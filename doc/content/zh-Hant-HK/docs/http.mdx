@@ -75,7 +75,7 @@ void main();
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
-- **路徑佔位符（`:name`）**：會嚴格編碼一次作為單一 path segment。斜線、`?`、`#`、`%`、空白同 Unicode 字元都會留喺該 segment 入面——千祈唔好預先手動 encode 數值。空字串、`.` 同 `..` 都會直接觸發 `REQ_BUILD_FAILED`。
+- **路徑佔位符（`:name`）**：會嚴格編碼一次作為單一 path segment。斜線、`?`、`#`、`%`、空白同 Unicode 字元都會留喺該 segment 入面——千祈唔好預先手動 encode 值。空字串、`.` 同 `..` 都會直接觸發 `REQ_BUILD_FAILED`。
 - **Origin 與目錄約束**：定義中嘅 path 唔可以係絕對 URL、協議相對 URL（`//...`），亦唔可以包含 C0 控制字元、反斜線、`?`、`#`，或者跳出 base endpoint 嘅目錄範圍（`../`）。任何違規都會喺中介層或傳輸層執行前，即時以 `REQ_BUILD_FAILED` 報錯。
 
 ## 3. 用 `builder` 放置 Input
@@ -98,15 +98,15 @@ void main();
 
 ### 自訂 Query 序列化
 
-預設情況下，query 支援純量純值（scalar）同埋純量陣列（重複 key）。如果傳入巢狀 query 物件，會拋出 `REQ_BUILD_FAILED`。如果後端需要特殊嘅巢狀 query 語法（例如 `filter[status]=paid`），可以喺 client 配置 `withQuerySerializer`：
+預設情況下，query 支援純量純值（scalar）同埋純量陣列（重複 key）。如果傳入巢狀 query 物件，呼叫會失敗，並喺回傳 tuple 嘅錯誤項提供 `REQ_BUILD_FAILED`。如果後端需要特殊嘅巢狀 query 語法（例如 `filter[status]=paid`），可以喺 client 配置 `withQuerySerializer`：
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
 ### Request Body 格式
 
-`GET` 同 `HEAD` 唔可以帶 body。對於其他 HTTP method，body 嘅格式會根據 `builder` 回傳嘅數值自動判斷：
+`GET` 同 `HEAD` 唔可以帶 body。對於其他 HTTP method，body 嘅格式會根據 `builder` 回傳嘅值自動判斷：
 
-| `body` 數值                                               | 網絡傳輸形式                                 | 預設 `Content-Type`                       |
+| `body` 值                                                 | 網絡傳輸形式                                 | 預設 `Content-Type`                       |
 | --------------------------------------------------------- | -------------------------------------------- | ----------------------------------------- |
 | `undefined` / 省略                                        | 冇 body                                      | —                                         |
 | 帶有 `urlencoded` / `formData` 編碼嘅根 struct            | `URLSearchParams` / `FormData`（已套用別名） | 表單類型 / multipart boundary             |
@@ -120,7 +120,7 @@ void main();
   examples/http/body.ts#example
 </include>
 
-任何無法喺 JSON 中合法表達嘅數值（例如 `NaN`、`±Infinity`、`Map`、`Set`、函式、冇 `toJSON()` 嘅 class 實例，或原生 iterable），都會即刻拋出 `REQ_BUILD_FAILED`，而唔會靜雞雞序列化成 `{}` 或 `null`。
+任何無法喺 JSON 中合法表達嘅值（例如 `NaN`、`±Infinity`、`Map`、`Set`、函式、冇 `toJSON()` 嘅 class 實例，或原生 iterable），都會令呼叫即刻失敗，並喺回傳 tuple 嘅錯誤項提供 `REQ_BUILD_FAILED`，而唔會靜雞雞序列化成 `{}` 或 `null`。
 
 ## 4. 回應點樣被解碼
 
@@ -128,9 +128,9 @@ void main();
 
 1. **按狀態碼 `ok` (`200..299`) 揀選對應側**：`2xx` 走 `output`，非 `2xx` 走 `error`。
 2. **未宣告則放棄讀取**：如果嗰一邊冇宣告 struct，回應 body 根本唔會被讀取（`2xx` resolve 出 `data: undefined` + `HttpMeta`；非 `2xx` resolve 出 `HTTP_STATUS` 且 `data: undefined`）。
-3. **優先驗證 JSON Media Type**：對於宣告 JSON 嘅 struct，如果伺服器回傳非 JSON 嘅 `Content-Type`，喺讀取串流前就會直接拋出 `RES_MEDIA_TYPE_INVALID`。
+3. **優先驗證 JSON Media Type**：對於宣告 JSON 嘅 struct，如果伺服器回傳非 JSON 嘅 `Content-Type`，喺讀取串流前呼叫就會失敗，並喺回傳 tuple 嘅錯誤項提供 `RES_MEDIA_TYPE_INVALID`。
 4. **讀取與解析**：無法讀取串流或 JSON 損壞會報 `RES_DECODE_FAILED`（如果中途被截斷則報 `NET_BODY_INCOMPLETE`）。
-5. **用 `struct` 進行驗證**：Schema 結構唔吻合會拋出 `RES_STRUCT_MISMATCH`。
+5. **用 `struct` 進行驗證**：Schema 結構唔吻合會令呼叫失敗，並喺回傳 tuple 嘅錯誤項提供 `RES_STRUCT_MISMATCH`。
 
 ## 5. 取消工作與設定逾時期限 [#cancel-the-work]
 
@@ -140,13 +140,13 @@ void main();
 - **手動取消（`NET_ABORTED`）**：使用 `AbortController`。
 - **組合多個信號**：使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`。
 
-<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
-<Tab value="Deadline (NET_TIMEOUT)">
+<Tabs items={["截止時間（NET_TIMEOUT）", "手動取消（NET_ABORTED）"]}>
+<Tab value="截止時間（NET_TIMEOUT）">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="Manual cancel (NET_ABORTED)">
+<Tab value="手動取消（NET_ABORTED）">
 
 <include cwd>examples/http/cancel.ts#example</include>
 

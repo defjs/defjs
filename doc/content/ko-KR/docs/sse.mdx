@@ -69,15 +69,15 @@ void main();
 
 초기 HTTP 응답이 `2xx`이고 미디어 타입이 `text/event-stream`이며 읽을 수 있는 본문이 포함되어 있을 때 비로소 `[error, stream, startupOpen]` 튜플이 반환됩니다:
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tabs items={["핸드셰이크 확인", "스트림 핸들 수명 주기"]}>
+<Tab value="핸드셰이크 확인">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab value="스트림 핸들 수명 주기">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -109,7 +109,7 @@ SSE 재연결은 **선택 사항(opt-in)**입니다. `withSSEReconnect(...)`를 
 - **재연결 시도 한도 (`attempts`)**: `withSSEReconnect`에 옵션 객체를 전달할 경우 기본값은 `3`입니다. 핸드셰이크가 성공하면 시도 횟수 카운터와 백오프 지수가 초기화됩니다. 정상적인 서버의 EOF(스트림 종료)는 실패가 아니므로 재연결을 트리거하지 않습니다.
 - **커서 추적 (`Last-Event-ID`)**: 이벤트의 끝을 알리는 빈 줄이 파싱될 때 커서가 확정(commit)되며, 재연결 시 자동으로 `Last-Event-ID` 헤더로 전송됩니다.
 - **멱등성(Idempotency) 안전장치**: 기본적으로 멱등한 메서드(`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`)만 자동 재연결됩니다. 비멱등한 메서드(`POST`, `PATCH`—예: LLM 스트리밍 요청 등)는 커스텀 `shouldReconnect` 콜백이 명시적으로 `true`를 반환할 때만 재연결됩니다. `ReadableStream` 요청 본문은 첫 번째 시도에서 완전히 소비되므로 재연결되지 않습니다.
-- **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: Fetch 호출부터 응답 헤더 수신까지의 각 핸드셰이크 시간을 제한하며, 이미 수립된 스트림의 유지 시간은 제한하지 않습니다.
+- **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. Fetch 호출부터 응답 헤더 수신까지의 각 핸드셰이크 시간을 제한하며, 이미 수립된 스트림의 유지 시간은 제한하지 않습니다.
 
 ## 5. 버퍼 및 큐 제한
 
@@ -124,15 +124,15 @@ SSE 재연결은 **선택 사항(opt-in)**입니다. `withSSEReconnect(...)`를 
 
 스트림을 연 호출자가 리소스 해제 책임을 갖습니다. `break`, `return` 또는 예외 발생으로 `for await` 루프를 벗어나면 스트림이 자동으로 닫히며, `await using` 또는 `stream.close()`를 명시적으로 사용할 수도 있습니다:
 
-<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tabs items={["await using으로 리소스 해제", "시작 단계에만 적용되는 기한"]}>
+<Tab value="await using으로 리소스 해제">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab value="시작 단계에만 적용되는 기한">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

@@ -69,15 +69,15 @@ void main();
 
 调用事件流操作只有在 HTTP 响应状态码为 `2xx`、媒体类型为 `text/event-stream` 且包含可读响应体时，才会成功 resolve 为 `[error, stream, startupOpen]` 元组：
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tabs items={["握手检查", "流句柄生命周期"]}>
+<Tab value="握手检查">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab value="流句柄生命周期">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -109,7 +109,7 @@ SSE 的断线自动重连是**显式开启（opt-in）**的。若未配置 `with
 - **重试预算（`attempts`）**：调用 `withSSEReconnect` 传入配置时默认重试 `3` 次。握手成功后会重置重试计数器和退避指数。服务端的正常 EOF 断开**不属于**错误，不会触发重连。
 - **游标追踪（`Last-Event-ID`）**：只有在完整解析到事件末尾的终止空行后，才会正式提交游标 ID，并在重连时自动通过 `Last-Event-ID` 请求头发送。
 - **幂等性安全限制**：默认情况下，只有幂等请求方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）才会自动执行重连。对于非幂等方法（如用于大模型流式输出的 `POST` 或 `PATCH`），只有在自定义的 `shouldReconnect` 回调显式返回 `true` 时才会重连。`ReadableStream` 类型的请求体在首次调用时即被消耗，永远不会重连。
-- **握手超时保护（`connectTimeoutMs`）**：用于对每次握手请求（从发起 Fetch 到收到响应头）设置时间上限，但不会影响已建立的长连接存活时长。
+- **握手超时保护（`connectTimeoutMs`）**：若提供，它必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它用于对每次握手请求（从发起 Fetch 到收到响应头）设置时间上限，但不会影响已建立的长连接存活时长。
 
 ## 5. 缓冲区与等待队列上限
 
@@ -124,15 +124,15 @@ SSE 的断线自动重连是**显式开启（opt-in）**的。若未配置 `with
 
 发起并打开事件流的代码拥有其生命周期的完整所有权。在 `for await` 循环中通过 `break`、`return` 退出或抛出异常都会自动触发流的关闭，你也可以通过 `await using` 或直接调用 `stream.close()`：
 
-<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tabs items={["使用 await using 释放资源", "仅启动阶段的截止时间"]}>
+<Tab value="使用 await using 释放资源">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab value="仅启动阶段的截止时间">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

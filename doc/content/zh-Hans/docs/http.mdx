@@ -120,7 +120,7 @@ void main();
   examples/http/body.ts#example
 </include>
 
-无法用标准 JSON 表达的值（如 `NaN`、`±Infinity`、`Map`、`Set`、函数、未实现 `toJSON()` 的自定义类实例或裸可迭代对象）会在发送前直接抛出 `REQ_BUILD_FAILED`，而不是被静默序列化为 `{}` 或 `null`。
+无法用标准 JSON 表达的值（如 `NaN`、`±Infinity`、`Map`、`Set`、函数、未实现 `toJSON()` 的自定义类实例或裸可迭代对象）会在发送前立即失败，并在返回元组的错误项中给出 `REQ_BUILD_FAILED`，而不是被静默序列化为 `{}` 或 `null`。
 
 ## 4. 响应校验与解码机制
 
@@ -140,13 +140,13 @@ void main();
 - **手动取消（`NET_ABORTED`）**：使用 `AbortController`。
 - **组合多种信号**：使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`。
 
-<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
-<Tab value="Deadline (NET_TIMEOUT)">
+<Tabs items={["截止时间（NET_TIMEOUT）", "手动取消（NET_ABORTED）"]}>
+<Tab value="截止时间（NET_TIMEOUT）">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="Manual cancel (NET_ABORTED)">
+<Tab value="手动取消（NET_ABORTED）">
 
 <include cwd>examples/http/cancel.ts#example</include>
 

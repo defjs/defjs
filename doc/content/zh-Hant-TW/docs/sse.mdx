@@ -69,15 +69,15 @@ void main();
 
 呼叫該操作僅會在初始 HTTP 回應為 `2xx`、媒體型別為 `text/event-stream` 且帶有可讀取本文時，才會成功解析為 `[error, stream, startupOpen]`：
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tabs items={["交握檢查", "串流控制代碼生命週期"]}>
+<Tab value="交握檢查">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab value="串流控制代碼生命週期">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -109,7 +109,7 @@ SSE 的自動重新連線機制屬於**選擇性啟用（opt-in）**。若未設
 - **斷線重試預算（`attempts`）**：傳入設定物件至 `withSSEReconnect` 時，預設為 `3` 次。交握成功後會重設重試次數與退避指數。伺服器正常的 EOF 結束**不屬於**失敗，不會觸發重新連線。
 - **游標追蹤（`Last-Event-ID`）**：在事件結尾的空白行完成剖析時確認並提交，重新連線時會自動作為 `Last-Event-ID` 標頭送出。
 - **冪等安全性**：預設情況下，只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）會自動重新連線。非冪等方法（`POST`、`PATCH`，例如 LLM 串流生成請求）只有在自訂 `shouldReconnect` 回呼明確回傳 `true` 時才會重連。使用 `ReadableStream` 請求本文的請求在第一次嘗試時即會消耗串流，因此絕不會重連。
-- **交握逾時（`connectTimeoutMs`）**：限制從呼叫 Fetch 到接收回應標頭之間的交握時間，而不會限制已建立串流的存活時長。
+- **交握逾時（`connectTimeoutMs`）**：若有提供，它必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制從呼叫 Fetch 到接收回應標頭之間的交握時間，而不會限制已建立串流的存活時長。
 
 ## 5. 緩衝區與佇列上限
 
@@ -124,15 +124,15 @@ SSE 的自動重新連線機制屬於**選擇性啟用（opt-in）**。若未設
 
 開啟串流的呼叫端負責其關閉與銷毀工作。透過 `break`、`return` 或拋出例外跳出 `for await` 迴圈會自動關閉串流，你也可以使用 `await using` 或 `stream.close()`：
 
-<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tabs items={["使用 await using 處置資源", "僅限啟動階段的截止時間"]}>
+<Tab value="使用 await using 處置資源">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab value="僅限啟動階段的截止時間">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

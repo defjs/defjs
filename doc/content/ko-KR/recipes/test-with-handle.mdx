@@ -7,53 +7,30 @@ description: withHTTPHandle로 단일 클라이언트의 Fetch를 교체하고 �
 
 `withHTTPHandle(...)`은 네트워크 소켓을 열지 않고도 단일 클라이언트 인스턴스의 기저 `fetch` 함수를 교체하여 입력값 검증, `builder` 매핑, URL 확인, 인터셉터, 상태 코드 분류, Struct 디코딩 등 전체 Defjs 파이프라인을 그대로 실행합니다:
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "단일 파일 데모"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
   </Tab>
   <Tab value="test/orders.spec.ts">
-```ts
-import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(
-withEndpoint("https://fixture.invalid"),
-withHTTPHandle(async (input, init) => {
-const request = new Request(input, init);
-const id = new URL(request.url).pathname.split("/").at(-1);
-if (id === "7") {
-return Response.json({ id: 7, status: "paid" }, { status: 200 });
-}
-return Response.json({ message: "Order not found" }, { status: 404 });
-}),
-);
-
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error) throw error;
-console.log(order.status, response.status);
-
-````
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
   </Tab>
-  <Tab value="get-order.test.ts">
-<include cwd meta="get-order.test.ts">
+  <Tab value="단일 파일 데모">
+이것은 테스트 러너 스펙이 아니라, 그 자체로 완결된 단일 파일 데모입니다. 공유 SDK 정의에 대한 단언은 앞의 테스트 탭을 사용하세요.
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
   </Tab>
 </Tabs>
 
+단일 파일 데모의 출력:
+
 ```txt
 paid 200
-````
+```
 
 프로덕션 환경에서는 완전히 동일한 `getOrder` 정의에 `withEndpoint(...)`로 구성된 클라이언트를 넘겨 호출하기만 하면 됩니다. 자세한 내용은 [테스트](/ko-KR/docs/testing) 및 [Client](/ko-KR/docs/client) 문서를 참조하세요.

@@ -13,22 +13,22 @@ description: 應用程式為自己的 Client 組合認證、追蹤及傳輸策�
 
 每種傳輸協議都有專屬嘅具型別中介層工廠函式（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。你可以將任何組合傳入 `withInterceptors(...)`：
 
-<Tabs items={["Basic setup", "Onion execution order", "Clone & add headers"]}>
-<Tab value="Basic setup">
+<Tabs items={["基本設定", "洋蔥模型執行次序", "複製並加入標頭"]}>
+<Tab value="基本設定">
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Onion execution order">
+<Tab value="洋蔥模型執行次序">
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
 </Tab>
-<Tab value="Clone & add headers">
+<Tab value="複製並加入標頭">
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example
@@ -62,7 +62,7 @@ Defjs 唔會自動重試業務 HTTP 狀態碼。當你需要針對特定狀態�
 </include>
 
 - **處理傳輸層 Reject**：當發生網絡錯誤時，`next(request)` 會直接 reject（絕唔存在狀態碼為 0 嘅 response 物件）。Catch 之後再重新 throw 該 rejection，可以完整保留原始嘅 `NET_*` fault code。
-- **喺中介層入面拋出例外**：未處理嘅 throw（或回傳非 response 數值）會令操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 失敗，並將原因記錄喺 `fault.cause`。若拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，則會分別結算為 `NET_ABORTED` 或 `NET_TIMEOUT`。
+- **喺中介層入面拋出例外**：未處理嘅 throw（或回傳非 response 值）會令操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 失敗，並將原因記錄喺 `fault.cause`。若拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，則會分別結算為 `NET_ABORTED` 或 `NET_TIMEOUT`。
 
 ## 4. 包裝 WebSocket 會話
 

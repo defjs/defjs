@@ -14,33 +14,15 @@ description: "用記憶體傳輸句柄（withHTTPHandle、withSSEHandle、withWe
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const NotFound = struct.object({
-  message: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-  error: NotFound,
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
 <include cwd lang="typescript">
-  examples/recipes/test-with-handle.ts#example
+  examples/testing/test/orders.ts#example
 </include>
 
 </Tab>
@@ -61,10 +43,13 @@ export const getOrder = defineRequest({
 
 ### 用 Fake Timers 實現確定性時間控制
 
-當測試請求逾時期限（`AbortSignal.timeout`）、中介層重試退避延遲、SSE/WebSocket 重連間隔，或者 WebSocket 心跳偵測嗰陣：
+中介層重試退避、SSE/WebSocket 重連延遲或者 WebSocket 心跳，喺 Vitest 入面用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`。呢啲假計時器唔會推動原生嘅 `AbortSignal.timeout`。想喺 Vitest 入面得到確定嘅請求期限，請用受控嘅 `setTimeout`，以 `TimeoutError` 做原因中止一個 `AbortController`：
 
-- 請使用假計時器（Vitest 入面用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`，或 Bun 測試中用 `jest.useFakeTimers()`）。
-- 等被測試階段開始後先快進計時器（`advanceTimersByTimeAsync`），然後斷言狀態轉換或嘗試次數——千祈唔好依賴真實經過嘅牆上時間（wall-clock time）。
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+喺 Bun test 入面用 `jest.useFakeTimers()` 同 `jest.advanceTimersByTime()`；Bun 嘅假計時器亦會控制 `AbortSignal.timeout`。唔好假定兩種 runner 控制同一套原生時鐘。只喺被等待嘅階段已經開始之後先推進時間，斷言狀態轉換或者嘗試次數，而唔係牆上時間，並喺每個測試之後恢復真實計時器。
 
 ## 延伸閱讀
 

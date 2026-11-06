@@ -69,15 +69,15 @@ void main();
 
 操作を呼び出すと、初回の HTTP レスポンスが `2xx` であり、メディアタイプが `text/event-stream`、かつボディが読み取り可能であることを確認した後にのみ `[error, stream, startupOpen]` が解決されます。
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tabs items={["ハンドシェイクの確認", "ストリームハンドルのライフサイクル"]}>
+<Tab value="ハンドシェイクの確認">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab value="ストリームハンドルのライフサイクル">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -109,7 +109,7 @@ SSE の自動再接続は **オプトイン（明示的な有効化）** です�
 - **リトライ回数の上限 (`attempts`)**: `withSSEReconnect` にオプションオブジェクトを渡した場合、デフォルトは `3` 回です。ハンドシェイクが成功すると、試行回数カウンターとバックオフ指数はリセットされます。サーバーからの正常な EOF による切断は失敗とはみなされず、再接続はトリガーされません。
 - **カーソルの追跡 (`Last-Event-ID`)**: イベントを区切る終端の空行が正常にパースされた時点でカーソルがコミットされ、再接続時に自動的に `Last-Event-ID` ヘッダーとして送信されます。
 - **冪等性の安全性保護**: デフォルトでは、冪等な HTTP メソッド（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）のみが自動再接続されます。非冪等なメソッド（LLM のストリーミングリクエストなどの `POST` や `PATCH`）は、カスタムの `shouldReconnect` コールバックが明示的に `true` を返した場合にのみ再接続されます。`ReadableStream` のリクエストボディは初回の試行で消費されるため、再接続されることはありません。
-- **ハンドシェイクのタイムアウト (`connectTimeoutMs`)**: Fetch の呼び出しからレスポンスヘッダー受信までの各接続ハンドシェイクに制限時間を設定します。すでに確立されたストリームの接続維持時間を制限するものではありません。
+- **ハンドシェイクのタイムアウト (`connectTimeoutMs`)**: 渡したときは、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。Fetch の呼び出しからレスポンスヘッダー受信までの各接続ハンドシェイクに制限時間を設定します。すでに確立されたストリームの接続維持時間を制限するものではありません。
 
 ## 5. バッファとキューの制限
 
@@ -124,15 +124,15 @@ SSE の自動再接続は **オプトイン（明示的な有効化）** です�
 
 ストリームを開いた呼び出し元が、リソース解放の責任を持ちます。`for await` ループを `break`、`return`、または throw で抜けるとストリームは自動的にクローズされます。あるいは、`await using` または `stream.close()` を明示的に使用できます。
 
-<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tabs items={["await using によるリソース解放", "開始時のみの期限"]}>
+<Tab value="await using によるリソース解放">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab value="開始時のみの期限">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

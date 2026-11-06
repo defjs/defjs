@@ -94,13 +94,13 @@ Defjs строго разделяет **наличие поля** (`undefined`) 
 
 ## 5. Обработка `StructError` и проблем валидации
 
-При неудачной валидации вызов `struct.parse(Schema, data, { aliases?, errorMap? })` возвращает кортеж `[StructError, undefined]`. Класс `StructError` расширяет стандартный `Error` и предоставляет методы `issues`, `format()`, `flatten()` и `prettify()`:
+При неудачной валидации вызов `struct.parse(Schema, data, { aliases?, errorMap? })` возвращает кортеж `[StructError, undefined]`. Класс `StructError` расширяет стандартный `Error` и предоставляет свойство `issues` и методы `format()`, `flatten()` и `prettify()`:
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-Каждая запись `StructIssue` содержит `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` или `custom`), `path`, `expected`, `received` и `message`. Сообщения по умолчанию отражают только полученный _тип_ (но не сами конфиденциальные значения из полезной нагрузки), поэтому `String(error)` и `error.prettify()` не раскрывают секреты в логах.
+Каждая запись `StructIssue` содержит `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` или `custom`), `path`, `expected`, `received` и `message`. Сообщения по умолчанию опускают полученное значение и сообщают только его _тип_, но пути сохраняют динамические ключи record, которые могут содержать конфиденциальные значения. `String(error)` и `error.prettify()` не являются границей маскирования; при логировании используйте allowlist безопасных полей и считайте сырые значения `received` и пользовательские сообщения конфиденциальными.
 
 ## 6. Справочник конструкторов
 

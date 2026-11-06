@@ -7,53 +7,30 @@ description: Подмените Fetch для одного клиента чер�
 
 Функция `withHTTPHandle(...)` подменяет базовую функцию `fetch` для отдельного экземпляра клиента, полностью выполняя весь конвейер Defjs — валидацию входных данных, маппинг в `builder`, разрешение URL, перехватчики, классификацию статусов и декодирование Struct — без открытия реального сетевого сокета:
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
   </Tab>
   <Tab value="test/orders.spec.ts">
-```ts
-import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(
-withEndpoint("https://fixture.invalid"),
-withHTTPHandle(async (input, init) => {
-const request = new Request(input, init);
-const id = new URL(request.url).pathname.split("/").at(-1);
-if (id === "7") {
-return Response.json({ id: 7, status: "paid" }, { status: 200 });
-}
-return Response.json({ message: "Order not found" }, { status: 404 });
-}),
-);
-
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error) throw error;
-console.log(order.status, response.status);
-
-````
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
   </Tab>
-  <Tab value="get-order.test.ts">
-<include cwd meta="get-order.test.ts">
+  <Tab value="Single-file demonstration">
+Это отдельная однофайловая демонстрация, а не spec тест-раннера. Для проверок общего определения SDK используйте предыдущую вкладку с тестом.
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
   </Tab>
 </Tabs>
 
+Однофайловая демонстрация печатает:
+
 ```txt
 paid 200
-````
+```
 
 В продакшене передавайте клиент, настроенный через `withEndpoint(...)`, в то же самое определение `getOrder`. См. разделы [Тестирование](/ru-RU/docs/testing) и [Клиент](/ru-RU/docs/client).

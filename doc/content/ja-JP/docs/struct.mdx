@@ -100,7 +100,7 @@ Defjs では、**フィールドの存在有無**（`undefined`）と **値の n
   examples/struct/parse-failures.ts#example
 </include>
 
-各 `StructIssue` には、`code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection`、`custom`）、`path`、`expected`、`received`、`message` が含まれます。デフォルトのエラーメッセージは受信した _型_ のみを報告し、生のペイロード値を決して含めないため、`String(error)` や `error.prettify()` を通じて機密情報がログに漏洩する心配がありません。
+各 `StructIssue` には、`code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection`、`custom`）、`path`、`expected`、`received`、`message` が含まれます。デフォルトのメッセージは受信した値を省き、その _型_ だけを報告しますが、path は動的な record のキーを保持し、そこに機微な値が含まれることがあります。`String(error)` と `error.prettify()` は秘匿化の境界ではありません。ログに出すときは安全なフィールドの許可リストを使い、生の `received` 値とカスタムメッセージは機微情報として扱ってください。
 
 ## 6. コンストラクターリファレンス
 

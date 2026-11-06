@@ -94,6 +94,8 @@ export const getOrder = defineRequest({
   examples/client/multiple-endpoints.ts#example
 </include>
 
+構成されたエンドポイントが 1 つだけのとき、`withRetry` はリクエストを再送しません。各リトライが、すでに試したエンドポイントを除外するからです。`attemptTimeoutMs` と `connectTimeoutMs` を渡したときは、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。
+
 ### ヘルスフィルタリングと P2C [#health-filtering-and-p2c]
 
 ピアサーバーのレプリカ群に対しては、[`roundRobinBalancer`](/ja-JP/api/core/roundrobinbalancer) や [`p2cBalancer`](/ja-JP/api/core/p2cbalancer)（PeakEwma RTT × 処理中負荷）により、Linkerd スタイルの連続失敗サーキットブレーカー（`outlierDetection`）がデフォルトで有効化されます。数えられるのは `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` です。生のレスポンス `status` はカスタムバランサー専用です。

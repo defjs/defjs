@@ -1,5 +1,5 @@
 ---
-title: Разработка плагинов
+title: Обзор интеграций
 description: Расширяйте клиент Defjs в приложении с помощью внедрения во фреймворки, наблюдаемости на сервере и навыков ИИ-ассистентов без жесткой связи с SDK.
 ---
 
@@ -93,27 +93,14 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. Middleware-плагины (`@defjs/opentelemetry-server`)
 
-Middleware-плагин представляет собой фабрику, возвращающую [`ClientOption`](/ru-RU/api/core/clientoption-type). При передаче в `createClient(...)` он добавляет перехватчики HTTP, SSE и/или WebSocket через `withHttpInterceptors`, `withSSEInterceptors` и `withWebSocketInterceptors`:
+Middleware-плагин представляет собой фабрику, возвращающую [`ClientOption`](/ru-RU/api/core/clientoption-type). При передаче в `createClient(...)` он добавляет перехватчики HTTP, SSE и/или WebSocket через `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
 <Tab value="plugins/request-id.ts">
 
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-  return withHttpInterceptors(interceptor);
-}
-```
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">

@@ -9,22 +9,22 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 
 ## 1. 在 SDK 宣告服務錯誤，在應用程式中進行分類處理
 
-<Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>
-<Tab value="Exhaustive code switch">
+<Tabs items={["完整列舉錯誤碼分支", "基本狀態碼檢查", "各傳輸方式的 tuple 結構"]}>
+<Tab value="完整列舉錯誤碼分支">
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="Basic status check">
+<Tab value="基本狀態碼檢查">
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Tuple shapes by transport">
+<Tab value="各傳輸方式的 tuple 結構">
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -63,22 +63,22 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 
 由於單一 `error` struct 會涵蓋所有非 `2xx` 狀態碼，當不同的錯誤狀態碼回傳不同結構的 JSON 時，請宣告 Union 結構：
 
-<Tabs items={["Discriminate by kind", "Discriminate by body status", "Plain union (struct.or)"]}>
-<Tab value="Discriminate by kind">
+<Tabs items={["依 kind 區分", "依本文狀態區分", "一般聯合型別（struct.or）"]}>
+<Tab value="依 kind 區分">
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="Discriminate by body status">
+<Tab value="依本文狀態區分">
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="Plain union (struct.or)">
+<Tab value="一般聯合型別（struct.or）">
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -103,15 +103,15 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 
 每個 `Fault` 都是原生 `Error`（`instanceof Error === true`），並帶有可列舉的 `code`、`status`、`response` 與 `data` 屬性。
 
-<Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
-<Tab value="Inspect StructError cause">
+<Tabs items={["檢查 StructError 原因", "去識別化診斷摘要"]}>
+<Tab value="檢查 StructError 原因">
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="Redacted diagnostic summary">
+<Tab value="去識別化診斷摘要">
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

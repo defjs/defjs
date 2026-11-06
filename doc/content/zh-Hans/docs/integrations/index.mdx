@@ -1,9 +1,9 @@
 ---
-title: 开发插件
+title: 集成概览
 description: 在明确的扩展点上扩展应用自有的 Defjs Client，接入框架注入、服务端可观测性或 AI 辅助技能，与 SDK 契约保持解耦。
 ---
 
-# 开发插件
+# 集成概览
 
 扩展集成机制允许在明确的扩展点上增强消费方应用自有的 `Client`，而无须修改 `@defjs/core` 核心逻辑，更不会将 SDK 接口定义与特定 UI 框架或遥测链路强行耦合。你的 SDK 定义始终保持为纯净的 `@defjs/core` 模块；由具体的消费方应用自主决定安装哪些集成扩展。
 
@@ -93,27 +93,14 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. 中间件插件（`@defjs/opentelemetry-server`）
 
-中间件插件是一个返回 [`ClientOption`](/zh-Hans/api/core/clientoption-type) 的工厂函数。当传递给 `createClient(...)` 时，它会通过 `withHttpInterceptors`、`withSSEInterceptors` 和 `withWebSocketInterceptors` 自动追加对应的传输拦截器：
+中间件插件是一个返回 [`ClientOption`](/zh-Hans/api/core/clientoption-type) 的工厂函数。当传递给 `createClient(...)` 时，它会通过 `withInterceptors` 追加 HTTP、SSE 和/或 WebSocket 拦截器：
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
 <Tab value="plugins/request-id.ts">
 
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-  return withHttpInterceptors(interceptor);
-}
-```
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">

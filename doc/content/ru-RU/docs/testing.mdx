@@ -14,33 +14,15 @@ description: Тестируйте определения SDK и политики
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const NotFound = struct.object({
-  message: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-  error: NotFound,
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
 <include cwd lang="typescript">
-  examples/recipes/test-with-handle.ts#example
+  examples/testing/test/orders.ts#example
 </include>
 
 </Tab>
@@ -61,10 +43,13 @@ export const getOrder = defineRequest({
 
 ### Детерминированное управление временем через фейковые таймеры
 
-При тестировании таймаутов запросов (`AbortSignal.timeout`), задержек повтора в перехватчиках, пауз переподключения SSE/WebSocket или периодических сигналов heartbeat:
+Для задержек повтора в перехватчиках, пауз переподключения SSE/WebSocket или heartbeat WebSocket используйте `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` в Vitest. Эти фейковые таймеры не двигают нативные часы `AbortSignal.timeout`. Для детерминированного дедлайна запроса в Vitest прервите `AbortController` из управляемого `setTimeout` с причиной `TimeoutError`:
 
-- Используйте фейковые таймеры (`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` в Vitest или `jest.useFakeTimers()` в Bun test).
-- Сдвигайте время вперёд после старта ожидаемой фазы (`advanceTimersByTimeAsync`) и проверяйте переходы состояний или счётчики попыток — никогда не делайте проверок на основе реального прошедшего системного времени.
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+В Bun test используйте `jest.useFakeTimers()` и `jest.advanceTimersByTime()`; фейковые таймеры Bun также управляют `AbortSignal.timeout`. Не считайте, что раннеры управляют одними и теми же нативными часами. Сдвигайте таймеры только после старта ожидаемой фазы, проверяйте переходы состояний или счётчики попыток, а не реальное прошедшее время, и восстанавливайте настоящие таймеры после каждого теста.
 
 ## Связанные материалы
 

@@ -108,13 +108,13 @@ void main();
 
 再接続とハートビートは、クライアントオプション（`withWebSocketReconnect`、`withWebSocketHeartbeat`）または呼び出しごとの一時クライアントオプション（`client({ reconnect, heartbeat })`）を通じたオプトイン設定です。
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
-<Tab value="Reconnect policy">
+<Tabs items={["再接続ポリシー", "アプリケーション層のハートビート"]}>
+<Tab value="再接続ポリシー">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="Application heartbeat">
+<Tab value="アプリケーション層のハートビート">
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
@@ -122,6 +122,7 @@ void main();
 </Tabs>
 
 - **再接続**: 有効時のデフォルト値は `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0` です。物理的な `open` が完了するたびにリトライ回数上限がリセットされます。`beforeConnect({ attempt, signal })` は、初回接続および再接続試行の直前に実行されます。
+- **ハンドシェイクのタイムアウト (`connectTimeoutMs`)**: 渡したときは、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。構築から `open` までを区切り、ハンドシェイクのあとで解除されます。
 - **ハートビート**: `outgoing` struct を通じて定期的に `message()` を送信し、最大 `timeoutMs` の間 `isAck(msg)` に一致するフレームの到着を待機します。合致した ACK フレームはハートビートモニターによって消費され、`session.receive` には転送されません。ACK を受信できなかった場合はセッションの致命的エラーとなります。
 - **キューの制限**:
   - `maxIncomingQueueSize`（必須の正の整数）: オーバーフロー時は `CAP_QUEUE_OVERFLOW` でセッションが終了します。セッションが開いている間は、`session.receive` から継続的にメッセージを消費してください。

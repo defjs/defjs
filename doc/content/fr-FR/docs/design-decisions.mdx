@@ -1,5 +1,5 @@
 ---
-title: "Décisions de conception"
+title: "Architecture du cœur"
 description: Comment la séparation entre définitions d'API et exécution du client simplifie la conception, la publication et la réutilisation des SDK.
 ---
 
@@ -74,7 +74,7 @@ Une réponse `2xx` est décodée exclusivement avec `output`. Tout autre statut 
 
 ### Règle 3 : Tout écart par rapport à l'affirmation est un échec explicite
 
-Si un `output` JSON est déclaré, une passerelle renvoyant une page d'erreur HTML ou du JSON malformé échoue immédiatement (`RES_MEDIA_TYPE_INVALID` ou `RES_DECODE_FAILED`). Pour les représentations JSON, l'en-tête `Content-Type` est vérifié **avant** de lire les octets du corps.
+Defjs choisit le côté de la réponse avec `response.ok` : `output` pour `2xx`, `error` pour un non-`2xx`. Seul un struct JSON déclaré de ce côté déclenche le décodage et peut produire `RES_MEDIA_TYPE_INVALID` ou `RES_DECODE_FAILED` ; son `Content-Type` est vérifié **avant** de lire les octets du corps. Une page de passerelle HTML non-`2xx` produit `RES_MEDIA_TYPE_INVALID` seulement lorsqu'un struct JSON `error` est déclaré. Sans déclaration pour le côté actif, le corps n'est pas lu ; une réponse non-`2xx` renvoie un `HTTP_STATUS` non décodé.
 
 | Ce qui a échoué pendant la lecture de la réponse          | Fault retourné                                                     |
 | --------------------------------------------------------- | ------------------------------------------------------------------ |

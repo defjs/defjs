@@ -1,11 +1,11 @@
 ---
 title: "إرسال JSON"
-description: أرسل جسم طلب JSON محدد الأنواع وفك تشفير استجابة 201 معلنة بدقة.
+description: أرسل جسم طلب JSON محدد الأنواع وفك ترميز استجابة 201 معلنة بدقة.
 ---
 
 # إرسال بيانات JSON (POST JSON)
 
-مرّر كائن مدخلات ذا نوع محدد إلى دالة `builder` وأرجع `{ body: input }`. تحافظ الدالة `.alias("customer_name")` على استخدام اسم `customerName` داخل TypeScript، بينما تضمن تشفير `"customer_name"` سلكياً عبر الشبكة وفك تشفيره مجدداً من استجابة `201`.
+مرّر كائن مدخلات ذا نوع محدد إلى دالة `builder` وأرجع `{ body: input }`. تحافظ الدالة `.alias("customer_name")` على استخدام اسم `customerName` داخل TypeScript، بينما تضمن ترميز `"customer_name"` سلكياً عبر الشبكة وفك ترميزه مجدداً من استجابة `201`.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
   <Tab value="sdk/orders.ts">

@@ -7,53 +7,30 @@ description: 使用 withHTTPHandle 為單一 Client 替換 Fetch，且無須更�
 
 `withHTTPHandle(...)` 能為單一 Client 實例替換底層的 `fetch` 函式，同時完整演練 Defjs 的全套處理管線——輸入驗證、`builder` 參數對應、URL 解析、攔截器、狀態碼判定與 Struct 解碼——完全不需要開啟實體網路 Socket：
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "單檔演示"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
   </Tab>
   <Tab value="test/orders.spec.ts">
-```ts
-import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(
-withEndpoint("https://fixture.invalid"),
-withHTTPHandle(async (input, init) => {
-const request = new Request(input, init);
-const id = new URL(request.url).pathname.split("/").at(-1);
-if (id === "7") {
-return Response.json({ id: 7, status: "paid" }, { status: 200 });
-}
-return Response.json({ message: "Order not found" }, { status: 404 });
-}),
-);
-
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error) throw error;
-console.log(order.status, response.status);
-
-````
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
   </Tab>
-  <Tab value="get-order.test.ts">
-<include cwd meta="get-order.test.ts">
+  <Tab value="單檔演示">
+這是一份獨立的單檔演示，不是測試執行器的 spec。要對共享的 SDK 定義做斷言，請用前面的測試頁籤。
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
   </Tab>
 </Tabs>
 
+單檔演示會印出：
+
 ```txt
 paid 200
-````
+```
 
 在正式環境中，只需將設定了 `withEndpoint(...)` 的真實 Client 傳入完全相同的 `getOrder` 定義即可。請參閱 [測試](/zh-Hant-TW/docs/testing) 與 [Client](/zh-Hant-TW/docs/client)。

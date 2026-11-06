@@ -140,13 +140,13 @@ JSON으로 표현할 수 없는 값(`NaN`, `±Infinity`, `Map`, `Set`, 함수, `
 - **수동 취소 (`NET_ABORTED`)**: `AbortController`를 사용하세요.
 - **신호 결합**: `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`를 사용하세요.
 
-<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
-<Tab value="Deadline (NET_TIMEOUT)">
+<Tabs items={["기한（NET_TIMEOUT）", "수동 취소（NET_ABORTED）"]}>
+<Tab value="기한（NET_TIMEOUT）">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="Manual cancel (NET_ABORTED)">
+<Tab value="수동 취소（NET_ABORTED）">
 
 <include cwd>examples/http/cancel.ts#example</include>
 

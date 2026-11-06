@@ -75,7 +75,7 @@ void main();
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
-- **路徑佔位符（`:name`）**：會被精確編碼為單一路徑片段。斜線、`?`、`#`、`%`、空白與 Unicode 都會被保留在該片段內——請勿事先手動編碼數值。空字串、`.` 與 `..` 會直接失敗並回傳 `REQ_BUILD_FAILED`。
+- **路徑佔位符（`:name`）**：會被精確編碼為單一路徑片段。斜線、`?`、`#`、`%`、空白與 Unicode 都會被保留在該片段內——請勿事先手動編碼值。空字串、`.` 與 `..` 會直接失敗並回傳 `REQ_BUILD_FAILED`。
 - **Origin 與目錄範圍限制**：定義路徑不能是絕對 URL、不能是協定相對路徑（`//...`）、不能包含 C0 控制字元、反斜線、`?`、`#`，也不能脫離基礎端點的目錄範圍（`../`）。任何違規都會在執行攔截器或傳輸層之前，立即失敗並回傳 `REQ_BUILD_FAILED`。
 
 ## 3. 使用 builder 放置輸入參數
@@ -104,9 +104,9 @@ void main();
 
 ### 請求本文格式
 
-`GET` 與 `HEAD` 請求不可夾帶本文。對於其他 HTTP 方法，本文格式會根據 `builder` 回傳的數值自動判定：
+`GET` 與 `HEAD` 請求不可夾帶本文。對於其他 HTTP 方法，本文格式會根據 `builder` 回傳的值自動判定：
 
-| `body` 數值                                                | 實際傳輸格式                               | 預設 `Content-Type`                       |
+| `body` 值                                                  | 實際傳輸格式                               | 預設 `Content-Type`                       |
 | ---------------------------------------------------------- | ------------------------------------------ | ----------------------------------------- |
 | `undefined` / 省略                                         | 無本文                                     | —                                         |
 | 帶有 `urlencoded` / `formData` 編解碼器的根 struct         | `URLSearchParams` / `FormData`（套用別名） | 表單型別 / multipart boundary             |
@@ -140,13 +140,13 @@ void main();
 - **手動取消（`NET_ABORTED`）**：使用 `AbortController`。
 - **組合訊號**：使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`。
 
-<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
-<Tab value="Deadline (NET_TIMEOUT)">
+<Tabs items={["截止時間（NET_TIMEOUT）", "手動取消（NET_ABORTED）"]}>
+<Tab value="截止時間（NET_TIMEOUT）">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="Manual cancel (NET_ABORTED)">
+<Tab value="手動取消（NET_ABORTED）">
 
 <include cwd>examples/http/cancel.ts#example</include>
 

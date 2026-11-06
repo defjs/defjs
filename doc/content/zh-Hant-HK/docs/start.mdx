@@ -76,7 +76,7 @@ Order not found
 
 每次 HTTP 呼叫都會 resolve 出 `[error, data, response]`：
 
-- **`2xx` 成功**：`error` 係 `null`，`data` 係通過驗證嘅 `output` 數值（`Order`），而 `response` 就係 `DecodedResponse<Order>`。
+- **`2xx` 成功**：`error` 係 `null`，`data` 係通過驗證嘅 `output` 值（`Order`），而 `response` 就係 `DecodedResponse<Order>`。
 - **宣告過嘅非 `2xx` 狀態碼**：`error.code` 係 `'HTTP_STATUS'`，`error.status` 係數字狀態碼（`404`），而 `error.data` 係通過驗證嘅 `error` struct（`NotFound`）。
 - **Input、解碼或網絡錯誤**：`error.code` 會標明具體喺邊個階段出事：
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — 呼叫端傳入嘅 input 無效，或者 `builder` 拋出例外

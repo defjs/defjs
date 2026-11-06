@@ -5,7 +5,7 @@ description: Declara en tu SDK los contratos de error del servicio y trata los f
 
 # Tratamiento de errores
 
-En Defjs, los fallos de petición, transporte y decodificación no lanzan excepciones en el punto de llamada. Cada operación devuelve una tupla con el error por delante (`[error, ...]`) donde `error` es `null` o bien una instancia tipada de `Fault` (una subclase de `Error` nativo discriminada por `error.code`).
+En Defjs, los fallos de petición, transporte y decodificación no lanzan excepciones en el punto de llamada. Cada operación devuelve una tupla con el error por delante (`[error, ...]`) donde `error` es `null` o bien una instancia tipada de `Fault` (una instancia nativa de `Error` discriminada por `error.code`).
 
 ## 1. Declarar errores del servicio en el SDK y clasificarlos en la aplicación
 

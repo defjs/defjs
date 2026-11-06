@@ -7,53 +7,30 @@ description: withHTTPHandle で単一クライアントの Fetch 実装を差し
 
 `withHTTPHandle(...)` は、単一のクライアントインスタンスに対して基底の `fetch` 関数を差し替えます。実際のネットワークソケットを開くことなく、入力値のバリデーション、`builder` による配置、URL 解決、インターセプター、ステータスに応じた振り分け、Struct デコードといった Defjs のパイプライン全体を完全にテストできます。
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "単一ファイルのデモ"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
   </Tab>
   <Tab value="test/orders.spec.ts">
-```ts
-import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(
-withEndpoint("https://fixture.invalid"),
-withHTTPHandle(async (input, init) => {
-const request = new Request(input, init);
-const id = new URL(request.url).pathname.split("/").at(-1);
-if (id === "7") {
-return Response.json({ id: 7, status: "paid" }, { status: 200 });
-}
-return Response.json({ message: "Order not found" }, { status: 404 });
-}),
-);
-
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error) throw error;
-console.log(order.status, response.status);
-
-````
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
   </Tab>
-  <Tab value="get-order.test.ts">
-<include cwd meta="get-order.test.ts">
+  <Tab value="単一ファイルのデモ">
+これは単体の単一ファイルデモであり、テストランナーの spec ではありません。共有された SDK 定義に対するアサーションは、前のテストタブを使ってください。
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
   </Tab>
 </Tabs>
 
+単一ファイルのデモが出力するもの：
+
 ```txt
 paid 200
-````
+```
 
 本番環境では、`withEndpoint(...)` で設定したクライアントをまったく同一の `getOrder` 定義に渡して実行します。詳細は [テスト](/ja-JP/docs/testing) および [Client](/ja-JP/docs/client) を参照してください。

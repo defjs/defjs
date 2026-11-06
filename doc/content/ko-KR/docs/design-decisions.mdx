@@ -74,7 +74,7 @@ Defjs가 HTTP 응답을 읽는 방식에는 6가지 엄격한 규칙이 적용�
 
 ### 규칙 3: 단언에서 벗어난 모든 경우는 즉시 명확한 오류로 처리된다
 
-JSON `output`이 선언되어 있을 때, 게이트웨이가 HTML 오류 페이지나 잘못된 JSON을 반환하면 즉시 실패합니다(`RES_MEDIA_TYPE_INVALID` 또는 `RES_DECODE_FAILED`). JSON 표현의 경우, 본문 바이트를 읽기 **전에** `Content-Type` 헤더를 먼저 검증합니다.
+Defjs는 `response.ok`로 응답 쪽을 고릅니다. `2xx`는 `output`, `2xx`가 아니면 `error`입니다. 그 쪽에 선언된 JSON struct만 디코딩을 일으키고 `RES_MEDIA_TYPE_INVALID` 또는 `RES_DECODE_FAILED`를 낼 수 있으며, 그 `Content-Type`은 본문 바이트를 읽기 **전에** 검증합니다. `2xx`가 아닌 HTML 게이트웨이 페이지는 JSON `error` struct가 선언된 경우에만 `RES_MEDIA_TYPE_INVALID`를 냅니다. 활성 쪽에 선언이 없으면 본문을 읽지 않으며, `2xx`가 아닌 응답은 디코딩되지 않은 `HTTP_STATUS`를 반환합니다.
 
 | 응답을 읽는 도중 실패한 원인                       | 반환되는 결함(Fault)                                                |
 | -------------------------------------------------- | ------------------------------------------------------------------- |

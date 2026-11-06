@@ -100,7 +100,7 @@ Defjs는 **필드 존재 여부**(`undefined`)와 **null 허용 여부**(`null`)
   examples/struct/parse-failures.ts#example
 </include>
 
-각 `StructIssue`에는 `code`(`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection`, 또는 `custom`), `path`, `expected`, `received`, `message`가 포함됩니다. 기본 메시지는 원시 페이로드 값이 아닌 수신된 *타입*만 보고하므로, `String(error)`나 `error.prettify()`를 호출해도 민감한 데이터가 로그에 유출되지 않습니다.
+각 `StructIssue`에는 `code`(`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection`, 또는 `custom`), `path`, `expected`, `received`, `message`가 포함됩니다. 기본 메시지는 수신된 값을 생략하고 그 *타입*만 보고하지만, path에는 동적 record 키가 남아 민감한 값이 들어갈 수 있습니다. `String(error)`와 `error.prettify()`는 삭제 경계가 아닙니다. 로그에는 안전한 필드의 허용 목록을 쓰고, 원시 `received` 값과 커스텀 메시지는 민감한 것으로 다루세요.
 
 ## 6. 생성자 레퍼런스
 

@@ -5,7 +5,7 @@ description: Connect，send 一個 typed envelope，receive 一次，之後 clos
 
 # 開啟 WebSocket 會話
 
-喺 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` Struct，並設定有上限嘅 `maxIncomingQueueSize`。喺你嘅應用程式入面，訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並保證喺 `finally` 區塊中登出監聽器、呼叫 `session.close(...)` 並等待 `await session.closed`：
+喺 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` Struct，並設定有上限嘅 `maxIncomingQueueSize`。喺你嘅應用程式入面，訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並保證喺 `finally` 區塊入面取消訂閱監聽器、呼叫 `session.close(...)` 並等待 `await session.closed`：
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab value="sdk/quotes.ts">

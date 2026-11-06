@@ -109,7 +109,7 @@ Die SSE-Wiederverbindung ist **Opt-in**. Ohne `withSSEReconnect(...)` beendet je
 - **Ausfallbudget (`attempts`)**: Standardmäßig `3`, wenn ein Optionen-Objekt an `withSSEReconnect` übergeben wird. Ein erfolgreicher Handshake setzt den Versuchszähler und den Backoff-Exponenten zurück. Ein reguläres Server-EOF gilt **nicht** als Fehler und löst keinen Reconnect aus.
 - **Cursor-Tracking (`Last-Event-ID`)**: Wird gespeichert, sobald die abschließende Leerzeile eines Events geparst ist, und beim Reconnect automatisch als `Last-Event-ID` mitgesendet.
 - **Idempotenz-Sicherheit**: Standardmäßig verbinden sich nur idempotente Methoden (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) automatisch wieder. Nicht-idempotente Methoden (`POST`, `PATCH` – wie etwa LLM-Streaming-Requests) verbinden sich nur dann neu, wenn ein benutzerdefinierter `shouldReconnect`-Callback explizit `true` zurückgibt. `ReadableStream`-Request-Bodys werden beim ersten Versuch verbraucht und bauen niemals einen Reconnect auf.
-- **Handshake-Timeout (`connectTimeoutMs`)**: Begrenzt jeden einzelnen Handshake vom Fetch-Aufruf bis zu den Response-Headern, ohne die Offenhaltezeit eines bereits etablierten Streams einzuschränken.
+- **Handshake-Timeout (`connectTimeoutMs`)**: Wenn angegeben, muss es endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück. Begrenzt jeden einzelnen Handshake vom Fetch-Aufruf bis zu den Response-Headern, ohne die Offenhaltezeit eines bereits etablierten Streams einzuschränken.
 
 ## 5. Puffer- und Warteschlangenlimits
 
@@ -139,7 +139,7 @@ Der Aufrufer, der einen Stream öffnet, ist für dessen Beendigung verantwortlic
 </Tab>
 </Tabs>
 
-Das über `client({ signal })` übergebene `signal` steuert die gesamte Lebensdauer des Streams. Möchtest du nur den anfänglichen Verbindungs-Handshake zeitlich begrenzen, ohne einen bestehenden Stream später abzuwürgen, setze deinen Timer zurück, sobald `await watchOrders(...)` zurückkehrt (wie im zweiten Tab oben gezeigt), oder nutze `connectTimeoutMs` in `withSSEReconnect`.
+Das über `client({ signal })` übergebene `signal` steuert die gesamte Lebensdauer des Streams. Möchtest du nur den anfänglichen Verbindungs-Handshake zeitlich begrenzen, ohne einen bestehenden Stream später abzuwürgen, lösche den Timer mit `clearTimeout`, sobald `await watchOrders(...)` zurückkehrt (wie im zweiten Tab oben gezeigt), oder nutze `connectTimeoutMs` in `withSSEReconnect`.
 
 ## Weiterführende Links
 

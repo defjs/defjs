@@ -108,13 +108,13 @@ void main();
 
 重連同心跳機制都係 opt-in 嘅，可透過 client 選項（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或單次衍生 client 選項（`client({ reconnect, heartbeat })`）配置：
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
-<Tab value="Reconnect policy">
+<Tabs items={["重新連線策略", "應用層心跳"]}>
+<Tab value="重新連線策略">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="Application heartbeat">
+<Tab value="應用層心跳">
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
@@ -122,6 +122,7 @@ void main();
 </Tabs>
 
 - **重新連線**：啟用時嘅預設值係 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線成功變成 `open` 都會重設重試預算。`beforeConnect({ attempt, signal })` 會喺初始連線同每次重連嘗試前執行。
+- **握手逾時（`connectTimeoutMs`）**：如果提供咗，佢必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。佢限制由 construction 到 `open`，handshake 之後會被清走。
 - **心跳偵測**：定時透過 `outgoing` struct 發送 `message()`，並等待最多 `timeoutMs` 嚟接收吻合 `isAck(msg)` 嘅 frame。吻合嘅 ack frame 會由心跳監控器消費，唔會轉發畀 `session.receive`。錯過 ack 會被判定為會話致命錯誤。
 - **佇列邊界**：
   - `maxIncomingQueueSize`（必填正整數）：超出上限會以 `CAP_QUEUE_OVERFLOW` 終止會話。喺會話開啟期間請保持消費 `session.receive`。
@@ -143,7 +144,7 @@ void main();
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-當你的元件或背景 worker 結束工作時，記得隨時登出取消 `onStateChange` 同 `onRuntimeError` 監聽器。
+當你的元件或背景 worker 結束工作時，記得隨時取消訂閱 `onStateChange` 同 `onRuntimeError` 監聽器。
 
 ## 延伸閱讀
 

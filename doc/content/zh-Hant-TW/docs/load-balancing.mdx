@@ -15,22 +15,22 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 | [`roundRobinBalancer(options?)`](/zh-Hant-TW/api/core/roundrobinbalancer)        | 跨同等權重伺服器副本的呼叫（支援選用 `weights`） | 開啟（連續失敗 `5` 次觸發）                |
 | [`p2cBalancer(options?)`](/zh-Hant-TW/api/core/p2cbalancer)                      | 副本節點延遲或進行中請求負載差異較大的伺服器呼叫 | 開啟（連續失敗 `5` 次觸發）                |
 
-<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
-<Tab value="Primary / backup (Pick-first)">
+<Tabs items={["主備（Pick-first）", "對等伺服器（Round-robin 與 P2C）", "自訂負載平衡器"]}>
+<Tab value="主備（Pick-first）">
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="Server peers (Round-robin & P2C)">
+<Tab value="對等伺服器（Round-robin 與 P2C）">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="Custom balancer">
+<Tab value="自訂負載平衡器">
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -59,7 +59,9 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 - **總嘗試次數（`maxAttempts`）**：包含首次嘗試，與 gRPC 的 `retryPolicy.maxAttempts` 以及 go-kit `lb.Retry` 的 `max` 一致。該值必須是至少為 1 的安全整數；`1` 表示不重試。沒有設定上的上限，但每個端點最多嘗試一次。串流請求 body 不會重試。`methods` 不區分大小寫；`methods: []` 會關閉所有方法的重試。
 - **重試條件（`on`）**：預設為 `["connect-failure"]`。可以追加 `"gateway-error"`，對應 `NET_UNAVAILABLE`（HTTP `502`/`503`/`504`），包括被 `RES_*` 解碼拒絕的閘道錯誤本文；設定了 `attemptTimeoutMs` 時還可以追加 `"attempt-timeout"`。一次符合條件的重試會重建請求，並從最外層重新執行整條攔截器鏈。
 - **退避（`delayMs`、`factor`、`jitter`、`maxDelayMs`）**：第 n 次重試之前，等待 `delayMs × factor^(n−1)`，並加上乘性抖動，在抖動與取整之後封頂。預設值是 `25`、`2`、`0.2` 與 `250`。`delayMs: 0` 略過等待。與重新連線一樣，`delayMs` 必須是非負有限數，`factor` 必須是正的有限數，`jitter` 必須是 `[0, 1]` 內的有限數，`maxDelayMs` 必須是非負有限數或正 `Infinity`。平台計時器上限仍然生效。
-- **單次嘗試 vs. 整次呼叫逾時**：`attemptTimeoutMs` 限制單次嘗試，從呼叫 Fetch 一直到本文解碼結束。呼叫端的 `client({ signal: AbortSignal.timeout(ms) })` 覆蓋每一次嘗試**以及退避等待**。等待期間取消會傳回呼叫端的取消錯誤，並且不再 pick。
+  只設定了一個端點時，`withRetry` 不會重放請求，因為每一次重試都會排除已經試過的端點。
+
+- **單次嘗試 vs. 整次呼叫逾時**：`attemptTimeoutMs` 必須是有限正數，並且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制單次嘗試，從呼叫 Fetch 一直到本文解碼結束。呼叫端的 `client({ signal: AbortSignal.timeout(ms) })` 覆蓋每一次嘗試**以及退避等待**。等待期間取消會傳回呼叫端的取消錯誤，並且不再 pick。
 - **Finagle / Linkerd 重試預算（`budget`）**：每份 client 設定擁有一份預算，只有使用這份設定的派生 client 會共享，共享平衡器的 client 並不共享。預設值是 `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`：原始流量的 20% 再加上儲備。存入和取出都在十個 TTL/10 切片上惰性過期。一次重試會在等待之前先取出額度；預算耗盡時既不等待，也不重試。設定 `budget: false` 可去掉這一上限。
 - **瀏覽器離線提示**：當 `navigator.onLine === false` 時，連線失敗會回報 `{ attempted: false }`，此時不會推進平衡器，也不會觸發重試。
 
@@ -69,15 +71,15 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 
 `roundRobinBalancer()` 與 `p2cBalancer()` 預設會將候選端點選擇邏輯包裝在 [`outlierDetection`](/zh-Hant-TW/api/core/outlierdetection) 中：
 
-<Tabs items={["Single-probe recovery", "Active health cache"]}>
-<Tab value="Single-probe recovery">
+<Tabs items={["單一探測復原", "主動健康檢查快取"]}>
+<Tab value="單一探測復原">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="Active health cache">
+<Tab value="主動健康檢查快取">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

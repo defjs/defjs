@@ -15,22 +15,22 @@ description: 複数エンドポイントへトラフィックを分散し、障�
 | [`roundRobinBalancer(options?)`](/ja-JP/api/core/roundrobinbalancer)              | 対等なレプリカ群に対するサーバー間通信（任意の `weights` 重み付けに対応） | 有効（`5` 回の連続失敗で発動）                        |
 | [`p2cBalancer(options?)`](/ja-JP/api/core/p2cbalancer)                            | レプリカごとのレイテンシや処理中負荷が変動するサーバー間通信              | 有効（`5` 回の連続失敗で発動）                        |
 
-<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
-<Tab value="Primary / backup (Pick-first)">
+<Tabs items={["プライマリ・バックアップ（Pick-first）", "対等なサーバー（Round-robin と P2C）", "カスタムバランサー"]}>
+<Tab value="プライマリ・バックアップ（Pick-first）">
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="Server peers (Round-robin & P2C)">
+<Tab value="対等なサーバー（Round-robin と P2C）">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="Custom balancer">
+<Tab value="カスタムバランサー">
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -59,7 +59,9 @@ description: 複数エンドポイントへトラフィックを分散し、障�
 - **試行回数の合計 (`maxAttempts`)**: 最初の試行を含み、gRPC の `retryPolicy.maxAttempts` および go-kit `lb.Retry` の `max` と一致します。値は 1 以上の安全な整数でなければなりません。`1` はリトライしないことを意味します。設定上の上限はありませんが、各エンドポイントは多くて 1 回だけ試されます。ストリーミングのリクエストボディはリトライしません。`methods` は大文字と小文字を区別しません。`methods: []` はすべてのメソッドのリトライを無効にします。
 - **リトライ条件 (`on`)**: デフォルトは `["connect-failure"]` です。`"gateway-error"` は `NET_UNAVAILABLE`（HTTP `502`/`503`/`504`）を加えます。これには、`RES_*` のデコードで拒否されたゲートウェイのエラーボディも含みます。`attemptTimeoutMs` を設定しているときは `"attempt-timeout"` も追加できます。条件を満たすリトライはリクエストを作り直し、インターセプターチェーン全体を一番外側から再実行します。
 - **バックオフ (`delayMs`、`factor`、`jitter`、`maxDelayMs`)**: n 回目のリトライの前に、`delayMs × factor^(n−1)` を乗法ジッター付きで待ち、ジッターと丸めのあとで上限を適用します。既定は `25`、`2`、`0.2`、`250` です。`delayMs: 0` は待ちを省きます。再接続と同じく、`delayMs` は有限で非負、`factor` は有限で正、`jitter` は `[0, 1]` の有限値、`maxDelayMs` は非負の有限値か正の `Infinity` でなければなりません。プラットフォームのタイマー上限は引き続き適用されます。
-- **試行ごとと呼び出し全体のタイムアウト**: `attemptTimeoutMs` は、Fetch の呼び出しからボディのデコードまで、1 回の試行を制限します。呼び出し元の `client({ signal: AbortSignal.timeout(ms) })` は、すべての試行**とバックオフの待ち**を覆います。待ちのあいだにキャンセルすると、呼び出し元のキャンセル fault が返り、次の pick は行われません。
+  構成されたエンドポイントが 1 つだけのとき、`withRetry` はリクエストを再送しません。各リトライが、すでに試したエンドポイントを除外するからです。
+
+- **試行ごとと呼び出し全体のタイムアウト**: `attemptTimeoutMs` は有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。それは、Fetch の呼び出しからボディのデコードまで、1 回の試行を制限します。呼び出し元の `client({ signal: AbortSignal.timeout(ms) })` は、すべての試行**とバックオフの待ち**を覆います。待ちのあいだにキャンセルすると、呼び出し元のキャンセル fault が返り、次の pick は行われません。
 - **Finagle / Linkerd のリトライバジェット (`budget`)**: 各クライアント構成がバジェットを所有し、同じ構成を使う派生クライアントだけがそれを共有します。バランサーを共有するクライアントは共有しません。既定は `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000` で、元のトラフィックの 20% に予約分を加えたものです。クレジットとデビットは、10 個の TTL/10 スライスで遅延して期限切れになります。リトライは待つ前に引き出します。バジェットを使い切ると、待たず、リトライもしません。上限を外すには `budget: false` を設定します。
 - **ブラウザのオフライン検知**: `navigator.onLine === false` の場合、接続失敗は `{ attempted: false }` と報告され、バランサーは進まず、リトライも起きません。
 
@@ -69,15 +71,15 @@ description: 複数エンドポイントへトラフィックを分散し、障�
 
 `roundRobinBalancer()` および `p2cBalancer()` は、デフォルトで候補の選択処理を [`outlierDetection`](/ja-JP/api/core/outlierdetection) でラップしています。
 
-<Tabs items={["Single-probe recovery", "Active health cache"]}>
-<Tab value="Single-probe recovery">
+<Tabs items={["単一プローブによる復旧", "アクティブヘルスチェックのキャッシュ"]}>
+<Tab value="単一プローブによる復旧">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="Active health cache">
+<Tab value="アクティブヘルスチェックのキャッシュ">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

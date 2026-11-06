@@ -1,5 +1,5 @@
 ---
-title: 開發外掛
+title: 整合套件概覽
 description: 在不耦合 SDK 定義的前提下，透過框架注入、伺服器可觀測性與 AI 助理技能擴充應用程式專屬的 Defjs Client。
 ---
 
@@ -87,27 +87,13 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. 中介層外掛 (`@defjs/opentelemetry-server`)
 
-中介層外掛是一個回傳 [`ClientOption`](/zh-Hant-TW/api/core/clientoption-type) 的 Factory 函式。傳入 `createClient(...)` 時，它會透過 `withHttpInterceptors`、`withSSEInterceptors` 與 `withWebSocketInterceptors` 附加對應的 HTTP、SSE 或 WebSocket 攔截器：
+中介層外掛是一個回傳 [`ClientOption`](/zh-Hant-TW/api/core/clientoption-type) 的 Factory 函式。傳入 `createClient(...)` 時，它會透過 `withInterceptors` 附加 HTTP、SSE 與／或 WebSocket 攔截器：
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab value="plugins/request-id.ts">
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-return withHttpInterceptors(interceptor);
-}
-
-````
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
   </Tab>
   <Tab value="app/client.ts">
 ```ts
@@ -118,7 +104,7 @@ export const client = createClient(
   withEndpoint("https://api.example.com"),
   withRequestIdHeader(),
 );
-````
+```
 
   </Tab>
 </Tabs>

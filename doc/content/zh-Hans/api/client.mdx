@@ -175,7 +175,7 @@ Defjs 对 Fetch 实现所要求的调用签名。它不是 `typeof fetch`，所�
 | `jitter`     | `0`             | `0`             |
 | `maxDelayMs` | 无上限          | `30000`         |
 
-`connectTimeoutMs` 可选，且必须是有限正数。对 SSE，它把从 Fetch 到响应头的时间加上限；对 WebSocket，它把从构造到 `open` 的时间加上限；握手之后会被清掉。到期会向均衡器报告 `NET_UNREACHABLE`，这样重连可以 pick 下一个端点。重试耗尽后以 `NET_TIMEOUT` 结束。
+`connectTimeoutMs` 可选，且必须是有限正数，并且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。对 SSE，它把从 Fetch 到响应头的时间加上限；对 WebSocket，它把从构造到 `open` 的时间加上限；握手之后会被清掉。到期会向均衡器报告 `NET_UNREACHABLE`，这样重连可以 pick 下一个端点。重试耗尽后以 `NET_TIMEOUT` 结束。
 
 两种传输在成功握手后，都会重置每次连接中断的重试预算、回调中的尝试次数和退避指数。`attempts: 0` 禁用重试；省略 `attempts` 并不表示单次中断期间可以无限重试。`maxDelayMs` 限制抖动和取整后的最终延迟；平台计时器上限 `2_147_483_647` 毫秒也始终生效，包括 SSE 未配置上限时。基础延迟为零时始终为零；有效数字在计算中溢出时会被限制在这些上限。
 
@@ -241,7 +241,7 @@ option helpers 修改、操作读取的解析后快照：应用默认值之后�
 
 独立于端点选择，启用同一次调用内的 HTTP 重试。省略 `withRetry` 表示一次尝试，也没有预算。`withRetry()` 与 `withRetry({})` 等价，默认值是 `maxAttempts: 2`（含首次）、`on: ["connect-failure"]`，以及安全方法 `GET`、`HEAD`、`OPTIONS`、`TRACE`。方法名不区分大小写；`[]` 关闭重试。`maxAttempts` 是至少为 1 的安全整数，且每个端点最多尝试一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` 解码拒绝的网关 body；`"attempt-timeout"` 使用 `attemptTimeoutMs`。流式请求 body 从不重试。
 
-退避默认为 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，字段语义与 SSE/WebSocket 重连相同。`delayMs: 0` 跳过等待。`attemptTimeoutMs` 限制单次尝试的 Fetch、读取 body 和解码；调用方的 signal 覆盖整次调用，包括退避等待。
+退避默认为 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，字段语义与 SSE/WebSocket 重连相同。`delayMs: 0` 跳过等待。`attemptTimeoutMs` 必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它限制单次尝试的 Fetch、读取 body 和解码；调用方的 signal 覆盖整次调用，包括退避等待。
 
 归 client 所有的 Finagle 预算默认为 20%，外加 10 秒 TTL 上每秒 10 次的储备。存入和取出都在十个 TTL/10 切片上惰性过期。`budget: false` 去掉这一限制。共享同一份配置的派生 client 共享它的预算；各自独立的 client 不共享，即使共用一个均衡器也一样。无效选项在 HTTP 运行时返回 `REQ_OPTIONS_INVALID`，消息为 `Invalid retry options`。该选项在应用时捕获自己拥有的字段、数组和嵌套的 budget。`withRetry()` 与 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。后一次 `withRetry` 会替换先前的策略；`withRetry({ maxAttempts: 1 })` 会在启用之后关闭重试。均衡器和健康包装器没有重试设置。见 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)。
 

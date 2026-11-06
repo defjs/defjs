@@ -111,7 +111,7 @@ description: 在服务端应用 Client 上为出站 SDK 请求注入观测能力
 | 声明的 `output` / `error` 响应体读取失败，或 JSON 格式的响应体媒体类型不匹配/JSON 解析失败                              | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`，`exception.type: "BodyFailure"`   |
 | SSE 或 WebSocket 握手建连失败（包括 SSE 非 2xx 状态码）                                                                 | 生成一条 `WARN` 日志，事件名为 `defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，phase 为 `connect` |
 | SSE 或 WebSocket 终态异常断开或 `closed` reject（包括 Node.js 下的 `1006` Socket 报错、队列溢出、心跳超时）             | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
-| 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动取消调用                               | 不生成日志                                                                                                            |
+| 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动发起的非超时取消                       | 不生成日志                                                                                                            |
 
 所有诊断日志均严格记录固定消息文本、`exception.type`（如 `BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError` 或 `Error`）、所处 phase 阶段、静态 `operation` 标识、服务端地址/端口与协议信息——绝不打印原始 URL、Query 参数、请求头、Body 载荷或异常堆栈。
 

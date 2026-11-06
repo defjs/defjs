@@ -73,7 +73,7 @@ Utilisez `.alias("wire_name")` lorsque le backend emploie du `snake_case` ou des
   examples/struct/aliases.ts#example
 </include>
 
-Déstructurer un objet typé au sein du `builder` (`{ ...input.order, extra: 1 }`) préserve l'encodage du struct et ses alias. Déclarer à la fois la clé logique et son alias réseau sur le même objet échoue avec `REQ_BUILD_FAILED`.
+Copier un objet typé avec la syntaxe de déploiement (spread) au sein du `builder` (`{ ...input.order, extra: 1 }`) préserve l'encodage du struct et ses alias. Déclarer à la fois la clé logique et son alias réseau sur le même objet échoue avec `REQ_BUILD_FAILED`.
 
 ## 4. Placement dans la requête et codecs de formulaire
 
@@ -100,7 +100,7 @@ Déstructurer un objet typé au sein du `builder` (`{ ...input.order, extra: 1 }
   examples/struct/parse-failures.ts#example
 </include>
 
-Chaque `StructIssue` contient `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` ou `custom`), `path`, `expected`, `received` et `message`. Les messages par défaut indiquent uniquement le _type_ reçu (jamais la valeur brute de la charge utile) afin que `String(error)` et `error.prettify()` ne fassent pas fuiter de données sensibles dans vos journaux.
+Chaque `StructIssue` contient `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` ou `custom`), `path`, `expected`, `received` et `message`. Les messages par défaut omettent la valeur reçue et n'indiquent que son _type_, mais les chemins conservent les clés dynamiques de record, qui peuvent contenir des valeurs sensibles. `String(error)` et `error.prettify()` ne constituent pas une frontière d'occultation ; utilisez une liste d'autorisation de champs sûrs pour les journaux, et traitez les valeurs brutes `received` ainsi que les messages personnalisés comme sensibles.
 
 ## 6. Référence des constructeurs
 

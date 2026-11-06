@@ -44,7 +44,7 @@ export type Order = Infer<typeof Order>;
 
 Defjs 嚴格區分**欄位是否存在**（`undefined`）與**欄位值是否為 null**（`null`）。預設情況下，所有 struct 建構子皆為嚴格必填且不可為 null：
 
-| 宣告方式                     | 缺失 / `undefined`           | `null` | 合法數值         |
+| 宣告方式                     | 缺失 / `undefined`           | `null` | 合法值           |
 | ---------------------------- | ---------------------------- | ------ | ---------------- |
 | `struct.string()`            | 拒絕                         | 拒絕   | 接受 `string`    |
 | `struct.string().optional()` | 接受（序列化物件時會被省略） | 拒絕   | 接受 `string`    |
@@ -100,7 +100,7 @@ Defjs 嚴格區分**欄位是否存在**（`undefined`）與**欄位值是否為
   examples/struct/parse-failures.ts#example
 </include>
 
-每個 `StructIssue` 包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 以及 `message`。預設訊息僅會報告收到的**型別名稱**（絕不會洩漏未經處理的原始負載數值），因此 `String(error)` 與 `error.prettify()` 不會將敏感資料外洩至日誌中。
+每個 `StructIssue` 包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 以及 `message`。預設訊息會省略收到的值，只報告它的*型別*，但 path 會保留動態 record 的 key，其中可能含有敏感值。`String(error)` 與 `error.prettify()` 不是脫敏邊界；寫入日誌時請使用安全欄位的允許清單，並把原始的 `received` 值以及自訂訊息當作敏感資訊。
 
 ## 6. 建構子快速參考
 
@@ -114,7 +114,7 @@ Defjs 嚴格區分**欄位是否存在**（`undefined`）與**欄位值是否為
 | `struct.number()`                                          | 除了 `NaN` 以外的任何 `number`     | `number`（拒絕 `NaN`；在 JSON 本文中拒絕 `±Infinity`） |
 | `struct.bigint()`                                          | `bigint` 或純數字字串              | `bigint`                                               |
 | `struct.date()`                                            | 合法的 `Date`、時間戳記或 ISO 字串 | `Date`                                                 |
-| `struct.literal(value)`                                    | 精確的原始型別常常常數值           | 字面值型別                                             |
+| `struct.literal(value)`                                    | 完全相符的基本型別字面值           | 字面值型別                                             |
 | `struct.enum(values)`                                      | 宣告的字串或數值成員               | 字面值的 Union                                         |
 | `struct.array(item)` / `struct.tuple(items)`               | 陣列 / 固定長度的 Tuple            | `T[]` / `[...]`                                        |
 | `struct.object(shape)` / `struct.record(val)`              | 一般物件（Plain object）           | 具型別物件 / `Record<string, V>`                       |

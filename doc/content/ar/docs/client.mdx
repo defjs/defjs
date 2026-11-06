@@ -94,6 +94,8 @@ export const getOrder = defineRequest({
   examples/client/multiple-endpoints.ts#example
 </include>
 
+عند ضبط نقطة نهاية واحدة فقط، لا يعيد `withRetry` تشغيل الطلب لأن كل إعادة محاولة تستبعد نقاط النهاية التي جُرِّبت. يجب أن يكون `attemptTimeoutMs` و`connectTimeoutMs`، عند توفيرهما، محدودين وموجبين ولا يزيدان على 2147483647 (حد المؤقت)؛ وإلا تُرجع العملية `REQ_OPTIONS_INVALID`.
+
 ### فحص السلامة وخوارزمية p2c [#health-filtering-and-p2c]
 
 بالنسبة للنسخ المتطابقة من الخوادم النظيرة، تُفعل أدوات التوزيع [`roundRobinBalancer`](/ar/api/core/roundrobinbalancer) و[`p2cBalancer`](/ar/api/core/p2cbalancer) (خوارزمية ذروة Ewma لزمن الرحلة RTT × الحمل اللحظي) قاطع الدائرة للأخطاء المتتالية بنمط Linkerd عبر (`outlierDetection`) افتراضياً. يحصي `NET_UNREACHABLE` و`NET_UNAVAILABLE` و`NET_SERVER_ERROR`؛ و`status` الخام للاستجابة مخصص فقط لموزعات الحمل المخصصة.

@@ -1,5 +1,5 @@
 ---
-title: "Entwurfsentscheidungen"
+title: "Kernarchitektur"
 description: Warum die Trennung von API-Definitionen und Client-Ausführung das Entwerfen, Veröffentlichen und Wiederverwenden von SDKs vereinfacht.
 ---
 
@@ -74,7 +74,7 @@ Eine `2xx`-Antwort wird ausschließlich über `output` dekodiert. Jeder andere S
 
 ### Regel 3: Jede Abweichung von der Zusicherung führt zu einem expliziten Fehler
 
-Wurde ein JSON-`output` deklariert und ein Gateway liefert eine HTML-Fehlerseite oder ungültiges JSON zurück, schlägt der Aufruf sofort fehl (`RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED`). Bei JSON-Repräsentationen wird der `Content-Type`-Header **vor** dem Auslesen der Body-Bytes geprüft.
+Defjs wählt die Response-Seite über `response.ok`: `output` für `2xx`, `error` für Nicht-`2xx`. Nur ein auf dieser Seite deklariertes JSON-Struct löst die Dekodierung aus und kann `RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED` erzeugen; sein `Content-Type` wird **vor** dem Auslesen der Body-Bytes geprüft. Eine HTML-Gateway-Seite bei Nicht-`2xx` erzeugt `RES_MEDIA_TYPE_INVALID` nur, wenn ein JSON-`error`-Struct deklariert ist. Ohne Deklaration für die aktive Seite wird der Body nicht gelesen; eine Nicht-`2xx`-Response liefert einen undekodierten `HTTP_STATUS`.
 
 | Was beim Lesen der Antwort fehlgeschlagen ist                           | Zurückgegebener Fehler (Fault)                                     |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |

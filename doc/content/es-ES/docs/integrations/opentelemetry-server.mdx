@@ -61,7 +61,7 @@ Configura conmutadores por transporte (`{ enabled: false }`) y hooks de span (`s
 
 ### Contrato de los hooks
 
-- `startSpanHook(request): Attributes` se ejecuta sincrónicamente antes de crear el span; los atributos devueltos se aplican al final y pueden sobreescribir los atributos predeterminados (por ejemplo, para redactar `url.full`).
+- `startSpanHook(request): Attributes` se ejecuta sincrónicamente antes de crear el span; los atributos devueltos se aplican al final y pueden sobreescribir los atributos predeterminados (por ejemplo, para ocultar datos sensibles de `url.full`).
 - `requestHook(span, request)` y `responseHook(span, responseOrHandle, request)` reciben el span creado y pueden ser sincrónicos o asíncronos. **No** son esperados por la canalización del transporte, y el span HTTP termina inmediatamente en cuanto finaliza la porción sincrónica de `responseHook`.
 - Los fallos en los hooks nunca abortan la llamada del cliente. Mientras `span.isRecording()` sea true, los errores en los hooks registran eventos `defjs.otel.hook.error` y `exception` en el span; para spans que no graban, los fallos se notifican a través de `diag.error` de `@opentelemetry/api` (`hook.name`, `error.type`, `traceId`, `spanId`).
 - `withOpenTelemetryServer` captura los bloques de opciones de `http`, `sse` y `webSocket` en el momento de creación. Pasar `{ enabled: false }` deshabilita ese transporte sin leer sus hooks.

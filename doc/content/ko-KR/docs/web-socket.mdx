@@ -108,13 +108,13 @@ void main();
 
 재연결과 하트비트는 모두 클라이언트 옵션(`withWebSocketReconnect`, `withWebSocketHeartbeat`) 또는 호출별 파생 클라이언트 옵션(`client({ reconnect, heartbeat })`)을 통해 선택적으로 활성화(opt-in)합니다:
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
-<Tab value="Reconnect policy">
+<Tabs items={["재연결 정책", "애플리케이션 계층 하트비트"]}>
+<Tab value="재연결 정책">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="Application heartbeat">
+<Tab value="애플리케이션 계층 하트비트">
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
@@ -122,6 +122,7 @@ void main();
 </Tabs>
 
 - **재연결**: 활성화 시 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`입니다. 물리적 소켓이 `open`될 때마다 재연결 시도 한도가 재설정됩니다. `beforeConnect({ attempt, signal })`는 최초 연결 및 모든 재연결 시도 직전에 실행됩니다.
+- **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제됩니다.
 - **하트비트**: `outgoing` struct를 통해 주기적으로 `message()`를 전송하고, `isAck(msg)`와 일치하는 프레임이 올 때까지 최대 `timeoutMs` 동안 대기합니다. 일치하는 확인(ack) 프레임은 하트비트 모니터가 소비하며 `session.receive`로 전달되지 않습니다. 확인 프레임을 제때 받지 못하면 세션에 치명적인 오류로 처리됩니다.
 - **큐 한도**:
   - `maxIncomingQueueSize` (필수 양의 정수): 큐가 넘치면 `CAP_QUEUE_OVERFLOW`로 세션이 즉시 종료됩니다. 세션이 열려 있는 동안 `session.receive`를 계속해서 소비해야 합니다.

@@ -81,7 +81,7 @@ export const getOrder = defineRequest({
 ## 3. 浏览器单例模式 vs. 服务端请求作用域
 
 - **浏览器应用程序**：当服务地址、拦截器和认证凭据在整个浏览器上下文内全局共享时，可直接在模块作用域导出一个单例 `DerivableClient`。
-- **服务端 / SSR 应用程序**：当请求头、Cookie、身份 Token 或租户信息与单个入站请求强绑定时，**务必在每个请求边界内部**创建独立的 Client 实例。切勿在跨进程共享的全局 Client 上存储属于单个用户的鉴权信息。
+- **服务端 / SSR 应用程序**：当请求头、Cookie、身份 Token 或租户信息与单个入站请求强绑定时，**务必在每个请求边界内部**创建独立的 Client 实例。切勿在整个进程共用的 Client 上存储单个用户的鉴权信息。
 
 ## 4. 多服务节点与负载均衡 [#multiple-endpoints]
 
@@ -93,6 +93,8 @@ export const getOrder = defineRequest({
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
+
+只配置了一个端点时，`withRetry` 不会重放请求，因为每一次重试都会排除已经试过的端点。若提供了 `attemptTimeoutMs` 和 `connectTimeoutMs`，它们必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。
 
 ### 被动健康检测与 P2C 算法 [#health-filtering-and-p2c]
 

@@ -94,6 +94,8 @@ Créez une nouvelle valeur de client dérivée pour chaque appel nécessitant so
   examples/client/multiple-endpoints.ts#example
 </include>
 
+Avec un seul endpoint configuré, `withRetry` ne rejoue pas la requête, parce que chaque retry exclut les endpoints déjà tentés. `attemptTimeoutMs` et `connectTimeoutMs`, lorsqu'ils sont fournis, doivent être finis, positifs et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`.
+
 ### Filtrage de santé et p2c [#health-filtering-and-p2c]
 
 Pour des réplicas de serveurs équivalents, [`roundRobinBalancer`](/fr-FR/api/core/roundrobinbalancer) et [`p2cBalancer`](/fr-FR/api/core/p2cbalancer) (RTT PeakEwma × charge en cours) activent par défaut un coupe-circuit par échecs consécutifs inspiré de Linkerd (`outlierDetection`). Il compte `NET_UNREACHABLE`, `NET_UNAVAILABLE` et `NET_SERVER_ERROR` ; le `status` brut de la réponse n'est destiné qu'aux répartiteurs personnalisés.

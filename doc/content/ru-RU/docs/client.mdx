@@ -94,6 +94,8 @@ export const getOrder = defineRequest({
   examples/client/multiple-endpoints.ts#example
 </include>
 
+При единственном настроенном эндпоинте `withRetry` не повторяет запрос, потому что каждый повтор исключает уже опробованные эндпоинты. `attemptTimeoutMs` и `connectTimeoutMs`, если заданы, должны быть конечными, положительными и не больше 2147483647 (предел таймера); иначе операция возвращает `REQ_OPTIONS_INVALID`.
+
 ### Фильтрация доступности и P2C [#health-filtering-and-p2c]
 
 Для пула равноправных реплик сервера балансировщики [`roundRobinBalancer`](/ru-RU/api/core/roundrobinbalancer) и [`p2cBalancer`](/ru-RU/api/core/p2cbalancer) (PeakEwma RTT × нагрузка в процессе) по умолчанию активируют автоматическое отключение сбойных узлов по серии последовательных ошибок (`outlierDetection`) в стиле Linkerd. Считаются `NET_UNREACHABLE`, `NET_UNAVAILABLE` и `NET_SERVER_ERROR`; сырой `status` ответа нужен только пользовательским балансировщикам.

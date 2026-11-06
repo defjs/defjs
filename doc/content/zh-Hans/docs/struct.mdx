@@ -100,7 +100,7 @@ Defjs 严格区分**字段是否存在**（`undefined`）与**是否允许为空
   examples/struct/parse-failures.ts#example
 </include>
 
-每个 `StructIssue` 包含 `code`（可能为 `invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 以及 `message`。默认错误提示只报告收到的*类型*（绝不会输出原始数据载荷），确保 `String(error)` 和 `error.prettify()` 在打印到生产日志时不会意外泄露敏感信息。
+每个 `StructIssue` 包含 `code`（可能为 `invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 以及 `message`。默认消息会省略收到的值，只报告它的*类型*，但 path 会保留动态 record 的 key，其中可能含有敏感值。`String(error)` 和 `error.prettify()` 不是脱敏边界；写日志时请使用安全字段的允许列表，并把原始 `received` 值以及自定义消息当作敏感信息。
 
 ## 6. 构造器速查表
 

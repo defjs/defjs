@@ -1,9 +1,9 @@
 ---
-title: Développer un plugin
+title: Vue d’ensemble des intégrations
 description: Étendez le client Defjs applicatif grâce à l'injection de framework, l'observabilité serveur et les skills IA sans coupler vos définitions de SDK.
 ---
 
-# Vue d'ensemble des intégrations
+# Vue d’ensemble des intégrations
 
 Une intégration étend le `Client` applicatif à un point d'extension défini sans modifier `@defjs/core` ni coupler une définition de SDK à un framework ou à une pile de télémétrie. Vos définitions de SDK restent de purs modules `@defjs/core` ; l'application consommatrice choisit quelles intégrations installer.
 
@@ -93,27 +93,14 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. Plugins middleware (`@defjs/opentelemetry-server`)
 
-Un plugin middleware est une fabrique renvoyant une [`ClientOption`](/fr-FR/api/core/clientoption-type). Lorsqu'elle est passée à `createClient(...)`, elle ajoute des intercepteurs HTTP, SSE et/ou WebSocket via `withHttpInterceptors`, `withSSEInterceptors` et `withWebSocketInterceptors` :
+Un plugin middleware est une fabrique renvoyant une [`ClientOption`](/fr-FR/api/core/clientoption-type). Lorsqu'elle est passée à `createClient(...)`, elle ajoute des intercepteurs HTTP, SSE et/ou WebSocket via `withInterceptors` :
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
 <Tab value="plugins/request-id.ts">
 
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-  return withHttpInterceptors(interceptor);
-}
-```
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">

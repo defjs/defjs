@@ -100,7 +100,7 @@ Das Spreaden eines typisierten Objekts im `builder` (`{ ...input.order, extra: 1
   examples/struct/parse-failures.ts#example
 </include>
 
-Jedes `StructIssue` enthält `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` oder `custom`), `path`, `expected`, `received` und `message`. Standard-Fehlermeldungen nennen ausschließlich den empfangenen _Typ_ (niemals den rohen Wert der Payload), damit `String(error)` und `error.prettify()` keine sensiblen Daten in Logs preisgeben.
+Jedes `StructIssue` enthält `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` oder `custom`), `path`, `expected`, `received` und `message`. Standardmeldungen lassen den empfangenen Wert weg und nennen nur seinen _Typ_, aber Pfade behalten dynamische Record-Schlüssel, die sensible Werte enthalten können. `String(error)` und `error.prettify()` sind keine Schwärzungsgrenze; verwende beim Loggen eine Allowlist sicherer Felder und behandle rohe `received`-Werte sowie eigene Meldungen als sensibel.
 
 ## 6. Konstruktoren-Übersicht
 

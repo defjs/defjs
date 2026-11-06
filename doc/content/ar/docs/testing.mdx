@@ -9,38 +9,20 @@ description: اختبر تعريفات SDK وسياسات التطبيق محل�
 
 ## 1. حقن مقبض نقل محلي للاختبار
 
-استخدم `withHTTPHandle` أو `withSSEHandle` أو `withWebSocketHandle` عند استدعاء `createClient(...)` لاستبدال وسيلة النقل الأصلية في بيئة التشغيل. يظل Defjs يشغل خط الأنابيب الكامل للعملية: التحقق من مخطط `struct` للمدخلات، وتطبيق دالة `builder`، وفحوصات نطاق الروابط، والمعترضات، وتوزيع حالات الاستجابة، وفك تشفير كائنات `struct` للاستجابة.
+استخدم `withHTTPHandle` أو `withSSEHandle` أو `withWebSocketHandle` عند استدعاء `createClient(...)` لاستبدال وسيلة النقل الأصلية في بيئة التشغيل. يظل Defjs يشغل خط الأنابيب الكامل للعملية: التحقق من مخطط `struct` للمدخلات، وتطبيق دالة `builder`، وفحوصات نطاق الروابط، والمعترضات، وتوزيع حالات الاستجابة، وفك ترميز كائنات `struct` للاستجابة.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const NotFound = struct.object({
-  message: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-  error: NotFound,
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
 <include cwd lang="typescript">
-  examples/recipes/test-with-handle.ts#example
+  examples/testing/test/orders.ts#example
 </include>
 
 </Tab>
@@ -61,10 +43,13 @@ export const getOrder = defineRequest({
 
 ### التحكم في الوقت بشكل قطعي باستخدام المؤقتات الوهمية (Fake Timers)
 
-عند اختبار مهل الطلبات الزمنية (`AbortSignal.timeout`)، أو التراجع الزمني لإعادة المحاولة في المعترضات، أو تأخيرات إعادة اتصال SSE/WebSocket، أو نبضات قلب WebSocket:
+لتراجع إعادة المحاولة في المعترضات، أو تأخيرات إعادة اتصال SSE/WebSocket، أو نبضات قلب WebSocket، استخدم `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` في Vitest. لا تقدّم هذه المؤقتات الوهمية ساعة `AbortSignal.timeout` الأصلية. للحصول على مهلة طلب قطعية في Vitest، ألغِ `AbortController` من `setTimeout` مضبوط بسبب `TimeoutError`:
 
-- استخدم المؤقتات الوهمية (`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` في Vitest أو `jest.useFakeTimers()` في اختبارات Bun).
-- قدّم المؤقتات بعد بدء المرحلة المنتظرة (`advanceTimersByTimeAsync`) وتحقق من تغيرات الحالة أو عدد المحاولات — ولا تقم أبداً بالتوكيد على انقضاء الوقت الفعلي للساعة الجدارية.
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+في اختبارات Bun، استخدم `jest.useFakeTimers()` و`jest.advanceTimersByTime()`؛ وتتحكم المؤقتات الوهمية في Bun أيضًا في `AbortSignal.timeout`. لا تفترض أن المشغّلين يتحكمون في الساعات الأصلية نفسها. قدّم المؤقتات فقط بعد بدء المرحلة المنتظرة، وتحقق من تغيرات الحالة أو عدد المحاولات بدل الوقت الفعلي المنقضي، وأعد المؤقتات الحقيقية بعد كل اختبار.
 
 ## قراءات ذات صلة
 

@@ -13,22 +13,22 @@ description: 在應用程式 Client 上套用身分驗證與傳輸策略，無�
 
 每種傳輸協定都有具備強型別的攔截器 Factory（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。你可以將任意組合傳入 `withInterceptors(...)`：
 
-<Tabs items={["Basic setup", "Onion execution order", "Clone & add headers"]}>
-<Tab value="Basic setup">
+<Tabs items={["基本設定", "洋蔥模型執行順序", "複製並新增標頭"]}>
+<Tab value="基本設定">
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Onion execution order">
+<Tab value="洋蔥模型執行順序">
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
 </Tab>
-<Tab value="Clone & add headers">
+<Tab value="複製並新增標頭">
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example

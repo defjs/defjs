@@ -175,7 +175,7 @@ Defjs 要求 Fetch 實作具備嘅 call signature。佢唔係 `typeof fetch`，�
 | `jitter`     | `0`             | `0`             |
 | `maxDelayMs` | 冇上限          | `30000`         |
 
-`connectTimeoutMs` 可選，而且必須係有限正數。對 SSE，佢限制由 Fetch 到 response headers；對 WebSocket，佢限制由 construction 到 `open`；handshake 之後會被清走。到期會向 balancer 報告 `NET_UNREACHABLE`，等 reconnect 可以 pick 下一個 endpoint。重試用盡就以 `NET_TIMEOUT` 結束。
+`connectTimeoutMs` 可選，而且必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。對 SSE，佢限制由 Fetch 到 response headers；對 WebSocket，佢限制由 construction 到 `open`；handshake 之後會被清走。到期會向 balancer 報告 `NET_UNREACHABLE`，等 reconnect 可以 pick 下一個 endpoint。重試用盡就以 `NET_TIMEOUT` 結束。
 
 兩種 transport 每次成功握手，都會重設該次斷線嘅重試預算、callback 嘅嘗試次數同退避指數。`attempts: 0` 停用重試；省略 `attempts` 唔代表同一次斷線可以無限重試。`maxDelayMs` 限制套用 jitter 同四捨五入之後嘅最終延遲；平台 timer 上限 `2_147_483_647` ms 亦適用，包括 SSE 冇設定上限嘅情況。Base 係零就會維持零；有效數值運算溢位時，會限制喺上限。
 
@@ -241,7 +241,7 @@ Transport 使用嘅 WebSocket instance surface：`WebSocket` 去掉 `binaryType`
 
 獨立於 endpoint 選擇，啟用同一次 call 入面嘅 HTTP 重試。省略 `withRetry` 代表一次 attempt，亦冇 budget。`withRetry()` 等同 `withRetry({})`，預設係 `maxAttempts: 2`（包括最初嗰次）、`on: ["connect-failure"]`，以及 safe method `GET`、`HEAD`、`OPTIONS`、`TRACE`。method 名唔分大小寫；`[]` 停用重試。`maxAttempts` 係至少為 1 嘅安全整數，而且每個 endpoint 最多試一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` decode 拒絕嘅 gateway body；`"attempt-timeout"` 用 `attemptTimeoutMs`。Streaming request body 永遠唔會重試。
 
-Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語義同 SSE/WebSocket 重連一樣。`delayMs: 0` 跳過等待。`attemptTimeoutMs` 限制單次 attempt 嘅 Fetch、讀 body 同 decode；caller 嘅 signal 覆蓋成次 call，包括 backoff 等待。
+Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語義同 SSE/WebSocket 重連一樣。`delayMs: 0` 跳過等待。`attemptTimeoutMs` 必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。佢限制單次 attempt 嘅 Fetch、讀 body 同 decode；caller 嘅 signal 覆蓋成次 call，包括 backoff 等待。
 
 歸 client 所有嘅 Finagle budget 預設係 20%，再加 10 秒 TTL 上面每秒 10 次嘅 reserve。Credit 同 debit 都喺十個 TTL/10 slice 上 lazy 過期。`budget: false` 拎走呢個限制。共享同一份配置嘅派生 client 共享佢嘅 budget；各自獨立嘅 client 唔共享，即使共用一個 balancer 都係。無效 option 喺 HTTP 運行時 return `REQ_OPTIONS_INVALID`，訊息係 `Invalid retry options`。呢個 option 喺套用時捕獲自己擁有嘅 field、array 同嵌套嘅 budget。`withRetry()` 同 `withRetry(undefined)` 嘅行為同 `withRetry({})` 一樣。後一次 `withRetry` 會替換呢份策略；`withRetry({ maxAttempts: 1 })` 會喺啟用之後關閉重試。balancer 同 health wrapper 冇重試設定。睇 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)。
 

@@ -1,5 +1,5 @@
 ---
-title: プラグインの開発
+title: プラグイン統合の概要
 description: SDK 定義を結合させることなく、フレームワーク注入、サーバー可観測性、AI アシスタントスキルで Defjs クライアントを拡張します。
 ---
 
@@ -87,27 +87,13 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. ミドルウェアプラグイン (`@defjs/opentelemetry-server`)
 
-ミドルウェアプラグインは、[`ClientOption`](/ja-JP/api/core/clientoption-type) を返すファクトリ関数です。`createClient(...)` に渡されると、`withHttpInterceptors`、`withSSEInterceptors`、`withWebSocketInterceptors` を介して HTTP、SSE、WebSocket の各インターセプターをクライアントに追加します。
+ミドルウェアプラグインは、[`ClientOption`](/ja-JP/api/core/clientoption-type) を返すファクトリ関数です。`createClient(...)` に渡されると、`withInterceptors` を介して HTTP、SSE、WebSocket のインターセプターを追加します。
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab value="plugins/request-id.ts">
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-return withHttpInterceptors(interceptor);
-}
-
-````
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
   </Tab>
   <Tab value="app/client.ts">
 ```ts
@@ -118,7 +104,7 @@ export const client = createClient(
   withEndpoint("https://api.example.com"),
   withRequestIdHeader(),
 );
-````
+```
 
   </Tab>
 </Tabs>

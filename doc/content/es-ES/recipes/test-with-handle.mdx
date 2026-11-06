@@ -7,53 +7,30 @@ description: Sustituye Fetch en un cliente con withHTTPHandle y deja la operaci�
 
 `withHTTPHandle(...)` sustituye la función subyacente `fetch` para una instancia concreta de cliente mientras ejercita toda la canalización de Defjs —validación de entrada, mapeo en `builder`, resolución de URLs, interceptores, clasificación por código de estado y decodificación con Struct— sin necesidad de abrir ningún socket de red:
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
   </Tab>
   <Tab value="test/orders.spec.ts">
-```ts
-import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(
-withEndpoint("https://fixture.invalid"),
-withHTTPHandle(async (input, init) => {
-const request = new Request(input, init);
-const id = new URL(request.url).pathname.split("/").at(-1);
-if (id === "7") {
-return Response.json({ id: 7, status: "paid" }, { status: 200 });
-}
-return Response.json({ message: "Order not found" }, { status: 404 });
-}),
-);
-
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error) throw error;
-console.log(order.status, response.status);
-
-````
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
   </Tab>
-  <Tab value="get-order.test.ts">
-<include cwd meta="get-order.test.ts">
+  <Tab value="Single-file demonstration">
+Esto es una demostración autónoma de un solo archivo, no una spec de un ejecutor de pruebas. Para aserciones contra la definición compartida del SDK, usa la pestaña de prueba anterior.
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
   </Tab>
 </Tabs>
 
+La demostración de un solo archivo imprime:
+
 ```txt
 paid 200
-````
+```
 
 En producción, pasa un cliente configurado con `withEndpoint(...)` exactamente a la misma definición de `getOrder`. Consulta [Pruebas](/es-ES/docs/testing) y [Cliente](/es-ES/docs/client).

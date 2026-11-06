@@ -175,7 +175,7 @@ Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`�
 | `jitter`     | `0`          | `0`          |
 | `maxDelayMs` | 상한 없음    | `30000`      |
 
-`connectTimeoutMs`는 선택이고, 유한한 양수여야 해요. SSE에서는 Fetch부터 응답 헤더까지, WebSocket에서는 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제돼요. 만료되면 밸런서에 `NET_UNREACHABLE`을 보고해서, 재연결이 다음 endpoint를 고를 수 있어요. 재시도를 모두 쓰면 `NET_TIMEOUT`으로 끝나요.
+`connectTimeoutMs`는 선택이고, 유한한 양수여야 하며 2147483647(타이머 상한)을 넘지 않아야 해요. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 돌려요. SSE에서는 Fetch부터 응답 헤더까지, WebSocket에서는 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제돼요. 만료되면 밸런서에 `NET_UNREACHABLE`을 보고해서, 재연결이 다음 endpoint를 고를 수 있어요. 재시도를 모두 쓰면 `NET_TIMEOUT`으로 끝나요.
 
 두 전송 모두, 핸드셰이크가 성공하면 단절마다의 재시도 예산, 콜백 attempt, 백오프 지수가 초기화돼요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략해도 한 단절 안에서 무제한 재시도가 되지는 않아요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한해요. SSE에 설정한 상한이 없어도 플랫폼 타이머 한계인 `2_147_483_647` ms가 적용돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 상한에서 포화돼요.
 
@@ -241,7 +241,7 @@ option 헬퍼가 변경하고 작업이 읽는, 해석된 스냅샷이에요. �
 
 엔드포인트 선택과 무관하게 같은 호출 HTTP 재시도를 켜요. 생략하면 시도는 한 번이고 예산은 없어요. `withRetry()`는 `withRetry({})`와 같고 기본값은 `maxAttempts: 2`(최초 시도 포함), `on: ["connect-failure"]`, 안전 메서드 `GET`, `HEAD`, `OPTIONS`, `TRACE`예요. 메서드는 대소문자를 가리지 않고, `[]`는 재시도를 꺼요. `maxAttempts`는 1 이상의 안전한 정수이고, 각 endpoint는 최대 한 번 시도해요. `"gateway-error"`는 `NET_UNAVAILABLE`(HTTP 502/503/504)과 `RES_*` 디코딩이 거절한 게이트웨이 body를 포함하고, `"attempt-timeout"`은 `attemptTimeoutMs`를 써요. 스트리밍 요청 body는 재시도하지 않아요.
 
-백오프 기본값은 `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`이고, SSE/WebSocket 재연결과 필드 의미가 같아요. `delayMs: 0`은 기다리지 않아요. `attemptTimeoutMs`는 한 시도의 Fetch, body 읽기, 디코딩을 덮고, 호출자 signal은 백오프 대기를 포함한 호출 전체를 덮어요.
+백오프 기본값은 `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`이고, SSE/WebSocket 재연결과 필드 의미가 같아요. `delayMs: 0`은 기다리지 않아요. `attemptTimeoutMs`는 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 해요. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 돌려요. 그것은 한 시도의 Fetch, body 읽기, 디코딩을 덮고, 호출자 signal은 백오프 대기를 포함한 호출 전체를 덮어요.
 
 클라이언트가 소유하는 Finagle 예산은 기본으로 20%에, 10초 TTL 동안 초당 10회의 예비를 더해요. 크레딧과 데빗은 TTL/10 슬라이스 열 개에서 지연해서 만료돼요. `budget: false`는 그 한도를 없애요. 같은 설정을 공유하는 파생 클라이언트는 그 예산을 공유하고, 클라이언트가 다르면 밸런서 하나를 공유해도 공유하지 않아요. 잘못된 option은 HTTP가 실행될 때 `Invalid retry options`와 함께 `REQ_OPTIONS_INVALID`를 돌려요. 이 option은 적용 시점에 소유 필드, 배열, 중첩 예산을 담아요. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같이 동작해요. 이후 `withRetry`는 정책을 대체하고, `withRetry({ maxAttempts: 1 })`는 재시도를 켠 뒤 꺼요. 밸런서와 헬스 래퍼에는 재시도 설정이 없어요. [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)를 보세요.
 

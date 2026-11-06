@@ -13,22 +13,22 @@ description: SDK의 API 정의를 수정하지 않고 애플리케이션 클라�
 
 각 전송 방식마다 고유한 타입 인터셉터 팩토리(`createHttpInterceptor`, `createSSEInterceptor`, `createWebSocketInterceptor`)가 제공됩니다. 이들을 조합하여 `withInterceptors(...)`에 전달하세요:
 
-<Tabs items={["Basic setup", "Onion execution order", "Clone & add headers"]}>
-<Tab value="Basic setup">
+<Tabs items={["기본 설정", "양파 모델 실행 순서", "복제 및 헤더 추가"]}>
+<Tab value="기본 설정">
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Onion execution order">
+<Tab value="양파 모델 실행 순서">
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
 </Tab>
-<Tab value="Clone & add headers">
+<Tab value="복제 및 헤더 추가">
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example

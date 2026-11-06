@@ -14,33 +14,15 @@ Nutze `withHTTPHandle`, `withSSEHandle` oder `withWebSocketHandle` an `createCli
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const NotFound = struct.object({
-  message: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-  error: NotFound,
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
 <include cwd lang="typescript">
-  examples/recipes/test-with-handle.ts#example
+  examples/testing/test/orders.ts#example
 </include>
 
 </Tab>
@@ -61,10 +43,13 @@ Erstelle innerhalb deiner `withHTTPHandle(async (input, init) => ...)`-Funktion 
 
 ### Zeit deterministisch mit Fake-Timern steuern
 
-Wenn du Request-Fristen (`AbortSignal.timeout`), Interceptor-Retry-Backoffs, SSE-/WebSocket-Reconnect-Verzögerungen oder WebSocket-Heartbeats testest:
+Für Interceptor-Retry-Backoff, SSE-/WebSocket-Reconnect-Verzögerungen oder WebSocket-Heartbeats nutze in Vitest `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`. Diese Fake-Timer schieben die native `AbortSignal.timeout`-Uhr nicht vor. Für eine deterministische Request-Frist in Vitest brich einen `AbortController` aus einem gesteuerten `setTimeout` mit dem Grund `TimeoutError` ab:
 
-- Nutze Fake-Timer (`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` in Vitest oder `jest.useFakeTimers()` in Bun Test).
-- Stelle die Zeit erst vor, nachdem die erwartete Phase gestartet wurde (`advanceTimersByTimeAsync`), und asserte Zustandsübergänge oder Versuchszähler – niemals vergangene reale Wanduhrzeit.
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+In Bun Test nutze `jest.useFakeTimers()` und `jest.advanceTimersByTime()`; Buns Fake-Timer steuern auch `AbortSignal.timeout`. Nimm nicht an, dass die Runner dieselben nativen Uhren steuern. Stelle die Zeit erst vor, nachdem die erwartete Phase gestartet wurde, asserte Zustandsübergänge oder Versuchszähler statt vergangener Wanduhrzeit, und stelle nach jedem Test die echten Timer wieder her.
 
 ## Weiterführende Links
 

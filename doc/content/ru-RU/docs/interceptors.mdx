@@ -66,7 +66,7 @@ Defjs не выполняет автоматических повторов по
 
 ## 4. Оборачивание WebSocket-сессий
 
-WebSocket-перехватчик может вызвать `next(req)` **не более одного раза**. При оборачивании возвращённого объекта `WebSocketSessionLike` делегируйте живые геттеры (`state`, `connection`, `bufferedAmount`), методы `close`, `closed`, `receive` и `[Symbol.asyncDispose]()` вместо копирования свойств через spread разового снимка:
+WebSocket-перехватчик может вызвать `next(req)` **не более одного раза**. При оборачивании возвращённого объекта `WebSocketSessionLike` делегируйте живые геттеры (`state`, `connection`, `bufferedAmount`), методы `close` и `[Symbol.asyncDispose]()`, промис `closed` и асинхронный итерируемый объект `receive` вместо копирования свойств через spread разового снимка:
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example

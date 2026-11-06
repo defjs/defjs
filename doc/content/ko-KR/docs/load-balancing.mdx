@@ -15,22 +15,22 @@ description: 여러 엔드포인트로 트래픽을 분산하고 비정상 레�
 | [`roundRobinBalancer(options?)`](/ko-KR/api/core/roundrobinbalancer)          | 동일한 사양의 레플리카 간 서버 간 호출 (선택적 `weights` 가중치 지원) | 활성화 (`5`회 연속 실패 시)                    |
 | [`p2cBalancer(options?)`](/ko-KR/api/core/p2cbalancer)                        | 레플리카별 레이턴시나 진행 중인 부하 차이가 큰 서버 환경              | 활성화 (`5`회 연속 실패 시)                    |
 
-<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
-<Tab value="Primary / backup (Pick-first)">
+<Tabs items={["기본·백업（Pick-first）", "동등한 서버（Round-robin 및 P2C）", "사용자 정의 밸런서"]}>
+<Tab value="기본·백업（Pick-first）">
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="Server peers (Round-robin & P2C)">
+<Tab value="동등한 서버（Round-robin 및 P2C）">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="Custom balancer">
+<Tab value="사용자 정의 밸런서">
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -59,7 +59,9 @@ description: 여러 엔드포인트로 트래픽을 분산하고 비정상 레�
 - **총 시도 횟수 (`maxAttempts`)**: 최초 시도를 포함하며, gRPC `retryPolicy.maxAttempts` 및 go-kit `lb.Retry`의 `max`와 같습니다. 값은 1 이상의 안전한 정수여야 하고, `1`은 재시도가 없음을 뜻합니다. 설정된 상한은 없지만, 각 엔드포인트는 최대 한 번만 시도합니다. 스트리밍 요청 본문은 재시도하지 않습니다. `methods`는 대소문자를 구분하지 않으며, `methods: []`는 모든 메서드의 재시도를 끕니다.
 - **재시도 조건 (`on`)**: 기본값은 `["connect-failure"]`입니다. `NET_UNAVAILABLE`(HTTP `502`/`503`/`504`)에는 `"gateway-error"`를 더합니다. `RES_*` 디코딩이 거절한 게이트웨이 오류 본문도 포함합니다. `attemptTimeoutMs`가 설정된 경우 `"attempt-timeout"`도 더할 수 있습니다. 재시도 자격이 되면 요청을 다시 만들고, 인터셉터 체인 전체를 가장 바깥 계층부터 다시 실행합니다.
 - **백오프 (`delayMs`, `factor`, `jitter`, `maxDelayMs`)**: n번째 재시도 전에는 `delayMs × factor^(n−1)`만큼 기다리며, 곱셈 지터를 적용하고 지터와 반올림 뒤에 상한을 둡니다. 기본값은 `25`, `2`, `0.2`, `250`입니다. `delayMs: 0`은 기다리지 않습니다. 재연결과 같이 `delayMs`는 유한한 0 이상, `factor`는 유한한 양수, `jitter`는 `[0, 1]`의 유한한 값, `maxDelayMs`는 0 이상의 유한한 값 또는 양의 `Infinity`여야 합니다. 플랫폼 타이머 상한은 그대로 적용됩니다.
-- **시도별 vs. 전체 호출 타임아웃**: `attemptTimeoutMs`는 Fetch 호출부터 본문 디코딩까지 단일 시도의 시간을 제한합니다. 호출자의 `client({ signal: AbortSignal.timeout(ms) })`는 모든 시도와 **백오프 대기**를 아우릅니다. 대기 중 취소는 다시 pick하지 않고 호출자의 취소 오류를 반환합니다.
+  설정된 엔드포인트가 하나뿐이면, 각 재시도가 이미 시도한 엔드포인트를 제외하므로 `withRetry`는 요청을 다시 보내지 않습니다.
+
+- **시도별 vs. 전체 호출 타임아웃**: `attemptTimeoutMs`는 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. 그것은 Fetch 호출부터 본문 디코딩까지 단일 시도의 시간을 제한합니다. 호출자의 `client({ signal: AbortSignal.timeout(ms) })`는 모든 시도와 **백오프 대기**를 아우릅니다. 대기 중 취소는 다시 pick하지 않고 호출자의 취소 오류를 반환합니다.
 - **Finagle / Linkerd 재시도 예산 (`budget`)**: 각 클라이언트 설정이 예산을 소유하며, 그 설정을 쓰는 파생 클라이언트만 공유합니다. 밸런서를 공유하는 클라이언트끼리는 공유하지 않습니다. 기본값은 `percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`이며, 원래 트래픽의 20%에 예비분을 더한 값입니다. 크레딧과 데빗은 TTL/10 슬라이스 열 개에서 지연해서 만료됩니다. 재시도는 기다리기 전에 인출하고, 예산이 소진되면 기다리지도 재시도하지도 않습니다. 상한을 없애려면 `budget: false`로 설정하세요.
 - **브라우저 오프라인 힌트**: `navigator.onLine === false`인 경우 연결 실패는 `{ attempted: false }`로 보고되며, 밸런서를 다음으로 넘기거나 재시도를 트리거하지 않습니다.
 
@@ -69,15 +71,15 @@ description: 여러 엔드포인트로 트래픽을 분산하고 비정상 레�
 
 `roundRobinBalancer()`와 `p2cBalancer()`는 기본적으로 후보 선택 로직을 [`outlierDetection`](/ko-KR/api/core/outlierdetection)으로 감싸서 제공합니다:
 
-<Tabs items={["Single-probe recovery", "Active health cache"]}>
-<Tab value="Single-probe recovery">
+<Tabs items={["단일 프로브 복구", "능동 상태 검사 캐시"]}>
+<Tab value="단일 프로브 복구">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="Active health cache">
+<Tab value="능동 상태 검사 캐시">
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

@@ -94,6 +94,8 @@ Erzeuge für jeden Aufruf, der ein eigenes `signal`, Progress-Callbacks oder Web
   examples/client/multiple-endpoints.ts#example
 </include>
 
+Bei nur einem konfigurierten Endpunkt spielt `withRetry` den Request nicht erneut ab, weil jeder Retry bereits versuchte Endpunkte ausschließt. `attemptTimeoutMs` und `connectTimeoutMs` müssen, wenn sie angegeben sind, endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück.
+
 ### Health-Filterung und P2C [#health-filtering-and-p2c]
 
 Für Peer-Server-Replikate aktivieren [`roundRobinBalancer`](/de-DE/api/core/roundrobinbalancer) und [`p2cBalancer`](/de-DE/api/core/p2cbalancer) (PeakEwma RTT × In-Flight-Last) standardmäßig ein Circuit-Breaking im Linkerd-Stil für aufeinanderfolgende Fehler (`outlierDetection`). Es zählt `NET_UNREACHABLE`, `NET_UNAVAILABLE` und `NET_SERVER_ERROR`; der rohe Antwort-`status` ist nur für eigene Balancer bestimmt.

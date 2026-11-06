@@ -49,7 +49,7 @@ export const getOrder = defineRequest({
 
 ## 2. 明確的輸入放置與雙向欄位別名
 
-在 Defjs 中，`input` 宣告呼叫端應傳入什麼值，`struct` 控管數值如何編碼與解碼，而 `builder` 則負責將每個數值精確放置到請求的各個部分（`path`、`query`、`headers`、`body`）。
+在 Defjs 中，`input` 宣告呼叫端應傳入什麼值，`struct` 控管值如何編碼與解碼，而 `builder` 則負責將每個值精確放置到請求的各個部分（`path`、`query`、`headers`、`body`）。
 
 - **無隱式推論**：只要操作宣告了 `input`，就必須提供一個明確、同步且純粹的 `builder`。欄位放置位置絕不會從參數名稱隱式猜測。
 - **雙向 `.alias(wireName)`**：在 struct 欄位上宣告 `.alias("customer_name")`，讓 TypeScript 程式碼保持慣用的 `customerName`，同時在網路通訊時自動完成對應 `"customer_name"` 的雙向轉換。
@@ -74,13 +74,13 @@ Defjs 依循六項嚴格的規則來讀取與處理 HTTP 回應：
 
 ### 規則 3：任何違反宣告的情況都會明確報錯
 
-若宣告了 JSON 格式的 `output`，當閘道器回傳 HTML 錯誤頁面或畸形 JSON 時，請求會立即失敗（回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`）。對於 JSON 資料型態，在讀取回應本文的位元組**之前**，就會先驗證 `Content-Type` 標頭。
+Defjs 用 `response.ok` 選擇回應的一側：`2xx` 用 `output`，非 `2xx` 用 `error`。只有在這一側宣告了 JSON struct，才會觸發解碼，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 會在讀取 body 位元組**之前**驗證。非 `2xx` 的 HTML 閘道頁只有在宣告了 JSON `error` struct 時才會產生 `RES_MEDIA_TYPE_INVALID`。作用中的一側沒有宣告時，不會讀取 body；非 `2xx` 回應會回傳未解碼的 `HTTP_STATUS`。
 
 | 讀取回應時發生的失敗情況                   | 回傳的 Fault 錯誤碼                                            |
 | ------------------------------------------ | -------------------------------------------------------------- |
 | 媒體型別不符合宣告的 JSON 格式             | `RES_MEDIA_TYPE_INVALID`（完全不讀取本文串流）                 |
 | 位元組無法以宣告的表示法解碼               | `RES_DECODE_FAILED`                                            |
-| 解碼後的數值未通過 `struct` 結構驗證       | `RES_STRUCT_MISMATCH`（HTTP）/ `RES_DECODE_FAILED`（SSE 交握） |
+| 解碼後的值未通過 `struct` 結構驗證         | `RES_STRUCT_MISMATCH`（HTTP）/ `RES_DECODE_FAILED`（SSE 交握） |
 | 非 `2xx` 狀態碼且成功解碼出 `error` struct | `HTTP_STATUS`，並帶有具型別的 `error.data`                     |
 | 非 `2xx` 狀態碼但未宣告 `error`            | `HTTP_STATUS`，且 `error.data: undefined`                      |
 

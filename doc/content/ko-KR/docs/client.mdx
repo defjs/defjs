@@ -94,6 +94,8 @@ export const getOrder = defineRequest({
   examples/client/multiple-endpoints.ts#example
 </include>
 
+설정된 엔드포인트가 하나뿐이면, 각 재시도가 이미 시도한 엔드포인트를 제외하므로 `withRetry`는 요청을 다시 보내지 않습니다. `attemptTimeoutMs`와 `connectTimeoutMs`는 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다.
+
 ### 헬스 필터링 및 p2c [#health-filtering-and-p2c]
 
 동일한 역할을 하는 서버 레플리카 집합의 경우, [`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer) 및 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)(PeakEwma RTT × 진행 중인 부하)가 기본적으로 Linkerd 스타일의 연속 실패 기반 서킷 브레이킹(`outlierDetection`)을 활성화합니다. 그것은 `NET_UNREACHABLE`, `NET_UNAVAILABLE`, `NET_SERVER_ERROR`를 세며, 원시 응답 `status`는 커스텀 밸런서만을 위한 것입니다.

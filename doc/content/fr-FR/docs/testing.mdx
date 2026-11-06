@@ -14,33 +14,15 @@ Utilisez `withHTTPHandle`, `withSSEHandle` ou `withWebSocketHandle` sur `createC
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const NotFound = struct.object({
-  message: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-  error: NotFound,
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
 <include cwd lang="typescript">
-  examples/recipes/test-with-handle.ts#example
+  examples/testing/test/orders.ts#example
 </include>
 
 </Tab>
@@ -61,10 +43,13 @@ Au sein de votre fonction `withHTTPHandle(async (input, init) => ...)`, instanci
 
 ### Contrôler le temps de manière déterministe avec de faux minuteurs (fake timers)
 
-Lors du test de délais d'attente (`AbortSignal.timeout`), de backoff d'intercepteur, de délais de reconnexion SSE/WebSocket ou de heartbeats WebSocket :
+Pour le backoff de retry d'un intercepteur, les délais de reconnexion SSE/WebSocket ou les heartbeats WebSocket, utilisez `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` dans Vitest. Ces faux minuteurs n'avancent pas l'horloge native d'`AbortSignal.timeout`. Pour un délai de requête déterministe dans Vitest, annulez un `AbortController` depuis un `setTimeout` contrôlé, avec la raison `TimeoutError` :
 
-- Utilisez de faux minuteurs (`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` avec Vitest ou `jest.useFakeTimers()` sous Bun test).
-- Faites avancer les minuteurs une fois la phase attendue entamée (`advanceTimersByTimeAsync`) et vérifiez les transitions d'état ou le décompte des tentatives — n'effectuez jamais d'assertions sur le temps réel écoulé.
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+Sous Bun test, utilisez `jest.useFakeTimers()` et `jest.advanceTimersByTime()` ; les faux minuteurs de Bun contrôlent aussi `AbortSignal.timeout`. Ne supposez pas que les exécuteurs contrôlent les mêmes horloges natives. Faites avancer les minuteurs seulement après le début de la phase attendue, vérifiez les transitions d'état ou le nombre de tentatives plutôt que le temps réel écoulé, et restaurez les vrais minuteurs après chaque test.
 
 ## Lectures connexes
 

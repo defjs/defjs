@@ -10,7 +10,7 @@ description: 在取用端應用程式中獨立設定如何呼叫匯入的 SDK �
 `createClient(...options)` 會回傳一個 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)：
 
 - 不需要單次呼叫選項時，可直接將 `client` 傳遞給操作（`getOrder(client, { id: 1 })`）。
-- 呼叫 `client(requestOptions)` 可衍生出單次呼叫的 `Client` 數值（`getOrder(client({ signal }), { id: 1 })`）。衍生過程不進行任何 I/O 操作，且衍生出的數值是一般純物件（不可再次呼叫）。
+- 呼叫 `client(requestOptions)` 可衍生出單次呼叫的 `Client` 值（`getOrder(client({ signal }), { id: 1 })`）。衍生過程不進行任何 I/O 操作，且衍生出的值是一般純物件（不可再次呼叫）。
 
 ## 1. 設定 Client 並呼叫 SDK 操作
 
@@ -93,6 +93,8 @@ export const getOrder = defineRequest({
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
+
+只設定了一個端點時，`withRetry` 不會重放請求，因為每一次重試都會排除已經試過的端點。若提供了 `attemptTimeoutMs` 與 `connectTimeoutMs`，它們必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。
 
 ### 健康狀態過濾與 p2c [#health-filtering-and-p2c]
 

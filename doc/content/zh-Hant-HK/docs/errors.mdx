@@ -9,22 +9,22 @@ description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple
 
 ## 1. 喺 SDK 宣告服務錯誤，喺應用程式分流處理
 
-<Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>
-<Tab value="Exhaustive code switch">
+<Tabs items={["完整列舉錯誤碼分支", "基本狀態碼檢查", "各傳輸方式嘅 tuple 結構"]}>
+<Tab value="完整列舉錯誤碼分支">
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="Basic status check">
+<Tab value="基本狀態碼檢查">
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Tuple shapes by transport">
+<Tab value="各傳輸方式嘅 tuple 結構">
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -47,7 +47,7 @@ description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple
 | `REQ`  | `REQ_INPUT_INVALID`、`REQ_OPTIONS_INVALID`、`REQ_BUILD_FAILED`         | 呼叫端傳入嘅 input 驗證失敗、client 選項超出範圍、URL/路徑無效，或者 `builder` 拋出例外。絕唔應該重試。 |
 | `RES`  | `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH`   | 伺服器回應違反咗宣告嘅 media type、資料格式或 `struct` 契約。                                           |
 | `NET`  | `NET_ABORTED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`NET_BODY_INCOMPLETE` | 呼叫端主動中斷（`NET_ABORTED`）、逾時期限屆滿（`NET_TIMEOUT`）、連線失敗，或串流中途截斷。              |
-| `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | 應用程式嘅中介層、hook 或進度／狀態監聽器拋出例外或回傳咗無效數值。                                     |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | 應用程式嘅中介層、hook 或進度／狀態監聽器拋出例外或回傳咗無效值。                                       |
 | `CAP`  | `CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`                            | SSE frame 緩衝區或 SSE/WebSocket 消費佇列超出設定上限。                                                 |
 | `ENV`  | `ENV_UNSUPPORTED`                                                      | 當前執行環境缺少所需嘅 Web API（例如喺 Firefox 中串流上傳 request body）。                              |
 
@@ -63,22 +63,22 @@ description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple
 
 因為單一 `error` struct 涵蓋所有非 `2xx` 狀態碼，當唔同錯誤狀態碼回傳唔同嘅 JSON 結構時，可以使用 union 宣告：
 
-<Tabs items={["Discriminate by kind", "Discriminate by body status", "Plain union (struct.or)"]}>
-<Tab value="Discriminate by kind">
+<Tabs items={["按 kind 區分", "按 body 狀態區分", "一般聯合型別（struct.or）"]}>
+<Tab value="按 kind 區分">
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="Discriminate by body status">
+<Tab value="按 body 狀態區分">
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="Plain union (struct.or)">
+<Tab value="一般聯合型別（struct.or）">
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -103,15 +103,15 @@ description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple
 
 每個 `Fault` 都係原生 `Error`（`instanceof Error === true`），並且帶有可列舉嘅 `code`、`status`、`response` 同 `data` 屬性。
 
-<Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
-<Tab value="Inspect StructError cause">
+<Tabs items={["檢查 StructError 原因", "隱去敏感資料嘅診斷摘要"]}>
+<Tab value="檢查 StructError 原因">
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="Redacted diagnostic summary">
+<Tab value="隱去敏感資料嘅診斷摘要">
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

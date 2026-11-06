@@ -1,5 +1,5 @@
 ---
-title: Plugins entwickeln
+title: Übersicht der Integrationen
 description: Erweitere einen anwendungseigenen Defjs-Client mit Framework-Injektion, Server-Observability und KI-Assistant-Skills, ohne deine SDK-Definitionen daran zu binden.
 ---
 
@@ -17,12 +17,12 @@ Jedes Defjs-Plugin folgt dem **Thin-Plugin-Vertrag**:
 
 ## Veröffentlichte Integrationen & Tools
 
-| Bereich                                                               | Paket / Ressource                 | Kategorie         | Was es bereitstellt                                                                                             | Was in der Anwendung verbleibt                                                            |
-| --------------------------------------------------------------------- | --------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [React](/de-DE/docs/integrations/react)                               | `@defjs/react`                    | Framework-Plugin  | `ClientProvider` und `useClient(override?)` für React 18+                                                       | Client-Erstellung, `AbortController`-Cleanup, Query-Caching (z. B. TanStack Query)        |
-| [Vue](/de-DE/docs/integrations/vue)                                   | `@defjs/vue`                      | Framework-Plugin  | `createClientPlugin`, `HTTP_CLIENT` und `injectClient(key?)` für Vue 3.2+                                       | Client-Erstellung, `onCleanup`- / `onScopeDispose`-Abbruch, Query-State                   |
-| [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Middleware-Plugin | `withOpenTelemetryServer(...)`-`ClientOption` für ausgehende HTTP-, SSE- und WebSocket-Spans, Metriken und Logs | Initialisierung des OpenTelemetry-SDKs, Exporter, Sampling, Redaktion und Flush           |
-| [KI-Skill](/de-DE/docs/ai) & [llms.txt](/de-DE/docs/ai-api)           | `defjs/defjs`-Skill & `/llms.txt` | KI-Werkzeuge      | Agent-Skill (`SKILL.md`) und maschinenlesbare Markdown-Dokumentation                                            | Verifikation gegen die installierte `@defjs/core`-Version des Projekts und die Test-Suite |
+| Bereich                                                               | Paket / Ressource                 | Kategorie         | Was es bereitstellt                                                                                             | Was in der Anwendung verbleibt                                                                   |
+| --------------------------------------------------------------------- | --------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [React](/de-DE/docs/integrations/react)                               | `@defjs/react`                    | Framework-Plugin  | `ClientProvider` und `useClient(override?)` für React 18+                                                       | Client-Erstellung, `AbortController`-Cleanup, Query-Caching (z. B. TanStack Query)               |
+| [Vue](/de-DE/docs/integrations/vue)                                   | `@defjs/vue`                      | Framework-Plugin  | `createClientPlugin`, `HTTP_CLIENT` und `injectClient(key?)` für Vue 3.2+                                       | Client-Erstellung, `onCleanup`- / `onScopeDispose`-Abbruch, Query-State                          |
+| [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Middleware-Plugin | `withOpenTelemetryServer(...)`-`ClientOption` für ausgehende HTTP-, SSE- und WebSocket-Spans, Metriken und Logs | Initialisierung des OpenTelemetry-SDKs, Exporter, Sampling, Schwärzung sensibler Daten und Flush |
+| [KI-Skill](/de-DE/docs/ai) & [llms.txt](/de-DE/docs/ai-api)           | `defjs/defjs`-Skill & `/llms.txt` | KI-Werkzeuge      | Agent-Skill (`SKILL.md`) und maschinenlesbare Markdown-Dokumentation                                            | Verifikation gegen die installierte `@defjs/core`-Version des Projekts und die Test-Suite        |
 
 ---
 
@@ -93,27 +93,14 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. Middleware-Plugins (`@defjs/opentelemetry-server`)
 
-Ein Middleware-Plugin ist eine Factory, die eine [`ClientOption`](/de-DE/api/core/clientoption-type) zurückgibt. Wird diese an `createClient(...)` übergeben, hängt sie HTTP-, SSE- und/oder WebSocket-Interceptors über `withHttpInterceptors`, `withSSEInterceptors` und `withWebSocketInterceptors` an:
+Ein Middleware-Plugin ist eine Factory, die eine [`ClientOption`](/de-DE/api/core/clientoption-type) zurückgibt. Wird diese an `createClient(...)` übergeben, hängt sie HTTP-, SSE- und/oder WebSocket-Interceptors über `withInterceptors` an:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
 <Tab value="plugins/request-id.ts">
 
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-  return withHttpInterceptors(interceptor);
-}
-```
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">

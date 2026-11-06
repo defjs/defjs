@@ -122,6 +122,7 @@ Tanto la reconexión como los latidos (_heartbeat_) son opcionales mediante opci
 </Tabs>
 
 - **Reconexión**: cuando se habilita, los valores por defecto son `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Cada evento físico `open` reinicia el presupuesto de fallos. El callback `beforeConnect({ attempt, signal })` se ejecuta antes de la conexión inicial y de cada intento de reconexión.
+- **Tiempo límite del handshake (`connectTimeoutMs`)**: cuando se proporciona, debe ser finito, positivo y no mayor que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`. Acota la construcción hasta `open` y se borra después del handshake.
 - **Latidos (_heartbeat_)**: envía periódicamente `message()` a través del struct `outgoing` y espera hasta `timeoutMs` por una trama que coincida con `isAck(msg)`. Las tramas de confirmación coincidentes son consumidas por el monitor de latidos y no se transmiten a `session.receive`. Perder una confirmación resulta fatal para la sesión.
 - **Límites de cola**:
   - `maxIncomingQueueSize` (entero positivo requerido): desbordar la cola termina la sesión con `CAP_QUEUE_OVERFLOW`. Mantén el consumo activo de `session.receive` mientras la sesión esté abierta.

@@ -122,6 +122,7 @@ La reconnexion et le heartbeat sont activables à la demande via les options du 
 </Tabs>
 
 - **Reconnexion** : Les valeurs par défaut une fois activée sont `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Chaque ouverture physique `open` réinitialise le budget de tentatives. `beforeConnect({ attempt, signal })` s'exécute avant la connexion initiale et chaque tentative de reconnexion.
+- **Délai de handshake (`connectTimeoutMs`)** : Lorsqu'il est fourni, il doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`. Il borne la construction jusqu'à `open` et est effacé après le handshake.
 - **Heartbeat** : Émet périodiquement `message()` à travers le struct `outgoing` et attend jusqu'à `timeoutMs` une trame satisfaisant `isAck(msg)`. Les trames d'acquittement correspondantes sont consommées par le moniteur de heartbeat et ne parviennent pas à `session.receive`. Un acquittement manqué met un terme fatal à la session.
 - **Limites de file d'attente** :
   - `maxIncomingQueueSize` (entier positif obligatoire) : Tout dépassement termine la session avec `CAP_QUEUE_OVERFLOW`. Consommez régulièrement `session.receive` tant que la session est ouverte.

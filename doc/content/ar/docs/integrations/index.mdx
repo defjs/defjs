@@ -1,9 +1,9 @@
 ---
-title: تطوير الإضافات
+title: نظرة عامة على التكاملات
 description: وسّع عميل Defjs المملوك للتطبيق بحقن أطر العمل ومراقبة الخادم وأدوات الذكاء الاصطناعي دون ربط تعريفات SDK الخاصة بك.
 ---
 
-# نظرة عامة على التكاملات وتطوير الإضافات
+# نظرة عامة على التكاملات
 
 يُوسّع التكامل عميل التطبيق `Client` عند نقاط تمديد محددة بدقة دون تعديل حزمة `@defjs/core` ودون ربط تعريفات SDK بأي إطار عمل أو حزمة قياس ومراقبة. تبقى تعريفات SDK لديك وحدات ESM نقية تتبع `@defjs/core` فقط؛ بينما يختار التطبيق المستهلك التكاملات التي يرغب في تثبيتها واستخدامها.
 
@@ -87,27 +87,13 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. الإضافات الوسيطة (`@defjs/opentelemetry-server`)
 
-الإضافة الوسيطة هي دالة مصنع تُرجع خيار عميل [`ClientOption`](/ar/api/core/clientoption-type). وعند تمريرها إلى `createClient(...)`، تقوم بإلحاق معترضات HTTP وSSE و/أو WebSocket عبر `withHttpInterceptors` و`withSSEInterceptors` و`withWebSocketInterceptors`:
+الإضافة الوسيطة هي دالة مصنع تُرجع خيار عميل [`ClientOption`](/ar/api/core/clientoption-type). وعند تمريرها إلى `createClient(...)`، تقوم بإلحاق معترضات HTTP وSSE و/أو WebSocket عبر `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab value="plugins/request-id.ts">
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-return withHttpInterceptors(interceptor);
-}
-
-````
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
   </Tab>
   <Tab value="app/client.ts">
 ```ts
@@ -118,7 +104,7 @@ export const client = createClient(
   withEndpoint("https://api.example.com"),
   withRequestIdHeader(),
 );
-````
+```
 
   </Tab>
 </Tabs>

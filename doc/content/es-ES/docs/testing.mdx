@@ -14,33 +14,15 @@ Utiliza `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle` en `createClie
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const NotFound = struct.object({
-  message: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-  error: NotFound,
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
 <include cwd lang="typescript">
-  examples/recipes/test-with-handle.ts#example
+  examples/testing/test/orders.ts#example
 </include>
 
 </Tab>
@@ -61,10 +43,13 @@ Dentro de tu función `withHTTPHandle(async (input, init) => ...)`, construye `c
 
 ### Controla el tiempo de forma determinista con temporizadores simulados
 
-Al probar límites de tiempo (`AbortSignal.timeout`), backoff de reintentos en interceptores, demoras de reconexión en SSE/WebSocket o latidos de WebSocket:
+Para el backoff de reintento en interceptores, las demoras de reconexión de SSE/WebSocket o los latidos de WebSocket, usa `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` en Vitest. Estos temporizadores simulados no avanzan el reloj nativo de `AbortSignal.timeout`. Para un límite de petición determinista en Vitest, aborta un `AbortController` desde un `setTimeout` controlado con una razón `TimeoutError`:
 
-- Emplea temporizadores simulados (_fake timers_), como `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` en Vitest o `jest.useFakeTimers()` en Bun test.
-- Avanza los temporizadores una vez iniciada la fase esperada (`advanceTimersByTimeAsync`) y comprueba transiciones de estado o recuentos de intentos; nunca hagas aserciones sobre el tiempo de reloj real transcurrido.
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+En Bun test, usa `jest.useFakeTimers()` y `jest.advanceTimersByTime()`; los temporizadores simulados de Bun también controlan `AbortSignal.timeout`. No des por hecho que los ejecutores controlan los mismos relojes nativos. Avanza los temporizadores solo después de que haya empezado la fase esperada, comprueba transiciones de estado o recuentos de intentos en lugar del tiempo de reloj real transcurrido, y restaura los temporizadores reales después de cada prueba.
 
 ## Lecturas relacionadas
 

@@ -32,7 +32,7 @@ bun add @defjs/core @defjs/react react
   </Tab>
 </Tabs>
 
-- `ClientProvider` 係一個極輕量嘅 React Context 提供者。傳入唔同嘅 `client` prop 會更新下層元件讀取到嘅數值，唔會 clone 亦唔會 dispose 先前嘅 client。
+- `ClientProvider` 係一個極輕量嘅 React Context 提供者。傳入唔同嘅 `client` prop 會更新下層元件讀取到嘅值，唔會 clone 亦唔會 dispose 先前嘅 client。
 - 喺開發模式（`StrictMode`）下，React 會多次掛載同清理 effect。檢查 `controller.signal.aborted` 可以防止過時嘅過期回應覆蓋最新狀態。
 
 ---

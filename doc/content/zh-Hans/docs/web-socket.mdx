@@ -108,13 +108,13 @@ void main();
 
 自动重连与心跳保活机制均为显式开启（opt-in），可通过 Client 选项（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或单次调用的派生 Client 选项（`client({ reconnect, heartbeat })`）进行配置：
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
-<Tab value="Reconnect policy">
+<Tabs items={["重连策略", "应用层心跳"]}>
+<Tab value="重连策略">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="Application heartbeat">
+<Tab value="应用层心跳">
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
@@ -122,6 +122,7 @@ void main();
 </Tabs>
 
 - **自动重连**：启用时的默认参数为 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次物理连接成功进入 `open` 状态均会重置重试预算。`beforeConnect({ attempt, signal })` 钩子会在首次连接以及后续每一次重连尝试前触发运行。
+- **握手超时（`connectTimeoutMs`）**：若提供，它必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它把从构造到 `open` 的时间加上限，握手之后会被清掉。
 - **心跳保活**：定时通过 `outgoing` struct 发送由 `message()` 构造的探测帧，并在至多 `timeoutMs` 毫秒内等待匹配 `isAck(msg)` 的确认帧。匹配的 Ack 确认帧会被心跳监控层内部消耗，不会转发给 `session.receive`。若在规定时间内未收到 Ack，整个会话将被作为致命错误终结。
 - **队列容量限制**：
   - `maxIncomingQueueSize`（必填正整数）：入站队列溢出将直接以 `CAP_QUEUE_OVERFLOW` 报错关闭会话。在会话存活期间，请确保持续消费 `session.receive`。

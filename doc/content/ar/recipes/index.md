@@ -7,7 +7,7 @@ description: ابنِ وانشر حزمة SDK قابلة لإعادة الاست
 
 ## HTTP
 
-- [إرسال بيانات JSON](/ar/recipes/post-json) — ربط الحقول المنطقية بنمط camelCase مع مفاتيح `snake_case` السلكية، وفك تشفير استجابة `201` محددة الأنواع.
+- [إرسال بيانات JSON](/ar/recipes/post-json) — ربط الحقول المنطقية بنمط camelCase مع مفاتيح `snake_case` السلكية، وفك ترميز استجابة `201` محددة الأنواع.
 - [معالجة استجابة 404 معلنة](/ar/recipes/get-declared-404) — التفريع بين ناتج النجاح `200` ومحتوى خطأ `404` المعلن كخطأ `HTTP_STATUS`.
 - [الإلغاء والمهل الزمنية](/ar/recipes/cancel-http) — الجمع بين `AbortController` الخاص بالمستدعي و`AbortSignal.timeout(...)`، والتمييز بين `NET_ABORTED` و`NET_TIMEOUT`.
 - [طلبات ETag الشرطية](/ar/recipes/etag-revalidate) — إرسال `If-None-Match`، ومعالجة `304 Not Modified` كخطأ `HTTP_STATUS`، والاحتفاظ بذاكرة التخزين المؤقت `Map` داخل كود التطبيق.
@@ -24,5 +24,5 @@ description: ابنِ وانشر حزمة SDK قابلة لإعادة الاست
 
 ## اختبار حزمة SDK ونشرها [#testing-and-packaging]
 
-- [اختبارات HTTP المحلية](/ar/recipes/test-with-handle) — اختبار بناء الروابط والمعترضات وفك تشفير كائنات Struct في الذاكرة باستخدام `withHTTPHandle(...)`.
+- [اختبارات HTTP المحلية](/ar/recipes/test-with-handle) — اختبار بناء الروابط والمعترضات وفك ترميز كائنات Struct في الذاكرة باستخدام `withHTTPHandle(...)`.
 - [بناء حزمة SDK ونشرها](/ar/recipes/publish-http-sdk) — حزم ونشر SDK خالٍ من العملاء عبر `tsdown` واستهلاكه مباشرة في التطبيق.

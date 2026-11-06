@@ -1,5 +1,5 @@
 ---
-title: "Decisiones de diseño"
+title: "Arquitectura central"
 description: Cómo separar las definiciones de API de la ejecución del cliente hace más fáciles de diseñar, publicar y reutilizar los SDK.
 ---
 
@@ -74,7 +74,7 @@ Una respuesta `2xx` se decodifica únicamente con `output`. Cualquier otro códi
 
 ### Regla 3: Cualquier desviación respecto a lo declarado es un fallo explícito
 
-Si se declara un `output` en JSON, una pasarela que devuelva una página de error en HTML o JSON malformado provocará un fallo inmediato (`RES_MEDIA_TYPE_INVALID` o `RES_DECODE_FAILED`). Para representaciones JSON, la cabecera `Content-Type` se verifica **antes** de leer los bytes del cuerpo.
+Defjs elige el lado de la respuesta con `response.ok`: `output` para `2xx` y `error` para lo que no es `2xx`. Solo un struct JSON declarado en ese lado dispara la decodificación y puede producir `RES_MEDIA_TYPE_INVALID` o `RES_DECODE_FAILED`; su `Content-Type` se verifica **antes** de leer los bytes del cuerpo. Una página HTML de pasarela que no sea `2xx` produce `RES_MEDIA_TYPE_INVALID` solo cuando hay un struct JSON `error` declarado. Sin una declaración para el lado activo, el cuerpo no se lee; una respuesta que no sea `2xx` devuelve un `HTTP_STATUS` sin decodificar.
 
 | Qué falló durante la lectura de la respuesta                      | Fallo devuelto                                                     |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------ |

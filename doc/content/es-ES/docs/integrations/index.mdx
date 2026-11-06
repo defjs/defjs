@@ -1,5 +1,5 @@
 ---
-title: Desarrollar un plugin
+title: Visión general de integraciones
 description: Extiende el cliente Defjs de la aplicación con inyección en frameworks, observabilidad en servidor y skills de IA sin acoplar tus definiciones de SDK.
 ---
 
@@ -17,12 +17,12 @@ Cada plugin de Defjs respeta el **contrato de plugin ligero**:
 
 ## Integraciones y herramientas publicadas
 
-| Área                                                                       | Paquete / Recurso                 | Categoría            | Qué proporciona                                                                                                       | Qué permanece en la aplicación                                                       |
-| -------------------------------------------------------------------------- | --------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [React](/es-ES/docs/integrations/react)                                    | `@defjs/react`                    | Plugin de framework  | `ClientProvider` y `useClient(override?)` para React 18+                                                              | Creación del cliente, limpieza con `AbortController`, caché de consultas             |
-| [Vue](/es-ES/docs/integrations/vue)                                        | `@defjs/vue`                      | Plugin de framework  | `createClientPlugin`, `HTTP_CLIENT` e `injectClient(key?)` para Vue 3.2+                                              | Creación del cliente, cancelación en `onCleanup` / `onScopeDispose`, estado          |
-| [OpenTelemetry en servidor](/es-ES/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Plugin de middleware | `ClientOption` con `withOpenTelemetryServer(...)` para spans salientes de HTTP, SSE y WebSocket, métricas y registros | Inicialización del SDK de OpenTelemetry, exportadores, muestreo, redacción y vaciado |
-| [Skill de IA](/es-ES/docs/ai) y [llms.txt](/es-ES/docs/ai-api)             | Skill `defjs/defjs` y `/llms.txt` | Herramientas de IA   | Skill para agentes (`SKILL.md`) y documentación Markdown procesable por máquinas                                      | Verificación contra la versión instalada de `@defjs/core` y suite de pruebas         |
+| Área                                                                       | Paquete / Recurso                 | Categoría            | Qué proporciona                                                                                                       | Qué permanece en la aplicación                                                                           |
+| -------------------------------------------------------------------------- | --------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [React](/es-ES/docs/integrations/react)                                    | `@defjs/react`                    | Plugin de framework  | `ClientProvider` y `useClient(override?)` para React 18+                                                              | Creación del cliente, limpieza con `AbortController`, caché de consultas                                 |
+| [Vue](/es-ES/docs/integrations/vue)                                        | `@defjs/vue`                      | Plugin de framework  | `createClientPlugin`, `HTTP_CLIENT` e `injectClient(key?)` para Vue 3.2+                                              | Creación del cliente, cancelación en `onCleanup` / `onScopeDispose`, estado                              |
+| [OpenTelemetry en servidor](/es-ES/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Plugin de middleware | `ClientOption` con `withOpenTelemetryServer(...)` para spans salientes de HTTP, SSE y WebSocket, métricas y registros | Inicialización del SDK de OpenTelemetry, exportadores, muestreo, ocultación de datos sensibles y vaciado |
+| [Skill de IA](/es-ES/docs/ai) y [llms.txt](/es-ES/docs/ai-api)             | Skill `defjs/defjs` y `/llms.txt` | Herramientas de IA   | Skill para agentes (`SKILL.md`) y documentación Markdown procesable por máquinas                                      | Verificación contra la versión instalada de `@defjs/core` y suite de pruebas                             |
 
 ---
 
@@ -93,27 +93,14 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. Plugins de middleware (`@defjs/opentelemetry-server`)
 
-Un plugin de middleware es una factoría que devuelve un [`ClientOption`](/es-ES/api/core/clientoption-type). Al pasarse a `createClient(...)`, añade interceptores HTTP, SSE o WebSocket mediante `withHttpInterceptors`, `withSSEInterceptors` y `withWebSocketInterceptors`:
+Un plugin de middleware es una factoría que devuelve un [`ClientOption`](/es-ES/api/core/clientoption-type). Al pasarse a `createClient(...)`, añade interceptores HTTP, SSE o WebSocket mediante `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
 <Tab value="plugins/request-id.ts">
 
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-  return withHttpInterceptors(interceptor);
-}
-```
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">

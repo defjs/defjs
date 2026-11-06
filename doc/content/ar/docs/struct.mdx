@@ -66,7 +66,7 @@ export type Order = Infer<typeof Order>;
 | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
 | مدخلات العملية `input` واستدعاء `struct.parse(Schema, value)`            | الاسم المنطقي (`customerName`)                              |
 | كائن struct محدد الأنواع تُرجعه `builder` (`body`، و`query`، و`headers`) | الاسم البديل السلكي (`customer_name`)                       |
-| فك تشفير استجابة JSON أو حدث SSE أو إطار WebSocket                       | الاسم السلكي `customer_name` ← الاسم المنطقي `customerName` |
+| فك ترميز استجابة JSON أو حدث SSE أو إطار WebSocket                       | الاسم السلكي `customer_name` ← الاسم المنطقي `customerName` |
 | مفتاح كائن مجهول مكتوب مباشرة داخل `builder`                             | المفتاح الحرفي كما كُتب تماماً                              |
 
 <include cwd lang="typescript">
@@ -77,7 +77,7 @@ export type Order = Infer<typeof Order>;
 
 ## 4. موضع الطلب ومحولات النماذج (Form Codecs)
 
-يعرّف `input` المعلمات؛ بينما تضعها دالة `builder` داخل `{ path, query, headers, body }`. وفيما يخص الأجسام المشفرة بنماذج الاستمارات، تضع دالتا `struct.urlencoded(shape)` و`struct.formData(shape)` وسماً على الكائن الجذري لتقوم وسيلة النقل بتسلسله تلقائياً كـ `URLSearchParams` أو `FormData`:
+يعرّف `input` المعلمات؛ بينما تضعها دالة `builder` داخل `{ path, query, headers, body }`. وفيما يخص الأجسام المُرمَّزة بنماذج الاستمارات، تضع دالتا `struct.urlencoded(shape)` و`struct.formData(shape)` وسماً على الكائن الجذري لتقوم وسيلة النقل بتسلسله تلقائياً كـ `URLSearchParams` أو `FormData`:
 
 <include cwd lang="typescript">
   examples/struct/request-placement.ts#example
@@ -100,7 +100,7 @@ export type Order = Infer<typeof Order>;
   examples/struct/parse-failures.ts#example
 </include>
 
-يحتوي كل عنصر `StructIssue` على: `code` (مثل `invalid_type` أو `missing_key` أو `invalid_literal` أو `invalid_enum` أو `invalid_union` أو `invalid_intersection` أو `custom`)، و`path`، و`expected`، و`received`، و`message`. تُبلّغ الرسائل الافتراضية عن _نوع_ القيمة المستلمة فقط (وليس قيمة الحمولة الخام أبداً) حتى لا تتسرب أي بيانات حساسة عبر `String(error)` أو `error.prettify()` إلى سجلات النظام.
+يحتوي كل عنصر `StructIssue` على: `code` (مثل `invalid_type` أو `missing_key` أو `invalid_literal` أو `invalid_enum` أو `invalid_union` أو `invalid_intersection` أو `custom`)، و`path`، و`expected`، و`received`، و`message`. تحذف الرسائل الافتراضية القيمة المستلمة وتُبلّغ عن _نوعها_ فقط، لكن المسارات تحتفظ بمفاتيح record الديناميكية، التي قد تحتوي على قيم حساسة. ليست `String(error)` و`error.prettify()` حد تنقيح؛ استخدم قائمة سماح للحقول الآمنة عند التسجيل، وعامل قيم `received` الخام والرسائل المخصصة على أنها حساسة.
 
 ## 6. مرجع دوال البناء (Constructors)
 

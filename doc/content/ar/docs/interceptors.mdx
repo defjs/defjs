@@ -66,7 +66,7 @@ description: طبّق سياسات المصادقة والنقل على عميل
 
 ## 4. تغليف جلسات WebSocket
 
-يجوز لمعترض WebSocket استدعاء `next(req)` **مرة واحدة على الأكثر**. وعند تغليف كائن الجلسة المُرجع `WebSocketSessionLike`، فوّض دوال الجلب الحية (`state`، و`connection`، و`bufferedAmount`)، ودالتي `close` و`closed`، والمكرر `receive`، والخاصية `[Symbol.asyncDispose]()` بدلاً من نشر لقطة أحادية عبر تفكيك الكائن:
+يجوز لمعترض WebSocket استدعاء `next(req)` **مرة واحدة على الأكثر**. وعند تغليف كائن الجلسة المُرجع `WebSocketSessionLike`، فوّض دوال الجلب الحية (`state`، و`connection`، و`bufferedAmount`)، والدالة `close`، والوعد `closed`، والمكرر غير المتزامن `receive`، والدالة `[Symbol.asyncDispose]()` بدلاً من نشر لقطة أحادية عبر تفكيك الكائن:
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example

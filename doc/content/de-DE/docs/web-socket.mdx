@@ -122,6 +122,7 @@ Sowohl Reconnect als auch Heartbeat sind Opt-in über Client-Optionen (`withWebS
 </Tabs>
 
 - **Reconnect**: Standardwerte im aktivierten Zustand sind `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Jedes physische `open` setzt das Ausfallbudget zurück. `beforeConnect({ attempt, signal })` wird vor dem ersten Verbindungsaufbau und vor jedem Reconnect-Versuch ausgeführt.
+- **Handshake-Timeout (`connectTimeoutMs`)**: Wenn angegeben, muss es endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück. Es begrenzt die Konstruktion bis `open` und wird nach dem Handshake gelöscht.
 - **Heartbeat**: Sendet periodisch `message()` durch das `outgoing`-Struct und wartet bis zu `timeoutMs` auf einen Frame, der `isAck(msg)` erfüllt. Passende Bestätigungs-Frames werden vom Heartbeat-Monitor konsumiert und nicht an `session.receive` weitergeleitet. Ein ausbleibendes Ack beendet die Sitzung fatal.
 - **Warteschlangenlimits**:
   - `maxIncomingQueueSize` (erforderliche positive Ganzzahl): Ein Überlauf beendet die Sitzung mit `CAP_QUEUE_OVERFLOW`. Stelle sicher, dass `session.receive` kontinuierlich konsumiert wird, solange die Sitzung geöffnet ist.

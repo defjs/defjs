@@ -8,7 +8,7 @@ description: 用 Struct 定義 SDK 的輸入、輸出、錯誤及訊息，同時
 `struct` 用嚟宣告 SDK 同使用方之間共享嘅網絡資料契約：包括呼叫端嘅 input、`2xx` 輸出、宣告過嘅服務錯誤、SSE 事件，以及 WebSocket frame。
 
 - **靜態型別推斷**：透過 `Infer<typeof Schema>` 推斷 TypeScript 型別。
-- **Error-first 執行時驗證**：用 `struct.parse(Schema, value)` 喺執行時驗證數值 — 回傳 `[null, data]` 或 `[StructError, undefined]`，唔會拋出例外。
+- **Error-first 執行時驗證**：用 `struct.parse(Schema, value)` 喺執行時驗證值 — 回傳 `[null, data]` 或 `[StructError, undefined]`，唔會拋出例外。
 
 ## 1. 喺 SDK 定義 Schema，喺應用程式驗證
 
@@ -44,7 +44,7 @@ export type Order = Infer<typeof Order>;
 
 Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得清清楚楚。預設情況下，每個 struct 建構子都係嚴格必填而且唔接受 null：
 
-| 宣告方式                     | 缺少 / `undefined`       | `null` | 有效數值      |
+| 宣告方式                     | 缺少 / `undefined`       | `null` | 有效值        |
 | ---------------------------- | ------------------------ | ------ | ------------- |
 | `struct.string()`            | 拒絕                     | 拒絕   | 接受 `string` |
 | `struct.string().optional()` | 接受（物件序列化時省略） | 拒絕   | 接受 `string` |
@@ -62,18 +62,18 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
 
 當後端 API 習慣用 `snake_case` 或者特定 header 名稱，但你嘅 TypeScript SDK 想保持乾淨嘅 `camelCase` 嗰陣，就可以用 `.alias("wire_name")`。你只需喺欄位宣告一次 alias，佢就可以喺兩個方向自動轉換：
 
-| 邊界                                                             | 使用嘅 Key 名稱                            |
-| ---------------------------------------------------------------- | ------------------------------------------ |
-| 操作 `input` 與 `struct.parse(Schema, value)`                    | 邏輯名稱（`customerName`）                 |
-| `builder` 回傳嘅帶型別 struct 數值（`body`、`query`、`headers`） | 網絡 alias（`customer_name`）              |
-| 解碼 JSON 回應 / SSE 事件 / WebSocket frame                      | 網絡 `customer_name` → 邏輯 `customerName` |
-| 喺 `builder` 入面直接手寫嘅匿名物件 key                          | 手寫乜就係乜，保持字面值                   |
+| 邊界                                                           | 使用嘅 Key 名稱                            |
+| -------------------------------------------------------------- | ------------------------------------------ |
+| 操作 `input` 與 `struct.parse(Schema, value)`                  | 邏輯名稱（`customerName`）                 |
+| `builder` 回傳嘅帶型別 struct 值（`body`、`query`、`headers`） | 網絡 alias（`customer_name`）              |
+| 解碼 JSON 回應 / SSE 事件 / WebSocket frame                    | 網絡 `customer_name` → 邏輯 `customerName` |
+| 喺 `builder` 入面直接手寫嘅匿名物件 key                        | 手寫乜就係乜，保持字面值                   |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-喺 `builder` 入面展開帶型別嘅物件（例如 `{ ...input.order, extra: 1 }`）會保留佢嘅 struct 編碼同別名設定。但如果你喺同一個物件同時寫入邏輯 key 同網絡 alias，就會拋出 `REQ_BUILD_FAILED`。
+喺 `builder` 入面展開帶型別嘅物件（例如 `{ ...input.order, extra: 1 }`）會保留佢嘅 struct 編碼同別名設定。但如果你喺同一個物件同時寫入邏輯 key 同網絡 alias，呼叫就會失敗，並喺回傳 tuple 嘅錯誤項提供 `REQ_BUILD_FAILED`。
 
 ## 4. 請求放置與表單編碼
 
@@ -83,7 +83,7 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
   examples/struct/request-placement.ts#example
 </include>
 
-| `builder` 回傳嘅 Body 根數值                | 網絡傳輸格式      | 預設 `Content-Type`                               |
+| `builder` 回傳嘅 Body 根值                  | 網絡傳輸格式      | 預設 `Content-Type`                               |
 | ------------------------------------------- | ----------------- | ------------------------------------------------- |
 | 帶型別物件、陣列、有限數值、boolean、`null` | JSON 字串         | `application/json`                                |
 | `string` struct 或原生 `string`             | UTF-8 純文字      | `text/plain;charset=UTF-8`                        |
@@ -100,7 +100,7 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
   examples/struct/parse-failures.ts#example
 </include>
 
-每個 `StructIssue` 都包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 同埋 `message`。預設錯誤訊息只會報告接收到嘅*型別*（絕唔會直接輸出原始 payload 數值），確保 `String(error)` 同 `error.prettify()` 唔會唔小心將敏感資料印落 log。
+每個 `StructIssue` 都包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 同埋 `message`。預設訊息會省略收到嘅值，只報告佢嘅*型別*，但 path 會保留動態 record 嘅 key，入面可能有敏感值。`String(error)` 同 `error.prettify()` 唔係脫敏邊界；寫 log 時請用安全欄位嘅 allowlist，並將原始 `received` 值同自訂訊息當作敏感資料。
 
 ## 6. 建構子參考
 
@@ -120,7 +120,7 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
 | `struct.object(shape)` / `struct.record(val)`              | 純物件                             | 帶型別物件 / `Record<string, V>`                      |
 | `struct.discriminatedUnion(key, options)`                  | 帶有字面值 `key` 判別器嘅物件      | 各物件分支嘅 Union                                    |
 | `struct.or(branches)`                                      | 第一個吻合嘅分支                   | 各分支型別嘅 Union                                    |
-| `struct.intersection(members)`                             | 同時滿足所有成員嘅數值             | 深度合併嘅 Intersection                               |
+| `struct.intersection(members)`                             | 同時滿足所有成員嘅值               | 深度合併嘅 Intersection                               |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`    | 二進制表示                                            |
 
 ## 延伸閱讀

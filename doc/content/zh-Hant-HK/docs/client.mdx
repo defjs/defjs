@@ -10,7 +10,7 @@ description: 設定應用程式點樣呼叫匯入嘅 SDK 操作，同佢哋嘅 A
 呼叫 `createClient(...options)` 會回傳一個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)：
 
 - 如果唔需要單次呼叫自訂選項，可以直接將 `client` 傳入操作（例如 `getOrder(client, { id: 1 })`）。
-- 呼叫 `client(requestOptions)` 可以衍生出單次呼叫嘅 `Client` 物件（例如 `getOrder(client({ signal }), { id: 1 })`）。衍生過程唔會進行任何 I/O 操作，而衍生出嚟嘅數值係一個普通純物件（唔可以再作為函式呼叫）。
+- 呼叫 `client(requestOptions)` 可以衍生出單次呼叫嘅 `Client` 物件（例如 `getOrder(client({ signal }), { id: 1 })`）。衍生過程唔會進行任何 I/O 操作，而衍生出嚟嘅值係一個普通純物件（唔可以再作為函式呼叫）。
 
 ## 1. 設定 Client 並呼叫 SDK 操作
 
@@ -55,7 +55,7 @@ export const getOrder = defineRequest({
 
 ## 2. 衍生單次呼叫嘅 Client（`client(options)`）
 
-當某次呼叫需要自訂專屬嘅 `signal`、進度回呼函式，或者覆寫 WebSocket 會話參數時，可以衍生出新嘅 client 數值：
+當某次呼叫需要自訂專屬嘅 `signal`、進度回呼函式，或者覆寫 WebSocket 會話參數時，可以衍生出新嘅 client 值：
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
@@ -93,6 +93,8 @@ export const getOrder = defineRequest({
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
+
+只設定咗一個端點嗰陣，`withRetry` 唔會重放請求，因為每一次重試都會排除已經試過嘅端點。如果提供咗 `attemptTimeoutMs` 同 `connectTimeoutMs`，佢哋必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。
 
 ### 健康檢查過濾與 P2C [#health-filtering-and-p2c]
 

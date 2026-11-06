@@ -109,7 +109,7 @@ La reconnexion SSE est **opt-in**. Sans `withSSEReconnect(...)`, toute perte ré
 - **Budget de tentatives (`attempts`)** : Vaut `3` par défaut lorsqu'un objet d'options est transmis à `withSSEReconnect`. Un handshake réussi réinitialise le compteur de tentatives et l'exposant de backoff. Une fin de flux serveur normale (EOF) **n'est pas** un échec et ne déclenche aucune reconnexion.
 - **Suivi du curseur (`Last-Event-ID`)** : Validé dès lors que la ligne vide finale d'un événement est analysée, et automatiquement envoyé sous forme d'en-tête `Last-Event-ID` lors de la reconnexion.
 - **Sécurité et idempotence** : Par défaut, seules les méthodes idempotentes (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) se reconnectent automatiquement. Les méthodes non idempotentes (`POST`, `PATCH` — comme les requêtes de génération en streaming pour LLM) ne se reconnectent que si un callback `shouldReconnect` personnalisé renvoie explicitement `true`. Les corps de requête `ReadableStream` sont consommés à la première tentative et ne se reconnectent jamais.
-- **Délai de connexion (`connectTimeoutMs`)** : Délimite chaque handshake depuis l'appel Fetch jusqu'aux en-têtes de réponse, sans limiter la durée d'ouverture d'un flux établi.
+- **Délai de connexion (`connectTimeoutMs`)** : Lorsqu'il est fourni, il doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`. Délimite chaque handshake depuis l'appel Fetch jusqu'aux en-têtes de réponse, sans limiter la durée d'ouverture d'un flux établi.
 
 ## 5. Limites de tampon et de file
 

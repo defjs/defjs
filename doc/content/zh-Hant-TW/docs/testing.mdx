@@ -14,33 +14,15 @@ description: 使用注入的傳輸控制代碼、Tuple 斷言與確定性計時�
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const NotFound = struct.object({
-  message: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-  error: NotFound,
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
 <include cwd lang="typescript">
-  examples/recipes/test-with-handle.ts#example
+  examples/testing/test/orders.ts#example
 </include>
 
 </Tab>
@@ -61,10 +43,13 @@ export const getOrder = defineRequest({
 
 ### 使用虛擬計時器（Fake Timers）進行確定性時間控制
 
-當測試請求逾時（`AbortSignal.timeout`）、攔截器重試退避、SSE/WebSocket 重新連線延遲或 WebSocket 心跳檢測時：
+攔截器重試退避、SSE/WebSocket 重新連線延遲或 WebSocket 心跳，在 Vitest 裡用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`。這些虛擬計時器不會推動原生的 `AbortSignal.timeout`。要在 Vitest 裡得到確定的請求期限，請用受控的 `setTimeout`，以 `TimeoutError` 為原因中止一個 `AbortController`：
 
-- 使用虛擬計時器（Vitest 中的 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` 或 Bun test 中的 `jest.useFakeTimers()`）。
-- 在等待的階段啟動後推進時間（`advanceTimersByTimeAsync`），並斷言狀態轉換或嘗試次數——絕不要斷言實際流逝的牆上時鐘時間（wall-clock time）。
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+在 Bun test 裡用 `jest.useFakeTimers()` 與 `jest.advanceTimersByTime()`；Bun 的虛擬計時器也會控制 `AbortSignal.timeout`。不要假定兩種執行器控制同一套原生時鐘。只在被等待的階段已經開始之後再推進時間，斷言狀態轉換或嘗試次數，而不是牆上時間，並在每個測試之後恢復真實計時器。
 
 ## 相關閱讀
 

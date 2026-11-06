@@ -59,7 +59,7 @@ bun add @defjs/core @defjs/vue vue
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
 - 停止 scope 會令 SSE 嘅 `for await` 迴圈正常結束。
-- 中斷 WebSocket 會話會將其狀態置為 `aborted`，並以 `AbortError` reject `session.receive`，因此請喺銷毀後保護好 `catch` 區塊，並喺 `finally` 入面登出取消 `onStateChange` / `onRuntimeError` 監聽器。
+- 中斷 WebSocket 會話會將其狀態置為 `aborted`，並以 `AbortError` reject `session.receive`，因此請喺銷毀後保護好 `catch` 區塊，並喺 `finally` 入面取消訂閱 `onStateChange` / `onRuntimeError` 監聽器。
 
 ---
 

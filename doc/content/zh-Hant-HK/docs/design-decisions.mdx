@@ -49,7 +49,7 @@ export const getOrder = defineRequest({
 
 ## 2. 明確嘅 Input 放置與雙向 Alias
 
-喺 Defjs 入面，`input` 宣告呼叫端要傳入乜嘢，`struct` 控制資料點樣編碼／解碼，而 `builder` 則負責將各個數值放到請求嘅正確位置（`path`、`query`、`headers`、`body`）。
+喺 Defjs 入面，`input` 宣告呼叫端要傳入乜嘢，`struct` 控制資料點樣編碼／解碼，而 `builder` 則負責將各個值放到請求嘅正確位置（`path`、`query`、`headers`、`body`）。
 
 - **唔會胡亂猜測**：如果一個操作宣告咗 `input`，就一定要提供明確、同步而且純粹嘅 `builder`。Defjs 絕唔會單憑參數名稱走去估佢應該放喺邊。
 - **雙向 `.alias(wireName)`**：喺 struct 欄位宣告 `.alias("customer_name")`，可以令 TypeScript 程式碼保持使用 `customerName`，同時喺網絡傳輸時自動雙向映射到 `"customer_name"`。
@@ -74,13 +74,13 @@ Defjs 遵循六條嚴格規則嚟讀取 HTTP 回應：
 
 ### 規則 3：任何偏離斷言嘅行為都會即刻報錯
 
-如果宣告咗 JSON `output`，但網關回傳咗 HTML 錯誤頁或者格式損壞嘅 JSON，呼叫會即時判定失敗（`RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`）。對於 JSON 格式，Defjs 會喺讀取 body bytes **之前**先檢查 `Content-Type` header。
+Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 `error`。只有喺嗰一邊宣告咗 JSON struct，先會觸發 decode，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；佢嘅 `Content-Type` 會喺讀取 body bytes **之前**檢查。非 `2xx` 嘅 HTML 網關頁只有喺宣告咗 JSON `error` struct 時先會產生 `RES_MEDIA_TYPE_INVALID`。作用緊嗰一邊冇宣告，就唔會讀 body；非 `2xx` 回應會返回未解碼嘅 `HTTP_STATUS`。
 
 | 讀取回應時出錯嘅情況                       | 回傳嘅 Fault                                                   |
 | ------------------------------------------ | -------------------------------------------------------------- |
 | Media type 唔符合宣告嘅 JSON 格式          | `RES_MEDIA_TYPE_INVALID`（根本唔會讀取 body）                  |
 | Bytes 無法解碼成宣告嘅資料格式             | `RES_DECODE_FAILED`                                            |
-| 解碼後嘅數值無法通過 `struct` 驗證         | `RES_STRUCT_MISMATCH`（HTTP）/ `RES_DECODE_FAILED`（SSE 握手） |
+| 解碼後嘅值無法通過 `struct` 驗證           | `RES_STRUCT_MISMATCH`（HTTP）/ `RES_DECODE_FAILED`（SSE 握手） |
 | 非 `2xx` 狀態碼，並成功解碼 `error` struct | `HTTP_STATUS`，帶有具型別嘅 `error.data`                       |
 | 非 `2xx` 狀態碼，但冇宣告 `error`          | `HTTP_STATUS`，且 `error.data: undefined`                      |
 

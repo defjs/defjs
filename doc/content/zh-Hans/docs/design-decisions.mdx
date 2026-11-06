@@ -72,9 +72,9 @@ Defjs 在读取 HTTP 响应时严格遵循以下六大规则：
 
 `2xx` 状态码的响应只通过 `output` 进行校验与解码。除此以外的所有状态码（`3xx`、`4xx`、`5xx`）均只走 `error` 解码路径。Defjs 绝不会在一侧解析失败时拿另一侧作为兜底尝试。
 
-### 规则 3：任何与声明偏离的行为都会抛出明确故障
+### 规则 3：任何偏离声明的情况都会返回明确故障
 
-如果声明了 JSON 格式的 `output`，但网关返回了 HTML 错误页面或格式损坏的 JSON，请求将立即明确失败（报错 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`）。针对 JSON 格式声明，框架在读取底层 Body 字节流**之前**就会先行校验响应头中的 `Content-Type`。
+Defjs 用 `response.ok` 选择响应的一侧：`2xx` 用 `output`，非 `2xx` 用 `error`。只有在这一侧声明了 JSON struct，才会触发解码，并可能产生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 会在读取 body 字节**之前**校验。非 `2xx` 的 HTML 网关页只有在声明了 JSON `error` struct 时才会产生 `RES_MEDIA_TYPE_INVALID`。活动的一侧没有声明时，不会读取 body；非 `2xx` 响应会返回未解码的 `HTTP_STATUS`。
 
 | 响应读取阶段出现的异常                             | 返回的明确 Fault 错误码                                        |
 | -------------------------------------------------- | -------------------------------------------------------------- |

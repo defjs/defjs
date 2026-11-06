@@ -7,57 +7,33 @@ description: 使用 withHTTPHandle 仅为单个测试 Client 替换底层 Fetch�
 
 `withHTTPHandle(...)` 仅针对单个 Client 实例替换其底层的 `fetch` 实现，同时完整跑通入参校验、`builder` 参数映射、URL 目录安全检查、中间件拦截链、HTTP 状态码分流以及 Struct 解码等全部流程，期间完全无需打开任何真实网络 Socket：
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "单文件演示"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
-```ts
-import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(
-  withEndpoint("https://fixture.invalid"),
-  withHTTPHandle(async (input, init) => {
-    const request = new Request(input, init);
-    const id = new URL(request.url).pathname.split("/").at(-1);
-    if (id === "7") {
-      return Response.json({ id: 7, status: "paid" }, { status: 200 });
-    }
-    return Response.json({ message: "Order not found" }, { status: 404 });
-  }),
-);
-
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error) throw error;
-console.log(order.status, response.status);
-```
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
 
 </Tab>
-<Tab value="get-order.test.ts">
+<Tab value="单文件演示">
 
-<include cwd meta="get-order.test.ts">
+这是一份独立的单文件演示，不是测试运行器的 spec。要对共享的 SDK 定义做断言，请用前面的测试页签。
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
 </Tab>
 </Tabs>
 
-运行输出：
+单文件演示的输出：
 
 ```txt
 paid 200

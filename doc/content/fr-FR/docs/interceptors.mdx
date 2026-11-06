@@ -66,7 +66,7 @@ Defjs ne réessaie pas automatiquement les statuts HTTP applicatifs. Lorsque vou
 
 ## 4. Envelopper des sessions WebSocket
 
-Un intercepteur WebSocket ne peut appeler `next(req)` **qu'une seule fois au maximum**. Lorsque vous enveloppez le `WebSocketSessionLike` renvoyé, déléguez explicitement les accesseurs dynamiques (`state`, `connection`, `bufferedAmount`), `close`, `closed`, `receive` et `[Symbol.asyncDispose]()` plutôt que de déstructurer un instantané figé :
+Un intercepteur WebSocket ne peut appeler `next(req)` **qu'une seule fois au maximum**. Lorsque vous enveloppez le `WebSocketSessionLike` renvoyé, déléguez explicitement les accesseurs dynamiques (`state`, `connection`, `bufferedAmount`), `close`, `closed`, `receive` et `[Symbol.asyncDispose]()` plutôt que de copier un instantané figé avec la syntaxe de déploiement (spread) :
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example

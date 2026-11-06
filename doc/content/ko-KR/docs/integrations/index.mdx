@@ -1,5 +1,5 @@
 ---
-title: 플러그인 개발
+title: 통합 개요
 description: SDK 정의를 결합하지 않고 프레임워크 주입, 서버 관측성, AI 어시스턴트 스킬로 애플리케이션 소유의 Defjs 클라이언트를 확장합니다.
 ---
 
@@ -87,27 +87,13 @@ export function OrderCard({ id }: { id: number }) {
 
 ### 2. 미들웨어 플러그인 (`@defjs/opentelemetry-server`)
 
-미들웨어 플러그인은 [`ClientOption`](/ko-KR/api/core/clientoption-type)을 반환하는 팩토리 함수입니다. `createClient(...)`에 전달되면 `withHttpInterceptors`, `withSSEInterceptors`, `withWebSocketInterceptors`를 통해 HTTP, SSE, WebSocket 인터셉터를 추가합니다:
+미들웨어 플러그인은 [`ClientOption`](/ko-KR/api/core/clientoption-type)을 반환하는 팩토리 함수입니다. `createClient(...)`에 전달되면 `withInterceptors`를 통해 HTTP, SSE, WebSocket 인터셉터를 추가합니다:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab value="plugins/request-id.ts">
-```ts
-import type { ClientOption } from "@defjs/core";
-import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
-
-export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
-  const interceptor = createHttpInterceptor(async (request, next) => {
-    const headers = new Headers(request.headers);
-    if (!headers.has(headerName)) {
-      headers.set(headerName, crypto.randomUUID());
-    }
-    return next({ ...request, headers });
-  });
-
-return withHttpInterceptors(interceptor);
-}
-
-````
+<include cwd lang="typescript">
+  examples/integrations/request-id.ts#example
+</include>
   </Tab>
   <Tab value="app/client.ts">
 ```ts
@@ -118,7 +104,7 @@ export const client = createClient(
   withEndpoint("https://api.example.com"),
   withRequestIdHeader(),
 );
-````
+```
 
   </Tab>
 </Tabs>

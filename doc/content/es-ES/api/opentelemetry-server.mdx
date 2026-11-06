@@ -56,7 +56,7 @@ Mientras `span.isRecording()` es true, los fallos de hook registran los eventos 
 
 `responseHook` recibe lo que devolvió el transporte: el `HttpResponse` de HTTP, el handle del stream de SSE una vez que el arranque tuvo éxito y la sesión de WebSocket una vez abierta. Su tercer argumento es la solicitud original.
 
-Por defecto, `url.full` resuelve solo `request.endpoint` contra un `request.baseEndpoint` opcional; un `request.queryString` independiente no se añade. Ese límite no es redacción, y el paquete no tiene un redactor integrado ni una política de claves sensibles. Construye y, si hace falta, redacta de forma explícita una URL que posea la aplicación:
+Por defecto, `url.full` resuelve solo `request.endpoint` contra un `request.baseEndpoint` opcional; un `request.queryString` independiente no se añade. Ese límite no es ocultación de datos sensibles, y el paquete no tiene un mecanismo integrado para ocultarlos ni una política de claves sensibles. Construye y, si hace falta, oculta de forma explícita los datos sensibles de una URL que posea la aplicación:
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example
