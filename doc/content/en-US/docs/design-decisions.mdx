@@ -74,7 +74,7 @@ A `2xx` response is decoded only with `output`. Every other status (`3xx`, `4xx`
 
 ### Rule 3: Any deviation from the assertion is a loud fault
 
-If a JSON `output` is declared, a gateway returning an HTML error page or malformed JSON fails immediately (`RES_MEDIA_TYPE_INVALID` or `RES_DECODE_FAILED`). For JSON representations, the `Content-Type` header is verified **before** reading the body bytes.
+Defjs chooses the response side using `response.ok`: `output` for `2xx`, `error` for non-`2xx`. Only a JSON struct declared on that side triggers decoding and can produce `RES_MEDIA_TYPE_INVALID` or `RES_DECODE_FAILED`; its `Content-Type` is verified **before** reading the body bytes. A non-`2xx` HTML gateway page produces `RES_MEDIA_TYPE_INVALID` only when a JSON `error` struct is declared. Without a declaration for the active side, the body is not read; a non-`2xx` response returns an undecoded `HTTP_STATUS`.
 
 | What failed during response reading                    | Returned Fault                                                     |
 | ------------------------------------------------------ | ------------------------------------------------------------------ |

@@ -44,32 +44,59 @@ export const client = createClient(
 
 ## Refresh bearer token once on 401
 
+Use a shared refresh flight and recheck the current credential before refreshing. Return the original 401 when the request body is a `ReadableStream`: it cannot be replayed safely. The application owns credential persistence; `refresh` must update the value returned by `read` before resolving.
+
 ```ts
 import { createHttpInterceptor } from "@defjs/core";
 
-declare function getAccessToken(): Promise<string>;
-declare function refreshAccessToken(): Promise<string>;
+type Credential = { accessToken: string };
 
-export const refreshBearerOnce = createHttpInterceptor(
-  async (request, next) => {
-    const withToken = (token: string) => {
+function refreshingBearer(
+  read: () => Credential,
+  refresh: (stale: Credential) => Promise<Credential>,
+) {
+  let flight: Promise<Credential> | undefined;
+
+  return createHttpInterceptor(async (request, next) => {
+    const authorize = (credential: Credential) => {
       const headers = new Headers(request.headers);
-      headers.set("Authorization", `Bearer ${token}`);
+      headers.set("authorization", `Bearer ${credential.accessToken}`);
       return { ...request, headers };
     };
 
-    const firstResponse = await next(withToken(await getAccessToken()));
-    if (firstResponse.status !== 401) return firstResponse;
+    const used = read();
+    const response = await next(authorize(used));
+    const body = response.body;
+    if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
+      response.status !== 401 ||
+      typeof body !== "object" ||
+      body === null ||
+      !("code" in body) ||
+      body.code !== "expired_token"
+    ) {
+      return response;
+    }
 
-    const freshToken = await refreshAccessToken();
-    return next(withToken(freshToken));
-  },
-);
+    const current = read();
+    if (current.accessToken !== used.accessToken)
+      return next(authorize(current));
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined;
+    });
+    const refreshed = await flight;
+    return next(authorize(refreshed));
+  });
+}
 ```
 
 ## Retry safe reads with `Retry-After`
 
 Only retry idempotent methods (`GET`, `HEAD`, `OPTIONS`) whose body is replayable (not a `ReadableStream`). Always respect `request.signal` while waiting:
+
+`Retry-After` accepts seconds or an HTTP date; waits are capped at 30 seconds, with a 250 ms fallback. Abort signals cancel the wait without another attempt.
 
 ```ts
 import {
@@ -78,8 +105,8 @@ import {
   type HttpResponse,
 } from "@defjs/core";
 
-const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const RETRY_STATUSES = new Set([429, 502, 503, 504]);
+const retryableMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const retryableStatuses = new Set([429, 502, 503, 504]);
 
 function isReplayable(request: HttpRequest): boolean {
   return (
@@ -88,39 +115,64 @@ function isReplayable(request: HttpRequest): boolean {
   );
 }
 
-function waitWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+function retryAfterMs(response: HttpResponse<unknown>): number {
+  const value = response.headers.get("retry-after");
+  if (!value) return 250;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0)
+    return Math.min(seconds * 1_000, 30_000);
+
+  const date = Date.parse(value);
+  return Number.isNaN(date)
+    ? 250
+    : Math.min(Math.max(0, date - Date.now()), 30_000);
+}
+
+function waitForRetryAfter(
+  response: HttpResponse<unknown>,
+  signal?: AbortSignal,
+): Promise<void> {
+  const delay = retryAfterMs(response);
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
       reject(signal.reason);
       return;
     }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
+
+    const timer = setTimeout(done, delay);
     const onAbort = () => {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
       reject(signal?.reason);
     };
+
+    function done() {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }
+
     signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
   });
 }
 
-export const retrySafeReads = createHttpInterceptor(
-  async (request, next): Promise<HttpResponse<unknown>> => {
-    if (
-      !SAFE_METHODS.has(request.method.toUpperCase()) ||
-      !isReplayable(request)
-    )
-      return next(request);
+const retrySafeReads = createHttpInterceptor(async (request, next) => {
+  if (
+    !retryableMethods.has(request.method.toUpperCase()) ||
+    !isReplayable(request)
+  )
+    return next(request);
 
-    for (let attempt = 0; ; attempt += 1) {
-      const response = await next(request);
-      if (!RETRY_STATUSES.has(response.status) || attempt >= 2) return response;
-      await waitWithSignal(250 * (attempt + 1), request.signal);
-    }
-  },
-);
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await next(request);
+    if (!retryableStatuses.has(response.status) || attempt >= 2)
+      return response;
+    await waitForRetryAfter(response, request.signal);
+  }
+});
 ```
 
 ## Short-circuiting and ETag caching

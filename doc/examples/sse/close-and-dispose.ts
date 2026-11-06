@@ -1,19 +1,33 @@
 // #region example
-import type {
-  EventStreamCloseInfo,
-  EventStreamHandle,
-  EventStreamOpenInfo,
+import {
+  createClient,
+  defineEventStream,
+  struct,
+  withEndpoint,
 } from "@defjs/core";
 
-interface StreamApi<T> extends AsyncIterable<T>, AsyncDisposable {
-  readonly open: EventStreamOpenInfo;
-  readonly closed: Promise<EventStreamCloseInfo>;
-  close(reason?: unknown): void;
-  [Symbol.asyncDispose](): PromiseLike<void>;
+const watchOrders = defineEventStream({
+  path: "/orders/events",
+  events: { order: struct.object({ id: struct.number() }) },
+});
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+  const [error, stream] = await watchOrders(client);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  await using ownedStream = stream;
+  try {
+    for await (const event of ownedStream) {
+      console.log(event.data.id);
+      break;
+    }
+  } catch (cause) {
+    console.error("watchOrders failed", cause);
+  }
 }
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original assignment-based lifecycle compatibility example without replacing it by a new function
-const handle = null as unknown as EventStreamHandle<string>;
-const api: StreamApi<string> = handle;
-void api;
+void main();
 // #endregion

@@ -106,4 +106,4 @@ export async function connectWithStartupDeadline(ms: number) {
 
 - **Reconnect is opt-in on the client** via `withSSEReconnect({ attempts, delayMs, factor, maxDelayMs, jitter, shouldReconnect })`. Note: `client({ reconnect })` in `RequestOptions` is for WebSocket only and is ignored by SSE.
 - Do not replay a non-idempotent `POST` SSE stream unless `shouldReconnect` verifies a server resumption contract (for example `lastEventId !== ""`).
-- Events whose name is not in `events` or whose payload fails struct validation are dropped without killing the stream. Observe them with `withSSEOnInvalidEvent(({ reason, message, cause, signal }) => ...)`.
+- An event first uses its same-name own entry in `events`, then the own `events.default` entry. Only when neither exists is it dropped as `missing-struct`; payload validation failures are also dropped without killing the stream. Observe them with `withSSEOnInvalidEvent(({ reason, message, cause, signal }) => ...)`.

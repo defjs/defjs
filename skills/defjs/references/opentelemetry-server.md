@@ -88,4 +88,4 @@ export const client = createClient(
 ## Redaction and safety
 
 - Request/response bodies and full headers are **never** captured by default.
-- Sensitive query parameter values are redacted in recorded URLs unless explicitly allowlisted in the plugin options.
+- By default, `url.full` does not append the independent `request.queryString`; this is not redaction. The plugin has no built-in redactor or sensitive-key policy. Applications that set `url.full` or other URL attributes through hooks must construct and redact those values themselves.

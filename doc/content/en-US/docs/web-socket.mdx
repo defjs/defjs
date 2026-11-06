@@ -122,6 +122,7 @@ Both reconnection and heartbeat are opt-in via client options (`withWebSocketRec
 </Tabs>
 
 - **Reconnect**: Defaults when enabled are `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Each physical `open` resets the outage budget. `beforeConnect({ attempt, signal })` runs before initial connect and every reconnect attempt.
+- **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds construction to `open` and is cleared after the handshake.
 - **Heartbeat**: Periodically sends `message()` through the `outgoing` struct and waits up to `timeoutMs` for a frame matching `isAck(msg)`. Matching ack frames are consumed by the heartbeat monitor and not forwarded to `session.receive`. A missed ack is fatal to the session.
 - **Queue bounds**:
   - `maxIncomingQueueSize` (required positive integer): Overflow terminates the session with `CAP_QUEUE_OVERFLOW`. Keep consuming `session.receive` while the session is open.

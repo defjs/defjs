@@ -109,7 +109,7 @@ SSE reconnection is **opt-in**. Without `withSSEReconnect(...)`, any network dro
 - **Outage budget (`attempts`)**: Defaults to `3` when an options object is passed to `withSSEReconnect`. A successful handshake resets the attempt counter and backoff exponent. Normal server EOF is **not** a failure and does not trigger reconnect.
 - **Cursor tracking (`Last-Event-ID`)**: Committed when an event's terminating blank line is parsed and automatically sent as `Last-Event-ID` on reconnect.
 - **Idempotency safety**: By default, only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) reconnect automatically. Non-idempotent methods (`POST`, `PATCH`—such as LLM streaming requests) reconnect only when a custom `shouldReconnect` callback explicitly returns `true`. `ReadableStream` request bodies are consumed on the first attempt and never reconnect.
-- **Handshake timeout (`connectTimeoutMs`)**: Bounds each handshake from Fetch invocation to response headers without limiting how long an established stream stays open.
+- **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. Bounds each handshake from Fetch invocation to response headers without limiting how long an established stream stays open.
 
 ## 5. Buffer and queue limits
 

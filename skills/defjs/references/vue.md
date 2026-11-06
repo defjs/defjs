@@ -122,7 +122,10 @@ void (async () => {
   try {
     for await (const event of nextStream) {
       lines.value.push({ id: nextId++, text: event.data });
+      if (lines.value.length > 100) lines.value.shift();
     }
+  } catch (cause) {
+    if (!disposed) console.error("deployEvents failed", cause);
   } finally {
     nextStream.close("scope-finished");
     await nextStream.closed;

@@ -1,3 +1,5 @@
+import "../testing/deadline.ts";
+import "../testing/test/orders.ts";
 import { expect, test } from "vitest";
 import { joinPath } from "../../scripts/paths";
 import { removeDirectory, tempDirectory } from "../../scripts/tmp";

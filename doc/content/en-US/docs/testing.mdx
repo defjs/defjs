@@ -14,33 +14,15 @@ Use `withHTTPHandle`, `withSSEHandle`, or `withWebSocketHandle` on `createClient
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const NotFound = struct.object({
-  message: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-  error: NotFound,
-});
-```
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="test/orders.spec.ts">
 
 <include cwd lang="typescript">
-  examples/recipes/test-with-handle.ts#example
+  examples/testing/test/orders.ts#example
 </include>
 
 </Tab>
@@ -61,10 +43,13 @@ Inside your `withHTTPHandle(async (input, init) => ...)` function, construct `co
 
 ### Control time deterministically with fake timers
 
-When testing request deadlines (`AbortSignal.timeout`), interceptor retry backoff, SSE/WebSocket reconnect delays, or WebSocket heartbeats:
+For interceptor retry backoff, SSE/WebSocket reconnect delays, or WebSocket heartbeats, use `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` in Vitest. These fake timers do not advance the native `AbortSignal.timeout` clock. For a deterministic request deadline in Vitest, abort an `AbortController` from a controlled `setTimeout` with a `TimeoutError` reason:
 
-- Use fake timers (`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` in Vitest or `jest.useFakeTimers()` in Bun test).
-- Advance timers after the awaited phase has started (`advanceTimersByTimeAsync`) and assert state transitions or attempt counts—never assert on elapsed wall-clock time.
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+In Bun test, use `jest.useFakeTimers()` and `jest.advanceTimersByTime()`; Bun's fake timers also control `AbortSignal.timeout`. Do not assume the runners control the same native clocks. Advance timers only after the awaited phase has started, assert state transitions or attempt counts rather than elapsed wall-clock time, and restore real timers after each test.
 
 ## Related reading
 

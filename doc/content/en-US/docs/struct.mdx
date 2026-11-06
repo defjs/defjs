@@ -100,7 +100,7 @@ Spreading a typed object inside `builder` (`{ ...input.order, extra: 1 }`) prese
   examples/struct/parse-failures.ts#example
 </include>
 
-Each `StructIssue` contains `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection`, or `custom`), `path`, `expected`, `received`, and `message`. Default messages report only the received _type_ (never the raw payload value) so `String(error)` and `error.prettify()` do not leak sensitive values into logs.
+Each `StructIssue` contains `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection`, or `custom`), `path`, `expected`, `received`, and `message`. Default messages omit the received value and report only its _type_, but paths retain dynamic record keys, which may contain sensitive values. `String(error)` and `error.prettify()` are not a redaction boundary; use an allowlist of safe fields when logging, and treat raw `received` values and custom messages as sensitive.
 
 ## 6. Constructor reference
 

@@ -52,14 +52,18 @@ async function withHealthChecks() {
     probing = true;
     try {
       for (const endpoint of endpoints) {
-        const response = await fetch(new URL("/healthz", endpoint), {
-          signal: AbortSignal.any([
-            controller.signal,
-            AbortSignal.timeout(2000),
-          ]),
-        }).catch(() => undefined);
-        healthy.set(endpoint, response?.ok === true);
-        await response?.body?.cancel();
+        try {
+          const response = await fetch(new URL("/healthz", endpoint), {
+            signal: AbortSignal.any([
+              controller.signal,
+              AbortSignal.timeout(2000),
+            ]),
+          });
+          await response.body?.cancel();
+          healthy.set(endpoint, response.ok);
+        } catch {
+          healthy.set(endpoint, false);
+        }
       }
     } finally {
       probing = false;
@@ -77,7 +81,11 @@ async function withHealthChecks() {
     ),
   );
   // The application owns the probe lifecycle, not the client or balancer.
-  const timer = setInterval(() => void probe(), 5000);
+  const timer = setInterval(() => {
+    void probe().catch((cause: unknown) => {
+      console.error("Health probe failed", cause);
+    });
+  }, 5000);
   try {
     await probe();
     const [error] = await getStatus(activeClient);

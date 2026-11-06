@@ -16,27 +16,29 @@ Always check `if (error)` and return from the surrounding function before readin
 
 ## Fault variants and codes
 
-`Fault<TError>` (and `AnyFault`) is a discriminated union keyed by `error.code`. Every fault carries `code`, `message`, `timestamp`, and optional `cause`; variant-specific fields (`status`, `data`, `response`) become available when you narrow `error.code`:
+`Fault<TError>` (and `AnyFault`) is a discriminated union keyed by `error.code`. Every fault carries `code`, `message`, and optional `cause`; `FaultClass<FaultCode>` extracts the code prefix for coarse classification. Variant-specific fields (`status`, `data`, `response`) become available when you narrow `error.code`:
 
-| `error.code`             | Fault variant             | Extra fields                        | When it happens                                                                             |
-| ------------------------ | ------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------- |
-| `REQ_INPUT_INVALID`      | `PreflightFault`          | `cause` (`StructError`)             | Caller input failed the `input` struct                                                      |
-| `REQ_BUILD_FAILED`       | `PreflightFault`          | `cause`                             | `builder` threw, or returned an invalid path/query/header/body placement                    |
-| `REQ_OPTIONS_INVALID`    | `PreflightFault`          | `cause`                             | Illegal numeric option in reconnect/heartbeat policy                                        |
-| `NET_UNREACHABLE`        | `NetworkFault`            | `cause`                             | DNS, socket, TLS, or CORS failure before receiving a valid response                         |
-| `NET_BODY_INCOMPLETE`    | `NetworkFault`            | `response?`, `cause`                | Response body stream broke mid-transfer                                                     |
-| `NET_TIMEOUT`            | `NetworkFault`            | `cause`                             | `AbortSignal.timeout(ms)` or a `TimeoutError` DOMException aborted the call                 |
-| `NET_ABORTED`            | `NetworkFault`            | `cause`                             | Caller aborted the `AbortSignal`                                                            |
-| `HTTP_STATUS`            | `HttpStatusFault<TError>` | `status`, `data`, `response`        | Non-2xx response whose declared `error` struct decoded (or no `error` struct was declared)  |
-| `RES_MEDIA_TYPE_INVALID` | `DecodeFault`             | `response`                          | JSON struct expected, but response `Content-Type` is not JSON (checked before reading body) |
-| `RES_DECODE_FAILED`      | `DecodeFault`             | `response`, `cause`                 | Response body could not be read or JSON-parsed (or SSE handshake error struct failed)       |
-| `RES_STRUCT_MISMATCH`    | `DecodeFault`             | `response`, `cause` (`StructError`) | HTTP response body did not match the declared `output` or `error` struct                    |
-| `EXT_INTERCEPTOR_FAILED` | `ExtensionFault`          | `cause`                             | An interceptor threw or returned an invalid response/handle                                 |
-| `EXT_HOOK_FAILED`        | `ExtensionFault`          | `cause`                             | `beforeConnect` or another lifecycle hook threw                                             |
-| `EXT_OBSERVER_FAILED`    | `ExtensionFault`          | `cause`                             | `onUploadProgress`, `onDownloadProgress`, or `withSSEOnInvalidEvent` threw                  |
-| `CAP_BUFFER_EXCEEDED`    | `CapacityFault`           | —                                   | SSE line/event exceeded `maxBufferSize`                                                     |
-| `CAP_QUEUE_OVERFLOW`     | `CapacityFault`           | —                                   | SSE `maxQueueSize` or WebSocket `maxIncomingQueueSize` overflowed                           |
-| `ENV_UNSUPPORTED`        | `EnvironmentFault`        | —                                   | Required runtime API (`fetch`, `WebSocket`, `ReadableStream`) is unavailable                |
+| `error.code`             | Fault variant             | Extra fields                        | When it happens                                                                                     |
+| ------------------------ | ------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `REQ_INPUT_INVALID`      | `PreflightFault`          | `cause` (`StructError`)             | Caller input failed the `input` struct                                                              |
+| `REQ_BUILD_FAILED`       | `PreflightFault`          | `cause`                             | `builder` threw, or returned an invalid path/query/header/body placement                            |
+| `REQ_OPTIONS_INVALID`    | `PreflightFault`          | `cause`                             | Illegal option in the retry, reconnect, or heartbeat policy, including timeouts above 2147483647 ms |
+| `NET_UNREACHABLE`        | `PreflightFault`          | `cause`                             | DNS, socket, TLS, or CORS failure before receiving a valid response                                 |
+| `NET_BODY_INCOMPLETE`    | `PreflightFault`          | `response?`, `cause`                | Response body stream broke mid-transfer                                                             |
+| `NET_TIMEOUT`            | `PreflightFault`          | `cause`                             | `AbortSignal.timeout(ms)` or a `TimeoutError` DOMException aborted the call                         |
+| `NET_ABORTED`            | `PreflightFault`          | `cause`                             | Caller aborted the `AbortSignal`                                                                    |
+| `HTTP_STATUS`            | `HttpStatusFault<TError>` | `status`, `data`, `response`        | Non-2xx response whose declared `error` struct decoded (or no `error` struct was declared)          |
+| `RES_MEDIA_TYPE_INVALID` | `DecodeFault`             | `response`                          | JSON struct expected, but response `Content-Type` is not JSON (checked before reading body)         |
+| `RES_DECODE_FAILED`      | `DecodeFault`             | `response`, `cause`                 | Response body could not be read or JSON-parsed (or SSE handshake error struct failed)               |
+| `RES_STRUCT_MISMATCH`    | `DecodeFault`             | `response`, `cause` (`StructError`) | HTTP response body did not match the declared `output` or `error` struct                            |
+| `EXT_INTERCEPTOR_FAILED` | `PreflightFault`          | `cause`                             | An interceptor threw or returned an invalid response/handle                                         |
+| `EXT_HOOK_FAILED`        | `PreflightFault`          | `cause`                             | `beforeConnect` or another lifecycle hook threw                                                     |
+| `EXT_OBSERVER_FAILED`    | `PreflightFault`          | `cause`                             | `onUploadProgress` or `onDownloadProgress` threw                                                    |
+| `CAP_BUFFER_EXCEEDED`    | `PreflightFault`          | —                                   | SSE line/event exceeded `maxBufferSize`                                                             |
+| `CAP_QUEUE_OVERFLOW`     | `PreflightFault`          | —                                   | SSE `maxQueueSize` or WebSocket `maxIncomingQueueSize` overflowed                                   |
+| `ENV_UNSUPPORTED`        | `PreflightFault`          | —                                   | Required runtime API (`fetch`, `WebSocket`, `ReadableStream`) is unavailable                        |
+
+`withSSEOnInvalidEvent` observer failures are isolated: the stream continues and no `EXT_OBSERVER_FAILED` is produced.
 
 ## Narrowing declared HTTP errors
 

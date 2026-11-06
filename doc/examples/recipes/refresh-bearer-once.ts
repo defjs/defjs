@@ -35,6 +35,8 @@ function refreshingBearer(
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||

@@ -94,6 +94,8 @@ Create a new derived client value for each call that needs its own `signal`, pro
   examples/client/multiple-endpoints.ts#example
 </include>
 
+With only one configured endpoint, `withRetry` does not replay the request because each retry excludes endpoints already tried. `attemptTimeoutMs` and `connectTimeoutMs`, when provided, must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`.
+
 ### Health filtering and p2c [#health-filtering-and-p2c]
 
 For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) enable Linkerd-style consecutive-failure circuit breaking (`outlierDetection`) by default. It counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`; raw response `status` is only for custom balancers.
