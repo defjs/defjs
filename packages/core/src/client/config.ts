@@ -106,7 +106,7 @@ export interface ClientWebSocketOptions {
   protocols?: readonly string[];
   /** Automatic reconnect policy after unexpected closes. */
   reconnect?: {
-    /** Positive finite handshake timeout in milliseconds; unset by default. Stops at response headers (SSE) or open (WebSocket). */
+    /** Positive finite handshake timeout in milliseconds, at most `2_147_483_647`; unset by default. Stops at response headers (SSE) or open (WebSocket). */
     connectTimeoutMs?: number;
     /** Retries per outage; a successful open resets the budget. Non-negative safe integer; defaults to 3. `0` disables. */
     attempts?: number;
@@ -154,7 +154,7 @@ export interface ClientSSEOptions {
   }) => unknown;
   /** Automatic reconnect policy after stream failures. */
   reconnect?: {
-    /** Positive finite handshake timeout in milliseconds; unset by default. Stops at response headers (SSE) or open (WebSocket). */
+    /** Positive finite handshake timeout in milliseconds, at most `2_147_483_647`; unset by default. Stops at response headers (SSE) or open (WebSocket). */
     connectTimeoutMs?: number;
     /** Retries per outage; a successful handshake resets the budget. Non-negative safe integer; defaults to 3. `0` disables. */
     attempts?: number;
@@ -213,15 +213,16 @@ export interface RetryOptions {
   /** Total attempts including the original (gRPC retryPolicy.maxAttempts / go-kit lb.Retry max). Safe integer at least 1; defaults to 2. One disables retries; there is no configured upper bound, but each endpoint is tried at most once. */
   readonly maxAttempts?: number;
   /**
-   * Retryable outcomes. Defaults to connection failures only. Gateway errors
+   * Retryable outcomes. Defaults to connection failures only; local failures
+   * before Fetch starts do not qualify. Gateway errors
    * include NET_UNAVAILABLE responses, including those whose declared error body fails with
    * a response-side RES_* fault. Successful or extension-failed interceptor
    * results never trigger gateway retry.
    */
   readonly on?: readonly RetryCondition[];
-  /** Allowed methods, case-insensitive. Defaults to GET, HEAD, OPTIONS, TRACE. */
+  /** Allowed methods, case-insensitive. Every method sent by an attempt after interceptor rewrites must qualify; without a transport invocation, the defined method is used. Defaults to GET, HEAD, OPTIONS, TRACE. */
   readonly methods?: readonly string[];
-  /** Positive finite timeout from Fetch invocation through body reading and decoding, per attempt. */
+  /** Positive finite timeout from Fetch invocation through body reading and decoding, per attempt; at most `2_147_483_647` ms. */
   readonly attemptTimeoutMs?: number;
   /** Initial finite non-negative backoff delay in milliseconds; defaults to 25. Zero skips waiting. */
   readonly delayMs?: number;

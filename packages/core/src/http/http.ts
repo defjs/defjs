@@ -297,6 +297,7 @@ type HttpExecutionDefinition<
 };
 
 type RetryAttempt = {
+  methods?: string[];
   endpoint?: string;
   info?: DoneInfo;
   replayable: boolean;
@@ -313,15 +314,33 @@ async function executeHttpCommand<
   input: EndpointInput<TInput> | undefined,
   options: HttpExecuteOptions | undefined,
 ): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
-  const policy = normalizeRetryOptions(clientConfig.http.retry);
-  if (policy instanceof Error) {
+  let retry:
+    | undefined
+    | Error
+    | {
+        policy: Exclude<
+          ReturnType<typeof normalizeRetryOptions>,
+          undefined | Error
+        >;
+        budget: ReturnType<typeof retryBudgetFor>;
+      };
+  try {
+    const policy = normalizeRetryOptions(clientConfig.http.retry);
+    retry =
+      policy === undefined || policy instanceof Error
+        ? policy
+        : { policy, budget: retryBudgetFor(clientConfig) };
+  } catch {
+    retry = new RangeError("Invalid retry options");
+  }
+  if (retry instanceof Error) {
     return [
-      createPreflightFault("REQ_OPTIONS_INVALID", policy),
+      createPreflightFault("REQ_OPTIONS_INVALID", retry),
       undefined,
       undefined,
     ];
   }
-  if (policy === undefined) {
+  if (retry === undefined) {
     return executeHttpAttempt(
       clientConfig,
       definition,
@@ -332,7 +351,7 @@ async function executeHttpCommand<
       undefined,
     );
   }
-  const budget = retryBudgetFor(clientConfig);
+  const { policy, budget } = retry;
   if (budget instanceof Error)
     return [
       createPreflightFault(
@@ -358,11 +377,14 @@ async function executeHttpCommand<
     );
     const condition = retryCondition(state, result[0]);
     candidates = candidates.filter((endpoint) => endpoint !== state.endpoint);
+    const sentMethods = state.methods ?? [definition.method];
     const allowed =
       condition !== undefined &&
       on.includes(condition) &&
-      methods.some(
-        (method) => method.toUpperCase() === definition.method.toUpperCase(),
+      sentMethods.every(
+        (sent) =>
+          typeof sent === "string" &&
+          methods.some((method) => method.toUpperCase() === sent.toUpperCase()),
       );
     const stopped =
       index + 1 >= maxAttempts ||
@@ -418,7 +440,9 @@ function normalizeRetryOptions(
     !Array.isArray(methods) ||
     methods.some((value) => typeof value !== "string" || value.length === 0) ||
     (attemptTimeoutMs !== undefined &&
-      (!Number.isFinite(attemptTimeoutMs) || attemptTimeoutMs <= 0))
+      (!Number.isFinite(attemptTimeoutMs) ||
+        attemptTimeoutMs <= 0 ||
+        attemptTimeoutMs > 2_147_483_647))
   ) {
     return new RangeError("Invalid retry options");
   }
@@ -639,6 +663,7 @@ async function executeHttpAttempt<
         return rejected;
       }
       if (isReadableStreamBody(nextRequest.body)) state.replayable = false;
+      let started = false;
       const pending = fetchHandlerWithLifecycle(
         {
           ...nextRequest,
@@ -647,6 +672,8 @@ async function executeHttpAttempt<
         clientConfig.http.handle,
         {
           start() {
+            started = true;
+            (state.methods ??= []).push(nextRequest.method);
             if (matches) resolved.start();
             if (attemptTimeoutMs !== undefined && attemptTimer === undefined)
               attemptTimer = setTimeout(() => {
@@ -677,7 +704,7 @@ async function executeHttpAttempt<
             return settled;
           },
           (error: unknown) => {
-            const classified = classifyHttpAttempt(error);
+            const classified = classifyHttpAttempt(error, started);
             if (matches)
               resolved.end(
                 httpAttemptDone(
@@ -877,8 +904,9 @@ type HttpAttempt = {
 };
 
 /** Map a fetchHandler rejection onto the attempt that reached the selected endpoint. */
-function classifyHttpAttempt(error: unknown): HttpAttempt {
+function classifyHttpAttempt(error: unknown, started: boolean): HttpAttempt {
   if (
+    !started ||
     error === ERR_FETCH_UNSUPPORTED ||
     error === ERR_STREAMING_REQUEST_UNSUPPORTED
   ) {

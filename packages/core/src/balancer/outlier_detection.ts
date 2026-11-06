@@ -1,5 +1,6 @@
 import type { Balancer, DoneInfo } from "./balancer";
 import { balancerOptionError } from "./balancer";
+import { ignoreRejection } from "./runtime";
 
 /**
  * Linkerd-style consecutive-failure circuit breaking and optional cached health checks.
@@ -44,6 +45,7 @@ export function classifyEndpointFailure(
 ): boolean | undefined {
   try {
     const result: unknown = classifier(info);
+    ignoreRejection(result);
     return typeof result === "boolean" ? result : undefined;
   } catch {
     return undefined;
@@ -167,6 +169,7 @@ export function outlierDetection(
         try {
           for (const endpoint of info.endpoints) {
             const healthy: unknown = isHealthy(endpoint);
+            ignoreRejection(healthy);
             if (typeof healthy !== "boolean")
               throw new TypeError("isHealthy must return a boolean");
             if (healthy) active.add(endpoint);
@@ -187,7 +190,9 @@ export function outlierDetection(
         candidates.length === info.endpoints.length
       )
         candidates = info.endpoints;
-      const [error, result] = child.pick({ ...info, endpoints: candidates });
+      const outcome = child.pick({ ...info, endpoints: candidates });
+      ignoreRejection(outcome);
+      const [error, result] = outcome;
       if (error !== null) return [error, undefined];
       const state = states.get(result.endpoint);
       const probe =

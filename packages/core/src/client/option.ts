@@ -84,11 +84,17 @@ export function withBalancer(balancer: Balancer): ClientOption {
  * HEAD, OPTIONS, and TRACE connection failures.
  * Each retry rebuilds the request and reruns the complete interceptor chain,
  * selecting an untried endpoint. Streaming request bodies and offline failures
- * never retry. SSE and WebSocket use their separate reconnect policies instead.
+ * never retry. Local failures before Fetch starts are not connection failures.
+ * Retry eligibility checks every method actually sent by the attempt, after
+ * interceptor rewrites; with no transport invocation it uses the defined method.
+ * A single configured endpoint is never replayed, because retries exclude every
+ * endpoint already tried by this call.
+ * SSE and WebSocket use their separate reconnect policies instead.
  *
  * Defaults are 25 ms delay, factor 2, 250 ms cap, and jitter 0.2. The caller's
  * signal covers all attempts and waits; `attemptTimeoutMs` covers each transport
- * attempt. Invalid policy values return `REQ_OPTIONS_INVALID` at HTTP execution.
+ * attempt and must be finite, positive, and at most `2_147_483_647` ms.
+ * Invalid policy values return `REQ_OPTIONS_INVALID` at HTTP execution.
  * Owned fields, arrays, and the budget record are captured when the option is
  * applied. A later option replaces the policy. `undefined` does not clear it;
  * pass `{ maxAttempts: 1 }` to turn retries off after enabling them.
@@ -313,7 +319,7 @@ export function withWebSocketHeartbeat(
  * - `attempts` is the retry budget for each outage. It defaults to `3`, and `0` disables reconnection. Successful `open` resets the budget and backoff exponent; the next outage starts at retry 1. Omitting it does not give unlimited retries within one outage. A socket that successfully opens and is immediately closed again by the server can keep reconnecting at the base delay (subject to jitter and caps), because every open resets the budget; use `shouldReconnect` to stop it.
  * - `delayMs` defaults to `1000`, `factor` to `2`, `maxDelayMs` to `30000`, and `jitter` (0 to 1) to `0`. Retry _n_ starts with `delayMs * factor^(n-1)`, capped at `maxDelayMs`; jitter and rounding follow, then the final delay is capped again at `maxDelayMs` and `2_147_483_647` ms. A zero base stays zero; valid-number overflow saturates at those caps.
  * - `shouldReconnect` can return `false` to end the session instead. Without it every close is retried while the budget lasts. It is not called for a manual `session.close()`.
- * - `connectTimeoutMs` optionally bounds each handshake, is finite and positive, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.
+ * - `connectTimeoutMs` optionally bounds each handshake, is finite and positive, must not exceed `2_147_483_647` ms, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.
  * - Reconnect options are validated before connecting: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values make the operation fail with `REQ_OPTIONS_INVALID` before connecting. `attempts: 0` disables subsequent retries, but all explicitly supplied reconnect fields are still validated before the initial connection.
  * - A `reconnect` in the request options replaces this one for that call.
  * - `attempts`, `connectTimeoutMs`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect` are copied when this option is applied. `shouldReconnect` keeps its identity and is not called. `undefined` clears an earlier policy. A getter runs at that moment and its exception escapes `createClient`. Invalid numbers still fail the operation with `REQ_OPTIONS_INVALID`.
@@ -391,7 +397,7 @@ export function withSSEOnInvalidEvent(
  * - `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.
  * - `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.
  * - An `id:` field updates a buffer. The reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message; a stream ending before that blank line leaves it unchanged. The committed ID is sent as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it at that blank line; an ID containing NUL is ignored.
- * - `connectTimeoutMs` optionally bounds each handshake, is finite and positive, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.
+ * - `connectTimeoutMs` optionally bounds each handshake, is finite and positive, must not exceed `2_147_483_647` ms, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.
  * - Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs. The seven fields are copied when this option is applied, and `shouldReconnect` keeps its identity. `undefined` clears an earlier policy. A getter runs then, once, and its exception escapes `createClient`.
  *
  * @param options - Retry budget, backoff, and `shouldReconnect` gate.

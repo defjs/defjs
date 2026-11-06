@@ -173,3 +173,90 @@ test("sparse runtime candidate arrays cannot produce an undefined endpoint", () 
   sparse[1] = "a";
   expect(pick(b, sparse).endpoint).toBe("a");
 });
+
+test.each([8_000_000, 8_000_000_000_000])(
+  "clock rollback by %i ms preserves the concurrent selection baseline after recovery",
+  (rollbackMs) => {
+    const now = 10_000_000;
+    vi.setSystemTime(now);
+    const baseline = p2cBalancer({ outlierDetection: false });
+    const expected = Array.from({ length: 8 }, () => pick(baseline).endpoint);
+    const b = p2cBalancer({ outlierDetection: false });
+    b.pick({ endpoints: ["a", "b"] })[1]?.done?.({ attempted: false });
+    vi.setSystemTime(now - rollbackMs);
+    b.pick({ endpoints: ["a", "b"] })[1]?.done?.({ attempted: false });
+    vi.setSystemTime(now);
+    const actual = Array.from({ length: 8 }, () => pick(b).endpoint);
+    expect(expected).toEqual(["a", "b", "a", "b", "a", "b", "a", "b"]);
+    expect(actual).toEqual(expected);
+  },
+);
+
+test("non-finite RTT samples fall back to the configured initial estimate", () => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(-Number.MAX_VALUE);
+  const b = p2cBalancer({ outlierDetection: false });
+  const a = pick(b, ["a"]);
+  clock.mockReturnValue(Number.MAX_VALUE);
+  a.end?.({ attempted: true });
+  a.done?.({ attempted: true });
+  expect(pick(b).endpoint).toBe("a");
+});
+
+test("non-finite pending-weighted costs fall back to the finite initial estimate", () => {
+  const b = p2cBalancer({
+    defaultRttMs: Number.MAX_VALUE,
+    outlierDetection: false,
+  });
+  pick(b, ["a"]);
+  expect(pick(b).endpoint).toBe("a");
+});
+
+test.each([false, true])(
+  "pruned unstarted picks rejoin the unique load state (replacement: %s)",
+  (replacement) => {
+    const b = p2cBalancer({ load: "pending", outlierDetection: false });
+    const [, waiting] = pickEndpoint(b, { endpoints: ["a"] });
+    expect(waiting).toBeDefined();
+    const many = Array.from({ length: 257 }, (_, i) => `other-${i}`);
+    b.pick({ endpoints: many })[1]?.done?.({ attempted: false });
+    const current = replacement ? pick(b, ["a"]) : undefined;
+    const competitor = replacement ? pick(b, ["b"]) : undefined;
+    waiting?.start();
+    const selected = pick(b);
+    expect(selected.endpoint).toBe("b");
+    selected.done?.({ attempted: false });
+    waiting?.done({ attempted: false });
+    waiting?.done({ attempted: false });
+    current?.done?.({ attempted: false });
+    competitor?.done?.({ attempted: false });
+    expect(pick(b).endpoint).toBe("a");
+  },
+);
+
+test("fast RTT samples recover after rollback without waiting for wall time to catch up", () => {
+  function selections(rollback: boolean): (string | undefined)[] {
+    vi.setSystemTime(10_000_000);
+    const b = p2cBalancer({ outlierDetection: false });
+    complete(b, "a", { attempted: true, sampleMs: 1000 });
+    if (rollback) vi.setSystemTime(Date.now() - 3_600_000);
+    for (let i = 0; i < 60; i += 1) {
+      vi.setSystemTime(Date.now() + 1000);
+      complete(b, "a", { attempted: true, sampleMs: 1 });
+    }
+    return Array.from(
+      { length: 6 },
+      () => b.pick({ endpoints: ["a", "b"] })[1]?.endpoint,
+    );
+  }
+  const baseline = selections(false);
+  expect(baseline).toEqual(["a", "a", "a", "a", "a", "a"]);
+  expect(selections(true)).toEqual(baseline);
+});
+
+test("forward idle decay underflow preserves pending-load selection", () => {
+  const b = p2cBalancer({ outlierDetection: false });
+  b.pick({ endpoints: ["a", "b"] })[1]?.done?.({ attempted: false });
+  vi.setSystemTime(8_000_000);
+  const selected = Array.from({ length: 8 }, () => pick(b).endpoint);
+  expect(selected).toEqual(["a", "b", "a", "b", "a", "b", "a", "b"]);
+});

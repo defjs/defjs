@@ -2485,3 +2485,35 @@ test("preserves an event getter's own call dispatch", async () => {
   ]);
   expect(call).toHaveBeenCalledOnce();
 });
+
+test.each(["maxBufferSize", "maxQueueSize"] as const)(
+  "explicit null %s is invalid rather than defaulted",
+  async (limitName) => {
+    const handle = vi.fn(() =>
+      Promise.resolve(
+        new Response("", {
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      ),
+    );
+    const client = createClient(
+      withEndpoint("https://a.test"),
+      withSSEHandle(handle),
+    );
+    const useStream = defineEventStream(
+      Object.defineProperty(
+        {
+          path: "/",
+          events: { message: struct.string() },
+        },
+        limitName,
+        { value: null },
+      ),
+    );
+    const [fault, stream] = await useStream(client);
+    stream?.close();
+    await stream?.closed;
+    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
+    expect(handle).not.toHaveBeenCalled();
+  },
+);

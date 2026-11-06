@@ -18,6 +18,8 @@ interface LoadState {
   rttMs: number;
   updatedAt: number;
 }
+// Decay underflow to zero erases pending from cost; only exact zero needs a floor.
+const MIN_ESTIMATE_MS = Number.MIN_VALUE;
 
 /**
  * Samples candidates without replacement and selects the least loaded draw.
@@ -60,11 +62,18 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
     }
     return state;
   }
+  function finiteEstimate(value: number): number {
+    return Number.isFinite(value)
+      ? Math.max(value, MIN_ESTIMATE_MS)
+      : defaultRttMs;
+  }
   function cost(state: LoadState, now: number): number {
     if (load === "pending") return state.pending;
-    state.rttMs *= Math.exp(-(now - state.updatedAt) / decayMs);
+    state.rttMs = finiteEstimate(
+      state.rttMs * Math.exp(-Math.max(0, now - state.updatedAt) / decayMs),
+    );
     state.updatedAt = now;
-    return state.rttMs * (state.pending + 1);
+    return finiteEstimate(state.rttMs * (state.pending + 1));
   }
   const child: Balancer = {
     pick(info) {
@@ -95,17 +104,19 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
           chosen = { endpoint, state, cost: value };
       }
       if (chosen === undefined) return [ERR_NO_CANDIDATE, undefined];
-      const state = chosen.state;
+      const endpoint = chosen.endpoint;
+      let state = chosen.state;
       let startedAt: number | undefined;
       let ended = false;
       let finished = false;
       return [
         null,
         {
-          endpoint: chosen.endpoint,
+          endpoint,
           start() {
             if (startedAt === undefined && !finished) {
               startedAt = Date.now();
+              state = stateFor(endpoint, startedAt);
               state.pending += 1;
             }
           },
@@ -116,10 +127,11 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
             const at = Date.now();
             const sample = Math.max(0, at - startedAt);
             const d = Math.exp(-Math.max(0, at - state.updatedAt) / decayMs);
-            state.rttMs =
+            state.rttMs = finiteEstimate(
               sample > state.rttMs
                 ? sample
-                : state.rttMs * d + sample * (1 - d);
+                : state.rttMs * d + sample * (1 - d),
+            );
             state.updatedAt = at;
           },
           done() {

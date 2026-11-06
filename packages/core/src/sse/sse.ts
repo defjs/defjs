@@ -274,8 +274,10 @@ export function defineEventStream<
   const error = definition.error;
   const events = snapshotEventDictionary(definition.events);
   const input = definition.input;
-  const maxBufferSize = definition.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE;
-  const maxQueueSize = definition.maxQueueSize ?? DEFAULT_MAX_QUEUE_SIZE;
+  const {
+    maxBufferSize = DEFAULT_MAX_BUFFER_SIZE,
+    maxQueueSize = DEFAULT_MAX_QUEUE_SIZE,
+  } = definition;
   const declaredMethod = definition.method;
   const operation = definition.operation;
   const path = definition.path;

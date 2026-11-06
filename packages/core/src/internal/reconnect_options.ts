@@ -32,6 +32,7 @@ export function normalizeReconnectOptions(
       "connectTimeoutMs",
       connectTimeoutMs,
       Number.MIN_VALUE,
+      2_147_483_647,
     );
   return { attempts, delayMs, factor, jitter, maxDelayMs, connectTimeoutMs };
 }

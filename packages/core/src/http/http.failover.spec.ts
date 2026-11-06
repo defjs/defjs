@@ -6,6 +6,7 @@ import {
   withBalancer,
   withHTTPHandle,
   withInterceptors,
+  withXSRF,
   type ClientOption,
 } from "../client/option";
 import type { DoneInfo, PickInfo } from "../balancer/balancer";
@@ -523,4 +524,94 @@ test("custom option retry configuration is read anew for every HTTP call", async
   setRetry?.();
   expect((await op(client))[0]).toBeNull();
   expect(calls).toBe(3);
+});
+
+test("pre-fetch XSRF failure is not an endpoint attempt and never retries", async () => {
+  const error = new TypeError("token unavailable");
+  const start = vi.fn();
+  const { client, requests, reports } = fixture(
+    policy({ methods: ["POST"] }),
+    withBalancer({
+      pick: (info) => [
+        null,
+        {
+          endpoint: info.endpoints[0] ?? "",
+          start,
+          done: (report) => reports.push(report),
+        },
+      ],
+    }),
+    withXSRF({
+      tokenProvider() {
+        throw error;
+      },
+    }),
+  );
+  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+  expect(fault?.code).toBe("NET_UNREACHABLE");
+  expect(fault?.cause).toBe(error);
+  expect(fault?.message).toBe("token unavailable");
+  expect(reports).toEqual([{ attempted: false }]);
+  expect(start).not.toHaveBeenCalled();
+  expect(requests).toHaveLength(0);
+});
+
+test.each([
+  ["GET", ["POST"], ["GET"], 1, "NET_UNREACHABLE"],
+  ["POST", ["GET"], ["get"], 2, null],
+  ["GET", ["POST", "GET"], ["GET"], 2, "NET_UNREACHABLE"],
+  ["GET", ["GET", "POST"], ["GET"], 2, "NET_UNREACHABLE"],
+  ["POST", ["GET", "GET"], ["gEt"], 4, null],
+] as const)(
+  "retry checks all transported methods: definition %s, sends %j, allows %j",
+  async (method, sent, methods, count, code) => {
+    const { client, requests } = fixture(
+      policy({ methods }),
+      withInterceptors({
+        kind: "http",
+        async fn(request, next) {
+          for (const rewritten of sent.slice(0, -1)) {
+            await next({ ...request, method: rewritten }).catch(
+              () => undefined,
+            );
+          }
+          return next({ ...request, method: sent.at(-1) ?? method });
+        },
+      }),
+    );
+    const [fault] = await defineRequest({ method, path: "/" })(client);
+    expect(fault?.code ?? null).toBe(code);
+    expect(requests.map((request) => request.method)).toEqual(
+      Array.from({ length: count }, (_, index) => sent[index % sent.length]),
+    );
+  },
+);
+
+test("an undefined interceptor method returns a fault tuple without retrying", async () => {
+  const { client, requests } = fixture(
+    withInterceptors({
+      kind: "http",
+      fn(request, next) {
+        // @ts-expect-error JavaScript interceptors may omit the required method
+        return next({ ...request, method: undefined });
+      },
+    }),
+  );
+  const result = await defineRequest({ method: "GET", path: "/" })(client);
+  expect(result[0]?.code).toBe("NET_UNREACHABLE");
+  expect(requests.map((request) => request.method)).toEqual(["GET"]);
+});
+
+test("a lowercase transported method remains eligible for retry", async () => {
+  const { client, requests } = fixture(
+    withInterceptors({
+      kind: "http",
+      fn(request, next) {
+        return next({ ...request, method: "get" });
+      },
+    }),
+  );
+  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+  expect(fault).toBeNull();
+  expect(requests.map((request) => request.method)).toEqual(["GET", "GET"]);
 });

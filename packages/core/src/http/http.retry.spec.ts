@@ -280,3 +280,56 @@ test("retry getter errors escape createClient while applying the option", () => 
   });
   expect(() => createClient(option)).toThrow(error);
 });
+
+test.each([2_147_483_648, Infinity, Number.MAX_VALUE])(
+  "attemptTimeoutMs %s outside platform timer range fails before picking",
+  async (attemptTimeoutMs) => {
+    const h = fixture({ attemptTimeoutMs, maxAttempts: 1 });
+    expect((await h.pending)[0]?.code).toBe("REQ_OPTIONS_INVALID");
+    expect(h.pick).not.toHaveBeenCalled();
+    expect(h.handle).not.toHaveBeenCalled();
+  },
+);
+
+test("attemptTimeoutMs accepts the platform timer upper bound", async () => {
+  clock();
+  const timer = vi.spyOn(globalThis, "setTimeout");
+  const h = fixture({ attemptTimeoutMs: 2_147_483_647, maxAttempts: 1 });
+  expect((await h.pending)[0]?.code).toBe("NET_UNREACHABLE");
+  expect(h.handle).toHaveBeenCalledTimes(1);
+  expect(timer.mock.calls.some((call) => call[1] === 2_147_483_647)).toBe(true);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test.each(["retry", "maxAttempts", "budget", "percentCanRetry"] as const)(
+  "handwritten client option throwing %s getter returns an invalid-options tuple",
+  async (field) => {
+    const error = new Error("runtime getter");
+    const policy = {};
+    const budget = {};
+    const throwing = {
+      get() {
+        throw error;
+      },
+    };
+    if (field === "percentCanRetry") {
+      Object.defineProperty(budget, field, throwing);
+      Object.defineProperty(policy, "budget", { value: budget });
+    } else if (field !== "retry") {
+      Object.defineProperty(policy, field, throwing);
+    }
+    const handle = vi.fn(() => Promise.resolve(new Response("ok")));
+    const client = createClient(
+      withEndpoint("https://a.test"),
+      withHTTPHandle(handle),
+      (config) => {
+        if (field === "retry")
+          Object.defineProperty(config.http, "retry", throwing);
+        else config.http.retry = policy;
+      },
+    );
+    const [fault] = await op(client);
+    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
+    expect(handle).not.toHaveBeenCalled();
+  },
+);

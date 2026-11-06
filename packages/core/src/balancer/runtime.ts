@@ -148,7 +148,7 @@ function isOptionalCallback<T extends (...args: never[]) => void>(
   return value === undefined || typeof value === "function";
 }
 
-function ignoreRejection(value: unknown): void {
+export function ignoreRejection(value: unknown): void {
   try {
     if (
       (typeof value === "object" && value !== null) ||
