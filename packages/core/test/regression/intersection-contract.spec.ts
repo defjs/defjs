@@ -12,6 +12,7 @@ import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/internal/outbound_request";
 import { encodeJson } from "../../src/struct/codec/json";
 import { guideMembers, readOwnGuide } from "../../src/struct/guide";
+import { assertObject, isRecord } from "../narrow";
 import type { RuntimeStruct } from "../../src/struct/types";
 import { mergeIntersectionValues } from "../../src/struct/utils";
 import { serializeOutgoingWebSocketMessage } from "../../src/web_socket/codec";
@@ -22,7 +23,7 @@ const value = { name: "N" };
 const plain = (input: unknown): unknown => JSON.parse(JSON.stringify(input));
 
 async function equivalent(schema: AnyStruct, input: unknown): Promise<void> {
-  const parsed = await parseEndpointInput(schema, input as never);
+  const parsed: unknown = await parseEndpointInput(schema, input);
   expect(plain(encodeOutbound(parsed))).toEqual(
     plain(encodeJson(schema, parsed)),
   );
@@ -31,10 +32,11 @@ async function equivalent(schema: AnyStruct, input: unknown): Promise<void> {
 function tagMembers(node: object): readonly RuntimeStruct[] {
   const tag = readOwnGuide(node);
   expect(tag).toBeDefined();
-  return guideMembers(tag as RuntimeStruct);
+  if (tag === undefined) throw new Error("Expected a guide tag");
+  return guideMembers(tag);
 }
 
-test("split parents keep the other group only as a literal extra", async () => {
+test("split parents keep the other group only as a literal extra", () => {
   const schema = struct.intersection(
     struct.object({
       profile: struct
@@ -47,7 +49,7 @@ test("split parents keep the other group only as a literal extra", async () => {
         .alias("p2"),
     }),
   );
-  const parsed = await parseEndpointInput(schema, {
+  const parsed = parseEndpointInput(schema, {
     profile: { firstName: "Ada", lastName: "Lovelace" },
   });
   expect(plain(encodeJson(schema, parsed))).toEqual({
@@ -79,7 +81,7 @@ test("a record selected by a union stays in the merged tag and on the wire", asy
     struct.or(record, struct.literal("other")),
     object,
   );
-  const parsed = await parseEndpointInput(schema, { extra: "E", name: "N" });
+  const parsed = parseEndpointInput(schema, { extra: "E", name: "N" });
   const members = tagMembers(parsed);
   expect(members).toContain(record);
   expect(members).toContain(object);
@@ -93,11 +95,9 @@ test("a record inside an array item stays in that item tag", async () => {
     struct.array(record),
     struct.array(object),
   );
-  const parsed = (await parseEndpointInput(schema, [
-    { name: "N" },
-  ])) as unknown[];
+  const parsed = parseEndpointInput(schema, [{ name: "N" }]);
   expect(Object.getOwnPropertySymbols(parsed)).toEqual([]);
-  const members = tagMembers(parsed[0] as object);
+  const members = tagMembers(assertObject(parsed[0], "array item"));
   expect(members).toContain(record);
   expect(members).toContain(object);
   await equivalent(schema, [{ name: "N" }]);
@@ -110,10 +110,8 @@ test("a record inside a tuple item stays in that item tag", async () => {
     struct.tuple([record]),
     struct.tuple([object]),
   );
-  const parsed = (await parseEndpointInput(schema, [
-    { name: "N" },
-  ])) as unknown[];
-  const members = tagMembers(parsed[0] as object);
+  const parsed = parseEndpointInput(schema, [{ name: "N" }]);
+  const members = tagMembers(assertObject(parsed[0], "tuple item"));
   expect(members).toContain(record);
   expect(members).toContain(object);
   await equivalent(schema, [{ name: "N" }]);
@@ -126,26 +124,26 @@ test("a record nested under a shared object descendant stays in the merged tag",
     struct.object({ rows: struct.object({ one: record }) }),
     struct.object({ rows: struct.object({ one: object }) }),
   );
-  const parsed = await parseEndpointInput(schema, {
+  const parsed = parseEndpointInput(schema, {
     rows: { one: { name: "N" } },
   });
-  const one = (parsed as { rows: { one: object } }).rows.one;
+  const one = parsed.rows.one;
   const members = tagMembers(one);
   expect(members).toContain(record);
   expect(members).toContain(object);
   await equivalent(schema, { rows: { one: { name: "N" } } });
 });
 
-test("a lone record container is tagged and null is not", async () => {
+test("a lone record container is tagged and null is not", () => {
   const record = struct.record(struct.string());
-  const parsed = await parseEndpointInput(record, { name: "N" });
+  const parsed = parseEndpointInput(record, { name: "N" });
   expect(tagMembers(parsed)).toEqual([record]);
 
   const schema = struct.object({
     note: struct.string(),
     rows: record.nullable(),
   });
-  const withNull = await parseEndpointInput(schema, { note: "ok", rows: null });
+  const withNull = parseEndpointInput(schema, { note: "ok", rows: null });
   expect(withNull.rows).toBeNull();
   expect(tagMembers(withNull)).toEqual([schema]);
 });
@@ -188,19 +186,19 @@ test("a nullable record null parses and encodes inside an intersection", async (
     struct.object({ note: struct.string() }),
   );
   expect(struct.parse(schema, { note: "ok", rows: null })[0]).toBeNull();
-  const parsed = await parseEndpointInput(schema, { note: "ok", rows: null });
+  const parsed = parseEndpointInput(schema, { note: "ok", rows: null });
   expect(parsed.rows).toBeNull();
   expect(parsed.note).toBe("ok");
   await equivalent(schema, { note: "ok", rows: null });
 });
 
-test("a separately parsed replacement keeps its own wire name in every group", async () => {
+test("a separately parsed replacement keeps its own wire name in every group", () => {
   const schema = struct.intersection(
     struct.object({ row: A.optional().alias("p1") }),
     struct.object({ row: B.optional().alias("p2") }),
   );
-  const root = await parseEndpointInput(schema, {});
-  const own = await parseEndpointInput(
+  const root = parseEndpointInput(schema, {});
+  const own = parseEndpointInput(
     struct.object({ name: struct.string().alias("own_name") }),
     value,
   );
@@ -290,9 +288,9 @@ test("a valid nullable record reaches the HTTP handle", async () => {
   );
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls += 1;
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const endpoint = defineRequest({
@@ -404,7 +402,7 @@ test("an aliased any field passes the stored object through on its own wire", as
   await equivalent(schema, { item: { name: "N" } });
 });
 
-test("an anonymous record child keeps the sibling object tag", async () => {
+test("an anonymous record child keeps the sibling object tag", () => {
   const profile = struct.object({
     name: struct.string().alias("display_name"),
   });
@@ -412,10 +410,8 @@ test("an anonymous record child keeps the sibling object tag", async () => {
     struct.record(struct.any()),
     struct.object({ profile }),
   );
-  const parsed = await parseEndpointInput(schema, { profile: { name: "N" } });
-  expect(tagMembers((parsed as { profile: object }).profile)).toEqual([
-    profile,
-  ]);
+  const parsed = parseEndpointInput(schema, { profile: { name: "N" } });
+  expect(tagMembers(parsed.profile)).toEqual([profile]);
 });
 
 test("merging two untagged objects does not invent a parse tag", () => {
@@ -429,9 +425,11 @@ test("merging two untagged objects does not invent a parse tag", () => {
   if (!merged.ok) {
     return;
   }
-  expect(readOwnGuide(merged.value as object)).toBeUndefined();
+  const mergedValue = assertObject(merged.value, "merged value");
+  expect(readOwnGuide(mergedValue)).toBeUndefined();
+  if (!isRecord(mergedValue)) throw new Error("Expected a merged record");
   expect(
-    readOwnGuide((merged.value as { shared: object }).shared),
+    readOwnGuide(assertObject(mergedValue["shared"], "shared")),
   ).toBeUndefined();
   expect(plain(merged.value)).toEqual({
     left: 1,

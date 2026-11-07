@@ -1,20 +1,37 @@
 ---
-title: "401 後更新權杖"
-description: 在同一個 interceptor 裡掛上 Authorization 並重放一次；next() 只往內走。
+title: "401 後重新整理 token"
+description: 在單一攔截器內附加 Authorization 並重試一次；next() 只會向內呼叫。
 ---
 
-# 在 401 時只刷新一次 Bearer token
+# 401 後重新整理 Bearer token 一次
 
-`next()` 是**這一層**洋蔥的其餘部分 — 不是從外面再用 `axios(config)` 重新分派。把掛上憑證、single-flight refresh、一次重放放在**同一個** HTTP interceptor，外層才不會跑兩次。
+在 Defjs 中，`next(request)` 只會向內呼叫攔截器鏈剩下的部分——不會從最外層攔截器重新分派。請把 token 附加、single-flight 重新整理去重，以及一次性的 `401` 重試，全部放在**同一個** HTTP 攔截器裡，這樣外層的日誌或計時攔截器就不會執行兩次：
 
-見 [Interceptors](/zh-Hant-TW/docs/interceptors)。
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 42
 ```
 
-再次呼叫 `next` 只會重新進入這一層**裡面**的 interceptors（以及 Fetch handler）。它不會重跑外層的計時／auth wrappers — 所以 401 的安排要放在一個 interceptor 裡，而不是再呼叫一次操作。
+本文可以重播，不代表業務操作可以重複執行。遇到符合條件的 401 時，這個攔截器也會重送 JSON `POST`：兩次 HTTP 傳遞，第一次被拒，第二次被接受。只有在驗證先於業務處理常式拒絕第一次傳遞時，才能拿它來做寫入；兩次傳遞都要帶同一個穩定的 idempotency key，並由伺服器端去重。若沒有這項契約，請回傳 401，不要自動重播寫入。完整範例不會重播 `ReadableStream` 請求本文。
+
+關於洋蔥式順序與重試邊界，請參閱[攔截器](/zh-Hant-TW/docs/interceptors)。

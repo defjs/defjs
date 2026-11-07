@@ -1,20 +1,75 @@
 ---
-title: Plugins
-description: Optional packages that plug into an application-owned Defjs client.
+title: Integrations overview
+description: Extend an application-owned Defjs client with framework injection, server observability, and AI assistant skills without coupling your SDK definitions.
 ---
 
-# Plugins
+# Integrations overview
 
-Plugins are optional packages the consuming application installs on its own Defjs client. `@defjs/core` does not import them, and SDK definitions do not either. The application owns the client, the endpoint, the credentials, and which plugins to install.
+An integration extends the application's own `Client` at a defined extension point without modifying `@defjs/core` or coupling an SDK definition to a framework or telemetry stack. Your SDK definitions remain pure `@defjs/core` modules; the consuming application chooses which integrations to install.
 
-Plugins come in two kinds. **Framework plugins** hand an existing `Client` to the framework tree. A **middleware plugin** is the plugin form of an interceptor chain: it appends interceptors to the application's client. See [Interceptors](/docs/interceptors).
+Every Defjs plugin obeys the **thin plugin contract**:
 
-| Plugin                                                                       | Package                       | What it adds                                                                                       | What it does not do                                                                |
-| ---------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| [React](/docs/integrations/react) · Framework                                | `@defjs/react`                | `ClientProvider` and `useClient()` for an existing client                                          | Create, cache, retry, or dispose the client. No query or state library             |
-| [Vue](/docs/integrations/vue) · Framework                                    | `@defjs/vue`                  | A Vue plugin, `HTTP_CLIENT`, and `injectClient()`                                                  | Create, cache, or retry. It does not close transports on unmount. No query library |
-| [OpenTelemetry server](/docs/integrations/opentelemetry-server) · Middleware | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`, a client option that appends HTTP, SSE, and WebSocket interceptors | Initialize an OpenTelemetry SDK, or instrument inbound server requests             |
+- **No hidden caching or state**: plugins never store responses, retry requests, or manage query state.
+- **No transport replacement**: plugins never wrap or replace the underlying HTTP, SSE, or WebSocket transport.
+- **Caller-owned lifecycle**: unmounting a UI provider or shutting down a telemetry SDK does not automatically cancel in-flight requests or close active streams.
 
-React and Vue hand an existing `Client` to the framework tree. The application creates that client with `createClient` from `@defjs/core`. The React plugin provides it through Context. The Vue plugin provides it through `app.use(createClientPlugin(client))`. Neither package starts a request.
+---
 
-The OpenTelemetry server middleware plugin is a `ClientOption`. Pass `withOpenTelemetryServer(...)` to `createClient`. It appends one interceptor for each enabled transport, in the order HTTP, SSE, WebSocket. See [Interceptors](/docs/interceptors). The package does not initialize the OpenTelemetry SDK.
+## Published integrations & tools
+
+| Area                                                            | Package / Resource                | Category          | What it provides                                                                                             | What stays in the application                                                     |
+| --------------------------------------------------------------- | --------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| [React](/docs/integrations/react)                               | `@defjs/react`                    | Framework plugin  | `ClientProvider` and `useClient(overrideClient?)` for React 18+                                              | Client creation, `AbortController` cleanup, query caching (e.g., TanStack Query)  |
+| [Vue](/docs/integrations/vue)                                   | `@defjs/vue`                      | Framework plugin  | `createClientPlugin`, `HTTP_CLIENT`, and `injectClient(key?)` for Vue 3.2+                                   | Client creation, `onCleanup` / `onScopeDispose` cancellation, query state         |
+| [OpenTelemetry server](/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Middleware plugin | `withOpenTelemetryServer(...)` `ClientOption` for outbound HTTP, SSE, and WebSocket spans, metrics, and logs | OpenTelemetry SDK initialization, exporters, sampling, redaction, and flush       |
+| [AI Skill](/docs/ai) & [llms.txt](/docs/ai-api)                 | `defjs/defjs` skill & `/llms.txt` | AI tooling        | Agent skill (`SKILL.md`) and machine-readable Markdown documentation                                         | Verification against the project's installed `@defjs/core` version and test suite |
+
+---
+
+## Two plugin architectures
+
+### 1. Framework plugins (`@defjs/react`, `@defjs/vue`)
+
+A framework plugin passes an existing [`DerivableClient`](/api/core/derivableclient-type) down the component tree via native dependency injection (React Context or Vue `provide` / `inject`):
+
+<Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
+
+  </Tab>
+</Tabs>
+
+### 2. Middleware plugins (`@defjs/opentelemetry-server`)
+
+A middleware plugin is a factory that returns a [`ClientOption`](/api/core/clientoption-type). When passed to `createClient(...)`, it appends HTTP, SSE, and/or WebSocket interceptors through `withInterceptors`:
+
+<Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/request-id/plugins/request-id.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+See [Interceptors](/docs/interceptors) for ordering rules, retry boundaries, and streaming lifecycle hooks.

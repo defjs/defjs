@@ -8,28 +8,32 @@ import {
 } from "@defjs/core";
 
 const client = createClient(
-  withEndpoint("https://chat.example.com"),
+  withEndpoint("https://quotes.example.com"),
   withWebSocketReconnect({
     attempts: 3,
+    connectTimeoutMs: 5_000,
     delayMs: 500,
     factor: 2,
     maxDelayMs: 10_000,
     jitter: 0.2,
     shouldReconnect({ attempt, code, wasClean }) {
-      return attempt <= 3 && (wasClean !== true || code === 1006);
+      // `wasClean: true` does not mean the application close was healthy: 1011 is clean too.
+      return (
+        attempt <= 3 && (wasClean !== true || code === 1006 || code === 1011)
+      );
     },
   }),
 );
-const room = defineWebSocket({
+const quotes = defineWebSocket({
   maxIncomingQueueSize: 100,
-  path: "/chat",
+  path: "/quotes",
   incoming: struct.object({
     type: struct.literal("ready"),
     ok: struct.boolean(),
   }),
 });
 async function main() {
-  const [error, session] = await room(client);
+  const [error, session] = await quotes(client);
   if (error) {
     console.error(error.code);
     return;

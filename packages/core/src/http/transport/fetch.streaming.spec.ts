@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { isReadableStreamBody } from "./fetch_init";
 import {
   createClient,
+  type FetchHandle,
   withEndpoint,
   withHTTPHandle,
   withInterceptors,
@@ -26,6 +28,11 @@ import {
   fetchHandler,
   supportsStreamingRequestBody,
 } from "./fetch";
+
+function streamBody(body: unknown): ReadableStream<Uint8Array> {
+  if (isReadableStreamBody(body)) return body;
+  throw new Error("expected stream");
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -97,7 +104,9 @@ describe("Fetch handler streaming", () => {
       loaded: number;
       total: number;
     }> = [];
-    const fetchMock = vi.fn(async (request: Request) => {
+    const fetchMock = vi.fn<FetchHandle>(async (input) => {
+      if (!(input instanceof Request)) throw new Error("expected Request");
+      const request = input;
       const reader = request.body?.getReader();
 
       if (reader) {
@@ -176,7 +185,7 @@ describe("Fetch handler streaming", () => {
         throw observerError;
       },
     });
-    const reader = (init.body as ReadableStream<Uint8Array>).getReader();
+    const reader = streamBody(init.body).getReader();
 
     await expect(settleWithin(reader.read())).rejects.toBe(observerError);
     expect(cancel).toHaveBeenCalledExactlyOnceWith(observerError);
@@ -197,7 +206,7 @@ describe("Fetch handler streaming", () => {
       method: "POST",
       uploadProgress: vi.fn(),
     });
-    const reader = (init.body as ReadableStream<Uint8Array>).getReader();
+    const reader = streamBody(init.body).getReader();
 
     await expect(
       settleWithin(reader.cancel("consumer canceled")),
@@ -248,9 +257,7 @@ describe("Fetch handler streaming", () => {
     const networkError = new Error("network failed");
     const cancel = vi.fn(() => new Promise<void>(() => undefined));
     const stream = new ReadableStream<Uint8Array>({ cancel });
-    const fetchMock = vi.fn(async () => {
-      throw networkError;
-    });
+    const fetchMock = vi.fn(() => Promise.reject(networkError));
     const failure = await settleWithin(
       fetchHandler(
         {
@@ -318,7 +325,7 @@ describe("Fetch handler streaming", () => {
         method: "POST",
         uploadProgress: vi.fn(),
       },
-      fetchMock as unknown as typeof fetch,
+      fetchMock,
     );
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
@@ -354,7 +361,9 @@ describe("Fetch handler streaming", () => {
     const consumingStarted = new Promise<void>((resolve) => {
       startConsuming = resolve;
     });
-    const fetchMock = vi.fn(async (request: Request) => {
+    const fetchMock = vi.fn<FetchHandle>(async (input) => {
+      if (!(input instanceof Request)) throw new Error("expected Request");
+      const request = input;
       const consuming = request.arrayBuffer();
       startConsuming();
       await consuming;
@@ -369,7 +378,7 @@ describe("Fetch handler streaming", () => {
         method: "POST",
         uploadProgress: vi.fn(),
       },
-      fetchMock as unknown as typeof fetch,
+      fetchMock,
     );
 
     await consumingStarted;
@@ -409,7 +418,7 @@ describe("Fetch handler streaming", () => {
           }
         },
       });
-      reader = (init.body as ReadableStream<Uint8Array>).getReader();
+      reader = streamBody(init.body).getReader();
 
       await expect(settleWithin(reader.read())).resolves.toEqual({
         done: true,
@@ -429,9 +438,12 @@ describe("Fetch handler streaming", () => {
     const cancel = vi.fn();
     const stream = new ReadableStream<Uint8Array>({ cancel });
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-    const fetchMock = vi.fn(async (request: Request) => {
+    const fetchMock = vi.fn<FetchHandle>((input) => {
+      if (!(input instanceof Request))
+        return Promise.reject(new Error("expected Request"));
+      const request = input;
       reader = request.body?.getReader();
-      throw networkError;
+      return Promise.reject(networkError);
     });
     const failure = await fetchHandler(
       {
@@ -441,7 +453,7 @@ describe("Fetch handler streaming", () => {
         method: "POST",
         uploadProgress: vi.fn(),
       },
-      fetchMock as unknown as typeof fetch,
+      fetchMock,
     ).catch((cause: unknown) => cause);
 
     expect(failure).toBe(networkError);
@@ -478,7 +490,9 @@ describe("Fetch handler streaming", () => {
       loaded: number;
       total: number;
     }> = [];
-    const fetchMock = vi.fn(async (request: Request) => {
+    const fetchMock = vi.fn<FetchHandle>(async (input) => {
+      if (!(input instanceof Request)) throw new Error("expected Request");
+      const request = input;
       const reader = request.body?.getReader();
       if (reader) {
         while (true) {
@@ -510,7 +524,7 @@ describe("Fetch handler streaming", () => {
           });
         },
       },
-      fetchMock as unknown as typeof fetch,
+      fetchMock,
     );
 
     expect(response.body).toBe("ok");
@@ -532,12 +546,13 @@ describe("Fetch handler streaming", () => {
 
   test("should skip upload wrapping for non-streamable bodies without a counted type", async () => {
     const uploadProgress = vi.fn();
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
         new Response("ok", {
           status: 200,
           headers: { "content-type": "text/plain" },
         }),
+      ),
     );
 
     const response = await fetchHandler(
@@ -549,7 +564,7 @@ describe("Fetch handler streaming", () => {
         responseType: "text",
         uploadProgress,
       },
-      fetchMock as unknown as typeof fetch,
+      fetchMock,
     );
 
     expect(response.body).toBe("ok");
@@ -566,7 +581,9 @@ describe("Fetch handler streaming", () => {
       loaded: number;
       total: number;
     }> = [];
-    const fetchMock = vi.fn(async (request: Request) => {
+    const fetchMock = vi.fn<FetchHandle>(async (input) => {
+      if (!(input instanceof Request)) throw new Error("expected Request");
+      const request = input;
       const reader = request.body?.getReader();
       if (reader) {
         while (true) {
@@ -598,7 +615,7 @@ describe("Fetch handler streaming", () => {
           });
         },
       },
-      fetchMock as unknown as typeof fetch,
+      fetchMock,
     );
 
     expect(response.body).toBe("ok");
@@ -629,11 +646,11 @@ describe("Fetch handler streaming", () => {
             endpoint: "/upload",
             method: "POST",
             responseType: "text",
-            async uploadProgress() {
-              throw observerError;
+            uploadProgress() {
+              return Promise.reject(observerError);
             },
           },
-          vi.fn(async () => new Response("ok")) as unknown as typeof fetch,
+          vi.fn(() => Promise.resolve(new Response("ok"))),
         ),
       ).catch((cause: unknown) => cause);
 
@@ -884,7 +901,7 @@ describe("streaming request body capability", () => {
           responseType: "text",
           uploadProgress,
         },
-        fetchMock as unknown as typeof fetch,
+        fetchMock,
       );
 
       expect(response.body).toBe("ok");
@@ -928,7 +945,7 @@ describe("streaming request body capability", () => {
             loaded.push(event.loaded);
           },
         },
-        fetchMock as unknown as typeof fetch,
+        fetchMock,
       );
 
       expect(response.body).toBe("ok");
@@ -941,7 +958,9 @@ describe("unsupported streaming request body", () => {
   test("should report ENV_UNSUPPORTED for a ReadableStream body before calling the handle", async () => {
     simulateUnsupportedStreaming();
     const stream = byteStream();
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
+    const handle = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const client = createClient(
       withEndpoint("https://example.com"),
       withHTTPHandle(handle),
@@ -968,7 +987,9 @@ describe("unsupported streaming request body", () => {
   test("should report ENV_UNSUPPORTED for a ReadableStream body when onUploadProgress is set", async () => {
     simulateUnsupportedStreaming();
     const stream = byteStream();
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
+    const handle = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const onUploadProgress = vi.fn();
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1026,9 +1047,7 @@ describe("unsupported streaming request body", () => {
               throw error;
             }
             expect(stream.locked).toBe(false);
-            const blob = await new Response(
-              request.body as ReadableStream<Uint8Array>,
-            ).blob();
+            const blob = await new Response(streamBody(request.body)).blob();
             return await next({ ...request, body: blob });
           }
         }),

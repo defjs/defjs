@@ -15,8 +15,6 @@ const encoder = new TextEncoder();
 // `message` carries text, `count` a JSON number, and any other event name has no struct at all.
 const useStream = defineEventStream({
   events: { count: struct.number(), message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/events",
 });
 
@@ -78,19 +76,16 @@ async function openStream(options: {
 }) {
   const client = createClient(
     withEndpoint("https://api.example.com"),
-    withSSEHandle(
-      (async () =>
+    withSSEHandle(() =>
+      Promise.resolve(
         new Response(options.body, {
           headers: { "content-type": "text/event-stream" },
-        })) as unknown as typeof fetch,
+        }),
+      ),
     ),
-    ...(options.onInvalidEvent
-      ? [withSSEOnInvalidEvent(options.onInvalidEvent)]
-      : []),
+    withSSEOnInvalidEvent(options.onInvalidEvent),
   );
-  const [error, stream] = await useStream(
-    options.signal ? client({ signal: options.signal }) : client,
-  );
+  const [error, stream] = await useStream(client({ signal: options.signal }));
   expect(error).toBeNull();
   if (!stream) {
     throw new Error("Expected stream");

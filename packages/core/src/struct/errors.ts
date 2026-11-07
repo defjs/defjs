@@ -91,7 +91,8 @@ export class StructError extends Error {
    */
   flatten(): FlattenedStructError {
     const formErrors: string[] = [];
-    const fieldErrors: { [key: string]: string[] } = Object.create(null);
+    const fieldErrors: { [key: string]: string[] } = {};
+    Object.setPrototypeOf(fieldErrors, null);
     for (const item of this.issues) {
       if (item.path.length === 0) {
         formErrors.push(item.message);
@@ -124,8 +125,8 @@ export class StructError extends Error {
 }
 
 function createFormattedError(): FormattedStructError {
-  const node: FormattedStructError = Object.create(null);
-  node._errors = [];
+  const node: FormattedStructError = { _errors: [] };
+  Object.setPrototypeOf(node, null);
   return node;
 }
 

@@ -1,22 +1,40 @@
 ---
 title: "معالجة 404 معلَن"
-description: استدعِ GET واحدًا وتفرّع بين 200 محدَّد النوع و404 معلَن.
+description: استدعِ طلب GET وتفرع بدقة بين استجابة النجاح 200 وخطأ 404 المعلن محدد الأنواع.
 ---
 
-# GET مع 404 معلَن
+# طلب GET مع استجابة 404 معلنة
 
-أعلن جسمي النجاح و404 معًا. تفرّع على `error.code` و`error.status` — تحصل على `error.data` محدَّد النوع للغياب المعلَن.
+صرّح عن كل من `output` (لاستجابات حالات 2xx) و`error` (للاستجابات غير 2xx) في `defineRequest`. وعند نقطة الاستدعاء، تفرّع بالتحقق من `error?.code === "HTTP_STATUS" && error.status === 404` لقراءة حمولة `error.data` محددة الأنواع.
 
-انظر [HTTP](/ar/docs/http) و[الأخطاء](/ar/docs/errors) للتفاصيل.
+<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
 
-`api.example.com` عنوان توضيحي. مع خادم يجيب على `GET /users/7` بـ `200` و`{ "id": 7, "name": "Ada" }`، تطبع الشيفرة:
+  </Tab>
+</Tabs>
+
+عندما يجيب الخادم على `GET /orders/7` بالحالة `200` مع `{ "id": 7, "status": "paid" }`، يطبع البرنامج:
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
-الحالة غير-2xx هي `HTTP_STATUS`. إعلان `error` يعطي جسمه نوعًا؛ وحذف `error` يترك `error.data` بقيمة `undefined` والجسم غير مقروء. إذا تعذّرت قراءة جسم `error` معلَن (نوع وسائط خاطئ، أو JSON غير صالح، أو شكل خاطئ)، تكون النتيجة عطل `RES_*` بدل ذلك. struct `error` واحد يغطي كل حالة غير-2xx، فاستخدم `struct.or(...)` أو اتحادًا مميّزًا عندما تختلف الأشكال.
+- تنتج كل حالة استجابة غير 2xx خطأ `HTTP_STATUS`. ويؤدي التصريح عن `error` إلى فك ترميز جسم الخطأ والتحقق منه داخل `error.data`؛ بينما يؤدي إغفال `error` إلى إبقاء `error.data` كـ `undefined` دون قراءة جسم الاستجابة.
+- إذا كان جسم `error` المعلن يحمل نوع وسائط خاطئاً، أو بيانات JSON غير صالحة، أو فشل في التحقق من بنية Struct، فإن العملية تُرجع خطأ `RES_*` بدلاً من ذلك. ونظراً لأن بنية `error` واحدة تغطي كافة الحالات غير 2xx، استخدم `struct.or(...)` عندما تُرجع حالات الخطأ المختلفة أشكالاً متباينة.
+
+راجع دليلي [عمليات HTTP](/ar/docs/http) و[معالجة الأخطاء](/ar/docs/errors).

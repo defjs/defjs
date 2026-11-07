@@ -11,11 +11,8 @@ export function parseMediaTypeEssence(value: string): string | undefined {
   if (!match) {
     return undefined;
   }
-  return (
-    (match as [string, string, string])[1].toLowerCase() +
-    "/" +
-    (match as [string, string, string])[2].toLowerCase()
-  );
+  // A match always has both captures: the type and the subtype.
+  return match.slice(1, 3).join("/").toLowerCase();
 }
 
 export function parseMediaTypePrefix(value: string): MediaTypePrefix {

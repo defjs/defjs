@@ -57,6 +57,11 @@ test("signature cleanup keeps the declaration and drops the body marker", () => 
   expect(
     stripInnerDocs("type Foo = {\n  /** hidden */\n  id: string;\n}"),
   ).toBe("type Foo = {\n\n  id: string;\n}");
+  expect(
+    stripInnerDocs(
+      "type Foo = {\n  // eslint-disable-next-line rule -- why\n  id: string;\n  // keep\n}",
+    ),
+  ).toBe("type Foo = {\n  id: string;\n  // keep\n}");
 });
 
 test("a short inferred type is appended only when the source has no annotation", () => {

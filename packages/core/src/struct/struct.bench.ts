@@ -1,10 +1,58 @@
-import assert from "node:assert/strict";
 import { afterAll, describe, test, type BenchRunOptions } from "vitest";
 import { materializeOutboundRequest } from "../internal/outbound_request";
 import { decodeJson, encodeJson } from "./codec/json";
 import { encodeStructValue } from "./introspection";
 import { StructError, struct } from "./index";
 import type { StructLike } from "./types";
+import { isPlainObject } from "./utils";
+
+function fail(message: string): never {
+  throw new Error(message);
+}
+
+type Assert = {
+  deepEqual(actual: unknown, expected: unknown): void;
+  equal(actual: unknown, expected: unknown): void;
+  notEqual(actual: unknown, expected: unknown): void;
+  ok(value: unknown): asserts value;
+};
+
+const assert: Assert = {
+  deepEqual(actual: unknown, expected: unknown): void {
+    if (!Bun.deepEquals(actual, expected)) fail("values are not deeply equal");
+  },
+  equal(actual: unknown, expected: unknown): void {
+    if (!Object.is(actual, expected)) fail("values are not equal");
+  },
+  notEqual(actual: unknown, expected: unknown): void {
+    if (Object.is(actual, expected)) fail("values are equal");
+  },
+  ok(value: unknown): asserts value {
+    if (!value) fail("expected a truthy value");
+  },
+};
+
+function nonEmpty<T>(values: readonly T[]): [T, ...T[]] {
+  const first = values[0];
+  if (first === undefined) {
+    throw new Error("expected a non-empty list");
+  }
+  return [first, ...values.slice(1)];
+}
+
+function present<T>(value: T | undefined): T {
+  if (value === undefined) {
+    throw new Error("expected a value");
+  }
+  return value;
+}
+
+function objectRecord(value: unknown): { [key: string]: unknown } {
+  if (!isPlainObject(value)) {
+    throw new Error("expected object");
+  }
+  return value;
+}
 
 const micro = { iterations: 10, time: 500, warmupTime: 100 };
 const largeBatch = {
@@ -95,9 +143,7 @@ function makeIntersectionFixture(branches: number) {
   return {
     branches,
     payload,
-    schema: struct.intersection(
-      ...(options as [(typeof options)[number], ...typeof options]),
-    ),
+    schema: struct.intersection(...nonEmpty(options)),
   };
 }
 
@@ -116,9 +162,7 @@ function makeEquivalentUnionFixture(branches: number, width: number) {
   return {
     branches,
     payload,
-    schema: struct.or(
-      ...(options as [(typeof options)[number], ...typeof options]),
-    ),
+    schema: struct.or(...nonEmpty(options)),
     width,
   };
 }
@@ -143,7 +187,8 @@ function makeLateWireDiscriminatedUnionFixture(size: number, fields = 10) {
   }
   return {
     payload,
-    schema: struct.discriminatedUnion("kind", options as never),
+    // @ts-expect-error generated options widen each tag literal into one union
+    schema: struct.discriminatedUnion("kind", nonEmpty(options)),
     fields,
     size,
   };
@@ -158,7 +203,7 @@ function makeUnionOptions(size: number, aliases = false) {
       value: aliases ? struct.string().alias("payload") : struct.string(),
     }),
   );
-  return options as [(typeof options)[number], ...typeof options];
+  return nonEmpty(options);
 }
 
 function makeOrdinaryUnionFixture(size: number) {
@@ -209,7 +254,8 @@ function assertParse(schema: StructLike, payload: unknown): void {
 }
 
 function plain(value: unknown): object {
-  return { ...(value as object) };
+  const record = objectRecord(value);
+  return { ...record };
 }
 
 const objectFixtures = [4, 16, 64].map(makeObjectFixture);
@@ -288,16 +334,10 @@ const placeRequest = (input: typeof requestPayload) => ({
 
 assert.notEqual(constructSchemaBatch(1), undefined);
 assert.notEqual(constructSchemaBatch(1_000), undefined);
-assertParse(
-  objectFixtures[0]?.schema as StructLike,
-  objectFixtures[0]?.payload,
-);
-assertParse(
-  nestedFixtures[2]?.schema as StructLike,
-  nestedFixtures[2]?.payload,
-);
+assertParse(present(objectFixtures[0]?.schema), objectFixtures[0]?.payload);
+assertParse(present(nestedFixtures[2]?.schema), nestedFixtures[2]?.payload);
 assertParse(nestedDepth64Valid.schema, nestedDepth64Valid.payload);
-assertParse(arrayFixtures[2]?.schema as StructLike, arrayFixtures[2]?.payload);
+assertParse(present(arrayFixtures[2]?.schema), arrayFixtures[2]?.payload);
 const [firstFailure] = struct.parse(failureSchema, failureFirst);
 assert.ok(firstFailure instanceof StructError);
 assert.deepEqual(firstFailure.issues[0]?.path, ["first"]);
@@ -313,24 +353,21 @@ assert.deepEqual(depth64Failure.issues[0]?.path, [
   ...Array<string>(63).fill("child"),
   "value",
 ]);
-assertParse(
-  unionFixtures[2]?.schema as StructLike,
-  unionFixtures[2]?.payloads[31],
-);
+assertParse(present(unionFixtures[2]?.schema), unionFixtures[2]?.payloads[31]);
 const [ordinaryUnionAllFailure] = struct.parse(
-  unionFixtures[2]?.schema as StructLike,
+  present(unionFixtures[2]?.schema),
   unionFixtures[2]?.failure,
 );
 assert.ok(ordinaryUnionAllFailure instanceof StructError);
 assert.equal(ordinaryUnionAllFailure.issues[0]?.code, "invalid_union");
 assertParse(
-  discriminatedFixtures[2]?.plain.schema as StructLike,
+  present(discriminatedFixtures[2]?.plain.schema),
   discriminatedFixtures[2]?.plain.payloads[31],
 );
 assert.deepEqual(
   plain(
     decodeJson(
-      discriminatedFixtures[2]?.alias.schema as StructLike,
+      present(discriminatedFixtures[2]?.alias.schema),
       discriminatedFixtures[2]?.alias.aliasPayloads[31],
     ),
   ),
@@ -342,7 +379,7 @@ assert.deepEqual(
 assert.deepEqual(
   plain(
     decodeJson(
-      lateWireDiscriminatedFixtures[2]?.schema as StructLike,
+      present(lateWireDiscriminatedFixtures[2]?.schema),
       lateWireDiscriminatedFixtures[2]?.payload,
     ),
   ),
@@ -359,17 +396,19 @@ assert.deepEqual(
     value: "value",
   },
 );
-const lateWire32x64Decoded = decodeJson(
-  lateWireDiscriminated32x64.schema,
-  lateWireDiscriminated32x64.payload,
-) as Record<string, unknown>;
+const lateWire32x64Decoded = objectRecord(
+  decodeJson(
+    lateWireDiscriminated32x64.schema,
+    lateWireDiscriminated32x64.payload,
+  ),
+);
 assert.equal(Object.keys(lateWire32x64Decoded).length, 64);
 assert.equal(lateWire32x64Decoded["kind"], "kind31");
 assert.equal(lateWire32x64Decoded["value"], "value");
 assert.deepEqual(
   plain(
     encodeStructValue(
-      objectEncodeFixtures[3]?.plainSchema as StructLike,
+      present(objectEncodeFixtures[3]?.plainSchema),
       objectEncodeFixtures[3]?.payload,
     ),
   ),
@@ -378,7 +417,7 @@ assert.deepEqual(
 assert.deepEqual(
   plain(
     encodeJson(
-      objectEncodeFixtures[3]?.aliasSchema as StructLike,
+      present(objectEncodeFixtures[3]?.aliasSchema),
       objectEncodeFixtures[3]?.payload,
     ),
   ),
@@ -411,7 +450,7 @@ assert.deepEqual(
 assert.deepEqual(
   plain(
     encodeStructValue(
-      equivalentUnionFixtures[2]?.schema as StructLike,
+      present(equivalentUnionFixtures[2]?.schema),
       equivalentUnionFixtures[2]?.payload,
     ),
   ),
@@ -420,7 +459,7 @@ assert.deepEqual(
 assert.deepEqual(
   plain(
     encodeStructValue(
-      equivalentUnionWidthFixtures[2]?.schema as StructLike,
+      present(equivalentUnionWidthFixtures[2]?.schema),
       equivalentUnionWidthFixtures[2]?.payload,
     ),
   ),
@@ -461,9 +500,9 @@ describe("Struct performance", () => {
     for (const { payload, schema } of nestedFixtures) {
       let depth = 1;
       for (
-        let current = payload as { child?: unknown };
-        current.child;
-        current = current.child as { child?: unknown }
+        let current: unknown = payload;
+        isPlainObject(current) && current["child"];
+        current = isPlainObject(current) ? current["child"] : undefined
       ) {
         depth += 1;
       }
@@ -689,8 +728,9 @@ describe("Struct performance", () => {
       const values = Array.from(
         { length: size },
         (_, index) => `value${index}`,
-      ) as [string, ...string[]];
-      const schema = struct.enum(values);
+      );
+      const enumValues = nonEmpty(values);
+      const schema = struct.enum(enumValues);
       const input = values.at(-1);
       assertParse(schema, input);
       measure(
@@ -717,7 +757,11 @@ describe("Struct performance", () => {
       micro,
     );
     const array = makeArrayFixture(1000);
-    array.payload[0] = { id: "invalid" as unknown as number, name: "first" };
+    array.payload[0] = {
+      // @ts-expect-error the id is intentionally not a number
+      id: "invalid",
+      name: "first",
+    };
     assert.ok(struct.parse(array.schema, array.payload)[0]);
     measure(
       "parse/array length 1000 first item failure",

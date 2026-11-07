@@ -1,10 +1,6 @@
-import type { WebSocketHandle } from "../client/config";
+import type { ClientWebSocketOptions, WebSocketHandle } from "../client/config";
 import type { AnyStruct } from "../struct";
 import { serializeOutgoingWebSocketMessage } from "./codec";
-import type {
-  WebSocketHeartbeatConfig,
-  WebSocketOutgoingData,
-} from "./web_socket";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
@@ -25,11 +21,10 @@ export function startHeartbeat<
 >(
   socket: WebSocketHandle,
   sessionController: HeartbeatSession<TIncoming>,
-  config:
-    | WebSocketHeartbeatConfig<TIncoming, WebSocketOutgoingData<TOutgoing>>
-    | undefined,
+  config: ClientWebSocketOptions["heartbeat"],
   outgoing: TOutgoing | undefined,
-  onFatal: (error: unknown) => void,
+  /** `timedOut` is true only when the peer left a heartbeat unacknowledged; other failures are local. */
+  onFatal: (error: unknown, timedOut: boolean) => void,
   openState: number,
 ): void {
   stopHeartbeat(sessionController);
@@ -75,30 +70,30 @@ export function startHeartbeat<
       }
       const serialized = serializeOutgoingWebSocketMessage(
         outgoing,
-        nextMessage as WebSocketOutgoingData<TOutgoing>,
+        nextMessage,
       );
       if (!isActive()) {
         return;
       }
       if (typeof config.timeoutMs === "number" && config.timeoutMs > 0) {
         ackTimer = setTimeout(() => {
-          fail(new Error("WebSocket heartbeat timeout"));
+          fail(new Error("WebSocket heartbeat timeout"), true);
         }, config.timeoutMs);
       }
       socket.send(serialized);
     } catch (error) {
-      fail(error);
+      fail(error, false);
     }
   }, config.intervalMs);
 
-  function fail(error: unknown): void {
+  function fail(error: unknown, timedOut: boolean): void {
     runtime.stop();
     /* istanbul ignore if -- @preserve defensive: a cleared platform timeout callback may already be queued when the runtime stops */
     if (!isActive()) {
       return;
     }
     sessionController.heartbeat = undefined;
-    onFatal(error);
+    onFatal(error, timedOut);
   }
 }
 

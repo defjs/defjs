@@ -1,22 +1,38 @@
 ---
 title: "استهلاك أحداث SSE"
-description: افتح تدفق أحداث محدَّد النوع، مرّ على أحداثه مرة واحدة، ثم أغلق وانتظر closed.
+description: افتح تدفق أحداث محدد الأنواع، وكرر عليه مرة واحدة، ثم أغلق وانتظر اكتمال الإغلاق.
 ---
 
-# استهلاك تدفق SSE
+# استهلاك تدفق أحداث SSE
 
-مكرّر غير متزامن واحد لكل تدفق. ضع `close` + `await stream.closed` في `finally` حتى لا تسرّب محاولة Fetch عند الخروج المبكر.
+يوفر كل مقبض تدفق `EventStreamHandle` مكرراً غير متزامن مفرد الاستهلاك. احرص دائماً على وضع `stream.close(...)` متبوعاً بـ `await stream.closed` داخل كتلة `finally` حتى لا تؤدي عبارات `break` أو `return` المبكرة إلى تسريب تدفق Fetch الأساسي:
 
-انظر [SSE](/ar/docs/sse) للتفاصيل.
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-<include cwd meta="notifications.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
 
-`api.example.com` عنوان توضيحي. مع خادم يكون أول حدث فيه `message` وبياناته `{ "text": "hello from the server" }`، تطبع الشيفرة:
+  </Tab>
+</Tabs>
+
+عندما يرسل الخادم الحدث الأول كـ `line` مع بيانات `{ "text": "build started" }`، يطبع البرنامج:
 
 ```txt
-hello from the server
+build started
 ```
 
-لا تعيد SSE المحاولة عند فشل الشبكة أو القراءة إلا إذا فعّلت `withSSEReconnect(...)`. عند ضبط كائن إعادة اتصال تكون القيمة الافتراضية لـ `attempts` هي `3` لكل انقطاع؛ وتعيد المصافحة الناجحة ضبط الميزانية وأُسّ التراجع. تعطّل `attempts: 0` إعادة المحاولة. تفشل خيارات إعادة الاتصال الرقمية غير الصالحة قبل إرسال أي طلب بـ `REQ_OPTIONS_INVALID`؛ راجع [قواعد التحقق](/ar/api/core/withssereconnect). في غياب `shouldReconnect`، تقتصر إعادة الاتصال على طلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE`، ولا تُعاد محاولة الاتصال لأي طلب جسمه `ReadableStream`.
+- لا يُعيد SSE الاتصال تلقائياً عند حدوث إخفاقات في الشبكة أو القراءة ما لم تضبط [`withSSEReconnect(...)`](/ar/api/core/withssereconnect) على العميل.
+- عند ضبط `withSSEReconnect(...)`، تكون القيمة الافتراضية لـ `attempts` هي `3` لكل انقطاع وتُعاد ضبطها عند كل مصافحة ناجحة (وتعطّل `attempts: 0` إعادة الاتصال). ودون دالة `shouldReconnect` مخصصة، لا يُعاد اتصال إلا لطلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE`. والطلب الذي يحمل جسمًا من نوع `ReadableStream` لا يُعاد اتصاله أبدًا. راجع [تدفقات أحداث SSE](/ar/docs/sse).

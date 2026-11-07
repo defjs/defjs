@@ -3,116 +3,106 @@ title: "WebSocket sessions"
 description: Define your SDK's WebSocket message contract while applications own connection configuration and session lifetime.
 ---
 
-# WebSocket
+# WebSocket sessions
 
-The SDK defines a WebSocket operation's path, inputs, incoming and outgoing messages, and queue limit. The consuming application configures its client, calls the operation, and chooses call-specific connection options on a derived client. Export the operation alongside your SDK's HTTP or SSE operations.
+`defineWebSocket` declares a bidirectional WebSocket contract in your SDK: the path template, optional `input` and `builder` (`path` and `query` only), `incoming` and `outgoing` message structs, queue bounds, and static subprotocols. The consuming application configures heartbeat, reconnect, and lifecycle cleanup on its client.
 
-Start → receive → send → release with `await using`. You own unsubscribe and disposal. Manual `close()` / `closed` remains available; clients, providers, and interceptors don’t auto-close sessions.
+## 1. Define the contract and run a session
 
-## Basic Setup
+Model multiple frame types on `incoming` or `outgoing` using `struct.discriminatedUnion(...)`. Release the returned `WebSocketSession` with `await using` or explicit `session.close()` + `await session.closed`:
+
+<Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup.ts#example
 </include>
 
-## One struct per direction
+</Tab>
+</Tabs>
 
-`incoming` is one struct for every text frame. `outgoing` is one struct for `session.send(...)`. Model several kinds with `struct.discriminatedUnion`. Alias on those fields is the wire name in both directions. There is no separate type envelope and no normalizer.
+## 2. Message validation and direction rules
 
-```json
-{ "type": "message", "text": "Hello" }
-```
+- **Incoming frames (`session.receive`)**: Text, `ArrayBuffer`, typed arrays, and `Blob` frames are decoded as UTF-8, parsed as JSON, and validated against `incoming`. Malformed JSON or schema mismatches are reported to `session.onRuntimeError` and dropped without closing the session. `session.receive` is single-consumer; requesting a second iterator throws `TypeError`.
+- **Outgoing frames (`session.send(payload)`)**: Synchronously validates against `outgoing`, applies `.alias()` and codecs, and serializes with `JSON.stringify`. Sends immediately in the `open` state, queues during `reconnecting` (if `maxOutgoingQueueSize > 0`), and throws synchronously if the payload is invalid, the queue is full/disabled, or the session is closed.
 
-Incoming text, `ArrayBuffer`, typed-array, and `Blob` frames are read as UTF-8, JSON-parsed, then checked against `incoming`. Malformed JSON and struct failures go to `session.onRuntimeError` and are not queued. The session stays up. Frames that are not text, bytes, or a `Blob` are ignored. There is no `withWebSocketOnInvalidEvent`.
+## 3. Session state and observers
 
-`session.send(...)` validates and serializes synchronously: struct encode, then `JSON.stringify`. It sends immediately when open, queues during `reconnecting` when an outgoing queue is enabled, and throws `InvalidStateError` when not writable. It also throws when there’s no outgoing struct, the payload fails the struct, the outgoing queue is disabled or full, or the native send fails. A static `protocols` list on the definition is the endpoint contract (for example `graphql-transport-ws`). A derived client's `protocols` and `withWebSocketProtocols` can still override it. Only those options choose subprotocols: the builder, `beforeConnect`, and interceptors cannot change them, so a token-in-subprotocol is passed as `protocols` on the derived client for that call. The builder may return only `path` and `query`.
-
-After struct encoding, values that JSON cannot faithfully represent throw `TypeError` before sending or entering the reconnect queue: non-finite numbers, functions, symbols, `Map`, `Set`, streams, and class instances without a JSON representation. Nested values follow the same rule as HTTP JSON bodies. `struct.number()` still accepts infinities and rejects `NaN`; accepting a value at the struct layer does not make it valid JSON. The heartbeat uses the same serializer; its serialization failure ends the logical session.
-
-`receive` is one-consumer. Asking for a second iterator throws a `TypeError`.
-
-## State snapshots
-
-| Member                     | Meaning                                                                                       |
-| -------------------------- | --------------------------------------------------------------------------------------------- |
-| `state`                    | `idle`, `connecting`, `open`, `reconnecting`, `closing`, `closed`, `aborted`, or `error`      |
-| `connection`               | Latest physical connection: `generation`, URL, negotiated protocol, extensions when available |
-| `bufferedAmount`           | Native unsent byte count, or `0` with no physical socket                                      |
-| `receive`                  | One-consumer async iterable of validated incoming messages                                    |
-| `onStateChange(listener)`  | Subscribe to logical state transitions; returns unsubscribe                                   |
-| `onRuntimeError(listener)` | Subscribe to non-startup runtime errors; returns unsubscribe                                  |
-| `closed`                   | Promise for the logical terminal close outcome                                                |
-
-`open` = physical socket open. `reconnecting` includes preparation + delay before a replacement. `connection.generation` increments each physical socket that reaches `open`. `session.connection` moves forward on reconnect. Tuple `startupConnection` preserves the first successful snapshot only for a native Defjs session or a wrapper forwarding the same live `connection` object. Custom sessions and wrappers that transform `connection` instead use the returned session's current public `connection` for the tuple. Sharing `closed` cannot bypass URL sanitization or metadata filtering, and Defjs does not reconstruct first-connection metadata from arbitrary transformations.
-
-Startup failure → `[error, undefined, connection?]`. Pre-open constructor failure may have no connection; an abort or close during startup may still provide a snapshot. After the session returns, runtime errors travel through observers, `receive`, and `closed` — not a second result tuple.
+| Member               | Description                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `state`              | `'idle' \| 'connecting' \| 'open' \| 'reconnecting' \| 'closing' \| 'closed' \| 'aborted' \| 'error'` |
+| `connection`         | Live snapshot of the latest physical socket (`generation`, `url`, `protocol`, `extensions`)           |
+| `bufferedAmount`     | Unsent byte count on the active physical socket (`0` when disconnected)                               |
+| `receive`            | Single-consumer async iterable of validated `incoming` messages                                       |
+| `onStateChange(fn)`  | Subscribes to state transitions; returns an `unsubscribe` function                                    |
+| `onRuntimeError(fn)` | Subscribes to non-startup frame/parse errors; returns an `unsubscribe` function                       |
+| `closed`             | Promise resolving to the terminal outcome (`kind: 'closed' \| 'aborted' \| 'error'`)                  |
 
 <include cwd lang="typescript">
   examples/web-socket/state-snapshots.ts#example
 </include>
 
-## Reconnect
+## 4. Reconnect, heartbeat, and queues
 
-Reconnect is opt-in. No `reconnect` object → physical close ends the logical session. When configured, defaults are `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. `attempts` is the retry budget for each outage; a successful `open` resets the budget and backoff exponent. Each later outage therefore starts again with retry 1 and the `delayMs` base. `attempts: 0` disables. Default predicate accepts every non-manual close outcome within that outage's budget. Repeated successful opens do not have a lifetime retry limit. A socket that successfully opens and is immediately closed again by the server can keep reconnecting at the base delay (subject to jitter and caps), because every open resets the budget; use `shouldReconnect` to stop it.
+Both reconnection and heartbeat are opt-in via client options (`withWebSocketReconnect`, `withWebSocketHeartbeat`) or per-call derived client options (`client({ reconnect, heartbeat })`):
+
+<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
-`shouldReconnect` gets next retry attempt, close cause, code, reason, and `wasClean`. Manual `session.close(...)` does not enter the predicate. Throwing preparation/policy ends the logical session with an error.
-
-WebSocket backoff jitter is **multiplicative** (`jitter: 0.2` scales the capped base by `0.8x`–`1.2x` before rounding). The final delay is capped again at `maxDelayMs` and the platform timer limit of `2_147_483_647` ms, so the upper part of that range can be truncated. A zero base stays zero; overflow from valid numbers is clamped instead of throwing. SSE uses the same 0–1 jitter rule. Reconnect options are validated before the constructor: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID`. WebSocket `attempts: 0` disables subsequent retries, but all explicitly supplied reconnect fields are still validated before the initial connection, just as in SSE.
-
-`beforeConnect({ attempt, signal })` runs before the initial constructor and every reconnect. Pass its signal into token refresh so cancel stops both prep and connect.
-
-## Heartbeat
-
-Opt-in on the client or on a derived client. Interval sends `message()` through the outgoing struct. Optional `isAck(message)` recognizes an ack — that message clears the acknowledgement wait and is **not** delivered to `receive`. `heartbeat` is replaced as a whole value. `timeoutMs` is how long to wait for that acknowledgement. It is not a request deadline.
+</Tab>
+<Tab>
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
-`intervalMs` and `timeoutMs` must be positive finite timers ≤ `2_147_483_647`. Heartbeat message must be valid for the outgoing struct. Serialization, native send, ack classification, and timeout failures are fatal to the logical session — they don’t become ordinary reconnects.
+</Tab>
+</Tabs>
 
-## Queues
+- **Reconnect**: When enabled, the defaults are `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Each physical `open` resets the outage budget. `beforeConnect({ attempt, signal })` runs before the initial connect and every reconnect attempt. The balancer attribution of an opened socket depends on the close code only, whatever `wasClean` reports: `1006` or `1015` (no close frame arrived) is `NET_UNREACHABLE`, `1012` or `1013` is `NET_UNAVAILABLE`, and every other code is not a failure.
+- **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds construction to `open` and is cleared after the handshake. The option exists only inside the `withWebSocketReconnect({...})` options object (or the `reconnect` request option). Passing that object enables automatic reconnect with the default `attempts: 3`, so `connectTimeoutMs` alone also reconnects; add `attempts: 0` for a handshake-only deadline.
+- **Heartbeat**: Periodically sends `message()` through the `outgoing` struct and waits up to `timeoutMs` for a frame matching `isAck(msg)`. Matching ack frames are consumed by the heartbeat monitor and not forwarded to `session.receive`. A missed ack is fatal to the logical session: `closed.kind` is `"error"` and `closed.cause` is the ordinary `Error("WebSocket heartbeat timeout")`; it does not start reconnect. The missed ack is also reported to the balancer as `NET_UNREACHABLE` for the endpoint. Heartbeat serialization failures, or a throwing `message()`, follow the same fatal path with their original cause but are local and not attributed to the endpoint.
+- **Queue bounds**:
+  - `maxIncomingQueueSize` (required positive safe integer): Bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow terminates the session with a `CAP_QUEUE_OVERFLOW` Fault as `closed.cause`; the same cause is sent to `onRuntimeError` and rejects `session.receive`. Keep consuming `session.receive` while the session is open.
+  - `maxOutgoingQueueSize` (optional non-negative safe integer, default `0`): Buffers `session.send()` calls only while `state === 'reconnecting'` and flushes them before publishing the next `open`.
 
-| Setting                | Required value                                  | Behavior                                                                                                       |
-| ---------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `maxIncomingQueueSize` | Positive safe integer                           | Bounds parsed messages waiting for `receive` and raw frames waiting for transform. Overflow → `state: 'error'` |
-| `maxOutgoingQueueSize` | Optional non-negative safe integer; default `0` | FIFO only while `state === 'reconnecting'`. Full/disabled → `send(...)` throws                                 |
+`shouldReconnect` receives the native close code and `wasClean`. A server can complete a clean close handshake with application-error code `1011`, so `wasClean === true` does not mean the application succeeded. The example explicitly permits `1011`; choose application codes according to your protocol rather than relying on `!wasClean` alone.
 
-Queued outgoing frames flush before the replacement socket publishes `open`. Frames already sent on an earlier socket are never auto-replayed. Reconnect queues are for messages you send while reconnecting — not for reconstructing app state.
+## 5. Subprotocols and authentication [#protocols-and-authentication]
 
-Incoming overflow clears the pending sequence, fails `receive`, stops the session, resolves `session.closed` with `kind: 'error'`. Keep the consumer fast enough or raise the bound from measured size/memory.
+Browser WebSockets do not support arbitrary handshake headers, so WebSocket `builder` functions return only `{ path?, query? }`.
 
-## Protocols and authentication
+- **Subprotocol precedence**: `client({ protocols })` overrides `withWebSocketProtocols(...)`, which overrides `defineWebSocket({ protocols })`.
+- **URL conversion**: Defjs automatically converts `http:` → `ws:` and `https:` → `wss:` on the resolved endpoint.
+- **Credentials**: `withCredentials(true)` applies to Fetch (HTTP/SSE) only. Authenticate WebSockets using cookies/session policies, subprotocols, or short-lived connection tickets—avoid placing long-lived secrets in query strings.
+- **`beforeConnect` is not a request mutator**: Input parsing, the synchronous pure `builder`, and the interceptor chain run once per operation. For a request whose base endpoint is not replaced by an interceptor, each reconnect re-picks an endpoint and reconstructs the URL with that endpoint but reuses the built path/query and the captured protocol list. The URL is fixed before that attempt's `beforeConnect` runs, both on the same endpoint and after failover. Changing a closure variable, input, or protocol array in the hook cannot supply a fresh ticket to the current handshake. Rotating a URL/subprotocol credential within one session is unsupported; obtain the new credential first, pass it as input or client configuration to a new operation, then own that replacement session's cleanup.
 
-Definition `protocols`, client `withWebSocketProtocols(...)`, and `protocols` on the derived client set the constructor subprotocol list. Precedence: derived client → client → definition. The derived list replaces the client list; it is not appended. The first defined list is copied for the logical session and reused on reconnect.
+## 6. Closure and ownership
 
-Browser WebSocket constructors don’t accept arbitrary handshake headers, and the builder cannot return `headers` or `body`. Defjs converts `http:` → `ws:` and `https:` → `wss:`, encodes path placeholders once, and uses the same query rules as HTTP: scalars and repeated keys by default, `withQuerySerializer` for nested objects, and no serializer call when there is no query.
-
-As with HTTP and SSE, a missing, relative, or invalid base endpoint or an illegal path fails with `REQ_BUILD_FAILED` during building, before any interceptor or transport runs, even if an interceptor would short-circuit. The resolved URL must keep the base origin and stay under its directory; C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes in the path are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`. An interceptor's final `req.endpoint` is validated against its final `req.baseEndpoint` with the same rule, but it may deliberately replace the base with another valid absolute URL. Deterministic URL errors are never retried.
-
-`withCredentials(true)` is Fetch credentials for HTTP/SSE — not WebSocket auth. Use reviewed cookie/session policy, subprotocol, or a short-lived connection ticket. Don’t put general credentials or long-lived secrets in the query string.
-
-## Closure and ownership
-
-`session.close(code?, reason?)` requests terminal closure and stops heartbeat. Code must be `1000` or `3000..4999`; reason ≤ 123 UTF-8 bytes. Invalid close args throw before changing state. Use it with `await session.closed` when you need a manual close reason or the logical terminal result.
-
-The `signal` passed to the operation stays attached to the opened session and covers the whole connection, including after it is open. A timeout-shaped abort (`TimeoutError` or `ERR_TIMEOUT`, including `AbortSignal.timeout(...)`) ends it as `'error'` (`NET_TIMEOUT`). Any other reason ends it as `'aborted'`, and `receive` rejects with that reason itself, not a new `AbortError`. There is no startup-only deadline. An application that wants one creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns. See [SSE](/docs/sse#close-and-dispose).
+Call `session.close(code?, reason?)` (where `code` is `1000` or `3000..4999` and `reason` is ≤ 123 UTF-8 bytes) and `await session.closed`, or use `await using`:
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-`session.closed` is the logical terminal snapshot: `'closed'`, `'aborted'`, or `'error'`, with optional native `code` / `reason` / `wasClean` and a `cause` for aborted/error. Observed native close fields win over the owner’s requested fallback.
+When a reconnect outage exhausts its attempts, the session ends with `closed.kind: "error"` and the ordinary transport error as `closed.cause`, alongside the native close snapshot (often code `1006` for a failed upgrade); it does not expose a separate stable exhaustion code. Always unsubscribe `onStateChange` and `onRuntimeError` listeners when your component or worker finishes.
 
-The standard async disposer requests best-effort native close, then waits for Defjs-owned lifecycle, message-pump, timer, listener, queue, and socket-reference teardown. If a close event is not observed within one second, teardown is forced and the disposer may reject with a `DOMException` named `TimeoutError`; this does not prove that the physical TCP connection closed. Repeated disposer calls share the same teardown. Custom structural session implementations must now provide the same `[Symbol.asyncDispose](): PromiseLike<void>` contract.
-
-## GraphQL boundary
-
-Defjs supplies one incoming struct, one outgoing struct, and a logical session lifecycle. It does **not** implement a WebSocket application protocol. GraphQL-over-WebSocket features — connection init, operation IDs, `next`/`error`/`complete`, disposal, subscription replay — are outside the core contract.
-
-Use a protocol client like `graphql-ws` when the server requires that protocol, or model the frames with `defineWebSocket(...)`. Put a static subprotocol such as `graphql-transport-ws` on `protocols`. A struct alone does not negotiate GraphQL semantics.
-
-## Related recipes
+## Related reading
 
 - [Open a WebSocket session](/recipes/websocket-session)
 - [Consume an SSE stream](/recipes/consume-sse)
+- [Load balancing & failover](/docs/load-balancing)

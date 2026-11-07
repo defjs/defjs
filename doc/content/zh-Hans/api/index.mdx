@@ -5,11 +5,11 @@ description: 查阅 SDK 定义入口、应用执行入口，以及传输、Struc
 
 # API 参考
 
+<ApiIndex />
+
 编写或使用 Defjs SDK 时查阅本参考。SDK 作者从 [`defineRequest`](/zh-Hans/api/core/definerequest)、[`defineEventStream`](/zh-Hans/api/core/defineeventstream)、[`defineWebSocket`](/zh-Hans/api/core/definewebsocket) 和 [Struct](/zh-Hans/api/struct) 开始。应用用 [Client 配置](/zh-Hans/api/client) 调用这些操作，用[错误](/zh-Hans/api/errors)处理结果。
 
-下面的签名描述 Defjs 的运行时契约。完整开发流程见[快速开始](/zh-Hans/docs/start)和[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)。
-
-<ApiIndex />
+签名就是契约。完整流程见[快速开始](/zh-Hans/docs/start)和[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)。
 
 ## 包
 
@@ -18,19 +18,19 @@ description: 查阅 SDK 定义入口、应用执行入口，以及传输、Struc
 | [`@defjs/core`](/zh-Hans/api/client)                               | `createClient`、`defineRequest`、`struct`、HTTP / SSE / WebSocket |
 | [`@defjs/vue`](/zh-Hans/api/vue)                                   | `createClientPlugin`、`injectClient`、`HTTP_CLIENT`               |
 | [`@defjs/react`](/zh-Hans/api/react)                               | `ClientProvider`、`useClient`                                     |
-| [`@defjs/opentelemetry-server`](/zh-Hans/api/opentelemetry-server) | `withOpenTelemetryServer`、各传输的 options                       |
+| [`@defjs/opentelemetry-server`](/zh-Hans/api/opentelemetry-server) | `withOpenTelemetryServer`、各传输的选项                           |
 
 ## @defjs/core
 
 | 页面                                 | 你来查什么                                                            |
 | ------------------------------------ | --------------------------------------------------------------------- |
-| [Client](/zh-Hans/api/client)        | `createClient`、`with*` options、`Client`                             |
+| [Client](/zh-Hans/api/client)        | `createClient`、`with*` 选项、`Client`                                |
 | [HTTP](/zh-Hans/api/http)            | `defineRequest`、`HttpExecuteOptions`、`HttpRequest` / `HttpResponse` |
 | [Struct](/zh-Hans/api/struct)        | `struct.*`、`Infer`、`StructError`                                    |
 | [错误](/zh-Hans/api/errors)          | `Fault` 变体和工厂                                                    |
-| [拦截器](/zh-Hans/api/interceptors)  | HTTP / SSE / WebSocket 的 interceptor helper                          |
-| [SSE](/zh-Hans/api/sse)              | `defineEventStream`、stream handle                                    |
-| [WebSocket](/zh-Hans/api/web-socket) | `defineWebSocket`、session                                            |
+| [拦截器](/zh-Hans/api/interceptors)  | HTTP / SSE / WebSocket 拦截器辅助函数                                 |
+| [SSE](/zh-Hans/api/sse)              | `defineEventStream`、流句柄                                           |
+| [WebSocket](/zh-Hans/api/web-socket) | `defineWebSocket`、会话                                               |
 
 ## 相关
 

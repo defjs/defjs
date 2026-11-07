@@ -10,7 +10,8 @@ export interface AsyncQueueOptions {
 }
 
 export class AsyncQueue<T> implements AsyncIterable<T> {
-  private readonly values: T[] = [];
+  // Queued values are stored as the results `next()` hands out, so an `undefined` value is still a queued result.
+  private readonly values: IteratorYieldResult<T>[] = [];
   private readonly waiting: PendingNext<T>[] = [];
   private readonly maxSize: number;
   private done = false;
@@ -39,7 +40,7 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
       throw new Error("AsyncQueue overflow");
     }
 
-    this.values.push(value);
+    this.values.push({ done: false, value });
   }
 
   close(): void {
@@ -74,11 +75,9 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
 
     return {
       next: () => {
-        if (this.values.length > 0) {
-          return Promise.resolve({
-            done: false,
-            value: this.values.shift() as T,
-          });
+        const queued = this.values.shift();
+        if (queued) {
+          return Promise.resolve(queued);
         }
 
         if (this.error !== NO_ERROR) {

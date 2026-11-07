@@ -69,8 +69,7 @@ describe("web socket single struct messages", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("decodes a discriminated incoming frame as the struct value", async () => {
@@ -202,7 +201,7 @@ describe("web socket single struct messages", () => {
       const acks: Array<{ ok: boolean; type: "pong" }> = [];
       const client = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket as unknown as typeof WebSocket),
+        withWebSocketHandle(Socket),
       );
       const pending = useHeartbeat(
         client({
@@ -285,7 +284,7 @@ describe("web socket single struct messages", () => {
     });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket as unknown as typeof WebSocket),
+      withWebSocketHandle(Socket),
     );
     const [error, session] = await openControllableSocket(
       endpoint(client),
@@ -315,7 +314,7 @@ describe("web socket single struct messages", () => {
     });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket as unknown as typeof WebSocket),
+      withWebSocketHandle(Socket),
     );
     const [error, session] = await openControllableSocket(
       endpoint(client),

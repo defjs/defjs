@@ -11,12 +11,13 @@ export function readBytesText(value: unknown): string | undefined {
     return value;
   }
   if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-    return decodeBytes(value as ArrayBuffer | ArrayBufferView);
+    return decodeBytes(value);
   }
   return undefined;
 }
 
-export function toArrayBuffer(content: Uint8Array): ArrayBuffer {
+/** The bytes of `content` as a buffer. A view over a SharedArrayBuffer keeps its shared storage. */
+export function toArrayBuffer(content: Uint8Array): ArrayBufferLike {
   const { buffer, byteLength, byteOffset } = content;
   if (
     buffer instanceof ArrayBuffer &&
@@ -25,12 +26,12 @@ export function toArrayBuffer(content: Uint8Array): ArrayBuffer {
   ) {
     return buffer;
   }
-  return buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer;
+  return buffer.slice(byteOffset, byteOffset + byteLength);
 }
 
 export function parseBytesBody(
   responseType: HttpRequest["responseType"],
-  content: Uint8Array,
+  content: Uint8Array<ArrayBuffer>,
   contentType: string,
 ): unknown {
   switch (responseType) {
@@ -39,7 +40,7 @@ export function parseBytesBody(
     case "text":
       return decodeBytes(content);
     case "blob":
-      return new Blob([toArrayBuffer(content)], { type: contentType });
+      return new Blob([content], { type: contentType });
     case "arraybuffer":
       return toArrayBuffer(content);
     default:
@@ -50,7 +51,7 @@ export function parseBytesBody(
 export function concatChunks(
   chunks: Uint8Array[],
   totalLength: number,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const chunksAll = new Uint8Array(totalLength);
   let position = 0;
   for (const chunk of chunks) {

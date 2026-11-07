@@ -1,22 +1,38 @@
 ---
 title: "ETag 条件请求"
-description: 把 304 当成 HTTP 状态 fault；缓存 Map 放在操作调用外面。
+description: 将 304 视为 HTTP 状态 Fault，并把缓存 Map 留在操作调用之外。
 ---
 
-# 用 ETag 和 304 再验证
+# 用 ETag 与 304 重新验证
 
-`ok` 表示 2xx，所以 `304` 是 `HTTP_STATUS` fault。重定向状态也不是错误 body，所以别声明 `error`：body 根本不会被读，fault 带着状态，你自己把缓存里的商品返回去。
+在 Defjs 中，只有 `2xx` 响应进入成功分支，因此 `304 Not Modified` 会以 `HTTP_STATUS` Fault 到达。在 `defineRequest` 上保持 `error` 未声明，这样空的 `304` body 从不读取；并在操作调用外层的应用包装器中维护 `Map` 缓存：
 
-见 [HTTP](/zh-Hans/docs/http)。
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/sdk/catalog.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/reader.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
+
+  </Tab>
+</Tabs>
+
+运行输出：
 
 ```txt
 Flask
 ```
 
-304 分支之后的 `throw error` 是这个读取函数的边界。函数仍然返回 `Promise<Product>`；非 304 的 fault 不会从这个边界以 Defjs 元组返回。
-
-别在 Core 里把 `304` 改写成假的 `200`。缓存所有权留在操作调用周围的应用代码里。
+- `304` 检查之后的 `if (error) throw error` 是显式策略：`createReader` 返回 `Promise<Product>`，所以其他 Fault 都会抛出。
+- 绝不要在拦截器内把 `304` 改写成合成的 `200`；缓存状态应留在操作调用周围的应用代码中。见 [HTTP 请求](/zh-Hans/docs/http)。

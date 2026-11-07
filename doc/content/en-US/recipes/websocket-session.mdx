@@ -5,18 +5,34 @@ description: Connect, send one typed envelope, receive once, then close and awai
 
 # Open a WebSocket session
 
-Each direction is one struct. You own unsubscribe, `close`, and `await session.closed`. Invalid frames go to `onRuntimeError`.
+Declare `incoming` and `outgoing` Structs on `defineWebSocket`, together with a `maxIncomingQueueSize` that bounds the incoming queue. In your application, subscribe to `session.onRuntimeError(...)`, consume `session.receive`, and always unsubscribe, call `session.close(...)`, and `await session.closed` in `finally`:
 
-See [WebSocket](/docs/web-socket) for details.
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
+</include>
 
-<include cwd meta="chat.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` is a placeholder. With a server that answers `{ "type": "send", "text": "Hello" }` with `{ "type": "message", "text": "Hello" }`, the snippet prints:
+  </Tab>
+</Tabs>
+
+With a server that replies to `{ "type": "subscribe", "symbol": "ACME" }` with `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, the script prints:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-Reconnect is opt-in (`withWebSocketReconnect`). Heartbeat is opt-in too. Browser WebSockets can’t take arbitrary handshake headers — use cookies, subprotocols, or a short-lived ticket.
+- Both reconnect (`withWebSocketReconnect`) and heartbeat (`withWebSocketHeartbeat`) are opt-in on the client.
+- Browser WebSockets cannot send arbitrary HTTP headers during the upgrade handshake; use cookies, subprotocols, or short-lived tickets instead. See [WebSocket sessions](/docs/web-socket).

@@ -1,6 +1,10 @@
+import { defined } from "./api-model";
+
+/** Removes doc comments and whole-line lint directives, which are source notes, not signature. */
 export function stripInnerDocs(text: string): string {
   return text
     .replace(/\/\*\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/[ \t]*(?:eslint|oxlint)-disable\b.*\n/gm, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -43,7 +47,7 @@ export function omitInternalMembers(text: string): string {
   const kept: string[] = [];
   let index = 0;
   while (index < lines.length) {
-    const line = lines[index] as string;
+    const line = defined(lines[index], "line");
     if (!/^\s*\/\*\*/.test(line)) {
       kept.push(line);
       index += 1;
@@ -53,7 +57,7 @@ export function omitInternalMembers(text: string): string {
     let comment = "";
     let trailing = "";
     while (index < lines.length) {
-      const current = lines[index] as string;
+      const current = defined(lines[index], "line");
       const close = current.indexOf("*/");
       if (close === -1) {
         comment += `${current}\n`;
@@ -67,7 +71,7 @@ export function omitInternalMembers(text: string): string {
     }
     if (!/@internal\b/i.test(comment)) {
       for (let cursor = start; cursor < index; cursor += 1)
-        kept.push(lines[cursor] as string);
+        kept.push(defined(lines[cursor], "line"));
       continue;
     }
     const pending = trailing.trim()
@@ -83,7 +87,7 @@ function skipMember(lines: readonly string[], start: number): number {
   let depth = 0;
   let seen = false;
   for (let index = start; index < lines.length; index += 1) {
-    const line = lines[index] as string;
+    const line = defined(lines[index], "line");
     for (const char of line) {
       if (char === "{") {
         depth += 1;

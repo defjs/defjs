@@ -1,0 +1,221 @@
+import { afterEach, expect, inject, test, vi } from "vitest";
+import {
+  createClient,
+  defineRequest,
+  defineEventStream,
+  defineWebSocket,
+  withEndpoint,
+  withRetry,
+  withBalancer,
+  withInterceptors,
+  withHTTPHandle,
+  withSSEHandle,
+  withWebSocketHandle,
+  struct,
+} from "../src";
+import type { Balancer } from "../src";
+import { makeResponse } from "../src/internal/http_response";
+import { p2cBalancer } from "../src/balancer/p2c";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+function recording(events: string[]): Balancer {
+  return {
+    pick({ endpoints }) {
+      const endpoint = endpoints[0] ?? "";
+      return [
+        null,
+        {
+          endpoint,
+          start: () => {
+            events.push(`start:${endpoint}`);
+          },
+          done: () => {
+            events.push(`done:${endpoint}`);
+          },
+        },
+      ];
+    },
+  };
+}
+test("HTTP failover starts and finishes each physical attempt separately", async () => {
+  const host = inject("testServerHost");
+  const events: string[] = [];
+  const client = createClient(
+    withRetry({ delayMs: 0 }),
+    withEndpoint("http://127.0.0.1:1", host),
+    withBalancer(recording(events)),
+  );
+  expect(
+    (await defineRequest({ method: "GET", path: "/json" })(client))[0],
+  ).toBeNull();
+  expect(events).toEqual([
+    "start:http://127.0.0.1:1",
+    "done:http://127.0.0.1:1",
+    `start:${host}`,
+    `done:${host}`,
+  ]);
+});
+test.each(["throw", "reject"])(
+  "throwing or rejected HTTP start (%s) cannot replace the result",
+  async (mode) => {
+    let calls = 0;
+    const b: Balancer = {
+      pick: () => [
+        null,
+        {
+          endpoint: inject("testServerHost"),
+          // eslint-disable-next-line @typescript-eslint/no-misused-promises -- start is typed to return void; the mock returns a rejected promise to exercise asynchronous start failure
+          start() {
+            calls++;
+            if (mode === "throw") throw new Error("start");
+            return Promise.reject(new Error("start"));
+          },
+        },
+      ],
+    };
+    const client = createClient(
+      withEndpoint(inject("testServerHost")),
+      withBalancer(b),
+    );
+    expect(
+      (await defineRequest({ method: "GET", path: "/json" })(client))[0],
+    ).toBeNull();
+    expect(calls).toBe(1);
+  },
+);
+test("SSE starts immediately before Fetch and closes its one attributed attempt", async () => {
+  const host = inject("testServerHost");
+  const events: string[] = [];
+  const client = createClient(
+    withEndpoint(host),
+    withBalancer(recording(events)),
+    withSSEHandle(async (...args) => {
+      expect(events).toEqual([`start:${host}`]);
+      return fetch(...args);
+    }),
+  );
+  const [err, stream] = await defineEventStream({
+    path: "/sse/infinite",
+    events: { tick: struct.string() },
+  })(client);
+  expect(err).toBeNull();
+  if (!stream) throw new Error("missing stream");
+  try {
+    await stream[Symbol.asyncIterator]().next();
+  } finally {
+    await stream[Symbol.asyncDispose]();
+  }
+  expect(events).toEqual([`start:${host}`, `done:${host}`]);
+});
+test("WebSocket starts before constructing the native socket", async () => {
+  const host = inject("testServerHost");
+  const events: string[] = [];
+  class ObservedSocket extends WebSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      expect(events).toEqual([`start:${host}`]);
+      super(url, protocols);
+    }
+  }
+  const client = createClient(
+    withEndpoint(host),
+    withBalancer(recording(events)),
+    withWebSocketHandle(ObservedSocket),
+  );
+  const [err, session] = await defineWebSocket({
+    path: "/ws/basic",
+    maxIncomingQueueSize: 4,
+    incoming: struct.unknown(),
+  })(client);
+  expect(err).toBeNull();
+  if (!session) throw new Error("missing session");
+  await session[Symbol.asyncDispose]();
+  expect(events).toEqual([`start:${host}`, `done:${host}`]);
+});
+test.each(["builder", "short-circuit", "abort", "replacement"])(
+  "HTTP %s never starts the selected endpoint but completes once",
+  async (mode) => {
+    const host = inject("testServerHost");
+    const events: string[] = [];
+    const controller = new AbortController();
+    const client = createClient(
+      withEndpoint(host),
+      withBalancer(recording(events)),
+      withInterceptors({
+        kind: "http",
+        async fn(req, next) {
+          if (mode === "short-circuit") return makeResponse({ status: 204 });
+          if (mode === "abort") controller.abort();
+          return next(
+            mode === "replacement" ? { ...req, baseEndpoint: host + "/" } : req,
+          );
+        },
+      }),
+    );
+    const op = defineRequest({
+      method: "GET",
+      path: "/json",
+      builder: () => {
+        if (mode === "builder") throw new Error("build");
+        return {};
+      },
+    });
+    await op(client({ signal: controller.signal }));
+    // Also exercise a reached transport: this test must detect a missing start hook.
+    expect(events).toEqual([`done:${host}`]);
+    events.length = 0;
+    const live = createClient(
+      withEndpoint(host),
+      withBalancer(recording(events)),
+    );
+    await defineRequest({ method: "GET", path: "/json" })(live);
+    expect(events).toEqual([`start:${host}`, `done:${host}`]);
+  },
+);
+test("p2c counts a call as pending from its pick through interceptor work until the response begins", async () => {
+  vi.spyOn(Math, "random").mockReturnValue(0);
+  const b = p2cBalancer({ load: "pending", outlierDetection: false });
+  const [, slow] = b.pick({
+    endpoints: ["https://slow.test"],
+  });
+  slow?.start?.();
+  const selections: string[] = [];
+  const probe = () => {
+    const [, result] = b.pick({
+      endpoints: ["https://fast.test", "https://idle.test"],
+    });
+    result?.done?.({ attempted: false });
+    selections.push(result?.endpoint ?? "");
+  };
+  const client = createClient(
+    withEndpoint("https://fast.test", "https://slow.test"),
+    withBalancer(b),
+    withHTTPHandle(() => {
+      probe();
+      return Promise.resolve(new Response(null));
+    }),
+    withInterceptors({
+      kind: "http",
+      async fn(req, next) {
+        probe();
+        const response = await next(req);
+        probe();
+        return response;
+      },
+    }),
+  );
+  for (let i = 0; i < 4; i++)
+    expect(
+      (await defineRequest({ method: "GET", path: "/" })(client))[0],
+    ).toBeNull();
+  expect(selections).toEqual(
+    Array.from({ length: 4 }, () => [
+      "https://idle.test",
+      "https://idle.test",
+      "https://fast.test",
+    ]).flat(),
+  );
+  slow?.done?.({ attempted: false });
+});

@@ -1,13 +1,15 @@
-import type { Socket } from "node:net";
-import type { ServerType } from "@hono/node-server";
-import { createAdaptorServer, upgradeWebSocket } from "@hono/node-server";
 import type { Context } from "hono";
 import { Hono } from "hono";
+import { upgradeWebSocket } from "hono/bun";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import type { TestProject } from "vitest/node";
-import { WebSocketServer } from "ws";
+import {
+  startHonoTestServer,
+  type HonoTestServer,
+} from "../../../test/hono-test-server";
 import { registerBodyRoutes } from "./body-routes";
+import { startTruncatedServer } from "./truncated-server";
 import { registerE2eProbe, registerE2eRoutes } from "./e2e-routes";
 import { registerXsrfRoutes } from "./xsrf-middleware";
 
@@ -17,18 +19,44 @@ declare module "vitest" {
   }
 }
 
-let testServer: ServerType | undefined;
-let webSocketServer: WebSocketServer | undefined;
+let testServer: HonoTestServer | undefined;
+let truncatedServer: ReturnType<typeof startTruncatedServer> | undefined;
 let testServerAddr: string;
-const testServerSockets = new Set<Socket>();
+const redirectStatuses = [300, 301, 302, 303, 304, 305, 306, 307, 308] as const;
 const providerEnvelopeAttempts = new Map<string, number>();
 
-type ServerConnectionCleanup = {
-  closeAllConnections?: () => void;
-  closeIdleConnections?: () => void;
-};
+function frameText(data: unknown): string {
+  if (typeof data !== "string") {
+    throw new TypeError("Expected a text WebSocket frame");
+  }
+  return data;
+}
 
-export async function setup({ provide }: TestProject) {
+function parseFrameObject(data: unknown): Record<string, unknown> {
+  const decoded: unknown = JSON.parse(frameText(data));
+  if (typeof decoded !== "object" || decoded === null) {
+    throw new TypeError("Expected a JSON object frame");
+  }
+  return Object.fromEntries(Object.entries(decoded));
+}
+const sseDropStreams = new Map<
+  string,
+  ReadableStreamDefaultController<Uint8Array>
+>();
+
+function releaseSseDropStreams(): void {
+  for (const controller of sseDropStreams.values()) {
+    try {
+      controller.error(new Error("test server stopped"));
+    } catch {
+      // Already closed by the client.
+    }
+  }
+  sseDropStreams.clear();
+}
+
+export async function setup({ provide }: Pick<TestProject, "provide">) {
+  releaseSseDropStreams();
   const app = new Hono();
   registerE2eProbe(app);
   registerXsrfRoutes(app);
@@ -122,6 +150,8 @@ export async function setup({ provide }: TestProject) {
 
   app.get("/text", (c) => c.text("Hello World!"));
   app.get("/json", (c) => c.json({ id: 1 }));
+  app.get("/balancer/bad/replica", (c) => c.body(null, 503));
+  app.get("/balancer/good/replica", (c) => c.body(null, 200));
   app.get("/json/malformed-error", (c) =>
     c.body("{not-json}", {
       headers: { "content-type": "application/json" },
@@ -151,7 +181,8 @@ export async function setup({ provide }: TestProject) {
   });
 
   // After the cors middleware above, so browsers may read these cross-origin.
-  registerBodyRoutes(app);
+  truncatedServer = startTruncatedServer();
+  registerBodyRoutes(app, `${truncatedServer.url}/`);
 
   const basicSSEHandler = (c: Context) => {
     c.header("x-request-id", "trace-sse-basic");
@@ -172,9 +203,14 @@ export async function setup({ provide }: TestProject) {
 
   app.get("/sse/basic", basicSSEHandler);
   app.post("/sse/basic", basicSSEHandler);
-  app.post("/sse/redirect/:status", (c) =>
-    c.redirect("/sse/basic", Number(c.req.param("status")) as 303 | 307),
-  );
+  app.post("/sse/redirect/:status", (c) => {
+    const status = redirectStatuses.find(
+      (candidate) => candidate === Number(c.req.param("status")),
+    );
+    return status === undefined
+      ? c.text("unsupported redirect status", 400)
+      : c.redirect("/sse/basic", status);
+  });
 
   app.get("/sse/retry", (c) => {
     const lastEventId = c.req.header("last-event-id");
@@ -206,7 +242,53 @@ export async function setup({ provide }: TestProject) {
     return c.body(null, 500);
   });
 
+  const sseDropAttempts = new Map<string, number>();
   const sseRetryAttempts = new Map<string, number>();
+
+  // The first attempt stays open until the test has read "partial" and calls the
+  // cut route. Erroring the stream aborts the chunked body without its terminator,
+  // so the client sees a read failure. Cutting earlier races the unread stream
+  // queue under load.
+  app.get("/sse/drop", (c) => {
+    const key = c.req.query("key") ?? "default";
+    const attempt = (sseDropAttempts.get(key) ?? 0) + 1;
+    sseDropAttempts.set(key, attempt);
+    if (attempt > 1) {
+      return streamSSE(c, async (stream) => {
+        await stream.writeSSE({ data: "resumed", event: "message", id: "2" });
+      });
+    }
+
+    const encoder = new TextEncoder();
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(
+            encoder.encode("event: message\ndata: partial\nid: 1\n\n"),
+          );
+          sseDropStreams.set(key, controller);
+        },
+      }),
+      {
+        headers: {
+          "cache-control": "no-cache",
+          "content-type": "text/event-stream",
+        },
+      },
+    );
+  });
+
+  app.post("/sse/drop/cut", (c) => {
+    const key = c.req.query("key") ?? "default";
+    const controller = sseDropStreams.get(key);
+    sseDropStreams.delete(key);
+    try {
+      controller?.error(new Error("dropped"));
+    } catch {
+      // Already closed by the client.
+    }
+    return c.body(null, 204);
+  });
 
   app.get("/sse/500-once", (c) => {
     const key = c.req.query("key") ?? "default";
@@ -446,9 +528,7 @@ export async function setup({ provide }: TestProject) {
           providerEnvelopeAttempts.delete(key);
         },
         onMessage(event, ws) {
-          const decoded = JSON.parse(
-            typeof event.data === "string" ? event.data : String(event.data),
-          ) as Record<string, unknown>;
+          const decoded = parseFrameObject(event.data);
           ws.send(
             JSON.stringify({
               method: "wire",
@@ -504,10 +584,8 @@ export async function setup({ provide }: TestProject) {
     upgradeWebSocket(() => ({
       onMessage(event, ws) {
         try {
-          const decoded = JSON.parse(
-            typeof event.data === "string" ? event.data : String(event.data),
-          ) as { type?: string };
-          if (decoded.type === "ping") {
+          const decoded = parseFrameObject(event.data);
+          if (decoded["type"] === "ping") {
             ws.send(createSocketMessage("pong", { ok: true }));
             ws.close(1000, "heartbeat-ok");
           }
@@ -622,116 +700,39 @@ export async function setup({ provide }: TestProject) {
     "/ws/regression/capture",
     upgradeWebSocket(() => ({
       onMessage(event, socket) {
-        socket.send(JSON.stringify({ received: String(event.data) }));
+        socket.send(JSON.stringify({ received: frameText(event.data) }));
       },
     })),
   );
 
-  const wss = new WebSocketServer({ noServer: true });
-  webSocketServer = wss;
-  const server = createAdaptorServer({
-    fetch: app.fetch,
-    hostname: "127.0.0.1",
-    websocket: { server: wss },
-  });
-  testServer = server;
-
-  server.on("connection", (socket) => {
-    testServerSockets.add(socket);
-    socket.on("close", () => {
-      testServerSockets.delete(socket);
-    });
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => resolve());
-  });
-
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new TypeError("Failed to resolve test server address");
-  }
-
-  testServerAddr = `http://127.0.0.1:${address.port}`;
-  server.unref();
+  testServer = await startHonoTestServer(app);
+  testServerAddr = testServer.host;
   provide("testServerHost", testServerAddr);
   console.log(`Test server is running on ${testServerAddr}`);
 }
 
 export async function teardown() {
+  releaseSseDropStreams();
   const failures: Error[] = [];
 
   try {
-    const currentWebSocketServer = webSocketServer;
-    if (currentWebSocketServer) {
-      currentWebSocketServer.clients.forEach(
-        (client: { terminate(): void }) => {
-          client.terminate();
-        },
-      );
-      try {
-        await teardownDeadline(
-          new Promise<void>((resolve, reject) => {
-            currentWebSocketServer.close((error: Error | undefined) => {
-              if (error) {
-                reject(error);
-                return;
-              }
-              resolve();
-            });
-          }),
-          "WebSocket server close timed out",
-        );
-      } catch (cause) {
-        currentWebSocketServer.clients.forEach(
-          (client: { terminate(): void }) => {
-            client.terminate();
-          },
-        );
-        failures.push(
-          labeledTeardownFailure("WebSocket server close failed", cause),
-        );
-      }
-    }
-
     const currentServer = testServer;
-    if (currentServer?.listening) {
-      const serverWithCleanup = currentServer as ServerType &
-        ServerConnectionCleanup;
-      serverWithCleanup.closeIdleConnections?.();
-      serverWithCleanup.closeAllConnections?.();
-
+    if (currentServer) {
       try {
         await teardownDeadline(
-          new Promise<void>((resolve, reject) => {
-            currentServer.close((error) => {
-              if (
-                error &&
-                (error as NodeJS.ErrnoException).code !==
-                  "ERR_SERVER_NOT_RUNNING"
-              ) {
-                reject(error);
-                return;
-              }
-              resolve();
-            });
-          }),
+          currentServer.close(),
           "HTTP server close timed out",
         );
       } catch (cause) {
-        testServerSockets.forEach((socket) => {
-          socket.destroy();
-        });
         failures.push(
           labeledTeardownFailure("HTTP server close failed", cause),
         );
       }
     }
   } finally {
+    truncatedServer?.close();
+    truncatedServer = undefined;
     providerEnvelopeAttempts.clear();
-    testServerSockets.clear();
-    webSocketServer = undefined;
     testServer = undefined;
   }
 

@@ -1,20 +1,39 @@
 ---
 title: "Lokale HTTP-Tests"
-description: Fetch für einen Client mit withHTTPHandle tauschen und die Operation unverändert lassen.
+description: Fetch für einen einzelnen Client mit withHTTPHandle austauschen und die Operation unverändert belassen.
 ---
 
 # Mit lokalem Fetch-Handle testen
 
-`withHTTPHandle(...)` ersetzt Fetch nur für diesen Client. Du bekommst weiterhin URL-Building, Interceptors, Status-Dispatch und Struct-Decoding — ohne DNS, TLS oder echten Server.
+`withHTTPHandle(...)` ersetzt die zugrundeliegende `fetch`-Funktion für einen einzelnen Client und durchläuft dabei die gesamte Defjs-Pipeline – Input-Validierung, `builder`-Mapping, URL-Auflösung, Interceptors, Status-Klassifizierung und Struct-Dekodierung – ganz ohne einen Netzwerk-Socket zu öffnen:
 
-Details siehe [Client](/de-DE/docs/client).
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.test.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+Das ist eine eigenständige Einzeldatei-Demonstration, keine Test-Runner-Spec. Für Zusicherungen gegen die gemeinsame SDK-Definition nutze den vorherigen Test-Tab.
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
+  </Tab>
+</Tabs>
+
+Die Einzeldatei-Demonstration gibt aus:
+
 ```txt
-Ada 200
+paid 200
 ```
 
-Nutze dieselbe `getUser`-Operation gegen einen echten `withEndpoint(...)`-Client in Production — nur das Handle ändert sich.
+In der Produktion rufst du exakt dieselbe `getOrder`-Operation mit einem mit `withEndpoint(...)` konfigurierten Client auf. Siehe [Tests](/de-DE/docs/testing) und [Client](/de-DE/docs/client).

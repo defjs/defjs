@@ -8,7 +8,7 @@ test("UI translations use semantic keys and library interpolation", () => {
   const chinese = getTranslator("zh-Hans");
   const english = getTranslator("en-US");
   expect(chinese("nav.guide.ai")).toBe("AI");
-  expect(chinese("nav.guide.sdkDevelopment")).toBe("SDK 开发");
+  expect(chinese("nav.guide.preface")).toBe("前言");
   expect(chinese("ui.results", { variables: { count: "12" } })).toBe(
     "结果：12",
   );

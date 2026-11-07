@@ -1,22 +1,38 @@
 ---
 title: "إدارة جلسات WebSocket"
-description: اتصل، أرسل غلافًا محدَّد النوع واحدًا، استقبل مرة، ثم أغلق وانتظر closed.
+description: اتصل وأرسل غلافاً محدد الأنواع واستقبل مرة واحدة، ثم أغلق وانتظر اكتمال الإغلاق.
 ---
 
-# فتح جلسة WebSocket
+# فتح جلسة WebSocket وإدارتها
 
-كل اتجاه هو struct واحد. أنت تملك إلغاء الاشتراك و`close` و`await session.closed`. الإطارات غير الصالحة تذهب إلى `onRuntimeError`.
+صرّح عن بنيتي الرسائل الواردة `incoming` والصادرة `outgoing` في `defineWebSocket`، إلى جانب `maxIncomingQueueSize` الذي يقيّد قائمة الانتظار الواردة. وفي تطبيقك، اشترك في أحداث `session.onRuntimeError(...)`، واستهلك مكرر `session.receive`، واحرص دائماً على إلغاء الاشتراك، واستدعاء `session.close(...)`، وانتظار `await session.closed` داخل كتلة `finally`:
 
-انظر [WebSocket](/ar/docs/web-socket) للتفاصيل.
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
+</include>
 
-<include cwd meta="chat.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` عنوان توضيحي. مع خادم يرد على `{ "type": "send", "text": "Hello" }` بالرسالة `{ "type": "message", "text": "Hello" }`، تطبع الشيفرة:
+  </Tab>
+</Tabs>
+
+عندما يجيب الخادم على `{ "type": "subscribe", "symbol": "ACME" }` بـ `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`، يطبع البرنامج:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-إعادة الاتصال اختيارية (`withWebSocketReconnect`). نبض القلب اختياري أيضًا. WebSocket في المتصفح لا يقبل رؤوس مصافحة عشوائية — استخدم ملفات تعريف الارتباط أو البروتوكولات الفرعية أو تذكرة قصيرة العمر.
+- ميزتا إعادة الاتصال (`withWebSocketReconnect`) ونبضات القلب (`withWebSocketHeartbeat`) اختياريتان تماماً على العميل.
+- لا يمكن لمقابس WebSocket في المتصفح إرسال ترويسات HTTP اعتباطية أثناء مصافحة الترقية؛ استخدم ملفات تعريف الارتباط، أو البروتوكولات الفرعية، أو تذاكر الاتصال قصيرة العمر بدلاً من ذلك. راجع [جلسات WebSocket](/ar/docs/web-socket).

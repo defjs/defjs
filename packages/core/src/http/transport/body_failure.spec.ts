@@ -66,7 +66,8 @@ describe("body failure classification in the fetch transport", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body, { status: 200, statusText: "OK" }),
+      () =>
+        Promise.resolve(new Response(body, { status: 200, statusText: "OK" })),
     );
 
     await expect(pending).rejects.toSatisfy(
@@ -87,18 +88,21 @@ describe("body failure classification in the fetch transport", () => {
         method: "GET",
         responseType: "text",
       },
-      async () =>
-        new Response(streamThatErrors(readError), {
-          status: 200,
-          statusText: "OK",
-        }),
+      () =>
+        Promise.resolve(
+          new Response(streamThatErrors(readError), {
+            status: 200,
+            statusText: "OK",
+          }),
+        ),
     );
 
     const failure = await pending.catch((cause: unknown) => cause);
     expect(isBodyFailure(failure)).toBe(true);
-    expect((failure as BodyFailure).code).toBe("NET_BODY_INCOMPLETE");
-    expect((failure as BodyFailure).cause).toBe(readError);
-    expect((failure as BodyFailure).meta).toMatchObject({
+    if (!isBodyFailure(failure)) throw new Error("expected body failure");
+    expect(failure.code).toBe("NET_BODY_INCOMPLETE");
+    expect(failure.cause).toBe(readError);
+    expect(failure.meta).toMatchObject({
       ok: true,
       status: 200,
       statusText: "OK",
@@ -116,11 +120,13 @@ describe("body failure classification in the fetch transport", () => {
         method: "GET",
         responseType: "text",
       },
-      async () =>
-        new Response(streamThatErrors(readError), {
-          status: 200,
-          statusText: "OK",
-        }),
+      () =>
+        Promise.resolve(
+          new Response(streamThatErrors(readError), {
+            status: 200,
+            statusText: "OK",
+          }),
+        ),
     );
 
     await expect(pending).rejects.toSatisfy(
@@ -139,17 +145,20 @@ describe("body failure classification in the fetch transport", () => {
         method: "GET",
         responseType: "json",
       },
-      async () =>
-        new Response("{ not json", {
-          status: 200,
-          statusText: "OK",
-          headers: { "content-type": "application/json" },
-        }),
+      () =>
+        Promise.resolve(
+          new Response("{ not json", {
+            status: 200,
+            statusText: "OK",
+            headers: { "content-type": "application/json" },
+          }),
+        ),
     );
 
     const failure = await pending.catch((cause: unknown) => cause);
     expect(isBodyFailure(failure)).toBe(true);
-    expect((failure as BodyFailure).code).toBe("RES_DECODE_FAILED");
-    expect((failure as BodyFailure).meta).toMatchObject({ status: 200 });
+    if (!isBodyFailure(failure)) throw new Error("expected body failure");
+    expect(failure.code).toBe("RES_DECODE_FAILED");
+    expect(failure.meta).toMatchObject({ status: 200 });
   });
 });

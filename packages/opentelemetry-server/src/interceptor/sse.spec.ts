@@ -14,6 +14,7 @@ import {
   waitForSettledPromises,
 } from "../test-utils";
 import { createOpenTelemetrySSEInterceptor } from "./sse";
+import { method } from "../../test/method";
 
 let mockPropagator: ReturnType<typeof createMockPropagator>;
 
@@ -34,9 +35,7 @@ describe("SSE client diagnostic logs", () => {
         propagator: createMockPropagator(),
       });
       await expect(
-        interceptor.fn(makeSSERequest(), async () => {
-          throw cause;
-        }),
+        interceptor.fn(makeSSERequest(), () => Promise.reject(cause)),
       ).rejects.toBe(cause);
       expect(records).toHaveLength(count);
       if (count)
@@ -73,7 +72,7 @@ describe("SSE client diagnostic logs", () => {
         propagator: createMockPropagator(),
       });
       await expect(
-        interceptor.fn(makeSSERequest(), async () => stream.stream),
+        interceptor.fn(makeSSERequest(), () => Promise.resolve(stream.stream)),
       ).resolves.toBe(stream.stream);
       expect(records).toEqual([]);
       active.mockReturnValue(ROOT_CONTEXT);
@@ -100,7 +99,10 @@ describe("SSE client diagnostic logs", () => {
       if (tracing) expect(trace.getSpan(record.context)).toBe(spans[0]);
       else expect(record.context).toBe(parent);
       expect(
-        metrics.activeStreams.add.mock.calls.map(([value]) => value),
+        metrics.activeStreams.add.mock.calls.map((call) => {
+          const value: unknown = call[0];
+          return value;
+        }),
       ).toEqual([1, -1]);
       expect(metrics.connectionDuration.record).toHaveBeenCalledTimes(1);
     },
@@ -115,7 +117,9 @@ describe("SSE client diagnostic logs", () => {
         logger,
         propagator: createMockPropagator(),
       });
-      await interceptor.fn(makeSSERequest(), async () => stream.stream);
+      await interceptor.fn(makeSSERequest(), () =>
+        Promise.resolve(stream.stream),
+      );
       stream.close(kind, new Error("user decided to stop"));
       await waitForSettledPromises();
       expect(records).toEqual([]);
@@ -140,7 +144,7 @@ describe("SSE client diagnostic logs", () => {
         propagator: createMockPropagator(),
       });
       await expect(
-        interceptor.fn(makeSSERequest(), async () => stream.stream),
+        interceptor.fn(makeSSERequest(), () => Promise.resolve(stream.stream)),
       ).resolves.toBe(stream.stream);
       const cause = new Error("original");
       if (rejected) {
@@ -157,29 +161,28 @@ describe("SSE client diagnostic logs", () => {
       expect(logger.emit).toHaveBeenCalledTimes(1);
       expect(spans[0]?.ended).toBe(true);
       expect(
-        metrics.activeStreams.add.mock.calls.map(([value]) => value),
+        metrics.activeStreams.add.mock.calls.map((call) => {
+          const value: unknown = call[0];
+          return value;
+        }),
       ).toEqual([1, -1]);
     },
   );
 });
 
-function settleWithin<T>(promise: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(
+async function settleWithin<T>(promise: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
       100,
     );
-    promise.then(
-      (value) => {
-        clearTimeout(timeout);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timeout);
-        reject(error);
-      },
-    );
   });
+  try {
+    return await Promise.race([promise, expired]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 describe("createOpenTelemetrySSEInterceptor", () => {
@@ -220,7 +223,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
         requireParentSpan: true,
       });
       await expect(
-        interceptor.fn(makeSSERequest(), async () => stream.stream),
+        interceptor.fn(makeSSERequest(), () => Promise.resolve(stream.stream)),
       ).resolves.toBe(stream.stream);
       expect(metrics.connectDuration.record).toHaveBeenCalledWith(
         expect.any(Number),
@@ -267,9 +270,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
     await expect(
-      interceptor.fn(makeSSERequest(), async () => {
-        throw error;
-      }),
+      interceptor.fn(makeSSERequest(), () => Promise.reject(error)),
     ).rejects.toBe(error);
     expect(metrics.connectDuration.record).toHaveBeenCalledTimes(1);
     expect(metrics.connectDuration.record).toHaveBeenCalledWith(
@@ -292,11 +293,11 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     });
 
     const req = makeSSERequest();
-    const next = vi.fn(async (_req: HttpRequest) => makeSSEStream());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeSSEStream()));
 
     await interceptor.fn(req, next);
 
-    expect(mockPropagator.inject).toHaveBeenCalled();
+    expect(method(mockPropagator, "inject")).toHaveBeenCalled();
     const calls = vi.mocked(next).mock.calls;
     expect(calls[0]?.[0].headers?.get("traceparent")).toBe("mock-trace-id");
   });
@@ -308,7 +309,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => makeSSEStream());
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(makeSSEStream()),
+    );
 
     expect(activeSpans).toHaveLength(1);
     expect(activeSpans[0]?.name).toBe("SSE");
@@ -321,7 +324,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => makeSSEStream());
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(makeSSEStream()),
+    );
 
     expect(activeSpans[0]?.attributes["url.full"]).toBe(
       "https://api.example.com/events",
@@ -341,10 +346,12 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       startSpanHook,
     });
 
-    await interceptor.fn(req, async () => makeSSEStream());
+    await interceptor.fn(req, () => Promise.resolve(makeSSEStream()));
 
     expect(startSpanHook).toHaveBeenCalledWith(req);
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "app.tenant": "acme",
       "url.full": "https://tenant.example.com/events",
     });
@@ -357,16 +364,20 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => makeSSEStream());
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(makeSSEStream()),
+    );
 
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "url.full": "https://api.example.com/events",
     });
   });
 
   test("should continue SSE and record a hook error when startSpanHook throws", async () => {
     const { tracer } = createMockTracer();
-    const next = vi.fn(async () => makeSSEStream());
+    const next = vi.fn(() => Promise.resolve(makeSSEStream()));
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -378,7 +389,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     await interceptor.fn(makeSSERequest(), next);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "url.full": "https://api.example.com/events",
     });
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
@@ -397,9 +410,14 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => makeSSEStream());
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(makeSSEStream()),
+    );
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("sse.connected");
+    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+      "sse.connected",
+      undefined,
+    );
   });
 
   test("should keep span open until stream.closed settles", async () => {
@@ -410,7 +428,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => stream.stream);
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
 
     expect(activeSpans[0]?.ended).toBe(false);
 
@@ -458,7 +478,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => stream.stream);
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
     stream.close("eof");
     await waitForSettledPromises();
 
@@ -487,7 +509,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => stream.stream);
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
     stream.close("aborted");
     await waitForSettledPromises();
 
@@ -515,7 +539,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => stream.stream);
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
     stream.close("error", new Error("stream broken"), "CAP_QUEUE_OVERFLOW");
     await waitForSettledPromises();
 
@@ -547,7 +573,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => stream.stream);
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
     stream.reject(new TypeError("rejected"));
     await waitForSettledPromises();
 
@@ -576,9 +604,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     });
 
     await expect(
-      interceptor.fn(makeSSERequest(), async () => {
-        throw new TypeError("connect failed");
-      }),
+      interceptor.fn(makeSSERequest(), () =>
+        Promise.reject(new TypeError("connect failed")),
+      ),
     ).rejects.toThrow("connect failed");
 
     expect(activeSpans[0]?.ended).toBe(true);
@@ -602,7 +630,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       requireParentSpan: true,
     });
 
-    const next = vi.fn(async (_req: HttpRequest) => makeSSEStream());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeSSEStream()));
     await interceptor.fn(makeSSERequest(), next);
 
     expect(activeSpans).toHaveLength(0);
@@ -619,7 +647,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     });
 
     const req = makeSSERequest();
-    await interceptor.fn(req, async () => makeSSEStream());
+    await interceptor.fn(req, () => Promise.resolve(makeSSEStream()));
 
     expect(requestHook).toHaveBeenCalledTimes(1);
     expect(requestHook).toHaveBeenCalledWith(activeSpans[0], req);
@@ -636,7 +664,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
 
     const stream = makeSSEStream();
     const req = makeSSERequest();
-    await interceptor.fn(req, async () => stream);
+    await interceptor.fn(req, () => Promise.resolve(stream));
 
     expect(responseHook).toHaveBeenCalledTimes(1);
     expect(responseHook).toHaveBeenCalledWith(activeSpans[0], stream, req);
@@ -654,9 +682,8 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       requestHook,
     });
 
-    const result = await interceptor.fn(
-      makeSSERequest(),
-      async () => stream.stream,
+    const result = await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
     );
 
     expect(result).toBe(stream.stream);
@@ -686,9 +713,8 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       responseHook,
     });
 
-    const result = await interceptor.fn(
-      makeSSERequest(),
-      async () => stream.stream,
+    const result = await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
     );
 
     expect(result).toBe(stream.stream);
@@ -714,7 +740,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => stream.stream);
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
 
     expect(metrics.connectDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
@@ -739,7 +767,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => stream.stream);
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
     stream.close();
     await waitForSettledPromises();
     stream.close();
@@ -768,10 +798,12 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeSSERequest(), async () => stream.stream);
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
 
     const call = vi.mocked(metrics.connectDuration.record).mock.calls[0];
-    const attributes = call?.[1];
+    const attributes: unknown = call?.[1];
 
     expect(attributes).toEqual(
       expect.objectContaining({ "server.address": "api.example.com" }),
@@ -788,7 +820,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     });
 
     const req = { ...makeSSERequest(), baseEndpoint: "not-a-url" };
-    await interceptor.fn(req, async () => makeSSEStream());
+    await interceptor.fn(req, () => Promise.resolve(makeSSEStream()));
 
     expect(activeSpans[0]?.attributes["url.full"]).toBe("/events");
   });
@@ -804,7 +836,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
 
       const existingHeaders = new Headers({ "x-custom": "value" });
       const req = { ...makeSSERequest(), headers: existingHeaders };
-      const next = vi.fn(async (_req: HttpRequest) => makeSSEStream());
+      const next = vi.fn((_req: HttpRequest) =>
+        Promise.resolve(makeSSEStream()),
+      );
 
       await interceptor.fn(req, next);
 
@@ -825,11 +859,11 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     });
 
     const req = { ...makeSSERequest(), headers: undefined };
-    const next = vi.fn(async (_req: HttpRequest) => makeSSEStream());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeSSEStream()));
 
     await interceptor.fn(req, next);
 
-    expect(mockPropagator.extract).toHaveBeenCalledWith(
+    expect(method(mockPropagator, "extract")).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(Headers),
       expect.anything(),

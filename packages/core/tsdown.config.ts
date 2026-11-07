@@ -4,10 +4,17 @@ const entries = {
   index: "src/index.ts",
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 async function writeDistPackageJson(): Promise<void> {
-  const packageJson = (await Bun.file(
+  const packageJson: unknown = await Bun.file(
     new URL("./package.json", import.meta.url),
-  ).json()) as Record<string, unknown>;
+  ).json();
+  if (!isRecord(packageJson)) {
+    throw new TypeError("package.json must contain a JSON object");
+  }
 
   packageJson["main"] = "./index.js";
   packageJson["module"] = "./index.js";

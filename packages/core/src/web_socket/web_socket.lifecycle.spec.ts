@@ -24,8 +24,7 @@ describe("web socket runtime lifecycle", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("should allow closing websocket before startup", async () => {
@@ -104,8 +103,9 @@ describe("web socket runtime lifecycle", () => {
 
     const [error, socket, connection] = await useBeforeConnectSocket(
       clientWithSerializer({
-        beforeConnect: async () => {
+        beforeConnect: () => {
           callCount += 1;
+          return Promise.resolve();
         },
       }),
       { token: "secret-0" },

@@ -18,7 +18,7 @@ Declara un socket, llama a la operación con un cliente, envía y recibe mensaje
 
 La llamada devuelve `[null, session, connection]` o `[error, undefined, connection?]`. Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). WebSocket lee `signal`, `beforeConnect`, `heartbeat`, `protocols` y `reconnect`, e ignora los campos de progreso HTTP.
 
-`beforeConnect`, `heartbeat`, `protocols` y `reconnect` sustituyen cada uno, como un valor entero, el valor del cliente para esa llamada. La precedencia de protocolos es el cliente derivado, luego `withWebSocketProtocols` y luego los `protocols` de la definición. `heartbeat.timeoutMs` es la espera del acuse, no un plazo de la solicitud.
+`beforeConnect`, `heartbeat`, `protocols` y `reconnect` sustituyen cada uno, como un todo, el valor del cliente para esa llamada. La precedencia de protocolos es el cliente derivado, luego `withWebSocketProtocols` y luego los `protocols` de la definición. `heartbeat.timeoutMs` es la espera del acuse, no un plazo de la solicitud.
 
 ## WebSocketSession
 
@@ -26,16 +26,11 @@ La llamada devuelve `[null, session, connection]` o `[error, undefined, connecti
 
 Prefiere `await using ownedSession = session` para la limpieza de un ámbito propio. Siguen disponibles `session.close()` y `await session.closed` manuales.
 
-```ts
-async function consume(
-  session: WebSocketSession<unknown, never>,
-): Promise<void> {
-  await using ownedSession = session;
-  for await (const message of ownedSession.receive) console.log(message);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#consume
+</include>
 
-`closed` informa del estado terminal lógico. El disposer async pide el cierre nativo y espera el teardown que posee Defjs, pero acota un evento de cierre ausente a un segundo y puede rechazar con un `DOMException` llamado `TimeoutError`. No puede demostrar que la conexión TCP física se cerró.
+`closed` informa del estado terminal lógico. El liberador asíncrono pide el cierre nativo y espera el desmontaje que posee Defjs, pero acota un evento de cierre ausente a un segundo y puede rechazar con un `DOMException` llamado `TimeoutError`. No puede demostrar que la conexión TCP física se cerró.
 
 ### WebSocketState
 
@@ -43,13 +38,13 @@ async function consume(
 
 ### WebSocketConnectionInfo
 
-`generation` (se incrementa al reconectar) y, una vez conocidos, `url`, `protocol` y `extensions`.
+`generation` (se incrementa en cada apertura) y, una vez conocidos, `url`, `protocol` y `extensions`.
 
 ### WebSocketCloseInfo
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` es `closed`, `aborted` o `error`. `cause` está ausente en `closed`, es opcional en `aborted` y es obligatorio en `error`. `code`, `reason` y `wasClean` pueden aparecer en cada variante. Un `session.close()` manual rellena `code` y `reason` en `{ kind: "closed" }` cuando el evento de cierre no los trae.
+`kind` es `closed`, `aborted` o `error`. `cause` está ausente en `closed`, es opcional en `aborted` y es obligatorio en `error`. Un desbordamiento de la cola de tramas entrantes en bruto o mensajes decodificados tiene `cause.code === "CAP_QUEUE_OVERFLOW"`; la misma causa rechaza `receive` y llega a `onRuntimeError`. El timeout del heartbeat y las reconexiones agotadas conservan causas `Error` ordinarias del runtime, sin un código estable separado. `code`, `reason` y `wasClean` pueden aparecer en cada variante. Un `session.close()` manual rellena `code` y `reason` en `{ kind: "closed" }` cuando el evento de cierre no los trae.
 
 ## WebSocketExecuteOptions
 
@@ -59,17 +54,19 @@ async function consume(
 
 `signal` cubre toda la sesión, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. `heartbeat` se sustituye entero; su `timeoutMs` espera un acuse y no es un plazo de la solicitud.
 
+El builder y la cadena de interceptores se ejecutan una vez por operación. La reconexión reutiliza el path/query construido y los protocolos capturados, y construye la URL antes de `beforeConnect`. Si ningún interceptor ha reemplazado el endpoint base de la solicitud, la reconexión también sustituye un endpoint recién seleccionado. El hook no puede rotar credenciales de URL o subprotocolo dentro de una sesión; inicia una operación nueva con entrada o configuración del cliente actualizadas.
+
 Cuando se define `reconnect`, `attempts` vale por defecto 3 por interrupción; `0` lo desactiva. Un `open` correcto reinicia el presupuesto y el exponente de backoff, así que cada interrupción nueva empieza en el reintento 1. Omitir `attempts` no da reintentos ilimitados dentro de una interrupción. Consulta [Cliente](/es-ES/api/client) para los valores por defecto y las reglas de validación.
 
 ## Mensajes
 
-`incoming` es un struct. Los frames de texto, `ArrayBuffer`, typed-array y `Blob` se leen como UTF-8, se parsean como JSON y luego se comprueban contra ese struct. Un frame que falla el parseo JSON o el struct se reporta a `session.onRuntimeError` y no se encola. No hay una opción de cliente para frames inválidos.
+`incoming` es un struct. Las tramas de texto, `ArrayBuffer`, typed-array y `Blob` se leen como UTF-8, se analizan como JSON y luego se comprueban contra ese struct. Una trama que falla el análisis JSON o el struct se reporta a `session.onRuntimeError` y no se encola. No hay una opción de cliente para frames inválidos.
 
-`outgoing` es un struct. `session.send` acepta el `StructInput` de ese struct, codifica los alias y luego hace `JSON.stringify`. Los valores que JSON no puede representar con fidelidad después de la codificación lanzan `TypeError` antes de enviarse o de entrar en la cola de reconexión, incluidos números no finitos, funciones, símbolos, `Map`, `Set`, streams e instancias de clase sin representación JSON. Los valores anidados usan la misma guarda que los cuerpos JSON de HTTP. El heartbeat usa esa guarda también; un fallo de serialización del heartbeat termina la sesión. Varios kinds de mensaje son un `struct.discriminatedUnion`.
+`outgoing` es un struct. `session.send` acepta el `StructInput` de ese struct, codifica los alias y luego hace `JSON.stringify`. Los valores que JSON no puede representar con fidelidad después de la codificación lanzan `TypeError` antes de enviarse o de entrar en la cola de reconexión, incluidos números no finitos, funciones, símbolos, `Map`, `Set`, streams e instancias de clase sin representación JSON. Los valores anidados usan la misma guarda que los cuerpos JSON de HTTP. El heartbeat usa esa guarda también; un fallo de serialización del heartbeat termina la sesión. Varios tipos de mensaje son un `struct.discriminatedUnion`.
 
-```ts
-session.send({ type: "message", text: "Hello" });
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#send
+</include>
 
 Consulta la [guía de WebSocket](/es-ES/docs/web-socket) y [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session).
 
@@ -103,7 +100,7 @@ Motivo registrado cuando la sesión se cierra mediante `session.close()`.
 
 ## WebSocketIncomingData
 
-Frame entrante decodificado: `Infer` del struct `incoming`.
+Trama entrante decodificada: `Infer` del struct `incoming`.
 
 ## WebSocketOutgoingData
 

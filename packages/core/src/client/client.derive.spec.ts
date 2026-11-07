@@ -26,81 +26,115 @@ describe("client factory and client values", () => {
     expect(typeof first).toBe("object");
     expect(first).not.toBe(base);
     expect(first).not.toBe(second);
-    expect(base[CLIENT].options).toEqual({});
-    expect(first[CLIENT].options).toEqual({});
+    expect(base[CLIENT].options).toBeUndefined();
+    expect(first[CLIENT].options).toBeUndefined();
     expect(first[CLIENT].config).toBe(base[CLIENT].config);
   });
 
   test("calling a derived client value throws a TypeError", () => {
     const derived = createClient(withEndpoint("https://example.test"))();
 
-    expect(() => (derived as unknown as () => void)()).toThrow(TypeError);
+    expect(() => {
+      // @ts-expect-error a derived client value is not callable
+      derived();
+    }).toThrow(TypeError);
   });
 
-  test("client(), client(undefined), and client({}) carry no request options", () => {
+  test("client() and client(undefined) store no request options", () => {
     const base = createClient(withEndpoint("https://example.test"));
 
-    for (const client of [base(), base(undefined), base({})]) {
-      expect(client[CLIENT].options).toEqual({});
-      expect(client[CLIENT].options).not.toBe(base[CLIENT].options);
-    }
+    expect(base()[CLIENT].options).toBeUndefined();
+    expect(base(undefined)[CLIENT].options).toBeUndefined();
   });
 
-  test("copies all seven known fields and ignores unknown fields", () => {
+  test("client({}) keeps an empty options snapshot", () => {
     const base = createClient(withEndpoint("https://example.test"));
-    const known = {
-      signal: new AbortController().signal,
-      onUploadProgress: () => undefined,
-      onDownloadProgress: () => undefined,
-      beforeConnect: () => undefined,
-      protocols: ["chat.v1"],
-      heartbeat: { intervalMs: 1_000, message: () => "ping" },
-      reconnect: { attempts: 1, delayMs: 10 },
-    } as const satisfies RequestOptions;
-    const patch = { ...known, timeout: 100, abort: known.signal };
+    const empty = {};
+    const derived = base(empty);
 
-    const derived = base(patch);
-
-    expect(derived[CLIENT].options).toEqual(known);
-    expect(Object.keys(derived[CLIENT].options).sort()).toEqual(
-      Object.keys(known).sort(),
-    );
-    expect(derived[CLIENT].options).not.toBe(patch);
-  });
-
-  test("omits fields whose value is undefined", () => {
-    const base = createClient(withEndpoint("https://example.test"));
-    const derived = base({
-      signal: undefined,
+    expect(derived[CLIENT].options).toEqual({
+      beforeConnect: undefined,
+      heartbeat: undefined,
       onDownloadProgress: undefined,
+      onUploadProgress: undefined,
       protocols: undefined,
+      reconnect: undefined,
+      signal: undefined,
     });
-
-    expect(Object.keys(derived[CLIENT].options)).toEqual([]);
+    expect(derived[CLIENT].options).not.toBe(empty);
+    expect(base[CLIENT].options).toBeUndefined();
   });
 
-  test("keeps nested heartbeat, protocols, and reconnect by reference", () => {
+  test("assigns each request field onto a new options object", () => {
+    const base = createClient(withEndpoint("https://example.test"));
+    const signal = new AbortController().signal;
+    const onUploadProgress = () => undefined;
+    const onDownloadProgress = () => undefined;
+    const beforeConnect = () => undefined;
+    const protocols = ["chat.v1"];
+    const heartbeat = { intervalMs: 1_000, message: () => "ping" };
+    const reconnect = { attempts: 1, delayMs: 10 };
+    const options = {
+      signal,
+      onUploadProgress,
+      onDownloadProgress,
+      beforeConnect,
+      protocols,
+      heartbeat,
+      reconnect,
+    } satisfies RequestOptions;
+
+    const derived = base(options);
+    const stored = derived[CLIENT].options;
+    if (!stored) throw new Error("Expected captured options");
+
+    expect(stored).not.toBe(options);
+    expect(stored.signal).toBe(signal);
+    expect(stored.onUploadProgress).toBe(onUploadProgress);
+    expect(stored.onDownloadProgress).toBe(onDownloadProgress);
+    expect(stored.beforeConnect).toBe(beforeConnect);
+    expect(stored.protocols).toEqual(["chat.v1"]);
+    expect(stored.protocols).not.toBe(protocols);
+    expect(stored.heartbeat).toEqual({
+      intervalMs: 1_000,
+      isAck: undefined,
+      message: heartbeat.message,
+      timeoutMs: undefined,
+    });
+    expect(stored.heartbeat).not.toBe(heartbeat);
+    expect(stored.heartbeat?.message).toBe(heartbeat.message);
+    expect(stored.reconnect).toEqual({
+      attempts: 1,
+      delayMs: 10,
+      factor: undefined,
+      jitter: undefined,
+      maxDelayMs: undefined,
+      shouldReconnect: undefined,
+    });
+    expect(stored.reconnect).not.toBe(reconnect);
+  });
+
+  test("keeps nested heartbeat, protocols, and reconnect independent of later edits", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const heartbeat = { intervalMs: 1_000 };
     const protocols = ["chat.v1"];
     const reconnect = { attempts: 1, delayMs: 10 };
     const derived = base({ heartbeat, protocols, reconnect });
-
-    expect(derived[CLIENT].options.heartbeat).toBe(heartbeat);
-    expect(derived[CLIENT].options.protocols).toBe(protocols);
-    expect(derived[CLIENT].options.reconnect).toBe(reconnect);
+    const stored = derived[CLIENT].options;
+    if (!stored) throw new Error("Expected captured options");
 
     heartbeat.intervalMs = 2_000;
     protocols.push("chat.v2");
+    protocols[0] = "changed";
     reconnect.attempts = 5;
 
-    expect(derived[CLIENT].options.heartbeat?.intervalMs).toBe(2_000);
-    expect(derived[CLIENT].options.protocols).toEqual(["chat.v1", "chat.v2"]);
-    expect(derived[CLIENT].options.reconnect?.attempts).toBe(5);
+    expect(stored.heartbeat?.intervalMs).toBe(1_000);
+    expect(stored.protocols).toEqual(["chat.v1"]);
+    expect(stored.reconnect?.attempts).toBe(1);
   });
 
   test("does not perform I/O or listen for abort while deriving", () => {
-    const handle = vi.fn(async () => json({ ok: true }));
+    const handle = vi.fn(() => Promise.resolve(json({ ok: true })));
     const signal = new AbortController().signal;
     const add = vi.spyOn(signal, "addEventListener");
     const client = createClient(
@@ -116,16 +150,16 @@ describe("client factory and client values", () => {
   });
 
   test("keeps an already aborted signal aborted", async () => {
-    const handle = vi.fn(async () => json({ ok: true }));
+    const handle = vi.fn(() => Promise.resolve(json({ ok: true })));
     const controller = new AbortController();
     controller.abort();
     const client = createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
       withInterceptors(
-        createHttpInterceptor(async () => {
-          throw new Error("transport must not run");
-        }),
+        createHttpInterceptor(() =>
+          Promise.reject(new Error("transport must not run")),
+        ),
       ),
     );
     const read = defineRequest({
@@ -175,58 +209,34 @@ describe("client factory and client values", () => {
     release?.(new Response(null, { status: 204 }));
   });
 
-  test("reads each known patch key once at derivation", () => {
+  test("reads option getters while deriving and keeps the values", () => {
     const base = createClient(withEndpoint("https://example.test"));
-    const firstSignal = new AbortController().signal;
-    const onDownloadProgress = () => undefined;
-    const reads: string[] = [];
-    const patch = {} as RequestOptions;
-    const values = {
-      signal: firstSignal,
-      beforeConnect: () => undefined,
-      heartbeat: { intervalMs: 1_000 },
-      onDownloadProgress,
-      onUploadProgress: () => undefined,
-      protocols: ["chat.v1"],
-      reconnect: { attempts: 1 },
-    } as const;
-    for (const key of [
-      "signal",
-      "onUploadProgress",
-      "onDownloadProgress",
-      "beforeConnect",
-      "protocols",
-      "heartbeat",
-      "reconnect",
-    ] as const) {
-      Object.defineProperty(patch, key, {
-        configurable: true,
-        enumerable: true,
-        get() {
-          reads.push(key);
-          return values[key];
-        },
-      });
-    }
+    const signal = new AbortController().signal;
+    const heartbeat = { intervalMs: 1_000 };
+    let signalReads = 0;
+    let heartbeatReads = 0;
+    const options: RequestOptions = {
+      get signal() {
+        signalReads += 1;
+        return signal;
+      },
+      get heartbeat() {
+        heartbeatReads += 1;
+        return heartbeat;
+      },
+    };
 
-    const derived = base(patch);
-    const fixed = derived[CLIENT].options;
+    const derived = base(options);
+    const stored = derived[CLIENT].options;
+    if (!stored) throw new Error("Expected captured options");
 
-    expect(reads).toEqual([
-      "signal",
-      "onUploadProgress",
-      "onDownloadProgress",
-      "beforeConnect",
-      "protocols",
-      "heartbeat",
-      "reconnect",
-    ]);
-    expect(derived[CLIENT].options).toBe(fixed);
-    expect(fixed).toEqual(values);
-    expect(reads).toHaveLength(7);
-    expect(fixed.heartbeat).toBe(values.heartbeat);
-    expect(fixed.protocols).toBe(values.protocols);
-    expect(fixed.reconnect).toBe(values.reconnect);
+    expect(signalReads).toBe(1);
+    expect(heartbeatReads).toBe(1);
+    expect(stored.signal).toBe(signal);
+    expect(stored.heartbeat).not.toBe(heartbeat);
+    expect(stored.heartbeat?.intervalMs).toBe(1_000);
+    expect(signalReads).toBe(1);
+    expect(heartbeatReads).toBe(1);
   });
 
   test("ignores a later replace, delete, and add on the derived patch", () => {
@@ -243,7 +253,7 @@ describe("client factory and client values", () => {
     expect(derived[CLIENT].options).toEqual({ signal: firstSignal });
     patch.onDownloadProgress = onDownloadProgress;
     expect(derived[CLIENT].options).toEqual({ signal: firstSignal });
-    expect(derived[CLIENT].options.onDownloadProgress).toBeUndefined();
+    expect(derived[CLIENT].options?.onDownloadProgress).toBeUndefined();
   });
 
   test("keeps the factory and other client values fixed when the patch changes", () => {
@@ -258,23 +268,11 @@ describe("client factory and client values", () => {
     delete patch.signal;
     patch.onDownloadProgress = () => undefined;
 
-    expect(base[CLIENT].options).toEqual({});
+    expect(base[CLIENT].options).toBeUndefined();
     expect(first[CLIENT].options).toEqual({ signal: firstSignal });
     expect(sibling[CLIENT].options).toEqual({ signal: secondSignal });
     expect(first[CLIENT].options).not.toBe(patch);
     expect(first[CLIENT].config).toBe(base[CLIENT].config);
-  });
-
-  test("does not read unknown getters", () => {
-    const base = createClient(withEndpoint("https://example.test"));
-    const read = vi.fn(() => 1);
-    const patch = Object.defineProperty({} as RequestOptions, "extra", {
-      enumerable: true,
-      get: read,
-    });
-
-    expect(base(patch)[CLIENT].options).toEqual({});
-    expect(read).not.toHaveBeenCalled();
   });
 
   test("stores options separately from the parent state and the patch object", () => {
@@ -292,19 +290,17 @@ describe("client factory and client values", () => {
   });
 
   test("throws from client(patch) when a patch getter throws and leaves the factory usable", async () => {
-    const handle = vi.fn(async () => json({ ok: true }));
+    const handle = vi.fn(() => Promise.resolve(json({ ok: true })));
     const parent = createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
     );
     const boom = new Error("signal getter failed");
-    const patch = Object.defineProperty({} as RequestOptions, "signal", {
-      configurable: true,
-      enumerable: true,
-      get() {
+    const patch: RequestOptions = {
+      get signal(): AbortSignal {
         throw boom;
       },
-    });
+    };
     const read = defineRequest({
       method: "GET",
       output: struct.object({ ok: struct.boolean() }),
@@ -325,15 +321,17 @@ describe("request options ignored by other protocols", () => {
     const seen: string[] = [];
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => json({ ok: true })),
+      withHTTPHandle(() => Promise.resolve(json({ ok: true }))),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           seen.push(request.method);
-          return makeResponse({
-            body: { ok: true },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
+          return Promise.resolve(
+            makeResponse({
+              body: { ok: true },
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          );
         }),
       ),
     );
@@ -362,16 +360,16 @@ describe("request options ignored by other protocols", () => {
   test("SSE ignores HTTP progress and WebSocket fields", async () => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
-        return new Response("data: hi\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        });
+      withSSEHandle(() => {
+        return Promise.resolve(
+          new Response("data: hi\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
     );
     const stream = defineEventStream({
       path: "/events",
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       events: { message: struct.string() },
     });
 
@@ -394,8 +392,15 @@ describe("request options ignored by other protocols", () => {
       withEndpoint("https://example.test"),
       withWebSocketHandle(
         class extends EventTarget {
+          static readonly OPEN = 1;
+          readonly bufferedAmount = 0;
+          readonly extensions = "";
+          readonly protocol = "";
+          readonly readyState = 0;
+          readonly url: string;
           constructor(url: string) {
             super();
+            this.url = url;
             constructed.push(url);
             queueMicrotask(() => {
               this.dispatchEvent(new Event("open"));
@@ -407,7 +412,7 @@ describe("request options ignored by other protocols", () => {
           send() {
             return undefined;
           }
-        } as unknown as typeof WebSocket,
+        },
       ),
     );
     const socket = defineWebSocket({
@@ -438,7 +443,10 @@ describe("AbortSignal.timeout classification", () => {
           new Promise<Response>((_resolve, reject) => {
             init?.signal?.addEventListener(
               "abort",
-              () => reject(init.signal?.reason),
+              () => {
+                const reason: unknown = init.signal?.reason;
+                reject(reason);
+              },
               { once: true },
             );
           }),
@@ -464,7 +472,10 @@ describe("AbortSignal.timeout classification", () => {
           new Promise<Response>((_resolve, reject) => {
             init?.signal?.addEventListener(
               "abort",
-              () => reject(init.signal?.reason),
+              () => {
+                const reason: unknown = init.signal?.reason;
+                reject(reason);
+              },
               { once: true },
             );
           }),
@@ -472,8 +483,6 @@ describe("AbortSignal.timeout classification", () => {
     );
     const stream = defineEventStream({
       path: "/events",
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       events: { message: struct.string() },
     });
     const manual = new AbortController();
@@ -494,6 +503,12 @@ describe("AbortSignal.timeout classification", () => {
       withEndpoint("https://example.test"),
       withWebSocketHandle(
         class extends EventTarget {
+          static readonly OPEN = 1;
+          readonly bufferedAmount = 0;
+          readonly extensions = "";
+          readonly protocol = "";
+          readonly readyState = 0;
+          readonly url = "";
           constructor(_url: string) {
             super();
           }
@@ -503,7 +518,7 @@ describe("AbortSignal.timeout classification", () => {
           send() {
             return undefined;
           }
-        } as unknown as typeof WebSocket,
+        },
       ),
     );
     const socket = defineWebSocket({

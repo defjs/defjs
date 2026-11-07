@@ -16,7 +16,6 @@ import { defineRequest } from "../http/http";
 import { defineEventStream } from "../sse/sse";
 import { struct } from "../struct";
 import { STRUCT } from "../struct/symbols";
-import type { RuntimeStruct } from "../struct/types";
 import { DEFINITION } from "../struct/symbols";
 import { transformWebSocketMessage } from "../web_socket/codec";
 import { defineWebSocket } from "../web_socket/web_socket";
@@ -33,42 +32,57 @@ const UserInput = struct.object({
   profile: Profile,
 });
 
+function readUnknown(value: unknown): unknown {
+  return value;
+}
+
+function isDictionary(value: unknown): value is { [key: string]: unknown } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function definitionOf(value: unknown): { codec?: string; kind: string } {
-  return (value as RuntimeStruct)[DEFINITION] as {
-    codec?: string;
-    kind: string;
-  };
+  if (typeof value !== "object" || value === null || !(DEFINITION in value)) {
+    throw new Error("expected a runtime struct");
+  }
+  const definition = value[DEFINITION];
+  if (
+    typeof definition !== "object" ||
+    definition === null ||
+    !("kind" in definition) ||
+    typeof definition.kind !== "string"
+  ) {
+    throw new Error("expected a struct definition");
+  }
+  const codec =
+    "codec" in definition && typeof definition.codec === "string"
+      ? definition.codec
+      : undefined;
+  return { codec, kind: definition.kind };
 }
 
 async function formBlob(
   value: unknown,
 ): Promise<{ text: string; type: string }> {
   expect(value).toBeInstanceOf(Blob);
-  const blob = value as Blob;
-  return { text: await blob.text(), type: blob.type };
+  if (!(value instanceof Blob)) {
+    throw new Error("expected a blob");
+  }
+  return { text: await value.text(), type: value.type };
 }
 
-type LooseInput = {
-  displayName: string;
-  form: {
-    file?: File;
-    profile?: { name: string };
-    q?: string;
-    tags?: string[];
-    title?: string;
-  };
-  profile: { birthday: Date; displayName: string };
-  room: string;
-  since?: string;
-  userId: number;
-};
-
-function structOf(value: object): RuntimeStruct {
-  return (value as { [STRUCT]: RuntimeStruct })[STRUCT];
+function structOf(value: object): object {
+  if (!(STRUCT in value)) {
+    throw new Error("expected a struct tag");
+  }
+  const tag = value[STRUCT];
+  if (typeof tag !== "object" || tag === null) {
+    throw new Error("expected a struct tag");
+  }
+  return tag;
 }
 
 function ownData(key: string, value: unknown): { [key: string]: unknown } {
-  const record: { [key: string]: unknown } = Object.create(null);
+  const record: { [key: string]: unknown } = {};
   Object.defineProperty(record, key, {
     configurable: true,
     enumerable: true,
@@ -81,8 +95,7 @@ function ownData(key: string, value: unknown): { [key: string]: unknown } {
 function protoStringShape(): {
   [key: string]: ReturnType<typeof struct.string>;
 } {
-  const shape: { [key: string]: ReturnType<typeof struct.string> } =
-    Object.create(null);
+  const shape: { [key: string]: ReturnType<typeof struct.string> } = {};
   Object.defineProperty(shape, "__proto__", {
     configurable: true,
     enumerable: true,
@@ -93,15 +106,69 @@ function protoStringShape(): {
 }
 
 function expectUntagged(value: unknown): void {
+  if (!isDictionary(value)) {
+    throw new Error("expected an object");
+  }
   expect(value).toEqual(expect.any(Object));
-  expect(Object.getOwnPropertySymbols(value as object)).not.toContain(STRUCT);
+  expect(Object.getOwnPropertySymbols(value)).not.toContain(STRUCT);
 }
 
-function buildHttp(
+function readTag(value: object): unknown {
+  return STRUCT in value ? value[STRUCT] : undefined;
+}
+
+function jsonObject(value: unknown): { [key: string]: unknown } {
+  const parsed = readUnknown(JSON.parse(String(value)));
+  if (!isDictionary(parsed)) {
+    throw new Error("expected a json object");
+  }
+  return parsed;
+}
+
+function nestedObject(
+  value: { [key: string]: unknown },
+  key: string,
+): { [key: string]: unknown } {
+  const child = value[key];
+  if (!isDictionary(child)) {
+    throw new Error(`expected ${key} to be an object`);
+  }
+  return child;
+}
+
+function bodyForm(value: unknown): FormData {
+  if (!(value instanceof FormData)) {
+    throw new Error("expected FormData");
+  }
+  return value;
+}
+
+function bodyParams(value: unknown): URLSearchParams {
+  if (!(value instanceof URLSearchParams)) {
+    throw new Error("expected URLSearchParams");
+  }
+  return value;
+}
+
+function dictionary(value: unknown): { [key: string]: unknown } {
+  const record = readUnknown(value);
+  if (!isDictionary(record)) {
+    throw new Error("expected an object");
+  }
+  return record;
+}
+
+function objectWithNonFunctionConstructor(): { [key: string]: unknown } {
+  const proto = dictionary(Object.create(null));
+  Object.defineProperty(proto, "constructor", { value: 1 });
+  return dictionary(Object.create(proto));
+}
+
+function buildHttp<TInput>(
   method: string,
   path: string,
-  input: unknown,
-  builder: (value: LooseInput) => unknown,
+  input: TInput,
+  builder: (value: NoInfer<TInput>) => unknown,
   serializer?: (query: { [key: string]: unknown }) => string,
 ) {
   return createHttpRequest(method, path, input, builder, {
@@ -112,6 +179,13 @@ function buildHttp(
 }
 
 describe("outbound request builder", () => {
+  test("keeps a header pair array, including values Headers will coerce", () => {
+    const headers = [["a", 1]];
+    expect(materializeOutboundRequest({ headers }, "http").headers).toBe(
+      headers,
+    );
+  });
+
   test("formData and urlencoded are object structs with a codec tag", () => {
     expect(
       definitionOf(struct.formData({ title: struct.string() })),
@@ -124,8 +198,8 @@ describe("outbound request builder", () => {
     ).toBeUndefined();
   });
 
-  test("encodes an anonymous path record literally", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("encodes an anonymous path record literally", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -136,8 +210,8 @@ describe("outbound request builder", () => {
     expect(request.endpoint).toBe("/users/7");
   });
 
-  test("rejects a tagged path object that contains a nested field", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("rejects a tagged path object that contains a nested field", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -147,8 +221,8 @@ describe("outbound request builder", () => {
     ).toThrow(/profile/);
   });
 
-  test("encodes a tagged body with alias, date, and bigint", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("encodes a tagged body with alias, date, and bigint", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -163,8 +237,8 @@ describe("outbound request builder", () => {
     expect(request.bodyContentType).toBe("application/json");
   });
 
-  test("encodes a tagged object nested under an anonymous parent", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("encodes a tagged object nested under an anonymous parent", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -177,8 +251,8 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("keeps the struct tag when a typed object is spread and adds a literal key", async () => {
-    const input = await parseEndpointInput(Profile, {
+  test("keeps the struct tag when a typed object is spread and adds a literal key", () => {
+    const input = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
@@ -191,8 +265,8 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("overwrites a logical field and still applies its alias", async () => {
-    const input = await parseEndpointInput(Profile, {
+  test("overwrites a logical field and still applies its alias", () => {
+    const input = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
@@ -205,8 +279,8 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("rejects a spread key that collides with a wire key", async () => {
-    const input = await parseEndpointInput(Profile, {
+  test("rejects a spread key that collides with a wire key", () => {
+    const input = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
@@ -218,8 +292,8 @@ describe("outbound request builder", () => {
     ).toThrow(/display_name/);
   });
 
-  test("keeps a nested spread extra when the parent stays tagged", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("keeps a nested spread extra when the parent stays tagged", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -232,8 +306,8 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("rejects a nested spread that collides with a wire key", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("rejects a nested spread that collides with a wire key", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -248,8 +322,8 @@ describe("outbound request builder", () => {
     ).toThrow(/display_name/);
   });
 
-  test("encodes an untagged nested object with the field struct and keeps extras", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("encodes an untagged nested object with the field struct and keeps extras", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -265,9 +339,9 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("encodes nested array items and tuple items with the tagged-object rule", async () => {
+  test("encodes nested array items and tuple items with the tagged-object rule", () => {
     const People = struct.object({ people: struct.array(Profile) });
-    const people = await parseEndpointInput(People, {
+    const people = parseEndpointInput(People, {
       people: [{ birthday, displayName: "Ada" }],
     });
     const peopleRequest = materializeOutboundRequest(
@@ -285,7 +359,7 @@ describe("outbound request builder", () => {
     const Pair = struct.object({
       pair: struct.tuple([Profile, struct.string()]),
     });
-    const pair = await parseEndpointInput(Pair, {
+    const pair = parseEndpointInput(Pair, {
       pair: [{ birthday, displayName: "Ada" }, "ok"],
     });
     const pairRequest = materializeOutboundRequest(
@@ -306,7 +380,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("encodes nested union, intersection, and record values from their own tags", async () => {
+  test("encodes nested union, intersection, and record values from their own tags", () => {
     const Alpha = struct.object({
       id: struct.number(),
       kind: struct.literal("a"),
@@ -317,7 +391,7 @@ describe("outbound request builder", () => {
       name: struct.string(),
     });
     const Choice = struct.object({ item: struct.or(Alpha, Beta) });
-    const choice = await parseEndpointInput(Choice, {
+    const choice = parseEndpointInput(Choice, {
       item: { id: 1, kind: "a", name: "Ada" },
     });
     const taggedChoice = materializeOutboundRequest(
@@ -334,7 +408,7 @@ describe("outbound request builder", () => {
       struct.object({ name: struct.string().alias("display_name") }),
     );
     const Wrapped = struct.object({ person: Person });
-    const wrapped = await parseEndpointInput(Wrapped, {
+    const wrapped = parseEndpointInput(Wrapped, {
       person: { id: 7, name: "Ada" },
     });
     const intersection = materializeOutboundRequest(
@@ -343,7 +417,7 @@ describe("outbound request builder", () => {
     );
 
     const Directory = struct.object({ directory: struct.record(Profile) });
-    const directory = await parseEndpointInput(Directory, {
+    const directory = parseEndpointInput(Directory, {
       directory: { ada: { birthday, displayName: "Ada" } },
     });
     const record = materializeOutboundRequest(
@@ -358,7 +432,7 @@ describe("outbound request builder", () => {
 
     const Payment = struct.object({ amount: struct.bigint().alias("amt") });
     const Invoice = struct.object({ payment: Payment });
-    const invoice = await parseEndpointInput(Invoice, {
+    const invoice = parseEndpointInput(Invoice, {
       payment: { amount: 10n },
     });
     const bigint = materializeOutboundRequest(
@@ -389,11 +463,11 @@ describe("outbound request builder", () => {
     ).toThrow(/display_name/);
   });
 
-  test("rejects an ambiguous untagged union before encoding one branch", async () => {
+  test("rejects an ambiguous untagged union before encoding one branch", () => {
     const Left = struct.object({ id: struct.string().alias("left_id") });
     const Right = struct.object({ id: struct.string().alias("right_id") });
     const Box = struct.object({ row: struct.or(Left, Right) });
-    const input = await parseEndpointInput(Box, { row: { id: "42" } });
+    const input = parseEndpointInput(Box, { row: { id: "42" } });
 
     expect(() =>
       materializeOutboundRequest(
@@ -403,7 +477,7 @@ describe("outbound request builder", () => {
     ).toThrow(/ambiguous union encode/);
   });
 
-  test("encodes an untagged discriminated object with aliases and extras", async () => {
+  test("encodes an untagged discriminated object with aliases and extras", () => {
     const Cat = struct.object({
       kind: struct.literal("cat"),
       name: struct.string().alias("display_name"),
@@ -415,7 +489,7 @@ describe("outbound request builder", () => {
     const Box = struct.object({
       pet: struct.discriminatedUnion("kind", [Cat, Dog]),
     });
-    const input = await parseEndpointInput(Box, {
+    const input = parseEndpointInput(Box, {
       pet: { kind: "cat", name: "Ada" },
     });
     const request = materializeOutboundRequest(
@@ -428,13 +502,13 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("encodes an untagged all-object intersection with both aliases and extras", async () => {
+  test("encodes an untagged all-object intersection with both aliases and extras", () => {
     const Person = struct.intersection(
       struct.object({ id: struct.number().alias("user_id") }),
       struct.object({ name: struct.string().alias("display_name") }),
     );
     const Box = struct.object({ person: Person });
-    const input = await parseEndpointInput(Box, {
+    const input = parseEndpointInput(Box, {
       person: { id: 7, name: "Ada" },
     });
     const request = materializeOutboundRequest(
@@ -447,14 +521,14 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("rejects a union when an object branch and a non-container branch both match", async () => {
+  test("rejects a union when an object branch and a non-container branch both match", () => {
     const Box = struct.object({
       row: struct.or(
         struct.object({ id: struct.string().alias("wire_id") }),
         struct.any(),
       ),
     });
-    const input = await parseEndpointInput(Box, { row: { id: "42" } });
+    const input = parseEndpointInput(Box, { row: { id: "42" } });
 
     expect(() =>
       materializeOutboundRequest(
@@ -464,13 +538,13 @@ describe("outbound request builder", () => {
     ).toThrow(/ambiguous union encode/);
   });
 
-  test("recurses through an unmatched union object so tagged children keep aliases", async () => {
+  test("recurses through an unmatched union object so tagged children keep aliases", () => {
     const Item = struct.object({ id: struct.string().alias("wire_id") });
     const Box = struct.object({
       payload: struct.or(struct.string(), struct.number()),
     });
-    const item = await parseEndpointInput(Item, { id: "42" });
-    const input = await parseEndpointInput(Box, { payload: "x" });
+    const item = parseEndpointInput(Item, { id: "42" });
+    const input = parseEndpointInput(Box, { payload: "x" });
     const request = materializeOutboundRequest(
       { body: { ...input, payload: { row: { ...item, extra: "kept" } } } },
       "http",
@@ -481,7 +555,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("tags a mixed intersection with the conjunction of the matched object sides", async () => {
+  test("tags a mixed intersection with the conjunction of the matched object sides", () => {
     const Schema = struct.intersection(
       struct.object({ firstName: struct.string().alias("first_name") }),
       struct.or(
@@ -489,23 +563,23 @@ describe("outbound request builder", () => {
         struct.number(),
       ),
     );
-    const first = await parseEndpointInput(Schema, {
+    const first = parseEndpointInput(Schema, {
       firstName: "Ada",
       lastName: "Lovelace",
     });
-    const second = await parseEndpointInput(Schema, {
+    const second = parseEndpointInput(Schema, {
       firstName: "Grace",
       lastName: "Hopper",
     });
-    const firstTag = (first as { [STRUCT]?: object })[STRUCT];
-    const secondTag = (second as { [STRUCT]?: object })[STRUCT];
+    const firstTag = readTag(first);
+    const secondTag = readTag(second);
 
     expect(firstTag).toBeDefined();
     expect(secondTag).toBeDefined();
-    expect(Object.hasOwn(firstTag as object, DEFINITION)).toBe(false);
-    expect(Object.hasOwn(secondTag as object, DEFINITION)).toBe(false);
+    expect(Object.hasOwn(dictionary(firstTag), DEFINITION)).toBe(false);
+    expect(Object.hasOwn(dictionary(secondTag), DEFINITION)).toBe(false);
     const request = materializeOutboundRequest(
-      { body: { ...(first as { [key: string]: unknown }), extra: "kept" } },
+      { body: { ...dictionary(first), extra: "kept" } },
       "http",
     );
     expect(request.body).toBe(
@@ -514,7 +588,7 @@ describe("outbound request builder", () => {
     expect(Object.getPrototypeOf(first)).toBeNull();
   });
 
-  test("encodes an untagged mixed intersection with literal keys", async () => {
+  test("encodes an untagged mixed intersection with literal keys", () => {
     const Person = struct.intersection(
       struct.object({ firstName: struct.string().alias("first_name") }),
       struct.or(
@@ -523,7 +597,7 @@ describe("outbound request builder", () => {
       ),
     );
     const Box = struct.object({ person: Person });
-    const input = await parseEndpointInput(Box, {
+    const input = parseEndpointInput(Box, {
       person: { firstName: "Ada", lastName: "Lovelace" },
     });
     const request = materializeOutboundRequest(
@@ -541,7 +615,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("recurses through an unmatched discriminated object so tagged children keep aliases", async () => {
+  test("recurses through an unmatched discriminated object so tagged children keep aliases", () => {
     const Cat = struct.object({
       kind: struct.literal("cat"),
       name: struct.string(),
@@ -550,8 +624,8 @@ describe("outbound request builder", () => {
     const Box = struct.object({
       pet: struct.discriminatedUnion("kind", [Cat]),
     });
-    const item = await parseEndpointInput(Item, { id: "42" });
-    const input = await parseEndpointInput(Box, {
+    const item = parseEndpointInput(Item, { id: "42" });
+    const input = parseEndpointInput(Box, {
       pet: { kind: "cat", name: "Ada" },
     });
     const request = materializeOutboundRequest(
@@ -564,7 +638,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("keeps a logical __proto__ key on a mixed intersection", async () => {
+  test("keeps a logical __proto__ key on a mixed intersection", () => {
     const Schema = struct.intersection(
       struct.object({ ["__proto__"]: struct.string().alias("proto_wire") }),
       struct.or(
@@ -572,7 +646,7 @@ describe("outbound request builder", () => {
         struct.number(),
       ),
     );
-    const value = await parseEndpointInput(Schema, {
+    const value = parseEndpointInput(Schema, {
       ["__proto__"]: "p",
       label: "L",
     });
@@ -580,24 +654,19 @@ describe("outbound request builder", () => {
     expect(Object.getPrototypeOf(value)).toBeNull();
     expect(Object.hasOwn(value, "__proto__")).toBe(true);
     const request = materializeOutboundRequest({ body: value }, "http");
-    expect(JSON.parse(String(request.body))).toEqual({
+    expect(jsonObject(request.body)).toEqual({
       label_wire: "L",
       proto_wire: "p",
     });
-    expect(
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
-  test("tags a mixed intersection from the single object side", async () => {
+  test("tags a mixed intersection from the single object side", () => {
     const Schema = struct.intersection(
       struct.unknown(),
       struct.object({ name: struct.string().alias("display_name") }),
     );
-    const value = await parseEndpointInput(Schema, {
-      extra: "kept",
-      name: "Ada",
-    } as { name: string } & { extra: string });
+    const value = parseEndpointInput(Schema, { extra: "kept", name: "Ada" });
     const request = materializeOutboundRequest({ body: value }, "http");
 
     expect(request.body).toBe('{"display_name":"Ada"}');
@@ -607,13 +676,13 @@ describe("outbound request builder", () => {
   test("does not tag an intersection when no side is an object struct", async () => {
     const Schema = struct.intersection(struct.unknown(), struct.any());
     const raw = { name: "Ada" };
-    const value = await parseEndpointInput(Schema, raw);
+    const value: unknown = await parseEndpointInput(Schema, raw);
 
     expect(value).toBe(raw);
-    expect((value as { [STRUCT]?: unknown })[STRUCT]).toBeUndefined();
+    expect(readTag(dictionary(value))).toBeUndefined();
   });
 
-  test("tags each mixed-intersection branch with the object structs that produced it", async () => {
+  test("tags each mixed-intersection branch with the object structs that produced it", () => {
     const Left = struct.object({
       firstName: struct.string().alias("first_name"),
     });
@@ -626,28 +695,28 @@ describe("outbound request builder", () => {
       name: struct.string().alias("dog_name"),
     });
     const Schema = struct.intersection(Left, struct.or(Cat, Dog));
-    const cat = await parseEndpointInput(Schema, {
+    const cat = parseEndpointInput(Schema, {
       firstName: "A",
       kind: "cat",
       name: "N",
     });
-    const dog = await parseEndpointInput(Schema, {
+    const dog = parseEndpointInput(Schema, {
       firstName: "B",
       kind: "dog",
       name: "M",
     });
-    const catAgain = await parseEndpointInput(Schema, {
+    const catAgain = parseEndpointInput(Schema, {
       firstName: "C",
       kind: "cat",
       name: "O",
     });
-    const catTag = (cat as { [STRUCT]?: object })[STRUCT];
-    const dogTag = (dog as { [STRUCT]?: object })[STRUCT];
-    const catAgainTag = (catAgain as { [STRUCT]?: object })[STRUCT];
+    const catTag = readTag(cat);
+    const dogTag = readTag(dog);
+    const catAgainTag = readTag(catAgain);
 
-    expect(Object.hasOwn(catTag as object, DEFINITION)).toBe(false);
-    expect(Object.hasOwn(dogTag as object, DEFINITION)).toBe(false);
-    expect(Object.hasOwn(catAgainTag as object, DEFINITION)).toBe(false);
+    expect(Object.hasOwn(dictionary(catTag), DEFINITION)).toBe(false);
+    expect(Object.hasOwn(dictionary(dogTag), DEFINITION)).toBe(false);
+    expect(Object.hasOwn(dictionary(catAgainTag), DEFINITION)).toBe(false);
     expect(materializeOutboundRequest({ body: cat }, "http").body).toBe(
       '{"first_name":"A","kind":"cat","cat_name":"N"}',
     );
@@ -659,7 +728,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("recurses through an array stored on a discriminated field", async () => {
+  test("recurses through an array stored on a discriminated field", () => {
     const Cat = struct.object({
       kind: struct.literal("cat"),
       name: struct.string(),
@@ -668,8 +737,8 @@ describe("outbound request builder", () => {
     const Box = struct.object({
       pet: struct.discriminatedUnion("kind", [Cat]),
     });
-    const item = await parseEndpointInput(Item, { id: "42" });
-    const input = await parseEndpointInput(Box, {
+    const item = parseEndpointInput(Item, { id: "42" });
+    const input = parseEndpointInput(Box, {
       pet: { kind: "cat", name: "Ada" },
     });
     const request = materializeOutboundRequest(
@@ -680,8 +749,8 @@ describe("outbound request builder", () => {
     expect(request.body).toBe('{"pet":[{"wire_id":"42","extra":"kept"}]}');
   });
 
-  test("uses the field struct when a nested object tag is not an object struct", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("uses the field struct when a nested object tag is not an object struct", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -701,9 +770,9 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("does not apply the tagged-object rule to an any field array", async () => {
+  test("does not apply the tagged-object rule to an any field array", () => {
     const Box = struct.object({ payload: struct.any() });
-    const input = await parseEndpointInput(Box, {
+    const input = parseEndpointInput(Box, {
       payload: [{ role: "admin" }],
     });
     const request = materializeOutboundRequest({ body: input }, "http");
@@ -711,20 +780,20 @@ describe("outbound request builder", () => {
     expect(request.body).toBe('{"payload":[{"role":"admin"}]}');
   });
 
-  test("leaves a scalar nested in an object field as a scalar", async () => {
-    const input = await parseEndpointInput(UserInput, {
+  test("leaves a scalar nested in an object field as a scalar", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
     const request = buildHttp("POST", "/users", input, (value) => ({
-      body: { ...(value as { [key: string]: unknown }), profile: "Ada" },
+      body: { ...value, profile: "Ada" },
     }));
 
     expect(request.body).toBe('{"user_id":7,"profile":"Ada"}');
   });
 
-  test("leaves a copied leaf under an anonymous parent unaliased", async () => {
-    const input = await parseEndpointInput(Profile, {
+  test("leaves a copied leaf under an anonymous parent unaliased", () => {
+    const input = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
@@ -818,8 +887,17 @@ describe("outbound request builder", () => {
     ["map element", [new Map()], 'body field "0" is not JSON data: Map.'],
     [
       "constructorless object",
-      { odd: Object.create(Object.create(null)) },
+      {
+        odd: dictionary(Object.create(dictionary(Object.create(null)))),
+      },
       'body field "odd" is not JSON data: Object.',
+    ],
+    [
+      "non-function constructor",
+      {
+        value: objectWithNonFunctionConstructor(),
+      },
+      'body field "value" is not JSON data: Object.',
     ],
   ])("rejects a nested %s", (_label, body, message) => {
     const send = () => buildHttp("POST", "/users", undefined, () => ({ body }));
@@ -830,7 +908,7 @@ describe("outbound request builder", () => {
 
   const asyncIterable = () => ({
     async *[Symbol.asyncIterator]() {
-      yield new TextEncoder().encode("chunk");
+      yield await Promise.resolve(new TextEncoder().encode("chunk"));
     },
   });
   const syncIterable = () => ({
@@ -858,11 +936,13 @@ describe("outbound request builder", () => {
       "root null-prototype async iterable body",
       "POST",
       () => ({
-        body: Object.assign(Object.create(null), {
-          async *[Symbol.asyncIterator]() {
-            yield new TextEncoder().encode("chunk");
-          },
-        }),
+        body: dictionary(
+          Object.assign(Object.create(null), {
+            async *[Symbol.asyncIterator]() {
+              yield await Promise.resolve(new TextEncoder().encode("chunk"));
+            },
+          }),
+        ),
       }),
       "value is an iterable object, not a record.",
       undefined,
@@ -973,7 +1053,7 @@ describe("outbound request builder", () => {
       body: { link: new URL("https://a.test/x") },
     }));
     const nullProto = buildHttp("POST", "/users", undefined, () => ({
-      body: Object.assign(Object.create(null), { a: 1 }),
+      body: dictionary(Object.assign(Object.create(null), { a: 1 })),
     }));
     const omitted = buildHttp("POST", "/users", undefined, () => ({
       body: { a: undefined, b: 1 },
@@ -1010,12 +1090,12 @@ describe("outbound request builder", () => {
     expect(request.headers?.get("content-type")).toBeNull();
   });
 
-  test("encodes a urlencoded codec object only at the body root", async () => {
+  test("encodes a urlencoded codec object only at the body root", () => {
     const Form = struct.urlencoded({
       q: struct.string().alias("query"),
       tags: struct.array(struct.string()),
     });
-    const input = await parseEndpointInput(struct.object({ form: Form }), {
+    const input = parseEndpointInput(struct.object({ form: Form }), {
       form: { q: "ada", tags: ["a", "b"] },
     });
     const root = buildHttp("POST", "/search", input, (value) => ({
@@ -1026,8 +1106,8 @@ describe("outbound request builder", () => {
     }));
 
     expect(root.body).toBeInstanceOf(URLSearchParams);
-    expect((root.body as URLSearchParams).get("query")).toBe("ada");
-    expect((root.body as URLSearchParams).getAll("tags")).toEqual(["a", "b"]);
+    expect(bodyParams(root.body).get("query")).toBe("ada");
+    expect(bodyParams(root.body).getAll("tags")).toEqual(["a", "b"]);
     expect(root.headers?.has("content-type")).toBe(false);
     expect(root.bodyContentType).toBe(
       "application/x-www-form-urlencoded;charset=UTF-8",
@@ -1043,7 +1123,7 @@ describe("outbound request builder", () => {
       file: struct.file(),
       title: struct.string().alias("t"),
     });
-    const input = await parseEndpointInput(struct.object({ form: Form }), {
+    const input = parseEndpointInput(struct.object({ form: Form }), {
       form: { file, title: "Hi" },
     });
     const root = buildHttp("POST", "/files", input, (value) => ({
@@ -1055,13 +1135,18 @@ describe("outbound request builder", () => {
     }));
 
     expect(root.body).toBeInstanceOf(FormData);
-    expect((root.body as FormData).get("t")).toBe("Hi");
-    const appended = (root.body as FormData).get("file");
+    expect(bodyForm(root.body).get("t")).toBe("Hi");
+    const appended = bodyForm(root.body).get("file");
     expect(await formBlob(appended)).toEqual(await formBlob(file));
-    expect(appended).toBeInstanceOf(File);
-    expect((appended as File).name).toBe(file.name);
+    if (!(appended instanceof File)) {
+      throw new Error("expected a file");
+    }
+    expect(appended.name).toBe(file.name);
     expect(root.headers?.get("content-type")).toBeNull();
-    expect(String(nested.body)).toContain('"t":"Hi"');
+    if (typeof nested.body !== "string") {
+      throw new Error("expected a string body");
+    }
+    expect(nested.body).toContain('"t":"Hi"');
     expect(nested.headers?.has("content-type")).toBe(false);
     expect(nested.bodyContentType).toBe("application/json");
   });
@@ -1076,18 +1161,19 @@ describe("outbound request builder", () => {
       nickname: struct.string().optional(),
       note: struct.null(),
     });
-    const input = await parseEndpointInput(Form, {
+    const input = parseEndpointInput(Form, {
       age: 3,
       enabled: true,
       files: [blob],
       name: "Ada",
       note: null,
     });
-    (input.files as unknown[]).push(undefined);
+    // @ts-expect-error parsed file lists do not include undefined
+    input.files?.push(undefined);
     const request = buildHttp("POST", "/files", undefined, () => ({
       body: input,
     }));
-    const form = request.body as FormData;
+    const form = bodyForm(request.body);
 
     expect(form.get("age")).toBe("3");
     expect(form.get("enabled")).toBe("true");
@@ -1097,22 +1183,22 @@ describe("outbound request builder", () => {
     expect(form.get("note")).toBe("null");
   });
 
-  test("rejects blobs in a urlencoded body", async () => {
+  test("rejects blobs in a urlencoded body", () => {
     const Form = struct.urlencoded({
       file: struct.blob(),
     });
-    const input = await parseEndpointInput(Form, { file: new Blob(["a"]) });
+    const input = parseEndpointInput(Form, { file: new Blob(["a"]) });
 
     expect(() =>
       buildHttp("POST", "/files", undefined, () => ({ body: input })),
     ).toThrow(/file/);
   });
 
-  test("rejects nested objects in a formData body", async () => {
+  test("rejects nested objects in a formData body", () => {
     const Form = struct.formData({
       profile: struct.object({ name: struct.string() }),
     });
-    const input = await parseEndpointInput(struct.object({ form: Form }), {
+    const input = parseEndpointInput(struct.object({ form: Form }), {
       form: { profile: { name: "Ada" } },
     });
 
@@ -1250,13 +1336,13 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("omits undefined fields and sends nullable null", async () => {
+  test("omits undefined fields and sends nullable null", () => {
     const Body = struct.object({
       nickname: struct.string().alias("nick").optional(),
       note: struct.string().nullable(),
     });
-    const input = await parseEndpointInput(Body, { note: null });
-    (input as { nickname?: string }).nickname = undefined;
+    const input = parseEndpointInput(Body, { note: null });
+    input.nickname = undefined;
     const request = buildHttp("POST", "/users", input, (value) => ({
       body: value,
     }));
@@ -1304,9 +1390,9 @@ describe("outbound request builder", () => {
   });
 
   test("rejects a non-object builder result", () => {
-    expect(() =>
-      buildHttp("POST", "/users", undefined, (() => 1) as never),
-    ).toThrow(/object/);
+    expect(() => buildHttp("POST", "/users", undefined, () => 1)).toThrow(
+      /object/,
+    );
   });
 
   test("rejects non-object path, query, and headers", () => {
@@ -1352,11 +1438,11 @@ describe("outbound request builder", () => {
     expect(request.queryParams).toBe(query);
   });
 
-  test("passes encoded query objects to the current serializer", async () => {
+  test("passes encoded query objects to the current serializer", () => {
     const Query = struct.object({
       pageSize: struct.number().alias("page_size"),
     });
-    const input = await parseEndpointInput(Query, { pageSize: 10 });
+    const input = parseEndpointInput(Query, { pageSize: 10 });
     let seen: unknown;
     const request = buildHttp(
       "GET",
@@ -1428,8 +1514,8 @@ describe("outbound request builder", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () => {
-          return makeResponse({ status: 204 });
+        createHttpInterceptor(() => {
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -1452,13 +1538,15 @@ describe("outbound request builder", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({
-            body: { display_name: "Ada" },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
+          return Promise.resolve(
+            makeResponse({
+              body: { display_name: "Ada" },
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          );
         }),
       ),
     );
@@ -1486,7 +1574,7 @@ describe("outbound request builder", () => {
     expect(captured?.endpoint).toBe("/users/7");
     expect(captured?.body).toBe('{"display_name":"Ada"}');
     expect(result).toEqual({ displayName: "Ada" });
-    expect(Object.getOwnPropertySymbols(result as object)).not.toContain(
+    expect(Object.getOwnPropertySymbols(dictionary(result))).not.toContain(
       STRUCT,
     );
   });
@@ -1496,9 +1584,9 @@ describe("outbound request builder", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -1512,22 +1600,22 @@ describe("outbound request builder", () => {
   });
 
   test("tags parsed endpoint objects and not public struct.parse", async () => {
-    const parsed = await parseEndpointInput(Profile, {
+    const parsed = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
     const [, value] = struct.parse(Profile, { birthday, displayName: "Ada" });
     const Item = struct.object({ id: struct.number() });
-    const items = await parseEndpointInput(struct.array(Item), [{ id: 1 }]);
+    const items = parseEndpointInput(struct.array(Item), [{ id: 1 }]);
     const Record = struct.record(Item);
-    const record = await parseEndpointInput(Record, { a: { id: 1 } });
+    const record = parseEndpointInput(Record, { a: { id: 1 } });
     const raw = { id: 1 };
-    const anyValue = await parseEndpointInput(struct.any(), raw);
+    const anyValue: unknown = await parseEndpointInput(struct.any(), raw);
     const Left = struct.object({ id: struct.number() });
     const Right = struct.object({ name: struct.string() });
     const Both = struct.intersection(Left, Right);
-    const first = await parseEndpointInput(Both, { id: 1, name: "A" });
-    const second = await parseEndpointInput(Both, { id: 2, name: "B" });
+    const first = parseEndpointInput(Both, { id: 1, name: "A" });
+    const second = parseEndpointInput(Both, { id: 2, name: "B" });
     const Alpha = struct.object({
       id: struct.number(),
       kind: struct.literal("a"),
@@ -1536,7 +1624,7 @@ describe("outbound request builder", () => {
       kind: struct.literal("b"),
       name: struct.string(),
     });
-    const union = await parseEndpointInput(struct.or(Alpha, Beta), {
+    const union = parseEndpointInput(struct.or(Alpha, Beta), {
       id: 1,
       kind: "a",
     });
@@ -1545,15 +1633,17 @@ describe("outbound request builder", () => {
     expect(Object.getOwnPropertyDescriptor(parsed, STRUCT)?.enumerable).toBe(
       true,
     );
-    expect(Object.getOwnPropertySymbols(value as object)).not.toContain(STRUCT);
+    expect(Object.getOwnPropertySymbols(dictionary(value))).not.toContain(
+      STRUCT,
+    );
     expect(Object.getOwnPropertySymbols(items)).not.toContain(STRUCT);
-    expect(structOf(items[0] as object)).toBe(Item);
+    expect(structOf(dictionary(items[0]))).toBe(Item);
     expect(structOf(record)).toBe(Record);
-    expect(structOf(record["a"] as object)).toBe(Item);
+    expect(structOf(dictionary(record["a"]))).toBe(Item);
     expect(anyValue).toBe(raw);
     expect(Object.getOwnPropertySymbols(raw)).not.toContain(STRUCT);
-    expect(Object.hasOwn(structOf(first) as object, DEFINITION)).toBe(false);
-    expect(Object.hasOwn(structOf(second) as object, DEFINITION)).toBe(false);
+    expect(Object.hasOwn(dictionary(structOf(first)), DEFINITION)).toBe(false);
+    expect(Object.hasOwn(dictionary(structOf(second)), DEFINITION)).toBe(false);
     expect(materializeOutboundRequest({ body: first }, "http").body).toBe(
       '{"id":1,"name":"A"}',
     );
@@ -1571,12 +1661,14 @@ describe("outbound request builder", () => {
     const outputClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () => {
-          return makeResponse({
-            body: payload,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
+        createHttpInterceptor(() => {
+          return Promise.resolve(
+            makeResponse({
+              body: payload,
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          );
         }),
       ),
     );
@@ -1590,18 +1682,20 @@ describe("outbound request builder", () => {
     expect(outputError).toBeNull();
     expect(output).toEqual(decoded);
     expectUntagged(output);
-    expectUntagged((output as { profile: object }).profile);
+    expectUntagged(nestedObject(dictionary(output), "profile"));
 
     const errorClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () => {
-          return makeResponse({
-            body: payload,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 404,
-            statusText: "Not Found",
-          });
+        createHttpInterceptor(() => {
+          return Promise.resolve(
+            makeResponse({
+              body: payload,
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 404,
+              statusText: "Not Found",
+            }),
+          );
         }),
       ),
     );
@@ -1619,33 +1713,33 @@ describe("outbound request builder", () => {
     expect(statusError.data).toEqual(decoded);
     expect(statusError.response.body).toBe(statusError.data);
     expectUntagged(statusError.data);
-    expectUntagged((statusError.data as { profile: object }).profile);
+    expectUntagged(nestedObject(dictionary(statusError.data), "profile"));
 
     const sseClient = createClient(
       withEndpoint("https://example.com"),
-      withSSEHandle((async () => {
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(
-                new TextEncoder().encode(
-                  'event: profile\ndata: {"display_name":"Ada","profile":{"trace_id":"t1"}}\n\n',
-                ),
-              );
-              controller.close();
+      withSSEHandle(() => {
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    'event: profile\ndata: {"display_name":"Ada","profile":{"trace_id":"t1"}}\n\n',
+                  ),
+                );
+                controller.close();
+              },
+            }),
+            {
+              headers: { "content-type": "text/event-stream" },
+              status: 200,
             },
-          }),
-          {
-            headers: { "content-type": "text/event-stream" },
-            status: 200,
-          },
+          ),
         );
-      }) as unknown as typeof fetch),
+      }),
     );
     const feed = defineEventStream({
       events: { profile: User },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     const [sseError, stream] = await feed(sseClient);
@@ -1663,7 +1757,7 @@ describe("outbound request builder", () => {
     ]);
     const sseData = events[0]?.data;
     expectUntagged(sseData);
-    expectUntagged((sseData as { profile: object }).profile);
+    expectUntagged(nestedObject(dictionary(sseData), "profile"));
 
     const message = await transformWebSocketMessage(
       struct.object({
@@ -1680,19 +1774,21 @@ describe("outbound request builder", () => {
       type: "profile",
     });
     expectUntagged(message);
-    expectUntagged((message as { profile: object }).profile);
+    expectUntagged(nestedObject(dictionary(message), "profile"));
   });
 
   test("fills sse path and query from the builder", async () => {
     let seen: Request | undefined;
     const client = createClient(
       withEndpoint("https://example.com"),
-      withSSEHandle(async (input, init) => {
+      withSSEHandle((input, init) => {
         seen = new Request(input, init);
-        return new Response("data: ok\n\n", {
-          headers: { "content-type": "text/event-stream" },
-          status: 200,
-        });
+        return Promise.resolve(
+          new Response("data: ok\n\n", {
+            headers: { "content-type": "text/event-stream" },
+            status: 200,
+          }),
+        );
       }),
     );
     const feed = defineEventStream({
@@ -1705,8 +1801,6 @@ describe("outbound request builder", () => {
         room: struct.string(),
         since: struct.string().optional(),
       }),
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       path: "/rooms/:room/events",
     });
 
@@ -1721,13 +1815,14 @@ describe("outbound request builder", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withWebSocketHandle(
+        // @ts-expect-error socket double records the url and then throws
         class {
           static OPEN = 1;
           constructor(nextUrl: string) {
             url = nextUrl;
             throw new Error("stop");
           }
-        } as unknown as typeof WebSocket,
+        },
       ),
     );
     const chat = defineWebSocket({
@@ -1742,13 +1837,19 @@ describe("outbound request builder", () => {
       protocols: ["chat.v1"],
     });
     const rejected = defineWebSocket({
-      builder: () => ({ headers: { token: "secret" } }) as never,
+      // @ts-expect-error websocket builders cannot set handshake headers
+      builder: () => ({
+        headers: { token: "secret" },
+      }),
       incoming: struct.unknown(),
       maxIncomingQueueSize: 1,
       path: "/ws/basic",
     });
     const rejectedBody = defineWebSocket({
-      builder: () => ({ body: "nope" }) as never,
+      // @ts-expect-error websocket builders cannot set a body
+      builder: () => ({
+        body: "nope",
+      }),
       incoming: struct.unknown(),
       maxIncomingQueueSize: 1,
       path: "/ws/basic",
@@ -1774,13 +1875,14 @@ describe("outbound request builder", () => {
       withEndpoint("https://example.com"),
       withQuerySerializer(() => "serialized=1"),
       withWebSocketHandle(
+        // @ts-expect-error socket double records the url and then throws
         class {
           static OPEN = 1;
           constructor(nextUrl: string) {
             urls.push(nextUrl);
             throw new Error("stop");
           }
-        } as unknown as typeof WebSocket,
+        },
       ),
     );
     const objectQuery = defineWebSocket({
@@ -1810,9 +1912,7 @@ describe("outbound request builder", () => {
     }));
 
     expect(request.endpoint).toBe("/files/safe");
-    expect(
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("serializes an own __proto__ query key and hands it to a serializer", () => {
@@ -1835,11 +1935,9 @@ describe("outbound request builder", () => {
     expect(plain.queryString).toBe("__proto__=safe");
     expect(custom.queryString).toBe("ok=1");
     expect(Object.getPrototypeOf(seen)).toBeNull();
-    expect(Object.hasOwn(seen as object, "__proto__")).toBe(true);
+    expect(Object.hasOwn(dictionary(seen), "__proto__")).toBe(true);
     expect(seen?.["__proto__"]).toEqual({ polluted: true });
-    expect(
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("applies an own __proto__ header name", () => {
@@ -1848,50 +1946,39 @@ describe("outbound request builder", () => {
     }));
 
     expect(request.headers?.get("__proto__")).toBe("safe");
-    expect(
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("preserves a nested anonymous __proto__ key in a json body", () => {
     const request = buildHttp("POST", "/body", undefined, () => ({
       body: { nested: ownData("__proto__", "safe") },
     }));
-    const decoded = JSON.parse(String(request.body)) as {
-      nested: { [key: string]: unknown };
-    };
+    const decoded = nestedObject(jsonObject(request.body), "nested");
 
-    expect(Object.hasOwn(decoded.nested, "__proto__")).toBe(true);
-    expect(decoded.nested["__proto__"]).toBe("safe");
+    expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
+    expect(decoded["__proto__"]).toBe("safe");
   });
 
-  test("preserves a tagged field literally named __proto__", async () => {
+  test("preserves a tagged field literally named __proto__", () => {
     const Payload = struct.object(protoStringShape());
-    const parsed = await parseEndpointInput(
-      Payload,
-      ownData("__proto__", "safe") as never,
-    );
+    const parsed = parseEndpointInput(Payload, ownData("__proto__", "safe"));
     const request = buildHttp("POST", "/body", parsed, () => ({
       body: parsed,
     }));
-    const decoded = JSON.parse(String(request.body)) as {
-      [key: string]: unknown;
-    };
+    const decoded = jsonObject(request.body);
 
-    expect(structOf(parsed as object)).toBe(Payload);
-    expect(Object.hasOwn(parsed as object, "__proto__")).toBe(true);
+    expect(structOf(dictionary(parsed))).toBe(Payload);
+    expect(Object.hasOwn(dictionary(parsed), "__proto__")).toBe(true);
     expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
     expect(decoded["__proto__"]).toBe("safe");
-    expect(
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
-  test("preserves a tagged field aliased to __proto__", async () => {
+  test("preserves a tagged field aliased to __proto__", () => {
     const Payload = struct.object({
       label: struct.string().alias("__proto__"),
     });
-    const parsed = await parseEndpointInput(Payload, { label: "safe" });
+    const parsed = parseEndpointInput(Payload, { label: "safe" });
     let seen: { [key: string]: unknown } | undefined;
     const body = buildHttp("POST", "/body", parsed, () => ({ body: parsed }));
     const query = buildHttp(
@@ -1907,7 +1994,7 @@ describe("outbound request builder", () => {
     const headers = buildHttp("GET", "/search", parsed, () => ({
       headers: parsed,
     }));
-    const decoded = JSON.parse(String(body.body)) as { [key: string]: unknown };
+    const decoded = jsonObject(body.body);
 
     expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
     expect(decoded["__proto__"]).toBe("safe");
@@ -1917,41 +2004,60 @@ describe("outbound request builder", () => {
     expect(headers.headers?.get("__proto__")).toBe("safe");
   });
 
-  test("preserves a nested tagged field named __proto__", async () => {
+  test("preserves a nested tagged field named __proto__", () => {
     const Inner = struct.object(protoStringShape());
     const Outer = struct.object({ inner: Inner });
-    const parsed = await parseEndpointInput(Outer, {
+    const parsed = parseEndpointInput(Outer, {
       inner: ownData("__proto__", "safe"),
-    } as never);
+    });
     const request = buildHttp("POST", "/body", parsed, () => ({
       body: parsed,
     }));
-    const decoded = JSON.parse(String(request.body)) as {
-      inner: { [key: string]: unknown };
-    };
+    const decoded = nestedObject(jsonObject(request.body), "inner");
 
-    expect(Object.hasOwn(decoded.inner, "__proto__")).toBe(true);
-    expect(decoded.inner["__proto__"]).toBe("safe");
+    expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
+    expect(decoded["__proto__"]).toBe("safe");
   });
 
-  test("appends form fields whose wire key is __proto__", async () => {
+  test("appends form fields whose wire key is __proto__", () => {
     const Urlencoded = struct.urlencoded(protoStringShape());
-    const urlencodedInput = await parseEndpointInput(
+    const urlencodedInput = parseEndpointInput(
       Urlencoded,
-      ownData("__proto__", "safe") as never,
+      ownData("__proto__", "safe"),
     );
     const urlencoded = buildHttp("POST", "/form", undefined, () => ({
       body: urlencodedInput,
     }));
     const Form = struct.formData({ label: struct.string().alias("__proto__") });
-    const formInput = await parseEndpointInput(Form, { label: "safe" });
+    const formInput = parseEndpointInput(Form, { label: "safe" });
     const form = buildHttp("POST", "/form", undefined, () => ({
       body: formInput,
     }));
 
     expect(urlencoded.body).toBeInstanceOf(URLSearchParams);
-    expect((urlencoded.body as URLSearchParams).get("__proto__")).toBe("safe");
+    expect(bodyParams(urlencoded.body).get("__proto__")).toBe("safe");
     expect(form.body).toBeInstanceOf(FormData);
-    expect((form.body as FormData).get("__proto__")).toBe("safe");
+    expect(bodyForm(form.body).get("__proto__")).toBe("safe");
+  });
+});
+
+describe("outbound passthrough groups", () => {
+  test("encode a fresh object under two any/unknown union guides field by field", () => {
+    const Left = struct.object({
+      x: struct.or(struct.unknown(), struct.string()),
+    });
+    const Right = struct.object({
+      x: struct.or(struct.unknown(), struct.string()),
+    });
+    const input = parseEndpointInput(struct.intersection(Left, Right), {
+      x: "seed",
+    });
+
+    expect(
+      materializeOutboundRequest(
+        { body: { ...input, x: { at: new Date(0) } } },
+        "http",
+      ).body,
+    ).toBe('{"x":{"at":"1970-01-01T00:00:00.000Z"}}');
   });
 });

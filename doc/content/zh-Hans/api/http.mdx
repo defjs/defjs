@@ -5,83 +5,83 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 # HTTP
 
-声明一次类型化请求，再带着 client 和它的 input 调用该操作。
+声明一个带类型的请求，再用 Client 和 input 调用该操作。
 
 ## defineRequest()
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`、`path`，可选 `input` struct，可选 `output` 和 `error` struct，可选 `operation`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员写在 [`RequestDefinition`](/zh-Hans/api/core/requestdefinition-type)。`builder` 恰好在声明了 `input` 时才必填。
-- **返回** 一个操作。调用方式是 `getUser(client, input)`；没有声明 input 时是 `health(client)`。整个 input struct 可选时，可以省略 input 参数。调用它即开始请求。没有第三个 options 参数。
+- **definition** — `method`、`path`，可选 `input` struct，可选 `output` 和 `error` struct，可选 `operation`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`RequestDefinition`](/zh-Hans/api/core/requestdefinition-type)。`builder` 恰好在声明 `input` 时必填。
+- **返回** 一个操作。调用方式是 `getOrder(client, input)`；未声明 input 时是 `health(client)`。整个 input struct 可选时，可以省略 input 参数。调用它即开始请求。没有第三个选项参数。
 
 <include cwd>examples/api/define-request.ts#example</include>
 
 `output` 是 2xx body 的单一 struct；`error` 是每个非 2xx body 的单一 struct。两者都不按状态码分键。省略哪个，那个 body 就根本不会被读——见
 [声明即断言](/zh-Hans/docs/design-decisions#declaration-is-an-assertion)。
 
-调用该操作会返回一个 promise，其值是 [`HttpAwaitResult`](/zh-Hans/api/core/httpawaitresult-type) 所描述的 tuple。按次选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 传入。HTTP 读取 `signal` 和进度回调，忽略其余字段。
+调用该操作会返回一个 promise，其值是 [`HttpAwaitResult`](/zh-Hans/api/core/httpawaitresult-type) 描述的元组。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。HTTP 读取 `signal` 和进度回调，忽略其他字段。
 
-没有声明 `error` struct，或所声明的 `error` body 能成功解码时，非 2xx 状态才是 `HTTP_STATUS`。声明过 `error` 时 fault 的 `data` 是解码后的错误 body，否则是 `undefined`。如果所声明的 `error` body 无法读取（媒体类型错误、JSON 无效）或与其 struct 不匹配，则 fault 改为 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，响应状态仍会记在它的元数据里。失败时 tuple 第三项是 `undefined`；响应元数据由 fault 携带。
+未声明 `error` struct，或声明的 `error` body 能解码时，非 2xx 状态为 `HTTP_STATUS`。声明过 `error` 时，`Fault` 的 `data` 是解码后的错误 body，否则为 `undefined`。如果声明的 `error` body 无法读取（媒体类型错误、JSON 无效）或与 struct 不匹配，`Fault` 改为 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，响应状态仍记录在其元数据中。失败时元组第三项为 `undefined`；响应元数据由 `Fault` 携带。
 
 ## fetchHandler()
 
 <ApiSignature name="fetchHandler" />
 
-默认 HTTP 传输。`fetchImpl` 默认是在发送时解析的全局 `fetch`；`withHTTPHandle` 可换成别的实现。未被替换的平台 Fetch 收到 `(url, init)`，被替换的全局实现或自定义 handle 则收到 `Request`。没有响应到达 client，或读取已声明的 body 失败时，它会 reject，而不是 resolve 一个合成响应。
+默认 HTTP 传输。`fetchImpl` 默认是在发送时解析的全局 `fetch`；`withHTTPHandle` 可提供其他实现。未被替换的平台 Fetch 收到 `(url, init)`，被替换的全局实现或自定义句柄收到 `Request`。没有响应到达 Client，或读取声明的 body 失败时，它会 reject，而不是解析为合成响应。
 
 ## makeResponse()
 
 <ApiSignature name="makeResponse" />
 
-不走网络造一个 `HttpResponse`（interceptor、测试）。默认 status 是 `0`。2xx 时 `ok` 为 true。它返回的值会走和网络响应完全一样的媒体类型检查和声明 struct；不存在受信任的短路。
+不发起网络调用即可构造 `HttpResponse`（用于拦截器或测试）。默认 status 为 `0`。2xx 时 `ok` 为 true。返回值会经过与网络响应相同的媒体类型检查和声明 struct；不存在可信短路。
 
 ## HttpExecuteOptions
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 的 HTTP 切片：[`UseRequestConfig`](/zh-Hans/api/core/userequestconfig-type)，即 `signal` 加上 `onDownloadProgress` 和 `onUploadProgress`。没有 `timeout` 或 `abort` 字段。期限是 `signal: AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。`signal` 是这次调用的 signal；要组合 signal，在应用代码里用 `AbortSignal.any`。没有 client 级的默认期限。其他请求字段，例如 `heartbeat`，会被忽略。
+`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 的 HTTP 部分：[`UseRequestConfig`](/zh-Hans/api/core/userequestconfig-type)，即 `signal` 加上 `onDownloadProgress` 和 `onUploadProgress`。没有 `timeout` 或 `abort` 字段。期限是 `signal: AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。`signal` 是本次调用的 signal；要组合 signal，在应用代码中使用 `AbortSignal.any`。没有 Client 级默认期限。其他请求字段（例如 `heartbeat`）会被忽略。
 
 ## 类型
 
 ### RequestDefinition
 
-`method`、`path`，可选 `input`、`output`、`error`、`operation` 和 `builder`。没有 `responseType`：声明 body 怎么读，由 struct kind 决定。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
+`method`、`path`，可选 `input`、`output`、`error`、`operation` 和 `builder`。声明 body 的读取方式由 struct 类型决定。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ### HttpAwaitResult
 
 <ApiSignature name="HttpAwaitResult" />
 
-成功时第三项只有在声明过 `output` 时才带 `body`。失败时它是 `undefined`——fault 已经握着当时存在的响应元数据。
+成功时，只有声明过 `output`，第三项才携带 `body`。失败时它仍是 `undefined`——`Fault` 已经持有当时存在的响应元数据。
 
 ### HttpRequest
 
-规范化后的出站请求：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString` 和 `queryParams`。Interceptor 看到它时，`body` 已经是传输值——JSON 时是 JSON 文本字符串——所以 HMAC 和摘要要针对它来签，而不是针对 struct 输入。Interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。builder 返回 `URLSearchParams` 时，传过去的就是那个实例。`responseType` 和 `errorResponseType` 是只读的：它们由端点的 `output` 与 `error` struct kind 推导而来，不能修改。
+规范化后的出站请求：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString` 和 `queryParams`。拦截器看到它时，`body` 已经是网络值——JSON 时是 JSON 文本字符串——因此 HMAC 和摘要要针对它来签，而不是针对 struct 输入。拦截器看到的 `queryParams` 是 `new URLSearchParams(queryString)`。`builder` 返回 `URLSearchParams` 时，该实例会原样传入。`responseType` 和 `errorResponseType` 是只读的：它们由声明的 `output` 与 `error` struct 类型推导而来，不能修改。
 
 ### HttpMeta
 
 <ApiSignature name="HttpMeta" />
 
-响应元数据，只要有响应到达 client 就有。它**不**带 `body`：body 只有在声明过的 struct 解出来之后才存在。
+响应元数据，只要有响应到达 Client 就可用。它**不**带 `body`：只有声明过的 struct 解码出 body 之后，body 才存在。
 
 ### DecodedResponse
 
 <ApiSignature name="DecodedResponse" />
 
-body 已按声明的 struct 解码成功的响应。拿到这个类型就是解码确实发生过的证明——这也正是解码失败时只报 `HttpMeta` 的原因。
+body 已按声明的 struct 解码成功的响应。持有这个类型就证明解码确实发生过——这也是解码失败时只报告 `HttpMeta` 的原因。
 
 ### HttpResponse
 
 <ApiSignature name="HttpResponse" />
 
-响应没有 body 时，`body` 是 `undefined`；JSON `null` 仍是 `null`。该类型带类型标记，所以请用 `makeResponse` 构造，不要用对象字面量。这是传输产出、interceptor 看到的传输形状：`body` 是文本或已解析的 JSON，不是解码后的值。对于 JSON 表示，字符串是 JSON 字符串根，不会再次解析；字节和 blob 仍是原始数据，只解析一次。到达调用方的是 `DecodedResponse`。
+响应没有 body 时，`body` 是 `undefined`；JSON `null` 仍是 `null`。该类型带品牌标记，因此请用 `makeResponse` 构造，不要用对象字面量。这是传输层产出、拦截器看到的网络形态：`body` 是文本或已解析的 JSON，不是解码后的值。对于 JSON 表示，字符串是 JSON 字符串根，不会再次解析；字节和 blob 是原始数据，只解析一次。到达调用方的是 `DecodedResponse`。
 
 ### HttpProgressEvent
 
 ### HttpProgressFn
 
-`loaded`、`total`、`lengthComputable`。回调可以异步执行。`onDownloadProgress` 或 `onUploadProgress` 抛出异常时，调用会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`；取消仍报告 `NET_ABORTED`，中止原因是超时时报告 `NET_TIMEOUT`。只有支持流式发送请求体的运行时（Bun、Node）才会报告上传进度；在浏览器中，`Blob` / `File`、`ArrayBuffer` 和 `FormData` 请求体会原样发送，不会调用 `onUploadProgress`。
+`loaded`、`total`、`lengthComputable`。回调可以异步执行。`onDownloadProgress` 或 `onUploadProgress` 抛出异常时，调用会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`；取消仍报告 `NET_ABORTED`，中止原因是超时时报告 `NET_TIMEOUT`。只有支持流式发送请求体的运行时（Bun）才会报告上传进度；在浏览器中，`Blob` / `File`、`ArrayBuffer` 和 `FormData` 请求体会原样发送，不会调用 `onUploadProgress`。
 
-在服务端运行时，FormData 使用序列化后的流，不会先把整个请求体缓冲成 Blob，并且保留实际的 multipart 边界。除非显式提供有效的 `Content-Length`，否则总长度未知。上传转换会保留显式设置的内容类型，但 FormData 必须使用其序列化产生的边界。`loaded` 统计流中的字节，不代表服务器已经确认收到的字节。带非 identity `Content-Encoding` 的下载报告 `total: 0` 和 `lengthComputable: false`；它们的流字节可能已经解压。
+在服务端运行时，FormData 使用其序列化后的流，不会把整个 body 缓冲成 Blob，并保留实际的 multipart 边界。除非提供了有效的显式 `Content-Length`，否则总长度未知。显式内容类型会在上传转换中保留，但 FormData 必须使用其序列化产生的边界。`loaded` 统计流中的字节，不代表服务端确认。带非 identity `Content-Encoding` 的下载报告 `total: 0` 和 `lengthComputable: false`；其流字节可能已经解压。
 
 见 [HTTP 指南](/zh-Hans/docs/http) 和 [Client](/zh-Hans/docs/client)。
 
@@ -91,15 +91,15 @@ body 已按声明的 struct 解码成功的响应。拿到这个类型就是解�
 
 ## BuilderInput
 
-`builder` 看到的、已经 parse 过的 endpoint input。对象节点带着产出它的 struct，所以 alias、`Date`、`bigint` 编码跟着这个值走。
+`builder` 看到的、解析后的操作 input。对象节点携带产生它的 struct，因此别名、`Date` 和 `bigint` 编码跟随该值。
 
 ## HttpRequestShape
 
 <ApiSignature name="HttpRequestShape" />
 
-四个字段都可选。`query` 是 `URLSearchParams` 或一条 record；嵌套对象在运行时需要 `withQuerySerializer`。`headers` 是 `HeadersInit`，或由标量、标量数组组成的 record。`path` 为每个 `:name` 片段提供一个标量。
+四个字段都可选。`query` 是 `URLSearchParams` 或 record；嵌套对象在运行时需要 `withQuerySerializer`。`headers` 是 `HeadersInit`，或由标量、标量数组组成的 record。`path` 为每个 `:name` 片段提供一个标量。
 
-`GET` 和 `HEAD` 的 `body` 是 `never`。其他方法下，它可以是传输值（`string`、`Blob`、`ArrayBuffer`、typed array 或 `DataView`、`FormData`、`URLSearchParams` 或 `ReadableStream<Uint8Array>`），也可以是 JSON 数据（`number`、`boolean`、`bigint`、`Date`、`null`、数组，或键为字符串的对象）。
+`GET` 和 `HEAD` 的 `body` 是 `never`。其他方法下，它可以是网络值（`string`、`Blob`、`ArrayBuffer`、类型化数组或 `DataView`、`FormData`、`URLSearchParams` 或 `ReadableStream<Uint8Array>`），也可以是 JSON 数据（`number`、`boolean`、`bigint`、`Date`、`null`、数组，或键为字符串的对象）。
 
 ## UseRequestConfig
 
@@ -117,7 +117,7 @@ body 已按声明的 struct 解码成功的响应。拿到这个类型就是解�
 
 `'arraybuffer' | 'blob' | 'json' | 'text'`
 
-由声明的 struct kind 选出（`string` → `text`，`blob` / `file` → `blob`，`arrayBuffer` → `arraybuffer`，其余 → `json`）。不是 `defineRequest` 上的字段。
+由声明的 struct 类型选出（`string` → `text`，`blob` / `file` → `blob`，`arrayBuffer` → `arraybuffer`，其他 → `json`）。不是 `defineRequest` 上的字段。
 
 ## MakeResponseOptions
 

@@ -5,7 +5,7 @@ description: HTTP、SSE、WebSocket のインターセプターコンストラ�
 
 # Interceptors
 
-1 つのトランスポート向けに `next` を包みます。`withInterceptors` で登録します。混在リストは、操作が実行されるときに kind でフィルタされます。
+1 つのトランスポート向けに `next` を包みます。`withInterceptors` で登録します。混在したリストは、操作が実行されるときに種類ごとにフィルタされます。
 
 ## createHttpInterceptor()
 
@@ -27,7 +27,7 @@ description: HTTP、SSE、WebSocket のインターセプターコンストラ�
 
 <ApiSignature name="WebSocketSessionLike" />
 
-wrapper やショートサーキットのセッションは、`close` / `closed` のライフサイクルと同じ `[Symbol.asyncDispose]()` の teardown を転送する必要があります。無関係な解決済み promise を返すのでは足りません。このメンバーを要求することは、構造的実装にとってはコンパイル時の破壊的変更です。Defjs が返すセッションだけを受け取るコードには、追加の実行時呼び出しは要りません。
+ラッパーやショートサーキットのセッションは、`close` / `closed` のライフサイクルと同じ `[Symbol.asyncDispose]()` の破棄処理を委譲する必要があります。無関係な解決済み promise を返すのでは足りません。
 
 ## タグ付きの型
 
@@ -51,6 +51,6 @@ wrapper やショートサーキットのセッションは、`close` / `closed`
 
 <ApiSignature name="basicAuthHttpInterceptor, basicAuthSSEInterceptor, BasicAuthInterceptorOptions" />
 
-リクエストごとに `Authorization: Basic <encoded>` をセットします。`fn` は `{ username, password }` を返し、リクエストごとに呼ばれます。省略可能な第 2 引数 `{ encode }` はその credential を受け取り、`Basic ` の後ろの部分を返します。デフォルトの符号化は ``btoa(`${username}:${password}`)`` です。`encode` がなく `btoa` が使えない環境では、インターセプターの作成時に throw します。
+リクエストごとに `Authorization: Basic <encoded>` を設定します。`fn` は `{ username, password }` を返し、リクエストごとに呼ばれます。省略可能な第 2 引数 `{ encode }` はその認証情報を受け取り、`Basic ` の後ろの部分を返します。デフォルトの符号化は ``btoa(`${username}:${password}`)`` です。`encode` がなく `btoa` が使えない環境では、インターセプターの作成時に throw します。
 
-[Interceptors ガイド](/ja-JP/docs/interceptors) を見てください。
+[インターセプターガイド](/ja-JP/docs/interceptors) を見てください。

@@ -1,43 +1,40 @@
 ---
 title: SSE
-description: defineEventStream、request options，同 stream handle。
+description: defineEventStream、request options，同事件流 handle。
 ---
 
 # SSE
 
-聲明一條 event stream，用 client 呼叫操作，逐個讀取 events，之後關閉。
+宣告一條事件流，用 client 呼叫操作，逐個讀取 event，之後關閉。
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`、`events` map，以及必填、為正整數嘅上限 `maxBufferSize` 同 `maxQueueSize`；可選 `method`（default `'GET'`）、`operation`、`input` 同 `error`。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` members 寫喺 [`EventStreamDefinition`](/zh-Hant-HK/api/core/eventstreamdefinition-type)。只有俾咗 error struct type 嗰陣 `error` 先必填，`builder` 恰好喺聲明咗 `input` 嗰陣先必填。
-- **Returns** 一個操作。第一個參數係 [`Client`](/zh-Hant-HK/api/core/client-type)。之後嘅參數只係 input。呼叫就開始 stream。
+- **definition** — `path` 同 `events` map；可選 `method`（預設 `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（預設 `64 * 1024`）同 `maxQueueSize`（預設 `1024`）。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` 成員記錄喺 [`EventStreamDefinition`](/zh-Hant-HK/api/core/eventstreamdefinition-type)。只有提供咗 error struct 型別嗰陣，`error` 先必填；`builder` 只有喺宣告咗 `input` 嗰陣先必填。
+- **Returns** 一個操作。第一個參數係 [`Client`](/zh-Hant-HK/api/core/client-type)。之後嘅參數只係 input。呼叫就會開始事件流。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼叫 return `[null, stream, open]` 或者 `[error, undefined, open?]`。聲明過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`signal` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `signal`，progress 同 WebSocket field 會忽略。
+呼叫回傳 `[null, stream, open]` 或者 `[error, undefined, open?]`。宣告過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`signal` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `signal`，progress 同 WebSocket 欄位會忽略。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` 係 `{ signal? }`。冇 `timeout` 或 `abort` field，亦冇 progress callback。`signal` 覆蓋成條 stream，包括 open 之後。Deadline 係 `AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。冇只限啟動嘅 deadline，亦冇 client 層級嘅預設 deadline。應用程式想要只限啟動嘅 deadline，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer。
+`EventStreamExecuteOptions` 係 `{ signal? }`。冇 `timeout` 或 `abort` 欄位，亦冇 progress callback。`signal` 覆蓋成條串流，包括 open 之後。截止期限係 `AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。冇只限啟動嘅截止期限，亦冇 client 層級嘅預設截止期限。應用程式想要只限啟動嘅截止期限，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 回傳之後清走 timer。
 
 ## EventStreamHandle
 
 <ApiSignature name="EventStreamHandle" />
 
-Tuple 第三項係 `open` 嘅 startup snapshot；reconnect 之後，`stream.open` 會跟住最新嘅連線。呢個第三項只喺返回嘅 Defjs 原生 handle 或透傳同一 live `open` 物件嘅 wrapper 上，先保證係所屬連線首次成功 handshake 嘅 snapshot；custom handle 或明確覆寫 `open` 嘅 wrapper 就算已經 reconnect，都保留自己目前公開嘅 `open`，所以共用 `closed` 唔可以繞過 URL 淨化或 headers 過濾，Defjs 亦唔會由任意 metadata 變換反推首次 handshake。 自己 own 嘅 scope 優先用 `await using stream = handle` cleanup。Disposer 會停低 Defjs 嘅 read 同 reconnect work，再等 reader lock release；但唔保證由 provider 控制兼卡死咗嘅 `ReadableStream.cancel()` promise 一定完成。Manual `close()` / `closed` 仍然用得。
+tuple 第三項係 `open` 嘅啟動 snapshot；重連之後，`stream.open` 會跟住最新嘅連線。呢個第三項只喺返回嘅 Defjs 原生 handle 或者透傳同一 live `open` 物件嘅 wrapper 上，先保證係所屬連線首次成功握手嘅 snapshot；自訂 handle 或者明確覆寫 `open` 嘅 wrapper 就算已經重連，都保留自己目前公開嘅 `open`，所以共用 `closed` 唔可以繞過 URL 淨化或者 headers 過濾，Defjs 亦唔會由任意 metadata 變換反推首次握手。自己擁有嘅 scope 優先用 `await using stream = handle` 做清理。disposer 會停止 Defjs 嘅讀取同重連工作，再等 reader lock 釋放；但唔保證由 provider 控制兼卡死咗嘅 `ReadableStream.cancel()` promise 一定完成。手動 `close()` / `closed` 仍然可以用。
 
-```ts
-async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
-  await using stream = handle;
-  for await (const event of stream) console.log(event);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-event-stream.ts#example
+</include>
 
-自己 structural implement `EventStreamHandle` 嘅 code，而家必須 implement `[Symbol.asyncDispose]()`，並 return 同一條 owned teardown path。對 custom handle implementer 嚟講係 compile-time breaking change；淨係接收 Defjs handle 嘅 code 唔使加新 runtime call。
+自行以結構式方式實作 `EventStreamHandle` 嘅程式碼，必須實作 `[Symbol.asyncDispose]()`，並回傳同一條自己擁有嘅 teardown 路徑。
 
 ### EventStreamOpenInfo
 
@@ -47,25 +44,25 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` 係 `eof`、`aborted` 或者 `error`。每個 variant 都可以帶 `reason` 同 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-HK/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
+`kind` 係 `eof`、`aborted` 或者 `error`。每個變體都可以帶 `reason` 同 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-HK/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 同 `REQ_OPTIONS_INVALID` 表示串流開啟之後，重連時揀選端點失敗。`HTTP_STATUS` 表示重連握手以非 2xx 狀態結束。
 
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
 
-Key 係 SSE event 名稱；冇 `event:` 欄位嘅訊息名為 `message`。冇 key 配得上嗰陣，就用 `default` struct。`string` event struct 會保留 raw `data` text。其他 kind 都係 JSON text：先 `JSON.parse`，再過 struct。所以 bare `struct.literal` 要 JSON text，唔係冇引號嘅 token。Handshake `error` bodies 用同 HTTP 一樣嘅 kind rule：`string` 係 text，`blob` / `file` 係 blobs，`arrayBuffer` 係 bytes，其他就係 JSON。
+key 係 SSE event 名稱；冇 `event:` 欄位嘅訊息名為 `message`。冇 key 匹配嗰陣，就用 `default` struct。`string` event struct 會保留原始 `data` 文字。其他種類都係 JSON 文字：先 `JSON.parse`，再交俾 struct。所以裸 `struct.literal` 需要 JSON 文字，而唔係冇引號嘅 token。握手 `error` body 用同 HTTP 一樣嘅種類規則：`string` 係文字，`blob` / `file` 係 blob，`arrayBuffer` 係 bytes，其他就係 JSON。
 
-重連設定喺 client（`withSSEReconnect`）。SSE `jitter` 係 **0–1 multiplicative factor**，同 WebSocket 一樣。
+重連設定喺 client（`withSSEReconnect`）。SSE `jitter` 係 **0–1 嘅乘性因子**，同 WebSocket 一樣。
 
-成功握手之後，重試預算同退避指數會重設；兩者都適用於每次斷線。無效嘅數值選項會喺開啟 stream 之前回傳 `REQ_OPTIONS_INVALID`，而 `maxDelayMs` 會限制套用 jitter 之後嘅最終延遲。驗證規則、預設值同 UTF-8 `Last-Event-ID` 處理見 [`withSSEReconnect`](/zh-Hant-HK/api/core/withssereconnect)。
+每次成功握手之後，重試預算同退避指數都會重設；兩者都適用於每次斷線，所以即使設定 `attempts: 1`，長時間會話入面仍然可以建立好多次連線。伺服器正常 EOF 唔會觸發重連，EOF 時未完成嘅 event 亦唔會提交佢嘅 id。回應 502、503 或 504 嘅握手會當作連線被拒絕咁重試，並跟同一套重連規則（方法、`shouldReconnect`、`attempts`、`ReadableStream` body）；其他非 2xx 握手係致命。重試用盡同致命嘅重連握手都會以 `HTTP_STATUS` 結束；請查看即時嘅 `stream.open.response.status` 取得嗰個狀態。無效嘅數值選項會喺開啟串流之前回傳 `REQ_OPTIONS_INVALID`，而 `maxDelayMs` 會限制套用 jitter 之後嘅最終延遲。驗證規則、預設值同 UTF-8 `Last-Event-ID` 處理見 [`withSSEReconnect`](/zh-Hant-HK/api/core/withssereconnect)。
 
-Parser 遵循 WHATWG SSE 嘅行同欄位規則，每條實體 stream 只會移除開頭一個 UTF-8 BOM。Data 或 ID 值入面嘅 U+FEFF 會保留；之後以 BOM 開頭嘅欄位名會當成未知欄位而被忽略。多行 data 會用 `\n` 連接，空行會送出帶 data 嘅 event，EOF 時未完成嘅 event 會被丟棄。
+解析器遵循 WHATWG 嘅 SSE 行同欄位規則，每條實體串流只會移除開頭一個 UTF-8 BOM。data 或 ID 值入面嘅 U+FEFF 會保留；之後以 BOM 開頭嘅欄位名會當成未知欄位而被忽略。多行 data 會用 `\n` 連接，空行會送出帶 data 嘅 event，EOF 時未完成嘅 event 會被丟棄。
 
-睇 [SSE guide](/zh-Hant-HK/docs/sse) 同 [Consume an SSE stream](/zh-Hant-HK/recipes/consume-sse)。
+睇 [SSE 指南](/zh-Hant-HK/docs/sse) 同[使用 SSE 事件流](/zh-Hant-HK/recipes/consume-sse)。
 
 ## EventStreamDefinition
 
-`path`、`events`、必填嘅 `maxBufferSize` 同 `maxQueueSize`，可選 `method` / `operation` / `input` / `error`。Request shape 同 HTTP 一樣，包括 `body`。`GET` 同 `HEAD` 唔可以 return body。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
+`path`、`events`，可選 `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize`。request 形狀同 HTTP 一樣，包括 `body`。`GET` 同 `HEAD` 唔可以帶 body。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ## EventStreamEndpoint
 
@@ -73,7 +70,7 @@ Parser 遵循 WHATWG SSE 嘅行同欄位規則，每條實體 stream 只會移�
 
 ## EventStreamRequestShape
 
-Fields 同條 stream 嘅 method 同 path 對應嘅 `HttpRequestShape` 一樣。
+欄位同 `HttpRequestShape` 一樣，對應嗰條串流嘅 method 同 path。
 
 ## StreamAwaitResult
 
@@ -81,4 +78,4 @@ Fields 同條 stream 嘅 method 同 path 對應嘅 `HttpRequestShape` 一樣。
 
 ## EventStreamData
 
-由 `EventStructs` map infer 出嚟、parse 完嘅 event payload。
+由 `EventStructs` map 推斷出嚟、已解析嘅 event payload。

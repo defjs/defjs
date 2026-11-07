@@ -5,7 +5,7 @@ description: Fault variants and factory helpers.
 
 # Errors
 
-Execute returns a discriminated `Fault` in the tuple's first slot — not a thrown exception for
+An operation returns a discriminated `Fault` in the tuple's first slot — not a thrown exception for
 declared failures.
 
 ## FaultCode
@@ -49,7 +49,7 @@ those helpers are not copied onto the fault.
 
 <ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
 
-Any non-2xx status. When the endpoint declared `error` and the body decoded, `data` is that body
+Any non-2xx status. When the definition declared `error` and the body decoded, `data` is that body
 and `response` carries it. When `error` was omitted the body is never read, which leaves `data` as
 `undefined` and `response` as metadata alone.
 
@@ -67,15 +67,17 @@ unreadable representation.
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
 Everything that may have failed before a response existed: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`,
-`ENV_UNSUPPORTED`. `response` is present only where the transport already had metadata to report,
+`ENV_UNSUPPORTED`. `response` is `undefined` until the transport has metadata to report,
 such as a body that truncated mid-download.
+
+Invalid `withRetry` options return `REQ_OPTIONS_INVALID` before HTTP transport starts, with `Invalid retry options`. This includes a non-object policy, a `maxAttempts` value that is not a safe integer at least 1, and invalid conditions, methods, timeouts, backoff, or budget settings. Omitting `withRetry` disables retries. `withRetry()` and `withRetry(undefined)` behave like `withRetry({})`. `withRetry({ maxAttempts: 1 })` turns retries off after they were enabled.
 
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
 
 Any fault regardless of its decoded error-body type. Use it for handlers that classify faults
-without caring which endpoint produced them; prefer `Fault<typeof yourErrorStruct>` where the body
+without caring which operation produced them; prefer `Fault<typeof yourErrorStruct>` where the body
 type matters.
 
 ## Factories
@@ -93,9 +95,9 @@ type matters.
 <ApiSignature name="createHttpStatusFault, createUndecodedHttpStatusFault, createDecodeFault, createNetworkFault, createPreflightFault" />
 
 `createHttpStatusFault` takes a response that already carries the decoded body;
-`createUndecodedHttpStatusFault` takes metadata alone, for an endpoint that declared no `error`.
+`createUndecodedHttpStatusFault` takes metadata alone, for a definition that declared no `error`.
 
-`createNetworkFault` uses [`isAbortCause`](/api/core/isabortcause) for `NET_ABORTED` and [`isTimeoutCause`](/api/core/istimeoutcause) for `NET_TIMEOUT`: these recognize branded sentinels from any Core copy, a `DOMException` named `AbortError`, and a `DOMException` or `Error` named `TimeoutError`, respectively. Everything else maps to `NET_UNREACHABLE`. `createPreflightFault` takes the code directly; with no
+`createNetworkFault` uses [`isAbortCause`](/api/core/isabortcause) for `NET_ABORTED` and [`isTimeoutCause`](/api/core/istimeoutcause) for `NET_TIMEOUT`: both recognize branded sentinels from any Core copy; `isAbortCause` also recognizes a `DOMException` named `AbortError`, and `isTimeoutCause` recognizes a `DOMException` or `Error` named `TimeoutError`. Everything else maps to `NET_UNREACHABLE`. `createPreflightFault` takes the code directly; with no
 `cause`, the code becomes the message.
 
 All factories return native `Error` instances with the structured fields above; they do not create
@@ -120,5 +122,13 @@ The sentinels carry non-enumerable `Symbol.for('defjs.cause.aborted')` and `Symb
 <ApiSignature name="isAbortCause, isTimeoutCause" />
 
 [`isAbortCause`](/api/core/isabortcause) recognizes an abort-branded `Error` or a `DOMException` named `AbortError`. [`isTimeoutCause`](/api/core/istimeoutcause) recognizes a timeout-branded `Error` or a `DOMException` / `Error` named `TimeoutError`. Pass `fault.cause` to classify the underlying value; these functions do not unwrap a fault. They work with sentinels from another Core copy.
+
+## ERR_NO_CANDIDATE
+
+## isNoCandidateCause
+
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`ERR_NO_CANDIDATE` appears only as the `cause` of `REQ_BUILD_FAILED`, when no candidate endpoint can be selected. It does not add a `FaultCode`. The sentinel carries a non-enumerable `Symbol.for('defjs.cause.no-endpoint')` brand. [`isNoCandidateCause`](/api/core/isnocandidatecause) recognizes that brand from another Core copy, the same way [`isAbortCause`](/api/core/isabortcause) recognizes an abort. Pass `fault.cause`. It does not unwrap a fault.
 
 See [Errors guide](/docs/errors).

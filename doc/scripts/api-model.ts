@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { firstParagraph } from "../app/lib/api-text";
 
 export type ApiKind = "function" | "type" | "constant";
@@ -61,15 +60,6 @@ export interface ParamDraft {
 export function defined<T>(value: T | undefined, label: string): T {
   if (value === undefined) throw new Error(`missing ${label}`);
   return value;
-}
-
-export function projectChecker<T>(program: {
-  project?: { checker?: T } | undefined;
-}): T {
-  const checker = program.project?.checker;
-  if (checker === undefined)
-    throw new Error("TypeScript program has no checker");
-  return checker;
 }
 
 export function catalogKind(options: {
@@ -155,18 +145,33 @@ export function memberDescription(
   return fromTarget.trim();
 }
 
+export interface WrappedNode {
+  kind: number;
+  expression?: WrappedNode | undefined;
+}
+
+/** Unwraps the listed wrapper kinds; wrapper nodes expose the node they wrap as `expression`. */
 export function nestedExpression(
-  node: { kind: number } | undefined,
+  node: WrappedNode | undefined,
   wrappers: readonly number[],
-): { kind: number } | undefined {
+): WrappedNode | undefined {
   let current = node;
   while (current && wrappers.includes(current.kind)) {
-    const inner = (current as { expression?: { kind: number } | undefined })
-      .expression;
+    const inner = current.expression;
     if (!inner) return undefined;
     current = inner;
   }
   return current;
+}
+
+/** Narrows a node with a type guard, failing with `label` when the guard rejects it. */
+export function requireNode<N, T extends N>(
+  node: N,
+  guard: (node: N) => node is T,
+  label: string,
+): T {
+  if (!guard(node)) throw new Error(label);
+  return node;
 }
 
 export function objectPropertyName(
@@ -190,8 +195,8 @@ export function storedEntry(entry: WorkerEntry): StoredEntry {
     required: entry.required,
     deprecated: entry.deprecated,
     tags: entry.tags.map((tag) => ({ name: tag.name, text: tag.text })),
+    typeHref: entry.typeHref || undefined,
   };
-  if (entry.typeHref) stored.typeHref = entry.typeHref;
   return stored;
 }
 
@@ -269,8 +274,8 @@ function copyStored(row: StoredEntry): StoredEntry {
     required: row.required,
     deprecated: row.deprecated,
     tags: row.tags.map((tag) => ({ name: tag.name, text: tag.text })),
+    typeHref: row.typeHref || undefined,
   };
-  if (row.typeHref) stored.typeHref = row.typeHref;
   return stored;
 }
 
@@ -336,8 +341,8 @@ function copyEntry(item: StoredEntry): StoredEntry {
     required: item.required,
     deprecated: item.deprecated,
     tags: item.tags.map((tag) => ({ name: tag.name, text: tag.text })),
+    typeHref: item.typeHref || undefined,
   };
-  if (item.typeHref) stored.typeHref = item.typeHref;
   return stored;
 }
 
@@ -378,14 +383,16 @@ export interface FormatResult {
 }
 
 function defaultFormat(source: string, filename: string): FormatResult {
-  const result = spawnSync("bun", ["fmt", `--stdin-filepath=${filename}`], {
-    input: source,
-    encoding: "utf8",
+  const result = Bun.spawnSync({
+    cmd: ["bun", "fmt", `--stdin-filepath=${filename}`],
+    stdin: new TextEncoder().encode(source),
+    stderr: "pipe",
+    stdout: "pipe",
   });
   return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
+    status: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
   };
 }
 

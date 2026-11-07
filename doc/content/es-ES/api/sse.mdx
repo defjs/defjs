@@ -5,13 +5,13 @@ description: defineEventStream, opciones de la solicitud y el handle del stream.
 
 # SSE
 
-Declara un stream de eventos, llama a la operación con un cliente, itera los eventos y luego ciérralo.
+Declara un flujo de eventos, llama a la operación con un cliente, itera los eventos y luego ciérralo.
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`, mapa `events` y los límites enteros positivos obligatorios `maxBufferSize` y `maxQueueSize`; `method` opcional (por defecto `'GET'`), `operation`, `input` y `error`. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`. Estos miembros de `definition` están documentados en [`EventStreamDefinition`](/es-ES/api/core/eventstreamdefinition-type). `error` solo es obligatorio cuando se da un tipo de struct de error, y `builder` es obligatorio exactamente cuando se declara `input`.
+- **definition** — `path` y mapa `events`; `method` opcional (por defecto `'GET'`), `operation`, `input`, `error`, `maxBufferSize` (por defecto `64 * 1024`) y `maxQueueSize` (por defecto `1024`). Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`. Estos miembros de `definition` están documentados en [`EventStreamDefinition`](/es-ES/api/core/eventstreamdefinition-type). `error` solo es obligatorio cuando se da un tipo de struct de error, y `builder` es obligatorio exactamente cuando se declara `input`.
 - **Devuelve** una operación. El primer argumento es un [`Client`](/es-ES/api/core/client-type). Los demás argumentos son solo la entrada. Llamarla arranca el stream.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -22,22 +22,19 @@ La llamada devuelve `[null, stream, open]` o `[error, undefined, open?]`. Cuando
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` es `{ signal? }`. No hay campo `timeout` ni `abort`, ni callback de progreso. `signal` cubre todo el stream, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. Una aplicación que quiera un plazo solo de arranque crea su propio `AbortController`, lo aborta con `new DOMException("...", "TimeoutError")` desde un temporizador y limpia el temporizador cuando el await regresa.
+`EventStreamExecuteOptions` es `{ signal? }`. No hay campo `timeout` ni `abort`, ni callback de progreso. `signal` cubre todo el stream, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. Una aplicación que quiera un plazo solo de arranque crea su propio `AbortController`, lo aborta con `new DOMException("...", "TimeoutError")` desde un temporizador y limpia el temporizador cuando el await retorna.
 
 ## EventStreamHandle
 
 <ApiSignature name="EventStreamHandle" />
 
-El tercer hueco de la tupla es la instantánea de arranque de `open`; `stream.open` sigue la conexión más reciente tras una reconexión. Ese tercer hueco es la instantánea del primer handshake correcto de la conexión devuelta solo para un handle nativo de Defjs o un wrapper que reenvía el mismo objeto `open` en vivo; los handles personalizados y los wrappers que sustituyen `open` conservan su `open` público actual incluso después de reconectar, así que un `closed` compartido no puede saltarse la sanitización de URL ni el filtrado de cabeceras, y Defjs no reconstruye los metadatos del primer handshake a partir de transformaciones arbitrarias. Prefiere `await using stream = handle` para la limpieza de un ámbito propio. El disposer detiene la lectura y la reconexión de Defjs y espera a que se suelte el lock del reader; no promete que termine una promesa `ReadableStream.cancel()` atascada y controlada por el proveedor. Siguen disponibles `close()` / `closed` manuales.
+El tercer hueco de la tupla es la instantánea de arranque de `open`; `stream.open` sigue la conexión más reciente tras una reconexión. Ese tercer hueco es la instantánea del primer handshake correcto de la conexión devuelta solo para un handle nativo de Defjs o un wrapper que reenvía el mismo objeto `open` en vivo; los handles personalizados y los wrappers que sustituyen `open` conservan su `open` público actual incluso después de reconectar, así que un `closed` compartido no puede saltarse la sanitización de URL ni el filtrado de cabeceras, y Defjs no reconstruye los metadatos del primer handshake a partir de transformaciones arbitrarias. Prefiere `await using stream = handle` para la limpieza de un ámbito propio. El liberador detiene la lectura y la reconexión de Defjs y espera a que se suelte el lock del reader; no promete que termine una promesa `ReadableStream.cancel()` atascada y controlada por el proveedor. Siguen disponibles `close()` / `closed` manuales.
 
-```ts
-async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
-  await using stream = handle;
-  for await (const event of stream) console.log(event);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-event-stream.ts#example
+</include>
 
-Las implementaciones estructurales de `EventStreamHandle` deben implementar ahora `[Symbol.asyncDispose]()` y devolver el mismo camino de teardown propio. Es un cambio incompatible en tiempo de compilación para los handles personalizados; el código que solo recibe handles devueltos por Defjs no tiene un requisito nuevo de llamada en runtime.
+Las implementaciones estructurales de `EventStreamHandle` deben implementar `[Symbol.asyncDispose]()` y devolver el mismo camino de desmontaje propio.
 
 ### EventStreamOpenInfo
 
@@ -47,25 +44,25 @@ Las implementaciones estructurales de `EventStreamHandle` deben implementar ahor
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` es `eof`, `aborted` o `error`. Cada variante puede llevar `reason` y `cause`. Solo `error` tiene `code`, uno de [`EventStreamFaultCode`](/es-ES/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+`kind` es `eof`, `aborted` o `error`. Cada variante puede llevar `reason` y `cause`. Solo `error` tiene `code`, uno de [`EventStreamFaultCode`](/es-ES/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` y `REQ_OPTIONS_INVALID` significan que una selección de reconexión falló después de abrir el flujo. `HTTP_STATUS` significa que un handshake de reconexión terminó con un estado distinto de 2xx.
 
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
 
-La clave es el nombre del evento SSE; un mensaje sin campo `event:` se llama `message`. Cuando ninguna clave coincide, se usa el struct `default`. Un struct de evento `string` conserva el texto `data` en bruto. Cualquier otro kind es texto JSON: `JSON.parse` y luego el struct. Un `struct.literal` desnudo necesita por tanto texto JSON, no un token sin comillas. Los cuerpos `error` del handshake usan la misma regla de kind que HTTP: `string` es texto, `blob` / `file` son blobs, `arrayBuffer` son bytes y todo lo demás es JSON.
+La clave es el nombre del evento SSE; un mensaje sin campo `event:` se llama `message`. Cuando ninguna clave coincide, se usa el struct `default`. Un struct de evento `string` conserva el texto `data` en bruto. Cualquier otro tipo es texto JSON: `JSON.parse` y luego el struct. Un `struct.literal` desnudo necesita por tanto texto JSON, no un token sin comillas. Los cuerpos `error` del handshake usan la misma regla de tipo que HTTP: `string` es texto, `blob` / `file` son blobs, `arrayBuffer` son bytes y todo lo demás es JSON.
 
 La reconexión vive en el cliente (`withSSEReconnect`). El `jitter` de SSE es un **factor multiplicativo 0–1**, igual que en WebSocket.
 
-El presupuesto de reintento y el exponente de backoff se reinician tras un handshake correcto; se aplican por interrupción. Las opciones numéricas inválidas devuelven `REQ_OPTIONS_INVALID` antes de abrir un stream, y `maxDelayMs` limita el retraso final después del jitter. Consulta [`withSSEReconnect`](/es-ES/api/core/withssereconnect) para las reglas de validación, los valores por defecto y el manejo UTF-8 de `Last-Event-ID`.
+El presupuesto de reintento y el exponente de backoff se reinician tras cada handshake correcto; se aplican por interrupción, así que `attempts: 1` aún puede crear muchas conexiones durante una sesión larga. Un EOF normal del servidor no reconecta y un evento incompleto en EOF no confirma su ID. Un handshake respondido con 502, 503 o 504 se reintenta como una conexión rechazada, con las mismas reglas de reconexión (método, `shouldReconnect`, `attempts`, cuerpo `ReadableStream`); los demás handshakes distintos de 2xx son fatales. Los reintentos agotados y los handshakes de reconexión fatales terminan con `HTTP_STATUS`; consulta `stream.open.response.status` en vivo para ver el estado. Las opciones numéricas inválidas devuelven `REQ_OPTIONS_INVALID` antes de abrir un stream, y `maxDelayMs` limita el retraso final después del jitter. Consulta [`withSSEReconnect`](/es-ES/api/core/withssereconnect) para las reglas de validación, los valores por defecto y el tratamiento UTF-8 de `Last-Event-ID`.
 
 El parser sigue las reglas de línea y de campo SSE de WHATWG y quita solo un BOM UTF-8 inicial al principio de cada stream físico. U+FEFF en valores de data o de ID se conserva; un nombre de campo posterior con prefijo BOM se ignora como desconocido. Los datos multilínea se unen con `\n`, una línea en blanco despacha un evento que lleva data y un evento inacabado en EOF se descarta.
 
-Consulta la [guía de SSE](/es-ES/docs/sse) y [Consumir un stream SSE](/es-ES/recipes/consume-sse).
+Consulta la [guía de SSE](/es-ES/docs/sse) y [Consumir un flujo SSE](/es-ES/recipes/consume-sse).
 
 ## EventStreamDefinition
 
-`path`, `events`, `maxBufferSize` y `maxQueueSize` obligatorios, `method` / `operation` / `input` / `error` opcionales. La forma de la solicitud coincide con HTTP, incluido `body`. `GET` y `HEAD` no pueden devolver un body. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
+`path`, `events`, `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize` opcionales. La forma de la solicitud coincide con HTTP, incluido `body`. `GET` y `HEAD` no pueden llevar un cuerpo. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
 
 ## EventStreamEndpoint
 
@@ -81,4 +78,4 @@ Los mismos campos que `HttpRequestShape` para el método y el path del stream.
 
 ## EventStreamData
 
-Payload de evento parseado, inferido de un mapa `EventStructs`.
+Carga de evento analizada, inferida de un mapa `EventStructs`.

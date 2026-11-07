@@ -1,22 +1,38 @@
 ---
 title: "WebSocket 세션 관리"
-description: 연결하고, 타입이 있는 envelope를 하나 보내고, 한 번 받은 뒤 닫고 closed를 await 해요.
+description: 연결하고, 타입화된 엔벨로프를 전송하며, 1회 수신한 뒤, 세션을 닫고 closed를 await합니다.
 ---
 
 # WebSocket 세션 열기
 
-각 방향은 struct 하나예요. unsubscribe, `close`, `await session.closed`는 호출하는 쪽이 소유해요. 잘못된 프레임은 `onRuntimeError`로 가요.
+`defineWebSocket`에 수신 큐를 제한하는 `maxIncomingQueueSize`와 함께 `incoming` 및 `outgoing` Struct를 선언합니다. 애플리케이션에서는 `session.onRuntimeError(...)`를 구독하고, `session.receive`를 소비하며, `finally` 블록에서 항상 구독 해제, `session.close(...)` 호출, `await session.closed`를 수행하세요:
 
-자세한 내용은 [WebSocket](/ko-KR/docs/web-socket)을 보세요.
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
+</include>
 
-<include cwd meta="chat.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com`은 placeholder예요. `{ "type": "send", "text": "Hello" }`에 `{ "type": "message", "text": "Hello" }`로 응답하는 서버에서는 이 스니펫이 다음을 출력해요.
+  </Tab>
+</Tabs>
+
+`{ "type": "subscribe", "symbol": "ACME" }` 요청에 대해 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`로 응답하는 서버를 대상으로 이 스크립트를 실행하면 다음과 같이 출력됩니다:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-재연결은 opt-in이에요 (`withWebSocketReconnect`). Heartbeat도 opt-in이에요. 브라우저 WebSocket은 임의 handshake 헤더를 받을 수 없어요. 쿠키, 서브프로토콜, 또는 짧은 수명의 티켓을 쓰세요.
+- 재연결(`withWebSocketReconnect`)과 하트비트(`withWebSocketHeartbeat`)는 모두 클라이언트에서 선택적으로 활성화(opt-in)합니다.
+- 브라우저의 WebSocket은 업그레이드 핸드셰이크 중에 임의의 HTTP 헤더를 보낼 수 없으므로, 쿠키, 서브프로토콜, 또는 짧은 수명의 티켓을 대신 사용하세요. 자세한 내용은 [WebSocket 세션](/ko-KR/docs/web-socket) 문서를 참조하세요.

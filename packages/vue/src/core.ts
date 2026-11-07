@@ -42,7 +42,7 @@ export function createClientPlugin(client: DerivableClient): Plugin {
  *
  * It returns the exact client value provided for the selected key, and throws an `Error` without an active injection context or a client for the selected key. Installing the plugin alone does not establish an injection context.
  *
- * The injected `DerivableClient` is a function. Call it with request options at the call site to derive a `Client` value for one call: `getUser(client({ signal }), input)`. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`. The provider holds only a root client; a derived `Client` value is not accepted, so create it where the operation is called.
+ * The injected `DerivableClient` is a function. Call it with request options at the call site to derive a `Client` value for one call: `getOrder(client({ signal }), input)`. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`. The provider holds only a root client; a derived `Client` value is not accepted, so create it where the operation is called.
  *
  * @param key - Injection key; use the same object with `app.provide` or `provide`.
  * Defaults to `HTTP_CLIENT`, as provided by {@link createClientPlugin}.

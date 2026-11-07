@@ -24,41 +24,60 @@ import type {
 
 const FAULT_NAME = "DefjsFault";
 
-function createFault<TFault extends Error>(
-  message: string,
-  cause?: unknown,
-): TFault {
-  const fault = (
-    cause === undefined ? new Error(message) : new Error(message, { cause })
-  ) as TFault;
+/** The fields a fault variant adds to Error, before the factory has written them. */
+type Unwritten<TFault extends Error> = Error &
+  Partial<Omit<TFault, keyof Error>>;
+
+function createFault(message: string, cause?: unknown): Error {
+  // Variant fields are attached by the specific factory. Error has none of them.
+  const fault = new Error(message, { cause });
   Object.defineProperty(fault, "name", {
     configurable: true,
     enumerable: false,
     value: FAULT_NAME,
     writable: true,
   });
-  if (cause === undefined) {
-    Object.defineProperty(fault, "cause", {
-      configurable: true,
-      enumerable: false,
-      value: undefined,
-      writable: true,
-    });
-  }
   return fault;
 }
 
-function buildHttpStatusFault<TData>(
-  response: HttpMeta,
+// Each writer below assigns every field its fault type adds to Error, which is what makes the assertion hold.
+
+function writeHttpStatusFields<TData>(
+  fault: Unwritten<HttpStatusFaultOf<TData>>,
+  response: HttpStatusFaultOf<TData>["response"],
   data: TData,
-): HttpStatusFaultOf<TData> {
-  const fault = createFault<HttpStatusFaultOf<TData>>(
-    getHttpErrorMessage(response),
-  );
+): asserts fault is HttpStatusFaultOf<TData> {
   fault.code = "HTTP_STATUS";
   fault.data = data;
-  fault.response = response as HttpStatusFaultOf<TData>["response"];
+  fault.response = response;
   fault.status = response.status;
+}
+
+function writeDecodeFields(
+  fault: Unwritten<DecodeFault>,
+  code: DecodeFaultCode,
+  response: HttpMeta,
+): asserts fault is DecodeFault {
+  fault.code = code;
+  fault.response = response;
+  fault.status = response.status;
+}
+
+function writePreflightFields(
+  fault: Unwritten<PreflightFault>,
+  code: PreflightFaultCode,
+  response: HttpMeta | undefined,
+): asserts fault is PreflightFault {
+  fault.code = code;
+  fault.response = response;
+}
+
+function buildHttpStatusFault<TData>(
+  response: HttpStatusFaultOf<TData>["response"],
+  data: TData,
+): HttpStatusFaultOf<TData> {
+  const fault = createFault(getHttpErrorMessage(response));
+  writeHttpStatusFields(fault, response, data);
   return fault;
 }
 
@@ -132,10 +151,8 @@ export function createDecodeFault(
     cause.name === "SyntaxError"
       ? "Response body could not be decoded"
       : describeCause(cause);
-  const fault = createFault<DecodeFault>(message, cause);
-  fault.code = code;
-  fault.response = response;
-  fault.status = response.status;
+  const fault = createFault(message, cause);
+  writeDecodeFields(fault, code, response);
   return fault;
 }
 
@@ -144,11 +161,11 @@ export function createDecodeFault(
  *
  * When `cause` is given, its message becomes the fault message; otherwise the
  * code is the message. The result is a native `Error` named `DefjsFault` with
- * `code`, plus `response` when one was given.
+ * `code`. `response` is `undefined` until transport metadata exists.
  *
  * @param code - The specific failure.
  * @param cause - Underlying value, when there is one; the code becomes the message otherwise.
- * @param response - Metadata, only where the transport already had some to report.
+ * @param response - Transport metadata. `undefined` until that metadata exists.
  * @returns A preflight fault.
  * @group errors
  */
@@ -157,22 +174,19 @@ export function createPreflightFault(
   cause?: unknown,
   response?: HttpMeta,
 ): PreflightFault {
-  const fault = createFault<PreflightFault>(
+  const fault = createFault(
     cause === undefined ? code : describeCause(cause),
     cause,
   );
-  fault.code = code;
-  if (response !== undefined) {
-    fault.response = response;
-  }
+  writePreflightFields(fault, code, response);
   return fault;
 }
 
 /**
  * Builds a `NET_*` `PreflightFault`, choosing the code from the shape of `cause`.
  *
- * Optional `response` metadata is attached when the transport already had some
- * to report. The cause is kept as `cause`.
+ * `response` is `undefined` until the transport has metadata to report. The
+ * cause is kept as `cause`.
  *
  * - `NET_ABORTED` when {@link isAbortCause} recognizes an abort-branded `Error`
  *   (including `ERR_ABORTED` from another Core copy) or a `DOMException` named
@@ -184,7 +198,7 @@ export function createPreflightFault(
  * - `NET_UNREACHABLE` for anything else, with the cause's message.
  *
  * @param cause - Underlying cancellation, timeout, or transport failure.
- * @param response - Metadata, only where the transport already had some to report.
+ * @param response - Transport metadata. `undefined` until that metadata exists.
  * @returns A `NET_ABORTED`, `NET_TIMEOUT`, or `NET_UNREACHABLE` fault.
  * @group errors
  */
@@ -193,11 +207,9 @@ export function createNetworkFault(
   response?: HttpMeta,
 ): PreflightFault {
   if (isAbortCause(cause)) {
-    return withResponse(
-      createFault<PreflightFault>(ERR_ABORTED.message, cause),
-      "NET_ABORTED",
-      response,
-    );
+    const fault = createFault(ERR_ABORTED.message, cause);
+    writePreflightFields(fault, "NET_ABORTED", response);
+    return fault;
   }
 
   if (isTimeoutCause(cause)) {
@@ -205,28 +217,12 @@ export function createNetworkFault(
       cause instanceof Error && cause.message
         ? cause.message
         : ERR_TIMEOUT.message;
-    return withResponse(
-      createFault<PreflightFault>(message, cause),
-      "NET_TIMEOUT",
-      response,
-    );
+    const fault = createFault(message, cause);
+    writePreflightFields(fault, "NET_TIMEOUT", response);
+    return fault;
   }
 
-  return withResponse(
-    createFault<PreflightFault>(describeCause(cause), cause),
-    "NET_UNREACHABLE",
-    response,
-  );
-}
-
-function withResponse(
-  fault: PreflightFault,
-  code: PreflightFaultCode,
-  response?: HttpMeta,
-): PreflightFault {
-  fault.code = code;
-  if (response !== undefined) {
-    fault.response = response;
-  }
+  const fault = createFault(describeCause(cause), cause);
+  writePreflightFields(fault, "NET_UNREACHABLE", response);
   return fault;
 }

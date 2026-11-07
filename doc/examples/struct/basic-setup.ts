@@ -1,38 +1,38 @@
 // #region example
 import { defineRequest, struct, type Infer } from "@defjs/core";
 
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  name: struct.string(),
-  active: struct.boolean(),
+  status: struct.string(),
+  totalCents: struct.number().alias("total_cents"),
 });
 
-type User = Infer<typeof User>;
+type Order = Infer<typeof Order>;
 
-const createUser = defineRequest({
+const createOrder = defineRequest({
   method: "POST",
-  path: "/users",
+  path: "/orders",
   input: struct.object({
-    name: struct.string(),
-    email: struct.string(),
+    status: struct.string(),
+    customerName: struct.string().alias("customer_name"),
   }),
   builder: (input) => ({ body: input }),
-  output: User,
+  output: Order,
 });
 
-function readUser() {
-  const [parseError, user] = struct.parse(User, {
+function readOrder() {
+  const [parseError, order] = struct.parse(Order, {
     id: 7,
-    name: "Ada",
-    active: true,
+    status: "paid",
+    totalCents: 4200,
   });
   if (parseError) {
     console.error(parseError.message);
     return;
   }
-  console.log(user.name);
+  console.log(order.status);
 }
 
-readUser();
-void createUser;
+readOrder();
+void createOrder;
 // #endregion

@@ -31,7 +31,20 @@ permissions:
   contents: read
 
 jobs:
+  # Runs on every manual dispatch, including one with no publish targets.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun ci
+      - run: bun run typecheck
+      - run: bun run build
+
   core:
+    needs: validate
     if: ${{ inputs.core }}
     runs-on: ubuntu-latest
     permissions:
@@ -39,13 +52,13 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
+      # npm is the registry's trusted-publishing CLI. Bun publish does not support
+      # npm OIDC trusted publishing (oven-sh/bun#22423), so publishing keeps npm.
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
       - run: bun ci
       # tsdown emits declarations with --noCheck, so this is the typecheck.
       - name: Typecheck build config
@@ -59,6 +72,7 @@ jobs:
         run: npm publish --access public
 
   opentelemetry-server:
+    needs: validate
     if: ${{ inputs.opentelemetry-server }}
     runs-on: ubuntu-latest
     permissions:
@@ -66,13 +80,13 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
+      # npm is the registry's trusted-publishing CLI. Bun publish does not support
+      # npm OIDC trusted publishing (oven-sh/bun#22423), so publishing keeps npm.
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
       - name: Build @defjs/core
@@ -89,6 +103,7 @@ jobs:
         run: npm publish --access public
 
   react:
+    needs: validate
     if: ${{ inputs.react }}
     runs-on: ubuntu-latest
     permissions:
@@ -96,13 +111,13 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
+      # npm is the registry's trusted-publishing CLI. Bun publish does not support
+      # npm OIDC trusted publishing (oven-sh/bun#22423), so publishing keeps npm.
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
       - name: Build @defjs/core
@@ -119,6 +134,7 @@ jobs:
         run: npm publish --access public
 
   vue:
+    needs: validate
     if: ${{ inputs.vue }}
     runs-on: ubuntu-latest
     permissions:
@@ -126,13 +142,13 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
+      # npm is the registry's trusted-publishing CLI. Bun publish does not support
+      # npm OIDC trusted publishing (oven-sh/bun#22423), so publishing keeps npm.
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
       - name: Build @defjs/core
@@ -149,6 +165,7 @@ jobs:
         run: npm publish --access public
 
   docs:
+    needs: validate
     if: ${{ inputs.docs }}
     runs-on: ubuntu-latest
     permissions:
@@ -160,6 +177,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
       - run: bun ci
       - name: Validate production site URL
         env:

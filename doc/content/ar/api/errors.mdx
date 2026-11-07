@@ -5,7 +5,7 @@ description: أنواع الأخطاء ودوال المصانع.
 
 # الأخطاء
 
-يُعيد التنفيذ `Fault` مُميَّزًا في الخانة الأولى من الـ tuple — لا استثناءً مرميًّا في حالات الفشل المعلَنة.
+تُرجع العملية `Fault` مُميَّزًا في الخانة الأولى من المصفوفة — لا استثناءً مُلقى في حالات الفشل المعلَنة.
 
 ## FaultCode
 
@@ -29,7 +29,7 @@ description: أنواع الأخطاء ودوال المصانع.
 
 <ApiSignature name="FaultOf, Fault" />
 
-`FaultOf` هو `Fault` معبَّرًا عنه بنوع جسم الخطأ المفكوك بدل الـ struct الذي أنتجه. يعمل `HttpAwaitResult` ومصانع الأعطال بالقيم المفكوكة، لذلك تستخدم هذه الصيغة.
+`FaultOf` هو `Fault` معبَّرًا عنه بنوع جسم الخطأ المفكوك بدلًا من struct الذي أنتجه. يعمل `HttpAwaitResult` ومصانع الأعطال بالقيم المفكوكة، لذلك تستخدم هذه الصيغة.
 
 كل صيغة هي `Error` أصلي باسم `DefjsFault`، فـ `String(fault)` يُنتج `DefjsFault: <message>`. و`code` وبيانات الصيغة الوصفية — `status` و`response` و`data` — خصائص ذاتية قابلة للتعداد. أما سلسلة `cause` الأصلية فغير قابلة للتعداد.
 
@@ -43,7 +43,7 @@ description: أنواع الأخطاء ودوال المصانع.
 
 <ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
 
-أي حالة غير-2xx. فإن أعلنت نقطة النهاية `error` وفُكّ الجسم، كان `data` هو ذلك الجسم و`response` يحمله. وإن حُذف `error` فالجسم لا يُقرأ أبدًا، فيبقى `data` بقيمة `undefined` ويكون `response` بيانات وصفية وحدها.
+أي حالة غير-2xx. فإن أعلنت العملية `error` وفُكّ الجسم، كان `data` هو ذلك الجسم و`response` يحمله. وإن حُذف `error` فالجسم لا يُقرأ أبدًا، فيبقى `data` بقيمة `undefined` ويكون `response` بيانات وصفية وحدها.
 
 ### DecodeFault
 
@@ -55,13 +55,15 @@ description: أنواع الأخطاء ودوال المصانع.
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-كل ما كان يمكن أن يفشل قبل وجود استجابة: `REQ_*` و`NET_*` و`EXT_*` و`CAP_*` و`ENV_UNSUPPORTED`. ولا يكون `response` موجودًا إلا حيث كانت لدى طبقة النقل بيانات وصفية تُبلِّغ عنها أصلًا، كجسم انقطع في منتصف التنزيل.
+كل ما كان يمكن أن يفشل قبل وجود استجابة: `REQ_*` و`NET_*` و`EXT_*` و`CAP_*` و`ENV_UNSUPPORTED`. وتبقى قيمة `response` هي `undefined` إلى أن تتوفر لدى طبقة النقل بيانات وصفية تُبلِّغ عنها، كجسم انقطع في منتصف التنزيل.
+
+تُرجع خيارات `withRetry` غير الصالحة `REQ_OPTIONS_INVALID` قبل أن يبدأ نقل HTTP، مع الرسالة `Invalid retry options`. يشمل ذلك سياسة ليست كائنًا، وقيمة `maxAttempts` ليست عددًا صحيحًا آمنًا لا يقل عن 1، وإعدادات غير صالحة للشروط أو الطرق أو المُهل أو backoff أو الميزانية. حذف `withRetry` يعطّل إعادات المحاولة. `withRetry()` و`withRetry(undefined)` يتصرفان مثل `withRetry({})`. `withRetry({ maxAttempts: 1 })` يوقف إعادات المحاولة بعد أن كانت مفعّلة.
 
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
 
-أيّ خطأ، بصرف النظر عن نوع جسم خطئه المفكوك. استخدمه للمعالِجات التي تُصنِّف الأخطاء دون أن يهمّها أي نقطة نهاية أنتجتها؛ وفضِّل `Fault<typeof yourErrorStruct>` حيث يهمّ نوع الجسم.
+أيّ خطأ، بصرف النظر عن نوع جسم خطئه المفكوك. استخدمه للمعالِجات التي تُصنِّف الأخطاء دون أن يهمّها أي عملية أنتجتها؛ وفضِّل `Fault<typeof yourErrorStruct>` حيث يهمّ نوع الجسم.
 
 ## المصانع
 
@@ -77,7 +79,7 @@ description: أنواع الأخطاء ودوال المصانع.
 
 <ApiSignature name="createHttpStatusFault, createUndecodedHttpStatusFault, createDecodeFault, createNetworkFault, createPreflightFault" />
 
-`createHttpStatusFault` يأخذ استجابة تحمل الجسم المفكوك أصلًا؛ و`createUndecodedHttpStatusFault` يأخذ البيانات الوصفية وحدها، لنقطة نهاية لم تُعلن `error`.
+`createHttpStatusFault` يأخذ استجابة تحمل الجسم المفكوك أصلًا؛ و`createUndecodedHttpStatusFault` يأخذ البيانات الوصفية وحدها، لعملية لم تُعلن `error`.
 
 يستخدم `createNetworkFault` الدالة [`isAbortCause`](/ar/api/core/isabortcause) للتصنيف `NET_ABORTED` والدالة [`isTimeoutCause`](/ar/api/core/istimeoutcause) للتصنيف `NET_TIMEOUT`. تتعرف الأولى على علامات الإلغاء الموسومة من أي نسخة من Core وعلى `DOMException` باسم `AbortError`؛ وتتعرف الثانية على علامات المهلة الموسومة من أي نسخة من Core وعلى `DOMException` أو `Error` باسم `TimeoutError`. يُصنَّف كل ما عدا ذلك `NET_UNREACHABLE`. ويأخذ `createPreflightFault` الرمز مباشرة؛ فإن لم يُمرَّر `cause` صار الرمز هو الرسالة.
 
@@ -91,7 +93,7 @@ description: أنواع الأخطاء ودوال المصانع.
 
 <ApiSignature name="ERR_ABORTED, ERR_TIMEOUT" />
 
-كائنا `Error` المشتركان يُستخدمان كـ `cause` للإلغاء والمهلة. رمي إحداهما من معترض HTTP ينهي الاستدعاء بـ `NET_ABORTED` أو `NET_TIMEOUT`. أما معترضات SSE وWebSocket فتبلّغ عن أي رمي، بما فيه هاتان القيمتان، بوصفه `EXT_INTERCEPTOR_FAILED`.
+كائنا `Error` المشتركان يُستخدمان كـ `cause` للإلغاء والمهلة. إلقاء إحداهما من معترض HTTP ينهي الاستدعاء بـ `NET_ABORTED` أو `NET_TIMEOUT`. أما معترضات SSE وWebSocket فتبلّغ عن أي رمي، بما فيه هاتان القيمتان، بوصفه `EXT_INTERCEPTOR_FAILED`.
 
 تحمل العلامات وسمَي `Symbol.for('defjs.cause.aborted')` و`Symbol.for('defjs.cause.timeout')` غير القابلين للتعداد. لا يعتمد التصنيف على هوية كائن العلامة أو على عمليات تنفيذ سابقة لا علاقة لها به.
 
@@ -100,5 +102,13 @@ description: أنواع الأخطاء ودوال المصانع.
 <ApiSignature name="isAbortCause, isTimeoutCause" />
 
 تتعرف [`isAbortCause`](/ar/api/core/isabortcause) على `Error` موسوم بالإلغاء أو `DOMException` باسم `AbortError`. وتتعرف [`isTimeoutCause`](/ar/api/core/istimeoutcause) على `Error` موسوم بالمهلة أو `DOMException` / `Error` باسم `TimeoutError`. مرّر `fault.cause` لتصنيف القيمة المسبِّبة؛ لا تفكّ هاتان الدالتان غلاف الخطأ. وتعملان مع علامات من نسخة أخرى من Core.
+
+## ERR_NO_CANDIDATE
+
+## isNoCandidateCause
+
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+يظهر `ERR_NO_CANDIDATE` فقط كـ `cause` لـ `REQ_BUILD_FAILED`، عندما لا يمكن اختيار نقطة نهاية مرشحة. لا يضيف `FaultCode`. تحمل العلامة وسم `Symbol.for('defjs.cause.no-endpoint')` غير القابل للتعداد. تتعرف [`isNoCandidateCause`](/ar/api/core/isnocandidatecause) على ذلك الوسم من نسخة أخرى من Core، بالطريقة نفسها التي تتعرف بها [`isAbortCause`](/ar/api/core/isabortcause) على إلغاء. مرّر `fault.cause`. وهي لا تفك غلاف الخطأ.
 
 راجع [دليل الأخطاء](/ar/docs/errors).

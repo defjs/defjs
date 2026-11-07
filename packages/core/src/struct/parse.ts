@@ -29,7 +29,6 @@ import type {
   PrimitiveKind,
   RecordDefinition,
   RuntimeStruct,
-  StructIssue,
   TupleDefinition,
   UnionDefinition,
 } from "./types";
@@ -120,9 +119,14 @@ function parseEntry(
       context,
     );
     succeeded = value !== FAILED;
-    // This parse reports, so every FAILED it returns has an issue parked right behind it.
+    // A reporting parse parks an issue behind every FAILED; a decode hook that fails without reporting gets a generic one.
     return value === FAILED
-      ? { issue: parkedFailure() as StructIssue, ok: false }
+      ? {
+          issue:
+            parkedFailure() ??
+            issue(path, "custom", "a decodable value", input),
+          ok: false,
+        }
       : { ok: true, value };
   } finally {
     if (!succeeded && context) {
@@ -133,11 +137,12 @@ function parseEntry(
 }
 
 function restoreGuides(context: ParseContext, checkpoint: number): void {
-  while (context.changes.length > checkpoint) {
-    const [value, previous] = context.changes.pop() as [
-      object,
-      Guide | undefined,
-    ];
+  let change: ParseContext["changes"][number] | undefined;
+  while (
+    context.changes.length > checkpoint &&
+    (change = context.changes.pop()) !== undefined
+  ) {
+    const [value, previous] = change;
     if (previous) {
       context.guides.set(value, previous);
     } else {
@@ -209,7 +214,7 @@ function parseNode(
         context,
       );
       if (provenance && value !== FAILED) {
-        const item = definition.item as RuntimeStruct;
+        const item = definition.item;
         const kind = item[DEFINITION].kind;
         if (kind === "any" || kind === "unknown") {
           provenance.passthrough = item;
@@ -375,7 +380,7 @@ function parseArrayValue(
     return nestingExceeded(input, path, reportIssues);
   }
 
-  const item = definition.item as RuntimeStruct;
+  const item = definition.item;
   const output: unknown[] = [];
   for (let index = 0; index < input.length; index += 1) {
     path.push(index);
@@ -420,8 +425,8 @@ function parseObjectValue(
 
   const output: { [key: string]: unknown } = target ?? nullObject();
   const fields = resolveStructFields(struct, definition);
-  // Indexed on purpose: for...of over this frozen array costs several times more in JavaScriptCore.
   for (let index = 0; index < fields.length; index += 1) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: `index < fields.length` bounds this read. `for (const field of fields)` over the frozen cached field list made struct.parse 2.066-2.096x slower for an 8-field object and 2.123-2.225x for 6 nested objects (Bun 1.4.4, two copies of each variant, 3 runs x 15 interleaved rounds x 2e5/1.5e5 parses, medians; the two indexed copies differed by at most 1.057x)
     const field = fields[index] as ResolvedStructField;
     const inputKey = useAliases ? field.wireKey : field.key;
     const inputValue =
@@ -497,7 +502,8 @@ function parseRecordValue(
     return nestingExceeded(input, path, reportIssues);
   }
 
-  const item = definition.value as RuntimeStruct;
+  const item = definition.value;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made struct.parse 1.207-1.295x slower for a 1-key record and 1.212-1.225x for 8 nested 2-key records (Bun 1.4.4, two copies of each variant, 3 runs x 15 interleaved rounds x 3e5/6e4 parses, medians; the two Object.create copies differed by at most 1.025x); `{}` plus setPrototypeOf allocates slower still
   const output: { [key: string]: unknown } = Object.create(null);
   for (const key of Object.keys(input)) {
     path.push(key);
@@ -551,10 +557,11 @@ function parseTupleValue(
   }
 
   const output: unknown[] = [];
-  for (let index = 0; index < definition.items.length; index += 1) {
+  let index = 0;
+  for (const item of definition.items) {
     path.push(index);
     const value = parseNode(
-      definition.items[index] as RuntimeStruct,
+      item,
       input[index],
       path,
       "value",
@@ -567,6 +574,7 @@ function parseTupleValue(
     }
     path.pop();
     output.push(value);
+    index += 1;
   }
   return output;
 }
@@ -585,7 +593,7 @@ function parseUnionValue(
   for (const option of definition.options) {
     const checkpoint = context?.changes.length ?? 0;
     const value = parseNode(
-      option as RuntimeStruct,
+      option,
       input,
       path,
       "value",
@@ -651,10 +659,9 @@ function parseDiscriminatedUnionValue(
           )
         : FAILED;
     }
-    const runtime = target as RuntimeStruct;
     return parseObjectValue(
-      runtime,
-      runtime[DEFINITION] as ObjectDefinition,
+      target,
+      discriminatorTargetDefinition(target),
       input,
       path,
       false,
@@ -683,7 +690,7 @@ function parseDiscriminatedUnionValue(
           )
         : FAILED;
     }
-    const target = definition.map.get(value) as RuntimeStruct | undefined;
+    const target = definition.map.get(value);
     if (!target || definition.wireKeyByValue?.get(value) !== wireKey) {
       return reportIssues
         ? failure(
@@ -698,7 +705,7 @@ function parseDiscriminatedUnionValue(
     }
     return parseObjectValue(
       target,
-      target[DEFINITION] as ObjectDefinition,
+      discriminatorTargetDefinition(target),
       input,
       path,
       true,
@@ -720,6 +727,17 @@ function parseDiscriminatedUnionValue(
     : FAILED;
 }
 
+// Construction maps tags only to object options. A definition built by hand can map one to anything else.
+function discriminatorTargetDefinition(
+  target: RuntimeStruct,
+): ObjectDefinition {
+  const definition = target[DEFINITION];
+  if (definition.kind !== "object") {
+    throw new TypeError("discriminatedUnion options must be object structs");
+  }
+  return definition;
+}
+
 function parseIntersectionValue(
   definition: IntersectionDefinition,
   input: unknown,
@@ -730,11 +748,10 @@ function parseIntersectionValue(
 ): unknown {
   if (definition.objectSides && isPlainObject(input)) {
     const merged = nullObject();
-    for (const option of definition.options) {
-      const runtime = option as RuntimeStruct;
+    for (const side of definition.options) {
       const value = parseObjectValue(
-        runtime,
-        runtime[DEFINITION] as ObjectDefinition,
+        side,
+        side[DEFINITION],
         input,
         path,
         useAliases,
@@ -751,21 +768,16 @@ function parseIntersectionValue(
     if (context) {
       context.owned.add(merged);
       // An object intersection always has at least one member struct, so the guide exists.
-      tagOwnNode(
-        merged,
-        guideTag(
-          definition.options as unknown as readonly RuntimeStruct[],
-        ) as Guide,
-      );
+      tagOwnNode(merged, guideTag(definition.options));
     }
     return merged;
   }
 
   // unknown/any still run, but they are the identity of `&` and must not put keys back into the output.
   const contributed: unknown[] = [];
-  const passthroughs: RuntimeStruct[] = [];
+  let passthroughs: [RuntimeStruct, ...RuntimeStruct[]] | undefined;
   for (const option of definition.options) {
-    const runtime = option as RuntimeStruct;
+    const runtime = option;
     const provenance: Provenance | undefined = context ? {} : undefined;
     const value = parseNode(
       runtime,
@@ -783,7 +795,11 @@ function parseIntersectionValue(
     if (!isIntersectionIdentity(runtime)) {
       contributed.push(value);
       if (provenance?.passthrough) {
-        passthroughs.push(provenance.passthrough);
+        if (passthroughs) {
+          passthroughs.push(provenance.passthrough);
+        } else {
+          passthroughs = [provenance.passthrough];
+        }
       }
     }
   }
@@ -815,7 +831,7 @@ function parseIntersectionValue(
     merged = mergedValue.value;
   }
 
-  if (context && passthroughs.length > 0) {
+  if (context && passthroughs) {
     if (isPlainObject(merged)) {
       attachPassthroughGuides(merged, passthroughs, context);
     } else if (Array.isArray(merged)) {
@@ -831,14 +847,13 @@ function parseIntersectionValue(
 
 function attachPassthroughGuides(
   value: { [key: string]: unknown },
-  guides: readonly RuntimeStruct[],
+  guides: readonly [RuntimeStruct, ...RuntimeStruct[]],
   context: ParseContext,
 ): void {
   const current = readOwnGuide(value, context.guides);
-  const next = guideTag([
-    ...(current ? guideMembers(current) : []),
-    ...guides,
-  ]) as Guide;
+  const next = guideTag(
+    current ? [...guideMembers(current), ...guides] : guides,
+  );
   if (context.owned.has(value)) {
     tagOwnNode(value, next);
   } else {

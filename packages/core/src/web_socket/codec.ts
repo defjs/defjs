@@ -1,8 +1,11 @@
-import type { AnyStruct } from "../struct";
+import type { AnyStruct, Infer } from "../struct";
+import type { AnyStructLike } from "../struct/types";
 import { decodeBytes, readBytesText } from "../internal/bytes";
 import { rejectNonJson } from "../internal/outbound_request";
-import { decodeJson, encodeJson } from "../struct/codec/json";
-import { parseStructValue } from "../struct/introspection";
+import { encodeAliasedStruct } from "../struct/codec/common";
+import { decodeJson } from "../struct/codec/json";
+import { parseRuntimeValue } from "../struct/introspection";
+import { assertStruct } from "../struct/shape";
 
 export function serializeOutgoingWebSocketMessage(
   outgoing: AnyStruct | undefined,
@@ -14,9 +17,16 @@ export function serializeOutgoingWebSocketMessage(
     );
   }
 
+  // One struct check covers both the parse and the encode.
+  assertStruct(outgoing, "struct");
   // Same guard as an HTTP JSON body: non-finite numbers, functions, symbols and non-plain objects throw.
   const wire = JSON.stringify(
-    encodeJson(outgoing, parseStructValue(outgoing, message)),
+    encodeAliasedStruct(
+      outgoing,
+      parseRuntimeValue(outgoing, message),
+      "json",
+      0,
+    ),
     (key, value: unknown) =>
       rejectNonJson(key, value, "Outgoing WebSocket message"),
   );
@@ -29,18 +39,18 @@ export function serializeOutgoingWebSocketMessage(
   return wire;
 }
 
-export async function transformWebSocketMessage(
-  incoming: AnyStruct,
+export async function transformWebSocketMessage<S extends AnyStructLike>(
+  incoming: S,
   raw: unknown,
-): Promise<unknown> {
+): Promise<Infer<S> | undefined> {
   return await decodeWebSocketMessage(incoming, raw);
 }
 
 /** Synchronous for text and bytes. Only a Blob frame has to be read first. */
-export function decodeWebSocketMessage(
-  incoming: AnyStruct,
+export function decodeWebSocketMessage<S extends AnyStructLike>(
+  incoming: S,
   raw: unknown,
-): unknown {
+): Infer<S> | undefined | Promise<Infer<S> | undefined> {
   if (typeof Blob !== "undefined" && raw instanceof Blob) {
     return raw
       .arrayBuffer()
@@ -49,10 +59,10 @@ export function decodeWebSocketMessage(
   return decodeWebSocketText(incoming, readBytesText(raw));
 }
 
-function decodeWebSocketText(
-  incoming: AnyStruct,
+function decodeWebSocketText<S extends AnyStructLike>(
+  incoming: S,
   text: string | undefined,
-): unknown {
+): Infer<S> | undefined {
   return text === undefined
     ? undefined
     : decodeJson(incoming, JSON.parse(text));
@@ -66,7 +76,11 @@ export interface WebSocketCloseSnapshot {
 }
 
 export function extractCloseInfo(
-  event?: CloseEvent,
+  event?: {
+    code?: number;
+    reason?: string;
+    wasClean?: boolean;
+  },
   cause?: unknown,
 ): WebSocketCloseSnapshot {
   return {

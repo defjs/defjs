@@ -171,17 +171,17 @@ describe("intersection merge depth", () => {
     );
   });
 
-  test("carries outbound logical field depth into an opaque array wire merge", async () => {
+  test("carries outbound logical field depth into an opaque array wire merge", () => {
     const Schema = struct.object({
       wrapper: struct.intersection(
         struct.object({ left: struct.any().alias("value") }),
         struct.object({ right: struct.any().alias("value") }),
       ),
     });
-    const accepted = await parseEndpointInput(Schema, {
+    const accepted = parseEndpointInput(Schema, {
       wrapper: { left: nest(254, true), right: nest(254, true) },
     });
-    const rejected = await parseEndpointInput(Schema, {
+    const rejected = parseEndpointInput(Schema, {
       wrapper: { left: nest(255, true), right: nest(255, true) },
     });
     expect(() => encodeOutbound(accepted)).not.toThrow();

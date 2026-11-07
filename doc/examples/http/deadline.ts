@@ -2,16 +2,16 @@
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
 
 const client = createClient(withEndpoint("https://api.example.com"));
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
 });
 
 async function main() {
-  const [error, user] = await getUser(
+  const [error, order] = await getOrder(
     client({ signal: AbortSignal.timeout(5_000) }),
     { id: 1 },
   );
@@ -23,7 +23,7 @@ async function main() {
     console.error(error.code);
     return;
   }
-  console.log(user.name);
+  console.log(order.status);
 }
 
 void main();

@@ -46,7 +46,8 @@ describe("struct public API", () => {
     expectTypeOf(struct.parse(User, { id: "u_1" })).toEqualTypeOf<
       ParseResult<{ id: string }>
     >();
-    expectTypeOf(StructError).toBeConstructibleWith([] as StructIssue[]);
+    const issues: StructIssue[] = [];
+    expectTypeOf(StructError).toBeConstructibleWith(issues);
     expectTypeOf<"invalid_intersection">().toExtend<StructIssue["code"]>();
     expectTypeOf<ErrorMap>().toBeFunction();
   });

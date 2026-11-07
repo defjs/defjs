@@ -1,6 +1,5 @@
 /**
  * Type acceptance for the callable client and operation functions.
- * Ported from docs/design/2026-11-01-operation-client.type.test.ts.
  */
 import {
   createClient,
@@ -26,7 +25,7 @@ const derived: Client = client({ signal });
 const noOptions: Client = client();
 void [derived, noOptions];
 // @ts-expect-error A derived client is not callable.
-client({ signal })({ protocols: ["chat.v1"] })();
+client({ signal })({ protocols: ["chat.v1"] });
 
 // @ts-expect-error timeout was removed from request options.
 client({ timeout: 100 });
@@ -64,30 +63,28 @@ export const search = defineRequest({
   builder: (input) => ({ query: input ?? {} }),
 });
 
-getUser(client, { id: 1 });
-getUser(client({ signal }), { id: 1 });
-health(client);
-health(client({ signal }));
-search(client);
-search(client({ signal }), { q: "Ada" });
+void getUser(client, { id: 1 });
+void getUser(client({ signal }), { id: 1 });
+void health(client);
+void health(client({ signal }));
+void search(client);
+void search(client({ signal }), { q: "Ada" });
 
 // @ts-expect-error an operation with no input does not accept a second argument.
-health(client, { signal });
+void health(client, { signal });
 // @ts-expect-error operations do not accept a third options argument.
-getUser(client, { id: 1 }, { signal });
+void getUser(client, { id: 1 }, { signal });
 // @ts-expect-error a required input cannot be omitted.
-getUser(client({ signal }));
+void getUser(client({ signal }));
 // @ts-expect-error the input value must match the struct.
-getUser(client({ signal }), { id: "wrong" });
+void getUser(client({ signal }), { id: "wrong" });
 // @ts-expect-error the old endpoint(input) entry is rejected; the first argument is a Client.
-getUser({ id: 1 });
+void getUser({ id: 1 });
 
-getUser(client({ protocols: ["chat.v1"] }), { id: 1 });
+void getUser(client({ protocols: ["chat.v1"] }), { id: 1 });
 
 export const updates = defineEventStream({
   path: "/events",
-  maxBufferSize: 1024,
-  maxQueueSize: 10,
   events: { message: struct.object({ text: struct.string() }) },
 });
 const Incoming = struct.object({
@@ -102,12 +99,12 @@ export const room = defineWebSocket({
   maxIncomingQueueSize: 10,
 });
 const shared = client({ signal });
-getUser(shared, { id: 1 });
-health(shared);
-updates(shared);
-room(shared);
+void getUser(shared, { id: 1 });
+void health(shared);
+void updates(shared);
+void room(shared);
 
-room(
+void room(
   client({
     heartbeat: {
       intervalMs: 1000,
@@ -120,7 +117,7 @@ room(
     },
   }),
 );
-room(
+void room(
   client({
     heartbeat: {
       intervalMs: 1000,
@@ -192,8 +189,6 @@ const StreamEvents = { message: struct.object({ text: struct.string() }) };
 const Problem = struct.object({ message: struct.string() }).optional();
 const optionalErrorStream = defineEventStream({
   path: "/error-stream",
-  maxBufferSize: 1024,
-  maxQueueSize: 10,
   events: StreamEvents,
   error: Problem,
 });

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, inject, test } from "vitest";
 import {
   StructError,
@@ -81,11 +80,12 @@ function runtimeSupportsStreamingRequestBody(): boolean {
         controller.close();
       },
     });
-    const request = new Request("https://example.com/", {
+    const init = {
       body: stream,
-      duplex: "half",
+      duplex: "half" as const,
       method: "POST",
-    } as RequestInit & { duplex?: "half" });
+    };
+    const request = new Request("https://example.com/", init);
     return request.body !== null;
   } catch {
     return false;
@@ -93,11 +93,29 @@ function runtimeSupportsStreamingRequestBody(): boolean {
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64");
+  return bytes.toBase64();
 }
 
 function isRecord(value: unknown): value is { [key: string]: unknown } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function queryScalar(value: unknown): string | undefined {
+  switch (typeof value) {
+    case "string":
+    case "number":
+    case "boolean":
+    case "bigint":
+      return String(value);
+    case "function":
+      return value.toString();
+    case "symbol":
+      throw new TypeError("Cannot convert a Symbol value to a string");
+    case "object":
+      return value === null ? "null" : undefined;
+    default:
+      return undefined;
+  }
 }
 
 function stringifyQuery(
@@ -120,9 +138,8 @@ function stringifyQuery(
       }
       continue;
     }
-    if (typeof value !== "undefined") {
-      parts.push(`${name}=${String(value)}`);
-    }
+    const scalar = queryScalar(value);
+    if (scalar !== undefined) parts.push(`${name}=${scalar}`);
   }
   return parts.join("&");
 }
@@ -723,7 +740,7 @@ describe("request builder through the real server", () => {
 
   test("returns REQ_BUILD_FAILED when the builder throws and does not reach the server", async () => {
     // The miss log lives in the globalSetup process, so every execution needs paths no earlier run has used.
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     const missPath = `/e2e/miss/build-failed-${runId}`;
     const controlPath = `/e2e/miss/build-failed-control-${runId}`;
     const explode = defineRequest({
@@ -756,7 +773,7 @@ describe("request builder through the real server", () => {
   });
 
   test("returns REQ_INPUT_INVALID for invalid input and does not reach the server", async () => {
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     const missPath = `/e2e/miss/input-invalid-${runId}`;
     const controlPath = `/e2e/miss/input-invalid-control-${runId}`;
     const create = defineRequest({
@@ -769,9 +786,11 @@ describe("request builder through the real server", () => {
       path: missPath,
     });
 
-    const [error, result, response] = await create(client, {
-      name: 1,
-    } as never);
+    const [error, result, response] = await create(
+      client,
+      // @ts-expect-error name must be a string to prove runtime rejection
+      { name: 1 },
+    );
     await pingMiss(controlPath);
 
     expect(error).toMatchObject({ code: "REQ_INPUT_INVALID" });

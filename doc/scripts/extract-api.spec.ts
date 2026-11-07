@@ -1,6 +1,3 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
   serializeCatalog,
@@ -12,7 +9,6 @@ import {
   ambientDeclaration,
   assertSignatureSyntax,
   declarationCategory,
-  fumadocsEntry,
   functionTypeOf,
   specifierIsTypeOnly,
   syntaxOffender,
@@ -24,6 +20,8 @@ import {
   typeTableQuery,
   writeExtractedApi,
 } from "./extract-api";
+import { joinPath } from "./paths";
+import { removeDirectory, tempDirectory } from "./tmp";
 
 const entry: ApiReferenceEntry = {
   package: "@defjs/core",
@@ -124,20 +122,6 @@ test("function types unwrap parentheses and ignore other types", () => {
   expect(functionTypeOf({ kind: SyntaxKind.TypeLiteral })).toBeUndefined();
 });
 
-test("fumadocs entries keep a type link only when one was generated", () => {
-  const base = {
-    name: "id",
-    description: "Identifier.",
-    type: "string",
-    simplifiedType: "string",
-    required: true,
-    deprecated: false,
-    tags: [{ name: "example", text: "n" }],
-  };
-  expect(fumadocsEntry(base).typeHref).toBeUndefined();
-  expect(fumadocsEntry({ ...base, typeHref: "#id" }).typeHref).toBe("#id");
-});
-
 test("empty parameter lists, hidden tables, and non-aliases stay inert", async () => {
   const build = () => "built";
   expect(syntheticQuery(0, build)).toBe("");
@@ -148,9 +132,10 @@ test("empty parameter lists, hidden tables, and non-aliases stay inert", async (
     query: "Client",
   });
   const plain = { flags: 0 };
-  const resolve = async (symbol: { flags: number }) => ({
-    flags: symbol.flags + 1,
-  });
+  const resolve = (symbol: { flags: number }) =>
+    Promise.resolve({
+      flags: symbol.flags + 1,
+    });
   expect(await resolveAlias(plain, 1, resolve)).toBe(plain);
   expect(await resolveAlias({ flags: 1 }, 1, resolve)).toEqual({ flags: 2 });
   expect(outputDirectory(undefined, "fallback")).toBe("fallback");
@@ -158,18 +143,18 @@ test("empty parameter lists, hidden tables, and non-aliases stay inert", async (
 });
 
 test("extracted JSON is written as catalog, reference and summary files", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "defjs-api-"));
+  const directory = tempDirectory("defjs-api");
   await writeExtractedApi([entry], directory);
-  expect(await Bun.file(join(directory, "api-entries.json")).text()).toBe(
+  expect(await Bun.file(joinPath(directory, "api-entries.json")).text()).toBe(
     serializeCatalog([entry]),
   );
-  expect(await Bun.file(join(directory, "api-reference.json")).text()).toBe(
+  expect(await Bun.file(joinPath(directory, "api-reference.json")).text()).toBe(
     serializeReference([entry]),
   );
-  expect(await Bun.file(join(directory, "api-summaries.json")).text()).toBe(
+  expect(await Bun.file(joinPath(directory, "api-summaries.json")).text()).toBe(
     serializeSummaries([entry]),
   );
-  await rm(directory, { recursive: true });
+  removeDirectory(directory);
 });
 
 test("generation fails when a signature is not valid TypeScript", async () => {

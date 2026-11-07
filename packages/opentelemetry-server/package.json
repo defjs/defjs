@@ -1,6 +1,6 @@
 {
   "name": "@defjs/opentelemetry-server",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Append OpenTelemetry interceptors to an application-owned Defjs client.",
   "bugs": {
     "url": "https://github.com/defjs/defjs/issues"
@@ -26,20 +26,17 @@
   },
   "devDependencies": {
     "@defjs/core": "workspace:^",
-    "@hono/node-server": "catalog:",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/core": "3.0.0",
-    "@types/ws": "catalog:",
     "@vitest/coverage-istanbul": "catalog:",
     "hono": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "ws": "catalog:"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.6.0",
+    "@defjs/core": "^0.7.0",
     "@opentelemetry/api": "^1.0.0",
     "@opentelemetry/core": "^2.0.0 || ^3.0.0"
   }

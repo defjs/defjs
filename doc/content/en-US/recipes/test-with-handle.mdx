@@ -5,16 +5,35 @@ description: Swap Fetch for one client with withHTTPHandle and keep the operatio
 
 # Test with a local Fetch handle
 
-`withHTTPHandle(...)` replaces Fetch for that client only. You still get URL building, interceptors, status dispatch, and Struct decoding — without DNS, TLS, or a real server.
+`withHTTPHandle(...)` replaces the underlying `fetch` function for a single client while exercising the entire Defjs pipeline—input validation, `builder` mapping, URL resolution, interceptors, status classification, and Struct decoding—without opening a network socket:
 
-See [Client](/docs/client) for details.
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.test.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+This is a standalone single-file demonstration, not a test-runner spec. For assertions against the shared SDK definition, use the preceding test tab.
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
+  </Tab>
+</Tabs>
+
+The single-file demonstration prints:
+
 ```txt
-Ada 200
+paid 200
 ```
 
-Use the same `getUser` operation against a real `withEndpoint(...)` client in production — only the handle changes.
+In production, call the exact same `getOrder` operation with a client configured with `withEndpoint(...)`. See [Testing](/docs/testing) and [Client](/docs/client).

@@ -4,6 +4,33 @@ import { StructError, struct } from "./index";
 import type { StructLike } from "./index";
 import { parseStructTuple as parse } from "./introspection";
 import { selectUnionOptions } from "./match";
+import { assertStruct } from "./shape";
+import type { RuntimeStruct } from "./types";
+import { isPlainObject } from "./utils";
+
+function runtime(value: unknown): RuntimeStruct {
+  assertStruct(value, "struct");
+  return value;
+}
+
+function prototypeValue(key: string): unknown {
+  const prototype: unknown = Object.prototype;
+  if (!isPlainObject(prototype)) {
+    throw new Error("expected prototype");
+  }
+  return prototype[key];
+}
+
+function anything(): unknown {
+  return expect.anything();
+}
+
+function record(value: unknown): { [key: string]: unknown } {
+  if (!isPlainObject(value)) {
+    throw new Error("expected record");
+  }
+  return value;
+}
 
 describe("parse.ts prototype pollution defense", () => {
   test("parseObjectValue strips __proto__ without polluting Object.prototype", () => {
@@ -12,18 +39,14 @@ describe("parse.ts prototype pollution defense", () => {
     if (err) {
       throw err;
     }
-    expect(
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
-    expect(Object.hasOwn(val as object, "__proto__")).toBe(false);
+    expect(prototypeValue("polluted")).toBeUndefined();
+    expect(Object.hasOwn(val, "__proto__")).toBe(false);
   });
 
   test("parseRecordValue does not pollute Object.prototype", () => {
     const s = struct.record(struct.any());
     parse(s, JSON.parse('{"__proto__":{"polluted":true}}'));
-    expect(
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(prototypeValue("polluted")).toBeUndefined();
   });
 
   test("parsed object output has null prototype(Object.create(null))", () => {
@@ -50,8 +73,9 @@ describe("parse.ts prototype pollution defense", () => {
     if (err) {
       throw err;
     }
-    expect(Object.hasOwn(val as object, "__proto__")).toBe(true);
-    expect((val as { [key: string]: unknown })["__proto__"]).toBe("data");
+    const output = record(val);
+    expect(Object.hasOwn(output, "__proto__")).toBe(true);
+    expect(output["__proto__"]).toBe("data");
   });
 
   test("parseObjectValue ignores inherited declared fields", () => {
@@ -67,7 +91,7 @@ describe("parse.ts prototype pollution defense", () => {
       expect(err?.issues[0]?.code).toBe("missing_key");
       expect(val).toBeUndefined();
     } finally {
-      delete (Object.prototype as { [key: string]: unknown })["pollutedId"];
+      Reflect.deleteProperty(Object.prototype, "pollutedId");
     }
   });
 
@@ -84,7 +108,7 @@ describe("parse.ts prototype pollution defense", () => {
       expect(err?.issues[0]?.code).toBe("missing_key");
       expect(val).toBeUndefined();
     } finally {
-      delete (Object.prototype as { [key: string]: unknown })["pollutedId"];
+      Reflect.deleteProperty(Object.prototype, "pollutedId");
     }
   });
 
@@ -92,7 +116,7 @@ describe("parse.ts prototype pollution defense", () => {
     const s = struct.object({
       name: struct.string().alias("user_name"),
     });
-    const wire = Object.create({ user_name: "admin" });
+    const wire: unknown = Object.create({ user_name: "admin" });
 
     expect(() => decodeJson(s, wire)).toThrow(StructError);
   });
@@ -103,17 +127,17 @@ describe("parse.ts prototype pollution defense", () => {
       protoValue: struct.string().alias("__proto__"),
     });
 
-    const encoded = encodeJson(dangerousStruct, {
-      constructorValue: "ctor",
-      protoValue: "proto",
-    }) as { [key: string]: unknown };
+    const encoded = record(
+      encodeJson(dangerousStruct, {
+        constructorValue: "ctor",
+        protoValue: "proto",
+      }),
+    );
     expect(Object.hasOwn(encoded, "__proto__")).toBe(true);
     expect(Object.hasOwn(encoded, "constructor")).toBe(true);
     expect(encoded["__proto__"]).toBe("proto");
     expect(encoded["constructor"]).toBe("ctor");
-    expect(
-      (Object.prototype as { [key: string]: unknown })["proto"],
-    ).toBeUndefined();
+    expect(prototypeValue("proto")).toBeUndefined();
 
     const decoded = decodeJson(
       dangerousStruct,
@@ -121,9 +145,7 @@ describe("parse.ts prototype pollution defense", () => {
     );
     expect(decoded).toEqual({ constructorValue: "ctor", protoValue: "proto" });
     expect(Object.getPrototypeOf(decoded)).toBeNull();
-    expect(
-      (Object.prototype as { [key: string]: unknown })["proto"],
-    ).toBeUndefined();
+    expect(prototypeValue("proto")).toBeUndefined();
   });
 
   test("keeps dangerous wire keys as own data properties during alias decode", () => {
@@ -132,14 +154,16 @@ describe("parse.ts prototype pollution defense", () => {
       constructorValue: struct.string().alias("constructor"),
     });
 
-    const raw: { [key: string]: unknown } = Object.create(null);
+    const raw: { [key: string]: unknown } = {};
+    Object.setPrototypeOf(raw, null);
     raw["__proto__"] = "safe";
     raw["constructor"] = "value";
 
     const output = decodeJson(Payload, raw);
 
     expect(output).toEqual({ proto: "safe", constructorValue: "value" });
-    expect(({} as { proto?: string }).proto).toBeUndefined();
+    const fresh: { proto?: string } = {};
+    expect(fresh.proto).toBeUndefined();
   });
 
   test("reads nested object fields and discriminators only once", () => {
@@ -252,7 +276,7 @@ describe("parse.ts nesting limit", () => {
   });
 
   test("returns a StructError instead of overflowing the stack on a very deep document", () => {
-    const input = JSON.parse(
+    const input: unknown = JSON.parse(
       '{"child":'.repeat(100_000) + "null" + "}".repeat(100_000),
     );
     const [error, output] = struct.parse(Chain, input);
@@ -306,9 +330,11 @@ describe("parse.ts nesting limit", () => {
         }
       }
       expect(struct.parse(schema, input)[0]).toBeNull();
-      expect(selectUnionOptions([schema], input)).toHaveLength(1);
+      expect(selectUnionOptions([runtime(schema)], input)).toHaveLength(1);
       const outer = struct.object({ value: schema });
-      expect(selectUnionOptions([outer], { value: input })).toHaveLength(0);
+      expect(
+        selectUnionOptions([runtime(outer)], { value: input }),
+      ).toHaveLength(0);
       const [error, output] = struct.parse(outer, { value: input });
       expect(error?.issues[0]).toMatchObject({
         code: "invalid_type",
@@ -456,7 +482,7 @@ describe("parse.ts nesting limit", () => {
     const deep = nest("next", 100_000, null);
     expect(parse(Fallback, deep)).toEqual([
       null,
-      expect.objectContaining({ next: expect.anything() }),
+      expect.objectContaining({ next: anything() }),
     ]);
   });
 });

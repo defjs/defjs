@@ -1,140 +1,128 @@
 ---
-title: "Контракты данных / Struct"
-description: Опиши контракты входа и ответа, которые SDK делит с потребителями, с типами и проверкой в рантайме.
+title: "Struct и схемы"
+description: Объявляйте контракты входных данных и ответов, разделяемые между SDK и использующими приложениями, с типами и валидацией во время выполнения.
 ---
 
-# Struct
+# Struct и схемы
 
-Struct выражает контракт данных, который обещает SDK: вход вызывающего, ответы сервиса, объявленные ошибки и сообщения реального времени. Переиспользуй их в экспортированных операциях, чтобы потребители получали согласованные типы TypeScript и проверку в рантайме независимо от клиента, который настраивают.
+`struct` объявляет сетевой контракт данных, разделяемый между SDK и использующими приложениями: входные параметры вызывающего кода, успешные ответы `2xx`, объявленные сервисные ошибки, события SSE и кадры WebSocket.
 
-Типы TypeScript даёт `Infer`, а проверки в рантайме — `struct.parse(...)`: без throw, кортеж error-first.
+- **Статический вывод типов**: выводите типы TypeScript с помощью `Infer<typeof Schema>`.
+- **Error-first валидация**: проверяйте значения во время выполнения с помощью `struct.parse(Schema, value)` — возвращает `[null, data]` или `[StructError, undefined]` без выбрасывания исключений.
 
-## Базовая настройка
+## 1. Объявление схемы в SDK и валидация в приложении
+
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
 </include>
 
-Распарсенный output держит только объявленные поля. Нет обязательного поля, неверный примитив, плохие вложенные значения, неверная длина tuple или запрещённый `null` → `StructError`, без частичного значения. Structs неизменяемы; `.optional()` и компания возвращают новый Struct.
+</Tab>
+</Tabs>
 
-## Обязательное, optional и null
+Распарсенные объекты сохраняют только явно объявленные поля (неизвестные свойства отсекаются) и создаются с прототипом `null`. Любой пропущенный обязательный ключ, несоответствие примитивного типа или невалидная ветка приводят к `StructError` без возврата частичных данных.
 
-Присутствие и nullability — разные вещи:
+## 2. Обязательные, опциональные и nullable-поля
 
-| Объявление                   | Отсутствует / `undefined`                    | `null`     | Валидное значение |
-| ---------------------------- | -------------------------------------------- | ---------- | ----------------- |
-| `struct.string()`            | Отвергнуть                                   | Отвергнуть | Принять string    |
-| `struct.string().optional()` | Принять; опустить отсутствующее поле объекта | Отвергнуть | Принять string    |
-| `struct.string().null()`     | Отвергнуть                                   | Принять    | Принять string    |
-| `struct.string().nullish()`  | Принять; опустить отсутствующее поле объекта | Принять    | Принять string    |
-| `struct.null()`              | Отвергнуть                                   | Принять    | Отвергнуть прочее |
+Defjs строго разделяет **наличие поля** (`undefined`) и **допустимость отсутствия значения** (`null`). Каждый конструктор `struct` по умолчанию строго обязателен и не допускает `null`:
+
+| Объявление                   | Отсутствует / `undefined`               | `null`    | Допустимое значение |
+| ---------------------------- | --------------------------------------- | --------- | ------------------- |
+| `struct.string()`            | Ошибка                                  | Ошибка    | Принимает `string`  |
+| `struct.string().optional()` | Принимает (опускается при сериализации) | Ошибка    | Принимает `string`  |
+| `struct.string().null()`     | Ошибка                                  | Принимает | Принимает `string`  |
+| `struct.string().nullish()`  | Принимает (опускается при сериализации) | Принимает | Принимает `string`  |
+| `struct.null()`              | Ошибка                                  | Принимает | Отклоняет не-`null` |
 
 <include cwd lang="typescript">
   examples/struct/required-optional-null.ts#example
 </include>
 
-`struct.any()` и `struct.unknown()` тоже отвергают `null` и `undefined`. Добавь `.null()`, `.optional()` или `.nullish()`, чтобы принять их.
+Конструкторы `struct.any()` и `struct.unknown()` также отклоняют `null` и `undefined`, если к ним явно не добавлены `.null()`, `.optional()` или `.nullish()`.
 
-На корне optional может быть `undefined`. Внутри объекта опущенные optional/nullish поля остаются absent. Вложенное поле-объект подчиняется тому же правилу: пометь его `.optional()`, когда вызывающий может его опустить. Обязательное поле-объект остаётся обязательным, даже если каждое поле внутри него optional.
+## 3. Двунаправленные сетевые алиасы (`.alias()`)
 
-## Раскладка запроса
+Используйте `.alias("wire_name")`, когда бэкенд использует `snake_case` или заголовки, а ваш TypeScript SDK спроектирован в `camelCase`. Алиас объявляется у поля ровно один раз и прозрачно работает в обоих направлениях:
 
-Path, query, headers и body — поля, которые возвращает builder, а не request struct. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. `struct.urlencoded(shape)` и `struct.formData(shape)` — object structs с тегом кодека. Тег применяется, только когда это значение — корень тела: ключи используют алиасы, а массивы повторяют имя поля.
-
-<include cwd lang="typescript">
-  examples/struct/request-placement.ts#example
-</include>
-
-| Корень тела                                                            | Уходит как        | Content type по умолчанию                         |
-| ---------------------------------------------------------------------- | ----------------- | ------------------------------------------------- |
-| типизированный объект, массив, конечное число, булево значение, `null` | JSON-текст        | `application/json`                                |
-| struct `string` или сырая string                                       | текст             | `text/plain;charset=UTF-8`                        |
-| `struct.urlencoded(shape)` в корне                                     | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)` в корне                                       | `FormData`        | multipart boundary платформы                      |
-| `Blob` / `File`                                                        | сам blob          | тип blob или `application/octet-stream`           |
-| `ArrayBuffer` / view / stream                                          | байты             | `application/octet-stream`                        |
-
-`NaN` и `±Infinity`, в том числе внутри массива или объекта, падают с `REQ_BUILD_FAILED`.
-
-`struct.file()` — value struct и для поля формы, и для сырого file body. WebSocket builder не может вернуть `headers` или `body`. HTTP и SSE могут. `GET` и `HEAD` — нет.
-
-## Алиасы
-
-`.alias(...)` отделяет логические имена от wire-имён. `struct.parse(...)` использует логические ключи, если не передать `{ aliases: true }`. JSON и плоские request-кодеки кодируют алиасы; декодирование JSON-ответа отображает wire-ключи обратно в логические поля.
+| Граница применения                                                                     | Используемый ключ                                   |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Входные данные `input` и `struct.parse(Schema, value)`                                 | Логическое имя (`customerName`)                     |
+| Типизированное значение struct, возвращаемое из `builder` (`body`, `query`, `headers`) | Сетевой алиас (`customer_name`)                     |
+| Декодирование JSON-ответа / события SSE / кадра WebSocket                              | Сетевой `customer_name` → логический `customerName` |
+| Анонимный ключ объекта, написанный прямо в `builder`                                   | Литеральный ключ как написан                        |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-| Граница                                        | Поле                            |
-| ---------------------------------------------- | ------------------------------- |
-| `struct.parse(User, ...)` и input операции     | Логический `displayName`        |
-| Типизированный объект, возвращённый из builder | Wire `display_name`             |
-| Декодирование JSON / SSE / WebSocket           | Wire → логический `displayName` |
-| Анонимный объект, написанный в builder         | Тот ключ, который ты написал    |
+Разворачивание (spread) типизированного объекта внутри `builder` (`{ ...input.order, extra: 1 }`) сохраняет кодирование структуры и все алиасы. Указание одновременно логического ключа и его сетевого алиаса в одном объекте приводит к ошибке `REQ_BUILD_FAILED`.
 
-Сам builder читает логические имена (`input.user.displayName`); wire-имя появляется только тогда, когда serializer кодирует типизированный объект, который builder возвращает.
+## 4. Размещение в запросе и кодеки форм
 
-Алиасы работают на вложенных полях, массивах, объектах, unions и дискриминаторах. Держи логические имена в коде приложения; внешнее имя клади на struct один раз. Spread типизированного объекта сохраняет это кодирование. Поставить в одном объекте и логическое поле, и его wire-ключ — это `REQ_BUILD_FAILED`. Свой `JSON.stringify` значения сходит с этого пути: serializer видит логические имена.
+`input` объявляет параметры вызова, а `builder` распределяет их по объекту `{ path, query, headers, body }`. Для тел с кодированием форм конструкторы `struct.urlencoded(shape)` и `struct.formData(shape)` помечают корневой объект, благодаря чему транспорт автоматически сериализует его как `URLSearchParams` или `FormData`:
 
-Схема кодирования выбирается на каждом узле, а не только в корне. Новый объект под анонимным родителем сохраняет ключи, которые ты написал. Тот же объект под типизированным родителем использует struct этого поля.
+<include cwd lang="typescript">
+  examples/struct/request-placement.ts#example
+</include>
 
-```ts
-body: { row: { id: '42' } }              // Anonymous root: emits id
-body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
-```
+| Корень `body`, возвращённый из `builder`                       | Сетевой формат    | `Content-Type` по умолчанию                       |
+| -------------------------------------------------------------- | ----------------- | ------------------------------------------------- |
+| Типизированный объект, массив, конечное число, boolean, `null` | Текст JSON        | `application/json`                                |
+| `string` struct или обычная `string`                           | Текст UTF-8       | `text/plain;charset=UTF-8`                        |
+| `struct.urlencoded(shape)` в корне тела                        | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `struct.formData(shape)` в корне тела                          | `FormData`        | `multipart/form-data; boundary=...`               |
+| `Blob` / `File` (`struct.file()`)                              | Бинарный blob     | `blob.type` или `application/octet-stream`        |
+| `ArrayBuffer` / typed array view / `ReadableStream`            | Сырые байты       | `application/octet-stream`                        |
 
-Если схема кодирования union соответствует нескольким веткам, каждая ветка кодируется и сравнивается. Одинаковый wire-результат сохраняется; различие — это `REQ_BUILD_FAILED`.
+## 5. Обработка `StructError` и проблем валидации
 
-Смешанное intersection, содержащее не-object часть, при разборе получает в качестве тега конъюнкцию тегов совпавших частей; заново написанное значение смешанного intersection, которое не разбиралось, обрабатывается как анонимный объект.
-
-## Сбои parse
-
-`struct.parse(...)` возвращает `[null, value]` или `[StructError, undefined]`. `StructError` расширяет `Error` и открывает `issues`, плюс `format()`, `flatten()` и `prettify()`.
+При неудачной валидации вызов `struct.parse(Schema, data, { aliases?, errorMap? })` возвращает кортеж `[StructError, undefined]`. Класс `StructError` расширяет стандартный `Error` и предоставляет свойство `issues` и методы `format()`, `flatten()` и `prettify()`:
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-У `StructIssue` есть `code`, `expected`, `message`, `path` и `received`. `code` — это `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` или `missing_key`. Сообщения по умолчанию называют тип полученного значения, но никогда не само значение: `Expected number at id, received string`. Пути issue структурные и сохраняют ключи record: `struct.record(...)` может дать `Expected number at alice@example.com, received string`, поэтому ключи могут оставаться чувствительными в сообщениях по умолчанию, `prettify()` и `String(fault)`. Поэтому `message` и `prettify()` не включают полученные данные; `received` хранит исходное значение и требует маскирования перед логированием или возвратом. `struct.parse(..., { errorMap })` переписывает сообщения только для этого вызова, включая ошибки преобразования bigint/date в struct из другой копии Core. Любая возвращённая строка, в том числе `''`, заменяет сообщение по умолчанию; только `undefined` сохраняет его. Пользовательский текст используется дословно и может раскрыть значения, если map их включает.
+Каждая запись `StructIssue` содержит `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` или `custom`), `path`, `expected`, `received` и `message`. Сообщения по умолчанию опускают полученное значение и сообщают только его _тип_, но пути сохраняют динамические ключи record, которые могут содержать конфиденциальные значения. `String(error)` и `error.prettify()` не являются границей маскирования; при логировании используйте allowlist безопасных полей и считайте сырые значения `received` и пользовательские сообщения конфиденциальными.
 
-Валидация Struct только структурная. Нет публичных правил range, format, refinement, auth или перехода состояния. Эти проверки делай до вызова операции.
-
-## Справка
-
-Публичные конструкторы на `@defjs/core` (внутренности — не API фасада):
+## 6. Справочник конструкторов
 
 <include cwd lang="typescript">
   examples/struct/any.ts#example
 </include>
 
-| Конструктор                      | Input                                                          | Выведенный output             |
-| -------------------------------- | -------------------------------------------------------------- | ----------------------------- |
-| `struct.number()`                | Число, кроме `NaN`                                             | `number`, включая ±`Infinity` |
-| `struct.date()`                  | `Date`, number или date string                                 | Валидный `Date`               |
-| `struct.bigint()`                | `bigint` или строка, которую принимает `BigInt(...)`           | `bigint`                      |
-| `struct.enum(...)`               | Объявленный string или number member                           | Этот literal union            |
-| `struct.discriminatedUnion(...)` | Объект с обязательным literal-дискриминатором                  | Выбранная ветка объекта       |
-| `struct.or(...)`                 | Первая подходящая ветка; кодирование проверяет неоднозначность | Union output веток            |
-| `struct.intersection(...)`       | Значения, которые принимает каждый member                      | Intersection output           |
-| `struct.record(value)`           | Plain object, чьи значения совпадают с `value`                 | Record распарсенных значений  |
-| `struct.tuple(items)`            | Массив ровно объявленной длины                                 | Tuple фиксированной длины     |
+| Конструктор                                                | Принимаемый вход                           | Выводимый результат                                          |
+| ---------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------ |
+| `struct.string()` / `struct.boolean()`                     | Соответствующий примитив                   | `string` / `boolean`                                         |
+| `struct.number()`                                          | Любой `number`, кроме `NaN`                | `number` (`NaN` отклоняется; `±Infinity` отклоняется в JSON) |
+| `struct.bigint()`                                          | `bigint` или числовая строка               | `bigint`                                                     |
+| `struct.date()`                                            | Валидный `Date`, таймстемп или ISO-строка  | `Date`                                                       |
+| `struct.literal(value)`                                    | Точный литерал примитива                   | Литеральный тип                                              |
+| `struct.enum(values)`                                      | Объявленный строковый или числовой элемент | Объединение литералов                                        |
+| `struct.array(item)` / `struct.tuple(items)`               | Массив / кортеж фиксированной длины        | `T[]` / `[...]`                                              |
+| `struct.object(shape)` / `struct.record(val)`              | Простой объект                             | Типизированный объект / `Record<string, V>`                  |
+| `struct.discriminatedUnion(key, options)`                  | Объект с литеральным дискриминатором `key` | Объединение веток объектов                                   |
+| `struct.or(branches)`                                      | Первая совпавшая ветка                     | Объединение типов веток                                      |
+| `struct.intersection(members)`                             | Значение, удовлетворяющее всем членам      | Глубоко объединённый тип (intersection)                      |
+| `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`            | Бинарное представление                                       |
 
-Каждый Struct поддерживает `.alias(name)`, `.optional()`, `.null()` и `.nullish()`. `struct.discriminatedUnion` нуждается в object options с обязательным literal-дискриминатором и отвергает дубликаты.
+## Связанные материалы
 
-Импортируй `struct`, `Infer`, `Struct`, `StructError` и связанные публичные типы из `@defjs/core`. Парсер — `struct.parse(...)`. Не импортируй `createObjectStruct`, символы определений, внутренности кодеков или `packages/core/src`.
-
-Чего фасад не обещает:
-
-- Output object/record с null prototype — не рассчитывай на методы `Object.prototype`.
-- Неизвестные ключи объекта отбрасываются.
-- `struct.number()` отвергает `NaN`, принимает бесконечности.
-- `struct.or(...)` пробует ветки по порядку; отвергает неоднозначные кодирования, когда ветки не согласны.
-- `struct.intersection(...)` парсит members в порядке объявления.
-- Intersection глубоко сливает outputs членов (значения, равные по `Object.is`, и Date с тем же временем остаются, plain objects и массивы равной длины сливаются рекурсивно, любой другой конфликт — `invalid_intersection` на этом path), `unknown` / `any` ничего не добавляют, и один логический key может соответствовать нескольким wire key; конфликт возникает только когда в один и тот же wire key записываются неравные значения.
-- Struct валидирует границу; он не кеширует, не авторизует и не владеет ресурсом транспорта.
-
-## Связанные рецепты
-
-- [POST JSON](/ru-RU/recipes/post-json)
-- [GET с объявленным 404](/ru-RU/recipes/get-declared-404)
+- [HTTP-операции](/ru-RU/docs/http)
+- [Обработка ошибок](/ru-RU/docs/errors)
+- [Отправка и валидация JSON](/ru-RU/recipes/post-json)

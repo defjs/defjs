@@ -73,7 +73,7 @@ type Evaluators<T> = T extends Locator
     : object;
 
 /**
- * A Playwright object that lives in the Node process. Every call is forwarded through a Vitest
+ * A Playwright object that lives in the Vitest host process. Every call is forwarded through a
  * browser command, so synchronous Playwright methods such as `page.url()` become promises.
  */
 export type Remote<T> = Omit<Mapped<T>, keyof Evaluators<T>> &
@@ -99,7 +99,18 @@ function encode(value: unknown): Encoded {
     return Object.fromEntries(
       Object.entries(value).map(([key, v]) => [key, encode(v)]),
     );
-  return value as Encoded;
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    typeof value === "boolean"
+  )
+    return value;
+  throw new TypeError(
+    `A ${typeof value} cannot be sent to the Playwright host`,
+  );
 }
 
 function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
@@ -117,7 +128,7 @@ function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
           });
         };
       if (typeof name === "symbol") return undefined;
-      return proxy(token, handle, [...steps, { name }]);
+      return proxy<unknown>(token, handle, [...steps, { name }]);
     },
     apply(_target, _this, args: unknown[]) {
       const last = steps.at(-1);
@@ -126,7 +137,8 @@ function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
         ...steps.slice(0, -1),
         { name: last.name, args: args.map(encode) },
       ];
-      if (locatorBuilders.has(last.name)) return proxy(token, handle, call);
+      if (locatorBuilders.has(last.name))
+        return proxy<unknown>(token, handle, call);
       return commands
         .e2eCall(token, { handle, steps: call })
         .then((reply) =>
@@ -137,6 +149,7 @@ function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
     },
   });
   origins.set(instance, { token, ref });
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: `new Proxy` is typed as its target, but the members of Remote<T> exist only through the get/apply traps that forward to the Playwright host; typing the target would need a real Remote<T>, and a wider overload or always-true guard is the same assertion in disguise
   return instance as T;
 }
 

@@ -1,20 +1,75 @@
 ---
-title: Плагины
-description: Необязательные пакеты, которые приложение подключает к своему клиенту Defjs.
+title: Обзор интеграций
+description: Расширяйте клиент Defjs в приложении с помощью внедрения во фреймворки, наблюдаемости на сервере и навыков ИИ-ассистентов без жёсткой связи с SDK.
 ---
 
-# Плагины
+# Обзор интеграций
 
-Плагины — необязательные пакеты, которые приложение-потребитель ставит на свой клиент Defjs. `@defjs/core` их не импортирует, определения SDK тоже. Клиент, endpoint, учётные данные и выбор плагинов принадлежат приложению.
+Интеграция расширяет собственный `Client` приложения в строго определённой точке расширения без модификации `@defjs/core` и без связывания определений SDK с конкретным фреймворком или стеком телеметрии. Определения вашего SDK остаются чистыми модулями `@defjs/core`, а использующее приложение само решает, какие интеграции подключать.
 
-Плагины бывают двух видов. **Плагины фреймворка** передают существующий `Client` дереву фреймворка. **Middleware-плагин** — это форма плагина для цепочки перехватчиков: он дописывает перехватчики в клиент приложения. См. [Перехватчики](/ru-RU/docs/interceptors).
+Каждый плагин Defjs строго следует **контракту тонкого плагина (thin plugin)**:
 
-| Плагин                                                                                 | Пакет                         | Что добавляет                                                                                        | Чего не делает                                                                                       |
-| -------------------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| [React](/ru-RU/docs/integrations/react) · фреймворк                                    | `@defjs/react`                | `ClientProvider` и `useClient()` для существующего клиента                                           | Не создаёт, не кэширует, не повторяет и не освобождает клиент. Это не библиотека query или состояния |
-| [Vue](/ru-RU/docs/integrations/vue) · фреймворк                                        | `@defjs/vue`                  | Vue-плагин, `HTTP_CLIENT` и `injectClient()`                                                         | Не создаёт, не кэширует и не повторяет. Не закрывает транспорт при unmount. Это не библиотека query  |
-| [OpenTelemetry на сервере](/ru-RU/docs/integrations/opentelemetry-server) · middleware | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`, опция клиента, которая дописывает перехватчики HTTP, SSE и WebSocket | Не инициализирует OpenTelemetry SDK и не инструментирует входящие серверные запросы                  |
+- **Никакого скрытого кэширования или состояния**: плагины никогда не кэшируют ответы, не повторяют запросы и не управляют состоянием данных запросов.
+- **Никакой подмены транспорта**: плагины никогда не оборачивают и не подменяют базовые транспорты HTTP, SSE или WebSocket.
+- **Жизненным циклом владеет вызывающий код**: размонтирование UI-провайдера или завершение работы SDK телеметрии не отменяет выполняемые запросы и не закрывает активные потоки автоматически.
 
-React и Vue передают существующий `Client` дереву фреймворка. Приложение создаёт этот клиент через `createClient` из `@defjs/core`. Плагин React отдаёт его через Context. Плагин Vue отдаёт его через `app.use(createClientPlugin(client))`. Ни один из пакетов не начинает запрос.
+---
 
-Серверный middleware-плагин OpenTelemetry — это `ClientOption`. Передай `withOpenTelemetryServer(...)` в `createClient`. Он дописывает по одному перехватчику на каждый включённый транспорт, в порядке HTTP, SSE, WebSocket. См. [Перехватчики](/ru-RU/docs/interceptors). Пакет не инициализирует OpenTelemetry SDK.
+## Опубликованные интеграции и инструменты
+
+| Область                                                                   | Пакет / Ресурс                    | Категория         | Что предоставляет                                                                                              | Что остаётся в приложении                                                               |
+| ------------------------------------------------------------------------- | --------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [React](/ru-RU/docs/integrations/react)                                   | `@defjs/react`                    | Плагин фреймворка | `ClientProvider` и `useClient(overrideClient?)` для React 18+                                                  | Создание клиента, отмена через `AbortController`, кэширование запросов (TanStack Query) |
+| [Vue](/ru-RU/docs/integrations/vue)                                       | `@defjs/vue`                      | Плагин фреймворка | `createClientPlugin`, `HTTP_CLIENT` и `injectClient(key?)` для Vue 3.2+                                        | Создание клиента, отмена в `onCleanup` / `onScopeDispose`, состояние запросов           |
+| [OpenTelemetry на сервере](/ru-RU/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Middleware-плагин | Опция `ClientOption` `withOpenTelemetryServer(...)` для исходящих спанов, метрик и логов HTTP, SSE и WebSocket | Инициализация OpenTelemetry SDK, экспортёры, сэмплирование, маскирование данных         |
+| [ИИ-навык](/ru-RU/docs/ai) и [llms.txt](/ru-RU/docs/ai-api)               | Навык `defjs/defjs` и `/llms.txt` | Инструменты ИИ    | Навык агента (`SKILL.md`) и машиночитаемая Markdown-документация                                               | Проверка на соответствие установленной в проекте версии `@defjs/core` и набору тестов   |
+
+---
+
+## Две архитектуры плагинов
+
+### 1. Плагины для фреймворков (`@defjs/react`, `@defjs/vue`)
+
+Плагин фреймворка передаёт существующий [`DerivableClient`](/ru-RU/api/core/derivableclient-type) вниз по дереву компонентов с помощью стандартного механизма внедрения зависимостей (React Context или Vue `provide` / `inject`):
+
+<Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
+
+  </Tab>
+</Tabs>
+
+### 2. Middleware-плагины (`@defjs/opentelemetry-server`)
+
+Middleware-плагин представляет собой фабрику, возвращающую [`ClientOption`](/ru-RU/api/core/clientoption-type). При передаче в `createClient(...)` он добавляет перехватчики HTTP, SSE и/или WebSocket через `withInterceptors`:
+
+<Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/request-id/plugins/request-id.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Смотрите раздел [Перехватчики](/ru-RU/docs/interceptors) для изучения правил порядка выполнения, границ повторов и хуков жизненного цикла потоков.

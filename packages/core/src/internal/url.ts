@@ -1,7 +1,7 @@
 import type { QuerySerializer } from "../client/config";
 import { isPlainObject } from "../struct/utils";
 import type { HttpRequest } from "./http_request";
-import type { RequestBuildValue, RequestScalarValue } from "./request_values";
+import type { RequestScalarValue } from "./request_values";
 import {
   isRequestScalarValue,
   serializeRequestScalarValue,
@@ -86,9 +86,58 @@ export function resolveTransportQuery(
   };
 }
 
+/** The first value of a name replaces a default header; later values of that name are appended. */
+function headerWriter(
+  headers: Headers,
+): (key: string, headerValue: string) => void {
+  const applied = new Set<string>();
+  return (key, headerValue) => {
+    const name = key.toLowerCase();
+    if (applied.has(name)) {
+      headers.append(key, headerValue);
+    } else {
+      headers.set(key, headerValue);
+      applied.add(name);
+    }
+  };
+}
+
+/**
+ * Applies `[name, value]` entries in order. Each entry is destructured, and the value becomes a string the way
+ * Headers converts it. A non-iterable entry, a name that is not a string, or a symbol value throws TypeError.
+ */
+export function appendHeaderEntries(
+  headers: Headers,
+  entries: readonly unknown[],
+): void {
+  const appendValue = headerWriter(headers);
+  for (const entry of entries) {
+    if (!isIterable(entry)) {
+      throw new TypeError("header entry must be a [name, value] pair");
+    }
+    const [key, headerValue] = entry;
+    if (typeof key !== "string") {
+      throw new TypeError("header name must be a string");
+    }
+    if (typeof headerValue === "symbol") {
+      throw new TypeError(`header value for "${key}" must not be a symbol`);
+    }
+    appendValue(key, String(headerValue));
+  }
+}
+
+function isIterable(value: unknown): value is Iterable<unknown> {
+  return (
+    typeof value === "string" ||
+    (typeof value === "object" &&
+      value !== null &&
+      typeof Reflect.get(value, Symbol.iterator) === "function")
+  );
+}
+
 export function appendRecordToHeaders(
   headers: Headers,
-  value?: HeadersInit | { [key: string]: RequestBuildValue },
+  value?: HeadersInit | { [key: string]: unknown },
 ): void {
   if (!value) {
     return;
@@ -101,23 +150,12 @@ export function appendRecordToHeaders(
     return;
   }
 
-  const applied = new Set<string>();
-  const appendValue = (key: string, headerValue: string) => {
-    const name = key.toLowerCase();
-    if (applied.has(name)) {
-      headers.append(key, headerValue);
-    } else {
-      headers.set(key, headerValue);
-      applied.add(name);
-    }
-  };
-
   if (Array.isArray(value)) {
-    for (const [key, headerValue] of value) {
-      appendValue(key, headerValue);
-    }
+    appendHeaderEntries(headers, value);
     return;
   }
+
+  const appendValue = headerWriter(headers);
 
   for (const [key, headerValue] of Object.entries(value)) {
     if (typeof headerValue === "undefined") {
@@ -253,8 +291,8 @@ let lastEndpoint: string | undefined;
 let lastBase: URL | undefined;
 
 function createEndpointDirectoryBase(baseEndpoint: string): URL {
-  if (baseEndpoint === lastEndpoint) {
-    return lastBase as URL;
+  if (baseEndpoint === lastEndpoint && lastBase !== undefined) {
+    return lastBase;
   }
   let base: URL;
   try {
@@ -275,6 +313,16 @@ function createEndpointDirectoryBase(baseEndpoint: string): URL {
   return base;
 }
 
+function hasC0ControlOrBackslash(path: string): boolean {
+  for (let index = 0; index < path.length; index += 1) {
+    const code = path.charCodeAt(index);
+    if (code <= 0x1f || code === 0x5c) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function validateEndpointPath(path: string): void {
   if (URL.canParse(path) || /^ *\/\//.test(path)) {
     throw new RequestUrlError("Endpoint path must not be an absolute URL");
@@ -284,8 +332,8 @@ function validateEndpointPath(path: string): void {
     throw new RequestUrlError("Endpoint path must not include query or hash");
   }
 
-  // eslint-disable-next-line no-control-regex -- C0 controls are an intentional request URL security boundary.
-  if (/[\u0000-\u001f\\]/.test(path)) {
+  // C0 controls are an intentional request URL security boundary.
+  if (hasC0ControlOrBackslash(path)) {
     throw new RequestUrlError(
       "Endpoint path must not include C0 controls or backslashes",
     );

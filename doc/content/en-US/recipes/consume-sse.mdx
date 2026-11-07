@@ -5,18 +5,34 @@ description: Open a typed event stream, iterate once, then close and await close
 
 # Consume an SSE stream
 
-One async iterator per stream. Put `close` + `await stream.closed` in `finally` so early exits don’t leak the Fetch attempt.
+Each `EventStreamHandle` exposes a single async iterator. Always place `stream.close(...)` and `await stream.closed` inside a `finally` block so early `break` or `return` statements never leak the underlying Fetch stream:
 
-See [SSE](/docs/sse) for details.
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-<include cwd meta="notifications.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
 
-`api.example.com` is a placeholder. With a server whose first event is `message` with the data `{ "text": "hello from the server" }`, the snippet prints:
+  </Tab>
+</Tabs>
+
+With a server whose first event is `line` with data `{ "text": "build started" }`, the script prints:
 
 ```txt
-hello from the server
+build started
 ```
 
-SSE does not retry network/read failures unless you enable `withSSEReconnect(...)`. With a reconnect object, `attempts` defaults to `3` per outage; a successful handshake resets the budget and backoff exponent. `attempts: 0` disables retry. Invalid numeric reconnect options fail before any request with `REQ_OPTIONS_INVALID`; see [validation rules](/api/core/withssereconnect). Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests reconnect, and a `ReadableStream` request body never does.
+- SSE does not automatically reconnect on network or read failures unless you configure [`withSSEReconnect(...)`](/api/core/withssereconnect) on the client.
+- When `withSSEReconnect(...)` is set, `attempts` defaults to `3` per outage and resets on a successful handshake (`attempts: 0` disables reconnect). Without a custom `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests reconnect. A request with a `ReadableStream` body never reconnects. See [SSE event streams](/docs/sse).

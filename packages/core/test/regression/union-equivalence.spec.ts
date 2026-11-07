@@ -61,8 +61,8 @@ test.each([
   },
 );
 
-test("own child tags disambiguate the wire encoding of overlapping array branches", async () => {
-  const input = await parseEndpointInput(
+test("own child tags disambiguate the wire encoding of overlapping array branches", () => {
+  const input = parseEndpointInput(
     struct.object({
       rows: struct.or(struct.array(Item), struct.array(OtherItem)),
     }),
@@ -73,9 +73,9 @@ test("own child tags disambiguate the wire encoding of overlapping array branche
   expect(encodeOutbound(input)).toEqual({ rows: [{ wire_id: "42" }] });
 });
 
-test("equivalent untagged object branches keep literal extras", async () => {
+test("equivalent untagged object branches keep literal extras", () => {
   const Plain = struct.object({ id: struct.string() });
-  const input = await parseEndpointInput(
+  const input = parseEndpointInput(
     struct.object({ row: struct.or(Plain, struct.unknown()) }),
     { row: { id: "42" } },
   );
@@ -84,8 +84,8 @@ test("equivalent untagged object branches keep literal extras", async () => {
   ).toEqual({ row: { id: "42", extra: "kept" } });
 });
 
-test("different untagged union wire encodings still fail loudly", async () => {
-  const input = await parseEndpointInput(
+test("different untagged union wire encodings still fail loudly", () => {
+  const input = parseEndpointInput(
     struct.object({ row: struct.or(Item, OtherItem) }),
     { row: { id: "42" } },
   );
@@ -94,7 +94,7 @@ test("different untagged union wire encodings still fail loudly", async () => {
   );
 });
 
-test("unique discriminated and union guides recurse through records and tuples at depth", async () => {
+test("unique discriminated and union guides recurse through records and tuples at depth", () => {
   const Cat = struct.object({
     kind: struct.literal("cat"),
     rows: struct.record(struct.tuple([Item])),
@@ -103,7 +103,7 @@ test("unique discriminated and union guides recurse through records and tuples a
     kind: struct.literal("dog"),
     age: struct.number(),
   });
-  const input = await parseEndpointInput(
+  const input = parseEndpointInput(
     struct.object({ pet: struct.discriminatedUnion("kind", [Cat, Dog]) }),
     {
       pet: { kind: "cat", rows: { selected: [{ id: "42" }] } },
@@ -130,7 +130,7 @@ test("unique discriminated and union guides recurse through records and tuples a
   ).toThrow(/wire key collision/);
 });
 
-test("nested mixed intersections retain all object-side tags and hostile keys", async () => {
+test("nested mixed intersections retain all object-side tags and hostile keys", () => {
   const First = struct.object({ first: struct.string().alias("first_wire") });
   const Second = struct.object({
     second: struct.string().alias("second_wire"),
@@ -142,7 +142,7 @@ test("nested mixed intersections retain all object-side tags and hostile keys", 
     struct.intersection(First, struct.or(Second, struct.number())),
     struct.or(Third, struct.string()),
   );
-  const input = await parseEndpointInput(Schema, {
+  const input = parseEndpointInput(Schema, {
     first: "A",
     second: "B",
     ["__proto__"]: "safe",
@@ -155,10 +155,10 @@ test("nested mixed intersections retain all object-side tags and hostile keys", 
   expect(Object.getPrototypeOf(input)).toBeNull();
 });
 
-test("object intersections keep literal extras and reject a key that shadows a wire alias", async () => {
+test("object intersections keep literal extras and reject a key that shadows a wire alias", () => {
   const Left = struct.object({ id: struct.string().alias("wire_id") });
   const Right = struct.object({ n: struct.number() });
-  const input = await parseEndpointInput(struct.intersection(Left, Right), {
+  const input = parseEndpointInput(struct.intersection(Left, Right), {
     id: "42",
     n: 1,
   });

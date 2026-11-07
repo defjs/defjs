@@ -1,92 +1,81 @@
 ---
 title: Defjs
-description: 設計並發佈 TypeScript SDK：可重用的 API 定義，以及由應用程式擁有的 client。
+description: 以可重用的 API 定義與由應用程式掌控的 Client 設計並發布 TypeScript SDK。
 ---
 
 # Defjs
 
-**為更友善的 SDK 設計而生。**
+**一次定義 API 契約，依個別應用程式靈活設定執行細節。**
 
-Defjs 幫助團隊把 API 做成可重用的 TypeScript SDK。`def` 代表 `define`：描述服務提供的操作，從模組或 npm 套件匯出，再讓每個應用程式設定自己的 client 去呼叫它們。
+Defjs 將 TypeScript SDK 的兩側明確分開：
 
-## 定義 SDK，設定應用程式
+- **SDK 定義端 (`@defjs/core`)** — SDK 開發者在 `struct` schema 旁宣告具型別的 HTTP、SSE 與 WebSocket 操作。定義本身是純粹的資料：匯入時不會發起任何網路請求，也不會綁定全域 Client。
+- **應用程式執行端** — 取用 SDK 的應用程式建立專屬的 `Client`（`createClient(withEndpoint(...))`），設定憑證與攔截器、配置負載平衡，並在呼叫操作時傳入該 Client。
 
-| SDK 作者                                 | SDK 使用端                               |
-| ---------------------------------------- | ---------------------------------------- |
-| 定義操作、input、請求對應、回應與錯誤    | 選擇服務位址、憑證、interceptors 與傳輸  |
-| 匯出具型別的 HTTP、SSE 與 WebSocket 端點 | 匯入那些端點，並用 Defjs client 呼叫它們 |
-| 維護並發佈 API 契約                      | 處理結果，並擁有取消、串流與 session     |
+## 快速預覽：SDK 定義 vs. 應用程式執行
 
-SDK 定義不會捕捉應用程式的 client。同一個匯出的端點可以用不同的 client 設定服務瀏覽器應用程式、伺服器或本機測試。兩邊仍使用 Defjs 的執行契約與相容的 Core 版本。
-
-SDK 匯出一項操作：
+<Tabs items={["get-health.ts", "app.ts"]}>
+<Tab>
 
 <include cwd meta="get-health.ts">
   examples/home/get-health.ts#example
 </include>
 
-應用程式匯入它，並擁有執行：
+</Tab>
+<Tab>
 
 <include cwd meta="app.ts">
   examples/home/app.ts#example
 </include>
 
-呼叫 `getHealth(client)` 就會啟動請求。發佈定義之後，使用端從你的 SDK 套件匯入，而不是從本機檔案匯入。
+</Tab>
+</Tabs>
 
-## 最佳實踐
+呼叫 `getHealth(client)` 會發起 I/O 並回傳 error-first tuple。在讀取解碼後的成功結果之前，請先檢查 `if (error)` 並提前返回。
 
-定義與 client 彼此獨立。把應用程式的 client 當第一個引數傳入，例如 `getHealth(client)`。服務位址與憑證也由應用程式持有。先檢查 error-first tuple。`error` 有值時，報告 `error.code`，從函式返回，然後再讀取成功值。
+## 為什麼要將「定義」與「Client」拆開？
 
-## 建置你的 SDK
+| 職責範圍     | SDK 開發者（定義端）                                                                                       | 應用程式（執行端）                                                |
+| ------------ | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **負責項目** | HTTP 方法、路徑模板、`input` / `output` / `error` schemas、`builder` 參數對應，以及靜態 `operation` 識別碼 | 基礎網址（Base URLs）、憑證、驗證攔截器、負載平衡、逾時與資源釋放 |
+| **發布內容** | 可重用的 ESM 模組與 `.d.ts` 型別宣告                                                                       | 瀏覽器、伺服器或測試環境的執行時期設定                            |
+| **主要優勢** | 零環境耦合；可在瀏覽器、SSR 伺服器端與測試之間無縫共用                                                     | 完全掌控重試、容錯移轉、遙測追蹤與生命週期                        |
 
-1. 在分開的 SDK 與應用程式檔案裡[定義並執行你的第一個操作](/zh-Hant-TW/docs/start)。
-2. 描述 SDK 匯出的[資料契約](/zh-Hant-TW/docs/struct)與 [HTTP 操作](/zh-Hant-TW/docs/http)。
-3. 用 JavaScript、宣告，以及相容的 Core 相依[測試並發佈 SDK 套件](/zh-Hant-TW/recipes/publish-http-sdk)。
-4. 設定使用端應用程式的 [Client](/zh-Hant-TW/docs/client)，再依需要加上框架或可觀測性整合。
+## 選擇你的學習路徑
 
-[設計決策](/zh-Hant-TW/docs/design-decisions)說明為什麼 API 定義與執行有各自的擁有者。發佈套件之前，也可以在同一個應用程式裡使用這套結構。
+1. **[快速開始](/zh-Hant-TW/docs/start)** — 定義一項操作，使用本機 Fetch Handle 進行離線測試，最後讓 Client 指向實際運作的服務。
+2. **[核心架構](/zh-Hant-TW/docs/design-decisions)** — 了解六項嚴格的回應解碼規則、error-first tuple 以及資源擁有權。
+3. **[定義 SDK](/zh-Hant-TW/docs/struct)** — 使用 [Struct](/zh-Hant-TW/docs/struct) 宣告通訊契約，並匯出 [HTTP](/zh-Hant-TW/docs/http)、[SSE](/zh-Hant-TW/docs/sse) 與 [WebSocket](/zh-Hant-TW/docs/web-socket) 操作。
+4. **[Client 與執行](/zh-Hant-TW/docs/client)** — 設定 [Client](/zh-Hant-TW/docs/client)、處理具型別的[錯誤](/zh-Hant-TW/docs/errors)、掛上[攔截器](/zh-Hant-TW/docs/interceptors)、設定[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)，並執行確定性的[測試](/zh-Hant-TW/docs/testing)。
 
-## 選傳輸方式
+## 支援的傳輸協定與回傳 Tuple
 
-| 你要的                    | 從這裡開始                               | 成功時的結果                                                        |
-| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
-| 請求 + 依狀態碼區分的回應 | [HTTP](/zh-Hant-TW/docs/http)            | 解碼後的資料 + `DecodedResponse`（沒有宣告 output 時是 `HttpMeta`） |
-| 長生命週期的伺服器事件流  | [SSE](/zh-Hant-TW/docs/sse)              | 一個串流 + 啟動時的 `open` 快照                                     |
-| 雙向工作階段              | [WebSocket](/zh-Hant-TW/docs/web-socket) | 一個 session + 啟動時的 `connection` 快照                           |
+每項操作都會回傳配合其傳輸生命週期設計的三元素 error-first tuple：
 
-三種傳輸都是同一套順序：定義操作，再帶著應用程式的 client 與呼叫端的 input 呼叫它。
+| 傳輸協定                                     | 入口函式            | Tuple 結構                     | 生命週期擁有權                                                            |
+| -------------------------------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| **[HTTP](/zh-Hant-TW/docs/http)**            | `defineRequest`     | `[error, data, response]`      | 透過 `client({ signal })` 取消進行中的請求                                |
+| **[SSE](/zh-Hant-TW/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | 透過 `await using` 或 `stream.close()` + `await stream.closed` 釋放資源   |
+| **[WebSocket](/zh-Hant-TW/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | 透過 `await using` 或 `session.close()` + `await session.closed` 釋放資源 |
 
-## 選套件
+當 HTTP 請求失敗時，tuple 為 `[error, undefined, undefined]`，因為 `error` 本身已帶有 `HttpMeta` 回應中繼資料。對 SSE 與 WebSocket 而言，只要失敗前曾擷取到啟動快照，第三個欄位就會帶著該快照。
 
-| 套件                          | 何時用                                                                                                      |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | 定義 SDK 操作與契約；建立 client，並呼叫 HTTP、SSE 與 WebSocket 操作                                        |
-| `@defjs/react`                | `ClientProvider` / `useClient` — 見 [React](/zh-Hant-TW/docs/integrations/react)                            |
-| `@defjs/vue`                  | Plugin + `injectClient` — 見 [Vue](/zh-Hant-TW/docs/integrations/vue)                                       |
-| `@defjs/opentelemetry-server` | 出站 spans、metrics 與 logs — 見 [OpenTelemetry Server](/zh-Hant-TW/docs/integrations/opentelemetry-server) |
+## 官方套件
 
-## 結果形狀
+| 套件                          | 角色定位                                                                   | 相關指南                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `@defjs/core`                 | 零依賴的 SDK 定義、`struct`、Client 與攔截器                               | [快速開始](/zh-Hant-TW/docs/start)                                         |
+| `@defjs/react`                | 適用於 React 18+ 的 `ClientProvider` 與 `useClient()` Context 注入         | [React 整合](/zh-Hant-TW/docs/integrations/react)                          |
+| `@defjs/vue`                  | 適用於 Vue 3.2+ 的 `createClientPlugin`、`HTTP_CLIENT` 與 `injectClient()` | [Vue 整合](/zh-Hant-TW/docs/integrations/vue)                              |
+| `@defjs/opentelemetry-server` | 伺服器端出站請求的 spans、Metrics 與診斷日誌                               | [OpenTelemetry Server](/zh-Hant-TW/docs/integrations/opentelemetry-server) |
 
-三種傳輸都回傳 error-first 的三項 tuple。位置對齊，意義不一樣：
+## 常見實戰範例
 
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`
-- WebSocket → `[error, session, connection]`
-
-失敗時第二項是 `undefined`。HTTP 的第三項也是 `undefined`，因為 fault 已經帶著回應 metadata。SSE 與 WebSocket 的第三項，則是失敗之前若已捕捉到啟動快照，就是那份快照。詳見[錯誤](/zh-Hant-TW/docs/errors)。
-
-## 擁有權一句話講完
-
-HTTP 過期就 abort。SSE 要 close 並 `await stream.closed`。WebSocket 要 close 並 `await session.closed`。在伺服器上，若 options 會捕捉 cookies、auth 或 tenant 資料，請在請求邊界內建立 client。記錄前先遮罩 URL、headers、bodies。
-
-Defjs 提供定義、驗證與執行。應用程式選擇快取與重試策略；串流重連需要明確啟用。手寫的 SDK 套件目前已支援。CLI 工具與 OpenAPI／SDK 產生仍在計畫中。
-
-## 相關操作範例
-
-- [建置並發佈 SDK](/zh-Hant-TW/recipes/publish-http-sdk)
-- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
-- [POST JSON](/zh-Hant-TW/recipes/post-json)
+- [建置並發布 SDK](/zh-Hant-TW/recipes/publish-http-sdk)
+- [傳送並驗證 JSON](/zh-Hant-TW/recipes/post-json)
+- [處理已宣告的 404](/zh-Hant-TW/recipes/get-declared-404)
 - [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
+- [401 後重新整理 Bearer token 一次](/zh-Hant-TW/recipes/refresh-bearer-once)
 - [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
-- [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)
-- [用本機 Fetch handle 測試](/zh-Hant-TW/recipes/test-with-handle)
+- [開啟 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)
+- [使用本機 Fetch Handle 進行測試](/zh-Hant-TW/recipes/test-with-handle)

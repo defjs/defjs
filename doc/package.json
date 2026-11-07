@@ -10,6 +10,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "bun --bun react-router dev",
+    "typegen": "bun --bun react-router typegen",
     "typecheck": "bun --bun react-router typegen && bun check --project tsconfig.json && bun check --project examples/tsconfig.json",
     "build": "bun scripts/build.ts",
     "extract-api": "bun scripts/extract-api.ts",
@@ -27,12 +28,8 @@
     "@fuma-translate/react": "1.0.2",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/api-logs": "0.223.0",
-    "@opentelemetry/context-async-hooks": "3.0.0",
     "@opentelemetry/core": "3.0.0",
-    "@opentelemetry/instrumentation-pino": "0.70.0",
     "@opentelemetry/sdk-logs": "3.0.0",
-    "@opentelemetry/sdk-node": "0.300.0",
-    "@opentelemetry/winston-transport": "0.35.0",
     "@react-router/dev": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/mdx": "catalog:",
@@ -42,9 +39,7 @@
     "@vitest/coverage-istanbul": "catalog:",
     "fumadocs-core": "catalog:",
     "fumadocs-mdx": "catalog:",
-    "fumadocs-typescript": "catalog:",
     "fumadocs-ui": "catalog:",
-    "pino": "10.4.0",
     "playwright": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -52,7 +47,6 @@
     "tailwindcss": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "vue": "3.5.44",
-    "winston": "3.19.0"
+    "vue": "3.5.44"
   }
 }

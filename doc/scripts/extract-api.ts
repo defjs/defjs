@@ -1,6 +1,5 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { joinPath } from "./paths";
+import { removeDirectory, tempDirectory } from "./tmp";
 import {
   API,
   ModuleKind,
@@ -14,19 +13,25 @@ import type {
   RawCompilerOptions,
   Symbol,
 } from "typescript/async";
-import { SyntaxKind } from "typescript/ast";
+import {
+  SyntaxKind,
+  isFunctionDeclaration,
+  isPropertyAssignment,
+  isTypeAliasDeclaration,
+  isVariableDeclaration,
+} from "typescript/ast";
 
 export { SyntaxKind };
 import type {
   ConstructorTypeNode,
-  ExportSpecifier,
   FunctionDeclaration,
   FunctionTypeNode,
   Node,
+  ObjectLiteralExpression,
   VariableDeclaration,
 } from "typescript/ast";
-import type { DocEntry } from "fumadocs-typescript";
 import { compareApiIdentity } from "./api-order";
+import { tableEntries } from "./type-tables";
 import { loadExample } from "./api-examples";
 import {
   catalogKind,
@@ -40,9 +45,9 @@ import {
   overloadNodes,
   parameterRequired,
   parameterTypeText,
-  projectChecker,
   referenceRecord,
   requireKind,
+  requireNode,
   serializeCatalog,
   serializeReference,
   serializeSummaries,
@@ -52,7 +57,12 @@ import {
   zipOverloads,
   zipParameters,
 } from "./api-model";
-import type { ApiReferenceEntry, ParamDraft, WorkerEntry } from "./api-model";
+import type {
+  ApiReferenceEntry,
+  ParamDraft,
+  WorkerEntry,
+  WrappedNode,
+} from "./api-model";
 import { apiSlug } from "./api-slug";
 import {
   annotatedTypeText,
@@ -74,11 +84,9 @@ import {
   unique,
   validateReference,
 } from "./api-validate";
-import { requestTypeTables } from "./api-worker";
-import type { WorkerDoc } from "./api-worker";
 
-const repoRoot = join(import.meta.dirname, "../..");
-const docRoot = join(import.meta.dirname, "..");
+const repoRoot = Bun.fileURLToPath(new URL("../..", import.meta.url));
+const docRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const packages = [
   { name: "@defjs/core", entry: "packages/core/src/index.ts" },
   { name: "@defjs/react", entry: "packages/react/src/index.ts" },
@@ -93,88 +101,23 @@ const compilerOptions = {
   noEmit: true,
   strict: true,
   target: 9,
+  lib: ["ESNext", "DOM", "DOM.Iterable"],
   module: ModuleKind.ESNext,
   moduleResolution: ModuleResolutionKind.Bundler,
   skipLibCheck: true,
-  types: [] as string[],
+  types: [],
   allowImportingTsExtensions: true,
   verbatimModuleSyntax: true,
   baseUrl: repoRoot,
   paths: {
-    "@defjs/core": ["packages/core/src/index.ts"],
-    "@defjs/react": ["packages/react/src/index.ts"],
-    "@defjs/vue": ["packages/vue/src/index.ts"],
+    "@defjs/core": [joinPath(repoRoot, "packages/core/src/index.ts")],
+    "@defjs/react": [joinPath(repoRoot, "packages/react/src/index.ts")],
+    "@defjs/vue": [joinPath(repoRoot, "packages/vue/src/index.ts")],
     "@defjs/opentelemetry-server": [
-      "packages/opentelemetry-server/src/index.ts",
+      joinPath(repoRoot, "packages/opentelemetry-server/src/index.ts"),
     ],
   },
-} as RawCompilerOptions;
-
-/** Node child. `fumadocs-typescript` uses `typescript/sync`, which crashes inside Bun. */
-export const workerSource = `
-import { createGenerator } from "fumadocs-typescript";
-import { readFileSync } from "node:fs";
-const chunks = [];
-for await (const chunk of process.stdin) chunks.push(chunk);
-const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-const generator = createGenerator({ tsconfigPath: payload.tsconfigPath });
-const docs = [];
-for (const job of payload.jobs) {
-  const content = readFileSync(job.file, "utf8") + "\\n" + job.suffix;
-  for (const name of job.queries) {
-    let generated;
-    try {
-      generated = await generator.generateDocumentation({ path: job.file, content }, name, {
-        transform: function (entry, _type, symbol) {
-          const declaration = symbol.valueDeclaration ?? (symbol.declarations ? symbol.declarations[0] : undefined);
-          if (!declaration || typeof declaration.resolve !== "function") return;
-          const node = declaration.resolve(this.program);
-          if (node && typeof node.then === "function") {
-            console.error("declaration.resolve returned a promise for " + name);
-            process.exit(1);
-          }
-          const printed = node && node.name && typeof node.name.getText === "function" ? node.name.getText() : "";
-          if (printed) entry.name = printed;
-          const fileName = node && typeof node.getSourceFile === "function" ? node.getSourceFile().fileName : "";
-          if (fileName && !fileName.includes("/packages/") && !fileName.includes("\\\\packages\\\\")) entry.name = "";
-        },
-      });
-    } catch (error) {
-      console.error("generateDocumentation failed for " + name + " in " + job.file + ": " + (error && error.message ? error.message : error));
-      process.exit(1);
-    }
-    if (!generated || generated.length === 0) {
-      console.error("no export " + name + " in " + job.file);
-      process.exit(1);
-    }
-    const entries = [];
-    for (const doc of generated) {
-      for (const entry of doc.entries ?? []) {
-        if (!entry.name) continue;
-        const plain = {
-          name: String(entry.name),
-          description: String(entry.description ?? ""),
-          type: String(entry.type ?? ""),
-          simplifiedType: String(entry.simplifiedType ?? ""),
-          required: Boolean(entry.required),
-          deprecated: Boolean(entry.deprecated),
-          tags: (entry.tags ?? []).map((tag) => ({ name: String(tag.name), text: String(tag.text ?? "") })),
-        };
-        if (entry.typeHref) plain.typeHref = String(entry.typeHref);
-        entries.push(plain);
-      }
-    }
-    entries.sort((left, right) => {
-      const leftIndex = /^p(\\d+)$/.exec(left.name);
-      const rightIndex = /^p(\\d+)$/.exec(right.name);
-      if (leftIndex && rightIndex) return Number(leftIndex[1]) - Number(rightIndex[1]);
-      return 0;
-    });
-    docs.push({ file: job.file, name, entries });
-  }
-}
-process.stdout.write(JSON.stringify({ docs }), () => process.exit(0));
-`;
+} satisfies RawCompilerOptions;
 
 export function declarationCategory(
   kind: SyntaxKind,
@@ -186,12 +129,13 @@ export function declarationCategory(
 }
 
 export function specifierIsTypeOnly(node: {
-  kind: number;
+  kind: SyntaxKind;
   isTypeOnly?: boolean | undefined;
   parent?:
     | {
-        kind: number;
-        parent?: { kind: number; isTypeOnly?: boolean | undefined } | undefined;
+        kind: SyntaxKind;
+        parent?:
+          { kind: SyntaxKind; isTypeOnly?: boolean | undefined } | undefined;
       }
     | undefined;
 }): boolean {
@@ -205,20 +149,28 @@ export function specifierIsTypeOnly(node: {
   );
 }
 
-export function functionTypeOf(node: {
-  kind: number;
-  type?: { kind: number; type?: { kind: number } | undefined } | undefined;
-}): { kind: number } | undefined {
-  let current:
-    { kind: number; type?: { kind: number } | undefined } | undefined = node;
+interface TypeShape {
+  kind: SyntaxKind;
+  type?: TypeShape | undefined;
+}
+
+function isCallableShape(
+  node: TypeShape,
+): node is FunctionTypeNode | ConstructorTypeNode {
+  return (
+    node.kind === SyntaxKind.FunctionType ||
+    node.kind === SyntaxKind.ConstructorType
+  );
+}
+
+export function functionTypeOf(
+  node: TypeShape,
+): FunctionTypeNode | ConstructorTypeNode | undefined {
+  let current: TypeShape | undefined = node;
   while (current && current.kind === SyntaxKind.ParenthesizedType)
     current = current.type;
   if (!current) return undefined;
-  if (
-    current.kind === SyntaxKind.FunctionType ||
-    current.kind === SyntaxKind.ConstructorType
-  )
-    return current;
+  if (isCallableShape(current)) return current;
   return undefined;
 }
 
@@ -299,7 +251,7 @@ function parameterPieces(
   const fileText = node.getSourceFile().text;
   const drafts: ParamDraft[] = [];
   const lines: string[] = [];
-  for (const [index, param] of node.parameters.entries()) {
+  for (const param of node.parameters) {
     const sourceName = param.name.getText();
     const rest = param.dotDotDotToken !== undefined;
     const display = rest ? `...${sourceName}` : sourceName;
@@ -323,7 +275,9 @@ function parameterPieces(
       typeText,
       description,
     });
-    lines.push(`  /** ${description} */\n  p${index}: ${typeText};`);
+    lines.push(
+      `  /** ${description} */\n  p${drafts.length - 1}: ${typeText};`,
+    );
   }
   return {
     drafts,
@@ -332,18 +286,20 @@ function parameterPieces(
   };
 }
 
-async function callablePages(
+function callablePages(
   nodes: readonly Node[],
   tags: readonly DocTag[],
   jobs: Map<string, FileJob>,
-): Promise<{ signatures: string[]; parameterQueries: ParameterQuery[] }> {
-  const selected = overloadNodes(nodes, SyntaxKind.FunctionDeclaration);
+): { signatures: string[]; parameterQueries: ParameterQuery[] } {
+  const selected = overloadNodes(
+    nodes.filter(isFunctionDeclaration),
+    SyntaxKind.FunctionDeclaration,
+  );
   const signatures: string[] = [];
   const parameterQueries: ParameterQuery[] = [];
-  for (const node of selected) {
-    const fn = node as FunctionDeclaration;
+  for (const fn of selected) {
     const fileText = fn.getSourceFile().text;
-    let signature = cleanSignature(
+    const signature = cleanSignature(
       fileText.slice(fn.getStart(), cutEnd("body", fn.body?.pos, fn.end)),
     );
     signatures.push(signature);
@@ -380,12 +336,10 @@ async function readPage(
     SyntaxKind.ExportSpecifier,
     SyntaxKind.ExportAssignment,
   );
-  const tags = (await checker.getJsDocTagsOfSymbol(
-    aliased,
-  )) as readonly DocTag[];
+  const tags = await checker.getJsDocTagsOfSymbol(aliased);
   const kind = catalogKind({
     typeOnlyExport: typeOnlyExport(
-      exportNodes.map((node) => specifierIsTypeOnly(node as ExportSpecifier)),
+      exportNodes.map((node) => specifierIsTypeOnly(node)),
     ),
     declarationKind: declarationCategory(impl.kind),
   });
@@ -393,20 +347,20 @@ async function readPage(
     outerStatement(node).jsDoc,
     node.jsDoc,
   ]);
-  let signatures: string[] = [];
+  let signatures: string[];
   let parameterQueries: ParameterQuery[] = [];
   let table: PageDraft["typeTable"] = null;
   const file = impl.getSourceFile().fileName;
   const fileText = impl.getSourceFile().text;
-  if (impl.kind === SyntaxKind.FunctionDeclaration) {
-    const callable = await callablePages(nodes, tags, jobs);
+  if (isFunctionDeclaration(impl)) {
+    const callable = callablePages(nodes, tags, jobs);
     signatures = callable.signatures;
     parameterQueries = callable.parameterQueries;
-  } else if (impl.kind === SyntaxKind.TypeAliasDeclaration) {
+  } else if (isTypeAliasDeclaration(impl)) {
     signatures = [cleanSignature(impl.getText())];
-    const callable = functionTypeOf((impl as unknown as { type: Node }).type);
+    const callable = functionTypeOf(impl.type);
     if (callable) {
-      const pieces = parameterPieces(callable as FunctionTypeNode, tags);
+      const pieces = parameterPieces(callable, tags);
       parameterQueries = [
         {
           file,
@@ -416,20 +370,13 @@ async function readPage(
           drafts: pieces.drafts,
         },
       ];
-    } else if (
-      typeAliasHasMembers(
-        impl as unknown as {
-          kind: number;
-          type?: { kind: number; type?: { kind: number } };
-        },
-      )
-    )
+    } else if (typeAliasHasMembers(impl))
       table = typeTableQuery(includeTypeTable, file, name);
   } else if (impl.kind === SyntaxKind.ClassDeclaration) {
     signatures = [cleanSignature(impl.getText())];
     table = typeTableQuery(includeTypeTable, file, name);
-  } else if (impl.kind === SyntaxKind.VariableDeclaration) {
-    const variable = impl as VariableDeclaration;
+  } else if (isVariableDeclaration(impl)) {
+    const variable = impl;
     const initializer = nestedExpression(variable.initializer, [
       SyntaxKind.AsExpression,
       SyntaxKind.SatisfiesExpression,
@@ -481,11 +428,20 @@ async function readPage(
     throws: textsFor(tags, ["throws", "throw"]),
     tags: storedTags(tags),
     group: singleGroup(textsFor(tags, ["group"])),
-    source: relative(repoRoot, file).split("\\").join("/"),
+    source: file.replace(repoRoot, "").split("\\").join("/"),
     typeTable: table,
     parameterQueries,
     memberDescriptions: null,
   };
+}
+
+/** `WrappedNode.kind` is a plain number, so compare against the enum member widened to one. */
+const objectLiteralKind: number = SyntaxKind.ObjectLiteralExpression;
+
+function isObjectLiteralShape(
+  node: WrappedNode,
+): node is ObjectLiteralExpression {
+  return node.kind === objectLiteralKind;
 }
 
 async function readStructMembers(
@@ -501,22 +457,19 @@ async function readStructMembers(
     ]),
     "struct initializer",
   );
-  requireKind(
-    initializer.kind,
-    SyntaxKind.ObjectLiteralExpression,
+  const literal = requireNode(
+    initializer,
+    isObjectLiteralShape,
     "struct initializer is not an object literal",
   );
   const pages: PageDraft[] = [];
   const descriptions = new Map<string, string>();
-  const properties = (initializer as unknown as { properties: readonly Node[] })
-    .properties;
-  for (const property of properties) {
-    requireKind(
-      property.kind,
-      SyntaxKind.PropertyAssignment,
+  for (const property of literal.properties) {
+    const assignment = requireNode(
+      property,
+      isPropertyAssignment,
       `unsupported struct property ${property.getText()}`,
     );
-    const assignment = property as unknown as { name: Node; initializer: Node };
     const name = objectPropertyName(
       assignment.name.getText(),
       assignment.name.kind,
@@ -556,10 +509,8 @@ function tableKey(file: string, name: string): string {
 
 export async function assemblePages(
   drafts: readonly PageDraft[],
-  docs: readonly WorkerDoc[],
+  tables: ReadonlyMap<string, readonly WorkerEntry[]>,
 ): Promise<ApiReferenceEntry[]> {
-  const tables = new Map<string, WorkerEntry[]>();
-  for (const doc of docs) tables.set(tableKey(doc.file, doc.name), doc.entries);
   const identities = identityIndex(drafts);
   const entries: ApiReferenceEntry[] = [];
   for (const draft of drafts) {
@@ -667,14 +618,14 @@ export async function assertSignatureSyntax(
   );
   if (pending.length === 0) return;
   const api = new API();
-  const directory = await mkdtemp(join(tmpdir(), "zen-signature-"));
+  const directory = tempDirectory("zen-signature");
   try {
     const files: string[] = [];
     await Promise.all(
       pending.map((item, index) => {
-        const file = join(directory, `${index}.d.ts`);
+        const file = joinPath(directory, `${index}.d.ts`);
         files[index] = file;
-        return writeFile(file, `${ambientDeclaration(item.signature)}\n`);
+        return Bun.write(file, `${ambientDeclaration(item.signature)}\n`);
       }),
     );
     const program = await api.createProgram(files, {
@@ -682,7 +633,7 @@ export async function assertSignatureSyntax(
       noLib: true,
       skipLibCheck: true,
       types: [],
-    } as RawCompilerOptions);
+    });
     const diagnostics = await program.getSyntacticDiagnostics();
     const offenders = diagnostics.map((diagnostic) =>
       syntaxOffender(
@@ -697,7 +648,7 @@ export async function assertSignatureSyntax(
       );
   } finally {
     await api.close();
-    await rm(directory, { recursive: true, force: true });
+    removeDirectory(directory);
   }
 }
 
@@ -711,17 +662,15 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
   const api = new API();
   try {
     const program: Program = await api.createProgram(
-      packages.map((pkg) => join(repoRoot, pkg.entry)),
+      packages.map((pkg) => joinPath(repoRoot, pkg.entry)),
       compilerOptions,
     );
-    const checker = projectChecker(
-      program as unknown as { project?: { checker?: Checker } },
-    );
+    const checker = program.getProject().checker;
     const jobs = new Map<string, FileJob>();
     const drafts: PageDraft[] = [];
     for (const pkg of packages) {
       const source = defined(
-        await program.getSourceFile(join(repoRoot, pkg.entry)),
+        await program.getSourceFile(joinPath(repoRoot, pkg.entry)),
         pkg.entry,
       );
       const moduleSymbol = defined(
@@ -750,7 +699,11 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
             SyntaxKind.ExportAssignment,
           );
           const members = await readStructMembers(
-            impl as VariableDeclaration,
+            requireNode(
+              impl,
+              isVariableDeclaration,
+              "struct is not a variable declaration",
+            ),
             checker,
             jobs,
           );
@@ -759,19 +712,41 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
         } else drafts.push(page);
       }
     }
-    const tables = await requestTypeTables(
-      workerSource,
-      {
-        tsconfigPath: join(docRoot, "tsconfig.json"),
-        jobs: [...jobs.values()].map((job) => ({
-          file: job.file,
-          suffix: job.suffix.join("\n"),
-          queries: job.queries,
-        })),
-      },
-      docRoot,
-    );
-    return await assemblePages(drafts, tables.docs);
+    const tables = new Map<string, readonly WorkerEntry[]>();
+    const roots: string[] = [];
+    const tempFiles: string[] = [];
+    const fileForJob = new Map<string, string>();
+    try {
+      for (const [index, job] of [...jobs.values()].entries()) {
+        if (job.suffix.length === 0) {
+          roots.push(job.file);
+          fileForJob.set(job.file, job.file);
+          continue;
+        }
+        const source = await Bun.file(job.file).text();
+        const temp = `${job.file}.__api_gen_${index}.ts`;
+        await Bun.write(temp, `${source}\n${job.suffix.join("\n")}`);
+        roots.push(temp);
+        tempFiles.push(temp);
+        fileForJob.set(job.file, temp);
+      }
+      const tableProgram = await api.createProgram(roots, compilerOptions);
+      const tableChecker = tableProgram.getProject().checker;
+      for (const job of jobs.values()) {
+        const root = defined(fileForJob.get(job.file), job.file);
+        for (const query of job.queries) {
+          tables.set(
+            tableKey(job.file, query),
+            await tableEntries(root, query, tableProgram, tableChecker),
+          );
+        }
+      }
+    } finally {
+      for (const temp of tempFiles) {
+        await Bun.file(temp).delete();
+      }
+    }
+    return await assemblePages(drafts, tables);
   } finally {
     await api.close();
   }
@@ -787,8 +762,9 @@ export function syntheticQuery(
 
 /** Object-shaped aliases keep a member table. Unions and conditionals do not. */
 export function typeAliasHasMembers(node: {
-  kind: number;
-  type?: { kind: number; type?: { kind: number } | undefined } | undefined;
+  kind: SyntaxKind;
+  type?:
+    { kind: SyntaxKind; type?: { kind: SyntaxKind } | undefined } | undefined;
 }): boolean {
   let current = node.type;
   while (current && current.kind === SyntaxKind.ParenthesizedType)
@@ -829,31 +805,19 @@ export async function writeExtractedApi(
   entries: readonly ApiReferenceEntry[],
   directory?: string,
 ): Promise<void> {
-  const target = outputDirectory(directory, join(docRoot, "app/data"));
-  await Bun.write(join(target, "api-entries.json"), serializeCatalog(entries));
+  const target = outputDirectory(directory, joinPath(docRoot, "app/data"));
   await Bun.write(
-    join(target, "api-reference.json"),
+    joinPath(target, "api-entries.json"),
+    serializeCatalog(entries),
+  );
+  await Bun.write(
+    joinPath(target, "api-reference.json"),
     serializeReference(entries),
   );
   await Bun.write(
-    join(target, "api-summaries.json"),
+    joinPath(target, "api-summaries.json"),
     serializeSummaries(entries),
   );
-}
-
-/** Reference so the type-table entry shape stays tied to fumadocs-typescript. */
-export function fumadocsEntry(entry: DocEntry): WorkerEntry {
-  const stored: WorkerEntry = {
-    name: entry.name,
-    description: entry.description,
-    type: entry.type,
-    simplifiedType: entry.simplifiedType,
-    required: entry.required,
-    deprecated: entry.deprecated,
-    tags: entry.tags.map((tag) => ({ name: tag.name, text: tag.text })),
-  };
-  if (entry.typeHref) stored.typeHref = entry.typeHref;
-  return stored;
 }
 
 /* istanbul ignore next -- @preserve: command-line entry point */

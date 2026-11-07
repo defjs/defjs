@@ -1,36 +1,22 @@
 ---
-title: "呼叫 AI API"
-description: "從應用程式呼叫 AI 服務且不把提供者憑證暴露給瀏覽器，並閱讀一段虛構的離線事件流。"
+title: "llms.txt"
+description: "讓助手找到為大型語言模型產生的英文 Markdown 索引與各頁原始檔。"
 ---
 
-從應用程式呼叫 AI 服務，與讓助手編寫 Defjs，是兩件不同的事。[AI 輔助開發](/zh-Hant-TW/docs/ai) 是助手工作流程。API 與 SSE 的事件格式由提供者各自規定。本頁的流是虛構後端，不是某個提供者的協定。
+本站發布供助手使用的英文 Markdown。這些位址沒有語言前綴，也不是在地化指南的譯文。
 
-## 在應用程式裡呼叫 AI 介面 [#call-an-api]
+## 頁面索引 [#llms-txt]
 
-用你已經在用的 HTTP 或 SSE 契約定義這次呼叫，再在應用程式擁有的 client 上呼叫操作。從 [HTTP 請求](/zh-Hant-TW/docs/http) 和 [SSE 事件串流](/zh-Hant-TW/docs/sse) 讀起。[傳送 JSON](/zh-Hant-TW/recipes/post-json) 是常見的 JSON 本文。[使用 SSE 事件串流](/zh-Hant-TW/recipes/consume-sse) 示範如何讀取及關閉串流，但範例只消費第一個事件。那個範例不是一份完整的 AI 回答。若要取得完整的 AI 回答，應依服務協定持續讀取至完成訊號或 EOF，處理讀取錯誤並關閉串流；事件名稱與資料契約也須依服務供應商的格式調整。[取消與逾時](/zh-Hant-TW/recipes/cancel-http) 說明呼叫端如何停掉一次 HTTP 呼叫。
+[llms.txt](/llms.txt) 列出英文頁面，並連到對應網頁。助手需要先找到頁面時，從這裡開始。
 
-把服務密鑰留在有權消耗它的伺服器。不要把它寫進瀏覽器套件、公開的建置變數，或會送到瀏覽器的 client。憑證歸應用程式所有：配在伺服器上的 client，或只在該伺服器邊界內執行的攔截器裡附上。用戶端的設定位置是[用戶端設定](/zh-Hant-TW/docs/client)和[攔截器](/zh-Hant-TW/docs/interceptors)。`withCredentials` 只選擇 Fetch 的 cookie 模式，並不保存服務密鑰。
+## 彙編指南 [#llms-full]
 
-操作回傳之後，串流歸應用程式所有。SSE 要依需求讀取事件、關閉控制代碼，並等到它關閉。HTTP 在不再需要答案時中止呼叫。中止並不能證明服務已經撤銷它接受過的工作。
+[llms-full.txt](/llms-full.txt) 把英文指南合併成單一檔案。當助手需要在同一份文件中取得較廣的脈絡，且 token 預算允許時使用。
 
-不要因為一次串流 POST 失敗就立刻重試。Defjs 不會替你重試 HTTP。SSE 重新連線預設關閉，要由應用程式明確開啟；即便開啟，POST 這類方法也不會再次送出，除非該策略明確允許。失敗的那一次可能已經讓服務開始了會計費的工作。把同一個 POST 再送一次，可能把這份工作再做一遍。加入重試之前，先讀 [HTTP 請求](/zh-Hant-TW/docs/http) 裡的重送規則和 [SSE 事件串流](/zh-Hant-TW/docs/sse) 裡的重新連線規則。
+## 單頁 Markdown [#page-markdown]
 
-## 虛構的離線串流 [#fictional-stream]
+每個英文頁面也可以透過 `/llms.mdx/<path>/content.md` 取得 Markdown。例如，[快速開始的 Markdown](/llms.mdx/docs/start/content.md) 就是快速開始頁的英文正文。
 
-下面的事件格式是虛構的，不是某個具體提供者的事件格式。`withSSEHandle` 提供回應，因此範例不需要網路，也不需要真實憑證。本文是兩個 `delta` 事件，然後是一個完成事件。迴圈會保留兩段文字，不會在第一個事件後停止。
+## 核對版本 [#version]
 
-<include cwd lang="typescript">
-  examples/ai/fictional-completion.ts#example
-</include>
-
-在已安裝 `@defjs/core` 的專案中，將範例儲存為 `fictional-completion.ts`，然後執行：
-
-```sh
-bun fictional-completion.ts
-```
-
-預期輸出：
-
-```txt
-Hello there
-```
+本站記錄的是預設分支；專案安裝的 `@defjs/core` 版本可能不同。採用建議之前，請先對照已安裝的套件核對 API。把程式碼或脈絡交給 AI 工具之前，請先移除機密資訊，並確認該專案的政策。

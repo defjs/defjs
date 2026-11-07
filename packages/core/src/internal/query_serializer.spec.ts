@@ -30,13 +30,14 @@ const Query = struct.object({
 });
 
 function stoppingSocket(urls: string[]): typeof WebSocket {
+  // @ts-expect-error socket double records the url and then throws
   return class {
     static OPEN = 1;
     constructor(url: string) {
       urls.push(url);
       throw new Error("stop");
     }
-  } as unknown as typeof WebSocket;
+  };
 }
 
 describe("query serializer contract", () => {
@@ -50,9 +51,9 @@ describe("query serializer contract", () => {
         return "ok=1";
       }),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -80,9 +81,10 @@ describe("query serializer contract", () => {
       tags: ["a", "b"],
     });
     expect(received).not.toBeInstanceOf(URLSearchParams);
-    expect(Object.getOwnPropertySymbols(received as object)).not.toContain(
-      STRUCT,
-    );
+    if (typeof received !== "object" || received === null) {
+      throw new Error("expected a query object");
+    }
+    expect(Object.getOwnPropertySymbols(received)).not.toContain(STRUCT);
     expect(captured?.queryString).toBe("ok=1");
     expect(captured?.queryParams?.get("ok")).toBe("1");
   });
@@ -92,9 +94,9 @@ describe("query serializer contract", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -135,7 +137,10 @@ describe("query serializer contract", () => {
   test("null query fails with REQ_BUILD_FAILED", async () => {
     const client = createClient(withEndpoint("https://example.com"));
     const search = defineRequest({
-      builder: (() => ({ query: { id: null } })) as never,
+      // @ts-expect-error null is not a query value
+      builder: () => ({
+        query: { id: null },
+      }),
       method: "GET",
       path: "/items",
     });
@@ -161,9 +166,9 @@ describe("query serializer contract", () => {
         throw new Error("serializer should be skipped");
       }),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -186,9 +191,9 @@ describe("query serializer contract", () => {
       withEndpoint("https://example.com"),
       withQuerySerializer(() => "filter[state]=open&tag=a&tag=b"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -218,9 +223,9 @@ describe("query serializer contract", () => {
         return "x=1";
       }),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -243,9 +248,9 @@ describe("query serializer contract", () => {
         seen.push(query);
         return "from=sse";
       }),
-      withSSEHandle(async (input) => {
+      withSSEHandle((input) => {
         url = input instanceof Request ? input.url : String(input);
-        throw new Error("stop");
+        return Promise.reject(new Error("stop"));
       }),
     );
     const events = defineEventStream({
@@ -255,15 +260,11 @@ describe("query serializer contract", () => {
         roomId: struct.string().alias("room_id"),
         since: struct.date(),
       }),
-      maxBufferSize: 128,
-      maxQueueSize: 4,
       path: "/events",
     });
     const native = defineEventStream({
       builder: () => ({ query: new URLSearchParams({ room_id: "blue" }) }),
       events: { message: struct.string() },
-      maxBufferSize: 128,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -350,10 +351,10 @@ describe("query serializer contract", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withQuerySerializer(() => "filter[state]=open"),
-      withHTTPHandle(async (input) => {
+      withHTTPHandle((input) => {
         const request = input instanceof Request ? input : new Request(input);
         search = new URL(request.url).search;
-        return new Response(null, { status: 204 });
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
     );
     const searchRequest = defineRequest({

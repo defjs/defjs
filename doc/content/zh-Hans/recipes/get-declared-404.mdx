@@ -1,22 +1,40 @@
 ---
 title: "处理声明的 404"
-description: 调用一次 GET，按类型化的 200 和声明过的 404 分支。
+description: 调用一次 GET，并在带类型的 200 与声明的 404 之间分支。
 ---
 
 # 声明了 404 的 GET
 
-成功和 404 body 都声明好。按 `error.code` 和 `error.status` 分支——声明过的 miss 会给你类型化的 `error.data`。
+在 `defineRequest` 上同时声明 `output`（用于 2xx 响应）和 `error`（用于非 2xx 响应）。在调用点用 `error?.code === "HTTP_STATUS" && error.status === 404` 分支，读取带类型的 `error.data`。
 
-细节见 [HTTP](/zh-Hans/docs/http) 和[错误](/zh-Hans/docs/errors)。
+<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
 
-`api.example.com` 是占位地址。假设服务器对 `GET /users/7` 返回 `200` 和 `{ "id": 7, "name": "Ada" }`，这段代码会输出：
+  </Tab>
+</Tabs>
+
+若服务端对 `GET /orders/7` 请求返回 `200` 状态码以及 `{ "id": 7, "status": "paid" }`，该脚本将打印：
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
-非 2xx 状态是 `HTTP_STATUS`。声明 `error` 会给它的 body 一个类型；省略 `error` 则 `error.data` 是 `undefined`，body 也不会被读。如果声明的 `error` body 读不出来（媒体类型不对、JSON 无效、形状不符），结果会是 `RES_*` fault。一个 `error` Struct 覆盖所有非 2xx 状态，所以形状不同时用 `struct.or(...)` 或判别联合。
+- 每个非 `2xx` 状态都会产生 `HTTP_STATUS`。声明 `error` 会把错误 body 解码并校验到 `error.data`；省略 `error` 时 `error.data` 为 `undefined`，且不读取 body。
+- 声明的 `error` body 媒体类型错误、JSON 无效或未通过 struct 校验时，操作改为返回 `RES_*` Fault。由于单个 `error` struct 覆盖所有非 `2xx` 状态，不同错误状态返回不同结构时应使用 `struct.or(...)`。
+
+见 [HTTP 请求](/zh-Hans/docs/http) 与 [错误处理](/zh-Hans/docs/errors)。

@@ -1,22 +1,38 @@
 ---
 title: "Получение событий SSE"
-description: Открой типизированный поток событий, обработай их одним итератором, затем закрой поток и дождись closed.
+description: Откройте типизированный поток событий, обработайте их одним итератором, затем закройте поток и дождитесь closed.
 ---
 
-# Читать SSE-стрим
+# Чтение SSE-потока
 
-Один асинхронный итератор на поток. Помести `close` + `await stream.closed` в `finally`, чтобы при раннем выходе не оставалась незавершённая попытка Fetch.
+Каждый `EventStreamHandle` предоставляет ровно один асинхронный итератор. Всегда помещайте `stream.close(...)` и `await stream.closed` в блок `finally`, чтобы ранний выход через `break` или `return` не приводил к утечке базового Fetch-потока:
 
-Подробности — в [SSE](/ru-RU/docs/sse).
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-<include cwd meta="notifications.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
 
-`api.example.com` — placeholder. Если первое событие сервера — `message` с данными `{ "text": "hello from the server" }`, сниппет выведет:
+  </Tab>
+</Tabs>
+
+Если сервер отправляет первым событие `line` с данными `{ "text": "build started" }`, скрипт выведет:
 
 ```txt
-hello from the server
+build started
 ```
 
-SSE не повторяет попытки после сбоев сети и чтения, пока не включишь `withSSEReconnect(...)`. Если задан объект настроек переподключения, `attempts` по умолчанию равен `3` на каждый обрыв; успешное установление соединения сбрасывает бюджет и показатель степени для задержки. `attempts: 0` отключает повторы. Недопустимые числовые настройки переподключения приводят к `REQ_OPTIONS_INVALID` до отправки любого запроса; см. [правила проверки](/ru-RU/api/core/withssereconnect). Без `shouldReconnect` переподключение выполняется только для запросов `GET`, `HEAD`, `OPTIONS`, `PUT` и `DELETE`; для запросов с телом `ReadableStream` оно никогда не выполняется.
+- SSE не выполняет автоматических переподключений при сбоях сети или чтения, пока вы не настроите [`withSSEReconnect(...)`](/ru-RU/api/core/withssereconnect) на клиенте.
+- При включении `withSSEReconnect` с объектом опций параметр `attempts` по умолчанию равен `3` на каждый сбой и сбрасывается при успешном хэндшейке (`attempts: 0` отключает переподключение). Без пользовательского колбэка `shouldReconnect` повторно подключаются только запросы `GET`, `HEAD`, `OPTIONS`, `PUT` и `DELETE`. Запрос с телом `ReadableStream` никогда не переподключается. См. раздел [Потоки событий SSE](/ru-RU/docs/sse).

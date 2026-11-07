@@ -13,10 +13,10 @@ describe("request-time default fetch", () => {
   test.each(["HTTP", "SSE"] as const)(
     "should honor a replacement after import for %s clients created before and after it",
     async (transport) => {
-      vi.stubGlobal(
-        "fetch",
-        async () =>
+      vi.stubGlobal("fetch", () =>
+        Promise.resolve(
           new Response("before", { headers: { "content-type": "text/plain" } }),
+        ),
       );
       vi.resetModules();
       const {
@@ -59,8 +59,6 @@ describe("request-time default fetch", () => {
         } else {
           const endpoint = defineEventStream({
             events: { message: struct.string() },
-            maxBufferSize: 1024,
-            maxQueueSize: 16,
             path: "/",
           });
           const [fault, stream] = await endpoint(client);
@@ -99,8 +97,6 @@ describe("request-time default fetch", () => {
           ? await defineRequest({ method: "GET", path: "/" })(client)
           : await defineEventStream({
               events: { message: struct.string() },
-              maxBufferSize: 1024,
-              maxQueueSize: 16,
               path: "/",
             })(client);
 
@@ -128,8 +124,6 @@ describe("request-time default fetch", () => {
           ? await defineRequest({ method: "GET", path: "/" })(client)
           : await defineEventStream({
               events: { message: struct.string() },
-              maxBufferSize: 1024,
-              maxQueueSize: 16,
               path: "/",
             })(client);
 
@@ -143,7 +137,7 @@ describe("request-time default fetch", () => {
     const { createClient, defineRequest, struct, withEndpoint } =
       await import("../index");
     const client = createClient(withEndpoint("https://example.com"));
-    vi.stubGlobal("fetch", async () => new Response("installed"));
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response("installed")));
     const [fault, data] = await defineRequest({
       method: "GET",
       output: struct.string(),
@@ -168,12 +162,15 @@ describe("request-time default fetch", () => {
     } = await import("../index");
     const client = createClient(
       withEndpoint("https://example.com"),
-      withHTTPHandle(async () => new Response(null, { status: 204 })),
-      withSSEHandle(
-        async () =>
+      withHTTPHandle(() =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      ),
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response("data: custom\n\n", {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
     );
     expect(
@@ -181,8 +178,6 @@ describe("request-time default fetch", () => {
     ).toBeNull();
     const [fault, stream] = await defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       path: "/",
     })(client);
     expect(fault).toBeNull();
@@ -215,17 +210,20 @@ describe("request-time default fetch", () => {
       const client = createClient(
         withEndpoint("https://example.com"),
         withInterceptors(
-          createHttpInterceptor(async () =>
-            makeResponse({ body: "cached", status: 200 }),
+          createHttpInterceptor(() =>
+            Promise.resolve(makeResponse({ body: "cached", status: 200 })),
           ),
           createSSEInterceptor((request) =>
             fetchEventStream(request, {
-              fetch: async () =>
-                new Response("data: cached\n\n", {
-                  headers: { "content-type": "text/event-stream" },
-                }),
+              fetch: () =>
+                Promise.resolve(
+                  new Response("data: cached\n\n", {
+                    headers: { "content-type": "text/event-stream" },
+                  }),
+                ),
               maxBufferSize: 1024,
-              maxQueueSize: 16,
+              maxQueueSize: 4,
+              transformMessage: (message) => message,
             }),
           ),
         ),
@@ -241,8 +239,6 @@ describe("request-time default fetch", () => {
       } else {
         const [fault, stream] = await defineEventStream({
           events: { message: struct.string() },
-          maxBufferSize: 1024,
-          maxQueueSize: 16,
           path: "/",
         })(client);
         expect(fault).toBeNull();
@@ -277,8 +273,6 @@ describe("request-time default fetch", () => {
           ? defineRequest({ method: "GET", path: "/" })(client)
           : defineEventStream({
               events: { message: struct.string() },
-              maxBufferSize: 1024,
-              maxQueueSize: 16,
               path: "/",
             })(client);
       expect(

@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { describe, expect, test, vi } from "vitest";
 import {
   createClient,
@@ -11,43 +10,60 @@ import { defineEventStream } from "../sse";
 import { struct } from "../struct";
 import { materializeOutboundRequest } from "./outbound_request";
 
-describe("outbound request node bodies", () => {
-  test("rejects a Node Readable json body", () => {
+class NonJsonBody {
+  readonly value = "x";
+}
+
+function readUnknown(value: unknown): unknown {
+  return value;
+}
+
+function streamFrom(source: AsyncIterable<Uint8Array>): ReadableStream {
+  const from = readUnknown(Reflect.get(ReadableStream, "from"));
+  if (typeof from !== "function") {
+    throw new Error("ReadableStream.from is unavailable");
+  }
+  const stream = readUnknown(Reflect.apply(from, ReadableStream, [source]));
+  if (!(stream instanceof ReadableStream)) {
+    throw new Error("expected a ReadableStream");
+  }
+  return stream;
+}
+
+describe("outbound request non-JSON bodies", () => {
+  test("rejects a class instance json body", () => {
     const send = () =>
-      materializeOutboundRequest({ body: Readable.from(["x"]) }, "http");
+      materializeOutboundRequest({ body: new NonJsonBody() }, "http");
 
     expect(send).toThrow(TypeError);
-    expect(send).toThrow("body is not JSON data: Readable.");
+    expect(send).toThrow("body is not JSON data: NonJsonBody.");
   });
 
   test("passes a web ReadableStream body through unchanged", () => {
-    const fromNode = Readable.toWeb(Readable.from([Buffer.from("x")]));
-    const fromAsync = (
-      ReadableStream as unknown as {
-        from(iterable: AsyncIterable<Uint8Array>): ReadableStream<Uint8Array>;
-      }
-    ).from(
+    const fromAsync = streamFrom(
       (async function* () {
-        yield new TextEncoder().encode("x");
+        yield await Promise.resolve(new TextEncoder().encode("x"));
       })(),
     );
 
-    expect(materializeOutboundRequest({ body: fromNode }, "http").body).toBe(
-      fromNode,
-    );
     expect(materializeOutboundRequest({ body: fromAsync }, "http").body).toBe(
       fromAsync,
     );
   });
 
-  test("returns REQ_BUILD_FAILED for an HTTP Readable body without calling the handle", async () => {
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
+  test("returns REQ_BUILD_FAILED for an HTTP class-instance body without calling the handle", async () => {
+    const handle = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const client = createClient(
       withEndpoint("https://example.com"),
       withHTTPHandle(handle),
     );
     const useRequest = defineRequest({
-      builder: () => ({ body: Readable.from(["x"]) as never }),
+      // @ts-expect-error a class instance is not a fetch body
+      builder: () => ({
+        body: new NonJsonBody(),
+      }),
       method: "POST",
       path: "/users",
     });
@@ -60,13 +76,13 @@ describe("outbound request node bodies", () => {
     expect(fault?.cause).toBeInstanceOf(TypeError);
     expect(
       fault?.cause instanceof TypeError ? fault.cause.message : "",
-    ).toMatch(/Readable/);
+    ).toMatch(/NonJsonBody/);
     expect(handle).toHaveBeenCalledTimes(0);
   });
 
-  test("returns REQ_BUILD_FAILED for an SSE Readable body without calling the handle", async () => {
-    const handle = vi.fn(
-      async () =>
+  test("returns REQ_BUILD_FAILED for an SSE class-instance body without calling the handle", async () => {
+    const handle = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
@@ -76,16 +92,18 @@ describe("outbound request node bodies", () => {
           }),
           { headers: { "content-type": "text/event-stream" }, status: 200 },
         ),
+      ),
     );
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
     const useStream = defineEventStream({
-      builder: () => ({ body: Readable.from(["x"]) as never }),
+      // @ts-expect-error a class instance is not a fetch body
+      builder: () => ({
+        body: new NonJsonBody(),
+      }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path: "/events",
     });
@@ -98,7 +116,7 @@ describe("outbound request node bodies", () => {
     expect(fault?.cause).toBeInstanceOf(TypeError);
     expect(
       fault?.cause instanceof TypeError ? fault.cause.message : "",
-    ).toMatch(/Readable/);
+    ).toMatch(/NonJsonBody/);
     expect(handle).toHaveBeenCalledTimes(0);
   });
 });

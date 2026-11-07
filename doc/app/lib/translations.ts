@@ -3,10 +3,14 @@ import { i18nProvider, uiTranslations } from "fumadocs-ui/i18n";
 import { i18n } from "./i18n";
 import { messages, type MessageKey, type Messages } from "./messages";
 
+function isMessageKey(key: string): key is MessageKey {
+  return Object.hasOwn(messages["en-US"], key);
+}
+
 const registry = i18n
   .translations()
   .extend(uiTranslations())
-  .extend({ keys: Object.keys(messages["en-US"]) as MessageKey[] })
+  .extend({ keys: Object.keys(messages["en-US"]).filter(isMessageKey) })
   .add(messages);
 
 export type Translator = (

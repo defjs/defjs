@@ -70,13 +70,11 @@ test("distinguishes navigation groups from their children in both reading direct
       ),
     ).toBeGreaterThan(0);
     const decision = sidebar.locator(`a[href="${path}/docs/design-decisions"]`);
-    const standalone = await textBox(decision);
+    const decisionBox = await textBox(decision);
     expect(
-      Math.abs(
-        rtl ? standalone.right - group.right : standalone.left - group.left,
-      ),
-    ).toBeLessThanOrEqual(2);
-    expect(await sidebar.getByRole("heading", { level: 2 }).count()).toBe(6);
+      rtl ? group.right - decisionBox.right : decisionBox.left - group.left,
+    ).toBeGreaterThanOrEqual(INDENT);
+    expect(await sidebar.getByRole("heading", { level: 2 }).count()).toBe(4);
     const aiLabel = {
       "/zh-Hans": "AI",
       "/ar": "الذكاء الاصطناعي",
@@ -97,6 +95,10 @@ test("distinguishes navigation groups from their children in both reading direct
     expect(
       await sidebar.evaluate((node) => node.scrollWidth <= node.clientWidth),
     ).toBe(true);
+    await page.goto(site.url(`${path}/docs/integrations`), {
+      waitUntil: "networkidle",
+    });
+    expect(await sidebar.getByRole("heading", { level: 2 }).count()).toBe(2);
   }
   expect(await errors.values()).toEqual([]);
 });

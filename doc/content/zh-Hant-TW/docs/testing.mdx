@@ -1,0 +1,58 @@
+---
+title: "測試"
+description: 以注入的傳輸層 Handle、tuple 斷言與確定性計時器，離線測試 SDK 定義與應用程式策略。
+---
+
+# 測試
+
+因為 Defjs 把操作定義與 Client 執行分開，你可以在離線環境測試真實的 SDK 操作與應用程式攔截器，不需要啟動網路伺服器，也不必模擬函式庫內部的函式。
+
+## 1. 注入本機傳輸層 Handle
+
+在 `createClient(...)` 上使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle`，替換底層的平台傳輸。Defjs 仍會執行完整的操作管線：輸入 `struct` 驗證、`builder` 對應、URL 範圍檢查、攔截器、狀態分派，以及回應 `struct` 解碼。
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. 測試最佳實務
+
+### 斷言 error-first tuple，而不是內部實作
+
+一律用測試 Client 呼叫匯出的 SDK 操作，並斷言回傳的 `[error, data, response]` tuple：
+
+- `2xx` 的情況，斷言 `expect(error).toBeNull()`，並檢查解碼後的 `data` 欄位（包含 `.alias()` 從傳輸名稱到邏輯名稱的對應）。
+- 失敗的情況，若屬於契約的一部分，斷言 `error?.code`、`error?.status`、`error?.data` 與 `error?.cause`。
+
+### 驗證出站請求的網路位元組
+
+在你的 `withHTTPHandle(async (input, init) => ...)` 內，建立 `const request = new Request(input, init)`，檢查 `request.url`、`request.method`、`request.headers` 與 `await request.text()`（或 `await request.json()`），確認你的 `builder` 與 struct 別名序列化出的傳輸格式正是後端期望的。
+
+### 使用虛擬計時器（Fake Timers）進行確定性時間控制
+
+遇到攔截器重試退避、SSE/WebSocket 重連延遲或 WebSocket 心跳時，在 Vitest 裡使用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`。這些虛擬計時器不會推動原生的 `AbortSignal.timeout` 時鐘。若要在 Vitest 中得到確定的請求期限，請用受控的 `setTimeout`，以 `TimeoutError` 為原因中止一個 `AbortController`：
+
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+在 Bun test 裡則使用 `jest.useFakeTimers()` 與 `jest.advanceTimersByTime()`；Bun 的虛擬計時器也會控制 `AbortSignal.timeout`。不要假設兩個測試執行器控制的是同一組原生時鐘。等到被等待的階段開始後才推進時間，斷言狀態轉換或嘗試次數，而不是實際經過的時間，並在每個測試結束後還原真實計時器。
+
+## 相關閱讀
+
+- [使用本機 Fetch Handle 進行測試](/zh-Hant-TW/recipes/test-with-handle)
+- [建置並發布 SDK](/zh-Hant-TW/recipes/publish-http-sdk)
+- [Client 設定](/zh-Hant-TW/docs/client)

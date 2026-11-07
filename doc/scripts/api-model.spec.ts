@@ -13,8 +13,8 @@ import {
   overloadNodes,
   parameterRequired,
   parameterTypeText,
-  projectChecker,
   requireKind,
+  requireNode,
   referenceRecord,
   formatJsonDocument,
   preferredParameterType,
@@ -38,14 +38,12 @@ const row = (name: string, typeHref?: string): StoredEntry => ({
   required: true,
   deprecated: false,
   tags: [{ name: "example", text: "n" }],
-  ...(typeHref ? { typeHref } : {}),
+  typeHref,
 });
 
 test("model helpers keep stable names, kinds, and parameter rows", () => {
   expect(defined("ok", "value")).toBe("ok");
   expect(() => defined(undefined, "value")).toThrow("missing value");
-  expect(projectChecker({ project: { checker: 1 } })).toBe(1);
-  expect(() => projectChecker({})).toThrow("TypeScript program has no checker");
   expect(
     catalogKind({ typeOnlyExport: true, declarationKind: "function" }),
   ).toBe("type");
@@ -94,6 +92,11 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
   );
   expect(() => requireKind(1, 2, "bad kind")).toThrow("bad kind");
   requireKind(2, 2, "bad kind");
+  const isNamed = (node: { name?: string }): node is { name: string } =>
+    node.name !== undefined;
+  const named = { name: "x" };
+  expect(requireNode(named, isNamed, "not named")).toBe(named);
+  expect(() => requireNode({}, isNamed, "not named")).toThrow("not named");
   expect(parameterTypeText("  ")).toBe("unknown");
   expect(parameterTypeText(" ClientOption[] ")).toBe("ClientOption[]");
   expect(() => stableMemberName("__@CLIENT@1")).toThrow("unstable member name");
@@ -158,17 +161,9 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
   ).toThrow("binding parameter type has no member table: Empty");
   expect(nestedExpression(undefined, [1])).toBeUndefined();
   expect(nestedExpression({ kind: 2 }, [1])).toEqual({ kind: 2 });
-  expect(
-    nestedExpression(
-      { kind: 1, expression: { kind: 2 } } as { kind: number },
-      [1],
-    ),
-  ).toEqual({
-    kind: 2,
-  });
-  expect(
-    nestedExpression({ kind: 1 } as { kind: number }, [1]),
-  ).toBeUndefined();
+  const wrapped = { kind: 1, expression: { kind: 2 } };
+  expect(nestedExpression(wrapped, [1])).toEqual({ kind: 2 });
+  expect(nestedExpression({ kind: 1 }, [1])).toBeUndefined();
   expect(objectPropertyName("any", "identifier")).toBe("any");
   expect(() => objectPropertyName("['any']", "other")).toThrow(
     "unsupported struct property name",
@@ -290,7 +285,8 @@ test("serialized reference JSON uses a fixed field order", () => {
       },
     ],
   });
-  const table = withTable.typeTable as StoredEntry[];
+  const table = withTable.typeTable;
+  if (!table) throw new Error("expected a type table");
   expect(defined(table[0], "id").typeHref).toBe("#id");
   expect(defined(table[1], "name").typeHref).toBeUndefined();
   expect(serializeReference([entry]).endsWith("\n")).toBe(true);

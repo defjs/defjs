@@ -8,6 +8,10 @@ import {
   withWebSocketHandle,
 } from "../client";
 import { MALFORMED_INTERCEPTOR_RESULTS } from "../../test/malformed_interceptor_results";
+import {
+  createHttpStatusFault,
+  createUndecodedHttpStatusFault,
+} from "../error";
 import { createWebSocketInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineWebSocket } from "./index";
@@ -86,15 +90,39 @@ describe("web socket startup faults", () => {
     },
   );
 
+  test("should return a thrown HTTP fault unchanged, with or without a decoded body", async () => {
+    const meta = {
+      headers: new Headers(),
+      ok: false,
+      status: 503,
+      statusText: "unavailable",
+      url: "https://example.test/ws",
+    };
+    const undecoded = createUndecodedHttpStatusFault(meta);
+    const decoded = createHttpStatusFault({
+      ...meta,
+      body: { reason: "down" },
+    });
+    for (const thrown of [undecoded, decoded]) {
+      const client = createClient(
+        withEndpoint("http://127.0.0.1:1"),
+        withInterceptors(
+          createWebSocketInterceptor(() => {
+            throw thrown;
+          }),
+        ),
+      );
+      const [fault, session] = await useRoom(client);
+      expect(session).toBeUndefined();
+      expect(fault).toBe(thrown);
+    }
+  });
+
   test("should report an interceptor throw as EXT_INTERCEPTOR_FAILED and keep the cause", async () => {
     const cause = new Error("interceptor exploded");
     const client = createClient(
       withEndpoint("http://127.0.0.1:1"),
-      withInterceptors(
-        createWebSocketInterceptor(async () => {
-          throw cause;
-        }),
-      ),
+      withInterceptors(createWebSocketInterceptor(() => Promise.reject(cause))),
     );
 
     const [fault, session] = await useRoom(client);
@@ -109,7 +137,10 @@ describe("web socket startup faults", () => {
     async (_name, resolved) => {
       const client = unreachableClient(
         withInterceptors(
-          createWebSocketInterceptor(async () => resolved() as never),
+          createWebSocketInterceptor(() =>
+            // @ts-expect-error malformed interceptor results are not sessions
+            Promise.resolve(resolved()),
+          ),
         ),
       );
 
@@ -148,7 +179,8 @@ describe("web socket startup faults", () => {
     const client = createClient(
       withEndpoint("http://127.0.0.1:1"),
       withWebSocketHandle(
-        {} as unknown as Parameters<typeof withWebSocketHandle>[0],
+        // @ts-expect-error a non-constructor proves ENV_UNSUPPORTED
+        {},
       ),
     );
 
@@ -169,9 +201,11 @@ describe("web socket startup faults", () => {
       path: "/ws/:room",
     });
 
-    const [fault] = await useTyped(unreachableClient(), {
-      room: "nope",
-    } as never);
+    const [fault] = await useTyped(
+      unreachableClient(),
+      // @ts-expect-error room must be a number
+      { room: "nope" },
+    );
 
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
   });

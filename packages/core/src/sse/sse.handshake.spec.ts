@@ -18,8 +18,6 @@ import type {
 
 const useStream = defineEventStream({
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 8,
   path: "/events",
 });
 
@@ -86,15 +84,16 @@ describe("F031 SSE first successful handshake snapshot", () => {
       let delivered: EventStreamHandle<unknown> | undefined;
       const client = createClient(
         withEndpoint("https://example.test"),
-        withSSEHandle(async (input) => {
+        withSSEHandle((input) => {
           const connection = Number(
             new Request(input).headers.get("x-connection"),
           );
           const attempt = attempts[connection] ?? 0;
           attempts[connection] = attempt + 1;
           const source = responses[connection]?.[attempt];
-          if (!source) throw new Error("Unexpected SSE attempt");
-          return source.response;
+          if (!source)
+            return Promise.reject(new Error("Unexpected SSE attempt"));
+          return Promise.resolve(source.response);
         }),
         withSSEReconnect({ attempts: 1, delayMs: 0 }),
         withInterceptors(
@@ -270,11 +269,13 @@ describe("F031 SSE first successful handshake snapshot", () => {
           await shortCircuit.closed;
         },
         [Symbol.asyncIterator]() {
-          return { next: async () => ({ done: true, value: undefined }) };
+          return {
+            next: () => Promise.resolve({ done: true, value: undefined }),
+          };
         },
       };
       const source = controlledResponse("discarded", 1);
-      const handle = vi.fn(async () => source.response);
+      const handle = vi.fn(() => Promise.resolve(source.response));
       let discarded: EventStreamHandle<unknown> | undefined;
       const client = createClient(
         withEndpoint("https://example.test"),

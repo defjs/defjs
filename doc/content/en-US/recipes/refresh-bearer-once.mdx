@@ -5,16 +5,33 @@ description: Attach Authorization and replay once inside one interceptor; next()
 
 # Refresh a Bearer token once on 401
 
-`next()` is the rest of **this** onion — not `axios(config)` re-dispatch from the outside. Put attach + single-flight refresh + one replay in **one** HTTP interceptor so outer layers do not run twice.
+In Defjs, `next(request)` invokes the remainder of the interceptor chain inward—it does not re-dispatch from the outermost interceptor. Place token attachment, single-flight refresh deduplication, and the one-time `401` replay inside **one** HTTP interceptor so outer logging or timing interceptors do not run twice:
 
-See [Interceptors](/docs/interceptors).
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 42
 ```
 
-Calling `next` again only re-enters interceptors **inside** this layer (and the Fetch handler). It does not re-run outer timing/auth wrappers — that is why 401 layout belongs in one interceptor, not a second call of the operation.
+A replayable body is not the same as a repeatable business operation. This interceptor also resends a JSON `POST` after a matching 401: two HTTP deliveries, first rejected and then accepted. Use it for writes only when authentication rejects the first delivery before the business handler runs; preserve a stable idempotency key across both deliveries and use server-side deduplication. If that contract is unavailable, return the 401 instead of automatically replaying the write. The complete example does not replay a `ReadableStream` request body.
+
+See [Interceptors](/docs/interceptors) for onion ordering and retry boundaries.

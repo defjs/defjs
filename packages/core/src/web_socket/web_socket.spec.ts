@@ -6,6 +6,7 @@ import {
   withInterceptors,
   withWebSocketHandle,
   type Client,
+  type WebSocketHandleConstructor,
 } from "../client";
 import { ERR_ABORTED } from "../error";
 import {
@@ -30,8 +31,7 @@ describe("web socket runtime", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("should return transport error with invalid client", async () => {
@@ -44,11 +44,9 @@ describe("web socket runtime", () => {
     const client = createClient(
       withEndpoint("http://localhost"),
       withWebSocketHandle(
-        class {
-          constructor() {
-            throw new Error("invalid client");
-          }
-        } as unknown as typeof WebSocket,
+        testHandle(() => {
+          throw new Error("invalid client");
+        }),
       ),
     );
 
@@ -77,11 +75,9 @@ describe("web socket runtime", () => {
       const isolated = createClient(
         withEndpoint(inject("testServerHost")),
         withWebSocketHandle(
-          class {
-            constructor() {
-              constructorCalls += 1;
-            }
-          } as unknown as typeof WebSocket,
+          testHandle(() => {
+            constructorCalls += 1;
+          }),
         ),
       );
       const useSocket = defineWebSocket({
@@ -255,7 +251,7 @@ describe("web socket runtime", () => {
       });
       const handled = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket as unknown as typeof WebSocket),
+        withWebSocketHandle(Socket),
       );
       const [error, socket] = await openControllableSocket(
         useHeartbeatSocket(
@@ -283,12 +279,16 @@ describe("web socket runtime", () => {
       // The ack deadline is armed only after the first ping. Advancing both timers explicitly keeps a
       // stalled event loop from observing the deadline before this assertion.
       await vi.advanceTimersByTimeAsync(15);
-      await expect(socket.closed).resolves.toMatchObject({
-        cause: expect.objectContaining({
-          message: "WebSocket heartbeat timeout",
-        }),
-        kind: "error",
-      });
+      const closed = await socket.closed;
+      expect(closed.kind).toBe("error");
+      if (closed.kind !== "error") {
+        throw new Error("expected an error close");
+      }
+      const cause = closed.cause;
+      if (!(cause instanceof Error)) {
+        throw new Error("expected an Error cause");
+      }
+      expect(cause.message).toBe("WebSocket heartbeat timeout");
       expect(runtimeError).toEqual(
         expect.objectContaining({ message: "WebSocket heartbeat timeout" }),
       );
@@ -312,7 +312,7 @@ describe("web socket runtime", () => {
       });
       const handled = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket as unknown as typeof WebSocket),
+        withWebSocketHandle(Socket),
       );
       const [error, socket] = await openControllableSocket(
         useHeartbeatSocket(
@@ -561,7 +561,11 @@ describe("web socket runtime", () => {
     });
 
     const [error, socket, connection] = await run((client) =>
-      useSocket(client, { id: "bad" } as never),
+      useSocket(
+        client,
+        // @ts-expect-error id must be a number
+        { id: "bad" },
+      ),
     );
 
     expect(socket).toBeUndefined();
@@ -615,9 +619,7 @@ describe("web socket runtime", () => {
     });
 
     const [error, socket, connection] = await run(useSocket, {
-      beforeConnect: async () => {
-        throw new Error("beforeConnect failed");
-      },
+      beforeConnect: () => Promise.reject(new Error("beforeConnect failed")),
     });
 
     expect(socket).toBeUndefined();
@@ -788,9 +790,9 @@ describe("web socket runtime", () => {
     const clientWithInterceptor = createClient(
       withEndpoint(inject("testServerHost")),
       withInterceptors(
-        createWebSocketInterceptor(async () => {
-          throw new Error("blocked by interceptor");
-        }),
+        createWebSocketInterceptor(() =>
+          Promise.reject(new Error("blocked by interceptor")),
+        ),
       ),
     );
 
@@ -1206,7 +1208,7 @@ describe("web socket runtime", () => {
       const acks: Array<{ method: "pong"; reqId: number }> = [];
       const handled = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket as unknown as typeof WebSocket),
+        withWebSocketHandle(Socket),
       );
       const [error, socket] = await openControllableSocket(
         useProviderSocket(
@@ -1310,11 +1312,9 @@ describe("web socket runtime", () => {
     const guardedClient = createClient(
       withEndpoint("https://example.test"),
       withWebSocketHandle(
-        class {
-          constructor() {
-            constructed += 1;
-          }
-        } as unknown as typeof WebSocket,
+        testHandle(() => {
+          constructed += 1;
+        }),
       ),
     );
     const useSocket = defineWebSocket({
@@ -1341,7 +1341,7 @@ function echoProviderPing(
   socket: { triggerMessage(data: unknown): void },
   payload: string,
 ): void {
-  const decoded = JSON.parse(payload) as Record<string, unknown>;
+  const decoded = jsonObject(payload);
   socket.triggerMessage(
     JSON.stringify({
       method: "wire",
@@ -1358,4 +1358,39 @@ function echoProviderPing(
   socket.triggerMessage(
     JSON.stringify({ method: "pong", req_id: decoded["req_id"] }),
   );
+}
+
+function jsonObject(payload: string): Record<string, unknown> {
+  const decoded: unknown = JSON.parse(payload);
+  if (!isRecord(decoded)) {
+    throw new Error("expected a heartbeat payload object");
+  }
+  return decoded;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function testHandle(construct: () => void): WebSocketHandleConstructor {
+  return class {
+    static readonly OPEN = 1;
+    bufferedAmount = 0;
+    extensions = "";
+    protocol = "";
+    readyState = 0;
+    url = "";
+
+    constructor() {
+      construct();
+    }
+
+    addEventListener(): void {}
+
+    close(): void {}
+
+    removeEventListener(): void {}
+
+    send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {}
+  };
 }

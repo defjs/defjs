@@ -23,8 +23,7 @@ describe("web socket runtime reconnect", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("should reconnect and flush queued messages", async () => {
@@ -53,11 +52,6 @@ describe("web socket runtime reconnect", () => {
     });
 
     const states: string[] = [];
-    let session:
-      | {
-          send(message: { text: string; type: "message" }): void;
-        }
-      | undefined;
 
     const executePromise = run(
       (client) =>
@@ -76,12 +70,10 @@ describe("web socket runtime reconnect", () => {
       throw new Error("Expected socket session");
     }
 
-    session = socket;
-
     socket.onStateChange((state: string) => {
       states.push(state);
-      if (state === "reconnecting" && session) {
-        session.send({
+      if (state === "reconnecting") {
+        socket.send({
           text: "after-reconnect",
           type: "message",
         });

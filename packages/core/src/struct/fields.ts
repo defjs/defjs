@@ -23,7 +23,7 @@ export function resolveStructFields(
     definition.cache.resolvedShape ?? resolveObjectShape(struct, definition);
   const fields = Object.freeze(
     Object.entries(shape).map(([key, field]) => {
-      const runtime = field as unknown as RuntimeStruct;
+      const runtime = field;
       const alias = runtime[DEFINITION].alias;
       return Object.freeze({
         alias,
@@ -43,7 +43,7 @@ function assertUniqueWireKeys(fields: readonly ResolvedStructField[]): void {
   const seen = new Map<string, string>();
   for (const field of fields) {
     if (seen.has(field.wireKey)) {
-      const previous = seen.get(field.wireKey) as string;
+      const previous = seen.get(field.wireKey);
       throw new TypeError(
         `duplicate wire key "${field.wireKey}" for object fields "${previous}" and "${field.key}"`,
       );

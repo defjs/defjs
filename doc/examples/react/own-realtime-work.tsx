@@ -3,13 +3,16 @@ import { defineWebSocket, struct } from "@defjs/core";
 import { useClient } from "@defjs/react";
 import { useEffect } from "react";
 
-const notifications = defineWebSocket({
+const quotes = defineWebSocket({
   maxIncomingQueueSize: 100,
-  path: "/notifications",
-  incoming: struct.object({ text: struct.string() }),
+  path: "/quotes",
+  incoming: struct.object({
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
 });
 
-export function Notifications() {
+export function QuoteTicker() {
   const client = useClient();
 
   useEffect(() => {
@@ -18,7 +21,7 @@ export function Notifications() {
     let closeActive: (() => void) | undefined;
 
     void (async () => {
-      const [error, session] = await notifications(
+      const [error, session] = await quotes(
         client({ signal: controller.signal }),
       );
       if (error) return;
@@ -39,11 +42,11 @@ export function Notifications() {
 
       try {
         for await (const message of session.receive) {
-          console.info(message.text);
+          console.info(message.symbol, message.price);
         }
       } catch (cause) {
         // Aborting `controller` ends the session and rejects `receive` with AbortError; only report real failures.
-        if (!disposed) console.error("notifications failed", cause);
+        if (!disposed) console.error("quotes failed", cause);
       } finally {
         close();
         await session.closed;

@@ -1,7 +1,7 @@
-import { join } from "node:path";
+import { joinPath } from "./paths";
 
 export async function buildFingerprint(
-  root = new URL("../", import.meta.url).pathname,
+  root = `${import.meta.dirname}/../`,
 ): Promise<string> {
   const paths = (
     await Array.fromAsync(
@@ -26,7 +26,7 @@ export async function buildFingerprint(
   const hash = new Bun.CryptoHasher("sha256");
   for (const path of paths.sort()) {
     hash.update(path);
-    hash.update(await Bun.file(join(root, path)).arrayBuffer());
+    hash.update(await Bun.file(joinPath(root, path)).arrayBuffer());
   }
   return hash.digest("hex");
 }
@@ -34,7 +34,7 @@ export async function assertFreshBuild(
   directory: string,
   fingerprint: string,
 ): Promise<void> {
-  const file = Bun.file(join(directory, "build-stamp.txt"));
+  const file = Bun.file(joinPath(directory, "build-stamp.txt"));
   if (!(await file.exists()))
     throw new Error(
       "Missing build stamp; build the documentation before site tests",
@@ -46,5 +46,5 @@ export async function writeBuildStamp(
   directory: string,
   fingerprint: string,
 ): Promise<void> {
-  await Bun.write(join(directory, "build-stamp.txt"), fingerprint);
+  await Bun.write(joinPath(directory, "build-stamp.txt"), fingerprint);
 }

@@ -386,39 +386,38 @@ void createTagNamespace;
 void getFieldTag;
 void getFieldTags;
 
-// @ts-expect-error primitive constraints were removed from the Go-style API.
-struct.string().min(1);
-
-// @ts-expect-error primitive constraints were removed from the Go-style API.
-struct.number().int();
-
-// @ts-expect-error primitive constraints were removed from the Go-style API.
-struct.array(struct.string()).nonempty();
-
-// @ts-expect-error transform was removed from the Go-style API.
-struct.string().transform(
-  (value: string) => Number(value),
-  (value: number) => String(value),
-);
-
-// @ts-expect-error refine was removed from the Go-style API.
-struct.string().refine((value: string) => value.length > 0);
-
-// @ts-expect-error parse is internal runtime behavior, not public struct API.
-struct.string().parse("x");
-
-// @ts-expect-error key was removed; wire names must use alias().
-const missingKeyMethod = struct.string().key;
-void missingKeyMethod;
-
-// @ts-expect-error async parsing is not part of the public struct API.
-struct.string().parseAsync("x");
-
-// @ts-expect-error struct.json was removed; non-string structs are JSON by kind.
-struct.json(struct.string());
-
-// @ts-expect-error struct.text was removed; raw text is struct.string().
-struct.text();
+export type RemovedStructMembers = [
+  // @ts-expect-error primitive constraints were removed from the Go-style API.
+  ReturnType<typeof struct.string>["min"],
+  // @ts-expect-error primitive constraints were removed from the Go-style API.
+  ReturnType<typeof struct.number>["int"],
+  // @ts-expect-error primitive constraints were removed from the Go-style API.
+  ReturnType<typeof struct.array>["nonempty"],
+  // @ts-expect-error transform was removed from the Go-style API.
+  ReturnType<typeof struct.string>["transform"],
+  // @ts-expect-error refine was removed from the Go-style API.
+  ReturnType<typeof struct.string>["refine"],
+  // @ts-expect-error parse is internal runtime behavior, not public struct API.
+  ReturnType<typeof struct.string>["parse"],
+  // @ts-expect-error key was removed; wire names must use alias().
+  ReturnType<typeof struct.string>["key"],
+  // @ts-expect-error async parsing is not part of the public struct API.
+  ReturnType<typeof struct.string>["parseAsync"],
+  // @ts-expect-error struct.json was removed; non-string structs are JSON by kind.
+  typeof struct.json,
+  // @ts-expect-error struct.text was removed; raw text is struct.string().
+  typeof struct.text,
+  // @ts-expect-error default was removed from the Go-style API.
+  ReturnType<typeof struct.string>["default"],
+  // @ts-expect-error passthrough was removed from the Go-style API.
+  ReturnType<typeof struct.object>["passthrough"],
+  // @ts-expect-error strip was removed from the Go-style API.
+  ReturnType<typeof struct.object>["strip"],
+  // @ts-expect-error object shape utilities were removed from the Go-style API.
+  ReturnType<typeof struct.object>["pick"],
+  // @ts-expect-error struct.recursive was removed from the public API.
+  typeof struct.recursive,
+];
 
 const WithOptionalInnerFields = struct.object({
   locale: struct.object({ region: struct.string().optional() }),
@@ -494,33 +493,108 @@ expectTypeOf<(typeof UrlencodedBody)["_struct"]["output"]>().toEqualTypeOf<{
   q: string;
 }>();
 
-// @ts-expect-error default was removed from the Go-style API.
-struct.string().default("default-value");
+export type Cases = [
+  AliasOutputCase,
+  AnyGuard,
+  DateCase,
+  FormDataBodyCase,
+  IntersectionCase,
+  MatrixCase,
+  OptionalPairIntersectionCase,
+  ProfileCase,
+  SingleIntersectionCase,
+  SingleNullishIntersectionCase,
+  SingleOptionalIntersectionCase,
+  SingleOptionalIntersectionFieldCase,
+  UnionCase,
+  UrlencodedBodyCase,
+];
 
-// @ts-expect-error passthrough was removed from the Go-style API.
-struct.object({ id: struct.string() }).passthrough();
+// Internal adapters retain the same decoded type as struct.parse, without exporting codecs publicly.
+import { decodeJson as decodeWireJson } from "./codec/json";
+import { decodeObjectByAlias } from "./codec/common";
+import { parseStructValue } from "./introspection";
+import { guideTag, type Guide } from "./guide";
+import { assertStruct } from "./shape";
 
-// @ts-expect-error strip was removed from the Go-style API.
-struct.object({ id: struct.string() }).strip();
+const InternalPayload = struct.object({
+  createdAt: struct.date().alias("created_at"),
+  total: struct.bigint(),
+  nickname: struct.string().optional(),
+});
+expectTypeOf(decodeWireJson(InternalPayload, {})).toEqualTypeOf<
+  Infer<typeof InternalPayload>
+>();
+expectTypeOf(decodeObjectByAlias(InternalPayload, {})).toEqualTypeOf<
+  Infer<typeof InternalPayload>
+>();
+expectTypeOf(parseStructValue(InternalPayload, {})).toEqualTypeOf<
+  Infer<typeof InternalPayload>
+>();
+expectTypeOf(decodeWireJson(InternalPayload.nullish(), null)).toEqualTypeOf<
+  Infer<typeof InternalPayload> | null | undefined
+>();
+assertStruct(InternalPayload, "internal type test");
+expectTypeOf(guideTag([InternalPayload])).toEqualTypeOf<Guide>();
+expectTypeOf(guideTag([])).toEqualTypeOf<Guide | undefined>();
 
-// @ts-expect-error object shape utilities were removed from the Go-style API.
-struct.object({ id: struct.string() }).pick({ id: true });
+export function genericInternalDecode<S extends StructLike>(
+  schema: S,
+  value: unknown,
+): Infer<S> {
+  return decodeWireJson(schema, value);
+}
 
-// @ts-expect-error struct.recursive was removed from the public API.
-struct.recursive(() => struct.object({ id: struct.string() }));
+type PreviousOutputContract<T> = T extends {
+  readonly _struct: { readonly output: unknown };
+}
+  ? T["_struct"]["output"]
+  : never;
 
-export type Cases =
-  | AliasOutputCase
-  | AnyGuard
-  | DateCase
-  | FormDataBodyCase
-  | IntersectionCase
-  | MatrixCase
-  | OptionalPairIntersectionCase
-  | ProfileCase
-  | SingleIntersectionCase
-  | SingleNullishIntersectionCase
-  | SingleOptionalIntersectionCase
-  | SingleOptionalIntersectionFieldCase
-  | UnionCase
-  | UrlencodedBodyCase;
+type InferenceContractCases = [
+  never,
+  unknown,
+  undefined,
+  null,
+  string,
+  typeof InternalPayload,
+  typeof InternalPayload | undefined,
+  typeof InternalPayload | ReturnType<typeof struct.date>,
+  { readonly _struct: { readonly output: "brand" } },
+  { readonly _struct?: { readonly output: "optional-brand" } },
+  { readonly _struct: { readonly output?: "optional-output" } },
+];
+
+type InferenceContractResults = {
+  [K in keyof InferenceContractCases]: StrictEqual<
+    Infer<InferenceContractCases[K]>,
+    PreviousOutputContract<InferenceContractCases[K]>
+  >;
+};
+expectTypeOf<InferenceContractResults>().toEqualTypeOf<{
+  [K in keyof InferenceContractCases]: true;
+}>();
+
+import type { TaggedStructOutput } from "./types";
+export function genericTaggedParse<S extends StructLike>(
+  schema: S,
+  value: unknown,
+): TaggedStructOutput<S> {
+  return parseStructValue(schema, value, { tagObjects: true });
+}
+export function genericPlainParse<S extends StructLike>(
+  schema: S,
+  value: unknown,
+): Infer<S> {
+  return parseStructValue(schema, value);
+}
+expectTypeOf(
+  parseStructValue(InternalPayload, {}, { tagObjects: true }),
+).toEqualTypeOf<TaggedStructOutput<typeof InternalPayload>>();
+
+export function cannotInventPublicOutput<S extends StructLike>(
+  value: unknown,
+): Infer<S> {
+  // @ts-expect-error The original public conditional does not accept an arbitrary unknown as a generic schema output.
+  return value;
+}

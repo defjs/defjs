@@ -8,8 +8,7 @@
     "*.ts",
     ".react-router/types/**/*.ts",
     "e2e/**/*.tsx",
-    "examples/**/*.spec.ts",
-    "examples/opentelemetry-logging/**/*.ts"
+    "examples/**/*.spec.ts"
   ],
   "compilerOptions": {
     "jsx": "react-jsx",

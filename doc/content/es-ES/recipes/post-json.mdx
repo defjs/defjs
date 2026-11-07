@@ -3,18 +3,35 @@ title: "Enviar JSON"
 description: Envía un cuerpo JSON tipado y decodifica un 201 declarado.
 ---
 
-# POST JSON
+# Enviar JSON con POST
 
-Entrega el cuerpo tipado al builder. Los nombres lógicos de campo se quedan en TypeScript; los alias de cable del struct se convierten en claves JSON. Un cuerpo objeto es `application/json`.
+Pasa un objeto de entrada tipado al `builder` y devuelve `{ body: input }`. Declarar `.alias("customer_name")` conserva `customerName` en TypeScript mientras codifica `"customer_name"` en la red y lo decodifica de vuelta desde la respuesta `201`.
 
-Ver detalles en [HTTP](/es-ES/docs/http) y [Cliente](/es-ES/docs/client).
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
+</include>
 
-<include cwd meta="create-user.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` es un placeholder. Con un servidor que responde `201` y `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, el snippet imprime:
+  </Tab>
+</Tabs>
+
+Con un servidor que responda `201` y `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, el script imprime:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+Consulta [Operaciones HTTP](/es-ES/docs/http) y [Struct y esquemas](/es-ES/docs/struct) para conocer más detalles.

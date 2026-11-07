@@ -12,7 +12,7 @@ export function serializeHttpBody(
   body: HttpRequest["body"],
 ):
   | ArrayBuffer
-  | Uint8Array<ArrayBuffer>
+  | ArrayBufferView<ArrayBuffer>
   | Blob
   | FormData
   | URLSearchParams
@@ -28,8 +28,11 @@ export function serializeHttpBody(
     case typeof body === "string":
       return body;
     case ArrayBuffer.isView(body):
-      // DOM BodyInit excludes SharedArrayBuffer views; the value itself is unchanged.
-      return body as Uint8Array<ArrayBuffer>;
+      // A fetch body view must be backed by an ArrayBuffer. A view over other storage, such as a
+      // SharedArrayBuffer, is sent as a copy of the same bytes.
+      return isArrayBufferBacked(body)
+        ? body
+        : new Uint8Array(body.buffer, body.byteOffset, body.byteLength).slice();
     case typeof body === "object":
     case typeof body === "boolean":
     case typeof body === "number":
@@ -38,6 +41,12 @@ export function serializeHttpBody(
     default:
       return null;
   }
+}
+
+function isArrayBufferBacked(
+  view: ArrayBufferView,
+): view is ArrayBufferView<ArrayBuffer> {
+  return view.buffer instanceof ArrayBuffer;
 }
 
 export function applyRequestContentType(

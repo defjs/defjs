@@ -3,10 +3,25 @@ import { encodeValue } from "./encode";
 import { struct } from "./index";
 import { encodeStructValue, parseStructTuple as parse } from "./introspection";
 import { matchesRuntimeValue } from "./match";
+import { assertStruct } from "./shape";
 import type { RuntimeStruct } from "./types";
+import { isPlainObject } from "./utils";
 
 function encode(struct: unknown, value: unknown): unknown {
-  return encodeValue(struct as RuntimeStruct, value);
+  assertStruct(struct, "struct");
+  return encodeValue(struct, value);
+}
+
+function runtimeOf(value: unknown): RuntimeStruct {
+  assertStruct(value, "struct");
+  return value;
+}
+
+function record(value: unknown): { [key: string]: unknown } {
+  if (!isPlainObject(value)) {
+    throw new Error("expected record");
+  }
+  return value;
 }
 
 describe("encode.ts", () => {
@@ -68,7 +83,7 @@ describe("encode.ts", () => {
     });
 
     try {
-      const encoded = encode(schema, value) as Record<string, unknown>;
+      const encoded = record(encode(schema, value));
       const duplicateAliases = struct.object({
         first: struct.string().alias("same"),
         second: struct.string().alias("same"),
@@ -90,17 +105,13 @@ describe("encode.ts", () => {
       expect(
         encode(duplicateAliases, { first: "first", second: "second" }),
       ).toEqual({ first: "first", second: "second" });
-      expect(
-        matchesRuntimeValue(schema as unknown as RuntimeStruct, value),
-      ).toBe(true);
-      expect(
-        matchesRuntimeValue(inheritedField as unknown as RuntimeStruct, {}),
-      ).toBe(false);
+      expect(matchesRuntimeValue(runtimeOf(schema), value)).toBe(true);
+      expect(matchesRuntimeValue(runtimeOf(inheritedField), {})).toBe(false);
     } finally {
       if (polluted) {
         Object.defineProperty(Object.prototype, "polluted", polluted);
       } else {
-        delete (Object.prototype as { polluted?: unknown }).polluted;
+        Reflect.deleteProperty(Object.prototype, "polluted");
       }
     }
   });
@@ -138,29 +149,30 @@ describe("encode.ts", () => {
       struct.object({ type: struct.literal("a"), payload: struct.date() }),
       struct.object({ type: struct.literal("b"), payload: struct.bigint() }),
     ]);
-    const aEncoded = encode(s, {
-      type: "a",
-      payload: new Date("2026-05-12T10:00:00Z"),
-    }) as { type: string; payload: string };
-    expect(aEncoded.payload).toBe("2026-05-12T10:00:00.000Z");
+    const aEncoded = record(
+      encode(s, {
+        type: "a",
+        payload: new Date("2026-05-12T10:00:00Z"),
+      }),
+    );
+    expect(aEncoded["payload"]).toBe("2026-05-12T10:00:00.000Z");
 
-    const bEncoded = encode(s, { type: "b", payload: 42n }) as {
-      type: string;
-      payload: string;
-    };
-    expect(bEncoded.payload).toBe("42");
+    const bEncoded = record(encode(s, { type: "b", payload: 42n }));
+    expect(bEncoded["payload"]).toBe("42");
   });
 
   test("struct.intersection encodes both object sides", () => {
     const named = struct.object({ name: struct.string() });
     const dated = struct.object({ when: struct.date() });
     const s = struct.intersection(named, dated);
-    const encoded = encode(s, {
-      name: "x",
-      when: new Date("2026-05-12T10:00:00Z"),
-    }) as { name: string; when: string };
-    expect(encoded.name).toBe("x");
-    expect(encoded.when).toBe("2026-05-12T10:00:00.000Z");
+    const encoded = record(
+      encode(s, {
+        name: "x",
+        when: new Date("2026-05-12T10:00:00Z"),
+      }),
+    );
+    expect(encoded["name"]).toBe("x");
+    expect(encoded["when"]).toBe("2026-05-12T10:00:00.000Z");
   });
 
   test("struct.intersection encode keeps a non-object value", () => {
@@ -235,8 +247,8 @@ describe("encode.ts", () => {
     if (err) {
       throw err;
     }
-    const encoded = encode(s, val) as { type: string; payload: string };
-    expect(encoded.payload).toBe("42");
+    const encoded = record(encode(s, val));
+    expect(encoded["payload"]).toBe("42");
   });
 
   test("struct.or encodes via blob, file, arrayBuffer, boolean, null branches", () => {
@@ -412,8 +424,8 @@ describe("encode.ts", () => {
   });
 
   test("matchesRuntimeValue uses neutral runtime guards for date and bigint", () => {
-    const dateStruct = struct.date() as unknown as RuntimeStruct;
-    const bigintStruct = struct.bigint() as unknown as RuntimeStruct;
+    const dateStruct = runtimeOf(struct.date());
+    const bigintStruct = runtimeOf(struct.bigint());
 
     expect(
       matchesRuntimeValue(dateStruct, new Date("2026-05-12T10:00:00Z")),
@@ -424,10 +436,7 @@ describe("encode.ts", () => {
   });
 
   test("encode uses injected selectUnionOptions as the union branch source", () => {
-    const union = struct.or(
-      struct.date(),
-      struct.string(),
-    ) as unknown as RuntimeStruct;
+    const union = runtimeOf(struct.or(struct.date(), struct.string()));
     const mockSelect = vi.fn(() => {
       throw new Error("selector-called");
     });
@@ -473,5 +482,27 @@ describe("encode.ts", () => {
   test("struct.enum in or falls through when value does not match", () => {
     const s = struct.or(struct.enum(["a", "b"]), struct.number());
     expect(encode(s, "c")).toBe("c");
+  });
+});
+
+describe("encode hooks given a value their struct did not produce", () => {
+  test("bigint encode calls toString() on any value that has it", () => {
+    expect(encode(struct.bigint(), 12n)).toBe("12");
+    expect(encode(struct.bigint(), 5)).toBe("5");
+    expect(encode(struct.bigint(), { toString: () => "custom" })).toBe(
+      "custom",
+    );
+    expect(() => encode(struct.bigint(), Object.create(null))).toThrow(
+      "toString() is not available on object",
+    );
+  });
+
+  test("Date encode calls toISOString() on a date-like value and rejects anything else", () => {
+    const dateLike = { toISOString: () => "2026-01-01T00:00:00.000Z" };
+    expect(encode(struct.date(), dateLike)).toBe("2026-01-01T00:00:00.000Z");
+    expect(() => encode(struct.date(), "2026-01-01")).toThrow(
+      "toISOString() is not available on string",
+    );
+    expect(() => encode(struct.date(), null)).toThrow(TypeError);
   });
 });

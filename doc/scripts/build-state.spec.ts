@@ -1,14 +1,11 @@
 import { expect, test } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import {
   assertFreshBuild,
   buildFingerprint,
   writeBuildStamp,
 } from "./build-state";
 test("site acceptance rejects missing or stale build stamps", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "defjs-build-"));
+  const directory = tempDirectory("defjs-build");
   try {
     await expect(assertFreshBuild(directory, "current")).rejects.toThrow(
       "Missing",
@@ -22,50 +19,54 @@ test("site acceptance rejects missing or stale build stamps", async () => {
       assertFreshBuild(directory, "current"),
     ).resolves.toBeUndefined();
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    removeDirectory(directory);
   }
 });
 
 import { finalizeBuild } from "./build";
+import { joinPath } from "./paths";
+import { removeDirectory, tempDirectory } from "./tmp";
 test("static build finalization rejects changed inputs, supplies GitHub Pages 404.html and drops unused search .data copies", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "defjs-finalize-"));
+  const directory = tempDirectory("defjs-finalize");
   try {
     await Bun.write(
-      join(directory, "404/index.html"),
+      joinPath(directory, "404/index.html"),
       "<main><h1>404</h1></main>",
     );
-    await Bun.write(join(directory, "api/search/en-US.json"), "{}");
-    await Bun.write(join(directory, "api/search/en-US.json.data"), "[]");
+    await Bun.write(joinPath(directory, "api/search/en-US.json"), "{}");
+    await Bun.write(joinPath(directory, "api/search/en-US.json.data"), "[]");
     await expect(finalizeBuild(directory, "before", "after")).rejects.toThrow(
       "changed",
     );
-    expect(await Bun.file(join(directory, "build-stamp.txt")).exists()).toBe(
-      false,
-    );
+    expect(
+      await Bun.file(joinPath(directory, "build-stamp.txt")).exists(),
+    ).toBe(false);
     await finalizeBuild(directory, "current", "current");
-    expect(await Bun.file(join(directory, "404.html")).text()).toContain(
+    expect(await Bun.file(joinPath(directory, "404.html")).text()).toContain(
       "<h1>404</h1>",
     );
     expect(
-      await Bun.file(join(directory, "api/search/en-US.json")).exists(),
+      await Bun.file(joinPath(directory, "api/search/en-US.json")).exists(),
     ).toBe(true);
     expect(
-      await Bun.file(join(directory, "api/search/en-US.json.data")).exists(),
+      await Bun.file(
+        joinPath(directory, "api/search/en-US.json.data"),
+      ).exists(),
     ).toBe(false);
     await expect(
       assertFreshBuild(directory, "current"),
     ).resolves.toBeUndefined();
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    removeDirectory(directory);
   }
 });
 
 test("build fingerprint covers included examples, public assets and tsconfig", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "defjs-fingerprint-"));
-  const root = join(workspace, "doc");
+  const workspace = tempDirectory("defjs-fingerprint");
+  const root = joinPath(workspace, "doc");
   try {
-    await Bun.write(join(workspace, "package.json"), "{}");
-    await Bun.write(join(workspace, "bun.lock"), "{}");
+    await Bun.write(joinPath(workspace, "package.json"), "{}");
+    await Bun.write(joinPath(workspace, "bun.lock"), "{}");
     for (const file of [
       "app/a.ts",
       "content/a.mdx",
@@ -80,8 +81,8 @@ test("build fingerprint covers included examples, public assets and tsconfig", a
       "scripts/build-state.ts",
       "scripts/check-links.ts",
     ])
-      await Bun.write(join(root, file), "one");
-    await Bun.write(join(root, "package.json"), "{}");
+      await Bun.write(joinPath(root, file), "one");
+    await Bun.write(joinPath(root, "package.json"), "{}");
     let previous = await buildFingerprint(root);
     for (const file of [
       "examples/a.ts",
@@ -89,23 +90,23 @@ test("build fingerprint covers included examples, public assets and tsconfig", a
       "tsconfig.json",
       "source.config.ts",
     ]) {
-      await Bun.write(join(root, file), `changed ${file}`);
+      await Bun.write(joinPath(root, file), `changed ${file}`);
       const next = await buildFingerprint(root);
       expect(next).not.toBe(previous);
       previous = next;
     }
     // Colocated specs sit under app/ and examples/ but do not reach the site, so editing one must not stale the build.
     for (const file of ["app/a.spec.ts", "examples/a.spec.ts"])
-      await Bun.write(join(root, file), "spec");
+      await Bun.write(joinPath(root, file), "spec");
     expect(await buildFingerprint(root)).toBe(previous);
   } finally {
-    await rm(workspace, { recursive: true, force: true });
+    removeDirectory(workspace);
   }
 });
 
 test("build fingerprint changes when only a dependency version changes", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "defjs-fingerprint-deps-"));
-  const root = join(workspace, "doc");
+  const workspace = tempDirectory("defjs-fingerprint-deps");
+  const root = joinPath(workspace, "doc");
   const versions = {
     uiCatalog: "16.17.1",
     uiResolved: "16.17.1",
@@ -118,7 +119,7 @@ test("build fingerprint changes when only a dependency version changes", async (
   };
   const writeVersions = async (next: typeof versions) => {
     await Bun.write(
-      join(workspace, "package.json"),
+      joinPath(workspace, "package.json"),
       JSON.stringify({
         workspaces: {
           catalog: {
@@ -130,7 +131,7 @@ test("build fingerprint changes when only a dependency version changes", async (
       }),
     );
     await Bun.write(
-      join(workspace, "bun.lock"),
+      joinPath(workspace, "bun.lock"),
       JSON.stringify({
         workspaces: { doc: { name: "doc" } },
         packages: {
@@ -158,9 +159,9 @@ test("build fingerprint changes when only a dependency version changes", async (
       "scripts/build-state.ts",
       "scripts/check-links.ts",
     ])
-      await Bun.write(join(root, file), "one");
+      await Bun.write(joinPath(root, file), "one");
     await Bun.write(
-      join(root, "package.json"),
+      joinPath(root, "package.json"),
       JSON.stringify({
         name: "doc",
         dependencies: { isbot: "^5" },
@@ -182,7 +183,7 @@ test("build fingerprint changes when only a dependency version changes", async (
     await writeVersions({ ...versions, transitive: "1.0.1" });
     expect(await buildFingerprint(root)).not.toBe(current);
   } finally {
-    await rm(workspace, { recursive: true, force: true });
+    removeDirectory(workspace);
   }
 });
 
@@ -191,12 +192,22 @@ test("the build fingerprint defaults to the documentation workspace", async () =
 });
 
 test("static build finalization requires the generated 404 page", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "defjs-finalize-404-"));
+  const directory = tempDirectory("defjs-finalize-404");
   try {
     await expect(
       finalizeBuild(directory, "current", "current"),
     ).rejects.toThrow("Missing generated 404 page");
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    removeDirectory(directory);
+  }
+});
+
+test("temporary directories fall back to /tmp without TMPDIR", () => {
+  const saved = Bun.env["TMPDIR"];
+  delete Bun.env["TMPDIR"];
+  try {
+    expect(tempDirectory("defjs-fallback")).toMatch(/^\/tmp\/defjs-fallback-/);
+  } finally {
+    if (saved !== undefined) Bun.env["TMPDIR"] = saved;
   }
 });

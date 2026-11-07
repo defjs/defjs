@@ -231,7 +231,7 @@ describe("codec/json.ts", () => {
       }),
     );
 
-    expect(encodeJson(Payload, { kind: "date" } as never)).toEqual({
+    expect(encodeJson(Payload, { kind: "date" })).toEqual({
       kind: "date",
     });
   });
@@ -260,7 +260,7 @@ describe("codec/json.ts", () => {
       struct.object({ type: struct.literal("message").alias("fallback_kind") }),
     );
 
-    expect(encodeJson(Payload, { type: "message" } as never)).toEqual({
+    expect(encodeJson(Payload, { type: "message" })).toEqual({
       fallback_kind: "message",
     });
   });

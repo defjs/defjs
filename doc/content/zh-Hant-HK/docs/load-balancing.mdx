@@ -1,0 +1,136 @@
+---
+title: "負載平衡與故障轉移"
+description: "將流量分發到多個端點、剔除唔健康嘅複本，並喺單次呼叫內對安全嘅 HTTP 請求做故障轉移。"
+---
+
+# 負載平衡與故障轉移
+
+當應用程式用 `withEndpoint(...urls)` 設定咗多個 base URL 嗰陣，Defjs 可以將請求分流到唔同節點複本、透過被動熔斷（passive circuit breaking）或主動健康檢查剔除唔健康嘅主機，並可以選擇喺同一次呼叫內為安全嘅 HTTP 方法執行故障轉移（failover）。
+
+## 1. 揀選負載平衡策略
+
+| 策略                                                                               | 最適用場景                                           | 預設健康過濾                               |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------ |
+| [`pickFirstBalancer(options?)`](/zh-Hant-HK/api/core/pickfirstbalancer) _（預設）_ | 帶有主從備用順序嘅瀏覽器前端應用程式                 | 關閉（可透過 `outlierDetection` 選項開啟） |
+| [`roundRobinBalancer(options?)`](/zh-Hant-HK/api/core/roundrobinbalancer)          | 對等伺服器節點之間嘅內部呼叫（支援可選嘅 `weights`） | 預設開啟（連續 `5` 次失敗即熔斷）          |
+| [`p2cBalancer(options?)`](/zh-Hant-HK/api/core/p2cbalancer)                        | 節點延遲或在途負載差異較大嘅伺服器呼叫               | 預設開啟（連續 `5` 次失敗即熔斷）          |
+
+<Tabs items={["主備（Pick-first）", "對等伺服器（Round-robin 同 P2C）", "自訂 balancer"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### `pickFirstBalancer` 與 `p2cBalancer` 點樣運作
+
+- **`pickFirstBalancer`**：停喺第一個 URL，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）先至前進。次序同黏住嘅端點跟隨 client 嘅完整端點清單（`members`），而 HTTP 重試永遠唔會移動黏住嘅端點：第一個端點逾時後喺第二個端點重試，之後嘅呼叫仍然留喺第一個端點，failback 保持待命。設定 `failbackMs: 30_000`，喺備用端點停留呢段時間之後，再探測主要端點。同時最多只可以有一個進行中嘅主要端點探測。探測喺對端 response 開始（HTTP response header、SSE 握手或 WebSocket open）時就判定，所以作為探測嘅長壽串流唔會令成個 client 嘅 failback 一直被擋住；未去到嗰一步嘅嘗試就喺完成時判定。故障轉移後首次探測主要端點之前，必須等間隔過咗，而且離開主要端點之後至少揀選過一次替代端點。探測失敗會重新開始呢兩個要求：下次探測之前，必須重新揀選過替代端點，再等足一次間隔，即使 SSE/WebSocket 重連退避比 `failbackMs` 更長都一樣。咁健康嘅備用端點先有機會被用到，而唔係每次重連都打去失效嘅主要端點。
+- **`roundRobinBalancer` 權重**：冇指定嘅權重係 `1`；設定嘅權重必須係有限正數。平滑加權輪詢會保留按比例揀選嘅特性（例如 `3:1` 會令權重較高嘅節點喺每四次揀選中被選中三次）。極端量級會縮放以避免溢出；低於浮點精度嘅比例可能會捨入為零。每次揀選同清理過時 current 值嘅工作量都係 O(候選數量)。
+- **`p2cBalancer`（二選一，Power of Two Choices）**：每次隨機抽取兩個唔同嘅候選端點，並揀選得分較低嗰個：`PeakEwma RTT × (pending + 1)`（若設定 `load: "pending"` 則單純比較在途請求數）。預設值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd/tower 開源標準慣例。pending 會喺 `pick` 揀中端點嗰一刻就預留，所以同一個 tick 入面嘅一輪突發呼叫會分散到唔同端點；佢喺對端 response 開始（HTTP response header、SSE 握手、WebSocket open）時釋放，如果冇 response 開始就喺嘗試完成時釋放。對 SSE 同 WebSocket 嚟講，即係 p2c 平衡嘅係 handshake，而唔係已開啟連線嘅數量。
+
+balancer 狀態（黏住嘅端點、剔除狀態同 p2c 負載）以及重試預算都屬於 Client：成個應用只建立一次 Client，再用 `client(options)` 派生每次呼叫嘅 Client：派生出嚟嘅 Client 會同時保留 balancer 狀態同重試預算。用 `withBalancer` 將同一個 balancer 值畀多個 Client 共用，只係共用 balancer 狀態；每個 Client 仍然各有自己嘅重試預算。每個請求都新建一個 `createClient`，兩者都會由頭開始。
+
+## 2. 同一次呼叫內嘅 HTTP 重試
+
+重試由三個分開嘅決定支配：**使唔使再試**（`withRetry`）、**發去邊度**（runtime 會要求 balancer 再揀一次，並排除已經試過嘅端點），同埋**等幾耐**（backoff）。HTTP 嘅 `withRetry`、SSE 嘅 `withSSEReconnect` 同 WebSocket 嘅 `withWebSocketReconnect` 係對稱嘅、各自傳輸層上面嘅策略。佢哋嗰啲扁平 backoff 欄位同名、同樣驗證、同樣計延遲。balancer 唔知道重試策略；自訂 balancer 唔使特別配合。
+
+同一次呼叫內嘅 HTTP 重試**預設關閉**。省略 `withRetry` 嗰陣，每次呼叫只試一次，既唔會建立重試預算，亦唔會向佢存入額度。之後各次呼叫點樣揀端點維持不變：`pickFirstBalancer` 仍然可以喺一次失敗嘅呼叫之後前進。`withRetry()` 等同 `withRetry({})`，會為 `GET`、`HEAD`、`OPTIONS` 同 `TRACE` 嘅連線失敗啟用總共兩次嘗試。
+
+呢個做法跟隨 Go 生態：[gRPC 將 `retryPolicy` 放喺 service configuration](https://grpc.io/docs/guides/retry/)，同負載平衡配置並列；[go-kit 嘅 `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) 就係明確包住一個 balancer。兩者預設都唔會套用應用程式自己嘅重試策略。gRPC 嘅重試策略要求設定 backoff，並用 ±0.2 嘅 jitter；[Envoy 預設以 25 毫秒做基數，上限係呢個基數嘅十倍](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-retry-policy-retrybackoff)。Defjs 用 25 毫秒、factor 2、250 毫秒上限，同 ±20% jitter。gRPC 可以對底層 race 做透明重試；Defjs 唔模擬呢啲行為。
+
+<include cwd lang="typescript">
+  examples/client/http-retry.ts#example
+</include>
+
+- **總嘗試次數（`maxAttempts`）**：包括最初嗰次嘗試，同 gRPC 嘅 `retryPolicy.maxAttempts` 以及 go-kit `lb.Retry` 嘅 `max` 一致。個值必須係至少為 1 嘅安全整數；`1` 代表唔重試。冇設定上嘅上限，但每次 balancer 揀選都會排除同一次呼叫內已經揀選過嘅端點。呢度計嘅係外層嘗試，唔係應用程式攔截器入面嘅實際傳送次數：循環呼叫 `next()` 嘅攔截器可以向同一個端點傳送幾次。例如，使用 `maxAttempts: 2` 時，攔截器向故障主要端點傳送三次，再由外層向健康備用端點重試一次，就會產生四次網絡請求；builder 同攔截器鏈外層嘅認證只會執行兩次，唔係四次。串流請求 body 永遠唔會重試。`methods` 唔分大小寫；`methods: []` 會關閉所有方法嘅重試。
+- **重試條件（`on`）**：預設係 `["connect-failure"]`。可以加 `"gateway-error"`，對應 `NET_UNAVAILABLE`（HTTP `502`/`503`/`504`），包括被 `RES_*` 解碼拒絕嘅 gateway 錯誤 body；設定咗 `attemptTimeoutMs` 就可以再加 `"attempt-timeout"`。一次符合條件嘅重試會重建請求，並由最外層重新跑成條攔截器鏈。
+- **退避（`delayMs`、`factor`、`jitter`、`maxDelayMs`）**：第 n 次重試之前，等 `delayMs × factor^(n−1)`，再乘上乘性 jitter，喺 jitter 同四捨五入之後先封頂。預設係 `25`、`2`、`0.2` 同 `250`。`delayMs: 0` 跳過等待。同重連一樣，`delayMs` 必須係非負有限數，`factor` 必須係正嘅有限數，`jitter` 必須係 `[0, 1]` 入面嘅有限數，`maxDelayMs` 必須係非負有限數或者正 `Infinity`。平台計時器上限仍然生效。
+  Core 嘅 `withRetry` 唔會讀取 `Retry-After`。呢個 header 嘅處理方式（包括任何延遲上限）屬於[應用程式攔截器策略](/zh-Hant-HK/docs/interceptors)，唔係呢度嘅退避機制。
+  只設定咗一個端點嗰陣，`withRetry` 唔會重放請求，因為每一次重試都會排除已經試過嘅端點。
+
+- **單次嘗試 vs. 成次呼叫逾時**：`attemptTimeoutMs` 必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。佢會為每個發送去所選端點嘅 Fetch 計時，由發起直到讀完 response body。發送前後嘅攔截器工作（例如 401 之後刷新 token）同 struct 解碼唔會計時，亦唔會算落端點頭上；呼叫端 deadline 如果喺發送完成之後嘅攔截器工作期間到期，唔會以 `NET_TIMEOUT` 報畀 balancer，而係報端點自己嘅結果。呼叫端嘅 `client({ signal: AbortSignal.timeout(ms) })` 覆蓋每一次嘗試**同埋 backoff 等待**。等待期間取消會返回呼叫端嘅取消錯誤，而且唔會再 pick。
+- **重試時冇可用端點**：當某一輪重試用唔到任何端點（balancer 嘅 pick 失敗，或者下一個端點嘅 URL 解析唔到），該次呼叫會回傳上一次嘗試嘅 fault（例如 `NET_UNREACHABLE`），而唔係 `REQ_BUILD_FAILED`。
+- **Finagle / Linkerd 重試預算（`budget`）**：每份 client 配置自己擁有一份預算，只有用同一份配置嘅派生 client 先至共享，共享 balancer 嘅 client 並唔共享。預設係 `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`：原始流量嘅 20% 再加 reserve。存入同取出都喺十個 TTL/10 slice 上 lazy 過期。一次重試會喺等待之前先扣額度；預算用盡就既唔等，亦唔重試。設 `budget: false` 可以拎走呢個上限。
+- **瀏覽器離線提示**：當 `navigator.onLine === false` 嗰陣，連線失敗會報告 `{ attempted: false }`，唔會推進 balancer，亦唔會觸發重試。
+
+### 瀏覽器部署邊界
+
+- 瀏覽器 CORS 失敗會以連線失敗嘅形式傳俾 Fetch，並回報為 `NET_UNREACHABLE`，無法同主機故障區分。佢可能推進端點揀選，並觸發明確啟用嘅安全方法重試；成功嘅故障轉移因此可能掩蓋主要區域嘅 CORS 設定錯誤。
+- 即使 response 缺少必要嘅 CORS headers，伺服器仍然可能已經處理咗 POST。應用程式之後收到 `NET_UNREACHABLE`，但唔知道寫入係咪成功。預設唔會重播 POST；明確啟用寫入重試，需要應用程式層級保證跨副本冪等性。
+- 喺瀏覽器入面，伺服器拒絕嘅 WebSocket 升級（例如 `401`）同端點連唔到無法分辨，都會報告為 `NET_UNREACHABLE`，所以過期嘅憑證可能令端點被剔除。
+- Cookie 範圍按主機劃分，唔係按 port：`localhost` 上唔同 port 嘅兩個端點可以共用 Cookie，但 `localhost` 同 `127.0.0.1` 唔會。多來源端點集合需要審慎規劃 Cookie/Token 同 CORS 憑證策略；`withCredentials(true)` 唔會改變 Cookie 範圍。
+- 明確嘅離線提示（`navigator.onLine === false`）會抑制端點歸因同連線失敗重試。佢只係瀏覽器提示，唔係可靠嘅可達性檢查。
+
+後一次 `withRetry` 會替換呢份策略。`withRetry()` 同 `withRetry(undefined)` 嘅行為同 `withRetry({})` 一樣。啟用之後想關閉重試，就傳 `withRetry({ maxAttempts: 1 })`。無效嘅重試設定會喺 HTTP 操作運行時返回 `REQ_OPTIONS_INVALID`，訊息係 `Invalid retry options`。
+
+## 3. 被動熔斷與主動健康檢查（`outlierDetection`）
+
+`roundRobinBalancer()` 同 `p2cBalancer()` 預設會將候選端點包裝喺 [`outlierDetection`](/zh-Hant-HK/api/core/outlierdetection) 入面：
+
+<Tabs items={["單一探測恢復", "主動健康檢查快取"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **連續失敗熔斷**：預設分類器將每個帶 code 嘅結果都當作失敗：`NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR`、`NET_TIMEOUT` 同 `NET_BODY_INCOMPLETE`。已嘗試但冇 code 嘅結果會重設連續計數；未歸屬嘅嘗試同被丟棄嘅樣本就保持計數不變。連續出現 `consecutiveFailures` 次（預設 `5` 次）被計入嘅結果之後，該端點會被熔斷剔除 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`），再加最多 `50%` 嘅均勻正向抖動；基礎時長加抖動嘅總和唔會超過 `maxPenaltyMs`。
+2. **單次探針復原**：隔離懲罰期屆滿後，系統只會放行一個請求去探測該主機。如果對端 response 喺 `end` 開始，而且唔係被計入嘅失敗，正常流量就即時恢復，懲罰等級重設為 `0`；若失敗（包括逾時），該端點會再次被剔除，懲罰時間加倍。
+3. **有界歷史紀錄**：喺派生 client 同每次呼叫嘅候選排除之間，健康歷史紀錄總共至少保留 256 個端點，而且至少保留目前成員數量。優先淘汰最近最少使用嘅乾淨或已過期項目，之後先係未達門檻嘅部分連續失敗紀錄。只有所有保留項目都受保護，先會淘汰懲罰未到期或者有進行中探測嘅項目，此時移除最舊嗰項。只喺某一次呼叫省略端點，唔會重設佢嘅懲罰。P2C 嘅負載歷史同樣至少保留 256 項，同時至少保留目前成員數量，所以超過 256 個端點嘅清單都會保留每個估算值，先淘汰閒置項目，再淘汰繁忙項目；被遺忘嘅端點會由 `defaultRttMs` 重新開始。Pick-first 嘅 shuffle key 用 LRU 快取至少保留 256 項（同時至少保留目前成員），所以被遺忘嘅端點返嚟時會獲得新 key。加權輪詢為 client 嘅成員保留 current 值：喺某次選擇中被排除嘅端點（HTTP 重試或健康過濾）仍然保留佢嘅值，好似 nginx 跳過已下線嘅節點咁，只有離開成員清單嘅端點先會丟棄其值；複製後嘅權重設定喺建構時固定。有得用時，時長會用平台嘅單調 Performance 時鐘，只有冇得用先以 `Date.now()` 做後備。
+4. **恐慌模式降級（Panic-mode fail-open）**：如果 `isHealthy` 否決晒所有未被剔除嘅端點，balancer 會忽略 `isHealthy`，喺未被剔除嘅端點入面揀；只有所有設定嘅端點都被剔除，先會降級為 fail-open，回退到 Client 嘅完整候選清單，而唔會直接喺本地丟棄全部流量。
+
+## 4. 傳輸監測生命週期（`pick` → `start` → `end` → `done`）
+
+自訂 balancer 必須揀選 `info.endpoints` 入面某個完全相同嘅字串。如果揀咗候選集以外嘅值，會回傳 `REQ_BUILD_FAILED` tuple，非敏感嘅 cause 訊息係 `Balancer selected an endpoint outside the candidate set`；唔會啟動任何傳輸，而該次揀選嘅 `done` 會以 `{ attempted: false }` 執行一次。呢條規則確保健康狀態過濾同每次呼叫嘅重試排除繼續生效。
+
+自訂 balancer 實作同步嘅 `pick(info)`，以及可選嘅 `start()`、`end(info)` 同 `done(info)` 回呼。`PickInfo` 包含單次 pick 嘅候選 `endpoints`（重試同 wrapper 過濾時清單會縮短）、`members`（client 嘅完整端點清單，每次嘗試都一樣；有狀態嘅 balancer 以佢作次序同狀態嘅 key），以及可選嘅定義 `operation`，冇 transport 判別欄位。transport 將自己嘅事實翻譯成中立嘅 `DoneInfo.code` 結果。內建 balancer 從不讀取 `status`；呢份原始 response 資訊只留給自訂 balancer。`start` 喺嘗試之前運行，`end` 喺對端 response 開始或者 response 之前失敗時運行，`done` 喺完成時運行。所以，更遲發生嘅 body 失敗可以改變最終 code，而唔改變更早嘅 `end` 樣本：
+
+| 實體傳輸結果                                                          | 最終傳入 `done(info)` 嘅採樣數據                           |
+| --------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE response status 502、503 或 504                              | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| HTTP/SSE 其他至少為 500 嘅 response status                            | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE response status 2xx、3xx 或 4xx（包括 429）                  | `{ attempted: true, status }`                              |
+| HTTP 回應 body 喺串流中途被截斷                                       | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE 握手成功，隨後串流 `reader.read()` reject                         | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE 正常 EOF、握手成功之後嘅解碼失敗，或超出佇列上限                  | `{ attempted: true, status }`                              |
+| 已開啟嘅 WebSocket 以代碼 `1006` 或 `1015` 關閉（冇收到 close frame） | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已開啟嘅 WebSocket 以代碼 `1012` 或 `1013` 關閉                       | `{ attempted: true, code: "NET_UNAVAILABLE" }`             |
+| WebSocket 心跳 acknowledgement 逾時                                   | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已開啟嘅 WebSocket 以其他任何代碼關閉，唔理 `wasClean` 報乜           | `{ attempted: true }`                                      |
+| 呼叫端主動中斷或手動關閉串流／socket                                  | `{ attempted: false }`                                     |
+| 呼叫端逾時期限喺嘗試開始後屆滿                                        | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+握手解碼失敗會保留由握手 status 推出嘅中立結果（例如 status `503` 對應 `NET_UNAVAILABLE`）。唔完整嘅 HTTP body 就保留 `NET_BODY_INCOMPLETE` 同佢嘅原始 status，即使嗰個係 gateway response；同其他帶 code 嘅結果一樣，預設嘅 outlier detection 會當佢係失敗。無法發送嘅心跳（`message()` throw 或序列化失敗）屬於本地事件，係中立嘅。
+
+## 延伸閱讀
+
+- [Client 設定](/zh-Hant-HK/docs/client)
+- [SSE 重新連線](/zh-Hant-HK/docs/sse#reconnect)
+- [WebSocket 會話](/zh-Hant-HK/docs/web-socket)

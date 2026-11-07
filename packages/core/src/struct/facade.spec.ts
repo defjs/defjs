@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { StructError, struct } from "./index";
 import { isStruct } from "./guards";
+import { assertStruct } from "./shape";
+import { DEFINITION } from "./symbols";
 import { parseStructTuple as parse } from "./introspection";
 import {
   createAnyStruct,
@@ -57,30 +59,18 @@ describe("facade.ts", () => {
   });
 
   test("covers internal primitive definitions that are otherwise short-circuited", () => {
-    const booleanStruct = struct.boolean() as unknown as {
-      [key: symbol]: unknown;
-    };
-    const nullStruct = struct.null() as unknown as { [key: symbol]: unknown };
-    const booleanDefinition = Object.getOwnPropertySymbols(booleanStruct)
-      .map((symbol) => booleanStruct[symbol])
-      .find(
-        (value) =>
-          typeof value === "object" &&
-          value !== null &&
-          "kind" in (value as object),
-      ) as {
-      is: (value: unknown) => boolean;
-    };
-    const nullDefinition = Object.getOwnPropertySymbols(nullStruct)
-      .map((symbol) => nullStruct[symbol])
-      .find(
-        (value) =>
-          typeof value === "object" &&
-          value !== null &&
-          "kind" in (value as object),
-      ) as {
-      is: (value: unknown) => boolean;
-    };
+    const booleanStruct: unknown = struct.boolean();
+    const nullStruct: unknown = struct.null();
+    assertStruct(booleanStruct, "boolean");
+    assertStruct(nullStruct, "null");
+    const booleanDefinition = booleanStruct[DEFINITION];
+    const nullDefinition = nullStruct[DEFINITION];
+    if (
+      booleanDefinition.kind !== "boolean" ||
+      nullDefinition.kind !== "null"
+    ) {
+      throw new Error("expected primitive definitions");
+    }
 
     expect(booleanDefinition.is(true)).toBe(true);
     expect(nullDefinition.is(null)).toBe(true);
@@ -128,7 +118,8 @@ describe("facade.ts", () => {
   test("object struct snapshots the declared shape at construction time", () => {
     const shape = { name: struct.string() };
     const user = struct.object(shape);
-    (shape as { [key: string]: unknown })["secret"] = struct.string();
+    const fields: { [key: string]: unknown } = shape;
+    fields["secret"] = struct.string();
 
     const [err, val] = parse(user, { name: "Miao", secret: "hidden" });
 
@@ -141,7 +132,8 @@ describe("facade.ts", () => {
   test("object struct ignores later replacement of a declared field", () => {
     const shape = { name: struct.string() };
     const user = struct.object(shape);
-    shape.name = struct.number() as never;
+    // @ts-expect-error the declared field is replaced after the struct is built
+    shape.name = struct.number();
 
     const [err, val] = parse(user, { name: "Miao" });
 

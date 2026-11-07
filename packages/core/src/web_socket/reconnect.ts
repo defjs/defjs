@@ -4,6 +4,7 @@ import type { SocketLifecycleOutcome } from "./web_socket";
 
 export type NormalizedReconnectConfig = {
   attempts: number;
+  connectTimeoutMs?: number;
   delayMs: number;
   factor: number;
   hasShouldReconnect: boolean;

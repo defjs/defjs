@@ -1,20 +1,39 @@
 ---
 title: "Локальные HTTP-тесты"
-description: Подмени Fetch для одного клиента через withHTTPHandle и оставь операцию прежней.
+description: Подмените Fetch для одного клиента через withHTTPHandle, оставив операцию неизменной.
 ---
 
-# Тест с локальным Fetch handle
+# Тест с локальным Fetch-хэндлом
 
-`withHTTPHandle(...)` заменяет Fetch только для этого клиента. Ты всё равно получаешь сборку URL, interceptors, status dispatch и Struct-decode — без DNS, TLS и настоящего сервера.
+Функция `withHTTPHandle(...)` подменяет базовую функцию `fetch` для отдельного экземпляра клиента, полностью выполняя весь конвейер Defjs — валидацию входных данных, маппинг в `builder`, разрешение URL, перехватчики, классификацию статусов и декодирование Struct — без открытия реального сетевого сокета:
 
-Подробности — в [Клиент](/ru-RU/docs/client).
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.test.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+Это отдельная однофайловая демонстрация, а не спецификация тест-раннера. Для проверок общего определения SDK используйте предыдущую вкладку с тестом.
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
+  </Tab>
+</Tabs>
+
+Однофайловая демонстрация печатает:
+
 ```txt
-Ada 200
+paid 200
 ```
 
-Ту же операцию `getUser` гоняй против реального клиента с `withEndpoint(...)` в проде — меняется только handle.
+В продакшене вызывайте ту же самую операцию `getOrder` с клиентом, настроенным через `withEndpoint(...)`. См. разделы [Тестирование](/ru-RU/docs/testing) и [Клиент](/ru-RU/docs/client).

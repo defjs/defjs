@@ -5,13 +5,13 @@ description: Constructores de interceptor HTTP, SSE y WebSocket.
 
 # Interceptores
 
-Envuelve `next` para un transporte. Regístralos con `withInterceptors`. Las listas mixtas se filtran por kind cuando corre la operación.
+Envuelve `next` para un transporte. Regístralos con `withInterceptors`. Las listas mixtas se filtran por tipo cuando se ejecuta la operación.
 
 ## createHttpInterceptor()
 
 <ApiSignature name="createHttpInterceptor, InterceptorFn, HttpInterceptorNext" />
 
-Llama a `next(req)` (opcionalmente una solicitud mutada) o cortocircuita con `makeResponse`. `next` solo va hacia dentro: a los interceptores registrados después de este y luego al transporte. Llamarlo otra vez reproduce esa parte interior desde este interceptor; los interceptores exteriores no corren dos veces.
+Llama a `next(req)` (opcionalmente con una solicitud modificada) o cortocircuita con `makeResponse`. `next` solo avanza hacia dentro: a los interceptores registrados después de este y luego al transporte. Llamarlo otra vez reproduce esa parte interior desde este interceptor; los interceptores exteriores no se ejecutan dos veces.
 
 ## createSSEInterceptor()
 
@@ -27,7 +27,7 @@ Llama a `next(req)` (opcionalmente una solicitud mutada) o cortocircuita con `ma
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Un wrapper o una sesión de cortocircuito debe reenviar el mismo teardown de `[Symbol.asyncDispose]()` que su ciclo de vida `close` / `closed`; devolver una promesa resuelta ajena no basta. Exigir este miembro es un cambio incompatible en tiempo de compilación para las implementaciones estructurales. El código que solo acepta sesiones devueltas por Defjs no tiene un requisito nuevo de llamada en runtime.
+Un wrapper o una sesión de cortocircuito debe reenviar el mismo teardown de `[Symbol.asyncDispose]()` que su ciclo de vida `close` / `closed`; devolver una promesa resuelta ajena no basta.
 
 ## Tipos etiquetados
 

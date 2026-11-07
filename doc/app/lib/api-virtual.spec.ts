@@ -8,13 +8,15 @@ const summaries = [
 test("a content file at a generated entry path fails the build", async () => {
   const occupied = apiVirtualPath("en-US", "core/createclient");
   expect(() =>
-    apiVirtualFiles(summaries, ["en-US"], new Set([occupied]), async () => ""),
+    apiVirtualFiles(summaries, ["en-US"], new Set([occupied]), () =>
+      Promise.resolve(""),
+    ),
   ).toThrow(`Content file shadows a generated API entry: ${occupied}`);
   const files = apiVirtualFiles(
     summaries,
     ["en-US", "ar"],
     new Set(),
-    async (slug, locale) => `${locale}:${slug}`,
+    (slug, locale) => Promise.resolve(`${locale}:${slug}`),
   );
   expect(files.map((file) => file.path)).toEqual([
     "en-US/api/core/createclient.mdx",
@@ -27,10 +29,11 @@ test("a content file at a generated entry path fails the build", async () => {
     description: "Creates.",
     apiSlug: "core/createclient",
   });
-  const data = page.data as { getText: (type: string) => Promise<string> };
-  expect(await data.getText("processed")).toBe("en-US:core/createclient");
-  expect(await data.getText("raw")).toBe("en-US:core/createclient");
-  await expect(data.getText("html")).rejects.toThrow("Unsupported API text");
+  expect(await page.data.getText("processed")).toBe("en-US:core/createclient");
+  expect(await page.data.getText("raw")).toBe("en-US:core/createclient");
+  await expect(page.data.getText("html")).rejects.toThrow(
+    "Unsupported API text",
+  );
 });
 
 test("only a non-empty api slug marks a virtual entry", () => {

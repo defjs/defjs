@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { assertObject, symbolValue } from "../narrow";
 import {
   createClient,
   defineRequest,
@@ -17,9 +18,18 @@ const Right = struct.object({ lastName: struct.string().alias("last_name") });
 const logical = { firstName: "Ada", lastName: "Lovelace" };
 const wire = { first_name: "Ada", last_name: "Lovelace" };
 
+function firstSymbol(value: unknown): symbol {
+  const key = Object.getOwnPropertySymbols(
+    assertObject(value, "tagged value"),
+  ).find(() => true);
+  if (key === undefined) throw new Error("Expected a symbol tag");
+  return key;
+}
+
 function notAStruct(value: unknown): void {
   expect(value).toBeDefined();
-  expect(Object.hasOwn(value as object, DEFINITION)).toBe(false);
+  const object = assertObject(value, "value");
+  expect(Object.hasOwn(object, DEFINITION)).toBe(false);
 }
 
 test("public parse and direct encode merge nested array members", () => {
@@ -31,36 +41,30 @@ test("public parse and direct encode merge nested array members", () => {
   expect(plain(encodeJson(rows, [logical]))).toEqual([wire]);
 });
 
-test("shared object field preserves its agreed parent alias", async () => {
+test("shared object field preserves its agreed parent alias", () => {
   const schema = struct.intersection(
     struct.object({ profile: Left.alias("wire_profile") }),
     struct.object({ profile: Right.alias("wire_profile") }),
   );
   const input = { profile: logical };
   expect(plain(encodeJson(schema, input))).toEqual({ wire_profile: wire });
-  const parsed = await parseEndpointInput(schema, input);
-  notAStruct(
-    (parsed as { [key: symbol]: unknown })[
-      Object.getOwnPropertySymbols(parsed).find(() => true) as symbol
-    ],
-  );
-  const actual = JSON.parse(
-    String(materializeOutboundRequest({ body: parsed }, "http").body),
+  const parsed = parseEndpointInput(schema, input);
+  notAStruct(symbolValue(parsed, firstSymbol(parsed)));
+  const actual: unknown = JSON.parse(
+    wireText(materializeOutboundRequest({ body: parsed }, "http").body),
   );
   expect(actual).toEqual({ wire_profile: wire });
 });
 
 test.each(["http", "sse", "webSocket"] as const)(
   "extracted merged child retains both aliases for %s query",
-  async (transport) => {
+  (transport) => {
     const schema = struct.intersection(
       struct.object({ profile: Left }),
       struct.object({ profile: Right }),
     );
-    const parsed = await parseEndpointInput(schema, { profile: logical });
-    const profile = (
-      parsed as { profile: { firstName: string; lastName: string } }
-    ).profile;
+    const parsed = parseEndpointInput(schema, { profile: logical });
+    const profile = parsed.profile;
     const actual = materializeOutboundRequest(
       { query: profile },
       transport,
@@ -69,11 +73,11 @@ test.each(["http", "sse", "webSocket"] as const)(
   },
 );
 
-test("root array intersection tags merged items", async () => {
+test("root array intersection tags merged items", () => {
   const schema = struct.intersection(struct.array(Left), struct.array(Right));
-  const parsed = await parseEndpointInput(schema, [logical]);
-  const actual = JSON.parse(
-    String(materializeOutboundRequest({ body: parsed }, "http").body),
+  const parsed = parseEndpointInput(schema, [logical]);
+  const actual: unknown = JSON.parse(
+    wireText(materializeOutboundRequest({ body: parsed }, "http").body),
   );
   expect(actual).toEqual([wire]);
 });
@@ -102,38 +106,38 @@ test("shared array field keeps both member aliases at the HTTP boundary", async 
   expect(actual).toEqual({ rows: [wire] });
 });
 
-test("shared record field keeps both member aliases", async () => {
+test("shared record field keeps both member aliases", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.record(Left) }),
     struct.object({ rows: struct.record(Right) }),
   );
-  const parsed = await parseEndpointInput(schema, { rows: { one: logical } });
-  const actual = JSON.parse(
-    String(materializeOutboundRequest({ body: parsed }, "http").body),
+  const parsed = parseEndpointInput(schema, { rows: { one: logical } });
+  const actual: unknown = JSON.parse(
+    wireText(materializeOutboundRequest({ body: parsed }, "http").body),
   );
   expect(actual).toEqual({ rows: { one: wire } });
 });
 
-test("shared tuple field keeps both member aliases", async () => {
+test("shared tuple field keeps both member aliases", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.tuple([Left]) }),
     struct.object({ rows: struct.tuple([Right]) }),
   );
-  const parsed = await parseEndpointInput(schema, { rows: [logical] });
-  const actual = JSON.parse(
-    String(materializeOutboundRequest({ body: parsed }, "http").body),
+  const parsed = parseEndpointInput(schema, { rows: [logical] });
+  const actual: unknown = JSON.parse(
+    wireText(materializeOutboundRequest({ body: parsed }, "http").body),
   );
   expect(actual).toEqual({ rows: [wire] });
 });
 
-test("a fresh array under an object intersection guide uses every member", async () => {
+test("a fresh array under an object intersection guide uses every member", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.array(Left) }),
     struct.object({ rows: struct.array(Right) }),
   );
-  const parsed = await parseEndpointInput(schema, { rows: [] });
-  const actual = JSON.parse(
-    String(
+  const parsed = parseEndpointInput(schema, { rows: [] });
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, rows: [logical] } },
         "http",
@@ -224,14 +228,14 @@ test("outbound encode writes both wire keys when a fresh object aliases one logi
   expect(actual).toEqual({ note: "hi", row: { first: "Ada", second: "Ada" } });
 });
 
-test("an array standing in for an object field keeps literal items", async () => {
+test("an array standing in for an object field keeps literal items", () => {
   const schema = struct.intersection(
     struct.object({ note: struct.string() }),
     struct.object({ extra: struct.string() }),
   );
-  const parsed = await parseEndpointInput(schema, { extra: "x", note: "hi" });
-  const actual = JSON.parse(
-    String(
+  const parsed = parseEndpointInput(schema, { extra: "x", note: "hi" });
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest({ body: { ...parsed, note: ["a"] } }, "http")
         .body,
     ),
@@ -239,14 +243,14 @@ test("an array standing in for an object field keeps literal items", async () =>
   expect(actual).toEqual({ extra: "x", note: ["a"] });
 });
 
-test("unknown and any field guides leave a fresh object literal", async () => {
+test("unknown and any field guides leave a fresh object literal", () => {
   const schema = struct.intersection(
     struct.object({ note: struct.unknown() }),
     struct.object({ note: struct.any() }),
   );
-  const parsed = await parseEndpointInput(schema, { note: { kept: 1 } });
-  const actual = JSON.parse(
-    String(
+  const parsed = parseEndpointInput(schema, { note: { kept: 1 } });
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, note: { extra: 2, kept: 1 } } },
         "http",
@@ -256,14 +260,14 @@ test("unknown and any field guides leave a fresh object literal", async () => {
   expect(actual).toEqual({ note: { extra: 2, kept: 1 } });
 });
 
-test("an unknown field passthrough keeps stored keys beside a record field", async () => {
+test("an unknown field passthrough keeps stored keys beside a record field", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.record(Left) }),
     struct.object({ rows: struct.unknown() }),
   );
-  const parsed = await parseEndpointInput(schema, { rows: {} });
-  const actual = JSON.parse(
-    String(
+  const parsed = parseEndpointInput(schema, { rows: {} });
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, rows: { one: logical } } },
         "http",
@@ -277,7 +281,7 @@ test("an unknown field passthrough keeps stored keys beside a record field", asy
   });
 });
 
-test("a nested object intersection guide contributes every object side", async () => {
+test("a nested object intersection guide contributes every object side", () => {
   const inner = struct.intersection(Left, Right);
   const schema = struct.intersection(
     struct.object({ profile: inner }),
@@ -285,11 +289,11 @@ test("a nested object intersection guide contributes every object side", async (
       profile: struct.object({ title: struct.string().alias("title_name") }),
     }),
   );
-  const parsed = await parseEndpointInput(schema, {
+  const parsed = parseEndpointInput(schema, {
     profile: { ...logical, title: "Countess" },
   });
-  const actual = JSON.parse(
-    String(
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, profile: { ...logical, title: "Countess" } } },
         "http",
@@ -305,7 +309,7 @@ test("a nested object intersection guide contributes every object side", async (
   });
 });
 
-test("a mixed intersection field does not rename a fresh sibling object", async () => {
+test("a mixed intersection field does not rename a fresh sibling object", () => {
   const mixed = struct.intersection(
     struct.object({ firstName: struct.string().alias("first_name") }),
     struct.number(),
@@ -318,9 +322,9 @@ test("a mixed intersection field does not rename a fresh sibling object", async 
         .optional(),
     }),
   );
-  const parsed = await parseEndpointInput(schema, {});
-  const actual = JSON.parse(
-    String(
+  const parsed = parseEndpointInput(schema, {});
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, box: { firstName: "Ada", title: "Countess" } } },
         "http",
@@ -330,7 +334,7 @@ test("a mixed intersection field does not rename a fresh sibling object", async 
   expect(actual).toEqual({ box: { firstName: "Ada", title_name: "Countess" } });
 });
 
-test("union and discriminated guides inside an intersection pick the matching branch", async () => {
+test("union and discriminated guides inside an intersection pick the matching branch", () => {
   const Cat = struct.object({
     kind: struct.literal("cat"),
     name: struct.string().alias("cat_name"),
@@ -345,13 +349,13 @@ test("union and discriminated guides inside an intersection pick the matching br
       pet: struct.object({ title: struct.string().alias("title_name") }),
     }),
   );
-  const parsed = await parseEndpointInput(unionSchema, {
+  const parsed = parseEndpointInput(unionSchema, {
     pet: { kind: "cat", name: "N", title: "T" },
   });
   const fresh = { kind: "cat", name: "N", title: "T" };
   expect(
     JSON.parse(
-      String(
+      wireText(
         materializeOutboundRequest({ body: { ...parsed, pet: fresh } }, "http")
           .body,
       ),
@@ -361,7 +365,7 @@ test("union and discriminated guides inside an intersection pick the matching br
   });
   expect(
     JSON.parse(
-      String(
+      wireText(
         materializeOutboundRequest({ body: { ...parsed, pet: true } }, "http")
           .body,
       ),
@@ -376,12 +380,12 @@ test("union and discriminated guides inside an intersection pick the matching br
       pet: struct.object({ title: struct.string().alias("title_name") }),
     }),
   );
-  const tagged = await parseEndpointInput(discriminated, {
+  const tagged = parseEndpointInput(discriminated, {
     pet: { kind: "dog", name: "M", title: "T" },
   });
   expect(
     JSON.parse(
-      String(
+      wireText(
         materializeOutboundRequest(
           { body: { ...tagged, pet: { kind: "dog", name: "M", title: "T" } } },
           "http",
@@ -393,7 +397,7 @@ test("union and discriminated guides inside an intersection pick the matching br
   });
   expect(
     JSON.parse(
-      String(
+      wireText(
         materializeOutboundRequest({ body: { ...tagged, pet: true } }, "http")
           .body,
       ),
@@ -403,46 +407,44 @@ test("union and discriminated guides inside an intersection pick the matching br
   });
 });
 
-test("object then record tags both containers and emits every wire key", async () => {
+test("object then record tags both containers and emits every wire key", () => {
   const schema = struct.intersection(
     struct.object({ name: struct.string().alias("display_name") }),
     struct.record(struct.string()),
   );
   const input = { extra: "kept", name: "Ada" };
-  const parsed = await parseEndpointInput(schema, input);
-  const tag = (parsed as { [key: symbol]: object })[
-    Object.getOwnPropertySymbols(parsed).find(() => true) as symbol
-  ];
-  expect(Object.hasOwn(tag as object, DEFINITION)).toBe(false);
+  const parsed = parseEndpointInput(schema, input);
+  const tag = assertObject(symbolValue(parsed, firstSymbol(parsed)), "tag");
+  expect(Object.hasOwn(tag, DEFINITION)).toBe(false);
   expect(
     JSON.parse(
-      String(materializeOutboundRequest({ body: parsed }, "http").body),
+      wireText(materializeOutboundRequest({ body: parsed }, "http").body),
     ),
   ).toEqual(plain(encodeJson(schema, input)));
 });
 
-test("repeating one object struct keeps that struct as the tag", async () => {
+test("repeating one object struct keeps that struct as the tag", () => {
   const Person = struct.object({ name: struct.string().alias("display_name") });
   const schema = struct.intersection(Person, Person);
-  const parsed = await parseEndpointInput(schema, { name: "Ada" });
-  expect((parsed as { [STRUCT]?: unknown })[STRUCT]).toBe(Person);
+  const parsed = parseEndpointInput(schema, { name: "Ada" });
+  expect(symbolValue(parsed, STRUCT)).toBe(Person);
   expect(
     JSON.parse(
-      String(materializeOutboundRequest({ body: parsed }, "http").body),
+      wireText(materializeOutboundRequest({ body: parsed }, "http").body),
     ),
   ).toEqual({ display_name: "Ada" });
 });
 
-test("an array under two object field guides stays literal", async () => {
+test("an array under two object field guides stays literal", () => {
   const schema = struct.intersection(
     struct.object({ note: struct.object({ title: struct.string() }) }),
     struct.object({ note: struct.object({ extra: struct.number() }) }),
   );
-  const parsed = await parseEndpointInput(struct.object({ item: schema }), {
+  const parsed = parseEndpointInput(struct.object({ item: schema }), {
     item: { note: { extra: 1, title: "t" } },
   });
-  const actual = JSON.parse(
-    String(
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, item: { note: ["a"] } } },
         "http",
@@ -452,7 +454,7 @@ test("an array under two object field guides stays literal", async () => {
   expect(actual).toEqual({ item: { note: ["a"] } });
 });
 
-test("an unmatched discriminated guide leaves the fresh object literal", async () => {
+test("an unmatched discriminated guide leaves the fresh object literal", () => {
   const Cat = struct.object({
     kind: struct.literal("cat"),
     name: struct.string().alias("cat_name"),
@@ -465,11 +467,11 @@ test("an unmatched discriminated guide leaves the fresh object literal", async (
     struct.object({ pet: struct.discriminatedUnion("kind", [Cat]).optional() }),
     struct.object({ pet: struct.discriminatedUnion("kind", [Dog]).optional() }),
   );
-  const parsed = await parseEndpointInput(struct.object({ row: schema }), {
+  const parsed = parseEndpointInput(struct.object({ row: schema }), {
     row: {},
   });
-  const actual = JSON.parse(
-    String(
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, row: { pet: { kind: "bird", name: "N" } } } },
         "http",
@@ -479,7 +481,7 @@ test("an unmatched discriminated guide leaves the fresh object literal", async (
   expect(actual).toEqual({ row: { pet: { kind: "bird", name: "N" } } });
 });
 
-test("a non-array member does not supply positional guides", async () => {
+test("a non-array member does not supply positional guides", () => {
   const Item = struct.object({ name: struct.string().alias("n") });
   const schema = struct.intersection(
     struct.object({ rows: struct.array(Item).optional() }),
@@ -489,11 +491,11 @@ test("a non-array member does not supply positional guides", async () => {
         .optional(),
     }),
   );
-  const parsed = await parseEndpointInput(struct.object({ payload: schema }), {
+  const parsed = parseEndpointInput(struct.object({ payload: schema }), {
     payload: {},
   });
-  const actual = JSON.parse(
-    String(
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, payload: { rows: [{ extra: 1, name: "Ada" }] } } },
         "http",
@@ -503,17 +505,17 @@ test("a non-array member does not supply positional guides", async () => {
   expect(actual).toEqual({ payload: { rows: [{ extra: 1, n: "Ada" }] } });
 });
 
-test("a string item beside an object item keeps the object aliases", async () => {
+test("a string item beside an object item keeps the object aliases", () => {
   const Item = struct.object({ name: struct.string().alias("n") });
   const schema = struct.intersection(
     struct.object({ rows: struct.array(struct.string()).optional() }),
     struct.object({ rows: struct.array(Item).optional() }),
   );
-  const parsed = await parseEndpointInput(struct.object({ payload: schema }), {
+  const parsed = parseEndpointInput(struct.object({ payload: schema }), {
     payload: {},
   });
-  const actual = JSON.parse(
-    String(
+  const actual: unknown = JSON.parse(
+    wireText(
       materializeOutboundRequest(
         { body: { ...parsed, payload: { rows: [{ extra: 1, name: "Ada" }] } } },
         "http",
@@ -565,3 +567,8 @@ test("getter-recursive intersection constructs and parses", () => {
   expect(plain(struct.parse(category, input))).toEqual([null, input]);
   expect(encodeJson(category, input)).toEqual(input);
 });
+
+function wireText(body: unknown): string {
+  if (typeof body !== "string") throw new TypeError("Expected a string body");
+  return body;
+}

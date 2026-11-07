@@ -30,3 +30,17 @@ test("the package/ prefix is removed", () => {
     ].sort(),
   ).toEqual(expected);
 });
+
+test("output without a package yields no files", () => {
+  expect(parsePackedFiles("[]").size).toBe(0);
+  expect(parsePackedFiles("{}").size).toBe(0);
+});
+
+test("a package without a file list is rejected", () => {
+  expect(() => parsePackedFiles('[{"name":"x"}]')).toThrow(
+    "npm pack output has no list of packed files",
+  );
+  expect(() => parsePackedFiles('[{"files":[{"size":1}]}]')).toThrow(
+    "npm pack output has no list of packed files",
+  );
+});

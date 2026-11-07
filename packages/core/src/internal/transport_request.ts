@@ -10,8 +10,8 @@ import {
   materializeOutboundRequest,
   runOutboundBuilder,
 } from "./outbound_request";
-import type { RequestBuildValue } from "./request_values";
 import {
+  appendHeaderEntries,
   appendRecordToHeaders,
   fillUrl,
   resolveRequestUrl,
@@ -67,11 +67,11 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
     ? new Headers(options.defaultHeaders)
     : new Headers();
 
-  appendRecordToHeaders(
-    headers,
-    built.headers as
-      HeadersInit | { [key: string]: RequestBuildValue } | undefined,
-  );
+  if (Array.isArray(built.headers)) {
+    appendHeaderEntries(headers, built.headers);
+  } else {
+    appendRecordToHeaders(headers, built.headers);
+  }
   const declaredContentType = headers.has("content-type");
   if (
     options.transport === "sse" &&
@@ -84,7 +84,7 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
   const request: BaseTransportRequest = {
     signal: options.signal,
     baseEndpoint: options.baseEndpoint,
-    body: built.body as HttpRequest["body"],
+    body: built.body,
     bodyContentTypeSource: built.body,
     endpoint: fillUrl(path, built.params),
     headers,

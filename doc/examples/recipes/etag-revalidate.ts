@@ -57,13 +57,17 @@ function createReader(client: DerivableClient) {
 const etag = '"v7"';
 const client = createClient(
   withEndpoint("https://catalog.example.test"),
-  withHTTPHandle(async (input, init) => {
+  withHTTPHandle((input, init) => {
     if (new Request(input, init).headers.get("if-none-match") === etag) {
-      return new Response(null, { status: 304, headers: { etag } });
+      return Promise.resolve(
+        new Response(null, { status: 304, headers: { etag } }),
+      );
     }
-    return Response.json(
-      { sku: "SKU-1", name: "Flask", priceCents: 3200 },
-      { status: 200, headers: { etag } },
+    return Promise.resolve(
+      Response.json(
+        { sku: "SKU-1", name: "Flask", priceCents: 3200 },
+        { status: 200, headers: { etag } },
+      ),
     );
   }),
 );

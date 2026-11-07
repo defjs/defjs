@@ -5,16 +5,31 @@ description: Abort or time out a call and read NET_ABORTED / NET_TIMEOUT.
 
 # Cancel an HTTP call
 
-Combine the caller's signal with a deadline on `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` is one signal. A manual abort classifies as `NET_ABORTED`. A deadline classifies as `NET_TIMEOUT`.
+Combine a caller `AbortController` with a deadline using `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` and pass the combined signal via `client({ signal })`. Defjs classifies a manual caller abort as `NET_ABORTED` and a timeout abort as `NET_TIMEOUT`.
 
-See [HTTP](/docs/http#cancel-the-work) for details.
+<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
 ```
 
-Cancellation tells you what the caller observed. It does not prove a server-side write rolled back — keep mutation retries behind an idempotency contract.
+Cancellation reports what the client observed—it does not guarantee that a server-side write rolled back. Guard mutation retries behind an idempotency key. See [HTTP cancellation and timeouts](/docs/http#cancel-the-work).

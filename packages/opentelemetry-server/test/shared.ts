@@ -1,14 +1,12 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import "../../../test/loopback-proxy-bypass.ts";
 
-export const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-export const globalSetupPath = resolve(packageRoot, "test/setup.ts");
+export const packageRoot = `${import.meta.dirname}/..`;
+export const globalSetupPath = `${import.meta.dirname}/setup.ts`;
 export const coverageConfig = {
   enabled: true,
   provider: "istanbul" as const,
   reporter: ["lcov", "json", "html", "text"],
-  reportsDirectory: resolve(packageRoot, "coverage"),
+  reportsDirectory: `${packageRoot}/coverage`,
   include: ["src/**/*.ts"],
   exclude: [
     "**/node_modules/**",

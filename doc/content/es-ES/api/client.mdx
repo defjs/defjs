@@ -5,13 +5,13 @@ description: createClient, helpers de opción y el tipo Client.
 
 # Cliente
 
-`createClient(...)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type). Compón las opciones del cliente de izquierda a derecha, luego llama a `client(options?)` para obtener un valor [`Client`](/es-ES/api/core/client-type) y pásalo a una operación: `getUser(client(options), input)`.
+`createClient(...)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type). Compón las opciones del cliente de izquierda a derecha, luego llama a `client(options?)` para obtener un valor [`Client`](/es-ES/api/core/client-type) y pásalo a una operación: `getOrder(client(options), input)`.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Las opciones se aplican en orden. Prefiere crear el cliente dentro del límite de la solicitud cuando los interceptores cierran sobre auth o tenants. La fábrica devuelta es una función. Llamarla devuelve un valor `Client` y no hace E/S. La propia fábrica también es un `Client` y no lleva opciones de solicitud.
+Las opciones se aplican en orden. Prefiere crear el cliente dentro del límite de la solicitud cuando los interceptores capturan auth o tenants en su ámbito. La fábrica devuelta es una función. Llamarla devuelve un valor `Client` y no hace E/S. La propia fábrica también es un `Client` y no lleva opciones de solicitud.
 
 - **options** — Helpers de opción como `withEndpoint`.
 - **Devuelve** una fábrica invocable. La configuración base la comparte cada valor de cliente y no está congelada en tiempo de ejecución. Queda fija por convención: nada en la biblioteca la cambia, y las aplicaciones tampoco deberían.
@@ -26,19 +26,25 @@ Todos los helpers devuelven `ClientOption`. Una llamada posterior sustituye a un
 
 <ApiSignature name="withEndpoint" />
 
-Fija la URL base que se antepone a los paths relativos.
+Copia las URLs base candidatas en el orden de primera aparición y descarta una copia posterior de la misma cadena. Un `withEndpoint` posterior sustituye la lista. No comprueba las URLs y no sustituye el balanceador. Una lista vacía es un valor admitido y hace fallar la llamada con `REQ_BUILD_FAILED`.
+
+### withBalancer()
+
+<ApiSignature name="withBalancer" />
+
+Sustituye el balanceador usado en las llamadas posteriores. El objeto se conserva por referencia. Sin esta opción, cada cliente recibe su propio `pickFirstBalancer()`.
 
 ### withInterceptors()
 
 <ApiSignature name="withInterceptors" />
 
-Añade interceptores en el orden de registro. Los kinds mixtos se filtran por transporte cuando corre la operación.
+Añade interceptores en el orden de registro. Los tipos mixtos se filtran por transporte cuando se ejecuta la operación.
 
 ### withQuerySerializer()
 
 <ApiSignature name="withQuerySerializer" />
 
-Sustituye la codificación de query para HTTP, SSE y WebSocket. `serializer(query)` recibe el **objeto de cable ya codificado** (alias aplicados, `Date` como ISO, `bigint` como string) y debe devolver el query string sin `?` inicial. No se llama cuando la solicitud no tiene query. Un builder que devuelve `URLSearchParams` se lo salta.
+Sustituye la codificación de query para HTTP, SSE y WebSocket. `serializer(query)` recibe el **objeto de red ya codificado** (alias aplicados, `Date` como ISO, `bigint` como string) y debe devolver el query string sin `?` inicial. No se llama cuando la solicitud no tiene query. Un builder que devuelve `URLSearchParams` se lo salta.
 
 ### withHeaders()
 
@@ -83,7 +89,7 @@ Añade una cabecera de token XSRF a las solicitudes HTTP. `options` es el ajuste
 
 El transporte HTTP por defecto añade la cabecera cuando se cumple todo esto: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya esa cabecera; la solicitud es del mismo origen; y se encuentra un token no vacío. Siempre que exista `location`, incluso en un Worker, el origen resuelto de la solicitud debe coincidir con `location.origin`; sin él, una solicitud con `baseEndpoint` cuenta como mismo origen. Las solicitudes de origen cruzado no llaman a `tokenProvider`. El token sale de ese provider cuando se da, y si no de `document.cookie`, que solo se lee cuando existe `document`.
 
-### Mandos de SSE
+### Opciones de SSE
 
 ### withSSEReconnect()
 
@@ -91,7 +97,7 @@ El transporte HTTP por defecto añade la cabecera cuando se cumple todo esto: el
 
 <ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
 
-### Mandos de WebSocket
+### Opciones de WebSocket
 
 ### withWebSocketBeforeConnect()
 
@@ -109,13 +115,13 @@ El transporte HTTP por defecto añade la cabecera cuando se cumple todo esto: el
 
 <ApiSignature name="DerivableClient" />
 
-El cliente raíz que devuelve `createClient`, en dos formas. La fábrica es una función y también es un `Client` sin opciones de solicitud, así que `getUser(client, input)` funciona directamente. Llamarla con [`RequestOptions`](/es-ES/api/core/requestoptions-type) devuelve un valor `Client` simple para una sola llamada. Ese valor no es invocable, así que `client()()` no compila y lanza un `TypeError` en tiempo de ejecución. La derivación ocurre una vez, desde la fábrica; no hay encadenamiento. Escribe el tipo como `DerivableClient` en lugar de `ReturnType<typeof createClient>`.
+El cliente raíz que devuelve `createClient`, en dos formas. La fábrica es una función y también es un `Client` sin opciones de solicitud, así que `getOrder(client, input)` funciona directamente. Llamarla con [`RequestOptions`](/es-ES/api/core/requestoptions-type) devuelve un valor `Client` simple para una sola llamada. Ese valor no es invocable, así que `client()()` no compila y lanza un `TypeError` en tiempo de ejecución. La derivación ocurre una vez, desde la fábrica; no hay encadenamiento. Escribe el tipo como `DerivableClient` en lugar de `ReturnType<typeof createClient>`.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-Un `Client` es un valor, no una función. Llamar al [`DerivableClient`](/es-ES/api/core/derivableclient-type) con [`RequestOptions`](/es-ES/api/core/requestoptions-type) devuelve uno. Los siete campos conocidos se copian del argumento en un objeto nuevo. Los campos desconocidos se ignoran y los campos cuyo valor es `undefined` se omiten. No hay superposición con un padre: `client()`, `client(undefined)` y `client({})` devuelven un cliente sin opciones de solicitud. Los valores anidados `heartbeat`, `protocols` y `reconnect` se conservan por referencia, no se clonan. WebSocket los lee cuando se ejecuta la operación (entonces copia los campos de heartbeat y la lista protocols), así que mutar esos objetos después de derivar todavía puede afectar a una llamada posterior. Las aplicaciones deben tratarlos como inmutables después de pasarlos. Derivar no hace E/S. Un valor de cliente no es invocable; llamarlo no compila y lanza un `TypeError` en tiempo de ejecución. Crea un valor de cliente por llamada. El mismo valor puede pasarse a muchas operaciones, pero reutilizar un valor que lleva `signal` comparte ese signal. `signal` no se combina; combina signals con `AbortSignal.any` en el código de la aplicación.
+Un `Client` es un valor, no una función. Llamar al [`DerivableClient`](/es-ES/api/core/derivableclient-type) con [`RequestOptions`](/es-ES/api/core/requestoptions-type) devuelve uno. `client()` y `client(undefined)` no guardan opciones de solicitud. `client({})` conserva una instantánea vacía. La llamada lee cada campo de nivel superior una vez. Un array `protocols` se copia. `heartbeat` y `reconnect` copian sus campos conocidos. Los bloques anidados que faltan siguen faltando. `signal`, `beforeConnect` y los callbacks conservan su identidad. Un getter de un campo capturado se ejecuta durante esa llamada y, si lanza, sale de la llamada. Los números no válidos siguen fallando más tarde con `REQ_OPTIONS_INVALID`. Derivar no hace E/S. Un valor de cliente no es invocable; llamarlo no compila y lanza un `TypeError` en tiempo de ejecución. Crea un valor de cliente por llamada. El mismo valor puede pasarse a muchas operaciones, pero reutilizar un valor que lleva `signal` comparte ese signal. `signal` no se combina; combina signals con `AbortSignal.any` en el código de la aplicación. La configuración base de la fábrica sigue compartida y no está congelada. Los helpers `with*` estándar copian los records fijos que poseen cuando se aplican.
 
 No pases la fábrica a un setter de estado de React (`setState(factory)` la llamaría como updater) ni lo uses como fuente de `watch` o `computed` de Vue (esos llaman a una función).
 
@@ -123,7 +129,7 @@ No pases la fábrica a un setter de estado de React (`setState(factory)` la llam
 
 <ApiSignature name="RequestOptions" />
 
-Siete campos planos. Cada protocolo lee los campos que entiende e ignora el resto. Pasar `heartbeat` a HTTP se ignora, no es un fault. SSE solo lee `signal` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación ni un campo `timeout` o `abort`.
+Siete campos planos. Cada protocolo lee los campos que entiende e ignora el resto. Pasar `heartbeat` a HTTP se ignora, no es un fallo. `client(options)` copia en esa llamada un array `protocols` y los campos conocidos de `heartbeat` y `reconnect`. Los bloques anidados que faltan siguen faltando. `signal`, `beforeConnect` y los callbacks conservan su identidad. SSE solo lee `signal` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación ni un campo `timeout` o `abort`.
 
 | Campo                | Protocolo             | Sustitución                                                                             |
 | -------------------- | --------------------- | --------------------------------------------------------------------------------------- |
@@ -169,6 +175,8 @@ La reconexión es opt-in en los dos transportes: sin `withSSEReconnect` / `withW
 | `jitter`     | `0`                  | `0`                  |
 | `maxDelayMs` | sin tope             | `30000`              |
 
+`connectTimeoutMs` es opcional y debe ser finito, positivo y no mayor que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`. Acota Fetch hasta las cabeceras de respuesta en SSE, y la construcción hasta `open` en WebSocket; se borra después del handshake. La expiración informa `NET_UNREACHABLE` al balanceador para que una reconexión pueda elegir el endpoint siguiente. Los reintentos agotados terminan con `NET_TIMEOUT`. Solo existe dentro de las opciones de reconexión y, como `attempts` vale `3` por defecto siempre que ese objeto está presente, definir solo `connectTimeoutMs` también activa la reconexión. Para un plazo solo del handshake, añade también `attempts: 0`.
+
 En los dos transportes, un handshake correcto reinicia el presupuesto de reintento por interrupción, el intento del callback y el exponente de backoff. `attempts: 0` desactiva el reintento; omitir `attempts` no da reintentos ilimitados dentro de una interrupción. `maxDelayMs` limita el retraso final después del jitter y el redondeo; el límite de temporizador de la plataforma, `2_147_483_647` ms, también se aplica, incluso cuando SSE no tiene tope configurado. Una base cero se queda en cero; el desbordamiento de números válidos se satura en los topes.
 
 Las opciones de reconexión se validan antes del transporte: `attempts` debe ser un entero seguro no negativo; `delayMs` debe ser finito y no negativo; `maxDelayMs` debe ser un número finito no negativo o `Infinity` positivo, que quita el tope configurado pero no el límite de plataforma de `2_147_483_647` ms; `factor` debe ser finito y positivo; `jitter` debe ser finito y estar entre 0 y 1. Los valores inválidos devuelven `REQ_OPTIONS_INVALID`. `attempts: 0` de WebSocket desactiva los reintentos posteriores, pero todos los campos de reconexión aportados de forma explícita se validan igualmente antes de la conexión inicial, igual que en SSE. El jitter escala la base ya limitada en cualquiera de las dos direcciones antes de aplicar el tope final.
@@ -183,11 +191,11 @@ Para WebSocket, `beforeConnect`, `heartbeat`, `protocols` y `reconnect` también
 
 <ApiSignature name="ClientOptions" />
 
-Los campos mostrados son `sse` y `webSocket`. Los otros siete — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` y `withCredentials` — se heredan de la base HTTP no exportada, y `endpoint` es obligatorio. No hay un `timeout` a nivel de cliente. `createClient` no recibe este objeto; recibe helpers de opción.
+Los campos mostrados son `sse` y `webSocket`. Los otros siete — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` y `withCredentials` — se heredan de la base HTTP no exportada. `endpoints` es `readonly string[]`. El valor por defecto resuelto es `[]`. Un array vacío es un valor admitido y hace fallar la llamada con `REQ_BUILD_FAILED`. No hay un `timeout` a nivel de cliente. `createClient` no recibe este objeto; recibe helpers de opción.
 
 ### ClientConfig
 
-La instantánea resuelta que mutan los helpers de opción y lee una operación: `ClientOptions` después de los valores por defecto, con `http.handle`, `interceptors`, `sse` (un `ClientSSEConfig`) y `webSocket` siempre presentes.
+La instantánea resuelta que mutan los helpers de opción y lee una operación: `ClientOptions` después de los valores por defecto, con `http.handle`, `interceptors`, `sse` (un `ClientSSEConfig`), `webSocket` y `balancer` siempre presentes. `http.retry` es opcional y vale por defecto `undefined` (un intento, sin presupuesto); `withRetry(options?)` lo configura. `balancer` vale por defecto un `pickFirstBalancer()` nuevo para ese cliente. No es un campo de [`RequestOptions`](/es-ES/api/core/requestoptions-type).
 
 ### ClientSSEConfig
 
@@ -204,5 +212,47 @@ La superficie de instancia de WebSocket que usa el transporte: `WebSocket` sin `
 <ApiSignature name="WebSocketHandleConstructor" />
 
 El constructor que se pasa a `withWebSocketHandle`. Debe exponer la constante de ready-state `OPEN`.
+
+## Balanceadores
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer` avanza ante `NET_UNREACHABLE` o `NET_UNAVAILABLE` (HTTP 502, 503 o 504); un reintento HTTP nunca mueve su endpoint fijo, y el orden sigue `members`, la lista completa de endpoints del cliente. Su `failbackMs` opcional, positivo y finito, habilita una sola sonda concurrente del primer endpoint tras el intervalo; la sonda se decide cuando comienza la respuesta del par (`end`), y `done` decide la que nunca llegó a `end`. Los reintentos HTTP son una política aparte del cliente, configurada con `withRetry`. `roundRobinBalancer` recorre la lista. `weights` es opcional. Consulta [Varios endpoints](/es-ES/docs/client#multiple-endpoints).
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+Muestrea candidatos distintos sin reemplazo (a diferencia de Envoy/gRPC A48) y elige el PeakEwma de tower o la carga pending. Los valores por defecto de Linkerd son un RTT de 30 ms y un decay de 10 s. Pending se reserva cuando `pick` selecciona el endpoint, y `end` lo libera en las cabeceras o al abrir el socket y registra el RTT real de cada transporte, incluidos los fallos. Un `done` sin `end` libera pending sin una muestra de RTT. No hay clasificador de fallo de p2c ni penalización. `choiceCount` vale 2 de forma predeterminada y tiene un tope de 10.
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+Envuelve un hijo con un disyuntor de fallos consecutivos al estilo de Linkerd. Round robin y p2c lo activan de forma predeterminada (como en Finagle); `false` lo desactiva. Pick-first lo activa con un objeto. El clasificador por defecto cuenta como fallo cualquier resultado con código, incluidos `NET_TIMEOUT` y `NET_BODY_INCOMPLETE`. Tras cinco fallos, las penalizaciones empiezan en 1000 ms, se duplican tras una sonda fallida, suman jitter positivo de hasta 0,5 veces la base y tienen un tope de 60000 ms. La expiración admite una sola sonda, decidida en `end`, o en `done` si no llegó ningún `end`. El éxito reinicia el backoff; la cancelación solo libera el hueco. No hay timeout que suponga éxito, ni cuota, ni protección del último host, ni rejilla de evaluación, ni criterio de porcentaje, ni slow start. `isHealthy` lee el estado en caché de la aplicación y nunca cancela una penalización. Todos los hosts pueden cortar; el fail-open local a la lista, al estilo de Finagle, sigue enviando solicitudes. A diferencia de Envoy/gRPC A50, no hay cuota de expulsión. Consulta [Filtrado de salud y p2c](/es-ES/docs/client#health-filtering-and-p2c).
+
+### withRetry()
+
+<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+
+Habilita el reintento HTTP en la misma llamada, con independencia de la selección de endpoint. Omitir `withRetry` significa un intento y ningún presupuesto. `withRetry()` equivale a `withRetry({})` y vale por defecto `maxAttempts: 2` (incluido el original), `on: ["connect-failure"]` y los métodos seguros `GET`, `HEAD`, `OPTIONS`, `TRACE`. Los métodos no distinguen entre mayúsculas y minúsculas; `[]` desactiva los reintentos. `maxAttempts` es un entero seguro de al menos 1, y cada endpoint se prueba como máximo una vez. `"gateway-error"` incluye `NET_UNAVAILABLE` (HTTP 502/503/504) y los cuerpos de pasarela rechazados por la decodificación `RES_*`; `"attempt-timeout"` usa `attemptTimeoutMs`. Los cuerpos de solicitud en streaming nunca se reintentan.
+
+El backoff vale por defecto `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`, con la misma semántica de campos que la reconexión de SSE/WebSocket. `delayMs: 0` omite la espera. `attemptTimeoutMs` debe ser finito, positivo y no mayor que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`. Cronometra cada Fetch enviado al endpoint seleccionado, desde su invocación hasta que se ha leído su cuerpo de respuesta; el trabajo de los interceptores alrededor del envío y la decodificación del struct no se cronometran y nunca cuentan contra el endpoint. La señal de quien llama cubre la llamada entera, incluidas las esperas del backoff. Cuando una ronda de reintento no puede usar ningún endpoint (el pick del balanceador falla, o la URL del siguiente endpoint no se resuelve), la llamada devuelve el fault del intento anterior en lugar de `REQ_BUILD_FAILED`.
+
+El presupuesto de Finagle, propio del cliente, vale por defecto el 20 % más una reserva de 10 reintentos por segundo durante un TTL de 10 s. Los créditos y los débitos caducan de forma perezosa en diez cortes de TTL/10. `budget: false` quita el límite. Los clientes derivados que comparten una configuración comparten su presupuesto; los clientes distintos no, aunque compartan un balanceador. Las opciones no válidas devuelven `REQ_OPTIONS_INVALID` con `Invalid retry options` cuando se ejecuta HTTP. La opción captura los campos propios, los arrays y el presupuesto anidado en el momento de aplicarla. `withRetry()` y `withRetry(undefined)` se comportan como `withRetry({})`. Un `withRetry` posterior sustituye la política; `withRetry({ maxAttempts: 1 })` desactiva los reintentos después de haberlos habilitado. Los balanceadores y los envoltorios de salud no tienen ajustes de reintento. Consulta [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing).
+
+<include cwd>examples/client/http-retry.ts#example</include>
+
+### Balancer
+
+<ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`pick` devuelve una tupla error-first. `start` opcional se ejecuta de forma síncrona como máximo una vez, justo antes de que arranque el transporte elegido; `end` opcional se ejecuta una vez después de `start`, cuando comienza la respuesta del par (o se produce un fallo previo a la respuesta), y `done` opcional se ejecuta una vez al completar. Fetch no puede exponer el primer frame de cuerpo de Linkerd ni los límites de stream de Envoy. Las excepciones y los rechazos de thenable de todos los hooks quedan contenidos. Una selección fuera de los candidatos falla con `REQ_BUILD_FAILED`, y su `done` se llama con `{ attempted: false }`. `ERR_NO_CANDIDATE` es solo una `cause` de `REQ_BUILD_FAILED`. No es un `FaultCode`. [`isNoCandidateCause`](/es-ES/api/core/isnocandidatecause) lo reconoce entre copias de Core.
+
+El balanceador solo ve resultados neutros; cada transporte traduce sus propios hechos a `DoneInfo.code`. La detección de valores atípicos por defecto cuenta todo resultado con código como un fallo, incluidos `NET_TIMEOUT` y `NET_BODY_INCOMPLETE`. El `DoneInfo.status` crudo se conserva solo para balanceadores personalizados y las estrategias integradas nunca lo leen. `PickInfo` contiene los `endpoints` candidatos de un pick, `members` (la lista completa de endpoints del cliente, la misma en cada intento) y un `operation` opcional, sin discriminador de transporte.
 
 Consulta la [guía del Cliente](/es-ES/docs/client).

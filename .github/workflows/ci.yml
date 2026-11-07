@@ -14,11 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
       - run: bun ci
       - name: Install Playwright browsers
         run: bunx --bun playwright install --with-deps chromium firefox
+      # Type-aware lint reads the generated route types in doc/.react-router, which are not committed.
+      - name: Generate route types
+        run: bun run --cwd doc typegen
       - name: Lint
-        run: bun run lint
+        run: bun lint
       - name: Format check
         run: bun fmt --check
       - name: Typecheck
@@ -29,23 +34,3 @@ jobs:
         run: bun run build
       - name: E2E tests
         run: bun run test:e2e
-
-  # Vitest's bin is `#!/usr/bin/env node`. `bunx` (without `--bun`) runs that bin on Node.
-  # `bun run` follows bunfig `[run] bun = true` and would stay on Bun, which is the `checks` job.
-  # Node 26 is the LTS baseline and matches Vitest's `>=26.0.0` engine range.
-  node-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
-      - uses: oven-sh/setup-bun@v2
-      - run: bun ci
-      - name: core-server on Node
-        working-directory: packages/core
-        run: bunx --no-install vitest run --config vitest.config.ts --project core-server --coverage.enabled=false
-      - name: opentelemetry-server on Node
-        working-directory: packages/opentelemetry-server
-        run: bunx --no-install vitest run --config vitest.config.ts --coverage.enabled=false

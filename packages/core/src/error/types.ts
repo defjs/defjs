@@ -138,7 +138,7 @@ export type DecodeFault = Error & {
  * A failure that may have happened before any response existed.
  *
  * Covers `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, and `ENV_UNSUPPORTED`. `response`
- * is present only where the transport already had metadata to report, such as a
+ * is `undefined` until the transport has metadata to report, such as a
  * body that truncated mid-download.
  *
  * @group errors

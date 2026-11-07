@@ -5,22 +5,36 @@ description: Call one GET and branch on typed 200 vs declared 404.
 
 # GET with a declared 404
 
-Declare both success and 404 bodies. Branch on `error.code` and `error.status` — you get typed `error.data` for the declared miss.
+Declare both `output` (for 2xx responses) and `error` (for non-2xx responses) on `defineRequest`. At the call site, branch on `error?.code === "HTTP_STATUS" && error.status === 404` to read the typed `error.data` payload.
 
-See [HTTP](/docs/http) and [Errors](/docs/errors) for details.
+<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
 
-`api.example.com` is a placeholder. With a server that answers `GET /users/7` with `200` and `{ "id": 7, "name": "Ada" }`, the snippet prints:
+  </Tab>
+</Tabs>
+
+With a server that answers `GET /orders/7` with `200` and `{ "id": 7, "status": "paid" }`, the script prints:
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
-A non-2xx status is `HTTP_STATUS`. Declaring `error` gives its body a type; omitting `error`
-leaves `error.data` as `undefined` and the body unread. If a declared `error` body cannot be read
-(wrong media type, invalid JSON, wrong shape), the result is a `RES_*` fault instead. One `error`
-Struct covers every non-2xx status, so use `struct.or(...)` or a discriminated union when the
-shapes differ.
+- Every non-2xx status produces `HTTP_STATUS`. Declaring `error` decodes and validates the error body into `error.data`; omitting `error` leaves `error.data` as `undefined` without reading the body.
+- If a declared `error` body has the wrong media type, invalid JSON, or fails Struct validation, the operation returns a `RES_*` fault instead. Because a single `error` Struct covers all non-2xx statuses, use `struct.or(...)` when different error statuses return different shapes.
+
+See [HTTP operations](/docs/http) and [Error handling](/docs/errors).

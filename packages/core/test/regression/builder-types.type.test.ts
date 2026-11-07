@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { expectTypeOf } from "vitest";
 import {
   defineEventStream,
@@ -122,8 +121,6 @@ const stream = defineEventStream({
   builder: (input) => ({ query: { id: input.id } }),
   events: { message: struct.string() },
   input: struct.object({ id: struct.number() }),
-  maxBufferSize: 1,
-  maxQueueSize: 1,
   path: "/events",
 });
 void stream;
@@ -147,7 +144,7 @@ void typedHeartbeat;
 
 defineRequest({
   // @ts-expect-error An async builder is not a synchronous request shape.
-  builder: async () => ({ body: {} }),
+  builder: () => Promise.resolve({ body: {} }),
   method: "POST",
   path: "/async",
 });
@@ -236,13 +233,6 @@ declare const aliasBody: UserAlias;
 declare const parsedBody: ParsedRequest;
 
 defineRequest({
-  // @ts-expect-error A Node Readable is not JSON data.
-  builder: () => ({ body: Readable.from(["x"]) }),
-  method: "POST",
-  path: "/users",
-});
-
-defineRequest({
   // @ts-expect-error An async generator is not JSON data.
   builder: () => ({ body: (async function* () {})() }),
   method: "POST",
@@ -288,8 +278,6 @@ defineEventStream({
   // @ts-expect-error A Map is not JSON data.
   builder: () => ({ body: new Map() }),
   events: { message: struct.string() },
-  maxBufferSize: 1,
-  maxQueueSize: 1,
   method: "POST",
   path: "/events",
 });

@@ -1,4 +1,4 @@
-import { upgradeWebSocket } from "@hono/node-server";
+import { upgradeWebSocket } from "hono/bun";
 import type { Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
@@ -30,7 +30,7 @@ export function registerE2eRoutes(app: Hono): void {
   app.post("/e2e/echo-raw", async (c) => {
     const bytes = new Uint8Array(await c.req.arrayBuffer());
     return c.json({
-      bodyBase64: Buffer.from(bytes).toString("base64"),
+      bodyBase64: bytes.toBase64(),
       contentType: c.req.header("content-type") ?? "",
     });
   });
@@ -134,7 +134,7 @@ async function echoReceived(c: Context): Promise<Response> {
     }
   } else if (c.req.method !== "GET" && c.req.method !== "HEAD") {
     const bytes = new Uint8Array(await c.req.arrayBuffer());
-    bodyBase64 = Buffer.from(bytes).toString("base64");
+    bodyBase64 = bytes.toBase64();
     bodyText = new TextDecoder().decode(bytes);
   }
 

@@ -1,24 +1,36 @@
 ---
 title: "ETag-Bedingungsanfragen"
-description: Behandle 304 als HTTP-Status-Fault; halte die Cache-Map außerhalb des Operationsaufrufs.
+description: "`304` als `HTTP_STATUS`-Fault behandeln; die Cache-Map außerhalb des Operationsaufrufs verwalten."
 ---
 
-# Mit ETag und einem 304 revalidieren
+# Revalidierung mit ETag und Status 304
 
-`ok` heißt 2xx, also kommt ein `304` als `HTTP_STATUS`-Fault an. Ein Redirect-Status ist auch kein Error-
-Body, also lass `error` undeclared: der Body wird nie gelesen, der Fault trägt den Status,
-und du gibst das gecachte Product selbst zurück.
+In Defjs nimmt ausschließlich eine `2xx`-Antwort den Erfolgszweig, weshalb `304 Not Modified` als `HTTP_STATUS`-Fault eintrifft. Lasse `error` an `defineRequest` undeklariert, damit der leere `304`-Body niemals eingelesen wird, und verwalte deinen `Map`-Cache in einem anwendungsseitigen Wrapper um den Operationsaufruf:
 
-Siehe [HTTP](/de-DE/docs/http).
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/sdk/catalog.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/reader.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 Flask
 ```
 
-`throw error` nach dem 304-Zweig ist die Grenze dieses Readers. Die Funktion gibt weiter `Promise<Product>` zurück; ein Fault, der kein 304 ist, verlässt diese Grenze nicht als Defjs-Tupel.
-
-Schreibe `304` nicht in ein vorgetäuschtes `200` innerhalb von Core um. Cache-Ownership bleibt im Application-Code um den Operationsaufruf.
+- Das `if (error) throw error` nach der Prüfung auf `304` ist eine explizite Policy: `createReader` gibt `Promise<Product>` zurück, also wird jeder andere Fault geworfen.
+- Schreibe ein `304` niemals innerhalb eines Interceptors in ein synthetisches `200` um; halte den Cache-Zustand immer im Anwendungscode rund um den Operationsaufruf. Siehe [HTTP-Operationen](/de-DE/docs/http).

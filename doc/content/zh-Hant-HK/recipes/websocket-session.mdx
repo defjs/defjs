@@ -1,22 +1,38 @@
 ---
 title: "管理 WebSocket 會話"
-description: Connect，send 一個 typed envelope，receive 一次，之後 close 同 await closed。
+description: 連線、傳送一個帶型別嘅 envelope、接收一次，然後關閉並等待 closed。
 ---
 
-# 開一個 WebSocket session
+# 開啟 WebSocket 會話
 
-每個方向係一個 struct。Unsubscribe、`close`，同 `await session.closed` 都係你 own。Invalid frames 去 `onRuntimeError`。
+喺 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` Struct，並設定有上限嘅 `maxIncomingQueueSize`。喺你嘅應用程式入面，訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並保證喺 `finally` 區塊入面取消訂閱監聽器、呼叫 `session.close(...)` 並等待 `await session.closed`：
 
-詳情睇 [WebSocket](/zh-Hant-HK/docs/web-socket)。
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
+</include>
 
-<include cwd meta="chat.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` 係 placeholder。如果 server 用 `{ "type": "message", "text": "Hello" }` 回應 `{ "type": "send", "text": "Hello" }`，snippet 會 print：
+  </Tab>
+</Tabs>
+
+如果伺服器收到 `{ "type": "subscribe", "symbol": "ACME" }` 後回覆 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`，腳本會輸出：
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-Reconnect 係 opt-in（`withWebSocketReconnect`）。Heartbeat 都係 opt-in。Browser WebSockets 唔可以拎 arbitrary handshake headers — 用 cookies、subprotocols，或者 short-lived ticket。
+- 自動重連（`withWebSocketReconnect`）同心跳偵測（`withWebSocketHeartbeat`）都係喺 client 端 opt-in 開啟嘅。
+- 瀏覽器環境嘅 WebSocket 喺握手階段無法發送自訂 HTTP headers；請改用 Cookie、子協議或短期連線 ticket 代替。詳情請參閱 [WebSocket 會話](/zh-Hant-HK/docs/web-socket)。

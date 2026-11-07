@@ -9,7 +9,6 @@ import {
   withHTTPHandle,
   withSSEHandle,
   withWebSocketHandle,
-  type WebSocketHandleConstructor,
 } from "../../src";
 
 const Input = struct
@@ -23,8 +22,6 @@ const sse = defineEventStream({
   path: "/events",
   input: Input,
   events: {},
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
 });
 // @ts-expect-error A WebSocket input field named `query` must not be implicitly placed in the URL.
 const socket = defineWebSocket({
@@ -40,23 +37,26 @@ test.each([true, false])(
     let dispatches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
+      withHTTPHandle(() => {
         dispatches += 1;
-        return new Response(null, { status: 204 });
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         dispatches += 1;
-        return new Response("", {
-          headers: { "content-type": "text/event-stream" },
-        });
+        return Promise.resolve(
+          new Response("", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
       withWebSocketHandle(
+        // @ts-expect-error tripwire constructor is not a WebSocket handle
         class {
           constructor() {
             dispatches += 1;
             throw new Error("Unexpected WebSocket dispatch");
           }
-        } as unknown as WebSocketHandleConstructor,
+        },
       ),
     );
     const value = present

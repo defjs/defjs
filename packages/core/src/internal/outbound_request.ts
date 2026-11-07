@@ -23,7 +23,6 @@ import type {
   IntersectionDefinition,
   ObjectDefinition,
   Path,
-  RecordDefinition,
   RuntimeStruct,
   UnionDefinition,
 } from "../struct/types";
@@ -31,7 +30,9 @@ import {
   intersectionEncodeError,
   isIntersectionIdentity,
   isPlainObject,
+  isPrimitive,
   mergeIntersectionValues,
+  mergePlainObjects,
   nullObject,
   sameWireValue,
 } from "../struct/utils";
@@ -42,9 +43,10 @@ export type OutboundTransport = "http" | "sse" | "webSocket";
 export type OutboundBuilder = (input: never) => unknown;
 
 export type MaterializedRequest = {
-  body?: unknown;
+  body?: object | string;
   defaultContentType?: string;
-  headers?: HeadersInit | { [key: string]: unknown };
+  /** A builder's header array is kept as given and applied by appendHeaderEntries. */
+  headers?: HeadersInit | unknown[] | { [key: string]: unknown };
   params?: { [key: string]: string };
   query?: URLSearchParams | { [key: string]: unknown };
 };
@@ -69,6 +71,7 @@ export function runOutboundBuilder(
     return {};
   }
 
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published OutboundBuilder type, `(input: never) => unknown` in RequestDefinition, EventStreamDefinition and WebSocketDefinition, erases each builder's parameter, so no value can be passed to it unasserted (TS2345, `unknown` is not assignable to `never`). Keeping each definition's own `(input: BuilderInput<TInput>) => …` type would need ParsedInput<TInput> to relate to BuilderInput<TInput>, two conditionals on the caller's generic
   const result = builder(input as never);
   return result === undefined ? {} : result;
 }
@@ -104,9 +107,7 @@ export function materializeOutboundRequest(
   if (shape["body"] !== undefined) {
     const body = materializeBody(shape["body"], guides);
     request.body = body.body;
-    if (body.defaultContentType) {
-      request.defaultContentType = body.defaultContentType;
-    }
+    request.defaultContentType = body.defaultContentType;
   }
   return request;
 }
@@ -175,12 +176,15 @@ function encodeGuided(
   if (isGuideSet(guide)) {
     return encodeMembers(value, guide.members, path, guides);
   }
-  if (guide?.[DEFINITION].kind === "intersection") {
-    return encodeIntersectionGuide(value, guide, path, guides);
-  }
-  // Peel unions before container dispatch so every match uses this same recursion.
-  if (guide?.[DEFINITION].kind === "or") {
-    return encodeMatchingUnion(value, guide, path, guides);
+  if (guide !== undefined) {
+    const definition = guide[DEFINITION];
+    if (definition.kind === "intersection") {
+      return encodeIntersectionGuide(value, guide, definition, path, guides);
+    }
+    // Peel unions before container dispatch so every match uses this same recursion.
+    if (definition.kind === "or") {
+      return encodeMatchingUnion(value, definition.options, path, guides);
+    }
   }
   if (Array.isArray(value)) {
     return encodeGuidedArray(value, guide, path, guides);
@@ -212,11 +216,8 @@ function narrowToParent(
       shared.push(member);
     }
   }
-  if (shared.length === 0) {
-    return own;
-  }
-  // shared is non-empty, so guideTag returns the one struct or a conjunction.
-  return guideTag(shared) as Guide;
+  // guideTag returns undefined only for an empty list: with no shared member, keep the own guide.
+  return guideTag(shared) ?? own;
 }
 
 function encodeOwnGuide(
@@ -234,17 +235,12 @@ function encodeOwnGuide(
 function encodeIntersectionGuide(
   value: unknown,
   guide: RuntimeStruct,
+  definition: IntersectionDefinition,
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): unknown {
-  const definition = guide[DEFINITION] as IntersectionDefinition;
   if (definition.objectSides && isPlainObject(value)) {
-    return encodeMembers(
-      value,
-      definition.options as unknown as readonly RuntimeStruct[],
-      path,
-      guides,
-    );
+    return encodeMembers(value, definition.options, path, guides);
   }
   // Array/tuple intersections are not object sides, but their items still have to be guided.
   if (Array.isArray(value)) {
@@ -302,11 +298,8 @@ function appendResolved(
   const definition = struct[DEFINITION];
   switch (definition.kind) {
     case "or": {
-      const matches = selectUnionOptions(
-        (definition as UnionDefinition).options,
-        value,
-      );
-      const first = matches[0] as RuntimeStruct | undefined;
+      const matches = selectUnionOptions(definition.options, value);
+      const first = matches[0];
       if (!first) {
         return;
       }
@@ -317,12 +310,7 @@ function appendResolved(
           if (
             !sameWireValue(
               encoded,
-              encodeGuided(
-                value,
-                matches[index] as RuntimeStruct,
-                path,
-                guides,
-              ),
+              encodeGuided(value, matches[index], path, guides),
             )
           ) {
             throw new TypeError(
@@ -338,8 +326,7 @@ function appendResolved(
       if (!isPlainObject(value)) {
         return;
       }
-      const matched = definition.map.get(value[definition.discriminator]) as
-        RuntimeStruct | undefined;
+      const matched = definition.map.get(value[definition.discriminator]);
       if (matched) {
         appendResolved(matched, value, path, out, unwrapIntersections, guides);
       }
@@ -350,7 +337,7 @@ function appendResolved(
       // intersect the member that actually parsed the node, including `T & unknown`.
       if (definition.objectSides || unwrapIntersections) {
         for (const option of definition.options) {
-          const runtime = option as RuntimeStruct;
+          const runtime = option;
           if (unwrapIntersections && isIntersectionIdentity(runtime)) {
             continue;
           }
@@ -408,15 +395,21 @@ function materializePath(
     throw new TypeError("path value must be an object");
   }
 
-  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
-  const params: { [key: string]: string } = Object.create(null);
+  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key, so the record has none.
+  const params: { [key: string]: string } = {};
+  Object.setPrototypeOf(params, null);
   for (const [key, item] of Object.entries(encoded)) {
     if (item === null) {
       throw new TypeError(`path value for "${key}" must not be null`);
     }
-    if (typeof item === "object") {
+    if (
+      !isPrimitive(item) &&
+      item !== undefined &&
+      typeof item !== "function"
+    ) {
       throw new TypeError(`path value for "${key}" must be a scalar`);
     }
+    // Every other value, including a symbol, a function or undefined, is converted with String().
     params[key] = String(item);
   }
   return params;
@@ -441,12 +434,13 @@ function materializeQuery(
 function materializeHeaders(
   value: unknown,
   guides?: WeakMap<object, Guide>,
-): HeadersInit | { [key: string]: unknown } {
+): HeadersInit | unknown[] | { [key: string]: unknown } {
   if (typeof Headers !== "undefined" && value instanceof Headers) {
     return value;
   }
   if (Array.isArray(value)) {
-    return value as HeadersInit;
+    const entries: unknown[] = value;
+    return entries;
   }
 
   const encoded = encodeOutbound(value, guides);
@@ -463,12 +457,12 @@ function materializeBody(
   body: unknown,
   guides?: WeakMap<object, Guide>,
 ): {
-  body?: unknown;
+  body?: object | string;
   defaultContentType?: string;
 } {
-  const codec = codecOf(body, guides);
-  if (codec && isPlainObject(body)) {
-    return { body: encodeCodecBody(body, codec, guides) };
+  const codecBody = codecBodyOf(body, guides);
+  if (codecBody) {
+    return { body: encodeCodecBody(codecBody, guides) };
   }
   if (
     isFormData(body) ||
@@ -512,7 +506,7 @@ export function rejectNonJson(
       typeof value === "number"
         ? String(value)
         : typeof value === "object"
-          ? (value as { constructor?: { name?: string } }).constructor?.name ||
+          ? value?.constructor?.name ||
             Object.prototype.toString.call(value).slice(8, -1)
           : typeof value;
     const advice =
@@ -527,11 +521,11 @@ export function rejectNonJson(
 }
 
 function encodeCodecBody(
-  body: { [key: string]: unknown },
-  codec: FormCodec,
+  { body, codec, struct }: CodecBody,
   guides?: WeakMap<object, Guide>,
 ): FormData | URLSearchParams {
-  const encoded = encodeOutbound(body, guides) as { [key: string]: unknown };
+  // The object struct that selected the codec is the body's own guide.
+  const encoded = encodeTaggedObject(body, struct, [], guides);
   if (codec === "formData") {
     const form = new FormData();
     for (const [key, value] of Object.entries(encoded)) {
@@ -562,12 +556,9 @@ function appendFormValue(
     }
     return;
   }
-  if (
-    codec === "formData" &&
-    typeof Blob !== "undefined" &&
-    value instanceof Blob
-  ) {
-    (target as FormData).append(key, value);
+  // Only the formData codec appends to a FormData target.
+  if (isFormData(target) && isBlob(value)) {
+    target.append(key, value);
     return;
   }
   if (
@@ -630,13 +621,11 @@ function keySetsOf(fields: readonly ResolvedStructField[]): ObjectKeySets {
 function encodeSingleObject(
   value: { [key: string]: unknown },
   struct: RuntimeStruct,
+  definition: ObjectDefinition,
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  const fields = resolveStructFields(
-    struct,
-    struct[DEFINITION] as ObjectDefinition,
-  );
+  const fields = resolveStructFields(struct, definition);
   const output = nullObject();
   for (const field of fields) {
     if (!Object.hasOwn(value, field.key)) {
@@ -677,24 +666,10 @@ function encodeObjectNode(
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  if (
-    members.length === 1 &&
-    (members[0] as RuntimeStruct)[DEFINITION].kind === "object"
-  ) {
-    return encodeSingleObject(value, members[0] as RuntimeStruct, path, guides);
-  }
-  const objects: RuntimeStruct[] = [];
-  const records: RuntimeStruct[] = [];
-  const passthroughs: RuntimeStruct[] = [];
-  for (const member of members) {
-    const kind = member[DEFINITION].kind;
-    if (kind === "object") {
-      objects.push(member);
-    } else if (kind === "record") {
-      records.push(member);
-    } else if (isPassthroughStruct(member)) {
-      passthroughs.push(member);
-    }
+  const sole = members.length === 1 ? members[0] : undefined;
+  const soleDefinition = sole?.[DEFINITION];
+  if (sole !== undefined && soleDefinition?.kind === "object") {
+    return encodeSingleObject(value, sole, soleDefinition, path, guides);
   }
 
   const output = nullObject();
@@ -702,24 +677,29 @@ function encodeObjectNode(
   const wireKeys = new Set<string>();
   const plans = new Map<string, WireGroup[]>();
   const order: string[] = [];
+  const recordValues: RuntimeStruct[] = [];
+  const passthroughs: RuntimeStruct[] = [];
 
-  for (const member of objects) {
-    for (const field of resolveStructFields(
-      member,
-      member[DEFINITION] as ObjectDefinition,
-    )) {
-      fieldKeys.add(field.key);
-      wireKeys.add(field.wireKey);
-      addWireGroup(plans, order, field.key, field.wireKey, field.struct);
+  // Object fields are planned in member order; record values and passthroughs are applied after them.
+  for (const member of members) {
+    const definition = member[DEFINITION];
+    if (definition.kind === "object") {
+      for (const field of resolveStructFields(member, definition)) {
+        fieldKeys.add(field.key);
+        wireKeys.add(field.wireKey);
+        addWireGroup(plans, order, field.key, field.wireKey, field.struct);
+      }
+    } else if (definition.kind === "record") {
+      recordValues.push(definition.value);
+    } else if (isPassthroughStruct(member)) {
+      passthroughs.push(member);
     }
   }
 
-  const recordValues = records.map(
-    (record) => (record[DEFINITION] as RecordDefinition).value as RuntimeStruct,
-  );
   // A record declares every key at this node, so there is no separate literal pass.
-  const keys = records.length > 0 ? declaredRecordKeys(value, order) : order;
-  if (records.length > 0) {
+  const keys =
+    recordValues.length > 0 ? declaredRecordKeys(value, order) : order;
+  if (recordValues.length > 0) {
     for (const key of keys) {
       for (const valueStruct of recordValues) {
         addWireGroup(plans, order, key, key, valueStruct);
@@ -727,24 +707,19 @@ function encodeObjectNode(
     }
   }
   for (const key of keys) {
-    if (!Object.hasOwn(value, key)) {
+    // Every key in `keys` was inserted into `plans` above.
+    const groups = plans.get(key);
+    if (groups === undefined || !Object.hasOwn(value, key)) {
       continue;
     }
     const fieldValue = value[key];
     if (fieldValue === undefined) {
       continue;
     }
-    // Every key in `keys` was inserted into `plans` above.
-    writeWireGroups(
-      output,
-      fieldValue,
-      plans.get(key) as WireGroup[],
-      [...path, key],
-      guides,
-    );
+    writeWireGroups(output, fieldValue, groups, [...path, key], guides);
   }
 
-  if (records.length > 0) {
+  if (recordValues.length > 0) {
     return applyPassthrough(output, value, passthroughs, path, guides);
   }
 
@@ -778,16 +753,32 @@ function applyPassthrough(
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  let merged: unknown = output;
-  for (const guide of passthroughs) {
-    const passed = encodeGuided(value, guide, path, guides);
-    const result = mergeIntersectionValues(merged, passed, false, path.length);
+  let merged = output;
+  // Every passthrough encodes this node the same way, so one encoded record is merged once per passthrough.
+  for (let index = 0; index < passthroughs.length; index += 1) {
+    const result = mergePlainObjects(
+      merged,
+      encodePassthroughObject(value, path, guides),
+      false,
+      path.length,
+    );
     if (!result.ok) {
       throw intersectionEncodeError([...path, ...result.path]);
     }
     merged = result.value;
   }
-  return merged as { [key: string]: unknown };
+  return merged;
+}
+
+/** What encodeGuided returns for an object node under an any/unknown guide: a tagged node as is, else its fields. */
+function encodePassthroughObject(
+  value: { [key: string]: unknown },
+  path: Path,
+  guides?: WeakMap<object, Guide>,
+): { [key: string]: unknown } {
+  return readOwnGuide(value, guides)
+    ? value
+    : encodeAnonymousObject(value, path, guides);
 }
 
 function addWireGroup(
@@ -919,12 +910,12 @@ function encodeArrayMembers(
       const definition = member[DEFINITION];
       let child: RuntimeStruct | undefined;
       if (definition.kind === "array") {
-        child = definition.item as RuntimeStruct;
+        child = definition.item;
       } else if (
         definition.kind === "tuple" &&
         index < definition.items.length
       ) {
-        child = definition.items[index] as RuntimeStruct;
+        child = definition.items[index];
       }
       if (!child) {
         continue;
@@ -1008,20 +999,19 @@ function containerOf(
     case "object":
       return { kind: "object", struct: guide };
     case "record":
-      return { kind: "record", valueStruct: definition.value as RuntimeStruct };
+      return { kind: "record", valueStruct: definition.value };
     case "array":
-      return { kind: "array", item: definition.item as RuntimeStruct };
+      return { kind: "array", item: definition.item };
     case "tuple":
       return {
         kind: "tuple",
-        items: definition.items as unknown as readonly RuntimeStruct[],
+        items: definition.items,
       };
     case "discriminatedUnion": {
       if (!isPlainObject(value)) {
         return undefined;
       }
-      const matched = definition.map.get(value[definition.discriminator]) as
-        RuntimeStruct | undefined;
+      const matched = definition.map.get(value[definition.discriminator]);
       return matched ? { kind: "object", struct: matched } : undefined;
     }
     default:
@@ -1031,14 +1021,11 @@ function containerOf(
 
 function encodeMatchingUnion(
   value: unknown,
-  guide: RuntimeStruct,
+  options: UnionDefinition["options"],
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): unknown {
-  const matches = selectUnionOptions(
-    (guide[DEFINITION] as UnionDefinition).options,
-    value,
-  );
+  const matches = selectUnionOptions(options, value);
   const first = matches[0];
   if (!first) {
     return encodeGuided(value, undefined, path, guides);
@@ -1047,10 +1034,7 @@ function encodeMatchingUnion(
   const encoded = encodeGuided(value, first, path, guides);
   for (let index = 1; index < matches.length; index += 1) {
     if (
-      !sameWireValue(
-        encoded,
-        encodeGuided(value, matches[index] as RuntimeStruct, path, guides),
-      )
+      !sameWireValue(encoded, encodeGuided(value, matches[index], path, guides))
     ) {
       throw new TypeError(
         "ambiguous union encode: multiple union branches match with different wire output",
@@ -1066,8 +1050,8 @@ function encodeRecord(
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
-  const output: { [key: string]: unknown } = Object.create(null);
+  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key, so the record has none.
+  const output: { [key: string]: unknown } = { __proto__: null };
   for (const [key, entry] of Object.entries(value)) {
     output[key] = encodeGuided(entry, valueStruct, [...path, key], guides);
   }
@@ -1136,10 +1120,16 @@ function assertHeaderValue(value: unknown, key: string): void {
   }
 }
 
-function codecOf(
+type CodecBody = {
+  body: { [key: string]: unknown };
+  codec: FormCodec;
+  struct: RuntimeStruct;
+};
+
+function codecBodyOf(
   value: unknown,
   guides?: WeakMap<object, Guide>,
-): FormCodec | undefined {
+): CodecBody | undefined {
   if (!isPlainObject(value)) {
     return undefined;
   }
@@ -1147,13 +1137,14 @@ function codecOf(
   if (!isStruct(tag)) {
     return undefined;
   }
-  const definition = (tag as RuntimeStruct)[DEFINITION];
-  if (definition.kind !== "object") {
+  const definition = tag[DEFINITION];
+  if (definition.kind !== "object" || definition.codec === undefined) {
     return undefined;
   }
-  return definition.codec;
+  return { body: value, codec: definition.codec, struct: tag };
 }
 
 function structTag(value: { [key: string]: unknown }): unknown {
-  return (value as { [STRUCT]?: unknown })[STRUCT];
+  const tag: unknown = Reflect.get(value, STRUCT);
+  return tag;
 }

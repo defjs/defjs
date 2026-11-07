@@ -36,12 +36,14 @@ test.each([200, 403])(
         const client = createClient(
           withEndpoint("https://example.test"),
           native
-            ? withHTTPHandle(
-                async () => new Response("null", { status, headers }),
+            ? withHTTPHandle(() =>
+                Promise.resolve(new Response("null", { status, headers })),
               )
             : withInterceptors(
-                createHttpInterceptor(async () =>
-                  makeResponse({ status, headers, body: null }),
+                createHttpInterceptor(() =>
+                  Promise.resolve(
+                    makeResponse({ status, headers, body: null }),
+                  ),
                 ),
               ),
         );
@@ -66,18 +68,17 @@ test("SSE handshake errors use the same JSON media-type validation", async () =>
     path: "/media",
     events: { message: struct.string() },
     error: struct.null(),
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
   for (const [contentType, valid] of mediaTypes) {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response("null", {
             status: 403,
             headers: { "content-type": contentType },
           }),
+        ),
       ),
     );
     const [fault, stream] = await endpoint(client);
@@ -114,14 +115,14 @@ test.each([200, 403])(
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           observed.push([
             request.method,
             request.endpoint,
             request.operation,
             request.body,
           ]);
-          return makeResponse({ status, body: "result" });
+          return Promise.resolve(makeResponse({ status, body: "result" }));
         }),
       ),
     );

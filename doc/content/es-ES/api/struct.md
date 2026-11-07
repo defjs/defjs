@@ -5,29 +5,15 @@ description: Fachada struct, Infer y StructError.
 
 # Struct
 
-Construye formas del límite de cable, parsea valores e infiere tipos TypeScript.
+Construye formas del límite de red, analiza valores e infiere tipos TypeScript.
 
 ## struct
 
 Fachada. Prefiere esto frente a los constructores internos.
 
-```ts
-const User = struct.object({
-  id: struct.number(),
-  displayName: struct.string().alias("display_name"),
-});
-
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(user.displayName);
-}
-
-readUser();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### Primitivos y contenedores
 
@@ -42,13 +28,13 @@ readUser();
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | Uniones                                                                              |
 | `struct.enum(values)`                                                       | Lista de strings o mapa `{ Name: value }`; el mapa acepta sus valores, no sus claves |
 
-### Códecs de body y valores binarios
+### Códecs de cuerpo y valores binarios
 
-| Helper                                         | Rol                                                                                                                                                                                                             |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `struct.formData(shape)` / `urlencoded(shape)` | Struct de objeto más un tag de códec. El tag solo aplica cuando ese valor es la raíz del body de la solicitud                                                                                                   |
-| `struct.arrayBuffer()` / `blob()` / `file()`   | Valores binarios. Como raíz de body se envían como bytes; como `output` / `error` seleccionan esa representación                                                                                                |
-| `struct.string()`                              | Texto. Como raíz de body HTTP o SSE, o como dato de entrada HTTP/SSE, los bytes siguen siendo texto. Un frame entrante de WebSocket se parsea primero como JSON, así que un struct string espera un string JSON |
+| Helper                                         | Rol                                                                                                                                                                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | Struct de objeto más un tag de códec. El tag solo se aplica cuando ese valor es la raíz del cuerpo de la solicitud                                                                                                  |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | Valores binarios. Como raíz de cuerpo se envían como bytes; como `output` / `error` seleccionan esa representación                                                                                                  |
+| `struct.string()`                              | Texto. Como raíz de cuerpo HTTP o SSE, o como dato de entrada HTTP/SSE, los bytes siguen siendo texto. Una trama entrante de WebSocket se analiza primero como JSON, así que un struct string espera un string JSON |
 
 ### struct.parse()
 
@@ -56,8 +42,8 @@ readUser();
 
 - **Devuelve** `[null, value]` o `[StructError, undefined]`. El error lleva un solo issue. Los campos de un objeto se detienen en el primer campo incorrecto. `struct.or` prueba todas las ramas y luego informa `invalid_union`; no conserva el fallo de la primera rama.
 - Los campos de un objeto son obligatorios salvo que se marquen con `.optional()` o `.nullish()`. Las claves que la forma no declara se descartan del resultado.
-- `options.errorMap` opcional reescribe los mensajes de issue solo para este parse.
-- Por defecto lee claves **lógicas** (`displayName`). Pasa `{ aliases: true }` para leer claves de cable (`display_name`) igual que los códecs HTTP/JSON.
+- `options.errorMap` opcional reescribe los mensajes de issue solo para este análisis.
+- Por defecto lee claves **lógicas** (`customerName`). Pasa `{ aliases: true }` para leer claves de cable (`customer_name`) igual que los códecs HTTP/JSON.
 
 ## ErrorMap
 
@@ -85,11 +71,11 @@ Mira la [guía de Struct](/es-ES/docs/struct).
 
 ## STRUCT
 
-Un `unique symbol` que etiqueta los objetos parseados a partir del input del endpoint. Es interno del codificador de salida y se exporta solo como tipo. No lo leas ni lo establezcas.
+Un `unique symbol` que etiqueta los objetos analizados a partir del input de la operación. Es interno del codificador de salida y se exporta solo como tipo. No lo leas ni lo establezcas.
 
 ## Struct
 
-Forma parseable: tipos input/output más `.optional()`, `.null()` / `.nullable()`, `.nullish()`, `.alias()`.
+Forma analizable: tipos input/output más `.optional()`, `.null()` / `.nullable()`, `.nullish()`, `.alias()`.
 
 ## StructLike
 

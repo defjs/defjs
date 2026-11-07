@@ -18,7 +18,7 @@ describe("Fetch handler responses", () => {
         endpoint: "/unused",
         method: "GET",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     expect(response.body).toBeUndefined();
@@ -45,7 +45,7 @@ describe("Fetch handler responses", () => {
         endpoint: "/unused",
         method: "GET",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     expect(response.body).toBeUndefined();
@@ -74,10 +74,12 @@ describe("Fetch handler responses", () => {
           method: "GET",
           responseType,
         },
-        async () =>
-          new Response(body, {
-            headers: { "content-type": "application/json" },
-          }),
+        () =>
+          Promise.resolve(
+            new Response(body, {
+              headers: { "content-type": "application/json" },
+            }),
+          ),
       );
 
       expect(response.body).toEqual(
@@ -93,9 +95,10 @@ describe("Fetch handler responses", () => {
         baseEndpoint: "https://example.com",
         endpoint: "/unsupported",
         method: "GET",
-        responseType: "unsupported" as HttpRequest["responseType"],
+        // @ts-expect-error unsupported is not a declared response type
+        responseType: "unsupported",
       },
-      async () => new Response("ignored"),
+      () => Promise.resolve(new Response("ignored")),
     );
 
     expect(response.body).toBeNull();
@@ -114,7 +117,7 @@ describe("Fetch handler responses", () => {
         endpoint: "/unused",
         method: "GET",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     expect(response.body).toBeUndefined();
@@ -131,7 +134,7 @@ describe("Fetch handler responses", () => {
           endpoint: "/unused",
           method: "GET",
         },
-        async () => new Response(body),
+        () => Promise.resolve(new Response(body)),
       ),
     );
 
@@ -160,7 +163,7 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     await expect(settleWithin(pending)).rejects.toMatchObject({
@@ -186,7 +189,7 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     ).catch((cause: unknown) => cause);
 
     expect(failure).toMatchObject({
@@ -242,7 +245,7 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      fetchMock as unknown as typeof fetch,
+      fetchMock,
     );
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
@@ -280,7 +283,7 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     await pullStarted;
@@ -316,7 +319,7 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     await pullStarted;
@@ -353,7 +356,7 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     await pullStarted;
@@ -511,11 +514,13 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "json",
       },
-      async () =>
-        new Response(JSON.stringify({ id: 1 }), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        }),
+      () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ id: 1 }), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+        ),
     );
 
     expect(response.url).toBe("https://example.com/filled");
@@ -530,13 +535,11 @@ describe("Fetch handler responses", () => {
       responseType: "json" as const,
     };
     const headers = { "content-type": "application/json" };
-    const absent = await fetchHandler(
-      request,
-      async () => new Response(null, { headers, status: 200 }),
+    const absent = await fetchHandler(request, () =>
+      Promise.resolve(new Response(null, { headers, status: 200 })),
     );
-    const parsedNull = await fetchHandler(
-      request,
-      async () => new Response("null", { headers, status: 200 }),
+    const parsedNull = await fetchHandler(request, () =>
+      Promise.resolve(new Response("null", { headers, status: 200 })),
     );
 
     expect(absent.body).toBeUndefined();
@@ -552,11 +555,13 @@ describe("Fetch handler responses", () => {
           method: "GET",
           responseType: "json",
         },
-        async () =>
-          new Response("", {
-            headers: { "content-type": "application/json" },
-            status: 200,
-          }),
+        () =>
+          Promise.resolve(
+            new Response("", {
+              headers: { "content-type": "application/json" },
+              status: 200,
+            }),
+          ),
       ),
     ).rejects.toMatchObject({ code: "RES_DECODE_FAILED" });
   });

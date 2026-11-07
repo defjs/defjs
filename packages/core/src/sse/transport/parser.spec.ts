@@ -74,11 +74,93 @@ describe("sse parser", () => {
     });
 
     const seen: string[] = [];
-    await readStreamBytes(stream, async (chunk) => {
+    await readStreamBytes(stream, (chunk) => {
       seen.push(decoder.decode(chunk));
+      return Promise.resolve();
     });
 
     expect(seen).toEqual(["first", "second", "third"]);
+  });
+
+  test.each([false, true])(
+    "should observe only the read rejection with a signal: %s",
+    async (withSignal) => {
+      const cause = new TypeError("response stream lost");
+      const onReadError = vi.fn();
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.error(cause);
+        },
+      });
+
+      await expect(
+        readStreamBytes(
+          stream,
+          noop,
+          withSignal ? new AbortController().signal : undefined,
+          onReadError,
+        ),
+      ).rejects.toBe(cause);
+
+      expect(onReadError).toHaveBeenCalledExactlyOnceWith(cause);
+      expect(stream.locked).toBe(false);
+    },
+  );
+
+  test("should not observe getReader, onChunk, cancel, or releaseLock failures as read rejections", async () => {
+    const onReadError = vi.fn();
+    const locked = new ReadableStream<Uint8Array>();
+    const owner = locked.getReader();
+    await expect(
+      readStreamBytes(locked, noop, undefined, onReadError),
+    ).rejects.toBeInstanceOf(TypeError);
+    owner.releaseLock();
+
+    const cause = new TypeError("application callback");
+    const chunks = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("data"));
+      },
+      cancel() {
+        return Promise.reject(new TypeError("provider cancel"));
+      },
+    });
+    await expect(
+      readStreamBytes(
+        chunks,
+        () => {
+          throw cause;
+        },
+        undefined,
+        onReadError,
+      ),
+    ).rejects.toBe(cause);
+
+    const complete = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.close();
+      },
+    });
+    const reader = complete.getReader();
+    const release = reader.releaseLock.bind(reader);
+    const getReader = vi.spyOn(complete, "getReader").mockReturnValue(reader);
+    const releaseLock = vi
+      .spyOn(reader, "releaseLock")
+      .mockImplementation(() => {
+        release();
+        throw cause;
+      });
+    try {
+      await expect(
+        readStreamBytes(complete, noop, undefined, onReadError),
+      ).rejects.toBe(cause);
+    } finally {
+      releaseLock.mockRestore();
+      getReader.mockRestore();
+    }
+    expect(onReadError).not.toHaveBeenCalled();
+    expect(chunks.locked).toBe(false);
+    expect(complete.locked).toBe(false);
   });
 
   test("should release reader lock on error", async () => {
@@ -237,8 +319,9 @@ describe("sse parser", () => {
 
   test("should parse split lines and crlf correctly", async () => {
     const lines: string[] = [];
-    const parseLine = createLineParser(async (line) => {
+    const parseLine = createLineParser((line) => {
       lines.push(decoder.decode(line));
+      return Promise.resolve();
     });
 
     await parseLine(encoder.encode("data: hel"));
@@ -259,8 +342,9 @@ describe("sse parser", () => {
       (retry) => {
         retries.push(retry);
       },
-      async (message) => {
+      (message) => {
         messages.push(message);
+        return Promise.resolve();
       },
     );
     const parseLine = createLineParser(parseMessage);
@@ -282,10 +366,52 @@ describe("sse parser", () => {
     ]);
   });
 
+  test("should commit an id only at the blank line before dispatch", async () => {
+    const onId = vi.fn();
+    const onMessage = vi.fn(() => expect(onId).toHaveBeenCalledWith("2"));
+    const parseLine = createLineParser(
+      createMessageParser(onId, noop, onMessage),
+    );
+
+    await parseLine(encoder.encode("id: 1\nid: 2\ndata: pending\n"));
+    expect(onId).not.toHaveBeenCalled();
+    expect(onMessage).not.toHaveBeenCalled();
+
+    await parseLine(encoder.encode("\n"));
+    expect(onId).toHaveBeenCalledExactlyOnceWith("2");
+    expect(onMessage).toHaveBeenCalledExactlyOnceWith({
+      id: "2",
+      event: "",
+      data: "pending",
+    });
+  });
+
+  test("should commit an id-only frame at its blank line without dispatch", async () => {
+    const onId = vi.fn();
+    const onMessage = vi.fn();
+    const parseLine = createLineParser(
+      createMessageParser(onId, noop, onMessage),
+    );
+
+    await parseLine(encoder.encode("id: 1\n"));
+    expect(onId).not.toHaveBeenCalled();
+    await parseLine(encoder.encode("\n"));
+    expect(onId).toHaveBeenCalledExactlyOnceWith("1");
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  test("should discard an id when the stream ends before the blank line", async () => {
+    const { ids, messages } = await parseEvents("id: 1\ndata: incomplete\n");
+
+    expect(ids).toEqual([]);
+    expect(messages).toEqual([]);
+  });
+
   test("should keep json-looking data as raw string at parser boundary", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -313,8 +439,9 @@ describe("sse parser", () => {
       (retry) => {
         retries.push(retry);
       },
-      async (message) => {
+      (message) => {
         messages.push(message);
+        return Promise.resolve();
       },
     );
     const parseLine = createLineParser(parseMessage);
@@ -413,8 +540,9 @@ describe("sse parser", () => {
       (retry) => {
         retries.push(retry);
       },
-      async (message) => {
+      (message) => {
         messages.push(message);
+        return Promise.resolve();
       },
     );
     const parseLine = createLineParser(parseMessage);
@@ -431,8 +559,9 @@ describe("sse parser", () => {
 
   test("should handle partial line across chunks with non-zero line start", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -452,8 +581,9 @@ describe("sse parser", () => {
 
   test("should handle crlf line endings and discard trailing newlines", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -471,8 +601,9 @@ describe("sse parser", () => {
 
   test("should handle field with space after colon", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -490,8 +621,9 @@ describe("sse parser", () => {
 
   test("should handle field without space after colon", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -509,8 +641,9 @@ describe("sse parser", () => {
 
   test("should handle crlf followed by non-newline char", async () => {
     const lines: string[] = [];
-    const parseLine = createLineParser(async (line) => {
+    const parseLine = createLineParser((line) => {
       lines.push(decoder.decode(line));
+      return Promise.resolve();
     });
 
     // \r\n triggers discardTrailingNewline, next char is 'i' not \n
@@ -521,8 +654,9 @@ describe("sse parser", () => {
 
   test("should handle bare cr without following lf", async () => {
     const lines: string[] = [];
-    const parseLine = createLineParser(async (line) => {
+    const parseLine = createLineParser((line) => {
       lines.push(decoder.decode(line));
+      return Promise.resolve();
     });
 
     // Bare \r (not \r\n) — discardTrailingNewline is true but next char is not \n
@@ -552,8 +686,9 @@ describe("sse parser", () => {
 
   test("should not throw maxBufferSize for short messages", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage, { maxBufferSize: 100 });
 
@@ -570,8 +705,9 @@ describe("sse parser", () => {
 
   test("should allow one chunk with multiple short messages over maxBufferSize", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage, { maxBufferSize: 20 });
 
@@ -941,7 +1077,7 @@ describe("sse message parser hand-off", () => {
   test("should return nothing when a synchronous consumer takes the message", () => {
     const parse = createMessageParser(noop, noop, noop);
 
-    parse(encoder.encode("data: x"));
+    void parse(encoder.encode("data: x"));
 
     expect(parse(new Uint8Array(0))).toBeUndefined();
   });

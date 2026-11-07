@@ -3,18 +3,37 @@ title: "本地 HTTP 測試"
 description: 用 withHTTPHandle 為一個 client 換走 Fetch，操作唔使改。
 ---
 
-# 用 local Fetch handle 做 test
+# 使用本地 Fetch Handle 進行測試
 
-`withHTTPHandle(...)` 淨係換嗰個 client 嘅 Fetch。你仍然有 URL building、interceptors、status dispatch 同 Struct decoding — 唔使 DNS、TLS 或者真實 server。
+`withHTTPHandle(...)` 可以為單一 client 實例換走底層嘅 `fetch` 函式，同時完整走勻整個 Defjs 流程——包括 input 驗證、`builder` 映射、URL 解析、攔截器、狀態碼分類以及 Struct 解碼——完全唔需要開啟任何真實嘅網絡 socket：
 
-詳情睇 [Client](/zh-Hant-HK/docs/client)。
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "單檔示範"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.test.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+呢個係獨立嘅單檔示範，唔係 test runner 嘅 spec。要對共享嘅 SDK 定義做斷言，請用前面嗰個測試頁籤。
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
+  </Tab>
+</Tabs>
+
+單檔示範會印出：
+
 ```txt
-Ada 200
+paid 200
 ```
 
-Production 用同一個 `getUser` 操作對住真實 `withEndpoint(...)` client — 淨係 handle 唔同。
+喺生產環境中，只需用一個透過 `withEndpoint(...)` 設定好嘅 client 呼叫同一個 `getOrder` 操作。詳情請參閱[測試](/zh-Hant-HK/docs/testing)與 [Client](/zh-Hant-HK/docs/client)。

@@ -39,13 +39,14 @@ test("API search ignores case and combines package and category filters", () => 
   expect(() => validateApiEntries(entries)).not.toThrow();
 });
 test("API search matches ASCII identifiers independently of Turkish locale folding", () => {
-  const localeLowerCase = String.prototype.toLocaleLowerCase;
+  const localeLowerCase = Reflect.get(String.prototype, "toLocaleLowerCase");
   const turkishFold = vi
     .spyOn(String.prototype, "toLocaleLowerCase")
     .mockImplementation(function (this: string) {
-      return localeLowerCase.call(this, "tr-TR");
+      return Reflect.apply(localeLowerCase, this, ["tr-TR"]);
     });
   try {
+    expect("I".toLocaleLowerCase()).toBe("ı");
     expect(
       filterApiEntries(
         apiEntries,

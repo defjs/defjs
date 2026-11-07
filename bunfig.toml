@@ -4,3 +4,52 @@ peer = true
 
 [run]
 bun = true
+
+[lint]
+typeAware = true
+plugins = ["./lint/plugin.ts"]
+
+# `bun lint` recommended defaults plus the project's own rules.
+[lint.rules]
+"defjs/prefer-typeof-switch" = "error"
+"typescript/no-explicit-any" = "error"
+"typescript/consistent-type-assertions" = [
+  "error",
+  { assertionStyle = "never" },
+]
+"typescript/no-non-null-assertion" = "error"
+# Forwarding a caught or observed `unknown` value is allowed for reject as it is for throw (only-throw-error's default).
+"typescript/prefer-promise-reject-errors" = [
+  "error",
+  { allowThrowingUnknown = true },
+]
+"typescript/no-unsafe-assignment" = "error"
+"typescript/no-unsafe-member-access" = "error"
+"typescript/no-unsafe-call" = "error"
+"typescript/no-unsafe-return" = "error"
+"typescript/no-unsafe-argument" = "error"
+"import/no-namespace" = "error"
+"typescript/consistent-type-imports" = [
+  "error",
+  { prefer = "type-imports", fixStyle = "separate-type-imports", disallowTypeAnnotations = true },
+]
+"typescript/ban-ts-comment" = [
+  "error",
+  { ts-expect-error = "allow-with-description", ts-ignore = true, minimumDescriptionLength = 10 },
+]
+
+
+# Examples leave values unused on purpose so readers can see the whole call.
+[[lint.overrides]]
+files = ["doc/examples/**"]
+rules = { "no-unused-vars" = "off" }
+
+# Type tests bind values to assert on their inferred types.
+[[lint.overrides]]
+files = ["**/*.type.test.ts"]
+rules = { "no-unused-vars" = "off" }
+
+# Specs declare a binding so an earlier callback can reference it, then assign it once.
+[[lint.overrides]]
+files = ["**/*.spec.ts"]
+rules = { "prefer-const" = ["warn", { ignoreReadBeforeAssign = true }] }

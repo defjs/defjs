@@ -18,8 +18,8 @@ describe("Handler util", () => {
     expect(result).toEqual(new Uint8Array([1, 2, 3, 4, 5, 6]));
   });
 
-  describe("test parse body", async () => {
-    test("should be null when the response type is not set", async () => {
+  describe("test parse body", () => {
+    test("should be null when the response type is not set", () => {
       const request: HttpRequest = {
         endpoint: "/v1/user",
         method: "GET",
@@ -27,6 +27,7 @@ describe("Handler util", () => {
       expect(
         parseBytesBody(request.responseType, new Uint8Array([]), ""),
       ).toBeNull();
+      return Promise.resolve();
     });
 
     test("should reject empty json content", () => {
@@ -127,12 +128,12 @@ describe("Handler util", () => {
       const result = parseBytesBody(request.responseType, content, "");
 
       expect(result).toBeInstanceOf(ArrayBuffer);
-      expect(Array.from(new Uint8Array(result as ArrayBuffer))).toEqual([
-        1, 2, 3,
-      ]);
+      if (!(result instanceof ArrayBuffer))
+        throw new Error("expected ArrayBuffer");
+      expect(Array.from(new Uint8Array(result))).toEqual([1, 2, 3]);
     });
 
-    test("should be null when content and response type set", async () => {
+    test("should be null when content and response type set", () => {
       const request: HttpRequest = {
         endpoint: "/v1/user",
         method: "GET",
@@ -147,7 +148,9 @@ describe("Handler util", () => {
       expect(
         parseBytesBody(request.responseType, new Uint8Array(0), contentType),
       ).toBeNull();
+      return Promise.resolve();
     });
+    return Promise.resolve();
   });
 
   test("should get content length", () => {

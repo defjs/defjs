@@ -32,6 +32,12 @@ type EnumValue<T> = T extends readonly (infer U extends string)[]
     ? U
     : never;
 
+function isStringEnumList(
+  value: { [key: string]: number | string } | readonly [string, ...string[]],
+): value is readonly [string, ...string[]] {
+  return Array.isArray(value);
+}
+
 /**
  * Struct that accepts one value from a list of strings or from the values of an object.
  *
@@ -54,11 +60,11 @@ function structEnum<const T extends { [key: string]: number | string }>(
 function structEnum(
   value: { [key: string]: number | string } | readonly [string, ...string[]],
 ) {
-  if (Array.isArray(value)) {
-    return createEnumStruct(value as readonly [string, ...string[]]);
+  if (isStringEnumList(value)) {
+    return createEnumStruct(value);
   }
 
-  return createObjectEnumStruct(value as { [key: string]: number | string });
+  return createObjectEnumStruct(value);
 }
 
 /**
@@ -92,21 +98,21 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
  * ```ts
  * import { struct } from "@defjs/core";
  *
- * const User = struct.object({
+ * const Order = struct.object({
  *   id: struct.number(),
- *   displayName: struct.string().alias("display_name"),
+ *   customerName: struct.string().alias("customer_name"),
  * });
  *
- * function readUser() {
- *   const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+ * function readOrder() {
+ *   const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
  *   if (error) {
  *     console.error(error.message);
  *     return;
  *   }
- *   console.log(user.displayName);
+ *   console.log(order.customerName);
  * }
  *
- * readUser();
+ * readOrder();
  * ```
  *
  * ### Primitives and containers
@@ -146,29 +152,29 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
  *
  * @example
  * ```ts
- * const User = struct.object({
+ * const Order = struct.object({
  *   id: struct.number(),
- *   displayName: struct.string().alias('display_name'),
+ *   customerName: struct.string().alias('customer_name'),
  * })
  *
- * const getUser = defineRequest({
+ * const getOrder = defineRequest({
  *   method: 'GET',
- *   path: '/users/:id',
+ *   path: '/orders/:id',
  *   input: struct.object({ id: struct.number() }),
  *   builder: (input) => ({ path: input }),
- *   output: User,
+ *   output: Order,
  * })
  *
- * function readUser() {
- *   const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+ * function readOrder() {
+ *   const [error, order] = struct.parse(Order, { id: 1, customerName: 'Ada' })
  *   if (error) {
  *     console.error(error.message)
  *     return
  *   }
- *   console.log(user.displayName)
+ *   console.log(order.customerName)
  * }
  *
- * readUser()
+ * readOrder()
  * ```
  * @group struct
  */

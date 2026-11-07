@@ -4,7 +4,7 @@ import { defined } from "./api-model";
 import { apiSlug, regularSlug, slugExceptions } from "./api-slug";
 
 test("the regular rule and the four historical exceptions reproduce every catalog slug", () => {
-  expect(catalog).toHaveLength(165);
+  expect(catalog).toHaveLength(185);
   expect(catalog.map((entry) => entry.name)).not.toContain("ClientState");
   for (const entry of catalog)
     expect(apiSlug(entry.package, entry.name, entry.kind)).toBe(entry.slug);

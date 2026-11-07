@@ -22,6 +22,7 @@ import {
   withXSRF,
 } from "./index";
 import type { Client } from "./client";
+import type { FetchHandle } from "./config";
 
 describe("Client", () => {
   let baseClient: Client;
@@ -30,15 +31,25 @@ describe("Client", () => {
     baseClient = createClient(withEndpoint("https://example.com/v1"));
   });
 
+  test("withXSRF keeps the default cookie and header names when omitted", () => {
+    const client = createClient(withXSRF());
+
+    expect(client[CLIENT].config.xsrf).toEqual({
+      cookieName: "XSRF-TOKEN",
+      headerName: "X-XSRF-TOKEN",
+      tokenProvider: undefined,
+    });
+  });
+
   test("withHeaders apply to an HTTP operation", async () => {
     const seen: { headers: Headers }[] = [];
     const client = createClient(
       withEndpoint("https://example.com"),
       withHeaders({ "X-Tenant": "acme", "X-Override": "default" }),
-      withHTTPHandle(async (input, init) => {
+      withHTTPHandle((input, init) => {
         const request = new Request(input, init);
         seen.push({ headers: new Headers(request.headers) });
-        return Response.json({ ok: true });
+        return Promise.resolve(Response.json({ ok: true }));
       }),
     );
 
@@ -65,13 +76,15 @@ describe("Client", () => {
         withEndpoint("https://example.test"),
         withHeaders(defaults),
         (transport === "HTTP" ? withHTTPHandle : withSSEHandle)(
-          async (input, init) => {
+          (input, init) => {
             sent = new Request(input, init).headers;
-            return transport === "HTTP"
-              ? new Response(null, { status: 204 })
-              : new Response(": done\n\n", {
-                  headers: { "content-type": "text/event-stream" },
-                });
+            return Promise.resolve(
+              transport === "HTTP"
+                ? new Response(null, { status: 204 })
+                : new Response(": done\n\n", {
+                    headers: { "content-type": "text/event-stream" },
+                  }),
+            );
           },
         ),
       );
@@ -92,8 +105,6 @@ describe("Client", () => {
                 headers: { "x-scope": ["first", "second"] },
               }),
               events: { message: struct.unknown() },
-              maxBufferSize: 1024,
-              maxQueueSize: 1,
               path: "/headers",
             })(client);
 
@@ -112,12 +123,14 @@ describe("Client", () => {
     const seen: string[] = [];
     const client = createClient(
       withEndpoint("https://original.example"),
-      withHTTPHandle(async (input) => {
+      withHTTPHandle((input) => {
         seen.push(input instanceof Request ? input.url : String(input));
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+        );
       }),
     );
 
@@ -133,18 +146,18 @@ describe("Client", () => {
   });
 
   test("HTTP handle, credentials, interceptors, serializer, and xsrf apply when an operation runs", async () => {
-    const customFetch = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = new Request(input, init);
-        expect(request.headers.get("x-custom-xsrf-token")).toBe("xsrf-token");
-        expect(request.credentials).toBe("include");
-        expect(new URL(request.url).search).toBe("?serialized=zen");
-        return new Response(JSON.stringify({ ok: true }), {
+    const customFetch = vi.fn<FetchHandle>((input, init) => {
+      const request = new Request(input, init);
+      expect(request.headers.get("x-custom-xsrf-token")).toBe("xsrf-token");
+      expect(request.credentials).toBe("include");
+      expect(new URL(request.url).search).toBe("?serialized=zen");
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true }), {
           headers: { "content-type": "application/json" },
           status: 200,
-        });
-      },
-    ) as unknown as typeof fetch;
+        }),
+      );
+    });
     const interceptor = createHttpInterceptor(async (request, next) =>
       next(request),
     );
@@ -184,17 +197,25 @@ describe("Client", () => {
     const onInvalidEvent = vi.fn();
     const beforeConnect = vi.fn();
     class MockWebSocket extends EventTarget {
-      static CONNECTING = 0;
-      static OPEN = 1;
-      static CLOSING = 2;
-      static CLOSED = 3;
+      static readonly OPEN = 1;
+      readonly bufferedAmount = 0;
+      readonly extensions = "";
+      readonly protocol = "";
+      readonly readyState = 0;
+      readonly url = "";
+      close() {
+        return undefined;
+      }
+      send() {
+        return undefined;
+      }
     }
 
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEOnInvalidEvent(onInvalidEvent),
       withSSEReconnect({ attempts: 5, delayMs: 500 }),
-      withWebSocketHandle(MockWebSocket as unknown as typeof WebSocket),
+      withWebSocketHandle(MockWebSocket),
       withWebSocketBeforeConnect(beforeConnect),
       withWebSocketProtocols(["json"]),
       withWebSocketHeartbeat({ intervalMs: 1_000, timeoutMs: 5_000 }),

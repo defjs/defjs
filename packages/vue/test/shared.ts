@@ -1,5 +1,3 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import type {} from "vitest";
 import "../../../test/loopback-proxy-bypass.ts";
 
@@ -9,12 +7,12 @@ declare module "vitest" {
   }
 }
 
-export const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+export const packageRoot = `${import.meta.dirname}/..`;
 export const coverageConfig = {
   enabled: true,
   provider: "istanbul" as const,
   reporter: ["lcov", "json", "html", "text"],
-  reportsDirectory: resolve(packageRoot, "coverage"),
+  reportsDirectory: `${packageRoot}/coverage`,
   include: ["src/**/*.ts"],
   exclude: [
     "**/node_modules/**",

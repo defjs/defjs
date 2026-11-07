@@ -1,20 +1,37 @@
 ---
 title: "傳送 JSON"
-description: 送出型別化的 JSON body，並解碼已宣告的 201。
+description: 傳送具型別的 JSON 請求本文，並解碼已宣告的 201 回應。
 ---
 
 # POST JSON
 
-把型別化的 body 交給 builder。邏輯欄位名留在 TypeScript；struct 上的 wire alias 會變成 JSON keys。物件 body 是 `application/json`。
+把具型別的輸入物件傳給 `builder`，回傳 `{ body: input }`。`.alias("customer_name")` 讓 TypeScript 端保留 `customerName`，在傳輸時編碼成 `"customer_name"`，再從 `201` 回應解碼回來。
 
-細節見 [HTTP](/zh-Hant-TW/docs/http) 與 [Client](/zh-Hant-TW/docs/client)。
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
+</include>
 
-<include cwd meta="create-user.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` 是 placeholder。若 server 回應 `201` 與 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`，這段 snippet 會印出：
+  </Tab>
+</Tabs>
+
+當伺服器回應 `201` 與 `{ "id": 1, "status": "paid", "customer_name": "Ada" }` 時，該腳本會輸出：
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+詳見 [HTTP 操作](/zh-Hant-TW/docs/http) 與 [Struct 與 schema](/zh-Hant-TW/docs/struct)。

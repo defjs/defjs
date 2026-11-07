@@ -32,6 +32,14 @@ import { fillUrl } from "../../src/internal/url";
 import { decodeJson } from "../../src/struct/codec/json";
 import { STRUCT } from "../../src/struct/symbols";
 import {
+  assertObject,
+  assertRecord,
+  isRecord,
+  isUnknownArray,
+  nullPrototypeRecord,
+  symbolValue,
+} from "../narrow";
+import {
   serializeOutgoingWebSocketMessage,
   transformWebSocketMessage,
 } from "../../src/web_socket/codec";
@@ -42,8 +50,31 @@ import {
 
 const iso = new Date("1815-12-10T00:00:00.000Z");
 
-function tagOf(value: object): unknown {
-  return (value as { [STRUCT]?: unknown })[STRUCT];
+function tagOf(value: unknown): unknown {
+  return symbolValue(value, STRUCT);
+}
+
+type AuditRoot = {
+  both: Record<string, unknown>;
+  choice: Record<string, unknown>;
+  items: Record<string, unknown>[];
+  maybe: null;
+};
+
+function isAuditRoot(value: unknown): value is AuditRoot {
+  if (
+    !isRecord(value) ||
+    !isRecord(value["choice"]) ||
+    !isRecord(value["both"])
+  ) {
+    return false;
+  }
+  const items = value["items"];
+  if (!isUnknownArray(items) || value["maybe"] !== null) return false;
+  for (const item of items) {
+    if (!isRecord(item)) return false;
+  }
+  return true;
 }
 
 function responseStream(text: string): Response {
@@ -59,7 +90,7 @@ function responseStream(text: string): Response {
 }
 
 describe("builder refactor adversarial audit", () => {
-  test("propagates struct tags through unions, intersections, nullable values, arrays, and deep spreads", async () => {
+  test("propagates struct tags through unions, intersections, nullable values, arrays, and deep spreads", () => {
     const Alpha = struct.object({
       kind: struct.literal("alpha"),
       displayName: struct.string().alias("display_name"),
@@ -84,35 +115,36 @@ describe("builder refactor adversarial audit", () => {
       optional: Child.optional(),
     });
 
-    const parsed = await parseEndpointInput(Root, {
+    const parsed = parseEndpointInput(Root, {
       choice: { displayName: "Ada", kind: "alpha" },
       both: { leftId: 7, rightName: "Lovelace" },
       items: [{ name: "A", when: iso }],
       maybe: null,
     });
-    const value = parsed as unknown as {
-      choice: Record<string, unknown>;
-      both: Record<string, unknown>;
-      items: Record<string, unknown>[];
-      maybe: null;
-    };
+    if (!isAuditRoot(parsed)) throw new Error("Expected a tagged root");
+    const value = parsed;
 
-    expect(tagOf(parsed as object)).toBe(Root);
+    expect(tagOf(parsed)).toBe(Root);
     expect(tagOf(value.choice)).toBe(Alpha);
     expect(tagOf(value.both)).toBeDefined();
-    expect(tagOf(value.items[0] as object)).toBe(Child);
+    const firstItem = value.items[0];
+    if (!firstItem) throw new Error("Expected a child");
+    expect(tagOf(firstItem)).toBe(Child);
     expect(value.maybe).toBeNull();
 
     const request = createHttpRequest(
       "POST",
       "/audit",
       parsed,
-      (input) => {
-        const child = { ...(input as typeof value).items[0] };
+      (input: unknown) => {
+        if (!isAuditRoot(input)) throw new Error("Expected a tagged root");
+        const childSource = input.items[0];
+        if (!childSource) throw new Error("Expected a child");
+        const child = { ...childSource };
         return {
           body: {
-            choice: { ...(input as typeof value).choice },
-            both: (input as typeof value).both,
+            choice: { ...input.choice },
+            both: input.both,
             child,
           },
         };
@@ -128,28 +160,28 @@ describe("builder refactor adversarial audit", () => {
     );
   });
 
-  test("keeps endpoint tags visible only to symbol-aware code", async () => {
+  test("keeps endpoint tags visible only to symbol-aware code", () => {
     const User = struct.object({
       displayName: struct.string().alias("display_name"),
     });
-    const parsed = await parseEndpointInput(User, { displayName: "Ada" });
+    const parsed = parseEndpointInput(User, { displayName: "Ada" });
 
-    expect(Object.keys(parsed as object)).toEqual(["displayName"]);
+    const parsedObject = assertObject(parsed, "parsed user");
+    expect(Object.keys(parsedObject)).toEqual(["displayName"]);
     expect(JSON.stringify(parsed)).toBe('{"displayName":"Ada"}');
-    expect(Object.getOwnPropertySymbols(parsed as object)).toContain(STRUCT);
+    expect(Object.getOwnPropertySymbols(parsedObject)).toContain(STRUCT);
 
     const [, publicValue] = struct.parse(User, { displayName: "Ada" });
-    expect(Object.getOwnPropertySymbols(publicValue as object)).not.toContain(
-      STRUCT,
-    );
+    const publicObject = assertObject(publicValue, "public user");
+    expect(Object.getOwnPropertySymbols(publicObject)).not.toContain(STRUCT);
   });
 
-  test("rejects alias collisions after a deep spread", async () => {
+  test("rejects alias collisions after a deep spread", () => {
     const Child = struct.object({
       displayName: struct.string().alias("display_name"),
     });
     const Root = struct.object({ child: Child });
-    const parsed = await parseEndpointInput(Root, {
+    const parsed = parseEndpointInput(Root, {
       child: { displayName: "Ada" },
     });
 
@@ -170,7 +202,7 @@ describe("builder refactor adversarial audit", () => {
   });
 
   test("preserves an own __proto__ body field instead of silently dropping it", () => {
-    const body = Object.create(null) as Record<string, unknown>;
+    const body = nullPrototypeRecord();
     Object.defineProperty(body, "__proto__", {
       configurable: true,
       enumerable: true,
@@ -178,20 +210,19 @@ describe("builder refactor adversarial audit", () => {
       writable: true,
     });
     const request = materializeOutboundRequest({ body }, "http");
-    const decoded = JSON.parse(request.body as string) as Record<
-      string,
-      unknown
-    >;
+    if (typeof request.body !== "string") {
+      throw new Error("Expected a string body");
+    }
+    const decodedValue: unknown = JSON.parse(request.body);
+    const decoded = assertRecord(decodedValue, "decoded body");
 
     expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
     expect(decoded["__proto__"]).toBe("safe");
-    expect(
-      (Object.prototype as Record<string, unknown>)["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("preserves an own __proto__ query field for serializers", () => {
-    const query = Object.create(null) as Record<string, unknown>;
+    const query = nullPrototypeRecord();
     Object.defineProperty(query, "__proto__", {
       configurable: true,
       enumerable: true,
@@ -200,17 +231,19 @@ describe("builder refactor adversarial audit", () => {
     });
     const request = materializeOutboundRequest({ query }, "http");
 
-    expect(Object.hasOwn(request.query as object, "__proto__")).toBe(true);
-    expect((request.query as Record<string, unknown>)["__proto__"]).toBe(
-      "safe",
-    );
-    expect(
-      (Object.prototype as Record<string, unknown>)["polluted"],
-    ).toBeUndefined();
+    if (
+      request.query === undefined ||
+      request.query instanceof URLSearchParams
+    ) {
+      throw new Error("Expected a query record");
+    }
+    expect(Object.hasOwn(request.query, "__proto__")).toBe(true);
+    expect(request.query["__proto__"]).toBe("safe");
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("preserves an own __proto__ header field instead of silently dropping it", () => {
-    const headers = Object.create(null) as Record<string, unknown>;
+    const headers = nullPrototypeRecord();
     Object.defineProperty(headers, "__proto__", {
       configurable: true,
       enumerable: true,
@@ -219,17 +252,16 @@ describe("builder refactor adversarial audit", () => {
     });
     const request = materializeOutboundRequest({ headers }, "http");
 
-    expect(Object.hasOwn(request.headers as object, "__proto__")).toBe(true);
-    expect((request.headers as Record<string, unknown>)["__proto__"]).toBe(
-      "safe",
-    );
-    expect(
-      (Object.prototype as Record<string, unknown>)["polluted"],
-    ).toBeUndefined();
+    if (!isRecord(request.headers) || request.headers instanceof Headers) {
+      throw new Error("Expected a header record");
+    }
+    expect(Object.hasOwn(request.headers, "__proto__")).toBe(true);
+    expect(request.headers["__proto__"]).toBe("safe");
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("keeps an own constructor key in body, query, and headers", () => {
-    const value = Object.create(null) as Record<string, unknown>;
+    const value = nullPrototypeRecord();
     Object.defineProperty(value, "constructor", {
       configurable: true,
       enumerable: true,
@@ -241,13 +273,24 @@ describe("builder refactor adversarial audit", () => {
       { body: value, query: value, headers: value },
       "http",
     );
-    expect(JSON.parse(request.body as string)).toMatchObject({
+    if (typeof request.body !== "string") {
+      throw new Error("Expected a string body");
+    }
+    const parsedBody: unknown = JSON.parse(request.body);
+    expect(parsedBody).toMatchObject({
       constructor: "safe",
     });
-    expect((request.query as Record<string, unknown>).constructor).toBe("safe");
-    expect((request.headers as Record<string, unknown>).constructor).toBe(
-      "safe",
-    );
+    if (
+      request.query === undefined ||
+      request.query instanceof URLSearchParams
+    ) {
+      throw new Error("Expected a query record");
+    }
+    expect(request.query["constructor"]).toBe("safe");
+    if (!isRecord(request.headers) || request.headers instanceof Headers) {
+      throw new Error("Expected a header record");
+    }
+    expect(request.headers["constructor"]).toBe("safe");
   });
 
   test("rejects path injection and header CR/LF before transport", () => {
@@ -301,9 +344,9 @@ describe("builder refactor adversarial audit", () => {
         return `payload=${encodeURIComponent(JSON.stringify(query))}`;
       }),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -383,28 +426,34 @@ describe("builder refactor adversarial audit", () => {
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () => makeResponse({ status: 204 })),
+        createHttpInterceptor(() =>
+          Promise.resolve(makeResponse({ status: 204 })),
+        ),
       ),
     );
     const throwsValue = defineRequest({
       builder: () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the builder under test throws a string primitive to exercise handling of a non-Error throw
         throw "boom";
       },
       method: "POST",
       path: "/throws",
     });
     const returnsValue = defineRequest({
-      builder: (() => 1) as never,
+      // @ts-expect-error builder must return request parts, not a number
+      builder: () => 1,
       method: "POST",
       path: "/value",
     });
     const returnsPromise = defineRequest({
-      builder: (() => Promise.resolve({})) as never,
+      // @ts-expect-error builder must be synchronous, not a promise
+      builder: () => Promise.resolve({}),
       method: "POST",
       path: "/promise",
     });
     const returnsUndefined = defineRequest({
-      builder: (() => undefined) as never,
+      // @ts-expect-error builder must return request parts, not undefined
+      builder: () => undefined,
       method: "POST",
       path: "/undefined",
     });
@@ -430,18 +479,18 @@ describe("builder refactor adversarial audit", () => {
       const client = createClient(
         withEndpoint("https://example.test"),
         withInterceptors(
-          createHttpInterceptor(async () => {
+          createHttpInterceptor(() => {
             interceptorCalls += 1;
-            return makeResponse({ status: 204 });
+            return Promise.resolve(makeResponse({ status: 204 }));
           }),
         ),
-        withHTTPHandle(async () => {
+        withHTTPHandle(() => {
           handleCalls += 1;
-          return new Response(null, { status: 204 });
+          return Promise.resolve(new Response(null, { status: 204 }));
         }),
       );
       const endpoint = defineRequest({
-        builder: () => ({ body: "forbidden" }) as never,
+        builder: () => ({ body: "forbidden" }),
         method: dynamicMethod,
         path: "/body",
       });
@@ -468,16 +517,16 @@ describe("builder refactor adversarial audit", () => {
             return next(request);
           }),
         ),
-        withSSEHandle(async () => {
+        withSSEHandle(() => {
           handleCalls += 1;
-          return responseStream("event: message\ndata: ok\n\n");
+          return Promise.resolve(
+            responseStream("event: message\ndata: ok\n\n"),
+          );
         }),
       );
       const endpoint = defineEventStream({
-        builder: () => ({ body: "forbidden" }) as never,
+        builder: () => ({ body: "forbidden" }),
         events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 4,
         method: dynamicMethod,
         path: "/events",
       });
@@ -496,9 +545,9 @@ describe("builder refactor adversarial audit", () => {
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -534,7 +583,9 @@ describe("builder refactor adversarial audit", () => {
           return next(request);
         }),
       ),
-      withSSEHandle(async () => responseStream("event: message\ndata: ok\n\n")),
+      withSSEHandle(() =>
+        Promise.resolve(responseStream("event: message\ndata: ok\n\n")),
+      ),
     );
     const feed = defineEventStream({
       builder: (input) => ({
@@ -543,8 +594,6 @@ describe("builder refactor adversarial audit", () => {
       }),
       events: { message: struct.string() },
       input: struct.object({ room: struct.string(), since: struct.string() }),
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/rooms/:room/events",
     });
 
@@ -595,7 +644,8 @@ describe("builder refactor adversarial audit", () => {
     expect(captured?.endpoint).toBe("/e2e/ws/blue");
     expect(captured?.queryString).toBe("since=2");
     if (!socket) throw new Error("Expected socket");
-    expect(() => socket.send({ type: "wrong" } as never)).toThrow();
+    // @ts-expect-error outgoing message must use the declared say literal
+    expect(() => socket.send({ type: "wrong" })).toThrow();
     socket.close();
     await socket.closed;
   });
@@ -614,32 +664,40 @@ describe("builder refactor adversarial audit", () => {
         const opened = createOpeningSocket();
         const client = createClient(
           withEndpoint("https://example.test"),
-          withHTTPHandle(async () => {
+          withHTTPHandle(() => {
             handleCalls += 1;
-            return new Response(null, { status: 204 });
+            return Promise.resolve(new Response(null, { status: 204 }));
           }),
-          withSSEHandle(async () => {
+          withSSEHandle(() => {
             handleCalls += 1;
-            return responseStream("event: message\ndata: ok\n\n");
+            return Promise.resolve(
+              responseStream("event: message\ndata: ok\n\n"),
+            );
           }),
-          withWebSocketHandle(opened.Socket as unknown as typeof WebSocket),
+          withWebSocketHandle(opened.Socket),
         );
-        const builder = (() => ({ path: { id: value } })) as never;
+        const builder = (input: unknown) => {
+          void input;
+          return { path: { id: value } };
+        };
         const execute = {
           HTTP: () =>
-            defineRequest({ builder, method: "GET", path: "/items/:id" })(
-              client,
-            ),
+            defineRequest({
+              // @ts-expect-error path id is intentionally not a scalar
+              builder,
+              method: "GET",
+              path: "/items/:id",
+            })(client),
           SSE: () =>
             defineEventStream({
+              // @ts-expect-error path id is intentionally not a scalar
               builder,
               events: { message: struct.string() },
-              maxBufferSize: 1024,
-              maxQueueSize: 4,
               path: "/items/:id",
             })(client),
           WebSocket: () =>
             defineWebSocket({
+              // @ts-expect-error path id is intentionally not a scalar
               builder,
               incoming: struct.unknown(),
               maxIncomingQueueSize: 1,
@@ -662,7 +720,7 @@ describe("builder refactor adversarial audit", () => {
 const Proto = struct.object({ value: struct.string().alias("__proto__") });
 
 function abortingInput(controller: AbortController): { id: string } {
-  const input = {} as { id: string };
+  const input: object = {};
   Object.defineProperty(input, "id", {
     enumerable: true,
     get() {
@@ -670,7 +728,12 @@ function abortingInput(controller: AbortController): { id: string } {
       return "ok";
     },
   });
+  if (!hasId(input)) throw new Error("Expected an id property");
   return input;
+}
+
+function hasId(value: object): value is { id: string } {
+  return Object.hasOwn(value, "id");
 }
 
 function sseResponse(): Response {
@@ -689,10 +752,7 @@ async function closeIfOpened(
   await resource.closed;
 }
 
-function createOpeningSocket(): {
-  Socket: new (url: string) => unknown;
-  counters: { sockets: number };
-} {
+function createOpeningSocket() {
   const counters = { sockets: 0 };
 
   class OpeningSocket {
@@ -707,9 +767,10 @@ function createOpeningSocket(): {
     protocol = "";
     readyState = OpeningSocket.CONNECTING;
     url: string;
-    private readonly listeners: {
-      [type: string]: Array<(event: unknown) => void>;
-    } = Object.create(null);
+    private readonly listeners = new Map<
+      string,
+      Array<(event: unknown) => void>
+    >();
 
     constructor(url: string) {
       counters.sockets += 1;
@@ -721,15 +782,19 @@ function createOpeningSocket(): {
     }
 
     addEventListener(type: string, listener: (event: unknown) => void): void {
-      (this.listeners[type] ??= []).push(listener);
+      const current = this.listeners.get(type);
+      if (current) current.push(listener);
+      else this.listeners.set(type, [listener]);
     }
 
     removeEventListener(
       type: string,
       listener: (event: unknown) => void,
     ): void {
-      this.listeners[type] = (this.listeners[type] ?? []).filter(
-        (item) => item !== listener,
+      const current = this.listeners.get(type) ?? [];
+      this.listeners.set(
+        type,
+        current.filter((item) => item !== listener),
       );
     }
 
@@ -741,7 +806,7 @@ function createOpeningSocket(): {
     }
 
     emit(type: string, event: unknown): void {
-      for (const listener of this.listeners[type] ?? []) {
+      for (const listener of this.listeners.get(type) ?? []) {
         listener(event);
       }
     }
@@ -764,10 +829,7 @@ describe("builder fixes re-audit", () => {
       nested: struct.array(Proto),
       records: struct.record(Proto),
     });
-    const records = JSON.parse('{"__proto__":{"value":"record"}}') as Record<
-      string,
-      { value: string }
-    >;
+    const records: unknown = JSON.parse('{"__proto__":{"value":"record"}}');
     const wire = serializeOutgoingWebSocketMessage(Message, {
       nested: [{ value: "nested" }],
       records,
@@ -775,12 +837,15 @@ describe("builder fixes re-audit", () => {
     expect(wire).toBe(
       '{"nested":[{"__proto__":"nested"}],"records":{"__proto__":{"__proto__":"record"}}}',
     );
-    const decoded = decodeJson(Message, JSON.parse(wire)) as {
-      records: Record<string, { value: string }>;
-    };
-    expect(Object.getPrototypeOf(decoded.records)).toBeNull();
-    expect(Object.hasOwn(decoded.records, "__proto__")).toBe(true);
-    expect(decoded.records["__proto__"]).toEqual({ value: "record" });
+    const wireValue: unknown = JSON.parse(wire);
+    const decoded = assertRecord(
+      decodeJson(Message, wireValue),
+      "decoded message",
+    );
+    const decodedRecords = assertRecord(decoded["records"], "decoded records");
+    expect(Object.getPrototypeOf(decodedRecords)).toBeNull();
+    expect(Object.hasOwn(decodedRecords, "__proto__")).toBe(true);
+    expect(decodedRecords["__proto__"]).toEqual({ value: "record" });
   });
 
   test("sends __proto__ alias on a real WebSocket frame with query serialization", async () => {
@@ -820,8 +885,9 @@ describe("builder fixes re-audit", () => {
         type: "joined",
         query: "__proto__=query",
       });
-      expect(Object.getPrototypeOf(serialized)).toBeNull();
-      expect(Object.hasOwn(serialized as object, "__proto__")).toBe(true);
+      const serializedObject = assertObject(serialized, "serialized query");
+      expect(Object.getPrototypeOf(serializedObject)).toBeNull();
+      expect(Object.hasOwn(serializedObject, "__proto__")).toBe(true);
       socket.send({ value: "frame" });
       expect((await iterator.next()).value).toEqual({
         type: "observed",
@@ -843,7 +909,10 @@ describe("builder fixes re-audit", () => {
       const client = createClient(
         withEndpoint("https://example.test"),
         withHTTPHandle(async (input) => {
-          fields = await (input as Request).formData();
+          if (!(input instanceof Request)) {
+            throw new Error("Expected a Request");
+          }
+          fields = await input.formData();
           return new Response(null, { status: 204 });
         }),
       );
@@ -887,13 +956,15 @@ describe("builder fixes re-audit", () => {
             return next(request);
           }),
         ),
-        withSSEHandle(async (input) => {
-          received = input as Request;
-          return new Response(
-            'event: message\ndata: {"__proto__":"inbound"}\n\n',
-            {
+        withSSEHandle((input) => {
+          if (!(input instanceof Request)) {
+            throw new Error("Expected a Request");
+          }
+          received = input;
+          return Promise.resolve(
+            new Response('event: message\ndata: {"__proto__":"inbound"}\n\n', {
               headers: { "content-type": "text/event-stream" },
-            },
+            }),
           );
         }),
       );
@@ -906,8 +977,6 @@ describe("builder fixes re-audit", () => {
         }),
         events: { message: Proto },
         input: Proto,
-        maxBufferSize: 1024,
-        maxQueueSize: 4,
         method: "POST",
         path: "/events/:__proto__",
       });
@@ -923,8 +992,9 @@ describe("builder fixes re-audit", () => {
       );
       expect(await received?.text()).toBe('{"__proto__":"safe"}');
       if (custom) {
-        expect(Object.getPrototypeOf(serialized)).toBeNull();
-        expect(Object.hasOwn(serialized as object, "__proto__")).toBe(true);
+        const serializedObject = assertObject(serialized, "serialized query");
+        expect(Object.getPrototypeOf(serializedObject)).toBeNull();
+        expect(Object.hasOwn(serializedObject, "__proto__")).toBe(true);
       }
       if (!stream) throw new Error("Expected stream");
       const events = [];
@@ -941,12 +1011,13 @@ describe("builder fixes re-audit", () => {
     async (status) => {
       const client = createClient(
         withEndpoint("https://example.test"),
-        withHTTPHandle(
-          async () =>
+        withHTTPHandle(() =>
+          Promise.resolve(
             new Response('{"__proto__":"safe"}', {
               status,
               headers: { "content-type": "application/json" },
             }),
+          ),
         ),
       );
       const endpoint = defineRequest({
@@ -974,9 +1045,9 @@ describe("builder fixes re-audit", () => {
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           requests.push(request);
-          return makeResponse({ body: "ok", status: 200 });
+          return Promise.resolve(makeResponse({ body: "ok", status: 200 }));
         }),
       ),
     );
@@ -1031,7 +1102,7 @@ describe("builder fixes re-audit", () => {
     let builderCalls = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(opened.Socket as unknown as typeof WebSocket),
+      withWebSocketHandle(opened.Socket),
     );
     const endpoint = defineWebSocket({
       builder: () => {
@@ -1061,7 +1132,7 @@ describe("builder fixes re-audit", () => {
     const opened = createOpeningSocket();
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(opened.Socket as unknown as typeof WebSocket),
+      withWebSocketHandle(opened.Socket),
     );
     const endpoint = defineWebSocket({
       builder: () => {
@@ -1108,9 +1179,9 @@ describe("builder fixes re-audit", () => {
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
+      withHTTPHandle(() => {
         fetches += 1;
-        return new Response("ok", { status: 200 });
+        return Promise.resolve(new Response("ok", { status: 200 }));
       }),
     );
     const endpoint = defineRequest({
@@ -1138,9 +1209,9 @@ describe("builder fixes re-audit", () => {
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
+      withHTTPHandle(() => {
         fetches += 1;
-        return new Response("ok", { status: 200 });
+        return Promise.resolve(new Response("ok", { status: 200 }));
       }),
     );
     const endpoint = defineRequest({
@@ -1169,9 +1240,9 @@ describe("builder fixes re-audit", () => {
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
+      withHTTPHandle(() => {
         fetches += 1;
-        return new Response("ok", { status: 200 });
+        return Promise.resolve(new Response("ok", { status: 200 }));
       }),
     );
     const endpoint = defineRequest({
@@ -1197,9 +1268,9 @@ describe("builder fixes re-audit", () => {
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
+      withHTTPHandle(() => {
         fetches += 1;
-        return new Response("ok", { status: 200 });
+        return Promise.resolve(new Response("ok", { status: 200 }));
       }),
       (config) => {
         // Resolution sits after the builder cancellation check and before the chain starts.
@@ -1208,7 +1279,8 @@ describe("builder fixes re-audit", () => {
             if (property === "filter") {
               controller.abort("caller stopped");
             }
-            return Reflect.get(target, property, receiver);
+            const value: unknown = Reflect.get(target, property, receiver);
+            return value;
           },
         });
       },
@@ -1231,9 +1303,9 @@ describe("builder fixes re-audit", () => {
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         fetches += 1;
-        return sseResponse();
+        return Promise.resolve(sseResponse());
       }),
     );
     const endpoint = defineEventStream({
@@ -1242,8 +1314,6 @@ describe("builder fixes re-audit", () => {
         throw new Error("builder must not run after cancellation");
       },
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -1264,9 +1334,9 @@ describe("builder fixes re-audit", () => {
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         fetches += 1;
-        return sseResponse();
+        return Promise.resolve(sseResponse());
       }),
     );
     const endpoint = defineEventStream({
@@ -1276,8 +1346,6 @@ describe("builder fixes re-audit", () => {
       },
       events: { message: struct.string() },
       input: struct.object({ id: struct.string() }),
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -1298,9 +1366,9 @@ describe("builder fixes re-audit", () => {
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         fetches += 1;
-        return sseResponse();
+        return Promise.resolve(sseResponse());
       }),
     );
     const endpoint = defineEventStream({
@@ -1309,8 +1377,6 @@ describe("builder fixes re-audit", () => {
         throw new Error("build failed after abort");
       },
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -1328,8 +1394,6 @@ describe("builder fixes re-audit", () => {
     controller.abort("caller stopped");
     const endpoint = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 0,
       path: "/events",
     });
 
@@ -1343,7 +1407,7 @@ describe("builder fixes re-audit", () => {
     expect(error).toMatchObject({ code: "NET_ABORTED" });
   });
 
-  test("BUILDER-PROTOTYPE-002: accepts an intersection with a logical __proto__ field", async () => {
+  test("BUILDER-PROTOTYPE-002: accepts an intersection with a logical __proto__ field", () => {
     const Left = struct.object({
       ["__proto__"]: struct.string().alias("proto_value"),
     });
@@ -1351,7 +1415,7 @@ describe("builder fixes re-audit", () => {
       Left,
       struct.object({ label: struct.string() }),
     );
-    const parsed = await parseEndpointInput(Input, {
+    const parsed = parseEndpointInput(Input, {
       ["__proto__"]: "safe",
       label: "left",
     });
@@ -1362,19 +1426,18 @@ describe("builder fixes re-audit", () => {
   test("decodes aliased fields in SSE JSON event data", async () => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response('event: message\ndata: {"error_code":"DENIED"}\n\n', {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
     );
     const endpoint = defineEventStream({
       events: {
         message: struct.object({ code: struct.string().alias("error_code") }),
       },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     const [error, stream] = await endpoint(client);
@@ -1398,7 +1461,7 @@ describe("builder fixes re-audit", () => {
     );
     expect(decoded).toEqual({ code: "DENIED" });
 
-    let opened: FakeSocket | undefined;
+    const constructed: FakeSocket[] = [];
     class FakeSocket {
       static OPEN = 1;
       static CONNECTING = 0;
@@ -1411,14 +1474,14 @@ describe("builder fixes re-audit", () => {
       protocol = "";
       readyState = FakeSocket.CONNECTING;
       url: string;
-      private readonly listeners: {
-        [type: string]: Array<(event: unknown) => void>;
-      } = Object.create(null);
+      private readonly listeners = new Map<
+        string,
+        Array<(event: unknown) => void>
+      >();
 
       constructor(url: string) {
         this.url = url;
-        // oxlint-disable-next-line typescript/no-this-alias -- the test has to emit a frame on the constructed socket
-        opened = this;
+        constructed.push(this);
         queueMicrotask(() => {
           this.readyState = FakeSocket.OPEN;
           this.emit("open", {});
@@ -1426,15 +1489,19 @@ describe("builder fixes re-audit", () => {
       }
 
       addEventListener(type: string, listener: (event: unknown) => void): void {
-        (this.listeners[type] ??= []).push(listener);
+        const current = this.listeners.get(type);
+        if (current) current.push(listener);
+        else this.listeners.set(type, [listener]);
       }
 
       removeEventListener(
         type: string,
         listener: (event: unknown) => void,
       ): void {
-        this.listeners[type] = (this.listeners[type] ?? []).filter(
-          (item) => item !== listener,
+        const current = this.listeners.get(type) ?? [];
+        this.listeners.set(
+          type,
+          current.filter((item) => item !== listener),
         );
       }
 
@@ -1446,7 +1513,7 @@ describe("builder fixes re-audit", () => {
       }
 
       emit(type: string, event: unknown): void {
-        for (const listener of this.listeners[type] ?? []) {
+        for (const listener of this.listeners.get(type) ?? []) {
           listener(event);
         }
       }
@@ -1454,7 +1521,7 @@ describe("builder fixes re-audit", () => {
 
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(FakeSocket as unknown as typeof WebSocket),
+      withWebSocketHandle(FakeSocket),
     );
     const endpoint = defineWebSocket({
       incoming: struct.object({ code: struct.string().alias("error_code") }),
@@ -1463,6 +1530,7 @@ describe("builder fixes re-audit", () => {
     });
     const [openError, session] = await endpoint(client);
     expect(openError).toBeNull();
+    const opened = constructed[0];
     if (!session || !opened) {
       throw new Error("Expected socket");
     }
@@ -1483,7 +1551,7 @@ describe("builder fixes re-audit", () => {
       const seen: unknown[] = [];
       const client = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket as unknown as typeof WebSocket),
+        withWebSocketHandle(Socket),
       );
       const endpoint = defineWebSocket({
         incoming: struct.object({
@@ -1562,19 +1630,18 @@ describe("builder fixes re-audit", () => {
   test("SSE-ERROR-ALIAS-001: decodes aliased fields in a failed SSE handshake", async () => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response('{"error_code":"DENIED"}', {
             status: 403,
             headers: { "content-type": "application/json" },
           }),
+        ),
       ),
     );
     const endpoint = defineEventStream({
       error: struct.object({ code: struct.string().alias("error_code") }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     const [error] = await endpoint(client);
@@ -1591,13 +1658,13 @@ const Profile = struct.object({
 });
 const Input = struct.object({ profile: Profile });
 
-test("runtime tags survive records, tuples, and chained modifiers used by the type probes", async () => {
+test("runtime tags survive records, tuples, and chained modifiers used by the type probes", () => {
   const User = struct.object({ id: struct.string().alias("user_id") });
-  const record = await parseEndpointInput(struct.record(User), {
+  const record = parseEndpointInput(struct.record(User), {
     selected: { id: "42" },
   });
-  const tuple = await parseEndpointInput(struct.tuple([User]), [{ id: "42" }]);
-  const modified = await parseEndpointInput(User.optional().nullable(), {
+  const tuple = parseEndpointInput(struct.tuple([User]), [{ id: "42" }]);
+  const modified = parseEndpointInput(User.optional().nullable(), {
     id: "42",
   });
   for (const value of [record["selected"], tuple[0], modified]) {
@@ -1636,9 +1703,9 @@ test("rejects a nested spread wire-key collision before sending a typed parent",
   let calls = 0;
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls += 1;
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const endpoint = defineRequest({

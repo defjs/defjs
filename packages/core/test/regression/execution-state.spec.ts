@@ -18,8 +18,6 @@ const request = defineRequest({ method: "GET", path: "/request" });
 const events = defineEventStream({
   path: "/events",
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
 });
 
 test.each(["abort", "timeout"] as const)(
@@ -37,11 +35,7 @@ test.each(["abort", "timeout"] as const)(
     const cause = mode === "abort" ? ERR_ABORTED : ERR_TIMEOUT;
     const second = createClient(
       withEndpoint("https://second.example"),
-      withInterceptors(
-        createSSEInterceptor(async () => {
-          throw cause;
-        }),
-      ),
+      withInterceptors(createSSEInterceptor(() => Promise.reject(cause))),
     );
     try {
       const pending = request(first({ signal: controller.signal }));
@@ -73,12 +67,8 @@ test.each(["http", "sse"] as const)(
     const seen: unknown[] = [];
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
-        throw cause;
-      }),
-      withSSEHandle(async () => {
-        throw cause;
-      }),
+      withHTTPHandle(() => Promise.reject(cause)),
+      withSSEHandle(() => Promise.reject(cause)),
       withInterceptors(
         createHttpInterceptor(async (req, next) => {
           if (!transportFailure) throw cause;
@@ -119,14 +109,15 @@ test.each(["abort", "timeout"] as const)(
     const cause = mode === "abort" ? ERR_ABORTED : ERR_TIMEOUT;
     const first = createClient(
       withEndpoint("https://first.example"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream<Uint8Array>(), {
             headers: {
               "content-type": "text/event-stream",
               "x-tenant": "first",
             },
           }),
+        ),
       ),
     );
     try {
@@ -148,9 +139,7 @@ test.each(["abort", "timeout"] as const)(
       await stream?.[Symbol.asyncDispose]();
       const second = createClient(
         withEndpoint("https://second.example"),
-        withSSEHandle(async () => {
-          throw cause;
-        }),
+        withSSEHandle(() => Promise.reject(cause)),
       );
       const [nextFault, nextStream, nextOpen] = await events(second);
       expect(nextFault?.code).toBe(
@@ -186,8 +175,8 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
   const rejected = Promise.withResolvers<unknown>();
   const first = createClient(
     withEndpoint("https://first.example"),
-    withSSEHandle(
-      async () =>
+    withSSEHandle(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>(
             {
@@ -205,6 +194,7 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
             },
           },
         ),
+      ),
     ),
     withInterceptors(
       createSSEInterceptor(async (req, next) => {
@@ -221,8 +211,6 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
     path: "/events",
     error: struct.object({ message: struct.string() }),
     events: { message: struct.string() },
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
   const pending = declared(first({ signal: controller.signal }));
   await entered.promise;
@@ -232,9 +220,7 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
   expect(await rejected.promise).toBe(ERR_ABORTED);
   const second = createClient(
     withEndpoint("https://second.example"),
-    withSSEHandle(async () => {
-      throw ERR_ABORTED;
-    }),
+    withSSEHandle(() => Promise.reject(ERR_ABORTED)),
   );
   const [fault, , open] = await events(second);
   expect(fault?.code).toBe("NET_ABORTED");

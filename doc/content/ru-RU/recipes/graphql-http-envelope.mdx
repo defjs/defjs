@@ -1,22 +1,36 @@
 ---
 title: "Запросы GraphQL"
-description: GraphQL остаётся HTTP 200 плюс прикладной unwrap; у Core нет протокола GraphQL.
+description: Обрабатывайте GraphQL как HTTP 200 плюс прикладную распаковку; в ядре Core нет отдельного протокола GraphQL.
 ---
 
 # Разбор HTTP-ответа GraphQL
 
-Defjs не реализует GraphQL `errorPolicy`. Опиши обмен как HTTP POST, в котором builder размещает документ запроса и переменные. Объяви `data` в оболочке ответа через `.nullish()`, чтобы и отсутствие `data`, и `data: null` дошли до твоего хелпера, затем обработай `errors[]` до проверки `data`.
+В Defjs нет встроенного клиента GraphQL или встроенной политики `errorPolicy`. Моделируйте GraphQL поверх HTTP как стандартную операцию `POST`, чей `builder` отправляет `{ query, operationName, variables }`. Пометьте `data` как `.nullish()` в Struct-оболочке, чтобы как пропущенное `data`, так и `data: null` успешно проходили структурную валидацию, а затем распаковывайте `errors[]` во вспомогательной функции приложения:
 
-См. [Проектные решения](/ru-RU/docs/design-decisions).
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 ada viewer unavailable viewer unavailable
 ```
 
-Успешный HTTP-ответ означает только получение оболочки ответа. Прикладные ошибки остаются в `errors[]`, пока твой обработчик не выбросит исключение или не вернёт результат, в том числе для ответа с `data: null`. Пример обрабатывает и отсутствие `data`, и `data: null` вместе с `errors[]` как прикладные ошибки, а не как несоответствие Struct.
-
-`if (error) throw error` переводит fault Defjs в исключение этого хелпера. Сбои GraphQL при HTTP 200 остаются прикладными ошибками в `errors[]` и выбрасываются отдельно.
+- Статус HTTP `200` означает лишь то, что конверт GraphQL успешно доставлен. Доменные ошибки внутри `errors[]` (даже в сочетании с `data: null`) являются результатами уровня приложения, а не ошибками `RES_STRUCT_MISMATCH`.
+- См. раздел [Архитектура ядра](/ru-RU/docs/design-decisions), где объясняется, почему протокольные конверты распаковываются во вспомогательных функциях приложения.

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { dirname, resolve } from "node:path";
+import { joinPath } from "../../scripts/paths";
 import { apiEntries } from "./api-catalog";
 import { extractApiData } from "../../scripts/extract-api";
 import {
@@ -11,7 +11,7 @@ import { assertDescribed } from "../../scripts/api-validate";
 
 const packages = ["core", "react", "vue", "opentelemetry-server"];
 const entryOf = (pkg: string) =>
-  resolve(import.meta.dirname, `../../../packages/${pkg}/src/index.ts`);
+  `${import.meta.dirname}/../../../packages/${pkg}/src/index.ts`;
 
 const understoodExport =
   /^export\s+(?:type\s+)?\{[^}]*\}(?:\s+from\s+['"][^'"]+['"])?|^export\s+\*\s+from\s+['"][^'"]+['"]|^export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:type|interface|class|enum|function|const)\s+\w+/;
@@ -55,10 +55,10 @@ async function sourceExports(
   ))
     if (match[1]) names.add(match[1]);
   for (const match of text.matchAll(/export\s+\*\s+from\s+['"]([^'"]+)['"]/g)) {
-    const base = resolve(dirname(file), match[1] ?? "");
+    const base = joinPath(file.replace(/\/[^/]*$/, ""), match[1] ?? "");
     const target = (await Bun.file(base + ".ts").exists())
       ? base + ".ts"
-      : resolve(base, "index.ts");
+      : joinPath(base, "index.ts");
     for (const name of await sourceExports(target, visited)) names.add(name);
   }
   return names;
@@ -72,10 +72,16 @@ function runtimeKind(value: unknown): string {
     : "function";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 test.each(packages)(
   "@defjs/%s catalog matches its public exports, in both directions, with the right kind",
   async (pkg) => {
-    const runtime: Record<string, unknown> = await import(entryOf(pkg)),
+    const loaded: unknown = await import(entryOf(pkg));
+    if (!isRecord(loaded)) throw new Error(`missing exports for ${pkg}`);
+    const runtime = loaded,
       names = await sourceExports(entryOf(pkg)),
       catalog = new Map(
         apiEntries
@@ -100,7 +106,10 @@ test.each(packages)(
 );
 
 test("struct.* catalog entries are exactly the struct facade members", async () => {
-  const { struct } = await import(entryOf("core")),
+  const loadedCore: unknown = await import(entryOf("core"));
+  if (!isRecord(loadedCore) || !isRecord(loadedCore["struct"]))
+    throw new Error("core struct export is missing");
+  const struct = loadedCore["struct"],
     members = apiEntries.filter(
       (entry) =>
         entry.package === "@defjs/core" && entry.name.startsWith("struct."),
@@ -115,13 +124,13 @@ test("regenerating the API data matches the committed JSON", async () => {
   const entries = await extractApiData();
   const directory = import.meta.dirname;
   expect(serializeCatalog(entries)).toBe(
-    await Bun.file(resolve(directory, "api-entries.json")).text(),
+    await Bun.file(joinPath(directory, "api-entries.json")).text(),
   );
   expect(serializeReference(entries)).toBe(
-    await Bun.file(resolve(directory, "api-reference.json")).text(),
+    await Bun.file(joinPath(directory, "api-reference.json")).text(),
   );
   expect(serializeSummaries(entries)).toBe(
-    await Bun.file(resolve(directory, "api-summaries.json")).text(),
+    await Bun.file(joinPath(directory, "api-summaries.json")).text(),
   );
 }, 180_000);
 

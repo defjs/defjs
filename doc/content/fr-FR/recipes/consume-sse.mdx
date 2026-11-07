@@ -1,22 +1,38 @@
 ---
 title: "Consommer les événements SSE"
-description: Ouvre un flux d’événements typé, itère une fois, puis ferme et attends closed.
+description: Ouvrez un flux d'événements typé, itérez une fois, puis fermez et attendez closed.
 ---
 
 # Consommer un flux SSE
 
-Un itérateur async par flux. Mets `close` + `await stream.closed` dans `finally` pour que les sorties anticipées ne fuient pas la tentative Fetch.
+Chaque `EventStreamHandle` expose un unique itérateur asynchrone. Placez systématiquement `stream.close(...)` et `await stream.closed` dans un bloc `finally` afin qu'un `break` ou un `return` anticipé ne laisse pas fuiter le flux Fetch sous-jacent :
 
-Voir [SSE](/fr-FR/docs/sse) pour les détails.
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-<include cwd meta="notifications.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
 
-`api.example.com` est un placeholder. Avec un serveur dont le premier événement est `message` avec les données `{ "text": "hello from the server" }`, le snippet affiche :
+  </Tab>
+</Tabs>
+
+Avec un serveur dont le premier événement est `line` avec les données `{ "text": "build started" }`, le script affiche :
 
 ```txt
-hello from the server
+build started
 ```
 
-SSE n’effectue de nouvelle tentative après une erreur réseau ou de lecture que si tu actives `withSSEReconnect(...)`. Avec un objet de configuration de reconnexion, `attempts` vaut `3` par défaut et par coupure ; un handshake réussi réinitialise le budget et l’exposant de backoff. `attempts: 0` désactive les nouvelles tentatives. Les options numériques de reconnexion invalides échouent avant toute requête avec `REQ_OPTIONS_INVALID` ; voir les [règles de validation](/fr-FR/api/core/withssereconnect). Sans `shouldReconnect`, la connexion n’est rétablie que pour les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE` ; une requête dont le corps est un `ReadableStream` ne fait jamais l’objet d’une reconnexion.
+- SSE ne se reconnecte pas automatiquement lors d'une déconnexion réseau ou d'une erreur de lecture sans avoir configuré [`withSSEReconnect(...)`](/fr-FR/api/core/withssereconnect) sur le client.
+- Lorsque `withSSEReconnect(...)` est configuré, `attempts` vaut `3` par défaut par coupure et se réinitialise après un handshake réussi (`attempts: 0` désactive la reconnexion). Sans callback personnalisé `shouldReconnect`, seules les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE` se reconnectent. Une requête dont le corps est un `ReadableStream` ne se reconnecte jamais. Consultez [Flux d'événements SSE](/fr-FR/docs/sse).

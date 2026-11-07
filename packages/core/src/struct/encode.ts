@@ -4,7 +4,11 @@ import { mapAliasedObjectFields, resolveStructFields } from "./fields";
 export { matchesDefinition } from "./match";
 import { resolveObjectShape } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { ObjectDefinition, RuntimeStruct } from "./types";
+import type {
+  ObjectDefinition,
+  ObjectRuntimeStruct,
+  RuntimeStruct,
+} from "./types";
 import {
   hasOwnKey,
   intersectionEncodeError,
@@ -71,13 +75,13 @@ function writeMergedWire(
 }
 
 function writeObjectFieldsMerged(
-  struct: RuntimeStruct,
+  struct: ObjectRuntimeStruct,
   value: { [key: string]: unknown },
   options: EncodeOptions,
   output: { [key: string]: unknown },
   depth: number,
 ): void {
-  const definition = struct[DEFINITION] as ObjectDefinition;
+  const definition = struct[DEFINITION];
   if (options.encodeObject === mapAliasedObjectFields) {
     for (const field of resolveStructFields(struct, definition)) {
       if (!hasOwnKey(value, field.key)) {
@@ -99,16 +103,12 @@ function writeObjectFieldsMerged(
 
   const shape = resolveObjectShape(struct, definition);
   for (const key in shape) {
-    if (hasOwnKey(value, key)) {
+    const fieldStruct = shape[key];
+    if (fieldStruct !== undefined && hasOwnKey(value, key)) {
       writeMergedWire(
         output,
         key,
-        encodeValue(
-          shape[key] as RuntimeStruct,
-          value[key],
-          options,
-          depth + 1,
-        ),
+        encodeValue(fieldStruct, value[key], options, depth + 1),
         depth + 1,
       );
     }
@@ -125,13 +125,9 @@ function encodeObjectFields(
 ): { [key: string]: unknown } {
   const shape = resolveObjectShape(struct, definition);
   for (const key in shape) {
-    if (hasOwnKey(value, key)) {
-      output[key] = encodeValue(
-        shape[key] as RuntimeStruct,
-        value[key],
-        options,
-        depth + 1,
-      );
+    const fieldStruct = shape[key];
+    if (fieldStruct !== undefined && hasOwnKey(value, key)) {
+      output[key] = encodeValue(fieldStruct, value[key], options, depth + 1);
     }
   }
   return output;
@@ -170,46 +166,34 @@ export function encodeValue(
     case "file":
     case "number":
     case "string":
-      return definition.encode ? definition.encode(value as never) : value;
+      return definition.encode ? definition.encode(value) : value;
 
     case "array":
       return Array.isArray(value)
         ? value.map((item) =>
-            encodeValue(
-              definition.item as unknown as RuntimeStruct,
-              item,
-              options,
-              depth + 1,
-            ),
+            encodeValue(definition.item, item, options, depth + 1),
           )
         : value;
 
     case "tuple":
       return Array.isArray(value)
-        ? value.map((item, index) =>
-            index < definition.items.length
-              ? encodeValue(
-                  definition.items[index] as unknown as RuntimeStruct,
-                  item,
-                  options,
-                  depth + 1,
-                )
-              : item,
-          )
+        ? value.map((item: unknown, index) => {
+            // Items past the declared positions pass through.
+            const itemStruct = definition.items[index];
+            return itemStruct === undefined
+              ? item
+              : encodeValue(itemStruct, item, options, depth + 1);
+          })
         : value;
 
     case "record": {
       if (!isPlainObject(value)) {
         return value;
       }
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made encodeStructValue of a 4-key record 1.083x/1.084x/1.083x and encodeJson of a 1-key record 1.131x/1.140x/1.134x slower (Bun 1.4.4, 3 runs x 21 interleaved rounds x 3e5/4e5 encodes, medians, against an unchanged control copy within 1.3%)
       const output: { [key: string]: unknown } = Object.create(null);
       for (const [key, entry] of Object.entries(value)) {
-        output[key] = encodeValue(
-          definition.value as unknown as RuntimeStruct,
-          entry,
-          options,
-          depth + 1,
-        );
+        output[key] = encodeValue(definition.value, entry, options, depth + 1);
       }
       return output;
     }
@@ -233,7 +217,7 @@ export function encodeValue(
         definition.uniformIdentityEncode
       ) {
         for (const option of definition.options) {
-          const runtime = option as unknown as RuntimeStruct;
+          const runtime = option;
           if (matchesRuntimeValue(runtime, value)) {
             return encodeValue(runtime, value, options, depth);
           }
@@ -249,8 +233,7 @@ export function encodeValue(
       }
 
       const first = encodeValue(firstOption, value, options, depth);
-      for (let index = 1; index < matches.length; index += 1) {
-        const option = matches[index] as RuntimeStruct;
+      for (const option of matches.slice(1)) {
         const encoded = encodeValue(option, value, options, depth);
         if (!sameEncodedShape(firstOption, first, option, encoded, options)) {
           throw new TypeError(
@@ -263,16 +246,9 @@ export function encodeValue(
 
     case "discriminatedUnion": {
       if (isPlainObject(value)) {
-        const matched = definition.map.get(
-          (value as { [key: string]: unknown })[definition.discriminator],
-        );
+        const matched = definition.map.get(value[definition.discriminator]);
         if (matched) {
-          return encodeValue(
-            matched as unknown as RuntimeStruct,
-            value,
-            options,
-            depth,
-          );
+          return encodeValue(matched, value, options, depth);
         }
       }
       return value;
@@ -281,21 +257,22 @@ export function encodeValue(
     case "intersection": {
       const parts: RuntimeStruct[] = [];
       for (const option of definition.options) {
-        const runtime = option as RuntimeStruct;
+        const runtime = option;
         if (!isIntersectionIdentity(runtime)) {
           parts.push(runtime);
         }
       }
-      if (parts.length === 0) {
+      const first = parts[0];
+      if (first === undefined) {
         return value;
       }
       if (parts.length === 1) {
-        const only = parts[0] as RuntimeStruct;
-        return encodeValue(only, value, options, depth);
+        return encodeValue(first, value, options, depth);
       }
 
       // Each member encodes on its own. One logical key can leave under every wire key it declares.
       // Disjoint keys stay one assignment. A key that is already present is merged, not overwritten.
+      // Object sides are never intersection identities, so they are exactly `parts`.
       if (
         definition.objectSides &&
         (!options.encodeObject ||
@@ -303,25 +280,15 @@ export function encodeValue(
         isPlainObject(value)
       ) {
         const output = nullObject();
-        for (const runtime of parts) {
-          writeObjectFieldsMerged(runtime, value, options, output, depth);
+        for (const side of definition.options) {
+          writeObjectFieldsMerged(side, value, options, output, depth);
         }
         return output;
       }
 
-      let merged: unknown = encodeValue(
-        parts[0] as RuntimeStruct,
-        value,
-        options,
-        depth,
-      );
-      for (let index = 1; index < parts.length; index += 1) {
-        const encoded = encodeValue(
-          parts[index] as RuntimeStruct,
-          value,
-          options,
-          depth,
-        );
+      let merged: unknown = encodeValue(first, value, options, depth);
+      for (const part of parts.slice(1)) {
+        const encoded = encodeValue(part, value, options, depth);
         const result = mergeIntersectionValues(merged, encoded, false, depth);
         if (!result.ok) {
           throw intersectionEncodeError(result.path);

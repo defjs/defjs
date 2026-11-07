@@ -35,6 +35,8 @@ function refreshingBearer(
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||
@@ -59,18 +61,20 @@ function refreshingBearer(
 let credential: Credential = { accessToken: "v1" };
 const client = createClient(
   withEndpoint("https://billing.example.test"),
-  withHTTPHandle(async (input, init) => {
+  withHTTPHandle((input, init) => {
     const auth = new Request(input, init).headers.get("authorization");
     if (auth === "Bearer v1")
-      return Response.json({ code: "expired_token" }, { status: 401 });
-    return Response.json({ total: 42 }, { status: 200 });
+      return Promise.resolve(
+        Response.json({ code: "expired_token" }, { status: 401 }),
+      );
+    return Promise.resolve(Response.json({ total: 42 }, { status: 200 }));
   }),
   withInterceptors(
     refreshingBearer(
       () => credential,
-      async () => {
+      () => {
         credential = { accessToken: "v2" };
-        return credential;
+        return Promise.resolve(credential);
       },
     ),
   ),

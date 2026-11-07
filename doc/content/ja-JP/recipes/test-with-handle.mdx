@@ -1,20 +1,39 @@
 ---
 title: "ローカル HTTP テスト"
-description: withHTTPHandle で 1 クライアント分の Fetch を差し替え、操作はそのままにします。
+description: withHTTPHandle で単一クライアントの Fetch 実装を差し替え、操作定義には一切手を加えずにテストを実行します。
 ---
 
-# ローカル Fetch ハンドルでテストする
+# ローカル Fetch ハンドルによるテスト
 
-`withHTTPHandle(...)` はそのクライアントだけ Fetch を差し替えます。URL 組み立て、インターセプター、status 振り分け、Struct デコードはそのまま — DNS・TLS・実サーバーは不要です。
+`withHTTPHandle(...)` は、単一のクライアントインスタンスに対して基底の `fetch` 関数を差し替えます。実際のネットワークソケットを開くことなく、入力値のバリデーション、`builder` による配置、URL 解決、インターセプター、ステータスに応じた振り分け、Struct デコードといった Defjs のパイプライン全体を実行しながらテストできます。
 
-詳細は [Client](/ja-JP/docs/client) を見てください。
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "単一ファイルのデモ"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.test.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+これは単体の単一ファイルデモであり、テストランナーの spec ではありません。共有された SDK 定義に対するアサーションは、前のテストタブを使ってください。
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
+  </Tab>
+</Tabs>
+
+単一ファイルのデモが出力するもの：
+
 ```txt
-Ada 200
+paid 200
 ```
 
-本番では同じ `getUser` 操作を、本物の `withEndpoint(...)` クライアントに対して使います — 変わるのはハンドルだけです。
+本番環境では、`withEndpoint(...)` で設定したクライアントをまったく同じ `getOrder` 操作に渡して呼び出します。詳細は [テスト](/ja-JP/docs/testing) および [Client](/ja-JP/docs/client) を参照してください。

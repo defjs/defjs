@@ -1,4 +1,9 @@
 import type { HttpProgressFn } from "../internal/http_request";
+import {
+  snapshotHeartbeat,
+  snapshotProtocols,
+  snapshotReconnect,
+} from "./capture";
 import type { ClientConfig, ClientWebSocketOptions } from "./config";
 import { createClientConfig } from "./config";
 import type { ClientOption } from "./option";
@@ -17,7 +22,7 @@ export const CLIENT = Symbol("Client");
  *
  * SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
  *
- * `signal` cancels HTTP, SSE, and WebSocket calls. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, `heartbeat`, and `reconnect` apply to WebSocket and replace the client setting for that call as a whole value. There is no `timeout` or `abort` field. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline.
+ * `signal` cancels HTTP, SSE, and WebSocket calls. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, `heartbeat`, and `reconnect` apply to WebSocket and replace the client setting for that call as a whole value. `client(options)` copies `heartbeat`, `reconnect`, and a `protocols` array at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. There is no `timeout` or `abort` field. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline.
  *
  * @group client
  */
@@ -41,7 +46,7 @@ export type RequestOptions = {
 // Slot value for [CLIENT]. Not exported from the package.
 interface ClientState {
   readonly config: ClientConfig;
-  readonly options: RequestOptions;
+  readonly options?: RequestOptions;
 }
 
 /**
@@ -63,7 +68,9 @@ export interface Client {
 /**
  * Callable root client returned by `createClient`.
  *
- * A factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. The seven known fields are copied from the argument into a fresh options object, unknown fields are ignored, and fields whose value is `undefined` are omitted. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` all return a client with no request options. A getter that throws escapes the call and is not converted into a fault; the factory stays usable.
+ * A factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. `client()` and `client(undefined)` store no request options. `client({})` keeps the empty snapshot produced by reading each top-level field; it is not dropped by inspecting keys.
+ *
+ * Each provided field is read once, in declaration order, onto a new options object. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `reconnect` copies `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect`. Missing nested blocks stay `undefined` and do not enable heartbeat or retry. `signal`, `beforeConnect`, and every callback keep their identity. A getter on these fixed fields runs during the call. If it throws, the exception escapes and is not converted into a fault; the factory stays usable. Out-of-range numbers are still checked when the operation runs.
  *
  * @group client
  * @see {@link createClient}
@@ -75,33 +82,24 @@ export interface DerivableClient extends Client {
   (options?: RequestOptions): Client;
 }
 
-const KNOWN_FIELDS = [
-  "signal",
-  "onUploadProgress",
-  "onDownloadProgress",
-  "beforeConnect",
-  "protocols",
-  "heartbeat",
-  "reconnect",
-] as const satisfies readonly (keyof RequestOptions)[];
-
-function snapshot(patch?: RequestOptions): RequestOptions {
-  const out: Record<string, unknown> = {};
-  if (patch === undefined) {
-    return out;
+function snapshot(options?: RequestOptions): RequestOptions | undefined {
+  if (options === undefined) {
+    return undefined;
   }
-  for (const key of KNOWN_FIELDS) {
-    const value = patch[key];
-    if (value !== undefined) {
-      out[key] = value;
-    }
-  }
-  return out;
+  return {
+    signal: options.signal,
+    onUploadProgress: options.onUploadProgress,
+    onDownloadProgress: options.onDownloadProgress,
+    beforeConnect: options.beforeConnect,
+    protocols: snapshotProtocols(options.protocols),
+    heartbeat: snapshotHeartbeat(options.heartbeat),
+    reconnect: snapshotReconnect(options.reconnect),
+  };
 }
 
 function createClientValue(
   config: ClientConfig,
-  options: RequestOptions,
+  options: RequestOptions | undefined,
 ): Client {
   return { [CLIENT]: { config, options } };
 }
@@ -109,9 +107,9 @@ function createClientValue(
 /**
  * Creates a Defjs {@link DerivableClient} from option helpers.
  *
- * Options apply in order: a later option overwrites an earlier one for the same setting, and interceptors accumulate. Prefer creating the client inside the request boundary when interceptors close over auth or tenants. Default HTTP/SSE fetch availability is checked when an operation invokes transport.
+ * Options apply in order: a later option overwrites an earlier one for the same setting, and interceptors accumulate. Prefer creating the client inside the request boundary when interceptors close over auth or tenants. Balancer state (sticky endpoint, ejections, load) and the retry budget belong to the client, so a client created per request starts them fresh. Creating the client once and deriving per-call values keeps both; passing one shared balancer to `withBalancer` keeps the balancer state only. Default HTTP/SSE fetch availability is checked when an operation invokes transport.
  *
- * The returned factory is a function. Calling it with {@link RequestOptions} returns a {@link Client} value for one call and performs no I/O; see {@link DerivableClient} for the snapshot rules. The factory itself is also a `Client` and carries no request options, so it can be passed to an operation directly. The base configuration is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either.
+ * The returned factory is a function. Calling it with {@link RequestOptions} returns a {@link Client} value for one call and performs no I/O; see {@link DerivableClient} for how request fields are captured. The factory itself is also a `Client` and carries no request options, so it can be passed to an operation directly. The base configuration is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. Standard option helpers copy the fixed records they own when they are applied. A custom {@link ClientOption} may still retain a reference.
  *
  * @param options - Client option helpers such as `withEndpoint`.
  * @returns A callable factory that carries the resolved base configuration.
@@ -128,9 +126,9 @@ export function createClient(...options: ClientOption[]): DerivableClient {
   for (const option of options) {
     option(config);
   }
-  function factory(patch?: RequestOptions): Client {
-    return createClientValue(config, snapshot(patch));
+  function factory(options?: RequestOptions): Client {
+    return createClientValue(config, snapshot(options));
   }
-  factory[CLIENT] = { config, options: {} } satisfies ClientState;
+  factory[CLIENT] = { config } satisfies ClientState;
   return factory;
 }

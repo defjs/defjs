@@ -1,6 +1,8 @@
 import { describe, expect, inject, onTestFinished, test, vi } from "vitest";
+import type { FetchHandle } from "../../client/config";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
 import type { HttpRequest } from "../../http";
+import { struct } from "../../struct";
 import type {
   EventStreamFailureInfo,
   EventStreamHandle,
@@ -16,21 +18,50 @@ const backoff = await import("../../internal/backoff");
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
-  "maxBufferSize" | "maxQueueSize"
+  "maxBufferSize" | "maxQueueSize" | "transformMessage"
 > & {
   maxBufferSize?: number;
   maxQueueSize?: number;
 };
 
-function fetchEventStream<T = EventStreamMessage>(
+function requireRequest(input: RequestInfo | URL): Request {
+  if (!(input instanceof Request)) {
+    throw new TypeError("SSE handle received a non-Request");
+  }
+  return input;
+}
+
+function thrownMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    throw new TypeError("expected an Error");
+  }
+  return error.message;
+}
+
+/** Streams the raw parsed messages. */
+function fetchEventStream(
   request: HttpRequest,
-  options: TestOptions<T> = {},
+  options: TestOptions<EventStreamMessage> = {},
+) {
+  return fetchEventStreamInternal(request, {
+    maxBufferSize: 1024,
+    maxQueueSize: 16,
+    transformMessage: (message) => message,
+    ...options,
+  });
+}
+
+/** Streams what `transformMessage` returns for each parsed message. */
+function fetchTransformedEventStream<T>(
+  request: HttpRequest,
+  options: TestOptions<T> &
+    Pick<FetchEventStreamOptions<T>, "transformMessage">,
 ) {
   return fetchEventStreamInternal(request, {
     maxBufferSize: 1024,
     maxQueueSize: 16,
     ...options,
-  } as FetchEventStreamOptions<T>);
+  });
 }
 
 function byteStream(): ReadableStream<Uint8Array> {
@@ -71,15 +102,18 @@ describe("fetchEventStream advanced", () => {
   }
 
   test("should skip messages when transformMessage returns undefined", async () => {
-    const stream = await fetchEventStream(createRequest("/sse/basic"), {
-      transformMessage() {
-        return undefined;
+    const stream = await fetchTransformedEventStream(
+      createRequest("/sse/basic"),
+      {
+        transformMessage() {
+          return undefined;
+        },
       },
-    });
+    );
 
-    const events: EventStreamMessage[] = [];
+    const events: undefined[] = [];
     for await (const event of stream) {
-      events.push(event as unknown as EventStreamMessage);
+      events.push(event);
     }
     expect(events).toEqual([]);
     await expect(stream.closed).resolves.toEqual({ kind: "eof" });
@@ -87,9 +121,7 @@ describe("fetchEventStream advanced", () => {
 
   test("should stop retry when onerror returns null", async () => {
     const networkError = new Error("network failure");
-    const fetch = vi.fn(async () => {
-      throw networkError;
-    }) as unknown as typeof globalThis.fetch;
+    const fetch = vi.fn(() => Promise.reject(networkError));
     const onerror = vi.fn().mockReturnValue(null);
     const shouldReconnect = vi.fn(() => true);
 
@@ -108,6 +140,7 @@ describe("fetchEventStream advanced", () => {
   test("should preserve an undefined network rejection", async () => {
     await expect(
       fetchEventStream(createRequest("/events"), {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the fetch under test rejects with undefined, which the stream must surface unchanged
         fetch: () => Promise.reject(undefined),
         onerror: () => null,
       }),
@@ -119,7 +152,7 @@ describe("fetchEventStream advanced", () => {
 
     const events: EventStreamMessage[] = [];
     for await (const event of stream) {
-      events.push(event as EventStreamMessage);
+      events.push(event);
     }
     expect(events[0]).not.toHaveProperty("retry");
   });
@@ -144,7 +177,7 @@ describe("fetchEventStream advanced", () => {
 
     const events: EventStreamMessage[] = [];
     for await (const event of stream) {
-      events.push(event as EventStreamMessage);
+      events.push(event);
     }
     expect(events).toEqual([{ data: "ok", event: "message", id: "1" }]);
     expect(onerror).toHaveBeenCalledTimes(1);
@@ -187,8 +220,9 @@ describe("fetchEventStream advanced", () => {
       await expect(
         fetchEventStream(createRequest("/events"), {
           failure,
-          fetch: async () => {
-            throw cause;
+          fetch: () => {
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the fetch under test rejects with a string, null or number, which must pass through unchanged
+            return Promise.reject(cause);
           },
         }),
       ).rejects.toBe(cause);
@@ -197,11 +231,14 @@ describe("fetchEventStream advanced", () => {
   });
 
   test("should throw when transformMessage throws", async () => {
-    const stream = await fetchEventStream(createRequest("/sse/basic"), {
-      transformMessage() {
-        throw new Error("transform failed");
+    const stream = await fetchTransformedEventStream(
+      createRequest("/sse/basic"),
+      {
+        transformMessage() {
+          throw new Error("transform failed");
+        },
       },
-    });
+    );
 
     const iter = stream[Symbol.asyncIterator]();
     await expect(iter.next()).rejects.toThrow(
@@ -231,7 +268,7 @@ describe("fetchEventStream advanced", () => {
 
     const events: EventStreamMessage[] = [];
     for await (const event of stream) {
-      events.push(event as EventStreamMessage);
+      events.push(event);
     }
     expect(events.length).toBeGreaterThan(0);
   });
@@ -256,7 +293,7 @@ describe("fetchEventStream advanced", () => {
     // The request was made with the real fetch; we verify the endpoint responded correctly.
     const events: EventStreamMessage[] = [];
     for await (const event of stream) {
-      events.push(event as EventStreamMessage);
+      events.push(event);
     }
     expect(events.length).toBeGreaterThan(0);
   });
@@ -302,7 +339,7 @@ describe("fetchEventStream advanced", () => {
       );
       const opening = fetchEventStream(
         { ...createRequest("/events"), signal: controller.signal },
-        { fetch: fetch as unknown as typeof globalThis.fetch },
+        { fetch: fetch },
       );
 
       await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
@@ -369,10 +406,12 @@ describe("fetchEventStream advanced", () => {
     "should accept valid event-stream content type %s",
     async (contentType) => {
       const stream = await fetchEventStream(createRequest("/events"), {
-        fetch: async () =>
-          new Response("data: ok\n\n", {
-            headers: { "content-type": contentType },
-          }),
+        fetch: () =>
+          Promise.resolve(
+            new Response("data: ok\n\n", {
+              headers: { "content-type": contentType },
+            }),
+          ),
       });
 
       await expect(
@@ -401,13 +440,15 @@ describe("fetchEventStream advanced", () => {
     async (contentType) => {
       await expect(
         fetchEventStream(createRequest("/events"), {
-          fetch: async () =>
-            new Response("data: ignored\n\n", {
-              headers:
-                contentType === undefined
-                  ? undefined
-                  : { "content-type": contentType },
-            }),
+          fetch: () =>
+            Promise.resolve(
+              new Response("data: ignored\n\n", {
+                headers:
+                  contentType === undefined
+                    ? undefined
+                    : { "content-type": contentType },
+              }),
+            ),
         }),
       ).rejects.toThrow(/Expected content-type/);
     },
@@ -417,9 +458,11 @@ describe("fetchEventStream advanced", () => {
     const cancel = vi.fn();
     const onerror = vi.fn(() => 0);
     const shouldReconnect = vi.fn(() => true);
-    const fetch = vi.fn(async () => {
+    const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({ cancel });
-      return new Response(body, { headers: { "content-type": "text/plain" } });
+      return Promise.resolve(
+        new Response(body, { headers: { "content-type": "text/plain" } }),
+      );
     });
 
     const error = await fetchEventStream(createRequest("/events"), {
@@ -429,7 +472,7 @@ describe("fetchEventStream advanced", () => {
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toMatch(/Expected content-type/);
+    expect(thrownMessage(error)).toMatch(/Expected content-type/);
     expect(getEventStreamFatalCode(error)).toBe("RES_MEDIA_TYPE_INVALID");
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
@@ -439,11 +482,12 @@ describe("fetchEventStream advanced", () => {
 
   test("should not wait for response cancellation after fatal open validation", async () => {
     const cancel = vi.fn(() => new Promise<void>(() => undefined));
-    const fetch = vi.fn(
-      async () =>
+    const fetch = vi.fn(() =>
+      Promise.resolve(
         new Response(new ReadableStream<Uint8Array>({ cancel }), {
           headers: { "content-type": "text/plain" },
         }),
+      ),
     );
 
     await expect(
@@ -459,11 +503,13 @@ describe("fetchEventStream advanced", () => {
 
   test("should cancel the response and terminate when onopen fails", async () => {
     const cancel = vi.fn();
-    const fetch = vi.fn(async () => {
+    const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({ cancel });
-      return new Response(body, {
-        headers: { "content-type": "text/event-stream" },
-      });
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     });
 
     await expect(
@@ -483,11 +529,12 @@ describe("fetchEventStream advanced", () => {
 
   test("should preserve an onopen failure when response cancellation rejects", async () => {
     const cancel = vi.fn(() => Promise.reject(new Error("cancel failed")));
-    const fetch = vi.fn(
-      async () =>
+    const fetch = vi.fn(() =>
+      Promise.resolve(
         new Response(new ReadableStream<Uint8Array>({ cancel }), {
           headers: { "content-type": "text/event-stream" },
         }),
+      ),
     );
 
     const error = await fetchEventStream(createRequest("/events"), {
@@ -498,31 +545,35 @@ describe("fetchEventStream advanced", () => {
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("onopen failed");
+    expect(thrownMessage(error)).toBe("onopen failed");
     expect(getEventStreamFatalCode(error)).toBe("EXT_HOOK_FAILED");
     expect(cancel).toHaveBeenCalledOnce();
   });
 
   test("should use the stable fallback when onopen throws a non-Error value", async () => {
     const error = await fetchEventStream(createRequest("/events"), {
-      fetch: async () =>
-        new Response("", { headers: { "content-type": "text/event-stream" } }),
+      fetch: () =>
+        Promise.resolve(
+          new Response("", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
       onopen() {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- onopen under test throws a string primitive to exercise handling of a non-Error failure
         throw "non-error failure";
       },
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe(
-      "Event stream onopen callback failed",
-    );
+    expect(thrownMessage(error)).toBe("Event stream onopen callback failed");
     expect(getEventStreamFatalCode(error)).toBe("EXT_HOOK_FAILED");
   });
 
   test("should retain the original fatal error when its observer fails", async () => {
-    const fetch = vi.fn(
-      async () =>
+    const fetch = vi.fn(() =>
+      Promise.resolve(
         new Response(null, { headers: { "content-type": "text/plain" } }),
+      ),
     );
 
     await expect(
@@ -538,16 +589,16 @@ describe("fetchEventStream advanced", () => {
 
   test("should classify a missing response body as an invalid response", async () => {
     const error = await fetchEventStream(createRequest("/events"), {
-      fetch: async () =>
-        new Response(null, {
-          headers: { "content-type": "text/event-stream" },
-        }),
+      fetch: () =>
+        Promise.resolve(
+          new Response(null, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe(
-      "Missing response body for event stream",
-    );
+    expect(thrownMessage(error)).toBe("Missing response body for event stream");
     expect(getEventStreamFatalCode(error)).toBe("RES_DECODE_FAILED");
   });
 
@@ -555,7 +606,7 @@ describe("fetchEventStream advanced", () => {
     const cancel = vi.fn();
     const onerror = vi.fn(() => 0);
     const shouldReconnect = vi.fn(() => true);
-    const fetch = vi.fn(async () => {
+    const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(
@@ -564,9 +615,11 @@ describe("fetchEventStream advanced", () => {
         },
         cancel,
       });
-      return new Response(body, {
-        headers: { "content-type": "text/event-stream" },
-      });
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     });
 
     const stream = await fetchEventStream(createRequest("/events"), {
@@ -593,9 +646,7 @@ describe("fetchEventStream advanced", () => {
   test("should classify a parser limit thrown by the fetch boundary as fatal", async () => {
     const onerror = vi.fn(() => 0);
     const shouldReconnect = vi.fn(() => true);
-    const fetch = vi.fn(async () => {
-      throw new SSEParserLimitError();
-    }) as unknown as typeof globalThis.fetch;
+    const fetch = vi.fn(() => Promise.reject(new SSEParserLimitError()));
 
     const error = await fetchEventStream(createRequest("/events"), {
       fetch,
@@ -619,10 +670,12 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        fetch: async () =>
-          new Response(new ReadableStream<Uint8Array>({ cancel }), {
-            headers: { "content-type": "text/plain" },
-          }),
+        fetch: () =>
+          Promise.resolve(
+            new Response(new ReadableStream<Uint8Array>({ cancel }), {
+              headers: { "content-type": "text/plain" },
+            }),
+          ),
         onerror() {
           markObserved?.();
           return new Promise<number>(() => undefined);
@@ -641,19 +694,21 @@ describe("fetchEventStream advanced", () => {
     const cancel = vi.fn();
     const onerror = vi.fn(() => 0);
     const shouldReconnect = vi.fn(() => true);
-    const fetch = vi.fn(async () => {
+    const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode("data: value\n\n"));
         },
         cancel,
       });
-      return new Response(body, {
-        headers: { "content-type": "text/event-stream" },
-      });
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     });
 
-    const stream = await fetchEventStream(createRequest("/events"), {
+    const stream = await fetchTransformedEventStream(createRequest("/events"), {
       fetch,
       onerror,
       reconnect: { attempts: 2, delayMs: 0, shouldReconnect },
@@ -677,7 +732,7 @@ describe("fetchEventStream advanced", () => {
 
   test("should discard buffered events and terminate on queue overflow", async () => {
     const cancel = vi.fn();
-    const fetch = vi.fn(async () => {
+    const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(
@@ -686,9 +741,11 @@ describe("fetchEventStream advanced", () => {
         },
         cancel,
       });
-      return new Response(body, {
-        headers: { "content-type": "text/event-stream" },
-      });
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     });
 
     const stream = await fetchEventStream(createRequest("/events"), {
@@ -715,9 +772,7 @@ describe("fetchEventStream advanced", () => {
       ...createRequest("/events"),
       signal: controller.signal,
     };
-    const fetch = vi.fn(async () => {
-      throw new Error("network error");
-    });
+    const fetch = vi.fn(() => Promise.reject(new Error("network error")));
 
     setTimeout(() => controller.abort(ERR_ABORTED), 50);
 
@@ -742,7 +797,7 @@ describe("fetchEventStream advanced", () => {
 
   test("should cancel active response body when stream is closed", async () => {
     const cancel = vi.fn();
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode("data: first\n\n"));
@@ -750,11 +805,13 @@ describe("fetchEventStream advanced", () => {
         cancel,
       });
 
-      return new Response(body, {
-        headers: { "content-type": "text/event-stream" },
-        status: 200,
-      });
-    }) as unknown as typeof fetch;
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+          status: 200,
+        }),
+      );
+    });
 
     const stream = await fetchEventStream(createRequest("/sse/basic"), {
       fetch: mockFetch,
@@ -788,12 +845,15 @@ describe("fetchEventStream advanced", () => {
         cancel,
       });
       const stream = await fetchEventStream(createRequest("/events"), {
-        fetch: async () =>
-          new Response(body, {
-            headers: { "content-type": "text/event-stream" },
-          }),
+        fetch: () =>
+          Promise.resolve(
+            new Response(body, {
+              headers: { "content-type": "text/event-stream" },
+            }),
+          ),
       });
       const close = vi.fn(() => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- close() under test throws closeError, which may be a non-Error value, to exercise handling of a throwing close
         throw closeError;
       });
       stream.close = close;
@@ -826,11 +886,12 @@ describe("fetchEventStream advanced", () => {
       { pull, cancel },
       { highWaterMark: 0 },
     );
-    const fetch = vi.fn(
-      async () =>
+    const fetch = vi.fn(() =>
+      Promise.resolve(
         new Response(body, {
           headers: { "content-type": "text/event-stream" },
         }),
+      ),
     );
     const stream = await fetchEventStream(createRequest("/events"), {
       fetch,
@@ -875,10 +936,12 @@ describe("fetchEventStream advanced", () => {
       },
     });
     const stream = await fetchEventStream(createRequest("/events"), {
-      fetch: async () =>
-        new Response(body, {
-          headers: { "content-type": "text/event-stream" },
-        }),
+      fetch: () =>
+        Promise.resolve(
+          new Response(body, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
     });
 
     sourceController?.error(failure);
@@ -899,8 +962,8 @@ describe("fetchEventStream advanced", () => {
 
   test("should close and cancel the active response when iteration returns early", async () => {
     const cancel = vi.fn();
-    const fetch = vi.fn(
-      async () =>
+    const fetch = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
@@ -910,7 +973,8 @@ describe("fetchEventStream advanced", () => {
           }),
           { headers: { "content-type": "text/event-stream" } },
         ),
-    ) as unknown as typeof globalThis.fetch;
+      ),
+    );
     const stream = await fetchEventStream(createRequest("/events"), { fetch });
     const iterator = stream[Symbol.asyncIterator]();
 
@@ -950,10 +1014,12 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        fetch: async () =>
-          new Response(new ReadableStream<Uint8Array>({ cancel }), {
-            headers: { "content-type": "text/event-stream" },
-          }),
+        fetch: () =>
+          Promise.resolve(
+            new Response(new ReadableStream<Uint8Array>({ cancel }), {
+              headers: { "content-type": "text/event-stream" },
+            }),
+          ),
         onopen() {
           markStarted?.();
           return new Promise<void>(() => undefined);
@@ -976,18 +1042,22 @@ describe("fetchEventStream advanced", () => {
       markStarted = resolve;
     });
     let transformSignal: AbortSignal | undefined;
-    const stream = await fetchEventStream(
+    const stream = await fetchTransformedEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        fetch: async () =>
-          new Response(
-            new ReadableStream<Uint8Array>({
-              start(controller) {
-                controller.enqueue(new TextEncoder().encode("data: value\n\n"));
-              },
-              cancel,
-            }),
-            { headers: { "content-type": "text/event-stream" } },
+        fetch: () =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  controller.enqueue(
+                    new TextEncoder().encode("data: value\n\n"),
+                  );
+                },
+                cancel,
+              }),
+              { headers: { "content-type": "text/event-stream" } },
+            ),
           ),
         transformMessage(_message, signal) {
           transformSignal = signal;
@@ -1019,10 +1089,12 @@ describe("fetchEventStream advanced", () => {
     const stream = await fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        fetch: async () =>
-          new Response("data: value\n\n", {
-            headers: { "content-type": "text/event-stream" },
-          }),
+        fetch: () =>
+          Promise.resolve(
+            new Response("data: value\n\n", {
+              headers: { "content-type": "text/event-stream" },
+            }),
+          ),
         onclose() {
           markStarted?.();
           return new Promise<void>(() => undefined);
@@ -1059,10 +1131,12 @@ describe("fetchEventStream advanced", () => {
       const stream = await fetchEventStream(
         { ...createRequest("/events"), signal: controller.signal },
         {
-          fetch: async () =>
-            new Response(body, {
-              headers: { "content-type": "text/event-stream" },
-            }),
+          fetch: () =>
+            Promise.resolve(
+              new Response(body, {
+                headers: { "content-type": "text/event-stream" },
+              }),
+            ),
         },
       );
       const next = stream[Symbol.asyncIterator]().next();
@@ -1105,9 +1179,7 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        fetch: async () => {
-          throw new Error("network failure");
-        },
+        fetch: () => Promise.reject(new Error("network failure")),
         onerror() {
           markStarted?.();
           return new Promise<number>(() => undefined);
@@ -1130,9 +1202,7 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        fetch: async () => {
-          throw new Error("network failure");
-        },
+        fetch: () => Promise.reject(new Error("network failure")),
         reconnect: {
           shouldReconnect() {
             markStarted?.();
@@ -1153,9 +1223,7 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        fetch: async () => {
-          throw new Error("network failure");
-        },
+        fetch: () => Promise.reject(new Error("network failure")),
         reconnect: {
           shouldReconnect() {
             queueMicrotask(() => abortController.abort(ERR_ABORTED));
@@ -1197,7 +1265,7 @@ describe("fetchEventStream advanced", () => {
             status: 200,
           },
         ),
-      ) as unknown as typeof globalThis.fetch;
+      );
 
     const stream = await fetchEventStream(createRequest("/sse/basic"), {
       fetch: mockFetch,
@@ -1207,7 +1275,7 @@ describe("fetchEventStream advanced", () => {
 
     const events: EventStreamMessage[] = [];
     for await (const event of stream) {
-      events.push(event as unknown as EventStreamMessage);
+      events.push(event);
     }
     expect(events).toEqual([{ data: "ok", event: "", id: "" }]);
   });
@@ -1228,7 +1296,7 @@ describe("fetchEventStream advanced", () => {
     const stream = await fetchEventStream(request);
     const events: EventStreamMessage[] = [];
     for await (const event of stream) {
-      events.push(event as EventStreamMessage);
+      events.push(event);
     }
     expect(events.length).toBeGreaterThan(0);
   });
@@ -1236,10 +1304,11 @@ describe("fetchEventStream advanced", () => {
   test("should not reconnect a ReadableStream body after a startup failure", async () => {
     const failure = new TypeError("network down");
     const shouldReconnect = vi.fn(() => true);
-    const fetch = vi.fn(async (request: Request) => {
+    const fetch = vi.fn<FetchHandle>(async (input) => {
+      const request = requireRequest(input);
       await request.arrayBuffer();
       throw failure;
-    }) as unknown as typeof globalThis.fetch;
+    });
 
     await expect(
       fetchEventStream(
@@ -1259,7 +1328,8 @@ describe("fetchEventStream advanced", () => {
   test("should end an opened ReadableStream-body stream with the original read error", async () => {
     const failure = new TypeError("network down");
     const shouldReconnect = vi.fn(() => true);
-    const fetch = vi.fn(async (request: Request) => {
+    const fetch = vi.fn<FetchHandle>(async (input) => {
+      const request = requireRequest(input);
       await request.arrayBuffer();
       return new Response(
         new ReadableStream<Uint8Array>({
@@ -1272,7 +1342,7 @@ describe("fetchEventStream advanced", () => {
         }),
         { headers: { "content-type": "text/event-stream" }, status: 200 },
       );
-    }) as unknown as typeof globalThis.fetch;
+    });
 
     const stream = await fetchEventStream(
       {
@@ -1368,7 +1438,8 @@ describe("fetchEventStream advanced", () => {
       const failure = new TypeError("network down");
       const recorded: unknown[] = [];
       const lastEventIds: Array<string | null> = [];
-      const fetch = vi.fn(async (request: Request) => {
+      const fetch = vi.fn<FetchHandle>(async (input) => {
+        const request = requireRequest(input);
         recorded.push(await read(request));
         lastEventIds.push(request.headers.get("last-event-id"));
         if (recorded.length === 1) {
@@ -1395,7 +1466,7 @@ describe("fetchEventStream advanced", () => {
           }),
           { headers: { "content-type": "text/event-stream" }, status: 200 },
         );
-      }) as unknown as typeof globalThis.fetch;
+      });
 
       const stream = await fetchEventStream(
         {
@@ -1419,10 +1490,10 @@ describe("fetchEventStream advanced", () => {
 
   test("should not retry when reconnect is omitted", async () => {
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+      return Promise.reject(new Error("network error"));
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1438,10 +1509,10 @@ describe("fetchEventStream advanced", () => {
 
   test("should not retry when reconnect.attempts = 0", async () => {
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      return new Response(null, { status: 503 });
-    }) as unknown as typeof fetch;
+      return Promise.resolve(new Response(null, { status: 503 }));
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1460,11 +1531,11 @@ describe("fetchEventStream advanced", () => {
 
   test("should retry up to reconnect.attempts limit", async () => {
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       // Throw a network error (not EventStreamFatalError) to trigger retry path
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+      return Promise.reject(new Error("network error"));
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1483,25 +1554,27 @@ describe("fetchEventStream advanced", () => {
 
   test("should succeed when retry eventually works", async () => {
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       if (fetchCount < 3) {
         // Throw network error to trigger retry path
-        throw new Error("network error");
+        return Promise.reject(new Error("network error"));
       }
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("data: ok\n\n"));
-            controller.close();
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("data: ok\n\n"));
+              controller.close();
+            },
+          }),
+          {
+            headers: { "content-type": "text/event-stream" },
+            status: 200,
           },
-        }),
-        {
-          headers: { "content-type": "text/event-stream" },
-          status: 200,
-        },
+        ),
       );
-    }) as unknown as typeof fetch;
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1524,11 +1597,11 @@ describe("fetchEventStream advanced", () => {
 
   test("should stop retry when shouldReconnect returns false", async () => {
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       // Throw network error so we reach the shouldReconnect check
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+      return Promise.reject(new Error("network error"));
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1539,7 +1612,10 @@ describe("fetchEventStream advanced", () => {
     await expect(
       fetchEventStream(request, {
         fetch: mockFetch,
-        reconnect: { shouldReconnect: async () => false, delayMs: 0 },
+        reconnect: {
+          shouldReconnect: () => Promise.resolve(false),
+          delayMs: 0,
+        },
       }),
     ).rejects.toThrow();
     expect(fetchCount).toBe(1);
@@ -1547,9 +1623,7 @@ describe("fetchEventStream advanced", () => {
 
   test("should preserve a reconnect policy exception instead of retrying", async () => {
     const cause = new Error("reconnect policy failed");
-    const fetch = vi.fn(async () => {
-      throw new Error("network error");
-    });
+    const fetch = vi.fn(() => Promise.reject(new Error("network error")));
 
     await expect(
       fetchEventStream(
@@ -1573,24 +1647,26 @@ describe("fetchEventStream advanced", () => {
 
   test("should continue retry when shouldReconnect returns true", async () => {
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       if (fetchCount < 2) {
-        throw new Error("network error");
+        return Promise.reject(new Error("network error"));
       }
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("data: ok\n\n"));
-            controller.close();
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("data: ok\n\n"));
+              controller.close();
+            },
+          }),
+          {
+            headers: { "content-type": "text/event-stream" },
+            status: 200,
           },
-        }),
-        {
-          headers: { "content-type": "text/event-stream" },
-          status: 200,
-        },
+        ),
       );
-    }) as unknown as typeof fetch;
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1600,7 +1676,7 @@ describe("fetchEventStream advanced", () => {
 
     const stream = await fetchEventStream(request, {
       fetch: mockFetch,
-      reconnect: { shouldReconnect: async () => true, delayMs: 0 },
+      reconnect: { shouldReconnect: () => Promise.resolve(true), delayMs: 0 },
     });
 
     const events: unknown[] = [];
@@ -1619,10 +1695,10 @@ describe("fetchEventStream advanced", () => {
       vi.useRealTimers();
     });
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+      return Promise.reject(new Error("network error"));
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1641,9 +1717,7 @@ describe("fetchEventStream advanced", () => {
   });
 
   test("should reject a non-finite retry delay without hot reconnecting", async () => {
-    const mockFetch = vi.fn(async () => {
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+    const mockFetch = vi.fn(() => Promise.reject(new Error("network error")));
 
     await expect(
       fetchEventStream(
@@ -1666,28 +1740,30 @@ describe("fetchEventStream advanced", () => {
     vi.useFakeTimers();
     const waitSpy = vi.spyOn(backoff, "wait");
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       if (fetchCount === 1) {
         let pulled = false;
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            pull(controller) {
-              if (!pulled) {
-                pulled = true;
-                controller.enqueue(
-                  new TextEncoder().encode("retry: 1500000000\n\n"),
-                );
-                return;
-              }
-              controller.error(new Error("connection lost"));
-            },
-          }),
-          { headers: { "content-type": "text/event-stream" } },
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(controller) {
+                if (!pulled) {
+                  pulled = true;
+                  controller.enqueue(
+                    new TextEncoder().encode("retry: 1500000000\n\n"),
+                  );
+                  return;
+                }
+                controller.error(new Error("connection lost"));
+              },
+            }),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
         );
       }
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+      return Promise.reject(new Error("network error"));
+    });
 
     try {
       const stream = await fetchEventStream(
@@ -1725,10 +1801,10 @@ describe("fetchEventStream advanced", () => {
       vi.useRealTimers();
     });
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+      return Promise.reject(new Error("network error"));
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1756,10 +1832,10 @@ describe("fetchEventStream advanced", () => {
       vi.useRealTimers();
     });
     let fetchCount = 0;
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+      return Promise.reject(new Error("network error"));
+    });
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1778,9 +1854,7 @@ describe("fetchEventStream advanced", () => {
   });
 
   test("should reject out-of-range SSE reconnect jitter", async () => {
-    const mockFetch = vi.fn(async () => {
-      throw new Error("network error");
-    }) as unknown as typeof fetch;
+    const mockFetch = vi.fn(() => Promise.reject(new Error("network error")));
 
     await expect(
       fetchEventStream(
@@ -1806,9 +1880,7 @@ describe("fetchEventStream advanced", () => {
       random.mockRestore();
       vi.useRealTimers();
     });
-    const fetch = vi.fn(async () => {
-      throw new Error("network error");
-    });
+    const fetch = vi.fn(() => Promise.reject(new Error("network error")));
     const rejected = fetchEventStream(
       {
         baseEndpoint: "https://example.com",
@@ -1829,8 +1901,8 @@ describe("fetchEventStream advanced", () => {
   });
 
   test("should enforce maxBufferSize in parser", async () => {
-    const mockFetch = vi.fn(
-      async () =>
+    const mockFetch = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
@@ -1849,7 +1921,8 @@ describe("fetchEventStream advanced", () => {
             status: 200,
           },
         ),
-    ) as unknown as typeof fetch;
+      ),
+    );
 
     const request = {
       baseEndpoint: "https://example.com",
@@ -1882,11 +1955,12 @@ describe("fetchEventStream message path", () => {
 
   // The whole text arrives as one chunk.
   function respondWith(text: string) {
-    return vi.fn(
-      async () =>
+    return vi.fn(() =>
+      Promise.resolve(
         new Response(text, {
           headers: { "content-type": "text/event-stream" },
         }),
+      ),
     );
   }
 
@@ -1896,7 +1970,7 @@ describe("fetchEventStream message path", () => {
 
   test("should transform every message of a chunk in one synchronous pass", async () => {
     const order: string[] = [];
-    const stream = await fetchEventStream(request, {
+    const stream = await fetchTransformedEventStream(request, {
       fetch: respondWith("data: a\n\ndata: b\n\ndata: c\n\n"),
       transformMessage(message) {
         if (order.length === 0) {
@@ -1927,7 +2001,7 @@ describe("fetchEventStream message path", () => {
     async ({ expected, settled }) => {
       const gate = Promise.withResolvers<EventStreamMessage | undefined>();
       const transformed: string[] = [];
-      const stream = await fetchEventStream(request, {
+      const stream = await fetchTransformedEventStream(request, {
         fetch: respondWith("data: a\n\ndata: b\n\ndata: c\n\n"),
         transformMessage(message) {
           transformed.push(message.data);
@@ -1957,7 +2031,7 @@ describe("fetchEventStream message path", () => {
       const transformed: string[] = [];
       const fetch = respondWith("data: a\n\ndata: b\n\n");
       const onerror = vi.fn(() => 0);
-      const stream = await fetchEventStream(request, {
+      const stream = await fetchTransformedEventStream(request, {
         fetch,
         onerror,
         reconnect: { attempts: 2, delayMs: 0 },
@@ -1989,10 +2063,10 @@ describe("fetchEventStream message path", () => {
   );
 
   test("should keep CAP_QUEUE_OVERFLOW as the failure when the queue overflows after a pending transform", async () => {
-    const stream = await fetchEventStream(request, {
+    const stream = await fetchTransformedEventStream(request, {
       fetch: respondWith("data: a\n\ndata: b\n\n"),
       maxQueueSize: 1,
-      transformMessage: async (message) => message,
+      transformMessage: (message) => Promise.resolve(message),
     });
 
     await expect(stream.closed).resolves.toMatchObject({
@@ -2008,7 +2082,7 @@ describe("fetchEventStream message path", () => {
     const controller = new AbortController();
     const fetch = respondWith("data: a\n\n");
     const onerror = vi.fn(() => 0);
-    const stream = await fetchEventStream(
+    const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
         fetch,
@@ -2034,38 +2108,30 @@ describe("fetchEventStream message path", () => {
 
   test("should observe a transform promise rejection after the transform aborts", async () => {
     const controller = new AbortController();
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => unhandled.push(reason);
-    process.on("unhandledRejection", onUnhandled);
     const lateFailure = new Error("late transform failure");
 
-    try {
-      const stream = await fetchEventStream(
-        { ...request, signal: controller.signal },
-        {
-          fetch: respondWith("data: a\n\n"),
-          transformMessage() {
-            controller.abort(ERR_ABORTED);
-            return Promise.reject(lateFailure);
-          },
+    const stream = await fetchTransformedEventStream(
+      { ...request, signal: controller.signal },
+      {
+        fetch: respondWith("data: a\n\n"),
+        transformMessage() {
+          controller.abort(ERR_ABORTED);
+          return Promise.reject(lateFailure);
         },
-      );
+      },
+    );
 
-      await expect(stream.closed).resolves.toMatchObject({
-        cause: ERR_ABORTED,
-        kind: "aborted",
-      });
-      await new Promise((resolve) => setImmediate(resolve));
-      expect(unhandled).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onUnhandled);
-    }
+    await expect(stream.closed).resolves.toMatchObject({
+      cause: ERR_ABORTED,
+      kind: "aborted",
+    });
+    await Bun.sleep(0);
   });
 
   test("should not transform the remaining messages of a chunk once the request is aborted", async () => {
     const controller = new AbortController();
     const transformed: string[] = [];
-    const stream = await fetchEventStream(
+    const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
         fetch: respondWith("data: a\n\ndata: b\n\ndata: c\n\n"),
@@ -2090,10 +2156,8 @@ describe("fetchEventStream message path", () => {
 });
 
 describe("reconnect method policy", () => {
-  function rejectingFetch(failure: TypeError): typeof fetch {
-    return vi.fn(async () => {
-      throw failure;
-    }) as unknown as typeof fetch;
+  function rejectingFetch(failure: TypeError): FetchHandle {
+    return vi.fn<FetchHandle>(() => Promise.reject(failure));
   }
 
   test("should not reconnect POST without shouldReconnect", async () => {
@@ -2189,19 +2253,23 @@ describe("reconnect method policy", () => {
 
   test("should end an opened POST stream with the original read error when shouldReconnect is absent", async () => {
     const failure = new TypeError("network down");
-    const fetch = vi.fn(async () => {
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("id: 1\ndata: a\n\n"));
-          },
-          pull(controller) {
-            controller.error(failure);
-          },
-        }),
-        { headers: { "content-type": "text/event-stream" }, status: 200 },
+    const fetch = vi.fn(() => {
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode("id: 1\ndata: a\n\n"),
+              );
+            },
+            pull(controller) {
+              controller.error(failure);
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" }, status: 200 },
+        ),
       );
-    }) as unknown as typeof globalThis.fetch;
+    });
 
     const stream = await fetchEventStream(
       {
@@ -2218,4 +2286,261 @@ describe("reconnect method policy", () => {
     expect(closed.cause).toBe(failure);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+});
+
+describe("raw transport handshake decoding", () => {
+  test.each([
+    {
+      body: '{"value":3}',
+      schema: struct.object({ value: struct.number() }),
+      contentType: "application/json",
+      expected: { value: 3 },
+    },
+    {
+      body: "denied",
+      schema: struct.string(),
+      contentType: "text/plain",
+      expected: "denied",
+    },
+    {
+      body: null,
+      schema: struct.string(),
+      contentType: "text/plain",
+      expected: "",
+    },
+  ])(
+    "decodes $contentType handshake bodies without an operation decoder",
+    async ({ body, schema, contentType, expected }) => {
+      const failure: EventStreamFailureInfo = {};
+      await expect(
+        fetchEventStream(
+          {
+            baseEndpoint: "https://example.test",
+            endpoint: "/events",
+            method: "GET",
+          },
+          {
+            fetch: () =>
+              Promise.resolve(
+                new Response(body, {
+                  status: 403,
+                  headers: { "content-type": contentType },
+                }),
+              ),
+            handshakeError: schema,
+            failure,
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: "HTTP_STATUS",
+        data: expected,
+        status: 403,
+      });
+      expect(failure.open?.response.body).toEqual(expected);
+    },
+  );
+
+  test("keeps cancellation while a declared handshake body is being read", async () => {
+    const started = Promise.withResolvers<void>();
+    const controller = new AbortController();
+    const pending = fetchEventStream(
+      {
+        baseEndpoint: "https://example.test",
+        endpoint: "/events",
+        method: "GET",
+        signal: controller.signal,
+      },
+      {
+        fetch: () =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(target) {
+                  target.enqueue(new Uint8Array([100]));
+                },
+                pull() {
+                  started.resolve();
+                },
+              }),
+              { status: 403, headers: { "content-type": "text/plain" } },
+            ),
+          ),
+        handshakeError: struct.string(),
+      },
+    );
+    await started.promise;
+    controller.abort(ERR_ABORTED);
+    await expect(pending).rejects.toBe(ERR_ABORTED);
+  });
+});
+
+test("reads the current transformMessage option for each frame", async () => {
+  const feed =
+    Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
+  const options: FetchEventStreamOptions<string> = {
+    maxBufferSize: 1024,
+    maxQueueSize: 16,
+    fetch: () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(target) {
+              feed.resolve(target);
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+      ),
+    transformMessage: (message) => message.data,
+  };
+  const stream = await fetchEventStreamInternal(
+    {
+      baseEndpoint: "https://example.test",
+      endpoint: "/events",
+      method: "GET",
+    },
+    options,
+  );
+  const target = await feed.promise;
+  const iterator = stream[Symbol.asyncIterator]();
+  target.enqueue(new TextEncoder().encode("data: first\n\n"));
+  await expect(iterator.next()).resolves.toEqual({
+    done: false,
+    value: "first",
+  });
+  options.transformMessage = () => "changed";
+  target.enqueue(new TextEncoder().encode("data: second\n\n"));
+  await expect(iterator.next()).resolves.toEqual({
+    done: false,
+    value: "changed",
+  });
+  stream.close();
+  await stream[Symbol.asyncDispose]();
+});
+
+test("reads the mapper accessor once per message and calls it with the options receiver", async () => {
+  let reads = 0;
+  const receivers: unknown[] = [];
+  const options: FetchEventStreamOptions<string> = {
+    maxBufferSize: 1024,
+    maxQueueSize: 16,
+    fetch: () =>
+      Promise.resolve(
+        new Response("data: frame\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    get transformMessage() {
+      const read = ++reads;
+      return function (
+        this: FetchEventStreamOptions<string>,
+        message: EventStreamMessage,
+      ) {
+        receivers.push(this);
+        return `${read}:${message.data}`;
+      };
+    },
+  };
+  const stream = await fetchEventStreamInternal(
+    {
+      baseEndpoint: "https://example.test",
+      endpoint: "/events",
+      method: "GET",
+    },
+    options,
+  );
+  expect(await Array.fromAsync(stream)).toEqual(["1:frame"]);
+  expect(reads).toBe(1);
+  expect(receivers).toEqual([options]);
+});
+
+test("reads attempt options as HEAD and invokes initial and reconnect callbacks without receivers", async () => {
+  const receivers: unknown[] = [];
+  let reads = 0;
+  let requests = 0;
+  const attempt: NonNullable<FetchEventStreamOptions["endpointAttempt"]> = {
+    done(this: unknown) {
+      receivers.push(this);
+    },
+    pickNext(this: unknown) {
+      receivers.push(this);
+      return [
+        null,
+        {
+          endpoint: "https://backup.test",
+          done(this: unknown) {
+            receivers.push(this);
+          },
+        },
+      ];
+    },
+  };
+  const options: FetchEventStreamOptions = {
+    maxBufferSize: 1024,
+    maxQueueSize: 16,
+    transformMessage: (message) => message,
+    reconnect: { attempts: 1, delayMs: 0 },
+    fetch: () =>
+      ++requests === 1
+        ? Promise.reject(new TypeError("connection lost"))
+        : Promise.resolve(
+            new Response("data: ok\n\n", {
+              headers: { "content-type": "text/event-stream" },
+            }),
+          ),
+    get endpointAttempt() {
+      reads += 1;
+      return attempt;
+    },
+  };
+  const stream = await fetchEventStreamInternal(
+    {
+      baseEndpoint: "https://example.test",
+      endpoint: "/events",
+      method: "GET",
+    },
+    options,
+  );
+  expect(
+    (await Array.fromAsync(stream)).map((message) => message.data),
+  ).toEqual(["ok"]);
+  expect(reads).toBe(4);
+  expect(receivers).toEqual([undefined, undefined, undefined]);
+  expect(requests).toBe(2);
+});
+
+test("passes missing attempt callbacks through as undefined", async () => {
+  let requests = 0;
+  const options: FetchEventStreamOptions = {
+    maxBufferSize: 1024,
+    maxQueueSize: 16,
+    transformMessage: (message) => message,
+    reconnect: { attempts: 1, delayMs: 0 },
+    fetch: () =>
+      ++requests === 1
+        ? Promise.reject(new TypeError("connection lost"))
+        : Promise.resolve(
+            new Response("data: ok\n\n", {
+              headers: { "content-type": "text/event-stream" },
+            }),
+          ),
+    endpointAttempt: {
+      // @ts-expect-error Deliberately omit the required callback to preserve runtime passthrough.
+      done: undefined,
+      // @ts-expect-error Deliberately omit the required picker to preserve runtime passthrough.
+      pickNext: undefined,
+    },
+  };
+  const stream = await fetchEventStreamInternal(
+    {
+      baseEndpoint: "https://example.test",
+      endpoint: "/events",
+      method: "GET",
+    },
+    options,
+  );
+  expect(
+    (await Array.fromAsync(stream)).map((message) => message.data),
+  ).toEqual(["ok"]);
+  expect(requests).toBe(2);
 });

@@ -3,10 +3,10 @@ import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
 
 const client = createClient(withEndpoint("https://api.example.com/v1"));
 
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  name: struct.string(),
-  email: struct.string(),
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
 });
 
 const ApiError = struct.object({
@@ -14,24 +14,24 @@ const ApiError = struct.object({
   message: struct.string(),
 });
 
-const NewUser = struct.object({
-  name: struct.string(),
-  email: struct.string(),
+const NewOrder = struct.object({
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
 });
 
-const createUser = defineRequest({
+const createOrder = defineRequest({
   method: "POST",
-  path: "/users",
-  input: NewUser,
+  path: "/orders",
+  input: NewOrder,
   builder: (input) => ({ body: input }),
-  output: User,
+  output: Order,
   error: ApiError,
 });
 
 async function main() {
-  const [error, user, response] = await createUser(client, {
-    name: "Ada",
-    email: "ada@example.com",
+  const [error, order, response] = await createOrder(client, {
+    status: "paid",
+    customerName: "Ada",
   });
   if (error?.code === "HTTP_STATUS") {
     console.error(error.status, error.data.message);
@@ -41,7 +41,7 @@ async function main() {
     console.error(error.code);
     return;
   }
-  console.log(`Created ${user.name} → ${response.status}`);
+  console.log(`Created ${order.status} → ${response.status}`);
 }
 
 void main();

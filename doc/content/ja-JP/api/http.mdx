@@ -1,6 +1,6 @@
 ---
 title: HTTP
-description: defineRequest、リクエスト options、HTTP の request/response 型です。
+description: defineRequest、リクエストオプション、HTTP のリクエスト / レスポンス型です。
 ---
 
 # HTTP
@@ -11,16 +11,16 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`、`path`、任意の `input` struct、任意の `output` と `error` struct、任意の `operation`。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`RequestDefinition`](/ja-JP/api/core/requestdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
-- **戻り値** 操作です。`getUser(client, input)` のように呼び、入力を宣言していなければ `health(client)` です。入力 struct 全体が任意なら、入力引数は省略できます。呼ぶとリクエストが始まります。第 3 の options 引数はありません。
+- **definition** — `method`、`path`、任意の `input` struct、任意の `output` と `error` struct、任意の `operation`。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`RequestDefinition`](/ja-JP/api/core/requestdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
+- **戻り値** 操作です。`getOrder(client, input)` のように呼び、入力を宣言していなければ `health(client)` です。入力 struct 全体が任意なら、入力引数は省略できます。呼ぶとリクエストが始まります。3 番目のオプション引数はありません。
 
 <include cwd>examples/api/define-request.ts#example</include>
 
-`output` は 2xx ボディ用の struct 1 つ、`error` は 2xx 以外すべてのボディ用の struct 1 つです。どちらも status でキー分けされません。省いた側のボディは読まれません — [宣言は断言である](/ja-JP/docs/design-decisions#declaration-is-an-assertion) を参照してください。
+`output` は 2xx ボディ用の struct 1 つ、`error` は 2xx 以外すべてのボディ用の struct 1 つです。どちらも status でキー分けされません。省いた側のボディは読まれません — [宣言はアサーション（保証）である](/ja-JP/docs/design-decisions#declaration-is-an-assertion) を参照してください。
 
-操作を呼ぶと、[`HttpAwaitResult`](/ja-JP/api/core/httpawaitresult-type) に書かれたタプルの promise が返ります。呼び出しごとの options は、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。HTTP が読むのは `signal` と進捗コールバックで、他のフィールドは無視します。
+操作を呼ぶと、[`HttpAwaitResult`](/ja-JP/api/core/httpawaitresult-type) に書かれたタプルの promise が返ります。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。HTTP が読むのは `signal` と進捗コールバックで、他のフィールドは無視します。
 
-2xx 以外の status は、`error` struct を宣言していないか、宣言した `error` ボディがデコードできる場合に `HTTP_STATUS` になります。fault の `data` は、`error` を宣言していればデコード済みのエラーボディ、していなければ `undefined` です。宣言した `error` ボディを読めない場合（メディアタイプが違う、JSON が不正）や struct に一致しない場合、fault は代わりに `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH` のいずれかになり、レスポンスの status はそのメタデータに引き続き含まれます。失敗時のタプル第三要素は `undefined` で、レスポンスのメタデータは fault が持ちます。
+2xx 以外の status は、`error` struct を宣言していないか、宣言した `error` ボディがデコードできる場合に `HTTP_STATUS` になります。Fault の `data` は、`error` を宣言していればデコード済みのエラーボディ、していなければ `undefined` です。宣言した `error` ボディを読めない場合（メディアタイプが違う、JSON が不正）や struct に一致しない場合、Fault は代わりに `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH` のいずれかになり、レスポンスの status はそのメタデータに引き続き含まれます。失敗時のタプルの 3 番目の要素は `undefined` で、レスポンスのメタデータは Fault が持ちます。
 
 ## fetchHandler()
 
@@ -32,29 +32,29 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 <ApiSignature name="makeResponse" />
 
-ネットワークなしで `HttpResponse` を作ります（インターセプター、テスト）。デフォルトの status は `0` です。`ok` は 2xx のとき true です。返る値は、回線から来たレスポンスと同じメディアタイプ確認と同じ宣言 struct を通ります。信頼による短絡経路はありません。
+ネットワークなしで `HttpResponse` を作ります（インターセプター、テスト）。デフォルトの status は `0` です。`ok` は 2xx のとき true です。返る値は、ワイヤから来たレスポンスと同じメディアタイプ確認と同じ宣言 struct を通ります。信頼による短絡経路はありません。
 
 ## HttpExecuteOptions
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) の HTTP スライスです。[`UseRequestConfig`](/ja-JP/api/core/userequestconfig-type)、つまり `signal` に `onDownloadProgress` と `onUploadProgress` を足したものです。`timeout` フィールドも `abort` フィールドもありません。期限は `signal: AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。クライアント単位の既定の期限はありません。`heartbeat` のような他のリクエストフィールドは無視されます。
+`HttpExecuteOptions` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) の HTTP スライスです。[`UseRequestConfig`](/ja-JP/api/core/userequestconfig-type)、つまり `signal` に `onDownloadProgress` と `onUploadProgress` を足したものです。`timeout` フィールドも `abort` フィールドもありません。期限は `signal: AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。クライアント単位のデフォルトの期限はありません。`heartbeat` のような他のリクエストフィールドは無視されます。
 
 ## 型
 
 ### RequestDefinition
 
-`method`、`path`、任意の `input`、`output`、`error`、`operation`、`builder` です。`responseType` はありません。宣言したボディの読み方は struct の kind が選びます。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+`method`、`path`、任意の `input`、`output`、`error`、`operation`、`builder` です。宣言したボディの読み方は struct の種類が決めます。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
 
 ### HttpAwaitResult
 
 <ApiSignature name="HttpAwaitResult" />
 
-成功時、第三要素が `body` を持つのは `output` を宣言していたときだけです。失敗時は `undefined` です — 存在したレスポンスのメタデータはすでに fault が抱えています。
+成功時、3 番目の要素が `body` を持つのは `output` を宣言していたときだけです。失敗時は `undefined` です — 存在したレスポンスのメタデータはすでに Fault が抱えています。
 
 ### HttpRequest
 
-正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString`、`queryParams` です。インターセプターが見る時点で `body` はすでに回線上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。ビルダーが `URLSearchParams` を返すと、そのインスタンスがそのまま渡されます。`responseType` と `errorResponseType` は readonly です。エンドポイントの `output` と `error` の struct kind から導出され、変更してはいけません。
+正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString`、`queryParams` です。インターセプターが見る時点で `body` はすでにワイヤ上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。`builder` が `URLSearchParams` を返すと、そのインスタンスがそのまま渡されます。`responseType` と `errorResponseType` は readonly です。宣言された `output` と `error` の struct の種類から導出され、変更してはいけません。
 
 ### HttpMeta
 
@@ -72,13 +72,13 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 <ApiSignature name="HttpResponse" />
 
-`body` は、レスポンスにボディがなかったときは `undefined` で、JSON の `null` は `null` のままです。この型はブランド付きなので、オブジェクトリテラルではなく `makeResponse` で作ってください。トランスポートが作り、インターセプターが見る回線上の形です。`body` はテキストか、すでにパースされた JSON で、デコード済みの値ではありません。JSON 表現では、文字列は JSON の文字列ルートであり、もう一度パースされません。バイトと blob は生のままで、一度だけパースされます。呼び出し側に届くのは `DecodedResponse` です。
+`body` は、レスポンスにボディがなかったときは `undefined` で、JSON の `null` は `null` のままです。この型はブランド付きなので、オブジェクトリテラルではなく `makeResponse` で作ってください。トランスポートが作り、インターセプターが見るワイヤ上の形です。`body` はテキストか、すでにパースされた JSON で、デコード済みの値ではありません。JSON 表現では、文字列は JSON の文字列ルートであり、もう一度パースされません。バイトと blob は生のままで、一度だけパースされます。呼び出し側に届くのは `DecodedResponse` です。
 
 ### HttpProgressEvent
 
 ### HttpProgressFn
 
-`loaded`、`total`、`lengthComputable` です。コールバックは非同期でも構いません。`onDownloadProgress` または `onUploadProgress` が例外を投げると、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。キャンセルは引き続き `NET_ABORTED` を報告し、abort の理由がタイムアウトなら `NET_TIMEOUT` を報告します。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます（Bun、Node）。ブラウザーでは、`Blob` / `File`、`ArrayBuffer`、`FormData` のボディはそのまま送られ、`onUploadProgress` は呼び出されません。
+`loaded`、`total`、`lengthComputable` です。コールバックは非同期でも構いません。`onDownloadProgress` または `onUploadProgress` が例外を投げると、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。キャンセルは引き続き `NET_ABORTED` を報告し、abort の理由がタイムアウトなら `NET_TIMEOUT` を報告します。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます（Bun）。ブラウザでは、`Blob` / `File`、`ArrayBuffer`、`FormData` のボディはそのまま送られ、`onUploadProgress` は呼び出されません。
 
 サーバーランタイムでは、FormData はボディ全体を Blob にバッファリングせず、シリアライズされたストリームを使い、実際の multipart boundary を保持します。有効な明示的 `Content-Length` がなければ総量は不明です。アップロード変換後も明示的な Content-Type は保持されますが、FormData はシリアライズ時の boundary を使う必要があります。`loaded` が数えるのはストリームのバイト数であり、サーバーの受信確認ではありません。`Content-Encoding` が identity 以外のダウンロードは `total: 0`、`lengthComputable: false` を報告します。そのストリームのバイト列はすでに展開されている場合があります。
 
@@ -86,17 +86,17 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 ## RequestEndpoint
 
-`defineRequest` の戻り値です。第一引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。
+`defineRequest` の戻り値です。第 1 引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。
 
 ## BuilderInput
 
-`builder` が見る、パース済みのエンドポイント入力です。オブジェクトノードは、その値を生成した struct の情報を保持するため、値に対応するエイリアス、`Date`、`bigint` のエンコードが適用されます。
+`builder` が見る、パース済みの操作入力です。オブジェクトノードは、その値を生成した struct の情報を保持するため、値に対応するエイリアス、`Date`、`bigint` のエンコードが適用されます。
 
 ## HttpRequestShape
 
 <ApiSignature name="HttpRequestShape" />
 
-4 つのフィールドはすべて任意です。`query` は `URLSearchParams` または record です。入れ子オブジェクトには実行時の `withQuerySerializer` が要ります。`headers` は `HeadersInit`、またはスカラーかスカラーの配列の record です。`path` は `:name` セグメントごとにスカラーを一つ渡します。
+4 つのフィールドはすべて任意です。`query` は `URLSearchParams` または record です。入れ子オブジェクトには実行時の `withQuerySerializer` が要ります。`headers` は `HeadersInit`、またはスカラーかスカラーの配列の record です。`path` は `:name` セグメントごとにスカラーを 1 つ渡します。
 
 `GET` と `HEAD` の `body` は `never` です。それ以外では、ワイヤ値（`string`、`Blob`、`ArrayBuffer`、typed array または `DataView`、`FormData`、`URLSearchParams`、`ReadableStream<Uint8Array>`）か、JSON データ（`number`、`boolean`、`bigint`、`Date`、`null`、配列、文字列キーのオブジェクト）です。
 
@@ -116,7 +116,7 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 `'arraybuffer' | 'blob' | 'json' | 'text'`
 
-宣言した struct の kind から選ばれます（`string` → `text`、`blob` / `file` → `blob`、`arrayBuffer` → `arraybuffer`、それ以外 → `json`）。`defineRequest` のフィールドではありません。
+宣言した struct の種類から選ばれます（`string` → `text`、`blob` / `file` → `blob`、`arrayBuffer` → `arraybuffer`、それ以外 → `json`）。`defineRequest` のフィールドではありません。
 
 ## MakeResponseOptions
 

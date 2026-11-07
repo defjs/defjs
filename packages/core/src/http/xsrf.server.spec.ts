@@ -1,5 +1,18 @@
 import { describe, expect, inject, test } from "vitest";
 
+async function issuedToken(response: Response): Promise<string> {
+  const body: unknown = await response.json();
+  if (
+    typeof body !== "object" ||
+    body === null ||
+    !("token" in body) ||
+    typeof body.token !== "string"
+  ) {
+    throw new Error("expected token");
+  }
+  return body.token;
+}
+
 describe("xsrf server endpoints", () => {
   const host = inject("testServerHost");
 
@@ -12,14 +25,14 @@ describe("xsrf server endpoints", () => {
     expect(setCookie).toContain("XSRF-TOKEN=");
     expect(setCookie).toContain("SameSite=Strict");
 
-    const { token } = (await response.json()) as { token: string };
+    const token = await issuedToken(response);
     expect(typeof token).toBe("string");
     expect(token.length).toBeGreaterThan(0);
   });
 
   test("should accept matching cookie and header", async () => {
     const tokenResponse = await fetch(`${host}/xsrf-token`);
-    const { token } = (await tokenResponse.json()) as { token: string };
+    const token = await issuedToken(tokenResponse);
     const cookie = tokenResponse.headers.get("set-cookie") ?? "";
 
     const response = await fetch(`${host}/xsrf-validate`, {
@@ -75,7 +88,7 @@ describe("xsrf server endpoints", () => {
     const tokenResponse = await fetch(
       `${host}/xsrf-token?cookieName=CUSTOM-XSRF&headerName=X-CUSTOM-TOKEN`,
     );
-    const { token } = (await tokenResponse.json()) as { token: string };
+    const token = await issuedToken(tokenResponse);
     const cookie = tokenResponse.headers.get("set-cookie") ?? "";
 
     expect(cookie).toContain("CUSTOM-XSRF=");

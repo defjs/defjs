@@ -2,14 +2,14 @@
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
 
 const client = createClient(withEndpoint("https://api.example.com"));
-const updateUser = defineRequest({
+const updateOrder = defineRequest({
   method: "PATCH",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({
     id: struct.number(),
     requestId: struct.string(),
     profile: struct.object({
-      displayName: struct.string().alias("display_name"),
+      customerName: struct.string().alias("customer_name"),
     }),
   }),
   builder: (input) => ({
@@ -19,21 +19,21 @@ const updateUser = defineRequest({
   }),
   output: struct.object({
     id: struct.number(),
-    displayName: struct.string().alias("display_name"),
+    customerName: struct.string().alias("customer_name"),
   }),
 });
 
 async function main() {
-  const [error, user] = await updateUser(client, {
+  const [error, order] = await updateOrder(client, {
     id: 7,
     requestId: "request-42",
-    profile: { displayName: "Ada" },
+    profile: { customerName: "Ada" },
   });
   if (error) {
     console.error(error.code);
     return;
   }
-  console.log(user.id);
+  console.log(order.id);
 }
 
 void main();

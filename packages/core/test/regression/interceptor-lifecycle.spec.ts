@@ -83,7 +83,7 @@ test.each([
             if (!first) throw new Error("Expected the first physical socket");
             first.readyState = 3;
             first.dispatchEvent(
-              Object.assign(new Event("close"), {
+              new CloseEvent("close", {
                 code: 1012,
                 reason: "restart",
                 wasClean: true,
@@ -95,9 +95,10 @@ test.each([
           }
           return new Proxy(session, {
             get(target, key) {
-              return key === "connection"
-                ? readConnection(target.connection)
-                : Reflect.get(target, key, target);
+              if (key === "connection")
+                return readConnection(target.connection);
+              const value: unknown = Reflect.get(target, key, target);
+              return value;
             },
           });
         }),
@@ -198,9 +199,9 @@ test("HTTP honours both the caller signal and an interceptor replacement signal"
   const calls: number[] = [];
   const blocked = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls.push(1);
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
     withInterceptors(
       createHttpInterceptor((request, next) =>
@@ -265,18 +266,18 @@ test("SSE keeps caller cancellation after an interceptor supplies its own signal
         next({ ...request, signal: replacement.signal }),
       ),
     ),
-    withSSEHandle(async (request) => {
+    withSSEHandle((request) => {
       transportSignal = new Request(request).signal;
-      return new Response(body, {
-        headers: { "content-type": "text/event-stream" },
-      });
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     }),
   );
   const endpoint = defineEventStream({
     path: "/events",
     events: { message: struct.string() },
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
   const [fault, stream] = await endpoint(client({ signal: controller.signal }));
   try {

@@ -1,20 +1,37 @@
 ---
 title: "Renouveler un jeton après 401"
-description: Pose Authorization et rejoue une fois dans un seul intercepteur ; next() ne va que vers l’intérieur.
+description: Attachez Authorization et rejouez une seule fois dans un unique intercepteur ; next() ne se propage que vers l'intérieur.
 ---
 
 # Renouveler un Bearer une fois sur 401
 
-`next()` est le reste de **cet** oignon — pas un `axios(config)` redistribué depuis l’extérieur. Place l’attache, le refresh single-flight et un seul rejeu dans **un** intercepteur HTTP pour que les couches extérieures ne tournent pas deux fois.
+Dans Defjs, `next(request)` invoque la portion restante de la chaîne d'intercepteurs vers l'intérieur — sans jamais relancer le flux depuis l'intercepteur le plus externe. Regroupez l'injection du jeton, la déduplication du rafraîchissement (single-flight) et le rejeu unique suite à une réponse `401` dans **un seul** intercepteur HTTP afin que les intercepteurs externes de journalisation ou de mesure ne s'exécutent pas deux fois :
 
-Voir [Intercepteurs](/fr-FR/docs/interceptors).
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 42
 ```
 
-Appeler `next` à nouveau ne réentre que dans les intercepteurs **à l’intérieur** de cette couche (et le handler Fetch). Cela ne relance pas les wrappers extérieurs de timing ou d’auth — c’est pourquoi le traitement du 401 appartient à un seul intercepteur, pas à un second appel de l’opération.
+Un corps rejouable n’est pas une opération métier répétable. Cet intercepteur renvoie aussi un `POST` JSON après une réponse 401 correspondante : deux livraisons HTTP, d’abord rejetée puis acceptée. Ne l’utilisez pour les écritures que si l’authentification rejette la première livraison avant l’exécution du gestionnaire métier ; conservez une clé d’idempotence stable entre les deux livraisons et utilisez une déduplication côté serveur. Si ce contrat est indisponible, renvoyez la 401 au lieu de rejouer automatiquement l’écriture. L’exemple complet ne rejoue pas un corps de requête `ReadableStream`.
+
+Consultez [Intercepteurs](/fr-FR/docs/interceptors) pour approfondir le modèle en oignon et les frontières de rejeu.

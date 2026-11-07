@@ -1,113 +1,127 @@
 ---
-title: "クライアント設定 / Client"
-description: import した SDK の操作を、API 定義とは独立してアプリケーションがどう呼ぶかを構成します。
+title: "Client"
+description: インポートした SDK 操作の実行方法を、API 定義から完全に独立させてアプリケーション側で構成します。
 ---
 
 # Client
 
-`Client` は、利用するアプリケーションの実行設定です。`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。ファクトリをリクエスト options 付きで呼ぶと `Client` 値が返り、操作が受け取るのはその `Client` 値です。`Client` 値は呼び出せません。SDK から操作を import し、サービスアドレス、認証情報、インターセプター、トランスポートを選んでから、クライアントを渡して操作を呼びます。入力を宣言した呼び出しは `getUser(client({ signal }), { id: 1 })` で始まります。入力を宣言していない呼び出しは `health(client)` で始まります。入力 struct 全体が任意なら、`search(client)` と `search(client, input)` の両方が有効です。第 3 の options 引数はありません。操作を呼ぶと処理が始まります。`await` が待つのは error-first タプルだけです。
+`Client` は、利用側アプリケーションの実行時設定（ベース URL、デフォルトヘッダー、認証情報、インターセプター、クエリシリアライズ、トランスポートハンドル）を保持します。
 
-SDK の定義はこのインスタンスに束縛されません。ブラウザー、サーバーリクエスト、ローカルテストが、異なるクライアントで同じ export された操作を使えます。どれも同じ Defjs 契約と互換性のある Core の版に従います。そのクライアントを通して呼ぶ操作に合わせて、各クライアントのサービスアドレスを構成してください。
+`createClient(...options)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。
 
-同じクライアント値を多くの操作に渡せます。キャッシュとリトライの方針はアプリケーションが選び、始めた作業を所有します。HTTP は自動ではリトライされません。ストリームの再接続はオプトインです。
+- 呼び出しごとの個別オプションが不要な場合は、`client` をそのまま操作に渡します（`getOrder(client, { id: 1 })`）。
+- 呼び出しごとのオプションが必要な場合は、`client(requestOptions)` を呼び出して単一呼び出し用の派生 `Client` 値を生成して渡します（`getOrder(client({ signal }), { id: 1 })`）。派生処理自体は I/O を行わず、返される値はプレーンなオブジェクト（関数ではない）です。
 
-ファクトリは関数であり、リクエスト options を持たない `Client` でもあります。ファクトリを React の state setter に渡さないでください。`setState(factory)` は updater としてそれを呼びます。Vue の `watch` や `computed` のソースにも使わないでください。それらは関数を呼びます。派生した client 値はプレーンなオブジェクトです。
+## 1. クライアントの構成と SDK 操作の呼び出し
 
-## 基本セットアップ
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` は、[`Client`](/ja-JP/api/core/client-type) でもある呼び出し可能なファクトリを 1 つ返します。トランスポートごとのオーバーロードの集合ではありません。
-
-## options を合成する
-
-options は左から右へ適用されます。setter は置換、`withInterceptors(...items)` は追記です。
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
 </include>
 
-混在インターセプターは操作の実行時にトランスポートでフィルタされ、選ばれた種別内の相対順はそのままです。
+</Tab>
+</Tabs>
 
-## クライアントを派生する
+### オプション合成のルール
 
-`client(options?)` は 1 回の呼び出し用の `Client` 値を返します。`client(options)` を呼ぶとき、既知の 7 フィールドは引数オブジェクトからコピーされます。新しい options オブジェクトへのトップレベルのスナップショットです。未知のフィールドは無視され、値が `undefined` のフィールドは省かれます。親の options を重ねることはありません。`client()`、`client(undefined)`、`client({})` はリクエスト options を持たないクライアントを返します。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされません。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。throw する getter は `client(options)` から外へ伝わり、ファクトリは引き続き使えます。client 値は呼び出せないため、呼び出しごとに 1 つ作ってください。
+- オプションは **左から右へ** 順番に適用されます。
+- 単一値を設定するヘルパー（`withEndpoint`、`withHeaders`、`withQuerySerializer`、`withCredentials`、`withXSRF`）は、先行する同種の設定を **置き換え** ます。
+- `withInterceptors(...items)` は既存のインターセプターリストの **末尾に追加** され、操作の実行時にトランスポート（`http`、`sse`、`web-socket`）ごとにフィルタリングされます。
 
-`signal` は合成されません。`signal` を持つ client 値を再利用すると、呼び出し間でそのシグナルを共有するため、呼び出しごとに client 値を作ってください。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+## 2. 呼び出しごとのクライアント派生 (`client(options)`)
+
+独自の `signal`、進捗コールバック、または WebSocket セッション固有の上書きが必要な呼び出しごとに、新しい派生クライアント値を生成します。
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-`createClient` からの基底設定は、すべての client 値が共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。そのクライアントの [`RequestOptions`](/ja-JP/api/core/requestoptions-type) は、そのトップレベルのスナップショットです。アプリケーションコードはクライアントを操作に渡します。その内部状態は読みません。
+> [!IMPORTANT]
+> `createClient(...)` は呼び出し可能な関数（`DerivableClient`）を返すため、React の `setState(client)` アップデーターや Vue の `watch(client)` / `computed(client)` ソースに直接渡さないでください。フレームワークが関数をアップデーターやゲッターとして解釈してしまうためです。
 
-## リクエスト options
+### 呼び出しごとの `RequestOptions` リファレンス
 
-[`RequestOptions`](/ja-JP/api/core/requestoptions-type) にはフラットなフィールドが 7 つあります。各プロトコルは自分が知るフィールドだけを読み、残りは無視します。HTTP の操作に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `signal` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはありません。
+`RequestOptions` には 7 つのフラットなフィールドがあります。各トランスポートは自身に関係するフィールドのみを読み取り、それ以外は無視します。
 
-| フィールド           | 使うもの             | 規則                                                                                                              |
-| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `signal`             | HTTP、SSE、WebSocket | 呼び出しを中止します。期限は `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）です。手動の abort は `NET_ABORTED` です。 |
-| `onUploadProgress`   | HTTP                 | SSE と WebSocket は無視します。                                                                                   |
-| `onDownloadProgress` | HTTP                 | SSE と WebSocket は無視します。                                                                                   |
-| `beforeConnect`      | WebSocket            | その呼び出しに限り、クライアント設定を置き換えます。                                                              |
-| `protocols`          | WebSocket            | クライアントのリストを置き換えます。追記はしません。                                                              |
-| `heartbeat`          | WebSocket            | 全体を置き換えます。`timeoutMs` はハートビートの確認待ちであり、リクエストの期限ではありません。                  |
-| `reconnect`          | WebSocket            | 全体を置き換えます。                                                                                              |
+| フィールド           | 対象トランスポート   | 動作                                                                                                                                    |
+| -------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE, WebSocket | 呼び出しを中断（`AbortSignal.timeout(ms)` → `NET_TIMEOUT`、手動中止 → `NET_ABORTED`）                                                   |
+| `onUploadProgress`   | HTTP                 | ストリーミングリクエストボディのアップロード進捗を報告                                                                                  |
+| `onDownloadProgress` | HTTP                 | 宣言されたレスポンスボディのダウンロード進捗を報告                                                                                      |
+| `beforeConnect`      | WebSocket            | このセッションに限り、クライアントレベルの `beforeConnect` フックを置き換え                                                             |
+| `protocols`          | WebSocket            | このセッションに限り、クライアントレベルのサブプロトコル一覧を置き換え                                                                  |
+| `heartbeat`          | WebSocket            | このセッションに限り、クライアントレベルのハートビート設定を置き換え                                                                    |
+| `reconnect`          | WebSocket            | このセッションに限り、クライアントレベルの WebSocket 再接続ポリシーを置き換え（SSE の再接続はクライアントの `withSSEReconnect` で設定） |
 
-`timeout` フィールドも、`abort` フィールドも、クライアント単位の既定の期限もありません。SSE と WebSocket では、`signal` は開いたあとも含む接続全体を覆います。起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。[SSE](/ja-JP/docs/sse#close-and-dispose) を参照してください。
+## 3. ブラウザのシングルトン vs サーバーのリクエストスコープ
 
-`HttpExecuteOptions` は HTTP のスライスです。`signal` と進捗コールバックです。`EventStreamExecuteOptions` は `{ signal? }` です。`WebSocketExecuteOptions` は WebSocket のスライスに `signal` を足したものです。
+- **ブラウザアプリケーション**: エンドポイント、インターセプター、認証情報がブラウザ全体で共通である場合、モジュールスコープの単一の `DerivableClient` を共有します。
+- **サーバー / SSR アプリケーション**: ヘッダー、Cookie、認証トークン、テナントコンテキストがリクエスト固有である場合、**各インバウンドリクエストの境界内で新しいクライアントを生成** します。プロセス共通のクライアントにユーザー固有の認証情報を保持させてはいけません。
 
-## トランスポート別に結果を見る
+## 4. 複数エンドポイントとロードバランシング [#multiple-endpoints]
 
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`。`open` は、Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合、返された接続の最初の成功したハンドシェイクのスナップショットです。独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先され、`stream.open` はライブのままです（[SSE](/ja-JP/docs/sse) を参照）。
-- WebSocket → `[error, session, connection]`
+`withEndpoint(...urls)` は 1 つ以上の候補ベース URL を受け取ります。デフォルトでは以下の動作になります。
 
-`error` があるときは、成功値を使う前に return してください。
+- 各クライアントは [`pickFirstBalancer`](/ja-JP/api/core/pickfirstbalancer) を使い、`NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）まで最初の URL に留まります。HTTP リトライは固定エンドポイントを動かしません。
+- **同一呼び出し内の HTTP リトライはデフォルトでオフです。** `withRetry()` は `withRetry({})` と同等で、安全なメソッド（`GET`、`HEAD`、`OPTIONS`、`TRACE`）の接続失敗に対し、バックオフ付きで未試行のエンドポイントへもう 1 回の試行を有効にします。Finagle のリトライバジェットはクライアント構成に属し、バランサーの同一性とは無関係に、その派生クライアント間で共有されます。
 
-クリーンアップは呼び出し側の責任です。HTTP は abort、SSE は close + `await stream.closed`、WebSocket は close + `await session.closed`。
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
 
-## テスト用トランスポートを注入する
+構成されたエンドポイントが 1 つだけのとき、`withRetry` はリクエストを再送しません。各リトライが、すでに試したエンドポイントを除外するからです。`attemptTimeoutMs` と `connectTimeoutMs` を渡す場合は、有限の正の数で、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。`connectTimeoutMs` は SSE と WebSocket の再接続オプションの中にしか存在しません。これらのオプションは `attempts: 3` が既定なので、単独で指定しても再接続が有効になります。ハンドシェイクだけを区切るには `attempts: 0` を併せて指定してください。
+
+### ヘルスフィルタリングと P2C [#health-filtering-and-p2c]
+
+ピアサーバーのレプリカ群に対しては、[`roundRobinBalancer`](/ja-JP/api/core/roundrobinbalancer) や [`p2cBalancer`](/ja-JP/api/core/p2cbalancer)（PeakEwma RTT × 処理中負荷）により、Linkerd スタイルの連続失敗サーキットブレーカー（`outlierDetection`）がデフォルトで有効になります。外れ値検出は、コードを持つ結果をすべて失敗としてカウントします（`NET_TIMEOUT` と `NET_BODY_INCOMPLETE` を含む）。生のレスポンス `status` はカスタムバランサー専用です。
+
+リトライバジェット、アクティブ／パッシブヘルスチェック、P2C 負荷推定、カスタムバランサーの詳細は、専用の [ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) ガイドを参照してください。
+
+## 5. テスト用トランスポートの注入
+
+クライアント上のプラットフォーム標準 `fetch` や `WebSocket` を `withHTTPHandle`、`withSSEHandle`、`withWebSocketHandle` に置き換えることで、オフラインで完全な契約テストを実行できます。
 
 <include cwd lang="typescript">
   examples/client/inject-test-transport.ts#example
 </include>
 
-## サーバーとブラウザーでのスコープ
+テストパターンの詳細は [テスト](/ja-JP/docs/testing) ガイドを参照してください。
 
-サーバーでは、options やインターセプターのクロージャが認証・cookie・ユーザー・テナントを掴むなら、クライアントをリクエスト境界の中で作ります。クライアントの同一性そのものがセキュリティ境界ではありません。
+## 6. クライアントオプションヘルパーリファレンス
 
-## 移行
+| ヘルパー                                                                                                      | 役割                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `withEndpoint(...urls)`                                                                                       | 1 つ以上の候補ベース URL を設定（以前のリストを上書き）                                                            |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP および SSE 向けの静的デフォルトヘッダーを設定（`builder` のヘッダーが優先）                                   |
+| `withInterceptors(...items)`                                                                                  | HTTP、SSE、WebSocket のインターセプターをオニオン順で末尾に追加                                                    |
+| `withQuerySerializer(fn)`                                                                                     | エイリアス適用済みのクエリオブジェクトをクエリ文字列にシリアライズ                                                 |
+| `withCredentials(boolean)`                                                                                    | `true` の場合、HTTP および SSE の Fetch に `credentials: "include"` を設定                                         |
+| `withXSRF(options?)`                                                                                          | 同一オリジンに対するデータ変更 HTTP リクエストで XSRF クッキーをヘッダーにコピー                                   |
+| `withBalancer(balancer)`                                                                                      | エンドポイント選択戦略を置き換え（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）                       |
+| `withRetry(options?)`                                                                                         | オプトインの HTTP リトライ条件、メソッド、バックオフ、試行タイムアウト、クライアント所有のリトライバジェットを設定 |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE の再接続および無効イベントの観測を設定                                                                         |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket セッションのデフォルト設定を構成                                                                         |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | カスタムまたはモックのトランスポート実装を注入                                                                     |
 
-| 旧                                           | 新                                                         |
-| -------------------------------------------- | ---------------------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                          |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`            |
-| `execute(cmd, { signal })`                   | `client({ signal })`                                       |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                   |
-| `createClient(withTimeout(5000), ...)`       | 呼び出し時に `signal` を渡すか、アプリケーション関数で包む |
+## 関連ドキュメント
 
-## リファレンス
-
-| ヘルパー                                                                                                      | 効果                                                                   |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | 全トランスポートの絶対ベースエンドポイント                             |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE の静的なデフォルトヘッダー。ビルダーのヘッダーが上書きする    |
-| `withHTTPHandle(fetch)`                                                                                       | HTTP の Fetch を差し替え                                               |
-| `withSSEHandle(fetch)`                                                                                        | SSE の Fetch を差し替え                                                |
-| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket コンストラクタを差し替え                                     |
-| `withInterceptors(...items)`                                                                                  | 混在インターセプターを追記                                             |
-| `withQuerySerializer(fn)`                                                                                     | エイリアス適用済みの query オブジェクトを query 文字列にエンコードする |
-| `withCredentials(boolean)`                                                                                    | true のとき HTTP/SSE で Fetch `credentials: 'include'`                 |
-| `withXSRF(options?)`                                                                                          | HTTP の XSRF cookie → ヘッダー                                         |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE のつまみ                                                           |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket のつまみ                                                     |
-
-## 関連レシピ
-
-- [ローカル Fetch ハンドルでテストする](/ja-JP/recipes/test-with-handle)
-- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
+- [ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing)
+- [インターセプター](/ja-JP/docs/interceptors)
+- [テスト](/ja-JP/docs/testing)
+- [ローカル Fetch ハンドルによるテスト](/ja-JP/recipes/test-with-handle)

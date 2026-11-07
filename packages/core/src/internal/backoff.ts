@@ -55,7 +55,9 @@ export async function wait(ms: number, signal: AbortSignal): Promise<void> {
     const onAbort = () => {
       clearTimeout(timeout);
       signal.removeEventListener("abort", onAbort);
-      reject(signal.reason);
+      // Like fetch and throwIfAborted, the delay rejects with the caller's reason, whatever value it is.
+      const reason: unknown = signal.reason;
+      reject(reason);
     };
 
     if (signal.aborted) {

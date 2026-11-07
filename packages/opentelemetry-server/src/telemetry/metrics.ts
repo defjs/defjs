@@ -33,7 +33,7 @@ export function createHttpClientMetrics(meter: Meter): HttpClientMetrics {
     requestDuration: meter.createHistogram("http.client.request.duration", {
       description: "Duration of HTTP client requests",
       unit: "s",
-      advice: { explicitBucketBoundaries: DURATION_BUCKETS },
+      advice: { explicitBucketBoundaries: [...DURATION_BUCKETS] },
     }),
   };
 }
@@ -45,7 +45,7 @@ export function createSSEClientMetrics(meter: Meter): SSEClientMetrics {
       {
         description: "Duration of SSE connection attempts",
         unit: "s",
-        advice: { explicitBucketBoundaries: DURATION_BUCKETS },
+        advice: { explicitBucketBoundaries: [...DURATION_BUCKETS] },
       },
     ),
     connectionDuration: meter.createHistogram(
@@ -53,7 +53,7 @@ export function createSSEClientMetrics(meter: Meter): SSEClientMetrics {
       {
         description: "Duration of SSE stream connections",
         unit: "s",
-        advice: { explicitBucketBoundaries: DURATION_BUCKETS },
+        advice: { explicitBucketBoundaries: [...DURATION_BUCKETS] },
       },
     ),
     activeStreams: meter.createUpDownCounter(
@@ -75,7 +75,7 @@ export function createWebSocketClientMetrics(
       {
         description: "Duration of WebSocket connection attempts",
         unit: "s",
-        advice: { explicitBucketBoundaries: DURATION_BUCKETS },
+        advice: { explicitBucketBoundaries: [...DURATION_BUCKETS] },
       },
     ),
     connectionDuration: meter.createHistogram(
@@ -83,7 +83,7 @@ export function createWebSocketClientMetrics(
       {
         description: "Duration of WebSocket connections",
         unit: "s",
-        advice: { explicitBucketBoundaries: DURATION_BUCKETS },
+        advice: { explicitBucketBoundaries: [...DURATION_BUCKETS] },
       },
     ),
     activeConnections: meter.createUpDownCounter(

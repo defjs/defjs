@@ -1,20 +1,39 @@
 ---
 title: "로컬 HTTP 테스트"
-description: withHTTPHandle로 그 클라이언트의 Fetch만 바꾸고 작업은 그대로 둬요.
+description: withHTTPHandle로 단일 클라이언트의 Fetch를 교체하고 작업 정의는 그대로 유지합니다.
 ---
 
 # 로컬 Fetch 핸들로 테스트하기
 
-`withHTTPHandle(...)`은 그 클라이언트의 Fetch만 바꿔요. DNS, TLS, 실제 서버 없이도 URL 구성, interceptor, status 디스패치, Struct 디코딩은 그대로예요.
+`withHTTPHandle(...)`은 네트워크 소켓을 열지 않고도 단일 클라이언트 인스턴스의 기반 `fetch` 함수를 교체하여 입력값 검증, `builder` 매핑, URL 해석, 인터셉터, 상태 코드 분류, Struct 디코딩 등 전체 Defjs 파이프라인을 그대로 실행합니다:
 
-자세한 내용은 [클라이언트](/ko-KR/docs/client)를 보세요.
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "단일 파일 데모"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.test.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+이것은 테스트 러너 스펙이 아니라, 그 자체로 완결된 단일 파일 데모입니다. 공유 SDK 정의에 대한 단언은 앞의 테스트 탭을 사용하세요.
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
+  </Tab>
+</Tabs>
+
+단일 파일 데모의 출력:
+
 ```txt
-Ada 200
+paid 200
 ```
 
-프로덕션에서는 같은 `getUser` 작업을 실제 `withEndpoint(...)` 클라이언트에 쓰세요. 바뀌는 것은 handle뿐이에요.
+프로덕션 환경에서는 완전히 동일한 `getOrder` 작업을 `withEndpoint(...)`로 구성된 클라이언트로 호출하기만 하면 됩니다. 자세한 내용은 [테스트](/ko-KR/docs/testing) 및 [Client](/ko-KR/docs/client) 문서를 참조하세요.

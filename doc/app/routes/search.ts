@@ -36,6 +36,6 @@ const servers = new Map(
 );
 export async function loader({ params }: Route.LoaderArgs) {
   const server = servers.get(params["locale"] ?? "");
-  if (!server) throw new Response("Not Found", { status: 404 });
+  if (!server) return new Response("Not Found", { status: 404 });
   return server.staticGET();
 }

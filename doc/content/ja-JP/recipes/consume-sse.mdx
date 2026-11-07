@@ -1,22 +1,38 @@
 ---
 title: "SSE イベントの受信"
-description: 型付きイベントストリームを開き、一度だけ反復し、close して closed を await します。
+description: 型付けされたイベントストリームを開いて反復処理し、最後にクローズして closed を待機します。
 ---
 
-# SSE ストリームを消費する
+# SSE ストリームを受信する
 
-ストリームあたり非同期イテレータは 1 つです。早めの exit で Fetch 試行を漏らさないよう、`finally` で `close` + `await stream.closed` を置きます。
+各 `EventStreamHandle` は、単一の非同期イテレーターを提供します。途中の `break` や `return` で基盤の Fetch ストリームがリークしないよう、`finally` ブロック内で必ず `stream.close(...)` と `await stream.closed` を実行してください。
 
-詳細は [SSE](/ja-JP/docs/sse) を見てください。
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-<include cwd meta="notifications.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
 
-`api.example.com` はプレースホルダーです。最初のイベントが `message` で、データが `{ "text": "hello from the server" }` のサーバーに対して、このスニペットは次のように出力します。
+  </Tab>
+</Tabs>
+
+サーバーが最初のイベントとして `{ "text": "build started" }` を持つ `line` を送信した場合、スクリプトの出力は以下のようになります。
 
 ```txt
-hello from the server
+build started
 ```
 
-SSE は `withSSEReconnect(...)` を有効にしない限り、ネットワーク/読み取りの失敗をリトライしません。再接続オブジェクトを指定すると、`attempts` のデフォルトは障害ごとに `3` です。ハンドシェイクに成功すると、予算とバックオフの指数がリセットされます。`attempts: 0` はリトライを無効にします。不正な数値の再接続オプションは、リクエスト前に `REQ_OPTIONS_INVALID` で失敗します。[検証規則](/ja-JP/api/core/withssereconnect) を参照してください。`shouldReconnect` がなければ、再接続するのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` のリクエストだけです。`ReadableStream` をボディに持つリクエストは再接続しません。
+- クライアント側で [`withSSEReconnect(...)`](/ja-JP/api/core/withssereconnect) を設定しない限り、ネットワークエラーや読み取り障害時に SSE が自動再接続されることはありません。
+- `withSSEReconnect` にオプションオブジェクトを指定して有効化した場合、障害ごとの試行回数 `attempts` はデフォルトで `3` 回となり、ハンドシェイクが成功するたびにリセットされます（`attempts: 0` で再接続を無効化できます）。カスタムの `shouldReconnect` を指定しない限り、再接続されるのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` リクエストだけです。`ReadableStream` ボディを持つリクエストは再接続されません。詳細は [SSE イベントストリーム](/ja-JP/docs/sse) を参照してください。

@@ -1,113 +1,127 @@
 ---
-title: "客戶端設定 / Client"
-description: 設定應用程式點樣呼叫匯入嘅 SDK 操作，同佢哋嘅 API 定義分開。
+title: "Client"
+description: 設定應用程式點樣呼叫匯入嘅 SDK 操作，同佢哋嘅 API 定義無關。
 ---
 
 # Client
 
-`Client` 係使用方應用程式嘅執行設定。`createClient(...)` return 一個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)。用 request options call 個 factory 會 return 一個 `Client` 值，操作接受嘅就係 `Client` 值；佢唔可以 call。由 SDK 匯入操作，揀服務地址、認證、攔截器同傳輸，再用 client 呼叫操作。`getUser(client({ signal }), { id: 1 })` 開始一次有聲明 input 嘅呼叫。`health(client)` 開始一次冇 input 嘅呼叫。成個 input struct 可選嗰陣，`search(client)` 同 `search(client, input)` 都合法。冇第三個 options 參數。呼叫操作就開始佢。`await` 只係等 error-first tuple。
+`Client` 負責持有使用方應用程式嘅執行設定：包括 base URL、預設 headers、認證憑證、攔截器、query 序列化函式同埋傳輸層 handle。
 
-SDK 嘅定義唔綁死呢個 instance。瀏覽器、伺服器請求同本地測試可以用同一個匯出操作，配唔同 client。全部仍然跟同一份 Defjs 契約同兼容嘅 Core 版本。你經一個 client 呼叫嘅操作，就要為嗰個 client 設定服務地址。
+呼叫 `createClient(...options)` 會回傳一個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)：
 
-同一個 client 值可以傳俾好多操作。應用程式自己揀快取同重試策略，並擁有自己開始嘅工作。HTTP 唔會自動重試。串流重連係 opt-in。
+- 如果唔需要單次呼叫自訂選項，可以直接將 `client` 傳入操作（例如 `getOrder(client, { id: 1 })`）。
+- 呼叫 `client(requestOptions)` 可以衍生出單次呼叫用嘅 client 值（例如 `getOrder(client({ signal }), { id: 1 })`）。衍生過程唔會進行任何 I/O，而衍生出嚟嘅值係一個普通物件（唔可以當函式咁呼叫）。
 
-Factory 係一個 function，同時亦係一個冇 request options 嘅 `Client`。唔好將 factory 傳俾 React state setter：`setState(factory)` 會將佢當 updater 嚟 call。亦唔好將佢做 Vue `watch` 或者 `computed` 嘅 source：嗰啲會 call function。派生出嚟嘅 client 值係普通物件。
+## 1. 設定 Client 並呼叫 SDK 操作
 
-## 基本用法
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` return 一個可呼叫嘅 factory，佢同時亦係一個 [`Client`](/zh-Hant-HK/api/core/client-type)。佢唔係一組按傳輸分嘅 overload。
-
-## 組合 options
-
-Options 由左到右套用。Setters 會 replace；`withInterceptors(...items)` 會 append。
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
 </include>
 
-Mixed interceptors 會喺操作運行時按 transport filter；選中嗰種嘅相對次序會保留。
+</Tab>
+</Tabs>
 
-## 派生一個 client
+### 選項組合規則
 
-`client(options?)` return 一個只供單次呼叫用嘅 `Client` 值。呼叫 `client(options)` 時，七個已知 field 從參數物件複製出嚟：頂層快照落一個新 options 物件。未知 field 會被忽略，值係 `undefined` 嘅 field 會被略過。冇上一層疊加：`client()`、`client(undefined)` 同 `client({})` 都 return 一個冇 request options 嘅 client。巢狀嘅 `heartbeat`、`protocols` 同 `reconnect` 嘅值按 reference 留住，唔會 clone。WebSocket 喺操作行嗰陣先讀佢哋（嗰陣會複製 heartbeat 嘅 field 同 protocols 列表），所以派生之後再改呢啲物件，仍然可以影響之後嘅呼叫。應用程式傳入之後應該當佢哋係 immutable。派生唔做 I/O。Getter 如果 throw，會由 `client(options)` 拋出，factory 仍然可用。Client 值唔可以 call；每次呼叫建立一個。
+- 所有選項按**由左至右**嘅順序套用。
+- 單值設定函式（`withEndpoint`、`withHeaders`、`withQuerySerializer`、`withCredentials`、`withXSRF`）會**覆寫**前面設定嘅舊值。
+- `withInterceptors(...items)` 會將新項目**追加**到現有嘅攔截器清單尾部，並喺執行具體操作時自動按傳輸層（`http`、`sse`、`web-socket`）過濾。
 
-`signal` 唔會合併。重用帶有 `signal` 嘅 client 值，會令多次呼叫共用嗰個 signal，所以每次呼叫建立一個 client 值。喺應用程式程式碼用 `AbortSignal.any` 合併 signal。
+## 2. 衍生單次呼叫嘅 Client（`client(options)`）
+
+當某次呼叫需要自訂專屬嘅 `signal`、進度回呼函式，或者覆寫 WebSocket 會話參數時，可以衍生出新嘅 client 值：
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-`createClient` 嘅 base 設定每個 client 值共用，runtime 唔會 freeze。佢按慣例固定：個 library 唔會改佢，應用程式亦唔應該改。嗰個 client 上面嘅 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 就係嗰份頂層快照。應用程式程式碼將 client 傳俾操作。佢唔讀呢個內部狀態。
+> [!IMPORTANT]
+> 因為 `createClient(...)` 回傳嘅係一個可呼叫嘅函式（`DerivableClient`），千祈**唔好**直接將佢傳入 React 嘅 `setState(client)` 或 Vue 嘅 `watch(client)` / `computed(client)`，否則框架會將佢當成 updater 函式或 getter 執行。
 
-## Request options
+### 單次呼叫 `RequestOptions` 參考
 
-[`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 有七個扁平 field。每種協定只讀自己識嘅 field，其餘忽略。傳 `heartbeat` 俾 HTTP 操作會被忽略，唔係 fault。SSE 只會由 request options 讀 `signal`。SSE reconnect 來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。冇 compile-time 嘅協定過濾。
+`RequestOptions` 包含七個扁平欄位。每種傳輸層只會讀取適用於自己嘅欄位，並自動忽略其餘部分：
 
-| Field                | 邊個用               | 規則                                                                                                |
-| -------------------- | -------------------- | --------------------------------------------------------------------------------------------------- |
-| `signal`             | HTTP、SSE、WebSocket | 中止該次呼叫。Deadline 係 `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）。手動 abort 係 `NET_ABORTED`。 |
-| `onUploadProgress`   | HTTP                 | SSE 同 WebSocket 會忽略。                                                                           |
-| `onDownloadProgress` | HTTP                 | SSE 同 WebSocket 會忽略。                                                                           |
-| `beforeConnect`      | WebSocket            | 喺該次呼叫取代 client 設定。                                                                        |
-| `protocols`          | WebSocket            | 取代 client 嘅 list。唔會 append。                                                                  |
-| `heartbeat`          | WebSocket            | 成個換走。`timeoutMs` 係 heartbeat 等確認嘅時間，唔係請求 deadline。                                |
-| `reconnect`          | WebSocket            | 成個換走。                                                                                          |
+| 欄位                 | 適用傳輸             | 行為描述                                                                                                    |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP、SSE、WebSocket | 中斷當前呼叫（`AbortSignal.timeout(ms)` → `NET_TIMEOUT`；手動中斷 → `NET_ABORTED`）。                       |
+| `onUploadProgress`   | HTTP                 | 回報串流 request body 嘅上傳進度。                                                                          |
+| `onDownloadProgress` | HTTP                 | 回報宣告過嘅 response body 嘅下載進度。                                                                     |
+| `beforeConnect`      | WebSocket            | 喺呢次會話入面替換 client 層級嘅 `beforeConnect` hook。                                                     |
+| `protocols`          | WebSocket            | 喺呢次會話入面替換 client 層級嘅子協議清單。                                                                |
+| `heartbeat`          | WebSocket            | 喺呢次會話入面替換 client 層級嘅心跳偵測設定。                                                              |
+| `reconnect`          | WebSocket            | 喺呢次會話入面替換 client 層級嘅 WebSocket 重連策略（SSE 重連則係透過 client 嘅 `withSSEReconnect` 設定）。 |
 
-冇 `timeout` field，冇 `abort` field，亦冇 client 層級嘅預設 deadline。SSE 同 WebSocket 嘅 `signal` 覆蓋成條連線，包括 open 之後。冇只限啟動嘅 deadline。應用程式想要一個，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer。睇 [SSE](/zh-Hant-HK/docs/sse#close-and-dispose)。
+## 3. 瀏覽器單例 vs. 伺服器請求作用域
 
-`HttpExecuteOptions` 係 HTTP 嗰片：`signal` 加 progress callbacks。`EventStreamExecuteOptions` 係 `{ signal? }`。`WebSocketExecuteOptions` 係 WebSocket 嗰片再加 `signal`。
+- **瀏覽器應用程式**：當 endpoint、攔截器同憑證屬於整個前端共用嗰陣，喺模組頂層共用一個 `DerivableClient` 單例即可。
+- **伺服器 / SSR 應用程式**：只要 headers、cookies、認證 token 或租戶 context 係隨請求變動，就一定要**喺每個傳入請求嘅處理範圍內**建立獨立嘅 client。絕唔好喺整個 process 共用嘅全域 client 上面存放個別用戶嘅身分憑證。
 
-## 按 transport 嘅結果
+## 4. 多端點與負載平衡 [#multiple-endpoints]
 
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`。`open` 對 Defjs 原生 handle 或透傳同一 live `open` 物件嘅 wrapper，係返回連線首次成功 handshake 嘅 snapshot；custom handle 或覆寫 `open` 嘅 wrapper 就算已經 reconnect，都以自己目前公開嘅 `open` 為準，`stream.open` 仍然係 live（見 [SSE](/zh-Hant-HK/docs/sse)）。
-- WebSocket → `[error, session, connection]`
+`withEndpoint(...urls)` 接受傳入一個或多個候選 base URL。預設情況下：
 
-`error` 有值時，先 return，先至用成功值。
+- 每個 client 預設使用 [`pickFirstBalancer`](/zh-Hant-HK/api/core/pickfirstbalancer)，停喺第一個 URL，直至遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）先至前進。HTTP 重試唔會移動黏住嘅端點。
+- **同一次呼叫內嘅 HTTP 重試預設關閉。** `withRetry()` 等同 `withRetry({})`，會喺安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）嘅連線失敗上，帶住 backoff，對一個未試過嘅端點再試一次。Finagle 重試預算屬於 client 配置，由佢派生出嚟嘅 client 共享，同 balancer 嘅 identity 無關。
 
-Cleanup 係你 own：abort HTTP，close SSE + `await stream.closed`，close WebSocket + `await session.closed`。
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
 
-## Inject 一個 test transport
+只設定咗一個端點嗰陣，`withRetry` 唔會重放請求，因為每一次重試都會排除已經試過嘅端點。如果提供咗 `attemptTimeoutMs` 同 `connectTimeoutMs`，佢哋必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。`connectTimeoutMs` 只存在於 SSE 同 WebSocket 嘅重連選項入面；呢啲選項預設 `attempts: 3`，所以淨係設定佢都會啟用重連，只想限制 handshake 嘅話要再加 `attempts: 0`。
+
+### 健康檢查過濾與 P2C [#health-filtering-and-p2c]
+
+對於對等伺服器節點，[`roundRobinBalancer`](/zh-Hant-HK/api/core/roundrobinbalancer) 同 [`p2cBalancer`](/zh-Hant-HK/api/core/p2cbalancer)（結合 PeakEwma RTT 與進行中請求負載）預設開啟 Linkerd 風格嘅連續失敗熔斷（`outlierDetection`）。佢將每個帶錯誤碼嘅結果都計為失敗（包括 `NET_TIMEOUT` 同 `NET_BODY_INCOMPLETE`）；原始 response `status` 只供自訂 balancer 使用。
+
+關於重試預算、主動／被動健康檢查、P2C 負載估算以及自訂 balancer 嘅完整細節，請參閱[負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)指南。
+
+## 5. 注入測試傳輸層
+
+可以用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 喺 client 上面替換平台原生嘅 `fetch` 或 `WebSocket`，等你可以喺離線環境下進行完整嘅契約測試：
 
 <include cwd lang="typescript">
   examples/client/inject-test-transport.ts#example
 </include>
 
-## Server vs browser 嘅 scope
+完整測試模式請參閱[測試](/zh-Hant-HK/docs/testing)指南。
 
-喺 server 上面，當 options 或者 interceptor closures capture auth、cookies、users 或者 tenants 時，喺 request boundary 入面 create client。Client identity 本身唔係 security boundary。
+## 6. Client 選項輔助函式參考
 
-## 遷移
+| 輔助函式                                                                                                      | 用途                                                                                              |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | 設定一個或多個候選 base URL（會覆寫先前嘅清單）。                                                 |
+| `withHeaders(HeadersInit)`                                                                                    | 為 HTTP 同 SSE 設定靜態預設 headers（會被 builder headers 覆寫）。                                |
+| `withInterceptors(...items)`                                                                                  | 以洋蔥模型順序追加 HTTP、SSE 同 WebSocket 攔截器。                                                |
+| `withQuerySerializer(fn)`                                                                                     | 將已套用別名嘅 query 物件序列化成 query string。                                                  |
+| `withCredentials(boolean)`                                                                                    | 設為 `true` 時，為 HTTP 同 SSE 請求設定 Fetch 嘅 `credentials: "include"`。                       |
+| `withXSRF(options?)`                                                                                          | 喺同源嘅變更類 HTTP 請求中，自動將 XSRF cookie 複製到 header。                                    |
+| `withBalancer(balancer)`                                                                                      | 替換端點選取策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。                    |
+| `withRetry(options?)`                                                                                         | 設定可選啟用嘅 HTTP 重試條件、方法、backoff、單次 attempt 逾時，以及一份歸 client 所有嘅 budget。 |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | 設定 SSE 重新連線機制同無效事件監聽。                                                             |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 設定 WebSocket 會話嘅各項預設參數。                                                               |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 注入自訂或 mock 傳輸實作。                                                                        |
 
-| 舊                                           | 新                                              |
-| -------------------------------------------- | ----------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`               |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })` |
-| `execute(cmd, { signal })`                   | `client({ signal })`                            |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`        |
-| `createClient(withTimeout(5000), ...)`       | 喺呼叫嗰陣傳入 `signal`，或者包一層應用程式函數 |
+## 延伸閱讀
 
-## 參考
-
-| Helper                                                                                                        | 效果                                                            |
-| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | 所有 transports 嘅 absolute base endpoint                       |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE 嘅 static default headers；builder headers 會 override |
-| `withHTTPHandle(fetch)`                                                                                       | 換走 HTTP 嘅 Fetch                                              |
-| `withSSEHandle(fetch)`                                                                                        | 換走 SSE 嘅 Fetch                                               |
-| `withWebSocketHandle(WebSocket)`                                                                              | 換走 WebSocket constructor                                      |
-| `withInterceptors(...items)`                                                                                  | 追加混合種類嘅 interceptors                                     |
-| `withQuerySerializer(fn)`                                                                                     | 將已經套咗 alias 嘅 query object encode 成 query string         |
-| `withCredentials(boolean)`                                                                                    | 為 true 時，HTTP/SSE 用 Fetch `credentials: 'include'`          |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                       |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE knobs                                                       |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket knobs                                                 |
-
-## 相關配方
-
-- [用 local Fetch handle 做 test](/zh-Hant-HK/recipes/test-with-handle)
-- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)
+- [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)
+- [攔截器](/zh-Hant-HK/docs/interceptors)
+- [測試](/zh-Hant-HK/docs/testing)
+- [使用本地 Fetch Handle 進行測試](/zh-Hant-HK/recipes/test-with-handle)

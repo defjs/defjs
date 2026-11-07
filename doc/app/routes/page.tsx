@@ -54,6 +54,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   const parts = (params["*"] ?? "").split("/").filter(Boolean);
   const locale = locales.includes(parts[0] ?? "") ? parts.shift() : "en-US";
   const page = source.getPage(parts, locale);
+  // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: React Router routes a thrown Response to the root ErrorBoundary's 404 page; its data() helper is not an Error either, and a thrown Error becomes a 500
   if (!page) throw new Response("Not Found", { status: 404 });
   const language = locale ?? "en-US";
   const apiSlug = apiSlugOf(page.data);

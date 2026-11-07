@@ -1,5 +1,3 @@
-import { createServer } from "node:http";
-import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, inject, test, vi } from "vitest";
 import {
   createClient,
@@ -20,6 +18,18 @@ import {
   createFetchRequestInit,
   fetchHandler,
 } from "./fetch";
+
+function requireRequest(input: RequestInfo | URL): Request {
+  if (input instanceof Request) return input;
+  throw new Error("expected Request");
+}
+
+async function gzip(text: string): Promise<Uint8Array<ArrayBuffer>> {
+  const stream = new Blob([text])
+    .stream()
+    .pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -68,7 +78,8 @@ describe("HTTP transport boundary regressions", () => {
         headers: { "content-type": data?.contentType ?? "" },
       },
     );
-    const uploaded = (await received.formData()).get("file") as File;
+    const uploaded = (await received.formData()).get("file");
+    if (!(uploaded instanceof File)) throw new Error("expected File");
     expect(uploaded.name).toBe("notes.txt");
     expect(await uploaded.text()).toBe("streamed file");
     expect(events.length).toBeGreaterThanOrEqual(2);
@@ -78,94 +89,6 @@ describe("HTTP transport boundary regressions", () => {
       events.every((event) => !event.lengthComputable && event.total === 0),
     ).toBe(true);
   });
-
-  test.runIf(!("Bun" in globalThis)).each(["timeout", "abort"] as const)(
-    "should promptly settle a stalled native FormData File upload on %s and unlock the serialized reader",
-    async (mode) => {
-      // Serialization stays frozen until the file stream's pull runs.
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-      let release!: () => void;
-      let opened!: () => void;
-      const reading = new Promise<void>((resolve) => {
-        opened = resolve;
-      });
-      const source = new ReadableStream<Uint8Array<ArrayBuffer>>(
-        {
-          pull() {
-            opened();
-            return new Promise<void>(() => undefined);
-          },
-          start(controller) {
-            release = () => controller.close();
-          },
-        },
-        { highWaterMark: 0 },
-      );
-      class StalledFile extends File {
-        override stream() {
-          return source;
-        }
-      }
-      const form = new FormData();
-      form.append("file", new StalledFile(["x"], "stalled.txt"));
-      const serialized: { body?: ReadableStream<Uint8Array> | null } = {};
-      class TrackedResponse extends Response {
-        constructor(body?: BodyInit | null, init?: ResponseInit) {
-          super(body, init);
-          if (body === form) {
-            serialized.body = this.body;
-          }
-        }
-      }
-      vi.stubGlobal("Response", TrackedResponse);
-      const controller = new AbortController();
-      const client = createClient(
-        withEndpoint("https://example.com"),
-        withHTTPHandle(async (input) => {
-          await (input as Request).arrayBuffer();
-          return new Response(null, { status: 204 });
-        }),
-      );
-      const endpoint = defineRequest({
-        builder: () => ({ body: form }),
-        method: "POST",
-        path: "/upload",
-      });
-      const pending = endpoint(
-        client({
-          signal: controller.signal,
-          onUploadProgress: () => undefined,
-        }),
-      );
-      try {
-        // Node 24 resumes FormData serialization on a zero-delay timer and
-        // reads the file on the following immediate. Flush both before cancelling.
-        vi.advanceTimersByTime(0);
-        await new Promise<void>((resolve) => {
-          setImmediate(resolve);
-        });
-        await reading;
-        expect(serialized.body).not.toBeNull();
-        expect(serialized.body?.locked).toBe(true);
-        controller.abort(
-          mode === "timeout"
-            ? new DOMException("deadline", "TimeoutError")
-            : undefined,
-        );
-        const [fault] = await pending;
-        expect(fault?.code).toBe(
-          mode === "timeout" ? "NET_TIMEOUT" : "NET_ABORTED",
-        );
-        expect(serialized.body?.locked).toBe(false);
-      } finally {
-        vi.useRealTimers();
-        if (serialized.body?.locked) {
-          release();
-        }
-        await pending;
-      }
-    },
-  );
 
   test.each(["timeout", "abort"] as const)(
     "should cancel and unlock a stalled serialized FormData stream on %s",
@@ -183,9 +106,7 @@ describe("HTTP transport boundary regressions", () => {
 
   test("should preserve a start observer failure even when converted stream cancellation rejects", async () => {
     const body = new Blob(["bytes"]);
-    const cancel = vi.fn(async () => {
-      throw new Error("cancel refused");
-    });
+    const cancel = vi.fn(() => Promise.reject(new Error("cancel refused")));
     const source = new ReadableStream<Uint8Array<ArrayBuffer>>({ cancel });
     vi.spyOn(body, "stream").mockReturnValue(source);
     const cause = new Error("observer failed");
@@ -200,7 +121,7 @@ describe("HTTP transport boundary regressions", () => {
             throw cause;
           },
         },
-        async () => new Response(null),
+        () => Promise.resolve(new Response(null)),
       ),
     ).rejects.toMatchObject({ code: "EXT_OBSERVER_FAILED", cause });
     expect(cancel).toHaveBeenCalledExactlyOnceWith(cause);
@@ -252,8 +173,8 @@ describe("HTTP transport boundary regressions", () => {
         let contentType: string | null = null;
         let sent = "";
         await fetchHandler(request, async (input) => {
-          contentType = (input as Request).headers.get("content-type");
-          sent = await (input as Request).text();
+          contentType = requireRequest(input).headers.get("content-type");
+          sent = await requireRequest(input).text();
           return new Response("ok");
         });
         expect(contentType).toBe(
@@ -308,8 +229,8 @@ describe("HTTP transport boundary regressions", () => {
           }),
         ),
         withHTTPHandle(async (input) => {
-          contentType = (input as Request).headers.get("content-type");
-          sent = await (input as Request).text();
+          contentType = requireRequest(input).headers.get("content-type");
+          sent = await requireRequest(input).text();
           return new Response(null, { status: 204 });
         }),
       );
@@ -348,10 +269,10 @@ describe("HTTP transport boundary regressions", () => {
           return next(request);
         }),
       ),
-      withHTTPHandle(async (input) => {
-        signedType = (input as Request).headers.get("x-signed-content-type");
-        contentType = (input as Request).headers.get("content-type");
-        return new Response(null, { status: 204 });
+      withHTTPHandle((input) => {
+        signedType = requireRequest(input).headers.get("x-signed-content-type");
+        contentType = requireRequest(input).headers.get("content-type");
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
     );
     const endpoint = defineRequest({
@@ -398,12 +319,12 @@ describe("HTTP transport boundary regressions", () => {
             return next(request);
           }),
         ),
-        withHTTPHandle(async (input) => {
-          const headers = (input as Request).headers;
+        withHTTPHandle((input) => {
+          const headers = requireRequest(input).headers;
           signedType = headers.get("x-signed-content-type");
           contentType = headers.get("content-type");
           authorization = headers.get("authorization");
-          return new Response(null, { status: 204 });
+          return Promise.resolve(new Response(null, { status: 204 }));
         }),
       );
       const endpoint = defineRequest({
@@ -441,9 +362,9 @@ describe("HTTP transport boundary regressions", () => {
             return next(request);
           }),
         ),
-        withHTTPHandle(async (input) => {
-          contentType = (input as Request).headers.get("content-type");
-          return new Response(null, { status: 204 });
+        withHTTPHandle((input) => {
+          contentType = requireRequest(input).headers.get("content-type");
+          return Promise.resolve(new Response(null, { status: 204 }));
         }),
       );
       const endpoint = defineRequest({
@@ -473,10 +394,10 @@ describe("HTTP transport boundary regressions", () => {
           return next(copy);
         }),
       ),
-      withHTTPHandle(async (input) => {
-        signedType = (input as Request).headers.get("x-signed-content-type");
-        contentType = (input as Request).headers.get("content-type");
-        return new Response(null, { status: 204 });
+      withHTTPHandle((input) => {
+        signedType = requireRequest(input).headers.get("x-signed-content-type");
+        contentType = requireRequest(input).headers.get("content-type");
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
     );
     const endpoint = defineRequest({
@@ -489,7 +410,7 @@ describe("HTTP transport boundary regressions", () => {
     expect(contentType).toBe("application/json");
   });
 
-  test("should retain a declared header when an interceptor removes the body", async () => {
+  test("should retain a declared header when an interceptor removes the body", () => {
     const request = createHttpRequest(
       "POST",
       "/",
@@ -508,6 +429,7 @@ describe("HTTP transport boundary regressions", () => {
         createFetchRequestInit({ ...request, body: undefined }).headers,
       ).get("content-type"),
     ).toBe("application/custom");
+    return Promise.resolve();
   });
 
   test.each([
@@ -531,15 +453,17 @@ describe("HTTP transport boundary regressions", () => {
             events.push(event);
           },
         },
-        async () =>
-          new Response("hello", {
-            headers: {
-              "content-length": "5",
-              ...(encoding === undefined
-                ? {}
-                : { "content-encoding": encoding }),
-            },
-          }),
+        () =>
+          Promise.resolve(
+            new Response("hello", {
+              headers: {
+                "content-length": "5",
+                ...(encoding === undefined
+                  ? {}
+                  : { "content-encoding": encoding }),
+              },
+            }),
+          ),
       );
       expect(response.body).toBe("hello");
       expect(events.at(-1)).toEqual({
@@ -571,7 +495,10 @@ describe("HTTP transport boundary regressions", () => {
           events.push(event);
         },
       },
-      async () => new Response(body, { headers: { "content-length": "3" } }),
+      () =>
+        Promise.resolve(
+          new Response(body, { headers: { "content-length": "3" } }),
+        ),
     );
     expect(response.body).toBe("abcdefgh");
     expect(events).toEqual([
@@ -585,29 +512,26 @@ describe("HTTP transport boundary regressions", () => {
     "should report unknown total for a real gzip response via %s fetch",
     async (handle) => {
       const text = "decoded ".repeat(1000);
-      const compressed = gzipSync(text);
-      const server = createServer((_request, response) => {
-        response.writeHead(200, {
-          "content-type": "text/plain",
-          "content-encoding": "gzip",
-          "content-length": compressed.byteLength,
-        });
-        response.end(compressed);
-      });
-      await new Promise<void>((resolve) => {
-        server.listen(0, "127.0.0.1", resolve);
+      const compressed = await gzip(text);
+      const server = Bun.serve({
+        fetch: () =>
+          new Response(compressed, {
+            headers: {
+              "content-type": "text/plain",
+              "content-encoding": "gzip",
+              "content-length": String(compressed.byteLength),
+            },
+          }),
+        hostname: "127.0.0.1",
+        port: 0,
       });
       try {
-        const address = server.address();
-        if (!address || typeof address === "string") {
-          throw new Error("expected a loopback server");
-        }
         const events: HttpProgressEvent[] = [];
         const client =
           handle === "default"
-            ? createClient(withEndpoint(`http://127.0.0.1:${address.port}`))
+            ? createClient(withEndpoint(`http://127.0.0.1:${server.port}`))
             : createClient(
-                withEndpoint(`http://127.0.0.1:${address.port}`),
+                withEndpoint(`http://127.0.0.1:${server.port}`),
                 withHTTPHandle((input, init) => fetch(input, init)),
               );
         const [fault, data] = await defineRequest({
@@ -629,10 +553,7 @@ describe("HTTP transport boundary regressions", () => {
           total: 0,
         });
       } finally {
-        server.closeAllConnections();
-        await new Promise<void>((resolve, reject) => {
-          server.close((error) => (error ? reject(error) : resolve()));
-        });
+        await server.stop(true);
       }
     },
   );
@@ -652,11 +573,11 @@ describe("HTTP transport boundary regressions", () => {
             tokenProvider,
           };
         },
-        withHTTPHandle(async (input) => {
-          expect((input as Request).headers.get("x-xsrf-token")).toBe(
+        withHTTPHandle((input) => {
+          expect(requireRequest(input).headers.get("x-xsrf-token")).toBe(
             baseEndpoint === "https://example.com" ? "worker-token" : null,
           );
-          return new Response(null, { status: 204 });
+          return Promise.resolve(new Response(null, { status: 204 }));
         }),
       );
       const [fault] = await defineRequest({ method: "POST", path: "/" })(
@@ -723,7 +644,7 @@ async function expectCancelledStalledFormData(
     withEndpoint("https://example.com"),
     withHTTPHandle(async (input) => {
       entered();
-      await (input as Request).arrayBuffer();
+      await requireRequest(input).arrayBuffer();
       return new Response(null, { status: 204 });
     }),
   );

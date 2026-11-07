@@ -53,6 +53,17 @@ export function createHttpRequest(
     errorResponseType: options.errorResponseType,
     responseType: options.responseType,
     uploadProgress: options.uploadProgress,
-    xsrf: options.xsrf,
+    xsrf: snapshotXsrf(options.xsrf),
+  };
+}
+
+function snapshotXsrf(value: HttpRequest["xsrf"]): HttpRequest["xsrf"] {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return value;
+  }
+  return {
+    cookieName: value.cookieName,
+    headerName: value.headerName,
+    tokenProvider: value.tokenProvider,
   };
 }

@@ -8,24 +8,22 @@ import {
 
 const client = createClient(withEndpoint("https://api.example.com"));
 
-const notifications = defineEventStream({
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 100,
-  path: "/notifications",
+const deployEvents = defineEventStream({
+  path: "/deployments/events",
   events: {
-    message: struct.object({ text: struct.string() }),
+    line: struct.object({ text: struct.string() }),
   },
 });
 
 async function main() {
-  const [error, stream] = await notifications(client);
+  const [error, stream] = await deployEvents(client);
   if (error) {
     console.error(error.code);
     return;
   }
   try {
     for await (const event of stream) {
-      if (event.event === "message") {
+      if (event.event === "line") {
         console.log(event.data.text);
         break;
       }

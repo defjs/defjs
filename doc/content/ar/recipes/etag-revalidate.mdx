@@ -1,22 +1,36 @@
 ---
 title: "طلبات ETag الشرطية"
-description: عُدّ 304 عطل حالة HTTP؛ وأبقِ خريطة التخزين المؤقت خارج استدعاء العملية.
+description: تعامل مع 304 كخطأ في حالة HTTP، واحتفظ بذاكرة التخزين المؤقت Map خارج استدعاء العملية.
 ---
 
-# أعد التحقق بـ ETag و304
+# إعادة التحقق عبر ETag واستجابة 304
 
-`ok` يعني 2xx، لذلك يصل `304` كعطل `HTTP_STATUS`. وحالة إعادة التوجيه ليست جسم خطأ أيضًا، فاترك `error` غير معلَن: لا يُقرأ الجسم أبدًا، ويحمل الخطأ الحالة، وتُرجع أنت المنتج المخزَّن بنفسك.
+في Defjs، تسلك استجابات `2xx` فقط فرع النجاح، لذا تصل استجابة `304 Not Modified` كخطأ `HTTP_STATUS`. اترك `error` غير معلن في `defineRequest` حتى لا يُقرأ جسم استجابة `304` الفارغ أبداً، واحتفظ بذاكرة التخزين المؤقت `Map` داخل غلاف تطبيقي حول استدعاء العملية:
 
-انظر [HTTP](/ar/docs/http).
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/sdk/catalog.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/reader.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 Flask
 ```
 
-`throw error` بعد فرع 304 هو حد هذا القارئ. ما زالت الدالة تُرجع `Promise<Product>`؛ وعطل غير 304 لا يُرجَع كـ tuple من Defjs من ذلك الحد.
-
-لا تُعد كتابة `304` إلى `200` مزيّف داخل Core. تبقى ملكية التخزين المؤقت في شيفرة التطبيق حول استدعاء العملية.
+- يمثل استدعاء `if (error) throw error` بعد فحص `304` سياسة صريحة: فدالة `createReader` تُرجع `Promise<Product>`، لذا تُلقى كل الأخطاء الأخرى.
+- لا تقم أبداً بإعادة كتابة استجابة `304` إلى `200` مصطنعة داخل معترض؛ بل احتفظ بحالة التخزين المؤقت في كود التطبيق حول استدعاء العملية. راجع [عمليات HTTP](/ar/docs/http).

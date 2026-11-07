@@ -5,20 +5,22 @@ import { openSite } from "./support/site";
 
 const guideArticles = [
   "/docs/start",
+  "/docs/design-decisions",
   "/docs/struct",
-  "/docs/client",
   "/docs/http",
   "/docs/sse",
   "/docs/web-socket",
+  "/docs/client",
   "/docs/errors",
   "/docs/interceptors",
+  "/docs/load-balancing",
+  "/docs/testing",
   "/docs/integrations",
   "/docs/integrations/react",
   "/docs/integrations/vue",
   "/docs/integrations/opentelemetry-server",
   "/docs/ai",
   "/docs/ai-api",
-  "/docs/design-decisions",
 ];
 const recipeArticles = [
   "/recipes/post-json",
@@ -57,6 +59,10 @@ function expectGroupedArticles(
   }
 }
 
+function markdownType(headers: Record<string, string>): string | undefined {
+  return headers["content-type"];
+}
+
 test("grouped overview articles stay visible and clickable in every language", async () => {
   const site = await openSite();
   await using context = await site.browser.newContext({
@@ -66,7 +72,7 @@ test("grouped overview articles stay visible and clickable in every language", a
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
     for (const [area, paths, groups] of [
-      ["docs", guideArticles, 6],
+      ["docs", guideArticles, 4],
       ["recipes", recipeArticles, 4],
     ] as const) {
       await page.goto(site.url(`${prefix}/${area}`), {
@@ -94,16 +100,16 @@ test("grouped overview articles export as Markdown", async () => {
   const site = await openSite();
   const page = await site.browser.newPage();
   for (const [area, paths, groups] of [
-    ["docs", guideArticles, 6],
+    ["docs", guideArticles, 4],
     ["recipes", recipeArticles, 4],
   ] as const) {
     const exported = await page.request.get(
       site.url(`/llms.mdx/${area}/content.md`),
     );
     expect(await exported.status()).toBe(200);
-    expect(await exported.headers()).toMatchObject({
-      "content-type": expect.stringContaining("text/markdown"),
-    });
+    expect(markdownType(await exported.headers())).toEqual(
+      expect.stringContaining("text/markdown"),
+    );
     expectGroupedArticles(await exported.text(), "", paths, groups);
   }
   for (const [path, names] of [
@@ -115,9 +121,9 @@ test("grouped overview articles export as Markdown", async () => {
   ] as const) {
     const exported = await page.request.get(site.url(path));
     expect(await exported.status()).toBe(200);
-    expect(await exported.headers()).toMatchObject({
-      "content-type": expect.stringContaining("text/markdown"),
-    });
+    expect(markdownType(await exported.headers())).toEqual(
+      expect.stringContaining("text/markdown"),
+    );
     expect(await exported.text()).toContain(
       "```ts\n" + catalogSignature(names) + "\n```",
     );

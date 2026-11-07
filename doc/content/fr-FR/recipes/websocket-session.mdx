@@ -1,22 +1,38 @@
 ---
 title: "Gérer les sessions WebSocket"
-description: Connecte, envoie une enveloppe typée, reçois une fois, puis ferme et attends closed.
+description: Connectez-vous, envoyez une enveloppe typée, recevez une fois, puis fermez et attendez closed.
 ---
 
 # Ouvrir une session WebSocket
 
-Chaque direction est un struct. Tu possèdes le désabonnement, `close` et `await session.closed`. Les frames invalides vont à `onRuntimeError`.
+Déclarez les structs `incoming` et `outgoing` sur `defineWebSocket`, avec une borne `maxIncomingQueueSize`. Dans votre application, abonnez-vous à `session.onRuntimeError(...)`, consommez `session.receive`, et veillez systématiquement à vous désabonner, appeler `session.close(...)` et attendre `await session.closed` dans un bloc `finally` :
 
-Voir [WebSocket](/fr-FR/docs/web-socket) pour les détails.
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
+</include>
 
-<include cwd meta="chat.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` est un placeholder. Avec un serveur qui répond à `{ "type": "send", "text": "Hello" }` par `{ "type": "message", "text": "Hello" }`, le snippet affiche :
+  </Tab>
+</Tabs>
+
+Avec un serveur répondant à `{ "type": "subscribe", "symbol": "ACME" }` par `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, le script affiche :
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-Le reconnect est opt-in (`withWebSocketReconnect`). Le heartbeat aussi. Les WebSockets navigateur ne peuvent pas prendre d’en-têtes de handshake arbitraires — utilise cookies, sous-protocoles ou un ticket de courte durée.
+- La reconnexion (`withWebSocketReconnect`) et le heartbeat (`withWebSocketHeartbeat`) sont tous deux opt-in sur le client.
+- Les WebSockets de navigateur ne peuvent pas envoyer d'en-têtes HTTP arbitraires lors du handshake d'upgrade ; utilisez des cookies, des sous-protocoles ou des jetons temporaires à la place. Consultez [Sessions WebSocket](/fr-FR/docs/web-socket).

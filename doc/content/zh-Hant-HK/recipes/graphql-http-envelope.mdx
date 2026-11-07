@@ -1,22 +1,36 @@
 ---
 title: "GraphQL 請求"
-description: GraphQL 保持 HTTP 200 加 application unwrap；Core 唔 ship GraphQL protocol。
+description: 將 GraphQL 當成 HTTP 200 加應用程式自行解包；Core 唔會內建 GraphQL 協議。
 ---
 
-# Unwrap 一個 GraphQL HTTP envelope
+# 解包 GraphQL HTTP Envelope
 
-Defjs 唔會實作 GraphQL `errorPolicy`。將 wire model 成 HTTP POST，由 builder 擺放 query document 同 variables。Envelope 嘅 `data` 要聲明為 `.nullish()`，等缺少 `data` 同 `data: null` 都可以交到你嘅 helper，再先處理 `errors[]`，之後先檢查 `data`。
+Defjs 並唔內建 GraphQL client 或者 `errorPolicy`。你可以將基於 HTTP 嘅 GraphQL 當成一般標準 `POST` 操作嚟建模，由 `builder` 發送 `{ query, operationName, variables }`。喺 Envelope Struct 上將 `data` 標記為 `.nullish()`，令省略 `data` 或回傳 `data: null` 都可以順利通過結構驗證，然後喺應用程式嘅輔助函式入面解包 `errors[]`：
 
-睇 [Design Decisions](/zh-Hant-HK/docs/design-decisions)。
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 ada viewer unavailable viewer unavailable
 ```
 
-HTTP 成功只代表 envelope 到咗。Application errors 會留喺 `errors[]`，直至你嘅 unwrap throw 或回傳，包括 `data: null` 嘅 response。例子會將缺少 `data` 或 `data: null` 並帶有 `errors[]` 嘅情況，當成 application errors，唔係 Struct mismatches。
-
-`if (error) throw error` 將 Defjs fault 轉成呢個 helper 嘅例外。HTTP 200 上嘅 GraphQL 失敗仍然係 `errors[]` 入面嘅 application error，另外 throw。
+- HTTP `200` 淨係代表 GraphQL envelope 完整送達。`errors[]` 入面嘅業務錯誤（就算同時伴隨 `data: null`）屬於應用層嘅結果，而唔係 `RES_STRUCT_MISMATCH` fault。
+- 關於點解特定協議嘅 envelope 應該留喺應用程式輔助函式處理，請參閱[核心架構](/zh-Hant-HK/docs/design-decisions)。

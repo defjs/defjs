@@ -1,8 +1,31 @@
 import { apiEntries } from "../data/api-catalog";
 import { localePrefix } from "./i18n";
+import { tabItems } from "./tab-items";
 interface TableField {
   type: string;
   required?: boolean;
+}
+function isTableField(value: unknown): value is TableField {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string" &&
+    (!("required" in value) || typeof value.required === "boolean")
+  );
+}
+function isTableFields(value: unknown): value is Record<string, TableField> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.values(value).every(isTableField)
+  );
+}
+function tableFields(data: string): Record<string, TableField> {
+  const parsed: unknown = JSON.parse(data);
+  if (!isTableFields(parsed))
+    throw new Error(`Invalid TypeTable data: ${data}`);
+  return parsed;
 }
 function table(fields: Record<string, TableField>): string {
   return (
@@ -37,11 +60,18 @@ export function mapOutsideFences(
 }
 export function readableMarkdown(text: string, locale: string): string {
   const prefix = localePrefix(locale);
+  // A `<Tab>` takes its heading from the enclosing `<Tabs items>` by position.
+  let items: string[] = [];
+  let tab = 0;
   return mapOutsideFences(text, (line) => {
+    if (/^\s*<Tabs\b/.test(line)) {
+      items = tabItems(line) ?? [];
+      tab = 0;
+    }
     const converted = line
       .replace(/^(#{1,6} .*?)\s*\[#[^\]]+\]$/, "$1")
       .replace(/<Tabs\b[^>]*>|<\/Tabs>|<\/Tab>/g, "")
-      .replace(/<Tab value="([^"]+)"\s*>/g, "### $1")
+      .replace(/^\s*<Tab>/g, () => `### ${items[tab++] ?? ""}`)
       .replace(/<ApiIndex\s*\/>/g, () =>
         apiEntries
           .map(
@@ -51,7 +81,7 @@ export function readableMarkdown(text: string, locale: string): string {
           .join("\n"),
       )
       .replace(/<TypeTable type=\{(\{.*\})\}\s*\/>/g, (_match, data: string) =>
-        table(JSON.parse(data)),
+        table(tableFields(data)),
       );
     // `\<Type>` is an escaped type argument, not an MDX component.
     if (

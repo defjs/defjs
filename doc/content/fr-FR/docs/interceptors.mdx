@@ -1,116 +1,97 @@
 ---
 title: "Intercepteurs"
-description: Applique l’authentification et les politiques de transport au client de l’application sans changer les définitions d’API de ton SDK.
+description: Appliquez l'authentification et les politiques de transport au client applicatif sans modifier les définitions d'API de votre SDK.
 ---
 
 # Intercepteurs
 
-Les intercepteurs permettent aux applications de configurer l’exécution indépendamment des définitions d’opérations du SDK. Un SDK peut exporter un intercepteur d’authentification ou une fabrique de client comme helper facultatif ; les applications choisissent où l’installer et fournissent leurs identifiants courants.
+Les intercepteurs rattachent des politiques d'exécution transversales — en-têtes d'authentification, signature de requêtes, court-circuit de maintenance ou rejeu de lectures sûres — au `Client` de l'application sans modifier les définitions d'opérations du SDK.
 
-Ajoute des en-têtes d’auth, court-circuite des fenêtres de maintenance, ou réessaie des lectures sûres — sans toucher la validation de l’opération. Chaque transport a sa propre chaîne. Tu reçois un `HttpRequest` ; tu renvoies le résultat de ce transport (`HttpResponse`, handle de flux d’événements, ou session WebSocket). La validation d’entrée tourne avant la chaîne ; le dispatch par statut et les résultats décodés, après.
+La validation de l'entrée et la projection par le `builder` s'exécutent **avant** la chaîne d'intercepteurs ; l'aiguillage par statut HTTP et la validation des structs `output` / `error` s'exécutent **après** la chaîne.
 
-## Mise en place
+## 1. Créer et enregistrer un intercepteur
+
+Chaque transport dispose de sa propre fabrique d'intercepteurs typée (`createHttpInterceptor`, `createSSEInterceptor`, `createWebSocketInterceptor`). Transmettez toute combinaison souhaitée à `withInterceptors(...)` :
+
+<Tabs items={["Basic setup", "Onion execution order", "Clone & add headers"]}>
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
-## Ordre oignon
-
-`withInterceptors(...items)` accepte des intercepteurs mixtes. Le client filtre par `kind` pour le transport sélectionné et garde l’ordre d’enregistrement relatif. Chaque intercepteur peut tourner avant et après `next` :
-
-| Fabrique                     | Requête       | Résultat de `next`                    |
-| ---------------------------- | ------------- | ------------------------------------- |
-| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
-| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
-| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
-Plusieurs appels `withInterceptors(...)` ajoutent. Place l’observation large à l’extérieur d’une mutation ou d’un retry plus étroit quand la couche extérieure doit voir le résultat final.
-
-## Cloner et ajouter des en-têtes de requête
-
-Traite le `HttpRequest` entrant comme possédé par la chaîne. Clone `Headers` avant de les changer ; passe une nouvelle requête à `next` :
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example
 </include>
 
-Même motif pour SSE. Le WebSocket navigateur ne peut pas ajouter d’en-têtes de handshake arbitraires — changer `request.headers` n’authentifiera pas un socket navigateur. Utilise le protocole, une politique d’URL ou de query, ou un handshake pris en charge par le serveur.
+</Tab>
+</Tabs>
 
-HTTP n’écrit jamais un Content-Type inféré dans `request.headers` ; les intercepteurs ne voient que les en-têtes déclarés. `request.bodyContentType` détient le type inféré du corps du builder comme champ simple, donc il survit aux copies `{ ...req }`. Un en-tête `content-type` explicite gagne toujours sur ce champ et sur la détection, qu’il soit déclaré par le builder, les défauts du client, un intercepteur ou une requête `fetchHandler` brute. Les signataires doivent lire `headers.get('content-type') ?? request.bodyContentType`.
+### Règles du pipeline d'intercepteurs
 
-Quand tu remplaces un corps HTTP, remplace `body` sur la requête copiée et déclare son type avec un en-tête `content-type`. `bodyContentType` ne s’applique que tant que `body` est la valeur du builder ; les corps de remplacement sont détectés à nouveau, donc une string de remplacement est du texte sauf si l’en-tête déclare autre chose. Poser `body: undefined` ne laisse aucun Content-Type inféré par la bibliothèque. Pour le corps du builder inchangé, `bodyContentType: null` supprime l’inférence de la bibliothèque quand il n’y a pas d’en-tête explicite, bien que le Fetch natif puisse encore ajouter son propre type pour une string. FormData utilise toujours sa boundary multipart réelle. Ne réutilise pas un corps `ReadableStream` déjà consommé.
+- **Modèle en oignon** : Les intercepteurs s'exécutent dans l'ordre d'enregistrement à l'aller (`avant next(req)`) et dans l'ordre inverse au retour (`après await next(req)`). Placez les intercepteurs larges de journalisation/traçage à l'extérieur des intercepteurs plus spécialisés d'authentification ou de retry.
+- **Convention de requête immuable** : Clonez toujours `req.headers` (`new Headers(req.headers)`) et passez un nouvel objet de requête (`{ ...req, headers }`) à `next(...)` afin que les retries externes voient des en-têtes intacts.
+- **`content-type` et `bodyContentType`** : Defjs conserve son type de contenu inféré sur `req.bodyContentType` sans altérer `req.headers`. Les mécanismes de signature de requête doivent lire `req.headers.get("content-type") ?? req.bodyContentType`. Si un intercepteur remplace `req.body` par un nouveau format, spécifiez un en-tête `content-type` explicite.
 
-## Court-circuiter une requête
+## 2. Court-circuiter une requête avec `makeResponse`
 
-Tu peux sauter `next`, mais tu dois renvoyer le type de résultat attendu. Pour HTTP, `makeResponse(...)` construit un wrapper compatible :
+Un intercepteur HTTP peut renvoyer une réponse synthétique sans appeler `next(req)` en la construisant à l'aide de `makeResponse(...)` :
 
 <include cwd lang="typescript">
   examples/interceptors/short-circuit.ts#example
 </include>
 
-L’opération dispatche encore par statut. Déclare un struct `error` pour le côté non-2xx quand les appelants ont besoin d’un `error.data` typé. Elle vérifie encore le côté déclaré : un `output` ou `error` JSON a besoin d’un en-tête `content-type` JSON sur la réponse synthétique, et `body` devrait déjà être la valeur parsée, comme le transport la livrerait (`request.responseType` et `request.errorResponseType` nomment la représentation). Court-circuiter SSE ou WebSocket exige un handle ou une session compatible complet (promesses de fermeture, état live, propriété, et `[Symbol.asyncDispose]`). Les objets partiels ne sont pas une politique valide. Les implémentations structurelles de `EventStreamHandle` et `WebSocketSessionLike` ont maintenant besoin de ce disposer standard à la compilation ; les consommateurs qui ne reçoivent que des handles Defjs n’ont pas de nouvel appel runtime à faire.
+`makeResponse` ne constitue **pas** un contournement de validation : la réponse synthétique reste soumise à la vérification du media type de l'opération, à la bifurcation selon le statut (`2xx` vs non-`2xx`) et à la validation des structs `output` / `error`.
 
-## Réessayer les lectures sûres
+## 3. Rejouer les lectures HTTP sûres
 
-Les nouvelles tentatives changent le comportement. Garde la politique étroite — cet exemple réessaie les `GET` / `HEAD` / `OPTIONS` rejouables pour les statuts `429`, `502`, `503`, `504`, plafonne `Retry-After` à 30 s, et s’arrête après deux nouvelles tentatives ou sur abort :
+Les retries HTTP sont désactivés par défaut. Pour basculer vers un autre endpoint sur `502`, `503` ou `504`, utilisez [`withRetry({ on: ["gateway-error"] })`](/fr-FR/docs/load-balancing). Il sélectionne un endpoint non encore tenté, reconstruit la requête et réexécute toute la chaîne d’intercepteurs.
+
+Un intercepteur applicatif peut plutôt traiter les statuts sur le même endpoint, tels que `429` et `Retry-After`. Cette recette bornée de lectures sûres traite aussi `502`/`503`/`504` :
 
 <include cwd lang="typescript">
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
-Les erreurs d’intercepteur ou de Fetch levées ne sont pas réessayées par cette boucle — un échec de transport rejette au lieu de produire un statut sur lequel cette boucle pourrait correspondre. Réessayer `POST` / `PUT` / `PATCH` / `DELETE` exige des octets rejouables, le support serveur, un contrat d’idempotence et une politique de statut revue. Tu possèdes le retry — Core n’exporte pas `retryAfter()`.
+- **Deux couches de retry** : Cette boucle `next(request)` reste sur l’endpoint sélectionné et ne réexécute ni l’authentification externe ni le builder. Combiner trois envois internes avec `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` peut envoyer quatre requêtes HTTP (trois vers un primaire défaillant, une vers un secours sain) ; `maxAttempts` borne les tentatives externes, pas les envois physiques. Décidez quelle couche possède chaque condition plutôt que de les empiler par inadvertance.
+- **Politique `Retry-After`** : Le `withRetry` de Core ne lit pas cet en-tête. Le plafond de 30 secondes et le repli à 250 ms de la recette sont des choix applicatifs. Plafonner un délai serveur plus long peut relancer plus tôt que demandé ; si cela est inacceptable, attendez le délai complet ou renvoyez plutôt la réponse.
+- **Écritures après 401** : La [recette de renouvellement Bearer](/fr-FR/recipes/refresh-bearer-once) peut livrer deux fois un POST JSON. Exigez un rejet d’authentification avant le traitement métier et une clé d’idempotence stable avec déduplication côté serveur, ou ne rejouez pas automatiquement les écritures. Les corps de requête en flux ne sont pas rejoués.
 
-Un intercepteur qui lève (ou rejette) hors de cet exemple est renvoyé à l’appelant comme
-`EXT_INTERCEPTOR_FAILED`, avec la valeur levée sur `cause` — voir [Gestion des erreurs](/fr-FR/docs/errors). Il en va de même pour un qui
-résout autre chose que le résultat de son transport : `undefined` d’un `return` oublié, ou une
-`Response` native là où un `HttpResponse` appartient. Dans un intercepteur HTTP, lever `ERR_ABORTED` ou `ERR_TIMEOUT` est la façon d’exprimer l’annulation : l’appel
-se résout avec `NET_ABORTED` ou `NET_TIMEOUT`. SSE enveloppe une levée hors transport en `EXT_INTERCEPTOR_FAILED`. Une levée WebSocket est renvoyée inchangée quand c’est déjà un Fault (un `Error` avec un `code` string) ; toute autre levée est `EXT_INTERCEPTOR_FAILED`.
+- **Gestion des rejets de transport** : `next(request)` rejette lorsqu'une erreur réseau survient (il n'existe aucune réponse de statut 0). Intercepter et relancer ce rejet préserve le code de fault `NET_*` initial.
+- **Exceptions au sein d'un intercepteur** : Une exception non gérée (ou le renvoi d'une valeur inadéquate) résout le tuple de l'opération avec `EXT_INTERCEPTOR_FAILED` et renseigne `fault.cause`. Lever `ERR_ABORTED` ou `ERR_TIMEOUT` résout avec `NET_ABORTED` ou `NET_TIMEOUT`.
 
-`next(request)` peut rejeter. Un échec de transport est un fault, pas une réponse de statut 0, donc un
-intercepteur qui veut en observer un utilise `try` / `catch` autour de `next`. Defjs l’attribue quand même
-correctement : un rejet venu du transport reste un fault `NET_*` plutôt que d’être imputé
-à ton intercepteur.
+Pour SSE, préférez `withSSEReconnect` à un intercepteur appelant `next()` à répétition. Appeler le `next()` de l’intercepteur plus d’une fois désactive l’attribution à l’endpoint et sa resélection pour ces flux de remplacement ; cela est sans rapport avec la consommation d’événements par le `next()` d’un itérateur.
 
-## Envelopper les sessions WebSocket
+## 4. Envelopper des sessions WebSocket
 
-Un intercepteur WebSocket peut appeler `next` au plus une fois. Si tu enveloppes la session, délègue explicitement les getters live et les membres de cycle de vie :
+Un intercepteur WebSocket ne peut appeler `next(req)` **qu'une seule fois au maximum**. Lorsque vous enveloppez le `WebSocketSessionLike` renvoyé, déléguez explicitement les accesseurs dynamiques (`state`, `connection`, `bufferedAmount`), `close`, `closed`, `receive` et `[Symbol.asyncDispose]()` plutôt que de copier un instantané figé avec la syntaxe de déploiement (spread) :
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-Étaler une session fige `state` / `connection` / `bufferedAmount` une fois. Préserve `closed`, `receive`, `close`, la délégation exacte de `[Symbol.asyncDispose]()`, et le nettoyage des listeners sauf si tu changes délibérément la propriété. Un wrapper doit renvoyer la promesse de teardown de la session intérieure, pas une promesse résolue sans rapport. Si une chaîne crée une session qui n’est pas livrée, Core la résout et la ferme ; si un intercepteur réussi renvoie une session différente, Core écarte celle qui a été créée.
+## 5. Fabriques et helpers intégrés
 
-## Référence
+| Export                                         | Transport | Description                                                                                     |
+| ---------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | Enveloppe `(req, next) => Promise<HttpResponse<unknown>>`                                       |
+| `createSSEInterceptor(fn)`                     | SSE       | Enveloppe `(req, next) => Promise<EventStreamHandle<unknown>>`                                  |
+| `createWebSocketInterceptor(fn)`               | WebSocket | Enveloppe `(req, next) => Promise<WebSocketSessionLike>`                                        |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injecte `Authorization: Basic ...` depuis un fournisseur d'identifiants synchrone ou asynchrone |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injecte `Authorization: Basic ...` sur les handshakes SSE                                       |
 
-Les fabriques renvoient des valeurs de transport marquées :
+## Lectures connexes
 
-- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
-- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
-- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
-- `basicAuthHttpInterceptor(provider, options?)` — identifiants Basic sur HTTP
-- `basicAuthSSEInterceptor(provider, options?)` — identifiants Basic sur SSE
-
-`HttpRequest` peut inclure `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `signal` et `operation` statique. C’est une valeur d’intégration de transport — pas l’entrée parsée de l’appelant. `queryParams` est `new URLSearchParams(queryString)` après sérialisation. Un serializer de query configuré n’est pas appelé quand le builder n’a produit aucune query, et un `URLSearchParams` du builder est utilisé tel quel. Garde la validation d’entrée, la validation de sortie et le mapping d’erreurs de domaine dans leurs couches.
-
-La validation d’URL commence pendant la construction de la requête : un endpoint de base absent, relatif ou invalide, ou un chemin illégal, échoue avec `REQ_BUILD_FAILED` avant tout intercepteur ou transport, y compris un intercepteur de court-circuit. Avant le dispatch, le `req.endpoint` final est validé contre le `req.baseEndpoint` final : l’URL résolue doit garder l’origine de cette base et rester sous son répertoire ; les caractères de contrôle C0 (y compris tab, CR et LF), les antislashs, `?`, `#` et les échappements de répertoire dans le chemin sont rejetés. Les formes scheme-like et protocol-relative sont rejetées même avec des espaces initiaux ; un espace intérieur simple est autorisé et envoyé comme `%20`. Un intercepteur peut délibérément remplacer `baseEndpoint` par une autre URL absolue valide. HTTP, SSE et WebSocket partagent la règle, et les erreurs d’URL déterministes ne sont jamais réessayées.
-
-Les observateurs SSE/WebSocket sont des hooks de cycle de vie, pas du flux de contrôle. Désabonne les listeners WebSocket quand le propriétaire termine. Les échecs d’observateur suivent le contrat du transport ; un intercepteur lui-même peut lever ou rejeter.
-
-Journalise une allowlist revue : `operation` statique, méthode, statut, durée, code d’erreur stable. Ne journalise pas par défaut les URL résolues, les query strings, les en-têtes d’auth, les corps, les causes brutes, les ID d’événements SSE, ni les payloads WebSocket.
-
-Les identifiants Basic sont en base64, pas chiffrés. Utilise TLS, garde les providers d’identifiants bornés à la requête sur un serveur, ne journalise jamais l’en-tête généré. L’encodeur par défaut est `globalThis.btoa` ; passe `BasicAuthInterceptorOptions.encode` quand le runtime n’a pas `btoa` ou a besoin d’un encodeur revu.
-
-Un intercepteur peut imposer une politique de transport. Ce n’est pas la validation d’entrée, l’autorisation, ni la propriété d’une ressource. Le code qui démarre un travail de longue durée utilise encore `await using` ou ferme manuellement et attend la promesse terminale. Le HTTP ordinaire reste borné à la requête et se gère avec son `AbortSignal` ; `Client` n’est pas `AsyncDisposable`.
-
-## Recettes liées
-
-- [Renouveler un Bearer une fois sur 401](/fr-FR/recipes/refresh-bearer-once)
-- [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk)
-- [Tester avec un handle Fetch local](/fr-FR/recipes/test-with-handle)
-- [Annuler un appel HTTP](/fr-FR/recipes/cancel-http)
+- [Rafraîchir un jeton Bearer sur 401](/fr-FR/recipes/refresh-bearer-once)
+- [Requêtes conditionnelles ETag](/fr-FR/recipes/etag-revalidate)
+- [Serveur OpenTelemetry](/fr-FR/docs/integrations/opentelemetry-server)

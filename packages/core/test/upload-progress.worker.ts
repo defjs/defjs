@@ -52,8 +52,7 @@ self.onmessage = (event: MessageEvent<string>) => {
 
 async function reportUpload(host: string): Promise<ModuleWorkerReport> {
   const client = createClient(withEndpoint(host));
-  const importScriptsValue = (globalThis as { importScripts?: unknown })
-    .importScripts;
+  const importScriptsValue: unknown = Reflect.get(globalThis, "importScripts");
   return {
     blob: await sendBlob(client),
     documentType: typeof document,

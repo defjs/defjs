@@ -22,7 +22,9 @@ function clientReturning(
 ) {
   return createClient(
     withEndpoint("https://example.com"),
-    withHTTPHandle(async () => new Response(body, { headers, status })),
+    withHTTPHandle(() =>
+      Promise.resolve(new Response(body, { headers, status })),
+    ),
   );
 }
 
@@ -71,7 +73,8 @@ describe("inbound representation by struct kind", () => {
 
     expect(error).toBeNull();
     expect(result).toBeInstanceOf(Blob);
-    await expect((result as Blob).arrayBuffer()).resolves.toEqual(
+    if (!(result instanceof Blob)) throw new Error("expected Blob");
+    await expect(result.arrayBuffer()).resolves.toEqual(
       new Uint8Array([1, 2, 3]).buffer,
     );
   });
@@ -92,15 +95,15 @@ describe("inbound representation by struct kind", () => {
 
     expect(error).toBeNull();
     expect(result).toBeInstanceOf(ArrayBuffer);
-    expect(new Uint8Array(result as ArrayBuffer)).toEqual(
-      new Uint8Array([1, 2, 3]),
-    );
+    if (!(result instanceof ArrayBuffer))
+      throw new Error("expected ArrayBuffer");
+    expect(new Uint8Array(result)).toEqual(new Uint8Array([1, 2, 3]));
   });
 
   test("should read object, number, and boolean outputs as JSON", async () => {
     const client = createClient(
       withEndpoint("https://example.com"),
-      withHTTPHandle(async (input) => {
+      withHTTPHandle((input) => {
         const href = input instanceof Request ? input.url : String(input);
         const pathname = new URL(href).pathname;
         const body =
@@ -109,7 +112,9 @@ describe("inbound representation by struct kind", () => {
             : pathname === "/flag"
               ? "true"
               : JSON.stringify({ id: 1 });
-        return new Response(body, { headers: JSON_HEADERS, status: 200 });
+        return Promise.resolve(
+          new Response(body, { headers: JSON_HEADERS, status: 200 }),
+        );
       }),
     );
     const useObject = defineRequest({
@@ -178,7 +183,7 @@ describe("inbound representation by struct kind", () => {
       throw new Error("Expected an http status fault");
     }
     expect(error.data).toBeInstanceOf(Blob);
-    await expect((error.data as Blob).arrayBuffer()).resolves.toEqual(
+    await expect(error.data.arrayBuffer()).resolves.toEqual(
       new Uint8Array([1, 2, 3]).buffer,
     );
   });
@@ -199,26 +204,28 @@ describe("inbound representation by struct kind", () => {
       throw new Error("Expected an http status fault");
     }
     expect(error.data).toBeInstanceOf(ArrayBuffer);
-    expect(new Uint8Array(error.data as ArrayBuffer)).toEqual(
-      new Uint8Array([4, 5]),
-    );
+    expect(new Uint8Array(error.data)).toEqual(new Uint8Array([4, 5]));
   });
 
   test("should read an object error as JSON while a blob output stays binary", async () => {
     const client = createClient(
       withEndpoint("https://example.com"),
-      withHTTPHandle(async (input) => {
+      withHTTPHandle((input) => {
         const href = input instanceof Request ? input.url : String(input);
         if (new URL(href).pathname === "/missing") {
-          return new Response(JSON.stringify({ message: "gone" }), {
-            headers: JSON_HEADERS,
-            status: 404,
-          });
+          return Promise.resolve(
+            new Response(JSON.stringify({ message: "gone" }), {
+              headers: JSON_HEADERS,
+              status: 404,
+            }),
+          );
         }
-        return new Response(new Uint8Array([1, 2, 3]), {
-          headers: BYTES_HEADERS,
-          status: 200,
-        });
+        return Promise.resolve(
+          new Response(new Uint8Array([1, 2, 3]), {
+            headers: BYTES_HEADERS,
+            status: 200,
+          }),
+        );
       }),
     );
     const useMissing = defineRequest({
@@ -284,17 +291,19 @@ describe("inbound representation by struct kind", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () => {
+        createHttpInterceptor(() => {
           const body = payloads[index];
           index += 1;
           if (body === undefined) {
-            throw new Error("missing payload");
+            return Promise.reject(new Error("missing payload"));
           }
-          return makeResponse({
-            body,
-            headers: new Headers(JSON_HEADERS),
-            status: 404,
-          });
+          return Promise.resolve(
+            makeResponse({
+              body,
+              headers: new Headers(JSON_HEADERS),
+              status: 404,
+            }),
+          );
         }),
       ),
     );
@@ -327,12 +336,14 @@ describe("inbound representation by struct kind", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: "123",
-            headers: new Headers(JSON_HEADERS),
-            status: 200,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: "123",
+              headers: new Headers(JSON_HEADERS),
+              status: 200,
+            }),
+          ),
         ),
       ),
     );
@@ -352,12 +363,14 @@ describe("inbound representation by struct kind", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: '{"role":"admin"}',
-            headers: new Headers(JSON_HEADERS),
-            status: 200,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: '{"role":"admin"}',
+              headers: new Headers(JSON_HEADERS),
+              status: 200,
+            }),
+          ),
         ),
       ),
     );
@@ -377,8 +390,10 @@ describe("inbound representation by struct kind", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({ body: { message: "gone" }, status: 404 }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({ body: { message: "gone" }, status: 404 }),
+          ),
         ),
       ),
     );
@@ -398,8 +413,8 @@ describe("inbound representation by struct kind", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({ body: 404, status: 404 }),
+        createHttpInterceptor(() =>
+          Promise.resolve(makeResponse({ body: 404, status: 404 })),
         ),
       ),
     );

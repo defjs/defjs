@@ -1,20 +1,37 @@
 ---
 title: "JSON 보내기"
-description: 타입이 있는 JSON body를 보내고 선언된 201을 디코딩해요.
+description: 타입화된 JSON 본문을 전송하고 선언된 201 응답을 디코딩합니다.
 ---
 
 # POST JSON
 
-타입이 있는 body를 builder에 넘겨요. 논리 필드 이름은 TypeScript에 두고, struct의 와이어 alias가 JSON 키가 돼요. 객체 body는 `application/json`이에요.
+타입화된 입력 객체를 `builder`에 전달하고 `{ body: input }`을 반환합니다. `.alias("customer_name")`을 사용하면 TypeScript 코드에서는 카멜케이스인 `customerName`을 유지하면서, 통신 시에는 `"customer_name"`으로 인코딩되고 `201` 응답으로부터 다시 올바르게 디코딩됩니다.
 
-자세한 내용은 [HTTP](/ko-KR/docs/http)와 [클라이언트](/ko-KR/docs/client)를 보세요.
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
+</include>
 
-<include cwd meta="create-user.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com`은 placeholder예요. `201`과 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`로 응답하는 서버에서는 이 스니펫이 다음을 출력해요.
+  </Tab>
+</Tabs>
+
+`201` 상태 코드와 함께 `{ "id": 1, "status": "paid", "customer_name": "Ada" }`를 반환하는 서버를 대상으로 이 스크립트를 실행하면 다음과 같이 출력됩니다:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+자세한 내용은 [HTTP 작업](/ko-KR/docs/http) 및 [Struct 및 스키마](/ko-KR/docs/struct) 가이드를 참조하세요.

@@ -2,9 +2,19 @@ import { describe, expect, test } from "vitest";
 import { isStruct } from "./guards";
 import { StructError, struct } from "./index";
 import { getStructFields, parseStructTuple as parse } from "./introspection";
-import { resolveObjectShape } from "./shape";
-import { DEFINITION } from "./symbols";
+import { assertStruct, resolveObjectShape } from "./shape";
+import { DEFINITION, FAILED } from "./symbols";
+import { createPrimitiveStruct } from "./runtime";
 import type { RuntimeStruct } from "./types";
+
+function runtimeOf(value: unknown): RuntimeStruct {
+  assertStruct(value, "struct");
+  return value;
+}
+
+function withPrototype(prototype: object): unknown {
+  return Object.create(prototype);
+}
 
 describe("runtime.ts chain methods", () => {
   test("nullable stays required while optional and nullish may be omitted", () => {
@@ -40,9 +50,10 @@ describe("runtime.ts chain methods", () => {
   });
 
   test("alias requires a string name", () => {
-    expect(() => struct.string().alias(null as never)).toThrow(
-      "alias() requires a string name",
-    );
+    expect(() => {
+      // @ts-expect-error alias requires a string name
+      struct.string().alias(null);
+    }).toThrow("alias() requires a string name");
   });
 
   test("removed tag method is absent from struct runtime surface", () => {
@@ -88,10 +99,10 @@ describe("runtime.ts chain methods", () => {
     const Alias = User.alias("user");
     const Optional = User.optional();
     const Nullish = User.nullish();
-    const baseRuntime = User as unknown as RuntimeStruct;
-    const aliasRuntime = Alias as unknown as RuntimeStruct;
-    const optionalRuntime = Optional as unknown as RuntimeStruct;
-    const nullishRuntime = Nullish as unknown as RuntimeStruct;
+    const baseRuntime = runtimeOf(User);
+    const aliasRuntime = runtimeOf(Alias);
+    const optionalRuntime = runtimeOf(Optional);
+    const nullishRuntime = runtimeOf(Nullish);
     const baseDefinition = baseRuntime[DEFINITION];
     const aliasDefinition = aliasRuntime[DEFINITION];
     const optionalDefinition = optionalRuntime[DEFINITION];
@@ -156,7 +167,7 @@ describe("runtime.ts chain methods", () => {
       firstName: struct.string().alias("name"),
       displayName: struct.string().alias("name"),
     });
-    const runtime = User as unknown as RuntimeStruct;
+    const runtime = runtimeOf(User);
     const definition = runtime[DEFINITION];
 
     if (definition.kind !== "object") {
@@ -170,9 +181,7 @@ describe("runtime.ts chain methods", () => {
   });
 
   test("does not accept inherited struct definition brand", () => {
-    const base = struct.string() as object;
-    const fake = Object.create(base);
-
+    const fake = withPrototype(struct.string());
     expect(isStruct(fake)).toBe(false);
   });
 
@@ -182,11 +191,66 @@ describe("runtime.ts chain methods", () => {
     expect(isStruct(fake)).toBe(false);
   });
 
+  test.each([
+    undefined,
+    null,
+    1,
+    {},
+    { nullable: false },
+    { optional: false },
+    { nullable: 0, optional: false },
+    { nullable: false, optional: 0 },
+  ])("rejects malformed struct flags: %j", (flags) => {
+    expect(isStruct({ [DEFINITION]: { kind: "string", flags } })).toBe(false);
+  });
+
+  test("an unreported decoder failure still returns an error-first tuple with a generic issue", () => {
+    const Malformed = createPrimitiveStruct({
+      kind: "string",
+      expected: "string",
+      is: (value): value is string => typeof value === "string",
+      decode: () => FAILED,
+    });
+    const [error, value] = parse(Malformed, "value");
+    expect(error).toBeInstanceOf(StructError);
+    expect(error?.message).toBe(
+      "Expected a decodable value at <root>, received string",
+    );
+    expect(error?.issues).toEqual([
+      {
+        code: "custom",
+        expected: "a decodable value",
+        message: "Expected a decodable value at <root>, received string",
+        path: [],
+        received: "value",
+      },
+    ]);
+    expect(value).toBeUndefined();
+    expect(parse(struct.string(), "next")).toEqual([null, "next"]);
+  });
+
   test("invalid primitive parse returns StructError and undefined", () => {
     const [err, val] = parse(struct.string(), 42);
 
     expect(err).toBeInstanceOf(StructError);
     expect(val).toBeUndefined();
+  });
+
+  test("modifiers retain their captured definition when the writable metadata property is replaced", () => {
+    const value = struct.string();
+    const original = runtimeOf(value)[DEFINITION];
+    Reflect.set(value, DEFINITION, {
+      ...original,
+      flags: { nullable: true, optional: false },
+    });
+    expect(runtimeOf(value.optional())[DEFINITION].flags).toEqual({
+      nullable: false,
+      optional: true,
+    });
+    expect(runtimeOf(value.alias("wire"))[DEFINITION].flags).toEqual({
+      nullable: false,
+      optional: false,
+    });
   });
 
   test("runtime structs do not carry an own _struct property", () => {
@@ -196,5 +260,30 @@ describe("runtime.ts chain methods", () => {
     expect("_struct" in value).toBe(false);
     expect(isStruct(value)).toBe(true);
     expect(Object.getOwnPropertySymbols(value)).toEqual([DEFINITION]);
+  });
+});
+
+describe("primitive decode hooks", () => {
+  test("a stored decode hook reports a value its struct does not accept", () => {
+    const definition = runtimeOf(struct.date())[DEFINITION];
+    if (definition.kind !== "date" || !definition.decode) {
+      throw new Error("expected a date decode hook");
+    }
+    const reported: unknown[] = [];
+    const result = definition.decode(true, ["at"], (issue) => {
+      reported.push(issue);
+      return FAILED;
+    });
+
+    expect(result).toBe(FAILED);
+    expect(reported).toEqual([
+      {
+        code: "invalid_type",
+        expected: "Date",
+        message: "Expected Date at at, received boolean",
+        path: ["at"],
+        received: true,
+      },
+    ]);
   });
 });

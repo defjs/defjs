@@ -82,19 +82,13 @@ export async function highlightCode(
   lang: string,
   labels: CopyLabels,
 ): Promise<string> {
-  const node = (await highlight(code, {
+  const node = await highlight(code, {
     lang,
     themes,
     defaultColor: false,
-  })) as ReactElement<ComponentProps<"pre">>;
+  });
   return tagCopyButton(
-    renderToStaticMarkup(
-      preBlock({
-        className: node.props.className,
-        style: node.props.style,
-        children: node.props.children,
-      }),
-    ),
+    renderToStaticMarkup(preBlock({ children: node })),
     labels,
   );
 }

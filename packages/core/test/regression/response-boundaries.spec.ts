@@ -17,8 +17,6 @@ const JsonError = struct.object({ reason: struct.string() });
 const eventOptions = {
   path: "/events",
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
 };
 
 function rawBody(kind: string, text: string): unknown {
@@ -41,8 +39,10 @@ test.each([200, 403])(
       const client = createClient(
         withEndpoint("https://example.test"),
         withInterceptors(
-          createHttpInterceptor(async () =>
-            makeResponse({ status, headers: new Headers(jsonHeaders), body }),
+          createHttpInterceptor(() =>
+            Promise.resolve(
+              makeResponse({ status, headers: new Headers(jsonHeaders), body }),
+            ),
           ),
         ),
       );
@@ -73,12 +73,14 @@ test.each([200, 403])(
       const client = createClient(
         withEndpoint("https://example.test"),
         withInterceptors(
-          createHttpInterceptor(async () =>
-            makeResponse({
-              status,
-              headers: new Headers(jsonHeaders),
-              body: rawBody(kind, "{"),
-            }),
+          createHttpInterceptor(() =>
+            Promise.resolve(
+              makeResponse({
+                status,
+                headers: new Headers(jsonHeaders),
+                body: rawBody(kind, "{"),
+              }),
+            ),
           ),
         ),
       );
@@ -120,8 +122,8 @@ test.each([200, 403])(
       const client = createClient(
         withEndpoint("https://example.test"),
         withInterceptors(
-          createHttpInterceptor(async () =>
-            makeResponse({ status, headers, body }),
+          createHttpInterceptor(() =>
+            Promise.resolve(makeResponse({ status, headers, body })),
           ),
         ),
       );
@@ -162,11 +164,12 @@ test("native malformed JSON and wrong media provide response classification cont
   ]) {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(
-        async () =>
+      withHTTPHandle(() =>
+        Promise.resolve(
           new Response(text, {
             headers: { "content-type": String(contentType) },
           }),
+        ),
       ),
     );
     const endpoint = defineRequest({
@@ -195,12 +198,14 @@ test.each(["abort", "timeout"] as const)(
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            status: 200,
-            headers: new Headers(jsonHeaders),
-            body: new SlowBlob(),
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              status: 200,
+              headers: new Headers(jsonHeaders),
+              body: new SlowBlob(),
+            }),
+          ),
         ),
       ),
     );
@@ -243,7 +248,7 @@ test.each([200, 403])(
   async (status) => {
     const cases = [
       {
-        body: null as BodyInit | null,
+        body: null,
         output: JsonError,
         error: JsonError,
         code: "RES_DECODE_FAILED",
@@ -281,8 +286,10 @@ test.each([200, 403])(
     for (const item of cases) {
       const client = createClient(
         withEndpoint("https://example.test"),
-        withHTTPHandle(
-          async () => new Response(item.body, { status, headers: jsonHeaders }),
+        withHTTPHandle(() =>
+          Promise.resolve(
+            new Response(item.body, { status, headers: jsonHeaders }),
+          ),
         ),
       );
       const endpoint = defineRequest({
@@ -315,8 +322,10 @@ test.each([200, 403])(
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({ status, headers: new Headers(jsonHeaders) }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({ status, headers: new Headers(jsonHeaders) }),
+          ),
         ),
       ),
     );
@@ -336,12 +345,13 @@ test("a bodiless declared string SSE error decodes to an empty string", async ()
   for (const body of [null, ""]) {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(body, {
             status: 403,
             headers: { "content-type": "text/plain" },
           }),
+        ),
       ),
     );
     const endpoint = defineEventStream({
@@ -362,8 +372,10 @@ test("a bodiless declared string SSE error decodes to an empty string", async ()
 test("a bodiless SSE response cannot return typed HTTP_STATUS with missing data", async () => {
   const client = createClient(
     withEndpoint("https://example.test"),
-    withSSEHandle(
-      async () => new Response(null, { status: 403, headers: jsonHeaders }),
+    withSSEHandle(() =>
+      Promise.resolve(
+        new Response(null, { status: 403, headers: jsonHeaders }),
+      ),
     ),
   );
   const endpoint = defineEventStream({ ...eventOptions, error: JsonError });
@@ -402,8 +414,10 @@ test.each(["json", "text", "blob", "arrayBuffer"] as const)(
       };
       const client = createClient(
         withEndpoint("https://example.test"),
-        withSSEHandle(
-          async () => new Response(body, { status: 403, headers: jsonHeaders }),
+        withSSEHandle(() =>
+          Promise.resolve(
+            new Response(body, { status: 403, headers: jsonHeaders }),
+          ),
         ),
       );
       const endpoint = defineEventStream({

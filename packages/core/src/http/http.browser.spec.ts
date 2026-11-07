@@ -11,6 +11,7 @@ import {
 import {
   createClient,
   type DerivableClient,
+  type FetchHandle,
   withEndpoint,
   withHTTPHandle,
   withXSRF,
@@ -116,11 +117,14 @@ describe("http browser runtime", () => {
   test("should inject xsrf header from document.cookie on same-origin mutating requests", async () => {
     document.cookie = "XSRF-TOKEN=browser-cookie; path=/";
 
-    const fetchMock = vi.fn(async (request: Request) => {
+    const fetchMock = vi.fn<FetchHandle>((input) => {
+      if (!(input instanceof Request))
+        return Promise.reject(new Error("expected Request"));
+      const request = input;
       expect(request.url).toBe(`${window.location.origin}/xsrf`);
       expect(request.headers.get("X-XSRF-TOKEN")).toBe("browser-cookie");
-      return new Response(null, { status: 200 });
-    }) as unknown as typeof fetch;
+      return Promise.resolve(new Response(null, { status: 200 }));
+    });
 
     const client = createClient(
       withEndpoint(window.location.origin),

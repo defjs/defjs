@@ -1,186 +1,137 @@
 ---
 title: "Serveur OpenTelemetry"
-description: Instrumente les appels du SDK sur le client de l’application serveur tout en gardant les définitions d’API indépendantes de la télémétrie.
+description: Instrumentez les appels du SDK sur le client applicatif serveur tout en préservant l'indépendance de vos définitions d'API.
 ---
 
 # Serveur OpenTelemetry
 
-Garde les définitions d’API du SDK de ton service réutilisables. L’application serveur consommatrice installe ce plugin middleware sur son propre client et fournit ses providers de télémétrie, pour que le même SDK puisse servir avec des mises en place d’observabilité différentes. Le SDK OpenTelemetry mentionné ci-dessous est le runtime de télémétrie de l’application, distinct du SDK d’API construit avec Defjs.
+`@defjs/opentelemetry-server` instrumente les opérations sortantes HTTP, SSE et WebSocket sur le client d'une application serveur tout en gardant vos définitions de SDK totalement indépendantes d'OpenTelemetry.
 
-Active l’instrumentation sortante quand tu crées le client. `@defjs/opentelemetry-server` ajoute des intercepteurs HTTP, SSE et WebSocket. Ce n’est **pas** une instrumentation serveur entrante, et il n’**initialise pas** un SDK OpenTelemetry.
+`withOpenTelemetryServer(options)` renvoie une [`ClientOption`](/fr-FR/api/core/clientoption-type) de `@defjs/core` qui ajoute un intercepteur par transport activé (HTTP, SSE, WebSocket). Il n'**initialise pas** le SDK OpenTelemetry et n'**instrumente pas** les requêtes serveur entrantes.
 
-## Mise en place
+---
 
-Initialise le SDK ailleurs. Passe ses objets d’API :
+## 1. Configuration de base & identité des opérations
 
-<include cwd lang="typescript">
-  examples/opentelemetry-server/basic-setup.ts#example
-</include>
+Définissez une chaîne `operation` statique et de faible cardinalité sur vos définitions de SDK (`defineRequest`, `defineEventStream`, `defineWebSocket`), puis transmettez votre `tracer`, `meter`, `logger` ou `propagator` OpenTelemetry à `withOpenTelemetryServer(...)` lors de la construction du client :
 
-`tracer` est facultatif. `meter` est facultatif — omets-le pour désactiver les métriques du paquet. Pas de `propagator` → le plugin construit un propagator composite W3C Trace Context + W3C Baggage. Il ne lit ni n’initialise la config globale du SDK à ta place.
+<Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
+  <Tab>
+    <include cwd lang="typescript">
+      examples/opentelemetry-server/operation-names.ts#example
+    </include>
 
-Sans `tracer`, le plugin ne crée pas de spans locaux, n’appelle jamais `trace.getTracer(...)`, et saute `startSpanHook`, `requestHook` et `responseHook`. Les instances `meter` et `logger` fournies fonctionnent indépendamment. La propagation transmet toujours le contexte parent extrait ; `queryPropagation` WebSocket reste `false` par défaut. Avec un tracer, `requireParentSpan: true` contourne toute l’instrumentation, journaux compris, quand aucun parent actif n’existe ; sans tracer, cela ne bloque ni les métriques ni les journaux.
+  </Tab>
+  <Tab>
+    <include cwd lang="typescript">
+      examples/opentelemetry-server/basic-setup.ts#example
+    </include>
 
-`withOpenTelemetryServer(options)` renvoie une `ClientOption` core. Applique-le au moment de `createClient` pour qu’un intercepteur soit ajouté par transport activé. HTTP, SSE et WebSocket sont activés par défaut ; `{ enabled: false }` désactive un transport.
+  </Tab>
+</Tabs>
 
-Le plugin peut créer de la télémétrie de transport même quand la requête échoue à la couche transport. Que quelque chose soit exporté dépend de ton SDK et de tes exporters.
+- **Nommage des spans** : Avec `operation` défini, les noms de spans deviennent `GET orders.read`, `SSE orders.watch` et `WebSocket orders.connect`, et portent l'attribut `defjs.operation`. En l'absence d'`operation`, les noms de spans se replient sur la méthode HTTP, `SSE` ou `WebSocket`.
+- **Signaux indépendants** : `tracer`, `meter` et `logger` sont tous facultatifs et fonctionnent de manière autonome :
+  - Omettez `tracer` pour désactiver la création de spans locaux et leurs hooks tout en continuant d'enregistrer les métriques, les logs et la propagation sortante de contexte.
+  - Omettez `meter` pour désactiver les métriques du paquet.
+  - Omettez `propagator` pour utiliser un propagateur composite intégré W3C Trace Context + W3C Baggage.
+  - En présence d'un `tracer`, `requireParentSpan: true` ignore spans, propagation, hooks, métriques et logs dès lors qu'aucun span parent actif n'existe ; sans `tracer`, `requireParentSpan` ne bloque ni les métriques ni les logs.
 
-## Portée
+---
 
-Tu possèdes l’init du SDK, les providers, les exporters, les processors, le contexte, l’échantillonnage, le masquage, le flush et le shutdown. Ce paquet consomme le `Tracer` facultatif, le `Meter` facultatif, le `Logger` facultatif et le `TextMapPropagator` facultatif que tu passes. Il n’inclut ni rédacteur ni politique de clés sensibles.
+## 2. Options de transport, hooks et propagation
 
-Pas de cache, de retries, de spans par message ni de politique de résultat applicative. Utilise un runtime serveur pris en charge par le SDK et le bridge choisis ; l’exemple Winston exécutable utilise Bun. Les peers sont `@defjs/core`, `@opentelemetry/api` 1.x et `@opentelemetry/core` 2.x/3.x. `@opentelemetry/api-logs` est une dépendance de paquet normale ; l’application installe son propre SDK et ses bridges.
+Configurez des interrupteurs par transport (`{ enabled: false }`) et des hooks de spans (`startSpanHook`, `requestHook`, `responseHook`) sous `http`, `sse` et `webSocket`. Pour les connexions WebSocket où les services en aval attendent le contexte de trace dans la query string du handshake, activez `queryPropagation: true` :
 
-API publique : `withOpenTelemetryServer` plus `OpenTelemetryServerOptions`, `OpenTelemetryServerHttpOptions`, `OpenTelemetryServerSSEOptions`, `OpenTelemetryServerWebSocketOptions`.
+<Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
+  <Tab>
+    <include cwd lang="typescript">
+      examples/opentelemetry-server/options-and-hooks.ts#example
+    </include>
 
-## Options et hooks
+  </Tab>
+  <Tab>
+    <include cwd>
+      examples/opentelemetry-server/websocket-query-propagation.ts#example
+    </include>
 
-Les hooks de span ne tournent que lorsqu’un `tracer` est fourni. Les hooks se placent à côté du transport qu’ils changent. Le `startSpanHook(request)` synchrone tourne avant la création du span et renvoie les `Attributes` initiaux ; les attributs applicatifs sont appliqués en dernier, donc ils peuvent remplacer les valeurs intégrées. `requestHook` et `responseHook` reçoivent le span déjà créé et peuvent renvoyer `void` ou une promesse. Un échec de hook n’**arrête pas** l’opération client ; un start hook échoué retombe sur les attributs initiaux intégrés.
+  </Tab>
+  <Tab>
+    <include cwd lang="typescript">
+      examples/opentelemetry-server/active-span.ts#example
+    </include>
 
-`requestHook` et `responseHook` ne sont pas attendus. Le span HTTP se termine quand la partie synchrone de `responseHook` revient et n’est pas prolongé pour un hook asynchrone. La partie synchrone peut encore modifier un span qui enregistre ; des événements ne peuvent pas être ajoutés après sa fin. Tant que `span.isRecording()` est vrai, les échecs de hook enregistrent les événements `defjs.otel.hook.error` et `exception`. Pour les spans qui n’enregistrent pas (terminés ou non échantillonnés), les échecs vont au logger de diagnostic OpenTelemetry via `diag.error`. Les applications doivent configurer `diag.setLogger(...)` depuis `@opentelemetry/api` pour les recevoir ; il n’y a pas de sortie automatique par défaut. Le paquet n’initialise pas le SDK, et ce diagnostic n’est pas un `LogRecord` de SDK séparé. Ce diagnostic inclut `hook.name`, `error.type`, `traceId` et `spanId`, mais exclut le message ou la stack de l’erreur d’origine et les données de requête.
+  </Tab>
+</Tabs>
 
-<include cwd lang="typescript">
-  examples/opentelemetry-server/options-and-hooks.ts#example
-</include>
+### Contrat des hooks
 
-Signatures des hooks :
+- `startSpanHook(request): Attributes` s'exécute de façon synchrone avant la création du span ; les attributs retournés sont appliqués en dernier et peuvent surcharger les attributs intégrés (comme masquer `url.full`).
+- `requestHook(span, request)` et `responseHook(span, responseOrHandle, request)` reçoivent le span créé et peuvent être synchrones ou asynchrones. Le pipeline de transport ne les attend **pas**, et le span HTTP prend fin immédiatement au retour de la portion synchrone de `responseHook`.
+- Tout échec de hook n'interrompt jamais l'appel client. Tant que `span.isRecording()` est vrai, les erreurs de hook enregistrent des événements `defjs.otel.hook.error` et `exception` sur le span ; pour les spans n'enregistrant pas, les échecs sont signalés via `diag.error` d'`@opentelemetry/api` (`hook.name`, `error.type`, `traceId`, `spanId`).
+- `withOpenTelemetryServer` fige les blocs d'options `http`, `sse` et `webSocket` dès la création. Passer `{ enabled: false }` désactive le transport correspondant sans même lire ses hooks.
 
-- Les trois transports : `startSpanHook(request): Attributes` (synchrone, avant la création du span)
-- HTTP : `requestHook(span, request)` et `responseHook(span, response, request)`
-- SSE : `requestHook(span, request)` et `responseHook(span, stream, request)`
-- WebSocket : `requestHook(span, request)` et `responseHook(span, session, request)`
+---
 
-Un objet de transport vide active ce transport. Les anciens interrupteurs booléens de transport (`http: false`) et les anciens hooks de premier niveau sont rejetés par les types TypeScript seulement. Il n’y a pas de contrôle au runtime : au runtime `http: false` laisse le transport activé et un hook de premier niveau est ignoré en silence. Utilise des objets d’options de transport (`{ enabled: false }`) et des hooks bornés au transport.
+## 3. Sémantique de télémétrie HTTP, SSE et WebSocket
 
-## Identité d’opération et propagation
+Le plugin mesure les cycles de vie du transport au sein de la chaîne d'intercepteurs :
 
-Pose un `operation` statique sur `defineRequest`, `defineEventStream` ou `defineWebSocket` quand l’opération a une identité stable. Le plugin l’utilise dans les noms de span et comme `defjs.operation`. Il ne dérive jamais l’identité d’un path résolu, d’un identifiant, d’un tenant ou d’une query string :
+- **HTTP** : Le span démarre dans l'intercepteur HTTP et s'achève au retour du `HttpResponse`. Les corps `output` / `error` déclarés sont lus (et les représentations JSON validées et analysées) **à l'intérieur** de la frontière du gestionnaire avant de retourner. Tout échec de lecture ou d'analyse/media-type JSON rejette à travers l'intercepteur (`error.type: "BodyFailure"`), marque le span en `ERROR`, consigne `BodyFailure` dans les métriques et émet un log `WARN`. Un statut `400+` marque le span en `ERROR` avec la chaîne du code de statut comme `error.type`. La validation Struct (`RES_STRUCT_MISMATCH`) et la conversion du tuple `HTTP_STATUS` surviennent après la chaîne et ne modifient pas le span de transport déjà clos.
+- **SSE** : Un flux logique unique (incluant les reconnexions automatiques) génère un unique span qui demeure ouvert jusqu'à la résolution de `stream.closed`. Événements consignés : `sse.connected`, suivi de `sse.closed`, `sse.aborted` (concluant en `OK` pour un `stream.close()` ou une annulation sans timeout) ou `sse.error` (concluant en `ERROR`, y compris pour une annulation sous forme de timeout). Les attributs de span `url.full`, `server.address` et `server.port` décrivent la première connexion ; une reconnexion vers un autre endpoint ne les modifie pas.
+- **WebSocket** : Une session logique unique (incluant les reconnexions automatiques) produit un seul span jusqu'à la résolution de `session.closed`. Événements consignés : `websocket.connected`, `websocket.closed`, `websocket.error`. Les trames de fermeture émanant du serveur (quel que soit le code) terminent le span en `OK` avec `websocket.closed` ; les annulations de l'appelant terminent le span en `ERROR` avec `websocket.error` sans log, sauf si le motif d’annulation est un `TimeoutError`, qui émet un `WARN`. Une coupure brutale sans trame de fermeture (`1006`) termine en `ERROR` avec un log sur les runtimes émettant une `error` de socket avant `close` et en `OK` sur ceux qui ne le font pas (Bun). Comme pour SSE, `url.full`, `server.address` et `server.port` décrivent la première connexion et ne changent pas lors d'une reconnexion vers un autre endpoint.
 
-<include cwd lang="typescript">
-  examples/opentelemetry-server/operation-names.ts#example
-</include>
+### Frontières des retries et reconnexions
 
-Les noms de span deviennent `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`. Sans `operation`, le repli est la méthode / `SSE` / `WebSocket`, et `defjs.operation` est omis.
+Il s’agit des observations actuelles des intercepteurs, pas d’une API de télémétrie distincte pour les répartiteurs :
 
-HTTP et SSE injectent les champs propagés dans les en-têtes de requête. L’injection utilise toujours une nouvelle copie de `Headers` sans changer les en-têtes de l’appelant, donc les retries extérieurs gardent le même contexte parent d’origine. La propagation de query WebSocket est **opt-in** (les navigateurs ne peuvent pas ajouter d’en-têtes de handshake arbitraires) :
+- Chaque tentative HTTP de `withRetry` a son propre span client et son propre échantillon de durée. En présence d’un span parent applicatif actif, les tentatives sont des spans frères sous ce parent ; sans lui, les retries ne sont pas automatiquement regroupés dans une trace unique. Core ne crée aucun span parent d’appel logique.
+- Les URL des tentatives HTTP identifient l’endpoint de chaque tentative, mais aucun attribut de numéro de tentative, motif de retry, solde/épuisement du budget ou éjection/rétablissement n’est émis.
+- SSE et WebSocket conservent un span de session logique à travers les reconnexions, et non un span par connexion physique. L’URL du span et les attributs des métriques conservent l’endpoint initial même après un basculement. Les reconnexions n’émettent pas de nouvel événement `connected`. Les métriques d’activité comptent les sessions logiques en attente de `closed`, pas les sockets sur le réplica actuellement sélectionné.
+- Lors d’une exécution Bun, HTTP 503 a produit `error.type: "503"`, un rejet de connexion a produit `"TypeError"`, et une échéance comme une annulation de l’appelant ont produit `"Error"`. Ces deux dernières ont renvoyé respectivement `NET_TIMEOUT` et `NET_ABORTED` ; ces codes de fault des tuples Defjs ne sont pas des attributs distincts de télémétrie HTTP. Pour un WebSocket ouvert, l’annulation par défaut a produit `"AbortError"` sans avertissement, tandis qu’un motif d’annulation `TimeoutError` a produit `"TimeoutError"` et un avertissement. Les noms de classes d’erreur sont des observations du transport/runtime, et ne remplacent pas l’inspection du tuple ou de l’issue de fermeture.
 
-<include cwd>
-  examples/opentelemetry-server/websocket-query-propagation.ts#example
-</include>
+### Métriques émises
 
-Avec `queryPropagation`, les champs que le propagator injecte sont écrits à la fin de la query string de connexion et remplacent tout paramètre du même nom ; tous les autres paramètres gardent leur forme sérialisée. Revois d’abord la journalisation d’URL, la visibilité des proxies, les access logs, le baggage et la rétention. Avec un `tracer`, `requireParentSpan: true` saute la création de span, la propagation, les hooks, les métriques et les journaux quand il n’y a pas de parent actif, puis appelle `next` inchangé.
+Lorsqu'un `meter` est fourni, la création des instruments s'exécute à chaque application de l'option à un client (avec les limites d'intervalles d'histogramme `0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10` secondes) :
 
-## Sémantique HTTP, SSE et WebSocket
+| Métrique                                     | Signification                                                |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| `http.client.request.duration`               | Durée d’une tentative HTTP (en secondes)                     |
+| `defjs.client.sse.connect.duration`          | Temps écoulé jusqu'au renvoi du handle SSE                   |
+| `defjs.client.sse.connection.duration`       | Du renvoi du handle jusqu'au `stream.closed` terminal        |
+| `defjs.client.sse.active_streams`            | Flux logiques SSE actifs avec `closed` en attente            |
+| `defjs.client.websocket.connect.duration`    | Temps écoulé jusqu'au renvoi de la session WebSocket         |
+| `defjs.client.websocket.connection.duration` | Du renvoi de la session jusqu'au `session.closed` terminal   |
+| `defjs.client.websocket.active_connections`  | Sessions logiques WebSocket actives avec `closed` en attente |
 
-Le plugin mesure les durées de vie de transport, pas chaque étape de l’opération.
+---
 
-- **HTTP** — le span commence dans l’intercepteur HTTP et se termine quand il obtient le `HttpResponse` Defjs. Un corps `output`/`error` déclaré est lu comme JSON, texte, `Blob` ou octets **avant** que cette réponse soit renvoyée, à l’intérieur de la chaîne d’intercepteurs. La vérification du media type JSON et `JSON.parse` ne s’appliquent qu’aux représentations JSON ; le texte, les blobs et les octets non JSON sont valides. Un échec de lecture pour n’importe quelle représentation, ou un échec de media type / parse JSON (`RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `NET_BODY_INCOMPLETE`), est rejeté à travers l’intercepteur : le span se termine en `ERROR` avec `error.type` valant `BodyFailure` et sans `http.response.status_code`, la métrique enregistre `BodyFailure`, et un WARN est journalisé. La validation du Struct (`RES_STRUCT_MISMATCH`), un corps déclaré absent (par exemple un 204) et la conversion `HTTP_STATUS` ont lieu ensuite, donc un fault ultérieur ne peut pas mettre à jour le span terminé. Un abort d’échéance ne journalise que lorsqu’un rejet de timeout atteint la frontière `next()` / transport de l’intercepteur OTel. Si seul l’appel d’opération observe l’échéance pendant le parsing de l’entrée, la construction, le travail d’un intercepteur applicatif après `next()`, ou la conversion de corps après la chaîne, aucun LogRecord n’est émis ; observe l’appel d’opération à la place. Comme le span vit dans la chaîne, un rejet de transport est enregistré avec la classe d’exception selon la convention OTel plutôt qu’avec le code de fault que l’opération assigne ensuite.
-- **SSE** — le span reste ouvert jusqu’à ce que `stream.closed` se résolve. Il enregistre `sse.connected`, puis `sse.closed` / `sse.aborted` / `sse.error`. `sse.aborted` couvre `stream.close()` et une annulation du flux ouvert par l’appelant pour une raison qui n’est pas un timeout ; le span se termine en `OK`. Une annulation de forme timeout par l’appelant (`TimeoutError` ou `ERR_TIMEOUT`) fait plutôt se résoudre `stream.closed` avec `kind: 'error'` et `code: 'NET_TIMEOUT'` ; le span se termine en `ERROR` avec `sse.error`. Un flux logique (reconnects inclus) → un span. Pas de spans par événement.
-- **WebSocket** — le span reste ouvert jusqu’à ce que `session.closed` se résolve. Événements : `websocket.connected`, `websocket.closed`, `websocket.error`. Les sockets physiques en reconnexion restent dans la session logique. Un abort de l’appelant sur une session ouverte termine le span en `ERROR` avec `websocket.error` et sans journal ; `error.type` suit la raison de l’abort (`AbortError` pour un `abort()` par défaut, le `Error.name` d’une raison `Error`, `string` pour une raison string). Une frame de fermeture venue du serveur, avec n’importe quel code, termine le span en `OK` avec `websocket.closed`. Une chute abrupte sans frame de fermeture (1006) dépend du runtime : elle se termine en `OK` là où aucun `error` de socket ne se déclenche avant `close` (Bun), et en `ERROR` avec un journal là où c’est le cas (Node.js). Pas de spans par message.
+## Logs et loggers tiers [#logs-and-third-party-loggers]
 
-Besoin du résultat final de l’opération, pas seulement du transport ? Enveloppe l’appel d’opération dans un span applicatif :
-
-<include cwd lang="typescript">
-  examples/opentelemetry-server/active-span.ts#example
-</include>
-
-Le span extérieur est le tien. Le plugin rapporte toujours le span de transport de plus bas niveau — deux questions différentes.
-
-## Référence
-
-Quand `meter` est fourni :
-
-| Métrique                                     | Sens                                                     |
-| -------------------------------------------- | -------------------------------------------------------- |
-| `http.client.request.duration`               | Durée de requête HTTP (secondes)                         |
-| `defjs.client.sse.connect.duration`          | Temps jusqu’au retour du handle SSE                      |
-| `defjs.client.sse.connection.duration`       | Retour du handle → fermeture terminale                   |
-| `defjs.client.sse.active_streams`            | Handles SSE logiques dont `closed` est en attente        |
-| `defjs.client.websocket.connect.duration`    | Temps jusqu’au retour de la session WebSocket            |
-| `defjs.client.websocket.connection.duration` | Retour de la session → fermeture terminale               |
-| `defjs.client.websocket.active_connections`  | Sessions WebSocket logiques dont `closed` est en attente |
-
-Les instruments SSE/WebSocket actifs comptent les ressources logiques (écarts de reconnexion compris), pas les sockets physiques ni les tentatives HTTP individuelles.
-
-Les spans HTTP enregistrent la méthode, `url.full` résolu, l’adresse et le port du serveur quand ils sont disponibles, et le statut de réponse quand il est reçu. Le `url.full` par défaut résout `request.endpoint` contre un `request.baseEndpoint` facultatif ; il n’ajoute pas une `request.queryString` indépendante. C’est une frontière de construction, pas une sanitation. Utilise `startSpanHook` pour construire une URL complète ou masquée, possédée par l’application, quand il le faut. Statut `400+` → statut de span `ERROR` avec la string de statut comme `error.type`. Statut `100..399` laisse le statut de span non défini. Un rejet (échec réseau, annulation, timeout, échec de corps déclaré) n’a pas de statut de réponse. Le span se termine en `ERROR` avec `error.type` posé au nom de classe de l’erreur levée : `TypeError` pour un échec réseau typique, `Error` pour une annulation (quelle que soit la raison de l’abort) et pour un timeout, `BodyFailure` pour un échec de corps déclaré. Il ne porte jamais de codes de fault `NET_*` ou `RES_*`, parce que core les assigne après la chaîne. L’annulation est aussi un span `ERROR` ; elle ne produit simplement pas de journal. Les métriques utilisent des dimensions stables : méthode, opération statique, adresse/port du serveur, statut de réponse, type d’erreur de faible cardinalité.
-
-Les métriques de connexion SSE/WebSocket enregistrent le temps de connexion, la durée de connexion logique, le nombre de ressources actives, `defjs.result`, l’opération, l’adresse/port du serveur et des types d’échec de faible cardinalité. Pas de corps de requête/réponse, de payloads de message, de longueurs de file, ni de spans par message par défaut.
-
-Traite `url.full` et `recordException(...)` comme potentiellement sensibles. Defjs ne les masque pas à ta place. Garde les noms d’opération et les attributs de hook en allowlist ; masque dans `startSpanHook` ou dans les processors/exporters du SDK. Ne copie pas d’URL brutes, de query strings, d’en-têtes, de baggage ou de payloads dans une télémétrie personnalisée sans revoir vie privée, cardinalité, rétention et masquage.
-
-La propagation de query WebSocket peut exposer le contexte de trace et le baggage aux navigateurs, proxies, access logs et à la télémétrie. Ce n’est pas un canal d’identifiants. `withCredentials(true)` est les identifiants Fetch pour HTTP/SSE — pas l’auth WebSocket.
-
-Le plugin n’initialise ni n’arrête le SDK, et ne dispose pas le client core ni les handles de transport. Tu flushes la télémétrie et fermes le travail HTTP/SSE/WebSocket. Voir [Intercepteurs](/fr-FR/docs/interceptors), [SSE](/fr-FR/docs/sse) et [WebSocket](/fr-FR/docs/web-socket).
-
-## Journaux et loggers tiers [#logs-and-third-party-loggers]
-
-`logger?: Logger` accepte l’interface native de `@opentelemetry/api-logs`. Elle est indépendante de `tracer` et de `meter` : l’omettre désactive les LogRecords Defjs, et passer seulement `logger` active les diagnostics sans spans locaux. Defjs n’obtient jamais un logger global. L’API Logs est une dépendance du paquet ; les SDK, exporters et bridges de journalisation appartiennent à l’application.
-
-### Journaux sans spans locaux
-
-Cet exemple complet crée un SDK Logs possédé par l’application et fait échouer délibérément un transport local. Ni Collector ni requête externe ne sont nécessaires :
+`logger?: Logger` accepte l'interface standard `@opentelemetry/api-logs` et fonctionne avec ou sans `tracer` et `meter`.
 
 <include cwd>
   examples/opentelemetry-server/logs-without-spans.ts#example
 </include>
 
-Le diagnostic exporté a la sévérité `WARN` (13), le nom d’événement `http.client.request.exception`, un message fixe et un type d’exception. L’application possède le flush et le shutdown ; Defjs n’arrête jamais ton provider. Une application réelle configure son exporter une fois au démarrage et l’arrête après que les requêtes et les flux sont terminés.
-
-### Winston : garder l’API de journalisation métier
-
-Le code métier continue d’appeler `appLogger.info()` ou `appLogger.error()`. Le transport officiel convertit ces records en Logs OTel ; Defjs reçoit un Logger natif séparé du même provider. Enregistre le provider avant le premier appel de log. Le transport résout le Logger global de façon paresseuse, donc l’ordre de construction n’importe pas, mais les records journalisés avant l’enregistrement sont écartés :
-
-<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
-
-Ce snippet montre le câblage de démarrage. Avant la sortie de l’application, termine le travail en attente, attends les écritures Winston, ferme le logger et attends `provider.shutdown()`. L’[exemple Winston exécutable](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging) inclut le nettoyage complet et une requête locale qui échoue. Depuis un checkout du dépôt, exécute `bun doc/examples/opentelemetry-logging/winston.ts`.
-
-L’exemple utilise un contexte parent de démonstration pour montrer la corrélation sans SDK Trace ; ces ID fixes ne sont pas des ID de requête de production. Un gestionnaire de contexte de production doit porter le vrai contexte de requête actif. Defjs attache explicitement son contexte sortant sauvegardé à chaque diagnostic, y compris la fermeture de flux asynchrone. Les journaux métier restent dans leur propre contexte actif : ils peuvent partager un trace ID avec Defjs tout en ayant un span ID différent.
-
-Utilise soit un transport OTel Winston explicite, soit l’envoi automatique des logs Winston. Activer les deux envoie des LogRecords en double. La sortie console et la sortie OTel sont des destinations séparées ; évite de collecter à nouveau le même record console si cela dupliquerait l’ingestion.
-
-### Pino : instrumentation Node.js
-
-Dans une application Node.js, initialise le SDK et l’instrumentation avant de charger Pino. Cet exemple charge Pino via CommonJS après `sdk.start()` pour que son instrumentation puisse observer le chargement du module ; importer Pino en tête annulerait cet ordre. C’est une référence Node, pas l’affirmation que l’instrumentation automatique de Bun a été vérifiée.
-
-<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
-
-`PinoInstrumentation` active l’envoi de logs et la corrélation de logs par défaut. L’envoi convertit les records vers le SDK Logs de l’application ; la corrélation ajoute des champs de trace quand un contexte de span valide est actif. Ce sont des capacités séparées. L’alternative `pino-opentelemetry-transport` crée un provider dans un worker, indépendant du provider du thread principal. Voir le [guide Pino officiel](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino).
-
-### Sévérité et filtrage
-
-OTel conserve le libellé d’origine dans `severityText` et le mappe vers `severityNumber`. Ce qui suit utilise les défauts Pino et les niveaux npm par défaut de Winston :
-
-| Sévérité OTel / valeur de base | Méthode Pino / valeur | Niveau Winston              |
-| ------------------------------ | --------------------- | --------------------------- |
-| TRACE / 1                      | trace / 10            | silly                       |
-| DEBUG / 5                      | debug / 20            | debug                       |
-| INFO / 9                       | info / 30             | info                        |
-| WARN / 13                      | warn / 40             | warn                        |
-| ERROR / 17                     | error / 50            | error                       |
-| FATAL / 21                     | fatal / 60            | Pas d’équivalent par défaut |
-
-OTel réserve quatre valeurs numériques par groupe de sévérité. Winston `http` correspond à 7 et `verbose` à 6. Vérifie les mappings pour les niveaux personnalisés : les valeurs numériques d’une bibliothèque ne sont pas des nombres de sévérité OTel, et des libellés Winston inconnus peuvent avoir une sévérité non spécifiée. Le niveau de log TRACE n’a aucun rapport avec l’API Tracer.
-
-La sévérité décrit l’événement ; un seuil décide si une destination le reçoit. Dans l’exemple Winston, la console reçoit DEBUG et au-dessus, tandis que son transport OTel reçoit INFO et au-dessus. Un niveau de transport explicite remplace le niveau de logger par défaut de Winston. Aucun des deux réglages ne contrôle le Logger OTel direct de Defjs. Applique un filtre de processor ou de Collector quand tu veux une seule politique pour les deux chemins ; un filtre en aval ne peut pas récupérer des records déjà écartés en amont.
-
 ### Contrat de diagnostic Defjs
 
-| Issue observée                                                                                                                                                              | LogRecord Defjs                                                                              |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `next()` OTel HTTP rejette (échec réseau, timeout observé, échec de corps déclaré), hors annulation et faults HTTP_STATUS publics                                           | Un WARN, `http.client.request.exception`, phase `request`                                    |
-| Réponse HTTP ordinaire, y compris 4xx/5xx dont le corps `error` déclaré décode (ou dont le corps n’est pas déclaré), ou statut 0                                            | Aucun ; le comportement de span/métrique existant reste                                      |
-| La lecture d’un corps `output`/`error` déclaré échoue (toute représentation), ou sa représentation JSON a un media type non JSON ou échoue le parse JSON (tout statut HTTP) | Un WARN, `http.client.request.exception`, phase `request`, `exception.type` `BodyFailure`    |
-| La connexion SSE ou WebSocket échoue                                                                                                                                        | Un WARN, `defjs.client.sse.exception` ou `defjs.client.websocket.exception`, phase `connect` |
-| Erreur terminale SSE ou WebSocket ou `closed` rejeté, y compris une chute WebSocket abrupte (1006) là où le runtime émet d’abord un `error` de socket (Node.js)             | Un WARN avec le même nom d’événement de transport, phase `connection`                        |
-| Succès, messages, EOF, fermeture normale, une frame de fermeture WebSocket venue du serveur (tout code, 1011 compris) ou annulation active                                  | Aucun                                                                                        |
+Chaque requête ou connexion logique émet au maximum un `LogRecord` terminal de niveau `WARN` (`13`) :
 
-L’événement d’exception HTTP suit une convention sémantique actuellement marquée Development. Les noms d’événements SSE/WS sont propres à Defjs. Un handshake SSE rejeté pour un statut non-2xx est observé ici comme un échec de connexion ; sa conversion publique ultérieure en HTTP_STATUS est hors de cet intercepteur. La lecture d’un corps déclaré est à l’intérieur de la frontière du handler HTTP pour chaque représentation ; la vérification de media type JSON et `JSON.parse` ne s’appliquent qu’aux représentations JSON. Un échec de lecture pour toute représentation déclarée, ou une réponse JSON malformé ou de mauvais media type sur un `output` JSON déclaré (2xx) ou un `error` (autre statut), émet un WARN, quel que soit le statut HTTP. Le texte, les blobs et les octets non JSON n’échouent pas simplement parce que leur media type n’est pas JSON. Un corps qui n’est pas déclaré n’est jamais lu et ne peut pas journaliser. La validation Struct (`RES_STRUCT_MISMATCH`), un corps déclaré absent comme 204, et la conversion `HTTP_STATUS` ont lieu après l’intercepteur et ne journalisent pas. Un abort d’échéance HTTP ne journalise que si un rejet de timeout atteint la frontière `next()` / transport de l’intercepteur OTel. Si seul l’appel d’opération observe l’échéance pendant le parsing de l’entrée, la construction, le travail d’un intercepteur applicatif après `next()`, ou la conversion de corps après la chaîne, aucun LogRecord n’est émis ; observe l’appel d’opération. `exception.type` est le nom de classe de ce que l’intercepteur a observé, pas un code de fault Defjs : `BodyFailure` (corps HTTP), `EventStreamFatalError` (handshake SSE), `DefjsFault` (démarrage WebSocket), ou une classe de plateforme telle que `TypeError` (échec réseau) ou `Error` (timeout). Un abort dont la raison est une `TimeoutError` (par exemple `AbortSignal.timeout()`) compte comme un timeout, pas comme une annulation, et journalise quand son rejet atteint cette frontière. Un handshake SSE non-2xx journalise toujours une fois quel que soit son corps ; une frame de fermeture WebSocket venue du serveur ne journalise jamais, quel que soit son code (1011 compris). Une chute abrupte sans frame de fermeture (1006) dépend du runtime : là où le WebSocket de la plateforme émet `error` avant `close` (Node.js) la session se termine en erreur et journalise une fois, avec `websocket.close.code` `1006` ; là où il ne le fait pas (Bun) la chute est une fermeture normale et rien n’est journalisé. Sinon, seule une session qui se termine en erreur (dépassement de file, timeout de heartbeat) journalise. Defjs ne journalise pas chaque fault de validation d’entrée ou de décodage, chaque tentative de reconnexion, ni les échecs de hook comme des Logs indépendants.
+| Événement observé                                                                                                                                                               | LogRecord Defjs                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Le `next()` HTTP d'OTel rejette (échec réseau, timeout observé, échec de corps déclaré), à l'exclusion d'une annulation active sans timeout et des faults publics `HTTP_STATUS` | Un `WARN`, `http.client.request.exception`, phase `request`                                    |
+| Réponse HTTP ordinaire (y compris 4xx/5xx dont le corps `error` déclaré se décode ou sans corps déclaré, ou statut `0`)                                                         | Aucun                                                                                          |
+| Échec de lecture du corps déclaré `output` / `error`, ou représentation JSON déclarée ayant un media type non-JSON ou échouant à `JSON.parse`                                   | Un `WARN`, `http.client.request.exception`, phase `request`, `exception.type: "BodyFailure"`   |
+| Échec de handshake/connexion SSE ou WebSocket (y compris statut SSE hors 2xx)                                                                                                   | Un `WARN`, `defjs.client.sse.exception` ou `defjs.client.websocket.exception`, phase `connect` |
+| Erreur terminale SSE ou WebSocket ou `closed` rejeté (y compris erreur socket `1006`, débordement de file, expiration de heartbeat)                                             | Un `WARN` avec le nom d'événement du transport, phase `connection`                             |
+| Clôture normale, messages, EOF, trames de fermeture WebSocket serveur (y compris `1011`) ou annulation active sans timeout                                                      | Aucun                                                                                          |
 
-Chaque requête ou connexion logique émet au plus un diagnostic terminal à travers cette intégration. Un nouveau retry extérieur est un nouveau cycle de vie ; les journaux applicatifs et les autres instrumentations sont hors de cette garantie. Les journaux restent indépendants de l’enregistrement ou de l’échantillonnage des spans sauf si le pipeline Logs de l’application les filtre. Avec un tracer fourni, `requireParentSpan: true` conserve le contournement complet existant quand aucun parent actif n’existe, journaux compris ; sans tracer, cela ne bloque ni les journaux ni les métriques.
+Les diagnostics enregistrent un message immuable, `exception.type` (nom de classe plateforme/transport comme `BodyFailure`, `EventStreamFatalError` (handshake SSE sans `text/event-stream`), `DefjsFault` (y compris un handshake SSE avec statut non 2xx), `TypeError` ou `Error`), la phase, la chaîne `operation` statique, l'adresse/port du serveur et les champs de protocole — sans jamais inclure d'URL brutes, query strings, en-têtes, corps ou piles d'erreurs.
 
-Les diagnostics contiennent un corps fixe, le type d’exception, la phase, l’opération statique, l’adresse/port de serveur disponibles, et des champs de protocole (méthode HTTP, code de fault SSE ou code de fermeture WebSocket). Ils ne copient pas automatiquement les URL brutes, les queries, les en-têtes, les corps, le baggage, les raisons de fermeture, les messages/stacks d’erreur ni les attributs de hook. Garde les noms d’opération et les noms d’exception personnalisés non sensibles. Les données de span existantes ont leurs propres exigences de masquage. Un échec à construire ou à émettre un LogRecord ne remplace pas le résultat métier ; le logger de diagnostic OTel ne reçoit qu’un message d’échec fixe.
+---
 
-## Recettes liées
+## Recettes connexes
 
 - [Tester avec un handle Fetch local](/fr-FR/recipes/test-with-handle)
 - [Consommer un flux SSE](/fr-FR/recipes/consume-sse)

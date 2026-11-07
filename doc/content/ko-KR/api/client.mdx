@@ -1,24 +1,24 @@
 ---
-title: 클라이언트
-description: "createClient, option 헬퍼, Client 타입이에요."
+title: Client
+description: "createClient, 옵션 헬퍼, Client 타입이에요."
 ---
 
-# 클라이언트
+# Client
 
-`createClient(...)`는 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 돌려줘요. 클라이언트 옵션을 왼쪽에서 오른쪽으로 조합한 뒤 `client(options?)`로 [`Client`](/ko-KR/api/core/client-type) 값을 얻어 작업에 넘기세요. `getUser(client(options), input)`처럼요.
+`createClient(...)`는 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 돌려줘요. 클라이언트 옵션을 왼쪽에서 오른쪽으로 조합한 뒤 `client(options?)`로 [`Client`](/ko-KR/api/core/client-type) 값을 얻어 작업에 넘기세요. `getOrder(client(options), input)`처럼요.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-옵션은 순서대로 적용돼요. interceptor가 인증이나 테넌트를 클로저로 잡을 때는 요청 경계 안에서 클라이언트를 만드는 편이 좋아요. 돌려준 팩토리는 함수예요. 호출하면 `Client` 값이 나오고, I/O는 없어요. 팩토리 자체도 `Client`이며 요청 옵션을 갖지 않아요.
+옵션은 순서대로 적용돼요. 인터셉터가 인증이나 테넌트를 클로저로 잡을 때는 요청 경계 안에서 클라이언트를 만드는 편이 좋아요. 돌려준 팩토리는 함수예요. 호출하면 `Client` 값이 나오고, I/O는 없어요. 팩토리 자체도 `Client`이며 요청 옵션을 갖지 않아요.
 
-- **options** — `withEndpoint` 같은 option 헬퍼예요.
+- **options** — `withEndpoint` 같은 옵션 헬퍼예요.
 - **반환** 호출 가능한 팩토리예요. 기본 설정은 모든 클라이언트 값이 공유하고, 런타임에 얼려지지 않아요. 관례로 고정돼요. 라이브러리는 그것을 바꾸지 않고, 애플리케이션도 바꾸면 안 돼요.
 
 <include cwd>examples/api/create-client.ts#example</include>
 
-## option 헬퍼
+## 옵션 헬퍼
 
 모든 헬퍼는 `ClientOption`을 돌려줘요. 같은 설정에 대한 나중 호출은 이전 호출을 대체해요. 단, 추가하는 `withInterceptors`는 예외예요.
 
@@ -26,19 +26,25 @@ description: "createClient, option 헬퍼, Client 타입이에요."
 
 <ApiSignature name="withEndpoint" />
 
-상대 path 앞에 붙는 base URL을 설정해요.
+후보 base URL을 처음 나타난 순서로 복사하고, 같은 문자열의 나중 복사는 버려요. 나중 `withEndpoint`는 목록을 바꿔요. URL을 검사하지 않고 밸런서도 바꾸지 않아요. 빈 목록은 유효하고, 호출은 `REQ_BUILD_FAILED`로 실패해요.
+
+### withBalancer()
+
+<ApiSignature name="withBalancer" />
+
+이후 호출에 쓸 밸런서를 바꿔요. 객체는 참조로 저장돼요. 이 옵션이 없으면 클라이언트마다 자기 `pickFirstBalancer()`를 가져요.
 
 ### withInterceptors()
 
 <ApiSignature name="withInterceptors" />
 
-등록 순서대로 interceptor를 추가해요. 섞인 kind는 작업이 돌 때 전송별로 걸러져요.
+등록 순서대로 인터셉터를 추가해요. 섞인 종류는 작업이 돌 때 전송별로 걸러져요.
 
 ### withQuerySerializer()
 
 <ApiSignature name="withQuerySerializer" />
 
-HTTP, SSE, WebSocket의 query 인코딩을 바꿔요. `serializer(query)`는 **인코딩된 와이어 객체**(alias가 적용되고, `Date`는 ISO, `bigint`는 문자열)를 받고, 앞에 `?`가 없는 query 문자열을 돌려줘야 해요. 요청에 query가 없으면 호출되지 않아요. `URLSearchParams`를 돌려주는 builder는 이걸 건너뛰어요.
+HTTP, SSE, WebSocket의 쿼리 인코딩을 바꿔요. `serializer(query)`는 **인코딩된 와이어 객체**(별칭이 적용되고, `Date`는 ISO, `bigint`는 문자열)를 받고, 앞에 `?`가 없는 쿼리 문자열을 돌려줘야 해요. 요청에 쿼리가 없으면 호출되지 않아요. `URLSearchParams`를 돌려주는 `builder`는 이걸 건너뛰어요.
 
 ### withHeaders()
 
@@ -49,11 +55,11 @@ HTTP와 SSE 요청에 정적 기본 헤더를 설정해요. WebSocket 요청은 
 요청 하나에 대한 우선순위는 다음과 같아요.
 
 1. 기본 헤더가 시작 헤더 집합이에요.
-2. 요청 builder가 돌려준 `headers`는 같은 이름의 기본 헤더를 대체해요. 그 이름의 첫 값은 기본값을 대체하고, 같은 배열의 나중 값은 그 대체값에만 덧붙여요. 스칼라나 `Headers` 인스턴스도 대체해요. 다른 이름의 기본 헤더는 그대로 남아요.
-3. interceptor는 병합된 헤더를 받고 바꿀 수 있어요.
+2. 요청 `builder`가 돌려준 `headers`는 같은 이름의 기본 헤더를 대체해요. 그 이름의 첫 값은 기본값을 대체하고, 같은 배열의 나중 값은 그 대체값에만 덧붙여요. 스칼라나 `Headers` 인스턴스도 대체해요. 다른 이름의 기본 헤더는 그대로 남아요.
+3. 인터셉터는 병합된 헤더를 받고 바꿀 수 있어요.
 4. 기본 HTTP 전송에서는 XSRF 헤더가 마지막에, 여전히 없을 때만 추가돼요 (`withXSRF`를 보세요).
 
-요청마다 달라지는 값은 interceptor를 쓰세요. 갱신된 Bearer 토큰이나 직렬화된 body에 대한 HMAC 같은 값이 그래요.
+요청마다 달라지는 값은 인터셉터를 쓰세요. 갱신된 Bearer 토큰이나 직렬화된 본문에 대한 HMAC 같은 값이 그래요.
 
 클라이언트 기본 데드라인은 없어요. 호출 하나에 데드라인이 필요하면 파생 클라이언트에 `signal: AbortSignal.timeout(ms)`를 넘기세요. 수동 취소는 `NET_ABORTED`예요. `AbortSignal.timeout`은 `NET_TIMEOUT`으로 분류돼요.
 
@@ -81,7 +87,7 @@ Fetch(HTTP/SSE)나 WebSocket 생성자를 바꿔요.
 
 HTTP 요청에 XSRF 토큰 헤더를 추가해요. `options`는 `xsrf` 설정이고, [`ClientOptions`](/ko-KR/api/core/clientoptions-type)의 `xsrf`와 같은 모양이에요. `cookieName`(기본 `XSRF-TOKEN`), `headerName`(기본 `X-XSRF-TOKEN`), `tokenProvider({ request })`예요. 인자 없이 `withXSRF()`를 호출하면 이 기본값이 켜져요. SSE와 WebSocket 요청에는 영향이 없어요.
 
-기본 HTTP 전송은 다음이 모두 성립할 때 헤더를 추가해요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 요청이 같은 origin이고, 비어 있지 않은 토큰을 찾았을 때예요. `location`이 있으면 Worker를 포함해 해석된 요청 origin이 `location.origin`과 같아야 해요. 없으면 `baseEndpoint`가 있는 요청을 같은 origin으로 봐요. 교차 출처 요청은 `tokenProvider`를 호출하지 않아요. 토큰은 provider가 있으면 거기서, 없으면 `document`가 있을 때만 읽는 `document.cookie`에서 가져와요.
+기본 HTTP 전송은 다음이 모두 성립할 때 헤더를 추가해요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 요청이 같은 origin이고, 비어 있지 않은 토큰을 찾았을 때예요. `location`이 있으면 Worker를 포함해 해석된 요청 origin이 `location.origin`과 같아야 해요. 없으면 `baseEndpoint`가 있는 요청을 같은 origin으로 봐요. 교차 출처 요청은 `tokenProvider`를 호출하지 않아요. 토큰은 프로바이더가 있으면 거기서, 없으면 `document`가 있을 때만 읽는 `document.cookie`에서 가져와요.
 
 ### SSE 설정
 
@@ -109,21 +115,21 @@ HTTP 요청에 XSRF 토큰 헤더를 추가해요. `options`는 `xsrf` 설정이
 
 <ApiSignature name="DerivableClient" />
 
-`createClient`가 돌려주는 루트 클라이언트로, 두 가지 형태예요. 팩토리는 함수이면서 요청 옵션이 없는 `Client`이기도 해서 `getUser(client, input)`을 바로 쓸 수 있어요. [`RequestOptions`](/ko-KR/api/core/requestoptions-type)를 넣어 호출하면 한 번의 호출에 쓸 평범한 `Client` 값이 나와요. 그 값은 호출할 수 없어서 `client()()`는 컴파일되지 않고 런타임에 `TypeError`를 던져요. 파생은 팩토리에서 한 번만 일어나며 체이닝은 없어요. 타입은 `ReturnType<typeof createClient>` 대신 `DerivableClient`로 쓰세요.
+`createClient`가 돌려주는 루트 클라이언트로, 두 가지 형태예요. 팩토리는 함수이면서 요청 옵션이 없는 `Client`이기도 해서 `getOrder(client, input)`을 바로 쓸 수 있어요. [`RequestOptions`](/ko-KR/api/core/requestoptions-type)를 넣어 호출하면 한 번의 호출에 쓸 평범한 `Client` 값이 나와요. 그 값은 호출할 수 없어서 `client()()`는 컴파일되지 않고 런타임에 `TypeError`를 던져요. 파생은 팩토리에서 한 번만 일어나며 체이닝은 없어요. 타입은 `ReturnType<typeof createClient>` 대신 `DerivableClient`로 쓰세요.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client`는 함수가 아니라 값이에요. [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)와 함께 호출하면 하나가 나와요. 알려진 필드 일곱 개는 인자에서 새 객체로 복사돼요. 알 수 없는 필드는 무시하고, 값이 `undefined`인 필드는 빼요. 부모 덮어쓰기는 없어요. `client()`, `client(undefined)`, `client({})`는 요청 옵션이 없는 클라이언트를 돌려줘요. 중첩된 `heartbeat`, `protocols`, `reconnect` 값은 참조로 유지되고 복제되지 않아요. WebSocket은 작업이 실행될 때 그것들을 읽어요 (그때 heartbeat 필드와 protocols 목록을 복사해요). 그래서 파생한 뒤에 그 객체를 바꾸면 이후 호출에 여전히 영향을 줄 수 있어요. 넘긴 뒤에는 불변으로 다루세요. 파생은 I/O를 하지 않아요. 클라이언트 값은 호출할 수 없고, 호출하면 컴파일되지 않으며 런타임에 `TypeError`를 던져요. 호출마다 클라이언트 값을 만드세요. 같은 값을 여러 작업에 넘길 수 있지만, `signal`이 담긴 값을 재사용하면 그 신호를 공유해요. `signal`은 합치지 않아요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요.
+`Client`는 함수가 아니라 값이에요. [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)와 함께 호출하면 하나가 나와요. `client()`와 `client(undefined)`는 요청 옵션을 저장하지 않아요. `client({})`는 빈 스냅샷을 남겨요. 호출은 각 최상위 필드를 한 번 읽어요. `protocols` 배열은 복사돼요. `heartbeat`와 `reconnect`는 알려진 필드를 복사해요. 빠진 중첩 블록은 빠진 채로 남아요. `signal`, `beforeConnect`, 콜백은 동일성을 유지해요. 캡처된 필드의 getter는 그 호출 동안 실행되고, throw하면 그 호출 밖으로 나가요. 잘못된 숫자는 나중에 `REQ_OPTIONS_INVALID`로 실패해요. 파생은 I/O를 하지 않아요. 클라이언트 값은 호출할 수 없고, 호출하면 컴파일되지 않으며 런타임에 `TypeError`를 던져요. 호출마다 클라이언트 값을 만드세요. 같은 값을 여러 작업에 넘길 수 있지만, `signal`이 담긴 값을 재사용하면 그 신호를 공유해요. `signal`은 합치지 않아요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 팩토리의 기본 설정은 계속 공유되고, 얼려지지 않아요. 표준 `with*` 헬퍼는 적용될 때 자신이 가진 고정 레코드를 복사해요.
 
-팩토리를 React state setter에 넘기지 마세요 (`setState(factory)`는 updater로 호출해요). Vue `watch`나 `computed`의 소스로 쓰지 마세요 (그 API는 함수를 호출해요).
+팩토리를 React 상태 설정자에 넘기지 마세요 (`setState(factory)`는 업데이터로 호출해요). Vue `watch`나 `computed`의 소스로 쓰지 마세요 (그 API는 함수를 호출해요).
 
 ### RequestOptions
 
 <ApiSignature name="RequestOptions" />
 
-평평한 필드 일곱 개예요. 각 프로토콜은 이해하는 필드를 읽고 나머지는 무시해요. HTTP에 `heartbeat`를 넘기면 무시될 뿐, 오류가 아니에요. SSE는 요청 옵션에서 `signal`만 읽어요. SSE 재연결은 클라이언트 설정(`withSSEReconnect`)에서 오므로, `client({ reconnect })`는 WebSocket에만 영향을 줘요. 컴파일 타임 프로토콜 필터도 없고, `timeout`이나 `abort` 필드도 없어요.
+평평한 필드 일곱 개예요. 각 프로토콜은 이해하는 필드를 읽고 나머지는 무시해요. HTTP에 `heartbeat`를 넘기면 무시될 뿐, 오류가 아니에요. `client(options)`는 그 호출에서 `protocols` 배열과 `heartbeat`, `reconnect`의 알려진 필드를 복사해요. 빠진 중첩 블록은 빠진 채로 남아요. `signal`, `beforeConnect`, 콜백은 동일성을 유지해요. SSE는 요청 옵션에서 `signal`만 읽어요. SSE 재연결은 클라이언트 설정(`withSSEReconnect`)에서 오므로, `client({ reconnect })`는 WebSocket에만 영향을 줘요. 컴파일 타임 프로토콜 필터도 없고, `timeout`이나 `abort` 필드도 없어요.
 
 | 필드                 | 프로토콜             | 대체                                                                        |
 | -------------------- | -------------------- | --------------------------------------------------------------------------- |
@@ -151,7 +157,7 @@ HTTP 요청에 XSRF 토큰 헤더를 추가해요. `options`는 `xsrf` 설정이
 
 <ApiSignature name="FetchHandle" />
 
-Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`가 아니므로 목(mock)에 `preconnect` 같은 호스트 전용 멤버가 필요 없어요. 기본 HTTP/SSE handle은 호출마다 `globalThis.fetch`를 해석해요. HTTP는 손대지 않은 플랫폼 Fetch에만 `(url, init)`을 쓰고, 교체된 전역과 사용자 지정 handle은 `Request`를 받아요. SSE는 항상 `Request`를 넘겨요. Fetch 없이 Core를 import하는 것은 유효해요. Fetch가 여전히 없으면 기본 실행은 `ENV_UNSUPPORTED`를 보고하고, 사용자 지정 handle은 그대로 쓸 수 있어요.
+Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`가 아니므로 목(mock)에 `preconnect` 같은 호스트 전용 멤버가 필요 없어요. 기본 HTTP/SSE 핸들은 호출마다 `globalThis.fetch`를 해석해요. HTTP는 손대지 않은 플랫폼 Fetch에만 `(url, init)`을 쓰고, 교체된 전역과 사용자 지정 핸들은 `Request`를 받아요. SSE는 항상 `Request`를 넘겨요. Fetch 없이 Core를 import하는 것은 유효해요. Fetch가 여전히 없으면 기본 실행은 `ENV_UNSUPPORTED`를 보고하고, 사용자 지정 핸들은 그대로 쓸 수 있어요.
 
 ### ClientSSEOptions
 
@@ -169,7 +175,9 @@ Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`�
 | `jitter`     | `0`          | `0`          |
 | `maxDelayMs` | 상한 없음    | `30000`      |
 
-두 전송 모두, 핸드셰이크가 성공하면 단절마다의 재시도 예산, 콜백 attempt, 백오프 지수가 초기화돼요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략해도 한 단절 안에서 무제한 재시도가 되지는 않아요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한해요. SSE에 설정한 상한이 없어도 플랫폼 타이머 한계인 `2_147_483_647` ms가 적용돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 상한에서 포화돼요.
+`connectTimeoutMs`는 선택이고, 유한한 양수여야 하며 2147483647(타이머 상한)을 넘지 않아야 해요. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 돌려요. SSE에서는 Fetch부터 응답 헤더까지, WebSocket에서는 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제돼요. 만료되면 밸런서에 `NET_UNREACHABLE`을 보고해서, 재연결이 다음 엔드포인트를 고를 수 있어요. 재시도를 모두 쓰면 `NET_TIMEOUT`으로 끝나요. 이 옵션은 재연결 옵션 안에만 있고, 그 객체가 있으면 `attempts`가 기본값 `3`이 되므로 `connectTimeoutMs`만 설정해도 재연결이 켜져요. 핸드셰이크만 제한하려면 `attempts: 0`을 함께 설정하세요.
+
+두 전송 모두, 핸드셰이크가 성공하면 단절마다의 재시도 예산, 콜백 시도, 백오프 지수가 초기화돼요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략해도 한 단절 안에서 무제한 재시도가 되지는 않아요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한해요. SSE에 설정한 상한이 없어도 플랫폼 타이머 한계인 `2_147_483_647` ms가 적용돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 상한에서 포화돼요.
 
 재연결 옵션은 전송 전에 검증돼요. `attempts`는 음이 아닌 안전한 정수여야 하고, `delayMs`는 유한하고 음이 아니어야 해요. `maxDelayMs`는 음이 아닌 유한한 수 또는 양의 `Infinity`일 수 있어요. `Infinity`는 설정한 상한만 없애며 최종 대기 시간에는 플랫폼의 `2_147_483_647` ms 한계가 그대로 적용돼요. `factor`는 유한하고 양수여야 하고, `jitter`는 유한하고 0–1 범위여야 해요. 잘못된 값은 `REQ_OPTIONS_INVALID`를 반환해요. WebSocket `attempts: 0`은 이후 재시도를 끄지만, 명시적으로 제공한 모든 재연결 필드는 SSE와 마찬가지로 최초 연결 전에 검증돼요. jitter는 상한이 걸린 기준을 양쪽으로 늘리거나 줄인 뒤 최종 상한을 적용해요.
 
@@ -183,17 +191,17 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 파생 �
 
 <ApiSignature name="ClientOptions" />
 
-보이는 필드는 `sse`와 `webSocket`이에요. 나머지 일곱 개——`endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, `withCredentials`——는 내보내지 않는 HTTP 기반에서 상속되고, `endpoint`는 필수예요. 클라이언트 수준의 `timeout`은 없어요. `createClient`는 이 객체를 받지 않고 option 헬퍼를 받아요.
+보이는 필드는 `sse`와 `webSocket`이에요. 나머지 일곱 개——`endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, `withCredentials`——는 내보내지 않는 HTTP 기반에서 상속돼요. `endpoints`는 `readonly string[]`예요. 해석된 기본값은 `[]`예요. 빈 배열은 유효한 값이고, 호출은 `REQ_BUILD_FAILED`로 실패해요. 클라이언트 수준의 `timeout`은 없어요. `createClient`는 이 객체를 받지 않고 옵션 헬퍼를 받아요.
 
 ### ClientConfig
 
-option 헬퍼가 변경하고 작업이 읽는, 해석된 스냅샷이에요. 기본값을 적용한 `ClientOptions`이며 `http.handle`, `interceptors`, `sse`(`ClientSSEConfig`), `webSocket`이 항상 있어요.
+옵션 헬퍼가 변경하고 작업이 읽는, 해석된 스냅샷이에요. 기본값을 적용한 `ClientOptions`이며 `http.handle`, `interceptors`, `sse`(`ClientSSEConfig`), `webSocket`, `balancer`가 항상 있어요. `http.retry`는 선택이고 기본값은 `undefined`(시도 한 번, 예산 없음)예요. `withRetry(options?)`가 그것을 설정해요. `balancer`의 기본값은 그 클라이언트용 새 `pickFirstBalancer()`예요. [`RequestOptions`](/ko-KR/api/core/requestoptions-type) 필드는 아니에요.
 
 ### ClientSSEConfig
 
 <ApiSignature name="ClientSSEConfig" />
 
-`ClientConfig.sse`에 있는, 해석된 SSE config예요. 필수 `handle`이 있는 `ClientSSEOptions`예요.
+`ClientConfig.sse`에 있는, 해석된 SSE 설정이에요. 필수 `handle`이 있는 `ClientSSEOptions`예요.
 
 ### WebSocketHandle
 
@@ -204,5 +212,47 @@ option 헬퍼가 변경하고 작업이 읽는, 해석된 스냅샷이에요. �
 <ApiSignature name="WebSocketHandleConstructor" />
 
 `withWebSocketHandle`에 넘기는 생성자예요. `OPEN` ready-state 상수를 노출해야 해요.
+
+## 밸런서
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer`는 `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 504)에서 진행해요. HTTP 재시도는 고정된 엔드포인트를 옮기지 않고, 순서는 클라이언트의 전체 엔드포인트 목록인 `members`를 따라요. 선택인 양의 유한한 `failbackMs`는 그 간격 뒤에 첫 엔드포인트를 동시에 하나만 탐색해요. 탐색은 피어 응답이 시작될 때(`end`) 판정되고, `end`에 이르지 못한 탐색은 `done`이 판정해요. HTTP 재시도는 `withRetry`로 설정하는, 별도의 클라이언트 정책이에요. `roundRobinBalancer`는 목록을 순서대로 돌아요. `weights`는 선택이에요. [여러 엔드포인트](/ko-KR/docs/client#multiple-endpoints)를 보세요.
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+비복원으로 서로 다른 후보를 표본 뽑고(Envoy/gRPC A48과 달라요), tower PeakEwma 또는 pending 부하를 골라요. Linkerd 기본은 RTT 30ms와 감쇠 10초예요. pending은 `pick`이 엔드포인트를 고를 때 예약되고, `end`는 헤더나 소켓 open에서 그것을 풀며, 실패를 포함한 모든 전송의 실제 RTT를 기록해요. `end`가 없는 `done`은 RTT 샘플 없이 pending을 풀어요. p2c 실패 분류자도 페널티도 없어요. `choiceCount` 기본은 2이고 상한은 10이에요.
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+자식을 Linkerd식 연속 실패 서킷 브레이킹으로 감싸요. 라운드 로빈과 p2c는 기본적으로 그것을 켜고(Finagle과 같아요), `false`는 꺼요. pick-first는 객체로 그것을 켜요. 기본 분류기는 코드가 있는 결과를 모두 실패로 세요(`NET_TIMEOUT`과 `NET_BODY_INCOMPLETE` 포함). 실패가 다섯 번이면 페널티는 1000ms에서 시작하고, 실패한 탐색 뒤에 두 배가 되며, 기준의 0.5배까지의 양의 jitter를 더하고, 60000ms에서 막혀요. 만료는 `end`에서 결정되는 탐색 하나를 들이고, `end`가 없으면 `done`에서 결정해요. 성공은 백오프를 초기화하고, 취소는 칸만 풀어요. 성공으로 가정하는 타임아웃도, 할당량도, 마지막 호스트 보호도, 정산 격자도, 비율 기준도, 슬로 스타트도 없어요. `isHealthy`는 애플리케이션이 가진 캐시된 상태를 읽고, 페널티를 취소하지 않아요. 모든 호스트가 끊길 수 있어요. Finagle식의 목록 안 페일오픈은 그래도 요청을 보내요. Envoy/gRPC A50과 달리 방출 할당량은 없어요. [헬스 필터링과 p2c](/ko-KR/docs/client#health-filtering-and-p2c)를 보세요.
+
+### withRetry()
+
+<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+
+엔드포인트 선택과 무관하게 같은 호출 HTTP 재시도를 켜요. 생략하면 시도는 한 번이고 예산은 없어요. `withRetry()`는 `withRetry({})`와 같고 기본값은 `maxAttempts: 2`(최초 시도 포함), `on: ["connect-failure"]`, 안전 메서드 `GET`, `HEAD`, `OPTIONS`, `TRACE`예요. 메서드는 대소문자를 가리지 않고, `[]`는 재시도를 꺼요. `maxAttempts`는 1 이상의 안전한 정수이고, 각 엔드포인트는 최대 한 번 시도해요. `"gateway-error"`는 `NET_UNAVAILABLE`(HTTP 502/503/504)과 `RES_*` 디코딩이 거절한 게이트웨이 본문을 포함하고, `"attempt-timeout"`은 `attemptTimeoutMs`를 써요. 스트리밍 요청 본문은 재시도하지 않아요.
+
+백오프 기본값은 `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`이고, SSE/WebSocket 재연결과 필드 의미가 같아요. `delayMs: 0`은 기다리지 않아요. `attemptTimeoutMs`는 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 해요. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 돌려요. 이 값은 고른 엔드포인트로 보낸 각 Fetch를 호출 시점부터 응답 본문을 다 읽을 때까지 재요. 전송 앞뒤의 인터셉터 작업과 struct 디코딩은 재지 않으며 엔드포인트에 불리하게 집계되지 않아요. 호출자 signal은 백오프 대기를 포함한 호출 전체를 덮어요. 재시도 라운드에서 쓸 수 있는 엔드포인트가 하나도 없으면(밸런서의 pick이 실패하거나 다음 엔드포인트의 URL을 해석할 수 없으면) 호출은 `REQ_BUILD_FAILED` 대신 직전 시도의 결함을 돌려줘요.
+
+클라이언트가 소유하는 Finagle 예산은 기본으로 20%에, 10초 TTL 동안 초당 10회의 예비를 더해요. 크레딧과 데빗은 TTL/10 슬라이스 열 개에서 지연해서 만료돼요. `budget: false`는 그 한도를 없애요. 같은 설정을 공유하는 파생 클라이언트는 그 예산을 공유하고, 클라이언트가 다르면 밸런서 하나를 공유해도 공유하지 않아요. 잘못된 옵션은 HTTP가 실행될 때 `Invalid retry options`와 함께 `REQ_OPTIONS_INVALID`를 돌려요. 이 옵션은 적용 시점에 소유 필드, 배열, 중첩 예산을 담아요. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같이 동작해요. 이후 `withRetry`는 정책을 대체하고, `withRetry({ maxAttempts: 1 })`는 재시도를 켠 뒤 꺼요. 밸런서와 헬스 래퍼에는 재시도 설정이 없어요. [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)를 보세요.
+
+<include cwd>examples/client/http-retry.ts#example</include>
+
+### Balancer
+
+<ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`pick`은 error-first 튜플을 돌려줘요. 선택인 `start`는 고른 전송이 시작하기 직전에 동기적으로 많아야 한 번 실행돼요. 선택인 `end`는 `start` 뒤에 한 번, 피어 응답이 시작될 때(또는 응답 전 실패가 있을 때) 실행돼요. 선택인 `done`은 완료 때 한 번 실행돼요. Fetch는 Linkerd의 첫 본문 프레임이나 Envoy의 스트림 경계를 드러낼 수 없어요. 모든 훅의 throw와 thenable rejection은 가둬져요. 후보 밖의 선택은 `REQ_BUILD_FAILED`로 실패하고, 그 `done`은 `{ attempted: false }`로 호출돼요. `ERR_NO_CANDIDATE`은 `REQ_BUILD_FAILED`의 `cause`로만 쓰여요. `FaultCode`는 아니에요. [`isNoCandidateCause`](/ko-KR/api/core/isnocandidatecause)는 Core 사본을 넘어서도 그것을 알아봐요.
+
+밸런서는 중립 결과만 봐요. 각 전송이 자기 사실을 `DoneInfo.code`로 옮겨요. 기본 이상치 감지(outlier detection)는 코드가 있는 모든 결과를 실패로 세며, `NET_TIMEOUT`과 `NET_BODY_INCOMPLETE`도 포함해요. 원시 `DoneInfo.status`는 커스텀 밸런서만을 위해 남고, 내장 전략은 읽지 않아요. `PickInfo`는 한 번의 pick에 대한 후보 `endpoints`, `members`(클라이언트의 전체 엔드포인트 목록으로 모든 시도에서 같아요), 정의의 선택적 `operation`을 담고, 전송 구분자는 없어요.
 
 [클라이언트 가이드](/ko-KR/docs/client)를 보세요.

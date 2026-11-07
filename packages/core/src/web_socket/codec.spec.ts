@@ -15,7 +15,7 @@ describe("codec helpers", () => {
       code: 1000,
       reason: "normal",
       wasClean: true,
-    } as CloseEvent;
+    };
     const info = extractCloseInfo(event, new Error("cause"));
     expect(info).toEqual({
       cause: new Error("cause"),
@@ -86,10 +86,14 @@ describe("codec helpers", () => {
   });
 
   test("resolveAbortCause falls back to ERR_ABORTED when reason is undefined", () => {
-    const signal = Object.create(AbortSignal.prototype);
+    const signal = {};
+    Object.setPrototypeOf(signal, AbortSignal.prototype);
     Object.defineProperty(signal, "aborted", { value: true });
     Object.defineProperty(signal, "reason", { value: undefined });
-    const cause = resolveAbortCause(signal as AbortSignal);
+    if (!isAbortedSignal(signal)) {
+      throw new Error("expected an aborted signal");
+    }
+    const cause = resolveAbortCause(signal);
     expect(cause).toBe(ERR_ABORTED);
   });
 
@@ -404,3 +408,7 @@ describe("decodeWebSocketMessage", () => {
     },
   );
 });
+
+function isAbortedSignal(value: object): value is AbortSignal {
+  return "aborted" in value && value.aborted === true && "reason" in value;
+}

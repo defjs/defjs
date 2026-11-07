@@ -1,6 +1,6 @@
 ---
 title: "@defjs/react"
-description: ClientProvider、支持显式 Client 覆盖的 useClient 和 provider props。
+description: ClientProvider、可显式覆盖 Client 的 useClient，以及 Provider 属性。
 ---
 
 # React
@@ -13,7 +13,7 @@ description: ClientProvider、支持显式 Client 覆盖的 useClient 和 provid
 
 <ApiSignature name="ClientProvider" />
 
-上下文提供组件。把 `createClient` 返回的 `DerivableClient` 传进去。嵌套的 `ClientProvider` 会覆盖其子树里的 Client；`useClient()` 读取最近的那一个。传入不同的 `client` 会改变后代拿到的 context 值。
+Context Provider。传入 `createClient` 返回的 `DerivableClient`。嵌套的 `ClientProvider` 会覆盖其子树的 Client；`useClient()` 读取最近的一个。传入不同的 `client` 会改变后代读取的 Context 值。
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,12 +21,12 @@ description: ClientProvider、支持显式 Client 覆盖的 useClient 和 provid
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` 优先返回显式 Client；省略参数或传入 `undefined` 时读取最近的 `ClientProvider`。两种来源都没有 Client 时才抛出 `Error`，原来的 `useClient()` 调用仍然有效。把这个 client 传进操作。该 Hook 返回传入的那个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)；在操作运行的地方带上请求选项调用它，即可派生出一个 `Client` 值。不要把它传给 state setter，因为 `setState(client)` 会把它当成 updater 来调用。派生出的 `Client` 值不被 `ClientProvider` 或 `useClient` 接受。
+`useClient(overrideClient)` 优先返回显式 Client；省略或传入 `undefined` 时读取最近的 `ClientProvider`。只有两种来源都没有 Client 时才抛出 `Error`，零参数的 `useClient()` 调用仍然有效。把该 Client 传进操作。Hook 返回传入的 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)；在操作运行处用请求选项调用它可派生一个 `Client` 值。不要把它传给状态设置函数，因为 `setState(client)` 会把它当作更新函数调用。派生出的 `Client` 值不被 `ClientProvider` 或 `useClient` 接受。
 
-始终在组件或自定义 Hook 顶层调用 `useClient(explicitClient)`，即使传了显式 Client，也不能在普通函数或事件回调里调用。不要写 `explicitClient ?? useClient()`，它会条件调用 Hook。显式值不写入 Context，也不建立 Provider；Hook 仍然订阅 Context。
+始终在组件或自定义 Hook 顶层调用 `useClient(explicitClient)`，即使传了显式 Client，也不要在普通函数或事件回调中调用。不要写 `explicitClient ?? useClient()`，它会条件调用 Hook。覆盖值不写入 Context，也不创建 Provider；Hook 仍然订阅 Context。
 
-- **返回** 显式传入或由最近 Provider 提供的同一个 Client。
-- **抛出** 显式参数和 Context 都没有提供 Client 时抛出 `Error`。
+- **返回** 显式传入的 Client，或最近 Provider 提供的同一个 Client。
+- **抛出** 显式参数与 Context 都未提供 Client 时抛出 `Error`。
 
 ## ClientProviderProps
 

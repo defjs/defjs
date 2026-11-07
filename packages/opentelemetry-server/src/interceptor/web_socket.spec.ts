@@ -38,6 +38,7 @@ import {
   resolveTransportQuery,
   resolveRequestUrl,
 } from "../../../core/src/internal/url";
+import { method } from "../../test/method";
 
 function createMockWsPropagator(): TextMapPropagator {
   return {
@@ -75,9 +76,7 @@ describe("WebSocket client diagnostic logs", () => {
         propagator: createMockWsPropagator(),
       });
       await expect(
-        interceptor.fn(makeWsRequest(), async () => {
-          throw cause;
-        }),
+        interceptor.fn(makeWsRequest(), () => Promise.reject(cause)),
       ).rejects.toBe(cause);
       expect(records).toHaveLength(count);
       if (count)
@@ -114,7 +113,7 @@ describe("WebSocket client diagnostic logs", () => {
         propagator: createMockWsPropagator(),
       });
       await expect(
-        interceptor.fn(makeWsRequest(), async () => session.session),
+        interceptor.fn(makeWsRequest(), () => Promise.resolve(session.session)),
       ).resolves.toBe(session.session);
       expect(records).toEqual([]);
       active.mockReturnValue(ROOT_CONTEXT);
@@ -148,7 +147,10 @@ describe("WebSocket client diagnostic logs", () => {
       if (tracing) expect(trace.getSpan(record.context)).toBe(spans[0]);
       else expect(record.context).toBe(parent);
       expect(
-        metrics.activeConnections.add.mock.calls.map(([value]) => value),
+        metrics.activeConnections.add.mock.calls.map((call) => {
+          const value: unknown = call[0];
+          return value;
+        }),
       ).toEqual([1, -1]);
       expect(metrics.connectionDuration.record).toHaveBeenCalledTimes(1);
     },
@@ -163,7 +165,9 @@ describe("WebSocket client diagnostic logs", () => {
         logger,
         propagator: createMockWsPropagator(),
       });
-      await interceptor.fn(makeWsRequest(), async () => session.session);
+      await interceptor.fn(makeWsRequest(), () =>
+        Promise.resolve(session.session),
+      );
       session.close({ kind, cause: new Error("user decided to stop") });
       await waitForSettledPromises();
       expect(records).toEqual([]);
@@ -182,8 +186,11 @@ describe("WebSocket client diagnostic logs", () => {
       { cause: new Error("offline"), code: 1006 },
     ]) {
       const session = makeDeferredWsSession();
-      await interceptor.fn(makeWsRequest(), async () => session.session);
-      session.close(info as never);
+      await interceptor.fn(makeWsRequest(), () =>
+        Promise.resolve(session.session),
+      );
+      // @ts-expect-error legacy close payloads are not WebSocketCloseInfo
+      session.close(info);
       await waitForSettledPromises();
     }
     expect(records).toHaveLength(1);
@@ -211,7 +218,7 @@ describe("WebSocket client diagnostic logs", () => {
         propagator: createMockWsPropagator(),
       });
       await expect(
-        interceptor.fn(makeWsRequest(), async () => session.session),
+        interceptor.fn(makeWsRequest(), () => Promise.resolve(session.session)),
       ).resolves.toBe(session.session);
       const cause = new Error("original");
       if (failure === "rejected") {
@@ -236,7 +243,10 @@ describe("WebSocket client diagnostic logs", () => {
       expect(report).toHaveBeenCalledTimes(1);
       expect(spans[0]?.ended).toBe(true);
       expect(
-        metrics.activeConnections.add.mock.calls.map(([value]) => value),
+        metrics.activeConnections.add.mock.calls.map((call) => {
+          const value: unknown = call[0];
+          return value;
+        }),
       ).toEqual([1, -1]);
     },
   );
@@ -268,7 +278,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
         requireParentSpan: true,
       });
       await expect(
-        interceptor.fn(makeWsRequest(), async () => ws.session),
+        interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session)),
       ).resolves.toBe(ws.session);
       expect(metrics.connectDuration.record).toHaveBeenCalledWith(
         expect.any(Number),
@@ -312,9 +322,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
     await expect(
-      interceptor.fn(makeWsRequest(), async () => {
-        throw error;
-      }),
+      interceptor.fn(makeWsRequest(), () => Promise.reject(error)),
     ).rejects.toBe(error);
     expect(metrics.connectDuration.record).toHaveBeenCalledTimes(1);
     expect(metrics.connectDuration.record).toHaveBeenCalledWith(
@@ -340,11 +348,11 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       undefined,
       new Headers({ traceparent: "upstream-trace-id" }),
     );
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
-    expect(mockPropagator.extract).toHaveBeenCalled();
+    expect(method(mockPropagator, "extract")).toHaveBeenCalled();
   });
 
   test("should inject propagation fields into query params when explicitly enabled", async () => {
@@ -356,11 +364,11 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     const req = makeWsRequest();
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
-    expect(mockPropagator.inject).toHaveBeenCalled();
+    expect(method(mockPropagator, "inject")).toHaveBeenCalled();
     const calls = vi.mocked(next).mock.calls;
     expect(calls[0]?.[0].queryParams?.get("traceparent")).toBe("mock-trace-id");
     expect(calls[0]?.[0].queryParams?.get("tracestate")).toBe("vendor=value");
@@ -379,7 +387,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     const req = makeWsRequest(new URLSearchParams({ room: "alpha" }));
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
@@ -405,7 +413,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       ),
       queryString: "space=hello%20world&room=alpha",
     };
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
@@ -423,7 +431,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => makeWsSession());
+    await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
+    );
 
     expect(activeSpans).toHaveLength(1);
     expect(activeSpans[0]?.name).toBe("WebSocket");
@@ -436,7 +446,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => makeWsSession());
+    await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
+    );
 
     expect(activeSpans[0]?.attributes["url.full"]).toBe(
       "wss://api.example.com/ws",
@@ -456,10 +468,12 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       startSpanHook,
     });
 
-    await interceptor.fn(req, async () => makeWsSession());
+    await interceptor.fn(req, () => Promise.resolve(makeWsSession()));
 
     expect(startSpanHook).toHaveBeenCalledWith(req);
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "app.tenant": "acme",
       "url.full": "wss://tenant.example.com/socket",
     });
@@ -472,16 +486,20 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => makeWsSession());
+    await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
+    );
 
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "url.full": "wss://api.example.com/ws",
     });
   });
 
   test("should continue WebSocket and record a hook error when startSpanHook throws", async () => {
     const { tracer } = createMockTracer();
-    const next = vi.fn(async () => makeWsSession());
+    const next = vi.fn(() => Promise.resolve(makeWsSession()));
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -493,7 +511,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     await interceptor.fn(makeWsRequest(), next);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "url.full": "wss://api.example.com/ws",
     });
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
@@ -512,10 +532,13 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => makeWsSession());
+    await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
+    );
 
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
       "websocket.connected",
+      undefined,
     );
   });
 
@@ -527,7 +550,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
 
     expect(activeSpans[0]?.ended).toBe(false);
 
@@ -547,11 +570,14 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
     ws.close();
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.closed");
+    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+      "websocket.closed",
+      undefined,
+    );
     expect(activeSpans[0]?.status?.code).toBe(1);
     expect(activeSpans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
@@ -573,15 +599,15 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
-    ws.close({
-      code: 1000,
-      reason: "legacy normal close",
-      wasClean: true,
-    } as never);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
+    // @ts-expect-error legacy close info has no kind
+    ws.close({ code: 1000, reason: "legacy normal close", wasClean: true });
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.closed");
+    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+      "websocket.closed",
+      undefined,
+    );
     expect(activeSpans[0]?.recordException).not.toHaveBeenCalled();
     expect(activeSpans[0]?.status?.code).toBe(1);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
@@ -600,11 +626,15 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
-    ws.close(null as never);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
+    // @ts-expect-error null is not a close info
+    ws.close(null);
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.closed");
+    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+      "websocket.closed",
+      undefined,
+    );
     expect(activeSpans[0]?.recordException).not.toHaveBeenCalled();
     expect(activeSpans[0]?.status?.code).toBe(1);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
@@ -624,8 +654,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
-    ws.close({ cause: closeCause, code: 1006, wasClean: false } as never);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
+    // @ts-expect-error legacy close info is a cause without a kind
+    ws.close({ cause: closeCause, code: 1006, wasClean: false });
     await waitForSettledPromises();
 
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
@@ -652,7 +683,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
     ws.reject(new TypeError("connection lost"));
     await waitForSettledPromises();
 
@@ -681,7 +712,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
     ws.close({
       code: 1006,
       cause: new TypeError("connection lost"),
@@ -716,7 +747,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
     ws.close({ kind: "aborted" });
     await waitForSettledPromises();
 
@@ -745,9 +776,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     await expect(
-      interceptor.fn(makeWsRequest(), async () => {
-        throw new TypeError("connect failed");
-      }),
+      interceptor.fn(makeWsRequest(), () =>
+        Promise.reject(new TypeError("connect failed")),
+      ),
     ).rejects.toThrow("connect failed");
 
     expect(activeSpans[0]?.ended).toBe(true);
@@ -771,7 +802,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       requireParentSpan: true,
     });
 
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
     await interceptor.fn(makeWsRequest(), next);
 
     expect(activeSpans).toHaveLength(0);
@@ -789,11 +820,11 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       ...makeWsRequest(new URLSearchParams({ room: "alpha" })),
       queryString: "room=alpha",
     };
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
-    expect(mockPropagator.inject).not.toHaveBeenCalled();
+    expect(method(mockPropagator, "inject")).not.toHaveBeenCalled();
     const calls = vi.mocked(next).mock.calls;
     expect(calls[0]?.[0].queryParams?.get("traceparent")).toBeNull();
     expect(calls[0]?.[0].queryParams).toBe(req.queryParams);
@@ -814,7 +845,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     const req = makeWsRequest(new URLSearchParams({ room: "alpha" }));
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
@@ -837,7 +868,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     const req = { ...makeWsRequest(), queryString: undefined };
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
@@ -855,7 +886,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     const req = makeWsRequest();
-    await interceptor.fn(req, async () => makeWsSession());
+    await interceptor.fn(req, () => Promise.resolve(makeWsSession()));
 
     expect(requestHook).toHaveBeenCalledTimes(1);
     expect(requestHook).toHaveBeenCalledWith(activeSpans[0], req);
@@ -872,7 +903,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
     const session = makeWsSession();
     const req = makeWsRequest();
-    await interceptor.fn(req, async () => session);
+    await interceptor.fn(req, () => Promise.resolve(session));
 
     expect(responseHook).toHaveBeenCalledTimes(1);
     expect(responseHook).toHaveBeenCalledWith(activeSpans[0], session, req);
@@ -890,9 +921,8 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       requestHook,
     });
 
-    const result = await interceptor.fn(
-      makeWsRequest(),
-      async () => ws.session,
+    const result = await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(ws.session),
     );
 
     expect(result).toBe(ws.session);
@@ -922,9 +952,8 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       responseHook,
     });
 
-    const result = await interceptor.fn(
-      makeWsRequest(),
-      async () => ws.session,
+    const result = await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(ws.session),
     );
 
     expect(result).toBe(ws.session);
@@ -950,7 +979,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
 
     expect(metrics.connectDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
@@ -975,7 +1004,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeWsRequest(), async () => ws.session);
+    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
     ws.close();
     await waitForSettledPromises();
     ws.close();
@@ -1006,11 +1035,11 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
     await interceptor.fn(
       makeWsRequest(new URLSearchParams({ room: "alpha" })),
-      async () => ws.session,
+      () => Promise.resolve(ws.session),
     );
 
     const call = vi.mocked(metrics.connectDuration.record).mock.calls[0];
-    const attributes = call?.[1];
+    const attributes: unknown = call?.[1];
 
     expect(attributes).toEqual(
       expect.objectContaining({ "server.address": "api.example.com" }),
@@ -1028,7 +1057,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     const req = { ...makeWsRequest(), baseEndpoint: "not-a-url" };
-    await interceptor.fn(req, async () => makeWsSession());
+    await interceptor.fn(req, () => Promise.resolve(makeWsSession()));
 
     expect(activeSpans[0]?.attributes["url.full"]).toBe("/ws");
   });
@@ -1041,11 +1070,11 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     const req = { ...makeWsRequest(), headers: undefined };
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
-    expect(mockPropagator.extract).toHaveBeenCalledWith(
+    expect(method(mockPropagator, "extract")).toHaveBeenCalledWith(
       expect.anything(),
       expect.any(Headers),
       expect.anything(),
@@ -1083,7 +1112,7 @@ describe("WebSocket query propagation with W3C propagators", () => {
         ),
       );
     }
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
     await createOpenTelemetryWebSocketInterceptor({
       tracer,
       propagator,

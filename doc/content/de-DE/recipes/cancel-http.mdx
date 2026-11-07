@@ -1,20 +1,35 @@
 ---
 title: "Abbruch und Zeitlimits"
-description: Einen Aufruf abbrechen oder mit einer Deadline beenden und NET_ABORTED / NET_TIMEOUT lesen.
+description: Einen Aufruf abbrechen oder zeitlich begrenzen und NET_ABORTED / NET_TIMEOUT gezielt auswerten.
 ---
 
 # HTTP-Aufruf abbrechen
 
-Kombiniere das Signal des Aufrufers mit einer Deadline auf `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` ist ein Signal. Ein manueller Abbruch wird als `NET_ABORTED` klassifiziert. Eine Deadline wird als `NET_TIMEOUT` klassifiziert.
+Kombiniere einen aufruferseitigen `AbortController` mit einer Frist über `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` und übergib das kombinierte Signal via `client({ signal })`. Defjs klassifiziert einen manuellen Abbruch durch den Aufrufer als `NET_ABORTED` und einen zeitlimitbedingten Abbruch als `NET_TIMEOUT`.
 
-Details siehe [HTTP](/de-DE/docs/http#cancel-the-work).
+<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
 ```
 
-Cancellation sagt dir, was der Caller beobachtet hat. Sie beweist nicht, dass ein server-seitiger Write zurückgerollt wurde — halte Mutation-Retries hinter einem Idempotency-Vertrag.
+Ein Abbruch meldet lediglich, was der Client beobachtet hat – er garantiert keineswegs, dass eine serverseitige Mutation zurückgerollt wurde. Schütze Wiederholungsversuche bei Mutationen durch Idempotenz-Schlüssel. Siehe [HTTP-Abbruch und Zeitlimits](/de-DE/docs/http#cancel-the-work).

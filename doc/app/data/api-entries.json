@@ -1183,5 +1183,157 @@
       "@defjs/core:Client",
       "@defjs/core:RequestOptions"
     ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Balancer",
+    "kind": "type",
+    "slug": "core/balancer-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickOutcome",
+    "kind": "type",
+    "slug": "core/pickoutcome-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickInfo",
+    "kind": "type",
+    "slug": "core/pickinfo-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickResult",
+    "kind": "type",
+    "slug": "core/pickresult-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickFaultCode",
+    "kind": "type",
+    "slug": "core/pickfaultcode-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DoneInfo",
+    "kind": "type",
+    "slug": "core/doneinfo-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ERR_NO_CANDIDATE",
+    "kind": "constant",
+    "slug": "core/err-no-candidate",
+    "related": ["@defjs/core:isNoCandidateCause"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "isNoCandidateCause",
+    "kind": "function",
+    "slug": "core/isnocandidatecause",
+    "related": ["@defjs/core:ERR_NO_CANDIDATE"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "pickFirstBalancer",
+    "kind": "function",
+    "slug": "core/pickfirstbalancer",
+    "related": ["@defjs/core:PickFirstOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickFirstOptions",
+    "kind": "type",
+    "slug": "core/pickfirstoptions-type",
+    "related": ["@defjs/core:pickFirstBalancer"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "roundRobinBalancer",
+    "kind": "function",
+    "slug": "core/roundrobinbalancer",
+    "related": ["@defjs/core:RoundRobinOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RoundRobinOptions",
+    "kind": "type",
+    "slug": "core/roundrobinoptions-type",
+    "related": ["@defjs/core:roundRobinBalancer"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withBalancer",
+    "kind": "function",
+    "slug": "core/withbalancer",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withRetry",
+    "kind": "function",
+    "slug": "core/withretry",
+    "related": [
+      "@defjs/core:RetryOptions",
+      "@defjs/core:withSSEReconnect",
+      "@defjs/core:withWebSocketReconnect"
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryCondition",
+    "kind": "type",
+    "slug": "core/retrycondition-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryOptions",
+    "kind": "type",
+    "slug": "core/retryoptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OutlierDetectionOptions",
+    "kind": "type",
+    "slug": "core/outlierdetectionoptions-type",
+    "related": ["@defjs/core:outlierDetection"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "outlierDetection",
+    "kind": "function",
+    "slug": "core/outlierdetection",
+    "related": [
+      "@defjs/core:OutlierDetectionOptions",
+      "@defjs/core:roundRobinBalancer",
+      "@defjs/core:p2cBalancer"
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "p2cBalancer",
+    "kind": "function",
+    "slug": "core/p2cbalancer",
+    "related": [
+      "@defjs/core:P2cOptions",
+      "@defjs/core:outlierDetection",
+      "@defjs/core:roundRobinBalancer"
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "P2cOptions",
+    "kind": "type",
+    "slug": "core/p2coptions-type",
+    "related": ["@defjs/core:p2cBalancer"]
   }
 ]

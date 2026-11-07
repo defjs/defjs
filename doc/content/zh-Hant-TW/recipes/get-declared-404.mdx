@@ -1,22 +1,40 @@
 ---
 title: "處理已宣告的 404"
-description: 呼叫一次 GET，並依型別化的 200 與已宣告 404 分支。
+description: 呼叫一次 GET，並依具型別的 200 與已宣告的 404 分支。
 ---
 
-# 已宣告 404 的 GET
+# 帶有已宣告 404 的 GET
 
-同時宣告成功與 404 body。用 `error.code` 與 `error.status` 分支 — 對已宣告的 miss 會拿到型別化的 `error.data`。
+在 `defineRequest` 上同時宣告 `output`（用於 2xx 回應）與 `error`（用於非 2xx 回應）。在呼叫端以 `error?.code === "HTTP_STATUS" && error.status === 404` 分支，讀取具型別的 `error.data` 酬載。
 
-細節見 [HTTP](/zh-Hant-TW/docs/http) 與[錯誤](/zh-Hant-TW/docs/errors)。
+<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
 
-`api.example.com` 是 placeholder。若 server 對 `GET /users/7` 回應 `200` 與 `{ "id": 7, "name": "Ada" }`，這段 snippet 會印出：
+  </Tab>
+</Tabs>
+
+當伺服器針對 `GET /orders/7` 回應 `200` 與 `{ "id": 7, "status": "paid" }` 時，該腳本會輸出：
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
-非 2xx 狀態是 `HTTP_STATUS`。宣告 `error` 會給它的 body 一個型別；省略 `error` 則 `error.data` 是 `undefined`，body 也不會被讀。如果已宣告的 `error` body 讀不出來（媒體類型不對、JSON 無效、形狀不符），結果會改成 `RES_*` fault。一個 `error` Struct 覆蓋所有非 2xx 狀態，所以形狀不同時用 `struct.or(...)` 或判別聯集。
+- 任何非 2xx 狀態碼都會產生 `HTTP_STATUS`。宣告 `error` 會把錯誤本文解碼並驗證進 `error.data`；省略 `error` 則讓 `error.data` 維持 `undefined`，且完全不讀取本文。
+- 若宣告的 `error` 本文媒體型別不符、JSON 無效，或未通過 struct 驗證，該操作會回傳 `RES_*` fault。由於單一 `error` struct 涵蓋所有非 2xx 狀態碼，當不同錯誤狀態回傳不同結構時，請使用 `struct.or(...)`。
+
+請參閱 [HTTP 操作](/zh-Hant-TW/docs/http) 與 [錯誤處理](/zh-Hant-TW/docs/errors)。

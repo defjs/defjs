@@ -1,140 +1,128 @@
 ---
-title: "عقود البيانات / Struct"
-description: عرّف عقود المدخل والاستجابة التي يشاركها SDK مع مستهلكيه، مع الأنواع والتحقق وقت التشغيل.
+title: "Struct والمخططات"
+description: حدّد عقود المدخلات والاستجابات التي تشاركها حزمة SDK مع مستهلكيها، مع دعم الأنواع والتحقق وقت التشغيل.
 ---
 
-# Struct
+# Struct والمخططات
 
-تعبّر الـ Structs عن عقد البيانات الذي يعد به SDK: مدخل المستدعي واستجابات الخدمة والأخطاء المعلَنة والرسائل الآنية. أعد استخدامها عبر العمليات المصدَّرة حتى يحصل المستهلكون على أنواع TypeScript متسقة وتحقق وقت التشغيل، باستقلال عن العميل الذي يضبطونه.
+يعلن `struct` عن عقد البيانات السلكي المشترك بين حزمة SDK ومستهلكيها: مدخلات المستدعي، ومخرجات النجاح `2xx`، وأخطاء الخدمة المعلنة، وأحداث SSE، وإطارات WebSocket.
 
-تحصل على أنواع TypeScript عبر `Infer`، وفحوص وقت التشغيل عبر `struct.parse(...)` — بلا رمي، وtuple يضع الخطأ أولًا.
+- **استنتاج الأنواع الثابتة (Static inference)**: اشتقاق أنواع TypeScript تلقائياً عبر `Infer<typeof Schema>`.
+- **التحقق بنمط الخطأ أولاً**: التحقق من صحة القيم وقت التشغيل عبر `struct.parse(Schema, value)` — تُرجع الدالة `[null, data]` أو `[StructError, undefined]` دون إلقاء أي استثناءات.
 
-## الإعداد الأساسي
+## 1. تعريف المخطط في SDK، والتحقق في التطبيق
+
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
 </include>
 
-يُبقي المخرج المحلَّل الحقول المعلَنة فقط. الحقول المطلوبة الغائبة، أو البدائيات الخاطئة، أو القيم المتداخلة السيئة، أو طول tuple خاطئ، أو `null` غير مسموح ← `StructError`، بلا قيمة جزئية. الـ Structs غير قابلة للتغيير؛ وتُرجع `.optional()` وأشباهها Struct جديدًا.
+</Tab>
+</Tabs>
 
-## المطلوب والاختياري وnull
+تحتفظ الكائنات التي تم التحقق منها بالحقول المعلنة فقط (يتم تجريد الخصائص غير المعروفة تلقائياً) وتستخدم نموذج أولي `null`. ويؤدي أي غياب لحقل إلزامي، أو نوع أولي غير صحيح، أو فرع غير صالح إلى إنتاج `StructError` فوري دون إرجاع نتائج جزئية.
 
-الحضور وقابلية الإفراغ منفصلان:
+## 2. الحقول الإلزامية والاختيارية والقابلة للقيمة الخالية (Nullable)
 
-| الإعلان                      | الغائب / `undefined`          | `null` | قيمة صالحة        |
-| ---------------------------- | ----------------------------- | ------ | ----------------- |
-| `struct.string()`            | يرفض                          | يرفض   | يقبل سلسلة        |
-| `struct.string().optional()` | يقبل؛ ويحذف حقل الكائن الغائب | يرفض   | يقبل سلسلة        |
-| `struct.string().null()`     | يرفض                          | يقبل   | يقبل سلسلة        |
-| `struct.string().nullish()`  | يقبل؛ ويحذف حقل الكائن الغائب | يقبل   | يقبل سلسلة        |
-| `struct.null()`              | يرفض                          | يقبل   | يرفض القيم الأخرى |
+يفصل Defjs بين **وجود الحقل** (`undefined`) و**قبول القيمة الفارغة** (`null`). وتكون جميع دوال بناء struct إلزامية تماماً وغير قابلة للقيمة الخالية افتراضياً:
+
+| الإعلان                      | غير موجود / `undefined`       | القيمة `null` | القيمة المقبولة        |
+| ---------------------------- | ----------------------------- | ------------- | ---------------------- |
+| `struct.string()`            | رفض                           | رفض           | قبول `string`          |
+| `struct.string().optional()` | قبول (يُحذف عند تسلسل الكائن) | رفض           | قبول `string`          |
+| `struct.string().null()`     | رفض                           | قبول          | قبول `string`          |
+| `struct.string().nullish()`  | قبول (يُحذف عند تسلسل الكائن) | قبول          | قبول `string`          |
+| `struct.null()`              | رفض                           | قبول          | رفض أي قيمة غير `null` |
 
 <include cwd lang="typescript">
   examples/struct/required-optional-null.ts#example
 </include>
 
-`struct.any()` و`struct.unknown()` يرفضان `null` و`undefined` أيضًا. سلسِل `.null()` أو `.optional()` أو `.nullish()` لقبولهما.
+ترفض دالتا `struct.any()` و`struct.unknown()` أيضاً القيمتين `null` و`undefined` ما لم تُربطا صراحة بـ `.null()` أو `.optional()` أو `.nullish()`.
 
-في الجذر، يمكن أن يكون الاختياري `undefined`. داخل كائن، تبقى حقول optional/nullish المحذوفة غائبة. يتبع حقل كائن متداخل القاعدة نفسها: وسِمه `.optional()` عندما يجوز للمستدعي حذفه. يبقى حقل الكائن المطلوب مطلوبًا حتى عندما يكون كل حقل داخله اختياريًا.
+## 3. الأسماء البديلة السلكية ثنائية الاتجاه (`.alias()`)
 
-## موضع الطلب
+استخدم `.alias("wire_name")` عندما تستخدم الواجهة الخلفية نمط `snake_case` أو ترويسات خاصة بينما تعتمد حزمة TypeScript SDK لديك نمط `camelCase`. تعلن عن الاسم البديل مرة واحدة على مستوى الحقل، ويعمل بكفاءة في كلا الاتجاهين:
 
-المسار والاستعلام والرؤوس والجسم حقول يُرجعها الـ builder، لا struct طلب. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. `struct.urlencoded(shape)` و`struct.formData(shape)` هما structا كائن بوسم ترميز. يعمل الوسم فقط عندما تكون تلك القيمة جذر الجسم: تستخدم المفاتيح الأسماء المستعارة، وتكرر المصفوفات اسم الحقل.
-
-<include cwd lang="typescript">
-  examples/struct/request-placement.ts#example
-</include>
-
-| جذر الجسم                                           | يُرسَل كـ         | نوع المحتوى الافتراضي                             |
-| --------------------------------------------------- | ----------------- | ------------------------------------------------- |
-| كائن محدَّد النوع، مصفوفة، عدد محدود، منطقي، `null` | نص JSON           | `application/json`                                |
-| struct `string` أو سلسلة خام                        | نص                | `text/plain;charset=UTF-8`                        |
-| `struct.urlencoded(shape)` عند الجذر                | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)` عند الجذر                  | `FormData`        | حد multipart للمنصة                               |
-| `Blob` / `File`                                     | الـ blob          | نوع الـ blob أو `application/octet-stream`        |
-| `ArrayBuffer` / عرض / تدفق                          | بايتات            | `application/octet-stream`                        |
-
-يفشل `NaN` و`±Infinity`، بما في ذلك داخل مصفوفة أو كائن، بـ `REQ_BUILD_FAILED`.
-
-`struct.file()` هو struct قيمة لحقل نموذج ولجسم ملف خام. لا يستطيع بناة WebSocket إرجاع `headers` أو `body`. يستطيع HTTP وSSE ذلك. لا يستطيع `GET` و`HEAD`.
-
-## الأسماء المستعارة
-
-تفصل `.alias(...)` الأسماء المنطقية عن أسماء السلك. يستخدم `struct.parse(...)` المفاتيح المنطقية إلا إذا مرّرت `{ aliases: true }`. ترمّز JSON وترميزات الطلب المسطحة الأسماء المستعارة؛ ويعيد فك استجابة JSON مفاتيح السلك إلى الحقول المنطقية.
+| الحد الفاصل                                                              | المفتاح المستخدم                                            |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| مدخلات العملية `input` واستدعاء `struct.parse(Schema, value)`            | الاسم المنطقي (`customerName`)                              |
+| كائن struct محدد الأنواع تُرجعه `builder` (`body`، و`query`، و`headers`) | الاسم البديل السلكي (`customer_name`)                       |
+| فك ترميز استجابة JSON أو حدث SSE أو إطار WebSocket                       | الاسم السلكي `customer_name` ← الاسم المنطقي `customerName` |
+| مفتاح كائن مجهول مكتوب مباشرة داخل `builder`                             | المفتاح الحرفي كما كُتب تماماً                              |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-| الحد                                    | الحقل                     |
-| --------------------------------------- | ------------------------- |
-| `struct.parse(User, ...)` ومدخل العملية | منطقي `displayName`       |
-| كائن محدَّد النوع يُرجعه الـ builder    | سلك `display_name`        |
-| فك JSON / SSE / WebSocket               | سلك ← منطقي `displayName` |
-| كائن مجهول مكتوب في الـ builder         | المفتاح الذي كتبته        |
+يحافظ نشر كائن ذي نوع محدد داخل `builder` (`{ ...input.order, extra: 1 }`) على ترميز struct وأسمائه البديلة. بينما كتابة المفتاح المنطقي واسمه البديل السلكي معاً في نفس الكائن يفشل فوراً بخطأ `REQ_BUILD_FAILED`.
 
-يقرأ الـ builder نفسه الأسماء المنطقية (`input.user.displayName`)؛ ويظهر اسم السلك فقط عندما يرمّز المسلسِل الكائن محدَّد النوع الذي يُرجعه الـ builder.
+## 4. موضع الطلب ومحولات النماذج (Form Codecs)
 
-تعمل الأسماء المستعارة على الحقول المتداخلة والمصفوفات والكائنات والاتحادات والمميِّزات. أبقِ الأسماء المنطقية في شيفرة التطبيق؛ وضع الاسم الخارجي على الـ struct مرة واحدة. نشر كائن محدَّد النوع يُبقي ذلك الترميز. ضبط الحقل المنطقي ومفتاح سلكه معًا في الكائن نفسه هو `REQ_BUILD_FAILED`. `JSON.stringify` لقيمة بنفسك يغادر هذا المسار: يرى المسلسِل الأسماء المنطقية.
+يعرّف `input` المعلمات؛ بينما تضعها دالة `builder` داخل `{ path, query, headers, body }`. وفيما يخص الأجسام المُرمَّزة بنماذج الاستمارات، تضع دالتا `struct.urlencoded(shape)` و`struct.formData(shape)` وسماً على الكائن الجذري لتقوم وسيلة النقل بتسلسله تلقائياً كـ `URLSearchParams` أو `FormData`:
 
-يُختار الدليل عند كل عقدة، لا عند الجذر فقط. يُبقي كائن جديد تحت أب مجهول المفاتيح التي كتبتها. ويستخدم الكائن نفسه تحت أب محدَّد النوع struct ذلك الحقل.
+<include cwd lang="typescript">
+  examples/struct/request-placement.ts#example
+</include>
 
-```ts
-body: { row: { id: '42' } }              // Anonymous root: emits id
-body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
-```
+| جذر الجسم الذي تُرجعه `builder`                          | التنسيق السلكي           | ترويسة `Content-Type` الافتراضية                  |
+| -------------------------------------------------------- | ------------------------ | ------------------------------------------------- |
+| كائن ذو نوع محدد، مصفوفة، رقم محدود، قيمة منطقية، `null` | نص JSON                  | `application/json`                                |
+| بنية `string` أو نص خام `string`                         | نص UTF-8                 | `text/plain;charset=UTF-8`                        |
+| `struct.urlencoded(shape)` في جذر الجسم                  | `URLSearchParams`        | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `struct.formData(shape)` في جذر الجسم                    | `FormData`               | `multipart/form-data; boundary=...`               |
+| `Blob` / `File` (`struct.file()`)                        | كائن ثنائي (Binary blob) | `blob.type` أو `application/octet-stream`         |
+| `ArrayBuffer` / مصفوفة عرض / `ReadableStream`            | بايتات خام               | `application/octet-stream`                        |
 
-عندما يطابق دليل اتحاد أكثر من فرع، يُرمَّز كل فرع ويُقارَن. يُحفَظ مخرج السلك المتطابق؛ والاختلاف هو `REQ_BUILD_FAILED`.
+## 5. معالجة `StructError` والمشكلات (Issues)
 
-التقاطع المختلط الذي يحتوي جزءًا ليس كائنًا يُوسَم، عند التحليل، باقتران الوسوم من الأجزاء التي طابقت؛ والقيمة المكتوبة حديثًا لتقاطع مختلط لم تُحلَّل هي كائن مجهول.
-
-## إخفاقات التحليل
-
-يُرجع `struct.parse(...)` القيمة `[null, value]` أو `[StructError, undefined]`. يمتد `StructError` من `Error` ويعرض `issues`، إضافة إلى `format()` و`flatten()` و`prettify()`.
+تُرجع الدالة `struct.parse(Schema, data, { aliases?, errorMap? })` القيمة `[StructError, undefined]` عند الفشل. يرث `StructError` من كائن الخطأ الأصلي `Error` ويوفر الخصائص والدوال: `issues` و`format()` و`flatten()` و`prettify()`:
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-لـ `StructIssue` الحقول `code` و`expected` و`message` و`path` و`received`. `code` هو `custom` أو `invalid_enum` أو `invalid_intersection` أو `invalid_literal` أو `invalid_type` أو `invalid_union` أو `missing_key`. تسمّي الرسائل الافتراضية نوع القيمة المستلَمة، لا قيمتها أبدًا: `Expected number at id, received string`. مسارات المشكلة بنيوية وتحتفظ بمفاتيح record: يمكن أن ينتج `struct.record(...)` الرسالة `Expected number at alice@example.com, received string`، لذا قد تظل المفاتيح حساسة في الرسائل الافتراضية و`prettify()` و`String(fault)`. لذلك يحذف `message` و`prettify()` الحمولات المستلَمة؛ ويُبقي `received` القيمة الأصلية ويحتاج حجبًا قبل التسجيل أو الإرجاع. يعيد `struct.parse(..., { errorMap })` كتابة الرسائل لذلك الاستدعاء فقط، بما فيه إخفاقات تحويل bigint/date في struct من نسخة Core أخرى. أي سلسلة مُرجَعة، بما فيها `''`، تستبدل الافتراضي؛ و`undefined` وحده يبقيه. يُستخدم النص المخصص كما هو وقد يكشف قيمًا إذا ضمّنتها الخريطة.
+يحتوي كل عنصر `StructIssue` على: `code` (مثل `invalid_type` أو `missing_key` أو `invalid_literal` أو `invalid_enum` أو `invalid_union` أو `invalid_intersection` أو `custom`)، و`path`، و`expected`، و`received`، و`message`. تحذف الرسائل الافتراضية القيمة المستلمة وتُبلّغ عن _نوعها_ فقط، لكن المسارات تحتفظ بمفاتيح record الديناميكية، التي قد تحتوي على قيم حساسة. ليست `String(error)` و`error.prettify()` حد تنقيح؛ استخدم قائمة سماح للحقول الآمنة عند التسجيل، وعامل قيم `received` الخام والرسائل المخصصة على أنها حساسة.
 
-التحقق من Struct بنيوي فقط. بلا قواعد عامة للنطاق أو التنسيق أو التحسين أو المصادقة أو انتقال الحالة. افعل تلك الفحوص قبل أن تستدعي عملية.
-
-## مرجع
-
-المنشئات العامة على `@defjs/core` (الداخليات ليست واجهات الـ facade):
+## 6. مرجع دوال البناء (Constructors)
 
 <include cwd lang="typescript">
   examples/struct/any.ts#example
 </include>
 
-| المنشئ                           | المدخل                                 | المخرج المستنتج               |
-| -------------------------------- | -------------------------------------- | ----------------------------- |
-| `struct.number()`                | عدد غير `NaN`                          | `number`، بما فيه ±`Infinity` |
-| `struct.date()`                  | `Date` أو عدد أو سلسلة تاريخ           | `Date` صالح                   |
-| `struct.bigint()`                | `bigint` أو سلسلة يقبلها `BigInt(...)` | `bigint`                      |
-| `struct.enum(...)`               | عضو سلسلة أو عدد معلَن                 | اتحاد تلك القيم الحرفية       |
-| `struct.discriminatedUnion(...)` | كائن بمميِّز حرفي مطلوب                | فرع الكائن المختار            |
-| `struct.or(...)`                 | أول فرع مطابق؛ والترميز يفحص الالتباس  | اتحاد مخرجات الفروع           |
-| `struct.intersection(...)`       | قيم يقبلها كل عضو                      | تقاطع المخرجات                |
-| `struct.record(value)`           | كائن عادي تطابق قيمه `value`           | record للقيم المحلَّلة        |
-| `struct.tuple(items)`            | مصفوفة بالطول المعلَن تمامًا           | tuple بطول ثابت               |
+| دالة البناء                                                | المدخلات المقبولة                         | المخرجات المستنتجة                                       |
+| ---------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------- |
+| `struct.string()` / `struct.boolean()`                     | النوع الأولي المطابق                      | `string` / `boolean`                                     |
+| `struct.number()`                                          | أي رقم `number` باستثناء `NaN`            | `number` (يُرفض `NaN`؛ وتُرفض `±Infinity` في أجسام JSON) |
+| `struct.bigint()`                                          | قيمة `bigint` أو نص رقمي                  | `bigint`                                                 |
+| `struct.date()`                                            | كائن `Date` صالح، أو طابع زمني، أو نص ISO | `Date`                                                   |
+| `struct.literal(value)`                                    | القيمة الأولية الحرفية المطابقة بدقة      | نوع حرفي (Literal type)                                  |
+| `struct.enum(values)`                                      | عضو معلن من النصوص أو الأرقام             | اتحاد قيم حرفية (Union of literals)                      |
+| `struct.array(item)` / `struct.tuple(items)`               | مصفوفة / Tuple محدد الطول                 | `T[]` / `[...]`                                          |
+| `struct.object(shape)` / `struct.record(val)`              | كائن بسيط (Plain object)                  | كائن محدد الأنواع / `Record<string, V>`                  |
+| `struct.discriminatedUnion(key, options)`                  | كائن يحتوي على مفتاح تمييز حرفي `key`     | اتحاد فروع الكائنات                                      |
+| `struct.or(branches)`                                      | أول فرع مطابق                             | اتحاد أنواع الفروع                                       |
+| `struct.intersection(members)`                             | قيمة تستوفي شروط جميع الأعضاء             | تقاطع مدمج بعمق (Deep-merged intersection)               |
+| `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`           | تمثيل ثنائي (Binary representation)                      |
 
-يدعم كل Struct الدوال `.alias(name)` و`.optional()` و`.null()` و`.nullish()`. يحتاج `struct.discriminatedUnion` خيارات كائن بمميِّز حرفي مطلوب ويرفض التكرار.
+## قراءات ذات صلة
 
-استورد `struct` و`Infer` و`Struct` و`StructError` والأنواع العامة ذات الصلة من `@defjs/core`. استخدم `struct.parse(...)` كالمحلّل. لا تستورد `createObjectStruct` ولا رموز التعريف ولا داخليات الترميز ولا `packages/core/src`.
-
-ما لا تعد به الواجهة:
-
-- مخرجات الكائن/record تستخدم نموذجًا أوليًا null — لا تفترض طرائق `Object.prototype`.
-- تُسقَط مفاتيح الكائن غير المعروفة.
-- يرفض `struct.number()` القيمة `NaN`، ويقبل اللانهايات.
-- يجرّب `struct.or(...)` الفروع بالترتيب؛ ويرفض الترميزات الملتبسة عندما تختلف الفروع.
-- يحلّل `struct.intersection(...)` الأعضاء بترتيب الإعلان.
-- يدمج التقاطع مخرجات الأعضاء بعمق (تبقى القيم المتساوية بـ `Object.is` والتواريخ متساوية الوقت، وتندمج الكائنات العادية والمصفوفات متساوية الطول تعاوديًا، وأي تعارض آخر هو `invalid_intersection` عند ذلك المسار)، ولا يساهم `unknown`/`any` بشيء، ويجوز لمفتاح منطقي واحد أن يقابل عدة مفاتيح سلك. تتعارض فقط القيم غير المتساوية المكتوبة على مفتاح السلك نفسه.
-- يتحقق الـ Struct من حد؛ وهو لا يخزّن مؤقتًا ولا يفوّض ولا يملك مورد نقل.
-
-## وصفات ذات صلة
-
-- [POST JSON](/ar/recipes/post-json)
-- [GET مع 404 معلَن](/ar/recipes/get-declared-404)
+- [عمليات HTTP](/ar/docs/http)
+- [معالجة الأخطاء](/ar/docs/errors)
+- [إرسال بيانات JSON والتحقق منها](/ar/recipes/post-json)

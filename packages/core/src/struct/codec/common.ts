@@ -2,8 +2,9 @@ import { encodeValue } from "../encode";
 import { mapAliasedObjectFields } from "../fields";
 
 import { isObjectStruct, parseStructValue } from "../introspection";
+import { assertStruct } from "../shape";
 import { DEFINITION } from "../symbols";
-import type { AnyStructLike, RuntimeStruct } from "../types";
+import type { AnyStructLike, Infer, RuntimeStruct } from "../types";
 
 export { mapAliasedObjectFields } from "../fields";
 
@@ -15,7 +16,18 @@ export function encodeObjectByAlias(
   label = "json",
   depth = 0,
 ): unknown {
-  const definition = (struct as RuntimeStruct)[DEFINITION];
+  assertStruct(struct, "struct");
+  return encodeAliasedStruct(struct, value, label, depth);
+}
+
+/** {@link encodeObjectByAlias} for a struct the caller already checked. */
+export function encodeAliasedStruct(
+  struct: RuntimeStruct,
+  value: unknown,
+  label: string,
+  depth: number,
+): unknown {
+  const definition = struct[DEFINITION];
   // `.nullable()` and `.optional()` keep kind `object`, so nullish has to win before the object assertion.
   if (value === null && definition.flags.nullable) {
     return null;
@@ -30,18 +42,15 @@ export function encodeObjectByAlias(
 
   assertPlainObject(value, `${label} encode expects object value`);
 
-  return mapAliasedObjectFields(
-    struct as unknown as RuntimeStruct,
-    value,
-    (fieldStruct, fieldValue) =>
-      encodeAliasedField(fieldStruct, fieldValue, label, depth + 1),
+  return mapAliasedObjectFields(struct, value, (fieldStruct, fieldValue) =>
+    encodeAliasedField(fieldStruct, fieldValue, label, depth + 1),
   );
 }
 
-export function decodeObjectByAlias(
-  struct: AnyStructLike,
+export function decodeObjectByAlias<S extends AnyStructLike>(
+  struct: S,
   value: unknown,
-): unknown {
+): Infer<S> {
   return parseStructValue(struct, value, { useAliases: true });
 }
 
@@ -55,19 +64,14 @@ export function assertPlainObject(
 }
 
 function encodeAliasedField(
-  struct: AnyStructLike,
+  struct: RuntimeStruct,
   value: unknown,
   label: string,
   depth: number,
 ): unknown {
   if (isObjectStruct(struct)) {
-    return encodeObjectByAlias(struct, value, label, depth);
+    return encodeAliasedStruct(struct, value, label, depth);
   }
 
-  return encodeValue(
-    struct as unknown as RuntimeStruct,
-    value,
-    ALIAS_ENCODE_OPTIONS,
-    depth,
-  );
+  return encodeValue(struct, value, ALIAS_ENCODE_OPTIONS, depth);
 }

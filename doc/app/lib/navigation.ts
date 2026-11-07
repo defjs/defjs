@@ -16,29 +16,39 @@ interface NavigationGroup {
 }
 
 const guideGroups = [
-  { titleKey: "nav.guide.sdkDevelopment", paths: ["", "/docs/start"] },
   {
-    titleKey: "nav.guide.contractsExecution",
-    paths: ["/docs/struct", "/docs/client"],
+    titleKey: "nav.guide.preface",
+    paths: ["", "/docs/start", "/docs/design-decisions"],
   },
   {
-    titleKey: "nav.guide.requestsRealtime",
-    paths: ["/docs/http", "/docs/sse", "/docs/web-socket"],
+    titleKey: "nav.guide.definingSdks",
+    paths: ["/docs/struct", "/docs/http", "/docs/sse", "/docs/web-socket"],
   },
   {
-    titleKey: "nav.guide.errorsInterception",
-    paths: ["/docs/errors", "/docs/interceptors"],
-  },
-  {
-    titleKey: "nav.guide.plugins",
+    titleKey: "nav.guide.clientExecution",
     paths: [
-      "/docs/integrations",
+      "/docs/client",
+      "/docs/errors",
+      "/docs/interceptors",
+      "/docs/load-balancing",
+      "/docs/testing",
+    ],
+  },
+  { titleKey: "nav.guide.ai", paths: ["/docs/ai", "/docs/ai-api"] },
+] as const satisfies readonly NavigationGroup[];
+export const integrationGroups = [
+  {
+    titleKey: "nav.integrations.overview",
+    paths: ["/docs/integrations"],
+  },
+  {
+    titleKey: "nav.integrations.official",
+    paths: [
       "/docs/integrations/react",
       "/docs/integrations/vue",
       "/docs/integrations/opentelemetry-server",
     ],
   },
-  { titleKey: "nav.guide.ai", paths: ["/docs/ai", "/docs/ai-api"] },
 ] as const satisfies readonly NavigationGroup[];
 export const exampleGroups = [
   {
@@ -89,53 +99,64 @@ export function getNavigationTree(
       ...paths.map((path) => page(path, names[path])),
     ]);
   }
-  const children = (["docs", "recipes", "api"] as const).map((area): Folder => {
-    const url = `${prefix}/${area}`;
-    const folder = tree.children.find(
-      (node): node is Folder =>
-        node.type === "folder" &&
-        flattenTree(node.children).some((child) => child.url === url),
-    );
-    if (!folder) throw new Error(`Missing reading area: ${url}`);
-    const root = page(`/${area}`);
-    const index = area === "api" ? { ...root, name: t("nav.apiIndex") } : root;
-    const integrations = [
-      "/api/react",
-      "/api/vue",
-      "/api/opentelemetry-server",
-    ].map((path) => prefix + path);
-    const isIntegration = (node: Node) =>
-      node.type === "page"
-        ? integrations.includes(node.url)
-        : node.type === "folder" &&
-          flattenTree(node.children).every((item) =>
-            integrations.some((url) => item.url.startsWith(url + "/")),
-          );
-    const other = folder.children.filter(
-      (node) => node.type !== "page" || node.url !== url,
-    );
-    const chapters =
-      area === "docs"
-        ? [
-            index,
-            ...grouped(guideGroups, { "": t("nav.home") }),
-            {
-              type: "separator" as const,
-              $id: `${locale}:navigation:standalone`,
-            },
-            page("/docs/design-decisions"),
-          ]
-        : area === "recipes"
-          ? [index, ...grouped(exampleGroups)]
-          : [
+  const children = (["docs", "integrations", "recipes", "api"] as const).map(
+    (area): Folder => {
+      const path = area === "integrations" ? "/docs/integrations" : `/${area}`;
+      const url = `${prefix}${path}`;
+      const folder = tree.children.find(
+        (node): node is Folder =>
+          node.type === "folder" &&
+          flattenTree(node.children).some((child) => child.url === url),
+      );
+      if (!folder) throw new Error(`Missing reading area: ${url}`);
+      const root = page(path);
+      const index =
+        area === "api" ? { ...root, name: t("nav.apiIndex") } : root;
+      const integrations = [
+        "/api/react",
+        "/api/vue",
+        "/api/opentelemetry-server",
+      ].map((item) => prefix + item);
+      const isIntegration = (node: Node) =>
+        node.type === "page"
+          ? integrations.includes(node.url)
+          : node.type === "folder" &&
+            flattenTree(node.children).every((item) =>
+              integrations.some((target) => item.url.startsWith(target + "/")),
+            );
+      const other = folder.children.filter(
+        (node) => node.type !== "page" || node.url !== url,
+      );
+      const chapters =
+        area === "docs"
+          ? [
               index,
-              { type: "separator" as const, name: t("nav.coreModules") },
-              ...other.filter((node) => !isIntegration(node)),
-              { type: "separator" as const, name: t("nav.integrations") },
-              ...other.filter(isIntegration),
-            ];
-    return { ...folder, name: root.name, children: chapters };
-  });
+              ...grouped(guideGroups, {
+                "": t("nav.home"),
+                "/docs/struct": t("nav.guide.dataStructures"),
+                "/docs/client": t("nav.guide.client"),
+                "/docs/interceptors": t("nav.guide.middleware"),
+                "/docs/errors": t("nav.guide.errors"),
+              }),
+            ]
+          : area === "integrations"
+            ? grouped(integrationGroups)
+            : area === "recipes"
+              ? [index, ...grouped(exampleGroups)]
+              : [
+                  index,
+                  { type: "separator" as const, name: t("nav.coreModules") },
+                  ...other.filter((node) => !isIntegration(node)),
+                  { type: "separator" as const, name: t("nav.integrations") },
+                  ...other.filter(isIntegration),
+                ];
+      return {
+        ...folder,
+        name: area === "integrations" ? t("nav.integrations") : root.name,
+        children: chapters,
+      };
+    },
+  );
   const result = { ...tree, children };
   const before = [...pages.keys()].sort();
   const after = flattenTree(result.children)
@@ -184,6 +205,8 @@ const relatedTopics = [
   ],
   [
     "/docs/client",
+    "/docs/load-balancing",
+    "/docs/testing",
     "/api/client",
     "/recipes/cancel-http",
     "/recipes/publish-http-sdk",

@@ -1,0 +1,182 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { createClient } from "../client/client";
+import { withEndpoint, withBalancer } from "../client/option";
+import { defineRequest } from "../http";
+import { ERR_NO_CANDIDATE, pickFirstBalancer, type Balancer } from "./balancer";
+import { pickEndpoint } from "./runtime";
+
+const endpoints = ["https://first.test", "https://second.test"];
+function pick(balancer: Balancer) {
+  const [error, selected] = balancer.pick({ endpoints });
+  if (error) throw error;
+  return selected;
+}
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+test("gateway errors advance pick_first but coded body failures do not", () => {
+  const balancer = pickFirstBalancer();
+  pick(balancer).done?.({
+    attempted: true,
+    code: "NET_BODY_INCOMPLETE",
+    status: 503,
+  });
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+  pick(balancer).done?.({ attempted: true, code: "NET_UNAVAILABLE" });
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
+});
+
+test("offline connect failures are unattributed; online and absent navigator still advance", () => {
+  for (const navigator of [{ onLine: false }, { onLine: true }, undefined]) {
+    vi.stubGlobal("navigator", navigator);
+    const balancer = pickFirstBalancer();
+    const [, selected] = pickEndpoint(balancer, {
+      endpoints,
+    });
+    selected?.done({ attempted: true, code: "NET_UNREACHABLE" });
+    expect(pick(balancer).endpoint).toBe(
+      navigator?.onLine === false ? endpoints[0] : endpoints[1],
+    );
+  }
+});
+
+test("failback permits one probe, retries failed probes, ignores unattributed probes", () => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(0);
+  const balancer = pickFirstBalancer({ failbackMs: 100 });
+  pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
+  vi.advanceTimersByTime(100 - performance.now());
+  const probe = pick(balancer);
+  expect(probe.endpoint).toBe(endpoints[0]);
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
+  probe.done?.({ attempted: true, code: "NET_UNAVAILABLE" });
+  vi.advanceTimersByTime(199 - performance.now());
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
+  vi.advanceTimersByTime(200 - performance.now());
+  pick(balancer).done?.({ attempted: false });
+  const success = pick(balancer);
+  expect(success.endpoint).toBe(endpoints[0]);
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
+  success.done?.({ attempted: true, status: 200 });
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+});
+
+test.each([0, -1, Infinity, NaN])(
+  "invalid failbackMs %s fails at execution",
+  async (failbackMs) => {
+    const client = createClient(
+      withEndpoint(...endpoints),
+      withBalancer(pickFirstBalancer({ failbackMs })),
+    );
+    const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
+    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
+  },
+);
+
+test("throwing navigator access is treated as online", () => {
+  vi.stubGlobal("navigator", {
+    get onLine() {
+      throw new Error("blocked");
+    },
+  });
+  const balancer = pickFirstBalancer();
+  const [, selected] = pickEndpoint(balancer, { endpoints });
+  selected?.done({ attempted: true, code: "NET_UNREACHABLE" });
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
+});
+
+test("a narrowed retry pick keeps the sticky endpoint and leaves failback armed", () => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(0);
+  const members = ["https://a.test", "https://b.test", "https://c.test"];
+  const balancer = pickFirstBalancer({ failbackMs: 100 });
+  const first = balancer.pick({ endpoints: members })[1];
+  expect(first?.endpoint).toBe("https://a.test");
+  first?.done?.({ attempted: true, code: "NET_TIMEOUT" });
+  const retry = balancer.pick({ endpoints: members.slice(1), members })[1];
+  expect(retry?.endpoint).toBe("https://b.test");
+  retry?.done?.({ attempted: true, status: 200 });
+  expect(balancer.pick({ endpoints: members })[1]?.endpoint).toBe(
+    "https://a.test",
+  );
+
+  balancer
+    .pick({ endpoints: members })[1]
+    ?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  const away = balancer.pick({ endpoints: ["https://c.test"], members })[1];
+  expect(away?.endpoint).toBe("https://c.test");
+  away?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  expect(balancer.pick({ endpoints: members })[1]?.endpoint).toBe(
+    "https://b.test",
+  );
+  vi.advanceTimersByTime(100);
+  expect(balancer.pick({ endpoints: members })[1]?.endpoint).toBe(
+    "https://a.test",
+  );
+});
+
+test("a sticky endpoint outside the pick wraps through member order", () => {
+  const members = ["https://a.test", "https://b.test", "https://c.test"];
+  const balancer = pickFirstBalancer();
+  balancer
+    .pick({ endpoints: members })[1]
+    ?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  balancer
+    .pick({ endpoints: members })[1]
+    ?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  expect(
+    balancer.pick({
+      endpoints: ["https://a.test", "https://b.test"],
+      members,
+    })[1]?.endpoint,
+  ).toBe("https://a.test");
+  expect(balancer.pick({ endpoints: members })[1]?.endpoint).toBe(
+    "https://c.test",
+  );
+  expect(
+    balancer.pick({ endpoints: ["https://z.test"], members })[1]?.endpoint,
+  ).toBe("https://z.test");
+});
+
+test("a failback probe is decided when the response begins, before a long-lived done", () => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(0);
+  const balancer = pickFirstBalancer({ failbackMs: 100 });
+  pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  pick(balancer).done?.({ attempted: true, status: 200 });
+  vi.advanceTimersByTime(100);
+  const stream = pick(balancer);
+  expect(stream?.endpoint).toBe(endpoints[0]);
+  stream?.end?.({ attempted: true, status: 200 });
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+  stream?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
+});
+
+test("a failback probe that fails at end restarts the interval without a second advance at done", () => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(0);
+  const balancer = pickFirstBalancer({ failbackMs: 100 });
+  pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  pick(balancer).done?.({ attempted: true, status: 200 });
+  vi.advanceTimersByTime(100);
+  const probe = pick(balancer);
+  expect(probe?.endpoint).toBe(endpoints[0]);
+  probe?.end?.({ attempted: true, code: "NET_UNREACHABLE" });
+  probe?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
+  vi.advanceTimersByTime(100);
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+});
+
+test("sparse runtime member and candidate arrays cannot produce an undefined endpoint", () => {
+  const members = new Array<string>(2);
+  members[0] = "https://member.test";
+  expect(
+    pickFirstBalancer().pick({ endpoints: new Array<string>(1), members })[0],
+  ).toBe(ERR_NO_CANDIDATE);
+});

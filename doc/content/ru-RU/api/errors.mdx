@@ -1,11 +1,11 @@
 ---
 title: Ошибки
-description: Варианты fault и фабричные helper’ы.
+description: Варианты `Fault` и фабричные хелперы.
 ---
 
 # Ошибки
 
-Execute возвращает размеченный `Fault` в первом слоте кортежа — а не выброшенное исключение для объявленных провалов.
+Операция возвращает размеченный `Fault` в первом слоте кортежа, а не выбрасывает исключение для объявленных сбоев.
 
 ## FaultCode
 
@@ -23,45 +23,47 @@ Execute возвращает размеченный `Fault` в первом сл
 
 <ApiSignature name="Fault" />
 
-Делай switch по `fault.code`.
+Используйте `switch` по `fault.code`.
 
 ### FaultOf
 
 <ApiSignature name="FaultOf, Fault" />
 
-`FaultOf` — это `Fault`, выраженный через тип декодированного тела ошибки, а не через struct, который его создал. `HttpAwaitResult` и фабрики fault’ов работают с декодированными значениями, поэтому используют эту форму.
+`FaultOf` — это `Fault`, выраженный через тип декодированного тела ошибки, а не через struct, который его создал. `HttpAwaitResult` и фабрики `Fault` работают с декодированными значениями, поэтому используют эту форму.
 
 Каждый вариант — нативный `Error` с именем `DefjsFault`, так что `String(fault)` даёт `DefjsFault: <message>`. `code` и метаданные варианта — `status`, `response`, `data` — это перечислимые собственные свойства. Нативная цепочка `cause` не перечислима.
 
-Сообщения Struct по умолчанию содержат `received <kind>`, но никогда не само полученное значение, например `Expected number at email, received string`. Ошибка JSON `SyntaxError`, лежащая в основе `RES_DECODE_FAILED`, даёт сообщение `Response body could not be decoded`. Пути issue структурные и сохраняют ключи record: `struct.record(...)` может дать `Expected number at alice@example.com, received string`, поэтому ключи могут оставаться чувствительными в сообщениях по умолчанию, `prettify()` и `String(fault)`. Исходные `StructIssue.received` и причины ошибок парсера остаются чувствительными данными; сообщения пользовательского `errorMap` и расширений используются дословно и требуют проверки перед записью в лог.
+Сообщения Struct по умолчанию содержат `received <kind>`, но никогда не само полученное значение, например `Expected number at email, received string`. Ошибка JSON `SyntaxError`, лежащая в основе `RES_DECODE_FAILED`, даёт сообщение `Response body could not be decoded`. Пути в issue структурные и сохраняют ключи record: `struct.record(...)` может дать `Expected number at alice@example.com, received string`, поэтому ключи могут оставаться чувствительными в сообщениях по умолчанию, `prettify()` и `String(fault)`. Исходные `StructIssue.received` и причины ошибок парсера остаются чувствительными данными; сообщения пользовательского `errorMap` и расширений используются дословно и требуют проверки перед записью в лог.
 
 <include cwd>examples/api/fault.ts#example</include>
 
-Вызывай `format()`, `flatten()` или `prettify()` только после сужения `fault.cause` до `StructError`; эти helper’ы не копируются на fault.
+Вызывайте `format()`, `flatten()` или `prettify()` только после сужения `fault.cause` до `StructError`; эти хелперы не копируются на объект `Fault`.
 
 ### HttpStatusFault
 
 <ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
 
-Любой non-2xx статус. Если endpoint объявил `error` и тело декодировалось, `data` — это то тело, и `response` его несёт. Если `error` был пропущен, тело не читают, поэтому `data` остаётся `undefined`, а `response` — это одни метаданные.
+Любой статус вне `2xx`. Если определение объявило `error` и тело декодировалось, `data` — это то тело, и `response` его несёт. Если `error` был пропущен, тело не читают, поэтому `data` остаётся `undefined`, а `response` — это одни метаданные.
 
 ### DecodeFault
 
 <ApiSignature name="DecodeFaultCode, DecodeFault" />
 
-Response пришёл, но прочитать его как объявлено не удалось. `response` — только метаданные: тело **и есть** декодированное значение, а провалилось именно декодирование, так что поля `body`, к которому можно было бы обратиться, нет. Виновная деталь лежит на `cause` — `StructError` при расхождении struct, провал парсера при нечитаемой representation.
+Ответ пришёл, но прочитать его в объявленном виде не удалось. `response` — только метаданные: тело **и есть** декодированное значение, а сбой произошёл именно при декодировании, так что поля `body`, к которому можно было бы обратиться, нет. Причина лежит на `cause` — `StructError` при расхождении struct, сбой парсера при нечитаемом представлении.
 
 ### PreflightFault
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-Всё, что могло провалиться до того, как response вообще появился: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` присутствует только там, где у транспорта уже были метаданные для сообщения — например, тело, обрезанное посреди загрузки.
+Всё, что могло провалиться до того, как появился ответ: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` равен `undefined`, пока у транспорта нет метаданных для сообщения — например, тела, обрезанного посреди загрузки.
+
+Недопустимые опции `withRetry` возвращают `REQ_OPTIONS_INVALID` до запуска HTTP-транспорта, с сообщением `Invalid retry options`. Сюда входят политика, которая не является объектом, значение `maxAttempts`, которое не является безопасным целым числом не меньше 1, а также недопустимые условия, методы, таймауты, backoff или настройки бюджета. Если опустить `withRetry`, повторы выключены. `withRetry()` и `withRetry(undefined)` ведут себя как `withRetry({})`. `withRetry({ maxAttempts: 1 })` выключает повторы после того, как они были включены.
 
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
 
-Любой fault, независимо от типа его декодированного тела ошибки. Используй его для handler’ов, которые классифицируют fault’ы, не интересуясь, какой endpoint их выдал; там, где важен тип тела, предпочитай `Fault<typeof yourErrorStruct>`.
+Любой `Fault`, независимо от типа его декодированного тела ошибки. Используйте его для обработчиков, которые классифицируют сбои, не интересуясь, какая операция их вернула; там, где важен тип тела, предпочитайте `Fault<typeof yourErrorStruct>`.
 
 ## Фабрики
 
@@ -77,13 +79,13 @@ Response пришёл, но прочитать его как объявлено 
 
 <ApiSignature name="createHttpStatusFault, createUndecodedHttpStatusFault, createDecodeFault, createNetworkFault, createPreflightFault" />
 
-`createHttpStatusFault` берёт response, который уже несёт декодированное тело; `createUndecodedHttpStatusFault` берёт одни метаданные — для endpoint’а, не объявившего `error`.
+`createHttpStatusFault` берёт response, который уже несёт декодированное тело; `createUndecodedHttpStatusFault` берёт одни метаданные — для определения, не объявившего `error`.
 
 `createNetworkFault` использует [`isAbortCause`](/ru-RU/api/core/isabortcause) для `NET_ABORTED` и [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) для `NET_TIMEOUT`: они распознают помеченные сигнальные ошибки из любой копии Core, а также соответственно `DOMException` с именем `AbortError` и `DOMException` или `Error` с именем `TimeoutError`. Всё остальное отображается на `NET_UNREACHABLE`. `createPreflightFault` берёт код напрямую; без `cause` код становится сообщением.
 
-Все фабрики возвращают экземпляры нативного `Error` с перечисленными выше структурированными полями; они не создают ошибок-простых-объектов и не нуждаются в адаптере для `String(fault)`.
+Все фабрики возвращают экземпляры нативного `Error` с перечисленными выше структурированными полями; они не создают ошибки в виде простых объектов и не нуждаются в адаптере для `String(fault)`.
 
-## Сигнальные ошибки
+## Сентинелы
 
 ## ERR_ABORTED
 
@@ -91,14 +93,22 @@ Response пришёл, но прочитать его как объявлено 
 
 <ApiSignature name="ERR_ABORTED, ERR_TIMEOUT" />
 
-Общие объекты-сигналы `Error`, используемые как `cause` для abort и timeout. Если бросить одно из них из HTTP-interceptor’а, вызов завершится с `NET_ABORTED` или `NET_TIMEOUT`. Interceptor’ы SSE и WebSocket сообщают о любом брошенном значении, включая эти, как `EXT_INTERCEPTOR_FAILED`.
+Общие сентинел-объекты `Error`, используемые как `cause` для отмены и таймаута. Если бросить один из них из HTTP-перехватчика, вызов завершится с `NET_ABORTED` или `NET_TIMEOUT`. Перехватчики SSE и WebSocket сообщают о любом брошенном значении, включая эти, как `EXT_INTERCEPTOR_FAILED`.
 
-Сигнальные ошибки имеют неперечислимые метки `Symbol.for('defjs.cause.aborted')` и `Symbol.for('defjs.cause.timeout')`. Классификация не зависит от идентичности объекта сигнальной ошибки или от предыдущих несвязанных вызовов.
+Сигнальные ошибки имеют неперечислимые метки `Symbol.for('defjs.cause.aborted')` и `Symbol.for('defjs.cause.timeout')`. Классификация не зависит от идентичности сентинела или от предыдущих несвязанных вызовов.
 
 ## Проверка причин
 
 <ApiSignature name="isAbortCause, isTimeoutCause" />
 
-[`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт `Error` с меткой отмены или `DOMException` с именем `AbortError`. [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) распознаёт `Error` с меткой таймаута или `DOMException` / `Error` с именем `TimeoutError`. Передавай `fault.cause`, чтобы классифицировать исходное значение; эти функции не извлекают причину из fault. Они работают и с сигнальными ошибками из другой копии Core.
+[`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт `Error` с меткой отмены или `DOMException` с именем `AbortError`. [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) распознаёт `Error` с меткой таймаута или `DOMException` / `Error` с именем `TimeoutError`. Передавайте `fault.cause`, чтобы классифицировать исходное значение; эти функции не извлекают причину из fault. Они работают и с сентинелами из другой копии Core.
 
-См. [гайд Errors](/ru-RU/docs/errors).
+## ERR_NO_CANDIDATE
+
+## isNoCandidateCause
+
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`ERR_NO_CANDIDATE` появляется только как `cause` у `REQ_BUILD_FAILED`, когда нельзя выбрать ни одного эндпоинта-кандидата. Он не добавляет `FaultCode`. Сентинел несёт неперечислимую метку `Symbol.for('defjs.cause.no-endpoint')`. [`isNoCandidateCause`](/ru-RU/api/core/isnocandidatecause) распознаёт эту метку из другой копии Core, так же как [`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт отмену. Передавайте `fault.cause`. Функция не извлекает причину из fault.
+
+См. [руководство по обработке ошибок](/ru-RU/docs/errors).

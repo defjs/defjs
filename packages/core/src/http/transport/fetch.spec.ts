@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { isReadableStreamBody } from "./fetch_init";
 import type { HttpRequest } from "../../http";
 import {
   __resetStreamingRequestBodySupportForTests,
@@ -9,6 +10,16 @@ import {
   supportsStreamingRequestBody,
 } from "./fetch";
 
+function headersOf(init: RequestInit): Headers {
+  if (init.headers instanceof Headers) return init.headers;
+  throw new Error("expected Headers");
+}
+
+function streamBody(body: unknown): ReadableStream<Uint8Array> {
+  if (isReadableStreamBody(body)) return body;
+  throw new Error("expected stream");
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   __resetStreamingRequestBodySupportForTests();
@@ -16,7 +27,7 @@ afterEach(() => {
 
 function stubXsrfBrowserEnvironment(origin: string, cookieValue: string) {
   const cookieGetter = vi.fn(() => cookieValue);
-  const documentStub = {} as { [key: string]: unknown };
+  const documentStub: { [key: string]: unknown } = {};
 
   vi.stubGlobal("location", { origin });
   vi.stubGlobal("document", documentStub);
@@ -62,7 +73,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe("cookie-token");
+    expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("cookie-token");
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
 
@@ -82,7 +93,7 @@ describe("Fetch handler XSRF injection", () => {
     const init = createFetchRequestInit(requestConfig);
 
     expect(init.credentials).toBe("include");
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe("cookie-token");
+    expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("cookie-token");
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
 
@@ -102,7 +113,7 @@ describe("Fetch handler XSRF injection", () => {
 
       const init = createFetchRequestInit(requestConfig);
 
-      expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+      expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
       expect(cookieGetter).not.toHaveBeenCalled();
     },
   );
@@ -121,7 +132,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe("cookie-token");
+    expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("cookie-token");
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
 
@@ -140,7 +151,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).not.toHaveBeenCalled();
   });
 
@@ -158,7 +169,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
 
@@ -176,7 +187,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
 
@@ -193,7 +204,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).not.toHaveBeenCalled();
   });
 
@@ -212,7 +223,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
     expect(cookieGetter).not.toHaveBeenCalled();
   });
@@ -232,7 +243,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
     expect(cookieGetter).not.toHaveBeenCalled();
   });
@@ -251,7 +262,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
 
@@ -259,7 +270,7 @@ describe("Fetch handler XSRF injection", () => {
     const cookieGetter = vi.fn(() => {
       throw new Error("cookie unavailable");
     });
-    const documentStub = {} as { [key: string]: unknown };
+    const documentStub: { [key: string]: unknown } = {};
 
     vi.stubGlobal("location", { origin: "https://example.com" });
     vi.stubGlobal("document", documentStub);
@@ -278,7 +289,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
 
@@ -297,9 +308,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe(
-      "provider-token",
-    );
+    expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("provider-token");
     expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
     expect(cookieGetter).not.toHaveBeenCalled();
   });
@@ -320,9 +329,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe(
-      "existing-token",
-    );
+    expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("existing-token");
     expect(tokenProvider).not.toHaveBeenCalled();
     expect(cookieGetter).not.toHaveBeenCalled();
   });
@@ -340,7 +347,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
+    expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
   });
 
   test("should inject xsrf header in non-browser runtime with provider", () => {
@@ -357,9 +364,7 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe(
-      "provider-token",
-    );
+    expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("provider-token");
     expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
   });
 });
@@ -449,19 +454,13 @@ describe("Fetch handler request creation", () => {
     };
 
     expect(
-      (createFetchRequestInit(jsonRequest).headers as Headers).get(
-        "content-type",
-      ),
+      headersOf(createFetchRequestInit(jsonRequest)).get("content-type"),
     ).toBe("text/plain");
     expect(
-      (createFetchRequestInit(builderRequest).headers as Headers).get(
-        "content-type",
-      ),
+      headersOf(createFetchRequestInit(builderRequest)).get("content-type"),
     ).toBe("text/plain");
     expect(
-      (createFetchRequestInit(binaryRequest).headers as Headers).get(
-        "content-type",
-      ),
+      headersOf(createFetchRequestInit(binaryRequest)).get("content-type"),
     ).toBe("text/plain");
   });
 
@@ -485,14 +484,10 @@ describe("Fetch handler request creation", () => {
     };
 
     expect(
-      (createFetchRequestInit(formDataRequest).headers as Headers).has(
-        "content-type",
-      ),
+      headersOf(createFetchRequestInit(formDataRequest)).has("content-type"),
     ).toBe(false);
     expect(
-      (createFetchRequestInit(suppressedRequest).headers as Headers).has(
-        "content-type",
-      ),
+      headersOf(createFetchRequestInit(suppressedRequest)).has("content-type"),
     ).toBe(false);
   });
 
@@ -596,9 +591,7 @@ describe("Fetch handler request creation", () => {
   test("should handle fetch network error", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
-        throw new TypeError("Network request failed");
-      }),
+      vi.fn(() => Promise.reject(new TypeError("Network request failed"))),
     );
 
     const requestConfig: HttpRequest = {
@@ -631,7 +624,7 @@ describe("Fetch handler request creation", () => {
     };
 
     const init = createFetchRequestInit(requestConfig);
-    const wrappedStream = init.body as ReadableStream<Uint8Array>;
+    const wrappedStream = streamBody(init.body);
     const reader = wrappedStream.getReader();
 
     // Read one chunk
@@ -663,9 +656,49 @@ describe("Fetch handler request creation", () => {
     };
 
     const init = createFetchRequestInit(requestConfig);
-    const wrappedStream = init.body as ReadableStream<Uint8Array>;
+    const wrappedStream = streamBody(init.body);
     const reader = wrappedStream.getReader();
 
     await expect(reader.read()).rejects.toThrow("source failed");
+  });
+});
+
+describe("upload progress without a serialized FormData stream", () => {
+  test("sends the FormData unchanged and reports no upload progress", async () => {
+    const PlatformResponse = Response;
+    class StreamlessResponse extends PlatformResponse {
+      constructor(body?: BodyInit | null, init?: ResponseInit) {
+        super(body instanceof FormData ? null : body, init);
+      }
+    }
+    const form = new FormData();
+    form.append("name", "miao");
+    const sent: (string | null)[] = [];
+    const handle = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const request = new Request(input, init);
+      sent.push(request.headers.get("content-type"));
+      await request.arrayBuffer();
+      return new PlatformResponse(null, { status: 204 });
+    };
+    const uploadProgress = vi.fn();
+    vi.stubGlobal("Response", StreamlessResponse);
+
+    const response = await fetchHandler(
+      {
+        baseEndpoint: "https://example.com",
+        body: form,
+        endpoint: "/v1/upload",
+        method: "POST",
+        uploadProgress,
+      },
+      handle,
+    );
+
+    expect(response.status).toBe(204);
+    expect(uploadProgress).not.toHaveBeenCalled();
+    expect(sent).toEqual([expect.stringContaining("multipart/form-data")]);
   });
 });

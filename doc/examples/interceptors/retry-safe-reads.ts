@@ -29,22 +29,17 @@ function retryAfterMs(response: HttpResponse<unknown>): number {
     : Math.min(Math.max(0, date - Date.now()), 30_000);
 }
 
-function waitForRetryAfter(
+async function waitForRetryAfter(
   response: HttpResponse<unknown>,
   signal?: AbortSignal,
 ): Promise<void> {
   const delay = retryAfterMs(response);
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason);
-      return;
-    }
-
+  signal?.throwIfAborted();
+  await new Promise<void>((resolve) => {
     const timer = setTimeout(done, delay);
     const onAbort = () => {
       clearTimeout(timer);
-      signal?.removeEventListener("abort", onAbort);
-      reject(signal?.reason);
+      done();
     };
 
     function done() {
@@ -53,8 +48,9 @@ function waitForRetryAfter(
     }
 
     signal?.addEventListener("abort", onAbort, { once: true });
-    if (signal?.aborted) onAbort();
   });
+  // An abort during the wait ends it early and rejects with the signal's reason.
+  signal?.throwIfAborted();
 }
 
 const retrySafeReads = createHttpInterceptor(async (request, next) => {

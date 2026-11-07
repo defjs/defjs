@@ -34,8 +34,6 @@ function executeInput(
     return defineEventStream({
       ...definition,
       events: { message: struct.unknown() },
-      maxBufferSize: 1024,
-      maxQueueSize: 1,
     })(client(options), input);
   }
   return defineWebSocket({
@@ -50,9 +48,14 @@ function transportHarness(transport: Transport, pending = false) {
     if (pending) {
       return new Promise<Response>((_resolve, reject) => {
         const signal = new Request(_input, init).signal;
-        signal.addEventListener("abort", () => reject(signal.reason), {
-          once: true,
-        });
+        signal.addEventListener(
+          "abort",
+          () => {
+            const reason: unknown = signal.reason;
+            reject(reason);
+          },
+          { once: true },
+        );
       });
     }
     return transport === "SSE"

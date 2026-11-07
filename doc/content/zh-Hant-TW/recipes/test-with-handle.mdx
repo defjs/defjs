@@ -1,20 +1,39 @@
 ---
 title: "本機 HTTP 測試"
-description: 用 withHTTPHandle 替換單一 client 的 Fetch，操作維持不變。
+description: 用 withHTTPHandle 為單一 client 換掉 Fetch，操作定義完全不動。
 ---
 
-# 用本機 Fetch handle 測試
+# 使用本機 Fetch handle 進行測試
 
-`withHTTPHandle(...)` 只替換該 client 的 Fetch。你仍會拿到 URL 建立、interceptors、狀態碼分派與 Struct 解碼 — 不需要 DNS、TLS 或真實伺服器。
+`withHTTPHandle(...)` 會為單一 client 替換底層的 `fetch`，同時跑完 Defjs 的整條管線——輸入驗證、`builder` 對應、URL 解析、攔截器、狀態分類與 struct 解碼——完全不開網路 socket：
 
-細節見 [Client](/zh-Hant-TW/docs/client)。
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
 
-<include cwd meta="get-user.test.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+這是一份獨立的單檔示範，不是測試執行器的 spec。若要對共用的 SDK 定義做斷言，請用前面的測試分頁。
+
+<include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
+  </Tab>
+</Tabs>
+
+單檔示範會輸出：
+
 ```txt
-Ada 200
+paid 200
 ```
 
-正式環境用真實的 `withEndpoint(...)` client 跑同一個 `getUser` 操作 — 變的只有 handle。
+在正式環境中，請用設定了 `withEndpoint(...)` 的 client 呼叫完全相同的 `getOrder` 操作。請參閱[測試](/zh-Hant-TW/docs/testing)與 [Client](/zh-Hant-TW/docs/client)。

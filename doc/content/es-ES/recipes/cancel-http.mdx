@@ -5,16 +5,31 @@ description: Aborta o aplica un plazo a una llamada y lee NET_ABORTED / NET_TIME
 
 # Cancelar una llamada HTTP
 
-Combina el signal de quien llama con un plazo en `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` es un solo signal. Un abort manual se clasifica como `NET_ABORTED`. Un plazo se clasifica como `NET_TIMEOUT`.
+Combina un `AbortController` de quien llama con un plazo límite mediante `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` y pasa la señal combinada con `client({ signal })`. Defjs clasifica una cancelación manual de quien llama como `NET_ABORTED` y el vencimiento de un plazo como `NET_TIMEOUT`.
 
-Ver detalles en [HTTP](/es-ES/docs/http#cancel-the-work).
+<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
 ```
 
-La cancelación te dice lo que observó quien llama. No demuestra que una escritura en el servidor se revirtiera — mantén los reintentos de mutación detrás de un contrato de idempotencia.
+La cancelación informa de lo que observó el cliente; no garantiza que una mutación de escritura en el servidor haya sido revertida. Condiciona los reintentos de mutación a una clave de idempotencia. Consulta [Cancelación y límites de tiempo en HTTP](/es-ES/docs/http#cancel-the-work).

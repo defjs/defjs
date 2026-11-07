@@ -1,6 +1,6 @@
-import { resolveObjectShape } from "./shape";
+import { resolveObjectShapeEntries } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { RuntimeStruct, StructDefinition, StructLike } from "./types";
+import type { RuntimeStruct, StructDefinition } from "./types";
 import { hasOwnKey, isPlainObject, matchesEnum, MAX_DEPTH } from "./utils";
 
 export function matchesRuntimeValue(
@@ -12,15 +12,14 @@ export function matchesRuntimeValue(
 }
 
 export function selectUnionOptions(
-  options: readonly StructLike<unknown, unknown, boolean>[],
+  options: readonly RuntimeStruct[],
   value: unknown,
   depth = 0,
 ): RuntimeStruct[] {
   const matches: RuntimeStruct[] = [];
   for (const option of options) {
-    const runtime = option as unknown as RuntimeStruct;
-    if (matchesRuntimeValue(runtime, value, depth)) {
-      matches.push(runtime);
+    if (matchesRuntimeValue(option, value, depth)) {
+      matches.push(option);
     }
   }
   return matches;
@@ -71,11 +70,7 @@ export function matchesDefinition(
         depth < MAX_DEPTH &&
         Array.isArray(value) &&
         value.every((item) =>
-          matchesRuntimeValue(
-            definition.item as unknown as RuntimeStruct,
-            item,
-            depth + 1,
-          ),
+          matchesRuntimeValue(definition.item, item, depth + 1),
         )
       );
     case "tuple":
@@ -84,11 +79,7 @@ export function matchesDefinition(
         Array.isArray(value) &&
         value.length === definition.items.length &&
         definition.items.every((item, index) =>
-          matchesRuntimeValue(
-            item as unknown as RuntimeStruct,
-            value[index],
-            depth + 1,
-          ),
+          matchesRuntimeValue(item, value[index], depth + 1),
         )
       );
     case "object":
@@ -102,16 +93,12 @@ export function matchesDefinition(
         depth < MAX_DEPTH &&
         isPlainObject(value) &&
         Object.keys(value).every((key) =>
-          matchesRuntimeValue(
-            definition.value as unknown as RuntimeStruct,
-            value[key],
-            depth + 1,
-          ),
+          matchesRuntimeValue(definition.value, value[key], depth + 1),
         )
       );
     case "or":
       return definition.options.some((option) =>
-        matchesRuntimeValue(option as unknown as RuntimeStruct, value, depth),
+        matchesRuntimeValue(option, value, depth),
       );
     case "discriminatedUnion": {
       if (
@@ -120,13 +107,12 @@ export function matchesDefinition(
       ) {
         return false;
       }
-      const target = definition.map.get(value[definition.discriminator]) as
-        RuntimeStruct | undefined;
+      const target = definition.map.get(value[definition.discriminator]);
       return target ? matchesRuntimeValue(target, value, depth) : false;
     }
     case "intersection":
       return definition.options.every((option) =>
-        matchesRuntimeValue(option as unknown as RuntimeStruct, value, depth),
+        matchesRuntimeValue(option, value, depth),
       );
   }
 }
@@ -141,10 +127,7 @@ function matchesObjectValue(
     return true;
   }
 
-  const shape = resolveObjectShape(struct, definition);
-  for (const key in shape) {
-    const fieldStruct = shape[key];
-    const field = fieldStruct as unknown as RuntimeStruct;
+  for (const [key, field] of resolveObjectShapeEntries(struct, definition)) {
     const fieldDefinition = field[DEFINITION];
     if (!hasOwnKey(value, key)) {
       if (isRequiredField(fieldDefinition)) {

@@ -1,22 +1,36 @@
 ---
 title: "GraphQL リクエスト"
-description: GraphQL は HTTP 200 とアプリケーション側の unwrap のままにします。Core は GraphQL プロトコルを出しません。
+description: GraphQL を HTTP 200 の送受信とアプリケーション側のアンラップとして扱います。Core は GraphQL プロトコルを提供しません。
 ---
 
-# GraphQL の HTTP エンベロープを開く
+# GraphQL HTTP エンベロープのアンラップ
 
-Defjs は GraphQL の `errorPolicy` を実装しません。ワイヤは、ビルダーがクエリ文書と変数を配置する HTTP POST としてモデル化します。エンベロープの `data` を `.nullish()` と宣言し、`data` の欠落と `data: null` の両方をヘルパーで扱えるようにしてください。そのうえで、`data` を確認する前に `errors[]` を取り出して処理します。
+Defjs は、GraphQL クライアントや独自の `errorPolicy` をコアに内蔵していません。HTTP 経由の GraphQL は、`builder` が `{ query, operationName, variables }` を送信する標準的な `POST` 操作としてモデル化します。エンベロープ Struct 上で `data` を `.nullish()` としてマークすることで、`data` の欠落と `data: null` の両方を構造バリデーションで受け入れられるようにし、アプリケーションのヘルパー関数内で `errors[]` をアンラップします。
 
-詳細は [設計上の判断](/ja-JP/docs/design-decisions) を見てください。
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
+</include>
 
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
+</include>
+
+  </Tab>
+  <Tab>
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 ada viewer unavailable viewer unavailable
 ```
 
-HTTP の成功は、エンベロープが届いたことだけを意味します。`data: null` のレスポンスも含め、アプリケーションのエラーは、unwrap が throw するか返すまで `errors[]` に残ります。この例では、`errors[]` があれば、`data` が欠落している場合も `data: null` の場合も、Struct の不一致ではなくアプリケーションのエラーとして扱います。
-
-`if (error) throw error` は Defjs の fault をこのヘルパーの例外に合わせます。HTTP 200 の GraphQL 失敗は `errors[]` のアプリケーションエラーのままで、別に throw します。
+- HTTP の `200` は、GraphQL エンベロープが正常に届いたことのみを意味します。`errors[]` に含まれるドメインエラー（`data: null` を伴う場合を含む）は、`RES_STRUCT_MISMATCH` Fault ではなくアプリケーションレベルの実行結果として処理します。
+- プロトコル固有のエンベロープ処理をアプリケーションのヘルパー関数に残す理由については、[コアアーキテクチャ](/ja-JP/docs/design-decisions) を参照してください。

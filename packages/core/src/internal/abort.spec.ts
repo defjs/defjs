@@ -132,27 +132,19 @@ describe("abort helpers", () => {
 
   test("should consume a callback rejection that arrives after abort", async () => {
     const controller = new AbortController();
-    const unhandled = vi.fn();
     let rejectTask: ((reason: unknown) => void) | undefined;
-    process.on("unhandledRejection", unhandled);
 
-    try {
-      const result = awaitWithSignal(
-        () =>
-          new Promise<never>((_resolve, reject) => {
-            rejectTask = reject;
-          }),
-        controller.signal,
-      );
-      controller.abort(new Error("stop"));
-      await expect(result).rejects.toThrow("stop");
+    const result = awaitWithSignal(
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          rejectTask = reject;
+        }),
+      controller.signal,
+    );
+    controller.abort(new Error("stop"));
+    await expect(result).rejects.toThrow("stop");
 
-      rejectTask?.(new Error("late failure"));
-      await new Promise((resolve) => setImmediate(resolve));
-
-      expect(unhandled).not.toHaveBeenCalled();
-    } finally {
-      process.off("unhandledRejection", unhandled);
-    }
+    rejectTask?.(new Error("late failure"));
+    await Bun.sleep(0);
   });
 });

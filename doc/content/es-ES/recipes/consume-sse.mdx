@@ -1,22 +1,38 @@
 ---
 title: "Consumir eventos SSE"
-description: Abre un stream de eventos tipado, itera una vez, luego cierra y await closed.
+description: Abre un flujo de eventos tipado, itera una vez y luego cierra y espera a closed.
 ---
 
-# Consumir un stream SSE
+# Consumir un flujo SSE
 
-Un iterador async por stream. Pon `close` + `await stream.closed` en `finally` para que las salidas tempranas no filtren el intento Fetch.
+Cada `EventStreamHandle` expone un único iterador asíncrono. Coloca siempre `stream.close(...)` y `await stream.closed` dentro de un bloque `finally` para que una salida temprana con `break` o `return` nunca deje escapar el flujo Fetch subyacente:
 
-Ver detalles en [SSE](/es-ES/docs/sse).
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-<include cwd meta="notifications.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
 
-`api.example.com` es un placeholder. Con un servidor cuyo primer evento es `message` con los datos `{ "text": "hello from the server" }`, el snippet imprime:
+  </Tab>
+</Tabs>
+
+Con un servidor cuyo primer evento sea `line` con datos `{ "text": "build started" }`, el script imprime:
 
 ```txt
-hello from the server
+build started
 ```
 
-SSE no reintenta fallos de red/lectura salvo que actives `withSSEReconnect(...)`. Cuando se configura la reconexión, `attempts` vale por defecto `3` por interrupción; un handshake correcto reinicia el presupuesto y el exponente de backoff. `attempts: 0` desactiva el reintento. Las opciones numéricas de reconexión no válidas fallan antes de cualquier solicitud con `REQ_OPTIONS_INVALID`; consulta las [reglas de validación](/es-ES/api/core/withssereconnect). Sin `shouldReconnect`, solo se reconectan las solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`; las solicitudes con un cuerpo `ReadableStream` nunca se reconectan.
+- SSE no se reconecta automáticamente ante fallos de red o de lectura a menos que configures [`withSSEReconnect(...)`](/es-ES/api/core/withssereconnect) en el cliente.
+- Cuando se configura `withSSEReconnect(...)`, `attempts` vale `3` por interrupción de forma predeterminada y se reinicia tras un handshake correcto (`attempts: 0` desactiva la reconexión). Sin un callback `shouldReconnect` personalizado, solo se reconectan las peticiones `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`. Una petición con cuerpo `ReadableStream` nunca se reconecta. Consulta [Flujos de eventos SSE](/es-ES/docs/sse).

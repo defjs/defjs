@@ -9,6 +9,7 @@ import { DEFINITION } from "./symbols";
 import type {
   ObjectStruct,
   ObjectShape,
+  ParsedStructOutput,
   ParseResult,
   RuntimeStruct,
   StructLike,
@@ -22,32 +23,25 @@ export interface StructField {
 
 export function isObjectStruct(
   value: unknown,
-): value is ObjectStruct<ObjectShape> {
-  return (
-    isStruct(value) && (value as RuntimeStruct)[DEFINITION].kind === "object"
-  );
+): value is ObjectStruct<ObjectShape> & RuntimeStruct {
+  return isStruct(value) && value[DEFINITION].kind === "object";
 }
 
 export function getStructFields(
   struct: StructLike<unknown, unknown, boolean>,
 ): readonly StructField[] {
   assertStruct(struct, "struct");
-  const runtime = struct as unknown as RuntimeStruct;
-  const definition = runtime[DEFINITION];
+  const definition = struct[DEFINITION];
   if (definition.kind !== "object") {
     throw new TypeError("object struct is required");
   }
 
   return Object.freeze(
-    resolveStructFields(runtime, definition).map((field) =>
+    resolveStructFields(struct, definition).map((field) =>
       Object.freeze({
         alias: field.alias,
         key: field.key,
-        struct: field.struct as unknown as StructLike<
-          unknown,
-          unknown,
-          boolean
-        >,
+        struct: field.struct,
       }),
     ),
   );
@@ -58,7 +52,7 @@ export function encodeStructValue(
   value: unknown,
 ): unknown {
   assertStruct(struct, "struct");
-  return encodeValue(struct as unknown as RuntimeStruct, value);
+  return encodeValue(struct, value);
 }
 
 /**
@@ -68,7 +62,7 @@ export function encodeStructValue(
  *
  * - **value** is the unknown input.
  *
- * - **options.aliases** defaults to `false`: object keys are read by their **logical** names (`displayName`). With `true` they are read by their wire names (`display_name`), the way HTTP/JSON codecs read them. The output always uses logical names.
+ * - **options.aliases** defaults to `false`: object keys are read by their **logical** names (`customerName`). With `true` they are read by their wire names (`customer_name`), the way HTTP/JSON codecs read them. The output always uses logical names.
  *
  * - **options.errorMap** is an {@link ErrorMap} that rewrites issue messages for this call only, including bigint/date conversion failures from a struct created by another Core copy. Any string, including `''`, replaces the message; only `undefined` keeps the default. Custom text is used verbatim.
  *
@@ -79,18 +73,18 @@ export function encodeStructValue(
  * ```ts
  * import { struct } from "@defjs/core";
  *
- * const User = struct.object({ id: struct.number(), displayName: struct.string() });
+ * const Order = struct.object({ id: struct.number(), customerName: struct.string() });
  *
- * function readUser() {
- *   const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+ * function readOrder() {
+ *   const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
  *   if (error) {
  *     console.error(error.prettify());
  *     return;
  *   }
- *   console.log(user.displayName);
+ *   console.log(order.customerName);
  * }
  *
- * readUser();
+ * readOrder();
  * ```
  *
  * `any` and `unknown` do not traverse their values, but an intersection may recursively merge two distinct object or array values returned by those leaves. This merge shares the same 256-container budget with its enclosing logical path. Exceeding it produces `invalid_intersection` at the rejected container's logical path. Identical references are retained without traversal, including a shared cyclic value.
@@ -108,23 +102,41 @@ export function parseStructTuple<
   options?: { aliases?: boolean; errorMap?: ErrorMap },
 ): ParseResult<S["_struct"]["output"]> {
   assertStruct(struct, "struct");
-  const runtime = struct as unknown as RuntimeStruct;
   return runWithErrorMap(options?.errorMap, () => {
     const result = parseRootValue(
-      runtime,
+      struct,
       value,
       "value",
       options?.aliases === true,
     );
     if (result.ok) {
-      return [null, result.value as unknown as S["_struct"]["output"]];
+      return [null, result.value];
     }
     return [new StructError([result.issue]), undefined];
   });
 }
 
-export function parseStructValue(
-  struct: StructLike<unknown, unknown, boolean>,
+export function parseStructValue<
+  S extends StructLike<unknown, unknown, boolean>,
+  Tagged extends boolean = false,
+>(
+  struct: S,
+  value: unknown,
+  options?: {
+    tagObjects?: Tagged;
+    useAliases?: boolean;
+    guides?: WeakMap<object, Guide>;
+  },
+): ParsedStructOutput<S, Tagged> {
+  assertStruct(struct, "struct");
+  const parsed = parseRuntimeValue(struct, value, options);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the parser builds this value at run time, while its type is the struct's compile-time-only `_struct` brand (Infer<S> or TaggedStructOutput<S>); no runtime value carries that brand, so it can only be attached here, the decoders' single typed boundary (codec decode and HTTP/SSE bodies call through it). Unasserted: TS2322, `unknown` is not assignable to `ParsedStructOutput<S, Tagged>`
+  return parsed as ParsedStructOutput<S, Tagged>;
+}
+
+/** {@link parseStructValue} for a struct the caller already checked: the output is not typed from it. */
+export function parseRuntimeValue(
+  struct: RuntimeStruct,
   value: unknown,
   options?: {
     tagObjects?: boolean;
@@ -132,9 +144,8 @@ export function parseStructValue(
     guides?: WeakMap<object, Guide>;
   },
 ): unknown {
-  assertStruct(struct, "struct");
   const result = parseRootValue(
-    struct as unknown as RuntimeStruct,
+    struct,
     value,
     "value",
     options?.useAliases,

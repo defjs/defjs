@@ -270,7 +270,7 @@ async function readWholeBody(
   response: Response,
   signal: AbortSignal | undefined,
   meta: HttpMeta,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   try {
     return new Uint8Array(
       await (signal
@@ -445,12 +445,21 @@ export async function fetchHandler(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle = resolveGlobalFetch(),
 ): Promise<HttpResponse<unknown>> {
+  return fetchHandlerWithLifecycle(httpRequest, fetchImpl);
+}
+
+/** Internal raw Fetch boundary used for per-attempt timing. */
+export async function fetchHandlerWithLifecycle(
+  httpRequest: HttpRequest,
+  fetchImpl: FetchHandle,
+  lifecycle?: { start(): void; response(response: Response): void },
+): Promise<HttpResponse<unknown>> {
   if (fetchImpl === DEFAULT_FETCH) {
     fetchImpl = resolveGlobalFetch();
   }
   const uploadProgress = httpRequest.uploadProgress;
   if (!uploadProgress) {
-    return sendFetchRequest(httpRequest, fetchImpl);
+    return sendFetchRequest(httpRequest, fetchImpl, lifecycle);
   }
 
   let observerFailure: BodyFailure<"EXT_OBSERVER_FAILED"> | undefined;
@@ -472,7 +481,7 @@ export async function fetchHandler(
 
   let response: HttpResponse<unknown>;
   try {
-    response = await sendFetchRequest(observed, fetchImpl);
+    response = await sendFetchRequest(observed, fetchImpl, lifecycle);
   } catch (error) {
     // sendFetchRequest already turned cancellation into the abort cause, and cancellation outranks the observer.
     throw observerFailure !== undefined && !httpRequest.signal?.aborted
@@ -489,13 +498,14 @@ export async function fetchHandler(
 async function sendFetchRequest(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
+  lifecycle?: { start(): void; response(response: Response): void },
 ): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.signal;
   const platform = fetchImpl === PLATFORM_FETCH_HANDLE;
   let prepared = httpRequest;
   let request: Request | undefined;
   let platformBody: RequestInit["body"];
-  let fallbackUrl = "";
+  let fallbackUrl: string;
   let response: Response;
 
   try {
@@ -507,7 +517,10 @@ async function sendFetchRequest(
       platformBody = init.body;
       fallbackUrl = url.href;
       response = await fetchWithSignal(
-        () => fetchImpl(url, init),
+        () => {
+          lifecycle?.start();
+          return fetchImpl(url, init);
+        },
         abortSignal,
         cancelLateResponseBody,
       );
@@ -516,7 +529,10 @@ async function sendFetchRequest(
       request = built;
       fallbackUrl = built.url;
       response = await fetchWithSignal(
-        () => fetchImpl(built),
+        () => {
+          lifecycle?.start();
+          return fetchImpl(built);
+        },
         abortSignal,
         cancelLateResponseBody,
       );
@@ -526,6 +542,7 @@ async function sendFetchRequest(
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
   }
 
+  lifecycle?.response(response);
   try {
     return await parseFetchResponse(
       httpRequest,
@@ -548,7 +565,7 @@ function isBrowserWindowOrWorker(): boolean {
 
 /**
  * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where the runtime streams
- * request bodies over any HTTP version (Bun, Node). Browsers are excluded: Chromium rejects a streamed
+ * request bodies over any HTTP version (Bun). Browsers are excluded: Chromium rejects a streamed
  * body on HTTP/1.1 and the protocol is unknown beforehand, and Firefox cannot stream request bodies.
  * `location`, `document`, or `importScripts` mark browser windows/workers: there the body is sent unchanged
  * and `onUploadProgress` is not called. Download progress is unaffected.
@@ -634,12 +651,13 @@ function convertBodyToUploadStream(body: HttpRequest["body"]):
 
   if (typeof FormData !== "undefined" && body instanceof FormData) {
     const serialized = new Response(body);
+    // Read the header first: in Bun, touching the body first leaves this Content-Type unset.
     const contentType = serialized.headers.get("Content-Type");
-    return {
-      contentType,
-      stream: serialized.body as ReadableStream<Uint8Array>,
-      total: 0,
-    };
+    // Fetch extracts FormData into a stream. A Response implementation without one leaves the body unconverted.
+    const stream = serialized.body;
+    if (stream) {
+      return { contentType, stream, total: 0 };
+    }
   }
 
   return undefined;

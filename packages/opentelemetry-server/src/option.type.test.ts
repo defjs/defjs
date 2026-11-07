@@ -304,7 +304,7 @@ withOpenTelemetryServer({
   tracer: makeTracer(),
   http: {
     // @ts-expect-error startSpanHook must synchronously return Attributes
-    startSpanHook: async () => ({ "app.tenant": "a" }),
+    startSpanHook: () => Promise.resolve({ "app.tenant": "a" }),
   },
 });
 
@@ -329,27 +329,28 @@ withOpenTelemetryServer({
   sse: { queryPropagation: true },
 });
 
-export type Cases =
-  | OptionIsCallable
-  | FullOptionType
-  | HttpResponseArg
-  | HttpOptsAlias
-  | SSEOptsAlias
-  | SSEResponseArg
-  | WebSocketResponseArg
-  | HttpResponseRequestArg
-  | SSEResponseRequestArg
-  | WebSocketResponseRequestArg
-  | HttpStartSpanRequestArg
-  | SSEStartSpanRequestArg
-  | WebSocketStartSpanRequestArg
-  | HttpStartSpanHookResult
-  | SSEStartSpanHookResult
-  | WebSocketStartSpanHookResult
-  | HttpRequestArg
-  | HttpRequestHookResult
-  | HttpResponseHookResult
-  | SSERequestHookResult
-  | SSEResponseHookResult
-  | WebSocketRequestHookResult
-  | WebSocketResponseHookResult;
+export type Cases = [
+  OptionIsCallable,
+  FullOptionType,
+  HttpResponseArg,
+  HttpOptsAlias,
+  SSEOptsAlias,
+  SSEResponseArg,
+  WebSocketResponseArg,
+  HttpResponseRequestArg,
+  SSEResponseRequestArg,
+  WebSocketResponseRequestArg,
+  HttpStartSpanRequestArg,
+  SSEStartSpanRequestArg,
+  WebSocketStartSpanRequestArg,
+  HttpStartSpanHookResult,
+  SSEStartSpanHookResult,
+  WebSocketStartSpanHookResult,
+  HttpRequestArg,
+  HttpRequestHookResult,
+  HttpResponseHookResult,
+  SSERequestHookResult,
+  SSEResponseHookResult,
+  WebSocketRequestHookResult,
+  WebSocketResponseHookResult,
+];

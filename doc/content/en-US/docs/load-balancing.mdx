@@ -1,0 +1,136 @@
+---
+title: "Load balancing & failover"
+description: Distribute traffic across multiple endpoints, eject unhealthy replicas, and fail over safe HTTP requests within a single call.
+---
+
+# Load balancing & failover
+
+When an application configures multiple base URLs by calling `withEndpoint(...urls)`, Defjs can distribute requests across replicas, eject unhealthy hosts using passive circuit breaking or active health checks, and optionally fail over safe HTTP methods within the same call.
+
+## 1. Choose a load balancer strategy
+
+| Strategy                                                                 | Best for                                                                   | Default health filtering                   |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------- | ------------------------------------------ |
+| [`pickFirstBalancer(options?)`](/api/core/pickfirstbalancer) _(Default)_ | Browser apps with an ordered primary + backup region list                  | Off (opt-in via `outlierDetection` option) |
+| [`roundRobinBalancer(options?)`](/api/core/roundrobinbalancer)           | Server-to-server calls across equal replicas (supports optional `weights`) | Enabled (`5` consecutive failures)         |
+| [`p2cBalancer(options?)`](/api/core/p2cbalancer)                         | Server calls where replica latency or in-flight load varies                | Enabled (`5` consecutive failures)         |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### How `pickFirstBalancer` and `p2cBalancer` work
+
+- **`pickFirstBalancer`**: Stays on the first URL and advances on `NET_UNREACHABLE` or `NET_UNAVAILABLE` (HTTP 502, 503, or 504). Order and the sticky endpoint follow the client's whole endpoint list (`members`), and an HTTP retry never moves the sticky endpoint: a timeout on the first endpoint that is retried on the second leaves later calls on the first, and failback stays armed. Configure `failbackMs: 30_000` to probe the primary endpoint again after spending that duration on a backup. Only one primary probe may be in flight. The probe is decided when the peer response begins (HTTP response headers, SSE handshake, or WebSocket open), so a long-lived stream that is the probe does not block failback for the whole client; an attempt that never reached that point is decided when it completes. Before the first primary probe after failover, the interval must have elapsed and an alternate must have been selected at least once since leaving the primary. A failed probe restarts both requirements: a fresh alternate selection and an elapsed interval before the next probe, even when SSE/WebSocket reconnect backoff is longer than `failbackMs`. A healthy backup therefore gets a turn instead of every reconnect hitting the dead primary.
+- **`roundRobinBalancer` weights**: A missing weight is `1`; configured weights must be finite and positive. Smooth weighted round-robin preserves proportional selection (for example, `3:1` gives three selections per four for the heavier peer). Extreme magnitudes are scaled to avoid overflow; ratios below floating-point precision may round to zero. Selection and stale-current cleanup take O(candidate count) work per pick.
+- **`p2cBalancer` (Power of Two Choices)**: Samples two distinct candidates without replacement and picks the one with the lower score: `PeakEwma RTT × (pending + 1)` (or in-flight `pending` count when `load: "pending"`). Defaults (`defaultRttMs: 30`, `decayMs: 10000`) follow Linkerd/tower conventions. Pending is reserved the moment `pick` selects the endpoint, so a burst of calls in the same tick spreads across endpoints, and it is released when the peer response begins (HTTP response headers, SSE handshake, WebSocket open), or when the attempt completes if no response began. For SSE and WebSocket this means p2c balances handshakes, not the number of open connections.
+
+Balancer state (the sticky endpoint, ejections, and p2c load) and the retry budget belong to the client. Create the client once per application and derive per-call clients with `client(options)`: derived clients keep both the balancer state and the retry budget. Passing one balancer value to several clients with `withBalancer` shares the balancer state only; each client keeps its own retry budget. Creating a fresh `createClient` for every request starts both from scratch.
+
+## 2. Same-call HTTP retry
+
+Three separate decisions govern a retry: **whether to try again** (`withRetry`), **where to send it** (the runtime asks the balancer to pick again, excluding already-tried endpoints), and **how long to wait** (backoff). HTTP's `withRetry`, SSE's `withSSEReconnect`, and WebSocket's `withWebSocketReconnect` are symmetric transport-level policies. Their flat backoff fields share the same names, validation, and delay calculation. The balancer knows nothing about retry policy; a custom balancer needs no special cooperation.
+
+Same-call HTTP retry is **off by default**. Omitting `withRetry` means one attempt per call, with no retry budget created or credited. Selection on later calls is unchanged: `pickFirstBalancer` can still advance after a failed call. `withRetry()` is equivalent to `withRetry({})` and enables two total attempts for connection failures on `GET`, `HEAD`, `OPTIONS`, and `TRACE`.
+
+This follows the Go ecosystem: [gRPC places `retryPolicy` in service configuration](https://grpc.io/docs/guides/retry/), alongside load-balancing configuration, while [go-kit `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) explicitly wraps a balancer. Neither applies an application retry policy by default. gRPC's retry policy requires backoff settings and uses ±0.2 jitter; [Envoy defaults to a 25 ms base and a maximum ten times that base](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-retry-policy-retrybackoff). Defjs uses 25 ms, factor 2, a 250 ms cap, and ±20% jitter. gRPC can perform transparent retries for low-level races; Defjs does not emulate those.
+
+<include cwd lang="typescript">
+  examples/client/http-retry.ts#example
+</include>
+
+- **Total attempts (`maxAttempts`)**: Includes the original, matching gRPC `retryPolicy.maxAttempts` and go-kit `lb.Retry`'s `max`. It must be a safe integer at least 1; `1` means no retry. There is no configured upper bound, but each balancer selection excludes endpoints already selected within that call. This counts outer attempts, not physical sends inside an application interceptor: an interceptor that loops over `next()` can send several times to the same endpoint. For example, three interceptor sends to a failing primary plus one outer retry to a healthy backup produce four network requests with `maxAttempts: 2`; the builder and the interceptor chain's outer authentication layer run twice, not four times. Streaming request bodies never retry. `methods` is case-insensitive; `methods: []` disables retries for all methods.
+- **Retry conditions (`on`)**: Defaults to `["connect-failure"]`. Add `"gateway-error"` for `NET_UNAVAILABLE` (HTTP `502`/`503`/`504`), including gateway error bodies rejected by `RES_*` decoding, and `"attempt-timeout"` when `attemptTimeoutMs` is configured. An eligible retry rebuilds the request and reruns the entire interceptor chain from its outermost layer.
+- **Backoff (`delayMs`, `factor`, `jitter`, `maxDelayMs`)**: Before retry n, wait for `delayMs × factor^(n−1)` with multiplicative jitter, capped after jitter and rounding. Defaults are `25`, `2`, `0.2`, and `250`. `delayMs: 0` skips waiting. As with reconnect, `delayMs` must be finite and non-negative, `factor` finite and positive, `jitter` finite in `[0, 1]`, and `maxDelayMs` non-negative finite or positive `Infinity`. The platform timer cap still applies.
+  Core `withRetry` does not read `Retry-After`. Handling that header, including any delay cap, is an [application interceptor policy](/docs/interceptors), not part of this backoff.
+  With only one configured endpoint, `withRetry` does not replay the request because each retry excludes endpoints already tried.
+
+- **Per-attempt vs. whole-call timeout**: `attemptTimeoutMs` must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It times each Fetch sent to the selected endpoint, from invocation until its response body has been read. Interceptor work around the send (for example a token refresh after a `401`) and struct decoding are not timed and never count against the endpoint; a caller deadline that expires during interceptor work after the send settled is not reported to the balancer as `NET_TIMEOUT`, the endpoint's own outcome is. The caller's `client({ signal: AbortSignal.timeout(ms) })` covers every attempt **and backoff wait**. Cancellation during a wait returns the caller's cancellation fault without another pick.
+- **No usable endpoint on retry**: When a retry round cannot use any endpoint (the balancer's pick fails, or the next endpoint's URL does not resolve), the call returns the previous attempt's fault (for example `NET_UNREACHABLE`) instead of `REQ_BUILD_FAILED`.
+- **Finagle / Linkerd retry budget (`budget`)**: Each client configuration owns a budget, shared only by derived clients using that same configuration, not by clients sharing a balancer. Defaults are `percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, and `ttlMs: 10000`: 20% of original traffic plus the reserve. Credits and debits expire lazily in ten TTL/10 slices. A retry withdraws before waiting; an exhausted budget neither waits nor retries. Set `budget: false` to remove the cap.
+- **Browser offline hint**: When `navigator.onLine === false`, connection failures report `{ attempted: false }` and do not advance balancers or trigger retries.
+
+### Browser deployment boundaries
+
+- A browser CORS failure reaches Fetch as a connection failure and is reported as `NET_UNREACHABLE`, indistinguishable from a down host. It can advance endpoint selection and trigger an opted-in safe-method retry; successful failover can therefore hide a primary region's CORS misconfiguration.
+- A POST can be processed by the server even when its response lacks the required CORS headers. The application then receives `NET_UNREACHABLE` without knowing whether the write succeeded. POST is not replayed by default; explicitly enabling write retries requires application-level idempotency across replicas.
+- A WebSocket upgrade that the server rejects (for example with `401`) is indistinguishable in browsers from an unreachable endpoint and is reported as `NET_UNREACHABLE`, so expired credentials can eject endpoints.
+- Cookies are scoped to a host, not a port: two endpoints on `localhost` with different ports can share a cookie, while `localhost` and `127.0.0.1` do not. Multi-origin endpoint sets need a deliberate cookie/token and CORS credentials policy; `withCredentials(true)` does not change cookie scope.
+- The explicit offline hint (`navigator.onLine === false`) suppresses endpoint attribution and connection-failure retries. It is only a browser hint, not a reliable reachability check.
+
+A later `withRetry` replaces the policy. `withRetry()` and `withRetry(undefined)` behave like `withRetry({})`. To turn retries off after enabling them, pass `withRetry({ maxAttempts: 1 })`. Invalid retry settings return `REQ_OPTIONS_INVALID` with `Invalid retry options` when the HTTP operation runs.
+
+## 3. Passive circuit breaking and active health checks (`outlierDetection`)
+
+`roundRobinBalancer()` and `p2cBalancer()` wrap their candidate selection in [`outlierDetection`](/api/core/outlierdetection) by default:
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **Consecutive failures**: The default classifier counts every coded outcome as a failure: `NET_UNREACHABLE`, `NET_UNAVAILABLE`, `NET_SERVER_ERROR`, `NET_TIMEOUT`, and `NET_BODY_INCOMPLETE`. An attempted outcome without a code resets the streak; unattributed attempts and discarded samples leave it unchanged. After `consecutiveFailures` (default `5`) counted outcomes in a row, the endpoint is ejected for `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` to `60000ms`) plus up to `50%` uniform positive jitter; base plus jitter never exceeds `maxPenaltyMs`.
+2. **Single-probe recovery**: Once the penalty expires, a single request probes the host. If its peer response begins (`end`) without a counted failure, normal traffic resumes immediately and the penalty level resets to `0`; if it fails (including a timeout), the endpoint is ejected again and the penalty doubles.
+3. **Bounded history**: Health history retains at least 256 endpoints, and at least the current member count, across derived clients and per-call candidate exclusions. Least-recently-used clean or expired entries are evicted first, then partial failure sequences. An unexpired penalty or an in-flight probe is evicted only when all retained entries are protected, then the oldest entry is removed. Merely omitting an endpoint from one call does not reset its penalty. P2C load history likewise keeps at least 256 entries and at least the current member count, so lists over 256 endpoints keep every estimate, evicting idle entries before busy ones; a forgotten endpoint restarts at `defaultRttMs`. Pick-first's shuffle keys keep at least 256 entries, and at least the current members, in an LRU cache, so a forgotten endpoint receives a new key when it returns. Weighted round-robin keeps current values for the client's members: an endpoint left out of one pick (an HTTP retry or a health-filtered pick) keeps its value, as nginx skips a peer that is down, and values are dropped only for endpoints that left the members; its copied weight configuration is fixed at construction. Durations use the platform's monotonic Performance clock when available, with `Date.now()` only as a fallback.
+4. **Panic-mode fail-open**: If `isHealthy` rejects every endpoint that is not ejected, the balancer ignores `isHealthy` and picks among the non-ejected endpoints. Only when every configured endpoint is ejected does it fail open to the client's full candidate list rather than dropping all traffic locally.
+
+## 4. Transport accounting lifecycle (`pick` → `start` → `end` → `done`)
+
+Custom balancers must select one of the exact strings in `info.endpoints`. A foreign selection returns a `REQ_BUILD_FAILED` tuple with the non-sensitive cause message `Balancer selected an endpoint outside the candidate set`; no transport starts, and the selection's `done` runs once with `{ attempted: false }`. This rule preserves health filtering and per-call retry exclusions.
+
+Custom balancers implement synchronous `pick(info)` and optional `start()`, `end(info)`, and `done(info)` callbacks. `PickInfo` contains the candidate `endpoints` for one pick (the list shrinks on retries and when a wrapper filters), `members` (the client's whole endpoint list, the same for every attempt; stateful balancers key order and state on it), and the optional definition `operation`; it has no transport discriminator. The transport translates its facts into neutral `DoneInfo.code` outcomes. Built-in balancers never read `status`; this raw response information is retained only for custom balancers. `start` runs before the attempt, `end` when the peer response begins or a pre-response failure occurs, and `done` at completion. A later body failure can therefore change the final code without changing the earlier `end` sample:
+
+| Physical transport outcome                                                  | Final `done(info)` sample                                  |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE response status 502, 503, or 504                                   | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| HTTP/SSE other response status at least 500                                 | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE response status 2xx, 3xx, or 4xx (including 429)                   | `{ attempted: true, status }`                              |
+| HTTP response body truncates mid-stream                                     | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE handshake succeeds, then stream `reader.read()` rejects                 | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE normal EOF, successful-handshake decode failure, or queue limit         | `{ attempted: true, status }`                              |
+| Opened WebSocket closes with code `1006` or `1015` (no close frame arrived) | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Opened WebSocket closes with code `1012` or `1013`                          | `{ attempted: true, code: "NET_UNAVAILABLE" }`             |
+| WebSocket heartbeat acknowledgement times out                               | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Opened WebSocket closes with any other code, whatever `wasClean` reports    | `{ attempted: true }`                                      |
+| Caller cancellation or manual stream/socket close                           | `{ attempted: false }`                                     |
+| Caller deadline expires after attempt started                               | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+Handshake decoding failures retain the neutral outcome derived from the handshake status (for example, `NET_UNAVAILABLE` with status `503`). An incomplete HTTP body instead retains `NET_BODY_INCOMPLETE` and its raw status, even for a gateway response; like any coded outcome, it counts as a failure for default outlier detection. A heartbeat that cannot be sent (a throwing `message()` or a serialization failure) is local and neutral.
+
+## Related reading
+
+- [Client configuration](/docs/client)
+- [SSE reconnect](/docs/sse#reconnect)
+- [WebSocket reconnect](/docs/web-socket)

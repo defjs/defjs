@@ -49,7 +49,7 @@ describe("constructors.ts browser primitives", () => {
     expect(buffer).toBeUndefined();
   });
 
-  test("upload object struct integrates web types end-to-end", async () => {
+  test("upload object struct integrates web types end-to-end", () => {
     const uploadStruct = struct.object({
       attachment: struct.file(),
       cover: struct.blob(),
@@ -66,7 +66,7 @@ describe("constructors.ts browser primitives", () => {
 
     const [err, parsed] = parse(uploadStruct, payload);
     if (err) {
-      throw err;
+      return Promise.reject(err);
     }
     expect(parsed.attachment.name).toBe("avatar.png");
     expect(parsed.cover.type).toBe("image/jpeg");
@@ -74,7 +74,7 @@ describe("constructors.ts browser primitives", () => {
 
     const [tupleErr, tupleVal] = parse(uploadStruct, payload);
     if (tupleErr) {
-      throw tupleErr;
+      return Promise.reject(tupleErr);
     }
     expect(tupleVal).toMatchObject({ caption: "hello" });
   });

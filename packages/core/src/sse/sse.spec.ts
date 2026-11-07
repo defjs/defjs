@@ -15,7 +15,16 @@ import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createSSEInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
+import type { FetchHandle } from "../client/config";
+import { makeResponse } from "../internal/http_response";
 import type { EventStreamHandle } from "./transport/event_stream";
+
+function requireRequest(input: RequestInfo | URL): Request {
+  if (!(input instanceof Request)) {
+    throw new TypeError("SSE handle received a non-Request");
+  }
+  return input;
+}
 
 function createSSEClientFromText(
   text: string,
@@ -24,8 +33,8 @@ function createSSEClientFromText(
     reconnect?: Parameters<typeof withSSEReconnect>[0];
   },
 ): Client {
-  const handle = withSSEHandle(
-    (async () =>
+  const handle = withSSEHandle(() =>
+    Promise.resolve(
       new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
@@ -37,16 +46,15 @@ function createSSEClientFromText(
           headers: { "content-type": "text/event-stream" },
           status: 200,
         },
-      )) as unknown as typeof fetch,
+      ),
+    ),
   );
 
   return createClient(
     withEndpoint("https://api.example.com"),
     handle,
-    ...(options?.onInvalidEvent
-      ? [withSSEOnInvalidEvent(options.onInvalidEvent)]
-      : []),
-    ...(options?.reconnect ? [withSSEReconnect(options.reconnect)] : []),
+    withSSEOnInvalidEvent(options?.onInvalidEvent),
+    withSSEReconnect(options?.reconnect),
   );
 }
 
@@ -70,7 +78,10 @@ function createShortCircuitStream(): EventStreamHandle<unknown> {
 
   const handle: EventStreamHandle<unknown> = {
     open: {
-      response: {} as never,
+      response: makeResponse({
+        status: 200,
+        url: "https://short-circuit.example/events",
+      }),
       url: "https://short-circuit.example/events",
     },
     closed,
@@ -88,8 +99,8 @@ function createShortCircuitStream(): EventStreamHandle<unknown> {
     },
     [Symbol.asyncIterator]() {
       return {
-        async next() {
-          return { done: true as const, value: undefined };
+        next() {
+          return Promise.resolve({ done: true as const, value: undefined });
         },
       };
     },
@@ -107,8 +118,6 @@ describe("request event stream runtime", () => {
 
   test("should resolve event streams through thenable refs", async () => {
     const useBasicStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -139,8 +148,6 @@ describe("request event stream runtime", () => {
 
   test("should support withCredentials for SSE", async () => {
     const useBasicStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -192,8 +199,6 @@ describe("request event stream runtime", () => {
     );
     const chat = defineEventStream({
       builder: (input) => ({ body: input }),
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       method: "POST",
       path: "/v1/chat/completions",
       input: struct.object({
@@ -220,8 +225,6 @@ describe("request event stream runtime", () => {
 
   test("should handle SSE events without id", async () => {
     const useNoIdStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -248,8 +251,6 @@ describe("request event stream runtime", () => {
 
   test("should handle SSE events with empty id", async () => {
     const useEmptyIdStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -276,8 +277,6 @@ describe("request event stream runtime", () => {
 
   test("should support default event struct parsing after selecting the event struct", async () => {
     const useMixedStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         default: struct.object({
           note: struct.string(),
@@ -321,8 +320,6 @@ describe("request event stream runtime", () => {
       "event: constructor\ndata: prototype-safe\n\n",
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { default: struct.string() },
       path: "/events",
     });
@@ -343,8 +340,6 @@ describe("request event stream runtime", () => {
       "event: __proto__\ndata: fallback\n\n",
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { default: struct.string() },
       path: "/events",
     });
@@ -365,8 +360,6 @@ describe("request event stream runtime", () => {
     const events = { ["__proto__"]: struct.number() };
     expect(Object.hasOwn(events, "__proto__")).toBe(true);
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events,
       path: "/events",
     });
@@ -387,8 +380,6 @@ describe("request event stream runtime", () => {
     const events = { __proto__: struct.number(), default: struct.string() };
     expect(Object.hasOwn(events, "__proto__")).toBe(false);
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events,
       path: "/events",
     });
@@ -406,8 +397,6 @@ describe("request event stream runtime", () => {
 
   test("should decode object event payloads with struct key aliases", async () => {
     const useAliasStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         profile: struct.object({
           displayName: struct.string().alias("display_name"),
@@ -444,8 +433,6 @@ describe("request event stream runtime", () => {
       'event: profile\ndata: {"display_name":"Miao"}\n\n',
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         profile: struct.object({
           displayName: struct.string().alias("display_name"),
@@ -474,18 +461,17 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       "event: profile\ndata: {not-json}\n\n",
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             data: context.message.data,
             hasCause: context.cause !== undefined,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         profile: struct.object({
           displayName: struct.string().alias("display_name"),
@@ -511,14 +497,13 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       'event: profile\ndata: {"display_name":123}\n\n',
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           causes.push(context.cause);
+          return Promise.resolve();
         },
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         profile: struct.object({
           displayName: struct.string().alias("display_name"),
@@ -547,8 +532,6 @@ describe("request event stream runtime", () => {
   test("should decode array event data as JSON", async () => {
     const client = createSSEClientFromText('data: ["a","b"]\n\n');
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.array(struct.string()) },
       path: "/events",
     });
@@ -567,8 +550,6 @@ describe("request event stream runtime", () => {
   test("should decode record event data as JSON", async () => {
     const client = createSSEClientFromText('data: {"count":1}\n\n');
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.record(struct.number()) },
       path: "/events",
     });
@@ -589,17 +570,16 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       "event: form\ndata: title=Miao\n\nevent: urlencoded\ndata: title=Miao\n\nevent: blob\ndata: bytes\n\nevent: arrayBuffer\ndata: bytes\n\n",
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             event: context.message.event,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         arrayBuffer: struct.arrayBuffer(),
         blob: struct.blob(),
@@ -626,8 +606,6 @@ describe("request event stream runtime", () => {
 
   test("should reject an already aborted stream before startup", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -658,11 +636,12 @@ describe("request event stream runtime", () => {
     let hiddenStream: EventStreamHandle<unknown> | undefined;
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream<Uint8Array>({ cancel }), {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -672,8 +651,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -692,10 +669,12 @@ describe("request event stream runtime", () => {
 
   test("should stop before fetch when an interceptor aborts before next", async () => {
     const controller = new AbortController();
-    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 200 })),
+    );
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(fetchMock as unknown as typeof fetch),
+      withSSEHandle(fetchMock),
       withInterceptors(
         createSSEInterceptor((req, next) => {
           controller.abort(ERR_ABORTED);
@@ -704,8 +683,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {},
       path: "/events",
     });
@@ -724,11 +701,12 @@ describe("request event stream runtime", () => {
     const cancel = vi.fn();
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream<Uint8Array>({ cancel }), {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -739,8 +717,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {},
       path: "/events",
     });
@@ -770,8 +746,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {},
       path: "/events",
     });
@@ -791,11 +765,13 @@ describe("request event stream runtime", () => {
     let discardedStream: EventStreamHandle<unknown> | undefined;
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         const cancel = cancels[fetchIndex++];
-        return new Response(new ReadableStream<Uint8Array>({ cancel }), {
-          headers: { "content-type": "text/event-stream" },
-        });
+        return Promise.resolve(
+          new Response(new ReadableStream<Uint8Array>({ cancel }), {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -805,8 +781,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -830,11 +804,12 @@ describe("request event stream runtime", () => {
     const cancel = vi.fn();
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream<Uint8Array>({ cancel }), {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -858,8 +833,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -896,15 +869,13 @@ describe("request event stream runtime", () => {
         });
       }),
       withInterceptors(
-        createSSEInterceptor(async (req, next) => {
+        createSSEInterceptor((req, next) => {
           void next(req);
-          return shortCircuit;
+          return Promise.resolve(shortCircuit);
         }),
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -925,8 +896,8 @@ describe("request event stream runtime", () => {
   test("should reject interceptor next calls after the chain settles", async () => {
     let sourceController:
       ReadableStreamDefaultController<Uint8Array> | undefined;
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
@@ -935,6 +906,7 @@ describe("request event stream runtime", () => {
           }),
           { headers: { "content-type": "text/event-stream" } },
         ),
+      ),
     );
     const shortCircuit = createShortCircuitStream();
     const lateCall = Promise.withResolvers<unknown>();
@@ -943,17 +915,15 @@ describe("request event stream runtime", () => {
       withEndpoint("https://api.example.com"),
       withSSEHandle(fetchMock),
       withInterceptors(
-        createSSEInterceptor(async (req, next) => {
+        createSSEInterceptor((req, next) => {
           invokeLateNext = () => {
             void next(req).then(lateCall.resolve, lateCall.resolve);
           };
-          return shortCircuit;
+          return Promise.resolve(shortCircuit);
         }),
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -979,8 +949,6 @@ describe("request event stream runtime", () => {
 
   test("should abort stream after connection via stream.close", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1000,8 +968,6 @@ describe("request event stream runtime", () => {
 
   test("should skip unexpected stream messages after startup", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -1026,8 +992,6 @@ describe("request event stream runtime", () => {
 
   test("should return startup error tuple when stream open response is invalid", async () => {
     const useInvalidStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1051,15 +1015,15 @@ describe("request event stream runtime", () => {
     async (reason, expectedCode) => {
       const controller = new AbortController();
       controller.abort(reason);
-      const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+      const fetchMock = vi.fn(() =>
+        Promise.resolve(new Response(null, { status: 200 })),
+      );
       const guardedClient = createClient(
         withEndpoint("https://api.example.com"),
-        withSSEHandle(fetchMock as unknown as typeof fetch),
+        withSSEHandle(fetchMock),
       );
 
       const useStream = defineEventStream({
-        maxBufferSize: 1024,
-        maxQueueSize: 16,
         events: {
           message: struct.string(),
         },
@@ -1079,8 +1043,8 @@ describe("request event stream runtime", () => {
 
   test("should classify a TimeoutError abort after open as NET_TIMEOUT", async () => {
     const controller = new AbortController();
-    const handle = vi.fn(
-      async () =>
+    const handle = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>(
             {
@@ -1092,15 +1056,14 @@ describe("request event stream runtime", () => {
           ),
           { headers: { "content-type": "text/event-stream" } },
         ),
+      ),
     );
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(handle as unknown as typeof fetch),
+      withSSEHandle(handle),
     );
     const useStream = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       path: "/events",
     });
 
@@ -1128,8 +1091,6 @@ describe("request event stream runtime", () => {
     const controller = new AbortController();
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1146,8 +1107,6 @@ describe("request event stream runtime", () => {
 
   test("should handle stream error state", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1164,8 +1123,6 @@ describe("request event stream runtime", () => {
 
   test("should fill the fault data from a declared SSE handshake error struct", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1173,10 +1130,12 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      Response.json(
-        { code: "unauthorized" },
-        { status: 401, headers: { "content-type": "application/json" } },
+    const handle = () =>
+      Promise.resolve(
+        Response.json(
+          { code: "unauthorized" },
+          { status: 401, headers: { "content-type": "application/json" } },
+        ),
       );
 
     const client = createClient(
@@ -1196,18 +1155,18 @@ describe("request event stream runtime", () => {
     // A single `error` struct applies to every non-2xx handshake; there is no status matching
     // to miss, so a body that decodes is always reported.
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.object({ code: struct.string() }),
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(JSON.stringify({ code: "unauthorized" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ code: "unauthorized" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1224,27 +1183,27 @@ describe("request event stream runtime", () => {
 
   test("should cancel an unread handshake body when no error struct is declared", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/sse/handshake-401",
     });
 
     let cancelled = false;
-    const handle = async () =>
-      new Response(
-        new ReadableStream<Uint8Array>({
-          cancel() {
-            cancelled = true;
-          },
-          start(controller) {
-            controller.enqueue(
-              new TextEncoder().encode('{"code":"unauthorized"}'),
-            );
-            controller.close();
-          },
-        }),
-        { status: 401, headers: { "content-type": "application/json" } },
+    const handle = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel() {
+              cancelled = true;
+            },
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode('{"code":"unauthorized"}'),
+              );
+              controller.close();
+            },
+          }),
+          { status: 401, headers: { "content-type": "application/json" } },
+        ),
       );
 
     const client = createClient(
@@ -1263,18 +1222,18 @@ describe("request event stream runtime", () => {
 
   test("should report an unreadable declared handshake body as RES_DECODE_FAILED", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.object({ code: struct.string() }),
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response("not-json", {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response("not-json", {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1292,18 +1251,18 @@ describe("request event stream runtime", () => {
 
   test("should report a declared handshake body that fails its struct as RES_DECODE_FAILED", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.object({ code: struct.string() }),
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(JSON.stringify({ code: 1 }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ code: 1 }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1321,18 +1280,18 @@ describe("request event stream runtime", () => {
 
   test("should read a string handshake error as raw text", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.string(),
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response("forbidden", {
-        status: 403,
-        headers: { "content-type": "text/plain" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response("forbidden", {
+          status: 403,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1350,18 +1309,18 @@ describe("request event stream runtime", () => {
 
   test("should read a blob handshake error as a Blob", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.blob(),
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(new Uint8Array([1, 2, 3]), {
-        status: 404,
-        headers: { "content-type": "application/octet-stream" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 404,
+          headers: { "content-type": "application/octet-stream" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1386,18 +1345,18 @@ describe("request event stream runtime", () => {
 
   test("should read an arrayBuffer handshake error as bytes", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.arrayBuffer(),
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(new Uint8Array([4, 5]), {
-        status: 404,
-        headers: { "content-type": "application/octet-stream" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(new Uint8Array([4, 5]), {
+          status: 404,
+          headers: { "content-type": "application/octet-stream" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1425,28 +1384,28 @@ describe("request event stream runtime", () => {
     "should reject %s before reading a JSON handshake error body",
     async (_label, headers) => {
       const useStream = defineEventStream({
-        maxBufferSize: 1024,
-        maxQueueSize: 16,
         events: { message: struct.string() },
         error: struct.object({ reason: struct.string() }),
         path: "/sse/handshake-401",
       });
 
       let cancelled = false;
-      const handle = async () =>
-        new Response(
-          new ReadableStream<Uint8Array>({
-            cancel() {
-              cancelled = true;
-            },
-            start(controller) {
-              controller.enqueue(
-                new TextEncoder().encode('{"reason":"forbidden"}'),
-              );
-              controller.close();
-            },
-          }),
-          { status: 403, headers },
+      const handle = () =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              cancel() {
+                cancelled = true;
+              },
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode('{"reason":"forbidden"}'),
+                );
+                controller.close();
+              },
+            }),
+            { status: 403, headers },
+          ),
         );
 
       const client = createClient(
@@ -1462,18 +1421,18 @@ describe("request event stream runtime", () => {
 
   test("should report a bodiless declared JSON handshake as a decode failure", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.object({ reason: struct.string() }),
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(null, {
-        status: 401,
-        headers: { "content-type": "text/plain" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(null, {
+          status: 401,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1488,8 +1447,6 @@ describe("request event stream runtime", () => {
 
   test("should skip unknown event types without default struct", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1512,8 +1469,6 @@ describe("request event stream runtime", () => {
 
   test("should parse empty event data", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1539,8 +1494,6 @@ describe("request event stream runtime", () => {
       'data: {"ok":true}\n\ndata:   padded text  \n\n',
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -1562,8 +1515,6 @@ describe("request event stream runtime", () => {
       'event: payload\ndata: {"ok":true}\n\n',
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { payload: struct.any() },
       path: "/events",
     });
@@ -1582,8 +1533,6 @@ describe("request event stream runtime", () => {
   test("should decode unknown event data as JSON", async () => {
     const client = createSSEClientFromText("event: payload\ndata: [1,2,3]\n\n");
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { payload: struct.unknown() },
       path: "/events",
     });
@@ -1602,8 +1551,6 @@ describe("request event stream runtime", () => {
   test("should decode number event data from JSON", async () => {
     const client = createSSEClientFromText("data:  42  \n\ndata: -1.5\n\n");
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.number() },
       path: "/events",
     });
@@ -1625,17 +1572,16 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       "data:\n\ndata: NaN\n\ndata: Infinity\n\ndata: -Infinity\n\ndata: 01\n\n",
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             data: context.message.data,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.number() },
       path: "/events",
     });
@@ -1661,17 +1607,16 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       "data: true\n\ndata: false\n\ndata: TRUE\n\ndata: 1\n\n",
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             data: context.message.data,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.boolean() },
       path: "/events",
     });
@@ -1694,8 +1639,6 @@ describe("request event stream runtime", () => {
 
   test("should parse message with empty event name", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
         default: struct.string(),
@@ -1722,8 +1665,6 @@ describe("request event stream runtime", () => {
     controller.abort(ERR_ABORTED);
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1742,8 +1683,6 @@ describe("request event stream runtime", () => {
 
   test("should return definition error when build throws", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       builder: () => {
         throw new Error("build failed");
       },
@@ -1763,8 +1702,6 @@ describe("request event stream runtime", () => {
 
   test("should return http error on non-ok response", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1781,8 +1718,6 @@ describe("request event stream runtime", () => {
 
   test("should use normalized HTTP status error message when SSE response has no error payload", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1790,10 +1725,7 @@ describe("request event stream runtime", () => {
     });
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
-          new Response(null, { status: 503 })) as unknown as typeof fetch,
-      ),
+      withSSEHandle(() => Promise.resolve(new Response(null, { status: 503 }))),
     );
 
     const [error, stream, open] = await useStream(client);
@@ -1809,17 +1741,16 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint(inject("testServerHost")),
-      withSSEOnInvalidEvent(async (context) => {
+      withSSEOnInvalidEvent((context) => {
         invalidEvents.push({
           reason: context.reason,
           event: context.message.event,
         });
+        return Promise.resolve();
       }),
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1856,18 +1787,17 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       'event: unknown\ndata: {"display_name":"Miao"}\n\n',
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             data: context.message.data,
             event: context.message.event,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -1897,18 +1827,17 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint(inject("testServerHost")),
-      withSSEOnInvalidEvent(async (context) => {
+      withSSEOnInvalidEvent((context) => {
         invalidEvents.push({
           reason: context.reason,
           event: context.message.event,
           hasCause: context.cause !== undefined,
         });
+        return Promise.resolve();
       }),
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -1942,8 +1871,8 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -1959,7 +1888,8 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
       withSSEOnInvalidEvent((context) =>
         captured.push({ id: context.message.id, reason: context.reason }),
@@ -1967,8 +1897,6 @@ describe("request event stream runtime", () => {
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1994,8 +1922,8 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -2010,16 +1938,16 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
-      withSSEOnInvalidEvent(async (context) => {
+      withSSEOnInvalidEvent((context) => {
         captured.push({ id: context.message.id, reason: context.reason });
+        return Promise.resolve();
       }),
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -2045,8 +1973,8 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -2063,16 +1991,16 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
-      withSSEOnInvalidEvent(async (context) => {
+      withSSEOnInvalidEvent((context) => {
         captured.push({ id: context.message.id, reason: context.reason });
+        return Promise.resolve();
       }),
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -2095,8 +2023,6 @@ describe("request event stream runtime", () => {
 
   test("should skip unexpected stream messages without onInvalidEvent", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -2130,8 +2056,8 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -2147,7 +2073,8 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
       withSSEOnInvalidEvent((context) => {
         observerSignal = context.signal;
@@ -2156,8 +2083,6 @@ describe("request event stream runtime", () => {
       }),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/stream",
     });
@@ -2185,8 +2110,8 @@ describe("request event stream runtime", () => {
   test("should keep stream alive when onInvalidEvent throws", async () => {
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -2200,16 +2125,13 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
-      withSSEOnInvalidEvent(async () => {
-        throw new Error("observer failed");
-      }),
+      withSSEOnInvalidEvent(() => Promise.reject(new Error("observer failed"))),
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -2232,6 +2154,43 @@ describe("request event stream runtime", () => {
     await expect(stream.closed).resolves.toMatchObject({ kind: "eof" });
   });
 
+  test("should use default maxBufferSize and maxQueueSize when omitted", async () => {
+    const encoder = new TextEncoder();
+    const client = createClient(
+      withEndpoint("https://api.example.com"),
+      withSSEHandle(() =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(encoder.encode("event: line\ndata: ok\n\n"));
+                controller.close();
+              },
+            }),
+            {
+              headers: { "Content-Type": "text/event-stream" },
+              status: 200,
+            },
+          ),
+        ),
+      ),
+    );
+    const useStream = defineEventStream({
+      events: { line: struct.string() },
+      path: "/stream",
+    });
+
+    const [error, stream] = await useStream(client);
+    expect(error).toBeNull();
+    if (!stream) throw new Error("Expected stream");
+
+    const received: string[] = [];
+    for await (const event of stream) {
+      received.push(event.data);
+    }
+    expect(received).toEqual(["ok"]);
+  });
+
   test.each([
     ["maxBufferSize", 0],
     ["maxBufferSize", -1],
@@ -2246,18 +2205,16 @@ describe("request event stream runtime", () => {
   ] as const)(
     "should reject invalid endpoint %s value %s before fetching",
     async (limitName, limit) => {
-      const handle = vi.fn() as unknown as typeof fetch;
+      const handle = vi.fn<FetchHandle>();
       const client = createClient(
         withEndpoint("https://api.example.com"),
         withSSEHandle(handle),
       );
       const useStream = defineEventStream({
         events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 16,
         path: "/stream",
         [limitName]: limit,
-      } as never);
+      });
 
       const [error, stream, open] = await useStream(client);
 
@@ -2276,8 +2233,8 @@ describe("request event stream runtime", () => {
         return undefined;
       },
     };
-    const handle = vi.fn(
-      async () =>
+    const handle = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>({
             start: (controller) => controller.close(),
@@ -2286,15 +2243,14 @@ describe("request event stream runtime", () => {
             headers: { "content-type": "text/event-stream" },
           },
         ),
+      ),
     );
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(handle as unknown as typeof fetch),
+      withSSEHandle(handle),
     );
     const useStream = defineEventStream({
       events: {},
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       path: "/snapshot",
     });
 
@@ -2309,8 +2265,6 @@ describe("request event stream runtime", () => {
   test("should handle request validation failure on invalid input", async () => {
     const useStream = defineEventStream({
       builder: () => ({}),
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       input: struct.object({
         id: struct.number(),
       }),
@@ -2354,19 +2308,19 @@ describe("sse reconnect method policy", () => {
   const usePost = defineEventStream({
     builder: () => ({ body: "prompt" }),
     events: { message: struct.string() },
-    maxBufferSize: 1024,
-    maxQueueSize: 8,
     method: "POST",
     path: "/events",
   });
 
   test("should not reconnect a POST body without shouldReconnect", async () => {
     const failure = new TypeError("network down");
-    const handle = vi.fn(async () => {
-      return new Response(eventBytes("id: 1\ndata: a\n\n", failure), {
-        headers: { "content-type": "text/event-stream" },
-        status: 200,
-      });
+    const handle = vi.fn(() => {
+      return Promise.resolve(
+        new Response(eventBytes("id: 1\ndata: a\n\n", failure), {
+          headers: { "content-type": "text/event-stream" },
+          status: 200,
+        }),
+      );
     });
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -2390,7 +2344,8 @@ describe("sse reconnect method policy", () => {
     const failure = new TypeError("network down");
     const bodies: string[] = [];
     const lastEventIds: Array<string | null> = [];
-    const handle = vi.fn(async (request: Request) => {
+    const handle = vi.fn<FetchHandle>(async (input) => {
+      const request = requireRequest(input);
       bodies.push(await request.text());
       lastEventIds.push(request.headers.get("last-event-id"));
       if (bodies.length === 1) {
@@ -2403,7 +2358,7 @@ describe("sse reconnect method policy", () => {
         headers: { "content-type": "text/event-stream" },
         status: 200,
       });
-    }) as unknown as typeof globalThis.fetch;
+    });
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
@@ -2431,20 +2386,25 @@ describe("sse reconnect method policy", () => {
     const failure = new TypeError("network down");
     const recorded: string[] = [];
     let n = 0;
-    const handle = vi.fn(async (request: Request) => {
+    const handle = vi.fn<FetchHandle>((input) => {
+      const request = requireRequest(input);
       request.headers.set("x-attempt", String(++n));
       recorded.push(request.headers.get("x-attempt") ?? "");
       if (n === 1) {
-        return new Response(eventBytes("id: 1\ndata: a\n\n", failure), {
+        return Promise.resolve(
+          new Response(eventBytes("id: 1\ndata: a\n\n", failure), {
+            headers: { "content-type": "text/event-stream" },
+            status: 200,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(eventBytes("data: b\n\n"), {
           headers: { "content-type": "text/event-stream" },
           status: 200,
-        });
-      }
-      return new Response(eventBytes("data: b\n\n"), {
-        headers: { "content-type": "text/event-stream" },
-        status: 200,
-      });
-    }) as unknown as typeof globalThis.fetch;
+        }),
+      );
+    });
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
@@ -2452,8 +2412,6 @@ describe("sse reconnect method policy", () => {
     );
     const useGet = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "GET",
       path: "/events",
     });
@@ -2473,9 +2431,9 @@ describe("sse reconnect method policy", () => {
     let fetched = 0;
     const guardedClient = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         fetched += 1;
-        return new Response(null, { status: 200 });
+        return Promise.resolve(new Response(null, { status: 200 }));
       }),
     );
     const useEvents = defineEventStream({
@@ -2484,8 +2442,6 @@ describe("sse reconnect method policy", () => {
         return {};
       },
       events: { message: struct.string() },
-      maxBufferSize: 64,
-      maxQueueSize: 1,
       path: "/events",
     });
 
@@ -2498,3 +2454,63 @@ describe("sse reconnect method policy", () => {
     expect(fetched).toBe(0);
   });
 });
+
+test("preserves an event getter's own call dispatch", async () => {
+  const events = { message: struct.string() };
+  const get = () => struct.number();
+  const call = vi.fn((receiver: unknown) => {
+    expect(receiver).toBe(events);
+    return struct.string();
+  });
+  Object.defineProperty(get, "call", { value: call });
+  Object.defineProperty(events, "message", { get });
+  const operation = defineEventStream({ path: "/events", events });
+  const client = createClient(
+    withEndpoint("https://example.test"),
+    withSSEHandle(() =>
+      Promise.resolve(
+        new Response("data: text\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    ),
+  );
+  const [error, stream] = await operation(client);
+  if (error) throw error;
+  expect(await Array.fromAsync(stream)).toEqual([
+    { event: "message", data: "text", id: undefined },
+  ]);
+  expect(call).toHaveBeenCalledOnce();
+});
+
+test.each(["maxBufferSize", "maxQueueSize"] as const)(
+  "explicit null %s is invalid rather than defaulted",
+  async (limitName) => {
+    const handle = vi.fn(() =>
+      Promise.resolve(
+        new Response("", {
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      ),
+    );
+    const client = createClient(
+      withEndpoint("https://a.test"),
+      withSSEHandle(handle),
+    );
+    const useStream = defineEventStream(
+      Object.defineProperty(
+        {
+          path: "/",
+          events: { message: struct.string() },
+        },
+        limitName,
+        { value: null },
+      ),
+    );
+    const [fault, stream] = await useStream(client);
+    stream?.close();
+    await stream?.closed;
+    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
+    expect(handle).not.toHaveBeenCalled();
+  },
+);

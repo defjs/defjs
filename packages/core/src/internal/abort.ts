@@ -106,13 +106,13 @@ export function mergeAbortSignals(
     }
   }
 
-  if (merged.length === 1) {
-    return merged[0] as AbortSignal;
+  const sole = merged[0];
+  if (merged.length === 1 && sole !== undefined) {
+    return sole;
   }
 
   const combinedController = new AbortController();
   const listeners: Array<[AbortSignal, () => void]> = [];
-  let abortWithReason: (reason: unknown) => void;
   const state: ForwardingSignalState = {
     active: true,
     release() {
@@ -128,7 +128,7 @@ export function mergeAbortSignals(
   };
   forwardingSignals.set(combinedController.signal, state);
 
-  abortWithReason = (reason) => {
+  const abortWithReason = (reason: unknown) => {
     if (combinedController.signal.aborted) {
       return;
     }

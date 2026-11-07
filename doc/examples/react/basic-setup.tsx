@@ -3,29 +3,29 @@ import { defineRequest, struct } from "@defjs/core";
 import { useClient } from "@defjs/react";
 import { useEffect, useState } from "react";
 
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ name: struct.string() }),
+  output: struct.object({ status: struct.string() }),
 });
 
-export function UserName({ id }: { id: number }) {
+export function OrderStatus({ id }: { id: number }) {
   const client = useClient();
   const [name, setName] = useState<string>();
 
   useEffect(() => {
     const controller = new AbortController();
 
-    void getUser(client({ signal: controller.signal }), { id }).then(
-      ([error, user]) => {
+    void getOrder(client({ signal: controller.signal }), { id }).then(
+      ([error, order]) => {
         if (controller.signal.aborted) return;
         if (error) {
           setName(undefined);
           return;
         }
-        setName(user.name);
+        setName(order.status);
       },
     );
 

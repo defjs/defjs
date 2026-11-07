@@ -1,22 +1,38 @@
 ---
-title: "使用 SSE 事件串流"
-description: 開啟型別化的事件串流，迭代一次，然後 close 並 await closed。
+title: "消費 SSE 事件"
+description: 開啟具型別的事件串流、迭代一次，然後關閉並等待 closed。
 ---
 
 # 消費 SSE 串流
 
-每個串流只有一個 async iterator。把 `close` + `await stream.closed` 放在 `finally`，避免提早離開時洩漏 Fetch attempt。
+每個 `EventStreamHandle` 都只提供一個非同步迭代器。一律把 `stream.close(...)` 與 `await stream.closed` 放在 `finally` 區塊中，讓提早執行的 `break` 或 `return` 不會漏掉底層的 Fetch 串流：
 
-細節見 [SSE](/zh-Hant-TW/docs/sse)。
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-<include cwd meta="notifications.ts">
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
 
-`api.example.com` 是 placeholder。若 server 的第一個 event 是 `message`，data 為 `{ "text": "hello from the server" }`，這段 snippet 會印出：
+  </Tab>
+</Tabs>
+
+當伺服器的第一個事件為 `line` 且資料為 `{ "text": "build started" }` 時，該腳本會輸出：
 
 ```txt
-hello from the server
+build started
 ```
 
-SSE 預設不重試網路或讀取失敗；必須用 `withSSEReconnect(...)` 明確啟用。提供重新連線設定物件後，`attempts` 預設為每次斷線 `3`；成功的握手會重設預算與 backoff 指數。`attempts: 0` 停用重試。無效的數值重連選項會在任何請求之前以 `REQ_OPTIONS_INVALID` 失敗；見 [驗證規則](/zh-Hant-TW/api/core/withssereconnect)。未提供 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求會重新連線，而使用 `ReadableStream` 請求主體的請求絕不會重新連線。
+- 除非在 client 上設定 [`withSSEReconnect(...)`](/zh-Hant-TW/api/core/withssereconnect)，否則 SSE 不會在網路或讀取失敗時自動重連。
+- 設定 `withSSEReconnect(...)` 後，每次中斷的 `attempts` 預設為 `3`，並在交握成功時重設（`attempts: 0` 會停用重連）。沒有自訂 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求會重連。帶有 `ReadableStream` 本文的請求永遠不會重連。詳見 [SSE 事件串流](/zh-Hant-TW/docs/sse)。

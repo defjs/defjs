@@ -1,25 +1,19 @@
-import type { AnyStruct, Infer } from "../struct";
+import type { AnyStruct } from "../struct";
 import type { Guide } from "../struct/guide";
 import { parseStructValue } from "../struct/introspection";
-import type { StructInput } from "../struct/types";
+import type { ParsedStructOutput, StructInput } from "../struct/types";
 
 export type EndpointInput<TInput extends AnyStruct | undefined> =
   TInput extends AnyStruct ? StructInput<TInput> : unknown;
 
-export type ParsedInput<TInput extends AnyStruct | undefined> =
-  TInput extends AnyStruct ? Infer<TInput> : unknown;
-
-export function parseEndpointInput<TInput extends AnyStruct | undefined>(
-  struct: TInput | undefined,
-  input: EndpointInput<TInput> | undefined,
+/** Validates operation input against the definition's input struct, tagging objects for the builder. */
+export function parseEndpointInput<S extends AnyStruct>(
+  struct: S,
+  input: unknown,
   guides?: WeakMap<object, Guide>,
-): ParsedInput<TInput> {
-  if (!struct) {
-    return input as ParsedInput<TInput>;
-  }
-
+): ParsedStructOutput<S, true> {
   return parseStructValue(struct, input, {
     guides,
     tagObjects: true,
-  }) as ParsedInput<TInput>;
+  });
 }

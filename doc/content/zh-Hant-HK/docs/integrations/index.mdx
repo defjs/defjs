@@ -1,20 +1,75 @@
 ---
-title: 插件
-description: 可選套件。使用方應用程式把它裝到自己的 Defjs Client 上。
+title: 整合概覽
+description: 喺已定義嘅擴充點上擴充應用程式自己嘅 Defjs Client，唔使改動核心同 SDK 定義。
 ---
 
-# 插件
+# 整合概覽
 
-插件是可選套件，由使用方應用程式裝到自己的 Defjs Client 上。`@defjs/core` 不會 import 它們，SDK 定義也不會。Client、endpoint、憑證，以及安裝哪些插件，都歸應用程式所有。
+整合機制允許應用程式喺已定義嘅擴充點上擴充自己嘅 `Client`，完全唔使改動 `@defjs/core`，亦唔會將 SDK 定義同任何前端框架或遙測工具庫綁死。你嘅 SDK 定義始終係純粹嘅 `@defjs/core` 模組；由使用方應用程式自由決定要安裝邊啲整合。
 
-插件分兩種。**框架插件**把現有的 `Client` 交給框架樹。**中間件插件**是攔截器鏈的插件形態：它把 interceptor 追加到應用程式自己的 Client 上。見 [攔截器](/zh-Hant-HK/docs/interceptors)。
+每個 Defjs 外掛都嚴格遵守**輕量外掛契約（Thin plugin contract）**：
 
-| 插件                                                                                  | 套件                          | 它加上什麼                                                                                | 它不做什麼                                                      |
-| ------------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [React](/zh-Hant-HK/docs/integrations/react) · 框架                                   | `@defjs/react`                | 為現有 Client 提供 `ClientProvider` 同 `useClient()`                                      | 不建立、不快取、不重試，也不釋放 Client。不是 query 或 state 庫 |
-| [Vue](/zh-Hant-HK/docs/integrations/vue) · 框架                                       | `@defjs/vue`                  | Vue 插件、`HTTP_CLIENT` 同 `injectClient()`                                               | 不建立、不快取、不重試。卸載時不關閉傳輸。不是 query 庫         |
-| [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server) · 中間件 | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`，一個 Client option，追加 HTTP、SSE、WebSocket interceptor | 不初始化 OpenTelemetry SDK，也不做入站伺服器插樁                |
+- **絕無隱藏快取或狀態**：外掛永遠唔會自行快取回應、重試請求，或擅自管理 query 狀態。
+- **絕唔替換傳輸層**：外掛永遠唔會包裝或替換底層嘅 HTTP、SSE 或 WebSocket 傳輸層。
+- **由呼叫端掌控生命週期**：卸載 UI provider 或者關閉遙測 SDK，都唔會自動取消進行中嘅請求或者關閉活躍嘅串流。
 
-React 同 Vue 把現有的 `Client` 交給框架樹。應用程式用 `@defjs/core` 的 `createClient` 建立這個 Client。React 插件透過 Context 提供它。Vue 插件透過 `app.use(createClientPlugin(client))` 提供它。兩個套件都不會發起請求。
+---
 
-OpenTelemetry 伺服器端中間件插件是一個 `ClientOption`。建立 Client 時傳入 `withOpenTelemetryServer(...)`。它按 HTTP、SSE、WebSocket 的順序，為每個啟用的傳輸追加一個 interceptor。見 [攔截器](/zh-Hant-HK/docs/interceptors)。這個套件不初始化 OpenTelemetry SDK。
+## 已發佈嘅整合與工具
+
+| 領域                                                                         | 套件 / 資源                        | 類別       | 提供嘅功能                                                                                         | 留喺應用程式負責嘅事項                                                                    |
+| ---------------------------------------------------------------------------- | ---------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [React](/zh-Hant-HK/docs/integrations/react)                                 | `@defjs/react`                     | 框架外掛   | 適用於 React 18+ 嘅 `ClientProvider` 同 `useClient(overrideClient?)`                               | 建立 Client、`AbortController` 資源清理、Query 快取（例如 TanStack Query）                |
+| [Vue](/zh-Hant-HK/docs/integrations/vue)                                     | `@defjs/vue`                       | 框架外掛   | 適用於 Vue 3.2+ 嘅 `createClientPlugin`、`HTTP_CLIENT` 與 `injectClient(key?)`                     | 建立 Client、`onCleanup` / `onScopeDispose` 取消請求、Query 狀態管理                      |
+| [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`      | 中介層外掛 | 提供 `withOpenTelemetryServer(...)` 選項，記錄傳出 HTTP、SSE 與 WebSocket 嘅 spans、metrics 與日誌 | 初始化 OpenTelemetry SDK、設定 Exporters、取樣（sampling）、機密脫敏（redaction）與 flush |
+| [AI Skill](/zh-Hant-HK/docs/ai) 與 [llms.txt](/zh-Hant-HK/docs/ai-api)       | `defjs/defjs` skill 與 `/llms.txt` | AI 工具    | Agent skill（`SKILL.md`）同機器可讀嘅 Markdown 文件                                                | 針對項目已安裝嘅 `@defjs/core` 版本同測試套件進行驗證                                     |
+
+---
+
+## 兩種外掛架構
+
+### 1. 框架外掛（`@defjs/react`、`@defjs/vue`）
+
+框架外掛透過原生依賴注入（React Context 或 Vue `provide` / `inject`），將現有嘅 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 傳遞畀元件樹下層：
+
+<Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
+
+  </Tab>
+</Tabs>
+
+### 2. 中介層外掛（`@defjs/opentelemetry-server`）
+
+中介層外掛係一個回傳 [`ClientOption`](/zh-Hant-HK/api/core/clientoption-type) 嘅工廠函式。當傳入 `createClient(...)` 時，佢會透過 `withInterceptors` 追加 HTTP、SSE 及／或 WebSocket 攔截器：
+
+<Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/request-id/plugins/request-id.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+關於攔截器順序規則、重試邊界同串流生命週期 hooks，請參閱[攔截器](/zh-Hant-HK/docs/interceptors)指南。

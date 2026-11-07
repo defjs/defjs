@@ -27,7 +27,7 @@ describe("web socket runtime heartbeat", () => {
       let runtimeError: unknown;
       const client = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket as unknown as typeof WebSocket),
+        withWebSocketHandle(Socket),
       );
       const pending = useHeartbeatSocket(
         client({

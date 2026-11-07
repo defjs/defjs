@@ -1,8 +1,7 @@
-import { upgradeWebSocket } from "@hono/node-server";
 import { Hono } from "hono";
+import { upgradeWebSocket } from "hono/bun";
 import { streamSSE } from "hono/streaming";
 import type { TestProject } from "vitest/node";
-import { WebSocketServer } from "ws";
 import {
   startHonoTestServer,
   type HonoTestServer,
@@ -20,7 +19,7 @@ export async function setup({ provide }: TestProject) {
   const app = new Hono();
 
   // HTTP: echo back received headers
-  app.post("/echo-headers", async (c) => {
+  app.post("/echo-headers", (c) => {
     const headers: { [key: string]: string } = {};
     c.req.raw.headers.forEach((value, key) => {
       headers[key] = value;
@@ -76,8 +75,7 @@ export async function setup({ provide }: TestProject) {
     })),
   );
 
-  const wss = new WebSocketServer({ noServer: true });
-  testServer = await startHonoTestServer(app, { websocket: { server: wss } });
+  testServer = await startHonoTestServer(app);
   provide("testServerHost", testServer.host);
 }
 

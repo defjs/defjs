@@ -30,23 +30,30 @@ import type {
   EventStreamOpenInfo,
 } from "./transport/event_stream";
 
-// @ts-expect-error SSE definitions require an endpoint-owned queue limit.
+defineEventStream({
+  path: "/default-limits",
+  events: { message: struct.string() },
+});
+
 defineEventStream({
   maxBufferSize: 1024,
-  path: "/missing-queue-limit",
+  path: "/custom-buffer-limit-only",
   events: { message: struct.string() },
 });
 
-// @ts-expect-error SSE definitions require an endpoint-owned parser limit.
 defineEventStream({
   maxQueueSize: 16,
-  path: "/missing-buffer-limit",
+  path: "/custom-queue-limit-only",
   events: { message: struct.string() },
 });
 
+function useType<T>(_probe?: T): T | undefined {
+  return _probe;
+}
+
 void withSSEQueue;
-void (undefined as unknown as FetchEventStreamOptions);
-void (undefined as unknown as FetchEventStreamErrorContext);
+useType<FetchEventStreamOptions>();
+useType<FetchEventStreamErrorContext>();
 
 const removedClientLimit: ClientSSEOptions = {
   // @ts-expect-error maxBufferSize belongs to each event-stream definition.
@@ -55,16 +62,12 @@ const removedClientLimit: ClientSSEOptions = {
 void removedClientLimit;
 
 const useEvents = defineEventStream({
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/events",
   events: { message: struct.object({ text: struct.string() }) },
 });
 
 const chatStream = defineEventStream({
   builder: (input) => ({ body: input }),
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   method: "POST",
   path: "/v1/chat/completions",
   input: struct.object({
@@ -89,10 +92,7 @@ expectTypeOf(takesEventStreamEndpoint(useEvents)).toEqualTypeOf<
   typeof useEvents
 >();
 
-void (undefined as unknown as EventStreamCommandBuilder<
-  undefined,
-  EventStructs
->);
+useType<EventStreamCommandBuilder<undefined, EventStructs>>();
 
 const catalogEventStructs = {
   "price-updated": struct.object({
@@ -111,8 +111,6 @@ expectTypeOf<
 
 const catalogEvents = defineEventStream({
   events: catalogEventStructs,
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/catalog/events",
 });
 
@@ -178,7 +176,11 @@ async function assertAsyncDisposableEventStream(
 void assertAsyncDisposableEventStream;
 
 const closeFaultCode: EventStreamFaultCode = "CAP_QUEUE_OVERFLOW";
+const reconnectBuildFault: EventStreamFaultCode = "REQ_BUILD_FAILED";
+const reconnectOptionsFault: EventStreamFaultCode = "REQ_OPTIONS_INVALID";
 void closeFaultCode;
+void reconnectBuildFault;
+void reconnectOptionsFault;
 
 type CatalogEvent = EventStreamData<typeof catalogEventStructs>;
 declare const catalogEvent: CatalogEvent;
@@ -253,8 +255,6 @@ const SseError = struct.object({ code: struct.string() });
 const streamWithError = defineEventStream({
   error: SseError,
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/events",
 });
 
