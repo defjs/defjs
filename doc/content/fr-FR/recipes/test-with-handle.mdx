@@ -12,11 +12,13 @@ description: Remplacez Fetch pour un client avec withHTTPHandle tout en gardant 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="test/orders.spec.ts">
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="Démonstration en un seul fichier">
 Il s'agit d'une démonstration autonome en un seul fichier, pas d'une spec de lanceur de tests. Pour des assertions sur la définition de SDK partagée, utilisez l'onglet de test précédent.
@@ -24,6 +26,7 @@ Il s'agit d'une démonstration autonome en un seul fichier, pas d'une spec de la
 <include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -33,4 +36,4 @@ La démonstration en un seul fichier affiche :
 paid 200
 ```
 
-En production, transmettez un client configuré avec `withEndpoint(...)` très exactement à la même définition `getOrder`. Consultez [Tests](/fr-FR/docs/testing) et [Client](/fr-FR/docs/client).
+En production, appelez très exactement la même opération `getOrder` avec un client configuré avec `withEndpoint(...)`. Consultez [Tests](/fr-FR/docs/testing) et [Client](/fr-FR/docs/client).

@@ -5,11 +5,11 @@ description: 匯出你的第一個 SDK 操作，從獨立的應用程式呼叫�
 
 # 快速開始：你的第一個 SDK 操作 [#getting-started-one-http-request]
 
-在本指南中，你將建立一個定義了 `GET /orders/:id` 的 SDK 模組，並分別從兩個獨立的應用程式模組呼叫它：一個使用離線 Mock 傳輸，另一個則直接指向實際運作的 API。
+在本指南中，你將建立一個定義 `GET /orders/:id` 的 SDK 模組，並分別從兩個獨立的應用程式模組呼叫它：一個使用離線的模擬傳輸層，另一個則直接指向實際運作的 API。
 
 ## 1. 安裝 `@defjs/core`
 
-`@defjs/core` 是一個零執行時期依賴的 ESM 套件，可在瀏覽器、Bun 以及 Node.js（22.18+ 或 24+ 可直接執行 `.ts` 檔案）中執行。請確保你的 `package.json` 中已設定 `"type": "module"`。
+`@defjs/core` 是一個零依賴的 ESM 套件，可在瀏覽器、Bun 以及 Node.js（22.18+ 或 24+ 可直接執行 `.ts` 檔案）中執行。請確保你的 `package.json` 中已設定 `"type": "module"`。
 
 ```sh
 bun add @defjs/core
@@ -17,7 +17,7 @@ bun add @defjs/core
 
 ## 2. 定義 SDK 並從應用程式呼叫
 
-請將操作定義保留在專屬的 SDK 模組中（`src/define-request.ts`），並在你的應用程式端建立 Client（`src/execute-locally.ts` 或 `src/real-api.ts`）：
+請將操作定義留在專屬的 SDK 模組中（`src/define-request.ts`），並在你的應用程式端建立 Client（`src/execute-locally.ts` 或 `src/real-api.ts`）：
 
 <Tabs items={["src/define-request.ts", "src/execute-locally.ts", "src/real-api.ts"]}>
 <Tab value="src/define-request.ts">
@@ -50,9 +50,9 @@ bun add @defjs/core
    - 提供同步的純函式 `builder`，將 `input` 對應至 `{ path }`。凡是宣告了 `input`，就必須提供明確的 `builder`。
    - 匯出 `getOrder`，過程中不建立也不會捕捉任何 Client。
 2. **`src/execute-locally.ts`（離線測試執行端）**：
-   - 使用 `withHTTPHandle(...)` 設定 Client，在完全不發出實際網路請求的情況下，執行完整的 Defjs 處理管線（輸入驗證、URL 解析、狀態分派與回應 struct 解析）。
+   - 使用 `withHTTPHandle(...)` 設定 Client，在不觸及網路的情況下執行完整的 Defjs 管線（輸入驗證、URL 解析、狀態分派與回應 struct 解析）。
 3. **`src/real-api.ts`（正式環境執行端）**：
-   - 匯入完全相同的 `getOrder` 操作，並透過 `withEndpoint(...)` 設定的真實基礎網址進行呼叫。
+   - 匯入完全相同的 `getOrder` 操作，並以 `withEndpoint(...)` 設定的線上基礎網址呼叫它。
 
 ## 3. 執行本機範例
 
@@ -88,6 +88,6 @@ Order not found
 
 ## 後續步驟
 
-- 閱讀[核心架構](/zh-Hant-TW/docs/design-decisions)以了解各項設計規範。
-- 在[資料結構 / Struct](/zh-Hant-TW/docs/struct) 中為複雜的負載與欄位別名建立模型。
+- 閱讀[核心架構](/zh-Hant-TW/docs/design-decisions)以了解各項架構規則。
+- 在[Struct 與 schema](/zh-Hant-TW/docs/struct) 中為複雜的酬載與欄位別名建立模型。
 - 透過[建置並發布 SDK](/zh-Hant-TW/recipes/publish-http-sdk) 將你的定義打包並發布至 npm。

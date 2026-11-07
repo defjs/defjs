@@ -34,7 +34,7 @@ Setze einen statischen Bezeichner mit geringer Kardinalität als `operation` in 
 
 - **Span-Benennung**: Ist `operation` gesetzt, lauten die Span-Namen `GET orders.read`, `SSE orders.watch` und `WebSocket orders.connect` und tragen das Attribut `defjs.operation`. Fehlt `operation`, fällt die Benennung auf die HTTP-Methode, `SSE` oder `WebSocket` zurück.
 - **Unabhängige Signale**: `tracer`, `meter` und `logger` sind optional und funktionieren unabhängig voneinander:
-  - Lässt du `tracer` weg, werden keine lokalen Spans und Span-Hooks erzeugt, während Metriken, Logs und ausgehende Kontext-Propagierung weiterhin aktiv bleiben.
+  - Lässt du `tracer` weg, werden keine lokalen Spans und Span-Hooks erzeugt, während Metriken, Logs und ausgehende Kontextpropagierung weiterhin aufgezeichnet werden.
   - Lässt du `meter` weg, werden Paket-Metriken deaktiviert.
   - Lässt du `propagator` weg, kommt ein eingebauter Composite-Propagator für W3C Trace Context + W3C Baggage zum Einsatz.
   - Ist ein `tracer` konfiguriert, überspringt `requireParentSpan: true` Spans, Propagierung, Hooks, Metriken und Logs, wenn kein aktiver Parent-Span existiert; ohne `tracer` blockiert `requireParentSpan` weder Metriken noch Logs.
@@ -74,7 +74,7 @@ Konfiguriere transportspezifische Schalter (`{ enabled: false }`) und Span-Hooks
 - `startSpanHook(request): Attributes` läuft synchron vor der Span-Erstellung; die zurückgegebenen Attribute werden zuletzt angewendet und können eingebaute Attribute überschreiben (z. B. zum Schwärzen von `url.full`).
 - `requestHook(span, request)` und `responseHook(span, responseOrHandle, request)` erhalten den erstellten Span und können synchron oder asynchron sein. Die Transport-Pipeline **wartet nicht** auf sie, und der HTTP-Span endet sofort, sobald der synchrone Teil von `responseHook` zurückkehrt.
 - Fehler innerhalb von Hooks brechen den Client-Aufruf niemals ab. Solange `span.isRecording()` aktiv ist, zeichnen Hook-Fehler `defjs.otel.hook.error`- und `exception`-Events auf dem Span auf; bei nicht-aufzeichnenden Spans werden Fehler über `diag.error` von `@opentelemetry/api` gemeldet (`hook.name`, `error.type`, `traceId`, `spanId`).
-- `withOpenTelemetryServer` friert die Optionsblöcke für `http`, `sse` und `webSocket` bei der Erstellung als Snapshot ein. Das Übergeben von `{ enabled: false }` deaktiviert diesen Transport, ohne dessen Hooks überhaupt auszulesen.
+- `withOpenTelemetryServer` erstellt bei der Erstellung einen Snapshot der Optionsblöcke für `http`, `sse` und `webSocket`. Das Übergeben von `{ enabled: false }` deaktiviert diesen Transport, ohne dessen Hooks überhaupt auszulesen.
 
 ---
 
@@ -93,7 +93,7 @@ Dies sind die aktuellen Beobachtungen der Interceptors, keine separate Balancer-
 - Jeder HTTP-Versuch von `withRetry` hat einen eigenen Client-Span und einen eigenen Dauer-Messwert. Mit einem aktiven Parent-Span der Anwendung sind die Versuche Geschwister unter diesem Parent; ohne ihn werden Retries nicht automatisch in einem Trace zusammengefasst. Core erstellt keinen Parent-Span für den logischen Aufruf.
 - Die URLs der HTTP-Versuche identifizieren den jeweiligen Endpunkt; es werden aber keine Attribute für Versuchsnummer, Retry-Grund, Budgetstand/-erschöpfung oder Ausschluss/Erholung ausgegeben.
 - SSE und WebSocket behalten über Reconnects hinweg einen Span pro logischer Sitzung, nicht einen pro physischer Verbindung. Span-URL und Metrikattribute behalten auch nach einem Failover den anfänglichen Endpunkt. Reconnects erzeugen kein weiteres `connected`-Event. Aktivitätsmetriken zählen logische Sitzungen, die auf `closed` warten, nicht Sockets auf dem aktuell ausgewählten Replikat.
-- In einem Bun-Lauf erzeugte HTTP 503 `error.type: "503"`, eine abgelehnte Verbindung `"TypeError"` und sowohl eine Deadline als auch ein Abbruch durch den Aufrufer `"Error"`. Die letzten beiden gaben `NET_TIMEOUT` bzw. `NET_ABORTED` zurück; diese Defjs-Tupel-Fehlercodes sind keine separaten HTTP-Telemetrieattribute. Bei einem geöffneten WebSocket erzeugte ein standardmäßiger Abbruch `"AbortError"` ohne Warnung, während ein Abbruchgrund `TimeoutError` `"TimeoutError"` und eine Warnung erzeugte. Fehlerklassennamen sind Beobachtungen von Transport und Laufzeit, kein Ersatz für die Prüfung des Tupels oder des Schließergebnisses.
+- In einem Bun-Lauf erzeugte HTTP 503 `error.type: "503"`, eine abgelehnte Verbindung `"TypeError"` und sowohl eine Deadline als auch ein Abbruch durch den Aufrufer `"Error"`. Die letzten beiden gaben `NET_TIMEOUT` bzw. `NET_ABORTED` zurück; diese Fault-Codes des Defjs-Tupels sind keine separaten HTTP-Telemetrieattribute. Bei einem geöffneten WebSocket erzeugte ein standardmäßiger Abbruch `"AbortError"` ohne Warnung, während ein Abbruchgrund `TimeoutError` `"TimeoutError"` und eine Warnung erzeugte. Fehlerklassennamen sind Beobachtungen von Transport und Laufzeit, kein Ersatz für die Prüfung des Tupels oder des Schließergebnisses.
 
 ### Ausgegebene Metriken
 

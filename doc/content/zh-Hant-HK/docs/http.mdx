@@ -1,6 +1,6 @@
 ---
-title: "HTTP 請求"
-description: 為 SDK 設計 HTTP 操作，由應用程式自己嘅設定同取消去呼叫。
+title: "HTTP 操作"
+description: 為 SDK 設計 HTTP 操作，並以應用程式自己擁有嘅設定同取消機制呼叫。
 ---
 
 # HTTP 操作
@@ -9,49 +9,21 @@ SDK 作者用 `defineRequest` 嚟定義每個 HTTP 操作：包括佢嘅 HTTP me
 
 ## 1. 定義操作並喺應用程式入面呼叫
 
-喺 SDK 模組入面為每個 endpoint 建立專屬嘅 `defineRequest` 匯出，並將 `createClient` 留畀使用方應用程式：
+喺 SDK 模組入面為每個操作建立專屬嘅 `defineRequest` 匯出，並將 `createClient` 留畀使用方應用程式：
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -66,7 +38,7 @@ void main();
 ### SDK 設計最佳實踐
 
 - **一個定義對應一個操作**：將每個 method、路徑同契約分開獨立定義，等應用程式可以 tree-shake 走用唔著嘅操作。
-- **設定靜態 `operation` 名稱**：使用低基數（low-cardinality）識別碼，例如 `"orders.read"`。遙測外掛（`@defjs/opentelemetry-server`）同日誌中介層可以直接用佢，唔會意外外洩具體 URL 或使用者 ID。
+- **設定靜態 `operation` 名稱**：使用低基數（low-cardinality）識別碼，例如 `"orders.read"`。遙測外掛（`@defjs/opentelemetry-server`）同日誌攔截器可以直接用佢，唔會意外外洩具體 URL 或使用者 ID。
 - **切忌喺 SDK 入面嵌入 Client**：SDK 只應該匯出定義、`struct` schema 同型別宣告。
 
 ## 2. URL 解析與路徑參數
@@ -76,7 +48,7 @@ void main();
 <include cwd>examples/http/resolve-url.ts#example</include>
 
 - **路徑佔位符（`:name`）**：會嚴格編碼一次作為單一 path segment。斜線、`?`、`#`、`%`、空白同 Unicode 字元都會留喺該 segment 入面——千祈唔好預先手動 encode 值。空字串、`.` 同 `..` 都會直接觸發 `REQ_BUILD_FAILED`。
-- **Origin 與目錄約束**：定義中嘅 path 唔可以係絕對 URL、協議相對 URL（`//...`），亦唔可以包含 C0 控制字元、反斜線、`?`、`#`，或者跳出 base endpoint 嘅目錄範圍（`../`）。任何違規都會喺中介層或傳輸層執行前，即時以 `REQ_BUILD_FAILED` 報錯。
+- **Origin 與目錄約束**：定義中嘅 path 唔可以係絕對 URL、協議相對 URL（`//...`），亦唔可以包含 C0 控制字元、反斜線、`?`、`#`，或者跳出 base endpoint 嘅目錄範圍（`../`）。任何違規都會喺攔截器或傳輸層執行前，即時以 `REQ_BUILD_FAILED` 報錯。
 
 ## 3. 用 `builder` 放置 Input
 
@@ -86,9 +58,9 @@ void main();
   examples/http/place-input.ts#example
 </include>
 
-### `builder` 點樣編碼欄位別名（Alias）
+### `builder` 點樣編碼欄位別名（alias）
 
-| Builder 表達式                                 | 網絡傳輸輸出                                                      |
+| builder 表達式                                 | 網絡傳輸輸出                                                      |
 | ---------------------------------------------- | ----------------------------------------------------------------- |
 | `body: input.profile`                          | 帶型別 struct：`.alias()` 以及 `Date` / `bigint` codec 會自動生效 |
 | `body: { profile: input.profile }`             | 外層 key `profile` 保持原樣；內層物件保留其 struct 別名           |
@@ -98,7 +70,7 @@ void main();
 
 ### 自訂 Query 序列化
 
-預設情況下，query 支援純量純值（scalar）同埋純量陣列（重複 key）。如果傳入巢狀 query 物件，呼叫會失敗，並喺回傳 tuple 嘅錯誤項提供 `REQ_BUILD_FAILED`。如果後端需要特殊嘅巢狀 query 語法（例如 `filter[status]=paid`），可以喺 client 配置 `withQuerySerializer`：
+預設情況下，query 嘅純量值（scalar）同純量陣列（重複 key）會直接編碼，而巢狀 query 物件會以 `REQ_BUILD_FAILED` 失敗。如果後端需要特殊嘅巢狀 query 語法（例如 `filter[status]=paid`），可以喺 client 配置 `withQuerySerializer`：
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
@@ -120,7 +92,7 @@ void main();
   examples/http/body.ts#example
 </include>
 
-任何無法喺 JSON 中合法表達嘅值（例如 `NaN`、`±Infinity`、`Map`、`Set`、函式、冇 `toJSON()` 嘅 class 實例，或原生 iterable），都會令呼叫即刻失敗，並喺回傳 tuple 嘅錯誤項提供 `REQ_BUILD_FAILED`，而唔會靜雞雞序列化成 `{}` 或 `null`。
+任何無法喺 JSON 中合法表達嘅值（例如 `NaN`、`±Infinity`、`Map`、`Set`、函式、冇 `toJSON()` 嘅 class 實例，或原生 iterable），都會令呼叫即刻以 `REQ_BUILD_FAILED` 失敗，而唔會靜雞雞序列化成 `{}` 或 `null`。
 
 ## 4. 回應點樣被解碼
 
@@ -128,9 +100,9 @@ void main();
 
 1. **按狀態碼 `ok` (`200..299`) 揀選對應側**：`2xx` 走 `output`，非 `2xx` 走 `error`。
 2. **未宣告則放棄讀取**：如果嗰一邊冇宣告 struct，回應 body 根本唔會被讀取（`2xx` resolve 出 `data: undefined` + `HttpMeta`；非 `2xx` resolve 出 `HTTP_STATUS` 且 `data: undefined`）。
-3. **優先驗證 JSON Media Type**：對於宣告 JSON 嘅 struct，如果伺服器回傳非 JSON 嘅 `Content-Type`，喺讀取串流前呼叫就會失敗，並喺回傳 tuple 嘅錯誤項提供 `RES_MEDIA_TYPE_INVALID`。
+3. **優先驗證 JSON media type**：對於宣告 JSON 嘅 struct，如果伺服器回傳非 JSON 嘅 `Content-Type`，呼叫會喺讀取串流之前以 `RES_MEDIA_TYPE_INVALID` 失敗。
 4. **讀取與解析**：無法讀取串流或 JSON 損壞會報 `RES_DECODE_FAILED`（如果中途被截斷則報 `NET_BODY_INCOMPLETE`）。
-5. **用 `struct` 進行驗證**：Schema 結構唔吻合會令呼叫失敗，並喺回傳 tuple 嘅錯誤項提供 `RES_STRUCT_MISMATCH`。
+5. **用 `struct` 進行驗證**：schema 結構唔吻合會令呼叫以 `RES_STRUCT_MISMATCH` 失敗。
 
 ## 5. 取消工作與設定逾時期限 [#cancel-the-work]
 
@@ -140,13 +112,13 @@ void main();
 - **手動取消（`NET_ABORTED`）**：使用 `AbortController`。
 - **組合多個信號**：使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`。
 
-<Tabs items={["截止時間（NET_TIMEOUT）", "手動取消（NET_ABORTED）"]}>
-<Tab value="截止時間（NET_TIMEOUT）">
+<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
+<Tab value="Deadline (NET_TIMEOUT)">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="手動取消（NET_ABORTED）">
+<Tab value="Manual cancel (NET_ABORTED)">
 
 <include cwd>examples/http/cancel.ts#example</include>
 
@@ -164,6 +136,6 @@ void main();
 ## 延伸閱讀
 
 - [發送與驗證 JSON](/zh-Hant-HK/recipes/post-json)
-- [處理已聲明嘅 404](/zh-Hant-HK/recipes/get-declared-404)
+- [處理已宣告嘅 404](/zh-Hant-HK/recipes/get-declared-404)
 - [取消 HTTP 呼叫](/zh-Hant-HK/recipes/cancel-http)
 - [使用本地 Fetch Handle 進行測試](/zh-Hant-HK/recipes/test-with-handle)

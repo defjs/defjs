@@ -5,70 +5,26 @@ description: 傳送具型別的 JSON 請求本文，並解碼已宣告的 201 �
 
 # POST JSON
 
-將具型別的輸入物件傳入 `builder` 並回傳 `{ body: input }`。`.alias("customer_name")` 讓 TypeScript 程式碼維持 `customerName`，同時在網路通訊時將其編碼為 `"customer_name"`，並在收到 `201` 回應時自動解碼對應回 TypeScript 屬性。
+把具型別的輸入物件傳給 `builder`，回傳 `{ body: input }`。`.alias("customer_name")` 讓 TypeScript 端保留 `customerName`，在傳輸時編碼成 `"customer_name"`，再從 `201` 回應解碼回來。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
+</include>
 
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-export const ApiError = struct.object({
-  code: struct.string(),
-  message: struct.string(),
-});
-
-export const NewOrder = struct.object({
-  status: struct.string(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-export const createOrder = defineRequest({
-  method: "POST",
-  path: "/orders",
-  input: NewOrder,
-  builder: (input) => ({ body: input }),
-  output: Order,
-  error: ApiError,
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { createOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com/v1"));
-
-async function main() {
-const [error, order, response] = await createOrder(client, {
-status: "paid",
-customerName: "Ada",
-});
-if (error?.code === "HTTP_STATUS") {
-console.error(error.status, error.data.message);
-return;
-}
-if (error) {
-console.error(error.code);
-return;
-}
-console.log(`Created ${order.status} → ${response.status}`);
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="create-order.ts">
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -76,6 +32,6 @@ void main();
 
 ```txt
 Created paid → 201
-````
+```
 
-詳細資訊請參閱 [HTTP 請求](/zh-Hant-TW/docs/http) 與 [資料結構 / Struct](/zh-Hant-TW/docs/struct)。
+詳見 [HTTP 操作](/zh-Hant-TW/docs/http) 與 [Struct 與 schema](/zh-Hant-TW/docs/struct)。

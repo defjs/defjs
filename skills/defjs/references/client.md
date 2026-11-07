@@ -17,7 +17,7 @@ import {
 
 export const client = createClient(
   withEndpoint("https://api.example.com/v1"),
-  withHeaders({ "x-client-Info": "orders-web" }),
+  withHeaders({ "x-client-info": "orders-web" }),
   withCredentials(true),
   withXSRF({
     cookieName: "XSRF-TOKEN",
@@ -36,7 +36,7 @@ export const client = createClient(
 
 1. It **is** a `Client` with no per-call options, so you can pass it directly: `getOrder(client, { id: 1 })`.
 2. It is **callable** with `RequestOptions` to derive a single-call `Client` value: `getOrder(client({ signal }), { id: 1 })`.
-3. Calling `client(options)` performs **no I/O** and returns a plain, **non-callable** `Client` value (`client()()` is a compile-time and runtime `TypeError`).
+3. Calling `client(options)` performs **no I/O** and returns a plain, **non-callable** `Client` value (`client()()` fails to compile and throws a `TypeError` at runtime).
 
 ```ts
 // Incorrect: sharing a derived client that holds a single-request signal

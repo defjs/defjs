@@ -5,13 +5,13 @@ description: Fault 的各个变体与工厂辅助函数。
 
 # 错误
 
-Execute 把一个可判别的 `Fault` 放在 tuple 第一项——声明过的失败不抛异常。
+操作会把可判别的 `Fault` 放在元组第一项——声明过的失败不抛出异常。
 
 ## FaultCode
 
 <ApiSignature name="FaultCode" />
 
-一个封闭集合。第一个 `_` 之前那段就是类别；没有单独的 `kind` 字段。集合保持封闭，`switch (fault.code)` 才能穷尽——扩展报自己的细节走 `cause`，不是加新 code。
+一个封闭集合。第一个 `_` 之前的部分是类别；没有单独的 `kind` 字段。集合保持封闭，`switch (fault.code)` 才能穷尽——扩展通过 `cause` 报告自己的细节，而不是新增代码。
 
 ## FaultClass
 
@@ -29,27 +29,27 @@ Execute 把一个可判别的 `Fault` 放在 tuple 第一项——声明过的�
 
 <ApiSignature name="FaultOf, Fault" />
 
-`FaultOf` 就是 `Fault`，只是用解码后的错误 body 类型来表达，而不是用产出它的 struct。`HttpAwaitResult` 和各 fault 工厂处理的是解码后的值，所以用这种形式。
+`FaultOf` 就是 `Fault`，只是用解码后的错误 body 类型表示，而不是用产生它的 struct。`HttpAwaitResult` 和各 `Fault` 工厂处理解码后的值，所以使用这种形式。
 
 每个变体都是名为 `DefjsFault` 的原生 `Error`，所以 `String(fault)` 给出 `DefjsFault: <message>`。`code` 和各变体元数据——`status`、`response`、`data`——都是可枚举的自有属性。原生 `cause` 链不可枚举。
 
-默认 Struct 消息使用 `received <kind>`，不包含接收到的值本身，例如 `Expected number at email, received string`。`RES_DECODE_FAILED` 的底层原因若是 JSON `SyntaxError`，消息为 `Response body could not be decoded`。问题路径是结构性的，会保留 record 的键：`struct.record(...)` 可能产生 `Expected number at alice@example.com, received string`，因此键在默认消息、`prettify()` 和 `String(fault)` 中仍可能敏感。原始 `StructIssue.received` 和解析器 cause 仍是敏感信息；自定义 `errorMap` 和扩展消息会原样使用，写日志前需要审查。
+默认 struct 消息使用 `received <kind>`，从不包含接收到的值，例如 `Expected number at email, received string`。`RES_DECODE_FAILED` 底层的 JSON `SyntaxError` 会给出消息 `Response body could not be decoded`。issue 路径是结构性的，并保留 record 键：`struct.record(...)` 可能产生 `Expected number at alice@example.com, received string`，因此键在默认消息、`prettify()` 和 `String(fault)` 中仍可能敏感。原始 `StructIssue.received` 和解析器 cause 仍然敏感；自定义 `errorMap` 与扩展消息按原样使用，记录日志前需要审查。
 
 <include cwd>examples/api/fault.ts#example</include>
 
-只有把 `fault.cause` 窄化到 `StructError` 之后，才能调 `format()`、`flatten()` 或 `prettify()`；这些 helper 不会被复制到 fault 上。
+只有在把 `fault.cause` 收窄到 `StructError` 之后，才能调用 `format()`、`flatten()` 或 `prettify()`；这些辅助函数不会被复制到 `Fault` 上。
 
 ### HttpStatusFault
 
 <ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
 
-任何非 2xx 状态。端点声明过 `error` 且 body 解码成功时，`data` 就是那个 body，`response` 也带着它。省略了 `error` 时 body 根本不会被读，于是 `data` 是 `undefined`，`response` 只有元数据。
+任何非 2xx 状态。定义声明了 `error` 且 body 解码成功时，`data` 就是该 body，`response` 也携带它。省略 `error` 时 body 从不读取，因此 `data` 为 `undefined`，`response` 只有元数据。
 
 ### DecodeFault
 
 <ApiSignature name="DecodeFaultCode, DecodeFault" />
 
-响应到了，但没法按声明读出来。`response` 只有元数据：body 就是解码后的值，而解码本身失败了，所以没有 `body` 字段可取。出错细节在 `cause` 上——struct 不匹配时是 `StructError`，表示形式读不出来时是解析器的失败。
+响应到达了，但无法按声明读取。`response` 只有元数据：body 是解码后的值，而失败的是解码，所以没有 `body` 字段可用。细节在 `cause` 上——struct 不匹配时是 `StructError`，表示形式不可读时是解析器失败。
 
 ### PreflightFault
 
@@ -63,7 +63,7 @@ Execute 把一个可判别的 `Fault` 放在 tuple 第一项——声明过的�
 
 <ApiSignature name="AnyFault" />
 
-任何 fault，不论它解码后的错误 body 是什么类型。写那种只做分类、不在乎是哪个端点产出的 handler 时用它；body 类型要紧的地方优先用 `Fault<typeof yourErrorStruct>`。
+任何 `Fault`，不论其解码后的错误 body 是什么类型。用于只做分类、不关心是哪个操作产生的处理函数；body 类型重要时优先使用 `Fault<typeof yourErrorStruct>`。
 
 ## 工厂
 
@@ -79,9 +79,9 @@ Execute 把一个可判别的 `Fault` 放在 tuple 第一项——声明过的�
 
 <ApiSignature name="createHttpStatusFault, createUndecodedHttpStatusFault, createDecodeFault, createNetworkFault, createPreflightFault" />
 
-`createHttpStatusFault` 收一个已经带着解码后 body 的响应；`createUndecodedHttpStatusFault` 只收元数据，给那些没声明 `error` 的端点用。
+`createHttpStatusFault` 接收一个已经携带解码后 body 的响应；`createUndecodedHttpStatusFault` 只接收元数据，用于未声明 `error` 的定义。
 
-`createNetworkFault` 使用 [`isAbortCause`](/zh-Hans/api/core/isabortcause) 判断 `NET_ABORTED`，使用 [`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause) 判断 `NET_TIMEOUT`：它们分别识别来自任意 Core 副本的带标记哨兵、名为 `AbortError` 的 `DOMException`，以及名为 `TimeoutError` 的 `DOMException` 或 `Error`。其他情况一律映射到 `NET_UNREACHABLE`。`createPreflightFault` 直接接收 code；不给 `cause` 时，code 就成为 message。
+`createNetworkFault` 用 [`isAbortCause`](/zh-Hans/api/core/isabortcause) 判断 `NET_ABORTED`，用 [`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause) 判断 `NET_TIMEOUT`：两者都能识别来自任意 Core 副本的带标记哨兵；`isAbortCause` 还能识别名为 `AbortError` 的 `DOMException`，`isTimeoutCause` 还能识别名为 `TimeoutError` 的 `DOMException` 或 `Error`。其他情况都映射到 `NET_UNREACHABLE`。`createPreflightFault` 直接接收代码；没有 `cause` 时，代码成为消息。
 
 所有工厂都返回带上述结构化字段的原生 `Error` 实例；它们不造普通对象错误，`String(fault)` 也不需要适配器。
 
@@ -93,11 +93,11 @@ Execute 把一个可判别的 `Fault` 放在 tuple 第一项——声明过的�
 
 <ApiSignature name="ERR_ABORTED, ERR_TIMEOUT" />
 
-abort 和 timeout 共享的 `Error` 哨兵对象，用作 `cause`。从 HTTP interceptor 里抛一个出来，调用会以 `NET_ABORTED` 或 `NET_TIMEOUT` 结束。SSE 和 WebSocket 的 interceptor 则把任何抛出（包括这两个）都报告为 `EXT_INTERCEPTOR_FAILED`。
+abort 和 timeout 共享的 `Error` 哨兵对象，用作 `cause`。从 HTTP 拦截器中抛出其中一个，调用会以 `NET_ABORTED` 或 `NET_TIMEOUT` 结算。SSE 和 WebSocket 拦截器会把任何抛出（包括这两个）都报告为 `EXT_INTERCEPTOR_FAILED`。
 
 这些哨兵带有不可枚举的 `Symbol.for('defjs.cause.aborted')` 和 `Symbol.for('defjs.cause.timeout')` 标记。分类不依赖哨兵的对象身份，也不受之前无关执行的影响。
 
-## Cause 检查
+## 原因检查
 
 <ApiSignature name="isAbortCause, isTimeoutCause" />
 

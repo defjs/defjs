@@ -11,17 +11,17 @@ description: Nutze ein framework-unabhängiges SDK mit einem über React bereitg
 bun add @defjs/core @defjs/react react
 ```
 
-## Was `@defjs/react` bereitstellt vs. was deine Anwendung besitzt
+## Was `@defjs/react` bereitstellt vs. was deine Anwendung verantwortet
 
 - **Bereitgestellt von `@defjs/react`**: `ClientProvider` und `useClient(overrideClient?)`.
-- **In Besitz deiner Anwendung**: Erstellung des [`DerivableClient`](/de-DE/api/core/derivableclient-type), Abbruch laufender Anfragen beim Unmounten oder bei Abhängigkeitswechseln (`AbortController`), Schließen von SSE-/WebSocket-Handles und Integration von Query-Caches wie TanStack Query.
+- **Verantwortet von deiner Anwendung**: Erstellung des [`DerivableClient`](/de-DE/api/core/derivableclient-type), Abbruch laufender Anfragen beim Unmounten oder bei Abhängigkeitswechseln (`AbortController`), Schließen von SSE-/WebSocket-Handles und Integration von Query-Caches wie TanStack Query.
 - **Wichtig**: `useClient()` gibt das aufrufbare `DerivableClient`-Objekt zurück. Rufe `client({ signal })` dort auf, wo die Operation ausgeführt wird (`getOrder(client({ signal }), input)`). Übergib `client` niemals direkt an `setState(client)`, da React ein Funktionsargument im State-Setter als Updater-Funktion interpretiert.
 
 ---
 
 ## 1. Client bereitstellen und im Effect abrufen
 
-Erstelle den Client an der Anwendungs-Wurzel, umschließe deinen Baum mit `<ClientProvider client={client}>` und brich laufende Anfragen im Cleanup des Effects ab:
+Erstelle den Client an der Anwendungsgrenze, umschließe deinen Baum mit `<ClientProvider client={client}>` und brich laufende Anfragen im Cleanup des Effects ab:
 
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
 <Tab value="app/App.tsx">
@@ -67,7 +67,7 @@ SSE- und WebSocket-Handles überdauern den ursprünglichen `openStream(...)`- od
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Das Abbrechen des an eine WebSocket-Operation übergebenen `signal` beendet die Sitzung als `aborted` und lässt `session.receive` mit `AbortError` fehlschlagen. Fange dies im `catch`-Block ab, sodass nur echte Laufzeitfehler (wie Warteschlangenüberlauf oder Heartbeat-Timeout) sichtbar werden.
+- Das Abbrechen des an eine WebSocket-Operation übergebenen `signal` beendet die Sitzung als `aborted` und lässt `session.receive` mit `AbortError` fehlschlagen. Schütze den `catch`-Block nach dem Disposal, sodass nur echte Laufzeitfehler (wie Warteschlangenüberlauf oder Heartbeat-Timeout) sichtbar werden.
 - Das Abbrechen eines SSE-Streams beendet `for await (const msg of stream)` sauber ohne Exception.
 
 ---
@@ -76,13 +76,13 @@ SSE- und WebSocket-Handles überdauern den ursprünglichen `openStream(...)`- od
 
 - **Browser**: Teile einen einzelnen modulweiten Client, wenn Endpunkt und Interceptors anfrageunabhängig sind.
 - **SSR**: Erstelle innerhalb jeder Server-Request-Grenze einen neuen Client, wenn Header, Cookies, Mandanten oder Anmeldedaten pro Anfrage variieren.
-- Das Unmounten von `<ClientProvider>` bricht aktive HTTP-Aufrufe **nicht** ab, schließt keine SSE-/WebSocket-Verbindungen und ruft `disposeClient` nicht auf.
+- Das Unmounten von `<ClientProvider>` bricht aktive HTTP-Aufrufe **nicht** ab, schließt keine SSE-/WebSocket-Verbindungen und entsorgt den Client nicht.
 
 ---
 
 ## Öffentliche Exporte & verwandte Leitfäden
 
-- `ClientProvider` — Stellt einen `DerivableClient` bereit (`ClientProviderProps: { client: Client; children?: ReactNode }`).
+- `ClientProvider` — Stellt einen `DerivableClient` bereit (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
 - `useClient(overrideClient?)` — Liest den expliziten Override oder den nächsten über Provider bereitgestellten Client aus.
-- Verwandte Leitfäden: [Client](/de-DE/docs/client), [Fehlerbehandlung](/de-DE/docs/errors), [SSE-Ereignisströme](/de-DE/docs/sse), [WebSocket-Sitzungen](/de-DE/docs/web-socket).
+- Verwandte Leitfäden: [Client](/de-DE/docs/client), [Fehlerbehandlung](/de-DE/docs/errors), [SSE-Event-Streams](/de-DE/docs/sse), [WebSocket-Sitzungen](/de-DE/docs/web-socket).
 - Verwandte Rezepte: [Deklarierte 404 behandeln](/de-DE/recipes/get-declared-404), [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http), [SSE-Stream verarbeiten](/de-DE/recipes/consume-sse), [WebSocket-Sitzung öffnen](/de-DE/recipes/websocket-session).

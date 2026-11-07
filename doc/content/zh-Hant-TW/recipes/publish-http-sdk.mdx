@@ -1,28 +1,30 @@
 ---
-title: "建置並發佈 SDK"
-description: 將 API 定義發布為帶有型別的 npm 套件，讓每個應用程式自行設定專屬 Client。
+title: "建置並發布 SDK"
+description: 把 API 定義連同型別匯出成 npm 套件，讓每個應用程式自行設定 client。
 ---
 
 # 建置並發布 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs SDK 將純粹的操作定義與 Struct schemas 打包發布為 npm 套件，並將 `createClient(...)`、端點、憑證與攔截器完整保留給取用端應用程式自行掌控。
+Defjs SDK 以 npm 套件的形式匯出純粹的操作定義與 struct schema，把 `createClient(...)`、端點、憑證與攔截器全都留給取用端應用程式。
 
 ---
 
 ## 1. 定義 SDK 套件
 
-將你的操作定義、統一匯出入口（Barrel export）、`package.json` 與 `tsconfig.json` 放置在獨立的套件目錄中，並將 `@defjs/core` 宣告為 `peerDependency`：
+把操作定義、barrel 匯出、`package.json` 與 `tsconfig.json` 放在專屬的套件目錄中，並將 `@defjs/core` 宣告為 `peerDependency`：
 
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -69,12 +71,12 @@ export { getOrder } from "./orders";
   </Tab>
 </Tabs>
 
-- `@defjs/core` 維持外部的執行時期 `peerDependency`，與取用端應用程式共用。
-- `"sideEffects": false` 讓打包工具在應用程式僅匯入部分操作時，能夠透過 Tree-shaking 移除未使用的端點程式碼。
+- `@defjs/core` 維持為外部的執行時期 `peerDependency`，與取用端應用程式共用。
+- `"sideEffects": false` 讓打包工具在應用程式只匯入部分操作時，以 tree-shaking 移除未使用的操作程式碼。
 
 ---
 
-## 2. 建置並驗證 Tarball 封裝
+## 2. 建置並驗證 tarball
 
 使用 `tsdown` 打包產出 `dist/index.js` 與 `dist/index.d.ts`，並在發布前檢查套件內容：
 
@@ -85,7 +87,7 @@ bun pm pack --dry-run
 bun pm pack
 ```
 
-驗證 `dist/index.js` 與 `dist/index.d.ts` 是否確實包含在 Tarball 壓縮檔中。
+確認 tarball 中確實包含 `dist/index.js` 與 `dist/index.d.ts`。
 
 ---
 
@@ -97,7 +99,7 @@ bun pm pack
 bun add @company/orders-sdk @defjs/core@^0.6.0
 ```
 
-應用程式建立專屬的 `Client`，並將其傳入匯入的操作中：
+應用程式建立自己的 `Client`，並把它傳給匯入的操作：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -107,16 +109,16 @@ bun add @company/orders-sdk @defjs/core@^0.6.0
 paid
 ```
 
-在正式環境程式碼中，請將相對路徑匯入 `./orders-sdk` 替換為套件名稱 `@company/orders-sdk`，並移除 `withHTTPHandle(...)` 以使用平台原生的 `fetch`。
+在正式環境程式碼中，請把相對匯入 `./src/orders.ts` 換成 `@company/orders-sdk`，並移除 `withHTTPHandle(...)`，改用平台的 `fetch`。
 
 ---
 
 ## 4. 測試與發布
 
-使用[記憶體內 Handle 測試](/zh-Hant-TW/recipes/test-with-handle)演練匯出的操作定義，涵蓋請求對應、`output` 解碼、已宣告的 `HTTP_STATUS` 錯誤以及取消機制。驗證無誤後即可發布套件：
+用[記憶體內的 Handle 測試](/zh-Hant-TW/recipes/test-with-handle)測試匯出的定義，涵蓋請求對應、`output` 解碼、已宣告的 `HTTP_STATUS` fault 與取消。確認無誤後再發布套件：
 
 ```sh
 bun publish --access public
 ```
 
-詳細資訊請參閱 [HTTP 請求](/zh-Hant-TW/docs/http)、[Client](/zh-Hant-TW/docs/client)、[測試](/zh-Hant-TW/docs/testing) 與 [核心架構](/zh-Hant-TW/docs/design-decisions)。
+請參閱 [HTTP 操作](/zh-Hant-TW/docs/http)、[Client](/zh-Hant-TW/docs/client)、[測試](/zh-Hant-TW/docs/testing) 與[核心架構](/zh-Hant-TW/docs/design-decisions)。

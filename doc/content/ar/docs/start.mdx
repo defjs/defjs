@@ -17,7 +17,7 @@ bun add @defjs/core
 
 ## 2. تعريف SDK واستدعاؤه من تطبيقك
 
-احرص على إبقاء تعريف العملية في وحدة SDK المستقلة الخاصة بها (`src/define-request.ts`)، وأنشئ العميل داخل تطبيقك المستهلك (`src/execute-locally.ts` أو `src/real-api.ts`):
+احرص على إبقاء تعريف العملية في وحدة SDK مستقلة (`src/define-request.ts`)، وأنشئ العميل داخل تطبيقك المستهلك (`src/execute-locally.ts` أو `src/real-api.ts`):
 
 <Tabs items={["src/define-request.ts", "src/execute-locally.ts", "src/real-api.ts"]}>
 <Tab value="src/define-request.ts">
@@ -47,7 +47,7 @@ bun add @defjs/core
 
 1. **`src/define-request.ts` (تعريف حزمة SDK)**:
    - يصرّح عن مخططات المدخلات `input`، والمخرجات `output` (لاستجابات النجاح `2xx`)، والأخطاء `error` (للاستجابات غير `2xx`) باستخدام `struct`.
-   - يوفّر دالة بناء `builder` تزامنية ونقية تُحوّل `input` إلى `{ path }`. متى ما تم الإعلان عن `input`، يلزم تقديم دالة `builder` صريحة.
+   - يوفّر دالة `builder` تزامنية ونقية تُحوّل `input` إلى `{ path }`. متى ما تم الإعلان عن `input`، يلزم تقديم دالة `builder` صريحة.
    - يصدّر العملية `getOrder` دون إنشاء أو التقاط أي عميل.
 2. **`src/execute-locally.ts` (تنفيذ الاختبار دون اتصال بالشبكة)**:
    - يضبط عميلاً باستخدام `withHTTPHandle(...)` لتشغيل خط أنابيب Defjs بالكامل (التحقق من المدخلات، وتحديد الروابط، وتوزيع حالات الاستجابة، وتفكيك بنية كائنات الاستجابة) دون إجراء أي اتصال بالشبكة.
@@ -88,6 +88,6 @@ Order not found
 
 ## الخطوات التالية
 
-- تعرّف على القواعد البنيوية والمعمارية في [الهندسة المعمارية وقرارات التصميم](/ar/docs/design-decisions).
+- تعرّف على القواعد البنيوية والمعمارية في [معمارية النواة](/ar/docs/design-decisions).
 - صمّم حمولات معقدة وأسماء بديلة للحقول في [Struct والمخططات](/ar/docs/struct).
 - احزم تعريفاتك وانشرها على npm في [بناء حزمة SDK ونشرها](/ar/recipes/publish-http-sdk).

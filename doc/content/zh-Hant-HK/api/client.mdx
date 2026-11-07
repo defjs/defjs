@@ -1,65 +1,65 @@
 ---
 title: Client
-description: createClient、option helpers，同 Client type。
+description: createClient、選項輔助函式，同 Client 型別。
 ---
 
 # Client
 
-`createClient(...)` return 一個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)。Client options 由左到右組合，之後 call `client(options?)` 攞一個 [`Client`](/zh-Hant-HK/api/core/client-type) 值，再傳俾操作：`getOrder(client(options), input)`。
+`createClient(...)` 回傳一個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)。Client 選項由左至右組合，之後呼叫 `client(options?)` 取得 [`Client`](/zh-Hant-HK/api/core/client-type) 值，再傳俾操作：`getOrder(client(options), input)`。
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料，建議喺 request boundary 入面建立 client。返回嘅 factory 係一個 function。Call 佢會 return 一個 `Client` 值，而且唔做 I/O。Factory 本身亦係一個 `Client`，冇帶任何 request options。
+選項按次序套用。如果攔截器會捕獲 auth 或者 tenant 資料，建議喺 request boundary 入面建立 client。回傳嘅 factory 係一個函式。呼叫佢會回傳一個 `Client` 值，而且唔會做 I/O。factory 本身亦係一個 `Client`，唔帶任何 request options。
 
-- **options** — Option helpers，例如 `withEndpoint`。
-- **Returns** 一個可呼叫嘅 factory。Base 設定每個 client 值共用，runtime 唔會 freeze。佢按慣例固定：個 library 唔會改佢，應用程式亦唔應該改。
+- **options** — 選項輔助函式，例如 `withEndpoint`。
+- **Returns** 一個可呼叫嘅 factory。Base 設定由每個 client 值共用，runtime 唔會 freeze。佢按慣例固定：library 唔會改佢，應用程式亦唔應該改。
 
 <include cwd>examples/api/create-client.ts#example</include>
 
-## 選項 helpers
+## 選項輔助函式
 
-所有 helpers 都 return `ClientOption`。同一個設定，後面嗰次 call 會取代前面嗰次，只有 `withInterceptors` 例外，佢會 append。
+所有輔助函式都回傳 `ClientOption`。同一個設定，後面嗰次呼叫會取代前面嗰次，只有 `withInterceptors` 例外，佢會追加。
 
 ### withEndpoint()
 
 <ApiSignature name="withEndpoint" />
 
-按第一次見到嘅次序複製候選 base URL，之後再出現嘅同一個字串會丟掉。後面一次 `withEndpoint` 會取代成份 list。佢唔檢查 URL，亦唔會換走 balancer。空 list 係合法值，該次 call 會以 `REQ_BUILD_FAILED` 失敗。
+按第一次見到嘅次序複製候選 base URL，之後再出現嘅同一個字串會丟掉。後面一次 `withEndpoint` 會取代成份清單。佢唔檢查 URL，亦唔會換走 balancer。空清單係合法值，該次呼叫會以 `REQ_BUILD_FAILED` 失敗。
 
 ### withBalancer()
 
 <ApiSignature name="withBalancer" />
 
-換走之後啲 call 所用嘅 balancer。個 object 按 reference 儲起。冇呢個 option 嘅時候，每個 client 各自有自己嘅 `pickFirstBalancer()`。
+取代之後呼叫所用嘅 balancer。個 object 按 reference 儲存。冇呢個選項嘅時候，每個 client 各自有自己嘅 `pickFirstBalancer()`。
 
 ### withInterceptors()
 
 <ApiSignature name="withInterceptors" />
 
-按 registration order append interceptors。Mixed kinds 會喺操作運行時按 transport filter。
+按註冊順序追加攔截器。混合種類會喺操作執行時按傳輸層過濾。
 
 ### withQuerySerializer()
 
 <ApiSignature name="withQuerySerializer" />
 
-換走 HTTP、SSE 同 WebSocket 嘅 query encoding。`serializer(query)` 收到嘅係**已經 encode 嘅 wire object**（aliases 已套用，`Date` 係 ISO，`bigint` 係 string），一定要 return query string，而且唔可以有 leading `?`。Request 冇 query 嘅時候唔會 call。Builder return `URLSearchParams` 就會 skip 佢。
+取代 HTTP、SSE 同 WebSocket 嘅 query 編碼。`serializer(query)` 收到嘅係**已經編碼嘅 wire object**（aliases 已套用，`Date` 係 ISO，`bigint` 係 string），一定要回傳 query string，而且唔可以有開頭嘅 `?`。request 冇 query 嘅時候唔會呼叫。builder 回傳 `URLSearchParams` 就會跳過佢。
 
 ### withHeaders()
 
 <ApiSignature name="withHeaders" />
 
-為 HTTP 同 SSE requests set 靜態預設 headers。WebSocket requests 唔會用。`headers` 會喺 option 套用嗰刻 copy，所以之後改嗰個 object 唔會影響 client。第二次 `withHeaders` 會取代第一次，唔會合併。
+為 HTTP 同 SSE request 設定靜態預設 headers。WebSocket request 唔會用。`headers` 會喺選項套用嗰刻複製，所以之後改嗰個 object 唔會影響 client。第二次 `withHeaders` 會取代第一次，唔會合併。
 
 單一 request 嘅優先次序：
 
 1. 預設值係起始嘅 header 集合。
-2. Request builder return 嘅 `headers` 會取代同名嘅預設值。嗰個名嘅第一個值取代預設；同一個 array 入面之後嘅值只會 append 落呢個取代結果。Scalar 或者 `Headers` instance 亦會取代。其他預設名保留。
-3. Interceptors 收到合併後嘅 headers，可以修改。
-4. 用預設 HTTP transport 嘅話，XSRF header 最後先加，而且只喺仍然未有嘅時候先加（見 `withXSRF`）。
+2. request builder 回傳嘅 `headers` 會取代同名嘅預設值。嗰個名嘅第一個值取代預設；同一個 array 入面之後嘅值只會追加落呢個取代結果。scalar 或者 `Headers` 實例亦會取代。其他預設名保留。
+3. 攔截器收到合併後嘅 headers，可以修改。
+4. 用預設 HTTP 傳輸層嘅話，XSRF header 最後先加，而且只喺仍然未有嘅時候先加（見 `withXSRF`）。
 
-每個 request 都會變嘅值，例如刷新後嘅 Bearer token，或者對序列化 body 計算嘅 HMAC，請用 interceptor。
+每個 request 都會變嘅值，例如刷新後嘅 Bearer token，或者對序列化 body 計算嘅 HMAC，請用攔截器。
 
 冇 client 層級嘅預設 deadline。某次呼叫需要 deadline 時，喺派生 client 上傳 `signal: AbortSignal.timeout(ms)`。手動 abort 係 `NET_ABORTED`。`AbortSignal.timeout` 分類為 `NET_TIMEOUT`。
 
@@ -73,21 +73,21 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 <ApiSignature name="withHTTPHandle, withSSEHandle, withWebSocketHandle" />
 
-換走 Fetch（HTTP/SSE）或者 WebSocket constructor。
+取代 Fetch（HTTP/SSE）或者 WebSocket 建構函式。
 
 ### withCredentials()
 
 <ApiSignature name="withCredentials" />
 
-`true` 嘅時候，HTTP 同 SSE 嘅 Fetch 會用 `credentials: 'include'`。預設係關。WebSocket 連線唔受影響。
+`true` 嘅時候，HTTP 同 SSE 嘅 Fetch 會用 `credentials: 'include'`。預設關閉。WebSocket 連線唔受影響。
 
 ### withXSRF()
 
 <ApiSignature name="withXSRF" />
 
-為 HTTP requests 加 XSRF token header。`options` 就係 `xsrf` 設定，形狀同 [`ClientOptions`](/zh-Hant-HK/api/core/clientoptions-type) 上嘅 `xsrf` 一樣：`cookieName`（default `XSRF-TOKEN`）、`headerName`（default `X-XSRF-TOKEN`）同 `tokenProvider({ request })`。唔傳參數 call `withXSRF()` 會啟用呢啲 defaults。SSE 同 WebSocket requests 唔受影響。
+為 HTTP request 加上 XSRF token header。`options` 就係 `xsrf` 設定，形狀同 [`ClientOptions`](/zh-Hant-HK/api/core/clientoptions-type) 上嘅 `xsrf` 一樣：`cookieName`（預設 `XSRF-TOKEN`）、`headerName`（預設 `X-XSRF-TOKEN`）同 `tokenProvider({ request })`。唔傳參數呼叫 `withXSRF()` 會啟用呢啲預設值。SSE 同 WebSocket request 唔受影響。
 
-預設 HTTP transport 只會喺以下條件全部成立時加 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；request 係 same-origin；而且搵到非空嘅 token。只要有 `location`（包括 Worker），解析後嘅 request origin 就必須同 `location.origin` 一致；冇 `location` 時，有 `baseEndpoint` 嘅 request 就算 same-origin。跨 origin request 唔會 call `tokenProvider`。有提供該 provider 就由佢取得 token，否則由 `document.cookie` 取得；只有 `document` 存在時先會讀取 cookie。
+預設 HTTP 傳輸層只會喺以下條件全部成立時加 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；request 係 same-origin；而且搵到非空嘅 token。只要有 `location`（包括 Worker），解析後嘅 request origin 就必須同 `location.origin` 一致；冇 `location` 時，有 `baseEndpoint` 嘅 request 就算 same-origin。跨 origin request 唔會呼叫 `tokenProvider`。有提供該 provider 就由佢取得 token，否則由 `document.cookie` 取得；只有 `document` 存在時先會讀取 cookie。
 
 ### SSE 調校選項
 
@@ -109,45 +109,45 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 <ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
 
-## 類型
+## 型別
 
 ### DerivableClient
 
 <ApiSignature name="DerivableClient" />
 
-`createClient` 返回嘅根 client，有兩種形態。Factory 係一個 function，同時亦係一個冇 request options 嘅 `Client`，所以 `getOrder(client, input)` 可以直接用。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) call 佢，會 return 一個只供單次呼叫用嘅普通 `Client` 值。嗰個值唔可以 call，所以 `client()()` 無法編譯，runtime 亦會 throw `TypeError`。派生只喺 factory 做一次，冇鏈式。寫類型時用 `DerivableClient`，唔好寫 `ReturnType<typeof createClient>`。
+`createClient` 回傳嘅根 client，有兩種形態。factory 係一個函式，同時亦係一個冇 request options 嘅 `Client`，所以 `getOrder(client, input)` 可以直接用。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 呼叫佢，會回傳一個只供單次呼叫用嘅普通 `Client` 值。嗰個值唔可以呼叫，所以 `client()()` 無法編譯，runtime 亦會 throw `TypeError`。派生只喺 factory 做一次，冇鏈式。寫型別時用 `DerivableClient`，唔好寫 `ReturnType<typeof createClient>`。
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` 係一個值，唔係 function。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) call [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 就會得到一個。`client()` 同 `client(undefined)` 唔會保存 request options。`client({})` 保留一份空 snapshot。呢次 call 每個頂層 field 只讀一次。`protocols` array 會被複製。`heartbeat` 同 `reconnect` 會複製各自嘅已知 field。缺失嘅 nested block 仍然缺失。`signal`、`beforeConnect` 同 callback 保持原來嘅 identity。被捕獲 field 上嘅 getter 喺呢次 call 期間運行；如果 throw，異常會離開呢次 call。無效數字仍然會之後以 `REQ_OPTIONS_INVALID` 失敗。派生唔做 I/O。Client 值唔可以 call，call 佢無法編譯，runtime 亦會 throw `TypeError`。每次呼叫建立一個 client 值。同一個值可以傳俾好多操作，但重用帶有 `signal` 嘅值會共用嗰個 signal。`signal` 唔會合併；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。Factory 嘅 base 設定仍然共用，亦唔會 freeze。標準 `with*` helper 喺套用時複製佢哋擁有嘅固定 record。
+`Client` 係一個值，唔係函式。用 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 配 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 呼叫，就會得到一個。`client()` 同 `client(undefined)` 唔會保存 request options。`client({})` 保留一份空 snapshot。呢次呼叫每個頂層欄位只讀一次。`protocols` array 會被複製。`heartbeat` 同 `reconnect` 會複製各自嘅已知欄位。缺失嘅巢狀區塊仍然缺失。`signal`、`beforeConnect` 同 callback 保持原來嘅 identity。被捕獲欄位上面嘅 getter 喺呢次呼叫期間執行；如果 throw，異常會離開呢次呼叫。無效數字仍然會之後以 `REQ_OPTIONS_INVALID` 失敗。派生唔會做 I/O。Client 值唔可以呼叫，呼叫佢無法編譯，runtime 亦會 throw `TypeError`。每次呼叫建立一個 client 值。同一個值可以傳俾好多操作，但重用帶有 `signal` 嘅值會共用嗰個 signal。`signal` 唔會合併；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。factory 嘅 base 設定仍然共用，亦唔會 freeze。標準 `with*` 輔助函式喺套用時複製佢哋擁有嘅固定 record。
 
-唔好將 factory 傳俾 React state setter（`setState(factory)` 會將佢當 updater 嚟 call），亦唔好將佢做 Vue `watch` 或者 `computed` 嘅 source（嗰啲會 call function）。
+唔好將 factory 傳俾 React state setter（`setState(factory)` 會將佢當 updater 嚟呼叫），亦唔好將佢做 Vue `watch` 或者 `computed` 嘅 source（嗰啲會呼叫函式）。
 
 ### RequestOptions
 
 <ApiSignature name="RequestOptions" />
 
-七個扁平 field。每種協定讀自己明白嘅 field，其餘忽略。傳 `heartbeat` 俾 HTTP 會被忽略，唔係 fault。`client(options)` 喺呢次 call 複製 `protocols` array，以及 `heartbeat` 同 `reconnect` 嘅已知 field。缺失嘅 nested block 仍然缺失。`signal`、`beforeConnect` 同 callback 保持原來嘅 identity。SSE 只會由 request options 讀 `signal`。SSE reconnect 來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。冇 compile-time 嘅協定過濾，亦冇 `timeout` 或 `abort` field。
+七個扁平欄位。每種協議只會讀自己明白嘅欄位，其餘忽略。將 `heartbeat` 傳俾 HTTP 會被忽略，唔係 fault。`client(options)` 喺呢次呼叫複製 `protocols` array，以及 `heartbeat` 同 `reconnect` 嘅已知欄位。缺失嘅巢狀區塊仍然缺失。`signal`、`beforeConnect` 同 callback 保持原來嘅 identity。SSE 只會由 request options 讀 `signal`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。冇 compile-time 嘅協議過濾，亦冇 `timeout` 或 `abort` 欄位。
 
-| Field                | 協定                   | 取代方式                                                      |
+| Field                | 協議                   | 取代方式                                                      |
 | -------------------- | ---------------------- | ------------------------------------------------------------- |
 | `signal`             | HTTP、SSE 同 WebSocket | 中止該次呼叫。SSE 同 WebSocket 覆蓋成條連線，包括 open 之後。 |
-| `onUploadProgress`   | HTTP                   | 其他協定會忽略。                                              |
-| `onDownloadProgress` | HTTP                   | 其他協定會忽略。                                              |
+| `onUploadProgress`   | HTTP                   | 其他協議會忽略。                                              |
+| `onDownloadProgress` | HTTP                   | 其他協議會忽略。                                              |
 | `beforeConnect`      | WebSocket              | 喺該次呼叫取代 client 設定。                                  |
-| `protocols`          | WebSocket              | 取代 client 嘅 list。                                         |
+| `protocols`          | WebSocket              | 取代 client 嘅清單。                                          |
 | `heartbeat`          | WebSocket              | 成個換走。`timeoutMs` 係等確認嘅時間，唔係請求 deadline。     |
 | `reconnect`          | WebSocket              | 成個換走。                                                    |
 
-[`HttpExecuteOptions`](/zh-Hant-HK/api/core/httpexecuteoptions-type) 係 HTTP 嗰片（`signal` 加 progress）。[`EventStreamExecuteOptions`](/zh-Hant-HK/api/core/eventstreamexecuteoptions-type) 係 `{ signal? }`。[`WebSocketExecuteOptions`](/zh-Hant-HK/api/core/websocketexecuteoptions-type) 係 WebSocket 嗰片再加 `signal`。
+[`HttpExecuteOptions`](/zh-Hant-HK/api/core/httpexecuteoptions-type) 係 HTTP 嗰部分（`signal` 加上 progress）。[`EventStreamExecuteOptions`](/zh-Hant-HK/api/core/eventstreamexecuteoptions-type) 係 `{ signal? }`。[`WebSocketExecuteOptions`](/zh-Hant-HK/api/core/websocketexecuteoptions-type) 係 WebSocket 嗰部分再加 `signal`。
 
 ### ClientOption
 
 <ApiSignature name="ClientOption" />
 
-修改 `createClient` 建立嘅 `ClientConfig`。冇合適嘅 `with*` helper 時，可以自己寫一個。
+修改 `createClient` 建立嘅 `ClientConfig`。冇合適嘅 `with*` 輔助函式時，可以自己寫一個。
 
 ### QuerySerializer
 
@@ -157,7 +157,7 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 <ApiSignature name="FetchHandle" />
 
-Defjs 要求 Fetch 實作具備嘅 call signature。佢唔係 `typeof fetch`，所以 mock 唔需要 `preconnect` 呢類 host 額外成員。預設 HTTP/SSE handles 每次 call 都會解析 `globalThis.fetch`。HTTP 只有喺平台原生 Fetch 未被取代時先用 `(url, init)`；被取代嘅 global Fetch 同自訂 handles 都會收到 `Request`。SSE 一律傳入 `Request`。冇 Fetch 亦可以 import Core；如果執行時仍然冇 Fetch，預設執行會回報 `ENV_UNSUPPORTED`，自訂 handles 就仍然可用。
+Defjs 要求 Fetch 實作具備嘅呼叫簽章。佢唔係 `typeof fetch`，所以 mock 唔需要 `preconnect` 呢類 host 額外成員。預設 HTTP/SSE handle 每次呼叫都會解析 `globalThis.fetch`。HTTP 只有喺平台原生 Fetch 未被取代時先用 `(url, init)`；被取代嘅 global Fetch 同自訂 handle 都會收到 `Request`。SSE 一律傳入 `Request`。冇 Fetch 亦可以 import Core；如果執行時仍然冇 Fetch，預設執行會回報 `ENV_UNSUPPORTED`，自訂 handle 就仍然可用。
 
 ### ClientSSEOptions
 
@@ -165,7 +165,7 @@ Defjs 要求 Fetch 實作具備嘅 call signature。佢唔係 `typeof fetch`，�
 
 <ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
 
-兩種 transport 嘅 reconnect 都係 opt-in：冇 `withSSEReconnect` / `withWebSocketReconnect` 就唔會重試。一旦設咗 `reconnect`，就會套用以下預設值：
+兩種傳輸層嘅重連都係 opt-in：冇 `withSSEReconnect` / `withWebSocketReconnect` 就唔會重試。一旦設咗 `reconnect`，就會套用以下預設值：
 
 | 欄位         | SSE             | WebSocket       |
 | ------------ | --------------- | --------------- |
@@ -175,27 +175,27 @@ Defjs 要求 Fetch 實作具備嘅 call signature。佢唔係 `typeof fetch`，�
 | `jitter`     | `0`             | `0`             |
 | `maxDelayMs` | 冇上限          | `30000`         |
 
-`connectTimeoutMs` 可選，而且必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。對 SSE，佢限制由 Fetch 到 response headers；對 WebSocket，佢限制由 construction 到 `open`；handshake 之後會被清走。到期會向 balancer 報告 `NET_UNREACHABLE`，等 reconnect 可以 pick 下一個 endpoint。重試用盡就以 `NET_TIMEOUT` 結束。
+`connectTimeoutMs` 可選，而且必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。對 SSE，佢限制由 Fetch 到 response headers；對 WebSocket，佢限制由建立連線到 `open`；handshake 之後會被清走。到期會向 balancer 報告 `NET_UNREACHABLE`，等重連可以 pick 下一個端點。重試用盡就以 `NET_TIMEOUT` 結束。
 
-兩種 transport 每次成功握手，都會重設該次斷線嘅重試預算、callback 嘅嘗試次數同退避指數。`attempts: 0` 停用重試；省略 `attempts` 唔代表同一次斷線可以無限重試。`maxDelayMs` 限制套用 jitter 同四捨五入之後嘅最終延遲；平台 timer 上限 `2_147_483_647` ms 亦適用，包括 SSE 冇設定上限嘅情況。Base 係零就會維持零；有效數值運算溢位時，會限制喺上限。
+兩種傳輸層每次成功握手，都會重設該次斷線嘅重試預算、callback 嘅嘗試次數同退避指數。`attempts: 0` 停用重試；省略 `attempts` 唔代表同一次斷線可以無限重試。`maxDelayMs` 限制套用 jitter 同四捨五入之後嘅最終延遲；平台 timer 上限 `2_147_483_647` ms 亦適用，包括 SSE 冇設定上限嘅情況。Base 係零就會維持零；有效數值運算溢位時，會限制喺上限。
 
-重連選項會喺 transport 執行之前驗證：`attempts` 必須係非負安全整數；`delayMs` 必須係有限非負數；`maxDelayMs` 必須係有限非負數或者正 `Infinity`，後者會移除設定上限，但最終等待仍然唔會超過 `2_147_483_647` ms；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket `attempts: 0` 會停用之後嘅重試，但所有明確提供嘅重連欄位仍然會喺首次連線之前驗證，同 SSE 一樣。Jitter 會向兩個方向縮放已設上限嘅 base，之後再套用最終上限。
+重連選項會喺傳輸層執行之前驗證：`attempts` 必須係非負安全整數；`delayMs` 必須係有限非負數；`maxDelayMs` 必須係有限非負數或者正 `Infinity`，後者會移除設定上限，但最終等待仍然唔會超過 `2_147_483_647` ms；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket `attempts: 0` 會停用之後嘅重試，但所有明確提供嘅重連欄位仍然會喺首次連線之前驗證，同 SSE 一樣。jitter 會向兩個方向縮放已設上限嘅 base，之後再套用最終上限。
 
-對 SSE 嚟講，`delayMs` 只係起始嘅 base delay：server 傳嚟、只包含數字嘅 `retry:` field 會取代佢，用喺之後嘅嘗試，恢復連線之後亦一樣。`shouldReconnect` 回傳 `false` 就會停止重試。SSE 嘅 callback 另外會收到 `lastEventId`、request 嘅 `method` 同最新嘅 `open` 資料，亦可以係 async。冇呢個 callback 嘅時候，SSE 只會重連 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` request；有呢個 callback 嘅話，每種 method 會唔會重連都由佢嘅結果決定。最新 event ID 會以 UTF-8 bytes 放喺 `Last-Event-ID` 送出；空 ID 會清除佢，包含 NUL 嘅 ID 會被忽略。WebSocket 嘅 callback 則會收到 close 嘅 `code`、`reason` 同 `wasClean`。
+對 SSE 嚟講，`delayMs` 只係起始嘅 base delay：server 傳嚟、只包含數字嘅 `retry:` 欄位會取代佢，用喺之後嘅嘗試，恢復連線之後亦一樣。`shouldReconnect` 回傳 `false` 就會停止重試。SSE 嘅 callback 另外會收到 `lastEventId`、request 嘅 `method` 同最新嘅 `open` 資料，亦可以係 async。冇呢個 callback 嘅時候，SSE 只會重連 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` request；有呢個 callback 嘅話，每種 method 會唔會重連都由佢嘅結果決定。最新 event ID 會以 UTF-8 bytes 放喺 `Last-Event-ID` 送出；空 ID 會清除佢，包含 NUL 嘅 ID 會被忽略。WebSocket 嘅 callback 則會收到 close 嘅 `code`、`reason` 同 `wasClean`。
 
-SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 event（`missing-struct`），或者 data 通唔過 struct 驗證嘅 event（`validation-failed`）。呢類 event 一定會被丟棄；handler 嘅 return 值會被忽略，佢 throw 出嚟嘅 error 亦唔會關閉 stream。
+SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 event（`missing-struct`），或者 data 通唔過 struct 驗證嘅 event（`validation-failed`）。呢類 event 一定會被丟棄；handler 嘅回傳值會被忽略，佢 throw 出嚟嘅 error 亦唔會關閉 stream。
 
-對 WebSocket 嚟講，`beforeConnect`、`heartbeat`、`protocols` 同 `reconnect` 亦可以喺派生 client 上傳；每個都會喺該次呼叫成個取代 client 嘅值。`heartbeat.message` 建立每個 ping；省略或者 return `undefined` 就唔會傳送任何嘢。`heartbeat.timeoutMs` 等確認。佢唔係請求 deadline。
+對 WebSocket 嚟講，`beforeConnect`、`heartbeat`、`protocols` 同 `reconnect` 亦可以喺派生 client 上傳；每個都會喺該次呼叫成個取代 client 嘅值。`heartbeat.message` 建立每個 ping；省略或者回傳 `undefined` 就唔會傳送任何嘢。`heartbeat.timeoutMs` 等確認。佢唔係請求 deadline。
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-簽名入面見到嘅 fields 係 `sse` 同 `webSocket`。另外七個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 同 `withCredentials`——繼承自未匯出嘅 HTTP base。`endpoints` 係 `readonly string[]`。解析後嘅預設值係 `[]`。空 array 係合法值，該次 call 會以 `REQ_BUILD_FAILED` 失敗。冇 client 層級嘅 `timeout`。`createClient` 唔接受呢個 object；佢接受 option helpers。
+簽名入面見到嘅欄位係 `sse` 同 `webSocket`。另外七個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 同 `withCredentials`——繼承自未匯出嘅 HTTP base。`endpoints` 係 `readonly string[]`。解析後嘅預設值係 `[]`。空 array 係合法值，該次呼叫會以 `REQ_BUILD_FAILED` 失敗。冇 client 層級嘅 `timeout`。`createClient` 唔接受呢個 object；佢接受選項輔助函式。
 
 ### ClientConfig
 
-Option helpers 修改、操作讀取嘅 resolved snapshot：套用預設值之後嘅 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）、`webSocket` 同 `balancer` 一定存在。`http.retry` 可選，預設係 `undefined`（一次 attempt，冇 budget）；`withRetry(options?)` 設定佢。`balancer` 預設係嗰個 client 新建嘅 `pickFirstBalancer()`。佢唔係 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) field。
+選項輔助函式會修改、操作會讀取嘅已解析 snapshot：套用預設值之後嘅 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）、`webSocket` 同 `balancer` 一定存在。`http.retry` 可選，預設係 `undefined`（一次 attempt，冇預算）；`withRetry(options?)` 設定佢。`balancer` 預設係嗰個 client 新建嘅 `pickFirstBalancer()`。佢唔係 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 欄位。
 
 ### ClientSSEConfig
 
@@ -205,13 +205,13 @@ Option helpers 修改、操作讀取嘅 resolved snapshot：套用預設值之�
 
 ### WebSocketHandle
 
-Transport 使用嘅 WebSocket instance surface：`WebSocket` 去掉 `binaryType`、ready-state 常數、`dispatchEvent` 同 `on*` handler 屬性，再加上唯讀嘅 `readyState: number`。
+傳輸層使用嘅 WebSocket 實例介面：`WebSocket` 去掉 `binaryType`、ready-state 常數、`dispatchEvent` 同 `on*` handler 屬性，再加上唯讀嘅 `readyState: number`。
 
 ### WebSocketHandleConstructor
 
 <ApiSignature name="WebSocketHandleConstructor" />
 
-傳畀 `withWebSocketHandle` 嘅 constructor。佢必須公開 `OPEN` ready-state 常數。
+傳畀 `withWebSocketHandle` 嘅建構函式。佢必須公開 `OPEN` ready-state 常數。
 
 ## Balancers
 
@@ -221,29 +221,29 @@ Transport 使用嘅 WebSocket instance surface：`WebSocket` 去掉 `binaryType`
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` 會喺 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前進。可選嘅有限正數 `failbackMs` 喺呢段間隔之後，對第一個 endpoint 做至多一個同時進行嘅 probe。HTTP 重試係用 `withRetry` 設定嘅另一份 client 策略。`roundRobinBalancer` 順住份 list 行。`weights` 可選。睇 [多個 endpoints](/zh-Hant-HK/docs/client#multiple-endpoints)。
+`pickFirstBalancer` 會喺 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前進。可選嘅有限正數 `failbackMs` 喺呢段間隔之後，對第一個端點做至多一個同時進行嘅 probe。HTTP 重試係用 `withRetry` 設定嘅另一份 client 策略。`roundRobinBalancer` 順住份清單行。`weights` 可選。睇[多個端點](/zh-Hant-HK/docs/client#multiple-endpoints)。
 
 ### p2cBalancer()
 
 <ApiSignature name="p2cBalancer" />
 
-唔放回咁抽唔同嘅 candidate（同 Envoy/gRPC A48 唔同），揀 tower 嘅 PeakEwma 或者 pending load。Linkerd 預設係 RTT 30 ms、decay 10 秒。`start` 開始計入 pending，`end` 喺 headers 或者 socket open 釋放佢，並對每種 transport 記錄真實 RTT，包括 failure。冇 `end` 嘅 `done` 只釋放 pending，唔產生 RTT sample。冇 p2c failure classifier，亦冇 penalty。`choiceCount` 預設係 2，上限係 10。
+唔放回咁抽樣唔同嘅候選端點（同 Envoy/gRPC A48 唔同），揀 tower 嘅 PeakEwma 或者 pending load。Linkerd 預設係 RTT 30 ms、decay 10 秒。`start` 開始計入 pending，`end` 喺 headers 或者 socket open 釋放佢，並對每種傳輸層記錄真實 RTT，包括 failure。冇 `end` 嘅 `done` 只釋放 pending，唔產生 RTT sample。冇 p2c failure classifier，亦冇 penalty。`choiceCount` 預設係 2，上限係 10。
 
 ### outlierDetection()
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-用 Linkerd 式嘅 consecutive-failure circuit breaking 包住 child。Round robin 同 p2c 預設開啟（同 Finagle 一樣）；`false` 關掉佢。Pick-first 傳入 object 先至開啟。預設分類器計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`。五次失敗之後，penalty 由 1000 ms 起，probe 失敗再加倍，並加上唔超過 base 0.5 倍嘅正 jitter，上限 60000 ms。到期接納一次 probe，喺 `end` 判定；如果冇 `end` 到達，就喺 `done` 判定。成功會重置 backoff；取消只釋放 slot。冇假定成功嘅 timeout、quota、last-host protection、settlement grid、percentage criterion 或者 slow start。`isHealthy` 讀應用程式自己持有嘅 cached state，永遠唔會取消 penalty。所有 host 都可以熔斷；Finagle 式、只限目前 list 嘅 fail-open 仍然會送 request。同 Envoy/gRPC A50 唔同，冇 ejection quota。睇 [Health filtering 同 p2c](/zh-Hant-HK/docs/client#health-filtering-and-p2c)。
+用 Linkerd 式嘅連續失敗熔斷包住 child。Round robin 同 p2c 預設開啟（同 Finagle 一樣）；`false` 關掉佢。Pick-first 要傳入 object 先至開啟。預設分類器計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`。五次失敗之後，penalty 由 1000 ms 起，probe 失敗就加倍，並加上唔超過 base 0.5 倍嘅正 jitter，上限 60000 ms。到期接納一次 probe，喺 `end` 判定；如果冇 `end` 到達，就喺 `done` 判定。成功會重置 backoff；取消只釋放 slot。冇假定成功嘅 timeout、quota、last-host protection、settlement grid、percentage criterion 或者 slow start。`isHealthy` 讀應用程式自己持有嘅 cached state，永遠唔會取消 penalty。所有 host 都可以熔斷；Finagle 式、只限目前清單嘅 fail-open 仍然會送 request。同 Envoy/gRPC A50 唔同，冇 ejection quota。睇[健康過濾同 p2c](/zh-Hant-HK/docs/client#health-filtering-and-p2c)。
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryCondition, RetryOptions" />
 
-獨立於 endpoint 選擇，啟用同一次 call 入面嘅 HTTP 重試。省略 `withRetry` 代表一次 attempt，亦冇 budget。`withRetry()` 等同 `withRetry({})`，預設係 `maxAttempts: 2`（包括最初嗰次）、`on: ["connect-failure"]`，以及 safe method `GET`、`HEAD`、`OPTIONS`、`TRACE`。method 名唔分大小寫；`[]` 停用重試。`maxAttempts` 係至少為 1 嘅安全整數，而且每個 endpoint 最多試一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` decode 拒絕嘅 gateway body；`"attempt-timeout"` 用 `attemptTimeoutMs`。Streaming request body 永遠唔會重試。
+獨立於端點選擇，啟用同一次呼叫入面嘅 HTTP 重試。省略 `withRetry` 代表一次 attempt，亦冇預算。`withRetry()` 等同 `withRetry({})`，預設係 `maxAttempts: 2`（包括最初嗰次）、`on: ["connect-failure"]`，以及安全 method `GET`、`HEAD`、`OPTIONS`、`TRACE`。method 名唔分大小寫；`[]` 停用重試。`maxAttempts` 係至少為 1 嘅安全整數，而且每個端點最多試一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` 解碼拒絕嘅 gateway body；`"attempt-timeout"` 用 `attemptTimeoutMs`。streaming request body 永遠唔會重試。
 
-Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語義同 SSE/WebSocket 重連一樣。`delayMs: 0` 跳過等待。`attemptTimeoutMs` 必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。佢限制單次 attempt 嘅 Fetch、讀 body 同 decode；caller 嘅 signal 覆蓋成次 call，包括 backoff 等待。
+Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語義同 SSE/WebSocket 重連一樣。`delayMs: 0` 跳過等待。`attemptTimeoutMs` 必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。佢限制單次 attempt 嘅 Fetch、讀 body 同解碼；caller 嘅 signal 覆蓋成次呼叫，包括 backoff 等待。
 
-歸 client 所有嘅 Finagle budget 預設係 20%，再加 10 秒 TTL 上面每秒 10 次嘅 reserve。Credit 同 debit 都喺十個 TTL/10 slice 上 lazy 過期。`budget: false` 拎走呢個限制。共享同一份配置嘅派生 client 共享佢嘅 budget；各自獨立嘅 client 唔共享，即使共用一個 balancer 都係。無效 option 喺 HTTP 運行時 return `REQ_OPTIONS_INVALID`，訊息係 `Invalid retry options`。呢個 option 喺套用時捕獲自己擁有嘅 field、array 同嵌套嘅 budget。`withRetry()` 同 `withRetry(undefined)` 嘅行為同 `withRetry({})` 一樣。後一次 `withRetry` 會替換呢份策略；`withRetry({ maxAttempts: 1 })` 會喺啟用之後關閉重試。balancer 同 health wrapper 冇重試設定。睇 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)。
+歸 client 所有嘅 Finagle 重試預算預設係 20%，再加 10 秒 TTL 上面每秒 10 次嘅 reserve。credit 同 debit 都喺十個 TTL/10 slice 上 lazy 過期。`budget: false` 拎走呢個限制。共享同一份配置嘅派生 client 共享佢嘅預算；各自獨立嘅 client 唔共享，即使共用一個 balancer 都係。無效選項喺 HTTP 執行時回傳 `REQ_OPTIONS_INVALID`，訊息係 `Invalid retry options`。呢個選項喺套用時捕獲自己擁有嘅欄位、array 同巢狀嘅預算。`withRetry()` 同 `withRetry(undefined)` 嘅行為同 `withRetry({})` 一樣。後一次 `withRetry` 會替換呢份策略；`withRetry({ maxAttempts: 1 })` 會喺啟用之後關閉重試。balancer 同 health wrapper 冇重試設定。睇[負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)。
 
 <include cwd>examples/client/http-retry.ts#example</include>
 
@@ -251,8 +251,8 @@ Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` return 一個 error-first tuple。可選嘅 `start` 喺所選 transport 開始之前至多同步運行一次；可選嘅 `end` 喺 `start` 之後運行一次，時機係對端 response 開始（或者 response 之前發生失敗）；可選嘅 `done` 喺完成時運行一次。Fetch 暴露唔到 Linkerd 嘅 first body frame，亦暴露唔到 Envoy 嘅 stream boundary。所有 hook 嘅 throw，同 thenable 嘅 rejection，都會被接住。`ERR_NO_CANDIDATE` 只係 `REQ_BUILD_FAILED` 嘅 `cause`。佢唔係 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-HK/api/core/isnocandidatecause) 亦可以識別另一份 Core 副本入面嘅佢。
+`pick` 回傳一個 error-first tuple。可選嘅 `start` 喺所選傳輸層開始之前至多同步執行一次；可選嘅 `end` 喺 `start` 之後執行一次，時機係對端 response 開始（或者 response 之前發生失敗）；可選嘅 `done` 喺完成時執行一次。Fetch 暴露唔到 Linkerd 嘅 first body frame，亦暴露唔到 Envoy 嘅 stream boundary。所有 hook 嘅 throw，同 thenable 嘅 rejection，都會被接住。`ERR_NO_CANDIDATE` 只係 `REQ_BUILD_FAILED` 嘅 `cause`。佢唔係 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-HK/api/core/isnocandidatecause) 亦可以識別另一份 Core 副本入面嘅佢。
 
-balancer 只見到中立結果；每種 transport 將自己嘅事實翻譯成 `DoneInfo.code`。預設嘅 outlier detection 計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`。原始嘅 `DoneInfo.status` 只留給自訂 balancer，內建策略從不讀取佢。`PickInfo` 包含 `endpoints` 同可選嘅 `operation`，冇 transport 判別欄位。
+balancer 只見到中立結果；每種傳輸層會將自己嘅事實翻譯成 `DoneInfo.code`。預設嘅 outlier detection 計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`。原始嘅 `DoneInfo.status` 只留給自訂 balancer，內建策略從不讀取佢。`PickInfo` 包含 `endpoints` 同可選嘅 `operation`，冇 transport 判別欄位。
 
-睇 [Client guide](/zh-Hant-HK/docs/client)。
+睇 [Client 指南](/zh-Hant-HK/docs/client)。

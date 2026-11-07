@@ -1,9 +1,9 @@
 ---
-title: "データ構造 / Struct"
+title: "Struct とスキーマ"
 description: SDK と利用側アプリケーション間で共有される入力およびレスポンスのデータ契約を、型推論と実行時バリデーション付きで定義します。
 ---
 
-# データ構造 / Struct
+# Struct とスキーマ
 
 `struct` は、SDK と利用側アプリケーションの間で共有される通信データ契約（呼び出し元の入力、`2xx` の出力、宣言されたサービスエラー、SSE イベント、WebSocket フレーム）を宣言します。
 
@@ -12,24 +12,22 @@ description: SDK と利用側アプリケーション間で共有される入力
 
 ## 1. SDK でスキーマを定義し、アプリケーションで検証する
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
@@ -60,7 +58,7 @@ Defjs では、**フィールドの存在有無**（`undefined`）と **値の n
 
 ## 3. 双方向の通信用エイリアス (`.alias()`)
 
-バックエンドが `snake_case` や特定のヘッダー名を使用し、TypeScript SDK 側では `camelCase` を使いたい場合は、`.alias("wire_name")` を使用します。フィールドに一度エイリアスを宣言するだけで、双方向でシームレスに機能します。
+バックエンドが `snake_case` や特定のヘッダー名を使用し、TypeScript SDK 側では `camelCase` を使いたい場合は、`.alias("wire_name")` を使用します。フィールドに一度エイリアスを宣言するだけで、双方向で機能します。
 
 | 境界                                                                 | 使用されるキー名                               |
 | -------------------------------------------------------------------- | ---------------------------------------------- |
@@ -83,14 +81,14 @@ Defjs では、**フィールドの存在有無**（`undefined`）と **値の n
   examples/struct/request-placement.ts#example
 </include>
 
-| `builder` が返すボディのルート値                           | 電送形式          | デフォルトの `Content-Type`                       |
+| `builder` が返すボディのルート値                           | 送信時の形式      | デフォルトの `Content-Type`                       |
 | ---------------------------------------------------------- | ----------------- | ------------------------------------------------- |
 | 型付けされたオブジェクト、配列、有限の数値、真偽値、`null` | JSON テキスト     | `application/json`                                |
 | `string` struct または生の `string`                        | UTF-8 テキスト    | `text/plain;charset=UTF-8`                        |
 | ボディルートの `struct.urlencoded(shape)`                  | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
 | ボディルートの `struct.formData(shape)`                    | `FormData`        | `multipart/form-data; boundary=...`               |
 | `Blob` / `File` (`struct.file()`)                          | バイナリ Blob     | `blob.type` または `application/octet-stream`     |
-| `ArrayBuffer` / typed array view / `ReadableStream`        | 生のバイト列      | `application/octet-stream`                        |
+| `ArrayBuffer` / ビュー / `ReadableStream`                  | 生のバイト列      | `application/octet-stream`                        |
 
 ## 5. `StructError` とバリデーション問題（issues）の処理
 
@@ -100,7 +98,7 @@ Defjs では、**フィールドの存在有無**（`undefined`）と **値の n
   examples/struct/parse-failures.ts#example
 </include>
 
-各 `StructIssue` には、`code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection`、`custom`）、`path`、`expected`、`received`、`message` が含まれます。デフォルトのメッセージは受信した値を省き、その _型_ だけを報告しますが、path は動的な record のキーを保持し、そこに機微な値が含まれることがあります。`String(error)` と `error.prettify()` は秘匿化の境界ではありません。ログに出すときは安全なフィールドの許可リストを使い、生の `received` 値とカスタムメッセージは機微情報として扱ってください。
+各 `StructIssue` には、`code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection`、`custom`）、`path`、`expected`、`received`、`message` が含まれます。デフォルトのメッセージは受信した値を省き、その _型_ だけを報告しますが、path は動的な record のキーを保持し、そこに機密性の高い値が含まれることがあります。`String(error)` と `error.prettify()` は秘匿化の境界ではありません。ログに出すときは安全なフィールドの許可リストを使い、生の `received` 値とカスタムメッセージは機密情報として扱ってください。
 
 ## 6. コンストラクターリファレンス
 

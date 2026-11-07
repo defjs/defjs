@@ -50,7 +50,7 @@ void verifyGetOrder();
 An SDK package owns **only** the operation definitions and shared structs. It never creates or exports a client, never hardcodes a deployment URL, and never reads environment credentials.
 
 ```ts
-// src/orders.ts — published in @company/orders-sdk
+// src/orders.ts: published in @company/orders-sdk
 import { defineRequest, struct } from "@defjs/core";
 
 export const Order = struct.object({
@@ -78,7 +78,7 @@ export const getOrder = defineRequest({
 | Not provided                                              | What to use instead                                                         |
 | --------------------------------------------------------- | --------------------------------------------------------------------------- |
 | A global client singleton                                 | Application-owned `createClient(...)` passed to operations                  |
-| A client method that executes a command                   | Call the operation directly: `getOrder(client, input)`                      |
+| A client method that executes an operation                | Call the operation directly: `getOrder(client, input)`                      |
 | Client-level default timeout or `timeout`/`abort` options | `client({ signal: AbortSignal.timeout(ms) })` or `AbortController`          |
 | A `responseType` field on `defineRequest`                 | The struct kind of `output` (`string`, `blob`, `arrayBuffer`, or JSON)      |
 | `.parse()` on a struct instance or `struct.encode`        | `struct.parse(schema, value)` and `builder` placement                       |
@@ -95,6 +95,6 @@ export const getOrder = defineRequest({
 - [ ] Call sites are not wrapped in `try/catch` expecting HTTP/network errors to throw (they resolve on the tuple).
 - [ ] Derived clients carrying a `signal` (`client({ signal })`) are created per call, not shared across unrelated calls.
 - [ ] Authentication, token refresh, retries, and tracing live in interceptors (`withInterceptors`), not in `builder`.
-- [ ] Retries only replay safe methods (`GET`, `HEAD`, `OPTIONS`) with replayable bodies and respect `request.signal`.
+- [ ] Retries only replay safe methods (by default `GET`, `HEAD`, `OPTIONS`, and `TRACE`) with replayable bodies and respect `request.signal`.
 - [ ] Every opened SSE stream (`defineEventStream`) and WebSocket session (`defineWebSocket`) is closed via `await using` or `finally { close(); await closed; }`.
 - [ ] React `useEffect` and Vue `watch` / `onScopeDispose` abort in-flight operations on cleanup and ignore late completions after abort.

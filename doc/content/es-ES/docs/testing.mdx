@@ -1,13 +1,13 @@
 ---
 title: "Pruebas"
-description: Prueba definiciones de SDK y aplicaciones en memoria con withHTTPHandle, withSSEHandle y withWebSocketHandle.
+description: Prueba sin conexión las definiciones de SDK y las políticas de la aplicación con handles de transporte inyectados, comprobaciones de tuplas y temporizadores deterministas.
 ---
 
 # Pruebas
 
 Dado que Defjs separa las definiciones de operaciones de la ejecución del cliente, puedes probar las definiciones reales de tu SDK y los interceptores de la aplicación sin conexión, sin necesidad de levantar un servidor de red ni falsear (_mockear_) funciones internas de la biblioteca.
 
-## 1. Inyectar un manejador de transporte local
+## 1. Inyectar un handle de transporte local
 
 Utiliza `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle` en `createClient(...)` para sustituir el transporte subyacente de la plataforma. Defjs sigue ejecutando el flujo completo de la operación: validación de `input` con `struct`, mapeo en `builder`, comprobaciones de confinamiento de URL, interceptores, despacho de código de estado y decodificación de `struct` en la respuesta.
 
@@ -32,7 +32,7 @@ Utiliza `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle` en `createClie
 
 ### Comprueba la tupla con error por delante, no las funciones internas
 
-Invoca siempre la operación exportada del SDK pasando tu cliente de prueba y realiza aserciones sobre la tupla devuelta `[error, data, response]`:
+Invoca siempre la operación exportada del SDK pasando tu cliente de prueba y comprueba la tupla devuelta `[error, data, response]`:
 
 - Para casos `2xx`, comprueba `expect(error).toBeNull()` y verifica los campos decodificados en `data` (incluyendo la conversión de claves de red a nombres lógicos mediante `.alias()`).
 - Para casos de fallo, comprueba `error?.code`, `error?.status`, `error?.data` y `error?.cause` cuando formen parte del contrato.
@@ -53,6 +53,6 @@ En Bun test, usa `jest.useFakeTimers()` y `jest.advanceTimersByTime()`; los temp
 
 ## Lecturas relacionadas
 
-- [Pruebas HTTP locales](/es-ES/recipes/test-with-handle)
+- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)
 - [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)
 - [Configuración del cliente](/es-ES/docs/client)

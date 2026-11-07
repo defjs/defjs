@@ -24,7 +24,7 @@ For complete guides, examples, and the API reference, visit **[defjs.lyz.cloud](
 bun add @defjs/core
 ```
 
-Best practice: keep the definition independent of the client. Calling an operation runs it. Return from the function when the error-first tuple is set.
+Best practice: keep the definition independent of the client. Calling an operation runs it. Return from the function when the error side is set, before using the success value.
 
 ```ts
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";

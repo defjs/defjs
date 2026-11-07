@@ -1,13 +1,13 @@
 ---
-title: "Middleware"
+title: "Interceptors"
 description: Wende Authentifizierungs- und Transportrichtlinien auf den Anwendungsclient an, ohne die API-Definitionen deines SDKs zu verändern.
 ---
 
-# Middleware
+# Interceptors
 
-Interceptors binden übergreifende Ausführungsregeln – wie Authentifizierungs-Header, Request-Signierung, Maintenance-Kurzschlüsse oder Retries für sichere Leseoperationen – direkt an den `Client` der Anwendung, ohne die SDK-Operationsdefinitionen anpassen zu müssen.
+Interceptors binden übergreifende Ausführungsregeln – wie Authentifizierungs-Header, Request-Signierung, Maintenance-Kurzschlüsse oder Retries für sichere Leseoperationen – direkt an den `Client` der Anwendung, ohne die SDK-Operationsdefinitionen anzupassen.
 
-Input-Validierung und das `builder`-Mapping laufen **vor** der Interceptor-Kette; HTTP-Status-Dispatching und die `output`- / `error`-Struct-Validierung laufen **nach** der Kette.
+Input-Validierung und das `builder`-Mapping laufen **vor** der Interceptor-Kette; HTTP-Status-Dispatch und die `output`- / `error`-Struct-Validierung laufen **nach** der Kette.
 
 ## 1. Interceptor erstellen und registrieren
 
@@ -39,7 +39,7 @@ Jeder Transport verfügt über eine eigene typisierte Interceptor-Factory (`crea
 
 ### Regeln für die Interceptor-Pipeline
 
-- **Zwiebel-Prinzip (Onion Order)**: Interceptors laufen beim Hinausgehen in Registrierungsreihenfolge (`vor next(req)`) und beim Zurückkommen in umgekehrter Reihenfolge (`nach await next(req)`). Platziere globale Logging-/Tracing-Interceptors außerhalb spezifischer Auth- oder Retry-Interceptors.
+- **Onion-Reihenfolge (Zwiebelprinzip)**: Interceptors laufen beim Hinausgehen in Registrierungsreihenfolge (`vor next(req)`) und beim Zurückkommen in umgekehrter Reihenfolge (`nach await next(req)`). Platziere breite Logging-/Tracing-Interceptors außerhalb engerer Auth- oder Retry-Interceptors.
 - **Unveränderlichkeit von Requests**: Klone stets `req.headers` (`new Headers(req.headers)`) und übergib ein neues Request-Objekt (`{ ...req, headers }`) an `next(...)`, damit äußere Wiederholungsversuche saubere Header vorfinden.
 - **`content-type` und `bodyContentType`**: Defjs hinterlegt den ermittelten Body-Content-Type auf `req.bodyContentType`, ohne `req.headers` direkt zu verändern. Signier-Interceptors sollten `req.headers.get("content-type") ?? req.bodyContentType` auslesen. Ersetzt ein Interceptor `req.body` durch ein anderes Format, setze explizit den `content-type`-Header.
 
@@ -65,16 +65,16 @@ Ein Anwendungs-Interceptor kann stattdessen Statusbehandlung auf demselben Endpu
 
 - **Zwei Retry-Schichten**: Diese `next(request)`-Schleife bleibt auf dem ausgewählten Endpunkt und führt weder die äußere Authentifizierung noch den Builder erneut aus. Drei innere Sendevorgänge zusammen mit `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` können vier HTTP-Requests senden (drei an einen fehlerhaften primären Endpunkt, einen an ein gesundes Backup); `maxAttempts` begrenzt äußere Versuche, nicht physische Sendevorgänge. Lege fest, welche Schicht welche Bedingung behandelt, statt die Schichten versehentlich zu stapeln.
 - **`Retry-After`-Policy**: Core-`withRetry` liest diesen Header nicht. Die 30-Sekunden-Obergrenze und der 250-ms-Fallback des Rezepts sind Entscheidungen der Anwendung. Das Deckeln einer längeren Server-Wartezeit kann früher als angefordert erneut versuchen; ist das nicht akzeptabel, warte die volle Dauer oder gib stattdessen die Antwort zurück.
-- **Schreibzugriffe nach 401**: Das [Bearer-Refresh-Rezept](/de-DE/recipes/refresh-bearer-once) kann einen JSON-POST zweimal zustellen. Verlange eine Ablehnung durch die Authentifizierung vor der Geschäftsverarbeitung sowie einen stabilen Idempotenzschlüssel mit serverseitiger Deduplizierung, oder spiele Schreibzugriffe nicht automatisch erneut ab. Stream-Request-Bodys werden nicht erneut abgespielt.
+- **Schreibzugriffe nach 401**: Das [Bearer-Refresh-Rezept](/de-DE/recipes/refresh-bearer-once) kann einen JSON-POST zweimal zustellen. Verlange eine Ablehnung durch die Authentifizierung vor der Geschäftsverarbeitung sowie einen stabilen Idempotenzschlüssel mit serverseitiger Deduplizierung, oder spiele Schreibzugriffe nicht automatisch erneut ab. Streaming-Request-Bodys werden nicht erneut gesendet.
 
-- **Umgang mit Transport-Rejections**: `next(request)` schlägt fehl (rejectet), sobald ein Netzwerkfehler auftritt (es gibt keine Status-0-Antwort). Das Abfangen und erneute Werfen dieser Rejection erhält den ursprünglichen `NET_*`-Fehlercode.
-- **Exceptions im Interceptor**: Ein unbehandelter Fehler (oder die Rückgabe eines Nicht-Response-Werts) löst das Operations-Tupel mit `EXT_INTERCEPTOR_FAILED` auf und setzt `fault.cause`. Das Werfen von `ERR_ABORTED` oder `ERR_TIMEOUT` resultiert in `NET_ABORTED` oder `NET_TIMEOUT`.
+- **Umgang mit Transport-Rejections**: `next(request)` schlägt fehl (rejectet), sobald ein Netzwerkfehler auftritt (es gibt keine Status-0-Antwort). Das Abfangen und erneute Werfen dieser Rejection erhält den ursprünglichen `NET_*`-Fault-Code.
+- **Fehler im Interceptor**: Ein unbehandelter Fehler (oder die Rückgabe eines Nicht-Response-Werts) löst das Operations-Tupel mit `EXT_INTERCEPTOR_FAILED` auf und setzt `fault.cause`. Das Werfen von `ERR_ABORTED` oder `ERR_TIMEOUT` führt zu `NET_ABORTED` oder `NET_TIMEOUT`.
 
 Bevorzuge bei SSE `withSSEReconnect` gegenüber einem Interceptor, der `next()` wiederholt aufruft. Mehr als ein Aufruf von `next()` des Interceptors deaktiviert Endpunktzuordnung und erneute Endpunktauswahl für diese Ersatz-Streams; das hat nichts mit dem Konsumieren von Events über `next()` eines Iterators zu tun.
 
-## 4. WebSocket-Sitzungen wrappen
+## 4. WebSocket-Sitzungen umhüllen
 
-Ein WebSocket-Interceptor darf `next(req)` **höchstens einmal** aufrufen. Beim Wrappen des zurückgegebenen `WebSocketSessionLike` delegiere dynamische Getter (`state`, `connection`, `bufferedAmount`), `close`, `closed`, `receive` und `[Symbol.asyncDispose]()`, anstatt einen einmaligen Snapshot via Object-Spread zu kopieren:
+Ein WebSocket-Interceptor darf `next(req)` **höchstens einmal** aufrufen. Beim Umhüllen des zurückgegebenen `WebSocketSessionLike` delegiere dynamische Getter (`state`, `connection`, `bufferedAmount`), `close`, `closed`, `receive` und `[Symbol.asyncDispose]()`, anstatt einen einmaligen Snapshot via Object-Spread zu kopieren:
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example
@@ -84,9 +84,9 @@ Ein WebSocket-Interceptor darf `next(req)` **höchstens einmal** aufrufen. Beim 
 
 | Export                                         | Transport | Beschreibung                                                                               |
 | ---------------------------------------------- | --------- | ------------------------------------------------------------------------------------------ |
-| `createHttpInterceptor(fn)`                    | HTTP      | Wrappt `(req, next) => Promise<HttpResponse<unknown>>`                                     |
-| `createSSEInterceptor(fn)`                     | SSE       | Wrappt `(req, next) => Promise<EventStreamHandle<unknown>>`                                |
-| `createWebSocketInterceptor(fn)`               | WebSocket | Wrappt `(req, next) => Promise<WebSocketSessionLike>`                                      |
+| `createHttpInterceptor(fn)`                    | HTTP      | Umhüllt `(req, next) => Promise<HttpResponse<unknown>>`                                    |
+| `createSSEInterceptor(fn)`                     | SSE       | Umhüllt `(req, next) => Promise<EventStreamHandle<unknown>>`                               |
+| `createWebSocketInterceptor(fn)`               | WebSocket | Umhüllt `(req, next) => Promise<WebSocketSessionLike>`                                     |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injiziert `Authorization: Basic ...` über einen synchronen/asynchronen Credential-Provider |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injiziert `Authorization: Basic ...` bei SSE-Handshakes                                    |
 

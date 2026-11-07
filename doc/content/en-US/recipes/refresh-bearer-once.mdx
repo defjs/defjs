@@ -9,77 +9,28 @@ In Defjs, `next(request)` invokes the remainder of the interceptor chain inwardâ
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
   <Tab value="sdk/billing.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
+</include>
 
-export const getInvoice = defineRequest({
-  method: "GET",
-  path: "/v1/invoice",
-  output: struct.object({ total: struct.number() }),
-  error: struct.object({ code: struct.literal("expired_token") }),
-});
-```
   </Tab>
   <Tab value="app/auth-interceptor.ts">
-```ts
-import { createHttpInterceptor } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
 
-export type Credential = { accessToken: string };
-
-export function refreshingBearer(
-  read: () => Credential,
-  refresh: (stale: Credential) => Promise<Credential>,
-) {
-  let flight: Promise<Credential> | undefined;
-
-return createHttpInterceptor(async (request, next) => {
-const authorize = (credential: Credential) => {
-const headers = new Headers(request.headers);
-headers.set("authorization", `Bearer ${credential.accessToken}`);
-return { ...request, headers };
-};
-
-    const used = read();
-    const response = await next(authorize(used));
-    const body = response.body;
-    if (
-      (typeof ReadableStream !== "undefined" &&
-        request.body instanceof ReadableStream) ||
-      response.status !== 401 ||
-      typeof body !== "object" ||
-      body === null ||
-      !("code" in body) ||
-      body.code !== "expired_token"
-    ) {
-      return response;
-    }
-
-    const current = read();
-    if (current.accessToken !== used.accessToken) {
-      return next(authorize(current));
-    }
-
-    flight ??= refresh(used).finally(() => {
-      flight = undefined;
-    });
-    const refreshed = await flight;
-    return next(authorize(refreshed));
-
-});
-}
-
-````
   </Tab>
   <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
 ```txt
 42
-````
+```
 
 A replayable body is not the same as a repeatable business operation. This interceptor also resends a JSON `POST` after a matching 401: two HTTP deliveries, first rejected and then accepted. Use it for writes only when authentication rejects the first delivery before the business handler runs; preserve a stable idempotency key across both deliveries and use server-side deduplication. If that contract is unavailable, return the 401 instead of automatically replaying the write. The complete example does not replay a `ReadableStream` request body.
 

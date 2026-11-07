@@ -1,93 +1,98 @@
 ---
 title: "OpenTelemetry 服务端"
-description: 在服务端应用 Client 上为出站 SDK 请求注入观测能力，API 契约定义与具体遥测配置完全解耦。
+description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 API 定义不依赖遥测配置。
 ---
 
 # OpenTelemetry 服务端
 
-`@defjs/opentelemetry-server` 为服务端应用程序的 Client 针对出站 HTTP、SSE 和 WebSocket 操作提供完善的可观测性插桩支持，同时保持 SDK 契约定义与 OpenTelemetry 完全解耦。
+`@defjs/opentelemetry-server` 在服务端应用的 Client 上为出站 HTTP、SSE 和 WebSocket 操作插桩，同时让 SDK 定义完全独立于 OpenTelemetry。
 
-`withOpenTelemetryServer(options)` 返回一个 `@defjs/core` 的 [`ClientOption`](/zh-Hans/api/core/clientoption-type)，为启用的每种传输协议（HTTP、SSE、WebSocket）自动追加一个拦截器。它**不负责**初始化 OpenTelemetry SDK，也**不负责**对入站的服务端请求进行插桩。
+`withOpenTelemetryServer(options)` 返回一个 `@defjs/core` 的 [`ClientOption`](/zh-Hans/api/core/clientoption-type)，为每种启用的传输（HTTP、SSE、WebSocket）追加一个拦截器。它**不会**初始化 OpenTelemetry SDK，也**不会**对入站服务端请求插桩。
 
 ---
 
 ## 1. 基础配置与操作标识
 
-在 SDK 定义中（`defineRequest`、`defineEventStream`、`defineWebSocket`）配置静态且低基数的 `operation` 字符串，然后在构建应用 Client 时将 OpenTelemetry 的 `tracer`、`meter`、`logger` 或 `propagator` 传递给 `withOpenTelemetryServer(...)`：
+在 SDK 定义中（`defineRequest`、`defineEventStream`、`defineWebSocket`）设置静态、低基数的 `operation` 字符串，然后在创建 Client 时把 OpenTelemetry 的 `tracer`、`meter`、`logger` 或 `propagator` 传给 `withOpenTelemetryServer(...)`：
 
 <Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
   <Tab value="sdk/operations.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
+
   </Tab>
   <Tab value="app/telemetry-client.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
-- **Span 命名规范**：若指定了 `operation`，Span 名称会自动生成为 `GET orders.read`、`SSE orders.watch` 与 `WebSocket orders.connect`，并自动附带 `defjs.operation` 属性。若未声明 `operation`，Span 名称将降级为对应的 HTTP Method、`SSE` 或 `WebSocket`。
-- **独立信号设计**：`tracer`、`meter` 与 `logger` 均为可选配置，且彼此完全独立运作：
-  - 省略 `tracer` 会停用本地 Span 创建与 Span Hook，但依然会正常采集指标、日志并向下游传递链路上下文（Propagation）。
-  - 省略 `meter` 会关闭指标统计。
-  - 省略 `propagator` 会默认使用内置的复合 W3C Trace Context + W3C Baggage 传播器。
+- **Span 命名**：设置了 `operation` 后，Span 名称会变成 `GET orders.read`、`SSE orders.watch` 与 `WebSocket orders.connect`，并带有 `defjs.operation` 属性。没有 `operation` 时，Span 名称回退到 HTTP 方法、`SSE` 或 `WebSocket`。
+- **独立信号**：`tracer`、`meter` 和 `logger` 都可选，且彼此独立：
+  - 省略 `tracer` 会禁用本地 Span 创建与 Span Hook，但仍会记录指标、日志并传播出站上下文。
+  - 省略 `meter` 会禁用该包的指标。
+  - 省略 `propagator` 会使用内置的 W3C Trace Context + W3C Baggage 组合传播器。
   - 在配置了 `tracer` 的前提下，设置 `requireParentSpan: true` 会在当前不存在活跃父 Span 时跳过 Span 创建、链路传播、Hooks、指标与日志记录；而若未传入 `tracer`，则 `requireParentSpan` 不会阻断指标与日志的生成。
 
 ---
 
 ## 2. 传输协议选项、钩子与上下文传播
 
-在 `http`、`sse` 和 `webSocket` 配置块内分别定制协议开关（`{ enabled: false }`）与 Span 钩子函数（`startSpanHook`、`requestHook`、`responseHook`）。对于下游服务期望在 WebSocket 握手 Query 参数中获取追踪上下文的场景，可显式开启 `queryPropagation: true`：
+在 `http`、`sse` 和 `webSocket` 中配置每种传输的开关（`{ enabled: false }`）与 Span Hook（`startSpanHook`、`requestHook`、`responseHook`）。如果下游服务期望在 WebSocket 握手 query 字符串中收到 trace context，可显式开启 `queryPropagation: true`：
 
 <Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
   <Tab value="app/hooks.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
+
   </Tab>
   <Tab value="app/ws-propagation.ts">
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
+
   </Tab>
   <Tab value="app/active-span.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
 ### Hook 契约规则
 
-- `startSpanHook(request): Attributes` 在创建 Span 前同步执行；其返回的自定义属性拥有最高优先级，可覆盖内置属性（例如用于对 `url.full` 进行隐私数据脱敏）。
-- `requestHook(span, request)` 与 `responseHook(span, responseOrHandle, request)` 接收已创建的 Span 对象，支持同步或异步函数。注意：传输流水线**不会** await 等待它们执行完毕，HTTP Span 会在 `responseHook` 的同步部分返回后立即关闭结束。
-- Hook 内部发生异常绝不会导致 Client 操作调用失败。在 `span.isRecording()` 为 true 时，Hook 错误会在该 Span 上记录 `defjs.otel.hook.error` 与 `exception` 事件；对于非记录中的 Span，错误会通过 `@opentelemetry/api` 的 `diag.error` 报告。
-- `withOpenTelemetryServer` 在创建之初即对 `http`、`sse` 和 `webSocket` 配置块进行快照。传入 `{ enabled: false }` 会彻底禁用该传输的插桩，并忽略内部配置的 Hook。
+- `startSpanHook(request): Attributes` 在创建 Span 前同步运行；返回的属性最后应用，可覆盖内置属性（例如对 `url.full` 脱敏）。
+- `requestHook(span, request)` 与 `responseHook(span, responseOrHandle, request)` 接收已创建的 Span，可以是同步或异步函数。传输流水线**不会** await 它们；HTTP Span 在 `responseHook` 的同步部分返回后立即结束。
+- Hook 失败绝不会中止 Client 调用。`span.isRecording()` 为 true 时，Hook 错误会在 Span 上记录 `defjs.otel.hook.error` 与 `exception` 事件；未记录中的 Span 则通过 `@opentelemetry/api` 的 `diag.error` 报告 `hook.name`、`error.type`、`traceId` 和 `spanId`。
+- `withOpenTelemetryServer` 在创建时快照 `http`、`sse` 和 `webSocket` 选项块。传入 `{ enabled: false }` 会禁用该传输，且不读取其 Hook。
 
 ---
 
 ## 3. HTTP、SSE 与 WebSocket 的遥测语义
 
-本插件在拦截器流水线内部度量各传输协议的生命周期：
+插件在拦截器链内部度量传输生命周期：
 
-- **HTTP**：Span 在 HTTP 拦截器开始处创建，在收到 `HttpResponse` 时结束。声明的 `output` / `error` 响应体会在拦截器边界**内部**完成读取（以及 JSON 校验和解析）。读取响应体失败或媒体类型不符会触发拦截器 reject（`error.type: "BodyFailure"`），标记 Span 为 `ERROR`，并在指标中记录 `BodyFailure`，同时生成一条 `WARN` 日志。HTTP 状态码大于等于 `400` 会将 Span 标记为 `ERROR`，并将状态码字符串作为 `error.type`。后续的 Struct 强类型校验（`RES_STRUCT_MISMATCH`）发生在拦截器链之外，不会篡改已结束的传输 Span。
-- **SSE**：单条逻辑事件流（包括自动重连）对应一个 Span，保持开启状态直至 `stream.closed` 终结。按顺序记录事件：`sse.connected`，随后为 `sse.closed`、`sse.aborted`（对于 `stream.close()` 或非超时的手动取消，Span 以 `OK` 结束）或 `sse.error`（对于包含超时在内的异常中止，Span 以 `ERROR` 结束）。
-- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 终结。记录事件：`websocket.connected`、`websocket.closed`、`websocket.error`。服务端主动发送的 Close Frame（不论关闭码为何）均以 `OK` 结束 Span 并记录 `websocket.closed`；调用方主动取消则以 `ERROR` 结束 Span 并记录 `websocket.error`，不生成日志，但取消原因是 `TimeoutError` 时例外，会生成一条 `WARN`。无 Close Frame 的意外断开（`1006`）取决于运行时：在 Socket 的 `error` 事件先于 `close` 触发的环境（Node.js）中以 `ERROR` 结束并生成一条日志；不触发该事件的环境（Bun）则以 `OK` 结束。
+- **HTTP**：Span 在 HTTP 拦截器中开始，在 `HttpResponse` 返回时结束。声明的 `output` / `error` body 会在处理函数边界**内部**读取（并校验和解析 JSON）。body 读取失败或 JSON 媒体类型/解析失败会通过拦截器 reject（`error.type: "BodyFailure"`），把 Span 标记为 `ERROR`，在指标中记录 `BodyFailure`，并输出一条 `WARN` 日志。状态码 `400+` 会把 Span 标记为 `ERROR`，并以状态码字符串作为 `error.type`。struct 校验（`RES_STRUCT_MISMATCH`）和 `HTTP_STATUS` 元组转换发生在拦截器链之后，不会改变已结束的传输 Span。
+- **SSE**：一条逻辑流（包括自动重连）产生一个 Span，保持打开到 `stream.closed` 结算。记录的事件：`sse.connected`，随后是 `sse.closed`、`sse.aborted`（`stream.close()` 或非超时的调用方中止以 `OK` 结束）或 `sse.error`（以 `ERROR` 结束，包括超时形态的调用方中止）。
+- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 结算。记录事件：`websocket.connected`、`websocket.closed`、`websocket.error`。服务端发来的关闭帧（不论 code 为何）都以 `OK` 结束 Span 并记录 `websocket.closed`；调用方中止以 `ERROR` 结束 Span 并记录 `websocket.error`，不生成日志，但取消原因是 `TimeoutError` 时例外，会生成一条 `WARN`。没有关闭帧的突然断开（`1006`）取决于运行时：在 socket 的 `error` 事件先于 `close` 触发的环境（Node.js）中以 `ERROR` 结束并记录一条日志；不触发该事件的环境（Bun）则以 `OK` 结束。
 
 ### 重试与重连边界
 
 以下是当前拦截器观测到的行为，并非独立的负载均衡器遥测 API：
 
-- 每次 `withRetry` HTTP 尝试都有独立的客户端 Span 和耗时样本。存在活跃的应用父 Span 时，各次尝试是该父 Span 下的兄弟节点；否则，重试不会自动归入同一条 Trace。Core 不会创建逻辑调用的父 Span。
-- HTTP 尝试的 URL 标识该次尝试的端点，但不会输出尝试序号、重试原因、预算余额/耗尽，或逐出/恢复属性。
+- 每次 `withRetry` HTTP 尝试都有自己的 Client Span 和耗时样本。存在活跃应用父 Span 时，各次尝试是该父 Span 的兄弟节点；否则重试不会自动归入同一条 trace。Core 不创建逻辑调用父 Span。
+- HTTP 尝试的 URL 标识该次尝试的端点，但不输出尝试次数、重试原因、预算余额/耗尽或逐出/恢复属性。
 - SSE 和 WebSocket 在重连过程中保留同一个逻辑会话 Span，不会为每条物理连接分别创建 Span。即使发生故障转移，Span 的 URL 和指标属性仍保留初始端点。重连不会再次输出 `connected` 事件。活跃指标统计的是等待 `closed` 的逻辑会话，而不是当前选中副本上的 socket。
 - 在一次 Bun 运行中，HTTP 503 产生了 `error.type: "503"`，连接被拒绝产生了 `"TypeError"`，而期限到期和调用方取消均产生了 `"Error"`。后两者分别返回 `NET_TIMEOUT` 和 `NET_ABORTED`；这些 Defjs 元组错误码并不是独立的 HTTP 遥测属性。对于已打开的 WebSocket，默认取消产生了 `"AbortError"`，不记录警告；以 `TimeoutError` 为取消原因时，则产生了 `"TimeoutError"` 和一条警告。错误类名是对传输/运行时的观测，不能代替检查元组或关闭结果。
 
 ### 导出的指标列表
 
-当传入了 `meter` 实例时，指标会在每次选项应用于 Client 时自动创建（耗时直方图默认边界为：`0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10` 秒）：
+传入 `meter` 时，每次把该选项应用到 Client 都会创建指标（直方图桶边界为 `0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10` 秒）：
 
 | 指标名称                                     | 业务含义                                    |
 | -------------------------------------------- | ------------------------------------------- |
@@ -101,7 +106,7 @@ description: 在服务端应用 Client 上为出站 SDK 请求注入观测能力
 
 ---
 
-## 4. 日志记录与第三方日志系统 [#logs-and-third-party-loggers]
+## 日志与第三方日志记录 [#logs-and-third-party-loggers]
 
 `logger?: Logger` 接收符合 `@opentelemetry/api-logs` 标准规范的实例，可独立于 `tracer` 和 `meter` 工作。
 
@@ -109,9 +114,9 @@ description: 在服务端应用 Client 上为出站 SDK 请求注入观测能力
   examples/opentelemetry-server/logs-without-spans.ts#example
 </include>
 
-### Defjs 诊断日志契约规范
+### Defjs 诊断契约
 
-每个请求或长连接生命周期最多只会生成一条终态 `WARN`（等级 `13`）的 `LogRecord`：
+每个请求或逻辑连接最多发出一条终态 `WARN`（严重级别 `13`）`LogRecord`：
 
 | 观察到的物理传输结果                                                                                                                     | 生成的 Defjs LogRecord 诊断日志                                                                                       |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -122,12 +127,12 @@ description: 在服务端应用 Client 上为出站 SDK 请求注入观测能力
 | SSE 或 WebSocket 终态异常断开或 `closed` reject（包括 Node.js 下的 `1006` Socket 报错、队列溢出、心跳超时）                              | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
 | 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动发起的非超时取消                                        | 不生成日志                                                                                                            |
 
-所有诊断日志均严格记录固定消息文本、`exception.type`（如 `BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError` 或 `Error`）、所处 phase 阶段、静态 `operation` 标识、服务端地址/端口与协议信息——绝不打印原始 URL、Query 参数、请求头、Body 载荷或异常堆栈。
+诊断记录固定消息、`exception.type`（平台/传输层类名，如 `BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError` 或 `Error`）、phase、静态 `operation`、服务端地址/端口和协议字段——从不记录原始 URL、query 字符串、请求头、body 或错误堆栈。
 
 ---
 
 ## 相关实战示例
 
-- [使用本地 Fetch Handle 编写离线测试](/zh-Hans/recipes/test-with-handle)
-- [消费 SSE 服务端推送流](/zh-Hans/recipes/consume-sse)
-- [开启并管理 WebSocket 会话](/zh-Hans/recipes/websocket-session)
+- [用本地 Fetch 句柄测试](/zh-Hans/recipes/test-with-handle)
+- [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)

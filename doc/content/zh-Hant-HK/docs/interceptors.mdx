@@ -1,19 +1,19 @@
 ---
-title: "中介層"
-description: 應用程式為自己的 Client 組合認證、追蹤及傳輸策略，SDK 的資料契約繼續生效。
+title: "攔截器"
+description: 為應用程式嘅 client 套用認證同傳輸策略，唔使改動 SDK 嘅 API 定義。
 ---
 
-# 中介層（Interceptors）
+# 攔截器
 
-中介層可以將橫切關注點（cross-cutting execution policies）——例如認證 headers、請求簽名、維護模式快速阻斷（short-circuiting），或者安全讀取嘅重試機制——掛載到應用程式嘅 `Client`，完全唔使改動 SDK 嘅操作定義。
+攔截器可以將橫切嘅執行策略——例如認證 headers、請求簽名、維護模式嘅快速短路（short-circuiting），或者安全讀取嘅重試機制——掛載到應用程式嘅 `Client`，完全唔使改動 SDK 嘅操作定義。
 
-呼叫流程中，Input 驗證同 `builder` 映射會喺中介層鏈**之前**執行；而 HTTP 狀態碼分發以及 `output` / `error` struct 驗證則會喺中介層鏈**之後**執行。
+呼叫流程中，input 驗證同 `builder` 映射會喺攔截器鏈**之前**執行；而 HTTP 狀態碼分發以及 `output` / `error` struct 驗證則會喺攔截器鏈**之後**執行。
 
-## 1. 建立與註冊中介層
+## 1. 建立與註冊攔截器
 
-每種傳輸協議都有專屬嘅具型別中介層工廠函式（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。你可以將任何組合傳入 `withInterceptors(...)`：
+每種傳輸層都有專屬嘅具型別攔截器工廠函式（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。你可以將任何組合傳入 `withInterceptors(...)`：
 
-<Tabs items={["基本設定", "洋蔥模型執行次序", "複製並加入標頭"]}>
+<Tabs items={["基本設定", "洋蔥模型執行次序", "複製並加入 headers"]}>
 <Tab value="基本設定">
 
 <include cwd lang="typescript">
@@ -28,7 +28,7 @@ description: 應用程式為自己的 Client 組合認證、追蹤及傳輸策�
 </include>
 
 </Tab>
-<Tab value="複製並加入標頭">
+<Tab value="複製並加入 headers">
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example
@@ -37,15 +37,15 @@ description: 應用程式為自己的 Client 組合認證、追蹤及傳輸策�
 </Tab>
 </Tabs>
 
-### 中介層管線規則
+### 攔截器管線規則
 
-- **洋蔥模型順序**：中介層喺傳出請求時會按註冊順序執行（`before next(req)`）；喺回應返回時則會按相反順序執行（`after await next(req)`）。請將廣泛嘅日誌／追蹤中介層放喺最外層，而將較具體嘅認證或重試中介層放喺內層。
+- **洋蔥模型順序**：攔截器喺傳出請求時會按註冊順序執行（`before next(req)`）；喺回應返回時則會按相反順序執行（`after await next(req)`）。請將廣泛嘅日誌／追蹤攔截器放喺最外層，而將較具體嘅認證或重試攔截器放喺內層。
 - **不可變 Request 慣例**：記得一定要複製 `req.headers`（`new Headers(req.headers)`），並將全新嘅 request 物件（`{ ...req, headers }`）傳畀 `next(...)`，等外層嘅重試邏輯可以見到乾淨嘅原始 headers。
-- **`content-type` 與 `bodyContentType`**：Defjs 會將推斷出嚟嘅 body content type 存喺 `req.bodyContentType`，唔會直接修改 `req.headers`。請求簽名邏輯應讀取 `req.headers.get("content-type") ?? req.bodyContentType`。如果中介層將 `req.body` 替換成全新格式，請明確設定 `content-type` header。
+- **`content-type` 與 `bodyContentType`**：Defjs 會將推斷出嚟嘅 body content type 存喺 `req.bodyContentType`，唔會直接修改 `req.headers`。請求簽名邏輯應讀取 `req.headers.get("content-type") ?? req.bodyContentType`。如果攔截器將 `req.body` 替換成全新格式，請明確設定 `content-type` header。
 
-## 2. 用 `makeResponse` 攔截阻斷請求
+## 2. 用 `makeResponse` 短路請求
 
-HTTP 中介層可以唔呼叫 `next(req)`，直接用 `makeResponse(...)` 構造一個合成回應（synthetic response）並即時回傳：
+HTTP 攔截器可以唔呼叫 `next(req)`，直接用 `makeResponse(...)` 構造一個合成回應（synthetic response）並即時回傳：
 
 <include cwd lang="typescript">
   examples/interceptors/short-circuit.ts#example
@@ -55,9 +55,9 @@ HTTP 中介層可以唔呼叫 `next(req)`，直接用 `makeResponse(...)` 構造
 
 ## 3. 重試安全嘅 HTTP 讀取
 
-HTTP 重試預設關閉。要喺 `502`、`503` 或 `504` 時故障轉移到另一個端點，請用 [`withRetry({ on: ["gateway-error"] })`](/zh-Hant-HK/docs/load-balancing)。佢會重新揀選未試過嘅端點、重新建構 request，並重新執行完整嘅中介層鏈。
+HTTP 重試預設關閉。要喺 `502`、`503` 或 `504` 時故障轉移到另一個端點，請用 [`withRetry({ on: ["gateway-error"] })`](/zh-Hant-HK/docs/load-balancing)。佢會重新揀選未試過嘅端點、重新建構 request，並重新執行完整嘅攔截器鏈。
 
-應用程式中介層亦可以改為處理同一端點嘅狀態碼，例如 `429` 同 `Retry-After`。以下有次數限制嘅安全讀取配方亦會處理 `502`/`503`/`504`：
+應用程式攔截器亦可以改為處理同一端點嘅狀態碼，例如 `429` 同 `Retry-After`。以下呢個有界嘅安全讀取配方亦會處理 `502`/`503`/`504`：
 
 <include cwd lang="typescript">
   examples/interceptors/retry-safe-reads.ts#example
@@ -66,14 +66,14 @@ HTTP 重試預設關閉。要喺 `502`、`503` 或 `504` 時故障轉移到另�
 - **兩層重試**：呢個 `next(request)` 迴圈會留喺選中嘅端點，唔會重新執行外層認證或 builder。將三次內層傳送同 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` 一齊用，可能發出四次 HTTP 請求（三次去故障主端點，一次去健康後備端點）；`maxAttempts` 限制外層嘗試次數，唔係實際傳送次數。應該明確決定每項條件由邊一層負責，避免無意間疊加。
 - **`Retry-After` 策略**：Core 嘅 `withRetry` 唔會讀取呢個 header。配方入面嘅 30 秒上限同 250 ms 後備值係應用程式嘅選擇。如果伺服器要求嘅延遲更長，設定上限可能會提早重試；如果唔可以接受，請等足完整延遲，或者直接回傳 response。
 - **401 寫入**：[Bearer 更新配方](/zh-Hant-HK/recipes/refresh-bearer-once) 可能傳遞同一個 JSON POST 兩次。必須確保認證喺業務處理前拒絕 request，並使用穩定嘅冪等鍵同伺服器端去重，否則唔好自動重播寫入。串流 request body 唔會重播。
-- **處理傳輸層 Reject**：當發生網絡錯誤時，`next(request)` 會直接 reject（絕唔存在狀態碼為 0 嘅 response 物件）。Catch 之後再重新 throw 該 rejection，可以完整保留原始嘅 `NET_*` fault code。
-- **喺中介層入面拋出例外**：未處理嘅 throw（或回傳非 response 值）會令操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 失敗，並將原因記錄喺 `fault.cause`。若拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，則會分別結算為 `NET_ABORTED` 或 `NET_TIMEOUT`。
+- **處理傳輸層拒絕**：當發生網絡錯誤時，`next(request)` 會直接 reject（絕唔存在狀態碼為 0 嘅 response 物件）。Catch 之後再重新 throw 該 rejection，可以完整保留原始嘅 `NET_*` fault code。
+- **喺攔截器入面拋出例外**：未處理嘅 throw（或回傳非 response 值）會令操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 失敗，並將原因記錄喺 `fault.cause`。若拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，則會分別結算為 `NET_ABORTED` 或 `NET_TIMEOUT`。
 
-對於 SSE，優先用 `withSSEReconnect`，而唔係反覆呼叫 `next()` 嘅中介層。多次呼叫中介層嘅 `next()` 會停用呢啲替代串流嘅端點歸因同重新揀選；呢件事同用 iterator 嘅 `next()` 消費 events 無關。
+對於 SSE，優先用 `withSSEReconnect`，而唔係反覆呼叫 `next()` 嘅攔截器。多次呼叫攔截器嘅 `next()` 會停用呢啲替代串流嘅端點歸因同重新揀選；呢件事同用 iterator 嘅 `next()` 消費 events 無關。
 
 ## 4. 包裝 WebSocket 會話
 
-WebSocket 中介層**最多只可以呼叫 `next(req)` 一次**。當包裝回傳嘅 `WebSocketSessionLike` 時，請務必代理即時嘅 getter（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive` 同埋 `[Symbol.asyncDispose]()`，而唔好貪方便用物件展開（spread）走去複製一次性嘅快照：
+WebSocket 攔截器**最多只可以呼叫 `next(req)` 一次**。當包裝回傳嘅 `WebSocketSessionLike` 時，請務必代理即時嘅 getter（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive` 同 `[Symbol.asyncDispose]()`，而唔好用物件展開（spread）複製一次性嘅快照：
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example
@@ -81,7 +81,7 @@ WebSocket 中介層**最多只可以呼叫 `next(req)` 一次**。當包裝回�
 
 ## 5. 內建工廠函式與輔助工具
 
-| 匯出名稱                                       | 傳輸協議  | 描述                                                      |
+| 匯出名稱                                       | 傳輸層    | 描述                                                      |
 | ---------------------------------------------- | --------- | --------------------------------------------------------- |
 | `createHttpInterceptor(fn)`                    | HTTP      | 包裝 `(req, next) => Promise<HttpResponse<unknown>>`      |
 | `createSSEInterceptor(fn)`                     | SSE       | 包裝 `(req, next) => Promise<EventStreamHandle<unknown>>` |
@@ -91,6 +91,6 @@ WebSocket 中介層**最多只可以呼叫 `next(req)` 一次**。當包裝回�
 
 ## 延伸閱讀
 
-- [401 後更新令牌](/zh-Hant-HK/recipes/refresh-bearer-once)
+- [401 後更新 Bearer token 一次](/zh-Hant-HK/recipes/refresh-bearer-once)
 - [ETag 條件請求](/zh-Hant-HK/recipes/etag-revalidate)
 - [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server)

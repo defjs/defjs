@@ -1,61 +1,31 @@
 ---
 title: "处理声明的 404"
-description: 在 GET 请求中分别声明 200 成功与 404 业务错误结构体，并通过条件分支安全解包处理。
+description: 调用一次 GET，并在带类型的 200 与声明的 404 之间分支。
 ---
 
-# 声明了 404 的 GET 请求
+# 声明了 404 的 GET
 
-在 `defineRequest` 中同时声明 `output`（针对 `2xx` 成功响应）与 `error`（针对非 `2xx` 响应）。在业务调用点，通过判断 `error?.code === "HTTP_STATUS" && error.status === 404`，即可安全读取并消费经过强类型校验的 `error.data` 错误体载荷。
+在 `defineRequest` 上同时声明 `output`（用于 2xx 响应）和 `error`（用于非 2xx 响应）。在调用点用 `error?.code === "HTTP_STATUS" && error.status === 404` 分支，读取带类型的 `error.data`。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
-<Tab value="sdk/orders.ts">
+  <Tab value="sdk/orders.ts">
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
+  </Tab>
+  <Tab value="app/main.ts">
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
-
-</Tab>
-<Tab value="app/main.ts">
-
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 7 });
-  if (error?.code === "HTTP_STATUS" && error.status === 404) {
-    console.log(error.data.message);
-    return;
-  }
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(`Loaded ${order.status} from ${response.status}`);
-}
-
-void main();
-```
-
-</Tab>
-<Tab value="get-order.ts">
-
+  </Tab>
+  <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
 
-</Tab>
+  </Tab>
 </Tabs>
 
 若服务端对 `GET /orders/7` 请求返回 `200` 状态码以及 `{ "id": 7, "status": "paid" }`，该脚本将打印：
@@ -64,7 +34,7 @@ void main();
 Loaded paid from 200
 ```
 
-- 所有非 `2xx` 状态码均会产生 `HTTP_STATUS` 错误。声明 `error` 会将返回的错误响应体校验解码至 `error.data`；若省略 `error` 声明，则 `error.data` 保持为 `undefined`，且根本不会读取响应体。
-- 若声明的 `error` 响应体媒体类型不匹配、JSON 损坏或未能通过 Struct 模式校验，操作将转而返回对应的 `RES_*` Fault 错误。由于单个 `error` Struct 负责覆盖所有非 `2xx` 状态码，当不同错误状态返回不同的 JSON 格式时，请使用 `struct.or(...)` 或判别联合。
+- 每个非 `2xx` 状态都会产生 `HTTP_STATUS`。声明 `error` 会把错误 body 解码并校验到 `error.data`；省略 `error` 时 `error.data` 为 `undefined`，且不读取 body。
+- 声明的 `error` body 媒体类型错误、JSON 无效或未通过 struct 校验时，操作改为返回 `RES_*` Fault。由于单个 `error` struct 覆盖所有非 `2xx` 状态，不同错误状态返回不同结构时应使用 `struct.or(...)`。
 
-更多细节请参阅 [HTTP 请求](/zh-Hans/docs/http) 与 [错误处理](/zh-Hans/docs/errors)。
+见 [HTTP 请求](/zh-Hans/docs/http) 与 [错误处理](/zh-Hans/docs/errors)。

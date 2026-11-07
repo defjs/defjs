@@ -14,21 +14,12 @@ Ein `Client` enthält die Ausführungskonfiguration der konsumierenden Anwendung
 
 ## 1. Client konfigurieren und SDK-Operation aufrufen
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
@@ -112,7 +103,7 @@ Ersetze plattformnatives `fetch` oder `WebSocket` an einem Client mit `withHTTPH
 
 Vollständige Testmuster findest du unter [Tests](/de-DE/docs/testing).
 
-## 6. Übersicht der Client-Options-Helfer
+## 6. Referenz der Client-Option-Helfer
 
 | Helfer                                                                                                        | Zweck                                                                                                           |
 | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -131,6 +122,6 @@ Vollständige Testmuster findest du unter [Tests](/de-DE/docs/testing).
 ## Weiterführende Links
 
 - [Lastverteilung & Failover](/de-DE/docs/load-balancing)
-- [Middleware](/de-DE/docs/interceptors)
+- [Interceptors](/de-DE/docs/interceptors)
 - [Tests](/de-DE/docs/testing)
 - [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)

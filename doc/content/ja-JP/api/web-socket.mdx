@@ -1,6 +1,6 @@
 ---
 title: WebSocket
-description: defineWebSocket、session、リクエスト options です。
+description: defineWebSocket、セッション、リクエストオプションです。
 ---
 
 # WebSocket
@@ -11,12 +11,12 @@ description: defineWebSocket、session、リクエスト options です。
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`、`incoming` struct 1 つ、必須で正の整数の `maxIncomingQueueSize`、任意の `outgoing` と `input` struct、`operation`、静的な `protocols`、0 以上の `maxOutgoingQueueSize` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`WebSocketDefinition`](/ja-JP/api/core/websocketdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
-- **戻り値** 操作です。第一引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとセッションが開きます。
+- **definition** — `path`、`incoming` struct 1 つ、必須で正の整数の `maxIncomingQueueSize`、任意の `outgoing` と `input` struct、`operation`、静的な `protocols`、0 以上の `maxOutgoingQueueSize` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`WebSocketDefinition`](/ja-JP/api/core/websocketdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
+- **戻り値** 操作です。第 1 引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとセッションが開きます。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとの options は、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` で、HTTP の進捗フィールドは無視します。
+呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` で、HTTP の進捗フィールドは無視します。
 
 `beforeConnect`、`heartbeat`、`protocols`、`reconnect` は、それぞれがその呼び出しに限りクライアントの値を全体として置き換えます。protocols の優先順位は、派生したクライアント、`withWebSocketProtocols`、定義の `protocols` の順です。`heartbeat.timeoutMs` は確認待ちであり、リクエストの期限ではありません。
 
@@ -26,14 +26,9 @@ description: defineWebSocket、session、リクエスト options です。
 
 所有するスコープのクリーンアップには `await using ownedSession = session` を選んでください。手動の `session.close()` と `await session.closed` も残っています。
 
-```ts
-async function consume(
-  session: WebSocketSession<unknown, never>,
-): Promise<void> {
-  await using ownedSession = session;
-  for await (const message of ownedSession.receive) console.log(message);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#consume
+</include>
 
 `closed` は論理的な終端状態を報告します。非同期 disposer はネイティブ close を要求し、Defjs が所有する teardown を待ちますが、close イベントが無い場合は 1 秒で打ち切り、`TimeoutError` という名前の `DOMException` で reject することがあります。物理 TCP 接続が閉じたことは証明できません。
 
@@ -43,7 +38,7 @@ async function consume(
 
 ### WebSocketConnectionInfo
 
-`generation`（再接続で増えます）と、わかった時点での `url`、`protocol`、`extensions` です。
+`generation`（`open` のたびに増えます）と、わかった時点での `url`、`protocol`、`extensions` です。
 
 ### WebSocketCloseInfo
 
@@ -57,31 +52,31 @@ async function consume(
 
 `WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`signal` です。`WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。`timeout` フィールドも `abort` フィールドもありません。
 
-`signal` は開いたあとも含むセッション全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
+`signal` は、開いたあとも含めてセッション全体を対象にします。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位のデフォルトの期限もありません。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
 
-ビルダーとインターセプターチェーンは操作ごとに 1 回だけ実行されます。再接続では構築済みの path/query と取り込んだ protocols を再利用し、`beforeConnect` より前に URL を構築します。インターセプターがリクエストのベースエンドポイントを置き換えていない場合、再接続では新たに選んだエンドポイントも代入します。このフックではセッション内で URL やサブプロトコルの認証情報を更新できません。新しい input またはクライアント設定で新たな操作を開始してください。
+`builder` とインターセプターチェーンは操作ごとに 1 回だけ実行されます。再接続では構築済みの path/query と取り込んだ protocols を再利用し、`beforeConnect` より前に URL を構築します。インターセプターがリクエストのベースエンドポイントを置き換えていない場合、再接続では新たに選んだエンドポイントに置き換えます。このフックではセッション内で URL やサブプロトコルの認証情報を更新できません。新しい input またはクライアント設定で新たな操作を開始してください。
 
 `reconnect` を指定したとき、`attempts` のデフォルトは障害ごとに 3 です。`0` はリトライを無効にします。`open` に成功すると予算とバックオフの指数がリセットされるため、新たな障害ではリトライ 1 から始まります。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。デフォルトと検証規則は [Client](/ja-JP/api/client) を参照してください。
 
 ## メッセージ
 
-`incoming` は struct 1 つです。テキスト、`ArrayBuffer`、typed-array、`Blob` のフレームは UTF-8 として読まれ、JSON パースされ、その struct に対して検査されます。JSON パースか struct に失敗したフレームは `session.onRuntimeError` に報告され、キューには入りません。クライアント側の不正フレーム option はありません。
+`incoming` は struct 1 つです。テキスト、`ArrayBuffer`、typed array、`Blob` のフレームは UTF-8 として読まれ、JSON パースされ、その struct に対して検査されます。JSON パースか struct に失敗したフレームは `session.onRuntimeError` に報告され、キューには入りません。クライアント側の不正フレームオプションはありません。
 
 `outgoing` は struct 1 つです。`session.send` はその struct の `StructInput` を受け、エイリアスをエンコードしてから `JSON.stringify` します。エンコード後に JSON で忠実に表現できない値は、送信や再接続キューへの追加の前に `TypeError` を投げます。非有限数、関数、symbol、`Map`、`Set`、ストリーム、JSON 表現を持たないクラスインスタンスなどが該当します。入れ子の値にも HTTP の JSON ボディと同じチェックを使います。ハートビートにもこのチェックが適用され、ハートビートのシリアライズに失敗するとセッションが終了します。メッセージの種類が複数なら `struct.discriminatedUnion` です。
 
-```ts
-session.send({ type: "subscribe", symbol: "ACME" });
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#send
+</include>
 
-[WebSocket ガイド](/ja-JP/docs/web-socket) と [WebSocket セッションを開く](/ja-JP/recipes/websocket-session) を見てください。
+[WebSocket ガイド](/ja-JP/docs/web-socket) と [WebSocket セッションの管理](/ja-JP/recipes/websocket-session) を見てください。
 
 ## WebSocketDefinition
 
-`path`、`incoming`、必須の `maxIncomingQueueSize`、任意の `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` です。ビルダーが返せるのは `path` と `query` だけです。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+`path`、`incoming`、必須の `maxIncomingQueueSize`、任意の `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` です。`builder` が返せるのは `path` と `query` だけです。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
 
 ## WebSocketEndpoint
 
-`defineWebSocket` の戻り値です。第一引数はクライアントです。それ以降の引数は入力だけです。
+`defineWebSocket` の戻り値です。第 1 引数はクライアントです。それ以降の引数は入力だけです。
 
 ## WebSocketRequestShape
 

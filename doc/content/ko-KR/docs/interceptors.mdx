@@ -1,11 +1,11 @@
 ---
-title: "미들웨어"
+title: "인터셉터"
 description: SDK의 API 정의를 수정하지 않고 애플리케이션 클라이언트에 인증 및 전송 정책을 적용합니다.
 ---
 
-# 미들웨어
+# 인터셉터
 
-인터셉터(미들웨어)는 SDK 작업 정의를 수정하지 않고도 애플리케이션의 `Client`에 인증 헤더 추가, 요청 서명, 유지보수 모드 단락(short-circuit), 안전한 조회 재시도 등 횡단 관심사 실행 정책을 연결할 수 있게 해줍니다.
+인터셉터는 SDK 작업 정의를 수정하지 않고도 애플리케이션의 `Client`에 인증 헤더 추가, 요청 서명, 유지보수 모드 단락(short-circuit), 안전한 조회 재시도 등 횡단 관심사 실행 정책을 연결할 수 있게 해줍니다.
 
 입력값 검증 및 `builder` 매핑은 인터셉터 체인이 실행되기 **전에** 수행되며, HTTP 상태 코드 분기 및 `output` / `error` struct 유효성 검증은 인터셉터 체인이 실행된 **후에** 수행됩니다.
 
@@ -41,7 +41,7 @@ description: SDK의 API 정의를 수정하지 않고 애플리케이션 클라�
 
 - **양파 껍질 순서**: 요청이 나갈 때는 등록된 순서대로 실행되고(`next(req)` 이전), 응답이 돌아올 때는 등록 역순으로 실행됩니다(`await next(req)` 이후). 전역 로깅이나 추적 인터셉터는 인증이나 재시도 같은 구체적인 인터셉터의 바깥쪽에 배치하세요.
 - **불변 요청 객체 규칙**: 외부 재시도 로직이 깨끗한 헤더 상태를 참조할 수 있도록, 항상 `req.headers`를 복제(`new Headers(req.headers)`)하여 새로운 요청 객체(`{ ...req, headers }`)를 `next(...)`에 전달하세요.
-- **`content-type`과 `bodyContentType`**: Defjs는 추론된 본문 컨텐츠 타입을 `req.headers`를 직접 변경하지 않고 `req.bodyContentType`에 저장합니다. 요청 서명 모듈은 `req.headers.get("content-type") ?? req.bodyContentType`을 읽어야 합니다. 인터셉터가 `req.body`를 새로운 형식으로 교체하는 경우 명시적인 `content-type` 헤더를 설정하세요.
+- **`content-type`과 `bodyContentType`**: Defjs는 추론된 본문 콘텐츠 타입을 `req.headers`를 직접 변경하지 않고 `req.bodyContentType`에 저장합니다. 요청 서명 모듈은 `req.headers.get("content-type") ?? req.bodyContentType`을 읽어야 합니다. 인터셉터가 `req.body`를 새로운 형식으로 교체하는 경우 명시적인 `content-type` 헤더를 설정하세요.
 
 ## 2. `makeResponse`를 통한 요청 단락(Short-circuit)
 
@@ -63,7 +63,7 @@ HTTP 재시도는 기본적으로 꺼져 있습니다. `502`, `503`, `504`에서
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
-- **두 재시도 계층**: 이 `next(request)` 루프는 선택된 엔드포인트를 유지하며 외부 인증이나 builder를 다시 실행하지 않습니다. 내부 전송 3회와 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })`를 조합하면 HTTP 요청이 4회 전송될 수 있습니다(실패한 기본 엔드포인트에 3회, 정상 백업에 1회). `maxAttempts`는 외부 시도 횟수를 제한하며 실제 전송 횟수를 제한하지 않습니다. 의도치 않게 중첩하지 말고 각 조건을 어느 계층에서 처리할지 정하세요.
+- **두 재시도 계층**: 이 `next(request)` 루프는 선택된 엔드포인트를 유지하며 외부 인증이나 `builder`를 다시 실행하지 않습니다. 내부 전송 3회와 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })`를 조합하면 HTTP 요청이 4회 전송될 수 있습니다(실패한 기본 엔드포인트에 3회, 정상 백업에 1회). `maxAttempts`는 외부 시도 횟수를 제한하며 실제 전송 횟수를 제한하지 않습니다. 의도치 않게 중첩하지 말고 각 조건을 어느 계층에서 처리할지 정하세요.
 - **`Retry-After` 정책**: Core의 `withRetry`는 이 헤더를 읽지 않습니다. 레시피의 30초 상한과 250 ms 대체값은 애플리케이션의 선택입니다. 서버가 요구한 지연이 더 길 때 상한을 적용하면 요청된 시간보다 일찍 재시도할 수 있습니다. 이를 허용할 수 없다면 전체 지연을 기다리거나 응답을 그대로 반환하세요.
 - **401 쓰기**: [Bearer 갱신 레시피](/ko-KR/recipes/refresh-bearer-once)는 JSON POST를 두 번 전달할 수 있습니다. 비즈니스 처리 전에 인증이 요청을 거부하고, 안정적인 멱등성 키로 서버 측 중복을 제거하도록 보장해야 합니다. 그렇지 않으면 쓰기를 자동 재전송하지 마세요. 스트림 요청 본문은 재전송하지 않습니다.
 - **전송 계층 거부(rejection) 처리**: 네트워크 오류가 발생하면 `next(request)`는 상태 코드 0 응답 대신 reject됩니다. 이 거부를 잡아서 다시 throw하면 원래의 `NET_*` 결함 코드가 보존됩니다.

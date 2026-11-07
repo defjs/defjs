@@ -19,7 +19,7 @@ Cada plugin de Defjs respeta el **contrato de plugin ligero**:
 
 | Área                                                                       | Paquete / Recurso                 | Categoría            | Qué proporciona                                                                                                       | Qué permanece en la aplicación                                                                           |
 | -------------------------------------------------------------------------- | --------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [React](/es-ES/docs/integrations/react)                                    | `@defjs/react`                    | Plugin de framework  | `ClientProvider` y `useClient(override?)` para React 18+                                                              | Creación del cliente, limpieza con `AbortController`, caché de consultas                                 |
+| [React](/es-ES/docs/integrations/react)                                    | `@defjs/react`                    | Plugin de framework  | `ClientProvider` y `useClient(overrideClient?)` para React 18+                                                        | Creación del cliente, limpieza con `AbortController`, caché de consultas                                 |
 | [Vue](/es-ES/docs/integrations/vue)                                        | `@defjs/vue`                      | Plugin de framework  | `createClientPlugin`, `HTTP_CLIENT` e `injectClient(key?)` para Vue 3.2+                                              | Creación del cliente, cancelación en `onCleanup` / `onScopeDispose`, estado                              |
 | [OpenTelemetry en servidor](/es-ES/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Plugin de middleware | `ClientOption` con `withOpenTelemetryServer(...)` para spans salientes de HTTP, SSE y WebSocket, métricas y registros | Inicialización del SDK de OpenTelemetry, exportadores, muestreo, ocultación de datos sensibles y vaciado |
 | [Skill de IA](/es-ES/docs/ai) y [llms.txt](/es-ES/docs/ai-api)             | Skill `defjs/defjs` y `/llms.txt` | Herramientas de IA   | Skill para agentes (`SKILL.md`) y documentación Markdown procesable por máquinas                                      | Verificación contra la versión instalada de `@defjs/core` y suite de pruebas                             |
@@ -33,62 +33,24 @@ Cada plugin de Defjs respeta el **contrato de plugin ligero**:
 Un plugin de framework transmite un [`DerivableClient`](/es-ES/api/core/derivableclient-type) existente a través del árbol de componentes mediante inyección de dependencias nativa (Context de React o `provide` / `inject` de Vue):
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-<Tab value="sdk/orders.ts">
+  <Tab value="sdk/orders.ts">
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
+  </Tab>
+  <Tab value="app/main.tsx">
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
 
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
+  </Tab>
+  <Tab value="app/OrderCard.tsx">
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: Order,
-});
-```
-
-</Tab>
-<Tab value="app/main.tsx">
-
-```tsx
-import { createClient, withEndpoint } from "@defjs/core";
-import { ClientProvider } from "@defjs/react";
-import { OrderCard } from "./OrderCard.tsx";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-export function App() {
-  return (
-    <ClientProvider client={client}>
-      <OrderCard id={42} />
-    </ClientProvider>
-  );
-}
-```
-
-</Tab>
-<Tab value="app/OrderCard.tsx">
-
-```tsx
-import { useClient } from "@defjs/react";
-import { getOrder } from "../sdk/orders.ts";
-
-export function OrderCard({ id }: { id: number }) {
-  const client = useClient();
-  // Pasa `client` o `client({ signal })` a `getOrder(...)` dentro de un efecto o hook de consulta
-  void id;
-  void getOrder;
-  void client;
-  return null;
-}
-```
-
-</Tab>
+  </Tab>
 </Tabs>
 
 ### 2. Plugins de middleware (`@defjs/opentelemetry-server`)
@@ -96,26 +58,18 @@ export function OrderCard({ id }: { id: number }) {
 Un plugin de middleware es una factoría que devuelve un [`ClientOption`](/es-ES/api/core/clientoption-type). Al pasarse a `createClient(...)`, añade interceptores HTTP, SSE o WebSocket mediante `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-<Tab value="plugins/request-id.ts">
-
+  <Tab value="plugins/request-id.ts">
 <include cwd lang="typescript">
-  examples/integrations/request-id.ts#example
+  examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
-</Tab>
-<Tab value="app/client.ts">
+  </Tab>
+  <Tab value="app/client.ts">
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { withRequestIdHeader } from "../plugins/request-id.ts";
-
-export const client = createClient(
-  withEndpoint("https://api.example.com"),
-  withRequestIdHeader(),
-);
-```
-
-</Tab>
+  </Tab>
 </Tabs>
 
-Consulta [Middleware e interceptores](/es-ES/docs/interceptors) para conocer las reglas de ordenación, límites de reintento y hooks del ciclo de vida en streaming.
+Consulta [Interceptores](/es-ES/docs/interceptors) para conocer las reglas de ordenación, límites de reintento y hooks del ciclo de vida en streaming.

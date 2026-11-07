@@ -1,13 +1,13 @@
 ---
 title: "OpenTelemetry 伺服器端"
-description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使用可選的 Tracer、Meter 及 Logger。
+description: 喺伺服器應用程式嘅 client 上觀測 SDK 呼叫，tracer、meter 同 logger 全部可選。
 ---
 
 # OpenTelemetry 伺服器端
 
 `@defjs/opentelemetry-server` 幫伺服器端應用程式嘅 client 監測對外發出嘅 HTTP、SSE 同 WebSocket 操作，同時令你嘅 SDK 定義完全獨立於任何 OpenTelemetry 設定。
 
-`withOpenTelemetryServer(options)` 會回傳一個 `@defjs/core` 嘅 [`ClientOption`](/zh-Hant-HK/api/core/clientoption-type)，為每種啟用咗嘅傳輸協議（HTTP、SSE、WebSocket）分別追加一個中介層。佢**唔會**初始化 OpenTelemetry SDK，亦**唔會**監測傳入伺服器嘅 inbound 請求。
+`withOpenTelemetryServer(options)` 會回傳一個 `@defjs/core` 嘅 [`ClientOption`](/zh-Hant-HK/api/core/clientoption-type)，為每種啟用咗嘅傳輸層（HTTP、SSE、WebSocket）分別追加一個攔截器。佢**唔會**初始化 OpenTelemetry SDK，亦**唔會**監測傳入伺服器嘅 inbound 請求。
 
 ---
 
@@ -20,15 +20,17 @@ description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
+
   </Tab>
   <Tab value="app/telemetry-client.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
-- **Span 命名規則**：設定咗 `operation` 之後，span 名稱會變成 `GET orders.read`、`SSE orders.watch` 同 `WebSocket orders.connect`，並且帶有 `defjs.operation` 屬性。如果冇設定 `operation`，span 名稱會 fallback 返去單純嘅 HTTP 方法、`SSE` 或 `WebSocket`。
+- **span 命名規則**：設定咗 `operation` 之後，span 名稱會變成 `GET orders.read`、`SSE orders.watch` 同 `WebSocket orders.connect`，並且帶有 `defjs.operation` 屬性。如果冇設定 `operation`，span 名稱會 fallback 返去單純嘅 HTTP 方法、`SSE` 或 `WebSocket`。
 - **獨立運作嘅 Signals**：`tracer`、`meter` 同 `logger` 都係可選嘅，並且彼此獨立運作：
   - 省略 `tracer`：停用本地 span 建立同 span hooks，但依然會記錄 metrics、日誌同向外傳遞 trace context。
   - 省略 `meter`：停用套件嘅各項 metrics 指標。
@@ -39,46 +41,49 @@ description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使
 
 ## 2. 傳輸選項、Hooks 與 Trace 傳播
 
-喺 `http`、`sse` 同 `webSocket` 選項入面配置各協議開關（`{ enabled: false }`）同埋 span hooks（`startSpanHook`、`requestHook`、`responseHook`）。針對下游服務預期喺握手 query string 接收 trace context 嘅 WebSocket 連線，可以開啟 `queryPropagation: true`：
+喺 `http`、`sse` 同 `webSocket` 選項入面配置各傳輸層開關（`{ enabled: false }`）同埋 span hooks（`startSpanHook`、`requestHook`、`responseHook`）。針對下游服務預期喺握手 query string 接收 trace context 嘅 WebSocket 連線，可以開啟 `queryPropagation: true`：
 
 <Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
   <Tab value="app/hooks.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
+
   </Tab>
   <Tab value="app/ws-propagation.ts">
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
+
   </Tab>
   <Tab value="app/active-span.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
 ### Hook 契約規範
 
-- `startSpanHook(request): Attributes` 喺建立 span 之前同步執行；佢回傳嘅屬性會喺最後被套用，可以用嚟覆寫內建屬性（例如為 `url.full` 進行脫敏去識別化）。
-- `requestHook(span, request)` 同 `responseHook(span, responseOrHandle, request)` 會接收到建立出嚟嘅 span，可以係同步或非同步函式。佢哋**唔會**被傳輸管線所 await，HTTP span 會喺 `responseHook` 同步部分回傳時即刻結束。
+- `startSpanHook(request): Attributes` 喺建立 span 之前同步執行；佢回傳嘅屬性會喺最後被套用，可以用嚟覆寫內建屬性（例如遮蓋 `url.full`）。
+- `requestHook(span, request)` 同 `responseHook(span, responseOrHandle, request)` 會接收到建立出嚟嘅 span，可以係同步或非同步函式。佢哋**唔會**被傳輸層管線 await，HTTP span 會喺 `responseHook` 同步部分回傳時即刻結束。
 - Hook 內部出錯永遠唔會中斷 client 呼叫。當 `span.isRecording()` 為 true 時，hook 錯誤會喺 span 上記錄 `defjs.otel.hook.error` 同 `exception` 事件；對於 non-recording span，錯誤會透過 `@opentelemetry/api` 嘅 `diag.error` 回報（`hook.name`、`error.type`、`traceId`、`spanId`）。
-- `withOpenTelemetryServer` 喺建立時會對 `http`、`sse` 同 `webSocket` 選項區塊進行快照。傳入 `{ enabled: false }` 會直接停用該傳輸協議，唔會讀取佢內部嘅 hooks。
+- `withOpenTelemetryServer` 喺建立時會對 `http`、`sse` 同 `webSocket` 選項區塊進行快照。傳入 `{ enabled: false }` 會直接停用該傳輸層，唔會讀取佢內部嘅 hooks。
 
 ---
 
 ## 3. HTTP、SSE 與 WebSocket 嘅遙測語義
 
-呢個外掛會喺中介層管線內測量傳輸生命週期：
+呢個外掛會喺攔截器管線內測量傳輸生命週期：
 
-- **HTTP**：Span 喺 HTTP 中介層開始，並喺 `HttpResponse` 回傳時結束。宣告過嘅 `output` / `error` body 會喺回傳**之前**喺中介層邊界內讀取完畢（包括檢查同解析 JSON 格式）。如果讀取 body 或 JSON media-type / 解析出錯，會喺中介層 reject（`error.type: "BodyFailure"`），將 span 標記為 `ERROR`，喺 metrics 記錄 `BodyFailure`，並發出一條 `WARN` 日誌。狀態碼 `400+` 會將 span 標記為 `ERROR`，並以狀態碼字串作為 `error.type`。Struct 驗證（`RES_STRUCT_MISMATCH`）同 `HTTP_STATUS` tuple 轉換都喺中介層鏈之後發生，唔會改動已結束嘅傳輸 span。
+- **HTTP**：Span 喺 HTTP 攔截器開始，並喺 `HttpResponse` 回傳時結束。宣告過嘅 `output` / `error` body 會喺回傳**之前**喺攔截器邊界內讀取完畢（包括檢查同解析 JSON 格式）。如果讀取 body 或 JSON media-type / 解析出錯，會喺攔截器 reject（`error.type: "BodyFailure"`），將 span 標記為 `ERROR`，喺 metrics 記錄 `BodyFailure`，並發出一條 `WARN` 日誌。狀態碼 `400+` 會將 span 標記為 `ERROR`，並以狀態碼字串作為 `error.type`。Struct 驗證（`RES_STRUCT_MISMATCH`）同 `HTTP_STATUS` tuple 轉換都喺攔截器鏈之後發生，唔會改動已結束嘅傳輸 span。
 - **SSE**：一條邏輯串流（包括自動重新連線）對應一個 span，保持開啟直到 `stream.closed` 結算。記錄嘅事件包括：`sse.connected`，隨後為 `sse.closed`、`sse.aborted`（主動呼叫 `stream.close()` 或非逾時中斷以 `OK` 結束），或 `sse.error`（以 `ERROR` 結束，包括呼叫端逾時類別嘅中斷）。
 - **WebSocket**：一個邏輯會話（包括自動重新連線）對應一個 span，直到 `session.closed` 結算。記錄嘅事件包括：`websocket.connected`、`websocket.closed`、`websocket.error`。伺服器主動送出關閉 frame（任何代碼）都會以 `OK` 結束 span 並記錄 `websocket.closed`；呼叫端主動中斷會以 `ERROR` 結束 span 並記錄 `websocket.error`，唔出 log，但中斷原因係 `TimeoutError` 時例外，會發出一條 `WARN`。冇關閉 frame 嘅異常斷線（`1006`），喺 socket `error` 先於 `close` 觸發嘅 runtime（Node.js）會以 `ERROR` 結束並記錄一條日誌，喺唔觸發 error 嘅 runtime（Bun）則以 `OK` 結束。
 
 ### 重試與重連邊界
 
-以下係目前中介層觀察到嘅行為，唔係獨立嘅負載平衡器遙測 API：
+以下係目前攔截器觀察到嘅行為，唔係獨立嘅 balancer 遙測 API：
 
 - 每次 `withRetry` HTTP 嘗試都有自己嘅 client span 同耗時樣本。如果有活躍嘅應用程式父級 span，各次嘗試會係同一父級之下嘅同級 span；否則，重試唔會自動歸入同一條 trace。Core 唔會建立邏輯呼叫嘅父級 span。
 - HTTP 嘗試嘅 URL 會標示嗰次嘗試嘅端點，但唔會輸出嘗試編號、重試原因、預算餘額／用盡，或者逐出／恢復屬性。
@@ -95,7 +100,7 @@ description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使
 | `defjs.client.sse.connect.duration`          | 直至回傳 SSE handle 所需時間                    |
 | `defjs.client.sse.connection.duration`       | 由回傳 handle 直至最終 `stream.closed` 嘅時長   |
 | `defjs.client.sse.active_streams`            | 等待 `closed` 結算中嘅活躍邏輯 SSE 串流數       |
-| `defjs.client.websocket.connect.duration`    | 直至回傳 WebSocket session 所需時間             |
+| `defjs.client.websocket.connect.duration`    | 直至回傳 WebSocket 會話所需時間                 |
 | `defjs.client.websocket.connection.duration` | 由回傳 session 直至最終 `session.closed` 嘅時長 |
 | `defjs.client.websocket.active_connections`  | 等待 `closed` 結算中嘅活躍邏輯 WebSocket 會話數 |
 

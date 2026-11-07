@@ -15,7 +15,7 @@ Cuando una aplicación configura múltiples URLs base con `withEndpoint(...urls)
 | [`roundRobinBalancer(options?)`](/es-ES/api/core/roundrobinbalancer)                  | Llamadas servidor a servidor entre réplicas equivalentes (admite `weights`) | Activado (`5` fallos consecutivos)          |
 | [`p2cBalancer(options?)`](/es-ES/api/core/p2cbalancer)                                | Llamadas de servidor donde la latencia o la carga en vuelo varían           | Activado (`5` fallos consecutivos)          |
 
-<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tabs items={["Primario / respaldo (Pick-first)", "Pares de servidor (Round-robin y P2C)", "Balanceador personalizado"]}>
 <Tab value="Primary / backup (Pick-first)">
 
 <include cwd lang="typescript">
@@ -82,7 +82,7 @@ Un `withRetry` posterior sustituye la política. `withRetry()` y `withRetry(unde
 
 `roundRobinBalancer()` y `p2cBalancer()` envuelven su selección de candidatos en [`outlierDetection`](/es-ES/api/core/outlierdetection) de forma predeterminada:
 
-<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tabs items={["Recuperación con sonda única", "Caché de salud activa"]}>
 <Tab value="Single-probe recovery">
 
 <include cwd lang="typescript">
@@ -105,7 +105,7 @@ Un `withRetry` posterior sustituye la política. `withRetry()` y `withRetry(unde
 
 4. **Apertura de emergencia (fail-open)**: si todos los endpoints configurados están expulsados o marcados como no saludables, el balanceador se abre a la lista completa de candidatos en lugar de descartar localmente todo el tráfico.
 
-## 4. Ciclo de vida contable del transporte (`pick` → `start` → `end` → `done`)
+## 4. Ciclo de vida de contabilización del transporte (`pick` → `start` → `end` → `done`)
 
 Los balanceadores personalizados deben seleccionar una de las cadenas exactas de `info.endpoints`. Una selección ajena devuelve una tupla `REQ_BUILD_FAILED` con el mensaje de causa no sensible `Balancer selected an endpoint outside the candidate set`; no se inicia ningún transporte ni se ejecuta ningún callback de finalización. Esta regla preserva el filtrado de salud y las exclusiones de reintento por llamada.
 
@@ -122,9 +122,9 @@ Los balanceadores personalizados implementan `pick(info)` sincrónico y los call
 | WebSocket abierto se cierra con código `1006` o `wasClean === false`                    | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
 | WebSocket abierto se cierra limpiamente                                                 | `{ attempted: true }`                                      |
 | Cancelación de quien llama o cierre manual del stream/socket                            | `{ attempted: false }`                                     |
-| El plazo del llamador expira tras haberse iniciado el intento                           | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+| El plazo de quien llama expira tras haberse iniciado el intento                         | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
 
-Los fallos al decodificar el handshake conservan el resultado neutro derivado del estado del handshake (por ejemplo, `NET_UNAVAILABLE` con estado `503`). Un cuerpo HTTP incompleto conserva en cambio `NET_BODY_INCOMPLETE` y su estado crudo, incluso en una respuesta de pasarela; la detección de outliers por defecto no lo cuenta.
+Los fallos al decodificar el handshake conservan el resultado neutro derivado del estado del handshake (por ejemplo, `NET_UNAVAILABLE` con estado `503`). Un cuerpo HTTP incompleto conserva en cambio `NET_BODY_INCOMPLETE` y su estado crudo, incluso en una respuesta de pasarela; la detección de valores atípicos por defecto no lo cuenta.
 
 ## Lecturas relacionadas
 

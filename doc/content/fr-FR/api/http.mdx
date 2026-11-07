@@ -5,14 +5,14 @@ description: defineRequest, options de requête, et types de requête/réponse H
 
 # HTTP
 
-Déclare une requête typée, puis appelle l’opération avec un client et son entrée.
+Déclarez une requête typée, puis appelez l'opération avec un client et son entrée.
 
 ## defineRequest()
 
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, struct `input` facultatif, structs `output` et `error` facultatifs, `operation` facultative. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`RequestDefinition`](/fr-FR/api/core/requestdefinition-type). `builder` est obligatoire exactement quand `input` est déclaré.
-- **Renvoie** une opération. Appelle-la comme `getOrder(client, input)`, ou `health(client)` quand aucune entrée n’est déclarée. Quand tout le struct d’entrée est facultatif, l’argument d’entrée peut être omis. L’appeler démarre la requête. Il n’y a pas de troisième argument d’options.
+- **Renvoie** une opération. Appelez-la comme `getOrder(client, input)`, ou `health(client)` quand aucune entrée n’est déclarée. Quand tout le struct d’entrée est facultatif, l’argument d’entrée peut être omis. L’appeler démarre la requête. Il n’y a pas de troisième argument d’options.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
@@ -20,7 +20,7 @@ Déclare une requête typée, puis appelle l’opération avec un client et son 
 indexé par statut. En omettre un veut dire que ce corps n’est jamais lu — voir
 [Une déclaration est une affirmation](/fr-FR/docs/design-decisions#declaration-is-an-assertion).
 
-Appeler l’opération renvoie une promesse du tuple décrit sous [`HttpAwaitResult`](/fr-FR/api/core/httpawaitresult-type). Passe les options par appel en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). HTTP lit `signal` et les callbacks de progression et ignore les autres champs.
+Appeler l’opération renvoie une promesse du tuple décrit sous [`HttpAwaitResult`](/fr-FR/api/core/httpawaitresult-type). Passez les options par appel en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). HTTP lit `signal` et les callbacks de progression et ignore les autres champs.
 
 Un statut non-2xx est `HTTP_STATUS` quand aucun struct `error` n’est déclaré ou que le corps `error` déclaré décode. Le `data` du fault est le corps
 `error` décodé quand un a été déclaré, et `undefined` sinon. Quand un corps `error` déclaré ne peut pas être lu (mauvais media type, JSON invalide) ou
@@ -46,13 +46,13 @@ qu’une valeur venue du fil ; il n’y a pas de court-circuit de confiance.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` est la tranche HTTP de [`RequestOptions`](/fr-FR/api/core/requestoptions-type) : [`UseRequestConfig`](/fr-FR/api/core/userequestconfig-type), c’est-à-dire `signal` plus `onDownloadProgress` et `onUploadProgress`. Il n’y a pas de champ `timeout` ou `abort`. Une échéance est `signal: AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. `signal` est le signal de l’appel ; combine les signaux avec `AbortSignal.any` dans le code applicatif. Il n’y a pas d’échéance par défaut au niveau du client. Les autres champs de requête, comme `heartbeat`, sont ignorés.
+`HttpExecuteOptions` est la tranche HTTP de [`RequestOptions`](/fr-FR/api/core/requestoptions-type) : [`UseRequestConfig`](/fr-FR/api/core/userequestconfig-type), c’est-à-dire `signal` plus `onDownloadProgress` et `onUploadProgress`. Il n’y a pas de champ `timeout` ou `abort`. Une échéance est `signal: AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. `signal` est le signal de l’appel ; combinez les signaux avec `AbortSignal.any` dans le code applicatif. Il n’y a pas d’échéance par défaut au niveau du client. Les autres champs de requête, comme `heartbeat`, sont ignorés.
 
 ## Types
 
 ### RequestDefinition
 
-`method`, `path`, `input`, `output`, `error`, `operation` et `builder` facultatifs.Le kind du struct choisit comment un corps déclaré est lu. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
+`method`, `path`, `input`, `output`, `error`, `operation` et `builder` ; `input`, `output`, `error` et `operation` sont facultatifs. Le type du struct choisit comment un corps déclaré est lu. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
 
 ### HttpAwaitResult
 
@@ -63,7 +63,7 @@ En succès, le troisième emplacement porte `body` seulement quand `output` a é
 
 ### HttpRequest
 
-Requête sortante normalisée : `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` et `queryParams`. Quand les intercepteurs la voient, `body` est déjà la valeur wire — pour du JSON, une chaîne de texte JSON — signe donc les HMAC et les digests sur celle-ci, pas sur l’entrée du struct. Les intercepteurs voient `queryParams` comme `new URLSearchParams(queryString)`. Un builder qui renvoie `URLSearchParams` fait passer cette instance telle quelle. `responseType` et `errorResponseType` sont readonly : ils sont dérivés des kinds de struct `output` et `error` de l’endpoint et ne doivent pas être modifiés.
+Requête sortante normalisée : `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` et `queryParams`. Quand les intercepteurs la voient, `body` est déjà la valeur réseau — pour du JSON, une chaîne de texte JSON — signez donc les HMAC et les digests sur celle-ci, pas sur l’entrée du struct. Les intercepteurs voient `queryParams` comme `new URLSearchParams(queryString)`. Un builder qui renvoie `URLSearchParams` fait passer cette instance telle quelle. `responseType` et `errorResponseType` sont readonly : ils sont dérivés des types de struct `output` et `error` de la définition et ne doivent pas être modifiés.
 
 ### HttpMeta
 
@@ -83,9 +83,9 @@ le décodage a eu lieu, ce qui explique qu’un échec de décodage ne rapporte 
 
 <ApiSignature name="HttpResponse" />
 
-`body` est `undefined` quand la réponse n’en avait pas ; un JSON `null` reste `null`. Le type est brandé, donc construis-en un avec `makeResponse` plutôt qu’avec un objet littéral. La forme wire que les transports produisent et que les intercepteurs voient : `body` est du texte ou du JSON déjà parsé, pas une
-valeur décodée. Pour une représentation JSON, une string est une racine de string JSON et n’est pas parsée à nouveau ; les octets
-et les blobs sont bruts et sont parsés une fois. `DecodedResponse` est ce qui atteint l’appelant.
+`body` est `undefined` quand la réponse n’en avait pas ; un JSON `null` reste `null`. Le type est brandé, donc construisez-en un avec `makeResponse` plutôt qu’avec un objet littéral. La forme réseau que les transports produisent et que les intercepteurs voient : `body` est du texte ou du JSON déjà analysé, pas une
+valeur décodée. Pour une représentation JSON, une chaîne est une racine de chaîne JSON et n'est pas analysée à nouveau ; les octets
+et les blobs sont bruts et sont analysés une fois. `DecodedResponse` est ce qui atteint l’appelant.
 
 ### HttpProgressEvent
 
@@ -106,7 +106,7 @@ Renvoyé par `defineRequest`. Le premier argument est un [`Client`](/fr-FR/api/c
 
 ## BuilderInput
 
-Entrée d’endpoint parsée vue par `builder`. Les nœuds objet portent le struct qui les a produits, donc l’encodage d’alias, de `Date` et de `bigint` suit la valeur.
+Entrée d'opération analysée vue par `builder`. Les nœuds objet portent le struct qui les a produits, donc l’encodage d’alias, de `Date` et de `bigint` suit la valeur.
 
 ## HttpRequestShape
 
@@ -114,7 +114,7 @@ Entrée d’endpoint parsée vue par `builder`. Les nœuds objet portent le stru
 
 Les quatre champs sont facultatifs. `query` est `URLSearchParams` ou un record ; un objet imbriqué a besoin de `withQuerySerializer` au runtime. `headers` est `HeadersInit` ou un record de scalaires ou de tableaux de scalaires. `path` fournit un scalaire par segment `:name`.
 
-`body` est `never` pour `GET` et `HEAD`. Sinon c’est une valeur wire (`string`, `Blob`, `ArrayBuffer`, un typed array ou `DataView`, `FormData`, `URLSearchParams`, ou `ReadableStream<Uint8Array>`) ou des données JSON (`number`, `boolean`, `bigint`, `Date`, `null`, un tableau, ou un objet à clés string).
+`body` est `never` pour `GET` et `HEAD`. Sinon c'est une valeur réseau (`string`, `Blob`, `ArrayBuffer`, un tableau typé ou `DataView`, `FormData`, `URLSearchParams`, ou `ReadableStream<Uint8Array>`) ou des données JSON (`number`, `boolean`, `bigint`, `Date`, `null`, un tableau, ou un objet à clés de type string).
 
 ## UseRequestConfig
 
@@ -132,7 +132,7 @@ Corps d’erreur inféré du struct `error` déclaré, ou `undefined` quand aucu
 
 `'arraybuffer' | 'blob' | 'json' | 'text'`
 
-Choisi à partir du kind de struct déclaré (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, tout le reste → `json`). Pas un champ de `defineRequest`.
+Choisi à partir du type de struct déclaré (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, tout le reste → `json`). Pas un champ de `defineRequest`.
 
 ## MakeResponseOptions
 

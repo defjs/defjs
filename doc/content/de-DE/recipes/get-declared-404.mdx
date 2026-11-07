@@ -5,51 +5,26 @@ description: Einen GET-Aufruf ausführen und zwischen einer typisierten 200- und
 
 # GET mit einer deklarierten 404-Antwort
 
-Deklariere sowohl `output` (für 2xx-Antworten) als auch `error` (für Nicht-2xx-Antworten) an `defineRequest`. Verzweige am Aufruf-Ort auf `error?.code === "HTTP_STATUS" && error.status === 404`, um die typisierte `error.data`-Payload auszulesen.
+Deklariere sowohl `output` (für 2xx-Antworten) als auch `error` (für Nicht-2xx-Antworten) an `defineRequest`. Verzweige an der Aufrufstelle auf `error?.code === "HTTP_STATUS" && error.status === 404`, um die typisierte `error.data`-Payload auszulesen.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error?.code === "HTTP_STATUS" && error.status === 404) {
-console.log(error.data.message);
-return;
-}
-if (error) {
-console.error(error.code);
-return;
-}
-console.log(`Loaded ${order.status} from ${response.status}`);
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -57,9 +32,9 @@ Antwortet ein Server auf `GET /orders/7` mit `200` und `{ "id": 7, "status": "pa
 
 ```txt
 Loaded paid from 200
-````
+```
 
 - Jeder Nicht-2xx-Status erzeugt `HTTP_STATUS`. Das Deklarieren von `error` dekodiert und validiert den Fehler-Body in `error.data`; lässt du `error` weg, bleibt `error.data` `undefined`, ohne den Body überhaupt einzulesen.
-- Weist ein deklarierter `error`-Body den falschen Medientyp auf, enthält er ungültiges JSON oder schlägt die Struct-Validierung fehl, gibt die Operation stattdessen einen `RES_*`-Fehler zurück. Da ein einzelnes `error`-Struct alle Nicht-2xx-Status abdeckt, nutze `struct.or(...)`, wenn unterschiedliche Fehler-Statuscodes abweichende Strukturen zurückgeben.
+- Weist ein deklarierter `error`-Body den falschen Medientyp auf, enthält er ungültiges JSON oder schlägt die Struct-Validierung fehl, gibt die Operation stattdessen einen `RES_*`-Fault zurück. Da ein einzelnes `error`-Struct alle Nicht-2xx-Status abdeckt, nutze `struct.or(...)`, wenn unterschiedliche Fehler-Statuscodes abweichende Strukturen zurückgeben.
 
 Siehe [HTTP-Operationen](/de-DE/docs/http) und [Fehlerbehandlung](/de-DE/docs/errors).

@@ -5,7 +5,7 @@ description: defineWebSocket, session и опции запроса.
 
 # WebSocket
 
-Объяви сокет, вызови операцию с клиентом, шли и принимай типизированные сообщения, потом закрой.
+Объявите сокет, вызовите операцию с клиентом, отправляйте и принимайте типизированные сообщения, затем закройте сессию.
 
 ## defineWebSocket()
 
@@ -16,24 +16,19 @@ description: defineWebSocket, session и опции запроса.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавай, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `reconnect` и игнорирует поля прогресса HTTP.
+Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `reconnect` и игнорирует поля прогресса HTTP.
 
-`beforeConnect`, `heartbeat`, `protocols` и `reconnect` каждое целиком заменяет значение клиента для этого вызова. Приоритет protocols: выведенный клиент, затем `withWebSocketProtocols`, затем `protocols` определения. `heartbeat.timeoutMs` — ожидание подтверждения, а не дедлайн запроса.
+Каждый из параметров `beforeConnect`, `heartbeat`, `protocols` и `reconnect` целиком заменяет значение клиента для этого вызова. Приоритет protocols: выведенный клиент, затем `withWebSocketProtocols`, затем `protocols` определения. `heartbeat.timeoutMs` — ожидание подтверждения, а не дедлайн запроса.
 
 ## WebSocketSession
 
 <ApiSignature name="WebSocketSession" />
 
-Для освобождения принадлежащих области видимости ресурсов предпочитай `await using ownedSession = session`. Ручные `session.close()` и `await session.closed` остаются доступны.
+Для освобождения ресурсов, принадлежащих области видимости, предпочитайте `await using ownedSession = session`. Ручные `session.close()` и `await session.closed` остаются доступны.
 
-```ts
-async function consume(
-  session: WebSocketSession<unknown, never>,
-): Promise<void> {
-  await using ownedSession = session;
-  for await (const message of ownedSession.receive) console.log(message);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#consume
+</include>
 
 `closed` сообщает окончательное логическое состояние. Асинхронное освобождение запрашивает нативное закрытие и ждёт освобождения ресурсов, которыми управляет Defjs, но при отсутствии события `close` ограничивает ожидание одной секундой и может завершиться отклонением Promise с `DOMException` с именем `TimeoutError`. Оно не доказывает, что физическое TCP-соединение закрылось.
 
@@ -43,7 +38,7 @@ async function consume(
 
 ### WebSocketConnectionInfo
 
-`generation` (растёт на reconnect) и, когда они известны, `url`, `protocol` и `extensions`.
+`generation` (увеличивается при каждом открытии) и, когда они известны, `url`, `protocol` и `extensions`.
 
 ### WebSocketCloseInfo
 
@@ -55,23 +50,23 @@ async function consume(
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательные `message`, `isAck`, `timeoutMs`. Полей `timeout` или `abort` нет.
+`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательный `message`, `isAck`, `timeoutMs`. Полей `timeout` или `abort` нет.
 
-`signal` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. `signal` — сигнал вызова; объединяй сигналы через `AbortSignal.any` в коде приложения. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
+`signal` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. `signal` — сигнал вызова; объединяйте сигналы через `AbortSignal.any` в коде приложения. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
 
-Builder и цепочка перехватчиков выполняются один раз на операцию. Переподключение повторно использует собранные path/query и зафиксированные протоколы и строит URL до `beforeConnect`. Если перехватчик не заменил базовый эндпоинт запроса, переподключение также подставляет заново выбранный эндпоинт. Хук не может обновлять учётные данные URL или субпротокола внутри одной сессии; начни новую операцию со свежими входными данными или конфигурацией клиента.
+Builder и цепочка перехватчиков выполняются один раз на операцию. Переподключение повторно использует собранные path/query и зафиксированные протоколы и строит URL до `beforeConnect`. Если перехватчик не заменил базовый эндпоинт запроса, переподключение также подставляет заново выбранный эндпоинт. Хук не может обновлять учётные данные URL или субпротокола внутри одной сессии; начните новую операцию со свежими входными данными или конфигурацией клиента.
 
 Когда задан `reconnect`, `attempts` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени для задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. Значения по умолчанию и правила проверки см. в [Клиент](/ru-RU/api/client).
 
 ## Сообщения
 
-`incoming` — один struct. Кадры text, `ArrayBuffer`, typed-array и `Blob` читаются как UTF-8, парсятся как JSON, потом проверяются этим struct. Кадр, который не прошёл JSON parse или struct, сообщается в `session.onRuntimeError` и в очередь не кладётся. Клиентской опции для невалидного кадра нет.
+`incoming` — один struct. Кадры text, `ArrayBuffer`, typed-array и `Blob` читаются как UTF-8, парсятся как JSON, затем проверяются этим struct. Кадр, который не прошёл разбор JSON или проверку struct, сообщается в `session.onRuntimeError` и в очередь не кладётся. Клиентской опции для невалидного кадра нет.
 
 `outgoing` — один struct. `session.send` принимает `StructInput` этого struct, кодирует алиасы, затем вызывает `JSON.stringify`. Значения, которые после кодирования невозможно без искажений представить в JSON, вызывают `TypeError` до отправки или попадания в очередь переподключения: в том числе неконечные числа, функции, символы, `Map`, `Set`, потоки и экземпляры классов без JSON-представления. Вложенные значения проходят ту же проверку, что и HTTP-тела JSON. Heartbeat также использует эту проверку; ошибка сериализации heartbeat завершает сессию. Несколько видов сообщений — это `struct.discriminatedUnion`.
 
-```ts
-session.send({ type: "subscribe", symbol: "ACME" });
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#send
+</include>
 
 См. [гайд WebSocket](/ru-RU/docs/web-socket) и [Открыть WebSocket-сессию](/ru-RU/recipes/websocket-session).
 
@@ -113,4 +108,4 @@ session.send({ type: "subscribe", symbol: "ACME" });
 
 ## SocketLifecycleOutcome
 
-Итог одной попытки подключения (`closeInfo`, `connection`, `cause`, `opened`), который использует логика reconnect. Это не окончательный результат сессии; для него см. `WebSocketCloseInfo`.
+Итог одной попытки подключения (`closeInfo`, `connection`, `cause`, `opened`), который использует логика переподключения. Это не окончательный результат сессии; для него см. `WebSocketCloseInfo`.

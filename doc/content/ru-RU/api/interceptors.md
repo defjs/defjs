@@ -1,33 +1,33 @@
 ---
-title: Interceptors
-description: Конструкторы interceptor’ов HTTP, SSE и WebSocket.
+title: Перехватчики
+description: Конструкторы перехватчиков HTTP, SSE и WebSocket.
 ---
 
-# Interceptors
+# Перехватчики
 
-Оберни `next` для одного транспорта. Регистрируй через `withInterceptors`. Смешанные списки фильтруются по kind, когда выполняется операция.
+Оберните `next` для одного транспорта. Регистрируйте через `withInterceptors`. Смешанные списки фильтруются по виду, когда выполняется операция.
 
 ## createHttpInterceptor()
 
 <ApiSignature name="createHttpInterceptor, InterceptorFn, HttpInterceptorNext" />
 
-Зови `next(req)` (можно мутированный request) или short-circuit через `makeResponse`. `next` идёт только внутрь: к interceptor’ам, зарегистрированным после этого, а затем к транспорту. Повторный вызов заново проигрывает эту внутреннюю часть начиная с данного interceptor’а; внешние interceptor’ы дважды не выполняются.
+Вызывайте `next(req)` (при необходимости с изменённым запросом) или выполняйте short-circuit через `makeResponse`. `next` идёт только внутрь: к перехватчикам, зарегистрированным после этого, а затем к транспорту. Повторный вызов заново проигрывает эту внутреннюю часть начиная с данного перехватчика; внешние перехватчики дважды не выполняются.
 
 ## createSSEInterceptor()
 
 <ApiSignature name="createSSEInterceptor, SSEHandler, SSEInterceptorFn" />
 
-`EventStreamHandle` расширяет `AsyncDisposable`. Структурная short-circuit реализация обязана предоставить `[Symbol.asyncDispose](): PromiseLike<void>` и связать его с тем же close lifecycle.
+`EventStreamHandle` расширяет `AsyncDisposable`. Структурная реализация short-circuit обязана предоставить `[Symbol.asyncDispose](): PromiseLike<void>` и связать его с тем же жизненным циклом закрытия.
 
 ## createWebSocketInterceptor()
 
 <ApiSignature name="createWebSocketInterceptor, WebSocketHandler, WebSocketInterceptorFn" />
 
-`WebSocketSessionLike` — session со стороны interceptor:
+`WebSocketSessionLike` — сессия со стороны перехватчика:
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Wrapper или short-circuit session должен пересылать тот же teardown `[Symbol.asyncDispose]()`, что и его `close` / `closed` lifecycle; отдельного resolved promise недостаточно.
+Обёртка или сессия с short-circuit должна пересылать тот же механизм освобождения `[Symbol.asyncDispose]()`, что и её жизненный цикл `close` / `closed`; отдельного разрешённого promise недостаточно.
 
 ## Типы с тегом
 
@@ -51,6 +51,6 @@ Wrapper или short-circuit session должен пересылать тот ж
 
 <ApiSignature name="basicAuthHttpInterceptor, basicAuthSSEInterceptor, BasicAuthInterceptorOptions" />
 
-Ставит `Authorization: Basic <encoded>` на каждый запрос. `fn` возвращает `{ username, password }` и вызывается на каждый запрос. Необязательный второй аргумент `{ encode }` получает этот credential и возвращает часть после `Basic `; кодирование по умолчанию — ``btoa(`${username}:${password}`)``. Без `encode` создание interceptor’а бросает ошибку, если `btoa` недоступен.
+Ставит `Authorization: Basic <encoded>` на каждый запрос. `fn` возвращает `{ username, password }` и вызывается на каждый запрос. Необязательный второй аргумент `{ encode }` получает эти учётные данные и возвращает часть после `Basic `; кодирование по умолчанию — ``btoa(`${username}:${password}`)``. Без `encode` создание перехватчика выбрасывает ошибку, если `btoa` недоступен.
 
-См. [гайд Interceptors](/ru-RU/docs/interceptors).
+См. [руководство по перехватчикам](/ru-RU/docs/interceptors).

@@ -13,29 +13,31 @@ bun add @defjs/core @defjs/vue vue
 
 ## `@defjs/vue` が提供するもの vs 開発者が所有するもの
 
-- **`@defjs/vue` が提供するもの**: `createClientPlugin(client)`、`HTTP_CLIENT`（`InjectionKey<Client>`）、および `injectClient(key?)`。
+- **`@defjs/vue` が提供するもの**: `createClientPlugin(client)`、`HTTP_CLIENT`（`InjectionKey<DerivableClient>`）、および `injectClient(key?)`。
 - **アプリケーション側が所有するもの**: [`DerivableClient`](/ja-JP/api/core/derivableclient-type) の生成、ウォッチャー（`onCleanup`）やコンポーザブル（`onScopeDispose`）内での通信キャンセル、SSE/WebSocket ハンドルのクローズ、Vue Query などのクエリライブラリとの連携。
 - **重要**: `injectClient()` は `DerivableClient` 関数オブジェクトを返します。操作を実行する箇所で `client({ signal })` を呼び出してください（`getOrder(client({ signal }), input)`）。Vue は関数引数をリアクティブなゲッターとして解釈するため、`client` を `watch(client, ...)` や `computed(client)` の第 1 引数に直接渡してはいけません。
 
 ---
 
-## 1. プラグインのインストールと Watcher 内でのデータ取得
+## 1. プラグインのインストールとウォッチャー内でのデータ取得
 
-アプリケーションのエントリポイントでクライアントを作成し、`createClientPlugin(client)` をインストールします。Watcher 内で非同期処理を開始する前に `onCleanup` を登録します。
+アプリケーションのエントリポイントでクライアントを作成し、`createClientPlugin(client)` をインストールします。ウォッチャー内で非同期処理を開始する前に `onCleanup` を登録します。
 
 <Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
+
   </Tab>
   <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
+
   </Tab>
 </Tabs>
 
-- `createClientPlugin(client)` は、渡された `DerivableClient` インスタンスを複製したりアンマウント破棄フックを登録したりすることなく、そのまま `HTTP_CLIENT` として提供します。
-- `onCleanup` は、Watcher が再実行される直前、およびコンポーネントがアンマウントされる時の両方で実行されます。
+- `createClientPlugin(client)` は、渡された `DerivableClient` インスタンスを複製したりアンマウント時の破棄フックを登録したりすることなく、そのまま `HTTP_CLIENT` として提供します。
+- `onCleanup` は、ウォッチャーが再実行される直前、およびコンポーネントがアンマウントされる時の両方で実行されます。
 
 ---
 
@@ -54,12 +56,11 @@ Vue ネイティブの `provide(HTTP_CLIENT, childClient)` を使用して、特
 
 ## 3. スコープ破棄時における SSE と WebSocket のクリーンアップ
 
-Watcher の外側のコンポーザブルやコンポーネント内で処理を開始する場合、`AbortController` と `onScopeDispose` を組み合わせます。接続開始処理を中断し、破棄後に解決されたハンドルも確実にクローズし、単一の非同期イテレーターを消費して `.closed` を await します。
+ウォッチャーの外側のコンポーザブルやコンポーネント内で処理を開始する場合、`AbortController` と `onScopeDispose` を組み合わせます。接続開始処理を中断し、破棄後に解決されたハンドルも確実にクローズし、単一の非同期イテレーターを消費して `.closed` を await します。
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
 - タプルのエラー分岐では、HTTP 503 を含む初回ハンドシェイクの失敗を表示します。イテレーターの `catch` では起動後の失敗を表示し、`finally` ブロックでは引き続きストリームを閉じて終了を待ちます。
-
 - スコープの停止によって、SSE の `for await` ループは通常通り終了します。
 - WebSocket セッションを abort すると、セッションは `aborted` として終了し、`session.receive` は `AbortError` で reject されます。そのため、破棄後は `catch` ブロックでエラーをガードし、`finally` で `onStateChange` / `onRuntimeError` のリスナーを確実に解除（unsubscribe）してください。
 
@@ -69,7 +70,7 @@ Watcher の外側のコンポーザブルやコンポーネント内で処理を
 
 - **ブラウザ**: エンドポイントやインターセプターがリクエストに依存しない場合、Vue アプリケーションごとに単一クライアントを共有します。
 - **SSR**: ヘッダー、Cookie、テナント、認証情報がリクエストごとに異なる場合、SSR リクエストごとに新しいクライアントを作成してインストールします。
-- Vue アプリケーションのアンマウントやコンポーネントスコープの破棄によって、HTTP リクエストが自動中止されたり、SSE/WebSocket ストリームが切断されたり、コアクライアントが破棄されることはありません。
+- Vue アプリケーションのアンマウントやコンポーネントスコープの破棄によって、HTTP リクエストが自動的に中止されたり、SSE/WebSocket ストリームが閉じられたり、コアクライアントが破棄されることはありません。
 
 ---
 
@@ -79,8 +80,8 @@ Watcher の外側のコンポーザブルやコンポーネント内で処理を
   examples/vue/exports.ts#example
 </include>
 
-- `HTTP_CLIENT` — ネイティブな `provide` / `inject` 用の `InjectionKey<Client>`
+- `HTTP_CLIENT` — ネイティブな `provide` / `inject` 用の `InjectionKey<DerivableClient>`
 - `createClientPlugin(client)` — `client` を `HTTP_CLIENT` のキーで提供する Vue `Plugin`
 - `injectClient(key?)` — `key`（デフォルトは `HTTP_CLIENT`）に対応する最も近いクライアントを解決
-- 関連ガイド: [Client](/ja-JP/docs/client)、[HTTP 操作](/ja-JP/docs/http)、[ミドルウェア](/ja-JP/docs/interceptors)、[SSE イベントストリーム](/ja-JP/docs/sse)、[WebSocket セッション](/ja-JP/docs/web-socket)
+- 関連ガイド: [Client](/ja-JP/docs/client)、[HTTP 操作](/ja-JP/docs/http)、[インターセプター](/ja-JP/docs/interceptors)、[SSE イベントストリーム](/ja-JP/docs/sse)、[WebSocket セッション](/ja-JP/docs/web-socket)
 - 関連レシピ: [宣言済み 404 の処理](/ja-JP/recipes/get-declared-404)、[HTTP 呼び出しのキャンセル](/ja-JP/recipes/cancel-http)、[SSE イベントの受信](/ja-JP/recipes/consume-sse)、[WebSocket セッションの管理](/ja-JP/recipes/websocket-session)

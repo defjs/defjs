@@ -5,55 +5,25 @@ description: Exporta definiciones tipadas de event-stream desde tu SDK y deja qu
 
 # Flujos de eventos SSE
 
-Un SDK declara un endpoint de Server-Sent Events con `defineEventStream`, indicando la ruta, entrada y builder opcionales, un diccionario `events` de structs y límites de búfer y cola. La aplicación consumidora configura la autenticación y la reconexión opcional en su cliente, abre el flujo, itera sobre los eventos tipados y se encarga de cerrarlo.
+Un SDK declara una operación de Server-Sent Events (SSE) con `defineEventStream`, indicando la ruta, entrada y builder opcionales, un diccionario `events` de structs y límites de búfer y cola. La aplicación consumidora configura la autenticación y la reconexión opcional en su cliente, abre el flujo, itera sobre los eventos tipados y se encarga de cerrarlo.
 
 ## 1. Definir el flujo de eventos y consumirlo
 
 Libera siempre un `EventStreamHandle` abierto mediante `await using` (o con `stream.close()` + `await stream.closed` en un bloque `finally`):
 
-<Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
+<Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Vista rápida en un solo archivo"]}>
 <Tab value="sdk/orders-stream.ts">
 
-```ts
-import { defineEventStream, struct } from "@defjs/core";
-
-export const watchOrders = defineEventStream({
-  path: "/orders/events",
-  operation: "orders.watch",
-  events: {
-    updated: struct.object({
-      id: struct.number(),
-      status: struct.string(),
-    }),
-  },
-});
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/sdk/orders-stream.ts#example
+</include>
 
 </Tab>
 <Tab value="app/watch-orders.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { watchOrders } from "../sdk/orders-stream.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = stream;
-  for await (const event of active) {
-    console.log(event.event, event.data.id, event.data.status);
-    break;
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/app/watch-orders.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -69,7 +39,7 @@ void main();
 
 Llamar a la operación resuelve `[error, stream, startupOpen]` solo después de que la respuesta HTTP inicial sea `2xx`, tenga tipo de medio `text/event-stream` y posea un cuerpo legible:
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tabs items={["Inspección del handshake", "Ciclo de vida del handle de flujo"]}>
 <Tab value="Handshake inspection">
 
 <include cwd lang="typescript">
@@ -96,7 +66,7 @@ Cuando llega una trama SSE (delimitada por una línea en blanco según la especi
 
 1. **Enrutamiento de eventos**: el campo de red `event:` selecciona `events[eventName]`, recurriendo a `events.default` si se declaró. Si el campo `event:` se omite, se asume `"message"`. Los eventos no declarados sin `events.default` se descartan.
 2. **Decodificación de la carga**: un esquema `struct.string()` recibe el texto sin procesar de `data:`. Cualquier otro tipo de struct analiza primero `data:` como JSON y luego lo valida contra el struct.
-3. **Observar eventos no válidos**: los eventos no válidos o no declarados se descartan sin interrumpir el flujo. Conecta `withSSEOnInvalidEvent(...)` en el cliente para diagnósticos controlados:
+3. **Observar eventos no válidos**: los eventos no válidos o no declarados se descartan sin interrumpir el flujo. Conecta `withSSEOnInvalidEvent(...)` en el cliente para diagnósticos acotados:
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
@@ -106,8 +76,8 @@ La reconexión SSE es **opcional (opt-in)**. Sin `withSSEReconnect(...)`, cualqu
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **Presupuesto de reintentos (`attempts`)**: Por defecto es `3` cuando se pasa un objeto de opciones a `withSSEReconnect`. Cada handshake exitoso restablece el contador de intentos y el exponente del backoff, por lo que `attempts: 1` aún puede crear muchas conexiones físicas durante una sesión larga si cada una se abre correctamente. Un fin de fichero normal del servidor (EOF) **no** es un fallo y no activa la reconexión.
-- **Seguimiento del cursor (`Last-Event-ID`)**: se confirma cuando se procesa la línea en blanco que termina el evento y se envía automáticamente como `Last-Event-ID` en la reconexión. Una trama parcial nunca confirma su `id`, tanto si la conexión termina limpiamente como si falla. La reanudación tras un fallo de lectura/red que permita reconexión parte del último ID confirmado; el servidor debe implementar el reenvío desde ese cursor.
+- **Presupuesto de caídas (`attempts`)**: Por defecto es `3` cuando se pasa un objeto de opciones a `withSSEReconnect`. Cada handshake exitoso restablece el contador de intentos y el exponente del backoff, por lo que `attempts: 1` aún puede crear muchas conexiones físicas durante una sesión larga si cada una se abre correctamente. Un fin de fichero normal del servidor (EOF) **no** es un fallo y no activa la reconexión.
+- **Seguimiento del cursor (`Last-Event-ID`)**: se confirma cuando se analiza la línea en blanco que termina el evento y se envía automáticamente como `Last-Event-ID` en la reconexión. Una trama parcial nunca confirma su `id`, tanto si la conexión termina limpiamente como si falla. La reanudación tras un fallo de lectura/red que permita reconexión parte del último ID confirmado; el servidor debe implementar el reenvío desde ese cursor.
 - **Seguridad e idempotencia**: por defecto, solo los métodos idempotentes (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) se reconectan automáticamente. Los métodos no idempotentes (`POST`, `PATCH`, como en peticiones de streaming de LLMs) solo se reconectan cuando un callback personalizado `shouldReconnect` devuelve explícitamente `true`. Cuerpos de petición con `ReadableStream` se consumen en el primer intento y nunca se reconectan.
 - **Tiempo límite del handshake (`connectTimeoutMs`)**: cuando se proporciona, debe ser finito, positivo y no mayor que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`. Limita cada handshake desde la invocación de Fetch hasta las cabeceras de respuesta, sin limitar el tiempo que un flujo establecido puede permanecer abierto.
 
@@ -124,7 +94,7 @@ Los valores por defecto son `maxBufferSize: 64 * 1024` bytes y `maxQueueSize: 10
 
 Quien abre un flujo es responsable de su limpieza. Salir de un bucle `for await` con `break`, `return` o una excepción cierra automáticamente el flujo, o puedes usar `await using` / `stream.close()`:
 
-<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
+<Tabs items={["Liberar con await using", "Plazo límite solo para el inicio"]}>
 <Tab value="Dispose with await using">
 
 <include cwd lang="typescript">

@@ -5,7 +5,7 @@ description: Plugin de Vue, claves de inyección predeterminadas o personalizada
 
 # Vue
 
-Proporciona un cliente `@defjs/core` existente a una app Vue. Este paquete no crea, no cachea ni dispone el cliente. Se requiere Vue 3 o posterior.
+Proporciona un cliente `@defjs/core` existente a una app Vue. Este paquete no crea, no cachea ni libera el cliente. Se requiere Vue 3 o posterior.
 
 Consulta la [guía de Vue](/es-ES/docs/integrations/vue).
 
@@ -13,7 +13,7 @@ Consulta la [guía de Vue](/es-ES/docs/integrations/vue).
 
 <ApiSignature name="createClientPlugin" />
 
-- **client** — Instancia de `createClient`.
+- **client** — El cliente que devuelve `createClient`.
 - **Devuelve** un plugin de Vue para `app.use(...)`. Instalarlo llama a `app.provide(HTTP_CLIENT, client)`.
 
 <include cwd>examples/api/create-client-plugin.ts#example</include>
@@ -22,9 +22,9 @@ Consulta la [guía de Vue](/es-ES/docs/integrations/vue).
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` lee el provider más cercano de esa clave; omitida o `undefined` usa `HTTP_CLIENT`. Llámalo en un contexto de inyección de Vue válido: `setup()` síncrono o `app.runWithContext()` (Vue 3.3+). Este último solo aporta el contexto síncrono a nivel de app, no las sustituciones de subárbol ni el contexto a través de un `await` ordinario. Los contextos que el compilador restaura tras un `await` de nivel superior en `<script setup>` siguen siendo válidos. Pasa ese cliente a una operación. El valor inyectado es el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que se proporcionó; llámalo con opciones de solicitud donde se ejecuta la operación para derivar un valor `Client`. No lo uses como fuente de `watch` o `computed`, porque esos llaman a una función. El plugin e `injectClient` no aceptan un valor `Client` derivado.
+`injectClient(key)` lee el proveedor más cercano de esa clave; omitida o `undefined` usa `HTTP_CLIENT`. Llámalo en un contexto de inyección de Vue válido: `setup()` síncrono o `app.runWithContext()` (Vue 3.3+). Este último solo aporta el contexto síncrono a nivel de app, no las sustituciones de subárbol ni el contexto a través de un `await` ordinario. Los contextos que el compilador restaura tras un `await` de nivel superior en `<script setup>` siguen siendo válidos. Pasa ese cliente a una operación. El valor inyectado es el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que se proporcionó; llámalo con opciones de solicitud donde se ejecuta la operación para derivar un valor `Client`. No lo uses como fuente de `watch` o `computed`, porque esos llaman a una función. El plugin e `injectClient` no aceptan un valor `Client` derivado.
 
-Para una `InjectionKey<Client>` personalizada, usa `app.provide(key, client)` o el `provide(key, client)` de un ancestro. Comparte el mismo objeto `Symbol`; que las descripciones coincidan no hace iguales las claves. `createClientPlugin(client)` sigue recibiendo solo el cliente y proporciona `HTTP_CLIENT`.
+Para una `InjectionKey<DerivableClient>` personalizada, usa `app.provide(key, client)` o el `provide(key, client)` de un ancestro. Comparte el mismo objeto `Symbol`; que las descripciones coincidan no hace iguales las claves. `createClientPlugin(client)` sigue recibiendo solo el cliente y proporciona `HTTP_CLIENT`.
 
 - **Devuelve** el cliente exacto proporcionado para la clave seleccionada.
 - **Lanza** un `Error` sin un contexto de inyección activo o sin un cliente para la clave seleccionada. Una clave personalizada ausente nunca cae a `HTTP_CLIENT`; instalar el plugin por sí solo no establece un contexto de inyección.

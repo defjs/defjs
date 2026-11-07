@@ -14,64 +14,16 @@ Model multiple frame types on `incoming` or `outgoing` using `struct.discriminat
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
 <Tab value="sdk/ticks-socket.ts">
 
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
-
-export const TickFrame = struct.discriminatedUnion("type", [
-  struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  struct.object({
-    type: struct.literal("subscribed"),
-    symbol: struct.string(),
-  }),
-]);
-
-export const SubscribeCommand = struct.object({
-  type: struct.literal("subscribe"),
-  symbol: struct.string(),
-});
-
-export const openTicker = defineWebSocket({
-  path: "/market/ws",
-  operation: "market.ticker",
-  incoming: TickFrame,
-  outgoing: SubscribeCommand,
-  maxIncomingQueueSize: 64,
-});
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
 
 </Tab>
 <Tab value="app/session.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { openTicker } from "../sdk/ticks-socket.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, session] = await openTicker(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = session;
-  active.send({ type: "subscribe", symbol: "ACME" });
-
-  for await (const message of active.receive) {
-    if (message.type === "tick") {
-      console.log(message.symbol, message.price);
-      break;
-    }
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -86,7 +38,7 @@ void main();
 ## 2. Message validation and direction rules
 
 - **Incoming frames (`session.receive`)**: Text, `ArrayBuffer`, typed arrays, and `Blob` frames are decoded as UTF-8, parsed as JSON, and validated against `incoming`. Malformed JSON or schema mismatches are reported to `session.onRuntimeError` and dropped without closing the session. `session.receive` is single-consumer; requesting a second iterator throws `TypeError`.
-- **Outgoing frames (`session.send(payload)`)**: Synchronously validates against `outgoing`, applies `.alias()` and codecs, and serializes with `JSON.stringify`. Sends immediately when `open`, queues during `reconnecting` (if `maxOutgoingQueueSize > 0`), and throws synchronously if the payload is invalid, the queue is full/disabled, or the session is closed.
+- **Outgoing frames (`session.send(payload)`)**: Synchronously validates against `outgoing`, applies `.alias()` and codecs, and serializes with `JSON.stringify`. Sends immediately in the `open` state, queues during `reconnecting` (if `maxOutgoingQueueSize > 0`), and throws synchronously if the payload is invalid, the queue is full/disabled, or the session is closed.
 
 ## 3. Session state and observers
 
@@ -121,12 +73,12 @@ Both reconnection and heartbeat are opt-in via client options (`withWebSocketRec
 </Tab>
 </Tabs>
 
-- **Reconnect**: Defaults when enabled are `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Each physical `open` resets the outage budget. `beforeConnect({ attempt, signal })` runs before initial connect and every reconnect attempt.
+- **Reconnect**: When enabled, the defaults are `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Each physical `open` resets the outage budget. `beforeConnect({ attempt, signal })` runs before the initial connect and every reconnect attempt.
 - **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds construction to `open` and is cleared after the handshake.
 - **Heartbeat**: Periodically sends `message()` through the `outgoing` struct and waits up to `timeoutMs` for a frame matching `isAck(msg)`. Matching ack frames are consumed by the heartbeat monitor and not forwarded to `session.receive`. A missed ack is fatal to the logical session: `closed.kind` is `"error"` and `closed.cause` is the ordinary `Error("WebSocket heartbeat timeout")`; it does not start reconnect. Heartbeat serialization failures follow the same fatal path with their original cause.
 - **Queue bounds**:
-  - `maxIncomingQueueSize` (required positive integer): Bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow terminates the session with a `CAP_QUEUE_OVERFLOW` Fault as `closed.cause`; the same cause is sent to `onRuntimeError` and rejects `session.receive`. Keep consuming `session.receive` while the session is open.
-  - `maxOutgoingQueueSize` (optional non-negative integer, default `0`): Buffers `session.send()` calls only while `state === 'reconnecting'` and flushes them before publishing the next `open`.
+  - `maxIncomingQueueSize` (required positive safe integer): Bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow terminates the session with a `CAP_QUEUE_OVERFLOW` Fault as `closed.cause`; the same cause is sent to `onRuntimeError` and rejects `session.receive`. Keep consuming `session.receive` while the session is open.
+  - `maxOutgoingQueueSize` (optional non-negative safe integer, default `0`): Buffers `session.send()` calls only while `state === 'reconnecting'` and flushes them before publishing the next `open`.
 
 `shouldReconnect` receives the native close code and `wasClean`. A server can complete a clean close handshake with application-error code `1011`, so `wasClean === true` does not mean the application succeeded. The example explicitly permits `1011`; choose application codes according to your protocol rather than relying on `!wasClean` alone.
 
@@ -147,7 +99,7 @@ Call `session.close(code?, reason?)` (where `code` is `1000` or `3000..4999` and
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-When a reconnect outage exhausts its attempts, the session ends with `closed.kind: "error"`, the native close snapshot (often code `1006` for a failed upgrade), and the ordinary transport error as `closed.cause`; it does not expose a separate stable exhaustion code. Always unsubscribe `onStateChange` and `onRuntimeError` listeners when your component or worker finishes.
+When a reconnect outage exhausts its attempts, the session ends with `closed.kind: "error"` and the ordinary transport error as `closed.cause`, alongside the native close snapshot (often code `1006` for a failed upgrade); it does not expose a separate stable exhaustion code. Always unsubscribe `onStateChange` and `onRuntimeError` listeners when your component or worker finishes.
 
 ## Related reading
 

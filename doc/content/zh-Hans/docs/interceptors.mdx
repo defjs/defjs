@@ -1,17 +1,17 @@
 ---
-title: "中间件"
-description: 在消费方 Client 上无侵入扩展认证、链路追踪与网络重试等跨切面执行策略，无须改动 SDK 接口定义。
+title: "拦截器"
+description: 在应用 Client 上挂载认证与传输策略，无须改动 SDK 的 API 定义。
 ---
 
-# 中间件
+# 拦截器
 
-中间件拦截器（Interceptors）允许在无需修改 SDK 接口定义的前提下，为消费方应用程序的 `Client` 统一挂载跨切面的执行策略——例如注入认证请求头、进行请求签名计算、在系统维护期执行快速短路，或针对幂等的读请求实施安全重试。
+拦截器为应用的 `Client` 挂载跨切面执行策略——认证请求头、请求签名、维护期短路或安全读重试——而无需修改 SDK 操作定义。
 
-入参校验与 `builder` 参数放置在进入拦截器链**之前**运行；HTTP 状态码分支分流与 `output` / `error` 的 Struct 校验解码则在走出拦截器链**之后**执行。
+输入校验和 `builder` 映射在拦截器链**之前**运行；HTTP 状态码分发与 `output` / `error` struct 校验在链**之后**运行。
 
 ## 1. 创建并注册拦截器
 
-每种传输协议均有专属的类型化拦截器工厂函数（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。你可以将任意组合传入 `withInterceptors(...)`：
+每种传输都有各自的类型化拦截器工厂（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。把任意组合传给 `withInterceptors(...)`：
 
 <Tabs items={["基本配置", "洋葱模型执行顺序", "克隆并添加请求头"]}>
 <Tab value="基本配置">
@@ -39,19 +39,19 @@ description: 在消费方 Client 上无侵入扩展认证、链路追踪与网�
 
 ### 拦截器执行链路规则
 
-- **洋葱模型执行顺序**：在请求发出阶段（`before next(req)`），拦截器严格按照注册顺序从外向内执行；在响应返回阶段（`after await next(req)`），则按照相反顺序从内向外回溯。因此，诸如日志审计、全局链路追踪等通用中间件应注册在外层，而鉴权 Token 注入或局部重试拦截器则应放置在更内层。
-- **不可变请求契约**：修改请求头时，始终克隆一份全新的 `Headers` 实例（`new Headers(req.headers)`），并将包装后的全新请求对象（`{ ...req, headers }`）传递给 `next(...)`，确保外层可能发生的重试逻辑能够看到干净、未受污染的请求头。
-- **`content-type` 与 `bodyContentType`**：Defjs 会将根据 Body 推断出的媒体类型存放在 `req.bodyContentType` 上，而绝不暗中直接修改 `req.headers`。若需要计算请求签名，建议读取 `req.headers.get("content-type") ?? req.bodyContentType`。若拦截器修改并替换了 `req.body` 的内容格式，请务必显式设置 `content-type` 请求头。
+- **洋葱顺序**：请求向外走时（`before next(req)`），拦截器按注册顺序执行；返回时（`after await next(req)`）按相反顺序执行。把范围较宽的日志/追踪拦截器放在较窄的认证或重试拦截器外层。
+- **不可变请求约定**：始终克隆 `req.headers`（`new Headers(req.headers)`），并把新的请求对象（`{ ...req, headers }`）传给 `next(...)`，这样外层重试才能看到干净的请求头。
+- **`content-type` 与 `bodyContentType`**：Defjs 把推断出的 body 内容类型放在 `req.bodyContentType` 上，不修改 `req.headers`。请求签名应读取 `req.headers.get("content-type") ?? req.bodyContentType`。如果拦截器用新格式替换了 `req.body`，请显式设置 `content-type` 请求头。
 
 ## 2. 使用 `makeResponse` 短路请求
 
-HTTP 拦截器可以在不实际调用 `next(req)` 的情况下，通过 `makeResponse(...)` 构造并直接返回一个合成的响应对象：
+HTTP 拦截器可以用 `makeResponse(...)` 构造合成响应，而不调用 `next(req)`：
 
 <include cwd lang="typescript">
   examples/interceptors/short-circuit.ts#example
 </include>
 
-需要注意的是，`makeResponse` **绝非**跳过校验的后门：合成的响应对象依然会完整经过该操作声明的媒体类型检查、HTTP 状态码分流分支判断（`2xx` vs 非 `2xx`），以及对应的 `output` / `error` Struct 校验逻辑。
+`makeResponse` **不是**校验旁路：合成响应仍会经过该操作的媒体类型检查、状态码分支（`2xx` vs 非 `2xx`）以及 `output` / `error` struct 校验。
 
 ## 3. 对安全的读请求执行重试
 
@@ -65,15 +65,15 @@ HTTP 重试默认关闭。要在 `502`、`503` 或 `504` 时故障转移到另�
 
 - **两层重试**：这个 `next(request)` 循环始终使用选中的端点，不会重新运行外层认证或 builder。把三次内层发送与 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` 组合起来，可能发送四次 HTTP 请求（三次发给故障主端点，一次发给健康备用端点）；`maxAttempts` 限制外层尝试次数，而不是物理发送次数。应明确每种条件由哪一层负责，避免无意间叠加。
 - **`Retry-After` 策略**：Core 的 `withRetry` 不读取这个响应头。配方中 30 秒的上限和 250 ms 的回退值是应用层的选择。对更长的服务器延迟设置上限，可能比服务器要求的时间更早重试；若不能接受，请等待完整延迟或直接返回响应。
-- **401 写操作**：[Bearer 刷新配方](/zh-Hans/recipes/refresh-bearer-once) 可能投递同一个 JSON POST 两次。必须确保认证在业务处理前拒绝请求，并使用稳定的幂等键和服务端去重，否则就不要自动重放写操作。流式请求体不会重放。
-- **处理传输层 Reject 异常**：当发生底层网络错误时，`next(request)` 会返回 rejected promise（底层不存在所谓的 status 为 0 的响应对象）。通过 `try...catch` 捕获并重新将其 throw 出去，即可完整保留原始的 `NET_*` 错误码。
-- **在拦截器内部抛出异常**：未捕获的 throw（或返回了非预期的响应对象）会使操作元组直接返回 `EXT_INTERCEPTOR_FAILED` 故障，并将异常原因挂在 `fault.cause` 上。若在拦截器中显式抛出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，则会精准结算为 `NET_ABORTED` 或 `NET_TIMEOUT`。
+- **401 写操作**：[Bearer 刷新配方](/zh-Hans/recipes/refresh-bearer-once)可能投递同一个 JSON POST 两次。请要求认证在业务处理前拒绝请求，并使用稳定的幂等键与服务端去重；否则不要自动重放写操作。流式请求体不会重放。
+- **处理传输层 rejection**：网络错误发生时 `next(request)` 会 reject（不存在 status 为 0 的响应）。捕获后重新抛出可保留原始 `NET_*` Fault 代码。
+- **在拦截器内抛出异常**：未捕获的抛出（或返回非响应值）会让操作元组以 `EXT_INTERCEPTOR_FAILED` 结算，并设置 `fault.cause`。抛出 `ERR_ABORTED` 或 `ERR_TIMEOUT` 会结算为 `NET_ABORTED` 或 `NET_TIMEOUT`。
 
 对于 SSE，优先使用 `withSSEReconnect`，而不是反复调用 `next()` 的拦截器。多次调用拦截器的 `next()` 会禁用这些替换流的端点归因和重新选择；这与通过迭代器的 `next()` 消费事件无关。
 
 ## 4. 包装并扩展 WebSocket 会话
 
-WebSocket 拦截器在一次生命周期中**最多只能调用一次** `next(req)`。当需要对返回的 `WebSocketSessionLike` 进行包装增强时，请显式委托其实时 Getter（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive` 以及 `[Symbol.asyncDispose]()` 方法，切勿通过对象解构 `{ ...session }` 仅复制一次性的属性快照：
+WebSocket 拦截器**最多只能调用一次** `next(req)`。包装返回的 `WebSocketSessionLike` 时，请委托实时 getter（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive` 和 `[Symbol.asyncDispose]()`，不要用对象展开复制一次性快照：
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example
@@ -81,16 +81,16 @@ WebSocket 拦截器在一次生命周期中**最多只能调用一次** `next(re
 
 ## 5. 内置工厂与常用辅助工具
 
-| 导出名称                                       | 适用协议  | 功能描述                                                               |
+| 导出                                           | 传输      | 说明                                                                   |
 | ---------------------------------------------- | --------- | ---------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>` 中间件            |
-| `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>` 中间件       |
-| `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>` 中间件             |
+| `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>`                   |
+| `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>`              |
+| `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>`                    |
 | `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 接收同步/异步凭证 Provider，自动注入 `Authorization: Basic ...` 请求头 |
 | `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 握手请求阶段自动注入 `Authorization: Basic ...` 请求头          |
 
 ## 相关阅读
 
-- [401 后刷新令牌](/zh-Hans/recipes/refresh-bearer-once)
+- [401 后刷新一次 Bearer 令牌](/zh-Hans/recipes/refresh-bearer-once)
 - [ETag 条件请求](/zh-Hans/recipes/etag-revalidate)
 - [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server)

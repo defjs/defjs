@@ -3,57 +3,28 @@ title: "SSE イベントの受信"
 description: 型付けされたイベントストリームを開いて反復処理し、最後にクローズして closed を待機します。
 ---
 
-# SSE イベントの受信 (Consume an SSE stream)
+# SSE ストリームを受信する
 
 各 `EventStreamHandle` は、単一の非同期イテレーターを提供します。途中の `break` や `return` で基盤の Fetch ストリームがリークしないよう、`finally` ブロック内で必ず `stream.close(...)` と `await stream.closed` を実行してください。
 
 <Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
   <Tab value="sdk/deployments.ts">
-```ts
-import { defineEventStream, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-export const deployEvents = defineEventStream({
-  path: "/deployments/events",
-  events: {
-    line: struct.object({ text: struct.string() }),
-  },
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { deployEvents } from "../sdk/deployments.ts";
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, stream] = await deployEvents(client);
-if (error) {
-console.error(error.code);
-return;
-}
-try {
-for await (const event of stream) {
-if (event.event === "line") {
-console.log(event.data.text);
-break;
-}
-}
-} finally {
-stream.close("consumer-finished");
-await stream.closed;
-}
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="deploy-events.ts">
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -61,7 +32,7 @@ void main();
 
 ```txt
 build started
-````
+```
 
-- クライアント側で [`withSSEReconnect(...)`](/ja-JP/api/core/withssereconnect) を明示的に設定しない限り、ネットワークエラーや読み取り障害時に SSE が自動再接続されることはありません。
-- `withSSEReconnect` にオプションオブジェクトを指定して有効化した場合、障害ごとの試行回数上限 `attempts` はデフォルトで `3` 回となり、ハンドシェイクが成功するたびにリセットされます（`attempts: 0` で再接続を無効化できます）。カスタムの `shouldReconnect` を指定しない限り、再実行可能なボディを持つ `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` リクエストのみが再接続されます。詳細は [SSE イベントストリーム](/ja-JP/docs/sse) を参照してください。
+- クライアント側で [`withSSEReconnect(...)`](/ja-JP/api/core/withssereconnect) を設定しない限り、ネットワークエラーや読み取り障害時に SSE が自動再接続されることはありません。
+- `withSSEReconnect` にオプションオブジェクトを指定して有効化した場合、障害ごとの試行回数 `attempts` はデフォルトで `3` 回となり、ハンドシェイクが成功するたびにリセットされます（`attempts: 0` で再接続を無効化できます）。カスタムの `shouldReconnect` を指定しない限り、再接続されるのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` リクエストだけです。`ReadableStream` ボディを持つリクエストは再接続されません。詳細は [SSE イベントストリーム](/ja-JP/docs/sse) を参照してください。

@@ -1,15 +1,15 @@
 ---
 title: "快速开始"
-description: 导出你的第一个 SDK 接口操作，在独立的应用中调用它，并在不同 Client 间自由复用这份契约定义。
+description: 导出你的第一个 SDK 操作，在独立的应用中调用它，并在另一个 Client 中复用这份定义。
 ---
 
 # 快速起步：定义你的第一个 SDK 操作 [#getting-started-one-http-request]
 
-在本指南中，你将创建一个定义了 `GET /orders/:id` 的 SDK 模块，并在两个不同的应用模块中调用它：一个使用本地 Mock handle 进行离线测试，另一个直接连接线上真实 API 服务。
+在本指南中，你将创建一个定义 `GET /orders/:id` 的 SDK 模块，并在两个独立的应用程序模块中调用它：一个使用离线的 mock 传输层，另一个指向真实 API。
 
 ## 1. 安装 `@defjs/core`
 
-`@defjs/core` 是一个零依赖的纯 ESM 软件包，支持在现代浏览器、Bun 以及 Node.js（22.18+ 或 24+ 可直接原生运行 `.ts` 文件）中运行。请确保项目的 `package.json` 中配置了 `"type": "module"`。
+`@defjs/core` 是一个零依赖的 ESM 包，可在浏览器、Bun 以及 Node.js（22.18+ 或 24+ 可直接运行 `.ts` 文件）中运行。请确保项目的 `package.json` 中设置了 `"type": "module"`。
 
 ```sh
 bun add @defjs/core
@@ -17,7 +17,7 @@ bun add @defjs/core
 
 ## 2. 定义 SDK 并在应用中调用
 
-我们推荐将操作定义存放在独立的 SDK 模块（`src/define-request.ts`）中，而在具体的应用代码（`src/execute-locally.ts` 或 `src/real-api.ts`）中创建并持有 Client：
+把操作定义放在独立的 SDK 模块（`src/define-request.ts`）中，在应用程序（`src/execute-locally.ts` 或 `src/real-api.ts`）中创建 Client：
 
 <Tabs items={["src/define-request.ts", "src/execute-locally.ts", "src/real-api.ts"]}>
 <Tab value="src/define-request.ts">
@@ -45,14 +45,14 @@ bun add @defjs/core
 
 ### 这三个文件是如何协同工作的？
 
-1. **`src/define-request.ts`（SDK 契约定义）**：
-   - 使用 `struct` 声明调用入参 `input`、成功响应 `output`（对应 `2xx` 状态码）以及非成功响应 `error`（对应非 `2xx` 状态码）。
-   - 提供一个同步、纯净的 `builder` 函数，负责将 `input` 映射为 `{ path }`。一旦声明了 `input`，就必须提供显式的 `builder`。
-   - 导出 `getOrder` 操作函数，期间不创建、不绑定任何 Client。
-2. **`src/execute-locally.ts`（离线本地测试执行）**：
-   - 通过 `withHTTPHandle(...)` 配置 Client，无需发起任何真实网络请求，即可跑通完整的 Defjs 执行链路（包括入参校验、URL 组装解析、HTTP 状态码分发以及响应 Struct 校验解码）。
-3. **`src/real-api.ts`（线上生产执行）**：
-   - 导入完全相同的 `getOrder` 操作，利用 `withEndpoint(...)` 配置真实服务的基地址，直接向后端发起网络请求。
+1. **`src/define-request.ts`（SDK 定义）**：
+   - 使用 `struct` 声明 `input`、`output`（对应 `2xx` 响应）以及 `error`（对应非 `2xx` 响应）。
+   - 提供一个同步、纯的 `builder`，把 `input` 映射为 `{ path }`。只要声明了 `input`，就必须提供显式 `builder`。
+   - 导出 `getOrder`，不创建也不捕获 Client。
+2. **`src/execute-locally.ts`（离线测试执行）**：
+   - 用 `withHTTPHandle(...)` 配置 Client，无需网络即可跑通完整的 Defjs 流水线（输入校验、URL 解析、状态码分发与响应 struct 解析）。
+3. **`src/real-api.ts`（生产执行）**：
+   - 导入完全相同的 `getOrder` 操作，通过 `withEndpoint(...)` 配置真实基地址并调用它。
 
 ## 3. 运行本地示例
 
@@ -62,13 +62,13 @@ bun add @defjs/core
 bun src/execute-locally.ts
 ```
 
-终端将输出成功获取到的订单信息：
+终端会输出：
 
 ```txt
 Loaded paid from 200
 ```
 
-如果将入参从 `{ id: 7 }` 改为不存在的 `{ id: 8 }`，Mock 逻辑会返回 `404`，此时 Defjs 会将之前声明的 `error` struct 正确解码并挂载在 `error.data` 上：
+如果把 `input` 从 `{ id: 7 }` 改为 `{ id: 8 }`，mock 会返回 `404`，Defjs 会把声明的 `error` struct 解码到 `error.data`：
 
 ```txt
 Order not found
@@ -76,20 +76,20 @@ Order not found
 
 ## 4. 理解错误优先元组
 
-所有 HTTP 调用均返回 `[error, data, response]` 结构的三元组：
+每次 HTTP 调用都解析为 `[error, data, response]`：
 
-- **业务请求成功（`2xx`）**：`error` 为 `null`，`data` 为经过校验与解码的 `output` 数据（`Order`），`response` 为 `DecodedResponse<Order>`。
-- **返回了已声明的非 `2xx` 状态码**：`error.code` 为 `'HTTP_STATUS'`，`error.status` 为具体的数字状态码（例如 `404`），`error.data` 则是按声明解码好的 `error` struct（`NotFound`）。
-- **入参、解码或底层网络异常**：`error.code` 会清晰指出故障发生的具体阶段：
-  - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` —— 调用方传入了无效入参，或者 `builder` 执行时抛出了异常
-  - `RES_MEDIA_TYPE_INVALID` —— 声明了 JSON 响应体，但服务端返回的 `Content-Type` 并非 JSON（在读取 body 之前立即中断拦截）
-  - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` —— 响应体无法读取，或返回的 JSON 数据结构与 Schema 不匹配
-  - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` —— 底层网络连不上、手动取消请求，或是触发了 `AbortSignal.timeout(ms)` 超时期限
+- **`2xx` 成功时**：`error` 为 `null`，`data` 是通过校验的 `output` 值（`Order`），`response` 是 `DecodedResponse<Order>`。
+- **返回已声明的非 `2xx` 状态码时**：`error.code` 为 `'HTTP_STATUS'`，`error.status` 是状态码数字（例如 `404`），`error.data` 是通过校验的 `error` struct（`NotFound`）。
+- **输入、解码或网络 fault 时**：`error.code` 指明失败发生在哪个阶段：
+  - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` —— 调用方输入无效，或 `builder` 抛出了异常
+  - `RES_MEDIA_TYPE_INVALID` —— 声明了 JSON body，但响应的 `Content-Type` 不是 JSON（在读取 body 之前就被拒绝）
+  - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` —— body 无法读取，或与 schema 不匹配
+  - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` —— 传输失败、手动取消，或 `AbortSignal.timeout(ms)` 到期
 
-如果你需要为某次单次调用设置超时或传递取消信号，可以通过派生 Client 轻松实现：`getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`。
+需要为单次调用设置期限或取消信号时，派生一个单次调用的 Client 值：`getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`。
 
 ## 下一步
 
-- 深入阅读[核心架构设计](/zh-Hans/docs/design-decisions)，了解底层的设计规则。
-- 在[数据结构 / Struct](/zh-Hans/docs/struct) 中学习如何建模复杂载荷及字段别名。
-- 查阅[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)，将你的 API 契约打包发布到 npm。
+- 阅读[核心架构设计](/zh-Hans/docs/design-decisions)，了解架构规则。
+- 在[数据结构 / Struct](/zh-Hans/docs/struct) 中为复杂载荷和字段别名建模。
+- 阅读[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)，把定义打包发布到 npm。

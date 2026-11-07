@@ -1,11 +1,11 @@
 ---
-title: "ミドルウェア"
+title: "インターセプター"
 description: SDK の API 定義を変更することなく、アプリケーション側のクライアントに認証やトランスポートの横断的ポリシーを適用します。
 ---
 
 # インターセプター
 
-インターセプターは、SDK の操作定義に手を加えることなく、認証ヘッダーの付与、リクエストの署名、メンテナンスモード時の短絡応答、安全な読み取り操作の再試行といった横断的な実行ポリシーをアプリケーション側の `Client` にアタッチします。
+インターセプターは、SDK の操作定義に手を加えることなく、認証ヘッダーの付与、リクエストの署名、メンテナンスモード時の短絡応答、安全な読み取り操作のリトライといった横断的な実行ポリシーをアプリケーション側の `Client` にアタッチします。
 
 入力値の検証と `builder` による配置はインターセプターチェーンの実行 **前** に行われ、HTTP ステータスに応じた振り分けと `output` / `error` の struct バリデーションはチェーンの実行 **後** に行われます。
 
@@ -39,8 +39,8 @@ description: SDK の API 定義を変更することなく、アプリケーシ�
 
 ### インターセプターパイプラインのルール
 
-- **オニオン（玉ねぎ）構造の実行順序**: インターセプターは、往路（`next(req)` の前）では登録された順序で実行され、復路（`await next(req)` の後）では逆順で実行されます。広範なロギングやトレーシングのインターセプターは、特定の認証やリトライのインターセプターよりも外側に配置してください。
-- **不変（immutable）リクエストの原則**: 必ず `req.headers` を複製し（`new Headers(req.headers)`）、新しいリクエストオブジェクト（`{ ...req, headers }`）を `next(...)` に渡してください。これにより、外側のリトライ処理が常にクリーンな初期ヘッダーを参照できるようになります。
+- **オニオン構造の実行順序**: インターセプターは、往路（`next(req)` の前）では登録された順序で実行され、復路（`await next(req)` の後）では逆順で実行されます。広範なロギングやトレーシングのインターセプターは、特定の認証やリトライのインターセプターよりも外側に配置してください。
+- **リクエストを不変に保つ原則**: 必ず `req.headers` を複製し（`new Headers(req.headers)`）、新しいリクエストオブジェクト（`{ ...req, headers }`）を `next(...)` に渡してください。これにより、外側のリトライ処理が常にクリーンな初期ヘッダーを参照できます。
 - **`content-type` と `bodyContentType`**: Defjs は推論されたボディの Content-Type を、`req.headers` を変更することなく `req.bodyContentType` に保持します。リクエスト署名処理では、`req.headers.get("content-type") ?? req.bodyContentType` を参照してください。インターセプターが `req.body` を別の形式に置き換える場合は、明示的に `content-type` ヘッダーを設定してください。
 
 ## 2. `makeResponse` によるリクエストの短絡（ショートサーキット）
@@ -63,17 +63,17 @@ HTTP リトライはデフォルトで無効です。`502`、`503`、`504` で�
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
-- **2 層のリトライ**: この `next(request)` ループは選択済みのエンドポイントに留まり、外側の認証や builder を再実行しません。内側の 3 回の送信と `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` を組み合わせると、HTTP リクエストは 4 回送信される場合があります（障害中のプライマリに 3 回、正常なバックアップに 1 回）。`maxAttempts` が制限するのは外側の試行であり、実際の送信回数ではありません。意図せず重ねるのではなく、各条件をどの層で扱うか決めてください。
+- **2 層のリトライ**: この `next(request)` ループは選択済みのエンドポイントに留まり、外側の認証や `builder` を再実行しません。内側の 3 回の送信と `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` を組み合わせると、HTTP リクエストは 4 回送信される場合があります（障害が発生しているプライマリに 3 回、正常なバックアップに 1 回）。`maxAttempts` が制限するのは外側の試行であり、実際の送信回数ではありません。意図せず重ねるのではなく、各条件をどの層で扱うか決めてください。
 - **`Retry-After` ポリシー**: Core の `withRetry` はこのヘッダーを読みません。レシピの 30 秒の上限と 250 ms のフォールバックはアプリケーション側の選択です。サーバーが求める遅延がより長い場合、上限によって指定より早くリトライする可能性があります。それを許容できなければ、指定された遅延全体を待つか、そのままレスポンスを返してください。
 - **401 と書き込み**: [Bearer 更新レシピ](/ja-JP/recipes/refresh-bearer-once) は JSON POST を 2 回送信する場合があります。業務処理前の認証拒否と、安定した冪等性キーによるサーバー側の重複排除を必須とするか、書き込みの自動再送を行わないでください。ストリームのリクエストボディは再送されません。
-- **トランスポート例外のハンドリング**: ネットワークエラーが発生した場合、`next(request)` は reject されます（ステータス 0 のレスポンスは存在しません）。この reject を catch して再度 rethrow することで、元の `NET_*` Fault コードが保持されます。
-- **インターセプター内での例外 throw**: ハンドルされていない例外が throw された場合（またはレスポンス以外の値が返された場合）、操作タプルは `EXT_INTERCEPTOR_FAILED` で解決され、`fault.cause` にその原因が設定されます。`ERR_ABORTED` または `ERR_TIMEOUT` を throw した場合は、それぞれ `NET_ABORTED` または `NET_TIMEOUT` で解決されます。
+- **トランスポート例外のハンドリング**: ネットワークエラーが発生した場合、`next(request)` は reject されます（ステータス 0 のレスポンスは存在しません）。この拒否を捕捉して再度 throw することで、元の `NET_*` Fault コードが保持されます。
+- **インターセプター内での例外 throw**: ハンドルされていない例外が throw された場合（またはレスポンス以外の値が返された場合）、操作のタプルは `EXT_INTERCEPTOR_FAILED` になり、`fault.cause` にその原因が設定されます。`ERR_ABORTED` または `ERR_TIMEOUT` を throw した場合は、それぞれ `NET_ABORTED` または `NET_TIMEOUT` になります。
 
 SSE では、`next()` を繰り返し呼ぶインターセプターより `withSSEReconnect` を優先してください。インターセプターの `next()` を複数回呼ぶと、置き換えられたストリームのエンドポイント帰属と再選択が無効になります。これは、イテレーターの `next()` でイベントを消費することとは無関係です。
 
 ## 4. WebSocket セッションのラップ
 
-WebSocket インターセプターが `next(req)` を呼び出せるのは **最大 1 回** です。返された `WebSocketSessionLike` をラップする際は、一過性のスナップショットをオブジェクトスプレッド展開するのではなく、動的ゲッター（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive`、`[Symbol.asyncDispose]()` を適切に委譲（delegate）してください。
+WebSocket インターセプターが `next(req)` を呼び出せるのは **最大 1 回** です。返された `WebSocketSessionLike` をラップする際は、一過性のスナップショットをオブジェクトスプレッド展開するのではなく、ライブゲッター（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive`、`[Symbol.asyncDispose]()` を適切に委譲（delegate）してください。
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example

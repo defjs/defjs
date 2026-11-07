@@ -1,35 +1,32 @@
 ---
 title: "构建并发布 SDK"
-description: 将纯粹的 API 接口定义与 Schema 契约打包发布为 npm 依赖，由消费方应用自主配置 Client 并执行。
+description: 把 API 定义导出为带类型的 npm 包，并让每个应用配置自己的 Client。
 ---
 
 # 构建并发布 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-基于 Defjs 架构的 SDK 仅向外导出纯粹的接口操作定义与 Struct 结构体契约作为 npm 依赖包，而将 `createClient(...)`、服务基地址、认证凭据与拦截器留给具体的消费方应用进行配置。
+Defjs SDK 把纯操作定义和 struct schema 作为 npm 包导出，而把 `createClient(...)`、端点、凭据和拦截器留在消费方应用中。
 
 ---
 
-## 1. 声明并定义 SDK 软件包
+## 1. 定义 SDK 包
 
-将你的接口操作定义、统一导出入口、`package.json` 与 `tsconfig.json` 放置在专属的 SDK 项目目录中，并将 `@defjs/core` 声明为外部共享的 `peerDependency`：
+把操作定义、统一导出入口、`package.json` 和 `tsconfig.json` 放在独立的包目录中，并把 `@defjs/core` 声明为 `peerDependency`：
 
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
-<Tab value="src/orders.ts">
-
+  <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
 
-</Tab>
-<Tab value="src/index.ts">
+  </Tab>
+  <Tab value="src/index.ts">
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
 
-```ts
-export { getOrder } from "./orders";
-```
-
-</Tab>
-<Tab value="package.json">
-
+  </Tab>
+  <Tab value="package.json">
 ```json
 {
   "name": "@company/orders-sdk",
@@ -56,10 +53,8 @@ export { getOrder } from "./orders";
   }
 }
 ```
-
-</Tab>
-<Tab value="tsconfig.json">
-
+  </Tab>
+  <Tab value="tsconfig.json">
 ```json
 {
   "compilerOptions": {
@@ -73,18 +68,17 @@ export { getOrder } from "./orders";
   "include": ["src/**/*.ts"]
 }
 ```
-
-</Tab>
+  </Tab>
 </Tabs>
 
-- `@defjs/core` 保持为外部运行时的 `peerDependency`，与调用方应用共享同一个 Core 实例。
-- 配置 `"sideEffects": false` 允许现代打包工具进行精确的 Tree-shaking 摇树优化，当应用仅导入部分操作时自动剔除无用代码。
+- `@defjs/core` 保持为外部运行时 `peerDependency`，与消费方应用共享。
+- `"sideEffects": false` 让打包器在应用只导入部分操作时 tree-shake 掉未使用的操作。
 
 ---
 
-## 2. 构建产物并验证打包文件
+## 2. 构建并验证 tarball
 
-使用 `tsdown` 将入口文件编译为 `dist/index.js` 与 `dist/index.d.ts`，并在正式发布前审查 tarball 打包内容：
+用 `tsdown` 打包 `dist/index.js` 和 `dist/index.d.ts`，发布前检查包内容：
 
 ```sh
 bun install
@@ -93,19 +87,19 @@ bun pm pack --dry-run
 bun pm pack
 ```
 
-确保 `dist/index.js` 和 `dist/index.d.ts` 正确包含在最终生成的压缩包内。
+确认 tarball 中包含 `dist/index.js` 和 `dist/index.d.ts`。
 
 ---
 
-## 3. 在消费方应用程序中接入 SDK
+## 3. 在应用中使用 SDK
 
-将发布后的 SDK 与 `@defjs/core` 一同安装至消费方项目中：
+把 SDK 与 `@defjs/core` 一起安装：
 
 ```sh
 bun add @company/orders-sdk @defjs/core@^0.6.0
 ```
 
-消费方应用程序创建属于自己的 `Client`，并将其传入导入的接口操作中执行：
+应用创建自己的 `Client`，并传入导入的操作：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -115,16 +109,16 @@ bun add @company/orders-sdk @defjs/core@^0.6.0
 paid
 ```
 
-在真实的生产代码中，将相对路径导入 `./orders-sdk` 替换为 npm 包名 `@company/orders-sdk`，并移除离线专用的 `withHTTPHandle(...)` 即可直接使用宿主平台的原生 `fetch`。
+在生产代码中，把相对导入 `./src/orders.ts` 替换为 `@company/orders-sdk`，并移除 `withHTTPHandle(...)` 以使用平台 `fetch`。
 
 ---
 
-## 4. 离线自动化测试与发布
+## 4. 测试并发布
 
-在发布前，通过[本地 HTTP 测试](/zh-Hans/recipes/test-with-handle)对导出的接口定义进行完整的在内存测试，覆盖请求参数映射、`output` 解码、声明的 `HTTP_STATUS` 错误以及取消逻辑。全部验证通过后，即可一键发布软件包：
+用[内存句柄测试](/zh-Hans/recipes/test-with-handle)覆盖导出的定义：请求映射、`output` 解码、声明的 `HTTP_STATUS` Fault 和取消。验证通过后发布包：
 
 ```sh
 bun publish --access public
 ```
 
-更多细节请参阅 [HTTP 请求](/zh-Hans/docs/http)、[Client](/zh-Hans/docs/client)、[测试](/zh-Hans/docs/testing) 与 [核心架构设计](/zh-Hans/docs/design-decisions)。
+见 [HTTP 请求](/zh-Hans/docs/http)、[Client](/zh-Hans/docs/client)、[测试](/zh-Hans/docs/testing) 与 [核心架构设计](/zh-Hans/docs/design-decisions)。

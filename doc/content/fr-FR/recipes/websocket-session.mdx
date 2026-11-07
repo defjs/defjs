@@ -9,61 +9,22 @@ Déclarez les structs `incoming` et `outgoing` sur `defineWebSocket`, avec une b
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab value="sdk/quotes.ts">
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
+</include>
 
-export const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
-  path: "/quotes",
-  incoming: struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  outgoing: struct.object({
-    type: struct.literal("subscribe"),
-    symbol: struct.string(),
-  }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { quotes } from "../sdk/quotes.ts";
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://quotes.example.com"));
-
-async function main() {
-const [error, session] = await quotes(client);
-if (error) {
-console.error(error.code);
-return;
-}
-const unsubscribe = session.onRuntimeError((cause) =>
-console.error("runtime", cause),
-);
-try {
-session.send({ type: "subscribe", symbol: "ACME" });
-for await (const message of session.receive) {
-console.log(message.symbol, message.price);
-break;
-}
-} finally {
-unsubscribe();
-session.close(1000, "consumer-finished");
-await session.closed;
-}
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -71,7 +32,7 @@ Avec un serveur répondant à `{ "type": "subscribe", "symbol": "ACME" }` par `{
 
 ```txt
 ACME 142.5
-````
+```
 
 - La reconnexion (`withWebSocketReconnect`) et le heartbeat (`withWebSocketHeartbeat`) sont tous deux opt-in sur le client.
 - Les WebSockets de navigateur ne peuvent pas envoyer d'en-têtes HTTP arbitraires lors du handshake d'upgrade ; utilisez des cookies, des sous-protocoles ou des jetons temporaires à la place. Consultez [Sessions WebSocket](/fr-FR/docs/web-socket).

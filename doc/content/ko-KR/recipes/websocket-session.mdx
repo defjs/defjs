@@ -5,65 +5,26 @@ description: 연결하고, 타입화된 엔벨로프를 전송하며, 1회 수�
 
 # WebSocket 세션 열기
 
-`defineWebSocket`에 제한된 `maxIncomingQueueSize`와 함께 `incoming` 및 `outgoing` Struct를 선언합니다. 애플리케이션에서는 `session.onRuntimeError(...)`를 구독하고, `session.receive`를 소비하며, `finally` 블록에서 항상 구독 해제, `session.close(...)` 호출, `await session.closed`를 수행하세요:
+`defineWebSocket`에 수신 큐를 제한하는 `maxIncomingQueueSize`와 함께 `incoming` 및 `outgoing` Struct를 선언합니다. 애플리케이션에서는 `session.onRuntimeError(...)`를 구독하고, `session.receive`를 소비하며, `finally` 블록에서 항상 구독 해제, `session.close(...)` 호출, `await session.closed`를 수행하세요:
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab value="sdk/quotes.ts">
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
+</include>
 
-export const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
-  path: "/quotes",
-  incoming: struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  outgoing: struct.object({
-    type: struct.literal("subscribe"),
-    symbol: struct.string(),
-  }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { quotes } from "../sdk/quotes.ts";
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://quotes.example.com"));
-
-async function main() {
-const [error, session] = await quotes(client);
-if (error) {
-console.error(error.code);
-return;
-}
-const unsubscribe = session.onRuntimeError((cause) =>
-console.error("runtime", cause),
-);
-try {
-session.send({ type: "subscribe", symbol: "ACME" });
-for await (const message of session.receive) {
-console.log(message.symbol, message.price);
-break;
-}
-} finally {
-unsubscribe();
-session.close(1000, "consumer-finished");
-await session.closed;
-}
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -71,7 +32,7 @@ void main();
 
 ```txt
 ACME 142.5
-````
+```
 
 - 재연결(`withWebSocketReconnect`)과 하트비트(`withWebSocketHeartbeat`)는 모두 클라이언트에서 선택적으로 활성화(opt-in)합니다.
 - 브라우저의 WebSocket은 업그레이드 핸드셰이크 중에 임의의 HTTP 헤더를 보낼 수 없으므로, 쿠키, 서브프로토콜, 또는 짧은 수명의 티켓을 대신 사용하세요. 자세한 내용은 [WebSocket 세션](/ko-KR/docs/web-socket) 문서를 참조하세요.

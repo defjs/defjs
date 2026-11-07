@@ -5,35 +5,28 @@ description: Warum die Trennung von API-Definitionen und Client-Ausführung das 
 
 # Kernarchitektur
 
-Defjs basiert auf einer grundlegenden Trennlinie: **Ein SDK definiert den Wire-Vertrag; die konsumierende Anwendung besitzt die Ausführung.** Jedes Designprinzip in `@defjs/core` folgt dieser strikten Trennung.
+Defjs basiert auf einer grundlegenden Grenze: **Ein SDK definiert den Wire-Vertrag; die konsumierende Anwendung besitzt die Ausführung.** Jedes Designprinzip in `@defjs/core` folgt aus dieser Trennung.
 
 ## 1. Definition vs. Ausführung
 
 Ein SDK-Paket exportiert Operationen (`defineRequest`, `defineEventStream`, `defineWebSocket`) und Datenverträge (`struct`). Es ruft niemals `createClient` auf, speichert keinen Singleton-Client und liest keine Umgebungsvariablen aus.
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -44,21 +37,21 @@ export const getOrder = defineRequest({
 
 Weil `getOrder` keinerlei Client-Zustand an sich bindet:
 
-- Können eine Browser-UI, ein Hintergrundjob, ein SSR-Request-Handler und ein Unit-Test dieselbe `getOrder`-Definition mit ganz unterschiedlichen `Client`-Konfigurationen aufrufen.
-- Hängen sich Framework-Plugins (`@defjs/react`, `@defjs/vue`) und Observability-Middleware (`@defjs/opentelemetry-server`) an den `Client` der Anwendung an, wodurch das veröffentlichte SDK-Paket zu 100 % frei von Abhängigkeiten bleibt.
+- Können eine Browser-UI, ein Hintergrundjob, ein SSR-Request-Handler und ein Unit-Test dieselbe `getOrder`-Operation mit unterschiedlichen `Client`-Konfigurationen aufrufen.
+- Hängen sich Framework-Plugins (`@defjs/react`, `@defjs/vue`) und das Observability-Middleware-Plugin (`@defjs/opentelemetry-server`) an den `Client` der Anwendung an, wodurch das veröffentlichte SDK-Paket zu 100 % frei von Abhängigkeiten bleibt.
 
 ## 2. Explizite Input-Platzierung und bidirektionale Aliase
 
-In Defjs deklariert `input`, was der Aufrufer übergibt, `struct` steuert, wie Werte enkodiert/dekodiert werden, und `builder` platziert jeden Wert an der richtigen Stelle des Requests (`path`, `query`, `headers`, `body`).
+In Defjs deklariert `input`, was der Aufrufer übergibt, `struct` steuert, wie Werte kodiert/dekodiert werden, und `builder` platziert jeden Wert an der richtigen Stelle des Requests (`path`, `query`, `headers`, `body`).
 
 - **Keine implizite Magie**: Wenn eine Operation `input` deklariert, muss sie einen expliziten, synchronen, reinen `builder` bereitstellen. Die Platzierung von Feldern wird niemals anhand von Parameternamen erraten.
-- **Bidirektionale `.alias(wireName)`**: Mit `.alias("customer_name")` an einem Struct-Feld bleibt in TypeScript `customerName` erhalten, während auf Wire-Ebene automatisch von und zu `"customer_name"` gemappt wird.
+- **Bidirektionale `.alias(wireName)`**: Mit `.alias("customer_name")` an einem Struct-Feld bleibt in TypeScript `customerName` erhalten, während auf Wire-Ebene automatisch von und zu `"customer_name"` zugeordnet wird.
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-Wenn der Builder ein typisiertes Struct-Objekt an `body`, `query` oder `headers` übergibt, greifen dessen Feld-Aliase sowie `Date`- / `bigint`-Codecs vollautomatisch. Schlüssel, die du in einem anonymen Wrapper-Objekt schreibst (wie `account_id` oder `x-api-version` oben), bleiben unverändert literal.
+Wenn der Builder ein typisiertes Struct-Objekt an `body`, `query` oder `headers` übergibt, greifen dessen Feld-Aliase sowie `Date`- / `bigint`-Codecs automatisch. Schlüssel, die du in einem anonymen Wrapper-Objekt schreibst (wie `account_id` oder `x-api-version` oben), bleiben literal.
 
 ## 3. Eine Deklaration ist eine Assertion [#declaration-is-an-assertion]
 
@@ -66,7 +59,7 @@ Sechs strikte Regeln bestimmen, wie Defjs HTTP-Antworten einliest:
 
 ### Regel 1: Was du deklarierst, ist das, was du zusicherst
 
-`output` sichert die Form eines `2xx`-Bodys zu. `error` sichert die Form eines Nicht-`2xx`-Bodys zu. Eine Deklaration ist eine Laufzeit-Garantie, kein vager Best-Effort-Hinweis.
+`output` sichert die Form eines `2xx`-Bodys zu. `error` sichert die Form eines Nicht-`2xx`-Bodys zu. Eine Deklaration ist eine Laufzeitgarantie, kein Best-Effort-Hinweis.
 
 ### Regel 2: `ok` (`200..299`) ist die einzige Verzweigung
 
@@ -76,7 +69,7 @@ Eine `2xx`-Antwort wird ausschließlich über `output` dekodiert. Jeder andere S
 
 Defjs wählt die Response-Seite über `response.ok`: `output` für `2xx`, `error` für Nicht-`2xx`. Nur ein auf dieser Seite deklariertes JSON-Struct löst die Dekodierung aus und kann `RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED` erzeugen; sein `Content-Type` wird **vor** dem Auslesen der Body-Bytes geprüft. Eine HTML-Gateway-Seite bei Nicht-`2xx` erzeugt `RES_MEDIA_TYPE_INVALID` nur, wenn ein JSON-`error`-Struct deklariert ist. Ohne Deklaration für die aktive Seite wird der Body nicht gelesen; eine Nicht-`2xx`-Response liefert einen undekodierten `HTTP_STATUS`.
 
-| Was beim Lesen der Antwort fehlgeschlagen ist                           | Zurückgegebener Fehler (Fault)                                     |
+| Was beim Lesen der Antwort fehlgeschlagen ist                           | Zurückgegebener Fault                                              |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Medientyp stimmt nicht mit der deklarierten JSON-Repräsentation überein | `RES_MEDIA_TYPE_INVALID` (Body wird erst gar nicht gelesen)        |
 | Bytes können nicht als deklarierte Repräsentation dekodiert werden      | `RES_DECODE_FAILED`                                                |
@@ -86,7 +79,7 @@ Defjs wählt die Response-Seite über `response.ok`: `output` für `2xx`, `error
 
 ### Regel 4: Ein fehlgeschlagener Decode besitzt keinen Body
 
-Ein Body existiert erst, nachdem Dekodierung und Validierung erfolgreich durchlaufen wurden. Schlägt das Dekodieren fehl, ist `response` des Fehlers als `HttpMeta` typisiert (welches keine `body`-Eigenschaft besitzt), und der Parser-/Validierungsfehler wird an `fault.cause` angehängt.
+Ein Body existiert erst, nachdem Dekodierung und Validierung erfolgreich durchlaufen wurden. Schlägt das Dekodieren fehl, ist die `response` des Faults als `HttpMeta` typisiert (welches keine `body`-Eigenschaft besitzt), und der Parser-/Validierungsfehler wird an `fault.cause` angehängt.
 
 ### Regel 5: Das Weglassen einer Seite schließt das Lesen aus
 
@@ -98,7 +91,7 @@ Lässt du `output` weg, werden `2xx`-Bodys niemals gelesen. Lässt du `error` we
 
 ## 4. Transportspezifische Ergebnis-Tupel
 
-Alle drei Transporte geben ein dreiteiliges Error-first-Tupel zurück, statt am Aufruf-Ort Exceptions zu werfen:
+Alle drei Transporte geben ein dreiteiliges Error-first-Tupel zurück, statt an der Aufrufstelle Exceptions zu werfen:
 
 - **HTTP** → `[error, data, response]` — dekodierte Payload + `DecodedResponse<T>` (`HttpMeta`, wenn `output` weggelassen wurde).
 - **SSE** → `[error, stream, open]` — `EventStreamHandle` + anfänglicher Handshake-Snapshot.

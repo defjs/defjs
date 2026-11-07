@@ -1,6 +1,6 @@
 ---
-title: "設計上の判断"
-description: API 定義とクライアント実行を分離することで、SDK の設計・公開・再利用が劇的に容易になる理由を解説します。
+title: "コアアーキテクチャ"
+description: API 定義とクライアント実行を分離することで、SDK をより簡単に設計・公開・再利用できる理由を説明します。
 ---
 
 # コアアーキテクチャ
@@ -9,31 +9,24 @@ Defjs は、1 つの根本的な境界線に基づいて構築されています
 
 ## 1. 定義と実行の分離
 
-SDK パッケージは、各操作（`defineRequest`、`defineEventStream`、`defineWebSocket`）とデータ契約（`struct`）のみを export します。`createClient` を呼び出したり、シングルトンクライアントを保持したり、環境変数を直接読み込んだりすることは決してありません。
+SDK パッケージは、各操作（`defineRequest`、`defineEventStream`、`defineWebSocket`）とデータ契約（`struct`）を export します。`createClient` を呼び出したり、シングルトンクライアントを保持したり、環境変数を直接読み込んだりすることは決してありません。
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -42,10 +35,10 @@ export const getOrder = defineRequest({
 </Tab>
 </Tabs>
 
-`getOrder` 定義はクライアントの状態を一切保持しないため、以下の利点が得られます。
+`getOrder` はクライアントの状態を一切保持しないため、次のことが可能です。
 
-- ブラウザ UI、バックグラウンドワーカー、SSR リクエストハンドラー、ユニットテストのすべてが、異なる `Client` 構成を用いてまったく同じ `getOrder` 定義を呼び出せます。
-- フレームワーク向けプラグイン（`@defjs/react`、`@defjs/vue`）や可観測性ミドルウェア（`@defjs/opentelemetry-server`）はアプリケーション側の `Client` にアタッチされるため、公開される SDK パッケージ自体は完全に外部依存ゼロ（zero-dependency）に保たれます。
+- ブラウザ UI、バックグラウンドジョブ、SSR リクエストハンドラー、ユニットテストのすべてが、異なる `Client` 構成を用いて同じ `getOrder` 操作を呼び出せます。
+- フレームワークプラグイン（`@defjs/react`、`@defjs/vue`）や可観測性ミドルウェアプラグイン（`@defjs/opentelemetry-server`）はアプリケーション側の `Client` にアタッチされるため、公開される SDK パッケージは外部依存ゼロのまま保たれます。
 
 ## 2. 明示的な入力配置と双方向エイリアス
 
@@ -72,7 +65,7 @@ Defjs が HTTP レスポンスを読み取る際には、6 つの厳格なルー
 
 `2xx` レスポンスは `output` のみを用いてデコードされます。それ以外のすべてのステータス（`3xx`、`4xx`、`5xx`）は `error` のみを用いてデコードされます。一方が失敗したからといって、Defjs がもう一方へフォールバックすることはありません。
 
-### ルール 3: アサーションからの逸脱は明確なエラー（Fault）となる
+### ルール 3: アサーションからの逸脱は明確な Fault になる
 
 Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、非 `2xx` は `error` です。その側に宣言された JSON struct だけがデコードを起こし、`RES_MEDIA_TYPE_INVALID` または `RES_DECODE_FAILED` を生み得ます。その `Content-Type` はボディのバイト列を読む**前**に検証されます。非 `2xx` の HTML ゲートウェイページが `RES_MEDIA_TYPE_INVALID` になるのは、JSON の `error` struct が宣言されているときだけです。有効な側に宣言がなければボディは読まれず、非 `2xx` のレスポンスは未デコードの `HTTP_STATUS` を返します。
 
@@ -86,7 +79,7 @@ Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、�
 
 ### ルール 4: デコードに失敗したレスポンスにはボディが存在しない
 
-ボディは、デコードとバリデーションを完全に通過して初めて存在が認められます。デコードに失敗した場合、Fault の `response` は `HttpMeta` 型（`body` プロパティを持たない型）となり、パースやバリデーションのエラー詳細は `fault.cause` に格納されます。
+ボディは、デコードと検証を通過した後にのみ存在します。デコードに失敗した場合、Fault の `response` は `HttpMeta` 型（`body` プロパティを持たない型）となり、パースや検証のエラー詳細は `fault.cause` に格納されます。
 
 ### ルール 5: 宣言の省略は読み取りの明示的なスキップを意味する
 
@@ -104,7 +97,7 @@ Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、�
 - **SSE** → `[error, stream, open]` — `EventStreamHandle` + 初回ハンドシェイクのスナップショット
 - **WebSocket** → `[error, session, connection]` — `WebSocketSession` + 初回接続のスナップショット
 
-クライアントは設定を保持するだけであり、アクティブな接続を抱え込むことはありません。HTTP リクエスト、SSE ストリーム、または WebSocket セッションを開始した呼び出し元が、キャンセルや接続切断の責務を負います（HTTP の場合は `AbortSignal`、SSE や WebSocket の場合は `await using` または `.close()` + `await .closed`）。
+クライアントは設定を保持するだけであり、アクティブな接続を抱え込むことはありません。HTTP リクエスト、SSE ストリーム、または WebSocket セッションを開始した呼び出し元が、キャンセルやクローズの責任を負います（HTTP の場合は `AbortSignal`、SSE や WebSocket の場合は `await using` または `.close()` + `await .closed`）。
 
 ## 関連ドキュメント
 

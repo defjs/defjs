@@ -1,5 +1,5 @@
 ---
-title: "Estructuras de datos / Struct"
+title: "Struct y esquemas"
 description: Define los contratos de entrada y de respuesta que tu SDK comparte con sus consumidores, con tipos y validación en runtime.
 ---
 
@@ -12,24 +12,22 @@ description: Define los contratos de entrada y de respuesta que tu SDK comparte 
 
 ## 1. Definir un esquema en el SDK y validar en la aplicación
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Vista rápida en un solo archivo"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
@@ -40,9 +38,9 @@ export type Order = Infer<typeof Order>;
 
 Los objetos analizados conservan únicamente los campos declarados (las propiedades desconocidas se eliminan) y usan un prototipo `null`. Cualquier clave requerida que falte, tipo primitivo incorrecto o rama no válida genera un `StructError` sin salida parcial.
 
-## 2. Campos requeridos, opcionales y nulleables
+## 2. Campos requeridos, opcionales y anulables
 
-Defjs separa la **presencia del campo** (`undefined`) de la **admisión de nulos** (`null`). Todo constructor de struct es estrictamente obligatorio y no nulo de forma predeterminada:
+Defjs separa la **presencia del campo** (`undefined`) de la **anulabilidad** (`null`). Cada constructor de struct es estrictamente obligatorio y no nulo de forma predeterminada:
 
 | Declaración                  | Ausente / `undefined`                     | `null`  | Valor válido      |
 | ---------------------------- | ----------------------------------------- | ------- | ----------------- |
@@ -100,7 +98,7 @@ Hacer spread de un objeto tipado dentro de `builder` (`{ ...input.order, extra: 
   examples/struct/parse-failures.ts#example
 </include>
 
-Cada `StructIssue` contiene `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` o `custom`), `path`, `expected`, `received` y `message`. Los mensajes predeterminados omiten el valor recibido y reportan solo su _tipo_, pero las rutas conservan las claves dinámicas de record, que pueden contener datos confidenciales. `String(error)` y `error.prettify()` no son una frontera de ocultación; usa una lista de permitidos de campos seguros al registrar, y trata los valores crudos de `received` y los mensajes personalizados como confidenciales.
+Cada `StructIssue` contiene `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` o `custom`), `path`, `expected`, `received` y `message`. Los mensajes predeterminados omiten el valor recibido y reportan solo su _tipo_, pero las rutas conservan las claves dinámicas de record, que pueden contener datos confidenciales. `String(error)` y `error.prettify()` no son una frontera de ocultación; usa una lista blanca de campos seguros al registrar, y trata los valores crudos de `received` y los mensajes personalizados como confidenciales.
 
 ## 6. Referencia de constructores
 

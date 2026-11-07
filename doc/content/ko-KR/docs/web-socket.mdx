@@ -14,64 +14,16 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
 <Tab value="sdk/ticks-socket.ts">
 
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
-
-export const TickFrame = struct.discriminatedUnion("type", [
-  struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  struct.object({
-    type: struct.literal("subscribed"),
-    symbol: struct.string(),
-  }),
-]);
-
-export const SubscribeCommand = struct.object({
-  type: struct.literal("subscribe"),
-  symbol: struct.string(),
-});
-
-export const openTicker = defineWebSocket({
-  path: "/market/ws",
-  operation: "market.ticker",
-  incoming: TickFrame,
-  outgoing: SubscribeCommand,
-  maxIncomingQueueSize: 64,
-});
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
 
 </Tab>
 <Tab value="app/session.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { openTicker } from "../sdk/ticks-socket.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, session] = await openTicker(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = session;
-  active.send({ type: "subscribe", symbol: "ACME" });
-
-  for await (const message of active.receive) {
-    if (message.type === "tick") {
-      console.log(message.symbol, message.price);
-      break;
-    }
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -86,7 +38,7 @@ void main();
 ## 2. 메시지 유효성 검증 및 방향 규칙
 
 - **수신 프레임 (`session.receive`)**: 텍스트, `ArrayBuffer`, typed array, `Blob` 프레임은 UTF-8로 디코딩된 후 JSON으로 파싱되며 `incoming` struct에 대해 유효성을 검증받습니다. 잘못된 형식의 JSON이나 스키마 불일치는 `session.onRuntimeError`에 보고되고 세션을 닫지 않은 채 폐기됩니다. `session.receive`는 단일 소비자(single-consumer) 전용이므로, 두 번째 이터레이터를 요청하면 `TypeError`가 발생합니다.
-- **송신 프레임 (`session.send(payload)`)**: `outgoing` struct에 대해 동기식으로 유효성을 검증하고, `.alias()` 및 코덱을 적용한 뒤 `JSON.stringify`로 직렬화합니다. `open` 상태에서는 즉시 전송되고, `reconnecting` 상태에서는 큐에 저장되며(`maxOutgoingQueueSize > 0`인 경우), 페이로드가 유효하지 않거나 큐가 가득 찼거나/비활성화되었거나 세션이 닫힌 상태라면 동기식 예외를 던집니다.
+- **송신 프레임 (`session.send(payload)`)**: `outgoing` struct에 대해 동기식으로 유효성을 검증하고, `.alias()` 및 코덱을 적용한 뒤 `JSON.stringify`로 직렬화합니다. `open` 상태에서는 즉시 전송되고, `reconnecting` 상태에서는 큐에 저장되며(`maxOutgoingQueueSize > 0`인 경우), 페이로드가 유효하지 않거나 큐가 가득 찼거나 비활성화되었거나 세션이 닫힌 상태라면 동기식 예외를 던집니다.
 
 ## 3. 세션 상태 및 옵저버
 
@@ -108,24 +60,24 @@ void main();
 
 재연결과 하트비트는 모두 클라이언트 옵션(`withWebSocketReconnect`, `withWebSocketHeartbeat`) 또는 호출별 파생 클라이언트 옵션(`client({ reconnect, heartbeat })`)을 통해 선택적으로 활성화(opt-in)합니다:
 
-<Tabs items={["재연결 정책", "애플리케이션 계층 하트비트"]}>
-<Tab value="재연결 정책">
+<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tab value="Reconnect policy">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="애플리케이션 계층 하트비트">
+<Tab value="Application heartbeat">
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
 </Tab>
 </Tabs>
 
-- **재연결**: 활성화 시 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`입니다. 물리적 소켓이 `open`될 때마다 재연결 시도 한도가 재설정됩니다. `beforeConnect({ attempt, signal })`는 최초 연결 및 모든 재연결 시도 직전에 실행됩니다.
+- **재연결**: 활성화 시 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`입니다. 물리적 소켓이 `open`될 때마다 단절 예산이 재설정됩니다. `beforeConnect({ attempt, signal })`는 최초 연결 및 모든 재연결 시도 직전에 실행됩니다.
 - **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제됩니다.
 - **하트비트**: `outgoing` struct를 통해 주기적으로 `message()`를 전송하고, 최대 `timeoutMs` 동안 `isAck(msg)`와 일치하는 프레임을 기다립니다. 일치하는 확인(ack) 프레임은 하트비트 모니터가 소비하며 `session.receive`로 전달되지 않습니다. 확인을 받지 못하면 논리적 세션에 치명적 오류가 발생합니다. `closed.kind`는 `"error"`이고 `closed.cause`는 일반 `Error("WebSocket heartbeat timeout")`이며, 재연결을 시작하지 않습니다. 하트비트 직렬화 실패도 원래 cause를 유지하면서 같은 치명적 종료 경로를 따릅니다.
 - **큐 한도**:
-  - `maxIncomingQueueSize` (필수 양의 정수): 디코딩을 기다리는 원시 프레임과 소비자를 기다리는 디코딩된 메시지 모두를 제한합니다. 초과하면 `CAP_QUEUE_OVERFLOW` Fault를 `closed.cause`로 하여 세션을 종료합니다. 같은 cause가 `onRuntimeError`로 전달되고 `session.receive`를 reject합니다. 세션이 열려 있는 동안 `session.receive`를 계속 소비하세요.
+  - `maxIncomingQueueSize` (필수 양의 정수): 디코딩을 기다리는 원시 프레임과 소비자를 기다리는 디코딩된 메시지 모두를 제한합니다. 초과하면 `CAP_QUEUE_OVERFLOW` 결함을 `closed.cause`로 하여 세션을 종료합니다. 같은 cause가 `onRuntimeError`로 전달되고 `session.receive`를 reject합니다. 세션이 열려 있는 동안 `session.receive`를 계속 소비하세요.
   - `maxOutgoingQueueSize` (선택적 0 이상의 정수, 기본값 `0`): `state === 'reconnecting'`인 동안에만 `session.send()` 호출을 버퍼링하고, 다음 `open`이 발행되기 전에 버퍼의 메시지를 비워냅니다(flush).
 
 `shouldReconnect`는 네이티브 종료 코드와 `wasClean`을 받습니다. 서버는 애플리케이션 오류 코드 `1011`로도 정상 종료 핸드셰이크를 완료할 수 있으므로, `wasClean === true`가 애플리케이션 성공을 의미하지는 않습니다. 예제는 `1011`을 명시적으로 허용합니다. `!wasClean`에만 의존하지 말고 프로토콜에 맞춰 애플리케이션 코드를 선택하세요.
@@ -135,7 +87,7 @@ void main();
 브라우저의 WebSocket API는 임의의 핸드셰이크 헤더 지정을 지원하지 않으므로, WebSocket의 `builder` 함수는 `{ path?, query? }`만을 반환합니다.
 
 - **서브프로토콜 우선순위**: `client({ protocols })`가 `withWebSocketProtocols(...)`보다 우선하며, 이는 다시 `defineWebSocket({ protocols })`보다 우선합니다.
-- **URL 변환**: Defjs는 확인된 엔드포인트 URL에 대해 `http:` → `ws:` 및 `https:` → `wss:` 변환을 자동으로 수행합니다.
+- **URL 변환**: Defjs는 해석된 엔드포인트에서 `http:` → `ws:` 및 `https:` → `wss:` 변환을 자동으로 수행합니다.
 - **자격 증명**: `withCredentials(true)`는 Fetch(HTTP/SSE)에만 적용됩니다. WebSocket은 쿠키/세션 정책, 서브프로토콜, 또는 짧은 수명의 연결 티켓을 사용해 인증하세요. 쿼리 스트링에 긴 수명의 비밀값을 넣는 것은 피해야 합니다.
 - **`beforeConnect`는 요청 변경 훅이 아닙니다**: 입력 파싱, 동기 순수 함수 `builder`, 인터셉터 체인은 작업마다 한 번만 실행됩니다. 인터셉터가 기본 엔드포인트를 바꾸지 않은 요청은 재연결마다 엔드포인트를 다시 선택하고 해당 엔드포인트로 URL을 다시 구성하지만, 빌드된 path/query와 캡처한 프로토콜 목록은 재사용합니다. 같은 엔드포인트이든 장애 조치 후이든, URL은 해당 시도의 `beforeConnect` 실행 전에 확정됩니다. 훅에서 클로저 변수, input, 프로토콜 배열을 바꿔도 현재 핸드셰이크에 새 티켓을 제공할 수 없습니다. 한 세션 안에서 URL/서브프로토콜 인증 정보를 갱신하는 것은 지원하지 않습니다. 새 인증 정보를 먼저 얻고, 새 작업의 input이나 클라이언트 설정으로 전달한 뒤 대체 세션의 정리를 직접 관리하세요.
 
@@ -147,7 +99,7 @@ void main();
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-한 단절에 대한 재연결 시도 횟수를 모두 소진하면 세션은 `closed.kind: "error"`로 종료됩니다. 네이티브 종료 스냅샷(업그레이드 실패 시 보통 코드 `1006`)을 유지하고 일반 전송 오류를 `closed.cause`로 사용하며, 별도의 안정적인 소진 코드는 제공하지 않습니다. 컴포넌트나 워커의 작업이 끝나면 항상 `onStateChange`와 `onRuntimeError` 리스너를 구독 해제하세요.
+재연결 단절이 시도 횟수를 모두 소진하면 세션은 `closed.kind: "error"`로 종료됩니다. 네이티브 종료 스냅샷(업그레이드 실패 시 보통 코드 `1006`)을 유지하고 일반 전송 오류를 `closed.cause`로 사용하며, 별도의 안정적인 소진 코드는 제공하지 않습니다. 컴포넌트나 워커의 작업이 끝나면 항상 `onStateChange`와 `onRuntimeError` 리스너를 구독 해제하세요.
 
 ## 관련 문서
 

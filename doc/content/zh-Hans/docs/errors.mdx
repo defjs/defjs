@@ -1,16 +1,16 @@
 ---
 title: "错误"
-description: 在 SDK 中声明服务端业务错误契约，并在消费方应用中通过强类型错误元组进行精准分流处理。
+description: 在 SDK 中声明服务错误契约，并在消费方应用中处理带类型的执行失败。
 ---
 
 # 错误处理
 
-在 Defjs 中，请求构建、底层网络传输以及响应解码阶段的异常均不会在调用处直接抛出。每个操作统一返回错误优先元组（`[error, ...]`），其中 `error` 要么是 `null`，要么是一个类型化的 `Fault` 实例（继承自原生 `Error`，通过 `error.code` 进行类型区分）。
+在 Defjs 中，请求、传输和解码失败不会在调用处抛出异常。每个操作都返回错误优先元组（`[error, ...]`），其中 `error` 要么是 `null`，要么是带类型的 `Fault`（原生 `Error` 实例，由 `error.code` 判别）。
 
 ## 1. 在 SDK 中声明业务错误，在应用中进行分流
 
-<Tabs items={["穷尽错误码分支", "基本状态码检查", "各传输协议的元组结构"]}>
-<Tab value="穷尽错误码分支">
+<Tabs items={["穷尽代码分支", "基本状态码检查", "各传输的元组结构"]}>
+<Tab value="穷尽代码分支">
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
@@ -33,31 +33,31 @@ description: 在 SDK 中声明服务端业务错误契约，并在消费方应�
 </Tab>
 </Tabs>
 
-### 为什么 HTTP 失败时元组第三项为 undefined？
+### 为什么 HTTP 失败时 `error` 会携带响应元数据？
 
-在 HTTP 请求失败时，返回的元组格式为 `[error, undefined, undefined]`。此时所有已收到的响应元数据（`status`、`statusText`、`headers`、`url`）均已完整挂载在 `error.response` 上。这样在将 `error` 单独传递给日志记录器或错误监控上报中心时，依然能够保留完整的上下文信息，而无需额外传递元组的第三项。
+HTTP 失败时，元组是 `[error, undefined, undefined]`。到达的响应元数据（`status`、`statusText`、`headers`、`url`）直接挂在 `error.response` 上，因此只把 `error` 交给日志记录器或错误处理程序也不会丢失上下文。
 
-## 2. 错误大类与封闭的 Code 错误码集合
+## 2. Fault 类别与封闭的代码集合
 
-`error.code` 中首个下划线 `_` 之前的前缀代表错误所属的大类（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），而完整的 `code` 构成了一个严格封闭的联合类型，非常适合通过 `switch` 语句进行详尽的分支匹配（Exhaustive Switch）：
+第一个 `_` 之前的前缀是 Fault 类别（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），完整的 `code` 构成封闭联合，可用于穷尽的 `switch`：
 
-| 错误类别 | 包含的错误码（Fault Code）                                             | 含义与排查指引                                                                                        |
-| -------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `HTTP`   | `HTTP_STATUS`                                                          | 服务端返回了非 `2xx` 状态码（`3xx`、`4xx`、`5xx`），若声明了 `error` struct 则其已被成功解码。        |
-| `REQ`    | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | 调用方传入入参不合法、Client 参数超出范围、URL/Path 无效，或 `builder` 抛出异常。此类错误绝不可重试。 |
-| `RES`    | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | 服务端响应破坏了已声明的媒体类型、底层表示或 `struct` 契约。                                          |
-| `NET`    | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | 调用方主动取消（`NET_ABORTED`）、请求超时（`NET_TIMEOUT`）、网络连不上，或响应流在传输中途中断。      |
-| `EXT`    | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | 应用层挂载的中间件拦截器、钩子函数或进度/状态观察者抛出了异常或返回了非法值。                         |
-| `CAP`    | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | SSE 数据帧解析缓冲区或 SSE/WebSocket 消费队列超出了配置的最大容量上限。                               |
-| `ENV`    | `ENV_UNSUPPORTED`                                                      | 当前宿主运行时缺少必须的 Web API（如在 Firefox 中尝试流式发送请求体）。                               |
+| 类别   | Fault 代码                                                             | 含义与处理                                                                                            |
+| ------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `HTTP` | `HTTP_STATUS`                                                          | 服务端返回了非 `2xx` 状态码（`3xx`、`4xx`、`5xx`），若声明了 `error` struct 则其已被成功解码。        |
+| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | 调用方传入入参不合法、Client 参数超出范围、URL/Path 无效，或 `builder` 抛出异常。此类错误绝不可重试。 |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | 服务端响应破坏了已声明的媒体类型、底层表示或 `struct` 契约。                                          |
+| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | 调用方主动取消（`NET_ABORTED`）、请求超时（`NET_TIMEOUT`）、网络连不上，或响应流在传输中途中断。      |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | 应用拦截器、Hook 或进度/状态观察者抛出异常或返回了非法值。                                            |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | SSE 数据帧解析缓冲区或 SSE/WebSocket 消费队列超出了配置的最大容量上限。                               |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | 当前宿主运行时缺少必须的 Web API（如在 Firefox 中尝试流式发送请求体）。                               |
 
-### 各错误码携带的属性字段
+### 各 Fault 代码携带的属性
 
-| 错误码        | `status` | `response`                                        | `data`                                  | `cause`                        |
+| Fault 代码    | `status` | `response`                                        | `data`                                  | `cause`                        |
 | ------------- | -------- | ------------------------------------------------- | --------------------------------------- | ------------------------------ |
 | `HTTP_STATUS` | `number` | `DecodedResponse<TErr>` 或 `HttpMeta`             | 解码后的 `error` struct，或 `undefined` | 底层原始原因（若存在）         |
 | `RES_*`       | `number` | `HttpMeta`（**绝无 `body` 属性**）                | 不存在                                  | `StructError` 或解析器原始报错 |
-| 其他错误码    | 不存在   | 若已收到响应头则为 `HttpMeta`，否则为 `undefined` | 不存在                                  | 底层原生 `Error` / 取消原因    |
+| 其他代码      | 不存在   | 若已收到响应头则为 `HttpMeta`，否则为 `undefined` | 不存在                                  | 底层 `Error` / 中止原因        |
 
 ## 3. 窄化联合错误体（`error.data`）
 
@@ -91,11 +91,11 @@ description: 在 SDK 中声明服务端业务错误契约，并在消费方应�
 
 ## 4. SSE 与 WebSocket 的启动期 vs. 连接建立后异常
 
-对于长连接传输协议，操作元组仅返回**启动阶段**的失败（即在流或 Socket 建立成功之前）。一旦连接成功建立，后续运行时的错误将通过返回的句柄（Handle）或会话（Session）生命周期进行通知：
+对于长连接，操作元组报告**启动期**失败（流或 socket 打开之前）。连接打开后，运行时失败通过句柄或会话生命周期传递：
 
-| 传输协议      | 启动期失败（直接在操作元组中返回）                                                                                        | 连接建立后的运行时失败（在元组 resolve 之后）                                                                                                                                                                                                                      |
+| 传输          | 启动期失败（在元组中返回）                                                                                                | 打开后的失败（元组 resolve 之后）                                                                                                                                                                                                                                  |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **HTTP**      | 所有错误均仅通过操作元组结算一次。                                                                                        | 不适用。                                                                                                                                                                                                                                                           |
+| **HTTP**      | 所有失败都在操作元组中结算一次。                                                                                          | 不适用。                                                                                                                                                                                                                                                           |
 | **SSE**       | 状态码非 `2xx`（`HTTP_STATUS`）、媒体类型不符（`RES_MEDIA_TYPE_INVALID`），或握手响应体缺失/非法（`RES_DECODE_FAILED`）。 | 异步迭代器直接 reject 抛错；`stream.closed` resolve 为 `{ kind: 'error', code }`。                                                                                                                                                                                 |
 | **WebSocket** | 握手前连接关闭、构造器执行失败，或在握手期间触发取消信号。                                                                | 非致命的数据帧错误触发 `session.onRuntimeError`；致命错误使 `session.receive` 报错并使 `session.closed` resolve 为 `{ kind: 'error', cause }`。传入队列溢出使用 `cause.code === 'CAP_QUEUE_OVERFLOW'`；心跳超时和重连次数耗尽仍使用普通运行时 `Error` 作为 cause。 |
 
@@ -121,10 +121,10 @@ description: 在 SDK 中声明服务端业务错误契约，并在消费方应�
 </Tabs>
 
 > [!CAUTION]
-> 请务必注意：`fault.cause`、`fault.data`、响应头、完整 URL 以及 `StructIssue.received` 可能包含敏感业务数据。在默认日志记录中，推荐只记录经过脱敏的低基数白名单字段（如 `operation`、`code`、`status` 及请求耗时）。
+> 把 `fault.cause`、`fault.data`、响应头、完整 URL 和 `StructIssue.received` 都视为可能敏感。默认只记录低基数白名单字段（`operation`、`code`、`status`、耗时）。
 
 ## 相关阅读
 
-- [优雅处理已声明的 404 响应](/zh-Hans/recipes/get-declared-404)
-- [取消进行中的 HTTP 请求](/zh-Hans/recipes/cancel-http)
+- [处理声明的 404](/zh-Hans/recipes/get-declared-404)
+- [取消 HTTP 调用](/zh-Hans/recipes/cancel-http)
 - [核心架构设计](/zh-Hans/docs/design-decisions)

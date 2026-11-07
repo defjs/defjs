@@ -5,11 +5,11 @@ description: Exportiere deine erste SDK-Operation, rufe sie aus einer separaten 
 
 # Schnellstart: Deine erste SDK-Operation [#getting-started-one-http-request]
 
-In dieser Anleitung erstellst du ein SDK-Modul, das `GET /orders/:id` definiert, und rufst es aus zwei separaten Anwendungsmodulen auf: eines nutzt einen lokalen Offline-Mock-Transport und das andere greift auf eine echte API zu.
+In dieser Anleitung erstellst du ein SDK-Modul, das `GET /orders/:id` definiert, und rufst es aus zwei separaten Anwendungsmodulen auf: eines nutzt einen Offline-Mock-Transport und das andere greift auf eine echte API zu.
 
 ## 1. `@defjs/core` installieren
 
-`@defjs/core` ist ein abhängigkeitsfreies ESM-Paket, das in modernen Browsern, Bun und Node.js (ab 22.18+ oder 24+ führt `.ts`-Dateien direkt aus) läuft. Achte darauf, dass `"type": "module"` in deiner `package.json` gesetzt ist.
+`@defjs/core` ist ein abhängigkeitsfreies ESM-Paket, das in Browsern, Bun und Node.js (ab 22.18+ oder 24+ führt `.ts`-Dateien direkt aus) läuft. Achte darauf, dass `"type": "module"` in deiner `package.json` gesetzt ist.
 
 ```sh
 bun add @defjs/core
@@ -50,7 +50,7 @@ Halte die Operationsdefinition in einem eigenen SDK-Modul (`src/define-request.t
    - Stellt einen synchronen, reinen `builder` bereit, der `input` auf `{ path }` abbildet. Sobald `input` deklariert ist, ist ein expliziter `builder` Pflicht.
    - Exportiert `getOrder`, ohne einen Client zu erstellen oder an sich zu binden.
 2. **`src/execute-locally.ts` (Lokale Offline-Ausführung für Tests)**:
-   - Konfiguriert einen Client mit `withHTTPHandle(...)`, um die gesamte Defjs-Pipeline (Input-Validierung, URL-Auflösung, Status-Dispatching und Struct-Parsing der Antwort) zu durchlaufen – komplett ohne Netzwerkzugriff.
+   - Konfiguriert einen Client mit `withHTTPHandle(...)`, um die gesamte Defjs-Pipeline (Input-Validierung, URL-Auflösung, Status-Dispatch und Struct-Parsing der Antwort) zu durchlaufen – komplett ohne Netzwerkzugriff.
 3. **`src/real-api.ts` (Produktionsausführung)**:
    - Importiert exakt dieselbe `getOrder`-Operation und ruft sie gegen eine über `withEndpoint(...)` konfigurierte Live-Basis-URL auf.
 
@@ -78,13 +78,13 @@ Jeder HTTP-Aufruf liefert ein dreiteiliges Tupel `[error, data, response]` zurü
 
 - **Bei `2xx`-Erfolg**: `error` ist `null`, `data` ist der validierte `output`-Wert (`Order`), und `response` ist `DecodedResponse<Order>`.
 - **Bei einem deklarierten Nicht-`2xx`-Status**: `error.code` lautet `'HTTP_STATUS'`, `error.status` ist der numerische HTTP-Statuscode (`404`), und `error.data` ist das validierte `error`-Struct (`NotFound`).
-- **Bei Validierungs-, Dekodierungs- oder Netzwerkfehlern**: `error.code` kennzeichnet die genaue Fehlerphase:
+- **Bei Eingabe-, Dekodierungs- oder Netzwerkfehlern**: `error.code` kennzeichnet die genaue Fehlerphase:
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — ungültige Aufruf-Eingabe oder eine Exception im `builder`
   - `RES_MEDIA_TYPE_INVALID` — deklarierter JSON-Body traf mit einem Nicht-JSON-`Content-Type` ein (wird bereits vor dem Lesen des Body abgewiesen)
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — unlesbarer Body oder Schema-Diskrepanz
   - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` — Transportfehler, manueller Abbruch oder `AbortSignal.timeout(ms)`-Zeitüberschreitung
 
-Per-Call-Deadlines oder Abbruchsignale übergibst du, indem du eine einmalige Client-Instanz ableitest: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`.
+Per-Call-Deadlines oder Abbruchsignale übergibst du, indem du einen Client-Wert für einen einzelnen Aufruf ableitest: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`.
 
 ## Nächste Schritte
 

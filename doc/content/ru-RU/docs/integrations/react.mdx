@@ -13,7 +13,7 @@ bun add @defjs/core @defjs/react react
 
 ## Зоны ответственности: что даёт `@defjs/react`, а чем владеете вы
 
-- **Предоставляет `@defjs/react`**: компоненты `ClientProvider` и хук `useClient(overrideClient?)`.
+- **Предоставляет `@defjs/react`**: компонент `ClientProvider` и хук `useClient(overrideClient?)`.
 - **Владеет ваше приложение**: создание экземпляра [`DerivableClient`](/ru-RU/api/core/derivableclient-type), отмена выполняемых запросов при размонтировании или смене зависимостей (`AbortController`), закрытие хэндлов SSE/WebSocket и интеграция с библиотеками кэширования запросов (например, TanStack Query).
 - **Важно**: хук `useClient()` возвращает объект-функцию `DerivableClient`. Вызывайте `client({ signal })` непосредственно в месте выполнения операции (`getOrder(client({ signal }), input)`). Никогда не передавайте `client` напрямую в `setState(client)`, так как React воспринимает переданную функцию как функцию обновления состояния (updater).
 
@@ -26,9 +26,11 @@ bun add @defjs/core @defjs/react react
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
   <Tab value="app/App.tsx">
     <include cwd>examples/react/client-provider.tsx#example</include>
+
   </Tab>
   <Tab value="app/OrderCard.tsx">
     <include cwd>examples/react/basic-setup.tsx#example</include>
+
   </Tab>
 </Tabs>
 
@@ -72,13 +74,13 @@ bun add @defjs/core @defjs/react react
 
 - **Браузер**: используйте общий клиент уровня модуля, если базовый эндпоинт и перехватчики не зависят от контекста запроса.
 - **SSR**: создавайте отдельный клиент внутри границы каждого входящего серверного запроса, если заголовки, cookies, тенанты или учётные данные различаются между запросами.
-- Размонтирование `<ClientProvider>` **не** отменяет активные HTTP-запросы, не закрывает соединения SSE/WebSocket и не вызывает `disposeClient`.
+- Размонтирование `<ClientProvider>` **не** отменяет активные HTTP-запросы, не закрывает соединения SSE/WebSocket и не освобождает клиент.
 
 ---
 
 ## Публичные экспорты и руководства
 
-- `ClientProvider` — предоставляет `DerivableClient` (`ClientProviderProps: { client: Client; children?: ReactNode }`).
+- `ClientProvider` — предоставляет `DerivableClient` (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
 - `useClient(overrideClient?)` — считывает явно переданный клиент или клиент из ближайшего провайдера.
 - Руководства: [Клиент](/ru-RU/docs/client), [Обработка ошибок](/ru-RU/docs/errors), [Потоки событий SSE](/ru-RU/docs/sse), [Сессии WebSocket](/ru-RU/docs/web-socket).
 - Связанные рецепты: [GET с объявленным 404](/ru-RU/recipes/get-declared-404), [Отмена HTTP-запроса](/ru-RU/recipes/cancel-http), [Потребление SSE-потока](/ru-RU/recipes/consume-sse), [Открытие WebSocket-сессии](/ru-RU/recipes/websocket-session).

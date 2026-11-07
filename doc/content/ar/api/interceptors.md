@@ -11,13 +11,13 @@ description: منشئات معترضات HTTP وSSE وWebSocket.
 
 <ApiSignature name="createHttpInterceptor, InterceptorFn, HttpInterceptorNext" />
 
-استدعِ `next(req)` (مع طلب معدَّل اختياريًا) أو أنهِ السلسلة مبكرًا بـ `makeResponse`. يتجه `next` إلى الداخل فقط: إلى المعترضات المسجَّلة بعد هذا، ثم وسيلة النقل. استدعاؤه مرة أخرى يعيد تشغيل ذلك الجزء الداخلي من هذا المعترض؛ ولا تعمل المعترضات الخارجية مرتين.
+استدعِ `next(req)` (مع طلب معدَّل اختياريًا) أو اقطع السلسلة مبكرًا بـ `makeResponse`. يتجه `next` إلى الداخل فقط: إلى المعترضات المسجَّلة بعد هذا، ثم وسيلة النقل. استدعاؤه مرة أخرى يعيد تشغيل ذلك الجزء الداخلي من هذا المعترض؛ ولا تعمل المعترضات الخارجية مرتين.
 
 ## createSSEInterceptor()
 
 <ApiSignature name="createSSEInterceptor, SSEHandler, SSEInterceptorFn" />
 
-`EventStreamHandle` يمتد `AsyncDisposable`. يجب أن يوفّر تنفيذ هيكلي لإنهاء السلسلة مبكرًا `[Symbol.asyncDispose](): PromiseLike<void>` ويربطه بدورة حياة الإغلاق نفسها.
+`EventStreamHandle` يمتد `AsyncDisposable`. يجب أن يوفّر التنفيذ الهيكلي لقطع السلسلة مبكرًا `[Symbol.asyncDispose](): PromiseLike<void>` ويربطه بدورة حياة الإغلاق نفسها.
 
 ## createWebSocketInterceptor()
 
@@ -27,7 +27,7 @@ description: منشئات معترضات HTTP وSSE وWebSocket.
 
 <ApiSignature name="WebSocketSessionLike" />
 
-يجب أن يمرّر غلاف أو جلسة إنهاء مبكر التفكيك نفسه في `[Symbol.asyncDispose]()` كما في دورة حياة `close` / `closed`؛ وإرجاع وعد محلول لا علاقة له غير كافٍ.
+يجب أن يمرّر الغلاف أو جلسة القطع المبكر التفكيك نفسه في `[Symbol.asyncDispose]()` كما في دورة حياة `close` / `closed`؛ وإرجاع وعد محلول لا علاقة له غير كافٍ.
 
 ## الأنواع الموسومة
 
@@ -51,6 +51,6 @@ description: منشئات معترضات HTTP وSSE وWebSocket.
 
 <ApiSignature name="basicAuthHttpInterceptor, basicAuthSSEInterceptor, BasicAuthInterceptorOptions" />
 
-يضع `Authorization: Basic <encoded>` على كل طلب. تُرجع `fn` القيمة `{ username, password }` وتُستدعى لكل طلب. يتلقى الوسيط الثاني الاختياري `{ encode }` بيانات الاعتماد تلك ويُرجع الجزء بعد `Basic `؛ والترميز الافتراضي هو ``btoa(`${username}:${password}`)``. دون `encode`، يرمي إنشاء المعترض عندما لا يتوفر `btoa`.
+يضع `Authorization: Basic <encoded>` على كل طلب. تُرجع `fn` القيمة `{ username, password }` وتُستدعى لكل طلب. يتلقى الوسيط الثاني الاختياري `{ encode }` بيانات الاعتماد تلك ويُرجع الجزء بعد `Basic `؛ والترميز الافتراضي هو ``btoa(`${username}:${password}`)``. دون `encode`، يُلقي إنشاء المعترض استثناءً عندما لا يتوفر `btoa`.
 
 انظر [دليل المعترضات](/ar/docs/interceptors).

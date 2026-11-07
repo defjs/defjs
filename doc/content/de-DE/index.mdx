@@ -9,8 +9,8 @@ description: TypeScript-SDKs mit wiederverwendbaren API-Definitionen und anwendu
 
 Defjs trennt die beiden Seiten eines TypeScript-SDKs sauber voneinander:
 
-- **SDK-Definition (`@defjs/core`)** — Als SDK-Autor deklarierst du typisierte HTTP-, SSE- und WebSocket-Operationen zusammen mit ihren `struct`-Schemas. Eine Definition ist reine Datenstruktur: Ihr Import startet weder Netzwerkaufrufe noch bindet er einen globalen Client.
-- **Anwendungsausführung** — Konsumierende Anwendungen erstellen ihren eigenen `Client` (`createClient(withEndpoint(...))`), hängen Anmeldedaten, Interceptors und Load-Balancer an und übergeben diesen Client beim Aufruf einer Operation.
+- **SDK-Definition (`@defjs/core`)** — Als SDK-Autor deklarierst du typisierte HTTP-, SSE- und WebSocket-Operationen zusammen mit ihren `struct`-Schemas. Eine Definition ist reine Daten: Ihr Import startet weder einen Netzwerkaufruf noch bindet er einen globalen Client.
+- **Anwendungsausführung** — Konsumierende Anwendungen erstellen ihren eigenen `Client` (`createClient(withEndpoint(...))`), hängen Anmeldedaten und Interceptors an, konfigurieren Load-Balancing und übergeben diesen Client beim Aufruf einer Operation.
 
 ## Kurzer Blick: SDK-Definition vs. Anwendungsausführung
 
@@ -44,7 +44,7 @@ Der Aufruf `getHealth(client)` führt I/O aus und liefert ein Error-first-Tupel 
 ## Wähle deinen Einstieg
 
 1. **[Schnellstart](/de-DE/docs/start)** — Definiere eine Operation, teste sie offline mit einem lokalen Fetch-Handle und richte sie auf einen echten Dienst aus.
-2. **[Kernarchitektur](/de-DE/docs/design-decisions)** — Verstehe die sechs Regeln zur Response-Dekodierung, Error-first-Tupel und den Besitz von Ressourcen.
+2. **[Kernarchitektur](/de-DE/docs/design-decisions)** — Verstehe die sechs Regeln zur Response-Dekodierung, Error-first-Tupel und die Verantwortung für Ressourcen.
 3. **[SDKs definieren](/de-DE/docs/struct)** — Deklariere Datenverträge mit [Struct](/de-DE/docs/struct) und exportiere [HTTP](/de-DE/docs/http)-, [SSE](/de-DE/docs/sse)- und [WebSocket](/de-DE/docs/web-socket)-Operationen.
 4. **[Client & Ausführung](/de-DE/docs/client)** — Konfiguriere [Clients](/de-DE/docs/client), behandle typisierte [Fehler](/de-DE/docs/errors), binde [Interceptors](/de-DE/docs/interceptors) ein, richte [Lastverteilung & Failover](/de-DE/docs/load-balancing) ein und führe deterministische [Tests](/de-DE/docs/testing) aus.
 
@@ -58,7 +58,7 @@ Jede Operation gibt ein dreiteiliges Error-first-Tupel zurück, das auf den Lebe
 | **[SSE](/de-DE/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | Freigeben mit `await using` oder `stream.close()` + `await stream.closed`   |
 | **[WebSocket](/de-DE/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | Freigeben mit `await using` oder `session.close()` + `await session.closed` |
 
-Bei einem HTTP-Fehler ist das Tupel `[error, undefined, undefined]`, da `error` bereits alle `HttpMeta`-Response-Metadaten enthält. Bei SSE und WebSocket enthält der dritte Slot die Startup-Informationen, sofern vor dem Fehler eine Verbindung zustande kam.
+Bei einem HTTP-Fehler ist das Tupel `[error, undefined, undefined]`, da `error` bereits alle `HttpMeta`-Response-Metadaten enthält. Bei SSE und WebSocket enthält der dritte Slot den Startup-Snapshot, sofern vor dem Fehler einer erfasst wurde.
 
 ## Offizielle Pakete
 

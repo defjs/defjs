@@ -1,57 +1,29 @@
 ---
-title: "HTTP 요청"
+title: "HTTP 작업"
 description: SDK를 위한 HTTP 작업을 설계하고, 애플리케이션 소유의 구성 및 취소 메커니즘으로 호출합니다.
 ---
 
-# HTTP 요청
+# HTTP 작업
 
 SDK는 `defineRequest`를 사용하여 각 HTTP 작업을 정의합니다: HTTP 메서드, 경로 템플릿, `input` 스키마, 동기 `builder`, 그리고 `output` / `error` 응답 스키마를 지정합니다. SDK를 사용하는 애플리케이션은 이 작업을 import하고, 자체 구성한 `Client`를 전달하여 반환되는 `[error, data, response]` 튜플을 처리합니다.
 
 ## 1. 작업 정의 및 호출하기
 
-SDK 모듈에서 각 엔드포인트마다 별도의 `defineRequest`를 export하고, `createClient` 호출은 사용하는 애플리케이션에 둡니다:
+SDK 모듈에서 각 작업마다 별도의 `defineRequest`를 export하고, `createClient` 호출은 사용하는 애플리케이션에 둡니다:
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -66,10 +38,10 @@ void main();
 ### SDK 설계 모범 사례
 
 - **정의당 하나의 작업**: 사용되지 않는 작업을 애플리케이션에서 트리쉐이킹할 수 있도록 각 메서드, 경로, 계약을 개별 정의로 분리하세요.
-- **고정된 `operation` 식별자 지정**: `"orders.read"`와 같이 카디널리티가 낮은 식별자를 사용하세요. 원격 분석 플러그인(`@defjs/opentelemetry-server`)이나 로깅 인터셉터가 URL이나 사용자 ID를 유출하지 않고 안전하게 활용할 수 있습니다.
+- **고정된 `operation` 식별자 지정**: `"orders.read"`와 같이 카디널리티가 낮은 식별자를 사용하세요. 텔레메트리 플러그인(`@defjs/opentelemetry-server`)이나 로깅 인터셉터가 URL이나 사용자 ID를 유출하지 않고 안전하게 활용할 수 있습니다.
 - **SDK 내부에 클라이언트를 포함하지 마세요**: 오직 정의, `struct` 스키마, 타입만을 export해야 합니다.
 
-## 2. URL 확인 및 경로 매개변수
+## 2. URL 해석 및 경로 매개변수
 
 `withEndpoint(...)`에는 유효한 절대 URL을 전달해야 합니다. URL의 경로(pathname)가 기본 디렉터리로 동작합니다(엔드포인트의 쿼리 스트링이나 해시는 무시됩니다).
 
@@ -91,7 +63,7 @@ void main();
 | Builder 표현식                                 | 전송 결과                                                       |
 | ---------------------------------------------- | --------------------------------------------------------------- |
 | `body: input.profile`                          | 타입화된 struct: `.alias()` 및 `Date` / `bigint` 코덱 자동 적용 |
-| `body: { profile: input.profile }`             | 외부 키 `profile`은 리터럴로 유지; 내부 객체는 struct 별칭 유지 |
+| `body: { profile: input.profile }`             | 바깥 키 `profile`은 리터럴로 유지; 안쪽 객체는 struct 별칭 유지 |
 | `body: { ...input.profile, role: "admin" }`    | 객체 전개 시 struct 별칭 유지; `role`은 리터럴                  |
 | `body: { name: input.profile.customerName }`   | 익명 객체: 작성된 키 그대로 리터럴 유지                         |
 | `query: input.filter` / `headers: input.trace` | 평면 타입화된 객체: 필드의 `.alias()`가 통신 키로 변환됨        |
@@ -106,7 +78,7 @@ void main();
 
 `GET`과 `HEAD`는 본문을 가질 수 없습니다. 다른 메서드의 경우 `builder`가 반환한 값에 따라 본문 형식이 결정됩니다:
 
-| `body` 반환값                                             | 전송되는 통신 형식                           | 기본 `Content-Type`                         |
+| `body` 반환값                                             | 전송 시 형식                                 | 기본 `Content-Type`                         |
 | --------------------------------------------------------- | -------------------------------------------- | ------------------------------------------- |
 | `undefined` / 생략됨                                      | 본문 없음                                    | —                                           |
 | `urlencoded` / `formData` 코덱이 적용된 루트 struct       | `URLSearchParams` / `FormData` (별칭 적용됨) | 폼 형식 / 멀티파트 경계(boundary)           |
@@ -134,19 +106,19 @@ JSON으로 표현할 수 없는 값(`NaN`, `±Infinity`, `Map`, `Set`, 함수, `
 
 ## 5. 작업 취소 및 마감 시간 설정 [#cancel-the-work]
 
-단일 호출용 파생 클라이언트를 통해 `signal`을 전달합니다: `client({ signal })`.
+단일 호출용 파생 클라이언트에 `signal`을 전달합니다: `client({ signal })`.
 
 - **마감 시간 설정 (`NET_TIMEOUT`)**: `AbortSignal.timeout(ms)`를 사용하세요.
 - **수동 취소 (`NET_ABORTED`)**: `AbortController`를 사용하세요.
 - **신호 결합**: `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`를 사용하세요.
 
-<Tabs items={["기한（NET_TIMEOUT）", "수동 취소（NET_ABORTED）"]}>
-<Tab value="기한（NET_TIMEOUT）">
+<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
+<Tab value="Deadline (NET_TIMEOUT)">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="수동 취소（NET_ABORTED）">
+<Tab value="Manual cancel (NET_ABORTED)">
 
 <include cwd>examples/http/cancel.ts#example</include>
 

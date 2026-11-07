@@ -1,80 +1,36 @@
 ---
 title: "ETag 條件請求"
-description: 將 304 視為 HTTP 狀態錯誤處理；將快取 Map 保留在操作呼叫外圍的應用程式程式碼中。
+description: 把 304 當成 HTTP 狀態 fault 處理；把快取 Map 留在操作呼叫之外。
 ---
 
-# 搭配 ETag 與 304 進行快取重新驗證
+# 搭配 ETag 與 304 重新驗證
 
-在 Defjs 中，只有 `2xx` 回應會走成功分支，因此 `304 Not Modified` 會以 `HTTP_STATUS` 錯誤回傳。在 `defineRequest` 上保持 `error` 未宣告狀態，這樣完全不會讀取空內容的 `304` 本文，並在圍繞該操作呼叫的應用程式包裝函式中維護你的 `Map` 快取：
+在 Defjs 中，只有 `2xx` 回應會走成功分支，因此 `304 Not Modified` 會以 `HTTP_STATUS` fault 送達。請在 `defineRequest` 上不宣告 `error`，讓空的 `304` 本文永遠不會被讀取，並把 `Map` 快取留在操作呼叫外圍的應用程式包裝函式中：
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
   <Tab value="sdk/catalog.ts">
-```ts
-import { defineRequest, struct, type Infer } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/sdk/catalog.ts#example
+</include>
 
-export const Product = struct.object({
-  sku: struct.string(),
-  name: struct.string(),
-  priceCents: struct.number(),
-});
-
-export type Product = Infer<typeof Product>;
-
-export const readProduct = defineRequest({
-  method: "GET",
-  path: "/catalog/:sku",
-  input: struct.object({
-    sku: struct.string(),
-    etag: struct.string().optional(),
-  }),
-  builder: (input) => ({
-    path: { sku: input.sku },
-    headers: { "If-None-Match": input.etag },
-  }),
-  output: Product,
-});
-```
   </Tab>
   <Tab value="app/reader.ts">
-```ts
-import type { DerivableClient } from "@defjs/core";
-import { readProduct, type Product } from "../sdk/catalog.ts";
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/reader.ts#example
+</include>
 
-export function createReader(client: DerivableClient) {
-  const cache = new Map<string, { etag: string; product: Product }>();
-
-return async (sku: string): Promise<Product> => {
-const cached = cache.get(sku);
-const [error, product, response] = await readProduct(client, {
-sku,
-etag: cached?.etag,
-});
-
-    if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
-      return cached.product;
-    }
-    if (error) throw error;
-
-    const etag = response.headers.get("etag");
-    if (!etag) throw new Error("missing ETag");
-    cache.set(sku, { etag, product });
-    return product;
-
-};
-}
-
-````
   </Tab>
   <Tab value="etag-cache.ts">
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
 ```txt
 Flask
-````
+```
 
-- 在檢查 `304` 之後執行的 `if (error) throw error` 是回傳 `Promise<Product>` 的 `createReader` 函式所設定的明確邊界。
-- 絕不要在攔截器內部將 `304` 改寫為偽造的 `200` 回應；請將快取狀態保留在圍繞操作呼叫的應用程式程式碼中。請參閱 [HTTP 請求](/zh-Hant-TW/docs/http)。
+- 在 `304` 檢查之後的 `if (error) throw error` 是一項明確的決策：`createReader` 回傳 `Promise<Product>`，所以其他 fault 一律拋出。
+- 絕不要在攔截器內把 `304` 改寫成合成的 `200`；請把快取狀態留在操作呼叫外圍的應用程式程式碼中。詳見 [HTTP 操作](/zh-Hant-TW/docs/http)。

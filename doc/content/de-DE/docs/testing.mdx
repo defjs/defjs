@@ -5,11 +5,11 @@ description: Teste SDK-Definitionen und Anwendungsrichtlinien offline mit injizi
 
 # Tests
 
-Weil Defjs Operationsdefinitionen sauber von der Client-Ausführung trennt, kannst du deine echten SDK-Definitionen und Anwendungs-Interceptors vollständig offline testen – ganz ohne einen Netzwerkserver zu starten oder interne Bibliotheksfunktionen zu mocken.
+Weil Defjs Operationsdefinitionen sauber von der Client-Ausführung trennt, kannst du deine echten SDK-Operationen und Anwendungs-Interceptors vollständig offline testen – ganz ohne einen Netzwerkserver zu starten oder interne Bibliotheksfunktionen zu mocken.
 
 ## 1. Lokales Transport-Handle injizieren
 
-Nutze `withHTTPHandle`, `withSSEHandle` oder `withWebSocketHandle` an `createClient(...)`, um den zugrundeliegenden Plattform-Transport zu ersetzen. Defjs führt weiterhin die komplette Operationspipeline aus: Input-`struct`-Validierung, `builder`-Mapping, Prüfung der URL-Verzeichnisgrenzen, Interceptors, Status-Dispatching und Response-`struct`-Dekodierung.
+Nutze `withHTTPHandle`, `withSSEHandle` oder `withWebSocketHandle` an `createClient(...)`, um den zugrundeliegenden Plattform-Transport zu ersetzen. Defjs führt weiterhin die komplette Operationspipeline aus: Input-`struct`-Validierung, `builder`-Mapping, Prüfung der URL-Verzeichnisgrenzen, Interceptors, Status-Dispatch und Response-`struct`-Dekodierung.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
@@ -30,7 +30,7 @@ Nutze `withHTTPHandle`, `withSSEHandle` oder `withWebSocketHandle` an `createCli
 
 ## 2. Best Practices für Tests
 
-### Das Error-first-Tupel asserten, nicht interne Details
+### Das Error-first-Tupel prüfen, nicht interne Details
 
 Rufe stets die exportierte SDK-Operation mit deinem Test-Client auf und prüfe das zurückgegebene `[error, data, response]`-Tupel:
 
@@ -43,13 +43,13 @@ Erstelle innerhalb deiner `withHTTPHandle(async (input, init) => ...)`-Funktion 
 
 ### Zeit deterministisch mit Fake-Timern steuern
 
-Für Interceptor-Retry-Backoff, SSE-/WebSocket-Reconnect-Verzögerungen oder WebSocket-Heartbeats nutze in Vitest `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`. Diese Fake-Timer schieben die native `AbortSignal.timeout`-Uhr nicht vor. Für eine deterministische Request-Frist in Vitest brich einen `AbortController` aus einem gesteuerten `setTimeout` mit dem Grund `TimeoutError` ab:
+Für Interceptor-Retry-Backoff, SSE-/WebSocket-Reconnect-Verzögerungen oder WebSocket-Heartbeats nutze in Vitest `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`. Diese Fake-Timer verändern die native `AbortSignal.timeout`-Uhr nicht. Für eine deterministische Request-Frist in Vitest brich einen `AbortController` aus einem gesteuerten `setTimeout` mit dem Grund `TimeoutError` ab:
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-In Bun Test nutze `jest.useFakeTimers()` und `jest.advanceTimersByTime()`; Buns Fake-Timer steuern auch `AbortSignal.timeout`. Nimm nicht an, dass die Runner dieselben nativen Uhren steuern. Stelle die Zeit erst vor, nachdem die erwartete Phase gestartet wurde, asserte Zustandsübergänge oder Versuchszähler statt vergangener Wanduhrzeit, und stelle nach jedem Test die echten Timer wieder her.
+In Bun Test nutze `jest.useFakeTimers()` und `jest.advanceTimersByTime()`; Buns Fake-Timer steuern auch `AbortSignal.timeout`. Nimm nicht an, dass die Runner dieselben nativen Uhren steuern. Spule die Timer erst vor, nachdem die erwartete Phase begonnen hat, prüfe Zustandsübergänge oder Versuchszähler statt vergangener Wanduhrzeit, und stelle nach jedem Test die echten Timer wieder her.
 
 ## Weiterführende Links
 

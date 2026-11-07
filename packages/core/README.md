@@ -10,7 +10,7 @@ Design reusable HTTP, SSE, and WebSocket APIs as data, then execute them with an
 bun add @defjs/core
 ```
 
-The package is ESM and declares no runtime dependencies. Declarations target `ES2022` with `ESNext.Disposable`, `DOM`, and `DOM.Iterable`; those entries supply types only, not polyfills. Defjs is pre-1.0, so use the documentation for the exact version you installed.
+The package is ESM and declares no runtime dependencies. Declarations target `ESNext`, whose lib set includes `ESNext.Disposable`, plus `DOM` and `DOM.Iterable`; those entries supply types only, not polyfills. Because Defjs is pre-1.0, consult the documentation for the version you installed.
 
 ## Quick start
 

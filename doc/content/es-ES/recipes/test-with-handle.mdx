@@ -3,20 +3,22 @@ title: "Pruebas HTTP locales"
 description: Sustituye Fetch en un cliente con withHTTPHandle y deja la operación igual.
 ---
 
-# Probar con un manejador Fetch local
+# Probar con un handle Fetch local
 
 `withHTTPHandle(...)` sustituye la función subyacente `fetch` para una instancia concreta de cliente mientras ejercita toda la canalización de Defjs —validación de entrada, mapeo en `builder`, resolución de URLs, interceptores, clasificación por código de estado y decodificación con Struct— sin necesidad de abrir ningún socket de red:
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Demostración en un solo archivo"]}>
   <Tab value="sdk/orders.ts">
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="test/orders.spec.ts">
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="Single-file demonstration">
 Esto es una demostración autónoma de un solo archivo, no una spec de un ejecutor de pruebas. Para aserciones contra la definición compartida del SDK, usa la pestaña de prueba anterior.
@@ -24,6 +26,7 @@ Esto es una demostración autónoma de un solo archivo, no una spec de un ejecut
 <include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -33,4 +36,4 @@ La demostración de un solo archivo imprime:
 paid 200
 ```
 
-En producción, pasa un cliente configurado con `withEndpoint(...)` exactamente a la misma definición de `getOrder`. Consulta [Pruebas](/es-ES/docs/testing) y [Cliente](/es-ES/docs/client).
+En producción, llama a la misma operación `getOrder` con un cliente configurado con `withEndpoint(...)`. Consulta [Pruebas](/es-ES/docs/testing) y [Cliente](/es-ES/docs/client).

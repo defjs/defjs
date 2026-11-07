@@ -1,62 +1,30 @@
 ---
 title: "GraphQL 請求"
-description: GraphQL 保持 HTTP 200 加 application unwrap；Core 唔 ship GraphQL protocol。
+description: 將 GraphQL 當成 HTTP 200 加應用程式自行解包；Core 唔會內建 GraphQL 協議。
 ---
 
 # 解包 GraphQL HTTP Envelope
 
-Defjs 核心並唔內建 GraphQL client 或專屬嘅 `errorPolicy`。你可以將基於 HTTP 嘅 GraphQL 當成一般標準 `POST` 操作嚟建模，由 `builder` 發送 `{ query, operationName, variables }`。喺 Envelope Struct 上將 `data` 標記為 `.nullish()`，令省略 `data` 或回傳 `data: null` 都可以順利通過結構驗證，然後喺應用程式嘅輔助函式入面解包 `errors[]`：
+Defjs 並唔內建 GraphQL client 或者 `errorPolicy`。你可以將基於 HTTP 嘅 GraphQL 當成一般標準 `POST` 操作嚟建模，由 `builder` 發送 `{ query, operationName, variables }`。喺 Envelope Struct 上將 `data` 標記為 `.nullish()`，令省略 `data` 或回傳 `data: null` 都可以順利通過結構驗證，然後喺應用程式嘅輔助函式入面解包 `errors[]`：
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
   <Tab value="sdk/viewer.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
+</include>
 
-const VIEWER_QUERY = "query Viewer { viewer { id login } }" as const;
-
-export const runViewer = defineRequest({
-  method: "POST",
-  path: "/graphql",
-  builder: () => ({
-    body: { query: VIEWER_QUERY, operationName: "Viewer" },
-  }),
-  output: struct.object({
-    data: struct
-      .object({
-        viewer: struct
-          .object({ id: struct.string(), login: struct.string() })
-          .null(),
-      })
-      .nullish(),
-    errors: struct
-      .array(struct.object({ message: struct.string() }))
-      .optional(),
-  }),
-});
-```
   </Tab>
   <Tab value="app/load-viewer.ts">
-```ts
-import type { Client } from "@defjs/core";
-import { runViewer } from "../sdk/viewer.ts";
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
+</include>
 
-export async function loadViewer(client: Client) {
-  const [error, result] = await runViewer(client);
-  if (error) throw error;
-  if (result.errors?.length) {
-    throw new Error(result.errors.map((item) => item.message).join("; "));
-  }
-  if (!result.data) {
-    throw new Error("GraphQL response contained neither data nor errors");
-  }
-  return result.data.viewer;
-}
-```
   </Tab>
   <Tab value="graphql-viewer.ts">
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -65,4 +33,4 @@ ada viewer unavailable viewer unavailable
 ```
 
 - HTTP `200` 淨係代表 GraphQL envelope 完整送達。`errors[]` 入面嘅業務錯誤（就算同時伴隨 `data: null`）屬於應用層嘅結果，而唔係 `RES_STRUCT_MISMATCH` fault。
-- 關於點解特定協議嘅 envelope 應該留喺使用者自訂輔助函式處理，請參閱[核心架構](/zh-Hant-HK/docs/design-decisions)。
+- 關於點解特定協議嘅 envelope 應該留喺應用程式輔助函式處理，請參閱[核心架構](/zh-Hant-HK/docs/design-decisions)。

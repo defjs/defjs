@@ -9,31 +9,24 @@ Defjs is built around one foundational boundary: **an SDK defines the wire contr
 
 ## 1. Definition vs. execution
 
-An SDK package exports operations (`defineRequest`, `defineEventStream`, `defineWebSocket`) and data contracts (`struct`). It never calls `createClient`, stores a singleton client, or reads environment variables.
+An SDK package exports operations (created with `defineRequest`, `defineEventStream`, and `defineWebSocket`) and data contracts (`struct`). It never calls `createClient`, stores a singleton client, or reads environment variables.
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -44,8 +37,8 @@ export const getOrder = defineRequest({
 
 Because `getOrder` captures no client state:
 
-- A browser UI, a background job, an SSR request handler, and a unit test can call the same `getOrder` definition with different `Client` configurations.
-- Framework plugins (`@defjs/react`, `@defjs/vue`) and observability middleware (`@defjs/opentelemetry-server`) attach to the application's `Client`, keeping the published SDK package 100% dependency-free.
+- A browser UI, a background job, an SSR request handler, and a unit test can call the same `getOrder` operation with different `Client` configurations.
+- Framework plugins (`@defjs/react`, `@defjs/vue`) and the observability middleware plugin (`@defjs/opentelemetry-server`) attach to the application's `Client`, keeping the published SDK package 100% dependency-free.
 
 ## 2. Explicit input placement and bidirectional aliases
 
@@ -104,7 +97,7 @@ All three transports return a three-item error-first tuple instead of throwing a
 - **SSE** → `[error, stream, open]` — `EventStreamHandle` + initial handshake snapshot.
 - **WebSocket** → `[error, session, connection]` — `WebSocketSession` + initial connection snapshot.
 
-Clients carry configuration, not active connections. The caller that starts an HTTP request, SSE stream, or WebSocket session owns cancelling or closing it (`AbortSignal` for HTTP; `await using` or `.close()` + `await .closed` for SSE and WebSocket).
+Clients carry configuration, not active connections. The caller that starts an HTTP request, SSE stream, or WebSocket session owns canceling or closing it (`AbortSignal` for HTTP; `await using` or `.close()` + `await .closed` for SSE and WebSocket).
 
 ## Related reading
 

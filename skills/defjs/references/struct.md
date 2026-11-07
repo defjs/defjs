@@ -43,10 +43,10 @@ type Order = Infer<typeof Order>;
 
 Every struct supports chainable methods:
 
-- `.optional()` — allows `undefined` or an omitted property.
-- `.null()` / `.nullable()` — allows `null`.
-- `.nullish()` — allows `null`, `undefined`, or an omitted property.
-- `.alias(wireName)` — maps the TypeScript property name (logical key) to `wireName` on the wire.
+- `.optional()`—allows `undefined` or an omitted property.
+- `.null()` / `.nullable()`—allows `null`.
+- `.nullish()`—allows `null`, `undefined`, or an omitted property.
+- `.alias(wireName)`—maps the TypeScript property name (logical key) to `wireName` on the wire.
 
 | Boundary                                                      | Key used                                                               |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------- |

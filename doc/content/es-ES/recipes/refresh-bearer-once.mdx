@@ -5,82 +5,33 @@ description: Adjunta Authorization y reintenta una vez dentro de un interceptor;
 
 # Renovar un token Bearer tras un 401
 
-En Defjs, `next(request)` invoca el resto de la cadena de interceptores hacia adentro; no vuelve a despachar desde el interceptor más externo. Ubica la asignación del token, la desduplicación de peticiones de renovación simultáneas (_single-flight_) y el reintento único tras `401` dentro de **un único** interceptor HTTP, de modo que los interceptores externos de registro o métricas no se ejecuten dos veces:
+En Defjs, `next(request)` invoca el resto de la cadena de interceptores hacia adentro; no vuelve a despachar desde el interceptor más externo. Ubica la asignación del token, la desduplicación de renovaciones simultáneas (_single-flight_) y el reintento único tras `401` dentro de **un único** interceptor HTTP, de modo que los interceptores externos de registro o de medición de tiempos no se ejecuten dos veces:
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
   <Tab value="sdk/billing.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
+</include>
 
-export const getInvoice = defineRequest({
-  method: "GET",
-  path: "/v1/invoice",
-  output: struct.object({ total: struct.number() }),
-  error: struct.object({ code: struct.literal("expired_token") }),
-});
-```
   </Tab>
   <Tab value="app/auth-interceptor.ts">
-```ts
-import { createHttpInterceptor } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
 
-export type Credential = { accessToken: string };
-
-export function refreshingBearer(
-  read: () => Credential,
-  refresh: (stale: Credential) => Promise<Credential>,
-) {
-  let flight: Promise<Credential> | undefined;
-
-return createHttpInterceptor(async (request, next) => {
-const authorize = (credential: Credential) => {
-const headers = new Headers(request.headers);
-headers.set("authorization", `Bearer ${credential.accessToken}`);
-return { ...request, headers };
-};
-
-    const used = read();
-    const response = await next(authorize(used));
-    const body = response.body;
-    if (
-      (typeof ReadableStream !== "undefined" &&
-        request.body instanceof ReadableStream) ||
-      response.status !== 401 ||
-      typeof body !== "object" ||
-      body === null ||
-      !("code" in body) ||
-      body.code !== "expired_token"
-    ) {
-      return response;
-    }
-
-    const current = read();
-    if (current.accessToken !== used.accessToken) {
-      return next(authorize(current));
-    }
-
-    flight ??= refresh(used).finally(() => {
-      flight = undefined;
-    });
-    const refreshed = await flight;
-    return next(authorize(refreshed));
-
-});
-}
-
-````
   </Tab>
   <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
 ```txt
 42
-````
+```
 
-Un cuerpo que puede reenviarse no equivale a una operación de negocio repetible. Este interceptor también reenvía un `POST` JSON tras un 401 coincidente: dos entregas HTTP, primero rechazada y después aceptada. Úsalo para escrituras solo cuando la autenticación rechace la primera entrega antes de ejecutar el manejador de negocio; conserva una clave de idempotencia estable entre ambas entregas y usa desduplicación en el servidor. Si ese contrato no está disponible, devuelve el 401 en lugar de repetir automáticamente la escritura. El ejemplo completo no repite un cuerpo de petición `ReadableStream`.
+Un cuerpo que puede reenviarse no equivale a una operación de negocio repetible. Este interceptor también reenvía un `POST` JSON tras un 401 coincidente: dos entregas HTTP, primero rechazada y después aceptada. Úsalo para escrituras solo cuando la autenticación rechace la primera entrega antes de ejecutar el gestor de negocio; conserva una clave de idempotencia estable entre ambas entregas y usa desduplicación en el servidor. Si ese contrato no está disponible, devuelve el 401 en lugar de repetir automáticamente la escritura. El ejemplo completo no repite un cuerpo de petición `ReadableStream`.
 
-Consulta [Middleware e interceptores](/es-ES/docs/interceptors) para conocer el orden de capas y los límites de reintentos.
+Consulta [Interceptores](/es-ES/docs/interceptors) para conocer el orden de capas y los límites de reintentos.

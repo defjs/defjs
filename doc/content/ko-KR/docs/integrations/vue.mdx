@@ -13,7 +13,7 @@ bun add @defjs/core @defjs/vue vue
 
 ## `@defjs/vue`의 역할 vs. 애플리케이션의 역할
 
-- **`@defjs/vue`가 제공하는 것**: `createClientPlugin(client)`, `HTTP_CLIENT` (`InjectionKey<Client>`), `injectClient(key?)`.
+- **`@defjs/vue`가 제공하는 것**: `createClientPlugin(client)`, `HTTP_CLIENT` (`InjectionKey<DerivableClient>`), `injectClient(key?)`.
 - **애플리케이션이 소유하는 것**: [`DerivableClient`](/ko-KR/api/core/derivableclient-type) 생성, watcher(`onCleanup`)나 composable(`onScopeDispose`)에서의 진행 중인 작업 취소, SSE/WebSocket 핸들 닫기, Vue Query 등 쿼리 라이브러리 연동.
 - **중요**: `injectClient()`는 함수 객체인 `DerivableClient`를 반환합니다. 작업이 실행되는 위치에서 `client({ signal })`을 호출하세요(`getOrder(client({ signal }), input)`). Vue는 함수 인자를 반응형 getter로 취급하므로, `client`를 `watch(client, ...)`의 첫 번째 인자나 `computed(client)`에 직접 전달해서는 절대 안 됩니다.
 
@@ -28,9 +28,11 @@ bun add @defjs/core @defjs/vue vue
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
+
   </Tab>
   <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
+
   </Tab>
 </Tabs>
 
@@ -54,14 +56,13 @@ Vue의 네이티브 `provide(HTTP_CLIENT, childClient)`를 사용하여 특정 �
 
 ## 3. 스코프 해제 시 SSE 및 WebSocket 스트림 정리
 
-watcher 외부의 composable이나 컴포넌트 내부에서 시작된 작업의 경우, `AbortController`를 `onScopeDispose`와 함께 사용하세요. 시작 단계를 abort하고, 스코프 해제 후에 확인된 핸들을 닫아주며, 단일 비동기 이터레이터를 소비하고 `.closed`를 await하세요:
+watcher 외부의 composable이나 컴포넌트 내부에서 시작된 작업의 경우, `AbortController`를 `onScopeDispose`와 함께 사용하세요. 시작 단계를 abort하고, 스코프 해제 후에 resolve되는 핸들은 닫아주며, 단일 비동기 이터레이터를 소비하고 `.closed`를 await하세요:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
-- 튜플의 오류 분기는 HTTP 503을 포함한 초기 핸드셰이크 실패를 표시합니다. 이터레이터의 `catch`는 시작 후 실패를 표시하며, `finally` 블록은 여전히 스트림을 닫고 종료를 기다립니다.
-
+- 튜플의 오류 분기는 HTTP 503을 포함한 초기 핸드셰이크 실패를 표시합니다. 이터레이터의 `catch`는 시작 후 실패를 표시하며, `finally` 블록은 여전히 스트림을 닫고 `.closed`를 await합니다.
 - 스코프가 중지되면 SSE의 `for await` 루프는 정상적으로 종료됩니다.
-- WebSocket 세션을 abort하면 세션이 `aborted` 상태로 종료되고 `session.receive`가 `AbortError`로 reject되므로, 스코프 해제 후 `catch` 블록을 방어하고 `finally`에서 `onStateChange` / `onRuntimeError` 리스너를 구독 해제하세요.
+- WebSocket 세션을 abort하면 세션이 `aborted` 상태로 종료되고 `session.receive`가 `AbortError`로 reject되므로, 스코프 해제 후에는 `catch` 블록에서 정리 상태를 걸러내고 `finally`에서 `onStateChange` / `onRuntimeError` 리스너를 구독 해제하세요.
 
 ---
 
@@ -79,8 +80,8 @@ watcher 외부의 composable이나 컴포넌트 내부에서 시작된 작업의
   examples/vue/exports.ts#example
 </include>
 
-- `HTTP_CLIENT` — 네이티브 `provide` / `inject`를 위한 `InjectionKey<Client>`.
+- `HTTP_CLIENT` — 네이티브 `provide` / `inject`를 위한 `InjectionKey<DerivableClient>`.
 - `createClientPlugin(client)` — `HTTP_CLIENT` 아래에 `client`를 제공하는 Vue `Plugin`.
 - `injectClient(key?)` — `key`(기본값 `HTTP_CLIENT`)에 해당하는 가장 가까운 클라이언트를 조회.
-- 관련 가이드: [Client](/ko-KR/docs/client), [HTTP 요청](/ko-KR/docs/http), [미들웨어](/ko-KR/docs/interceptors), [SSE 이벤트 스트림](/ko-KR/docs/sse), [WebSocket 세션](/ko-KR/docs/web-socket).
+- 관련 가이드: [Client](/ko-KR/docs/client), [HTTP 작업](/ko-KR/docs/http), [인터셉터](/ko-KR/docs/interceptors), [SSE 이벤트 스트림](/ko-KR/docs/sse), [WebSocket 세션](/ko-KR/docs/web-socket).
 - 관련 레시피: [선언된 404 처리](/ko-KR/recipes/get-declared-404), [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http), [SSE 이벤트 소비](/ko-KR/recipes/consume-sse), [WebSocket 세션 관리](/ko-KR/recipes/websocket-session).

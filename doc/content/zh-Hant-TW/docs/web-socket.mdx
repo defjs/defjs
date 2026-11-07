@@ -1,77 +1,29 @@
 ---
 title: "WebSocket 工作階段"
-description: 在 SDK 中定義 WebSocket 訊息通訊契約，由應用程式端控管連線設定與工作階段生命週期。
+description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連線設定與工作階段生命週期。
 ---
 
 # WebSocket 工作階段
 
-`defineWebSocket` 用於在 SDK 中宣告雙向 WebSocket 契約：包含路徑模板、選用的 `input` 與 `builder`（僅限 `path` 與 `query`）、`incoming` 與 `outgoing` 訊息 struct、佇列大小邊界以及靜態子協定。取用端應用程式則在 Client 上設定心跳機制、斷線重連以及生命週期清理。
+`defineWebSocket` 在 SDK 中宣告雙向的 WebSocket 契約：路徑模板、選用的 `input` 與 `builder`（僅限 `path` 與 `query`）、`incoming` 與 `outgoing` 訊息 struct、佇列上限，以及靜態子協定。取用端應用程式則在自己的 Client 上設定心跳、重連與生命週期清理。
 
 ## 1. 定義契約並執行工作階段
 
-在 `incoming` 或 `outgoing` 上使用 `struct.discriminatedUnion(...)` 為多種封包型別建立模型。釋放回傳的 `WebSocketSession` 時，可以使用 `await using` 或明確呼叫 `session.close()` + `await session.closed`：
+用 `struct.discriminatedUnion(...)` 在 `incoming` 或 `outgoing` 上建立多種訊框型別。回傳的 `WebSocketSession` 要用 `await using` 釋放，或明確呼叫 `session.close()` + `await session.closed`：
 
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
 <Tab value="sdk/ticks-socket.ts">
 
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
-
-export const TickFrame = struct.discriminatedUnion("type", [
-  struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  struct.object({
-    type: struct.literal("subscribed"),
-    symbol: struct.string(),
-  }),
-]);
-
-export const SubscribeCommand = struct.object({
-  type: struct.literal("subscribe"),
-  symbol: struct.string(),
-});
-
-export const openTicker = defineWebSocket({
-  path: "/market/ws",
-  operation: "market.ticker",
-  incoming: TickFrame,
-  outgoing: SubscribeCommand,
-  maxIncomingQueueSize: 64,
-});
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
 
 </Tab>
 <Tab value="app/session.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { openTicker } from "../sdk/ticks-socket.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, session] = await openTicker(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = session;
-  active.send({ type: "subscribe", symbol: "ACME" });
-
-  for await (const message of active.receive) {
-    if (message.type === "tick") {
-      console.log(message.symbol, message.price);
-      break;
-    }
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -85,8 +37,8 @@ void main();
 
 ## 2. 訊息驗證與方向性規範
 
-- **接收封包（`session.receive`）**：文字、`ArrayBuffer`、型別化陣列以及 `Blob` 封包皆會被解碼為 UTF-8、剖析為 JSON，並對照 `incoming` 進行驗證。格式錯誤的 JSON 或結構不符會回報給 `session.onRuntimeError` 並直接丟棄，而不會中斷工作階段。`session.receive` 屬於單一消費者；重複請求第二個迭代器會拋出 `TypeError`。
-- **發送封包（`session.send(payload)`）**：同步對照 `outgoing` 進行驗證，套用 `.alias()` 與編解碼器，並透過 `JSON.stringify` 序列化。在 `open` 狀態下會立即發送；在 `reconnecting` 重新連線期間會進入佇列緩衝（若 `maxOutgoingQueueSize > 0`）；若負載無效、佇列已滿/停用，或工作階段已關閉，則會同步拋出例外。
+- **接收訊框（`session.receive`）**：文字、`ArrayBuffer`、型別化陣列與 `Blob` 訊框都會以 UTF-8 解碼、剖析為 JSON，再對照 `incoming` 驗證。格式錯誤的 JSON 或 schema 不符會回報給 `session.onRuntimeError` 並直接丟棄，不會關閉工作階段。`session.receive` 是單一消費者；要求第二個迭代器會拋出 `TypeError`。
+- **發送訊框（`session.send(payload)`）**：同步對照 `outgoing` 驗證、套用 `.alias()` 與編解碼器，再以 `JSON.stringify` 序列化。狀態為 `open` 時立即送出；`reconnecting` 期間會排入佇列（若 `maxOutgoingQueueSize > 0`）；若酬載無效、佇列已滿或停用，或工作階段已關閉，則同步拋出例外。
 
 ## 3. 工作階段狀態與觀察者
 
@@ -95,49 +47,49 @@ void main();
 | `state`              | `'idle' \| 'connecting' \| 'open' \| 'reconnecting' \| 'closing' \| 'closed' \| 'aborted' \| 'error'` |
 | `connection`         | 最新實體 Socket 的即時快照（`generation`、`url`、`protocol`、`extensions`）                           |
 | `bufferedAmount`     | 當前實體 Socket 上未傳送的位元組數（未連線時為 `0`）                                                  |
-| `receive`            | 經由驗證的 `incoming` 訊息單一消費者非同步可迭代物件                                                  |
+| `receive`            | 已驗證之 `incoming` 訊息的單一消費者非同步可迭代物件                                                  |
 | `onStateChange(fn)`  | 訂閱狀態轉換事件；回傳 `unsubscribe` 取消訂閱函式                                                     |
-| `onRuntimeError(fn)` | 訂閱連線建立後的封包/剖析錯誤；回傳 `unsubscribe` 取消訂閱函式                                        |
+| `onRuntimeError(fn)` | 訂閱連線建立後的訊框／剖析錯誤；回傳 `unsubscribe` 取消訂閱函式                                       |
 | `closed`             | 解析為最終終結結果的 Promise（`kind: 'closed' \| 'aborted' \| 'error'`）                              |
 
 <include cwd lang="typescript">
   examples/web-socket/state-snapshots.ts#example
 </include>
 
-## 4. 重新連線、心跳檢測與佇列控制
+## 4. 重連、心跳與佇列
 
-重新連線與心跳檢測皆屬於選擇性啟用，可透過 Client 選項（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或單次呼叫的衍生 Client 選項（`client({ reconnect, heartbeat })`）設定：
+重新連線與心跳都需要主動啟用，可透過 Client 選項（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或單次呼叫的衍生 Client 選項（`client({ reconnect, heartbeat })`）設定：
 
-<Tabs items={["重新連線策略", "應用層心跳"]}>
-<Tab value="重新連線策略">
+<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tab value="Reconnect policy">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="應用層心跳">
+<Tab value="Application heartbeat">
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
 </Tab>
 </Tabs>
 
-- **重新連線**：啟用時的預設值為 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線 `open` 都會重設斷線重試預算。`beforeConnect({ attempt, signal })` 會在初始連線與每次重連嘗試之前執行。
-- **交握逾時（`connectTimeoutMs`）**：若有提供，它必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它把從建構到 `open` 的時間加上限，握手之後會被清掉。
-- **心跳檢測**：定期透過 `outgoing` struct 發送 `message()`，並在 `timeoutMs` 內等待符合 `isAck(msg)` 的確認訊框。相符的 ACK 訊框會被心跳監控器消耗，不會轉發至 `session.receive`。未收到 ACK 對邏輯工作階段是致命錯誤：`closed.kind` 為 `"error"`，`closed.cause` 為一般的 `Error("WebSocket heartbeat timeout")`；這不會啟動重連。心跳序列化失敗也會沿著同一致命路徑結束，並保留原始 cause。
-- **佇列邊界**：
-  - `maxIncomingQueueSize`（必填正整數）：同時限制等待解碼的原始訊框與等待消費端的已解碼訊息。溢位會以 `CAP_QUEUE_OVERFLOW` Fault 作為 `closed.cause` 終止工作階段；同一個 cause 會傳給 `onRuntimeError` 並拒絕 `session.receive`。在工作階段開啟期間請持續消費 `session.receive`。
-  - `maxOutgoingQueueSize`（選用非負整數，預設為 `0`）：僅在 `state === 'reconnecting'` 期間緩衝 `session.send()` 呼叫，並在發布下一次 `open` 之前將它們排空發出。
+- **重新連線**：啟用時的預設值為 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線 `open` 都會重設中斷額度。`beforeConnect({ attempt, signal })` 會在初始連線與每次重連嘗試之前執行。
+- **交握逾時（`connectTimeoutMs`）**：有提供時，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制從建構到 `open` 的時間，交握完成後即清除。
+- **心跳**：定期透過 `outgoing` struct 送出 `message()`，並在 `timeoutMs` 內等待符合 `isAck(msg)` 的訊框。符合的 ACK 訊框會被心跳監控器吃掉，不會轉給 `session.receive`。沒收到 ACK 對邏輯工作階段是致命錯誤：`closed.kind` 為 `"error"`，`closed.cause` 是普通的 `Error("WebSocket heartbeat timeout")`；這不會啟動重連。心跳序列化失敗也會走同一條致命路徑，並保留原始的 cause。
+- **佇列上限**：
+  - `maxIncomingQueueSize`（必填的正安全整數）：同時限制等待解碼的原始訊框，以及等待消費端的已解碼訊息。溢位會以 `CAP_QUEUE_OVERFLOW` Fault 作為 `closed.cause` 終止工作階段；同一個 cause 也會傳給 `onRuntimeError`，並讓 `session.receive` 拒絕。工作階段開啟期間請持續消費 `session.receive`。
+  - `maxOutgoingQueueSize`（選用的非負安全整數，預設 `0`）：只在 `state === 'reconnecting'` 時緩衝 `session.send()` 呼叫，並在下一次 `open` 發布前送完。
 
 `shouldReconnect` 會收到原生關閉代碼與 `wasClean`。伺服器可以使用應用程式錯誤碼 `1011` 完成正常的關閉交握，因此 `wasClean === true` 不代表應用程式處理成功。範例明確允許 `1011`；請依照你的通訊協定選擇應用程式代碼，不要只依賴 `!wasClean`。
 
 ## 5. 子協定與身分驗證 [#protocols-and-authentication]
 
-瀏覽器環境中的 WebSocket 不支援在交握期間自訂任意 HTTP 標頭，因此 WebSocket 的 `builder` 函式僅能回傳 `{ path?, query? }`。
+瀏覽器的 WebSocket 不支援任意交握標頭，因此 WebSocket 的 `builder` 只能回傳 `{ path?, query? }`。
 
-- **子協定優先權順序**：`client({ protocols })` 覆蓋 `withWebSocketProtocols(...)`，後者再覆蓋 `defineWebSocket({ protocols })`。
-- **URL 協定轉換**：Defjs 會自動將解析後的端點從 `http:` 轉為 `ws:`，或從 `https:` 轉為 `wss:`。
-- **憑證**：`withCredentials(true)` 僅適用於 Fetch（HTTP/SSE）。請使用 Cookie / Session 機制、子協定或短期連線票證（Ticket）驗證 WebSocket——避免將長期密鑰放入 query string。
-- **`beforeConnect` 不是請求修改器**：輸入剖析、同步純函式 `builder` 與攔截器鏈每次操作只執行一次。如果請求的基礎端點未被攔截器取代，每次重連都會重新選取端點並以該端點重建 URL，但會重用已建構的 path/query 與擷取的協定清單。無論仍使用同一端點或已容錯移轉，URL 都會在該次嘗試的 `beforeConnect` 執行前確定。在 hook 中變更閉包變數、input 或協定陣列，無法為目前交握提供新的票證。同一個工作階段內不支援輪替 URL/子協定憑證；請先取得新憑證，再透過 input 或 Client 設定發起新操作，並負責替代工作階段的清理。
+- **子協定優先順序**：`client({ protocols })` 覆蓋 `withWebSocketProtocols(...)`，後者再覆蓋 `defineWebSocket({ protocols })`。
+- **URL 轉換**：Defjs 會自動把解析後的端點從 `http:` 轉為 `ws:`、從 `https:` 轉為 `wss:`。
+- **憑證**：`withCredentials(true)` 只適用於 Fetch（HTTP/SSE）。WebSocket 請以 Cookie／工作階段策略、子協定或短期的連線票證進行驗證——避免把長期有效的金鑰放進 query string。
+- **`beforeConnect` 不是請求修改器**：輸入解析、同步純函式 `builder` 與攔截器鏈，每次操作只執行一次。若請求的基礎端點未被攔截器取代，每次重連都會重新選取端點，並以該端點重建 URL，但會重用已建構的 path/query 與擷取到的協定清單。無論是沿用同一端點或已容錯移轉，URL 都會在該次嘗試執行 `beforeConnect` 之前確定。在 hook 中變更閉包變數、input 或協定陣列，無法為目前的交握換上新票證。同一個工作階段內不支援輪替 URL／子協定憑證；請先取得新憑證，再以 input 或 Client 設定發起新操作，並負責清理被替換的工作階段。
 
 ## 6. 關閉機制與擁有權
 
@@ -147,10 +99,10 @@ void main();
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-一次斷線的重連嘗試耗盡後，工作階段會以 `closed.kind: "error"` 結束，保留原生關閉快照（升級失敗時通常為代碼 `1006`），並以一般傳輸錯誤作為 `closed.cause`；不會提供獨立且穩定的耗盡代碼。當元件或背景 Worker 執行完畢時，務必取消訂閱 `onStateChange` 與 `onRuntimeError` 監聽器。
+一次中斷的重連嘗試用盡後，工作階段會以 `closed.kind: "error"` 結束，`closed.cause` 是一般的傳輸錯誤，並附上原生的關閉快照（升級失敗時通常是代碼 `1006`）；不會另外提供一個穩定的「額度用盡」代碼。元件或背景 Worker 結束時，務必取消訂閱 `onStateChange` 與 `onRuntimeError` 監聽器。
 
 ## 相關閱讀
 
-- [建立 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)
-- [使用 SSE 事件串流](/zh-Hant-TW/recipes/consume-sse)
+- [開啟 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)
+- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
 - [負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)

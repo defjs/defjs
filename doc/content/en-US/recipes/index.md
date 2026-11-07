@@ -3,7 +3,7 @@ title: "Examples"
 description: Build and publish a reusable SDK, then configure authentication, calls, and realtime work in consuming applications.
 ---
 
-Start with [Build and publish an SDK](/recipes/publish-http-sdk) for the end-to-end journey from exported SDK definition to npm package and consuming application. Each recipe below presents an individual operation contract and application policy with multi-file code tabs showing how the SDK definition and application execution modules fit together.
+Start with [Build and publish an SDK](/recipes/publish-http-sdk) for the end-to-end journey from an exported SDK definition to an npm package consumed by an application. Each recipe below pairs one operation contract with the application policy around it, using multi-file code tabs to show how the SDK definition and application execution modules fit together.
 
 ## HTTP
 

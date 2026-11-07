@@ -1,9 +1,9 @@
 ---
-title: "Middleware"
+title: "Interceptores"
 description: Aplica autenticación y políticas de transporte al cliente de la aplicación sin cambiar las definiciones de API de tu SDK.
 ---
 
-# Middleware e interceptores
+# Interceptores
 
 Los interceptores conectan políticas transversales de ejecución —cabeceras de autenticación, firma de peticiones, respuestas inmediatas por mantenimiento o reintentos en lecturas seguras— al `Client` de la aplicación sin modificar las definiciones de operación del SDK.
 
@@ -13,7 +13,7 @@ La validación de entrada y el mapeo en `builder` se ejecutan **antes** de la ca
 
 Cada transporte cuenta con su propia factoría tipada de interceptores (`createHttpInterceptor`, `createSSEInterceptor`, `createWebSocketInterceptor`). Pasa cualquier combinación a `withInterceptors(...)`:
 
-<Tabs items={["Basic setup", "Onion execution order", "Clone & add headers"]}>
+<Tabs items={["Configuración básica", "Orden de ejecución en capas", "Clonar y añadir cabeceras"]}>
 <Tab value="Basic setup">
 
 <include cwd lang="typescript">
@@ -92,6 +92,6 @@ Un interceptor WebSocket puede llamar a `next(req)` **como máximo una vez**. Al
 
 ## Lecturas relacionadas
 
-- [Renovar un token tras 401](/es-ES/recipes/refresh-bearer-once)
+- [Renovar un token Bearer una sola vez tras un 401](/es-ES/recipes/refresh-bearer-once)
 - [Solicitudes condicionales ETag](/es-ES/recipes/etag-revalidate)
 - [OpenTelemetry en el servidor](/es-ES/docs/integrations/opentelemetry-server)

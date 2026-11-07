@@ -43,10 +43,10 @@ Al llamar a `getHealth(client)` se realiza la E/S y se resuelve una tupla con el
 
 ## Elige tu camino
 
-1. **[Inicio rápido](/es-ES/docs/start)** — Define una operación, pruébala sin conexión con un manejador Fetch local y conéctala a un servicio real.
+1. **[Inicio rápido](/es-ES/docs/start)** — Define una operación, pruébala sin conexión con un handle Fetch local y conéctala a un servicio real.
 2. **[Arquitectura central](/es-ES/docs/design-decisions)** — Comprende las seis reglas de decodificación de respuestas, las tuplas de error por delante y la propiedad de los recursos.
 3. **[Definir SDKs](/es-ES/docs/struct)** — Declara contratos de red con [Struct](/es-ES/docs/struct) y exporta operaciones [HTTP](/es-ES/docs/http), [SSE](/es-ES/docs/sse) y [WebSocket](/es-ES/docs/web-socket).
-4. **[Cliente y ejecución](/es-ES/docs/client)** — Configura [Clientes](/es-ES/docs/client), gestiona [Errores](/es-ES/docs/errors) tipados, añade [Middleware](/es-ES/docs/interceptors), configura el [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing) y ejecuta [Pruebas](/es-ES/docs/testing) deterministas.
+4. **[Cliente y ejecución](/es-ES/docs/client)** — Configura [Clientes](/es-ES/docs/client), gestiona [Errores](/es-ES/docs/errors) tipados, añade [Interceptores](/es-ES/docs/interceptors), configura el [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing) y ejecuta [Pruebas](/es-ES/docs/testing) deterministas.
 
 ## Transportes compatibles y tuplas de resultado
 
@@ -78,4 +78,4 @@ Si una petición HTTP falla, la tupla es `[error, undefined, undefined]` porque 
 - [Renovar un token Bearer una sola vez tras un 401](/es-ES/recipes/refresh-bearer-once)
 - [Consumir un flujo SSE](/es-ES/recipes/consume-sse)
 - [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session)
-- [Probar con un manejador Fetch local](/es-ES/recipes/test-with-handle)
+- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)

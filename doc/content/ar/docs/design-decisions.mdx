@@ -5,35 +5,28 @@ description: كيف يجعل الفصل بين تعريفات API وتنفيذ �
 
 # معمارية النواة
 
-تتمحور بنية Defjs حول حد فاصل وجوهري: **تتولى حزمة SDK تعريف العقد البرمجي السلكي؛ بينما يملك التطبيق المستهلك حرية التنفيذ بالكامل.** وكل قاعدة تصميمية في `@defjs/core` تنبثق مباشرة من هذا المبدأ.
+تتمحور بنية Defjs حول حد فاصل وجوهري: **تعرّف حزمة SDK العقد السلكي؛ بينما يملك التطبيق المستهلك التنفيذ.** وكل قاعدة تصميمية في `@defjs/core` تنبثق مباشرة من هذا المبدأ.
 
 ## 1. التعريف مقابل التنفيذ
 
 تصدّر حزمة SDK العمليات البرمجية (`defineRequest` و`defineEventStream` و`defineWebSocket`) وعقود البيانات (`struct`). وهي لا تستدعي أبداً `createClient`، ولا تحتفظ بعميل عام وحيد (singleton)، ولا تقرأ متغيرات البيئة.
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -45,13 +38,13 @@ export const getOrder = defineRequest({
 نظراً لأن العملية `getOrder` لا تلتقط أي حالة عميل:
 
 - يمكن لواجهة متصفح، ومهمة خلفية مجدولة، ومعالج طلبات SSR، واختبار وحدة، استدعاء نفس تعريف `getOrder` تماماً بإعدادات `Client` متباينة تناسب كل بيئة.
-- ترتبط إضافات أطر العمل (`@defjs/react` و`@defjs/vue`) ووسائط المراقبة والقياس (`@defjs/opentelemetry-server`) بعميل التطبيق المستهلك مباشرة، مما يحافظ على حزمة SDK المنشورة خالية 100% من أي اعتماديات خارجية.
+- ترتبط إضافات أطر العمل (`@defjs/react` و`@defjs/vue`) وإضافة البرمجيات الوسيطة للمراقبة والقياس (`@defjs/opentelemetry-server`) بعميل التطبيق المستهلك مباشرة، مما يحافظ على حزمة SDK المنشورة خالية 100% من أي اعتماديات خارجية.
 
 ## 2. موضع المدخلات الصريح والأسماء البديلة ثنائية الاتجاه
 
 في Defjs، يعلن `input` عما يمرره المستدعي، ويتحكم `struct` في كيفية ترميز وفك ترميز القيم، وتضع دالة `builder` كل قيمة في موضعها الصحيح من الطلب (`path`، و`query`، و`headers`، و`body`).
 
-- **لا استنتاج سحري ولا تخمين**: إذا أعلنت العملية عن `input`، يجب عليها تقديم دالة `builder` صريحة وتزامنية ونقية. ولا يتم أبداً تخمين موضع الحقل في الطلب بناءً على اسمه.
+- **لا استنتاج تلقائي**: إذا أعلنت العملية عن `input`، يجب عليها تقديم دالة `builder` صريحة وتزامنية ونقية. ولا يتم أبداً تخمين موضع الحقل في الطلب بناءً على اسمه.
 - **أسماء بديلة ثنائية الاتجاه عبر `.alias(wireName)`**: يتيح الإعلان عن `.alias("customer_name")` في حقل المخطط الإبقاء على اسم `customerName` داخل TypeScript مع التحويل التلقائي من وإلى `"customer_name"` عبر الشبكة.
 
 <include cwd lang="typescript">
@@ -60,7 +53,7 @@ export const getOrder = defineRequest({
 
 عندما تمرر دالة `builder` كائن struct ذي نوع محدد إلى `body` أو `query` أو `headers`، تُطبّق الأسماء البديلة للحقول ومحولات `Date` و`bigint` تلقائياً. أما المفاتيح التي تكتبها في كائن مجهول يدوياً (مثل `account_id` أو `x-api-version` أعلاه) فتبقى حرفية كما هي.
 
-## 3. الإعلان بمثابة توكيد حازم [#declaration-is-an-assertion]
+## 3. الإعلان توكيد [#declaration-is-an-assertion]
 
 تحكم ست قواعد صارمة كيفية قراءة Defjs لاستجابات HTTP:
 
@@ -98,7 +91,7 @@ export const getOrder = defineRequest({
 
 ## 4. مصفوفات نتائج مخصصة لكل وسيلة نقل
 
-تُرجع جميع وسائل النقل الثلاث مصفوفة بنمط الخطأ أولاً بدلاً من إلقاء استثناءات (exceptions) في مكان الاستدعاء:
+تُرجع جميع وسائل النقل الثلاث مصفوفة الخطأ أولاً بدلاً من إلقاء استثناءات (exceptions) في مكان الاستدعاء:
 
 - **HTTP** ← `[error, data, response]` — الحمولة المفكوكة + `DecodedResponse<T>` (`HttpMeta` عند إغفال `output`).
 - **SSE** ← `[error, stream, open]` — مقبض `EventStreamHandle` + لقطة مصافحة الاتصال الأولية.

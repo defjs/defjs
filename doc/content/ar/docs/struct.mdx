@@ -1,9 +1,9 @@
 ---
-title: "بنى البيانات / Struct"
+title: "Struct والمخططات"
 description: حدّد عقود المدخلات والاستجابات التي تشاركها حزمة SDK مع مستهلكيها، مع دعم الأنواع والتحقق وقت التشغيل.
 ---
 
-# بنى البيانات / Struct والمخططات
+# Struct والمخططات
 
 يعلن `struct` عن عقد البيانات السلكي المشترك بين حزمة SDK ومستهلكيها: مدخلات المستدعي، ومخرجات النجاح `2xx`، وأخطاء الخدمة المعلنة، وأحداث SSE، وإطارات WebSocket.
 
@@ -12,24 +12,22 @@ description: حدّد عقود المدخلات والاستجابات التي 
 
 ## 1. تعريف المخطط في SDK، والتحقق في التطبيق
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example

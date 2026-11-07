@@ -16,13 +16,15 @@ SDK на базе Defjs экспортирует чистые определен
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -51,6 +53,7 @@ export { getOrder } from "./orders";
   }
 }
 ```
+
   </Tab>
   <Tab value="tsconfig.json">
 ```json
@@ -66,11 +69,12 @@ export { getOrder } from "./orders";
   "include": ["src/**/*.ts"]
 }
 ```
+
   </Tab>
 </Tabs>
 
 - Пакет `@defjs/core` остаётся внешней runtime-зависимостью (`peerDependency`), разделяемой с использующим приложением.
-- Поле `"sideEffects": false` позволяет бандлерам удалять неиспользуемые эндпоинты с помощью tree-shaking, если приложение импортирует только часть операций.
+- Поле `"sideEffects": false` позволяет бандлерам удалять неиспользуемые операции с помощью tree-shaking, если приложение импортирует только часть из них.
 
 ---
 
@@ -107,13 +111,13 @@ bun add @company/orders-sdk @defjs/core@^0.6.0
 paid
 ```
 
-В продакшен-коде замените относительный импорт `./orders-sdk` на `@company/orders-sdk` и удалите вызов `withHTTPHandle(...)`, чтобы использовать платформенный `fetch`.
+В продакшен-коде замените относительный импорт `./src/orders.ts` на `@company/orders-sdk` и удалите вызов `withHTTPHandle(...)`, чтобы использовать платформенный `fetch`.
 
 ---
 
 ## 4. Тестирование и публикация
 
-Проверьте экспортированные определения с помощью [тестов с хэндлами в памяти](/ru-RU/recipes/test-with-handle), охватывающих маппинг запроса, декодирование `output`, объявленные ошибки `HTTP_STATUS` и отмену. После успешной проверки опубликуйте пакет:
+Проверьте экспортированные определения с помощью [тестов с хэндлами в памяти](/ru-RU/recipes/test-with-handle), охватывающих маппинг запроса, декодирование `output`, объявленные сбои `HTTP_STATUS` и отмену. После успешной проверки опубликуйте пакет:
 
 ```sh
 bun publish --access public

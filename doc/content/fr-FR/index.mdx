@@ -10,7 +10,7 @@ description: Concevoir et publier des SDK TypeScript avec des définitions d'API
 Defjs sépare les deux facettes d'un SDK TypeScript :
 
 - **Définition du SDK (`@defjs/core`)** — Les auteurs de SDK déclarent des opérations typées HTTP, SSE et WebSocket ainsi que leurs schémas `struct`. Une définition est une donnée pure : son importation ne déclenche aucun appel réseau et ne lie aucun client global.
-- **Exécution applicative** — Les applications consommatrices créent leur propre `Client` (`createClient(withEndpoint(...))`), y associent identifiants, intercepteurs et répartiteurs de charge, et transmettent ce client lors de l'appel d'une opération.
+- **Exécution applicative** — Les applications consommatrices créent leur propre `Client` (`createClient(withEndpoint(...))`), y associent identifiants, intercepteurs et répartiteurs, et transmettent ce client lors de l'appel d'une opération.
 
 ## Aperçu rapide : définition de SDK vs exécution applicative
 
@@ -39,11 +39,11 @@ L'appel `getHealth(client)` effectue les E/S et résout un tuple error-first. V�
 | -------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | **Possède**    | Méthode, patron de chemin, schémas `input` / `output` / `error`, projection `builder` et nom d'opération | URL de base, identifiants, intercepteurs d'authentification, répartition de charge, délais d'attente et nettoyage des ressources |
 | **Livre**      | Modules ESM réutilisables et déclarations `.d.ts`                                                        | Configuration du runtime navigateur, serveur ou environnement de test                                                            |
-| **Bénéfice**   | Aucun couplage avec l'environnement ; fonctionne dans le navigateur, en SSR et dans les tests            | Maîtrise totale des tentatives de rejeu, du basculement, de la télémétrie et des cycles de vie                                   |
+| **Bénéfice**   | Aucun couplage avec l'environnement ; fonctionne dans le navigateur, en SSR et dans les tests            | Maîtrise totale des retries, du basculement, de la télémétrie et des cycles de vie                                               |
 
 ## Choisissez votre parcours
 
-1. **[Démarrage rapide](/fr-FR/docs/start)** — Définissez une opération, testez-la hors ligne avec un gestionnaire Fetch local et pointez-la vers un service réel.
+1. **[Démarrage rapide](/fr-FR/docs/start)** — Définissez une opération, testez-la hors ligne avec un handle Fetch local et pointez un client vers un service réel.
 2. **[Architecture du cœur](/fr-FR/docs/design-decisions)** — Comprenez les six règles de décodage des réponses, les tuples error-first et la gestion des ressources.
 3. **[Définir des SDK](/fr-FR/docs/struct)** — Déclarez vos contrats de données avec [Struct](/fr-FR/docs/struct) et exportez des opérations [HTTP](/fr-FR/docs/http), [SSE](/fr-FR/docs/sse) et [WebSocket](/fr-FR/docs/web-socket).
 4. **[Client & exécution](/fr-FR/docs/client)** — Configurez vos [Clients](/fr-FR/docs/client), traitez les [Erreurs](/fr-FR/docs/errors) typées, associez des [Intercepteurs](/fr-FR/docs/interceptors), configurez la [Répartition de charge & basculement](/fr-FR/docs/load-balancing) et lancez des [Tests](/fr-FR/docs/testing) déterministes.
@@ -67,7 +67,7 @@ En cas d'échec HTTP, le tuple est `[error, undefined, undefined]`, car l'objet 
 | `@defjs/core`                 | Définitions de SDK sans dépendance, `struct`, client et intercepteurs  | [Démarrage rapide](/fr-FR/docs/start)                                  |
 | `@defjs/react`                | Injection de contexte `ClientProvider` et `useClient()` pour React 18+ | [Intégration React](/fr-FR/docs/integrations/react)                    |
 | `@defjs/vue`                  | `createClientPlugin`, `HTTP_CLIENT` et `injectClient()` pour Vue 3.2+  | [Intégration Vue](/fr-FR/docs/integrations/vue)                        |
-| `@defjs/opentelemetry-server` | Spans sortantes côté serveur, métriques et journaux de diagnostic      | [Serveur OpenTelemetry](/fr-FR/docs/integrations/opentelemetry-server) |
+| `@defjs/opentelemetry-server` | Spans sortants côté serveur, métriques et journaux de diagnostic       | [Serveur OpenTelemetry](/fr-FR/docs/integrations/opentelemetry-server) |
 
 ## Recettes populaires
 

@@ -1,6 +1,6 @@
 ---
 title: "Consumir eventos SSE"
-description: Abre un stream de eventos tipado, itera una vez, luego cierra y await closed.
+description: Abre un flujo de eventos tipado, itera una vez y luego cierra y espera a closed.
 ---
 
 # Consumir un flujo SSE
@@ -9,51 +9,22 @@ Cada `EventStreamHandle` expone un único iterador asíncrono. Coloca siempre `s
 
 <Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
   <Tab value="sdk/deployments.ts">
-```ts
-import { defineEventStream, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-export const deployEvents = defineEventStream({
-  path: "/deployments/events",
-  events: {
-    line: struct.object({ text: struct.string() }),
-  },
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { deployEvents } from "../sdk/deployments.ts";
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, stream] = await deployEvents(client);
-if (error) {
-console.error(error.code);
-return;
-}
-try {
-for await (const event of stream) {
-if (event.event === "line") {
-console.log(event.data.text);
-break;
-}
-}
-} finally {
-stream.close("consumer-finished");
-await stream.closed;
-}
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="deploy-events.ts">
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -61,7 +32,7 @@ Con un servidor cuyo primer evento sea `line` con datos `{ "text": "build starte
 
 ```txt
 build started
-````
+```
 
 - SSE no se reconecta automáticamente ante fallos de red o de lectura a menos que configures [`withSSEReconnect(...)`](/es-ES/api/core/withssereconnect) en el cliente.
-- Cuando `withSSEReconnect` se habilita con un objeto de opciones, `attempts` se establece por defecto en `3` por interrupción y se reinicia tras un handshake exitoso (`attempts: 0` desactiva la reconexión). Sin un callback `shouldReconnect` personalizado, solo las peticiones `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE` con cuerpos reproducibles se reconectan. Consulta [Flujos de eventos SSE](/es-ES/docs/sse).
+- Cuando se configura `withSSEReconnect(...)`, `attempts` vale `3` por interrupción de forma predeterminada y se reinicia tras un handshake correcto (`attempts: 0` desactiva la reconexión). Sin un callback `shouldReconnect` personalizado, solo se reconectan las peticiones `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`. Una petición con cuerpo `ReadableStream` nunca se reconecta. Consulta [Flujos de eventos SSE](/es-ES/docs/sse).

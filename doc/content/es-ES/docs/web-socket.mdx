@@ -11,67 +11,19 @@ description: Define el contrato de mensajes WebSocket de tu SDK mientras las apl
 
 Modela múltiples tipos de tramas en `incoming` o `outgoing` con `struct.discriminatedUnion(...)`. Libera el `WebSocketSession` devuelto con `await using` o mediante `session.close()` explícito + `await session.closed`:
 
-<Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
+<Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Vista rápida en un solo archivo"]}>
 <Tab value="sdk/ticks-socket.ts">
 
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
-
-export const TickFrame = struct.discriminatedUnion("type", [
-  struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  struct.object({
-    type: struct.literal("subscribed"),
-    symbol: struct.string(),
-  }),
-]);
-
-export const SubscribeCommand = struct.object({
-  type: struct.literal("subscribe"),
-  symbol: struct.string(),
-});
-
-export const openTicker = defineWebSocket({
-  path: "/market/ws",
-  operation: "market.ticker",
-  incoming: TickFrame,
-  outgoing: SubscribeCommand,
-  maxIncomingQueueSize: 64,
-});
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
 
 </Tab>
 <Tab value="app/session.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { openTicker } from "../sdk/ticks-socket.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, session] = await openTicker(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = session;
-  active.send({ type: "subscribe", symbol: "ACME" });
-
-  for await (const message of active.receive) {
-    if (message.type === "tick") {
-      console.log(message.symbol, message.price);
-      break;
-    }
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -108,7 +60,7 @@ void main();
 
 Tanto la reconexión como los latidos (_heartbeat_) son opcionales mediante opciones de cliente (`withWebSocketReconnect`, `withWebSocketHeartbeat`) o derivadas por llamada (`client({ reconnect, heartbeat })`):
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tabs items={["Política de reconexión", "Latido de la aplicación"]}>
 <Tab value="Reconnect policy">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
@@ -121,12 +73,12 @@ Tanto la reconexión como los latidos (_heartbeat_) son opcionales mediante opci
 </Tab>
 </Tabs>
 
-- **Reconexión**: cuando se habilita, los valores por defecto son `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Cada evento físico `open` reinicia el presupuesto de fallos. El callback `beforeConnect({ attempt, signal })` se ejecuta antes de la conexión inicial y de cada intento de reconexión.
+- **Reconexión**: cuando se habilita, los valores por defecto son `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Cada evento físico `open` reinicia el presupuesto de caídas. El callback `beforeConnect({ attempt, signal })` se ejecuta antes de la conexión inicial y de cada intento de reconexión.
 - **Tiempo límite del handshake (`connectTimeoutMs`)**: cuando se proporciona, debe ser finito, positivo y no mayor que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`. Acota la construcción hasta `open` y se borra después del handshake.
 - **Latidos (_heartbeat_)**: Envía periódicamente `message()` a través del struct `outgoing` y espera hasta `timeoutMs` por una trama que coincida con `isAck(msg)`. Las tramas de confirmación coincidentes son consumidas por el monitor de latidos y no se transmiten a `session.receive`. Perder una confirmación es fatal para la sesión lógica: `closed.kind` es `"error"` y `closed.cause` es el `Error("WebSocket heartbeat timeout")` ordinario; no inicia una reconexión. Los fallos de serialización del heartbeat siguen la misma ruta fatal con su causa original.
 - **Límites de cola**:
   - `maxIncomingQueueSize` (entero positivo requerido): Limita tanto las tramas en bruto pendientes de decodificación como los mensajes decodificados pendientes del consumidor. Un desbordamiento termina la sesión con un Fault `CAP_QUEUE_OVERFLOW` como `closed.cause`; la misma causa se envía a `onRuntimeError` y rechaza `session.receive`. Mantén el consumo activo de `session.receive` mientras la sesión esté abierta.
-  - `maxOutgoingQueueSize` (entero no negativo opcional, por defecto `0`): almacena llamadas de `session.send()` únicamente mientras `state === 'reconnecting'` y las vacía antes de emitir el siguiente `open`.
+  - `maxOutgoingQueueSize` (entero no negativo opcional, por defecto `0`): guarda en búfer las llamadas de `session.send()` únicamente mientras `state === 'reconnecting'` y las vacía antes de emitir el siguiente `open`.
 
 `shouldReconnect` recibe el código de cierre nativo y `wasClean`. Un servidor puede completar un handshake de cierre limpio con el código de error de aplicación `1011`, así que `wasClean === true` no significa que la aplicación haya tenido éxito. El ejemplo permite explícitamente `1011`; elige los códigos de aplicación según tu protocolo en lugar de depender solo de `!wasClean`.
 

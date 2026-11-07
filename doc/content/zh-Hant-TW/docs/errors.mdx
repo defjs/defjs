@@ -5,7 +5,7 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 
 # 錯誤處理
 
-在 Defjs 中，請求、傳輸層與解碼錯誤都不會在呼叫處拋出例外。每項操作都會回傳一個 error-first tuple（`[error, ...]`），其中 `error` 若非 `null`，就是一個具型別的 `Fault` 物件（由 `error.code` 鑑別的原生 `Error` 實例）。
+在 Defjs 中，請求、傳輸與解碼失敗都不會在呼叫端拋出例外。每項操作都會回傳 error-first tuple（`[error, ...]`），其中 `error` 不是 `null`，就是具型別的 `Fault`（以 `error.code` 區分的原生 `Error` 實例）。
 
 ## 1. 在 SDK 宣告服務錯誤，在應用程式中進行分類處理
 
@@ -35,11 +35,11 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 
 ### 為什麼 HTTP 失敗時 `error` 會包含回應中繼資料
 
-在 HTTP 失敗時，回傳的 tuple 為 `[error, undefined, undefined]`。所有收到的回應中繼資料（`status`、`statusText`、`headers`、`url`）都會直接附加在 `error.response` 上，因此你可以單獨將 `error` 傳遞給日誌記錄器或錯誤處理常式，而不會遺失上下文資訊。
+HTTP 失敗時，tuple 是 `[error, undefined, undefined]`。收到的回應中繼資料（`status`、`statusText`、`headers`、`url`）會直接掛在 `error.response` 上，因此只把 `error` 交給日誌或錯誤處理常式，也不會遺失脈絡。
 
 ## 2. Fault 類別與封閉錯誤碼集合
 
-錯誤碼第一個 `_` 前面的前綴代表錯誤類別（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），而完整的 `code` 則構成一個封閉的 Union，適合使用窮舉式 `switch` 語句處理：
+第一個 `_` 之前的前綴就是 fault 類別（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），完整的 `code` 則構成封閉的聯集，適合以窮盡的 `switch` 處理：
 
 | 類別   | 錯誤碼                                                                 | 意義與處置建議                                                                                 |
 | ------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -48,20 +48,20 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 | `RES`  | `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH`   | 伺服器回應違反了宣告的媒體型別、資料表示法或 `struct` 契約。                                   |
 | `NET`  | `NET_ABORTED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`NET_BODY_INCOMPLETE` | 呼叫端主動取消（`NET_ABORTED`）、逾時已過（`NET_TIMEOUT`）、連線失敗或回應本文串流中途截斷。   |
 | `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | 應用程式攔截器、鉤子或進度/狀態觀察者拋出例外或回傳了無效值。                                  |
-| `CAP`  | `CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`                            | SSE 封包緩衝區或 SSE/WebSocket 消費端佇列超過了設定的上限。                                    |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`                            | SSE 訊框緩衝區或 SSE/WebSocket 消費端佇列超過設定上限。                                        |
 | `ENV`  | `ENV_UNSUPPORTED`                                                      | 宿主執行環境缺乏必要的 Web API（例如在 Firefox 中嘗試串流上傳請求本文）。                      |
 
 ### Fault 屬性依錯誤碼對照
 
-| 錯誤碼        | `status` | `response`                                        | `data`                                  | `cause`                  |
-| ------------- | -------- | ------------------------------------------------- | --------------------------------------- | ------------------------ |
-| `HTTP_STATUS` | `number` | `DecodedResponse<TErr>` 或 `HttpMeta`             | 解碼後的 `error` struct，或 `undefined` | 底層 cause（若有）       |
-| `RES_*`       | `number` | `HttpMeta`（**不包含 `body` 欄位**）              | 無                                      | `StructError` 或剖析錯誤 |
-| 其他錯誤碼    | 無       | 若已接收到標頭則為 `HttpMeta`，否則為 `undefined` | 無                                      | 底層 `Error` / 中斷原因  |
+| 錯誤碼        | `status` | `response`                                      | `data`                                  | `cause`                  |
+| ------------- | -------- | ----------------------------------------------- | --------------------------------------- | ------------------------ |
+| `HTTP_STATUS` | `number` | `DecodedResponse<TErr>` 或 `HttpMeta`           | 解碼後的 `error` struct，或 `undefined` | 底層 cause（若有）       |
+| `RES_*`       | `number` | `HttpMeta`（**不包含 `body` 欄位**）            | 無                                      | `StructError` 或剖析錯誤 |
+| 其他錯誤碼    | 無       | 若已收到標頭則為 `HttpMeta`，否則為 `undefined` | 無                                      | 底層 `Error` / 中斷原因  |
 
-## 3. 收窄 Union 錯誤本文 (error.data)
+## 3. 收窄聯集錯誤本文 (error.data)
 
-由於單一 `error` struct 會涵蓋所有非 `2xx` 狀態碼，當不同的錯誤狀態碼回傳不同結構的 JSON 時，請宣告 Union 結構：
+單一 `error` struct 會涵蓋所有非 `2xx` 狀態碼，因此當不同錯誤狀態碼回傳不同結構的 JSON 時，請宣告聯集：
 
 <Tabs items={["依 kind 區分", "依本文狀態區分", "一般聯合型別（struct.or）"]}>
 <Tab value="依 kind 區分">
@@ -87,17 +87,17 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 </Tab>
 </Tabs>
 
-只要 API 包含字面值標籤（如 `kind`、`type` 或內嵌的 `status` 欄位），一律優先推薦使用 `struct.discriminatedUnion(...)`。
+只要 API 帶有字面值標記（`kind`、`type`，或內嵌的 `status` 欄位），就優先使用 `struct.discriminatedUnion(...)`。
 
-## 4. SSE 與 WebSocket 的啟動錯誤 vs. 連線後執行時期錯誤
+## 4. SSE 與 WebSocket 的啟動錯誤 vs. 開啟後錯誤
 
-對於長生命週期的連線，操作的 tuple 僅會回報**啟動時**的失敗（在串流或 Socket 成功開啟之前）。連線建立後，後續的執行時期錯誤會透過控制代碼或工作階段生命週期發布：
+對於長生命週期的連線，操作 tuple 只回報**啟動時**的失敗（在串流或 Socket 開啟之前）。一旦開啟，執行時期的失敗會改由 Handle 或工作階段生命週期傳遞：
 
-| 傳輸協定      | 啟動失敗（在回傳的 tuple 中反映）                                                                                             | 連線後執行時期失敗（tuple 解析之後）                                                                                                                                                                                                                           |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **HTTP**      | 所有失敗皆在單次操作 tuple 中確定回傳。                                                                                       | 不適用                                                                                                                                                                                                                                                         |
-| **SSE**       | 非 `2xx` 狀態碼（`HTTP_STATUS`）、無效的 Content-Type（`RES_MEDIA_TYPE_INVALID`）或交握本文缺失/無效（`RES_DECODE_FAILED`）。 | 非同步迭代器拋出拒絕；`stream.closed` 解析為 `{ kind: 'error', code }`。                                                                                                                                                                                       |
-| **WebSocket** | 開啟前被關閉、建構子拋出例外或交握期間被中斷。                                                                                | 非致命封包錯誤會觸發 `session.onRuntimeError`；致命錯誤會拒絕 `session.receive` 並將 `session.closed` 解析為 `{ kind: 'error', cause }`。傳入佇列溢位使用 `cause.code === 'CAP_QUEUE_OVERFLOW'`；心跳逾時與重連次數耗盡仍使用一般執行時期 `Error` 作為 cause。 |
+| 傳輸協定      | 啟動失敗（在回傳的 tuple 中反映）                                                                                       | 連線後執行時期失敗（tuple 解析之後）                                                                                                                                                                                                                            |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HTTP**      | 所有失敗都在操作 tuple 中一次結清。                                                                                     | 不適用                                                                                                                                                                                                                                                          |
+| **SSE**       | 非 `2xx`（`HTTP_STATUS`）、Content-Type 不符（`RES_MEDIA_TYPE_INVALID`），或交握本文缺少／無效（`RES_DECODE_FAILED`）。 | 非同步迭代器拒絕；`stream.closed` 解析為 `{ kind: 'error', code }`。                                                                                                                                                                                            |
+| **WebSocket** | 開啟前關閉、建構子失敗，或交握期間中斷。                                                                                | 非致命的訊框錯誤會觸發 `session.onRuntimeError`；致命錯誤會讓 `session.receive` 拒絕，並使 `session.closed` 解析為 `{ kind: 'error', cause }`。傳入佇列溢位時 `cause.code === 'CAP_QUEUE_OVERFLOW'`；心跳逾時與重連次數用盡仍保留一般的執行時期 `Error` cause。 |
 
 ## 5. 安全的結構化日誌記錄與 cause 檢查
 
@@ -121,7 +121,7 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 </Tabs>
 
 > [!CAUTION]
-> 請將 `fault.cause`、`fault.data`、回應標頭、完整 URL 與 `StructIssue.received` 視為可能包含機敏資訊的內容。預設情況下記錄時，應只記錄低基數的白名單欄位（如 `operation`、`code`、`status`、耗費時間）。
+> `fault.cause`、`fault.data`、回應標頭、完整 URL 與 `StructIssue.received` 都可能含有機敏資訊。預設請只記錄低基數欄位的允許清單（`operation`、`code`、`status`、耗時）。
 
 ## 相關閱讀
 

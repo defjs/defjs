@@ -5,30 +5,21 @@ description: 在取用端應用程式中獨立設定如何呼叫匯入的 SDK �
 
 # Client
 
-`Client` 負責保存取用端應用程式的請求執行設定：基礎網址（Base URLs）、預設標頭、憑證、中介層攔截器、Query 序列化函式以及傳輸控制代碼（Transport handles）。
+`Client` 保存的是取用端應用程式的執行設定：基礎網址（base URLs）、預設標頭、憑證、攔截器、query 序列化，以及傳輸層 Handle。
 
 `createClient(...options)` 會回傳一個 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)：
 
 - 不需要單次呼叫選項時，可直接將 `client` 傳遞給操作（`getOrder(client, { id: 1 })`）。
-- 呼叫 `client(requestOptions)` 可衍生出單次呼叫的 `Client` 值（`getOrder(client({ signal }), { id: 1 })`）。衍生過程不進行任何 I/O 操作，且衍生出的值是一般純物件（不可再次呼叫）。
+- 呼叫 `client(requestOptions)` 可衍生出單次呼叫的 `Client` 值（`getOrder(client({ signal }), { id: 1 })`）。衍生不會進行任何 I/O，衍生出的值是一般物件（不可再呼叫）。
 
 ## 1. 設定 Client 並呼叫 SDK 操作
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
@@ -62,7 +53,7 @@ export const getOrder = defineRequest({
 </include>
 
 > [!IMPORTANT]
-> 由於 `createClient(...)` 回傳的是可呼叫的函式物件（`DerivableClient`），請**不要**將其直接傳入 React 的 `setState(client)` 或 Vue 的 `watch(client)` / `computed(client)`，否則框架會將其誤判為更新函式或響應式 Getter。
+> 由於 `createClient(...)` 回傳的是可呼叫的函式（`DerivableClient`），請**不要**將它直接傳給 React 的 `setState(client)` updater，或當作 Vue 的 `watch(client)` / `computed(client)` 來源，因為它們會把函式當成 updater 或 getter 呼叫。
 
 ### 單次呼叫 `RequestOptions` 參考
 
@@ -72,23 +63,23 @@ export const getOrder = defineRequest({
 | -------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `signal`             | HTTP、SSE、WebSocket | 中斷請求（`AbortSignal.timeout(ms)` → `NET_TIMEOUT`；手動中斷 → `NET_ABORTED`）。                             |
 | `onUploadProgress`   | HTTP                 | 回報串流請求本文的上傳進度。                                                                                  |
-| `onDownloadProgress` | HTTP                 | 回報已宣告回應本文的下載進度。                                                                                |
+| `onDownloadProgress` | HTTP                 | 回報已宣告之回應本文的下載進度。                                                                              |
 | `beforeConnect`      | WebSocket            | 覆寫該次工作階段 Client 層級的 `beforeConnect` 鉤子。                                                         |
 | `protocols`          | WebSocket            | 覆寫該次工作階段 Client 層級的子協定清單。                                                                    |
-| `heartbeat`          | WebSocket            | 覆寫該次工作階段 Client 層級的心跳檢測設定。                                                                  |
+| `heartbeat`          | WebSocket            | 覆寫該次工作階段 Client 層級的心跳設定。                                                                      |
 | `reconnect`          | WebSocket            | 覆寫該次工作階段 Client 層級的 WebSocket 重連策略。（SSE 重連則是透過 Client 上的 `withSSEReconnect` 設定。） |
 
 ## 3. 瀏覽器 Singleton vs. 伺服器請求範圍
 
-- **瀏覽器應用程式**：當端點、攔截器與憑證在整個瀏覽器生命週期中共用時，可在模組層級共用單一 `DerivableClient` 實例。
-- **伺服器端 / SSR 應用程式**：當標頭、Cookie、身分驗證 Token 或租戶識別因請求而異時，請在**每個連入請求邊界內**建立全新的 Client。絕不要在行程層級的全域 Client 上儲存個別使用者的機敏憑證。
+- **瀏覽器應用程式**：當端點、攔截器與憑證在整個瀏覽器中共用時，可共用單一模組層級的 `DerivableClient`。
+- **伺服器 / SSR 應用程式**：只要標頭、Cookie、身分驗證 token 或租戶脈絡會因請求而異，就必須在**每個連入請求的邊界內**建立新的 Client。絕不要把個別使用者的憑證存在整個行程共用的 Client 上。
 
 ## 4. 多端點與負載平衡 [#multiple-endpoints]
 
 `withEndpoint(...urls)` 接受傳入一個或多個候選基礎網址。預設情況下：
 
 - 每個 Client 使用 [`pickFirstBalancer`](/zh-Hant-TW/api/core/pickfirstbalancer)，停在第一個 URL，直到遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進。
-- **同一次呼叫內的 HTTP 重試預設關閉。** `withRetry()` 與 `withRetry({})` 等價，會在安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）的連線失敗上，帶著退避，對一個尚未嘗試過的端點再做一次嘗試。Finagle 重試預算屬於 client 設定，由其派生出的 client 共享，與平衡器的身份無關。
+- **同一次呼叫內的 HTTP 重試預設關閉。** `withRetry()` 相等於 `withRetry({})`，會在安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）遇到連線失敗時，帶著退避再試一個尚未嘗試過的端點。Finagle 重試預算屬於 Client 設定，由衍生自它的 Client 共享，與平衡器本身無關。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -98,9 +89,9 @@ export const getOrder = defineRequest({
 
 ### 健康狀態過濾與 p2c [#health-filtering-and-p2c]
 
-針對同儕伺服器副本，[`roundRobinBalancer`](/zh-Hant-TW/api/core/roundrobinbalancer) 與 [`p2cBalancer`](/zh-Hant-TW/api/core/p2cbalancer)（PeakEwma RTT × 進行中請求數）預設啟用了類似 Linkerd 風格的連續失敗斷路器（`outlierDetection`）。它計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 與 `NET_SERVER_ERROR`；原始回應 `status` 只供自訂平衡器使用。
+對於對等端的伺服器副本，[`roundRobinBalancer`](/zh-Hant-TW/api/core/roundrobinbalancer) 與 [`p2cBalancer`](/zh-Hant-TW/api/core/p2cbalancer)（PeakEwma RTT × 進行中請求數）預設會啟用 Linkerd 風格的連續失敗斷路（`outlierDetection`）。它計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 與 `NET_SERVER_ERROR`；原始回應 `status` 只供自訂平衡器使用。
 
-詳細重試預算、主動/被動健康檢查、P2C 負載估算與自訂負載平衡器設定，請參閱專屬的[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)指南。
+重試預算、主動與被動健康檢查、P2C 負載估算與自訂平衡器的完整說明，請參閱專門的[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)指南。
 
 ## 5. 注入測試傳輸層
 
@@ -114,23 +105,23 @@ export const getOrder = defineRequest({
 
 ## 6. Client 選項輔助函式參考
 
-| 輔助函式                                                                                                      | 用途說明                                                                               |
-| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | 設定一個或多個候選基礎網址（會覆蓋先前的清單）。                                       |
-| `withHeaders(HeadersInit)`                                                                                    | 為 HTTP 與 SSE 設定靜態預設標頭（會被 builder 標頭覆蓋）。                             |
-| `withInterceptors(...items)`                                                                                  | 以洋蔥模型順序附加 HTTP、SSE 與 WebSocket 攔截器。                                     |
-| `withQuerySerializer(fn)`                                                                                     | 將已套用別名的 Query 物件序列化為 Query 字串。                                         |
-| `withCredentials(boolean)`                                                                                    | 當設為 `true` 時，為 HTTP 與 SSE 請求設定 Fetch 的 `credentials: "include"`。          |
-| `withXSRF(options?)`                                                                                          | 在同源且具變更性質的 HTTP 請求中，將 XSRF Cookie 複製到請求標頭。                      |
-| `withBalancer(balancer)`                                                                                      | 替換端點選擇策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。         |
-| `withRetry(options?)`                                                                                         | 設定選擇加入的 HTTP 重試條件、方法、退避、單次嘗試逾時，以及一份歸 client 所有的預算。 |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | 設定 SSE 重新連線與無效事件觀察機制。                                                  |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 設定 WebSocket 工作階段預設值。                                                        |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 注入自訂或 Mock 傳輸層實作。                                                           |
+| 輔助函式                                                                                                      | 用途說明                                                                             |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `withEndpoint(...urls)`                                                                                       | 設定一個或多個候選基礎網址（會覆蓋先前的清單）。                                     |
+| `withHeaders(HeadersInit)`                                                                                    | 為 HTTP 與 SSE 設定靜態預設標頭（會被 builder 標頭覆蓋）。                           |
+| `withInterceptors(...items)`                                                                                  | 以洋蔥模型順序附加 HTTP、SSE 與 WebSocket 攔截器。                                   |
+| `withQuerySerializer(fn)`                                                                                     | 將已套用別名的 Query 物件序列化為 Query 字串。                                       |
+| `withCredentials(boolean)`                                                                                    | 當設為 `true` 時，為 HTTP 與 SSE 請求設定 Fetch 的 `credentials: "include"`。        |
+| `withXSRF(options?)`                                                                                          | 在同源的變更型 HTTP 請求中，把 XSRF Cookie 複製到標頭。                              |
+| `withBalancer(balancer)`                                                                                      | 替換端點選擇策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。       |
+| `withRetry(options?)`                                                                                         | 設定需主動啟用的 HTTP 重試條件、方法、退避、單次嘗試逾時，以及由 client 擁有的預算。 |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | 設定 SSE 重連與無效事件觀察。                                                        |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 設定 WebSocket 工作階段預設值。                                                      |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 注入自訂或 Mock 傳輸層實作。                                                         |
 
 ## 相關閱讀
 
 - [負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)
-- [中介層](/zh-Hant-TW/docs/interceptors)
+- [攔截器](/zh-Hant-TW/docs/interceptors)
 - [測試](/zh-Hant-TW/docs/testing)
 - [使用本機 Fetch Handle 進行測試](/zh-Hant-TW/recipes/test-with-handle)

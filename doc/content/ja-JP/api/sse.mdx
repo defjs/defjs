@@ -1,6 +1,6 @@
 ---
 title: SSE
-description: defineEventStream、リクエスト options、stream handle です。
+description: defineEventStream、リクエストオプション、ストリームハンドルです。
 ---
 
 # SSE
@@ -11,33 +11,30 @@ description: defineEventStream、リクエスト options、stream handle です�
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` と `events` マップ、任意の `method`（デフォルト `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（デフォルト `64 * 1024`）、`maxQueueSize`（デフォルト `1024`）です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`EventStreamDefinition`](/ja-JP/api/core/eventstreamdefinition-type) にあります。`error` が必須なのは error struct の型を渡したときだけで、`builder` が必須なのは `input` を宣言したときだけです。
-- **戻り値** 操作です。第一引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとストリームが始まります。
+- **definition** — `path` と `events` マップ、任意の `method`（デフォルト `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（デフォルト `64 * 1024`）、`maxQueueSize`（デフォルト `1024`）です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`EventStreamDefinition`](/ja-JP/api/core/eventstreamdefinition-type) にあります。`error` が必須なのは error struct の型を渡したときだけで、`builder` が必須なのは `input` を宣言したときだけです。
+- **戻り値** 操作です。第 1 引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとストリームが始まります。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼び出しは `[null, stream, open]` または `[error, undefined, open?]` を返します。`error` を宣言していれば fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`signal` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `signal` だけで、進捗と WebSocket のフィールドは無視します。
+呼び出しは `[null, stream, open]` または `[error, undefined, open?]` を返します。`error` を宣言していれば Fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`signal` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `signal` だけで、進捗と WebSocket のフィールドは無視します。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` は `{ signal? }` です。`timeout` フィールドも `abort` フィールドも、進捗コールバックもありません。`signal` は開いたあとも含むストリーム全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。起動時だけの期限が欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
+`EventStreamExecuteOptions` は `{ signal? }` です。`timeout` フィールドも `abort` フィールドも、進捗コールバックもありません。`signal` は、開いたあとも含めてストリーム全体を対象にします。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位のデフォルトの期限もありません。起動時だけの期限が欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
 
 ## EventStreamHandle
 
 <ApiSignature name="EventStreamHandle" />
 
-タプルの 3 番目の要素は `open` の起動時スナップショットです。再接続のあとは `stream.open` が最新の接続に追従します。その 3 番目の要素が返されたハンドルの接続の最初の成功したハンドシェイクのスナップショットになるのは、Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合だけであり、独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先されるため、`closed` の共有によって URL のサニタイズやヘッダーのフィルタリングを迂回することはなく、Defjs は任意の変換から最初のハンドシェイクのメタデータを復元しません。 所有するスコープのクリーンアップには `await using stream = handle` を選んでください。disposer は Defjs の読み取りと再接続を止め、reader lock が解放されるのを待ちます。provider が制御する、止まった `ReadableStream.cancel()` の promise が終わることは約束しません。手動の `close()` / `closed` も残っています。
+タプルの 3 番目の要素は `open` の起動時スナップショットです。再接続のあとは `stream.open` が最新の接続に追従します。この 3 番目の要素が、返された接続の最初の成功したハンドシェイクのスナップショットになるのは、Defjs のネイティブハンドルか、同じライブ `open` オブジェクトをそのまま転送するラッパーの場合だけです。独自ハンドルや `open` を上書きするラッパーでは、再接続後も現在公開している `open` が優先されます。そのため、`closed` を共有しても URL のサニタイズやヘッダーのフィルタリングを迂回できず、Defjs が任意の変換から最初のハンドシェイクのメタデータを復元することもありません。 所有するスコープのクリーンアップには `await using stream = handle` を選んでください。disposer は Defjs の読み取りと再接続を止め、reader lock が解放されるのを待ちます。プロバイダーが制御する、止まった `ReadableStream.cancel()` の promise が終わることは約束しません。手動の `close()` / `closed` も残っています。
 
-```ts
-async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
-  await using stream = handle;
-  for await (const event of stream) console.log(event);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-event-stream.ts#example
+</include>
 
-`EventStreamHandle` の構造的実装は、`[Symbol.asyncDispose]()` を実装し、同じ所有 teardown 経路を返す必要があります。
+`EventStreamHandle` の構造的実装は、`[Symbol.asyncDispose]()` を実装し、同じ所有権に基づく破棄経路を返す必要があります。
 
 ### EventStreamOpenInfo
 
@@ -47,33 +44,33 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) の一つで、`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。`REQ_BUILD_FAILED` と `REQ_OPTIONS_INVALID` は、ストリームが開いたあとの再接続の pick が失敗したことを意味します。
+`kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) のいずれかで、`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。`REQ_BUILD_FAILED` と `REQ_OPTIONS_INVALID` は、ストリームが開いたあとの再接続時のエンドポイント選択が失敗したことを意味します。
 
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
 
-キーは SSE のイベント名です。`event:` フィールドのないメッセージの名前は `message` です。どのキーにも一致しないときは `default` struct が使われます。`string` のイベント struct は生の `data` テキストを保ちます。それ以外の kind は JSON テキストです。`JSON.parse` してから struct です。だから裸の `struct.literal` には、引用のないトークンではなく JSON テキストが要ります。ハンドシェイクの `error` ボディは HTTP と同じ kind 規則です。`string` はテキスト、`blob` / `file` は blob、`arrayBuffer` はバイト列、それ以外は JSON です。
+キーは SSE のイベント名です。`event:` フィールドのないメッセージの名前は `message` です。どのキーにも一致しないときは `default` struct が使われます。`string` のイベント struct は生の `data` テキストを保ちます。それ以外の種類は JSON テキストです。`JSON.parse` してから struct です。だから裸の `struct.literal` には、引用のないトークンではなく JSON テキストが要ります。ハンドシェイクの `error` ボディは HTTP と同じ種類の規則です。`string` はテキスト、`blob` / `file` は blob、`arrayBuffer` はバイト列、それ以外は JSON です。
 
 再接続はクライアントにあります（`withSSEReconnect`）。SSE の `jitter` は WebSocket と同じ、**0–1 の乗法因子**です。
 
-リトライ予算とバックオフの指数は、ハンドシェイクが成功するたびにリセットされ、障害ごとに適用されます。そのため、`attempts: 1` でも長いセッションでは何度も接続を確立できます。サーバーの正常な EOF では再接続せず、EOF 時点で未完了のイベントの id も確定しません。再接続時のハンドシェイクが `503` を返すと、`RES_DECODE_FAILED` で終了します。その `503` はライブの `stream.open.response.status` で確認してください。不正な数値オプションは、ストリームを開く前に `REQ_OPTIONS_INVALID` を返します。`maxDelayMs` はジッター後の最終的な待ち時間に上限を設けます。検証規則、デフォルト、UTF-8 の `Last-Event-ID` の扱いについては、[`withSSEReconnect`](/ja-JP/api/core/withssereconnect) を参照してください。
+リトライバジェットとバックオフの指数は、ハンドシェイクが成功するたびにリセットされ、障害ごとに適用されます。そのため、`attempts: 1` でも長いセッションでは何度も接続を確立できます。サーバーの正常な EOF では再接続せず、EOF 時点で未完了のイベントの id も確定しません。再接続時のハンドシェイクが `503` を返すと、`RES_DECODE_FAILED` で終了します。その `503` はライブの `stream.open.response.status` で確認してください。不正な数値オプションは、ストリームを開く前に `REQ_OPTIONS_INVALID` を返します。`maxDelayMs` はジッター後の最終的な待ち時間に上限を設けます。検証規則、デフォルト、UTF-8 の `Last-Event-ID` の扱いについては、[`withSSEReconnect`](/ja-JP/api/core/withssereconnect) を参照してください。
 
 パーサーは WHATWG SSE の行とフィールドの規則に従い、各物理ストリームの先頭にある UTF-8 BOM を 1 つだけ除去します。データや ID 値の U+FEFF は保持されます。ストリームの途中で BOM が付いたフィールド名は、未知のフィールドとして無視されます。複数行のデータは `\n` で結合され、空行でデータを持つイベントが配信されます。EOF 時点で未完了のイベントは破棄されます。
 
-[SSE ガイド](/ja-JP/docs/sse) と [SSE ストリームを消費する](/ja-JP/recipes/consume-sse) を見てください。
+[SSE ガイド](/ja-JP/docs/sse) と [SSE イベントの受信](/ja-JP/recipes/consume-sse) を見てください。
 
 ## EventStreamDefinition
 
-`path`、`events`、任意の `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize` です。リクエストの形は HTTP と同じで、`body` も含みます。`GET` と `HEAD` はボディを返せません。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+`path`、`events`、任意の `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize` です。リクエストの形は HTTP と同じで、`body` も含みます。`GET` と `HEAD` はボディを持てません。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
 
 ## EventStreamEndpoint
 
-`defineEventStream` の戻り値です。第一引数はクライアントです。それ以降の引数は入力だけです。
+`defineEventStream` の戻り値です。第 1 引数はクライアントです。それ以降の引数は入力だけです。
 
 ## EventStreamRequestShape
 
-ストリームの method と path に対する、`HttpRequestShape` と同じフィールドです。
+ストリームのメソッドとパスに対する、`HttpRequestShape` と同じフィールドです。
 
 ## StreamAwaitResult
 

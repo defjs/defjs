@@ -1,5 +1,5 @@
 ---
-title: "오류"
+title: "오류 처리"
 description: SDK에서 서비스 오류 계약을 선언하고, 사용하는 애플리케이션에서 타입화된 실행 오류를 처리합니다.
 ---
 
@@ -37,7 +37,7 @@ Defjs에서는 요청, 전송, 디코딩 실패가 발생해도 호출 지점에
 
 HTTP 실패 시 반환되는 튜플은 `[error, undefined, undefined]`입니다. 수신된 응답 메타데이터(`status`, `statusText`, `headers`, `url`)는 모두 `error.response`에 직접 첨부되므로, 로거나 오류 처리 함수에 `error` 객체 하나만 전달해도 컨텍스트를 잃지 않고 안전하게 처리할 수 있습니다.
 
-## 2. 결함 분류(Fault class) 및 닫힌 코드 유니온
+## 2. 결함 클래스 및 닫힌 코드 유니온
 
 첫 번째 밑줄(`_`) 앞의 접두사는 결함의 대분류(`HTTP`, `REQ`, `NET`, `RES`, `EXT`, `CAP`, `ENV`)를 나타내며, 전체 `code`는 철저한(exhaustive) `switch` 문 검사를 지원하는 닫힌 유니온을 형성합니다:
 
@@ -55,15 +55,15 @@ HTTP 실패 시 반환되는 튜플은 `[error, undefined, undefined]`입니다.
 
 | 결함 코드     | `status` | `response`                                 | `data`                                    | `cause`                      |
 | ------------- | -------- | ------------------------------------------ | ----------------------------------------- | ---------------------------- |
-| `HTTP_STATUS` | `number` | `DecodedResponse<TErr>` 또는 `HttpMeta`    | 디코딩된 `error` struct, 또는 `undefined` | 기저 원인이 있다면 포함      |
+| `HTTP_STATUS` | `number` | `DecodedResponse<TErr>` 또는 `HttpMeta`    | 디코딩된 `error` struct, 또는 `undefined` | 원인이 있으면 포함           |
 | `RES_*`       | `number` | `HttpMeta` (**`body` 필드 없음**)          | 없음                                      | `StructError` 또는 파서 오류 |
-| 기타 코드     | 없음     | 헤더 수신 시 `HttpMeta`, 그 외 `undefined` | 없음                                      | 기저 `Error` / abort 사유    |
+| 기타 코드     | 없음     | 헤더 수신 시 `HttpMeta`, 그 외 `undefined` | 없음                                      | 기반 `Error` / abort 사유    |
 
 ## 3. 유니온 오류 본문 타입 좁히기 (`error.data`)
 
 하나의 `error` struct가 모든 비`2xx` 상태 코드를 포괄하므로, 상태 코드별로 서로 다른 JSON 형태를 반환하는 API라면 유니온 스키마를 선언하세요:
 
-<Tabs items={["kind로 구분", "본문 상태로 구분", "일반 유니온（struct.or）"]}>
+<Tabs items={["kind로 구분", "본문 상태로 구분", "일반 유니온 (struct.or)"]}>
 <Tab value="kind로 구분">
 
 <include cwd lang="typescript">
@@ -78,7 +78,7 @@ HTTP 실패 시 반환되는 튜플은 `[error, undefined, undefined]`입니다.
 </include>
 
 </Tab>
-<Tab value="일반 유니온（struct.or）">
+<Tab value="일반 유니온 (struct.or)">
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -93,15 +93,15 @@ API 응답에 리터럴 태그(`kind`, `type`, 또는 본문 내부의 `status` 
 
 오래 유지되는 연결의 경우, 작업 반환 튜플은 스트림이나 소켓이 열리기 전의 **시작(startup)** 실패만을 보고합니다. 연결이 수립된 후 발생하는 런타임 오류는 핸들이나 세션의 수명 주기를 통해 전달됩니다:
 
-| 전송 방식     | 시작 단계 실패 (튜플로 반환됨)                                                                                               | 연결 수립 후 실패 (튜플 해결 이후)                                                                                                                                                                                                                                                                                               |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **HTTP**      | 모든 실패가 단 한 번 튜플로 반환되어 종결됩니다.                                                                             | 해당 없음                                                                                                                                                                                                                                                                                                                        |
-| **SSE**       | 비`2xx` (`HTTP_STATUS`), 잘못된 미디어 타입 (`RES_MEDIA_TYPE_INVALID`), 유효하지 않은 핸드셰이크 본문 (`RES_DECODE_FAILED`). | 비동기 이터레이터가 예외를 던지며 reject되고, `stream.closed`가 `{ kind: 'error', code }`로 해결됩니다.                                                                                                                                                                                                                          |
-| **WebSocket** | 연결 열리기 전 닫힘, 생성자 실패, 또는 핸드셰이크 중단.                                                                      | 치명적이지 않은 프레임 오류는 `session.onRuntimeError`를 실행하며, 치명적 오류는 `session.receive`를 reject하고 `session.closed`를 `{ kind: 'error', cause }`로 해결합니다. 수신 큐 초과에는 `cause.code === 'CAP_QUEUE_OVERFLOW'`를 사용하며, heartbeat 타임아웃과 재연결 횟수 소진은 일반 런타임 `Error`를 cause로 유지합니다. |
+| 전송 방식     | 시작 단계 실패 (튜플로 반환됨)                                                                                               | 연결 수립 후 실패 (튜플 해결 이후)                                                                                                                                                                                                                                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HTTP**      | 모든 실패가 작업 튜플을 한 번 확정합니다.                                                                                    | 해당 없음                                                                                                                                                                                                                                                                                                                         |
+| **SSE**       | 비`2xx` (`HTTP_STATUS`), 잘못된 미디어 타입 (`RES_MEDIA_TYPE_INVALID`), 유효하지 않은 핸드셰이크 본문 (`RES_DECODE_FAILED`). | 비동기 이터레이터가 reject되고, `stream.closed`가 `{ kind: 'error', code }`로 해결됩니다.                                                                                                                                                                                                                                         |
+| **WebSocket** | 연결 열리기 전 닫힘, 생성자 실패, 또는 핸드셰이크 중단.                                                                      | 치명적이지 않은 프레임 오류는 `session.onRuntimeError`를 발생시키며, 치명적 오류는 `session.receive`를 reject하고 `session.closed`를 `{ kind: 'error', cause }`로 해결합니다. 수신 큐 초과에는 `cause.code === 'CAP_QUEUE_OVERFLOW'`를 사용하며, 하트비트 타임아웃과 재연결 횟수 소진은 일반 런타임 `Error`를 cause로 유지합니다. |
 
 ## 5. 안전한 구조화된 로깅 및 원인 분석
 
-모든 `Fault`는 `code`, `status`, `response`, `data` 열거 가능(enumerable) 프로퍼티를 가진 표준 `Error`(`instanceof Error === true`)입니다.
+모든 `Fault`는 `code`, `status`, `response`, `data` 열거 가능(enumerable) 프로퍼티를 가진 네이티브 `Error`(`instanceof Error === true`)입니다.
 
 <Tabs items={["StructError 원인 확인", "민감 정보를 제거한 진단 요약"]}>
 <Tab value="StructError 원인 확인">
@@ -121,7 +121,7 @@ API 응답에 리터럴 태그(`kind`, `type`, 또는 본문 내부의 `status` 
 </Tabs>
 
 > [!CAUTION]
-> `fault.cause`, `fault.data`, 응답 헤더, 전체 URL, `StructIssue.received`에는 민감한 정보가 포함될 수 있습니다. 로그에는 기본적으로 카디널리티가 낮은 안전한 필드(`operation`, `code`, `status`, 소요 시간)만 선별하여 남기세요.
+> `fault.cause`, `fault.data`, 응답 헤더, 전체 URL, `StructIssue.received`에는 민감한 정보가 포함될 수 있습니다. 로그에는 기본적으로 카디널리티가 낮은 필드(`operation`, `code`, `status`, 소요 시간)의 허용 목록만 남기세요.
 
 ## 관련 문서
 

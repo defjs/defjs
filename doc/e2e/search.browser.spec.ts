@@ -12,17 +12,17 @@ import { openSite } from "./support/site";
 
 // Prose queries absent from each overview's title and description.
 const overviewQueries: Record<string, { docs: string; recipes: string }> = {
-  "en-US": { docs: "middleware", recipes: "individual" },
-  "zh-Hans": { docs: "围绕", recipes: "掌握" },
-  "zh-Hant-TW": { docs: "讀到", recipes: "掌握" },
-  "zh-Hant-HK": { docs: "讀到", recipes: "掌握" },
-  "ja-JP": { docs: "担当", recipes: "設計" },
-  "ko-KR": { docs: "맡습니다", recipes: "수명을" },
-  "de-DE": { docs: "Anwendungspfad", recipes: "Operationsverträge" },
-  "fr-FR": { docs: "empaqueter", recipes: "composer" },
+  "en-US": { docs: "architecture", recipes: "journey" },
+  "zh-Hans": { docs: "架构", recipes: "流程" },
+  "zh-Hant-TW": { docs: "架構", recipes: "流程" },
+  "zh-Hant-HK": { docs: "架構", recipes: "旅程" },
+  "ja-JP": { docs: "アーキテクチャ", recipes: "流れ" },
+  "ko-KR": { docs: "맡습니다", recipes: "흐름" },
+  "de-DE": { docs: "Architektur", recipes: "Starte" },
+  "fr-FR": { docs: "architecture", recipes: "Commencez" },
   "es-ES": { docs: "autoría", recipes: "recorrido" },
-  "ru-RU": { docs: "упаковать", recipes: "собрать" },
-  ar: { docs: "تأليف", recipes: "تركيبها" },
+  "ru-RU": { docs: "архитектуру", recipes: "путь" },
+  ar: { docs: "المعمارية", recipes: "المسار" },
 };
 
 /** Text hits are `${pageUrl}-${n}`. Fumadocs navigates to `pageUrl`, not the suffixed id. */

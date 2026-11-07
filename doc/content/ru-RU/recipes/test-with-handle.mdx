@@ -3,7 +3,7 @@ title: "Локальные HTTP-тесты"
 description: Подмените Fetch для одного клиента через withHTTPHandle, оставив операцию неизменной.
 ---
 
-# Тест с локальным Fetch handle
+# Тест с локальным Fetch-хэндлом
 
 Функция `withHTTPHandle(...)` подменяет базовую функцию `fetch` для отдельного экземпляра клиента, полностью выполняя весь конвейер Defjs — валидацию входных данных, маппинг в `builder`, разрешение URL, перехватчики, классификацию статусов и декодирование Struct — без открытия реального сетевого сокета:
 
@@ -12,18 +12,21 @@ description: Подмените Fetch для одного клиента чер�
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="test/orders.spec.ts">
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="Single-file demonstration">
-Это отдельная однофайловая демонстрация, а не spec тест-раннера. Для проверок общего определения SDK используйте предыдущую вкладку с тестом.
+Это отдельная однофайловая демонстрация, а не спецификация тест-раннера. Для проверок общего определения SDK используйте предыдущую вкладку с тестом.
 
 <include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -33,4 +36,4 @@ description: Подмените Fetch для одного клиента чер�
 paid 200
 ```
 
-В продакшене передавайте клиент, настроенный через `withEndpoint(...)`, в то же самое определение `getOrder`. См. разделы [Тестирование](/ru-RU/docs/testing) и [Клиент](/ru-RU/docs/client).
+В продакшене вызывайте ту же самую операцию `getOrder` с клиентом, настроенным через `withEndpoint(...)`. См. разделы [Тестирование](/ru-RU/docs/testing) и [Клиент](/ru-RU/docs/client).

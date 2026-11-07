@@ -9,7 +9,7 @@ En Defjs, los fallos de petición, transporte y decodificación no lanzan excepc
 
 ## 1. Declarar errores del servicio en el SDK y clasificarlos en la aplicación
 
-<Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>
+<Tabs items={["Switch exhaustivo por código", "Comprobación básica de estado", "Formas de tupla por transporte"]}>
 <Tab value="Exhaustive code switch">
 
 <include cwd lang="typescript">
@@ -41,15 +41,15 @@ En un fallo HTTP, la tupla es `[error, undefined, undefined]`. Cualquier metadat
 
 El prefijo antes del primer guion bajo `_` identifica la clase del fallo (`HTTP`, `REQ`, `NET`, `RES`, `EXT`, `CAP`, `ENV`), mientras que el `code` completo forma una unión cerrada para sentencias `switch` exhaustivas:
 
-| Clase  | Códigos de fallo                                                       | Significado y resolución                                                                                                       |
-| ------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `HTTP` | `HTTP_STATUS`                                                          | El servidor respondió con un estado no `2xx` (`3xx`, `4xx`, `5xx`) y se decodificó el struct de `error` declarado.             |
-| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | La entrada falló la validación, opciones fuera de rango, URL/ruta no válida o el `builder` lanzó una excepción. No reintentar. |
-| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | La respuesta del servidor violó el tipo de medio, la representación o el contrato de `struct` declarados.                      |
-| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | Quien llama canceló (`NET_ABORTED`), venció el plazo (`NET_TIMEOUT`), falló la conexión o el flujo se truncó.                  |
-| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | Un interceptor, hook u observador de la aplicación lanzó una excepción o devolvió un valor no válido.                          |
-| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | El búfer de tramas SSE o la cola de consumo de SSE/WebSocket superó el límite configurado.                                     |
-| `ENV`  | `ENV_UNSUPPORTED`                                                      | El runtime anfitrión carece de APIs Web requeridas (p. ej., cuerpo de petición en streaming en Firefox).                       |
+| Clase  | Códigos de fallo                                                       | Significado y resolución                                                                                                                                    |
+| ------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HTTP` | `HTTP_STATUS`                                                          | El servidor respondió con un estado no `2xx` (`3xx`, `4xx`, `5xx`) y se decodificó el struct de `error` declarado.                                          |
+| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | La entrada no superó la validación, las opciones estaban fuera de rango, la URL o la ruta no era válida, o el `builder` lanzó una excepción. No reintentar. |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | La respuesta del servidor violó el tipo de medio, la representación o el contrato de `struct` declarados.                                                   |
+| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | Quien llama canceló (`NET_ABORTED`), venció el plazo (`NET_TIMEOUT`), falló la conexión o el flujo se truncó.                                               |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | Un interceptor, hook u observador de la aplicación lanzó una excepción o devolvió un valor no válido.                                                       |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | El búfer de tramas SSE o la cola de consumo de SSE/WebSocket superó el límite configurado.                                                                  |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | El runtime anfitrión carece de APIs Web requeridas (p. ej., cuerpo de petición en streaming en Firefox).                                                    |
 
 ### Propiedades de Fault según el código
 
@@ -59,11 +59,11 @@ El prefijo antes del primer guion bajo `_` identifica la clase del fallo (`HTTP`
 | `RES_*`         | `number` | `HttpMeta` (**sin campo `body`**)               | Ausente                                      | `StructError` o error del parser     |
 | Otros códigos   | Ausente  | `HttpMeta` si llegaron cabeceras, o `undefined` | Ausente                                      | `Error` subyacente / motivo de abort |
 
-## 3. Filtrar cuerpos de error en unión (`error.data`)
+## 3. Estrechar uniones en los cuerpos de error (`error.data`)
 
 Dado que un único struct de `error` cubre todos los códigos de estado no `2xx`, declara una unión cuando diferentes estados de error devuelvan distintas estructuras JSON:
 
-<Tabs items={["Discriminate by kind", "Discriminate by body status", "Plain union (struct.or)"]}>
+<Tabs items={["Discriminar por kind", "Discriminar por estado del cuerpo", "Unión simple (struct.or)"]}>
 <Tab value="Discriminate by kind">
 
 <include cwd lang="typescript">
@@ -87,23 +87,23 @@ Dado que un único struct de `error` cubre todos los códigos de estado no `2xx`
 </Tab>
 </Tabs>
 
-Usa preferentemente `struct.discriminatedUnion(...)` siempre que la API incluya una etiqueta literal (`kind`, `type` o un campo `status` incrustado).
+Prefiere `struct.discriminatedUnion(...)` siempre que la API incluya una etiqueta literal (`kind`, `type` o un campo `status` incrustado).
 
 ## 4. Errores de inicio frente a errores posteriores en SSE y WebSocket
 
 En conexiones de larga duración, la tupla de la operación notifica los fallos de **inicio** (antes de abrir el flujo o el socket). Una vez abiertos, los fallos en tiempo de ejecución se transmiten a través del ciclo de vida del handle o la sesión:
 
-| Transporte    | Fallo en el inicio (devuelto en la tupla)                                                                                              | Fallo posterior al inicio (tras resolverse la tupla)                                                                                                                                                                                                                                                                                                                 |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **HTTP**      | Todos los fallos resuelven la tupla de la operación una única vez.                                                                     | N/A                                                                                                                                                                                                                                                                                                                                                                  |
-| **SSE**       | No `2xx` (`HTTP_STATUS`), tipo de contenido no válido (`RES_MEDIA_TYPE_INVALID`) o cuerpo de handshake ilegible (`RES_DECODE_FAILED`). | El iterador asíncrono rechaza; `stream.closed` se resuelve con `{ kind: 'error', code }`.                                                                                                                                                                                                                                                                            |
-| **WebSocket** | Cierre previo a la apertura, fallo en el constructor o abort durante el handshake.                                                     | Los fallos de trama no fatales disparan `session.onRuntimeError`; los errores fatales rechazan `session.receive` y resuelven `session.closed` con `{ kind: 'error', cause }`. El desbordamiento de la cola entrante usa `cause.code === 'CAP_QUEUE_OVERFLOW'`; el timeout del heartbeat y las reconexiones agotadas conservan causas `Error` ordinarias del runtime. |
+| Transporte    | Fallo en el inicio (devuelto en la tupla)                                                                                                         | Fallo posterior al inicio (tras resolverse la tupla)                                                                                                                                                                                                                                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HTTP**      | Todos los fallos resuelven la tupla de la operación una única vez.                                                                                | N/A                                                                                                                                                                                                                                                                                                                                                                  |
+| **SSE**       | No `2xx` (`HTTP_STATUS`), tipo de contenido no válido (`RES_MEDIA_TYPE_INVALID`) o cuerpo de handshake ausente o no válido (`RES_DECODE_FAILED`). | El iterador asíncrono rechaza; `stream.closed` se resuelve con `{ kind: 'error', code }`.                                                                                                                                                                                                                                                                            |
+| **WebSocket** | Cierre previo a la apertura, fallo en el constructor o abort durante el handshake.                                                                | Los fallos de trama no fatales disparan `session.onRuntimeError`; los errores fatales rechazan `session.receive` y resuelven `session.closed` con `{ kind: 'error', cause }`. El desbordamiento de la cola entrante usa `cause.code === 'CAP_QUEUE_OVERFLOW'`; el timeout del heartbeat y las reconexiones agotadas conservan causas `Error` ordinarias del runtime. |
 
 ## 5. Registro estructurado seguro e inspección de causas
 
 Cada `Fault` es un `Error` nativo (`instanceof Error === true`) con propiedades enumerables `code`, `status`, `response` y `data`.
 
-<Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
+<Tabs items={["Inspeccionar la causa de StructError", "Resumen de diagnóstico redactado"]}>
 <Tab value="Inspect StructError cause">
 
 <include cwd lang="typescript">

@@ -4,7 +4,7 @@ Contents: [Define and consume](#define-and-consume) · [Buffer, queue, and event
 
 ## Define and consume
 
-`defineEventStream` declares a typed SSE endpoint with `path` and an `events` map.
+`defineEventStream` declares a typed SSE operation with `path` and an `events` map.
 
 ```ts
 import {
@@ -52,14 +52,14 @@ void main();
 ## Buffer, queue, and event decoding
 
 - `maxBufferSize` (default `64 * 1024` bytes) and `maxQueueSize` (default `1024` events) are optional positive safe-integer limits. Exceeding them terminates the stream with `CAP_BUFFER_EXCEEDED` or `CAP_QUEUE_OVERFLOW`.
-- Each key in `events` matches the SSE `event:` field (defaulting to `"message"` on the wire when `event:` is omitted by the server).
+- Each key in `events` matches the SSE `event:` field; an event whose frame omits `event:` is named `message`.
 - Decoding follows the event struct kind: `struct.string()` delivers the raw text payload; any other struct runs `JSON.parse` first and then validates against the struct.
-- Handshake errors (non-2xx responses) decode against `error` if declared. Note: if a declared handshake error body fails reading, JSON parsing, or struct validation, SSE reports `RES_DECODE_FAILED` (with `StructError` as `cause` on struct mismatch).
+- Handshake errors (non-2xx responses) decode against `error` if declared. If a declared handshake error body fails reading, JSON parsing, or struct validation, SSE reports `RES_DECODE_FAILED`; a struct mismatch keeps the `StructError` as `cause`.
 - `startupOpen` (3rd tuple element) is the initial handshake snapshot; `stream.open` updates live across reconnections.
 
 ## Stream ownership and disposal
 
-After `[null, stream]` resolves, the caller owns the stream:
+After the success tuple resolves, the caller owns the stream:
 
 1. Prefer `await using ownedStream = stream;`, which closes the stream and awaits teardown when leaving the block.
 2. Or use `try { ... } finally { stream.close("consumer-finished"); await stream.closed; }`.
@@ -104,9 +104,9 @@ export async function connectWithStartupDeadline(ms: number) {
 
 ## Reconnect and invalid events
 
-- **Reconnect is opt-in on the client** via `withSSEReconnect({ attempts, delayMs, factor, maxDelayMs, jitter, shouldReconnect })`. Note: `client({ reconnect })` in `RequestOptions` is for WebSocket only and is ignored by SSE.
+- **Reconnect is opt-in on the client** via `withSSEReconnect({ attempts, delayMs, factor, maxDelayMs, jitter, shouldReconnect })`. The `reconnect` field of `RequestOptions` (`client({ reconnect })`) is for WebSocket only and is ignored by SSE.
 - `attempts` defaults to 3 per outage; successful handshakes reset the budget and backoff. Clean EOF ends normally and does not reconnect; body read failures may reconnect. A non-2xx handshake is fatal and bypasses `shouldReconnect`, though a later operation can pick another endpoint.
 - On managed reconnect, the balancer re-picks. `id:` commits at the terminating blank line, even for an ID-only frame; a partial frame never commits it. Reconnect sends the committed cursor as `Last-Event-ID` (an empty ID clears it). The server must support resumption. After a reconnect fails with 503, inspect live `stream.open.response.status`; the runtime fault can be `RES_DECODE_FAILED`.
 - For multiple endpoints and the separate HTTP retry layer, read [load balancing](load-balancing.md).
 - Do not replay a non-idempotent `POST` SSE stream unless `shouldReconnect` verifies a server resumption contract (for example `lastEventId !== ""`).
-- An event first uses its same-name own entry in `events`, then the own `events.default` entry. Only when neither exists is it dropped as `missing-struct`; payload validation failures are also dropped without killing the stream. Observe them with `withSSEOnInvalidEvent(({ reason, message, cause, signal }) => ...)`.
+- An event uses the `events` entry matching its name; if there is none, it uses `events.default`. Only when neither exists is it dropped as `missing-struct`. Payload validation failures are also dropped without killing the stream. Observe both with `withSSEOnInvalidEvent(({ reason, message, cause, signal }) => ...)`.

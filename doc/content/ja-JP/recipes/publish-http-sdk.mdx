@@ -16,13 +16,15 @@ Defjs の SDK は、純粋な操作定義と Struct スキーマを npm パッ�
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -70,7 +72,7 @@ export { getOrder } from "./orders";
 </Tabs>
 
 - `@defjs/core` は利用側アプリケーションと共有される外部ランタイム `peerDependency` として維持します。
-- `"sideEffects": false` を設定することで、アプリケーションが一部の操作のみを import した場合に、バンドラーが未使用のエンドポイントを安全にツリーシェイク（不要コード削除）できるようにします。
+- `"sideEffects": false` を設定することで、アプリケーションが一部の操作のみを import した場合に、バンドラーが未使用の操作をツリーシェイクできます。
 
 ---
 
@@ -107,13 +109,13 @@ bun add @company/orders-sdk @defjs/core@^0.6.0
 paid
 ```
 
-本番コードでは、相対パス `./orders-sdk` を公開されたパッケージ名 `@company/orders-sdk` に置き換え、`withHTTPHandle(...)` を削除してプラットフォーム標準の `fetch` を使用します。
+本番コードでは、相対 import `./src/orders.ts` を `@company/orders-sdk` に置き換え、`withHTTPHandle(...)` を削除してプラットフォームの `fetch` を使用します。
 
 ---
 
 ## 4. テストとパッケージの公開
 
-リクエストマッピング、`output` のデコード、宣言された `HTTP_STATUS` エラー、キャンセル処理を網羅した [インメモリのハンドルテスト](/ja-JP/recipes/test-with-handle) を通じて、export された定義を検証します。検証完了後、パッケージを npm に公開します。
+リクエストマッピング、`output` のデコード、宣言された `HTTP_STATUS` Fault、キャンセル処理を網羅した [インメモリのハンドルテスト](/ja-JP/recipes/test-with-handle) を通じて、export された定義を検証します。検証完了後、パッケージを npm に公開します。
 
 ```sh
 bun publish --access public

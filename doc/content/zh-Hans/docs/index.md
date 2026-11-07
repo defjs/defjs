@@ -1,9 +1,9 @@
 ---
 title: "指南"
-description: 设计 SDK 契约与操作，独立打包发布，并在消费方应用中自由配置与执行。
+description: 设计并发布 SDK 契约与操作，并在消费方应用中配置执行方式。
 ---
 
-Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时配置的 Client 彻底分离开来。阅读以下各章节，围绕“声明契约”与“管控执行”两条主线，学习如何定义操作，并通过 Client 选项和中间件拦截器全面治理执行行为。
+Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时使用的 Client 配置分离开来。阅读以下各章节，了解整体架构、定义操作，并通过 Client 选项和拦截器管控执行。
 
 ## 快速起步 [#getting-started]
 
@@ -22,13 +22,13 @@ Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时配置的 
 
 - [Client](/zh-Hans/docs/client)
 - [错误处理](/zh-Hans/docs/errors)
-- [中间件拦截器](/zh-Hans/docs/interceptors)
+- [拦截器](/zh-Hans/docs/interceptors)
 - [负载均衡与故障转移](/zh-Hans/docs/load-balancing)
 - [测试](/zh-Hans/docs/testing)
 
 ## 框架集成与 AI [#integrations-and-ai]
 
-- [开发插件](/zh-Hans/docs/integrations)
+- [集成概览](/zh-Hans/docs/integrations)
 - [React](/zh-Hans/docs/integrations/react)
 - [Vue](/zh-Hans/docs/integrations/vue)
 - [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server)

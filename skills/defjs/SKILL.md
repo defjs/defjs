@@ -39,7 +39,7 @@ Skip this skill for plain `fetch` or axios code, for other SDKs or query librari
 2. **Calling an operation runs it.** `getOrder(client, input)` or `getOrder(client(options), input)`. `client(options)` returns a non-callable `Client` value for one call and performs no I/O. There is no global client.
 3. **Results are error-first tuples.** Check `if (error)` and return before using the success value. Request, response, and transport failures do not throw at the call site.
 4. **`struct` only declares structure.** Struct instances have no `.parse()`; call `struct.parse(schema, value)`. There is no `struct.encode`, no validation DSL, and no zero-filling.
-5. **Auth, tracing, and application replay policies belong in an interceptor**, never in `builder`. Use `withRetry` for endpoint failover. Put low-cardinality identity in `operation`.
+5. **Auth, tracing, and application replay policies belong in an interceptor**, never in `builder`. Use `withRetry` for same-call HTTP failover. Put low-cardinality identity in `operation`.
 6. **The caller owns streams and sessions.** After a successful SSE or WebSocket startup, handle runtime errors, close the handle/session, and await `closed` (or use `await using`).
 
 ## Minimal correct example

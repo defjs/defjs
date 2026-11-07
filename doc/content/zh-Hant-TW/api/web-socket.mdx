@@ -1,41 +1,36 @@
 ---
 title: WebSocket
-description: defineWebSocket、session，以及 request options。
+description: defineWebSocket、工作階段與請求選項。
 ---
 
 # WebSocket
 
-宣告 socket，帶著 client 呼叫操作，收發型別化 messages，然後 close。
+宣告 socket，帶著 client 呼叫操作，收發具型別的訊息，然後關閉。
 
 ## defineWebSocket()
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`、一個 `incoming` struct，以及必填的正整數 `maxIncomingQueueSize`；選填 `outgoing` 與 `input` struct、`operation`、靜態 `protocols`，以及非負的 `maxOutgoingQueueSize`。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。這些 `definition` 成員寫在 [`WebSocketDefinition`](/zh-Hant-TW/api/core/websocketdefinition-type)。恰好在宣告了 `input` 時，`builder` 才必填。
-- **回傳** 操作。第一個引數是 [`Client`](/zh-Hant-TW/api/core/client-type)。其餘引數只有 input。呼叫它就會開啟 session。
+- **definition** — `path`、一個 `incoming` struct，以及必填的正安全整數 `maxIncomingQueueSize`；選用的 `outgoing` 與 `input` struct、`operation`、靜態 `protocols`，以及非負安全整數的 `maxOutgoingQueueSize`。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。這些 `definition` 成員的文件位於 [`WebSocketDefinition`](/zh-Hant-TW/api/core/websocketdefinition-type)。`builder` 恰好在宣告 `input` 時必填。
+- **回傳** 一個操作。第一個引數是 [`Client`](/zh-Hant-TW/api/core/client-type)。其餘引數只有 input。呼叫它就會開啟工作階段。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-呼叫回傳 `[null, session, connection]` 或 `[error, undefined, connection?]`。每次呼叫的 options 要從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。WebSocket 讀 `signal`、`beforeConnect`、`heartbeat`、`protocols` 與 `reconnect`，並忽略 HTTP 進度欄位。
+呼叫會回傳 `[null, session, connection]` 或 `[error, undefined, connection?]`。單次呼叫的選項，請從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。WebSocket 會讀 `signal`、`beforeConnect`、`heartbeat`、`protocols` 與 `reconnect`，並忽略 HTTP 進度欄位。
 
-`beforeConnect`、`heartbeat`、`protocols` 與 `reconnect` 每一項都會在該次呼叫整份取代 client 的值。Protocols 的優先順序是衍生的 client，其次是 `withWebSocketProtocols`，最後是定義上的 `protocols`。`heartbeat.timeoutMs` 是確認等待，不是請求期限。
+`beforeConnect`、`heartbeat`、`protocols` 與 `reconnect` 每一項都會在該次呼叫整份取代 client 的設定。子協定的優先順序是：衍生的 client、`withWebSocketProtocols`，最後才是定義上的 `protocols`。`heartbeat.timeoutMs` 是等待確認的時間，不是請求期限。
 
 ## WebSocketSession
 
 <ApiSignature name="WebSocketSession" />
 
-自有作用域優先用 `await using ownedSession = session` 清理。手動 `session.close()` 與 `await session.closed` 仍可使用。
+自有作用域請優先使用 `await using ownedSession = session` 清理。手動 `session.close()` 與 `await session.closed` 仍可使用。
 
-```ts
-async function consume(
-  session: WebSocketSession<unknown, never>,
-): Promise<void> {
-  await using ownedSession = session;
-  for await (const message of ownedSession.receive) console.log(message);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#consume
+</include>
 
-`closed` 報告邏輯終止狀態。Async disposer 會要求原生 close 並等待 Defjs 自有 teardown；若持續沒有 close event，則以一秒為界，並可能用名為 `TimeoutError` 的 `DOMException` reject。它無法證明實體 TCP 連線已經關閉。
+`closed` 回報邏輯上的終止狀態。非同步 disposer 會要求原生關閉，並等待 Defjs 擁有的 teardown；但若關閉事件遲遲不來，最多只等一秒，並可能以名為 `TimeoutError` 的 `DOMException` 拒絕。它無法證明實體 TCP 連線真的關閉了。
 
 ### WebSocketState
 
@@ -43,41 +38,41 @@ async function consume(
 
 ### WebSocketConnectionInfo
 
-`generation`（重連時遞增），以及在已知時的 `url`、`protocol` 與 `extensions`。
+`generation`（每次開啟時遞增），以及已知時的 `url`、`protocol` 與 `extensions`。
 
 ### WebSocketCloseInfo
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上選填，在 `error` 上必填。傳入的原始 frame 或已解碼訊息 queue 溢位時，`cause.code === "CAP_QUEUE_OVERFLOW"`；同一個 cause 會讓 `receive` reject，並傳給 `onRuntimeError`。Heartbeat 逾時與重連次數耗盡仍使用一般執行期 `Error` 作為 cause，沒有獨立的穩定代碼。`code`、`reason` 與 `wasClean` 可以出現在每個變體上。手動 `session.close()` 會在 close 事件自己沒有這兩項時，填上 `{ kind: "closed" }` 的 `code` 與 `reason`。
+`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上為選用，在 `error` 上必填。傳入的原始訊框或已解碼訊息佇列溢位時，`cause.code === "CAP_QUEUE_OVERFLOW"`；同一個 cause 會讓 `receive` 拒絕，並傳給 `onRuntimeError`。心跳逾時與重連次數用盡則保留一般的執行時期 `Error` 作為 cause，沒有獨立而穩定的代碼。`code`、`reason` 與 `wasClean` 可能出現在每個變體上。手動 `session.close()` 會在關閉事件本身沒有這兩項時，為 `{ kind: "closed" }` 補上 `code` 與 `reason`。
 
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hant-TW/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 與 `signal`。`WebSocketHeartbeatConfig`：`intervalMs`、選填 `message`、`isAck`、`timeoutMs`。沒有 `timeout` 或 `abort` 欄位。
+`WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hant-TW/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 與 `signal`。`WebSocketHeartbeatConfig` 為 `intervalMs`、選用的 `message`、`isAck` 與 `timeoutMs`。沒有 `timeout` 或 `abort` 欄位。
 
-`signal` 涵蓋整個 session，包含開啟之後。期限是 `AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動取消是 `NET_ABORTED`。沒有只涵蓋啟動期的期限，也沒有 client 層級的預設期限。`signal` 是該次呼叫的 signal；在應用程式碼裡用 `AbortSignal.any` 組合 signals。`heartbeat` 整份替換；它的 `timeoutMs` 等待確認，不是請求期限。
+`signal` 涵蓋整個工作階段，包括開啟之後。期限是 `AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動中止歸類為 `NET_ABORTED`。沒有只涵蓋啟動期的期限，也沒有 client 層級的預設期限。`signal` 是該次呼叫的 signal；請在應用程式碼中用 `AbortSignal.any` 組合。`heartbeat` 是整份替換；它的 `timeoutMs` 只是等待確認，不是請求期限。
 
-Builder 與攔截器鏈每次操作只執行一次。重連會重用已建構的 path/query 與擷取的 protocols，並在 `beforeConnect` 之前建構 URL。如果攔截器沒有取代請求的基礎端點，重連還會代入新選取的端點。這個 hook 無法在同一個 session 內輪替 URL 或子通訊協定的憑證；請使用新的 input 或 client 設定發起新操作。
+builder 與攔截器鏈每次操作只執行一次。重連會重用已建構的 path/query 與擷取到的 protocols，並在 `beforeConnect` 之前建構 URL。若攔截器沒有取代請求的基礎端點，重連還會代入新選取的端點。這個 hook 無法在同一個工作階段內輪替 URL 或子協定的憑證；請用新的 input 或 client 設定發起新操作。
 
-設定了 `reconnect` 時，`attempts` 預設是每一次中斷 3 次；`0` 停用。成功的 `open` 會重設額度與 backoff 指數，所以每一次新的中斷都從重試 1 開始。省略 `attempts` 並不會在同一次中斷內給予無限次重試。預設值與驗證規則見 [Client](/zh-Hant-TW/api/client)。
+設定 `reconnect` 後，`attempts` 預設為每次中斷 3 次；`0` 會停用。成功的 `open` 會重設預算與 backoff 指數，所以每次新的中斷都從重試 1 開始。省略 `attempts` 並不會在同一次中斷內取得無限次重試。預設值與驗證規則見 [Client](/zh-Hant-TW/api/client)。
 
 ## 訊息
 
-`incoming` 是一個 struct。文字、`ArrayBuffer`、typed-array、`Blob` frames 會讀成 UTF-8，再 JSON parse，然後對這個 struct 檢查。JSON parse 或 struct 失敗的 frame 會報給 `session.onRuntimeError`，而且不會進 queue。沒有 client 端的 invalid-frame option。
+`incoming` 是單一 struct。文字、`ArrayBuffer`、型別化陣列與 `Blob` 訊框都會以 UTF-8 讀取、剖析 JSON，再對這個 struct 檢查。JSON 剖析或 struct 驗證失敗的訊框會回報給 `session.onRuntimeError`，不會進入佇列。沒有用戶端層級的無效訊框選項。
 
-`outgoing` 是一個 struct。`session.send` 接受該 struct 的 `StructInput`，編碼 aliases，再 `JSON.stringify`。編碼之後 JSON 無法忠實表示的值，會在送出或進入重新連線 queue 之前丟出 `TypeError`，包含非有限數字、函式、symbol、`Map`、`Set`、stream，以及沒有 JSON 表示的 class instance。巢狀值使用與 HTTP JSON body 相同的檢查。Heartbeat 也使用這項檢查；heartbeat 序列化失敗會結束 session。多種訊息用 `struct.discriminatedUnion`。
+`outgoing` 是單一 struct。`session.send` 接受該 struct 的 `StructInput`，編碼別名，再呼叫 `JSON.stringify`。編碼之後 JSON 無法忠實表示的值，會在送出或進入重連佇列之前拋出 `TypeError`，包括非有限數字、函式、symbol、`Map`、`Set`、串流，以及沒有 JSON 表示的類別實例。巢狀值沿用與 HTTP JSON 本文相同的檢查。心跳也適用這項檢查；心跳序列化失敗會結束工作階段。多種訊息型別請用 `struct.discriminatedUnion`。
 
-```ts
-session.send({ type: "subscribe", symbol: "ACME" });
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#send
+</include>
 
-見 [WebSocket 指南](/zh-Hant-TW/docs/web-socket) 與 [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)。
+見 [WebSocket 指南](/zh-Hant-TW/docs/web-socket) 與[開啟 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)。
 
 ## WebSocketDefinition
 
-`path`、`incoming`、必填的 `maxIncomingQueueSize`，可選 `outgoing`／`input`／`operation`／`protocols`／`maxOutgoingQueueSize`。Builder 只能回傳 `path` 與 `query`。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。
+`path`、`incoming`、必填的 `maxIncomingQueueSize`，以及選用的 `outgoing`／`input`／`operation`／`protocols`／`maxOutgoingQueueSize`。builder 只能回傳 `path` 與 `query`。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。
 
 ## WebSocketEndpoint
 
@@ -97,20 +92,20 @@ session.send({ type: "subscribe", symbol: "ACME" });
 
 ## ManualSocketCloseReason
 
-用 `session.close()` 關掉時記下的原因。
+透過 `session.close()` 關閉工作階段時所記錄的原因。
 
 ## WebSocketHeartbeatConfig
 
-`intervalMs`、選填 `message`、`isAck`、`timeoutMs`。
+`intervalMs`、選用的 `message`、`isAck` 與 `timeoutMs`。
 
 ## WebSocketIncomingData
 
-解碼後的入站 frame：`incoming` struct 的 `Infer`。
+解碼後的入站訊框：`incoming` struct 的 `Infer`。
 
 ## WebSocketOutgoingData
 
-`session.send` 接受的值：`outgoing` struct 的 `StructInput`；沒宣告時是 `never`。
+`session.send` 接受的值：`outgoing` struct 的 `StructInput`；未宣告時為 `never`。
 
 ## SocketLifecycleOutcome
 
-單次連線嘗試的結果（`closeInfo`、`connection`、`cause`、`opened`），供重連邏輯使用。它不是 session 的最終結果；最終結果見 `WebSocketCloseInfo`。
+單次連線嘗試的結果（`closeInfo`、`connection`、`cause`、`opened`），供重連邏輯使用。它不是工作階段的最終結果；最終結果請見 `WebSocketCloseInfo`。

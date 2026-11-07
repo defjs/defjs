@@ -5,18 +5,20 @@ description: Swap Fetch for one client with withHTTPHandle and keep the operatio
 
 # Test with a local Fetch handle
 
-`withHTTPHandle(...)` replaces the underlying `fetch` function for a single client instance while exercising the entire Defjs pipeline—input validation, `builder` mapping, URL resolution, interceptors, status classification, and Struct decoding—without opening a network socket:
+`withHTTPHandle(...)` replaces the underlying `fetch` function for a single client while exercising the entire Defjs pipeline—input validation, `builder` mapping, URL resolution, interceptors, status classification, and Struct decoding—without opening a network socket:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
   <Tab value="sdk/orders.ts">
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="test/orders.spec.ts">
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="Single-file demonstration">
 This is a standalone single-file demonstration, not a test-runner spec. For assertions against the shared SDK definition, use the preceding test tab.
@@ -24,6 +26,7 @@ This is a standalone single-file demonstration, not a test-runner spec. For asse
 <include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -33,4 +36,4 @@ The single-file demonstration prints:
 paid 200
 ```
 
-In production, pass a client configured with `withEndpoint(...)` to the exact same `getOrder` definition. See [Testing](/docs/testing) and [Client](/docs/client).
+In production, call the exact same `getOrder` operation with a client configured with `withEndpoint(...)`. See [Testing](/docs/testing) and [Client](/docs/client).

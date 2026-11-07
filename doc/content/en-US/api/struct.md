@@ -5,29 +5,15 @@ description: struct facade, Infer, and StructError.
 
 # Struct
 
-Build wire-boundary shapes, parse values, infer TypeScript types.
+Build wire-boundary shapes, parse values, and infer TypeScript types.
 
 ## struct
 
 Facade. Prefer this over internal constructors.
 
-```ts
-const Order = struct.object({
-  id: struct.number(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-function readOrder() {
-  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(order.customerName);
-}
-
-readOrder();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### Primitives and containers
 
@@ -57,7 +43,7 @@ readOrder();
 - **Returns** `[null, value]` or `[StructError, undefined]`. The error carries one issue. Object fields stop at the first bad field. `struct.or` tries every branch and then reports `invalid_union`; it does not keep the first branch failure.
 - Object fields are required unless marked `.optional()` or `.nullish()`. Keys the shape does not declare are dropped from the result.
 - Optional `options.errorMap` rewrites issue messages for this parse only.
-- Default reads **logical** keys (`customerName`). Pass `{ aliases: true }` to read wire keys (`customer_name`) the same way HTTP/JSON codecs do.
+- By default, parsing reads **logical** keys (`customerName`). Pass `{ aliases: true }` to read wire keys (`customer_name`) the same way HTTP/JSON codecs do.
 
 ## ErrorMap
 
@@ -85,7 +71,7 @@ See [Struct guide](/docs/struct).
 
 ## STRUCT
 
-A `unique symbol` that tags the objects parsed from endpoint input. It is internal to the outbound encoder and is exported as a type only. Do not read or set it.
+A `unique symbol` that tags the objects parsed from operation input. It is internal to the outbound encoder and is exported as a type only. Do not read or set it.
 
 ## Struct
 

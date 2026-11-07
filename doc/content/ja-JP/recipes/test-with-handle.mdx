@@ -5,18 +5,20 @@ description: withHTTPHandle で単一クライアントの Fetch 実装を差し
 
 # ローカル Fetch ハンドルによるテスト
 
-`withHTTPHandle(...)` は、単一のクライアントインスタンスに対して基底の `fetch` 関数を差し替えます。実際のネットワークソケットを開くことなく、入力値のバリデーション、`builder` による配置、URL 解決、インターセプター、ステータスに応じた振り分け、Struct デコードといった Defjs のパイプライン全体を完全にテストできます。
+`withHTTPHandle(...)` は、単一のクライアントインスタンスに対して基底の `fetch` 関数を差し替えます。実際のネットワークソケットを開くことなく、入力値のバリデーション、`builder` による配置、URL 解決、インターセプター、ステータスに応じた振り分け、Struct デコードといった Defjs のパイプライン全体を実行しながらテストできます。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "単一ファイルのデモ"]}>
   <Tab value="sdk/orders.ts">
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="test/orders.spec.ts">
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="単一ファイルのデモ">
 これは単体の単一ファイルデモであり、テストランナーの spec ではありません。共有された SDK 定義に対するアサーションは、前のテストタブを使ってください。
@@ -24,6 +26,7 @@ description: withHTTPHandle で単一クライアントの Fetch 実装を差し
 <include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -33,4 +36,4 @@ description: withHTTPHandle で単一クライアントの Fetch 実装を差し
 paid 200
 ```
 
-本番環境では、`withEndpoint(...)` で設定したクライアントをまったく同一の `getOrder` 定義に渡して実行します。詳細は [テスト](/ja-JP/docs/testing) および [Client](/ja-JP/docs/client) を参照してください。
+本番環境では、`withEndpoint(...)` で設定したクライアントをまったく同じ `getOrder` 操作に渡して呼び出します。詳細は [テスト](/ja-JP/docs/testing) および [Client](/ja-JP/docs/client) を参照してください。

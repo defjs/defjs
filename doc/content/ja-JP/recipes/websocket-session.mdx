@@ -3,67 +3,28 @@ title: "WebSocket セッションの管理"
 description: 接続を確立し、型付けされたエンベロープを送信して受信し、クローズして closed を待機します。
 ---
 
-# WebSocket セッションの管理 (Open a WebSocket session)
+# WebSocket セッションを開く
 
-`defineWebSocket` で `incoming` と `outgoing` の Struct スキーマを、適切な `maxIncomingQueueSize` とともに宣言します。アプリケーション側では、`session.onRuntimeError(...)` を購読し、`session.receive` を消費し、`finally` ブロック内で必ず購読解除、`session.close(...)` の呼び出し、および `await session.closed` を行います。
+`defineWebSocket` で `incoming` と `outgoing` の Struct スキーマを、受信キューを制限する `maxIncomingQueueSize` とともに宣言します。アプリケーション側では、`session.onRuntimeError(...)` を購読し、`session.receive` を消費し、`finally` ブロック内で必ず購読解除、`session.close(...)` の呼び出し、および `await session.closed` を行います。
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab value="sdk/quotes.ts">
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
+</include>
 
-export const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
-  path: "/quotes",
-  incoming: struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  outgoing: struct.object({
-    type: struct.literal("subscribe"),
-    symbol: struct.string(),
-  }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { quotes } from "../sdk/quotes.ts";
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://quotes.example.com"));
-
-async function main() {
-const [error, session] = await quotes(client);
-if (error) {
-console.error(error.code);
-return;
-}
-const unsubscribe = session.onRuntimeError((cause) =>
-console.error("runtime", cause),
-);
-try {
-session.send({ type: "subscribe", symbol: "ACME" });
-for await (const message of session.receive) {
-console.log(message.symbol, message.price);
-break;
-}
-} finally {
-unsubscribe();
-session.close(1000, "consumer-finished");
-await session.closed;
-}
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -71,7 +32,7 @@ void main();
 
 ```txt
 ACME 142.5
-````
+```
 
-- 自動再接続（`withWebSocketReconnect`）およびハートビート（`withWebSocketHeartbeat`）は、クライアント側のオプトイン設定です。
+- 再接続（`withWebSocketReconnect`）およびハートビート（`withWebSocketHeartbeat`）は、クライアント側のオプトイン設定です。
 - ブラウザの WebSocket はアップグレードハンドシェイク時に任意の HTTP ヘッダーを送信できません。Cookie、サブプロトコル、または短寿命のチケットを使用してください。詳細は [WebSocket セッション](/ja-JP/docs/web-socket) を参照してください。

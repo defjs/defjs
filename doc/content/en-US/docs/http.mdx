@@ -9,49 +9,21 @@ An SDK defines each HTTP operation with `defineRequest`: its method, path templa
 
 ## 1. Define the operation and call it
 
-Give each endpoint its own `defineRequest` export in your SDK module, and keep `createClient` in the consuming application:
+Give each operation its own `defineRequest` export in your SDK module, and keep `createClient` in the consuming application:
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -76,7 +48,7 @@ void main();
 <include cwd>examples/http/resolve-url.ts#example</include>
 
 - **Path placeholders (`:name`)**: Encoded exactly once as a single path segment. Slashes, `?`, `#`, `%`, spaces, and Unicode stay inside that segment—do not pre-encode values. Empty strings, `.`, and `..` fail with `REQ_BUILD_FAILED`.
-- **Origin and directory confinement**: Definition paths cannot be absolute URLs, protocol-relative (`//...`), contain C0 control characters, backslashes, `?`, `#`, or escape the base endpoint's directory (`../`). Any violation fails with `REQ_BUILD_FAILED` before interceptors or transport run.
+- **Origin and directory confinement**: Definition paths cannot be absolute URLs or protocol-relative (`//...`), cannot contain C0 control characters, backslashes, `?`, or `#`, and cannot escape the base endpoint's directory (`../`). Any violation fails with `REQ_BUILD_FAILED` before interceptors or transport run.
 
 ## 3. Placing input with `builder`
 
@@ -153,7 +125,7 @@ Pass `signal` on a per-call derived client: `client({ signal })`.
 </Tab>
 </Tabs>
 
-Cancelling a write request only reports that the caller stopped waiting—it does not guarantee that the server rolled back the mutation.
+Canceling a write request only reports that the caller stopped waiting—it does not guarantee that the server rolled back the mutation.
 
 ## 6. Credentials, XSRF, and transfer progress
 

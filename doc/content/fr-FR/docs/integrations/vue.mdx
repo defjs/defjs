@@ -13,7 +13,7 @@ bun add @defjs/core @defjs/vue vue
 
 ## Ce que `@defjs/vue` possède vs ce que vous possédez
 
-- **Fourni par `@defjs/vue`** : `createClientPlugin(client)`, `HTTP_CLIENT` (`InjectionKey<Client>`) et `injectClient(key?)`.
+- **Fourni par `@defjs/vue`** : `createClientPlugin(client)`, `HTTP_CLIENT` (`InjectionKey<DerivableClient>`) et `injectClient(key?)`.
 - **Possédé par votre application** : création du [`DerivableClient`](/fr-FR/api/core/derivableclient-type), annulation du travail en cours dans les watchers (`onCleanup`) ou les composables (`onScopeDispose`), fermeture des handles SSE/WebSocket et intégration de bibliothèques de requêtes (telles que Vue Query).
 - **Important** : `injectClient()` renvoie l'objet-fonction `DerivableClient`. Appelez `client({ signal })` là où l'opération s'exécute (`getOrder(client({ signal }), input)`). Ne passez jamais `client` comme premier argument à `watch(client, ...)` ou `computed(client)`, car Vue traite un argument fonctionnel comme un accesseur réactif (getter).
 
@@ -28,9 +28,11 @@ Créez le client au point d'entrée de votre application, installez `createClien
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
+
   </Tab>
   <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
+
   </Tab>
 </Tabs>
 
@@ -59,7 +61,6 @@ Pour un travail initié dans un composable ou un composant hors d'un watcher, as
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
 - La branche d’erreur du tuple affiche les échecs du handshake initial (y compris HTTP 503). Le `catch` de l’itérateur affiche les échecs après le démarrage ; le bloc `finally` ferme toujours le flux et attend sa clôture.
-
 - Arrêter la portée met fin à une boucle SSE `for await` normalement.
 - Annuler une session WebSocket la clôt en `'aborted'` et rejette `session.receive` avec une `AbortError`. Protégez donc le bloc `catch` après destruction et désabonnez les écouteurs `onStateChange` / `onRuntimeError` dans un bloc `finally`.
 
@@ -69,7 +70,7 @@ Pour un travail initié dans un composable ou un composant hors d'un watcher, as
 
 - **Navigateur** : partagez un client unique par application Vue lorsque l'endpoint et les intercepteurs ne dépendent pas de la requête.
 - **SSR** : instanciez et installez un client neuf par requête SSR dès que les en-têtes, cookies, tenants ou identifiants diffèrent.
-- Démonter l'application Vue ou détruire la portée d'un composant n'**annule pas** automatiquement les requêtes HTTP, ne ferme pas les flux SSE/WebSocket et ne détruit pas le client du cœur.
+- Démonter l'application Vue ou détruire la portée d'un composant n'**annule pas** automatiquement les requêtes HTTP, ne ferme pas les flux SSE/WebSocket et ne libère pas le client Core.
 
 ---
 
@@ -79,7 +80,7 @@ Pour un travail initié dans un composable ou un composant hors d'un watcher, as
   examples/vue/exports.ts#example
 </include>
 
-- `HTTP_CLIENT` — `InjectionKey<Client>` pour le `provide` / `inject` natif.
+- `HTTP_CLIENT` — `InjectionKey<DerivableClient>` pour le `provide` / `inject` natif.
 - `createClientPlugin(client)` — `Plugin` Vue fournissant `client` sous la clé `HTTP_CLIENT`.
 - `injectClient(key?)` — résout le client le plus proche pour `key` (`HTTP_CLIENT` par défaut).
 - Guides connexes : [Client](/fr-FR/docs/client), [Opérations HTTP](/fr-FR/docs/http), [Intercepteurs](/fr-FR/docs/interceptors), [Flux d'événements SSE](/fr-FR/docs/sse), [Sessions WebSocket](/fr-FR/docs/web-socket).

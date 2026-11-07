@@ -1,6 +1,6 @@
 ---
 title: "Skill"
-description: "Installiere den Defjs-Skill, bitte um einen typisierten GET-Endpunkt und prüfe das Ergebnis am installierten SDK."
+description: "Installiere den Defjs-Skill, frage eine typisierte GET-Operation an und prüfe das Ergebnis am installierten SDK."
 ---
 
 Der Defjs-Skill vermittelt einem Assistenten den Vertrag zwischen SDK-Definition und Anwendungsausführung. Ein unterstützter Assistent kann ihn bei passenden Aufgaben laden; die automatische Aktivierung hängt vom Tool ab.
@@ -15,9 +15,9 @@ bunx skills add defjs/defjs --skill defjs
 
 Nach der Veröffentlichung stehen die Skill-Anweisungen unter [skills/defjs/SKILL.md](https://github.com/defjs/defjs/blob/main/skills/defjs/SKILL.md). Der GitHub-Quelltext ist der Standardbranch und kann von der im Projekt installierten `@defjs/core`-Version abweichen.
 
-## Einen Endpunkt verlangen [#prompt]
+## Eine Operation anfragen [#prompt]
 
-Gib dem Assistenten eine Aufgabe. Dieser Prompt verlangt ein typisiertes `GET /orders/:id`, dessen Client in der Anwendung bleibt:
+Gib dem Assistenten eine Aufgabe. Dieser Prompt fordert ein typisiertes `GET /orders/:id`, dessen Client in der Anwendung bleibt:
 
 ```txt
 Use @defjs/core to define GET /orders/:id.
@@ -30,4 +30,4 @@ and verify the result with the project’s existing tests.
 
 Lies Definition und Anwendung getrennt. Die Definition exportiert die Operation und erzeugt den Client nicht. Die Anwendung erzeugt den Client und ruft die Operation auf, zum Beispiel `getOrder(client, { id: 1 })`. Ist `input` deklariert, ist `builder` eine explizite synchrone reine Funktion. Der Erfolgswert wird nur gelesen, wenn der Fehlerplatz leer ist.
 
-Führe danach die Typprüfung dieses Projekts und die Tests aus, die den Vertrag wirklich ausführen. Installation von Abhängigkeiten und CI-Regeln bleiben bei diesem Projekt.
+Führe danach die Typprüfung dieses Projekts und die Tests aus, die den Vertrag abdecken. Installation von Abhängigkeiten und CI-Regeln bleiben bei diesem Projekt.

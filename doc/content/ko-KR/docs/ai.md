@@ -1,6 +1,6 @@
 ---
 title: "Skill"
-description: "Defjs skill을 설치하고, 도우미에게 타입이 있는 GET 엔드포인트를 맡긴 뒤 설치된 SDK와 결과를 대조합니다."
+description: "Defjs skill을 설치하고, 도우미에게 타입화된 GET 작업을 맡긴 뒤 설치된 SDK와 결과를 대조합니다."
 ---
 
 Defjs skill은 SDK 정의와 애플리케이션 실행 계약을 어시스턴트에게 알려 줍니다. 지원하는 어시스턴트는 관련 작업에서 이를 불러올 수 있으며, 자동 활성화 여부는 도구에 따라 다릅니다.
@@ -15,9 +15,9 @@ bunx skills add defjs/defjs --skill defjs
 
 게시된 뒤의 skill 설명은 [skills/defjs/SKILL.md](https://github.com/defjs/defjs/blob/main/skills/defjs/SKILL.md)에서 읽을 수 있습니다. GitHub 소스는 기본 브랜치이며, 프로젝트에 설치된 `@defjs/core` 버전과 다를 수 있습니다.
 
-## 엔드포인트 하나 요청하기 [#prompt]
+## 작업 하나 요청하기 [#prompt]
 
-도우미에게 작업을 하나 줍니다. 다음 프롬프트는 타입이 있는 `GET /orders/:id`와 애플리케이션에 두는 client를 요청합니다.
+도우미에게 작업을 하나 줍니다. 다음 프롬프트는 타입화된 `GET /orders/:id`와 애플리케이션에 두는 클라이언트를 요청합니다.
 
 ```txt
 Use @defjs/core to define GET /orders/:id.
@@ -28,6 +28,6 @@ and verify the result with the project’s existing tests.
 
 ## 결과 확인 [#verify]
 
-정의와 애플리케이션을 따로 읽습니다. 정의는 작업을 export하고 client를 만들지 않습니다. 애플리케이션이 client를 만들고 작업을 호출합니다. 예를 들어 `getOrder(client, { id: 1 })`입니다. `input`을 선언했다면 `builder`는 명시적인 동기 순수 함수입니다. 성공 값은 error 칸이 비어 있을 때만 사용합니다.
+정의와 애플리케이션을 따로 읽습니다. 정의는 작업을 export하고 클라이언트를 만들지 않습니다. 애플리케이션이 클라이언트를 만들고 작업을 호출합니다. 예를 들어 `getOrder(client, { id: 1 })`입니다. `input`을 선언했다면 `builder`는 명시적인 동기 순수 함수입니다. 성공 값은 error 칸이 비어 있을 때만 사용합니다.
 
 그다음 그 프로젝트의 타입 검사와, 그 계약을 실제로 실행하는 테스트를 실행합니다. 의존성 설치와 CI 규칙은 그 프로젝트에 둡니다.

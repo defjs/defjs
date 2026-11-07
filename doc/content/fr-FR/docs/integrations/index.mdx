@@ -5,11 +5,11 @@ description: Étendez le client Defjs applicatif grâce à l'injection de framew
 
 # Vue d’ensemble des intégrations
 
-Une intégration étend le `Client` applicatif à un point d'extension défini sans modifier `@defjs/core` ni coupler une définition de SDK à un framework ou à une pile de télémétrie. Vos définitions de SDK restent de purs modules `@defjs/core` ; l'application consommatrice choisit quelles intégrations installer.
+Une intégration étend le `Client` applicatif à un point d'extension défini sans modifier `@defjs/core` ni coupler une définition de SDK à un framework ou à une stack de télémétrie. Vos définitions de SDK restent de purs modules `@defjs/core` ; l'application consommatrice choisit quelles intégrations installer.
 
 Tout plugin Defjs respecte le contrat des **plugins légers (thin plugins)** :
 
-- **Aucun cache ni état dissimulé** : les plugins ne stockent jamais de réponses, ne rejouent pas de requêtes et ne gèrent pas d'état de requêtage.
+- **Aucun cache ni état dissimulé** : les plugins ne stockent jamais de réponses, ne rejouent pas de requêtes et ne gèrent pas d'état des requêtes.
 - **Aucune substitution de transport** : les plugins n'enveloppent ni ne remplacent les transports HTTP, SSE ou WebSocket sous-jacents.
 - **Cycle de vie possédé par l'appelant** : démonter un provider d'interface ou éteindre un SDK de télémétrie n'annule pas automatiquement les requêtes en cours ni ne ferme les flux actifs.
 
@@ -19,8 +19,8 @@ Tout plugin Defjs respecte le contrat des **plugins légers (thin plugins)** :
 
 | Domaine                                                                | Package / Ressource               | Catégorie           | Ce qu'il fournit                                                                                                | Ce qui reste dans l'application                                                               |
 | ---------------------------------------------------------------------- | --------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [React](/fr-FR/docs/integrations/react)                                | `@defjs/react`                    | Plugin de framework | `ClientProvider` et `useClient(override?)` pour React 18+                                                       | Création du client, nettoyage via `AbortController`, cache de requêtes (ex. TanStack Query)   |
-| [Vue](/fr-FR/docs/integrations/vue)                                    | `@defjs/vue`                      | Plugin de framework | `createClientPlugin`, `HTTP_CLIENT` et `injectClient(key?)` pour Vue 3.2+                                       | Création du client, annulation par `onCleanup` / `onScopeDispose`, état de requêtage          |
+| [React](/fr-FR/docs/integrations/react)                                | `@defjs/react`                    | Plugin de framework | `ClientProvider` et `useClient(overrideClient?)` pour React 18+                                                 | Création du client, nettoyage via `AbortController`, cache de requêtes (ex. TanStack Query)   |
+| [Vue](/fr-FR/docs/integrations/vue)                                    | `@defjs/vue`                      | Plugin de framework | `createClientPlugin`, `HTTP_CLIENT` et `injectClient(key?)` pour Vue 3.2+                                       | Création du client, annulation par `onCleanup` / `onScopeDispose`, état des requêtes          |
 | [Serveur OpenTelemetry](/fr-FR/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Plugin middleware   | `ClientOption` `withOpenTelemetryServer(...)` pour les spans, métriques et logs sortants HTTP, SSE et WebSocket | Initialisation du SDK OpenTelemetry, exportateurs, échantillonnage, masquage et purge         |
 | [Skill IA](/fr-FR/docs/ai) & [llms.txt](/fr-FR/docs/ai-api)            | Skill `defjs/defjs` & `/llms.txt` | Outillage IA        | Skill d'agent (`SKILL.md`) et documentation Markdown lisible par machine                                        | Vérification vis-à-vis de la version `@defjs/core` installée dans le projet et suite de tests |
 
@@ -33,62 +33,24 @@ Tout plugin Defjs respecte le contrat des **plugins légers (thin plugins)** :
 Un plugin de framework transmet un [`DerivableClient`](/fr-FR/api/core/derivableclient-type) existant à l'arbre de composants via l'injection de dépendances native (React Context ou Vue `provide` / `inject`) :
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-<Tab value="sdk/orders.ts">
+  <Tab value="sdk/orders.ts">
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
+  </Tab>
+  <Tab value="app/main.tsx">
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
 
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
+  </Tab>
+  <Tab value="app/OrderCard.tsx">
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: Order,
-});
-```
-
-</Tab>
-<Tab value="app/main.tsx">
-
-```tsx
-import { createClient, withEndpoint } from "@defjs/core";
-import { ClientProvider } from "@defjs/react";
-import { OrderCard } from "./OrderCard.tsx";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-export function App() {
-  return (
-    <ClientProvider client={client}>
-      <OrderCard id={42} />
-    </ClientProvider>
-  );
-}
-```
-
-</Tab>
-<Tab value="app/OrderCard.tsx">
-
-```tsx
-import { useClient } from "@defjs/react";
-import { getOrder } from "../sdk/orders.ts";
-
-export function OrderCard({ id }: { id: number }) {
-  const client = useClient();
-  // Transmettez `client` ou `client({ signal })` à `getOrder(...)` dans un hook d'effet ou de requête
-  void id;
-  void getOrder;
-  void client;
-  return null;
-}
-```
-
-</Tab>
+  </Tab>
 </Tabs>
 
 ### 2. Plugins middleware (`@defjs/opentelemetry-server`)
@@ -96,26 +58,18 @@ export function OrderCard({ id }: { id: number }) {
 Un plugin middleware est une fabrique renvoyant une [`ClientOption`](/fr-FR/api/core/clientoption-type). Lorsqu'elle est passée à `createClient(...)`, elle ajoute des intercepteurs HTTP, SSE et/ou WebSocket via `withInterceptors` :
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-<Tab value="plugins/request-id.ts">
-
+  <Tab value="plugins/request-id.ts">
 <include cwd lang="typescript">
-  examples/integrations/request-id.ts#example
+  examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
-</Tab>
-<Tab value="app/client.ts">
+  </Tab>
+  <Tab value="app/client.ts">
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { withRequestIdHeader } from "../plugins/request-id.ts";
-
-export const client = createClient(
-  withEndpoint("https://api.example.com"),
-  withRequestIdHeader(),
-);
-```
-
-</Tab>
+  </Tab>
 </Tabs>
 
 Consultez [Intercepteurs](/fr-FR/docs/interceptors) pour découvrir les règles d'ordonnancement, les frontières de retry et les hooks de cycle de vie des flux.

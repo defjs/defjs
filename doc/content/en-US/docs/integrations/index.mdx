@@ -19,7 +19,7 @@ Every Defjs plugin obeys the **thin plugin contract**:
 
 | Area                                                            | Package / Resource                | Category          | What it provides                                                                                             | What stays in the application                                                     |
 | --------------------------------------------------------------- | --------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| [React](/docs/integrations/react)                               | `@defjs/react`                    | Framework plugin  | `ClientProvider` and `useClient(override?)` for React 18+                                                    | Client creation, `AbortController` cleanup, query caching (e.g., TanStack Query)  |
+| [React](/docs/integrations/react)                               | `@defjs/react`                    | Framework plugin  | `ClientProvider` and `useClient(overrideClient?)` for React 18+                                              | Client creation, `AbortController` cleanup, query caching (e.g., TanStack Query)  |
 | [Vue](/docs/integrations/vue)                                   | `@defjs/vue`                      | Framework plugin  | `createClientPlugin`, `HTTP_CLIENT`, and `injectClient(key?)` for Vue 3.2+                                   | Client creation, `onCleanup` / `onScopeDispose` cancellation, query state         |
 | [OpenTelemetry server](/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Middleware plugin | `withOpenTelemetryServer(...)` `ClientOption` for outbound HTTP, SSE, and WebSocket spans, metrics, and logs | OpenTelemetry SDK initialization, exporters, sampling, redaction, and flush       |
 | [AI Skill](/docs/ai) & [llms.txt](/docs/ai-api)                 | `defjs/defjs` skill & `/llms.txt` | AI tooling        | Agent skill (`SKILL.md`) and machine-readable Markdown documentation                                         | Verification against the project's installed `@defjs/core` version and test suite |
@@ -34,54 +34,22 @@ A framework plugin passes an existing [`DerivableClient`](/api/core/derivablecli
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
 
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: Order,
-});
-```
   </Tab>
   <Tab value="app/main.tsx">
-```tsx
-import { createClient, withEndpoint } from "@defjs/core";
-import { ClientProvider } from "@defjs/react";
-import { OrderCard } from "./OrderCard.tsx";
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-export function App() {
-  return (
-    <ClientProvider client={client}>
-      <OrderCard id={42} />
-    </ClientProvider>
-  );
-}
-```
   </Tab>
   <Tab value="app/OrderCard.tsx">
-```tsx
-import { useClient } from "@defjs/react";
-import { getOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
 
-export function OrderCard({ id }: { id: number }) {
-  const client = useClient();
-  // Pass `client` or `client({ signal })` into `getOrder(...)` inside an effect or query hook
-  void id;
-  void getOrder;
-  void client;
-  return null;
-}
-```
   </Tab>
 </Tabs>
 
@@ -92,19 +60,14 @@ A middleware plugin is a factory that returns a [`ClientOption`](/api/core/clien
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab value="plugins/request-id.ts">
 <include cwd lang="typescript">
-  examples/integrations/request-id.ts#example
+  examples/integrations/request-id/plugins/request-id.ts#example
 </include>
+
   </Tab>
   <Tab value="app/client.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { withRequestIdHeader } from "../plugins/request-id.ts";
-
-export const client = createClient(
-  withEndpoint("https://api.example.com"),
-  withRequestIdHeader(),
-);
-```
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
 
   </Tab>
 </Tabs>

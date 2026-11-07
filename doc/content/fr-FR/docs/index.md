@@ -3,7 +3,7 @@ title: "Guide"
 description: Concevoir les contrats et les opérations du SDK, les publier, et configurer l'exécution dans les applications consommatrices.
 ---
 
-Defjs sépare le contrat d'API publié par l'équipe du SDK de la configuration du client utilisée au runtime par l'application. Suivez les sections ci-dessous pour apprendre l'architecture, définir et empaqueter vos opérations, et maîtriser l'exécution grâce aux options de client et aux intercepteurs.
+Defjs sépare le contrat d'API publié par l'équipe du SDK de la configuration du client utilisée au runtime par l'application. Suivez les sections ci-dessous pour apprendre l'architecture, définir des opérations et piloter l'exécution grâce aux options de client et aux intercepteurs.
 
 ## Prise en main [#getting-started]
 

@@ -1,6 +1,6 @@
 ---
-title: "錯誤"
-description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple 區分業務狀態及執行失敗。
+title: "錯誤處理"
+description: 由 SDK 宣告服務錯誤契約，使用方應用程式按型別處理執行失敗。
 ---
 
 # 錯誤處理
@@ -39,21 +39,21 @@ description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple
 
 ## 2. Fault 類別與封閉代碼集
 
-首個底線 `_` 前面嘅前綴代表 Fault 嘅類別（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），而完整嘅 `code` 組成一個封閉型別集合（closed union），非常適合寫窮舉（exhaustive）嘅 `switch` 語句：
+首個底線 `_` 前面嘅前綴代表 Fault 嘅類別（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），而完整嘅 `code` 組成一個封閉型別集合（closed union），可以直接寫窮舉（exhaustive）嘅 `switch` 語句：
 
-| 類別   | Fault 代碼                                                             | 意思與應對方式                                                                                          |
+| 類別   | 錯誤碼                                                                 | 意思與應對方式                                                                                          |
 | ------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `HTTP` | `HTTP_STATUS`                                                          | 伺服器回傳咗非 `2xx` 狀態碼（`3xx`、`4xx`、`5xx`），並成功解碼任何宣告過嘅 `error` struct。             |
 | `REQ`  | `REQ_INPUT_INVALID`、`REQ_OPTIONS_INVALID`、`REQ_BUILD_FAILED`         | 呼叫端傳入嘅 input 驗證失敗、client 選項超出範圍、URL/路徑無效，或者 `builder` 拋出例外。絕唔應該重試。 |
 | `RES`  | `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH`   | 伺服器回應違反咗宣告嘅 media type、資料格式或 `struct` 契約。                                           |
 | `NET`  | `NET_ABORTED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`NET_BODY_INCOMPLETE` | 呼叫端主動中斷（`NET_ABORTED`）、逾時期限屆滿（`NET_TIMEOUT`）、連線失敗，或串流中途截斷。              |
-| `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | 應用程式嘅中介層、hook 或進度／狀態監聽器拋出例外或回傳咗無效值。                                       |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | 應用程式嘅攔截器、hook 或進度／狀態監聽器拋出例外或回傳咗無效值。                                       |
 | `CAP`  | `CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`                            | SSE frame 緩衝區或 SSE/WebSocket 消費佇列超出設定上限。                                                 |
 | `ENV`  | `ENV_UNSUPPORTED`                                                      | 當前執行環境缺少所需嘅 Web API（例如喺 Firefox 中串流上傳 request body）。                              |
 
-### 各 Fault 代碼嘅屬性一覽
+### 各錯誤碼嘅屬性一覽
 
-| Fault 代碼    | `status` | `response`                                           | `data`                                    | `cause`                     |
+| 錯誤碼        | `status` | `response`                                           | `data`                                    | `cause`                     |
 | ------------- | -------- | ---------------------------------------------------- | ----------------------------------------- | --------------------------- |
 | `HTTP_STATUS` | `number` | `DecodedResponse<TErr>` 或 `HttpMeta`                | 解碼後嘅 `error` struct，或為 `undefined` | 底層根本原因（如有）        |
 | `RES_*`       | `number` | `HttpMeta`（**冇 `body` 欄位**）                     | 無                                        | `StructError` 或解析器錯誤  |
@@ -93,11 +93,11 @@ description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple
 
 對於長連線，操作回傳嘅 tuple 淨係會報告**啟動階段**嘅失敗（即串流或 socket 開啟之前）。連線一旦成功開啟，後續嘅執行時錯誤會透過 handle 或 session 嘅生命週期派發：
 
-| 傳輸協議      | 啟動階段失敗（喺 Tuple 回傳）                                                                                               | 連線建立後失敗（喺 Tuple resolve 之後）                                                                                                                                                                                                                                 |
+| 傳輸層        | 啟動階段失敗（喺 Tuple 回傳）                                                                                               | 連線建立後失敗（喺 Tuple resolve 之後）                                                                                                                                                                                                                                 |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **HTTP**      | 所有失敗都會一次過喺操作 tuple 完成結算。                                                                                   | 不適用                                                                                                                                                                                                                                                                  |
-| **SSE**       | 非 `2xx`（`HTTP_STATUS`）、錯誤嘅 content type（`RES_MEDIA_TYPE_INVALID`），或握手 body 缺失／無效（`RES_DECODE_FAILED`）。 | Async iterator 會 reject；`stream.closed` 會 resolve 出 `{ kind: 'error', code }`。                                                                                                                                                                                     |
-| **WebSocket** | 握手完成前被關閉、建構子失敗，或喺握手期間被中斷。                                                                          | 非致命 frame 錯誤會觸發 `session.onRuntimeError`；致命錯誤會 reject `session.receive`，並令 `session.closed` resolve 為 `{ kind: 'error', cause }`。傳入佇列溢出使用 `cause.code === 'CAP_QUEUE_OVERFLOW'`；心跳逾時同重連次數用盡仍然用一般 runtime `Error` 做 cause。 |
+| **SSE**       | 非 `2xx`（`HTTP_STATUS`）、錯誤嘅 content type（`RES_MEDIA_TYPE_INVALID`），或握手 body 缺失／無效（`RES_DECODE_FAILED`）。 | 非同步迭代器會 reject；`stream.closed` 會 resolve 出 `{ kind: 'error', code }`。                                                                                                                                                                                        |
+| **WebSocket** | 握手完成前被關閉、建構函式失敗，或喺握手期間被中斷。                                                                        | 非致命 frame 錯誤會觸發 `session.onRuntimeError`；致命錯誤會 reject `session.receive`，並令 `session.closed` resolve 為 `{ kind: 'error', cause }`。傳入佇列溢出使用 `cause.code === 'CAP_QUEUE_OVERFLOW'`；心跳逾時同重連次數用盡仍然用一般 runtime `Error` 做 cause。 |
 
 ## 5. 安全嘅結構化日誌與 Cause 檢查
 
@@ -121,10 +121,10 @@ description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple
 </Tabs>
 
 > [!CAUTION]
-> 請將 `fault.cause`、`fault.data`、回應 headers、完整 URL 同 `StructIssue.received` 視為可能含有機密資料嘅欄位。預設記錄日誌嗰陣，請採用白名單模式，淨係記錄低基數字段（例如 `operation`、`code`、`status`、耗時 duration）。
+> 請將 `fault.cause`、`fault.data`、回應 headers、完整 URL 同 `StructIssue.received` 視為可能含有機密資料嘅欄位。預設記錄日誌嗰陣，請採用白名單模式，淨係記錄低基數欄位（例如 `operation`、`code`、`status`、耗時 duration）。
 
 ## 延伸閱讀
 
-- [處理已聲明嘅 404](/zh-Hant-HK/recipes/get-declared-404)
+- [處理已宣告嘅 404](/zh-Hant-HK/recipes/get-declared-404)
 - [取消 HTTP 呼叫](/zh-Hant-HK/recipes/cancel-http)
 - [核心架構](/zh-Hant-HK/docs/design-decisions)

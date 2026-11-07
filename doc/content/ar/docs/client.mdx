@@ -5,7 +5,7 @@ description: اضبط كيفية استدعاء تطبيقك لعمليات SDK 
 
 # العميل (Client)
 
-يحمل كائن `Client` إعدادات تنفيذ التطبيق المستهلك: العناوين الأساسية (base URLs)، والترويسات الافتراضية، وبيانات الاعتماد، ووسائط الاعتراض (Interceptors)، وتسلسل معلمات الاستعلام، ومقابض وسائل النقل.
+يحمل كائن `Client` إعدادات تنفيذ التطبيق المستهلك: العناوين الأساسية (base URLs)، والترويسات الافتراضية، وبيانات الاعتماد، والمعترضات (Interceptors)، وتسلسل معلمات الاستعلام، ومقابض وسائل النقل.
 
 تُرجع الدالة `createClient(...options)` عميلاً مشتقاً من نوع [`DerivableClient`](/ar/api/core/derivableclient-type):
 
@@ -14,21 +14,12 @@ description: اضبط كيفية استدعاء تطبيقك لعمليات SDK 
 
 ## 1. ضبط العميل واستدعاء عملية من SDK
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
@@ -88,7 +79,7 @@ export const getOrder = defineRequest({
 تقبل الدالة `withEndpoint(...urls)` عنواناً أساسياً واحداً أو أكثر كمرشحين. وافتراضياً:
 
 - يستخدم كل عميل [`pickFirstBalancer`](/ar/api/core/pickfirstbalancer)، ويلتزم بالعنوان الأول حتى يتقدّم عند `NET_UNREACHABLE` أو `NET_UNAVAILABLE` (HTTP 502 أو 503 أو 504).
-- **إعادة محاولة HTTP في نفس الاستدعاء معطّلة افتراضياً.** `withRetry()` يعادل `withRetry({})` ويفعّل محاولة ثانية على نقطة نهاية لم تُجرَّب عند فشل الاتصال للطرق الآمنة (`GET` و`HEAD` و`OPTIONS` و`TRACE`)، مع backoff. ميزانية إعادة المحاولة بنمط Finagle ملك لإعداد العميل، ويشاركها العملاء المشتقون من ذلك الإعداد، بمعزل عن هوية الموازن.
+- **إعادة محاولة HTTP في نفس الاستدعاء معطّلة افتراضياً.** `withRetry()` يعادل `withRetry({})` ويفعّل محاولة ثانية على نقطة نهاية لم تُجرَّب عند فشل الاتصال للطرق الآمنة (`GET` و`HEAD` و`OPTIONS` و`TRACE`)، مع backoff. ميزانية إعادة المحاولة بنمط Finagle تملكها إعدادات العميل، ويشاركها العملاء المشتقون من ذلك الإعداد، بمعزل عن هوية الموازن.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -98,9 +89,9 @@ export const getOrder = defineRequest({
 
 ### فحص السلامة وخوارزمية p2c [#health-filtering-and-p2c]
 
-بالنسبة للنسخ المتطابقة من الخوادم النظيرة، تُفعل أدوات التوزيع [`roundRobinBalancer`](/ar/api/core/roundrobinbalancer) و[`p2cBalancer`](/ar/api/core/p2cbalancer) (خوارزمية ذروة Ewma لزمن الرحلة RTT × الحمل اللحظي) قاطع الدائرة للأخطاء المتتالية بنمط Linkerd عبر (`outlierDetection`) افتراضياً. يحصي `NET_UNREACHABLE` و`NET_UNAVAILABLE` و`NET_SERVER_ERROR`؛ و`status` الخام للاستجابة مخصص فقط لموزعات الحمل المخصصة.
+بالنسبة للنسخ المتطابقة من الخوادم النظيرة، تُفعل أدوات التوزيع [`roundRobinBalancer`](/ar/api/core/roundrobinbalancer) و[`p2cBalancer`](/ar/api/core/p2cbalancer) (خوارزمية ذروة Ewma لزمن الرحلة RTT × الحمل اللحظي) قاطع الدائرة للأخطاء المتتالية على طراز Linkerd (عبر `outlierDetection`) افتراضياً. يحصي `NET_UNREACHABLE` و`NET_UNAVAILABLE` و`NET_SERVER_ERROR`؛ و`status` الخام للاستجابة مخصص فقط لموازنات الحمل المخصصة.
 
-راجع دليل [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing) المخصص للاطلاع على التفاصيل الكاملة لميزانيات إعادة المحاولة، وفحوصات السلامة النشطة والسلبية، وتقدير الحمل بخوارزمية P2C، وموزعات الحمل المخصصة.
+راجع دليل [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing) للاطلاع على التفاصيل الكاملة لميزانيات إعادة المحاولة، وفحوصات السلامة النشطة والسلبية، وتقدير الحمل بخوارزمية P2C، وموازنات الحمل المخصصة.
 
 ## 5. حقن وسيلة نقل مخصصة للاختبار
 
@@ -117,8 +108,8 @@ export const getOrder = defineRequest({
 | الدالة المساعدة                                                                                               | الغرض                                                                                               |
 | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `withEndpoint(...urls)`                                                                                       | تضبط عنواناً أساسياً واحداً أو أكثر كمرشحين (تستبدل القائمة السابقة).                               |
-| `withHeaders(HeadersInit)`                                                                                    | تضبط ترويسات افتراضية ثابتة لـ HTTP وSSE (تتجاوزها ترويسات builder).                                |
-| `withInterceptors(...items)`                                                                                  | تُلحق وسائط معترضة لـ HTTP وSSE وWebSocket بنمط طبقات البصلة (onion order).                         |
+| `withHeaders(HeadersInit)`                                                                                    | تضبط ترويسات افتراضية ثابتة لـ HTTP وSSE (تتجاوزها ترويسات `builder`).                              |
+| `withInterceptors(...items)`                                                                                  | تُلحق معترضات لـ HTTP وSSE وWebSocket بنمط طبقات البصلة (onion order).                              |
 | `withQuerySerializer(fn)`                                                                                     | تُسلسل كائنات معلمات الاستعلام ذات الأسماء البديلة إلى نص استعلام سلكي.                             |
 | `withCredentials(boolean)`                                                                                    | تضبط خيار Fetch على `credentials: "include"` لـ HTTP وSSE عند التعيين إلى `true`.                   |
 | `withXSRF(options?)`                                                                                          | تنسخ ملف تعريف ارتباط XSRF إلى ترويسة الطلب لطلبات HTTP المعدِّلة من نفس المصدر.                    |
@@ -131,6 +122,6 @@ export const getOrder = defineRequest({
 ## قراءات ذات صلة
 
 - [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing)
-- [الوسائط (Interceptors)](/ar/docs/interceptors)
+- [المعترضات (Interceptors)](/ar/docs/interceptors)
 - [الاختبارات](/ar/docs/testing)
 - [اختبار الطلبات محلياً عبر مقبض Fetch](/ar/recipes/test-with-handle)

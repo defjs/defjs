@@ -16,13 +16,15 @@ Halte deine Operationsdefinitionen, Barrel-Exporte, `package.json` und `tsconfig
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -70,7 +72,7 @@ export { getOrder } from "./orders";
 </Tabs>
 
 - `@defjs/core` bleibt eine externe Laufzeit-`peerDependency`, die mit der konsumierenden Anwendung geteilt wird.
-- `"sideEffects": false` erlaubt es Bundlern, ungenutzte Endpunkte per Tree-Shaking zu entfernen, wenn eine Anwendung nur einen Teil der Operationen importiert.
+- `"sideEffects": false` erlaubt es Bundlern, ungenutzte Operationen per Tree-Shaking zu entfernen, wenn eine Anwendung nur einen Teil davon importiert.
 
 ---
 
@@ -107,13 +109,13 @@ Die Anwendung erstellt ihren eigenen `Client` und übergibt ihn an die importier
 paid
 ```
 
-Im Produktionscode ersetzt du den relativen Import `./orders-sdk` durch `@company/orders-sdk` und entfernst `withHTTPHandle(...)`, um das plattformnative `fetch` zu verwenden.
+Im Produktionscode ersetzt du den relativen Import `./src/orders.ts` durch `@company/orders-sdk` und entfernst `withHTTPHandle(...)`, um das plattformnative `fetch` zu verwenden.
 
 ---
 
 ## 4. Testen und veröffentlichen
 
-Prüfe deine exportierten Definitionen mit [In-Memory-Handle-Tests](/de-DE/recipes/test-with-handle), die Request-Mapping, `output`-Dekodierung, deklarierte `HTTP_STATUS`-Fehler und Abbruchszenarien abdecken. Nach erfolgreicher Verifikation veröffentlichst du das Paket:
+Prüfe deine exportierten Definitionen mit [In-Memory-Handle-Tests](/de-DE/recipes/test-with-handle), die Request-Mapping, `output`-Dekodierung, deklarierte `HTTP_STATUS`-Faults und Abbruchszenarien abdecken. Nach erfolgreicher Verifikation veröffentlichst du das Paket:
 
 ```sh
 bun publish --access public

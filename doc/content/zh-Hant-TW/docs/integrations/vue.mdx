@@ -13,63 +13,64 @@ bun add @defjs/core @defjs/vue vue
 
 ## `@defjs/vue` 負責的項目 vs. 應用程式負責的項目
 
-- **由 `@defjs/vue` 提供**：`createClientPlugin(client)`、`HTTP_CLIENT`（`InjectionKey<Client>`）與 `injectClient(key?)`。
-- **由你的應用程式掌控**：建立 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)、在 Watcher（`onCleanup`）或 Composable（`onScopeDispose`）中取消進行中的請求、關閉 SSE/WebSocket 控制代碼，以及整合如 Vue Query 等查詢狀態管理函式庫。
-- **重要提示**：`injectClient()` 回傳的是 `DerivableClient` 函式物件。請在實際執行操作處呼叫 `client({ signal })`（如 `getOrder(client({ signal }), input)`）。切勿將 `client` 直接作為第一個參數傳入 `watch(client, ...)` 或 `computed(client)`，因為 Vue 會將函式參數視為響應式 Getter。
+- **由 `@defjs/vue` 提供**：`createClientPlugin(client)`、`HTTP_CLIENT`（`InjectionKey<DerivableClient>`）與 `injectClient(key?)`。
+- **由你的應用程式擁有**：建立 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)、在 watcher（`onCleanup`）或 composable（`onScopeDispose`）中中止進行中的工作、關閉 SSE/WebSocket handle，以及整合 Vue Query 之類的 query 函式庫。
+- **重要**：`injectClient()` 回傳的是 `DerivableClient` 函式物件。請在實際執行操作的地方呼叫 `client({ signal })`（`getOrder(client({ signal }), input)`）。切勿把 `client` 當成 `watch(client, ...)` 或 `computed(client)` 的第一個參數，因為 Vue 會把函式參數當成 reactive getter。
 
 ---
 
 ## 1. 安裝外掛並在 Watcher 中發起請求
 
-在應用程式進入點建立 Client，安裝 `createClientPlugin(client)`，並在 Watcher 內部開始非同步工作前註冊 `onCleanup`：
+在應用程式進入點建立 client，安裝 `createClientPlugin(client)`，並在 watcher 內開始非同步工作之前註冊 `onCleanup`：
 
 <Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
+
   </Tab>
   <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
+
   </Tab>
 </Tabs>
 
-- `createClientPlugin(client)` 會將該 `DerivableClient` 實例直接提供至 `HTTP_CLIENT` 鍵下，過程中不會複製它，也不會註冊任何卸載處置鉤子。
-- `onCleanup` 會在 Watcher 重新執行前以及元件卸載時自動觸發。
+- `createClientPlugin(client)` 會把同一個 `DerivableClient` 實例提供在 `HTTP_CLIENT` 之下，不會複製它，也不會註冊卸載處置鉤子。
+- `onCleanup` 會在 watcher 重新執行之前與元件卸載時執行。
 
 ---
 
 ## 2. 在子樹中注入與覆寫
 
-`injectClient(key?)` 會向上尋找最接近該 `key` 的提供者（預設為 `HTTP_CLIENT`）。若在作用中的 Vue 注入上下文（`setup()` 或 `app.runWithContext()`）之外呼叫，或該鍵未提供任何 Client，則會拋出 `Error`。
+`injectClient(key?)` 會尋找 `key` 最近一層的提供者（預設為 `HTTP_CLIENT`）；若在有效的 Vue 注入脈絡（`setup()` 或 `app.runWithContext()`）之外呼叫，或該 key 沒有提供 client，就會拋出 `Error`。
 
-你可以使用 Vue 原生的 `provide(HTTP_CLIENT, childClient)` 為元件子樹覆寫 Client：
+你可以用 Vue 原生的 `provide(HTTP_CLIENT, childClient)` 為元件子樹覆寫 client：
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 
-- 後代元件會接收到 `childClient`，而平行的其他子樹則繼續沿用根節點的 Client。
-- 若輔助函式接受選用的明確 Client 參數（`explicitClient ?? injectClient()`），只有在 fallback 分支時才需要活躍的 Vue 注入上下文。請務必在 `setup()` 期間、任何 `await` 之前同步擷取 Client。
+- 後代會拿到 `childClient`，同層的其他子樹則沿用根層的 client。
+- 若輔助函式接受選用的明確 client（`explicitClient ?? injectClient()`），只有回退的那個分支需要有效的 Vue 注入脈絡。請在 `setup()` 期間、任何 `await` 之前同步取得 client。
 
 ---
 
 ## 3. 在 Scope 銷毀時清理 SSE 與 WebSocket 串流
 
-若工作是在 Composable 內部或 Watcher 之外的元件邏輯中啟動，請將 `AbortController` 與 `onScopeDispose` 搭配使用。先中止啟動階段、關閉在銷毀後才成功解析的控制代碼、消費其唯一的非同步迭代器，並等待 `.closed`：
+若工作是在 composable 內、或 watcher 以外的元件邏輯中啟動，請把 `AbortController` 與 `onScopeDispose` 搭配使用。先中止啟動、關閉在處置後才完成的 handle、消費它唯一的非同步迭代器，並等待 `.closed`：
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
-- Tuple 的錯誤分支會顯示初始握手失敗（包含 HTTP 503）。迭代器的 `catch` 會顯示啟動後的失敗；`finally` 區塊仍會關閉並等待串流結束。
-
-- 停止 Scope 會讓 SSE 的 `for await` 迴圈正常結束。
-- 中斷 WebSocket 工作階段會將其終結為 `aborted`，並以 `AbortError` 拒絕 `session.receive`，因此在處置後請對 `catch` 區塊進行防護，並在 `finally` 中取消訂閱 `onStateChange` / `onRuntimeError` 監聽器。
+- tuple 的錯誤分支會顯示初始交握失敗（包含 HTTP 503）。迭代器的 `catch` 會顯示啟動後的失敗；`finally` 區塊仍會關閉串流並等待結束。
+- 停止 scope 會讓 SSE 的 `for await` 迴圈正常結束。
+- 中止 WebSocket 工作階段會讓它以 `aborted` 結束，並以 `AbortError` 拒絕 `session.receive`；因此處置後請在 `catch` 區塊加上防護，並在 `finally` 中取消訂閱 `onStateChange` / `onRuntimeError` 監聽器。
 
 ---
 
 ## 4. SSR 與應用程式範圍
 
-- **瀏覽器端**：當端點與攔截器不隨請求變更時，每個 Vue App 可共用單一 Client。
-- **SSR 伺服器端**：當標頭、Cookie、租戶或憑證因請求而異時，請在每個 SSR 請求中建立並安裝全新的 Client。
-- 卸載 Vue 應用程式或銷毀元件 Scope **不會**自動中止 HTTP 請求、關閉 SSE/WebSocket 串流，也不會處置 Core Client。
+- **瀏覽器**：當端點與攔截器不隨請求變更時，每個 Vue 應用程式可共用單一 client。
+- **SSR**：只要標頭、Cookie、租戶或憑證會因請求而異，就為每個 SSR 請求建立並安裝新的 client。
+- 卸載 Vue 應用程式或處置元件 scope **不會**自動中止 HTTP 請求、關閉 SSE/WebSocket 串流，也不會處置 core client。
 
 ---
 
@@ -79,8 +80,8 @@ bun add @defjs/core @defjs/vue vue
   examples/vue/exports.ts#example
 </include>
 
-- `HTTP_CLIENT` — 用於原生 `provide` / `inject` 的 `InjectionKey<Client>`。
+- `HTTP_CLIENT` — 供原生 `provide` / `inject` 使用的 `InjectionKey<DerivableClient>`。
 - `createClientPlugin(client)` — 在 `HTTP_CLIENT` 下提供 `client` 的 Vue `Plugin`。
-- `injectClient(key?)` — 解析最接近該 `key` 的 Client（預設為 `HTTP_CLIENT`）。
-- 相關指南：[Client](/zh-Hant-TW/docs/client)、[HTTP 請求](/zh-Hant-TW/docs/http)、[中介層](/zh-Hant-TW/docs/interceptors)、[SSE 事件串流](/zh-Hant-TW/docs/sse)、[WebSocket 工作階段](/zh-Hant-TW/docs/web-socket)。
-- 相關範例：[處理已宣告的 404](/zh-Hant-TW/recipes/get-declared-404)、[取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)、[使用 SSE 事件串流](/zh-Hant-TW/recipes/consume-sse)、[建立 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)。
+- `injectClient(key?)` — 解析 `key` 最近一層的 client（預設為 `HTTP_CLIENT`）。
+- 相關指南：[Client](/zh-Hant-TW/docs/client)、[HTTP 操作](/zh-Hant-TW/docs/http)、[攔截器](/zh-Hant-TW/docs/interceptors)、[SSE 事件串流](/zh-Hant-TW/docs/sse)、[WebSocket 工作階段](/zh-Hant-TW/docs/web-socket)。
+- 相關範例：[處理已宣告的 404](/zh-Hant-TW/recipes/get-declared-404)、[取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)、[消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)、[開啟 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)。

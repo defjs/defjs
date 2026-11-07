@@ -1,5 +1,5 @@
 ---
-title: "Requêtes HTTP"
+title: "Opérations HTTP"
 description: Concevez les opérations HTTP de votre SDK et appelez-les avec la configuration et l'annulation possédées par l'application.
 ---
 
@@ -9,49 +9,21 @@ Un SDK définit chaque opération HTTP avec `defineRequest` : sa méthode, son p
 
 ## 1. Définir l'opération et l'appeler
 
-Attribuez à chaque endpoint son propre export `defineRequest` dans votre module SDK, et réservez `createClient` à l'application consommatrice :
+Attribuez à chaque opération son propre export `defineRequest` dans votre module SDK, et réservez `createClient` à l'application consommatrice :
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">

@@ -6,11 +6,11 @@ Contents: [Tuple shapes](#tuple-shapes) · [Fault variants and codes](#fault-var
 
 Operations never throw for request, response, validation, or transport failures. They resolve to an error-first tuple:
 
-| Protocol                      | Success tuple                        | Failure tuple                                               |
-| ----------------------------- | ------------------------------------ | ----------------------------------------------------------- |
-| HTTP (`defineRequest`)        | `[null, data, response]`             | `[Fault<TError>, undefined, undefined]`                     |
-| SSE (`defineEventStream`)     | `[null, stream, startupOpen]`        | `[Fault<TError>, undefined, startupOpen \| undefined]`      |
-| WebSocket (`defineWebSocket`) | `[null, session, startupConnection]` | `[Fault<never>, undefined, startupConnection \| undefined]` |
+| Protocol                      | Success tuple                        | Failure tuple                                                   |
+| ----------------------------- | ------------------------------------ | --------------------------------------------------------------- |
+| HTTP (`defineRequest`)        | `[null, data, response]`             | `[Fault<TError>, undefined, undefined]`                         |
+| SSE (`defineEventStream`)     | `[null, stream, startupOpen]`        | `[Fault<TError>, undefined, startupOpen \| undefined]`          |
+| WebSocket (`defineWebSocket`) | `[null, session, startupConnection]` | `[Fault<undefined>, undefined, startupConnection \| undefined]` |
 
 Always check `if (error)` and return from the surrounding function before reading the second or third element.
 
@@ -18,25 +18,25 @@ Always check `if (error)` and return from the surrounding function before readin
 
 `Fault<TError>` (and `AnyFault`) is a discriminated union keyed by `error.code`. Every fault carries `code`, `message`, and optional `cause`; `FaultClass<FaultCode>` extracts the code prefix for coarse classification. Variant-specific fields (`status`, `data`, `response`) become available when you narrow `error.code`:
 
-| `error.code`             | Fault variant             | Extra fields                        | When it happens                                                                                     |
-| ------------------------ | ------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `REQ_INPUT_INVALID`      | `PreflightFault`          | `cause` (`StructError`)             | Caller input failed the `input` struct                                                              |
-| `REQ_BUILD_FAILED`       | `PreflightFault`          | `cause`                             | `builder` threw, or returned an invalid path/query/header/body placement                            |
-| `REQ_OPTIONS_INVALID`    | `PreflightFault`          | `cause`                             | Illegal option in the retry, reconnect, or heartbeat policy, including timeouts above 2147483647 ms |
-| `NET_UNREACHABLE`        | `PreflightFault`          | `cause`                             | DNS, socket, TLS, or CORS failure before receiving a valid response                                 |
-| `NET_BODY_INCOMPLETE`    | `PreflightFault`          | `response?`, `cause`                | Response body stream broke mid-transfer                                                             |
-| `NET_TIMEOUT`            | `PreflightFault`          | `cause`                             | `AbortSignal.timeout(ms)` or a `TimeoutError` DOMException aborted the call                         |
-| `NET_ABORTED`            | `PreflightFault`          | `cause`                             | Caller aborted the `AbortSignal`                                                                    |
-| `HTTP_STATUS`            | `HttpStatusFault<TError>` | `status`, `data`, `response`        | Non-2xx response whose declared `error` struct decoded (or no `error` struct was declared)          |
-| `RES_MEDIA_TYPE_INVALID` | `DecodeFault`             | `response`                          | JSON struct expected, but response `Content-Type` is not JSON (checked before reading body)         |
-| `RES_DECODE_FAILED`      | `DecodeFault`             | `response`, `cause`                 | Response body could not be read or JSON-parsed (or SSE handshake error struct failed)               |
-| `RES_STRUCT_MISMATCH`    | `DecodeFault`             | `response`, `cause` (`StructError`) | HTTP response body did not match the declared `output` or `error` struct                            |
-| `EXT_INTERCEPTOR_FAILED` | `PreflightFault`          | `cause`                             | An interceptor threw or returned an invalid response/handle                                         |
-| `EXT_HOOK_FAILED`        | `PreflightFault`          | `cause`                             | `beforeConnect` or another lifecycle hook threw                                                     |
-| `EXT_OBSERVER_FAILED`    | `PreflightFault`          | `cause`                             | `onUploadProgress` or `onDownloadProgress` threw                                                    |
-| `CAP_BUFFER_EXCEEDED`    | `PreflightFault`          | —                                   | SSE line/event exceeded `maxBufferSize`                                                             |
-| `CAP_QUEUE_OVERFLOW`     | `PreflightFault`          | —                                   | SSE `maxQueueSize` or WebSocket `maxIncomingQueueSize` overflowed                                   |
-| `ENV_UNSUPPORTED`        | `PreflightFault`          | —                                   | Required runtime API (`fetch`, `WebSocket`, `ReadableStream`) is unavailable                        |
+| `error.code`             | Fault variant             | Extra fields                                  | When it happens                                                                                                         |
+| ------------------------ | ------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `REQ_INPUT_INVALID`      | `PreflightFault`          | `cause` (`StructError`)                       | Caller input failed the `input` struct                                                                                  |
+| `REQ_BUILD_FAILED`       | `PreflightFault`          | `cause`                                       | `builder` threw, or returned an invalid path/query/header/body placement                                                |
+| `REQ_OPTIONS_INVALID`    | `PreflightFault`          | `cause`                                       | Invalid retry, reconnect, heartbeat, buffer, or queue option, including timeouts above 2147483647 ms                    |
+| `NET_UNREACHABLE`        | `PreflightFault`          | `cause`                                       | DNS, socket, TLS, or CORS failure before receiving a valid response                                                     |
+| `NET_BODY_INCOMPLETE`    | `PreflightFault`          | `response?`, `cause`                          | Response body stream broke mid-transfer                                                                                 |
+| `NET_TIMEOUT`            | `PreflightFault`          | `cause`                                       | `AbortSignal.timeout(ms)` or a `TimeoutError` DOMException aborted the call                                             |
+| `NET_ABORTED`            | `PreflightFault`          | `cause`                                       | Caller aborted the `AbortSignal`                                                                                        |
+| `HTTP_STATUS`            | `HttpStatusFault<TError>` | `status`, `data`, `response`                  | Non-2xx response whose declared `error` struct decoded (or no `error` struct was declared)                              |
+| `RES_MEDIA_TYPE_INVALID` | `DecodeFault`             | `status`, `response`, `cause`                 | `Content-Type` does not match the declared representation (JSON body or SSE handshake), checked before reading the body |
+| `RES_DECODE_FAILED`      | `DecodeFault`             | `status`, `response`, `cause`                 | Response body could not be read or JSON-parsed (or SSE handshake error struct failed)                                   |
+| `RES_STRUCT_MISMATCH`    | `DecodeFault`             | `status`, `response`, `cause` (`StructError`) | HTTP response body did not match the declared `output` or `error` struct                                                |
+| `EXT_INTERCEPTOR_FAILED` | `PreflightFault`          | `cause`                                       | An interceptor threw or returned an invalid response/handle                                                             |
+| `EXT_HOOK_FAILED`        | `PreflightFault`          | `cause`                                       | `beforeConnect` or another lifecycle hook threw                                                                         |
+| `EXT_OBSERVER_FAILED`    | `PreflightFault`          | `cause`                                       | `onUploadProgress` or `onDownloadProgress` threw                                                                        |
+| `CAP_BUFFER_EXCEEDED`    | `PreflightFault`          | —                                             | SSE frame buffer before a blank line exceeded `maxBufferSize`                                                           |
+| `CAP_QUEUE_OVERFLOW`     | `PreflightFault`          | —                                             | SSE `maxQueueSize` or WebSocket `maxIncomingQueueSize` overflowed                                                       |
+| `ENV_UNSUPPORTED`        | `PreflightFault`          | —                                             | Default `fetch` or `WebSocket` is missing, or the runtime cannot send a `ReadableStream` request body                   |
 
 `withSSEOnInvalidEvent` observer failures are isolated: the stream continues and no `EXT_OBSERVER_FAILED` is produced.
 
@@ -91,7 +91,7 @@ async function loadOrder(id: number) {
 void loadOrder(7);
 ```
 
-- Note: If the server returns non-2xx and its body fails the declared `error` struct, the fault code is `RES_STRUCT_MISMATCH` (not `HTTP_STATUS`), so `if (error.code === "HTTP_STATUS")` guarantees `error.data` matches the declared struct.
+- If a non-2xx HTTP response body fails the declared `error` struct, the fault code is `RES_STRUCT_MISMATCH` (not `HTTP_STATUS`), so `if (error.code === "HTTP_STATUS")` guarantees `error.data` matches the declared struct.
 
 ## Triaging and logging faults
 

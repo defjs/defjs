@@ -11,26 +11,26 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method` و`path` وstruct `input` اختياري وstructا `output` و`error` اختياريان و`operation` اختياري. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`RequestDefinition`](/ar/api/core/requestdefinition-type). `builder` مطلوب تمامًا عندما يُعلَن `input`.
+- **definition** — `method` و`path` وstruct `input` اختياري وstructا `output` و`error` اختياريان و`operation` اختياري. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`RequestDefinition`](/ar/api/core/requestdefinition-type). `builder` مطلوب تمامًا عندما يُعلَن `input`.
 - **يُرجع** عملية. استدعها كـ `getOrder(client, input)`، أو `health(client)` عندما لا يُعلَن مدخل. عندما يكون struct المدخل كاملًا اختياريًا، يجوز حذف وسيط المدخل. استدعاؤها يبدأ الطلب. لا وسيط ثالث للخيارات.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
-`output` هو struct واحد لجسم 2xx؛ و`error` هو struct واحد لكل جسم غير-2xx. لا يُفتاح أي منهما بالحالة. حذف أحدهما يعني أن ذلك الجسم لا يُقرأ أبدًا — انظر
+`output` هو struct واحد لجسم 2xx؛ و`error` هو struct واحد لكل جسم غير-2xx. ولا يُربط أي منهما بالحالة. حذف أحدهما يعني أن ذلك الجسم لا يُقرأ أبدًا — انظر
 [الإعلان تأكيد](/ar/docs/design-decisions#declaration-is-an-assertion).
 
-يُرجع استدعاء العملية وعدًا بالـ tuple الموصوف تحت [`HttpAwaitResult`](/ar/api/core/httpawaitresult-type). مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ HTTP الحقل `signal` وردود نداء التقدّم ويتجاهل الحقول الأخرى.
+يُرجع استدعاء العملية وعدًا بالمصفوفة الموصوفة تحت [`HttpAwaitResult`](/ar/api/core/httpawaitresult-type). مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ HTTP الحقل `signal` وردود نداء التقدّم ويتجاهل الحقول الأخرى.
 
 الحالة غير-2xx هي `HTTP_STATUS` عندما لا يُعلَن struct `error` أو يُفك جسم `error` المعلَن. `data` في الخطأ هو جسم
 `error` المفكوك عندما أُعلن واحد، و`undefined` فيما عدا ذلك. عندما يتعذّر قراءة جسم `error` معلَن (نوع وسائط خاطئ، أو JSON غير صالح) أو
-لا يطابق struct، يكون الخطأ `RES_MEDIA_TYPE_INVALID` أو `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH` بدل ذلك، وما زالت حالة الاستجابة
-تُبلَّغ في بياناته الوصفية. عند الفشل يكون الموضع الثالث في الـ tuple هو `undefined`؛ ويحمل الخطأ بيانات الاستجابة الوصفية.
+لا يطابق struct المعلَن، يكون الخطأ `RES_MEDIA_TYPE_INVALID` أو `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH` بدل ذلك، وما زالت حالة الاستجابة
+تُبلَّغ في بياناته الوصفية. عند الفشل يكون الموضع الثالث في المصفوفة هو `undefined`؛ ويحمل الخطأ بيانات الاستجابة الوصفية.
 
 ## fetchHandler()
 
 <ApiSignature name="fetchHandler" />
 
-نقل HTTP الافتراضي. `fetchImpl` يفترض `fetch` العام المحلول وقت الإرسال؛ ويوفّر `withHTTPHandle` غيره. يتلقى Fetch الأصلي للمنصة دون تعديل `(url, init)`، بينما يتلقى العام المستبدل أو المعالج المخصص `Request`. يرفض — بدل أن يحل
+نقل HTTP الافتراضي. `fetchImpl` يعتمد افتراضيًا على `fetch` العام المحلول وقت الإرسال؛ ويوفّر `withHTTPHandle` غيره. يتلقى Fetch الأصلي للمنصة دون تعديل `(url, init)`، بينما يتلقى العام المستبدل أو المعالج المخصص `Request`. يرفض — بدل أن يحل
 باستجابة اصطناعية — عندما لا تصل استجابة إلى العميل أو تفشل قراءة جسم معلَن.
 
 ## makeResponse()
@@ -38,19 +38,19 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 <ApiSignature name="makeResponse" />
 
 ابنِ `HttpResponse` دون استدعاء شبكة (المعترضات، الاختبارات). الحالة الافتراضية `0`. `ok` صحيح
-لـ 2xx. القيمة التي يُرجعها تمر بفحص نوع الوسائط نفسه والـ struct المعلَن نفسه كما لو جاءت من السلك؛ ولا يوجد إنهاء مبكر موثوق.
+لـ 2xx. القيمة التي يُرجعها تمر بفحص نوع الوسائط نفسه وبفحص struct المعلَن نفسه كما لو جاءت من السلك؛ ولا يوجد قطع مبكر موثوق.
 
 ## HttpExecuteOptions
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` هو شريحة HTTP من [`RequestOptions`](/ar/api/core/requestoptions-type): [`UseRequestConfig`](/ar/api/core/userequestconfig-type)، وهو `signal` مع `onDownloadProgress` و`onUploadProgress`. لا يوجد حقل `timeout` أو `abort`. المهلة هي `signal: AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. لا توجد مهلة افتراضية على مستوى العميل. تُتجاهل حقول الطلب الأخرى، مثل `heartbeat`.
+`HttpExecuteOptions` هو شريحة HTTP من [`RequestOptions`](/ar/api/core/requestoptions-type): [`UseRequestConfig`](/ar/api/core/userequestconfig-type)، وهو `signal` مع `onDownloadProgress` و`onUploadProgress`. لا يوجد حقل `timeout` أو `abort`. المهلة هي `signal: AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإلغاء اليدوي هو `NET_ABORTED`. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. لا توجد مهلة افتراضية على مستوى العميل. تُتجاهل حقول الطلب الأخرى، مثل `heartbeat`.
 
 ## الأنواع
 
 ### RequestDefinition
 
-`method` و`path` و`input` و`output` و`error` و`operation` و`builder` الاختيارية.يختار نوع الـ struct كيف يُقرأ الجسم المعلَن. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
+`method` و`path` و`input` و`output` و`error` و`operation` و`builder` الاختيارية. يختار نوع struct كيف يُقرأ الجسم المعلَن. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
 
 ### HttpAwaitResult
 
@@ -61,7 +61,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 ### HttpRequest
 
-طلب صادر موحّد: `method` و`endpoint` و`headers` و`body` و`signal` و`operation` و`withCredentials` و`xsrf` و`downloadProgress` / `uploadProgress` و`baseEndpoint` و`queryString` و`queryParams`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات على ذلك، لا على مدخل الـ struct. يرى المعترضون `queryParams` كـ `new URLSearchParams(queryString)`. الـ builder الذي يُرجع `URLSearchParams` يمرّر تلك النسخة كما هي. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من نوع struct لـ `output` و`error` في نقطة النهاية ولا يجوز تغييرهما.
+طلب صادر موحّد: `method` و`endpoint` و`headers` و`body` و`signal` و`operation` و`withCredentials` و`xsrf` و`downloadProgress` / `uploadProgress` و`baseEndpoint` و`queryString` و`queryParams`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات على ذلك، لا على مدخل struct. يرى المعترضون `queryParams` كـ `new URLSearchParams(queryString)`. دالة `builder` التي تُرجع `URLSearchParams` يمرّر تلك النسخة كما هي. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من نوع struct لـ `output` و`error` في التعريف ولا يجوز تغييرهما.
 
 ### HttpMeta
 
@@ -74,7 +74,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 <ApiSignature name="DecodedResponse" />
 
-استجابة فُك جسمها مقابل الـ struct المعلَن. حمل هذا النوع هو الدليل على أن
+استجابة فُك جسمها مقابل struct المعلَن. حمل هذا النوع هو الدليل على أن
 الفك حدث، ولهذا يبلّغ فشل الفك عن `HttpMeta` وحده.
 
 ### HttpResponse
@@ -83,14 +83,14 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 `body` هو `undefined` عندما لم يكن للاستجابة جسم؛ ويبقى `null` في JSON بقيمة `null`. النوع موسوم، فابنِ واحدًا بـ `makeResponse` لا بكائن حرفي. شكل السلك الذي ينتجه النقل ويراه المعترضون: `body` نص أو JSON محلَّل أصلًا، لا قيمة
 مفكوكة. في تمثيل JSON، السلسلة جذر سلسلة JSON ولا تُحلَّل مرة أخرى؛ والبايتات
-والـ blobs خام وتُحلَّل مرة واحدة. `DecodedResponse` هو ما يصل إلى المستدعي.
+وblobs خام وتُحلَّل مرة واحدة. `DecodedResponse` هو ما يصل إلى المستدعي.
 
 ### HttpProgressEvent
 
 ### HttpProgressFn
 
-`loaded` و`total` و`lengthComputable`. قد تكون ردود النداء غير متزامنة. `onDownloadProgress` أو `onUploadProgress` الذي يرمي يُفشل الاستدعاء بـ
-`EXT_OBSERVER_FAILED`، مع القيمة المرمية في `cause`؛ ويظل الإلغاء يُبلَّغ `NET_ABORTED`، أو `NET_TIMEOUT` عندما يكون سبب الإجهاض مهلة.
+`loaded` و`total` و`lengthComputable`. قد تكون ردود النداء غير متزامنة. `onDownloadProgress` أو `onUploadProgress` الذي يُلقي استثناءً يُفشل الاستدعاء بـ
+`EXT_OBSERVER_FAILED`، مع القيمة المُلقاة في `cause`؛ ويظل الإلغاء يُبلَّغ `NET_ABORTED`، أو `NET_TIMEOUT` عندما يكون سبب الإلغاء مهلة.
 يُبلَّغ تقدّم الرفع فقط حيث يستطيع وقت التشغيل بث أجسام الطلب (Bun وNode)؛ وفي المتصفحات، تُرسَل أجسام `Blob` / `File`
 و`ArrayBuffer` و`FormData` دون تغيير ولا يُستدعى `onUploadProgress`.
 
@@ -104,7 +104,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 ## BuilderInput
 
-مدخل نقطة النهاية المحلَّل الذي يراه `builder`. تحمل عقد الكائن الـ struct الذي أنتجها، فيتبع ترميز alias و`Date` و`bigint` القيمة.
+مدخل العملية المحلَّل الذي يراه `builder`. تحمل عقد الكائن struct الذي أنتجها، فيتبع ترميز alias و`Date` و`bigint` القيمة.
 
 ## HttpRequestShape
 
@@ -130,7 +130,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 `'arraybuffer' | 'blob' | 'json' | 'text'`
 
-يُختار من نوع الـ struct المعلَن (`string` → `text`، و`blob` / `file` → `blob`، و`arrayBuffer` → `arraybuffer`، وكل ما عدا ذلك → `json`). ليس حقلًا على `defineRequest`.
+يُختار من نوع struct المعلَن (`string` → `text`، و`blob` / `file` → `blob`، و`arrayBuffer` → `arraybuffer`، وكل ما عدا ذلك → `json`). ليس حقلًا على `defineRequest`.
 
 ## MakeResponseOptions
 

@@ -1,16 +1,16 @@
 ---
 title: Defjs
-description: 設計並發布 TypeScript SDK：可重用的 API 定義搭配由應用程式掌控的 Client 設定。
+description: 以可重用的 API 定義與由應用程式掌控的 Client 設計並發布 TypeScript SDK。
 ---
 
 # Defjs
 
 **一次定義 API 契約，依個別應用程式靈活設定執行細節。**
 
-Defjs 將 TypeScript SDK 的職責明確劃分為兩個維度：
+Defjs 將 TypeScript SDK 的兩側明確分開：
 
-- **SDK 定義端 (`@defjs/core`)** — SDK 開發者使用 `struct` 宣告型別結構，並定義具型別的 HTTP、SSE 與 WebSocket 操作。定義本身是純粹的資料：匯入時不會發起任何網路請求，也不會綁定全域 Client。
-- **應用程式執行端** — 取用 SDK 的應用程式建立專屬的 `Client`（`createClient(withEndpoint(...))`），自行掛載憑證、攔截器與負載平衡器，並在呼叫操作時傳入該 Client。
+- **SDK 定義端 (`@defjs/core`)** — SDK 開發者在 `struct` schema 旁宣告具型別的 HTTP、SSE 與 WebSocket 操作。定義本身是純粹的資料：匯入時不會發起任何網路請求，也不會綁定全域 Client。
+- **應用程式執行端** — 取用 SDK 的應用程式建立專屬的 `Client`（`createClient(withEndpoint(...))`），設定憑證與攔截器、配置負載平衡，並在呼叫操作時傳入該 Client。
 
 ## 快速預覽：SDK 定義 vs. 應用程式執行
 
@@ -43,10 +43,10 @@ Defjs 將 TypeScript SDK 的職責明確劃分為兩個維度：
 
 ## 選擇你的學習路徑
 
-1. **[快速開始](/zh-Hant-TW/docs/start)** — 定義一項操作，使用本機 Fetch handle 進行離線測試，最後串接至實際運作的服務。
-2. **[核心架構](/zh-Hant-TW/docs/design-decisions)** — 了解六大回應解碼規則、error-first tuples 以及資源擁有權模型。
+1. **[快速開始](/zh-Hant-TW/docs/start)** — 定義一項操作，使用本機 Fetch Handle 進行離線測試，最後讓 Client 指向實際運作的服務。
+2. **[核心架構](/zh-Hant-TW/docs/design-decisions)** — 了解六項嚴格的回應解碼規則、error-first tuple 以及資源擁有權。
 3. **[定義 SDK](/zh-Hant-TW/docs/struct)** — 使用 [Struct](/zh-Hant-TW/docs/struct) 宣告通訊契約，並匯出 [HTTP](/zh-Hant-TW/docs/http)、[SSE](/zh-Hant-TW/docs/sse) 與 [WebSocket](/zh-Hant-TW/docs/web-socket) 操作。
-4. **[Client 與執行](/zh-Hant-TW/docs/client)** — 設定 [Client](/zh-Hant-TW/docs/client)、處理具型別的[錯誤](/zh-Hant-TW/docs/errors)、掛載[中介層攔截器](/zh-Hant-TW/docs/interceptors)、設定[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)，以及執行確定性的[單元測試](/zh-Hant-TW/docs/testing)。
+4. **[Client 與執行](/zh-Hant-TW/docs/client)** — 設定 [Client](/zh-Hant-TW/docs/client)、處理具型別的[錯誤](/zh-Hant-TW/docs/errors)、掛上[攔截器](/zh-Hant-TW/docs/interceptors)、設定[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)，並執行確定性的[測試](/zh-Hant-TW/docs/testing)。
 
 ## 支援的傳輸協定與回傳 Tuple
 
@@ -58,16 +58,16 @@ Defjs 將 TypeScript SDK 的職責明確劃分為兩個維度：
 | **[SSE](/zh-Hant-TW/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | 透過 `await using` 或 `stream.close()` + `await stream.closed` 釋放資源   |
 | **[WebSocket](/zh-Hant-TW/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | 透過 `await using` 或 `session.close()` + `await session.closed` 釋放資源 |
 
-當 HTTP 請求失敗時，tuple 為 `[error, undefined, undefined]`，因為 `error` 本身已帶有 `HttpMeta` 回應中繼資料。對於 SSE 與 WebSocket，第三個欄位則會在連線失敗前成功擷取到啟動快照時提供該快照。
+當 HTTP 請求失敗時，tuple 為 `[error, undefined, undefined]`，因為 `error` 本身已帶有 `HttpMeta` 回應中繼資料。對 SSE 與 WebSocket 而言，只要失敗前曾擷取到啟動快照，第三個欄位就會帶著該快照。
 
 ## 官方套件
 
 | 套件                          | 角色定位                                                                   | 相關指南                                                                   |
 | ----------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `@defjs/core`                 | 零依賴的 SDK 定義、`struct` 驗證、Client 與攔截器                          | [快速開始](/zh-Hant-TW/docs/start)                                         |
+| `@defjs/core`                 | 零依賴的 SDK 定義、`struct`、Client 與攔截器                               | [快速開始](/zh-Hant-TW/docs/start)                                         |
 | `@defjs/react`                | 適用於 React 18+ 的 `ClientProvider` 與 `useClient()` Context 注入         | [React 整合](/zh-Hant-TW/docs/integrations/react)                          |
 | `@defjs/vue`                  | 適用於 Vue 3.2+ 的 `createClientPlugin`、`HTTP_CLIENT` 與 `injectClient()` | [Vue 整合](/zh-Hant-TW/docs/integrations/vue)                              |
-| `@defjs/opentelemetry-server` | 伺服器端出站請求的 Spans、Metrics 與診斷日誌                               | [OpenTelemetry Server](/zh-Hant-TW/docs/integrations/opentelemetry-server) |
+| `@defjs/opentelemetry-server` | 伺服器端出站請求的 spans、Metrics 與診斷日誌                               | [OpenTelemetry Server](/zh-Hant-TW/docs/integrations/opentelemetry-server) |
 
 ## 常見實戰範例
 
@@ -75,7 +75,7 @@ Defjs 將 TypeScript SDK 的職責明確劃分為兩個維度：
 - [傳送並驗證 JSON](/zh-Hant-TW/recipes/post-json)
 - [處理已宣告的 404](/zh-Hant-TW/recipes/get-declared-404)
 - [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
-- [遇到 401 時自動重新取得 Bearer Token 一次](/zh-Hant-TW/recipes/refresh-bearer-once)
-- [使用 SSE 事件串流](/zh-Hant-TW/recipes/consume-sse)
-- [建立 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)
+- [401 後重新整理 Bearer token 一次](/zh-Hant-TW/recipes/refresh-bearer-once)
+- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
+- [開啟 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)
 - [使用本機 Fetch Handle 進行測試](/zh-Hant-TW/recipes/test-with-handle)

@@ -5,29 +5,15 @@ description: struct 门面、Infer，以及 StructError。
 
 # Struct
 
-建传输边界的形状，parse 值，推断 TypeScript 类型。
+构建网络边界上的形状、解析值，并推断 TypeScript 类型。
 
 ## struct
 
-门面。用这个，别直接碰内部构造函数。
+门面。优先使用它，而不是内部构造函数。
 
-```ts
-const Order = struct.object({
-  id: struct.number(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-function readOrder() {
-  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(order.customerName);
-}
-
-readOrder();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### 原语和容器
 
@@ -54,10 +40,10 @@ readOrder();
 
 <ApiSignature name="struct.parse" />
 
-- **返回** `[null, value]` 或 `[StructError, undefined]`。错误只带一个 issue。对象字段停在第一个坏字段。`struct.or` 会试完每个分支，然后报告 `invalid_union`，不保留第一个分支的失败。
-- 对象字段默认必填，除非标了 `.optional()` 或 `.nullish()`。shape 没有声明的 key 会从结果中丢弃。
-- 可选 `options.errorMap` 只改这一次 parse 的 issue 文案。
-- 默认读**逻辑** key（`customerName`）。传 `{ aliases: true }` 则读传输 key（`customer_name`），和 HTTP/JSON codec 一样。
+- **返回** `[null, value]` 或 `[StructError, undefined]`。错误携带一个 issue。对象字段在第一个错误字段处停止。`struct.or` 会尝试每个分支，然后报告 `invalid_union`，不保留第一个分支的失败。
+- 对象字段默认必填，除非标记了 `.optional()` 或 `.nullish()`。shape 未声明的键会从结果中丢弃。
+- 可选 `options.errorMap` 只改写本次解析的 issue 消息。
+- 默认读取**逻辑**键（`customerName`）。传入 `{ aliases: true }` 会像 HTTP/JSON 编解码器一样读取网络键（`customer_name`）。
 
 ## ErrorMap
 
@@ -85,11 +71,11 @@ readOrder();
 
 ## STRUCT
 
-一个 `unique symbol`，用来标记由 endpoint input 解析出来的对象。它属于出站编码器的内部实现，只作为类型导出。不要读取或设置它。
+一个 `unique symbol`，用于标记由操作 input 解析出的对象。它属于出站编码器的内部实现，只作为类型导出。不要读取或设置它。
 
 ## Struct
 
-能 parse 的形状：input/output 类型，加上 `.optional()`、`.null()` / `.nullable()`、`.nullish()`、`.alias()`。
+可解析的形状：input/output 类型，加上 `.optional()`、`.null()` / `.nullable()`、`.nullish()`、`.alias()`。
 
 ## StructLike
 
@@ -101,7 +87,7 @@ readOrder();
 
 ## ObjectStruct
 
-`struct.object` 造出来的对象形状。
+由 `struct.object` 构造的对象 struct。
 
 ## StructIssue
 

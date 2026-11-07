@@ -1,77 +1,29 @@
 ---
 title: "WebSocket 會話"
-description: SDK 定義收發訊息契約，應用程式開啟 WebSocket 會話並負責監聽、傳送及釋放。
+description: SDK 定義 WebSocket 訊息契約，應用程式負責連線設定同會話生命週期。
 ---
 
 # WebSocket 會話
 
-`defineWebSocket` 用嚟喺你嘅 SDK 入面宣告雙向 WebSocket 契約：包括路徑模板、可選嘅 `input` 同 `builder`（僅限 `path` 同 `query`）、`incoming` 同 `outgoing` 訊息 struct、佇列大小上限，以及靜態子協議（subprotocols）。使用方應用程式則喺自己嘅 client 設定心跳偵測（heartbeat）、自動重連同生命週期釋放。
+`defineWebSocket` 用嚟喺你嘅 SDK 入面宣告雙向 WebSocket 契約：包括路徑模板、可選嘅 `input` 同 `builder`（僅限 `path` 同 `query`）、`incoming` 同 `outgoing` 訊息 struct、佇列上限，以及靜態子協議（subprotocols）。使用方應用程式則喺自己嘅 client 設定心跳偵測（heartbeat）、自動重連同生命週期釋放。
 
-## 1. 定義契約並運行會話
+## 1. 定義契約並執行會話
 
-利用 `struct.discriminatedUnion(...)` 為 `incoming` 或 `outgoing` 建立多種 frame 訊息型別模型。記得隨時用 `await using` 或手動 `session.close()` + `await session.closed` 嚟釋放回傳嘅 `WebSocketSession`：
+利用 `struct.discriminatedUnion(...)` 為 `incoming` 或 `outgoing` 建立多種 frame 訊息型別模型。一律用 `await using` 或手動 `session.close()` + `await session.closed` 嚟釋放回傳嘅 `WebSocketSession`：
 
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
 <Tab value="sdk/ticks-socket.ts">
 
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
-
-export const TickFrame = struct.discriminatedUnion("type", [
-  struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  struct.object({
-    type: struct.literal("subscribed"),
-    symbol: struct.string(),
-  }),
-]);
-
-export const SubscribeCommand = struct.object({
-  type: struct.literal("subscribe"),
-  symbol: struct.string(),
-});
-
-export const openTicker = defineWebSocket({
-  path: "/market/ws",
-  operation: "market.ticker",
-  incoming: TickFrame,
-  outgoing: SubscribeCommand,
-  maxIncomingQueueSize: 64,
-});
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
 
 </Tab>
 <Tab value="app/session.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { openTicker } from "../sdk/ticks-socket.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, session] = await openTicker(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = session;
-  active.send({ type: "subscribe", symbol: "ACME" });
-
-  for await (const message of active.receive) {
-    if (message.type === "tick") {
-      console.log(message.symbol, message.price);
-      break;
-    }
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -85,8 +37,8 @@ void main();
 
 ## 2. 訊息驗證與方向規則
 
-- **傳入 Frames（`session.receive`）**：文字、`ArrayBuffer`、TypedArray 同 `Blob` frame 都會解碼成 UTF-8，解析為 JSON，並以 `incoming` struct 進行驗證。損壞嘅 JSON 或 schema 結構唔吻合會被回報到 `session.onRuntimeError` 並丟棄，唔會中斷會話。`session.receive` 係單一消費者模式；請求第二個 iterator 會拋出 `TypeError`。
-- **傳出 Frames（`session.send(payload)`）**：會同步通過 `outgoing` 驗證、套用 `.alias()` 同編解碼器，然後以 `JSON.stringify` 序列化。喺 `open` 狀態下會即時發送；喺 `reconnecting` 狀態下會排入佇列（若 `maxOutgoingQueueSize > 0`）；如果 payload 無效、佇列已滿／關閉，或會話已終止，則會同步拋出例外。
+- **傳入 frame（`session.receive`）**：文字、`ArrayBuffer`、typed array 同 `Blob` frame 都會解碼成 UTF-8，解析為 JSON，並用 `incoming` struct 驗證。損壞嘅 JSON 或 schema 結構唔吻合會被回報到 `session.onRuntimeError` 並丟棄，唔會中斷會話。`session.receive` 係單一消費者模式；請求第二個 iterator 會拋出 `TypeError`。
+- **傳出 frame（`session.send(payload)`）**：會同步通過 `outgoing` 驗證、套用 `.alias()` 同 codec，然後以 `JSON.stringify` 序列化。喺 `open` 狀態下會即時發送；喺 `reconnecting` 狀態下會排入佇列（若 `maxOutgoingQueueSize > 0`）；如果 payload 無效、佇列已滿／關閉，或會話已終止，則會同步拋出例外。
 
 ## 3. 會話狀態與監聽器
 
@@ -108,13 +60,13 @@ void main();
 
 重連同心跳機制都係 opt-in 嘅，可透過 client 選項（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或單次衍生 client 選項（`client({ reconnect, heartbeat })`）配置：
 
-<Tabs items={["重新連線策略", "應用層心跳"]}>
-<Tab value="重新連線策略">
+<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tab value="Reconnect policy">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="應用層心跳">
+<Tab value="Application heartbeat">
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
@@ -122,9 +74,9 @@ void main();
 </Tabs>
 
 - **重新連線**：啟用時嘅預設值係 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線成功變成 `open` 都會重設重試預算。`beforeConnect({ attempt, signal })` 會喺初始連線同每次重連嘗試前執行。
-- **握手逾時（`connectTimeoutMs`）**：如果提供咗，佢必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。佢限制由 construction 到 `open`，handshake 之後會被清走。
+- **握手逾時（`connectTimeoutMs`）**：如果提供咗，佢必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。佢限制由建立連線到 `open` 嘅時間，handshake 之後會被清走。
 - **心跳偵測**：定時透過 `outgoing` struct 發送 `message()`，並等待最多 `timeoutMs` 嚟接收吻合 `isAck(msg)` 嘅 frame。吻合嘅 ack frame 會由心跳監控器消費，唔會轉發畀 `session.receive`。收唔到 ack 對邏輯會話係致命錯誤：`closed.kind` 係 `"error"`，`closed.cause` 係一般嘅 `Error("WebSocket heartbeat timeout")`；呢個唔會啟動重連。心跳序列化失敗亦會行同一條致命路徑，並保留原始 cause。
-- **佇列邊界**：
+- **佇列上限**：
   - `maxIncomingQueueSize`（必填正整數）：同時限制等待解碼嘅原始 frames 同等待消費者嘅已解碼訊息。溢出會用 `CAP_QUEUE_OVERFLOW` Fault 做 `closed.cause` 終止會話；同一個 cause 會傳俾 `onRuntimeError` 並 reject `session.receive`。喺會話開啟期間請保持消費 `session.receive`。
   - `maxOutgoingQueueSize`（可選非負整數，預設 `0`）：淨係會喺 `state === 'reconnecting'` 期間緩衝 `session.send()` 呼叫，並喺下次發佈 `open` 狀態前將佢哋一次過 flush 送出。
 
@@ -136,8 +88,8 @@ void main();
 
 - **子協議優先級**：`client({ protocols })` 優於 `withWebSocketProtocols(...)`，而後者又優於 `defineWebSocket({ protocols })`。
 - **URL 自動轉換**：Defjs 會自動將已解析端點嘅 `http:` 轉為 `ws:`，`https:` 轉為 `wss:`。
-- **憑證傳遞**：`withCredentials(true)` 僅適用於 Fetch（HTTP/SSE）。WebSocket 認證應透過 Cookie/Session 策略、子協議或短期 connection ticket 完成——避免將長期敏感密鑰放入 query string。
-- **`beforeConnect` 唔係 request mutator**：Input 解析、同步純函式 `builder` 同中介層鏈每次操作只執行一次。如果 request 嘅 base endpoint 冇俾中介層取代，每次重連都會重新揀選端點並用嗰個端點重建 URL，但會重用已建構嘅 path/query 同擷取嘅協議清單。無論仍然用同一端點定已經故障轉移，URL 都會喺嗰次嘗試嘅 `beforeConnect` 執行之前確定。喺 hook 入面改閉包變數、input 或協議陣列，唔可以為目前握手提供新 ticket。同一個會話內唔支援輪換 URL/子協議憑證；請先取得新憑證，再透過 input 或 client 設定開始新操作，並負責替代會話嘅清理。
+- **憑證傳遞**：`withCredentials(true)` 僅適用於 Fetch（HTTP/SSE）。WebSocket 認證應透過 Cookie／會話策略、子協議或短期 connection ticket 完成——避免將長期敏感密鑰放入 query string。
+- **`beforeConnect` 唔係 request mutator**：input 解析、同步純函式 `builder` 同攔截器鏈每次操作只執行一次。如果 request 嘅 base endpoint 冇俾攔截器取代，每次重連都會重新揀選端點並用嗰個端點重建 URL，但會重用已建構嘅 path/query 同擷取嘅協議清單。無論仍然用同一端點定已經故障轉移，URL 都會喺嗰次嘗試嘅 `beforeConnect` 執行之前確定。喺 hook 入面改閉包變數、input 或協議陣列，唔可以為目前握手提供新 ticket。同一個會話內唔支援輪換 URL/子協議憑證；請先取得新憑證，再透過 input 或 client 設定開始新操作，並負責替代會話嘅清理。
 
 ## 6. 關閉與生命週期管理
 
@@ -147,7 +99,7 @@ void main();
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-一次斷線嘅重連嘗試用盡之後，會話會以 `closed.kind: "error"` 結束，保留原生關閉 snapshot（升級失敗時通常係代碼 `1006`），並用一般傳輸錯誤做 `closed.cause`；唔會提供獨立而穩定嘅用盡代碼。當元件或背景 worker 結束工作時，記得取消訂閱 `onStateChange` 同 `onRuntimeError` 監聽器。
+一次斷線嘅重連嘗試用盡之後，會話會以 `closed.kind: "error"` 結束，保留原生關閉 snapshot（升級失敗時通常係代碼 `1006`），並用一般傳輸層錯誤做 `closed.cause`；唔會提供獨立而穩定嘅用盡錯誤碼。當元件或背景 worker 結束工作時，記得取消訂閱 `onStateChange` 同 `onRuntimeError` 監聽器。
 
 ## 延伸閱讀
 

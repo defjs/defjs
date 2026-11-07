@@ -1,26 +1,26 @@
 ---
 title: Client
-description: createClient, Option-Helper und der Client-Type.
+description: createClient, Option-Helfer und der Client-Typ.
 ---
 
 # Client
 
-`createClient(...)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück. Komponiere Client-Options von links nach rechts, dann rufe `client(options?)` auf, um einen [`Client`](/de-DE/api/core/client-type)-Wert zu erhalten, und übergib ihn an eine Operation: `getOrder(client(options), input)`.
+`createClient(...)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück. Komponiere Client-Optionen von links nach rechts, dann rufe `client(options?)` auf, um einen [`Client`](/de-DE/api/core/client-type)-Wert zu erhalten, und übergib ihn an eine Operation: `getOrder(client(options), input)`.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Options gelten in Reihenfolge. Erzeuge den Client lieber innerhalb der Request-Grenze, wenn Interceptors Auth oder Tenants per Closure einschließen. Die zurückgegebene Factory ist eine Funktion. Sie aufzurufen gibt einen `Client`-Wert zurück und führt kein I/O aus. Die Factory selbst ist ebenfalls ein `Client` und trägt keine Request-Options.
+Optionen gelten in Reihenfolge. Erzeuge den Client lieber innerhalb der Request-Grenze, wenn Interceptors Auth oder Tenants per Closure einschließen. Die zurückgegebene Factory ist eine Funktion. Sie aufzurufen gibt einen `Client`-Wert zurück und führt kein I/O aus. Die Factory selbst ist ebenfalls ein `Client` und trägt keine Request-Options.
 
-- **options** — Option-Helper wie `withEndpoint`.
+- **options** — Option-Helfer wie `withEndpoint`.
 - **Returns** eine aufrufbare Factory. Die Basiskonfiguration teilt jeder Client-Wert, und sie ist zur Laufzeit nicht eingefroren. Sie ist per Konvention fest: nichts in der Bibliothek ändert sie, und Anwendungen sollten das auch nicht.
 
 <include cwd>examples/api/create-client.ts#example</include>
 
 ## Option-Helfer
 
-Alle Helper geben `ClientOption` zurück. Ein späterer Aufruf ersetzt einen früheren für dieselbe Einstellung; nur `withInterceptors` hängt an.
+Alle Helfer geben `ClientOption` zurück. Ein späterer Aufruf ersetzt einen früheren für dieselbe Einstellung; nur `withInterceptors` hängt an.
 
 ### withEndpoint()
 
@@ -38,7 +38,7 @@ Ersetzt den Balancer für spätere Aufrufe. Das Objekt wird per Referenz gehalte
 
 <ApiSignature name="withInterceptors" />
 
-Hängt Interceptors in Registration-Order an. Gemischte Kinds werden nach Transport gefiltert, wenn die Operation läuft.
+Hängt Interceptors in Registrierungsreihenfolge an. Gemischte Arten werden nach Transport gefiltert, wenn die Operation läuft.
 
 ### withQuerySerializer()
 
@@ -50,7 +50,7 @@ Ersetzt Query-Encoding für HTTP, SSE und WebSocket. `serializer(query)` bekommt
 
 <ApiSignature name="withHeaders" />
 
-Setzt statische Default-Header für HTTP- und SSE-Requests. WebSocket-Requests nutzen sie nicht. `headers` wird kopiert, sobald die Option greift; spätere Änderungen am Objekt erreichen den Client also nicht. Ein zweites `withHeaders` ersetzt das erste und merged nicht.
+Setzt statische Default-Header für HTTP- und SSE-Requests. WebSocket-Requests nutzen sie nicht. `headers` wird kopiert, sobald die Option greift; spätere Änderungen am Objekt erreichen den Client also nicht. Ein zweites `withHeaders` ersetzt das erste und führt nichts zusammen.
 
 Vorrang für einen Request:
 
@@ -147,7 +147,7 @@ Sieben flache Felder. Jedes Protokoll liest die Felder, die es versteht, und ign
 
 <ApiSignature name="ClientOption" />
 
-Mutiert das `ClientConfig`, das `createClient` aufbaut. Schreib eine eigene, wenn kein `with*`-Helper passt.
+Mutiert das `ClientConfig`, das `createClient` aufbaut. Schreibe eine eigene, wenn kein `with*`-Helfer passt.
 
 ### QuerySerializer
 
@@ -205,7 +205,7 @@ Das aufgelöste SSE-Config auf `ClientConfig.sse`: `ClientSSEOptions` mit einem 
 
 ### WebSocketHandle
 
-Die WebSocket-Instanzfläche, die der Transport nutzt: `WebSocket` ohne `binaryType`, die Ready-State-Konstanten, `dispatchEvent` und die `on*`-Handler-Properties, dafür mit einem schreibgeschützten `readyState: number`.
+Die WebSocket-Instanzfläche, die der Transport nutzt: `WebSocket` ohne `binaryType`, die Ready-State-Konstanten, `dispatchEvent` und die `on*`-Handler-Eigenschaften, dafür mit einem schreibgeschützten `readyState: number`.
 
 ### WebSocketHandleConstructor
 
@@ -227,13 +227,13 @@ Der Konstruktor, den du an `withWebSocketHandle` übergibst. Er muss die Ready-S
 
 <ApiSignature name="p2cBalancer" />
 
-Sampelt verschiedene Kandidaten ohne Zurücklegen (anders als Envoy/gRPC A48) und wählt tower PeakEwma oder Pending-Last. Die Linkerd-Defaults sind eine RTT von 30 ms und ein Decay von 10 s. `start` beginnt pending, `end` gibt es bei den Headern oder beim Öffnen des Sockets frei und zeichnet die echte RTT für jeden Transport auf, auch bei Fehlern. Ein `done` ohne `end` gibt pending frei, ohne ein RTT-Sample. Es gibt keinen p2c-Fehlerklassifikator und keine Strafe. `choiceCount` ist standardmäßig 2 und auf 10 gedeckelt.
+Zieht Stichproben aus verschiedenen Kandidaten ohne Zurücklegen (anders als Envoy/gRPC A48) und wählt tower PeakEwma oder Pending-Last. Die Linkerd-Defaults sind eine RTT von 30 ms und ein Decay von 10 s. `start` beginnt pending, `end` gibt es bei den Headern oder beim Öffnen des Sockets frei und zeichnet die echte RTT für jeden Transport auf, auch bei Fehlern. Ein `done` ohne `end` gibt pending frei, ohne ein RTT-Sample. Es gibt keinen p2c-Fehlerklassifikator und keine Strafe. `choiceCount` ist standardmäßig 2 und auf 10 gedeckelt.
 
 ### outlierDetection()
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-Umhüllt ein Child mit Consecutive-Failure-Circuit-Breaking im Stil von Linkerd. Round Robin und p2c schalten es standardmäßig ein (wie bei Finagle); `false` schaltet es ab. Pick-first schaltet es mit einem Objekt ein. Der Standard-Klassifikator zählt `NET_UNREACHABLE`, `NET_UNAVAILABLE` und `NET_SERVER_ERROR`. Nach fünf Fehlern beginnen die Strafen bei 1000 ms, verdoppeln sich nach einer fehlgeschlagenen Sonde, addieren positiven Jitter bis zum 0,5-Fachen der Basis und sind bei 60000 ms gedeckelt. Der Ablauf lässt eine einzelne Sonde zu, entschieden an `end` oder an `done`, wenn kein `end` kam. Erfolg setzt den Backoff zurück; ein Abbruch gibt nur den Platz frei. Es gibt kein Timeout, das Erfolg annimmt, keine Quote, keinen Schutz des letzten Hosts, kein Auswertungs-Gitter, kein Prozent-Kriterium und kein Slow Start. `isHealthy` liest den Cache der Anwendung und hebt eine Strafe nie auf. Alle Hosts dürfen unterbrechen; listenlokales Fail-open nach Finagle sendet trotzdem Requests. Anders als Envoy/gRPC A50 gibt es keine Auswurf-Quote. Siehe [Health-Filterung und p2c](/de-DE/docs/client#health-filtering-and-p2c).
+Umhüllt ein Kind mit Consecutive-Failure-Circuit-Breaking im Stil von Linkerd. Round Robin und p2c schalten es standardmäßig ein (wie bei Finagle); `false` schaltet es ab. Pick-first schaltet es mit einem Objekt ein. Der Standard-Klassifikator zählt `NET_UNREACHABLE`, `NET_UNAVAILABLE` und `NET_SERVER_ERROR`. Nach fünf Fehlern beginnen die Strafen bei 1000 ms, verdoppeln sich nach einer fehlgeschlagenen Sonde, addieren positiven Jitter bis zum 0,5-Fachen der Basis und sind bei 60000 ms gedeckelt. Nach Ablauf der Sperrzeit lässt der Balancer eine einzelne Sonde zu, entschieden an `end` oder an `done`, wenn kein `end` kam. Erfolg setzt den Backoff zurück; ein Abbruch gibt nur den Platz frei. Es gibt kein Timeout, das Erfolg annimmt, keine Quote, keinen Schutz des letzten Hosts, kein Auswertungs-Gitter, kein Prozent-Kriterium und kein Slow Start. `isHealthy` liest den Cache der Anwendung und hebt eine Strafe nie auf. Alle Hosts dürfen unterbrechen; listenlokales Fail-open nach Finagle sendet trotzdem Requests. Anders als Envoy/gRPC A50 gibt es keine Auswurf-Quote. Siehe [Health-Filterung und p2c](/de-DE/docs/client#health-filtering-and-p2c).
 
 ### withRetry()
 
@@ -243,7 +243,7 @@ Aktiviert Same-Call-HTTP-Retry unabhängig von der Endpunktauswahl. Weglassen be
 
 Backoff ist standardmäßig `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`, mit derselben Feldsemantik wie SSE-/WebSocket-Reconnect. `delayMs: 0` überspringt das Warten. `attemptTimeoutMs` muss endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück. Es begrenzt Fetch, das Lesen des Bodys und das Dekodieren eines Versuchs; das Signal des Aufrufers deckt den gesamten Aufruf ab, einschließlich der Backoff-Wartezeiten.
 
-Das clienteigene Finagle-Budget ist standardmäßig 20 % plus eine Reserve von 10 Retries pro Sekunde über eine TTL von 10 s. Gutschriften und Belastungen laufen träge in zehn Scheiben von TTL/10 ab. `budget: false` hebt das Limit auf. Abgeleitete Clients, die eine Konfiguration teilen, teilen ihr Budget; getrennte Clients nicht, auch mit einem gemeinsamen Balancer. Ungültige Optionen liefern `REQ_OPTIONS_INVALID` mit `Invalid retry options`, wenn HTTP läuft. Die Option erfasst eigene Felder, Arrays und das verschachtelte Budget zum Anwendungszeitpunkt. `withRetry()` und `withRetry(undefined)` verhalten sich wie `withRetry({})`. Ein späteres `withRetry` ersetzt die Policy; `withRetry({ maxAttempts: 1 })` schaltet Retries aus, nachdem sie aktiviert wurden. Balancer und Health-Wrapper haben keine Retry-Einstellungen. Siehe [Lastverteilung & Failover](/de-DE/docs/load-balancing).
+Das clienteigene Finagle-Budget ist standardmäßig 20 % plus eine Reserve von 10 Retries pro Sekunde über eine TTL von 10 s. Gutschriften und Belastungen laufen träge in zehn TTL/10-Abschnitten ab. `budget: false` hebt das Limit auf. Abgeleitete Clients, die eine Konfiguration teilen, teilen ihr Budget; getrennte Clients nicht, auch mit einem gemeinsamen Balancer. Ungültige Optionen liefern `REQ_OPTIONS_INVALID` mit `Invalid retry options`, wenn HTTP läuft. Die Option erfasst eigene Felder, Arrays und das verschachtelte Budget zum Anwendungszeitpunkt. `withRetry()` und `withRetry(undefined)` verhalten sich wie `withRetry({})`. Ein späteres `withRetry` ersetzt die Policy; `withRetry({ maxAttempts: 1 })` schaltet Retries aus, nachdem sie aktiviert wurden. Balancer und Health-Wrapper haben keine Retry-Einstellungen. Siehe [Lastverteilung & Failover](/de-DE/docs/load-balancing).
 
 <include cwd>examples/client/http-retry.ts#example</include>
 
@@ -255,4 +255,4 @@ Das clienteigene Finagle-Budget ist standardmäßig 20 % plus eine Reserve von 1
 
 Der Balancer sieht nur neutrale Ergebnisse; jeder Transport übersetzt seine eigenen Fakten in `DoneInfo.code`. Die Standard-Outlier-Detection zählt `NET_UNREACHABLE`, `NET_UNAVAILABLE` und `NET_SERVER_ERROR`. Der rohe `DoneInfo.status` bleibt nur für eigene Balancer erhalten und wird von eingebauten Strategien nie gelesen. `PickInfo` enthält `endpoints` und optionales `operation`, ohne Transport-Diskriminator.
 
-Siehe [Client-Guide](/de-DE/docs/client).
+Siehe [Client-Leitfaden](/de-DE/docs/client).

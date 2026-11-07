@@ -9,61 +9,27 @@ Combine a caller `AbortController` with a deadline using `AbortSignal.any([contr
 
 <Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
   <Tab value="sdk/reports.ts">
-```ts
-import { defineRequest } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
+</include>
 
-export const getReport = defineRequest({
-  method: "GET",
-  path: "/report",
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getReport } from "../sdk/reports.ts";
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-const controller = new AbortController();
-const pending = getReport(
-client({
-signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
-}),
-);
-
-controller.abort("screen closed");
-
-async function main() {
-const [error] = await pending;
-if (error?.code === "NET_ABORTED") {
-console.log("caller cancelled");
-return;
-}
-if (error?.code === "NET_TIMEOUT") {
-console.log("timed out");
-return;
-}
-if (error) {
-console.error(error.code);
-return;
-}
-console.log("got the report");
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="cancel-report.ts">
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
 ```txt
 caller cancelled
-````
+```
 
 Cancellation reports what the client observed—it does not guarantee that a server-side write rolled back. Guard mutation retries behind an idempotency key. See [HTTP cancellation and timeouts](/docs/http#cancel-the-work).

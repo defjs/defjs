@@ -1,6 +1,6 @@
 # Server-side OpenTelemetry (`@defjs/opentelemetry-server`)
 
-Contents: [Boundary and setup](#boundary-and-setup) · [Low-cardinality `operation` names](#low-cardinality-operation-names) · [Transport options and WebSocket propagation](#transport-options-and-websocket-propagation) · [Redaction and safety](#redaction-and-safety)
+Contents: [Boundary and setup](#boundary-and-setup) · [Low-cardinality `operation` names](#low-cardinality-operation-names) · [Transport options and WebSocket propagation](#transport-options-and-websocket-propagation) · [Attempts and logical sessions](#attempts-and-logical-sessions) · [Redaction and safety](#redaction-and-safety)
 
 ## Boundary and setup
 

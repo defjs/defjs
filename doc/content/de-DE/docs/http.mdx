@@ -1,5 +1,5 @@
 ---
-title: "HTTP-Anfragen"
+title: "HTTP-Operationen"
 description: Entwirfe HTTP-Operationen für dein SDK und rufe sie mit anwendungseigener Konfiguration und Abbruchsteuerung auf.
 ---
 
@@ -9,49 +9,21 @@ Ein SDK definiert jede HTTP-Operation mit `defineRequest`: ihre Methode, die Pfa
 
 ## 1. Operation definieren und aufrufen
 
-Gib jedem Endpunkt einen eigenen `defineRequest`-Export in deinem SDK-Modul und behalte `createClient` in der konsumierenden Anwendung:
+Gib jeder Operation einen eigenen `defineRequest`-Export in deinem SDK-Modul und behalte `createClient` in der konsumierenden Anwendung:
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -71,11 +43,11 @@ void main();
 
 ## 2. URL-Auflösung und Pfadparameter
 
-`withEndpoint(...)` erfordert eine gültige, absolute URL. Ihr Pfadname fungiert als Basisverzeichnis (etwaige Query-Strings oder Hashes am Basis-Endpunkt werden verworfen).
+`withEndpoint(...)` erfordert eine gültige, absolute URL. Ihr Pfad wirkt als Basisverzeichnis (etwaige Query-Strings oder Hashes am Basis-Endpunkt werden verworfen).
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
-- **Pfad-Platzhalter (`:name`)**: Werden exakt einmal als einzelnes Pfadsegment URL-kodiert. Schrägstriche, `?`, `#`, `%`, Leerzeichen und Unicode verbleiben innerhalb dieses Segments – kodiere Werte daher nicht vorab. Leere Strings, `.` und `..` schlagen mit `REQ_BUILD_FAILED` fehl.
+- **Pfad-Platzhalter (`:name`)**: Werden exakt einmal als einzelnes Pfadsegment URL-kodiert. Schrägstriche, `?`, `#`, `%`, Leerzeichen und Unicode verbleiben innerhalb dieses Segments – kodiere Werte daher nicht vorab. Leere Zeichenketten, `.` und `..` schlagen mit `REQ_BUILD_FAILED` fehl.
 - **Origin- und Verzeichnisgrenzen**: Definitionspfade dürfen keine absoluten URLs sein, nicht protokollrelativ (`//...`) beginnen, keine C0-Steuerzeichen, Backslashes, `?` oder `#` enthalten und das Basisverzeichnis nicht über `../` verlassen. Jeder Verstoß schlägt mit `REQ_BUILD_FAILED` fehl, bevor Interceptors oder der Transport überhaupt ausgeführt werden.
 
 ## 3. Eingaben mit `builder` platzieren
@@ -129,7 +101,7 @@ Werte, die sich nicht in JSON darstellen lassen (`NaN`, `±Infinity`, `Map`, `Se
 1. **Zweig anhand von `ok` (`200..299`) wählen**: `output` für `2xx`, `error` für Nicht-`2xx`.
 2. **Opt-out beim Weglassen**: Ist für diesen Zweig kein Struct deklariert, wird der Response-Body niemals gelesen (`2xx` liefert `data: undefined` + `HttpMeta`; Nicht-`2xx` liefert `HTTP_STATUS` mit `data: undefined`).
 3. **JSON-Medientyp zuerst prüfen**: Bei JSON-Structs führt ein Nicht-JSON-`Content-Type` zu `RES_MEDIA_TYPE_INVALID`, bevor der Body-Stream gelesen wird.
-4. **Einlesen und Parsen**: Unlesbare Streams oder ungültiges JSON scheitern mit `RES_DECODE_FAILED` (oder `NET_BODY_INCOMPLETE`, falls mitten im Stream abgebrochen).
+4. **Einlesen und Parsen**: Unlesbare Streams oder ungültiges JSON scheitern mit `RES_DECODE_FAILED` (oder `NET_BODY_INCOMPLETE`, falls mitten im Stream abgeschnitten).
 5. **Mit `struct` validieren**: Schema-Abweichungen schlagen mit `RES_STRUCT_MISMATCH` fehl.
 
 ## 5. Anfragen abbrechen und Fristen setzen [#cancel-the-work]
@@ -153,13 +125,13 @@ Werte, die sich nicht in JSON darstellen lassen (`NaN`, `±Infinity`, `Map`, `Se
 </Tab>
 </Tabs>
 
-Das Abbrechen einer schreibenden Anfrage signalisiert lediglich, dass der Aufrufer nicht mehr wartet – es garantiert keinesfalls, dass der Server die Mutation zurückgerollt hat.
+Das Abbrechen eines schreibenden Requests signalisiert lediglich, dass der Aufrufer nicht mehr wartet – es garantiert keinesfalls, dass der Server die Mutation zurückgerollt hat.
 
 ## 6. Zugangsdaten, XSRF und Übertragungsfortschritt
 
 - **`withCredentials(true)`**: Setzt Fetch `credentials: "include"` für HTTP- und SSE-Anfragen.
 - **`withXSRF(options?)`**: Liest das XSRF-Cookie (standardmäßig `XSRF-TOKEN`) aus und injiziert den Header (`X-XSRF-TOKEN`) bei Same-Origin-mutierenden HTTP-Methoden (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: Übergibst du an `client({ onDownloadProgress, onUploadProgress })`. Der Download-Fortschritt meldet `lengthComputable: true` nur dann, wenn `Content-Length` positiv ist und `Content-Encoding` fehlt oder `identity` lautet. Der Upload-Fortschritt streamt Bodys auf Server-Laufzeiten (Bun, Node.js). Ein Fortschritts-Callback, der eine Exception wirft, lässt den Aufruf mit `EXT_OBSERVER_FAILED` fehlschlagen.
+- **`onDownloadProgress` / `onUploadProgress`**: Übergibst du an `client({ onDownloadProgress, onUploadProgress })`. Der Download-Fortschritt meldet `lengthComputable: true` nur dann, wenn `Content-Length` positiv ist und `Content-Encoding` fehlt oder `identity` lautet. Der Upload-Fortschritt streamt Bodys auf Server-Laufzeitumgebungen (Bun, Node.js). Ein Fortschritts-Callback, der eine Exception wirft, lässt den Aufruf mit `EXT_OBSERVER_FAILED` fehlschlagen.
 
 ## Weiterführende Links
 

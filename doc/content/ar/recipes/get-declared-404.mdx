@@ -9,47 +9,22 @@ description: استدعِ طلب GET وتفرع بدقة بين استجابة �
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error?.code === "HTTP_STATUS" && error.status === 404) {
-console.log(error.data.message);
-return;
-}
-if (error) {
-console.error(error.code);
-return;
-}
-console.log(`Loaded ${order.status} from ${response.status}`);
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -57,7 +32,7 @@ void main();
 
 ```txt
 Loaded paid from 200
-````
+```
 
 - تنتج كل حالة استجابة غير 2xx خطأ `HTTP_STATUS`. ويؤدي التصريح عن `error` إلى فك ترميز جسم الخطأ والتحقق منه داخل `error.data`؛ بينما يؤدي إغفال `error` إلى إبقاء `error.data` كـ `undefined` دون قراءة جسم الاستجابة.
 - إذا كان جسم `error` المعلن يحمل نوع وسائط خاطئاً، أو بيانات JSON غير صالحة، أو فشل في التحقق من بنية Struct، فإن العملية تُرجع خطأ `RES_*` بدلاً من ذلك. ونظراً لأن بنية `error` واحدة تغطي كافة الحالات غير 2xx، استخدم `struct.or(...)` عندما تُرجع حالات الخطأ المختلفة أشكالاً متباينة.

@@ -1,6 +1,6 @@
 ---
 title: Обзор интеграций
-description: Расширяйте клиент Defjs в приложении с помощью внедрения во фреймворки, наблюдаемости на сервере и навыков ИИ-ассистентов без жесткой связи с SDK.
+description: Расширяйте клиент Defjs в приложении с помощью внедрения во фреймворки, наблюдаемости на сервере и навыков ИИ-ассистентов без жёсткой связи с SDK.
 ---
 
 # Обзор интеграций
@@ -19,10 +19,10 @@ description: Расширяйте клиент Defjs в приложении с 
 
 | Область                                                                   | Пакет / Ресурс                    | Категория         | Что предоставляет                                                                                              | Что остаётся в приложении                                                               |
 | ------------------------------------------------------------------------- | --------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [React](/ru-RU/docs/integrations/react)                                   | `@defjs/react`                    | Плагин фреймворка | `ClientProvider` и `useClient(override?)` для React 18+                                                        | Создание клиента, отмена через `AbortController`, кэширование запросов (TanStack Query) |
+| [React](/ru-RU/docs/integrations/react)                                   | `@defjs/react`                    | Плагин фреймворка | `ClientProvider` и `useClient(overrideClient?)` для React 18+                                                  | Создание клиента, отмена через `AbortController`, кэширование запросов (TanStack Query) |
 | [Vue](/ru-RU/docs/integrations/vue)                                       | `@defjs/vue`                      | Плагин фреймворка | `createClientPlugin`, `HTTP_CLIENT` и `injectClient(key?)` для Vue 3.2+                                        | Создание клиента, отмена в `onCleanup` / `onScopeDispose`, состояние запросов           |
-| [OpenTelemetry на сервере](/ru-RU/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Middleware-плагин | Опция `ClientOption` `withOpenTelemetryServer(...)` для исходящих спанов, метрик и логов HTTP, SSE и WebSocket | Инициализация OpenTelemetry SDK, экспортеры, сэмплирование, маскирование данных         |
-| [ИИ-навык](/ru-RU/docs/ai) и [llms.txt](/ru-RU/docs/ai-api)               | Навык `defjs/defjs` и `/llms.txt` | Инструменты ИИ    | Навык агента (`SKILL.md`) и машиночитаемая Markdown-документация                                               | Проверка на соответствие установленной версии `@defjs/core` и набору тестов             |
+| [OpenTelemetry на сервере](/ru-RU/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Middleware-плагин | Опция `ClientOption` `withOpenTelemetryServer(...)` для исходящих спанов, метрик и логов HTTP, SSE и WebSocket | Инициализация OpenTelemetry SDK, экспортёры, сэмплирование, маскирование данных         |
+| [ИИ-навык](/ru-RU/docs/ai) и [llms.txt](/ru-RU/docs/ai-api)               | Навык `defjs/defjs` и `/llms.txt` | Инструменты ИИ    | Навык агента (`SKILL.md`) и машиночитаемая Markdown-документация                                               | Проверка на соответствие установленной в проекте версии `@defjs/core` и набору тестов   |
 
 ---
 
@@ -33,62 +33,24 @@ description: Расширяйте клиент Defjs в приложении с 
 Плагин фреймворка передаёт существующий [`DerivableClient`](/ru-RU/api/core/derivableclient-type) вниз по дереву компонентов с помощью стандартного механизма внедрения зависимостей (React Context или Vue `provide` / `inject`):
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-<Tab value="sdk/orders.ts">
+  <Tab value="sdk/orders.ts">
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
+  </Tab>
+  <Tab value="app/main.tsx">
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
 
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
+  </Tab>
+  <Tab value="app/OrderCard.tsx">
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: Order,
-});
-```
-
-</Tab>
-<Tab value="app/main.tsx">
-
-```tsx
-import { createClient, withEndpoint } from "@defjs/core";
-import { ClientProvider } from "@defjs/react";
-import { OrderCard } from "./OrderCard.tsx";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-export function App() {
-  return (
-    <ClientProvider client={client}>
-      <OrderCard id={42} />
-    </ClientProvider>
-  );
-}
-```
-
-</Tab>
-<Tab value="app/OrderCard.tsx">
-
-```tsx
-import { useClient } from "@defjs/react";
-import { getOrder } from "../sdk/orders.ts";
-
-export function OrderCard({ id }: { id: number }) {
-  const client = useClient();
-  // Передавайте `client` или `client({ signal })` в `getOrder(...)` внутри эффекта или query-хука
-  void id;
-  void getOrder;
-  void client;
-  return null;
-}
-```
-
-</Tab>
+  </Tab>
 </Tabs>
 
 ### 2. Middleware-плагины (`@defjs/opentelemetry-server`)
@@ -96,26 +58,18 @@ export function OrderCard({ id }: { id: number }) {
 Middleware-плагин представляет собой фабрику, возвращающую [`ClientOption`](/ru-RU/api/core/clientoption-type). При передаче в `createClient(...)` он добавляет перехватчики HTTP, SSE и/или WebSocket через `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-<Tab value="plugins/request-id.ts">
-
+  <Tab value="plugins/request-id.ts">
 <include cwd lang="typescript">
-  examples/integrations/request-id.ts#example
+  examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
-</Tab>
-<Tab value="app/client.ts">
+  </Tab>
+  <Tab value="app/client.ts">
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { withRequestIdHeader } from "../plugins/request-id.ts";
-
-export const client = createClient(
-  withEndpoint("https://api.example.com"),
-  withRequestIdHeader(),
-);
-```
-
-</Tab>
+  </Tab>
 </Tabs>
 
 Смотрите раздел [Перехватчики](/ru-RU/docs/interceptors) для изучения правил порядка выполнения, границ повторов и хуков жизненного цикла потоков.

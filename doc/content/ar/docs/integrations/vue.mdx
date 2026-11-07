@@ -13,7 +13,7 @@ bun add @defjs/core @defjs/vue vue
 
 ## ما توفره `@defjs/vue` مقابل ما يملكه تطبيقك
 
-- **ما توفره `@defjs/vue`**: الدالة `createClientPlugin(client)`، والرمز `HTTP_CLIENT` (من نوع `InjectionKey<Client>`)، ودالة `injectClient(key?)`.
+- **ما توفره `@defjs/vue`**: الدالة `createClientPlugin(client)`، والرمز `HTTP_CLIENT` (من نوع `InjectionKey<DerivableClient>`)، ودالة `injectClient(key?)`.
 - **ما يملكه تطبيقك**: إنشاء عميل [`DerivableClient`](/ar/api/core/derivableclient-type)، وإلغاء العمل الجاري في المراقبين عبر (`onCleanup`) أو في دوال Composables عبر (`onScopeDispose`)، وإغلاق مقابض SSE/WebSocket، ودمج مكتبات الاستعلام (مثل Vue Query).
 - **تنبيه هام**: تُرجع `injectClient()` كائن-دالة `DerivableClient`. استدعِ `client({ signal })` حيث تُشغّل العملية (`getOrder(client({ signal }), input)`). ولا تمرر `client` أبداً كمعامل أول لـ `watch(client, ...)` أو `computed(client)` لأن Vue يعامل وسيط الدالة كدالة جلب تفاعلية (reactive getter).
 
@@ -28,9 +28,11 @@ bun add @defjs/core @defjs/vue vue
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
+
   </Tab>
   <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
+
   </Tab>
 </Tabs>
 
@@ -78,8 +80,8 @@ bun add @defjs/core @defjs/vue vue
   examples/vue/exports.ts#example
 </include>
 
-- `HTTP_CLIENT` — رمز `InjectionKey<Client>` لدوال `provide` و`inject` الأصلية.
+- `HTTP_CLIENT` — رمز `InjectionKey<DerivableClient>` لدوال `provide` و`inject` الأصلية.
 - `createClientPlugin(client)` — إضافة Vue `Plugin` توفر `client` تحت الرمز `HTTP_CLIENT`.
 - `injectClient(key?)` — يحل أقرب عميل للمفتاح `key` (افتراضياً `HTTP_CLIENT`).
-- أدلة ذات صلة: [العميل](/ar/docs/client)، [عمليات HTTP](/ar/docs/http)، [الوسائط (Interceptors)](/ar/docs/interceptors)، [تدفقات أحداث SSE](/ar/docs/sse)، [جلسات WebSocket](/ar/docs/web-socket).
+- أدلة ذات صلة: [العميل](/ar/docs/client)، [عمليات HTTP](/ar/docs/http)، [المعترضات (Interceptors)](/ar/docs/interceptors)، [تدفقات أحداث SSE](/ar/docs/sse)، [جلسات WebSocket](/ar/docs/web-socket).
 - أمثلة عملية ذات صلة: [GET مع 404 معلَن](/ar/recipes/get-declared-404)، [إلغاء طلب HTTP وإدارته بالمهلة الزمنية](/ar/recipes/cancel-http)، [استهلاك تدفق أحداث SSE](/ar/recipes/consume-sse)، [إدارة جلسات WebSocket](/ar/recipes/websocket-session).

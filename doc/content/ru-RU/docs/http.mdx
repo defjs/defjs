@@ -1,5 +1,5 @@
 ---
-title: "HTTP-запросы"
+title: "HTTP-операции"
 description: Проектируйте HTTP-операции для вашего SDK и вызывайте их с настройкой и отменой, которыми владеет приложение.
 ---
 
@@ -9,49 +9,21 @@ SDK определяет каждую HTTP-операцию с помощью `d
 
 ## 1. Объявление операции и её вызов
 
-Экспортируйте для каждого эндпоинта отдельный вызов `defineRequest` из модуля вашего SDK, а создание клиента через `createClient` оставьте на стороне приложения:
+Экспортируйте для каждой операции отдельный `defineRequest` из модуля вашего SDK, а создание клиента через `createClient` оставьте на стороне приложения:
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -65,17 +37,17 @@ void main();
 
 ### Лучшие практики проектирования SDK
 
-- **Одна операция на каждое определение**: держите каждый метод, путь и контракт в отдельном определении, чтобы приложения могли эффективно применять tree-shaking к неиспользуемым вызовам.
+- **Одна операция на каждое определение**: держите каждый метод, путь и контракт в отдельном определении, чтобы приложения могли применять tree-shaking к неиспользуемым операциям.
 - **Указывайте статическое имя `operation`**: используйте идентификаторы с низкой кардинальностью, например `"orders.read"`. Плагины телеметрии (`@defjs/opentelemetry-server`) и логирующие перехватчики используют это имя без риска утечки URL или ID пользователей.
 - **Никогда не встраивайте клиент в SDK**: экспортируйте только определения, схемы `struct` и типы.
 
 ## 2. Разрешение URL и параметры пути
 
-Функции `withEndpoint(...)` требуется валидный абсолютный URL. Его путь (pathname) служит базовым каталогом (любые query-параметры или хеш из базового эндпоинта отбрасываются).
+Для `withEndpoint(...)` требуется валидный абсолютный URL. Его путь (pathname) служит базовым каталогом (любые query-параметры или хеш из базового эндпоинта отбрасываются).
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
-- **Плейсхолдеры пути (`:name`)**: кодируются ровно один раз как одиночный сегмент пути. Слэши, `?`, `#`, `%`, пробелы и символы Unicode остаются внутри этого сегмента — не кодируйте значения вручную заранее. Пустые строки, `.` и `..` приводят к ошибке `REQ_BUILD_FAILED`.
+- **Плейсхолдеры пути (`:name`)**: кодируются ровно один раз как одиночный сегмент пути. Слэши, `?`, `#`, `%`, пробелы и символы Unicode остаются внутри этого сегмента — не кодируйте значения заранее. Пустые строки, `.` и `..` приводят к ошибке `REQ_BUILD_FAILED`.
 - **Ограничение origin и каталога**: пути в определении не могут быть абсолютными URL, начинаться с `//`, содержать управляющие символы C0, обратные слэши, `?`, `#` или выходить за пределы базового каталога через `../`. Любое нарушение завершается ошибкой `REQ_BUILD_FAILED` ещё до запуска перехватчиков и транспорта.
 
 ## 3. Размещение входных данных с помощью `builder`
@@ -114,7 +86,7 @@ void main();
 | `Blob` / `File`                                                           | Передаётся напрямую как есть                   | `blob.type` или `application/octet-stream` |
 | `ArrayBuffer`, typed array, `DataView`, `ReadableStream`                  | Сырые байты / поток                            | `application/octet-stream`                 |
 | `string`                                                                  | Текст UTF-8                                    | `text/plain;charset=UTF-8`                 |
-| Простой объект, массив, конечное число, boolean, `null`, `Date`, `bigint` | JSON, закодированный через struct              | `application/json`                         |
+| Обычный объект, массив, конечное число, boolean, `null`, `Date`, `bigint` | JSON, закодированный через struct              | `application/json`                         |
 
 <include cwd lang="typescript">
   examples/http/body.ts#example
@@ -130,7 +102,7 @@ void main();
 2. **Отказ от чтения при отсутствии схемы**: если для соответствующей стороны схема не объявлена, тело ответа вообще не читается (`2xx` возвращает `data: undefined` + `HttpMeta`; не-`2xx` возвращает `HTTP_STATUS` с `data: undefined`).
 3. **Проверка media type для JSON в первую очередь**: для JSON-структур заголовок `Content-Type`, отличный от JSON, сразу приводит к ошибке `RES_MEDIA_TYPE_INVALID` ещё до чтения потока тела.
 4. **Чтение и парсинг**: ошибки чтения потока или невалидный JSON приводят к ошибке `RES_DECODE_FAILED` (или `NET_BODY_INCOMPLETE`, если поток оборвался на середине).
-5. **Валидация через `struct`**: несоответствие структуре схемы возвращает `RES_STRUCT_MISMATCH`.
+5. **Валидация через `struct`**: несоответствие схеме возвращает `RES_STRUCT_MISMATCH`.
 
 ## 5. Отмена работы и установка дедлайнов [#cancel-the-work]
 
@@ -157,7 +129,7 @@ void main();
 
 ## 6. Учётные данные, XSRF и отслеживание прогресса
 
-- **`withCredentials(true)`**: устанавливает для запросов Fetch `credentials: "include"` для HTTP и SSE.
+- **`withCredentials(true)`**: устанавливает `credentials: "include"` в Fetch для HTTP и SSE.
 - **`withXSRF(options?)`**: читает cookie XSRF (по умолчанию `XSRF-TOKEN`) и устанавливает заголовок (`X-XSRF-TOKEN`) для мутирующих HTTP-методов одного origin (`POST`, `PUT`, `PATCH`, `DELETE`).
 - **`onDownloadProgress` / `onUploadProgress`**: передавайте через `client({ onDownloadProgress, onUploadProgress })`. Прогресс скачивания возвращает `lengthComputable: true`, только если заголовок `Content-Length` положителен, а `Content-Encoding` отсутствует или равен `identity`. Прогресс загрузки потоково передаёт тело на серверных средах (Bun, Node.js). Выброс ошибки в колбэке прогресса завершает вызов сбоем `EXT_OBSERVER_FAILED`.
 

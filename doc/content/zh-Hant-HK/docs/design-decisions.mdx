@@ -1,6 +1,6 @@
 ---
-title: "設計決策"
-description: Defjs 如何透過分離 SDK 契約與應用程式執行，讓介面設計、編寫及發佈更直接。
+title: "核心架構"
+description: Defjs 將 SDK 定義同應用程式執行分離，令 SDK 更容易設計、發佈同重用。
 ---
 
 # 核心架構
@@ -11,29 +11,22 @@ Defjs 圍繞住一個基本邊界建立：**SDK 負責定義網絡契約；使�
 
 SDK 套件匯出操作（`defineRequest`、`defineEventStream`、`defineWebSocket`）同埋資料契約（`struct`）。佢永遠唔會呼叫 `createClient`、唔會保留單例 client，亦唔會直接讀取環境變數。
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -44,8 +37,8 @@ export const getOrder = defineRequest({
 
 正因為 `getOrder` 完全冇捕獲任何 client 狀態：
 
-- 無論係瀏覽器前端、後台排程 job、SSR 請求處理常式，定係單元測試，都可以用唔同嘅 `Client` 設定呼叫同一個 `getOrder` 定義。
-- 框架外掛（`@defjs/react`、`@defjs/vue`）同可觀測性中介層（`@defjs/opentelemetry-server`）只會掛落應用程式嘅 `Client`，令發佈出去嘅 SDK 套件保持 100% 零第三方依賴。
+- 無論係瀏覽器 UI、背景工作、SSR 請求處理常式，定係單元測試，都可以用唔同嘅 `Client` 設定呼叫同一個 `getOrder` 操作。
+- 框架外掛（`@defjs/react`、`@defjs/vue`）同可觀測性中介層外掛（`@defjs/opentelemetry-server`）只會掛落應用程式嘅 `Client`，令發佈出去嘅 SDK 套件保持 100% 零第三方依賴。
 
 ## 2. 明確嘅 Input 放置與雙向 Alias
 
@@ -60,13 +53,13 @@ export const getOrder = defineRequest({
 
 當 builder 將帶型別嘅 struct 物件交畀 `body`、`query` 或 `headers` 時，佢嘅欄位別名以及 `Date` / `bigint` codec 會自動生效。而你喺匿名包裝物件寫嘅 key（例如上面嘅 `account_id` 或 `x-api-version`）就會保持原樣。
 
-## 3. 聲明即斷言 [#declaration-is-an-assertion]
+## 3. 宣告即斷言 [#declaration-is-an-assertion]
 
 Defjs 遵循六條嚴格規則嚟讀取 HTTP 回應：
 
-### 規則 1：有聲明先有斷言
+### 規則 1：有宣告先有斷言
 
-`output` 斷言 `2xx` 回應 body 嘅形狀。`error` 斷言非 `2xx` 回應 body 嘅形狀。聲明係執行時嘅強制保證，而唔係「盡力而為」嘅參考建議。
+`output` 斷言 `2xx` 回應 body 嘅形狀。`error` 斷言非 `2xx` 回應 body 嘅形狀。宣告係執行時嘅強制保證，而唔係「盡力而為」嘅參考建議。
 
 ### 規則 2：`ok` (`200..299`) 係唯一嘅分水嶺
 
@@ -74,7 +67,7 @@ Defjs 遵循六條嚴格規則嚟讀取 HTTP 回應：
 
 ### 規則 3：任何偏離斷言嘅行為都會即刻報錯
 
-Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 `error`。只有喺嗰一邊宣告咗 JSON struct，先會觸發 decode，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；佢嘅 `Content-Type` 會喺讀取 body bytes **之前**檢查。非 `2xx` 嘅 HTML 網關頁只有喺宣告咗 JSON `error` struct 時先會產生 `RES_MEDIA_TYPE_INVALID`。作用緊嗰一邊冇宣告，就唔會讀 body；非 `2xx` 回應會返回未解碼嘅 `HTTP_STATUS`。
+Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 `error`。只有喺嗰一邊宣告咗 JSON struct，先會觸發 decode，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；佢嘅 `Content-Type` 會喺讀取 body bytes **之前**檢查。非 `2xx` 嘅 HTML 網關頁只有喺宣告咗 JSON `error` struct 時先會產生 `RES_MEDIA_TYPE_INVALID`。生效嗰一邊冇宣告，就唔會讀 body；非 `2xx` 回應會返回未解碼嘅 `HTTP_STATUS`。
 
 | 讀取回應時出錯嘅情況                       | 回傳嘅 Fault                                                   |
 | ------------------------------------------ | -------------------------------------------------------------- |
@@ -94,17 +87,17 @@ Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 
 
 ### 規則 6：`3xx` 唔算係成功狀態
 
-`ok` 指嘅係 `200 <= status < 300`。`304 Not Modified` 屬於非 `2xx`：你可以唔宣告 `error` 並直接處理 `HTTP_STATUS`（或者喺 ETag 中介層攔截 `304`）；若預期空文字 body 亦可宣告 `struct.string()`。
+`ok` 指嘅係 `200 <= status < 300`。`304 Not Modified` 屬於非 `2xx`：你可以唔宣告 `error` 並直接處理 `HTTP_STATUS`（或者喺 ETag 攔截器攔截 `304`）；若預期空文字 body 亦可宣告 `struct.string()`。
 
-## 4. 傳輸專屬嘅 Result Tuple
+## 4. 各傳輸層專屬嘅結果 tuple
 
-三種傳輸協議都會回傳三項式 error-first tuple，而唔會喺呼叫處直接 throw：
+三種傳輸層都會回傳三項式 error-first tuple，而唔會喺呼叫處直接 throw：
 
 - **HTTP** → `[error, data, response]` — 解碼後嘅 payload + `DecodedResponse<T>`（未宣告 `output` 時為 `HttpMeta`）。
 - **SSE** → `[error, stream, open]` — `EventStreamHandle` + 初始握手 snapshot。
 - **WebSocket** → `[error, session, connection]` — `WebSocketSession` + 初始連線 snapshot。
 
-Client 只負責帶住設定，唔會持有活躍連線。發起 HTTP 請求、SSE stream 或 WebSocket session 嘅呼叫端，先擁有取消或者關閉資源嘅責任（HTTP 用 `AbortSignal`；SSE 同 WebSocket 則用 `await using` 或 `.close()` + `await .closed`）。
+Client 只負責帶住設定，唔會持有活躍連線。發起 HTTP 請求、SSE 串流或 WebSocket 會話嘅呼叫端，負責取消或者關閉資源（HTTP 用 `AbortSignal`；SSE 同 WebSocket 則用 `await using` 或 `.close()` + `await .closed`）。
 
 ## 延伸閱讀
 

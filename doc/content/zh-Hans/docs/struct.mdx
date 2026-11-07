@@ -1,35 +1,33 @@
 ---
 title: "数据结构 / Struct"
-description: 使用 Struct 声明强类型的数据契约，在 SDK 与调用方之间共享输入、输出与错误校验。
+description: 使用 `struct` 声明带类型的数据契约，在 SDK 与调用方之间共享输入、输出与错误校验。
 ---
 
 # 数据结构 / Struct
 
-`struct` 用于声明 SDK 与其消费方之间共享的网络数据契约：包括调用方传入的入参、`2xx` 成功输出、显式声明的服务端业务错误、SSE 推送事件以及 WebSocket 通信数据帧。
+`struct` 声明 SDK 与消费方应用共享的网络数据契约：调用方输入、`2xx` 输出、声明的服务错误、SSE 事件和 WebSocket 帧。
 
-- **静态类型推断**：通过 `Infer<typeof Schema>` 自动推导出强类型的 TypeScript 类型。
-- **错误优先校验**：在运行时通过 `struct.parse(Schema, value)` 校验任意未知数据——返回 `[null, data]` 或 `[StructError, undefined]`，绝不在调用处抛出异常。
+- **静态推断**：用 `Infer<typeof Schema>` 推导 TypeScript 类型。
+- **错误优先校验**：用 `struct.parse(Schema, value)` 在运行时校验值——返回 `[null, data]` 或 `[StructError, undefined]`，不抛出异常。
 
-## 1. 在 SDK 中定义 Schema，在应用中校验
+## 1. 在 SDK 中定义 schema，在应用中校验
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
@@ -38,11 +36,11 @@ export type Order = Infer<typeof Order>;
 </Tab>
 </Tabs>
 
-通过解析的对象仅会保留已声明的字段（多余的未知字段会被自动剔除），并且具有 `null` 原型以防止原型污染。任何必填字段缺失、基础数据类型不匹配或无效分支都会直接返回 `StructError`，不会产生任何残缺的半成品数据。
+解析后的对象只保留声明的字段（未知属性被剔除），并使用 `null` 原型。缺少必填键、基础类型错误或无效分支都会产生 `StructError`，不会返回部分结果。
 
-## 2. 必填、可选与 Nullable 字段
+## 2. 必填、可选与可空字段
 
-Defjs 严格区分**字段是否存在**（`undefined`）与**是否允许为空**（`null`）。默认情况下，所有 struct 构造器都是严格必填且不允许为 null 的：
+Defjs 区分**字段是否存在**（`undefined`）与**是否可为 null**（`null`）。默认情况下，每个 struct 构造器都严格必填且不可为 null：
 
 | 声明方式                     | 缺失 / 传入 `undefined`            | 传入 `null` | 合法输入值                 |
 | ---------------------------- | ---------------------------------- | ----------- | -------------------------- |
@@ -56,15 +54,15 @@ Defjs 严格区分**字段是否存在**（`undefined`）与**是否允许为空
   examples/struct/required-optional-null.ts#example
 </include>
 
-注意：`struct.any()` 和 `struct.unknown()` 默认同样会拒绝 `null` 与 `undefined`，除非显式链式调用 `.null()`、`.optional()` 或 `.nullish()`。
+`struct.any()` 和 `struct.unknown()` 也会拒绝 `null` 与 `undefined`，除非链式调用 `.null()`、`.optional()` 或 `.nullish()`。
 
 ## 3. 双向网络字段别名（`.alias()`）
 
-当服务端接口使用下划线命名（`snake_case`）或特定 Header 名称，而你希望在 TypeScript SDK 中保持小驼峰风格（`camelCase`）时，可以使用 `.alias("wire_name")`。你只需在字段定义处声明一次别名，它在出入两个方向均会自动生效：
+当后端使用 `snake_case` 或请求头名称，而 TypeScript SDK 使用 `camelCase` 时，使用 `.alias("wire_name")`。别名在字段上声明一次，两个方向都会生效：
 
-| 处理边界                                                       | 实际使用的键名                                           |
+| 边界                                                           | 使用的键                                                 |
 | -------------------------------------------------------------- | -------------------------------------------------------- |
-| 操作 `input` 与独立调用 `struct.parse(Schema, value)`          | 逻辑属性名（`customerName`）                             |
+| 操作 `input` 与 `struct.parse(Schema, value)`                  | 逻辑名称（`customerName`）                               |
 | `builder` 返回的类型化 struct 值（`body`、`query`、`headers`） | 网络别名（`customer_name`）                              |
 | JSON 响应、SSE 事件以及 WebSocket 数据帧的解码过程             | 网络传输的 `customer_name` 自动转为逻辑名 `customerName` |
 | 在 `builder` 中直接手写的匿名对象键名                          | 保持手写的字面量键名不变                                 |
@@ -73,11 +71,11 @@ Defjs 严格区分**字段是否存在**（`undefined`）与**是否允许为空
   examples/struct/aliases.ts#example
 </include>
 
-在 `builder` 中展开类型化的对象（如 `{ ...input.order, extra: 1 }`）会完整保留其 struct 编码规则与字段别名。如果同一个对象中同时出现了逻辑属性名和其对应的网络传输别名，执行时将直接报错 `REQ_BUILD_FAILED`。
+在 `builder` 中展开类型化对象（`{ ...input.order, extra: 1 }`）会保留其 struct 编码和别名。在同一对象上同时写逻辑键和网络别名会以 `REQ_BUILD_FAILED` 失败。
 
-## 4. 请求参数放置与表单编解码器
+## 4. 请求放置与表单编解码器
 
-`input` 声明调用方入参；`builder` 负责将参数放置到 `{ path, query, headers, body }` 中。对于表单类请求体，`struct.urlencoded(shape)` 和 `struct.formData(shape)` 会标记根对象，使底层传输层自动将其序列化为 `URLSearchParams` 或 `FormData`：
+`input` 声明参数；`builder` 把它们放入 `{ path, query, headers, body }`。对于表单编码的 body，`struct.urlencoded(shape)` 和 `struct.formData(shape)` 会给根对象打上标记，让传输层自动序列化为 `URLSearchParams` 或 `FormData`：
 
 <include cwd lang="typescript">
   examples/struct/request-placement.ts#example
@@ -92,15 +90,15 @@ Defjs 严格区分**字段是否存在**（`undefined`）与**是否允许为空
 | `Blob` / `File`（`struct.file()`）            | 二进制 Blob       | `blob.type` 或 `application/octet-stream`         |
 | `ArrayBuffer` / 类型化视图 / `ReadableStream` | 原始字节流        | `application/octet-stream`                        |
 
-## 5. 处理 `StructError` 与校验问题列表
+## 5. 处理 `StructError` 与 issue
 
-当校验失败时，`struct.parse(Schema, data, { aliases?, errorMap? })` 会返回 `[StructError, undefined]`。`StructError` 继承自原生 `Error`，提供了 `issues` 列表以及 `format()`、`flatten()` 和 `prettify()` 等格式化方法：
+校验失败时，`struct.parse(Schema, data, { aliases?, errorMap? })` 返回 `[StructError, undefined]`。`StructError` 继承原生 `Error`，提供 `issues`、`format()`、`flatten()` 和 `prettify()`：
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-每个 `StructIssue` 包含 `code`（可能为 `invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 以及 `message`。默认消息会省略收到的值，只报告它的*类型*，但 path 会保留动态 record 的 key，其中可能含有敏感值。`String(error)` 和 `error.prettify()` 不是脱敏边界；写日志时请使用安全字段的允许列表，并把原始 `received` 值以及自定义消息当作敏感信息。
+每个 `StructIssue` 包含 `code`（可能为 `invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 以及 `message`。默认消息会省略收到的值，只报告其*类型*，但 path 会保留动态 record 的键，其中可能含有敏感值。`String(error)` 和 `error.prettify()` 不是脱敏边界；写日志时请使用安全字段的允许列表，并把原始 `received` 值以及自定义消息当作敏感信息。
 
 ## 6. 构造器速查表
 
@@ -108,7 +106,7 @@ Defjs 严格区分**字段是否存在**（`undefined`）与**是否允许为空
   examples/struct/any.ts#example
 </include>
 
-| 构造器                                                     | 接受的输入                                  | 推断出的输出类型                                     |
+| 构造器                                                     | 接受的输入                                  | 推断输出                                             |
 | ---------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------- |
 | `struct.string()` / `struct.boolean()`                     | 匹配的原生类型                              | `string` / `boolean`                                 |
 | `struct.number()`                                          | 除 `NaN` 外的任意数字                       | `number`（拒绝 `NaN`；JSON Body 中拒绝 `±Infinity`） |
@@ -127,4 +125,4 @@ Defjs 严格区分**字段是否存在**（`undefined`）与**是否允许为空
 
 - [HTTP 请求](/zh-Hans/docs/http)
 - [错误处理](/zh-Hans/docs/errors)
-- [发送并校验 JSON 数据](/zh-Hans/recipes/post-json)
+- [发送并校验 JSON](/zh-Hans/recipes/post-json)

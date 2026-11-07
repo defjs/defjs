@@ -1,9 +1,9 @@
 ---
-title: "Équilibrage de charge et basculement"
+title: "Répartition de charge & basculement"
 description: Répartissez le trafic sur plusieurs endpoints, éjectez les réplicas défaillants et basculez de façon optionnelle les requêtes HTTP sûres au sein d'un même appel.
 ---
 
-# Équilibrage de charge et basculement
+# Répartition de charge & basculement
 
 Lorsqu'une application configure plusieurs URL de base avec `withEndpoint(...urls)`, Defjs peut distribuer les requêtes entre les différents réplicas, éjecter les hôtes défaillants par coupure de circuit passive ou vérifications de santé actives, et basculer de façon optionnelle les méthodes HTTP sûres au sein d'un même appel.
 
@@ -65,7 +65,7 @@ Cela suit l'écosystème Go : [gRPC place `retryPolicy` dans la configuration de
 
   Avec un seul endpoint configuré, `withRetry` ne rejoue pas la requête, parce que chaque retry exclut les endpoints déjà tentés.
 
-- **Délai par tentative vs délai pour tout l'appel** : `attemptTimeoutMs` doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`. Il borne une tentative unique de l'invocation Fetch jusqu'au décodage du corps. Le `client({ signal: AbortSignal.timeout(ms) })` de l'appelant couvre chaque tentative **et l'attente de backoff**. Une annulation pendant une attente renvoie le fault d'annulation de l'appelant, sans autre pick.
+- **Délai par tentative vs délai pour tout l'appel** : `attemptTimeoutMs` doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`. Il borne une tentative unique depuis l'invocation de Fetch jusqu'au décodage du corps. Le `client({ signal: AbortSignal.timeout(ms) })` de l'appelant couvre chaque tentative **et l'attente de backoff**. Une annulation pendant une attente renvoie le fault d'annulation de l'appelant, sans autre pick.
 - **Budget de retry Finagle / Linkerd (`budget`)** : Chaque configuration de client possède un budget, partagé seulement par les clients dérivés de cette même configuration, et non par les clients qui partagent un répartiteur. Les défauts sont `percentCanRetry: 0.2`, `minRetriesPerSecond: 10` et `ttlMs: 10000` : 20 % du trafic d'origine plus la réserve. Les crédits et les débits expirent paresseusement en dix tranches de TTL/10. Un retry prélève avant d'attendre ; un budget épuisé n'attend pas et ne réessaie pas. Définissez `budget: false` pour retirer le plafond.
 - **Indication hors ligne du navigateur** : Lorsque `navigator.onLine === false`, les échecs de connexion sont notifiés avec `{ attempted: false }` et ne font pas avancer les répartiteurs ni ne déclenchent de retry.
 
@@ -99,7 +99,7 @@ Un `withRetry` ultérieur remplace la politique. `withRetry()` et `withRetry(und
 </Tab>
 </Tabs>
 
-1. **Échecs consécutifs** : Le classificateur par défaut compte `NET_UNREACHABLE`, `NET_UNAVAILABLE` et `NET_SERVER_ERROR`. Après `consecutiveFailures` (par défaut `5`) issues comptées consécutives, l'endpoint est éjecté pendant `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` à `60000ms`) additionné d'un jitter uniforme positif pouvant atteindre `50%`.
+1. **Échecs consécutifs** : Le classificateur par défaut compte `NET_UNREACHABLE`, `NET_UNAVAILABLE` et `NET_SERVER_ERROR`. Après `consecutiveFailures` (par défaut `5`) résultats comptés consécutifs, l'endpoint est éjecté pendant `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` à `60000ms`) additionné d'un jitter uniforme positif pouvant atteindre `50%`.
 2. **Rétablissement par sonde unique** : Dès expiration de la pénalité, une unique requête sonde l'hôte. Si sa réponse du pair commence (`end`) sans échec compté, le trafic normal reprend immédiatement et le niveau de pénalité retombe à `0` ; en cas d'échec, la pénalité est doublée.
 3. **Historique borné** : L’historique de santé conserve au plus 256 endpoints à travers les clients dérivés et les exclusions de candidats par appel. Les entrées saines ou expirées les moins récemment utilisées sont évincées en premier, puis les séquences partielles d’échecs. Une pénalité non expirée ou une sonde en cours n’est évincée que si toutes les entrées conservées sont protégées ; l’entrée la plus ancienne est alors retirée. Omettre simplement un endpoint d’un appel ne réinitialise pas sa pénalité. P2C plafonne aussi l’historique de charge à 256 entrées, en évinçant les entrées inactives avant les occupées ; un endpoint oublié repart à `defaultRttMs`. Les clés de mélange de Pick-first utilisent un cache LRU de 256 entrées, donc un endpoint oublié reçoit une nouvelle clé à son retour. Le round-robin pondéré ne conserve les valeurs courantes que pour son dernier ensemble de candidats ; sa configuration de poids copiée est fixée à la construction. Les durées utilisent l’horloge monotone Performance de la plateforme si disponible, avec `Date.now()` uniquement en repli.
 
@@ -124,7 +124,7 @@ Les répartiteurs personnalisés implémentent `pick(info)` synchrone et les cal
 | Annulation par l'appelant ou fermeture manuelle du flux/socket                    | `{ attempted: false }`                                     |
 | Expiration du délai de l'appelant après démarrage de la tentative                 | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
 
-Les échecs de décodage du handshake conservent l'issue neutre dérivée du statut du handshake (par exemple `NET_UNAVAILABLE` avec le statut `503`). Un corps HTTP incomplet conserve au contraire `NET_BODY_INCOMPLETE` et son statut brut, même pour une réponse de passerelle ; la détection d'outliers par défaut ne le compte pas.
+Les échecs de décodage du handshake conservent l'issue neutre dérivée du statut du handshake (par exemple `NET_UNAVAILABLE` avec le statut `503`). Un corps HTTP incomplet conserve au contraire `NET_BODY_INCOMPLETE` et son statut brut, même pour une réponse de passerelle ; la détection des anomalies par défaut ne le compte pas.
 
 ## Lectures connexes
 

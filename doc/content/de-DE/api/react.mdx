@@ -5,15 +5,15 @@ description: ClientProvider, useClient mit optionalem Client-Override und Provid
 
 # React
 
-Stelle einen bestehenden `@defjs/core`-Client einem React-Tree bereit. Dieses Paket erzeugt den Client nicht, legt ihn nicht im Cache ab und gibt ihn nicht frei. Der Entry ist mit `'use client'` markiert, importiere ihn also aus Client-Komponenten. React 18 oder neuer ist erforderlich.
+Stelle einen bestehenden `@defjs/core`-Client einem React-Baum bereit. Dieses Paket erzeugt den Client nicht, legt ihn nicht im Cache ab und gibt ihn nicht frei. Der Einstiegspunkt ist mit `'use client'` markiert, importiere ihn also aus Client-Komponenten. React 18 oder neuer ist erforderlich.
 
-Siehe den [React-Guide](/de-DE/docs/integrations/react).
+Siehe den [React-Leitfaden](/de-DE/docs/integrations/react).
 
 ## ClientProvider
 
 <ApiSignature name="ClientProvider" />
 
-Context-Provider. Übergib den `DerivableClient`, den `createClient` zurückgibt. Ein verschachtelter `ClientProvider` überschreibt den Client für seinen Subtree; `useClient()` liest den nächsten. Übergibst du einen anderen `client`, ändert sich der Context-Wert für Nachfahren.
+Context-Provider. Übergib den `DerivableClient`, den `createClient` zurückgibt. Ein verschachtelter `ClientProvider` überschreibt den Client für seinen Teilbaum; `useClient()` liest den nächstgelegenen. Übergibst du einen anderen `client`, ändert sich der Context-Wert für Nachfahren.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,15 +21,15 @@ Context-Provider. Übergib den `DerivableClient`, den `createClient` zurückgibt
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` bevorzugt den expliziten Client; ohne Argument oder mit `undefined` liest es den nächsten `ClientProvider`. Ein `Error` wird nur ausgelöst, wenn keine der beiden Quellen einen Client liefert. `useClient()` ohne Argument bleibt gültig. Übergib diesen Client an eine Operation. Der Hook gibt den [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück, der geliefert wurde; rufe ihn dort, wo die Operation läuft, mit Request-Options auf, um einen `Client`-Wert abzuleiten. Übergib ihn nicht an einen State-Setter, denn `setState(client)` würde ihn als Updater aufrufen. Ein abgeleiteter `Client`-Wert wird von `ClientProvider` und `useClient` nicht akzeptiert.
+`useClient(overrideClient)` bevorzugt den expliziten Client; ohne Argument oder mit `undefined` liest es den nächstgelegenen `ClientProvider`. Ein `Error` wird nur geworfen, wenn keine der beiden Quellen einen Client liefert. `useClient()` ohne Argument bleibt gültig. Übergib diesen Client an eine Operation. Der Hook gibt den [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück, der geliefert wurde; rufe ihn dort, wo die Operation läuft, mit Request-Options auf, um einen `Client`-Wert abzuleiten. Übergib ihn nicht an einen State-Setter, denn `setState(client)` würde ihn als Updater aufrufen. Ein abgeleiteter `Client`-Wert wird von `ClientProvider` und `useClient` nicht akzeptiert.
 
-Ruf `useClient(explicitClient)` immer auf oberster Ebene einer Komponente oder eines Custom Hooks auf, auch mit explizitem Client; nicht in normalen Funktionen oder Event-Callbacks. `explicitClient ?? useClient()` ruft einen Hook bedingt auf und ist ungültig. Das Override schreibt nicht in den Context und erzeugt keinen Provider; der Hook abonniert weiterhin den Context.
+Ruf `useClient(explicitClient)` immer auf oberster Ebene einer Komponente oder eines Custom Hooks auf, auch mit explizitem Client; nicht in normalen Funktionen oder Event-Callbacks. `explicitClient ?? useClient()` ruft einen Hook bedingt auf und ist ungültig. Der Override schreibt nicht in den Context und erzeugt keinen Provider; der Hook abonniert weiterhin den Context.
 
-- **Returns** unverändert den expliziten oder den nächsten bereitgestellten Client.
+- **Returns** genau den expliziten oder den nächstgelegenen bereitgestellten Client.
 - **Throws** einen `Error`, wenn weder ein expliziter Client noch der Context einen Client liefert.
 
 ## ClientProviderProps
 
 <ApiSignature name="ClientProviderProps" />
 
-`client` ist erforderlich und gehört der Anwendung. `children` ist optional: der Tree, der `useClient` aufrufen kann.
+`client` ist erforderlich und gehört der Anwendung. `children` ist optional: der Baum, der `useClient` aufrufen kann.

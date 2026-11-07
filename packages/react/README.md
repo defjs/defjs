@@ -89,7 +89,7 @@ Returns `overrideClient` when supplied, otherwise the nearest provided client. T
 ## Notes
 
 - `useClient()` returns the `DerivableClient` that was supplied, a function. Call it with request options where the operation runs to derive a `Client` value. Do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater and will invoke it. A derived `Client` value is not accepted by `ClientProvider` or `useClient`.
-- Create request-specific clients (SSR data with credentials, cookies, or tenant state) at the application boundary.
+- Create request-specific clients (SSR with per-request credentials, cookies, or tenant state) at the application boundary.
 - The owner that creates a client also owns its requests, SSE streams, and WebSocket sessions. Provider unmount does not clean them up.
 - Import `createClient`, `withEndpoint`, `withInterceptors`, and other client options from `@defjs/core`.
 

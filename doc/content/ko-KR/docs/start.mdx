@@ -48,9 +48,9 @@ bun add @defjs/core
 1. **`src/define-request.ts` (SDK 정의)**:
    - `struct`를 사용해 `input`, `output`(`2xx` 응답용), `error`(`2xx` 이외의 응답용)를 선언합니다.
    - `input`을 `{ path }`로 매핑하는 동기 순수 함수 `builder`를 제공합니다. `input`이 선언된 경우 명시적인 `builder`가 반드시 필요합니다.
-   - 클라이언트를 생성하거나 캡처하지 않고 순수 작업인 `getOrder`를 export합니다.
+   - 클라이언트를 생성하거나 캡처하지 않고 `getOrder`를 export합니다.
 2. **`src/execute-locally.ts` (오프라인 테스트 실행)**:
-   - `withHTTPHandle(...)`로 클라이언트를 구성하여 실제 네트워크 요청 없이 전체 Defjs 파이프라인(입력 유효성 검증, URL 확인, 상태 디스패치, 응답 구조 파싱)을 실행합니다.
+   - `withHTTPHandle(...)`로 클라이언트를 구성하여 실제 네트워크 요청 없이 전체 Defjs 파이프라인(입력 유효성 검증, URL 해석, 상태 디스패치, 응답 struct 파싱)을 실행합니다.
 3. **`src/real-api.ts` (프로덕션 실행)**:
    - 완전히 동일한 `getOrder` 작업을 import하고, `withEndpoint(...)`로 구성된 실제 기본 URL을 대상으로 호출합니다.
 
@@ -66,7 +66,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-입력값을 `{ id: 7 }`에서 `{ id: 8 }`로 변경하면 모의 핸들러가 `404`를 반환하고, Defjs가 선언된 `error` 구조체를 `error.data`로 디코딩합니다:
+입력값을 `{ id: 7 }`에서 `{ id: 8 }`로 변경하면 모의 핸들러가 `404`를 반환하고, Defjs가 선언된 `error` struct를 `error.data`로 디코딩합니다:
 
 ```txt
 Order not found
@@ -74,17 +74,17 @@ Order not found
 
 ## 4. error-first 튜플의 이해
 
-모든 HTTP 호출은 `[error, data, response]` 형태의 튜플로 반환됩니다:
+모든 HTTP 호출은 `[error, data, response]`를 반환합니다:
 
 - **`2xx` 성공 시**: `error`는 `null`이고, `data`는 검증된 `output` 값(`Order`)이며, `response`는 `DecodedResponse<Order>`입니다.
-- **선언된 비`2xx` 상태 코드 수신 시**: `error.code`는 `'HTTP_STATUS'`, `error.status`는 상태 코드 번호(`404`), `error.data`는 검증된 `error` 구조체(`NotFound`)가 됩니다.
+- **선언된 비`2xx` 상태 코드 수신 시**: `error.code`는 `'HTTP_STATUS'`, `error.status`는 상태 코드 번호(`404`), `error.data`는 검증된 `error` struct(`NotFound`)가 됩니다.
 - **입력, 디코딩 또는 네트워크 실패 시**: `error.code`가 실패가 발생한 정확한 단계를 나타냅니다:
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — 호출자의 입력값이 유효하지 않거나 `builder`에서 예외가 발생한 경우
   - `RES_MEDIA_TYPE_INVALID` — JSON 본문으로 선언되었으나 응답 헤더의 `Content-Type`이 JSON이 아닌 경우 (본문을 읽기 전에 거부됨)
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — 본문을 읽을 수 없거나 스키마가 일치하지 않는 경우
   - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` — 전송 오류, 수동 취소, 또는 `AbortSignal.timeout(ms)` 마감 시간 초과
 
-단일 호출용 파생 클라이언트 값을 만들어 호출 단위 타임아웃이나 취소 시그널을 전달할 수 있습니다: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`.
+단일 호출용 파생 클라이언트 값을 만들어 호출 단위 마감 시간이나 취소 시그널을 전달할 수 있습니다: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`.
 
 ## 다음 단계
 

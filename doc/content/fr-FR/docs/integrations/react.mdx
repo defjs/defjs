@@ -26,9 +26,11 @@ Créez le client à la frontière de l'application, enveloppez votre arbre dans 
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
   <Tab value="app/App.tsx">
     <include cwd>examples/react/client-provider.tsx#example</include>
+
   </Tab>
   <Tab value="app/OrderCard.tsx">
     <include cwd>examples/react/basic-setup.tsx#example</include>
+
   </Tab>
 </Tabs>
 
@@ -63,7 +65,7 @@ Les handles SSE et WebSocket survivent à l'appel initial `openStream(...)` ou `
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Annuler le `signal` transmis à une opération WebSocket clôt la session en `'aborted'` et rejette `session.receive` avec une `AbortError`. Protégez le bloc `catch` lors du nettoyage afin de ne faire remonter que les réelles erreurs runtime (telles que le débordement de file ou l'expiration du heartbeat).
+- Annuler le `signal` transmis à une opération WebSocket clôt la session en `'aborted'` et rejette `session.receive` avec une `AbortError`. Protégez le bloc `catch` lors du nettoyage afin de ne faire remonter que les véritables erreurs runtime (telles que le débordement de file ou l'expiration du heartbeat).
 - Annuler un flux SSE met fin à la boucle `for await (const msg of stream)` proprement sans lever d'exception.
 
 ---
@@ -72,13 +74,13 @@ Les handles SSE et WebSocket survivent à l'appel initial `openStream(...)` ou `
 
 - **Navigateur** : partagez un client unique au niveau du module lorsque l'endpoint et les intercepteurs ne dépendent pas de la requête.
 - **SSR** : instanciez un client neuf au sein de chaque frontière de requête serveur dès que les en-têtes, cookies, tenants ou identifiants diffèrent par requête.
-- Démonter `<ClientProvider>` n'**annule pas** les appels HTTP actifs, ne ferme pas les connexions SSE/WebSocket et n'appelle pas `disposeClient`.
+- Démonter `<ClientProvider>` n'**annule pas** les appels HTTP actifs, ne ferme pas les connexions SSE/WebSocket et ne libère pas le client.
 
 ---
 
 ## Exports publics & guides connexes
 
-- `ClientProvider` — fournit un `DerivableClient` (`ClientProviderProps: { client: Client; children?: ReactNode }`).
+- `ClientProvider` — fournit un `DerivableClient` (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
 - `useClient(overrideClient?)` — lit la surcharge explicite ou le client fourni le plus proche.
 - Guides connexes : [Client](/fr-FR/docs/client), [Gestion des erreurs](/fr-FR/docs/errors), [Flux d'événements SSE](/fr-FR/docs/sse), [Sessions WebSocket](/fr-FR/docs/web-socket).
 - Recettes connexes : [Traiter une erreur 404 déclarée](/fr-FR/recipes/get-declared-404), [Annuler un appel HTTP](/fr-FR/recipes/cancel-http), [Consommer un flux SSE](/fr-FR/recipes/consume-sse), [Ouvrir une session WebSocket](/fr-FR/recipes/websocket-session).

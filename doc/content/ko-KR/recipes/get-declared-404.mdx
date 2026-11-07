@@ -9,47 +9,22 @@ description: 단일 GET을 호출하고 타입화된 200과 선언된 404 응답
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error?.code === "HTTP_STATUS" && error.status === 404) {
-console.log(error.data.message);
-return;
-}
-if (error) {
-console.error(error.code);
-return;
-}
-console.log(`Loaded ${order.status} from ${response.status}`);
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -57,9 +32,9 @@ void main();
 
 ```txt
 Loaded paid from 200
-````
+```
 
-- 모든 비`2xx` 상태 코드는 `HTTP_STATUS` 결함을 생성합니다. `error`를 선언해 두면 오류 본문이 파싱 및 검증되어 `error.data`에 채워집니다. `error` 선언을 생략하면 응답 본문을 읽지 않고 `error.data`는 `undefined`로 남습니다.
-- 선언된 `error` 본문의 미디어 타입이 잘못되었거나 JSON 형식이 올바르지 않거나 Struct 스키마 검증에 실패하면 `RES_*` 결함이 반환됩니다. 단일 `error` Struct가 모든 비`2xx` 상태 코드를 처리하므로, 상태 코드별로 오류 응답 형태가 다르다면 `struct.or(...)`나 `struct.discriminatedUnion(...)`을 사용하세요.
+- 모든 비`2xx` 상태 코드는 `HTTP_STATUS` 결함을 생성합니다. `error`를 선언해 두면 오류 본문이 디코딩 및 검증되어 `error.data`에 채워집니다. `error` 선언을 생략하면 응답 본문을 읽지 않고 `error.data`는 `undefined`로 남습니다.
+- 선언된 `error` 본문의 미디어 타입이 잘못되었거나 JSON 형식이 올바르지 않거나 Struct 스키마 검증에 실패하면 `RES_*` 결함이 반환됩니다. 단일 `error` Struct가 모든 비`2xx` 상태 코드를 처리하므로, 상태 코드별로 오류 응답 형태가 다르다면 `struct.or(...)`을 사용하세요.
 
-자세한 내용은 [HTTP 요청](/ko-KR/docs/http) 및 [오류 처리](/ko-KR/docs/errors) 문서를 참조하세요.
+자세한 내용은 [HTTP 작업](/ko-KR/docs/http) 및 [오류 처리](/ko-KR/docs/errors) 문서를 참조하세요.

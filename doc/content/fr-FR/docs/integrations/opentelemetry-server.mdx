@@ -20,11 +20,13 @@ Définissez une chaîne `operation` statique et de faible cardinalité sur vos d
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
+
   </Tab>
   <Tab value="app/telemetry-client.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
@@ -46,16 +48,19 @@ Configurez des interrupteurs par transport (`{ enabled: false }`) et des hooks d
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
+
   </Tab>
   <Tab value="app/ws-propagation.ts">
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
+
   </Tab>
   <Tab value="app/active-span.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
@@ -122,7 +127,7 @@ Chaque requête ou connexion logique émet au maximum un `LogRecord` terminal de
 | Erreur terminale SSE ou WebSocket ou `closed` rejeté (y compris erreur socket Node.js `1006`, débordement de file, expiration de heartbeat)                                     | Un `WARN` avec le nom d'événement du transport, phase `connection`                             |
 | Clôture normale, messages, EOF, trames de fermeture WebSocket serveur (y compris `1011`) ou annulation active sans timeout                                                      | Aucun                                                                                          |
 
-Les diagnostics enregistrent un message immuable, `exception.type` (nom de classe plateforme/transport comme `BodyFailure`, `EventStreamFatalError`, `DefjsFault`, `TypeError` ou `Error`), la phase, l'`operation` statique, l'adresse/port du serveur et les champs de protocole — sans jamais inclure d'URL brutes, query strings, en-têtes, corps ou piles d'erreurs.
+Les diagnostics enregistrent un message immuable, `exception.type` (nom de classe plateforme/transport comme `BodyFailure`, `EventStreamFatalError`, `DefjsFault`, `TypeError` ou `Error`), la phase, la chaîne `operation` statique, l'adresse/port du serveur et les champs de protocole — sans jamais inclure d'URL brutes, query strings, en-têtes, corps ou piles d'erreurs.
 
 ---
 

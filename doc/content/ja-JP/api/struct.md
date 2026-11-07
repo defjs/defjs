@@ -11,23 +11,9 @@ description: struct ファサード、Infer、StructError です。
 
 ファサードです。内部コンストラクタよりこちらを使ってください。
 
-```ts
-const Order = struct.object({
-  id: struct.number(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-function readOrder() {
-  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(order.customerName);
-}
-
-readOrder();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### プリミティブとコンテナ
 
@@ -85,7 +71,7 @@ readOrder();
 
 ## STRUCT
 
-エンドポイントの入力からパースされたオブジェクトに付く `unique symbol` です。アウトバウンドのエンコーダー内部のものであり、型としてのみ export されています。読んだり設定したりしないでください。
+操作の入力からパースされたオブジェクトに付く `unique symbol` です。アウトバウンドのエンコーダー内部のものであり、型としてのみ export されています。読んだり設定したりしないでください。
 
 ## Struct
 
@@ -109,7 +95,7 @@ readOrder();
 
 ## FormattedStructError
 
-`StructError.format()` が出す、入れ子の `{ _errors, [key]: … }` の木です。
+`StructError.format()` が出す、入れ子の `{ _errors, [key]: … }` ツリーです。
 
 ## FlattenedStructError
 

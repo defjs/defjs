@@ -1,59 +1,29 @@
 ---
 title: "SSE 事件流"
-description: SDK 定義帶類型的事件流，應用程式開啟並使用它，負責取消、關閉及等待終態。
+description: 由 SDK 匯出帶型別嘅事件流定義，使用方應用程式負責開啟、消費同關閉。
 ---
 
 # SSE 事件流
 
-SDK 作者用 `defineEventStream` 嚟宣告 Server-Sent Events（SSE）端點，指定路徑、可選嘅 input 同 builder、由 struct 組成嘅 `events` 字典，以及緩衝區／佇列上限。使用方應用程式則喺自己嘅 client 設定認證同 opt-in 嘅重新連線機制、開啟串流、以非同步迭代器（`for await`）消費帶型別嘅事件，並全權負責關閉串流。
+SDK 作者用 `defineEventStream` 嚟宣告 Server-Sent Events（SSE）操作，指定路徑、可選嘅 input 同 builder、由 struct 組成嘅 `events` 字典，以及緩衝區／佇列上限。使用方應用程式則喺自己嘅 client 設定認證同 opt-in 嘅重新連線機制、開啟串流、以非同步迭代器（`for await`）消費帶型別嘅事件，並全權負責關閉串流。
 
 ## 1. 定義事件流並喺應用程式入面消費
 
-記得隨時使用 `await using`（或者喺 `finally` 區塊入面執行 `stream.close()` + `await stream.closed`）釋放開啟咗嘅 `EventStreamHandle`：
+一律用 `await using`（或者喺 `finally` 區塊入面執行 `stream.close()` + `await stream.closed`）釋放開啟咗嘅 `EventStreamHandle`：
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders-stream.ts">
 
-```ts
-import { defineEventStream, struct } from "@defjs/core";
-
-export const watchOrders = defineEventStream({
-  path: "/orders/events",
-  operation: "orders.watch",
-  events: {
-    updated: struct.object({
-      id: struct.number(),
-      status: struct.string(),
-    }),
-  },
-});
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/sdk/orders-stream.ts#example
+</include>
 
 </Tab>
 <Tab value="app/watch-orders.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { watchOrders } from "../sdk/orders-stream.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = stream;
-  for await (const event of active) {
-    console.log(event.event, event.data.id, event.data.status);
-    break;
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/app/watch-orders.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -65,19 +35,19 @@ void main();
 </Tab>
 </Tabs>
 
-## 2. 開啟握手與 Tuple 形狀
+## 2. 開啟時嘅握手與 tuple 形狀
 
 呼叫操作只會喺初始 HTTP 回應係 `2xx`、media type 為 `text/event-stream` 而且帶有可讀 body 時，先會 resolve 出 `[error, stream, startupOpen]`：
 
-<Tabs items={["握手檢查", "串流 handle 生命週期"]}>
-<Tab value="握手檢查">
+<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tab value="Handshake inspection">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="串流 handle 生命週期">
+<Tab value="Stream handle lifecycle">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -86,9 +56,9 @@ void main();
 </Tab>
 </Tabs>
 
-- **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`（若定義中有宣告 `error` struct，則包含解碼後嘅 `error.data`）。呢個係目前操作嘅致命錯誤，唔會呼叫 `shouldReconnect`。下一次操作會重新揀選端點，所以負載平衡器可能會揀另一個端點。
+- **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`（若定義中有宣告 `error` struct，則包含解碼後嘅 `error.data`）。呢個係目前操作嘅致命錯誤，唔會呼叫 `shouldReconnect`。下一次操作會重新揀選端點，所以 balancer 可能會揀另一個端點。
 - **Content-Type 唔啱或 body 無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` vs. `stream.open`**：Tuple 嘅第三個欄位（`startupOpen`）記錄首次握手回應嘅 snapshot；後續重連時，`stream.open` 會即時更新。如果重連握手回傳 `503`，iterator 會 reject，`stream.closed` 會回報 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍然係 `503`；請檢查 `stream.open` 取得嗰個即時回應狀態。
+- **`startupOpen` vs. `stream.open`**：tuple 嘅第三個欄位（`startupOpen`）記錄首次握手回應嘅 snapshot；後續重連時，`stream.open` 會即時更新。如果重連握手回傳 `503`，iterator 會 reject，`stream.closed` 會回報 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍然係 `503`；請檢查 `stream.open` 取得嗰個即時回應狀態。
 
 ## 3. 事件分發與解碼
 
@@ -96,7 +66,7 @@ void main();
 
 1. **事件路由**：網絡傳輸嘅 `event:` 欄位會匹配 `events[eventName]`；如果宣告咗 `events.default`，則會喺冇匹配時 fallback 返去 default。如果省略 `event:` 欄位，預設視為 `"message"`。未宣告而且冇 `events.default` 嘅事件會被自動丟棄。
 2. **Payload 解碼**：`struct.string()` schema 會直接接收原始文字 `data:`。其他所有 struct 種類都會先將 `data:` 解析成 JSON，然後再用 struct 驗證。
-3. **監聽無效事件**：遇到無效或未宣告嘅事件，Defjs 只會默默丟棄，唔會中斷整條串流。你可喺 client 掛上 `withSSEOnInvalidEvent(...)` 記錄受約束嘅診斷日誌：
+3. **監聽無效事件**：遇到無效或未宣告嘅事件，Defjs 會直接丟棄，唔會中斷整條串流。你可喺 client 掛上 `withSSEOnInvalidEvent(...)` 記錄受約束嘅診斷日誌：
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
@@ -106,16 +76,16 @@ SSE 重新連線機制係 **opt-in** 嘅。如果冇配置 `withSSEReconnect(...
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **重試預算（`attempts`）**：傳入選項物件畀 `withSSEReconnect` 時，預設為 `3` 次。每次握手成功後都會重設重試計數器同退避指數，所以即使設定 `attempts: 1`，只要每次連線都成功開啟，長時間 session 入面仍然可以建立好多次實體連線。伺服器正常送出 EOF **唔算**失敗，因此唔會觸發重新連線。
+- **重試預算（`attempts`）**：傳入選項物件畀 `withSSEReconnect` 時，預設為 `3` 次。每次握手成功後都會重設重試計數器同退避指數，所以即使設定 `attempts: 1`，只要每次連線都成功開啟，長時間會話入面仍然可以建立好多次實體連線。伺服器正常送出 EOF **唔算**失敗，因此唔會觸發重新連線。
 - **游標追蹤（`Last-Event-ID`）**：當成功解析事件結尾嘅空行時，ID 就會被 commit，並喺重連時自動作為 `Last-Event-ID` header 送出。無論連線正常結束定失敗，唔完整嘅 frame 都唔會提交佢嘅 `id`。遇到可以重連嘅讀取／網絡失敗之後，會由最後提交嘅 id 恢復；伺服器必須實作由嗰個游標重播嘅功能。
 - **冪等安全性**：預設情況下，只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）先會自動重連。非冪等方法（例如 `POST`、`PATCH`，常見於 LLM 串流請求）只有喺自訂嘅 `shouldReconnect` callback 明確回傳 `true` 時先會重連。傳入 `ReadableStream` 作為 request body 嘅請求喺第一次嘗試就會被消費完畢，絕唔會重連。
-- **握手逾時（`connectTimeoutMs`）**：如果提供咗，佢必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。佢用嚟限制由發起 Fetch 到收到回應 header 之間嘅握手時間，唔會影響已建立串流嘅連線時長。
+- **握手逾時（`connectTimeoutMs`）**：如果提供咗，佢必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。佢用嚟限制由發起 Fetch 到收到回應 header 之間嘅握手時間，唔會影響已建立串流嘅連線時長。
 
 ## 5. 緩衝區與佇列限制
 
 預設上限係 `maxBufferSize: 64 * 1024` bytes 同 `maxQueueSize: 1024` 個 events。呢兩項限制都必須係正嘅安全整數。冇預設握手 deadline：未完成嘅 Fetch 會等待平台、呼叫端取消，或者明確設定嘅 `connectTimeoutMs`。一旦超出任何一個容量限制，都會導致致命錯誤（`stream.closed` 會以 `kind: "error"` 結束，而且 iterator 會 reject——事件絕唔會被靜雞雞丟棄）：
 
-| 定義選項        | 限制範圍                                    | 終止錯誤代碼          |
+| 定義選項        | 限制範圍                                    | 終止錯誤碼            |
 | --------------- | ------------------------------------------- | --------------------- |
 | `maxBufferSize` | 遇到空行前未完成或過大嘅 SSE frame bytes    | `CAP_BUFFER_EXCEEDED` |
 | `maxQueueSize`  | 等待 `for await` 消費者讀取嘅已驗證事件數量 | `CAP_QUEUE_OVERFLOW`  |
@@ -124,15 +94,15 @@ SSE 重新連線機制係 **opt-in** 嘅。如果冇配置 `withSSEReconnect(...
 
 開啟串流嘅呼叫端必須負責清理資源。透過 `break`、`return` 或拋出例外跳出 `for await` 迴圈都會自動關閉串流，你亦都可以使用 `await using` 或手動呼叫 `stream.close()`：
 
-<Tabs items={["用 await using 清理資源", "只限啟動階段嘅截止時間"]}>
-<Tab value="用 await using 清理資源">
+<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
+<Tab value="Dispose with await using">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="只限啟動階段嘅截止時間">
+<Tab value="Startup-only deadline">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

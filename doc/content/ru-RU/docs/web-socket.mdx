@@ -1,6 +1,6 @@
 ---
 title: "Сессии WebSocket"
-description: Описывайте контракт сообщений WebSocket в вашем SDK, пока приложения управляют настройками соединения и временем жизни сессии.
+description: Описывайте контракт сообщений WebSocket в вашем SDK, пока использующие приложения управляют настройками соединения и временем жизни сессии.
 ---
 
 # Сессии WebSocket
@@ -14,64 +14,16 @@ description: Описывайте контракт сообщений WebSocket 
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
 <Tab value="sdk/ticks-socket.ts">
 
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
-
-export const TickFrame = struct.discriminatedUnion("type", [
-  struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  struct.object({
-    type: struct.literal("subscribed"),
-    symbol: struct.string(),
-  }),
-]);
-
-export const SubscribeCommand = struct.object({
-  type: struct.literal("subscribe"),
-  symbol: struct.string(),
-});
-
-export const openTicker = defineWebSocket({
-  path: "/market/ws",
-  operation: "market.ticker",
-  incoming: TickFrame,
-  outgoing: SubscribeCommand,
-  maxIncomingQueueSize: 64,
-});
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
 
 </Tab>
 <Tab value="app/session.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { openTicker } from "../sdk/ticks-socket.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, session] = await openTicker(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = session;
-  active.send({ type: "subscribe", symbol: "ACME" });
-
-  for await (const message of active.receive) {
-    if (message.type === "tick") {
-      console.log(message.symbol, message.price);
-      break;
-    }
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -121,8 +73,8 @@ void main();
 </Tab>
 </Tabs>
 
-- **Повторное подключение**: значения по умолчанию при включении: `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Каждое физическое открытие сокета (`open`) сбрасывает лимит попыток. Колбэк `beforeConnect({ attempt, signal })` вызывается перед первоначальным подключением и перед каждой попыткой повторного соединения.
-- **Таймаут хэндшейка (`connectTimeoutMs`)**: если задан, он должен быть конечным, положительным и не больше 2147483647 (предел таймера); иначе операция возвращает `REQ_OPTIONS_INVALID`. Ограничивает конструирование до `open` и сбрасывается после handshake.
+- **Повторное подключение**: значения по умолчанию при включении: `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Каждое физическое открытие сокета (`open`) сбрасывает бюджет попыток. Колбэк `beforeConnect({ attempt, signal })` вызывается перед первоначальным подключением и перед каждой попыткой повторного соединения.
+- **Таймаут хэндшейка (`connectTimeoutMs`)**: если задан, он должен быть конечным, положительным и не больше 2147483647 (предел таймера); иначе операция возвращает `REQ_OPTIONS_INVALID`. Ограничивает конструирование до `open` и сбрасывается после хэндшейка.
 - **Heartbeat**: Периодически отправляет сообщение `message()` через структуру `outgoing` и ожидает до `timeoutMs` кадр, удовлетворяющий условию `isAck(msg)`. Подходящие ack-кадры поглощаются монитором heartbeat и не передаются в `session.receive`. Пропущенный ack фатален для логической сессии: `closed.kind` равен `"error"`, а `closed.cause` — обычный `Error("WebSocket heartbeat timeout")`; переподключение не запускается. Ошибки сериализации heartbeat идут по тому же фатальному пути с исходной причиной.
 - **Ограничения очередей**:
   - `maxIncomingQueueSize` (обязательное положительное целое): Ограничивает и сырые кадры, ожидающие декодирования, и декодированные сообщения, ожидающие потребителя. Переполнение завершает сессию с Fault `CAP_QUEUE_OVERFLOW` в `closed.cause`; та же причина передаётся в `onRuntimeError` и отклоняет `session.receive`. Продолжайте читать `session.receive`, пока сессия открыта.
@@ -135,7 +87,7 @@ void main();
 Браузерные WebSocket не поддерживают произвольные заголовки хэндшейка, поэтому функция `builder` для WebSocket возвращает только `{ path?, query? }`.
 
 - **Приоритет субпротоколов**: `client({ protocols })` переопределяет `withWebSocketProtocols(...)`, который переопределяет `defineWebSocket({ protocols })`.
-- **Преобразование протокола URL**: Defjs автоматически преобразует `http:` → `ws:` и `https:` → `wss:` в разрешённом эндпоинте.
+- **Преобразование URL**: Defjs автоматически преобразует `http:` → `ws:` и `https:` → `wss:` в разрешённом эндпоинте.
 - **Учётные данные**: опция `withCredentials(true)` относится только к Fetch (HTTP/SSE). Аутентифицируйте соединения WebSocket с помощью cookies/сессионных политик, субпротоколов или короткоживущих тикетов подключения — избегайте передачи долгоживущих секретов в параметрах запроса query.
 - **`beforeConnect` не изменяет запрос**: Разбор входных данных, синхронный чистый `builder` и цепочка перехватчиков выполняются один раз на операцию. Для запроса, базовый эндпоинт которого не заменён перехватчиком, каждое переподключение заново выбирает эндпоинт и пересобирает URL с ним, но повторно использует собранные path/query и зафиксированный список протоколов. URL фиксируется до выполнения `beforeConnect` этой попытки как на том же эндпоинте, так и после переключения на резервный. Изменение переменной замыкания, входных данных или массива протоколов в хуке не может предоставить свежий тикет текущему хэндшейку. Обновление учётных данных URL/субпротокола внутри одной сессии не поддерживается; сначала получите новые учётные данные, передайте их как входные данные или конфигурацию клиента в новую операцию, затем возьмите на себя очистку заменяющей сессии.
 

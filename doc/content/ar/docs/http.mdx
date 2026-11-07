@@ -5,53 +5,25 @@ description: صمّم عمليات HTTP لحزمة SDK الخاصة بك واس�
 
 # عمليات HTTP
 
-تُعرّف حزمة SDK كل عملية HTTP باستخدام `defineRequest`: طريقة الطلب، وقالب المسار، ومخطط المدخلات `input`، ودالة التجميع التزامنية `builder`، ومخططات الاستجابة للمخرجات `output` والأخطاء `error`. تستورد التطبيقات المستهلكة هذه العملية، وتمرر عميلها المهيأ `Client`، وتتعامل مع مصفوفة النتائج الناتجة `[error, data, response]`.
+تُعرّف حزمة SDK كل عملية HTTP باستخدام `defineRequest`: طريقة الطلب، وقالب المسار، ومخطط المدخلات `input`، ودالة `builder` التزامنية، ومخططات الاستجابة للمخرجات `output` والأخطاء `error`. تستورد التطبيقات المستهلكة هذه العملية، وتمرر عميلها المهيأ `Client`، وتتعامل مع مصفوفة النتائج الناتجة `[error, data, response]`.
 
 ## 1. تعريف العملية واستدعاؤها
 
-امنح كل نقطة نهاية تصديراً مستقلاً عبر `defineRequest` داخل وحدة SDK الخاصة بك، واحتفظ بإنشاء العميل `createClient` داخل التطبيق المستهلك:
+امنح كل عملية تصديراً مستقلاً عبر `defineRequest` داخل وحدة SDK الخاصة بك، واحتفظ بإنشاء العميل `createClient` داخل التطبيق المستهلك:
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -80,7 +52,7 @@ void main();
 
 ## 3. وضع المدخلات باستخدام `builder`
 
-كلما أعلنت العملية عن `input`، **يجب** عليها تقديم دالة تجميع `builder` تزامنية ونقية تُرجع `{ path?, query?, headers?, body? }`. ولا يجوز إغفال `builder` إلا في العمليات التي لا تتطلب أي `input`.
+كلما أعلنت العملية عن `input`، **يجب** عليها تقديم دالة `builder` تزامنية ونقية تُرجع `{ path?, query?, headers?, body? }`. ولا يجوز إغفال `builder` إلا في العمليات التي لا تتطلب أي `input`.
 
 <include cwd lang="typescript">
   examples/http/place-input.ts#example
@@ -153,13 +125,13 @@ void main();
 </Tab>
 </Tabs>
 
-يُفيد إلغاء طلب كتابة فقط بأن المستدعي قد توقف عن الانتظار — ولكنه لا يضمن أن الخادم قد تراجع عن العملية أو ألغى التعديل.
+يقتصر إلغاء طلب كتابة على الإبلاغ بأن المستدعي توقف عن الانتظار، ولا يضمن أن الخادم قد تراجع عن التعديل.
 
 ## 6. بيانات الاعتماد، حماية XSRF، وتتبع تقدم النقل
 
 - **`withCredentials(true)`**: يضبط خيار Fetch على `credentials: "include"` لطلبات HTTP وتدفقات أحداث SSE.
 - **`withXSRF(options?)`**: يقرأ ملف تعريف ارتباط XSRF (`XSRF-TOKEN` افتراضياً) ويحقن الترويسة (`X-XSRF-TOKEN`) مع طرق HTTP المعدِّلة من نفس المصدر (`POST` و`PUT` و`PATCH` و`DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: تُمرر عبر `client({ onDownloadProgress, onUploadProgress })`. يُبلغ تقدم التنزيل عن `lengthComputable: true` فقط عندما تكون ترويسة `Content-Length` موجبة وتكون `Content-Encoding` غائبة أو مضبوطة على `identity`. ويتيح تقدم الرفع دفق الأجسام على بيئات تشغيل الخادم (Bun وNode.js). ويؤدي إلقاء استثناء داخل دالة رد نداء التقدم إلى فشل الاستدعاء بخطأ `EXT_OBSERVER_FAILED`.
+- **`onDownloadProgress` / `onUploadProgress`**: تُمرَّر عبر `client({ onDownloadProgress, onUploadProgress })`. يُبلغ تقدم التنزيل عن `lengthComputable: true` فقط عندما تكون ترويسة `Content-Length` موجبة وتكون `Content-Encoding` غائبة أو مضبوطة على `identity`. ويتيح تقدم الرفع دفق الأجسام على بيئات تشغيل الخادم (Bun وNode.js). ويؤدي إلقاء استثناء داخل دالة رد نداء التقدم إلى فشل الاستدعاء بخطأ `EXT_OBSERVER_FAILED`.
 
 ## قراءات ذات صلة
 

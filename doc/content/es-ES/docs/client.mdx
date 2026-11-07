@@ -5,7 +5,7 @@ description: Configura cómo llama tu aplicación a las operaciones importadas d
 
 # Cliente
 
-Un `Client` almacena la configuración de ejecución de la aplicación consumidora: URLs base, cabeceras predeterminadas, credenciales, interceptores, serialización de consultas y manejadores de transporte.
+Un `Client` almacena la configuración de ejecución de la aplicación consumidora: URLs base, cabeceras predeterminadas, credenciales, interceptores, serialización de consultas y handles de transporte.
 
 `createClient(...options)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type):
 
@@ -14,21 +14,12 @@ Un `Client` almacena la configuración de ejecución de la aplicación consumido
 
 ## 1. Configurar un cliente y llamar a una operación del SDK
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Opciones de cliente compuestas"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
@@ -131,6 +122,6 @@ Consulta [Pruebas](/es-ES/docs/testing) para ver los patrones completos de testi
 ## Lecturas relacionadas
 
 - [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing)
-- [Middleware](/es-ES/docs/interceptors)
+- [Interceptores](/es-ES/docs/interceptors)
 - [Pruebas](/es-ES/docs/testing)
-- [Probar con un manejador Fetch local](/es-ES/recipes/test-with-handle)
+- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)

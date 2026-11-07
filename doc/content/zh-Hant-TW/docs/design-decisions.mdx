@@ -1,9 +1,9 @@
 ---
-title: "設計決策"
-description: 深入解析為什麼將 API 定義與 Client 執行分離，能讓 SDK 更易於設計、發布與跨環境重用。
+title: "核心架構"
+description: 說明將 API 定義與 Client 執行分離，為何能讓 SDK 更容易設計、發布與重用。
 ---
 
-# 設計決策
+# 核心架構
 
 Defjs 圍繞著一個核心邊界建構：**SDK 定義通訊契約；取用端應用程式掌控請求執行。** `@defjs/core` 中的所有設計原則皆源自這項分離。
 
@@ -11,29 +11,22 @@ Defjs 圍繞著一個核心邊界建構：**SDK 定義通訊契約；取用端�
 
 SDK 套件匯出各項操作（`defineRequest`、`defineEventStream`、`defineWebSocket`）與資料契約（`struct`）。它絕不呼叫 `createClient`、不儲存全域 Singleton Client，也不會讀取環境變數。
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -44,21 +37,21 @@ export const getOrder = defineRequest({
 
 由於 `getOrder` 完全不捕捉任何 Client 狀態：
 
-- 瀏覽器前端、背景工作任務、SSR 請求處理常式與單元測試，都能使用各自的 `Client` 設定呼叫同一個 `getOrder` 定義。
-- 框架外掛（`@defjs/react`、`@defjs/vue`）與可觀測性中介層（`@defjs/opentelemetry-server`）只掛載在應用程式的 `Client` 上，讓發布的 SDK 套件保持 100% 零依賴。
+- 瀏覽器介面、背景工作、SSR 請求處理常式與單元測試，都能以各自的 `Client` 設定呼叫同一個 `getOrder` 操作。
+- 框架外掛（`@defjs/react`、`@defjs/vue`）與可觀測性中介層外掛（`@defjs/opentelemetry-server`）只掛在應用程式的 `Client` 上，讓發布的 SDK 套件保持 100% 零依賴。
 
 ## 2. 明確的輸入放置與雙向欄位別名
 
-在 Defjs 中，`input` 宣告呼叫端應傳入什麼值，`struct` 控管值如何編碼與解碼，而 `builder` 則負責將每個值精確放置到請求的各個部分（`path`、`query`、`headers`、`body`）。
+在 Defjs 中，`input` 宣告呼叫端要傳入什麼值，`struct` 控管值如何編碼與解碼，而 `builder` 負責把每個值放到請求的哪個位置（`path`、`query`、`headers`、`body`）。
 
-- **無隱式推論**：只要操作宣告了 `input`，就必須提供一個明確、同步且純粹的 `builder`。欄位放置位置絕不會從參數名稱隱式猜測。
-- **雙向 `.alias(wireName)`**：在 struct 欄位上宣告 `.alias("customer_name")`，讓 TypeScript 程式碼保持慣用的 `customerName`，同時在網路通訊時自動完成對應 `"customer_name"` 的雙向轉換。
+- **沒有魔法推論**：只要操作宣告了 `input`，就必須提供明確、同步且純粹的 `builder`。欄位放置位置絕不會從參數名稱猜測。
+- **雙向 `.alias(wireName)`**：在 struct 欄位上宣告 `.alias("customer_name")`，TypeScript 端就能保留 `customerName`，同時在傳輸時自動雙向對應 `"customer_name"`。
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-當 builder 將具型別的 struct 物件傳遞給 `body`、`query` 或 `headers` 時，其欄位別名以及 `Date` / `bigint` 編解碼器會自動生效。而在匿名包裝物件中直接撰寫的鍵名（例如上面的 `account_id` 或 `x-api-version`）則會如實保留。
+當 builder 把具型別的 struct 物件交給 `body`、`query` 或 `headers` 時，其欄位別名與 `Date` / `bigint` 編解碼器會自動生效。至於在匿名包裝物件中直接寫下的鍵名（例如上面的 `account_id` 或 `x-api-version`），則會如實保留。
 
 ## 3. 宣告即斷言 [#declaration-is-an-assertion]
 
@@ -66,17 +59,17 @@ Defjs 依循六項嚴格的規則來讀取與處理 HTTP 回應：
 
 ### 規則 1：宣告什麼，就斷言什麼
 
-`output` 斷言 `2xx` 回應本文的結構；`error` 斷言非 `2xx` 回應本文的結構。型別宣告是一項執行時期的硬性保證，而非盡力而為的提示。
+`output` 斷言 `2xx` 回應本文的結構；`error` 斷言非 `2xx` 回應本文的結構。宣告是執行時期的保證，不是盡力而為的提示。
 
 ### 規則 2：`ok` (`200..299`) 是唯一的分歧點
 
-`2xx` 回應一律只使用 `output` 進行解碼；所有其他狀態碼（`3xx`、`4xx`、`5xx`）一律只使用 `error` 進行解碼。Defjs 絕不會在兩者之間互相 fallback。
+`2xx` 回應只會用 `output` 解碼；其他所有狀態碼（`3xx`、`4xx`、`5xx`）只會用 `error` 解碼。Defjs 絕不會從一側回退到另一側。
 
 ### 規則 3：任何違反宣告的情況都會明確報錯
 
-Defjs 用 `response.ok` 選擇回應的一側：`2xx` 用 `output`，非 `2xx` 用 `error`。只有在這一側宣告了 JSON struct，才會觸發解碼，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 會在讀取 body 位元組**之前**驗證。非 `2xx` 的 HTML 閘道頁只有在宣告了 JSON `error` struct 時才會產生 `RES_MEDIA_TYPE_INVALID`。作用中的一側沒有宣告時，不會讀取 body；非 `2xx` 回應會回傳未解碼的 `HTTP_STATUS`。
+Defjs 用 `response.ok` 選擇回應的一側：`2xx` 用 `output`，非 `2xx` 用 `error`。只有在該側宣告了 JSON struct，才會觸發解碼，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 會在讀取本文位元組**之前**驗證。非 `2xx` 的 HTML 閘道頁面只有在宣告了 JSON `error` struct 時，才會產生 `RES_MEDIA_TYPE_INVALID`。該側沒有宣告時就不會讀取本文；非 `2xx` 回應會回傳未解碼的 `HTTP_STATUS`。
 
-| 讀取回應時發生的失敗情況                   | 回傳的 Fault 錯誤碼                                            |
+| 讀取回應時發生的失敗情況                   | 回傳的 Fault                                                   |
 | ------------------------------------------ | -------------------------------------------------------------- |
 | 媒體型別不符合宣告的 JSON 格式             | `RES_MEDIA_TYPE_INVALID`（完全不讀取本文串流）                 |
 | 位元組無法以宣告的表示法解碼               | `RES_DECODE_FAILED`                                            |
@@ -86,29 +79,29 @@ Defjs 用 `response.ok` 選擇回應的一側：`2xx` 用 `output`，非 `2xx` �
 
 ### 規則 4：解碼失敗的回應沒有本文
 
-只有在通過解碼與驗證後，本文才會存在。當解碼失敗時，錯誤物件中的 `response` 型別為 `HttpMeta`（不包含 `body` 屬性），而實際的剖析或驗證錯誤會附加在 `fault.cause` 上。
+本文只有通過解碼與驗證後才會存在。解碼失敗時，fault 的 `response` 型別為 `HttpMeta`（沒有 `body` 屬性），而實際的剖析或驗證錯誤則掛在 `fault.cause` 上。
 
 ### 規則 5：省略任一側即代表選擇不讀取
 
-省略 `output` 代表完全不讀取 `2xx` 回應本文；省略 `error` 代表完全不讀取非 `2xx` 回應本文——即使伺服器在 `500` 時傳送了無效的 JSON 也是如此。
+省略 `output` 代表完全不讀取 `2xx` 回應本文；省略 `error` 代表完全不讀取非 `2xx` 回應本文——即使伺服器在 `500` 時送出了無效的 JSON 也一樣。
 
 ### 規則 6：`3xx` 不是成功狀態碼
 
-`ok` 代表 `200 <= status < 300`。`304 Not Modified` 屬於非 `2xx` 狀態：你可以不宣告 `error` 並以 `HTTP_STATUS` 進行處理（或在 ETag 攔截器中攔截 `304`），或者在預期為空字串本文時宣告 `struct.string()`。
+`ok` 代表 `200 <= status < 300`。`304 Not Modified` 屬於非 `2xx` 狀態：可以不宣告 `error` 並處理 `HTTP_STATUS`（或在 ETag 攔截器中攔截 `304`），也可以在預期會收到空的文字本文時宣告 `struct.string()`。
 
-## 4. 針對傳輸協定特化的結果 Tuple
+## 4. 依傳輸協定設計的結果 Tuple
 
-這三種傳輸協定都回傳三元素 error-first tuple，呼叫端無須使用 try-catch：
+三種傳輸協定都回傳三元素 error-first tuple，而不是在呼叫端拋出例外：
 
-- **HTTP** → `[error, data, response]` — 解碼後的負載 + `DecodedResponse<T>`（省略 `output` 時為 `HttpMeta`）。
+- **HTTP** → `[error, data, response]` — 解碼後的酬載 + `DecodedResponse<T>`（省略 `output` 時為 `HttpMeta`）。
 - **SSE** → `[error, stream, open]` — `EventStreamHandle` + 初始交握快照。
 - **WebSocket** → `[error, session, connection]` — `WebSocketSession` + 初始連線快照。
 
-Client 僅保存設定，不持有活躍連線。發起 HTTP 請求、SSE 串流或 WebSocket 工作階段的呼叫端，擁有取消或關閉該連線的責任（HTTP 使用 `AbortSignal`；SSE 與 WebSocket 使用 `await using` 或 `.close()` + `await .closed`）。
+Client 只保存設定，不持有進行中的連線。發起 HTTP 請求、SSE 串流或 WebSocket 工作階段的呼叫端，負責取消或關閉它（HTTP 使用 `AbortSignal`；SSE 與 WebSocket 使用 `await using` 或 `.close()` + `await .closed`）。
 
 ## 相關閱讀
 
-- [資料結構 / Struct](/zh-Hant-TW/docs/struct)
-- [HTTP 請求](/zh-Hant-TW/docs/http)
+- [Struct 與 schema](/zh-Hant-TW/docs/struct)
+- [HTTP 操作](/zh-Hant-TW/docs/http)
 - [錯誤處理](/zh-Hant-TW/docs/errors)
 - [建置並發布 SDK](/zh-Hant-TW/recipes/publish-http-sdk)

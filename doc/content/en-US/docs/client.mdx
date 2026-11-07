@@ -10,25 +10,16 @@ A `Client` holds the consuming application's execution configuration: base URLs,
 `createClient(...options)` returns a [`DerivableClient`](/api/core/derivableclient-type):
 
 - Pass `client` directly to an operation (`getOrder(client, { id: 1 })`) when no per-call request options are needed.
-- Call `client(requestOptions)` to derive a single-call `Client` value (`getOrder(client({ signal }), { id: 1 })`). Deriving performs no I/O, and the derived value is a plain object (not callable).
+- Call `client(requestOptions)` to derive a client value for one call (`getOrder(client({ signal }), { id: 1 })`). Deriving performs no I/O, and the derived value is a plain object (not callable).
 
 ## 1. Configure a client and call an SDK operation
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
@@ -68,15 +59,15 @@ Create a new derived client value for each call that needs its own `signal`, pro
 
 `RequestOptions` has seven flat fields. Each transport reads only the fields that apply to it and ignores the rest:
 
-| Field                | Used by              | Behavior                                                                                                                                   |
-| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `signal`             | HTTP, SSE, WebSocket | Aborts the call (`AbortSignal.timeout(ms)` → `NET_TIMEOUT`; manual abort → `NET_ABORTED`).                                                 |
-| `onUploadProgress`   | HTTP                 | Reports streaming request-body upload progress.                                                                                            |
-| `onDownloadProgress` | HTTP                 | Reports declared response-body download progress.                                                                                          |
-| `beforeConnect`      | WebSocket            | Replaces the client-level `beforeConnect` hook for this session.                                                                           |
-| `protocols`          | WebSocket            | Replaces the client-level subprotocol list for this session.                                                                               |
-| `heartbeat`          | WebSocket            | Replaces the client-level heartbeat configuration for this session.                                                                        |
-| `reconnect`          | WebSocket            | Replaces the client-level WebSocket reconnect policy for this session. (SSE reconnect is configured on the client via `withSSEReconnect`.) |
+| Field                | Used by              | Behavior                                                                                                                                  |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE, WebSocket | Aborts the call (`AbortSignal.timeout(ms)` → `NET_TIMEOUT`; manual abort → `NET_ABORTED`).                                                |
+| `onUploadProgress`   | HTTP                 | Reports streaming request-body upload progress.                                                                                           |
+| `onDownloadProgress` | HTTP                 | Reports declared response-body download progress.                                                                                         |
+| `beforeConnect`      | WebSocket            | Replaces the client-level `beforeConnect` hook for this session.                                                                          |
+| `protocols`          | WebSocket            | Replaces the client-level subprotocol list for this session.                                                                              |
+| `heartbeat`          | WebSocket            | Replaces the client-level heartbeat configuration for this session.                                                                       |
+| `reconnect`          | WebSocket            | Replaces the client-level WebSocket reconnect policy for this session (SSE reconnect is configured on the client via `withSSEReconnect`). |
 
 ## 3. Browser singleton vs. server request scope
 
@@ -98,7 +89,7 @@ With only one configured endpoint, `withRetry` does not replay the request becau
 
 ### Health filtering and p2c [#health-filtering-and-p2c]
 
-For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) enable Linkerd-style consecutive-failure circuit breaking (`outlierDetection`) by default. It counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`; raw response `status` is only for custom balancers.
+For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) enable Linkerd-style consecutive-failure circuit breaking (`outlierDetection`) by default. Outlier detection counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`; raw response `status` is only for custom balancers.
 
 See the dedicated [Load balancing & failover](/docs/load-balancing) guide for full details on retry budgets, active/passive health checks, P2C load estimation, and custom balancers.
 

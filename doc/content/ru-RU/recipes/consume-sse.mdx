@@ -9,51 +9,22 @@ description: Откройте типизированный поток событ
 
 <Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
   <Tab value="sdk/deployments.ts">
-```ts
-import { defineEventStream, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-export const deployEvents = defineEventStream({
-  path: "/deployments/events",
-  events: {
-    line: struct.object({ text: struct.string() }),
-  },
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { deployEvents } from "../sdk/deployments.ts";
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, stream] = await deployEvents(client);
-if (error) {
-console.error(error.code);
-return;
-}
-try {
-for await (const event of stream) {
-if (event.event === "line") {
-console.log(event.data.text);
-break;
-}
-}
-} finally {
-stream.close("consumer-finished");
-await stream.closed;
-}
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="deploy-events.ts">
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -61,7 +32,7 @@ void main();
 
 ```txt
 build started
-````
+```
 
 - SSE не выполняет автоматических переподключений при сбоях сети или чтения, пока вы не настроите [`withSSEReconnect(...)`](/ru-RU/api/core/withssereconnect) на клиенте.
-- При включении `withSSEReconnect` с объектом опций параметр `attempts` по умолчанию равен `3` на каждый сбой и сбрасывается при успешном хэндшейке (`attempts: 0` отключает переподключение). Без пользовательского колбэка `shouldReconnect` повторно подключаются только запросы `GET`, `HEAD`, `OPTIONS`, `PUT` и `DELETE` с повторяемым телом. См. раздел [Потоки событий SSE](/ru-RU/docs/sse).
+- При включении `withSSEReconnect` с объектом опций параметр `attempts` по умолчанию равен `3` на каждый сбой и сбрасывается при успешном хэндшейке (`attempts: 0` отключает переподключение). Без пользовательского колбэка `shouldReconnect` повторно подключаются только запросы `GET`, `HEAD`, `OPTIONS`, `PUT` и `DELETE`. Запрос с телом `ReadableStream` никогда не переподключается. См. раздел [Потоки событий SSE](/ru-RU/docs/sse).

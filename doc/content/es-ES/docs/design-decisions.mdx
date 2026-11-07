@@ -11,29 +11,22 @@ Defjs se construye sobre una frontera fundamental: **el SDK define el contrato d
 
 Un paquete de SDK exporta operaciones (`defineRequest`, `defineEventStream`, `defineWebSocket`) y contratos de datos (`struct`). Nunca llama a `createClient`, no guarda clientes singleton ni lee variables de entorno.
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -44,8 +37,8 @@ export const getOrder = defineRequest({
 
 Dado que `getOrder` no captura ningún estado del cliente:
 
-- Una interfaz de navegador, una tarea en segundo plano, un manejador de peticiones en SSR y una prueba unitaria pueden invocar la misma definición `getOrder` con diferentes configuraciones de `Client`.
-- Los plugins para frameworks (`@defjs/react`, `@defjs/vue`) y el middleware de observabilidad (`@defjs/opentelemetry-server`) se conectan al `Client` de la aplicación, manteniendo el paquete publicado del SDK completamente libre de dependencias.
+- Una interfaz de navegador, una tarea en segundo plano, un gestor de peticiones en SSR y una prueba unitaria pueden invocar la misma operación `getOrder` con diferentes configuraciones de `Client`.
+- Los plugins para frameworks (`@defjs/react`, `@defjs/vue`) y el plugin de middleware de observabilidad (`@defjs/opentelemetry-server`) se conectan al `Client` de la aplicación, manteniendo el paquete publicado del SDK completamente libre de dependencias.
 
 ## 2. Ubicación explícita de entradas y alias bidireccionales
 
@@ -60,13 +53,13 @@ En Defjs, `input` declara lo que pasa quien llama, `struct` controla cómo se co
 
 Cuando el builder pasa un objeto struct tipado a `body`, `query` o `headers`, sus alias de campo y códecs de `Date` / `bigint` se aplican automáticamente. Las claves que escribas en un objeto contenedor anónimo (como `account_id` o `x-api-version` en el ejemplo anterior) se mantienen literales.
 
-## 3. Declarar es asegurar [#declaration-is-an-assertion]
+## 3. Declarar es afirmar [#declaration-is-an-assertion]
 
 Seis reglas estrictas rigen cómo lee Defjs las respuestas HTTP:
 
-### Regla 1: Lo que declaras es lo que aseguras
+### Regla 1: Lo que declaras es lo que afirmas
 
-`output` asegura la forma del cuerpo en respuestas `2xx`. `error` asegura la forma del cuerpo en respuestas no `2xx`. Una declaración es una garantía en tiempo de ejecución, no una simple sugerencia.
+`output` afirma la forma del cuerpo en respuestas `2xx`. `error` afirma la forma del cuerpo en respuestas no `2xx`. Una declaración es una garantía en tiempo de ejecución, no una simple sugerencia.
 
 ### Regla 2: `ok` (`200..299`) es la única bifurcación
 

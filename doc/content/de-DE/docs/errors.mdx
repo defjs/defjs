@@ -1,13 +1,13 @@
 ---
-title: "Fehler"
-description: Deklariere Service-Fehlerverträge im SDK und behandle typisierte Ausführungsfehler zuverlässig in der konsumierenden Anwendung.
+title: "Fehlerbehandlung"
+description: Deklariere Service-Fehlerverträge im SDK und behandle typisierte Ausführungsfehler in der konsumierenden Anwendung.
 ---
 
-# Fehler
+# Fehlerbehandlung
 
-In Defjs werfen Request-, Transport- und Dekodierungsfehler am Aufruf-Ort keine Exceptions. Jede Operation gibt ein Error-first-Tupel (`[error, ...]`) zurück, bei dem `error` entweder `null` oder ein typisierter `Fault` ist (eine native `Error`-Instanz, diskriminiert über `error.code`).
+In Defjs werfen Request-, Transport- und Dekodierungsfehler an der Aufrufstelle keine Exceptions. Jede Operation gibt ein Error-first-Tupel (`[error, ...]`) zurück, bei dem `error` entweder `null` oder ein typisierter `Fault` ist (eine native `Error`-Instanz, diskriminiert über `error.code`).
 
-## 1. Service-Fehler im SDK deklarieren, in der Anwendung abfangen
+## 1. Service-Fehler im SDK deklarieren, in der Anwendung triagieren
 
 <Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>
 <Tab value="Exhaustive code switch">
@@ -37,23 +37,23 @@ In Defjs werfen Request-, Transport- und Dekodierungsfehler am Aufruf-Ort keine 
 
 Bei einem HTTP-Fehler lautet das Tupel `[error, undefined, undefined]`. Sämtliche eingetroffenen Response-Metadaten (`status`, `statusText`, `headers`, `url`) sind direkt an `error.response` angehängt, sodass du `error` isoliert an Logger oder Fehlerbehandlungsroutinen übergeben kannst, ohne Kontext zu verlieren.
 
-## 2. Fehlerklassen und geschlossenes Code-Set
+## 2. Fault-Klassen und geschlossenes Code-Set
 
-Das Präfix vor dem ersten Unterstrich `_` benennt die Fehlerklasse (`HTTP`, `REQ`, `NET`, `RES`, `EXT`, `CAP`, `ENV`), während der vollständige `code` eine geschlossene Union für erschöpfende `switch`-Prüfungen bildet:
+Das Präfix vor dem ersten `_` benennt die Fault-Klasse (`HTTP`, `REQ`, `NET`, `RES`, `EXT`, `CAP`, `ENV`), während der vollständige `code` eine geschlossene Union für erschöpfende `switch`-Prüfungen bildet:
 
-| Klasse | Fehlercodes                                                            | Bedeutung & Behebung                                                                                                                                                                     |
-| ------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `HTTP` | `HTTP_STATUS`                                                          | Server hat mit Nicht-`2xx`-Status (`3xx`, `4xx`, `5xx`) geantwortet und ein etwaig deklariertes `error`-Struct wurde dekodiert.                                                          |
-| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | Aufrufer-Eingabe hat die Validierung verfehlt, Client-Optionen waren außerhalb des gültigen Bereichs, URL/Pfad war ungültig oder der `builder` warf eine Exception. Niemals wiederholen. |
-| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | Server-Antwort verletzte den deklarierten Medientyp, die Repräsentation oder den `struct`-Vertrag.                                                                                       |
-| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | Aufrufer hat abgebrochen (`NET_ABORTED`), Frist abgelaufen (`NET_TIMEOUT`), Verbindung fehlgeschlagen oder Stream unvollständig abgebrochen.                                             |
-| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | Ein Anwendungs-Interceptor, Hook oder Progress-/State-Observer warf einen Fehler oder gab einen ungültigen Wert zurück.                                                                  |
-| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | SSE-Frame-Puffer oder SSE-/WebSocket-Warteschlange hat die konfigurierte Obergrenze überschritten.                                                                                       |
-| `ENV`  | `ENV_UNSUPPORTED`                                                      | Host-Laufzeitumgebung fehlen erforderliche Web-APIs (z. B. gestreamter Request-Body in Firefox).                                                                                         |
+| Klasse | Fehlercodes                                                            | Bedeutung & Behebung                                                                                                                                                                                             |
+| ------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HTTP` | `HTTP_STATUS`                                                          | Server hat mit Nicht-`2xx`-Status (`3xx`, `4xx`, `5xx`) geantwortet und ein etwaig deklariertes `error`-Struct wurde dekodiert.                                                                                  |
+| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | Die Eingabe des Aufrufers hat die Validierung nicht bestanden, Client-Optionen lagen außerhalb des gültigen Bereichs, URL/Pfad war ungültig oder der `builder` hat eine Exception geworfen. Niemals wiederholen. |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | Server-Antwort verletzte den deklarierten Medientyp, die Repräsentation oder den `struct`-Vertrag.                                                                                                               |
+| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | Aufrufer hat abgebrochen (`NET_ABORTED`), Frist abgelaufen (`NET_TIMEOUT`), Verbindung fehlgeschlagen oder Stream abgeschnitten.                                                                                 |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | Ein Anwendungs-Interceptor, Hook oder Progress-/State-Observer warf einen Fehler oder gab einen ungültigen Wert zurück.                                                                                          |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | SSE-Frame-Puffer oder SSE-/WebSocket-Warteschlange hat die konfigurierte Obergrenze überschritten.                                                                                                               |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | Der Host-Laufzeitumgebung fehlen erforderliche Web-APIs (z. B. Streaming-Request-Bodys in Firefox).                                                                                                              |
 
-### Fehlereigenschaften nach Code
+### Fault-Eigenschaften nach Code
 
-| Fehlercode    | `status`        | `response`                                            | `data`                                      | `cause`                                    |
+| Fault-Code    | `status`        | `response`                                            | `data`                                      | `cause`                                    |
 | ------------- | --------------- | ----------------------------------------------------- | ------------------------------------------- | ------------------------------------------ |
 | `HTTP_STATUS` | `number`        | `DecodedResponse<TErr>` oder `HttpMeta`               | Dekodiertes `error`-Struct oder `undefined` | Zugrundeliegende Ursache (falls vorhanden) |
 | `RES_*`       | `number`        | `HttpMeta` (**kein `body`-Feld**)                     | Nicht vorhanden                             | `StructError` oder Parser-Fehler           |
@@ -121,7 +121,7 @@ Jeder `Fault` ist ein nativer `Error` (`instanceof Error === true`) mit aufzähl
 </Tabs>
 
 > [!CAUTION]
-> Behandle `fault.cause`, `fault.data`, Response-Header, vollständige URLs und `StructIssue.received` als potenziell sicherheitsrelevant. Protokolliere standardmäßig nur eine Allowlist von Feldern mit geringer Kardinalität (`operation`, `code`, `status`, Dauer).
+> Behandle `fault.cause`, `fault.data`, Response-Header, vollständige URLs und `StructIssue.received` als potenziell sensibel. Protokolliere standardmäßig nur eine Allowlist von Feldern mit geringer Kardinalität (`operation`, `code`, `status`, Dauer).
 
 ## Weiterführende Links
 

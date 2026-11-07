@@ -7,8 +7,9 @@ Contents: [Onion model and registration](#onion-model-and-registration) · [Auth
 Register HTTP, SSE, and WebSocket interceptors with `withInterceptors(...)`.
 
 - The first registered interceptor is the outermost layer; `next(request)` runs only the interceptors registered **after** the current one and then the transport handler.
-- Calling `next(request)` a second time inside the same interceptor replays the inner chain without re-running outer interceptors.
-- Once the chain has settled, calling `next` again rejects.
+- Only interceptors matching the operation's transport run: an HTTP interceptor never sees an SSE or WebSocket request.
+- For HTTP, calling `next(request)` a second time inside the same interceptor replays the inner chain without re-running outer interceptors.
+- Once the chain has settled, calling `next` again rejects. A WebSocket interceptor's `next()` may be called only once per operation.
 
 ## Auth header injection
 
@@ -39,8 +40,8 @@ export const client = createClient(
 );
 ```
 
-- HTTP interceptors see explicit headers only; Defjs applies automatic `Content-Type` headers right before sending.
-- `request.queryParams` is a `URLSearchParams` view; to change the outgoing URL or headers, pass a modified copy to `next({ ...request, headers })`.
+- HTTP interceptors see explicit headers only; Defjs applies automatic `Content-Type` headers right before sending. `request.body` is already the wire value (JSON text for JSON bodies), so sign that, and read `request.bodyContentType` for the inferred media type.
+- `request.queryParams` is a `URLSearchParams` snapshot of `queryString`; to change the outgoing URL or headers, pass a modified copy to `next({ ...request, headers })`.
 
 ## Refresh bearer token once on 401
 
@@ -185,8 +186,8 @@ An HTTP interceptor can return a synthetic response with `makeResponse({ status,
 
 ## SSE and WebSocket interceptors
 
-- Calling an SSE interceptor's `next()` repeatedly disables endpoint attribution and re-picking for replacement streams. Prefer `withSSEReconnect`; this does not refer to the event iterator's `next()`.
+- Calling an SSE interceptor's `next()` repeatedly disables endpoint attribution and re-picking for replacement streams; prefer `withSSEReconnect`. The `next()` here is the interceptor's, not the event iterator's.
 - `createSSEInterceptor((request, next) => ...)`: wraps SSE connection startup and returns an `EventStreamHandle`.
 - `createWebSocketInterceptor((request, next) => ...)`: wraps WebSocket session startup and returns a `WebSocketSessionLike`.
-- Any wrapper or short-circuit handle/session must implement `[Symbol.asyncDispose]()` forwarding to the same `close` / `closed` teardown lifecycle.
+- Any wrapper or short-circuit handle/session must implement `[Symbol.asyncDispose]()` and forward to the same `close` / `closed` teardown lifecycle.
 - WebSocket interceptors cannot modify subprotocols (`protocols`) or set handshake headers; pass dynamic subprotocol tokens via `client({ protocols })` at the call site.

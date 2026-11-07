@@ -5,13 +5,13 @@ description: Constructores de interceptor HTTP, SSE y WebSocket.
 
 # Interceptores
 
-Envuelve `next` para un transporte. Regístralos con `withInterceptors`. Las listas mixtas se filtran por kind cuando corre la operación.
+Envuelve `next` para un transporte. Regístralos con `withInterceptors`. Las listas mixtas se filtran por tipo cuando se ejecuta la operación.
 
 ## createHttpInterceptor()
 
 <ApiSignature name="createHttpInterceptor, InterceptorFn, HttpInterceptorNext" />
 
-Llama a `next(req)` (opcionalmente una solicitud mutada) o cortocircuita con `makeResponse`. `next` solo va hacia dentro: a los interceptores registrados después de este y luego al transporte. Llamarlo otra vez reproduce esa parte interior desde este interceptor; los interceptores exteriores no corren dos veces.
+Llama a `next(req)` (opcionalmente con una solicitud modificada) o cortocircuita con `makeResponse`. `next` solo avanza hacia dentro: a los interceptores registrados después de este y luego al transporte. Llamarlo otra vez reproduce esa parte interior desde este interceptor; los interceptores exteriores no se ejecutan dos veces.
 
 ## createSSEInterceptor()
 

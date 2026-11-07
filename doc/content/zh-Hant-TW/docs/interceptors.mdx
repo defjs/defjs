@@ -1,17 +1,17 @@
 ---
-title: "中介層"
-description: 在應用程式 Client 上套用身分驗證與傳輸策略，無須改動 SDK 的 API 定義。
+title: "攔截器"
+description: 在應用程式 Client 上套用身分驗證與傳輸策略，不必改動 SDK 的 API 定義。
 ---
 
-# 中介層
+# 攔截器
 
-中介層攔截器可將橫切面的請求執行策略——如身分驗證標頭、請求簽署、維護中短路攔截或安全讀取重試——掛載到應用程式的 `Client` 上，完全不需要修改 SDK 的操作定義。
+攔截器能把橫切面的執行策略——身分驗證標頭、請求簽署、維護中短路，或安全讀取重試——掛到應用程式的 `Client` 上，完全不必修改 SDK 的操作定義。
 
-輸入驗證與 `builder` 參數對應會在攔截器鏈**之前**執行；而 HTTP 狀態碼分派與 `output` / `error` struct 驗證則會在攔截器鏈**之後**執行。
+輸入驗證與 `builder` 對應會在攔截器鏈**之前**執行；HTTP 狀態分派與 `output` / `error` struct 驗證則在鏈**之後**執行。
 
 ## 1. 建立並註冊攔截器
 
-每種傳輸協定都有具備強型別的攔截器 Factory（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。你可以將任意組合傳入 `withInterceptors(...)`：
+每種傳輸都有專屬的具型別攔截器 factory（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。把任意組合傳給 `withInterceptors(...)`：
 
 <Tabs items={["基本設定", "洋蔥模型執行順序", "複製並新增標頭"]}>
 <Tab value="基本設定">
@@ -39,19 +39,19 @@ description: 在應用程式 Client 上套用身分驗證與傳輸策略，無�
 
 ### 攔截器管線規範
 
-- **洋蔥模型順序**：外送階段依註冊順序執行（`before next(req)`）；回程階段則依反向順序執行（`after await next(req)`）。範圍廣泛的日誌與追蹤攔截器應放在外層，較具體的驗證或重試攔截器則放在內層。
-- **不可變請求慣例**：務必複製 `req.headers`（`new Headers(req.headers)`）並將新的請求物件（`{ ...req, headers }`）傳遞給 `next(...)`，讓外層的重試邏輯能看見乾淨的初始標頭。
-- **`content-type` 與 `bodyContentType`**：Defjs 會將推論出的本文 Content-Type 存放在 `req.bodyContentType` 上，而不會修改 `req.headers`。需要計算請求簽章的邏輯應讀取 `req.headers.get("content-type") ?? req.bodyContentType`。若攔截器替換了 `req.body` 的格式，請明確設定 `content-type` 標頭。
+- **洋蔥式順序**：出去時依註冊順序執行（`next(req)` 之前），回來時則反向執行（`await next(req)` 之後）。把範圍較廣的日誌與追蹤攔截器放在外層，較窄的驗證或重試攔截器放在內層。
+- **請求不可變的慣例**：一律複製 `req.headers`（`new Headers(req.headers)`），並把新的請求物件（`{ ...req, headers }`）傳給 `next(...)`，讓外層的重試看到乾淨的標頭。
+- **`content-type` 與 `bodyContentType`**：Defjs 會把推論出的本文 content type 放在 `req.bodyContentType`，不會修改 `req.headers`。請求簽署邏輯應讀取 `req.headers.get("content-type") ?? req.bodyContentType`。若攔截器把 `req.body` 換成其他格式，請明確設定 `content-type` 標頭。
 
 ## 2. 使用 makeResponse 短路請求
 
-HTTP 攔截器可以使用 `makeResponse(...)` 建構合成回應，而不呼叫 `next(req)`，直接短路請求：
+HTTP 攔截器可以用 `makeResponse(...)` 建構合成回應，不呼叫 `next(req)`，直接短路請求：
 
 <include cwd lang="typescript">
   examples/interceptors/short-circuit.ts#example
 </include>
 
-`makeResponse` **並非**略過驗證的後門：該合成回應仍會經過操作的媒體型別檢查、狀態碼分歧（`2xx` vs. 非 `2xx`）以及 `output` / `error` struct 的結構驗證。
+`makeResponse` **不是**繞過驗證的後門：合成回應仍會經過操作的媒體型別檢查、狀態分支（`2xx` 與非 `2xx`），以及 `output` / `error` struct 驗證。
 
 ## 3. 重試安全的 HTTP 讀取請求
 
@@ -63,31 +63,31 @@ HTTP 重試預設關閉。若要在 `502`、`503` 或 `504` 時容錯移轉到�
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
-- **兩層重試**：這個 `next(request)` 迴圈會留在選取的端點，不會重新執行外層驗證或 builder。將三次內層傳送與 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` 組合使用，可能送出四次 HTTP 請求（三次送往故障主端點，一次送往健康備援端點）；`maxAttempts` 限制的是外層嘗試次數，不是實際傳送次數。請明確決定各項條件由哪一層負責，避免無意間疊加。
+- **兩層重試**：這個 `next(request)` 迴圈會留在已選取的端點，不會重新執行外層驗證或 builder。將三次內層傳送與 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` 組合使用，可能送出四次 HTTP 請求（三次送往故障主端點，一次送往健康備援端點）；`maxAttempts` 限制的是外層嘗試次數，不是實際傳送次數。請明確決定各項條件由哪一層負責，避免無意間疊加。
 - **`Retry-After` 策略**：Core 的 `withRetry` 不會讀取這個標頭。範例中的 30 秒上限與 250 ms 後備值是應用程式的選擇。若伺服器要求的延遲更長，設定上限可能導致提早重試；若無法接受，請等待完整延遲，或直接回傳回應。
 - **401 寫入**：[Bearer 更新範例](/zh-Hant-TW/recipes/refresh-bearer-once) 可能傳遞同一個 JSON POST 兩次。必須確保驗證在業務處理前拒絕請求，並使用穩定的冪等鍵與伺服器端去重，否則不要自動重播寫入。串流請求本文不會重播。
-- **處理傳輸層拒絕**：當發生網路錯誤時，`next(request)` 會拋出拒絕（不會有狀態碼為 0 的回應）。捕捉並重新拋出該拒絕能完整保留原本的 `NET_*` 錯誤碼。
-- **攔截器內部拋出例外**：未處理的拋出例外（或回傳非 Response 物件）會讓操作 tuple 解析為 `EXT_INTERCEPTOR_FAILED` 並設定 `fault.cause`。若拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，則會精確解析為 `NET_ABORTED` 或 `NET_TIMEOUT`。
+- **處理傳輸層拒絕**：發生網路錯誤時，`next(request)` 會拒絕（不會有狀態碼 0 的回應）。接住並重新拋出該拒絕，就能保留原本的 `NET_*` 錯誤碼。
+- **在攔截器內拋出例外**：未處理的拋出（或回傳非 response 的值）會讓操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 解析，並設定 `fault.cause`。拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT` 則解析為 `NET_ABORTED` 或 `NET_TIMEOUT`。
 
-對於 SSE，請優先使用 `withSSEReconnect`，而非反覆呼叫 `next()` 的攔截器。多次呼叫攔截器的 `next()` 會停用這些替代串流的端點歸因與重新選取；這和使用迭代器的 `next()` 消費事件無關。
+對 SSE 而言，請優先使用 `withSSEReconnect`，而不是反覆呼叫 `next()` 的攔截器。多次呼叫攔截器的 `next()` 會讓這些替代串流失去端點歸屬與重新選取；這和以迭代器的 `next()` 消費事件無關。
 
 ## 4. 包裝 WebSocket 工作階段
 
-WebSocket 攔截器**最多只能呼叫一次** `next(req)`。包裝回傳的 `WebSocketSessionLike` 時，請將即時 Getter 屬性（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive` 與 `[Symbol.asyncDispose]()` 委託轉發，而不是以物件展開的方式複製單次靜態快照：
+WebSocket 攔截器**最多只能呼叫一次** `next(req)`。包裝回傳的 `WebSocketSessionLike` 時，要把即時的 getter（`state`、`connection`、`bufferedAmount`）、`close`、`closed`、`receive` 與 `[Symbol.asyncDispose]()` 轉發出去，而不是用物件展開複製一份當下的快照：
 
 <include cwd lang="typescript">
   examples/interceptors/websocket-sessions.ts#example
 </include>
 
-## 5. 內建 Factory 與輔助函式
+## 5. 內建 factory 與輔助函式
 
-| 匯出名稱                                       | 傳輸協定  | 說明                                                               |
-| ---------------------------------------------- | --------- | ------------------------------------------------------------------ |
-| `createHttpInterceptor(fn)`                    | HTTP      | 包裝 `(req, next) => Promise<HttpResponse<unknown>>`               |
-| `createSSEInterceptor(fn)`                     | SSE       | 包裝 `(req, next) => Promise<EventStreamHandle<unknown>>`          |
-| `createWebSocketInterceptor(fn)`               | WebSocket | 包裝 `(req, next) => Promise<WebSocketSessionLike>`                |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 透過同步或非同步憑證提供者自動注入 `Authorization: Basic ...` 標頭 |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 交握請求中自動注入 `Authorization: Basic ...` 標頭          |
+| 匯出名稱                                       | 傳輸協定  | 說明                                                      |
+| ---------------------------------------------- | --------- | --------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | 包裝 `(req, next) => Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor(fn)`                     | SSE       | 包裝 `(req, next) => Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor(fn)`               | WebSocket | 包裝 `(req, next) => Promise<WebSocketSessionLike>`       |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 從同步或非同步的憑證提供者注入 `Authorization: Basic ...` |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 交握注入 `Authorization: Basic ...`                |
 
 ## 相關閱讀
 

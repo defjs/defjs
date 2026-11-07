@@ -16,13 +16,15 @@ Defjs 기반 SDK는 순수한 작업 정의와 Struct 스키마만을 npm 패키
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -70,7 +72,7 @@ export { getOrder } from "./orders";
 </Tabs>
 
 - `@defjs/core`는 사용하는 애플리케이션과 공유되는 외부 런타임 `peerDependency`로 유지됩니다.
-- `"sideEffects": false`를 지정하면 애플리케이션이 작업 중 일부만 import할 때 번들러가 사용되지 않는 엔드포인트를 깔끔하게 트리쉐이킹할 수 있습니다.
+- `"sideEffects": false`를 지정하면 애플리케이션이 작업 중 일부만 import할 때 번들러가 사용되지 않는 작업을 트리쉐이킹할 수 있습니다.
 
 ---
 
@@ -107,16 +109,16 @@ bun add @company/orders-sdk @defjs/core@^0.6.0
 paid
 ```
 
-실제 프로덕션 코드에서는 상대 경로 import인 `./orders-sdk`를 `@company/orders-sdk`로 변경하고, `withHTTPHandle(...)`을 제거하여 플랫폼의 실제 `fetch`를 사용하도록 설정합니다.
+실제 프로덕션 코드에서는 상대 경로 import인 `./src/orders.ts`를 `@company/orders-sdk`로 변경하고, `withHTTPHandle(...)`을 제거하여 플랫폼의 실제 `fetch`를 사용하도록 설정합니다.
 
 ---
 
 ## 4. 테스트 및 배포
 
-요청 매핑, `output` 디코딩, 선언된 `HTTP_STATUS` 오류, 취소 동작을 포괄하는 [인메모리 핸들 테스트](/ko-KR/recipes/test-with-handle)로 export된 정의들을 철저히 검증하세요. 검증이 완료되면 패키지를 배포합니다:
+요청 매핑, `output` 디코딩, 선언된 `HTTP_STATUS` 결함, 취소 동작을 포괄하는 [인메모리 핸들 테스트](/ko-KR/recipes/test-with-handle)로 export된 정의들을 철저히 검증하세요. 검증이 완료되면 패키지를 배포합니다:
 
 ```sh
 bun publish --access public
 ```
 
-자세한 내용은 [HTTP 요청](/ko-KR/docs/http), [Client](/ko-KR/docs/client), [테스트](/ko-KR/docs/testing), [핵심 아키텍처](/ko-KR/docs/design-decisions) 문서를 참조하세요.
+자세한 내용은 [HTTP 작업](/ko-KR/docs/http), [Client](/ko-KR/docs/client), [테스트](/ko-KR/docs/testing), [핵심 아키텍처](/ko-KR/docs/design-decisions) 문서를 참조하세요.

@@ -1,24 +1,24 @@
 ---
 title: Client
-description: createClient、option ヘルパー、Client 型です。
+description: createClient、オプションヘルパー、Client 型です。
 ---
 
 # Client
 
-`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。クライアント options を左から右へ合成し、`client(options?)` を呼んで [`Client`](/ja-JP/api/core/client-type) 値を得て、操作に渡します。`getOrder(client(options), input)` です。
+`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。クライアントオプションを左から右へ合成し、`client(options?)` を呼んで [`Client`](/ja-JP/api/core/client-type) 値を得て、操作に渡します。`getOrder(client(options), input)` です。
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-options は順に適用されます。インターセプターが認証情報やテナント情報をクロージャーで保持する場合は、クライアントをリクエスト境界の中で作ることを推奨します。返るファクトリは関数です。それを呼ぶと `Client` 値が返り、I/O はしません。ファクトリ自身も `Client` であり、リクエスト options は持ちません。
+オプションは順に適用されます。インターセプターが認証情報やテナント情報をクロージャーで保持する場合は、クライアントをリクエスト境界の中で作ることを推奨します。返されるファクトリは関数です。それを呼ぶと `Client` 値が返り、I/O は行いません。ファクトリ自身も `Client` であり、リクエストオプションは持ちません。
 
-- **options** — `withEndpoint` のような option ヘルパーです。
-- **戻り値** 呼び出し可能なファクトリです。基底設定はすべての `Client` 値が共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。
+- **オプション** — `withEndpoint` などのヘルパーです。
+- **戻り値** 呼び出し可能なファクトリです。基本設定はすべての `Client` 値が共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。
 
 <include cwd>examples/api/create-client.ts#example</include>
 
-## option ヘルパー
+## オプションヘルパー
 
 どのヘルパーも `ClientOption` を返します。同じ設定に対しては後の呼び出しが先の呼び出しを置き換えます。ただし `withInterceptors` だけは追記します。
 
@@ -32,36 +32,36 @@ options は順に適用されます。インターセプターが認証情報や
 
 <ApiSignature name="withBalancer" />
 
-以降の呼び出しに使うバランサーを置き換えます。オブジェクトは参照のまま保存されます。この option がなければ、各クライアントは自分の `pickFirstBalancer()` を持ちます。
+以降の呼び出しに使うバランサーを置き換えます。オブジェクトは参照のまま保存されます。このオプションがなければ、各クライアントは自分の `pickFirstBalancer()` を持ちます。
 
 ### withInterceptors()
 
 <ApiSignature name="withInterceptors" />
 
-登録順でインターセプターを追記します。混在の kind は、操作が実行されるときにトランスポートごとにフィルタされます。
+登録順でインターセプターを追記します。異なる種類が混在していても、操作の実行時にトランスポートごとにフィルタされます。
 
 ### withQuerySerializer()
 
 <ApiSignature name="withQuerySerializer" />
 
-HTTP、SSE、WebSocket の query エンコードを差し替えます。`serializer(query)` は**エンコード済みのワイヤオブジェクト**（エイリアス適用済み、`Date` は ISO、`bigint` は文字列）を受け取り、先頭の `?` なしの query 文字列を返す必要があります。リクエストに query が無いときは呼ばれません。`URLSearchParams` を返すビルダーはこれを飛ばします。
+HTTP、SSE、WebSocket のクエリエンコードを差し替えます。`serializer(query)` は**エンコード済みのワイヤオブジェクト**（エイリアス適用済み、`Date` は ISO、`bigint` は文字列）を受け取り、先頭の `?` のないクエリ文字列を返す必要があります。リクエストにクエリがないときは呼ばれません。`URLSearchParams` を返す `builder` はこれを飛ばします。
 
 ### withHeaders()
 
 <ApiSignature name="withHeaders" />
 
-HTTP と SSE のリクエストに使う静的なデフォルトヘッダーをセットします。WebSocket のリクエストでは使われません。`headers` は option の適用時にコピーされるため、あとでそのオブジェクトを変更してもクライアントには反映されません。`withHeaders` を 2 回呼ぶと 2 回目が 1 回目を置き換え、マージはしません。
+HTTP と SSE のリクエストに使う静的なデフォルトヘッダーを設定します。WebSocket のリクエストでは使われません。`headers` はオプションの適用時にコピーされるため、あとでそのオブジェクトを変更してもクライアントには反映されません。`withHeaders` を 2 回呼ぶと 2 回目が 1 回目を置き換え、マージはしません。
 
 1 つのリクエストでの優先順位です。
 
 1. デフォルトが最初のヘッダー集合になります。
-2. リクエストビルダーが返す `headers` は、同名のデフォルトを置き換えます。その名前の最初の値がデフォルトを置き換え（`Headers.set`）、同じ配列のあとの値はその置き換え先にだけ追加されます。スカラーや `Headers` インスタンスも置き換えます。それ以外のデフォルト名はそのまま残ります。
+2. `builder` が返す `headers` は、同名のデフォルトを置き換えます。その名前の最初の値がデフォルトを置き換え、同じ配列のあとの値はその置き換え先にだけ追加されます。スカラーや `Headers` インスタンスも置き換えます。それ以外のデフォルト名はそのまま残ります。
 3. インターセプターはマージ後のヘッダーを受け取り、変更できます。
 4. デフォルトの HTTP トランスポートでは、XSRF ヘッダーが最後に、まだ存在しない場合に限って追加されます（`withXSRF` を参照）。
 
 リクエストごとに変わる値には、インターセプターを使ってください。たとえば更新した Bearer トークンや、シリアライズ済みボディに対する HMAC です。
 
-クライアント単位の既定の期限はありません。1 回の呼び出しに期限が要るときは、派生したクライアントに `signal: AbortSignal.timeout(ms)` を渡します。手動の abort は `NET_ABORTED` です。`AbortSignal.timeout` は `NET_TIMEOUT` に分類されます。
+クライアント単位のデフォルトの期限はありません。1 回の呼び出しに期限が必要なときは、派生したクライアントに `signal: AbortSignal.timeout(ms)` を渡します。手動の abort は `NET_ABORTED` です。`AbortSignal.timeout` は `NET_TIMEOUT` に分類されます。
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,13 +115,13 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 
 <ApiSignature name="DerivableClient" />
 
-`createClient` が返すルートのクライアントで、2 つの形を持ちます。ファクトリは関数であり、リクエスト options を持たない `Client` でもあるため、`getOrder(client, input)` をそのまま呼べます。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、1 回の呼び出し用のプレーンな `Client` 値が返ります。その値は呼び出せないため、`client()()` はコンパイルに失敗し、実行時には `TypeError` を投げます。派生はファクトリから 1 回だけ行い、連鎖はありません。型は `ReturnType<typeof createClient>` ではなく `DerivableClient` と書いてください。
+`createClient` が返すルートのクライアントで、2 つの形を持ちます。ファクトリは関数であり、リクエストオプションを持たない `Client` でもあるため、`getOrder(client, input)` をそのまま呼べます。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、1 回の呼び出し用のプレーンな `Client` 値が返ります。その値は呼び出せないため、`client()()` はコンパイルに失敗し、実行時には `TypeError` を投げます。派生はファクトリから 1 回だけ行い、連鎖はありません。型は `ReturnType<typeof createClient>` ではなく `DerivableClient` と書いてください。
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。`client()` と `client(undefined)` はリクエスト options を保存しません。`client({})` は空のスナップショットを残します。呼び出しは各トップレベルフィールドを一度だけ読みます。`protocols` 配列はコピーされます。`heartbeat` と `reconnect` は既知のフィールドをコピーします。欠けている入れ子ブロックは欠けたままです。`signal`、`beforeConnect`、コールバックは同一性を保ちます。キャプチャしたフィールドの getter はこの呼び出しの間に実行され、throw した場合はその呼び出しから外へ伝わります。不正な数値は、あとから `REQ_OPTIONS_INVALID` で失敗します。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗し、実行時には `TypeError` を投げます。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`signal` を持つ値を再利用するとそのシグナルを共有します。`signal` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。ファクトリの基底設定は共有されたままで、凍結されません。標準の `with*` ヘルパーは、適用されるときに自分が持つ固定レコードをコピーします。
+`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。`client()` と `client(undefined)` はリクエストオプションを保存しません。`client({})` は空のスナップショットを残します。呼び出しは各トップレベルフィールドを一度だけ読みます。`protocols` 配列はコピーされます。`heartbeat` と `reconnect` は既知のフィールドをコピーします。欠けている入れ子ブロックは欠けたままです。`signal`、`beforeConnect`、コールバックは同一性を保ちます。キャプチャしたフィールドの getter はこの呼び出しの間に実行され、throw した場合はその呼び出しから外へ伝わります。不正な数値は、あとから `REQ_OPTIONS_INVALID` で失敗します。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗し、実行時には `TypeError` を投げます。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`signal` を持つ値を再利用するとそのシグナルを共有します。`signal` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。ファクトリの基底設定は共有されたままで、凍結されません。標準の `with*` ヘルパーは、適用されるときに自分が持つ固定レコードをコピーします。
 
 ファクトリを React の state setter に渡さないでください（`setState(factory)` は updater としてそれを呼びます）。Vue の `watch` や `computed` のソースにも使わないでください（それらは関数を呼びます）。
 
@@ -129,7 +129,7 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 
 <ApiSignature name="RequestOptions" />
 
-フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。`client(options)` はその呼び出しで `protocols` 配列と、`heartbeat` および `reconnect` の既知フィールドをコピーします。欠けている入れ子ブロックは欠けたままです。`signal`、`beforeConnect`、コールバックは同一性を保ちます。SSE がリクエスト options から読むのは `signal` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `abort` フィールドもありません。
+フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。`client(options)` はその呼び出しで `protocols` 配列と、`heartbeat` および `reconnect` の既知フィールドをコピーします。欠けている入れ子ブロックは欠けたままです。`signal`、`beforeConnect`、コールバックは同一性を保ちます。SSE がリクエストオプションから読むのは `signal` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `abort` フィールドもありません。
 
 | フィールド           | プロトコル           | 置き換え                                                                           |
 | -------------------- | -------------------- | ---------------------------------------------------------------------------------- |
@@ -177,7 +177,7 @@ Defjs が Fetch 実装に求める呼び出しシグネチャです。`typeof fe
 
 `connectTimeoutMs` は任意で、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。SSE では Fetch からレスポンスヘッダーまで、WebSocket では構築から `open` までを区切り、ハンドシェイクのあとで解除されます。期限が切れるとバランサーへ `NET_UNREACHABLE` を報告するので、再接続は次のエンドポイントを選べます。リトライを使い切ると `NET_TIMEOUT` で終わります。
 
-どちらのトランスポートでも、ハンドシェイクに成功すると、障害ごとのリトライ予算、コールバックの試行番号、バックオフの指数がリセットされます。`attempts: 0` はリトライを無効にします。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。`maxDelayMs` は、ジッターと丸め処理の後の最終的な待ち時間に上限を設けます。SSE に設定上の上限がない場合も含め、プラットフォームのタイマー上限である `2_147_483_647` ms も適用されます。基準値がゼロならゼロのままで、有効な数値からの計算でオーバーフローした場合は上限で飽和します。
+どちらのトランスポートでも、ハンドシェイクに成功すると、障害ごとのリトライバジェット、コールバックの試行番号、バックオフの指数がリセットされます。`attempts: 0` はリトライを無効にします。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。`maxDelayMs` は、ジッターと丸め処理の後の最終的な待ち時間に上限を設けます。SSE に設定上の上限がない場合も含め、プラットフォームのタイマー上限である `2_147_483_647` ms も適用されます。基準値がゼロならゼロのままで、有効な数値からの計算でオーバーフローした場合は上限で飽和します。
 
 再接続オプションはトランスポートの呼び出し前に検証されます。`attempts` は非負の安全な整数、`delayMs` は非負の有限値、`maxDelayMs` は非負の有限値または正の `Infinity`（設定上の上限を解除しますが、最終遅延は引き続き `2_147_483_647` ms 以下に制限されます）、`factor` は有限の正数、`jitter` は有限で 0–1 の範囲でなければなりません。不正な値は `REQ_OPTIONS_INVALID` を返します。WebSocket の `attempts: 0` は以降のリトライを無効にしますが、明示的に指定したすべての再接続フィールドは SSE と同様に初回接続前に検証されます。ジッターは上限適用済みの基準値を増減させ、その後に最終的な上限が適用されます。
 
@@ -191,11 +191,11 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を
 
 <ApiSignature name="ClientOptions" />
 
-表示されるフィールドは `sse` と `webSocket` です。残りの七つ——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf`、`withCredentials`——はエクスポートされない HTTP の基底から継承されます。`endpoints` は `readonly string[]` です。解決後の既定は `[]` です。空の配列は正当な値で、呼び出しは `REQ_BUILD_FAILED` で失敗します。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、option ヘルパーを受け取ります。
+表示されるフィールドは `sse` と `webSocket` です。残りの 7 つ——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf`、`withCredentials`——は export されない HTTP の基底から継承されます。`endpoints` は `readonly string[]` です。解決後のデフォルトは `[]` です。空の配列は正当な値で、呼び出しは `REQ_BUILD_FAILED` で失敗します。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、オプションヘルパーを受け取ります。
 
 ### ClientConfig
 
-option ヘルパーが変更し、操作が読み取る解決済みスナップショットです。デフォルト適用後の `ClientOptions` で、`http.handle`、`interceptors`、`sse`（`ClientSSEConfig`）、`webSocket`、`balancer` が常に存在します。`http.retry` は任意で、既定は `undefined`（試行 1 回、予算なし）です。`withRetry(options?)` がそれを構成します。`balancer` の既定は、そのクライアント用の新しい `pickFirstBalancer()` です。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) のフィールドではありません。
+オプションヘルパーが変更し、操作が読み取る解決済みスナップショットです。デフォルト適用後の `ClientOptions` で、`http.handle`、`interceptors`、`sse`（`ClientSSEConfig`）、`webSocket`、`balancer` が常に存在します。`http.retry` は任意で、デフォルトは `undefined`（試行 1 回、リトライバジェットなし）です。`withRetry(options?)` がそれを構成します。`balancer` のデフォルトは、そのクライアント用の新しい `pickFirstBalancer()` です。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) のフィールドではありません。
 
 ### ClientSSEConfig
 
@@ -221,29 +221,29 @@ option ヘルパーが変更し、操作が読み取る解決済みスナップ�
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` は `NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）で進みます。任意の正の有限な `failbackMs` は、その間隔のあと最初のエンドポイントを同時に 1 つだけ探します。HTTP リトライは、`withRetry` で構成する別のクライアント方針です。`roundRobinBalancer` はリストを順に歩きます。`weights` は任意です。[複数のエンドポイント](/ja-JP/docs/client#multiple-endpoints) を参照してください。
+`pickFirstBalancer` は `NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）で進みます。任意の正の有限な `failbackMs` は、その間隔のあとプライマリへフェイルバックするために、最初のエンドポイントを同時に 1 つだけプローブします。HTTP リトライは、`withRetry` で設定する別のクライアントポリシーです。`roundRobinBalancer` はリストを順に歩きます。`weights` は任意です。[複数のエンドポイント](/ja-JP/docs/client#multiple-endpoints) を参照してください。
 
 ### p2cBalancer()
 
 <ApiSignature name="p2cBalancer" />
 
-非復元で相異なる候補を標本し（Envoy/gRPC A48 とは違います）、tower の PeakEwma か pending の負荷を選びます。Linkerd の既定は RTT 30ms と減衰 10s です。`start` が pending を始め、`end` はヘッダーまたはソケットの open でそれを解放し、失敗を含むすべてのトランスポートについて実際の RTT を記録します。`end` の無い `done` は、RTT のサンプルなしで pending を解放します。p2c の失敗分類子もペナルティもありません。`choiceCount` の既定は 2 で、上限は 10 です。
+非復元で相異なる候補を標本し（Envoy/gRPC A48 とは違います）、tower の PeakEwma か pending の負荷を選びます。Linkerd のデフォルトは RTT 30ms と減衰 10s です。`start` が pending を始め、`end` はヘッダーまたはソケットの open でそれを解放し、失敗を含むすべてのトランスポートについて実際の RTT を記録します。`end` の無い `done` は、RTT のサンプルなしで pending を解放します。p2c の失敗分類子もペナルティもありません。`choiceCount` のデフォルトは 2 で、上限は 10 です。
 
 ### outlierDetection()
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-子を Linkerd 流の連続失敗のサーキットブレーカーで包みます。ラウンドロビンと p2c は既定でそれを有効にし（Finagle と同じです）、`false` は無効にします。pick-first はオブジェクトでそれを有効にします。既定の分類子は `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` を数えます。失敗が 5 回あると、ペナルティは 1000ms から始まり、失敗した探りのあと倍になり、ベースの 0.5 倍までの正のジッターを加え、60000ms を上限とします。期限は `end` で決まる探りを 1 つ入れ、`end` が来なければ `done` で決めます。成功はバックオフをリセットし、キャンセルは枠を解放するだけです。成功したとみなすタイムアウトも、排出枠も、最後のホストの保護も、精算の格子も、割合の基準も、スロースタートもありません。`isHealthy` はアプリケーションが所有するキャッシュされた状態を読み、ペナルティを取り消すことはありません。すべてのホストが遮断され得ます。Finagle 流の、リスト内だけのフェイルオープンは、それでもリクエストを送ります。Envoy/gRPC A50 と違い、排出枠はありません。[ヘルスフィルタリングと p2c](/ja-JP/docs/client#health-filtering-and-p2c) を参照してください。
+子を Linkerd 流の連続失敗のサーキットブレーカーで包みます。ラウンドロビンと p2c はデフォルトでそれを有効にし（Finagle と同じです）、`false` は無効にします。pick-first はオブジェクトでそれを有効にします。デフォルトの分類子は `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` を数えます。失敗が 5 回あると、ペナルティは 1000ms から始まり、失敗したプローブのあと倍になり、ベースの 0.5 倍までの正のジッターを加え、60000ms を上限とします。期限が切れると、`end` で決まる単一のプローブを許可し、`end` が来なければ `done` で決めます。成功はバックオフをリセットし、キャンセルは枠を解放するだけです。成功したとみなすタイムアウトも、除外枠も、最後のホストの保護も、精算グリッドも、割合の基準も、スロースタートもありません。`isHealthy` はアプリケーションが所有するキャッシュされた状態を読み、ペナルティを取り消すことはありません。すべてのホストが遮断され得ます。Finagle 流の、リスト内だけのフェイルオープンは、それでもリクエストを送ります。Envoy/gRPC A50 と違い、除外枠はありません。[ヘルスフィルタリングと p2c](/ja-JP/docs/client#health-filtering-and-p2c) を参照してください。
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryCondition, RetryOptions" />
 
-エンドポイント選択とは独立に、同一呼び出し内の HTTP リトライを有効にします。`withRetry` を省くと試行は 1 回で、予算もありません。`withRetry()` は `withRetry({})` と同等で、既定は、最初の試行を含む `maxAttempts: 2`、`on: ["connect-failure"]`、安全なメソッド `GET`、`HEAD`、`OPTIONS`、`TRACE` です。メソッド名は大文字小文字を区別しません。`[]` はリトライを無効にします。`maxAttempts` は 1 以上の安全な整数で、各エンドポイントは多くて 1 回だけ試されます。`"gateway-error"` は `NET_UNAVAILABLE`（HTTP 502/503/504）と、`RES_*` のデコードで拒否されたゲートウェイボディを含みます。`"attempt-timeout"` は `attemptTimeoutMs` を使います。ストリーミングのリクエストボディはリトライされません。
+エンドポイント選択とは独立に、同一呼び出し内の HTTP リトライを有効にします。`withRetry` を省くと試行は 1 回で、リトライバジェットもありません。`withRetry()` は `withRetry({})` と同等で、デフォルトは、最初の試行を含む `maxAttempts: 2`、`on: ["connect-failure"]`、安全なメソッド `GET`、`HEAD`、`OPTIONS`、`TRACE` です。メソッド名は大文字小文字を区別しません。`[]` はリトライを無効にします。`maxAttempts` は 1 以上の安全な整数で、各エンドポイントは多くて 1 回だけ試されます。`"gateway-error"` は `NET_UNAVAILABLE`（HTTP 502/503/504）と、`RES_*` のデコードで拒否されたゲートウェイボディを含みます。`"attempt-timeout"` は `attemptTimeoutMs` を使います。ストリーミングのリクエストボディはリトライされません。
 
-バックオフの既定は `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250` で、フィールドの意味は SSE/WebSocket の再接続と同じです。`delayMs: 0` は待ちを省きます。`attemptTimeoutMs` は有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。それは 1 回の試行の Fetch、ボディ読み取り、デコードを限ります。呼び出し側の signal は呼び出し全体を覆い、バックオフの待ちも含みます。
+バックオフのデフォルトは `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250` で、フィールドの意味は SSE/WebSocket の再接続と同じです。`delayMs: 0` は待ちを省きます。`attemptTimeoutMs` は有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。それは 1 回の試行の Fetch、ボディ読み取り、デコードを制限します。呼び出し側の signal は、バックオフの待ちも含めて呼び出し全体を対象にします。
 
-クライアント所有の Finagle 予算は、既定で 20% に、10 秒の TTL にわたる毎秒 10 回の予約を加えたものです。クレジットとデビットは、TTL/10 の 10 スライスで遅延して期限切れになります。`budget: false` はその上限を外します。同じ構成を共有する派生クライアントはその予算を共有します。別々のクライアントは、バランサーを 1 つ共有していても共有しません。無効な option は、HTTP の実行時に `Invalid retry options` を伴う `REQ_OPTIONS_INVALID` を返します。この option は適用時に、所有するフィールド、配列、入れ子の budget を捕捉します。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。後から渡した `withRetry` は方針を置き換え、`withRetry({ maxAttempts: 1 })` は、有効にしたあとリトライを無効にします。バランサーとヘルスラッパーにリトライ設定はありません。[ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) を参照してください。
+クライアント所有の Finagle リトライバジェットは、デフォルトで 20% に、10 秒の TTL にわたる毎秒 10 回の予約を加えたものです。クレジットとデビットは、TTL/10 の 10 スライスで遅延して期限切れになります。`budget: false` はその上限を外します。同じ構成を共有する派生クライアントはそのリトライバジェットを共有します。別々のクライアントは、バランサーを 1 つ共有していても共有しません。無効なオプションは、HTTP の実行時に `Invalid retry options` を伴う `REQ_OPTIONS_INVALID` を返します。このオプションは適用時に、所有するフィールド、配列、入れ子の `budget` を捕捉します。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。後から渡した `withRetry` はポリシーを置き換え、`withRetry({ maxAttempts: 1 })` は、有効にしたあとリトライを無効にします。バランサーとヘルスラッパーにリトライ設定はありません。[ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) を参照してください。
 
 <include cwd>examples/client/http-retry.ts#example</include>
 
@@ -253,6 +253,6 @@ option ヘルパーが変更し、操作が読み取る解決済みスナップ�
 
 `pick` は error-first タプルを返します。任意の `start` は、選ばれたトランスポートが始まる直前に、同期的に多くて 1 回実行されます。任意の `end` は `start` のあと 1 回、ピアの応答が始まるとき（またはレスポンス前の失敗）に実行されます。任意の `done` は完了時に 1 回実行されます。Fetch は Linkerd の最初のボディフレームの境界も、Envoy のストリームの境界も公開できません。すべてのフックからの throw と thenable の rejection は封じ込められます。`ERR_NO_CANDIDATE` は `REQ_BUILD_FAILED` の `cause` でしかありません。`FaultCode` ではありません。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーをまたいでもそれを認識します。
 
-バランサーが見るのは中立な結果だけです。各トランスポートは自分の事実を `DoneInfo.code` へ翻訳します。既定の outlier detection は `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` を数えます。生の `DoneInfo.status` はカスタムバランサーのためだけに残され、組み込み戦略は決して読みません。`PickInfo` は `endpoints` と任意の `operation` を含み、トランスポートを区別するフィールドはありません。
+バランサーが見るのは中立な結果だけです。各トランスポートは自身の情報を `DoneInfo.code` へ変換します。デフォルトの外れ値検出は `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` をカウントします。生の `DoneInfo.status` はカスタムバランサーのためだけに残され、組み込み戦略は決して読みません。`PickInfo` は `endpoints` と任意の `operation` を含み、トランスポートを区別するフィールドはありません。
 
 [Client ガイド](/ja-JP/docs/client) を見てください。

@@ -14,64 +14,16 @@ Modélisez plusieurs types de trames pour `incoming` ou `outgoing` à l'aide de 
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
 <Tab value="sdk/ticks-socket.ts">
 
-```ts
-import { defineWebSocket, struct } from "@defjs/core";
-
-export const TickFrame = struct.discriminatedUnion("type", [
-  struct.object({
-    type: struct.literal("tick"),
-    symbol: struct.string(),
-    price: struct.number(),
-  }),
-  struct.object({
-    type: struct.literal("subscribed"),
-    symbol: struct.string(),
-  }),
-]);
-
-export const SubscribeCommand = struct.object({
-  type: struct.literal("subscribe"),
-  symbol: struct.string(),
-});
-
-export const openTicker = defineWebSocket({
-  path: "/market/ws",
-  operation: "market.ticker",
-  incoming: TickFrame,
-  outgoing: SubscribeCommand,
-  maxIncomingQueueSize: 64,
-});
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
 
 </Tab>
 <Tab value="app/session.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { openTicker } from "../sdk/ticks-socket.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, session] = await openTicker(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = session;
-  active.send({ type: "subscribe", symbol: "ACME" });
-
-  for await (const message of active.receive) {
-    if (message.type === "tick") {
-      console.log(message.symbol, message.price);
-      break;
-    }
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -125,7 +77,7 @@ La reconnexion et le heartbeat sont activables à la demande via les options du 
 - **Délai de handshake (`connectTimeoutMs`)** : Lorsqu'il est fourni, il doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`. Il borne la construction jusqu'à `open` et est effacé après le handshake.
 - **Heartbeat** : Émet périodiquement `message()` à travers le struct `outgoing` et attend jusqu’à `timeoutMs` une trame satisfaisant `isAck(msg)`. Les trames d’acquittement correspondantes sont consommées par le moniteur de heartbeat et ne parviennent pas à `session.receive`. Un acquittement manqué est fatal à la session logique : `closed.kind` vaut `"error"` et `closed.cause` est l’ordinaire `Error("WebSocket heartbeat timeout")` ; cela ne déclenche pas de reconnexion. Les échecs de sérialisation du heartbeat suivent le même chemin fatal avec leur cause initiale.
 - **Limites de file d'attente** :
-  - `maxIncomingQueueSize` (entier positif obligatoire) : Borne à la fois les trames brutes en attente de décodage et les messages décodés en attente du consommateur. Un dépassement termine la session avec un Fault `CAP_QUEUE_OVERFLOW` comme `closed.cause` ; cette même cause parvient à `onRuntimeError` et rejette `session.receive`. Consommez régulièrement `session.receive` tant que la session est ouverte.
+  - `maxIncomingQueueSize` (entier positif obligatoire) : Borne à la fois les trames brutes en attente de décodage et les messages décodés en attente du consommateur. Un dépassement termine la session avec un fault `CAP_QUEUE_OVERFLOW` comme `closed.cause` ; cette même cause parvient à `onRuntimeError` et rejette `session.receive`. Consommez régulièrement `session.receive` tant que la session est ouverte.
   - `maxOutgoingQueueSize` (entier non négatif facultatif, par défaut `0`) : Met en tampon les appels `session.send()` uniquement lorsque `state === 'reconnecting'` et les expédie avant de publier l'état `open` suivant.
 
 `shouldReconnect` reçoit le code de fermeture natif et `wasClean`. Un serveur peut achever un handshake de fermeture normal avec le code d’erreur applicative `1011` ; `wasClean === true` ne signifie donc pas que l’application a réussi. L’exemple autorise explicitement `1011` ; choisissez les codes applicatifs selon votre protocole au lieu de vous fier uniquement à `!wasClean`.

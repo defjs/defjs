@@ -26,9 +26,11 @@ Crea el cliente en el límite de la aplicación, envuelve tu árbol con `<Client
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
   <Tab value="app/App.tsx">
     <include cwd>examples/react/client-provider.tsx#example</include>
+
   </Tab>
   <Tab value="app/OrderCard.tsx">
     <include cwd>examples/react/basic-setup.tsx#example</include>
+
   </Tab>
 </Tabs>
 
@@ -72,13 +74,13 @@ Los handles de SSE y WebSocket sobreviven a la llamada inicial a `openStream(...
 
 - **Navegador**: comparte un único cliente con ámbito de módulo cuando el endpoint y los interceptores sean independientes de la petición.
 - **SSR**: crea un cliente nuevo dentro del límite de cada petición del servidor siempre que las cabeceras, cookies, datos de tenant o credenciales varíen por petición.
-- Desmontar `<ClientProvider>` **no** cancela llamadas HTTP activas, no cierra conexiones SSE/WebSocket ni llama a `disposeClient`.
+- Desmontar `<ClientProvider>` **no** cancela llamadas HTTP activas, no cierra conexiones SSE/WebSocket ni libera el cliente.
 
 ---
 
 ## Exportaciones públicas y guías relacionadas
 
-- `ClientProvider` — provee un `DerivableClient` (`ClientProviderProps: { client: Client; children?: ReactNode }`).
+- `ClientProvider` — provee un `DerivableClient` (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
 - `useClient(overrideClient?)` — lee la sobreescritura explícita o el cliente provisto más cercano.
 - Guías relacionadas: [Cliente](/es-ES/docs/client), [Tratamiento de errores](/es-ES/docs/errors), [Flujos de eventos SSE](/es-ES/docs/sse), [Sesiones WebSocket](/es-ES/docs/web-socket).
 - Recetas relacionadas: [Manejar una 404 declarada](/es-ES/recipes/get-declared-404), [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http), [Consumir eventos SSE](/es-ES/recipes/consume-sse), [Gestionar sesiones WebSocket](/es-ES/recipes/websocket-session).

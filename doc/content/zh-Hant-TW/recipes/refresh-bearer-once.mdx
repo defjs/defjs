@@ -1,86 +1,37 @@
 ---
-title: "401 後更新權杖"
-description: 在單一攔截器內附加 Authorization 標頭並進行單次重試；next() 僅向內呼叫。
+title: "401 後重新整理 token"
+description: 在單一攔截器內附加 Authorization 並重試一次；next() 只會向內呼叫。
 ---
 
-# 401 後更新 Bearer Token 並重試一次
+# 401 後重新整理 Bearer token 一次
 
-在 Defjs 中，`next(request)` 只會向內呼叫攔截器鏈的後續部分——不會從最外層攔截器重新發起分派。請將 Token 的附加、單飛（Single-flight）更新防重複請求，以及遭遇 `401` 時的一次性重試，全部放在**同一個** HTTP 攔截器中，這樣外層的日誌記錄或計時攔截器就不會被重複執行兩次：
+在 Defjs 中，`next(request)` 只會向內呼叫攔截器鏈剩下的部分——不會從最外層攔截器重新分派。請把 token 附加、single-flight 重新整理去重，以及一次性的 `401` 重試，全部放在**同一個** HTTP 攔截器裡，這樣外層的日誌或計時攔截器就不會執行兩次：
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
   <Tab value="sdk/billing.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
+</include>
 
-export const getInvoice = defineRequest({
-  method: "GET",
-  path: "/v1/invoice",
-  output: struct.object({ total: struct.number() }),
-  error: struct.object({ code: struct.literal("expired_token") }),
-});
-```
   </Tab>
   <Tab value="app/auth-interceptor.ts">
-```ts
-import { createHttpInterceptor } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
 
-export type Credential = { accessToken: string };
-
-export function refreshingBearer(
-  read: () => Credential,
-  refresh: (stale: Credential) => Promise<Credential>,
-) {
-  let flight: Promise<Credential> | undefined;
-
-return createHttpInterceptor(async (request, next) => {
-const authorize = (credential: Credential) => {
-const headers = new Headers(request.headers);
-headers.set("authorization", `Bearer ${credential.accessToken}`);
-return { ...request, headers };
-};
-
-    const used = read();
-    const response = await next(authorize(used));
-    const body = response.body;
-    if (
-      (typeof ReadableStream !== "undefined" &&
-        request.body instanceof ReadableStream) ||
-      response.status !== 401 ||
-      typeof body !== "object" ||
-      body === null ||
-      !("code" in body) ||
-      body.code !== "expired_token"
-    ) {
-      return response;
-    }
-
-    const current = read();
-    if (current.accessToken !== used.accessToken) {
-      return next(authorize(current));
-    }
-
-    flight ??= refresh(used).finally(() => {
-      flight = undefined;
-    });
-    const refreshed = await flight;
-    return next(authorize(refreshed));
-
-});
-}
-
-````
   </Tab>
   <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
 ```txt
 42
-````
+```
 
-請求 body 可以重播，不代表業務操作可以重複執行。符合條件的 401 之後，這個攔截器也會重新傳送 JSON `POST`：共兩次 HTTP 傳遞，第一次被拒絕，第二次被接受。只有當驗證在業務處理函式執行前拒絕第一次傳遞時，才能將它用於寫入；兩次傳遞之間必須保留同一個穩定的冪等鍵，並由伺服器端去除重複。如果沒有這項契約，就應回傳 401，而不是自動重播寫入操作。完整範例不會重播 `ReadableStream` 請求 body。
+本文可以重播，不代表業務操作可以重複執行。遇到符合條件的 401 時，這個攔截器也會重送 JSON `POST`：兩次 HTTP 傳遞，第一次被拒，第二次被接受。只有在驗證先於業務處理常式拒絕第一次傳遞時，才能拿它來做寫入；兩次傳遞都要帶同一個穩定的 idempotency key，並由伺服器端去重。若沒有這項契約，請回傳 401，不要自動重播寫入。完整範例不會重播 `ReadableStream` 請求本文。
 
-關於洋蔥模型執行順序與重試邊界規範，請參閱[中介層](/zh-Hant-TW/docs/interceptors)。
+關於洋蔥式順序與重試邊界，請參閱[攔截器](/zh-Hant-TW/docs/interceptors)。

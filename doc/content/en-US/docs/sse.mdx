@@ -5,7 +5,7 @@ description: Export typed event-stream definitions from your SDK and let consumi
 
 # SSE event streams
 
-An SDK declares a Server-Sent Events endpoint with `defineEventStream`, specifying the path, optional input and builder, an `events` dictionary of structs, and buffer/queue limits. The consuming application configures authentication and opt-in reconnection on its client, opens the stream, iterates typed events, and owns closing the stream.
+An SDK declares a Server-Sent Events (SSE) operation with `defineEventStream`, specifying the path, optional input and builder, an `events` dictionary of structs, and buffer/queue limits. The consuming application configures authentication and opt-in reconnection on its client, opens the stream, iterates typed events, and owns closing the stream.
 
 ## 1. Define the event stream and consume it
 
@@ -14,46 +14,16 @@ Always release an opened `EventStreamHandle` with `await using` (or `stream.clos
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders-stream.ts">
 
-```ts
-import { defineEventStream, struct } from "@defjs/core";
-
-export const watchOrders = defineEventStream({
-  path: "/orders/events",
-  operation: "orders.watch",
-  events: {
-    updated: struct.object({
-      id: struct.number(),
-      status: struct.string(),
-    }),
-  },
-});
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/sdk/orders-stream.ts#example
+</include>
 
 </Tab>
 <Tab value="app/watch-orders.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { watchOrders } from "../sdk/orders-stream.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = stream;
-  for await (const event of active) {
-    console.log(event.event, event.data.id, event.data.status);
-    break;
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/app/watch-orders.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -107,9 +77,9 @@ SSE reconnection is **opt-in**. Without `withSSEReconnect(...)`, any network dro
 <include cwd>examples/sse/reconnect.ts#example</include>
 
 - **Outage budget (`attempts`)**: Defaults to `3` when an options object is passed to `withSSEReconnect`. Every successful handshake resets the attempt counter and backoff exponent, so `attempts: 1` can still create many physical connections over a long-lived session when each one opens successfully. Normal server EOF is **not** a failure and does not trigger reconnect.
-- **Cursor tracking (`Last-Event-ID`)**: Committed when an event's terminating blank line is parsed and automatically sent as `Last-Event-ID` on reconnect. A partial frame never commits its `id`, whether the connection ends cleanly or fails. Resume after a reconnectable read/network failure starts from the last committed id; the server must implement replay from that cursor.
+- **Cursor tracking (`Last-Event-ID`)**: The cursor commits when an event's terminating blank line is parsed and is sent automatically as `Last-Event-ID` on reconnect. A partial frame never commits its `id`, whether the connection ends cleanly or fails. Resume after a reconnectable read/network failure starts from the last committed id; the server must implement replay from that cursor.
 - **Idempotency safety**: By default, only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) reconnect automatically. Non-idempotent methods (`POST`, `PATCH`—such as LLM streaming requests) reconnect only when a custom `shouldReconnect` callback explicitly returns `true`. `ReadableStream` request bodies are consumed on the first attempt and never reconnect.
-- **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. Bounds each handshake from Fetch invocation to response headers without limiting how long an established stream stays open.
+- **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds each handshake from Fetch invocation to response headers without limiting how long an established stream stays open.
 
 ## 5. Buffer and queue limits
 

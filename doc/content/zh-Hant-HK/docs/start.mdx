@@ -5,7 +5,7 @@ description: 匯出你嘅第一個 SDK 操作，由另一個應用程式呼叫�
 
 # 快速開始：你嘅第一個 SDK 操作 [#getting-started-one-http-request]
 
-喺呢篇指南入面，你會建立一個定義咗 `GET /orders/:id` 嘅 SDK 模組，然後由兩個獨立嘅應用程式模組呼叫佢：一個用離線 mock transport 測試，另一個直接對接真實嘅線上 API。
+喺呢篇指南入面，你會建立一個定義咗 `GET /orders/:id` 嘅 SDK 模組，然後由兩個獨立嘅應用程式模組呼叫佢：一個用離線 mock 傳輸層，另一個直接對接真實嘅線上 API。
 
 ## 1. 安裝 `@defjs/core`
 
@@ -50,11 +50,11 @@ bun add @defjs/core
    - 提供一個同步嘅純函式 `builder`，將 `input` 映射成 `{ path }`。只要宣告咗 `input`，就必須提供明確嘅 `builder`。
    - 匯出 `getOrder`，過程完全唔會建立或者綁死任何 client。
 2. **`src/execute-locally.ts`（離線測試執行）**：
-   - 用 `withHTTPHandle(...)` 配置 client，唔使連上真實網絡，都可以跑齊完整嘅 Defjs 流程（input 驗證、URL 解析、狀態碼分發，以及 response struct 解析）。
+   - 用 `withHTTPHandle(...)` 設定 client，唔使連上真實網絡，都可以跑齊完整嘅 Defjs 流程（input 驗證、URL 解析、狀態碼分發，以及 response struct 解析）。
 3. **`src/real-api.ts`（生產環境執行）**：
-   - 匯入完全同一個 `getOrder` 操作，並透過 `withEndpoint(...)` 配置真實嘅 base URL 嚟呼叫線上服務。
+   - 匯入完全同一個 `getOrder` 操作，並透過 `withEndpoint(...)` 設定真實嘅 base URL 嚟呼叫線上服務。
 
-## 3. 運行本地範例
+## 3. 執行本地範例
 
 用 Bun 執行 `src/execute-locally.ts`：
 
@@ -72,7 +72,7 @@ Loaded paid from 200
 Order not found
 ```
 
-## 4. 理解 Error-First Tuple
+## 4. 理解 error-first tuple
 
 每次 HTTP 呼叫都會 resolve 出 `[error, data, response]`：
 

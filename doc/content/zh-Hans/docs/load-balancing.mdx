@@ -5,7 +5,7 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 
 # 负载均衡与故障转移
 
-当应用程序通过 `withEndpoint(...urls)` 配置了多个服务基地址时，Defjs 能够智能地在对等副本间分发流量，借助被动连续熔断或主动健康检查剔除不健康节点，并在同一次调用内部对安全的 HTTP 方法可选地执行故障转移。
+当应用通过 `withEndpoint(...urls)` 配置多个基地址时，Defjs 可以在副本间分发请求，用被动熔断或主动健康检查剔除不健康主机，并可选择在同一次调用内对安全 HTTP 方法做故障转移。
 
 ## 1. 选择负载均衡策略
 
@@ -43,11 +43,11 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 
 - **`pickFirstBalancer`（主备粘性）**：始终停在第一个 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。配置 `failbackMs: 30_000`，在备用端点上停留这段时间之后，再探测主端点。同时最多只能有一个在途主端点探测。故障转移后第一次探测主端点之前，必须满足间隔已过，且离开主端点后至少选中过一次备用端点。探测失败会重新开始这两个要求：下一次探测前，必须重新选中过备用端点，并再次经过该间隔，即使 SSE/WebSocket 重连退避比 `failbackMs` 更长也不例外。这样健康的备用端点才有机会被使用，而不是每次重连都访问已经失效的主端点。
 - **`roundRobinBalancer` 权重**：未指定的权重为 `1`；配置的权重必须是有限正数。平滑加权轮询保留按比例选择的特性（例如 `3:1` 会让权重较高的节点在每四次选择中被选中三次）。极端量级会被缩放以避免溢出；低于浮点精度的比例可能舍入为零。每次选择及过期 current 值的清理都需要 O(候选数量) 的工作量。
-- **`p2cBalancer`（双选择随机 P2C 算法）**：不放回地随机抽取两个不同的候选端点，并选出综合评分更低的一个：`PeakEwma RTT × (pending + 1)`（或在配置 `load: "pending"` 时直接比较在途 `pending` 请求数）。其默认参数（`defaultRttMs: 30`、`decayMs: 10000`）完全遵循 Linkerd 与 tower 的业界成熟标准。
+- **`p2cBalancer`（双选择随机 P2C 算法）**：不放回地随机抽取两个不同的候选端点，并选出综合评分更低的一个：`PeakEwma RTT × (pending + 1)`（或在配置 `load: "pending"` 时直接比较在途 `pending` 请求数）。其默认值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd 与 tower 的惯例。
 
 ## 2. 同一次调用内的 HTTP 重试
 
-重试由三个彼此独立的决定支配：**要不要再试一次**（`withRetry`）、**发到哪里**（运行时让均衡器重新 pick，并排除已经试过的端点），以及**等多久**（退避）。HTTP 的 `withRetry`、SSE 的 `withSSEReconnect` 和 WebSocket 的 `withWebSocketReconnect` 是对称的、各自传输上的策略。它们扁平的退避字段同名、同样校验、同样计算延迟。均衡器不知道重试策略；自定义均衡器不需要专门配合。
+重试由三个彼此独立的决定支配：**是否再试**（`withRetry`）、**发到哪里**（运行时让均衡器重新选择，并排除已经试过的端点），以及**等多久**（退避）。HTTP 的 `withRetry`、SSE 的 `withSSEReconnect` 和 WebSocket 的 `withWebSocketReconnect` 是对称的、各自传输上的策略。它们扁平的退避字段同名、同样校验、同样计算延迟。均衡器不知道重试策略；自定义均衡器不需要专门配合。
 
 同一次调用内的 HTTP 重试**默认关闭**。省略 `withRetry` 时，每次调用只尝试一次，既不会创建重试预算，也不会向它存入额度。之后各次调用的选择方式不变：`pickFirstBalancer` 仍可以在一次失败的调用之后前进。`withRetry()` 与 `withRetry({})` 等价，会为 `GET`、`HEAD`、`OPTIONS` 和 `TRACE` 上的连接失败启用总共两次尝试。
 
@@ -78,7 +78,7 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 
 ## 3. 被动熔断剔除与主动健康检查（`outlierDetection`）
 
-`roundRobinBalancer()` 和 `p2cBalancer()` 默认在节点选择器外层自动包裹了 [`outlierDetection`](/zh-Hans/api/core/outlierdetection) 熔断机制：
+`roundRobinBalancer()` 和 `p2cBalancer()` 默认在候选选择外包裹 [`outlierDetection`](/zh-Hans/api/core/outlierdetection) 离群检测：
 
 <Tabs items={["单探测恢复", "主动健康检查缓存"]}>
 <Tab value="单探测恢复">
@@ -97,10 +97,10 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 </Tab>
 </Tabs>
 
-1. **连续失败熔断**：默认分类器计入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 和 `NET_SERVER_ERROR`。连续出现 `consecutiveFailures` 次（默认 `5` 次）被计入的结果后，该端点将被熔断剔除 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`），并加上最高 `50%` 的均匀正向抖动。
-2. **单次探测恢复机制**：当冷却时间到期后，系统会分配一个探测请求尝试访问该节点。若对端响应在 `end` 开始，且不是被计入的失败，正常流量立即恢复，惩罚等级重置为 `0`；若探测失败，惩罚时间翻倍。
+1. **连续失败**：默认分类器计入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 和 `NET_SERVER_ERROR`。连续出现 `consecutiveFailures` 次（默认 `5` 次）被计入的结果后，该端点在 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`）期间被逐出，并加上最高 `50%` 的均匀正向抖动。
+2. **单探测恢复**：惩罚到期后，一个请求会探测该主机。若对端响应在 `end` 开始且不是被计入的失败，正常流量立即恢复，惩罚等级重置为 `0`；若探测失败，惩罚翻倍。
 3. **有界历史记录**：在派生 client 和每次调用的候选排除之间，健康历史记录总共最多保留 256 个端点。优先淘汰最近最少使用的干净或已过期条目，然后才是尚未达到阈值的部分连续失败记录。只有所有保留条目都受保护时，才会淘汰惩罚尚未到期或有在途探测的条目，此时移除最旧的一条。仅在一次调用中省略端点，并不会重置其惩罚。P2C 的负载历史同样最多保留 256 条，先淘汰空闲条目，再淘汰繁忙条目；被遗忘的端点会从 `defaultRttMs` 重新开始。Pick-first 的 shuffle key 使用 256 条目的 LRU 缓存，因此被遗忘的端点回来时会获得新 key。加权轮询只保留最近候选集的 current 值；复制后的权重配置在构造时固定。可用时，时长使用平台的单调 Performance 时钟，仅以 `Date.now()` 作为后备。
-4. **熔断兜底防雪崩（Panic-mode Fail-open）**：如果配置的所有节点均被熔断或被判定为不健康，负载均衡器会立即进入放行兜底模式，直接使用初始候选列表分发流量，而绝不在客户端本地自毁式拒绝所有请求。
+4. **Panic 模式 fail-open**：如果配置的所有端点都被逐出或被标记为不健康，均衡器会失败时放行，回退到 Client 的候选列表，而不是在本地丢弃所有流量。
 
 ## 4. 传输层生命周期记账（`pick` → `start` → `end` → `done`）
 
@@ -121,10 +121,10 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 | 调用方主动取消请求，或手动关闭长连接流/Socket                        | `{ attempted: false }`                                     |
 | 请求尝试开始后调用方设置的超时期限到期                               | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
 
-握手解码失败会保留由握手状态推导出的中立结果（例如状态 `503` 对应 `NET_UNAVAILABLE`）。不完整的 HTTP body 则保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使那是网关响应；默认的 outlier detection 不计入它。
+握手解码失败会保留由握手状态推导出的中立结果（例如状态 `503` 对应 `NET_UNAVAILABLE`）。不完整的 HTTP body 则保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使那是网关响应；默认离群检测不计入它。
 
 ## 相关阅读
 
-- [Client 客户端配置](/zh-Hans/docs/client)
+- [Client 配置](/zh-Hans/docs/client)
 - [SSE 自动重连](/zh-Hans/docs/sse#reconnect)
 - [WebSocket 自动重连](/zh-Hans/docs/web-socket)

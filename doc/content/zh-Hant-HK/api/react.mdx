@@ -1,19 +1,19 @@
 ---
 title: "@defjs/react"
-description: ClientProvider、支援明確 Client override 嘅 useClient，同 provider props。
+description: ClientProvider、支援明確 client override 嘅 useClient，同 provider props。
 ---
 
 # React
 
-將現有 `@defjs/core` client 提供畀 React tree。呢個 package 唔會 create、cache 或者 dispose client。佢嘅 entry 標記咗 `'use client'`，所以要喺 client components 入面 import。需要 React 18 或以上。
+將現有嘅 `@defjs/core` client 提供俾 React 元件樹。呢個 package 唔會建立、快取或者銷毀 client。佢嘅入口標記咗 `'use client'`，所以要喺 client component 入面 import。需要 React 18 或以上。
 
-見 [React guide](/zh-Hant-HK/docs/integrations/react)。
+見 [React 指南](/zh-Hant-HK/docs/integrations/react)。
 
 ## ClientProvider
 
 <ApiSignature name="ClientProvider" />
 
-Context provider。傳入 `createClient` 返回嘅 `DerivableClient`。巢狀嘅 `ClientProvider` 會喺自己嘅 subtree 覆蓋 client；`useClient()` 讀取最近嗰個。傳入唔同嘅 `client`，會改變 descendants 拎到嘅 context 值。
+Context provider。傳入 `createClient` 回傳嘅 `DerivableClient`。巢狀嘅 `ClientProvider` 會喺自己嘅子樹覆蓋 client；`useClient()` 讀取最近嗰個。傳入唔同嘅 `client`，會改變後代元件讀到嘅 context 值。
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,15 +21,15 @@ Context provider。傳入 `createClient` 返回嘅 `DerivableClient`。巢狀嘅
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` 優先 return 明確傳入嘅 Client；省略參數或者傳入 `undefined` 就讀最近嘅 `ClientProvider`。兩個來源都冇 Client 先會 throw `Error`，原本嘅 `useClient()` call 仍然有效。將嗰個 client 傳入操作。Hook 返回嘅就係提供入去嗰個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)；喺操作行嗰度用 request options call 佢，就會派生一個 `Client` 值。唔好傳俾 state setter，因為 `setState(client)` 會將佢當 updater 嚟 call。派生出嚟嘅 `Client` 值唔會被 `ClientProvider` 或者 `useClient` 接受。
+`useClient(overrideClient)` 優先回傳明確傳入嘅 client；省略參數或者傳入 `undefined` 就讀最近嘅 `ClientProvider`。兩個來源都冇 client 先會 throw `Error`，原本嘅零參數 `useClient()` 呼叫仍然有效。將嗰個 client 傳入操作。Hook 回傳嘅就係提供入去嗰個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)；喺操作執行嗰度用 request options 呼叫佢，就會派生一個 `Client` 值。唔好傳俾 state setter，因為 `setState(client)` 會將佢當 updater 嚟呼叫。派生出嚟嘅 `Client` 值唔會被 `ClientProvider` 或者 `useClient` 接受。
 
-無論有冇明確 Client，都要喺組件或者 custom Hook 頂層 call `useClient(explicitClient)`，唔可以喺普通 function 或者 event callback 入面 call。唔好寫 `explicitClient ?? useClient()`，因為佢會有條件咁 call Hook。明確值唔會寫入 Context，亦唔會建立 Provider；Hook 仍然會 subscribe Context。
+無論有冇明確傳入 client，都要喺元件或者自訂 Hook 頂層呼叫 `useClient(explicitClient)`，唔可以喺普通函式或者 event callback 入面呼叫。唔好寫 `explicitClient ?? useClient()`，因為佢會有條件咁呼叫 Hook。明確值唔會寫入 Context，亦唔會建立 provider；Hook 仍然會訂閱 Context。
 
-- **Returns** 明確傳入或者最近 Provider 提供嘅同一個 Client。
-- **Throws** 明確參數同 Context 都冇提供 Client 時會 throw `Error`。
+- **Returns** 明確傳入或者最近 provider 提供嘅同一個 client。
+- **Throws** 明確參數同 Context 都冇提供 client 時會 throw `Error`。
 
 ## ClientProviderProps
 
 <ApiSignature name="ClientProviderProps" />
 
-`client` 必填，由 application 擁有。`children` 可選：佢係可以 call `useClient` 嘅 tree。
+`client` 必填，由應用程式擁有。`children` 可選：佢係可以呼叫 `useClient` 嘅元件樹。

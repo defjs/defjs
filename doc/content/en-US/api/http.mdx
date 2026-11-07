@@ -63,7 +63,7 @@ On success the third slot carries `body` only when `output` was declared. On fai
 
 ### HttpRequest
 
-Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, and `queryParams`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through. `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed.
+Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, and `queryParams`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through. `responseType` and `errorResponseType` are readonly: they are derived from the declared `output` and `error` struct kinds and must not be changed.
 
 ### HttpMeta
 
@@ -106,7 +106,7 @@ Returned by `defineRequest`. The first argument is a [`Client`](/api/core/client
 
 ## BuilderInput
 
-Parsed endpoint input seen by `builder`. Object nodes carry the struct that produced them, so alias, `Date`, and `bigint` encoding follow the value.
+Parsed operation input seen by `builder`. Object nodes carry the struct that produced them, so alias, `Date`, and `bigint` encoding follow the value.
 
 ## HttpRequestShape
 

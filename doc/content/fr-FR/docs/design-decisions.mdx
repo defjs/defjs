@@ -11,29 +11,22 @@ Defjs repose sur une frontière fondamentale : **un SDK définit le contrat rés
 
 Un package de SDK exporte des opérations (`defineRequest`, `defineEventStream`, `defineWebSocket`) et des contrats de données (`struct`). Il n'appelle jamais `createClient`, ne stocke aucun singleton de client et ne lit aucune variable d'environnement.
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -44,8 +37,8 @@ export const getOrder = defineRequest({
 
 Comme `getOrder` ne capture aucun état de client :
 
-- Une interface navigateur, une tâche de fond, un gestionnaire de requêtes SSR et un test unitaire peuvent appeler la même définition `getOrder` avec des configurations de `Client` différentes.
-- Les plugins de frameworks (`@defjs/react`, `@defjs/vue`) et les middlewares d'observabilité (`@defjs/opentelemetry-server`) se greffent sur le `Client` applicatif, préservant ainsi le package SDK publié de toute dépendance tierce.
+- Une interface navigateur, une tâche de fond, un gestionnaire de requêtes SSR et un test unitaire peuvent appeler la même opération `getOrder` avec des configurations de `Client` différentes.
+- Les plugins de frameworks (`@defjs/react`, `@defjs/vue`) et le plugin middleware d'observabilité (`@defjs/opentelemetry-server`) se greffent sur le `Client` applicatif, préservant ainsi le package SDK publié de toute dépendance tierce.
 
 ## 2. Placement explicite des entrées et alias bidirectionnels
 

@@ -1,28 +1,28 @@
 ---
 title: "操作示例"
-description: 构建并发布可复用的 SDK，并在消费方应用中自由配置认证、请求调用和实时通信。
+description: 构建并发布可复用的 SDK，然后在消费方应用中配置认证、调用和实时通信。
 ---
 
-建议首先阅读[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)，了解从导出 SDK 契约定义到打包为 npm 依赖并在应用中消费的完整流程。通过以下实战示例，你可以充分掌握如何围绕这套 SDK 组合出具体的接口契约与应用控制策略，示例均采用多文件选项卡直观呈现定义与执行的协同方式。
+从[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)开始，了解从导出 SDK 定义到打包为 npm 包并在应用中使用的完整流程。以下每个配方都把一份操作契约与围绕它的应用策略配对，并用多文件代码选项卡展示 SDK 定义与应用执行模块如何协作。
 
 ## HTTP
 
-- [发送 JSON](/zh-Hans/recipes/post-json) —— 将代码中的驼峰字段（camelCase）映射到底层网络传输的下划线字段（`snake_case`），并校验解码强类型的 `201` 响应。
-- [处理声明的 404](/zh-Hans/recipes/get-declared-404) —— 区分业务成功时的类型化 `200` 数据，与显式声明了结构体的 `404` `HTTP_STATUS` 错误体。
-- [取消与超时](/zh-Hans/recipes/cancel-http) —— 结合调用方传入的 `AbortController` 与 `AbortSignal.timeout(...)`，并在错误处理中准确区分 `NET_ABORTED` 和 `NET_TIMEOUT`。
-- [ETag 条件请求](/zh-Hans/recipes/etag-revalidate) —— 自动携带 `If-None-Match`，将 `304 Not Modified` 作为预期的 `HTTP_STATUS` 错误捕获，并在应用内存中维护缓存 `Map`。
-- [GraphQL 请求](/zh-Hans/recipes/graphql-http-envelope) —— 通过 HTTP `POST` 发送 GraphQL 查询，并在应用层辅助函数中安全解包 `errors[]` 与 `.nullish()` 的 `data` 载荷。
+- [发送 JSON](/zh-Hans/recipes/post-json) —— 把逻辑上的 camelCase 字段映射到网络 `snake_case` 键，并解码带类型的 `201` 响应。
+- [处理声明的 404](/zh-Hans/recipes/get-declared-404) —— 在带类型的 `200` 输出与声明的 `404` `HTTP_STATUS` 错误体之间分支。
+- [取消与超时](/zh-Hans/recipes/cancel-http) —— 把调用方 `AbortController` 与 `AbortSignal.timeout(...)` 组合起来，并区分 `NET_ABORTED` 与 `NET_TIMEOUT`。
+- [ETag 条件请求](/zh-Hans/recipes/etag-revalidate) —— 发送 `If-None-Match`，把 `304 Not Modified` 当作 `HTTP_STATUS` Fault 处理，并把缓存 `Map` 留在应用代码中。
+- [GraphQL 请求](/zh-Hans/recipes/graphql-http-envelope) —— 通过 HTTP `POST` 发送 GraphQL 查询，并在应用辅助函数中解包 `errors[]` 与 `.nullish()` 的 `data`。
 
 ## 身份认证
 
-- [401 后刷新令牌](/zh-Hans/recipes/refresh-bearer-once) —— 携带 `Bearer` 令牌，在单个 HTTP 拦截器中合并并发的刷新请求，并在换票成功后自动重试一次原请求。
+- [401 后刷新令牌](/zh-Hans/recipes/refresh-bearer-once) —— 附加 `Bearer` 令牌，合并并发刷新，并在单个 HTTP 拦截器中重放一次。
 
 ## 实时通信
 
-- [消费 SSE 事件流](/zh-Hans/recipes/consume-sse) —— 打开强类型的 Server-Sent Events 流，通过 `for await` 单次遍历事件，并在 `finally` 中严格保证 `stream.close()` 与 `await stream.closed`。
-- [管理 WebSocket 会话](/zh-Hans/recipes/websocket-session) —— 双向收发类型化的 JSON 数据帧，监听 `onRuntimeError` 运行时事件，并在完成时优雅断开连接。
+- [消费 SSE 事件](/zh-Hans/recipes/consume-sse) —— 打开带类型的 Server-Sent Events 流，迭代一次，并在 `finally` 中保证执行 `stream.close()` + `await stream.closed`。
+- [管理 WebSocket 会话](/zh-Hans/recipes/websocket-session) —— 收发带类型的入站/出站 JSON 帧，订阅 `onRuntimeError`，并干净地关闭。
 
 ## SDK 测试与发布 [#testing-and-packaging]
 
-- [本地 HTTP 测试](/zh-Hans/recipes/test-with-handle) —— 利用 `withHTTPHandle(...)` 在纯内存中完整测试 URL 拼接、中间件拦截链以及 Struct 数据的编码与解码。
-- [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk) —— 使用 `tsdown` 打包零 Client 绑定的纯净 SDK，发布到 npm，并在消费方应用中安全导入。
+- [本地 HTTP 测试](/zh-Hans/recipes/test-with-handle) —— 用 `withHTTPHandle(...)` 在内存中测试 URL 构建、拦截器和 struct 解码。
+- [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk) —— 用 `tsdown` 打包并发布不绑定 Client 的 SDK，并在应用中使用。

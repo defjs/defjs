@@ -9,25 +9,11 @@ description: واجهة struct، وInfer، وStructError.
 
 ## struct
 
-واجهة. فضّل هذه على المنشئات الداخلية.
+واجهة. فضّل هذه على دوال البناء الداخلية.
 
-```ts
-const Order = struct.object({
-  id: struct.number(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-function readOrder() {
-  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(order.customerName);
-}
-
-readOrder();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### البدائيات والحاويات
 
@@ -85,7 +71,7 @@ readOrder();
 
 ## STRUCT
 
-`unique symbol` يسِم الكائنات المحلَّلة من مدخل نقطة النهاية. وهو داخلي لمرمِّز الطلبات الصادرة ويُصدَّر كنوع فقط. لا تقرأه ولا تعيّنه.
+`unique symbol` يسِم الكائنات المحلَّلة من مدخل العملية. وهو داخلي لمرمِّز الطلبات الصادرة ويُصدَّر كنوع فقط. لا تقرأه ولا تعيّنه.
 
 ## Struct
 

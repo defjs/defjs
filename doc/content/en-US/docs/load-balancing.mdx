@@ -5,7 +5,7 @@ description: Distribute traffic across multiple endpoints, eject unhealthy repli
 
 # Load balancing & failover
 
-When an application configures multiple base URLs with `withEndpoint(...urls)`, Defjs can distribute requests across replicas, eject unhealthy hosts using passive circuit breaking or active health checks, and optionally fail over safe HTTP methods within the same call.
+When an application configures multiple base URLs by calling `withEndpoint(...urls)`, Defjs can distribute requests across replicas, eject unhealthy hosts using passive circuit breaking or active health checks, and optionally fail over safe HTTP methods within the same call.
 
 ## 1. Choose a load balancer strategy
 
@@ -97,7 +97,7 @@ A later `withRetry` replaces the policy. `withRetry()` and `withRetry(undefined)
 </Tab>
 </Tabs>
 
-1. **Consecutive failures**: The default classifier counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`. After `consecutiveFailures` (default `5`) consecutive counted outcomes, the endpoint is ejected for `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` to `60000ms`) plus up to `50%` uniform positive jitter.
+1. **Consecutive failures**: The default classifier counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`. After `consecutiveFailures` (default `5`) counted outcomes in a row, the endpoint is ejected for `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` to `60000ms`) plus up to `50%` uniform positive jitter.
 2. **Single-probe recovery**: Once the penalty expires, a single request probes the host. If its peer response begins (`end`) without a counted failure, normal traffic resumes immediately and the penalty level resets to `0`; if it fails, the penalty doubles.
 3. **Bounded history**: Health history retains at most 256 endpoints across derived clients and per-call candidate exclusions. Least-recently-used clean or expired entries are evicted first, then partial failure sequences. An unexpired penalty or an in-flight probe is evicted only when all retained entries are protected, then the oldest entry is removed. Merely omitting an endpoint from one call does not reset its penalty. P2C also caps load history at 256 entries, evicting idle entries before busy ones; a forgotten endpoint restarts at `defaultRttMs`. Pick-first's shuffle keys use a 256-entry LRU cache, so a forgotten endpoint receives a new key when it returns. Weighted round-robin retains current values only for its latest candidate set; its copied weight configuration is fixed at construction. Durations use the platform's monotonic Performance clock when available, with `Date.now()` only as a fallback.
 4. **Panic-mode fail-open**: If every configured endpoint is ejected or marked unhealthy, the balancer fails open to the client's candidate list rather than dropping all traffic locally.

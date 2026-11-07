@@ -28,7 +28,7 @@ app.mount("#app");
 
 ## Reactive `watch` with cancellation
 
-Define endpoints at module scope. Inside `<script setup lang="ts">`, call `injectClient()` synchronously and use `onCleanup` in `watch` to abort stale requests:
+Define operations at module scope. Inside `<script setup lang="ts">`, call `injectClient()` synchronously and use `onCleanup` in `watch` to abort stale requests:
 
 ```vue
 <script setup lang="ts">

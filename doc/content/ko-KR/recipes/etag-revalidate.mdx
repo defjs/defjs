@@ -9,72 +9,28 @@ Defjs에서는 오직 `2xx` 응답만이 성공 브랜치를 타므로, `304 Not
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
   <Tab value="sdk/catalog.ts">
-```ts
-import { defineRequest, struct, type Infer } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/sdk/catalog.ts#example
+</include>
 
-export const Product = struct.object({
-  sku: struct.string(),
-  name: struct.string(),
-  priceCents: struct.number(),
-});
-
-export type Product = Infer<typeof Product>;
-
-export const readProduct = defineRequest({
-  method: "GET",
-  path: "/catalog/:sku",
-  input: struct.object({
-    sku: struct.string(),
-    etag: struct.string().optional(),
-  }),
-  builder: (input) => ({
-    path: { sku: input.sku },
-    headers: { "If-None-Match": input.etag },
-  }),
-  output: Product,
-});
-```
   </Tab>
   <Tab value="app/reader.ts">
-```ts
-import type { DerivableClient } from "@defjs/core";
-import { readProduct, type Product } from "../sdk/catalog.ts";
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/reader.ts#example
+</include>
 
-export function createReader(client: DerivableClient) {
-  const cache = new Map<string, { etag: string; product: Product }>();
-
-return async (sku: string): Promise<Product> => {
-const cached = cache.get(sku);
-const [error, product, response] = await readProduct(client, {
-sku,
-etag: cached?.etag,
-});
-
-    if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
-      return cached.product;
-    }
-    if (error) throw error;
-
-    const etag = response.headers.get("etag");
-    if (!etag) throw new Error("missing ETag");
-    cache.set(sku, { etag, product });
-    return product;
-
-};
-}
-
-````
   </Tab>
   <Tab value="etag-cache.ts">
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
 ```txt
 Flask
-````
+```
 
-- `304` 확인 후의 `if (error) throw error`는 `Promise<Product>`를 반환하는 `createReader`를 위한 명시적 경계 처리입니다.
-- 인터셉터 내부에서 `304`를 가짜 `200`으로 억지 변환하지 마세요. 캐시 상태는 작업 호출을 둘러싼 애플리케이션 코드에서 유지하는 것이 올바른 설계입니다. 자세한 내용은 [HTTP 요청](/ko-KR/docs/http) 문서를 참조하세요.
+- `304` 확인 후의 `if (error) throw error`는 명시적인 정책입니다. `createReader`가 `Promise<Product>`를 반환하므로 다른 모든 결함은 throw됩니다.
+- 인터셉터 내부에서 `304`를 가짜 `200`으로 억지 변환하지 마세요. 캐시 상태는 작업 호출을 둘러싼 애플리케이션 코드에서 유지하는 것이 올바른 설계입니다. 자세한 내용은 [HTTP 작업](/ko-KR/docs/http) 문서를 참조하세요.

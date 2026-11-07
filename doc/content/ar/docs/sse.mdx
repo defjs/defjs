@@ -5,7 +5,7 @@ description: صدّر تعريفات تدفقات الأحداث من حزمة S
 
 # تدفقات أحداث SSE (Server-Sent Events)
 
-تُصرّح حزمة SDK عن نقطة نهاية Server-Sent Events باستخدام `defineEventStream`، حيث تُحدد المسار، والمدخلات الاختيارية مع دالة التجميع، وقاموس بنى الأحداث `events`، وحدود المخزن المؤقت وقائمة الانتظار. ويتولى التطبيق المستهلك ضبط المصادقة وخيارات إعادة الاتصال على عميله، وفتح التدفق، والتكرار على الأحداث محددة الأنواع، كما يملك مسؤولية إغلاق التدفق وتحرير موارده.
+تُصرّح حزمة SDK عن عملية Server-Sent Events باستخدام `defineEventStream`، حيث تُحدد المسار، والمدخلات الاختيارية مع دالة `builder`، وقاموس بنى الأحداث `events`، وحدود المخزن المؤقت وقائمة الانتظار. ويتولى التطبيق المستهلك ضبط المصادقة وخيارات إعادة الاتصال على عميله، وفتح التدفق، والتكرار على الأحداث محددة الأنواع، كما يملك مسؤولية إغلاق التدفق وتحرير موارده.
 
 ## 1. تعريف تدفق الأحداث واستهلاكه
 
@@ -14,46 +14,16 @@ description: صدّر تعريفات تدفقات الأحداث من حزمة S
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders-stream.ts">
 
-```ts
-import { defineEventStream, struct } from "@defjs/core";
-
-export const watchOrders = defineEventStream({
-  path: "/orders/events",
-  operation: "orders.watch",
-  events: {
-    updated: struct.object({
-      id: struct.number(),
-      status: struct.string(),
-    }),
-  },
-});
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/sdk/orders-stream.ts#example
+</include>
 
 </Tab>
 <Tab value="app/watch-orders.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { watchOrders } from "../sdk/orders-stream.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = stream;
-  for await (const event of active) {
-    console.log(event.event, event.data.id, event.data.status);
-    break;
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/app/watch-orders.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -67,7 +37,7 @@ void main();
 
 ## 2. مصافحة بدء الاتصال وشكل مصفوفة النتائج
 
-لا ينتج عن استدعاء العملية مصفوفة `[error, stream, startupOpen]` إلا بعد التحقق من أن استجابة HTTP الأولية هي `2xx`، وتحمل نوع الوسائط `text/event-stream`، ولديها جسم قابل للقراءة:
+لا تُحل مصفوفة `[error, stream, startupOpen]` الناتجة عن استدعاء العملية إلا بعد أن تكون استجابة HTTP الأولية `2xx`، وتحمل نوع الوسائط `text/event-stream`، ولديها جسم قابل للقراءة:
 
 <Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
 <Tab value="Handshake inspection">
@@ -86,7 +56,7 @@ void main();
 </Tab>
 </Tabs>
 
-- **مصافحة غير `2xx`**: تُرجع خطأ `HTTP_STATUS` (مع فك ترميز كائن `error.data` عند الإعلان عن بنية `error` في التعريف). هذا إخفاق فادح للعملية الحالية؛ ولا تُستدعى `shouldReconnect`. تجري العملية التالية اختيارًا جديدًا لنقطة النهاية، لذا قد يختار موزع الحمل نقطة نهاية أخرى.
+- **مصافحة غير `2xx`**: تُرجع خطأ `HTTP_STATUS` (مع فك ترميز كائن `error.data` عند الإعلان عن بنية `error` في التعريف). هذا إخفاق فادح للعملية الحالية؛ ولا تُستدعى `shouldReconnect`. تجري العملية التالية اختيارًا جديدًا لنقطة النهاية، لذا قد يختار موازن الحمل نقطة نهاية أخرى.
 - **نوع محتوى خاطئ أو جسم غير قابل للقراءة**: يُرجع خطأ `RES_MEDIA_TYPE_INVALID` أو `RES_DECODE_FAILED`.
 - **الفرق بين `startupOpen` و`stream.open`**: يُمثل العنصر الثالث في المصفوفة (`startupOpen`) لقطة لاستجابة المصافحة الأولى؛ بينما يُحدَّث `stream.open` بصورة حية إذا أُعيد اتصال التدفق لاحقاً. إذا أعادت مصافحة إعادة الاتصال `503`، يرفض المكرر الاستمرار وتُبلّغ `stream.closed` عن `RES_DECODE_FAILED`، بينما تظل `stream.open.response.status` مساوية لـ `503`؛ افحص `stream.open` لمعرفة حالة الاستجابة الحية.
 
@@ -94,7 +64,7 @@ void main();
 
 عند وصول إطار SSE (المنتهي بسطر فارغ وفق معايير WHATWG):
 
-1. **توجيه الحدث**: يحدد حقل `event:` القادم سلكياً البنية المطابقة من `events[eventName]`، ويتراجع إلى `events.default` إذا كانت معلنة. وإذا أُغفل حقل `event:`، تُعتمد القيمة الافتراضية `"message"`. ويتم إسقاط الأحداث غير المعلنة إذا لم تتوفر `events.default`.
+1. **توجيه الحدث**: يحدد حقل `event:` القادم سلكياً البنية المطابقة من `events[eventName]`، ويتراجع إلى `events.default` إذا كان معلنًا. وإذا أُغفل حقل `event:`، تُعتمد القيمة الافتراضية `"message"`. وتُسقط الأحداث غير المعلنة إذا لم يتوفر `events.default`.
 2. **فك ترميز الحمولة**: يستلم مخطط `struct.string()` النص الخام في `data:`. وتُحلل أي بنية struct أخرى قيمة `data:` كـ JSON أولاً، ثم تتحقق من صحتها عبر المخطط.
 3. **مراقبة الأحداث غير الصالحة**: تُسقط الأحداث غير الصالحة أو غير المعلنة دون إغلاق التدفق أو إنهاء عمله. يمكنك إرفاق `withSSEOnInvalidEvent(...)` على العميل لأغراض التشخيص المحدودة:
 

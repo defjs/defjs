@@ -14,7 +14,7 @@ bun add @defjs/core @defjs/react react
 ## What `@defjs/react` owns vs. what you own
 
 - **Provided by `@defjs/react`**: `ClientProvider` and `useClient(overrideClient?)`.
-- **Owned by your application**: creating the [`DerivableClient`](/api/core/derivableclient-type), cancelling in-flight requests on unmount or dependency change (`AbortController`), closing SSE/WebSocket handles, and integrating query caches such as TanStack Query.
+- **Owned by your application**: creating the [`DerivableClient`](/api/core/derivableclient-type), canceling in-flight requests on unmount or dependency change (`AbortController`), closing SSE/WebSocket handles, and integrating query caches such as TanStack Query.
 - **Important**: `useClient()` returns the `DerivableClient` function-object. Call `client({ signal })` where the operation runs (`getOrder(client({ signal }), input)`). Never pass `client` directly to `setState(client)` because React treats a function argument to a state setter as an updater function.
 
 ---
@@ -26,9 +26,11 @@ Create the client at the application boundary, wrap your tree in `<ClientProvide
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
   <Tab value="app/App.tsx">
     <include cwd>examples/react/client-provider.tsx#example</include>
+
   </Tab>
   <Tab value="app/OrderCard.tsx">
     <include cwd>examples/react/basic-setup.tsx#example</include>
+
   </Tab>
 </Tabs>
 
@@ -72,13 +74,13 @@ SSE and WebSocket handles outlive the initial `openStream(...)` or `connectChat(
 
 - **Browser**: share a single module-scoped client when the endpoint and interceptors are request-independent.
 - **SSR**: create a fresh client inside each server request boundary whenever headers, cookies, tenants, or credentials differ per request.
-- Unmounting `<ClientProvider>` does **not** abort active HTTP calls, close SSE/WebSocket connections, or call `disposeClient`.
+- Unmounting `<ClientProvider>` does **not** abort active HTTP calls, close SSE/WebSocket connections, or dispose the client.
 
 ---
 
 ## Public exports & related guides
 
-- `ClientProvider` — provides a `DerivableClient` (`ClientProviderProps: { client: Client; children?: ReactNode }`).
+- `ClientProvider` — provides a `DerivableClient` (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
 - `useClient(overrideClient?)` — reads the explicit override or nearest provided client.
 - Related guides: [Client](/docs/client), [Error handling](/docs/errors), [SSE event streams](/docs/sse), [WebSocket sessions](/docs/web-socket).
 - Related recipes: [GET with a declared 404](/recipes/get-declared-404), [Cancel an HTTP call](/recipes/cancel-http), [Consume an SSE stream](/recipes/consume-sse), [Open a WebSocket session](/recipes/websocket-session).

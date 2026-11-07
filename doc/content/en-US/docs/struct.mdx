@@ -5,31 +5,29 @@ description: Define the input and response contracts your SDK shares with its co
 
 # Struct & schemas
 
-`struct` declares the wire data contract shared between an SDK and its consumers: caller inputs, `2xx` outputs, declared service errors, SSE events, and WebSocket frames.
+`struct` declares the wire data contract shared between an SDK and the consuming application: caller inputs, `2xx` outputs, declared service errors, SSE events, and WebSocket frames.
 
 - **Static inference**: Derive TypeScript types with `Infer<typeof Schema>`.
 - **Error-first validation**: Validate values at runtime with `struct.parse(Schema, value)` — returns `[null, data]` or `[StructError, undefined]` without throwing.
 
 ## 1. Define a schema in the SDK, validate in the application
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
@@ -77,7 +75,7 @@ Spreading a typed object inside `builder` (`{ ...input.order, extra: 1 }`) prese
 
 ## 4. Request placement and form codecs
 
-`input` defines the parameters; `builder` places them into `{ path, query, headers, body }`. For form-encoded bodies, `struct.urlencoded(shape)` and `struct.formData(shape)` tag the root object so the transport serializes it as `URLSearchParams` or `FormData` automatically:
+`input` declares the parameters; `builder` places them into `{ path, query, headers, body }`. For form-encoded bodies, `struct.urlencoded(shape)` and `struct.formData(shape)` tag the root object so the transport serializes it as `URLSearchParams` or `FormData` automatically:
 
 <include cwd lang="typescript">
   examples/struct/request-placement.ts#example

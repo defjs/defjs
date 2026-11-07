@@ -5,24 +5,24 @@ description: 在明确的扩展点上扩展应用自有的 Defjs Client，接入
 
 # 集成概览
 
-扩展集成机制允许在明确的扩展点上增强消费方应用自有的 `Client`，而无须修改 `@defjs/core` 核心逻辑，更不会将 SDK 接口定义与特定 UI 框架或遥测链路强行耦合。你的 SDK 定义始终保持为纯净的 `@defjs/core` 模块；由具体的消费方应用自主决定安装哪些集成扩展。
+集成在明确的扩展点上扩展应用自有的 `Client`，不修改 `@defjs/core`，也不把 SDK 定义耦合到某个框架或遥测栈。SDK 定义始终保持为纯 `@defjs/core` 模块；消费方应用自行选择安装哪些集成。
 
-所有官方 Defjs 插件均严格恪守**轻量插件契约（Thin Plugin Contract）**：
+每个 Defjs 插件都遵循**薄插件契约**：
 
-- **零隐式缓存与状态管理**：插件绝不擅自缓存响应数据、不静默重试请求，也不维护任何业务 Query 状态。
-- **绝不篡改底层传输层**：插件绝不包装或替换原生的 HTTP、SSE 或 WebSocket 传输链路。
-- **生命周期完全归调用方所有**：卸载前端 UI Provider 或停止遥测 SDK 不会自动取消正在进行中的网络请求，也不会擅自关闭活跃的长连接流。
+- **不做隐式缓存或状态管理**：插件从不保存响应、重试请求或管理查询状态。
+- **不替换传输层**：插件从不包装或替换底层 HTTP、SSE 或 WebSocket 传输。
+- **生命周期由调用方持有**：卸载 UI Provider 或关闭遥测 SDK 不会自动取消进行中的请求，也不会关闭活跃的流。
 
 ---
 
-## 官方已发布的集成与工具
+## 已发布的集成与工具
 
-| 领域                                                                    | 软件包 / 资源                      | 插件分类   | 核心能力                                                                                            | 仍由应用程序全权管控的部分                                                   |
-| ----------------------------------------------------------------------- | ---------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| [React](/zh-Hans/docs/integrations/react)                               | `@defjs/react`                     | 框架插件   | 面向 React 18+ 的 `ClientProvider` 上下文与 `useClient(override?)` Hook                             | Client 创建与配置、`AbortController` 卸载清理、数据缓存（如 TanStack Query） |
-| [Vue](/zh-Hans/docs/integrations/vue)                                   | `@defjs/vue`                       | 框架插件   | 面向 Vue 3.2+ 的 `createClientPlugin`、`HTTP_CLIENT` 标识与 `injectClient(key?)`                    | Client 创建与配置、`onCleanup` / `onScopeDispose` 请求取消、响应式状态管理   |
-| [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`      | 中间件插件 | `withOpenTelemetryServer(...)` 客户端选项，自动采集出站 HTTP、SSE 和 WebSocket 的 Spans、指标与日志 | OpenTelemetry SDK 初始化、数据 Exporter、采样率决策、字段脱敏及日志刷盘      |
-| [AI Skill](/zh-Hans/docs/ai) 与 [llms.txt](/zh-Hans/docs/ai-api)        | `defjs/defjs` skill 与 `/llms.txt` | AI 工具链  | 供编码智能体使用的标准 Skill（`SKILL.md`）与机器友好的 Markdown 完整文档                            | 针对当前项目安装的 `@defjs/core` 真实版本与测试用例进行自动化验证            |
+| 领域                                                                    | 软件包 / 资源                      | 类别       | 提供的内容                                                                                   | 仍由应用负责的部分                                                 |
+| ----------------------------------------------------------------------- | ---------------------------------- | ---------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [React](/zh-Hans/docs/integrations/react)                               | `@defjs/react`                     | 框架插件   | 面向 React 18+ 的 `ClientProvider` 与 `useClient(overrideClient?)`                           | Client 创建、`AbortController` 清理、查询缓存（如 TanStack Query） |
+| [Vue](/zh-Hans/docs/integrations/vue)                                   | `@defjs/vue`                       | 框架插件   | 面向 Vue 3.2+ 的 `createClientPlugin`、`HTTP_CLIENT` 与 `injectClient(key?)`                 | Client 创建、`onCleanup` / `onScopeDispose` 取消、查询状态         |
+| [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`      | 中间件插件 | `withOpenTelemetryServer(...)` ClientOption：出站 HTTP、SSE 和 WebSocket 的 Span、指标与日志 | OpenTelemetry SDK 初始化、exporter、采样、脱敏与 flush             |
+| [AI Skill](/zh-Hans/docs/ai) 与 [llms.txt](/zh-Hans/docs/ai-api)        | `defjs/defjs` skill 与 `/llms.txt` | AI 工具    | 智能体 skill（`SKILL.md`）与机器可读的 Markdown 文档                                         | 按项目已安装的 `@defjs/core` 版本和测试套件核对结果                |
 
 ---
 
@@ -30,65 +30,27 @@ description: 在明确的扩展点上扩展应用自有的 Defjs Client，接入
 
 ### 1. 框架插件（`@defjs/react`、`@defjs/vue`）
 
-框架插件的作用是通过框架原生的依赖注入机制（React Context 或 Vue 的 `provide` / `inject`），将应用中已创建的 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type) 沿着组件树向下传递：
+框架插件通过框架原生依赖注入（React Context 或 Vue 的 `provide` / `inject`），把应用自有的 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type) 沿组件树向下传递：
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-<Tab value="sdk/orders.ts">
+  <Tab value="sdk/orders.ts">
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
+  </Tab>
+  <Tab value="app/main.tsx">
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
 
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
+  </Tab>
+  <Tab value="app/OrderCard.tsx">
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: Order,
-});
-```
-
-</Tab>
-<Tab value="app/main.tsx">
-
-```tsx
-import { createClient, withEndpoint } from "@defjs/core";
-import { ClientProvider } from "@defjs/react";
-import { OrderCard } from "./OrderCard.tsx";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-export function App() {
-  return (
-    <ClientProvider client={client}>
-      <OrderCard id={42} />
-    </ClientProvider>
-  );
-}
-```
-
-</Tab>
-<Tab value="app/OrderCard.tsx">
-
-```tsx
-import { useClient } from "@defjs/react";
-import { getOrder } from "../sdk/orders.ts";
-
-export function OrderCard({ id }: { id: number }) {
-  const client = useClient();
-  // 在 useEffect 或 TanStack Query 中调用 getOrder(client({ signal }), ...)
-  void id;
-  void getOrder;
-  void client;
-  return null;
-}
-```
-
-</Tab>
+  </Tab>
 </Tabs>
 
 ### 2. 中间件插件（`@defjs/opentelemetry-server`）
@@ -96,26 +58,18 @@ export function OrderCard({ id }: { id: number }) {
 中间件插件是一个返回 [`ClientOption`](/zh-Hans/api/core/clientoption-type) 的工厂函数。当传递给 `createClient(...)` 时，它会通过 `withInterceptors` 追加 HTTP、SSE 和/或 WebSocket 拦截器：
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-<Tab value="plugins/request-id.ts">
-
+  <Tab value="plugins/request-id.ts">
 <include cwd lang="typescript">
-  examples/integrations/request-id.ts#example
+  examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
-</Tab>
-<Tab value="app/client.ts">
+  </Tab>
+  <Tab value="app/client.ts">
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { withRequestIdHeader } from "../plugins/request-id.ts";
-
-export const client = createClient(
-  withEndpoint("https://api.example.com"),
-  withRequestIdHeader(),
-);
-```
-
-</Tab>
+  </Tab>
 </Tabs>
 
-关于洋葱拦截链顺序、安全重试边界以及流式生命周期钩子的详细说明，请参阅[中间件](/zh-Hans/docs/interceptors)。
+关于洋葱顺序、重试边界和流式生命周期 Hook，请参阅[拦截器](/zh-Hans/docs/interceptors)。

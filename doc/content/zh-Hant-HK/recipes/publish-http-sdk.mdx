@@ -1,28 +1,30 @@
 ---
 title: "建置並發佈 SDK"
-description: 將帶類型的端點定義作為 npm 套件發佈，由每個應用程式設定自己的 Client。
+description: 將帶型別嘅 API 定義作為 npm 套件發佈，由每個應用程式設定自己嘅 Client。
 ---
 
 # 建置並發佈 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs SDK 將純粹嘅操作定義同 Struct schema 打包成 npm 套件發佈，同時將 `createClient(...)`、端點 URL、身分憑證同中介層完全留畀使用方應用程式掌控。
+Defjs SDK 將純粹嘅操作定義同 Struct schema 打包成 npm 套件發佈，同時將 `createClient(...)`、端點、身分憑證同攔截器完全留畀使用方應用程式掌控。
 
 ---
 
 ## 1. 定義 SDK 套件結構
 
-將你的操作定義、barrel 匯出入口、`package.json` 同 `tsconfig.json` 擺喺專屬嘅套件目錄入面，並將 `@defjs/core` 宣告為 `peerDependency`：
+將你嘅操作定義、barrel 匯出入口、`package.json` 同 `tsconfig.json` 擺喺專屬嘅套件目錄入面，並將 `@defjs/core` 宣告為 `peerDependency`：
 
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -70,7 +72,7 @@ export { getOrder } from "./orders";
 </Tabs>
 
 - `@defjs/core` 保持為外部嘅執行時 `peerDependency`，同使用方應用程式共用同一個實例。
-- `"sideEffects": false` 畀各類打包工具喺應用程式淨係引用部分操作嗰陣，自動 tree-shake 剔除用唔著嘅端點代碼。
+- `"sideEffects": false` 畀各類打包工具喺應用程式淨係引用部分操作嗰陣，自動 tree-shake 剔除用唔著嘅操作。
 
 ---
 
@@ -107,7 +109,7 @@ bun add @company/orders-sdk @defjs/core@^0.6.0
 paid
 ```
 
-喺正式生產代碼入面，將相對路徑匯入 `./orders-sdk` 換成 `@company/orders-sdk`，並移除 `withHTTPHandle(...)` 即可改用平台原生嘅 `fetch`。
+喺正式生產代碼入面，將相對路徑匯入 `./src/orders.ts` 換成 `@company/orders-sdk`，並移除 `withHTTPHandle(...)`，即可改用平台原生嘅 `fetch`。
 
 ---
 

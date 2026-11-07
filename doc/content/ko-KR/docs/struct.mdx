@@ -1,35 +1,33 @@
 ---
-title: "데이터 구조 / Struct"
-description: SDK와 사용자가 공유하는 입력 및 응답 계약을 타입과 런타임 검증을 통해 정의합니다.
+title: "Struct 및 스키마"
+description: SDK와 사용하는 애플리케이션이 공유하는 입력 및 응답 계약을 타입과 런타임 검증을 통해 정의합니다.
 ---
 
-# 데이터 구조 / Struct
+# Struct 및 스키마
 
-`struct`는 SDK와 사용자 간에 공유되는 통신 데이터 계약(호출자 입력, `2xx` 출력, 선언된 서비스 오류, SSE 이벤트, WebSocket 프레임)을 선언합니다.
+`struct`는 SDK와 사용하는 애플리케이션 간에 공유되는 통신 데이터 계약(호출자 입력, `2xx` 출력, 선언된 서비스 오류, SSE 이벤트, WebSocket 프레임)을 선언합니다.
 
 - **정적 타입 추론**: `Infer<typeof Schema>`를 통해 TypeScript 타입을 도출합니다.
 - **error-first 유효성 검증**: `struct.parse(Schema, value)`를 사용하여 런타임에 값을 검증하며, 예외(throw) 없이 `[null, data]` 또는 `[StructError, undefined]`를 반환합니다.
 
 ## 1. SDK에서 스키마를 정의하고, 애플리케이션에서 검증하기
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
@@ -44,13 +42,13 @@ export type Order = Infer<typeof Order>;
 
 Defjs는 **필드 존재 여부**(`undefined`)와 **null 허용 여부**(`null`)를 명확히 구분합니다. 모든 struct 생성자는 기본적으로 엄격한 필수(required)이며 non-null입니다:
 
-| 선언 방식                    | 누락 / `undefined`           | `null` | 유효한 값        |
-| ---------------------------- | ---------------------------- | ------ | ---------------- |
-| `struct.string()`            | 거부                         | 거부   | `string` 허용    |
-| `struct.string().optional()` | 허용 (객체 직렬화 시 생략됨) | 거부   | `string` 허용    |
-| `struct.string().null()`     | 거부                         | 허용   | `string` 허용    |
-| `struct.string().nullish()`  | 허용 (객체 직렬화 시 생략됨) | 허용   | `string` 허용    |
-| `struct.null()`              | 거부                         | 허용   | `null` 이외 거부 |
+| 선언 방식                    | 누락 / `undefined`           | `null` | 유효한 값           |
+| ---------------------------- | ---------------------------- | ------ | ------------------- |
+| `struct.string()`            | 거부                         | 거부   | `string` 허용       |
+| `struct.string().optional()` | 허용 (객체 직렬화 시 생략됨) | 거부   | `string` 허용       |
+| `struct.string().null()`     | 거부                         | 허용   | `string` 허용       |
+| `struct.string().nullish()`  | 허용 (객체 직렬화 시 생략됨) | 허용   | `string` 허용       |
+| `struct.null()`              | 거부                         | 허용   | `null` 이외 값 거부 |
 
 <include cwd lang="typescript">
   examples/struct/required-optional-null.ts#example
@@ -73,7 +71,7 @@ Defjs는 **필드 존재 여부**(`undefined`)와 **null 허용 여부**(`null`)
   examples/struct/aliases.ts#example
 </include>
 
-`builder` 내부에서 타입화된 객체를 전개(`{ ...input.order, extra: 1 }`)하더라도 struct 인코딩과 별칭 설정이 유지됩니다. 동일한 객체에 논리적 키와 통신 별칭을 동시에 작성하면 `REQ_BUILD_FAILED` 오류가 발생합니다.
+`builder` 내부에서 타입화된 객체를 전개(`{ ...input.order, extra: 1 }`)하더라도 struct 인코딩과 별칭 설정이 유지됩니다. 동일한 객체에 논리적 키와 통신 별칭을 동시에 작성하면 `REQ_BUILD_FAILED`로 실패합니다.
 
 ## 4. 요청 배치 및 폼 코덱
 
@@ -83,24 +81,24 @@ Defjs는 **필드 존재 여부**(`undefined`)와 **null 허용 여부**(`null`)
   examples/struct/request-placement.ts#example
 </include>
 
-| `builder`가 반환한 body 루트                        | 전송 형식         | 기본 `Content-Type`                               |
+| `builder`가 반환한 `body` 루트                      | 전송 형식         | 기본 `Content-Type`                               |
 | --------------------------------------------------- | ----------------- | ------------------------------------------------- |
 | 타입화된 객체, 배열, 유한수(number), 불리언, `null` | JSON 텍스트       | `application/json`                                |
 | `string` struct 또는 원시 `string`                  | UTF-8 텍스트      | `text/plain;charset=UTF-8`                        |
-| body 루트에 지정된 `struct.urlencoded(shape)`       | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| body 루트에 지정된 `struct.formData(shape)`         | `FormData`        | `multipart/form-data; boundary=...`               |
+| `body` 루트에 지정된 `struct.urlencoded(shape)`     | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `body` 루트에 지정된 `struct.formData(shape)`       | `FormData`        | `multipart/form-data; boundary=...`               |
 | `Blob` / `File` (`struct.file()`)                   | 바이너리 블롭     | `blob.type` 또는 `application/octet-stream`       |
 | `ArrayBuffer` / typed view / `ReadableStream`       | 원시 바이트       | `application/octet-stream`                        |
 
 ## 5. `StructError` 및 이슈 처리
 
-`struct.parse(Schema, data, { aliases?, errorMap? })`는 유효성 검증 실패 시 `[StructError, undefined]`를 반환합니다. `StructError`는 표준 `Error`를 상속하며 `issues`, `format()`, `flatten()`, `prettify()` 메서드를 제공합니다:
+`struct.parse(Schema, data, { aliases?, errorMap? })`는 유효성 검증 실패 시 `[StructError, undefined]`를 반환합니다. `StructError`는 네이티브 `Error`를 상속하며 `issues`, `format()`, `flatten()`, `prettify()` 메서드를 제공합니다:
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-각 `StructIssue`에는 `code`(`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection`, 또는 `custom`), `path`, `expected`, `received`, `message`가 포함됩니다. 기본 메시지는 수신된 값을 생략하고 그 *타입*만 보고하지만, path에는 동적 record 키가 남아 민감한 값이 들어갈 수 있습니다. `String(error)`와 `error.prettify()`는 삭제 경계가 아닙니다. 로그에는 안전한 필드의 허용 목록을 쓰고, 원시 `received` 값과 커스텀 메시지는 민감한 것으로 다루세요.
+각 `StructIssue`에는 `code`(`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection`, 또는 `custom`), `path`, `expected`, `received`, `message`가 포함됩니다. 기본 메시지는 수신된 값을 생략하고 그 *타입*만 보고하지만, path에는 동적 record 키가 남아 민감한 값이 들어갈 수 있습니다. `String(error)`와 `error.prettify()`는 민감 정보 제거 경계가 아닙니다. 로그에는 안전한 필드의 허용 목록을 쓰고, 원시 `received` 값과 커스텀 메시지는 민감한 것으로 다루세요.
 
 ## 6. 생성자 레퍼런스
 
@@ -125,6 +123,6 @@ Defjs는 **필드 존재 여부**(`undefined`)와 **null 허용 여부**(`null`)
 
 ## 관련 문서
 
-- [HTTP 요청](/ko-KR/docs/http)
+- [HTTP 작업](/ko-KR/docs/http)
 - [오류 처리](/ko-KR/docs/errors)
 - [JSON 데이터 전송 및 유효성 검증](/ko-KR/recipes/post-json)

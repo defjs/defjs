@@ -16,13 +16,15 @@ Keep your operation definitions, barrel exports, `package.json`, and `tsconfig.j
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -70,7 +72,7 @@ export { getOrder } from "./orders";
 </Tabs>
 
 - `@defjs/core` stays an external runtime `peerDependency` shared with the consuming application.
-- `"sideEffects": false` lets bundlers tree-shake unused endpoints when an application imports only a subset of operations.
+- `"sideEffects": false` lets bundlers tree-shake unused operations when an application imports only a subset of them.
 
 ---
 
@@ -107,13 +109,13 @@ The application creates its own `Client` and passes it into the imported operati
 paid
 ```
 
-In production code, replace the relative import `./orders-sdk` with `@company/orders-sdk` and remove `withHTTPHandle(...)` to use the platform `fetch`.
+In production code, replace the relative import `./src/orders.ts` with `@company/orders-sdk` and remove `withHTTPHandle(...)` to use the platform `fetch`.
 
 ---
 
 ## 4. Test and publish
 
-Exercise your exported definitions with [in-memory handle tests](/recipes/test-with-handle) covering request mapping, `output` decoding, declared `HTTP_STATUS` errors, and cancellation. Once verified, publish the package:
+Exercise your exported definitions with [in-memory handle tests](/recipes/test-with-handle) covering request mapping, `output` decoding, declared `HTTP_STATUS` faults, and cancellation. Once verified, publish the package:
 
 ```sh
 bun publish --access public

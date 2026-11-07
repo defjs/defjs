@@ -1,6 +1,6 @@
 ---
-title: "Структуры данных / Struct"
-description: Объявляйте контракты входных данных и ответов, разделяемые между SDK и потребителями, со строгой типизацией и валидацией во время выполнения.
+title: "Struct и схемы"
+description: Объявляйте контракты входных данных и ответов, разделяемые между SDK и использующими приложениями, с типами и валидацией во время выполнения.
 ---
 
 # Struct и схемы
@@ -12,24 +12,22 @@ description: Объявляйте контракты входных данных
 
 ## 1. Объявление схемы в SDK и валидация в приложении
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
@@ -62,12 +60,12 @@ Defjs строго разделяет **наличие поля** (`undefined`) 
 
 Используйте `.alias("wire_name")`, когда бэкенд использует `snake_case` или заголовки, а ваш TypeScript SDK спроектирован в `camelCase`. Алиас объявляется у поля ровно один раз и прозрачно работает в обоих направлениях:
 
-| Граница применения                                                      | Используемый ключ                                   |
-| ----------------------------------------------------------------------- | --------------------------------------------------- |
-| Входные данные `input` и `struct.parse(Schema, value)`                  | Логическое имя (`customerName`)                     |
-| Объект `struct`, возвращаемый из `builder` (`body`, `query`, `headers`) | Сетевой алиас (`customer_name`)                     |
-| Декодирование JSON-ответа / события SSE / кадра WebSocket               | Сетевой `customer_name` → логический `customerName` |
-| Анонимный ключ объекта, написанный прямо в `builder`                    | Литеральный ключ как написан                        |
+| Граница применения                                                                     | Используемый ключ                                   |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Входные данные `input` и `struct.parse(Schema, value)`                                 | Логическое имя (`customerName`)                     |
+| Типизированное значение struct, возвращаемое из `builder` (`body`, `query`, `headers`) | Сетевой алиас (`customer_name`)                     |
+| Декодирование JSON-ответа / события SSE / кадра WebSocket                              | Сетевой `customer_name` → логический `customerName` |
+| Анонимный ключ объекта, написанный прямо в `builder`                                   | Литеральный ключ как написан                        |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
@@ -83,14 +81,14 @@ Defjs строго разделяет **наличие поля** (`undefined`) 
   examples/struct/request-placement.ts#example
 </include>
 
-| Корень `body`, возвращённый из `builder`               | Сетевой формат    | `Content-Type` по умолчанию                       |
-| ------------------------------------------------------ | ----------------- | ------------------------------------------------- |
-| Объект struct, массив, конечное число, boolean, `null` | Текст JSON        | `application/json`                                |
-| `string` struct или обычная `string`                   | Текст UTF-8       | `text/plain;charset=UTF-8`                        |
-| `struct.urlencoded(shape)` в корне тела                | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)` в корне тела                  | `FormData`        | `multipart/form-data; boundary=...`               |
-| `Blob` / `File` (`struct.file()`)                      | Бинарный blob     | `blob.type` или `application/octet-stream`        |
-| `ArrayBuffer` / typed array view / `ReadableStream`    | Сырые байты       | `application/octet-stream`                        |
+| Корень `body`, возвращённый из `builder`                       | Сетевой формат    | `Content-Type` по умолчанию                       |
+| -------------------------------------------------------------- | ----------------- | ------------------------------------------------- |
+| Типизированный объект, массив, конечное число, boolean, `null` | Текст JSON        | `application/json`                                |
+| `string` struct или обычная `string`                           | Текст UTF-8       | `text/plain;charset=UTF-8`                        |
+| `struct.urlencoded(shape)` в корне тела                        | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `struct.formData(shape)` в корне тела                          | `FormData`        | `multipart/form-data; boundary=...`               |
+| `Blob` / `File` (`struct.file()`)                              | Бинарный blob     | `blob.type` или `application/octet-stream`        |
+| `ArrayBuffer` / typed array view / `ReadableStream`            | Сырые байты       | `application/octet-stream`                        |
 
 ## 5. Обработка `StructError` и проблем валидации
 
@@ -115,12 +113,12 @@ Defjs строго разделяет **наличие поля** (`undefined`) 
 | `struct.bigint()`                                          | `bigint` или числовая строка               | `bigint`                                                     |
 | `struct.date()`                                            | Валидный `Date`, таймстемп или ISO-строка  | `Date`                                                       |
 | `struct.literal(value)`                                    | Точный литерал примитива                   | Литеральный тип                                              |
-| `struct.enum(values)`                                      | Объявленный элемент строки или числа       | Объединение литералов                                        |
+| `struct.enum(values)`                                      | Объявленный строковый или числовой элемент | Объединение литералов                                        |
 | `struct.array(item)` / `struct.tuple(items)`               | Массив / кортеж фиксированной длины        | `T[]` / `[...]`                                              |
 | `struct.object(shape)` / `struct.record(val)`              | Простой объект                             | Типизированный объект / `Record<string, V>`                  |
 | `struct.discriminatedUnion(key, options)`                  | Объект с литеральным дискриминатором `key` | Объединение веток объектов                                   |
 | `struct.or(branches)`                                      | Первая совпавшая ветка                     | Объединение типов веток                                      |
-| `struct.intersection(members)`                             | Значение, удовлетворяющее всем веткам      | Глубоко объединённый тип (intersection)                      |
+| `struct.intersection(members)`                             | Значение, удовлетворяющее всем членам      | Глубоко объединённый тип (intersection)                      |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`            | Бинарное представление                                       |
 
 ## Связанные материалы

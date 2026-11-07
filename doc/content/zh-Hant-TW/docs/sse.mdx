@@ -5,55 +5,25 @@ description: 在 SDK 中匯出具型別的事件串流定義，由取用端應�
 
 # SSE 事件串流
 
-SDK 開發者使用 `defineEventStream` 宣告 Server-Sent Events 端點：指定路徑、選用的 input 與 builder、定義事件 struct 對照表的 `events` 物件，以及緩衝區與佇列大小上限。取用端應用程式則在 Client 上設定身分驗證與選用的自動重連機制，開啟串流、迭代接收具型別的事件，並負責最終關閉串流。
+SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：指定路徑、選用的 `input` 與 `builder`、以 `events` 字典對應事件 struct，以及緩衝區與佇列上限。取用端應用程式則在自己的 Client 上設定身分驗證與需主動啟用的重連，開啟串流、迭代具型別的事件，並負責關閉串流。
 
 ## 1. 定義事件串流並使用它
 
-開啟的 `EventStreamHandle` 務必使用 `await using`（或在 `finally` 區塊中使用 `stream.close()` + `await stream.closed`）進行釋放：
+已開啟的 `EventStreamHandle` 一律要用 `await using` 釋放（或在 `finally` 區塊中執行 `stream.close()` + `await stream.closed`）：
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders-stream.ts">
 
-```ts
-import { defineEventStream, struct } from "@defjs/core";
-
-export const watchOrders = defineEventStream({
-  path: "/orders/events",
-  operation: "orders.watch",
-  events: {
-    updated: struct.object({
-      id: struct.number(),
-      status: struct.string(),
-    }),
-  },
-});
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/sdk/orders-stream.ts#example
+</include>
 
 </Tab>
 <Tab value="app/watch-orders.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { watchOrders } from "../sdk/orders-stream.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = stream;
-  for await (const event of active) {
-    console.log(event.event, event.data.id, event.data.status);
-    break;
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/app/watch-orders.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -67,17 +37,17 @@ void main();
 
 ## 2. 開啟連線交握與 Tuple 結構
 
-呼叫該操作僅會在初始 HTTP 回應為 `2xx`、媒體型別為 `text/event-stream` 且帶有可讀取本文時，才會成功解析為 `[error, stream, startupOpen]`：
+只有在初始 HTTP 回應為 `2xx`、媒體型別為 `text/event-stream` 且帶有可讀取的本文時，呼叫該操作才會解析為 `[error, stream, startupOpen]`：
 
-<Tabs items={["交握檢查", "串流控制代碼生命週期"]}>
-<Tab value="交握檢查">
+<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tab value="Handshake inspection">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="串流控制代碼生命週期">
+<Tab value="Stream handle lifecycle">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -86,63 +56,63 @@ void main();
 </Tab>
 </Tabs>
 
-- **非 `2xx` 交握失敗**：回傳 `HTTP_STATUS`（若定義中宣告了 `error` struct，則會包含解碼後的 `error.data`）。這對目前操作是致命錯誤，不會呼叫 `shouldReconnect`。下一次操作會重新選取端點，因此負載平衡器可能選擇另一個端點。
-- **Content-Type 錯誤或本文無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` vs. `stream.open`**：Tuple 中的第三項（`startupOpen`）保存首次交握回應的快照；而 `stream.open` 會在串流後續重連時即時更新。如果重連交握回傳 `503`，迭代器會被拒絕，`stream.closed` 會回報 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍為 `503`；請檢查 `stream.open` 取得該即時回應狀態。
+- **非 `2xx` 交握**：回傳 `HTTP_STATUS`（若定義上宣告了 `error` struct，則帶有解碼後的 `error.data`）。這對目前的操作是致命錯誤，不會呼叫 `shouldReconnect`。下一次操作會重新選取端點，因此平衡器可能選到另一個端點。
+- **Content-Type 不符或本文無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
+- **`startupOpen` 與 `stream.open`**：tuple 的第三項（`startupOpen`）是首次交握回應的快照；`stream.open` 會在串流之後重連時即時更新。若重連交握回傳 `503`，迭代器會拒絕，`stream.closed` 回報 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍為 `503`；即時的回應狀態請看 `stream.open`。
 
 ## 3. 事件分派與解碼
 
-當 SSE 封包抵達時（根據 WHATWG 規範以連續空行結尾）：
+當一個 SSE 訊框抵達時（依 WHATWG 規則以空行結尾）：
 
-1. **事件路由**：網路傳送的 `event:` 欄位會比對 `events[eventName]`；若未比對成功，則會降級使用宣告的 `events.default`。省略 `event:` 欄位時，事件名稱預設為 `"message"`。未宣告且無 `events.default` 的未知事件會被自動忽略。
-2. **負載解碼**：`struct.string()` schema 會直接接收原始文字 `data:`；所有其他 struct 種類都會先將 `data:` 剖析為 JSON，接著再透過 struct 進行結構驗證。
-3. **觀察無效事件**：無效或未宣告的事件會被丟棄，而不會中斷整個串流。可以在 Client 上掛載 `withSSEOnInvalidEvent(...)` 以進行受控的診斷：
+1. **事件路由**：線上的 `event:` 欄位會選出 `events[eventName]`；若沒有對應，則回退到已宣告的 `events.default`。省略 `event:` 欄位時，事件名稱預設為 `"message"`。未宣告且沒有 `events.default` 的事件會被丟棄。
+2. **酬載解碼**：`struct.string()` schema 會直接收到原始的 `data:` 文字；其他所有 struct 種類都會先把 `data:` 剖析為 JSON，再以 struct 驗證。
+3. **觀察無效事件**：無效或未宣告的事件會被丟棄，不會中斷串流。可在 Client 上設定 `withSSEOnInvalidEvent(...)`，取得有上限的診斷資訊：
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
 ## 4. 重新連線與 Last-Event-ID [#reconnect]
 
-SSE 的自動重新連線機制屬於**選擇性啟用（opt-in）**。若未設定 `withSSEReconnect(...)`，任何網路斷線或串流讀取錯誤都會直接終止串流。
+SSE 的重新連線是**需主動啟用（opt-in）**的功能。沒有設定 `withSSEReconnect(...)` 時，任何網路斷線或串流讀取錯誤都會直接終止串流。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **斷線重試預算（`attempts`）**：傳入設定物件至 `withSSEReconnect` 時，預設為 `3` 次。每次交握成功後都會重設重試次數與退避指數，因此即使設定 `attempts: 1`，只要每次連線都成功開啟，長時間工作階段中仍可建立多次實體連線。伺服器正常的 EOF 結束**不屬於**失敗，不會觸發重新連線。
-- **游標追蹤（`Last-Event-ID`）**：在事件結尾的空白行完成剖析時確認並提交，重新連線時會自動作為 `Last-Event-ID` 標頭送出。不論連線正常結束或失敗，不完整的訊框都不會提交其 `id`。在可重新連線的讀取/網路失敗之後，會從最後提交的 id 恢復；伺服器必須實作從該游標重播的能力。
-- **冪等安全性**：預設情況下，只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）會自動重新連線。非冪等方法（`POST`、`PATCH`，例如 LLM 串流生成請求）只有在自訂 `shouldReconnect` 回呼明確回傳 `true` 時才會重連。使用 `ReadableStream` 請求本文的請求在第一次嘗試時即會消耗串流，因此絕不會重連。
-- **交握逾時（`connectTimeoutMs`）**：若有提供，它必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制從呼叫 Fetch 到接收回應標頭之間的交握時間，而不會限制已建立串流的存活時長。
+- **中斷額度（`attempts`）**：傳入設定物件給 `withSSEReconnect` 時，預設為 `3`。每次交握成功都會重設嘗試次數與退避指數，因此只要每次連線都成功開啟，即使設定 `attempts: 1`，長時間的工作階段仍可能建立多次實體連線。伺服器正常的 EOF **不算**失敗，不會觸發重連。
+- **游標追蹤（`Last-Event-ID`）**：事件結尾的空行被剖析時，游標才會提交，並在重連時自動以 `Last-Event-ID` 送出。不完整的訊框不論連線是正常結束或失敗，都不會提交其 `id`。在可重連的讀取或網路失敗之後，會從最後提交的 id 續傳；伺服器必須支援從該游標重播。
+- **冪等安全性**：預設只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）會自動重連。非冪等方法（`POST`、`PATCH`——例如 LLM 串流請求）只有在自訂 `shouldReconnect` 明確回傳 `true` 時才會重連。帶有 `ReadableStream` 請求本文的請求會在第一次嘗試時用掉本文，因此永遠不會重連。
+- **交握逾時（`connectTimeoutMs`）**：有提供時，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制每次交握從呼叫 Fetch 到收到回應標頭的時間，但不限制已建立串流的存活時間。
 
 ## 5. 緩衝區與佇列上限
 
-預設上限為 `maxBufferSize: 64 * 1024` 位元組與 `maxQueueSize: 1024` 個事件。兩項上限值皆必須為大於零的安全整數。沒有預設的交握期限：尚未完成的 Fetch 會等待平台、呼叫端取消，或明確設定的 `connectTimeoutMs`。超過任一容量上限皆屬於致命錯誤（`stream.closed` 會以 `kind: "error"` 解析且迭代器會被拒絕——事件絕不會被靜默丟棄）：
+預設為 `maxBufferSize: 64 * 1024` 位元組與 `maxQueueSize: 1024` 個事件。兩項上限都必須是正的安全整數。沒有預設的交握期限：未完成的 Fetch 會一直等待平台、呼叫端取消，或明確設定的 `connectTimeoutMs`。超過任一容量上限都是致命錯誤（`stream.closed` 以 `kind: "error"` 解析，迭代器拒絕——事件絕不會被悄悄丟棄）：
 
-| 定義選項        | 限制項目                                  | 致命錯誤碼            |
+| 定義選項        | 限制範圍                                  | 終結錯誤碼            |
 | --------------- | ----------------------------------------- | --------------------- |
-| `maxBufferSize` | 遇到空行前未完成或過大的 SSE 封包位元組數 | `CAP_BUFFER_EXCEEDED` |
+| `maxBufferSize` | 遇到空行前未完成或過大的 SSE 訊框位元組數 | `CAP_BUFFER_EXCEEDED` |
 | `maxQueueSize`  | 等待 `for await` 消費端處理的已驗證事件數 | `CAP_QUEUE_OVERFLOW`  |
 
 ## 6. 關閉與釋放資源 [#close-and-dispose]
 
-開啟串流的呼叫端負責其關閉與銷毀工作。透過 `break`、`return` 或拋出例外跳出 `for await` 迴圈會自動關閉串流，你也可以使用 `await using` 或 `stream.close()`：
+開啟串流的呼叫端負責收拾善後。以 `break`、`return` 或拋出例外離開 `for await` 迴圈會自動關閉串流，也可以使用 `await using` 或 `stream.close()`：
 
-<Tabs items={["使用 await using 處置資源", "僅限啟動階段的截止時間"]}>
-<Tab value="使用 await using 處置資源">
+<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
+<Tab value="Dispose with await using">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="僅限啟動階段的截止時間">
+<Tab value="Startup-only deadline">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 
 </Tab>
 </Tabs>
 
-透過 `client({ signal })` 傳入的 `signal` 會控管串流的整個生命週期。若只想限制初始連線交握的時間而不影響後續連線，請在 `await watchOrders(...)` 回傳後清除計時器（如上方第二個標籤頁所示），或在 `withSSEReconnect` 中使用 `connectTimeoutMs`。
+透過 `client({ signal })` 傳入的 `signal` 會掌管串流的整個生命週期。若只想限制初始連線交握、又不想在之後殺掉已開啟的串流，請在 `await watchOrders(...)` 回傳後清除計時器（如上方的第二個分頁），或改用 `withSSEReconnect` 的 `connectTimeoutMs`。
 
 ## 相關閱讀
 
-- [使用 SSE 事件串流](/zh-Hant-TW/recipes/consume-sse)
+- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
 - [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
 - [負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)

@@ -1,70 +1,31 @@
 ---
 title: "取消与超时"
-description: 使用 AbortSignal 结合超时与手动取消，并在错误元组中准确识别 NET_ABORTED 与 NET_TIMEOUT。
+description: 中止或超时一次调用，并读取 NET_ABORTED / NET_TIMEOUT。
 ---
 
-# 取消进行中的 HTTP 请求
+# 取消 HTTP 调用
 
-使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 将调用方持有的 `AbortController` 与超时期限合并为一个 Signal，并通过派生 Client 传入：`client({ signal })`。Defjs 会将调用方手动触发的主动取消精准归类为 `NET_ABORTED`，而将超时期限到期归类为 `NET_TIMEOUT`。
+用 `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 把调用方 `AbortController` 与期限组合起来，并通过 `client({ signal })` 传入组合后的 signal。Defjs 把调用方手动中止归类为 `NET_ABORTED`，把超时中止归类为 `NET_TIMEOUT`。
 
 <Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
-<Tab value="sdk/reports.ts">
+  <Tab value="sdk/reports.ts">
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
+</include>
 
-```ts
-import { defineRequest } from "@defjs/core";
+  </Tab>
+  <Tab value="app/main.ts">
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
 
-export const getReport = defineRequest({
-  method: "GET",
-  path: "/report",
-});
-```
-
-</Tab>
-<Tab value="app/main.ts">
-
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getReport } from "../sdk/reports.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-const controller = new AbortController();
-const pending = getReport(
-  client({
-    signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
-  }),
-);
-
-controller.abort("screen closed");
-
-async function main() {
-  const [error] = await pending;
-  if (error?.code === "NET_ABORTED") {
-    console.log("caller cancelled");
-    return;
-  }
-  if (error?.code === "NET_TIMEOUT") {
-    console.log("timed out");
-    return;
-  }
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log("got the report");
-}
-
-void main();
-```
-
-</Tab>
-<Tab value="cancel-report.ts">
-
+  </Tab>
+  <Tab value="cancel-report.ts">
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>
 
-</Tab>
+  </Tab>
 </Tabs>
 
 运行输出：
@@ -73,4 +34,4 @@ void main();
 caller cancelled
 ```
 
-请注意：客户端主动取消仅代表调用方停止继续等待结果，绝不保证服务端已经成功回滚了写操作。对于涉及数据变更的重试，务必配合服务端的幂等键（Idempotency Key）机制。更多细节请参阅 [HTTP 取消与超时](/zh-Hans/docs/http#cancel-the-work)。
+取消只报告 Client 观察到的结果——它不保证服务端回滚了写操作。变更类重试请用幂等键保护。见 [HTTP 取消与超时](/zh-Hans/docs/http#cancel-the-work)。

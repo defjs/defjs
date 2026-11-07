@@ -1,86 +1,37 @@
 ---
 title: "发送 JSON"
-description: 发送强类型的 JSON 请求体，自动处理字段网络别名，并解码声明的 201 成功响应。
+description: 发送带类型的 JSON body，并解码声明的 201。
 ---
 
-# 发送 JSON 数据
+# POST JSON
 
-将类型化的输入对象传递给 `builder` 并返回 `{ body: input }`。字段声明的 `.alias("customer_name")` 让你在 TypeScript 代码中始终使用优雅的 `customerName`，而在底层网络传输中自动编码为 `"customer_name"`，并在收到 `201` 响应时自动解码还原为小驼峰属性。
+把带类型的输入对象传给 `builder`，返回 `{ body: input }`。`.alias("customer_name")` 让你在 TypeScript 中保持 `customerName`，在网络上编码为 `"customer_name"`，并从 `201` 响应中解码回来。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
-<Tab value="sdk/orders.ts">
+  <Tab value="sdk/orders.ts">
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
+</include>
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
+  </Tab>
+  <Tab value="app/main.ts">
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
 
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-export const ApiError = struct.object({
-  code: struct.string(),
-  message: struct.string(),
-});
-
-export const NewOrder = struct.object({
-  status: struct.string(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-export const createOrder = defineRequest({
-  method: "POST",
-  path: "/orders",
-  input: NewOrder,
-  builder: (input) => ({ body: input }),
-  output: Order,
-  error: ApiError,
-});
-```
-
-</Tab>
-<Tab value="app/main.ts">
-
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { createOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com/v1"));
-
-async function main() {
-  const [error, order, response] = await createOrder(client, {
-    status: "paid",
-    customerName: "Ada",
-  });
-  if (error?.code === "HTTP_STATUS") {
-    console.error(error.status, error.data.message);
-    return;
-  }
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(`Created ${order.status} → ${response.status}`);
-}
-
-void main();
-```
-
-</Tab>
-<Tab value="create-order.ts">
-
+  </Tab>
+  <Tab value="create-order.ts">
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-</Tab>
+  </Tab>
 </Tabs>
 
-当服务端返回 `201` 状态码以及 `{ "id": 1, "status": "paid", "customer_name": "Ada" }` 响应体时，终端将打印：
+当服务端以 `201` 返回 `{ "id": 1, "status": "paid", "customer_name": "Ada" }` 时，脚本会打印：
 
 ```txt
 Created paid → 201
 ```
 
-更多细节请参阅 [HTTP 请求](/zh-Hans/docs/http) 与 [数据结构 / Struct](/zh-Hans/docs/struct)。
+见 [HTTP 请求](/zh-Hans/docs/http) 与 [数据结构 / Struct](/zh-Hans/docs/struct)。

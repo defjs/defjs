@@ -12,11 +12,13 @@ description: استبدل دالة Fetch لعميل واحد عبر withHTTPHand
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="test/orders.spec.ts">
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="Single-file demonstration">
 هذا عرض مستقل في ملف واحد، وليس مواصفة مشغّل اختبارات. للتوكيدات على تعريف SDK المشترك، استخدم تبويب الاختبار السابق.
@@ -24,6 +26,7 @@ description: استبدل دالة Fetch لعميل واحد عبر withHTTPHand
 <include cwd meta="get-order.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -33,4 +36,4 @@ description: استبدل دالة Fetch لعميل واحد عبر withHTTPHand
 paid 200
 ```
 
-في بيئة الإنتاج، مرّر عميلاً تم ضبطه عبر `withEndpoint(...)` لنفس تعريف `getOrder` تماماً. راجع دليلي [الاختبارات](/ar/docs/testing) و[العميل](/ar/docs/client).
+في بيئة الإنتاج، استدعِ نفس العملية `getOrder` تماماً بعميل مضبوط عبر `withEndpoint(...)`. راجع دليلي [الاختبارات](/ar/docs/testing) و[العميل](/ar/docs/client).

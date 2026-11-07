@@ -5,7 +5,7 @@ description: Exporta definiciones de API como un paquete npm con tipos y deja qu
 
 # Crear y publicar un SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Un SDK basado en Defjs exporta definiciones de operaciones puras y esquemas Struct como un paquete npm, dejando la llamada a `createClient(...)`, los endpoints, las credenciales y los interceptores en manos de la aplicación consumidora.
+Un SDK basado en Defjs exporta definiciones de operaciones puras y esquemas Struct como un paquete npm, dejando `createClient(...)`, los endpoints, las credenciales y los interceptores en manos de la aplicación consumidora.
 
 ---
 
@@ -16,13 +16,15 @@ Mantén las definiciones de tus operaciones, las exportaciones del punto de entr
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -107,13 +109,13 @@ La aplicación crea su propio `Client` y lo pasa a la operación importada:
 paid
 ```
 
-En código de producción, sustituye la importación relativa `./orders-sdk` por `@company/orders-sdk` y elimina `withHTTPHandle(...)` para utilizar el `fetch` nativo de la plataforma.
+En código de producción, sustituye la importación relativa `./src/orders.ts` por `@company/orders-sdk` y elimina `withHTTPHandle(...)` para utilizar el `fetch` nativo de la plataforma.
 
 ---
 
 ## 4. Probar y publicar
 
-Ejercita tus definiciones exportadas con [pruebas en memoria con manejadores](/es-ES/recipes/test-with-handle) que cubran el mapeo de la petición, la decodificación de `output`, errores declarados `HTTP_STATUS` y la cancelación. Una vez verificadas, publica el paquete:
+Ejercita tus definiciones exportadas con [pruebas en memoria con handles](/es-ES/recipes/test-with-handle) que cubran el mapeo de la petición, la decodificación de `output`, errores declarados `HTTP_STATUS` y la cancelación. Una vez verificadas, publica el paquete:
 
 ```sh
 bun publish --access public

@@ -1,6 +1,6 @@
 ---
 title: "Skill"
-description: "Install the Defjs skill, ask for a typed GET endpoint, and check the result against the installed SDK."
+description: "Install the Defjs skill, ask for a typed GET operation, and check the result against the installed SDK."
 ---
 
 The Defjs skill gives an assistant the SDK definition and application execution contract. A supported assistant may load it for a relevant task; automatic activation depends on the tool.
@@ -15,7 +15,7 @@ bunx skills add defjs/defjs --skill defjs
 
 After publication, the skill instructions can be read at [skills/defjs/SKILL.md](https://github.com/defjs/defjs/blob/main/skills/defjs/SKILL.md). The GitHub source is the default branch and may not match the `@defjs/core` version installed in a project.
 
-## Ask for one endpoint [#prompt]
+## Ask for one operation [#prompt]
 
 Give the assistant a task. This prompt asks for a typed `GET /orders/:id` whose client stays in the application:
 

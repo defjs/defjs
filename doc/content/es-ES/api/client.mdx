@@ -11,7 +11,7 @@ description: createClient, helpers de opción y el tipo Client.
 
 <ApiSignature name="createClient" />
 
-Las opciones se aplican en orden. Prefiere crear el cliente dentro del límite de la solicitud cuando los interceptores cierran sobre auth o tenants. La fábrica devuelta es una función. Llamarla devuelve un valor `Client` y no hace E/S. La propia fábrica también es un `Client` y no lleva opciones de solicitud.
+Las opciones se aplican en orden. Prefiere crear el cliente dentro del límite de la solicitud cuando los interceptores capturan auth o tenants en su ámbito. La fábrica devuelta es una función. Llamarla devuelve un valor `Client` y no hace E/S. La propia fábrica también es un `Client` y no lleva opciones de solicitud.
 
 - **options** — Helpers de opción como `withEndpoint`.
 - **Devuelve** una fábrica invocable. La configuración base la comparte cada valor de cliente y no está congelada en tiempo de ejecución. Queda fija por convención: nada en la biblioteca la cambia, y las aplicaciones tampoco deberían.
@@ -38,13 +38,13 @@ Sustituye el balanceador usado en las llamadas posteriores. El objeto se conserv
 
 <ApiSignature name="withInterceptors" />
 
-Añade interceptores en el orden de registro. Los kinds mixtos se filtran por transporte cuando corre la operación.
+Añade interceptores en el orden de registro. Los tipos mixtos se filtran por transporte cuando se ejecuta la operación.
 
 ### withQuerySerializer()
 
 <ApiSignature name="withQuerySerializer" />
 
-Sustituye la codificación de query para HTTP, SSE y WebSocket. `serializer(query)` recibe el **objeto de cable ya codificado** (alias aplicados, `Date` como ISO, `bigint` como string) y debe devolver el query string sin `?` inicial. No se llama cuando la solicitud no tiene query. Un builder que devuelve `URLSearchParams` se lo salta.
+Sustituye la codificación de query para HTTP, SSE y WebSocket. `serializer(query)` recibe el **objeto de red ya codificado** (alias aplicados, `Date` como ISO, `bigint` como string) y debe devolver el query string sin `?` inicial. No se llama cuando la solicitud no tiene query. Un builder que devuelve `URLSearchParams` se lo salta.
 
 ### withHeaders()
 
@@ -89,7 +89,7 @@ Añade una cabecera de token XSRF a las solicitudes HTTP. `options` es el ajuste
 
 El transporte HTTP por defecto añade la cabecera cuando se cumple todo esto: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya esa cabecera; la solicitud es del mismo origen; y se encuentra un token no vacío. Siempre que exista `location`, incluso en un Worker, el origen resuelto de la solicitud debe coincidir con `location.origin`; sin él, una solicitud con `baseEndpoint` cuenta como mismo origen. Las solicitudes de origen cruzado no llaman a `tokenProvider`. El token sale de ese provider cuando se da, y si no de `document.cookie`, que solo se lee cuando existe `document`.
 
-### Mandos de SSE
+### Opciones de SSE
 
 ### withSSEReconnect()
 
@@ -97,7 +97,7 @@ El transporte HTTP por defecto añade la cabecera cuando se cumple todo esto: el
 
 <ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
 
-### Mandos de WebSocket
+### Opciones de WebSocket
 
 ### withWebSocketBeforeConnect()
 
@@ -129,7 +129,7 @@ No pases la fábrica a un setter de estado de React (`setState(factory)` la llam
 
 <ApiSignature name="RequestOptions" />
 
-Siete campos planos. Cada protocolo lee los campos que entiende e ignora el resto. Pasar `heartbeat` a HTTP se ignora, no es un fault. `client(options)` copia en esa llamada un array `protocols` y los campos conocidos de `heartbeat` y `reconnect`. Los bloques anidados que faltan siguen faltando. `signal`, `beforeConnect` y los callbacks conservan su identidad. SSE solo lee `signal` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación ni un campo `timeout` o `abort`.
+Siete campos planos. Cada protocolo lee los campos que entiende e ignora el resto. Pasar `heartbeat` a HTTP se ignora, no es un fallo. `client(options)` copia en esa llamada un array `protocols` y los campos conocidos de `heartbeat` y `reconnect`. Los bloques anidados que faltan siguen faltando. `signal`, `beforeConnect` y los callbacks conservan su identidad. SSE solo lee `signal` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación ni un campo `timeout` o `abort`.
 
 | Campo                | Protocolo             | Sustitución                                                                             |
 | -------------------- | --------------------- | --------------------------------------------------------------------------------------- |
@@ -233,15 +233,15 @@ Muestrea candidatos distintos sin reemplazo (a diferencia de Envoy/gRPC A48) y e
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-Envuelve un hijo con circuit breaking de fallos consecutivos al estilo de Linkerd. Round robin y p2c lo activan de forma predeterminada (como en Finagle); `false` lo desactiva. Pick-first lo activa con un objeto. El clasificador por defecto cuenta `NET_UNREACHABLE`, `NET_UNAVAILABLE` y `NET_SERVER_ERROR`. Tras cinco fallos, las penalizaciones empiezan en 1000 ms, se duplican tras una sonda fallida, suman jitter positivo de hasta 0,5 veces la base y tienen un tope de 60000 ms. La expiración admite una sola sonda, decidida en `end`, o en `done` si no llegó ningún `end`. El éxito reinicia el backoff; la cancelación solo libera el hueco. No hay timeout que suponga éxito, ni cuota, ni protección del último host, ni rejilla de evaluación, ni criterio de porcentaje, ni slow start. `isHealthy` lee el estado en caché de la aplicación y nunca cancela una penalización. Todos los hosts pueden cortar; el fail-open local a la lista, al estilo de Finagle, sigue enviando solicitudes. A diferencia de Envoy/gRPC A50, no hay cuota de expulsión. Consulta [Filtrado de salud y p2c](/es-ES/docs/client#health-filtering-and-p2c).
+Envuelve un hijo con un disyuntor de fallos consecutivos al estilo de Linkerd. Round robin y p2c lo activan de forma predeterminada (como en Finagle); `false` lo desactiva. Pick-first lo activa con un objeto. El clasificador por defecto cuenta `NET_UNREACHABLE`, `NET_UNAVAILABLE` y `NET_SERVER_ERROR`. Tras cinco fallos, las penalizaciones empiezan en 1000 ms, se duplican tras una sonda fallida, suman jitter positivo de hasta 0,5 veces la base y tienen un tope de 60000 ms. La expiración admite una sola sonda, decidida en `end`, o en `done` si no llegó ningún `end`. El éxito reinicia el backoff; la cancelación solo libera el hueco. No hay timeout que suponga éxito, ni cuota, ni protección del último host, ni rejilla de evaluación, ni criterio de porcentaje, ni slow start. `isHealthy` lee el estado en caché de la aplicación y nunca cancela una penalización. Todos los hosts pueden cortar; el fail-open local a la lista, al estilo de Finagle, sigue enviando solicitudes. A diferencia de Envoy/gRPC A50, no hay cuota de expulsión. Consulta [Filtrado de salud y p2c](/es-ES/docs/client#health-filtering-and-p2c).
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryCondition, RetryOptions" />
 
-Habilita el reintento HTTP en la misma llamada, con independencia de la selección de endpoint. Omitir `withRetry` significa un intento y ningún presupuesto. `withRetry()` equivale a `withRetry({})` y vale por defecto `maxAttempts: 2` (incluido el original), `on: ["connect-failure"]` y los métodos seguros `GET`, `HEAD`, `OPTIONS`, `TRACE`. Los métodos no distinguen mayúsculas y minúsculas; `[]` desactiva los reintentos. `maxAttempts` es un entero seguro de al menos 1, y cada endpoint se prueba como máximo una vez. `"gateway-error"` incluye `NET_UNAVAILABLE` (HTTP 502/503/504) y los cuerpos de pasarela rechazados por la decodificación `RES_*`; `"attempt-timeout"` usa `attemptTimeoutMs`. Los cuerpos de solicitud en streaming nunca se reintentan.
+Habilita el reintento HTTP en la misma llamada, con independencia de la selección de endpoint. Omitir `withRetry` significa un intento y ningún presupuesto. `withRetry()` equivale a `withRetry({})` y vale por defecto `maxAttempts: 2` (incluido el original), `on: ["connect-failure"]` y los métodos seguros `GET`, `HEAD`, `OPTIONS`, `TRACE`. Los métodos no distinguen entre mayúsculas y minúsculas; `[]` desactiva los reintentos. `maxAttempts` es un entero seguro de al menos 1, y cada endpoint se prueba como máximo una vez. `"gateway-error"` incluye `NET_UNAVAILABLE` (HTTP 502/503/504) y los cuerpos de pasarela rechazados por la decodificación `RES_*`; `"attempt-timeout"` usa `attemptTimeoutMs`. Los cuerpos de solicitud en streaming nunca se reintentan.
 
-El backoff vale por defecto `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`, con la misma semántica de campos que la reconexión de SSE/WebSocket. `delayMs: 0` omite la espera. `attemptTimeoutMs` debe ser finito, positivo y no mayor que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`. Acota Fetch, la lectura del cuerpo y la decodificación de un intento; la señal del llamador cubre la llamada entera, incluidas las esperas del backoff.
+El backoff vale por defecto `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`, con la misma semántica de campos que la reconexión de SSE/WebSocket. `delayMs: 0` omite la espera. `attemptTimeoutMs` debe ser finito, positivo y no mayor que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`. Acota Fetch, la lectura del cuerpo y la decodificación de un intento; la señal de quien llama cubre la llamada entera, incluidas las esperas del backoff.
 
 El presupuesto de Finagle, propio del cliente, vale por defecto el 20 % más una reserva de 10 reintentos por segundo durante un TTL de 10 s. Los créditos y los débitos caducan de forma perezosa en diez cortes de TTL/10. `budget: false` quita el límite. Los clientes derivados que comparten una configuración comparten su presupuesto; los clientes distintos no, aunque compartan un balanceador. Las opciones no válidas devuelven `REQ_OPTIONS_INVALID` con `Invalid retry options` cuando se ejecuta HTTP. La opción captura los campos propios, los arrays y el presupuesto anidado en el momento de aplicarla. `withRetry()` y `withRetry(undefined)` se comportan como `withRetry({})`. Un `withRetry` posterior sustituye la política; `withRetry({ maxAttempts: 1 })` desactiva los reintentos después de haberlos habilitado. Los balanceadores y los envoltorios de salud no tienen ajustes de reintento. Consulta [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing).
 
@@ -253,6 +253,6 @@ El presupuesto de Finagle, propio del cliente, vale por defecto el 20 % más una
 
 `pick` devuelve una tupla error-first. `start` opcional se ejecuta de forma síncrona como máximo una vez, justo antes de que arranque el transporte elegido; `end` opcional se ejecuta una vez después de `start`, cuando comienza la respuesta del par (o se produce un fallo previo a la respuesta), y `done` opcional se ejecuta una vez al completar. Fetch no puede exponer el primer frame de cuerpo de Linkerd ni los límites de stream de Envoy. Las excepciones y los rechazos de thenable de todos los hooks quedan contenidos. `ERR_NO_CANDIDATE` es solo una `cause` de `REQ_BUILD_FAILED`. No es un `FaultCode`. [`isNoCandidateCause`](/es-ES/api/core/isnocandidatecause) lo reconoce entre copias de Core.
 
-El balanceador solo ve resultados neutros; cada transporte traduce sus propios hechos a `DoneInfo.code`. La detección de outliers por defecto cuenta `NET_UNREACHABLE`, `NET_UNAVAILABLE` y `NET_SERVER_ERROR`. El `DoneInfo.status` crudo se conserva solo para balanceadores personalizados y las estrategias integradas nunca lo leen. `PickInfo` contiene `endpoints` y un `operation` opcional, sin discriminador de transporte.
+El balanceador solo ve resultados neutros; cada transporte traduce sus propios hechos a `DoneInfo.code`. La detección de valores atípicos por defecto cuenta `NET_UNREACHABLE`, `NET_UNAVAILABLE` y `NET_SERVER_ERROR`. El `DoneInfo.status` crudo se conserva solo para balanceadores personalizados y las estrategias integradas nunca lo leen. `PickInfo` contiene `endpoints` y un `operation` opcional, sin discriminador de transporte.
 
 Consulta la [guía del Cliente](/es-ES/docs/client).

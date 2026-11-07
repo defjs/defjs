@@ -16,13 +16,15 @@ description: صدّر تعريفات API كحزمة npm مع تصريحات ال
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -70,13 +72,13 @@ export { getOrder } from "./orders";
 </Tabs>
 
 - تبقى `@defjs/core` اعتمادية تشغيل نظيرة خارجية `peerDependency` مشتركة مع التطبيق المستهلك.
-- يتيح الخيار `"sideEffects": false` لأدوات الحزم استبعاد نقاط النهاية غير المستخدمة (tree-shaking) عندما يستورد التطبيق مجموعة فرعية فقط من العمليات.
+- يتيح الخيار `"sideEffects": false` لأدوات الحزم استبعاد العمليات غير المستخدمة (tree-shaking) عندما يستورد التطبيق مجموعة فرعية فقط من العمليات.
 
 ---
 
 ## 2. بناء الحزمة والتحقق من أرشيف النشر (Tarball)
 
-احزم ملفي `dist/index.js` و`dist/index.d.ts` باستخدام `tsdown`، ثم عاين محتويات الحزمة قبل النشر:
+احزم ملفي `dist/index.js` و`dist/index.d.ts` باستخدام `tsdown`، ثم افحص محتويات الحزمة قبل النشر:
 
 ```sh
 bun install
@@ -107,7 +109,7 @@ bun add @company/orders-sdk @defjs/core@^0.6.0
 paid
 ```
 
-في كود الإنتاج، استبدل الاستيراد النسبي `./orders-sdk` باسم الحزمة `@company/orders-sdk` وأزل `withHTTPHandle(...)` لاستخدام دالة `fetch` الأصلية في بيئة التشغيل.
+في كود الإنتاج، استبدل الاستيراد النسبي `./src/orders.ts` باسم الحزمة `@company/orders-sdk` وأزل `withHTTPHandle(...)` لاستخدام دالة `fetch` الأصلية في بيئة التشغيل.
 
 ---
 
@@ -119,4 +121,4 @@ paid
 bun publish --access public
 ```
 
-راجع أدلة [عمليات HTTP](/ar/docs/http)، و[العميل](/ar/docs/client)، و[الاختبارات](/ar/docs/testing)، و[الهندسة المعمارية وقرارات التصميم](/ar/docs/design-decisions).
+راجع أدلة [عمليات HTTP](/ar/docs/http)، و[العميل](/ar/docs/client)، و[الاختبارات](/ar/docs/testing)، و[معمارية النواة](/ar/docs/design-decisions).

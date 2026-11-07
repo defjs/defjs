@@ -1,57 +1,29 @@
 ---
-title: "HTTP リクエスト"
-description: SDK 向けの HTTP 操作を設計し、アプリケーション側で構成されたクライアント設定やキャンセル処理を用いて呼び出します。
+title: "HTTP 操作"
+description: SDK 向けの HTTP 操作を設計し、アプリケーションが所有する構成とキャンセル処理を使って呼び出します。
 ---
 
-# HTTP リクエスト
+# HTTP 操作
 
 SDK は、各 HTTP 操作を `defineRequest` を使って定義します。HTTP メソッド、パステンプレート、`input` スキーマ、同期的で純粋な `builder`、そしてレスポンスの `output` / `error` スキーマを宣言します。利用側アプリケーションはその操作を import し、設定済みの `Client` を渡して呼び出し、返される `[error, data, response]` タプルを処理します。
 
 ## 1. 操作の定義と呼び出し
 
-SDK モジュール内で各エンドポイントごとに個別の `defineRequest` を export し、`createClient` によるクライアント生成は利用側アプリケーション側で行います。
+SDK モジュール内で各操作ごとに個別の `defineRequest` を export し、`createClient` によるクライアント生成は利用側アプリケーションで行います。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -65,8 +37,8 @@ void main();
 
 ### SDK 設計のベストプラクティス
 
-- **1 定義につき 1 操作**: 各メソッド、パス、契約を独立した定義に保つことで、アプリケーション側で未使用の操作をツリーシェイク（不要コード削除）できます。
-- **静的な `operation` 名を設定する**: `"orders.read"` のようなカーディナリティの低い識別子を使用します。テレメトリプラグイン（`@defjs/opentelemetry-server`）やロギングインターセプターが、URL やユーザー ID などの個人情報を漏らすことなく識別できるようにするためです。
+- **1 定義につき 1 操作**: 各メソッド、パス、契約を独立した定義に保つことで、アプリケーション側で未使用の操作をツリーシェイクできます。
+- **静的な `operation` 名を設定する**: `"orders.read"` のようなカーディナリティの低い識別子を使用します。テレメトリプラグイン（`@defjs/opentelemetry-server`）やロギングインターセプターが、URL やユーザー ID を漏らすことなく操作を識別できるようにするためです。
 - **SDK 内にクライアントを埋め込まない**: export するのは操作定義、`struct` スキーマ、型定義のみに限定します。
 
 ## 2. URL 解決とパスパラメータ
@@ -75,8 +47,8 @@ void main();
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
-- **パステンプレートのプレースホルダー (`:name`)**: 単一のパスセグメントとして正確に 1 回だけ URL エンコードされます。スラッシュ、`?`、`#`、`%`、空白、Unicode 文字などはそのセグメント内にそのまま安全にエスケープされます（事前に手動エンコードする必要はありません）。空文字列、`.`、`..` は `REQ_BUILD_FAILED` で失敗します。
-- **オリジンとディレクトリの拘束（Directory Confinement）**: 定義側のパスに絶対 URL、プロトコル相対 URL（`//...`）、C0 制御文字、バックスラッシュ、`?`、`#` を含めたり、ベースエンドポイントのディレクトリ階層を遡る指定（`../`）を行うことはできません。違反した場合は、インターセプターやトランスポートが実行される前に `REQ_BUILD_FAILED` で即座に失敗します。
+- **パステンプレートのプレースホルダー (`:name`)**: 単一のパスセグメントとして正確に 1 回だけ URL エンコードされます。スラッシュ、`?`、`#`、`%`、空白、Unicode はそのセグメント内に収まります。値を事前にエンコードしないでください。空文字列、`.`、`..` は `REQ_BUILD_FAILED` で失敗します。
+- **オリジンとディレクトリの制限**: 定義側のパスに絶対 URL、プロトコル相対 URL（`//...`）、C0 制御文字、バックスラッシュ、`?`、`#` を含めたり、ベースエンドポイントのディレクトリ階層を遡る指定（`../`）を行うことはできません。違反した場合は、インターセプターやトランスポートが実行される前に `REQ_BUILD_FAILED` で即座に失敗します。
 
 ## 3. `builder` による入力値の配置
 
@@ -88,7 +60,7 @@ void main();
 
 ### `builder` がフィールドエイリアスをエンコードする仕組み
 
-| builder の戻り値の式                           | 通信時の出力                                                                          |
+| `builder` の戻り値の式                         | 通信時の出力                                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `body: input.profile`                          | 型付けされた struct: `.alias()` および `Date` / `bigint` コーデックが適用されます     |
 | `body: { profile: input.profile }`             | 外側の `profile` キーはリテラル。内側のオブジェクトは struct のエイリアスを維持します |
@@ -104,9 +76,9 @@ void main();
 
 ### リクエストボディの形式
 
-`GET` と `HEAD` ではリクエストボディを送信できません。その他のメソッドでは、`builder` が返した値に応じてボディの形式が自動選択されます。
+`GET` と `HEAD` ではリクエストボディを送信できません。その他のメソッドでは、`builder` が返した値に応じてボディの形式が選ばれます。
 
-| `body` の値                                                              | 通信電送時の形式                                     | デフォルトの `Content-Type`                   |
+| `body` の値                                                              | 送信時の形式                                         | デフォルトの `Content-Type`                   |
 | ------------------------------------------------------------------------ | ---------------------------------------------------- | --------------------------------------------- |
 | `undefined` / 省略                                                       | ボディなし                                           | —                                             |
 | `urlencoded` / `formData` コーデックを持つルート struct                  | `URLSearchParams` / `FormData`（エイリアス適用済み） | フォーム形式 / multipart boundary             |
@@ -127,33 +99,33 @@ JSON で表現できない値（`NaN`、`±Infinity`、`Map`、`Set`、関数、
 `output` は `2xx` レスポンスを検証し、`error` は `2xx` 以外のレスポンス（`3xx`、`4xx`、`5xx`）を検証します。struct の種別によって、レスポンスストリームの読み取り方法が決まります（`struct.string()` → テキスト、`struct.blob()` / `struct.file()` → `Blob`、`struct.arrayBuffer()` → `ArrayBuffer`、それ以外 → JSON）。
 
 1. **`ok` (`200..299`) による分岐**: `2xx` は `output`、非 `2xx` は `error` を使用します。
-2. **省略時の明示的スキップ**: そのステータスに対応する struct が宣言されていない場合、レスポンスボディは一切読み取られません（`2xx` では `data: undefined` + `HttpMeta` が返り、非 `2xx` では `data: undefined` の `HTTP_STATUS` が返ります）。
+2. **省略時の明示的スキップ**: その側に宣言された struct がない場合、レスポンスボディは一切読み取られません（`2xx` では `data: undefined` + `HttpMeta` が返り、非 `2xx` では `data: undefined` の `HTTP_STATUS` が返ります）。
 3. **JSON メディアタイプの先行検証**: JSON struct の場合、ボディストリームを読み取る前に、非 JSON の `Content-Type` が返されていないか検証し、不一致なら即座に `RES_MEDIA_TYPE_INVALID` を返します。
 4. **ストリームの読み取りとパース**: 読み取り不可のストリームや壊れた JSON は `RES_DECODE_FAILED`（ストリーム途中切断の場合は `NET_BODY_INCOMPLETE`）で失敗します。
 5. **`struct` による検証**: スキーマと一致しないデータは `RES_STRUCT_MISMATCH` で失敗します。
 
-## 5. 処理のキャンセルとタイムアウト設定 [#cancel-the-work]
+## 5. 処理のキャンセルと期限の設定 [#cancel-the-work]
 
 呼び出しごとに派生させたクライアント値 `client({ signal })` に `signal` を渡します。
 
-- **タイムアウト設定 (`NET_TIMEOUT`)**: `AbortSignal.timeout(ms)` を使用します。
+- **期限 (`NET_TIMEOUT`)**: `AbortSignal.timeout(ms)` を使用します。
 - **手動キャンセル (`NET_ABORTED`)**: `AbortController` を使用します。
 - **シグナルの結合**: `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])` を使用します。
 
-<Tabs items={["期限（NET_TIMEOUT）", "手動キャンセル（NET_ABORTED）"]}>
-<Tab value="期限（NET_TIMEOUT）">
+<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
+<Tab value="Deadline (NET_TIMEOUT)">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="手動キャンセル（NET_ABORTED）">
+<Tab value="Manual cancel (NET_ABORTED)">
 
 <include cwd>examples/http/cancel.ts#example</include>
 
 </Tab>
 </Tabs>
 
-データ変更（書き込み）リクエストをキャンセルした場合、「呼び出し元が待機を中止した」ことのみが通知されます。サーバー側で処理がロールバックされたことまで保証するものではありません。
+書き込みリクエストをキャンセルした場合、「呼び出し元が待機を中止した」ことのみが通知されます。サーバー側で処理がロールバックされたことまで保証するものではありません。
 
 ## 6. クレデンシャル、XSRF、転送進捗
 

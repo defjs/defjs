@@ -30,12 +30,9 @@ The call returns `[null, stream, open]` or `[error, undefined, open?]`. When `er
 
 The tuple's third slot is the startup snapshot of `open`; `stream.open` follows the latest connection after a reconnect. That third slot is the returned connection's first successful handshake snapshot only for a native Defjs handle or a wrapper forwarding the same live `open` object; custom handles and wrappers overriding `open` retain their current public `open` even after reconnect, so shared `closed` cannot bypass URL sanitization or header filtering, and Defjs does not reconstruct first-handshake metadata from arbitrary transformations. Prefer `await using stream = handle` for owned scope cleanup. The disposer stops Defjs reading and reconnect work and waits for its reader lock to be released; it does not promise that a provider-controlled, stuck `ReadableStream.cancel()` promise will finish. Manual `close()` / `closed` remains available.
 
-```ts
-async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
-  await using stream = handle;
-  for await (const event of stream) console.log(event);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-event-stream.ts#example
+</include>
 
 Structural implementations of `EventStreamHandle` must implement `[Symbol.asyncDispose]()` and return the same owned teardown path.
 
@@ -65,7 +62,7 @@ See [SSE guide](/docs/sse) and [Consume an SSE stream](/recipes/consume-sse).
 
 ## EventStreamDefinition
 
-`path`, `events`, optional `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize`. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot return a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+`path`, `events`, optional `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize`. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot carry a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
 
 ## EventStreamEndpoint
 

@@ -11,29 +11,22 @@ Defjs строится вокруг одной фундаментальной г
 
 Пакет SDK экспортирует операции (`defineRequest`, `defineEventStream`, `defineWebSocket`) и структуры данных (`struct`). Он никогда не вызывает `createClient`, не хранит глобальный синглтон-клиент и не читает переменные окружения.
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -44,8 +37,8 @@ export const getOrder = defineRequest({
 
 Поскольку `getOrder` не захватывает состояние клиента:
 
-- Браузерный интерфейс, фоновая задача, SSR-обработчик и юнит-тест могут вызывать одно и то же определение `getOrder` с совершенно разными конфигурациями `Client`.
-- Плагины для фреймворков (`@defjs/react`, `@defjs/vue`) и middleware для наблюдаемости (`@defjs/opentelemetry-server`) подключаются к `Client` приложения, благодаря чему опубликованный пакет SDK остаётся абсолютно свободным от внешних зависимостей.
+- Браузерный интерфейс, фоновая задача, SSR-обработчик и юнит-тест могут вызывать одну и ту же операцию `getOrder` с совершенно разными конфигурациями `Client`.
+- Плагины для фреймворков (`@defjs/react`, `@defjs/vue`) и middleware-плагин наблюдаемости (`@defjs/opentelemetry-server`) подключаются к `Client` приложения, благодаря чему опубликованный пакет SDK остаётся абсолютно свободным от внешних зависимостей.
 
 ## 2. Явное размещение входа и двунаправленные алиасы
 
@@ -76,13 +69,13 @@ export const getOrder = defineRequest({
 
 Defjs выбирает сторону ответа по `response.ok`: `output` для `2xx`, `error` для не-`2xx`. Только JSON-struct, объявленный на этой стороне, запускает декодирование и может дать `RES_MEDIA_TYPE_INVALID` или `RES_DECODE_FAILED`; его `Content-Type` проверяется **до** чтения байтов тела. HTML-страница шлюза со статусом не-`2xx` даёт `RES_MEDIA_TYPE_INVALID`, только если объявлен JSON-struct `error`. Без объявления для активной стороны тело не читается; ответ не-`2xx` возвращает недекодированный `HTTP_STATUS`.
 
-| Причина сбоя при чтении ответа                                 | Возвращаемый сбой (Fault)                                         |
-| -------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Тип медиа (Content-Type) не совпадает с JSON                   | `RES_MEDIA_TYPE_INVALID` (тело даже не читается)                  |
-| Байты невозможно декодировать в объявленное представление      | `RES_DECODE_FAILED`                                               |
-| Декодированное значение не прошло валидацию `struct`           | `RES_STRUCT_MISMATCH` (HTTP) / `RES_DECODE_FAILED` (хэндшейк SSE) |
-| Статус вне диапазона `2xx` с декодированной структурой `error` | `HTTP_STATUS` с типизированным `error.data`                       |
-| Статус вне диапазона `2xx` без объявления `error`              | `HTTP_STATUS` с `error.data: undefined`                           |
+| Причина сбоя при чтении ответа                                          | Возвращаемый сбой (Fault)                                         |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Тип медиа (Content-Type) не совпадает с объявленным JSON-представлением | `RES_MEDIA_TYPE_INVALID` (тело даже не читается)                  |
+| Байты невозможно декодировать в объявленное представление               | `RES_DECODE_FAILED`                                               |
+| Декодированное значение не прошло валидацию `struct`                    | `RES_STRUCT_MISMATCH` (HTTP) / `RES_DECODE_FAILED` (хэндшейк SSE) |
+| Статус вне диапазона `2xx` с декодированной структурой `error`          | `HTTP_STATUS` с типизированным `error.data`                       |
+| Статус вне диапазона `2xx` без объявления `error`                       | `HTTP_STATUS` с `error.data: undefined`                           |
 
 ### Правило 4: У неудавшегося декодирования нет тела
 

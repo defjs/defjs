@@ -1,6 +1,6 @@
 ---
 title: 整合概覽
-description: 在一個已定義的擴充點上擴充應用程式自己的 Defjs Client，不改動核心與 SDK 定義。
+description: 喺已定義嘅擴充點上擴充應用程式自己嘅 Defjs Client，唔使改動核心同 SDK 定義。
 ---
 
 # 整合概覽
@@ -11,7 +11,7 @@ description: 在一個已定義的擴充點上擴充應用程式自己的 Defjs 
 
 - **絕無隱藏快取或狀態**：外掛永遠唔會自行快取回應、重試請求，或擅自管理 query 狀態。
 - **絕唔替換傳輸層**：外掛永遠唔會包裝或替換底層嘅 HTTP、SSE 或 WebSocket 傳輸層。
-- **由呼叫端掌控生命週期**：Unmount UI 提供者或關閉遙測 SDK，都唔會自動取消進行中嘅請求或者關閉活躍嘅串流。
+- **由呼叫端掌控生命週期**：卸載 UI provider 或者關閉遙測 SDK，都唔會自動取消進行中嘅請求或者關閉活躍嘅串流。
 
 ---
 
@@ -19,10 +19,10 @@ description: 在一個已定義的擴充點上擴充應用程式自己的 Defjs 
 
 | 領域                                                                         | 套件 / 資源                        | 類別       | 提供嘅功能                                                                                         | 留喺應用程式負責嘅事項                                                                    |
 | ---------------------------------------------------------------------------- | ---------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [React](/zh-Hant-HK/docs/integrations/react)                                 | `@defjs/react`                     | 框架外掛   | 適用於 React 18+ 嘅 `ClientProvider` 同 `useClient(override?)`                                     | 建立 Client、`AbortController` 資源清理、Query 快取（例如 TanStack Query）                |
+| [React](/zh-Hant-HK/docs/integrations/react)                                 | `@defjs/react`                     | 框架外掛   | 適用於 React 18+ 嘅 `ClientProvider` 同 `useClient(overrideClient?)`                               | 建立 Client、`AbortController` 資源清理、Query 快取（例如 TanStack Query）                |
 | [Vue](/zh-Hant-HK/docs/integrations/vue)                                     | `@defjs/vue`                       | 框架外掛   | 適用於 Vue 3.2+ 嘅 `createClientPlugin`、`HTTP_CLIENT` 與 `injectClient(key?)`                     | 建立 Client、`onCleanup` / `onScopeDispose` 取消請求、Query 狀態管理                      |
 | [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`      | 中介層外掛 | 提供 `withOpenTelemetryServer(...)` 選項，記錄傳出 HTTP、SSE 與 WebSocket 嘅 spans、metrics 與日誌 | 初始化 OpenTelemetry SDK、設定 Exporters、取樣（sampling）、機密脫敏（redaction）與 flush |
-| [AI Skill](/zh-Hant-HK/docs/ai) 與 [llms.txt](/zh-Hant-HK/docs/ai-api)       | `defjs/defjs` skill 與 `/llms.txt` | AI 工具    | Agent skill（`SKILL.md`）同機器可讀嘅 Markdown 文件                                                | 針對專案已安裝嘅 `@defjs/core` 版本同測試套件進行驗證                                     |
+| [AI Skill](/zh-Hant-HK/docs/ai) 與 [llms.txt](/zh-Hant-HK/docs/ai-api)       | `defjs/defjs` skill 與 `/llms.txt` | AI 工具    | Agent skill（`SKILL.md`）同機器可讀嘅 Markdown 文件                                                | 針對項目已安裝嘅 `@defjs/core` 版本同測試套件進行驗證                                     |
 
 ---
 
@@ -34,79 +34,42 @@ description: 在一個已定義的擴充點上擴充應用程式自己的 Defjs 
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
 
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: Order,
-});
-```
   </Tab>
   <Tab value="app/main.tsx">
-```tsx
-import { createClient, withEndpoint } from "@defjs/core";
-import { ClientProvider } from "@defjs/react";
-import { OrderCard } from "./OrderCard.tsx";
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-export function App() {
-  return (
-    <ClientProvider client={client}>
-      <OrderCard id={42} />
-    </ClientProvider>
-  );
-}
-```
   </Tab>
   <Tab value="app/OrderCard.tsx">
-```tsx
-import { useClient } from "@defjs/react";
-import { getOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
 
-export function OrderCard({ id }: { id: number }) {
-  const client = useClient();
-  // 喺 effect 或 query hook 入面將 `client` 或 `client({ signal })` 傳入 `getOrder(...)`
-  void id;
-  void getOrder;
-  void client;
-  return null;
-}
-```
   </Tab>
 </Tabs>
 
 ### 2. 中介層外掛（`@defjs/opentelemetry-server`）
 
-中介層外掛係一個回傳 [`ClientOption`](/zh-Hant-HK/api/core/clientoption-type) 嘅工廠函式。當傳入 `createClient(...)` 時，佢會透過 `withInterceptors` 追加 HTTP、SSE 及／或 WebSocket 中介層：
+中介層外掛係一個回傳 [`ClientOption`](/zh-Hant-HK/api/core/clientoption-type) 嘅工廠函式。當傳入 `createClient(...)` 時，佢會透過 `withInterceptors` 追加 HTTP、SSE 及／或 WebSocket 攔截器：
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
   <Tab value="plugins/request-id.ts">
 <include cwd lang="typescript">
-  examples/integrations/request-id.ts#example
+  examples/integrations/request-id/plugins/request-id.ts#example
 </include>
+
   </Tab>
   <Tab value="app/client.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { withRequestIdHeader } from "../plugins/request-id.ts";
-
-export const client = createClient(
-  withEndpoint("https://api.example.com"),
-  withRequestIdHeader(),
-);
-```
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
 
   </Tab>
 </Tabs>
 
-關於中介層順序規則、重試邊界同串流生命週期 hooks，請參閱[中介層](/zh-Hant-HK/docs/interceptors)指南。
+關於攔截器順序規則、重試邊界同串流生命週期 hooks，請參閱[攔截器](/zh-Hant-HK/docs/interceptors)指南。

@@ -63,7 +63,7 @@ export default {
   "nav.guide.clientExecution": "客户端与执行",
   "nav.guide.dataStructures": "数据结构 / Struct",
   "nav.guide.client": "Client",
-  "nav.guide.middleware": "中间件",
+  "nav.guide.middleware": "拦截器",
   "nav.guide.errors": "错误",
   "nav.guide.preface": "前言",
   "nav.guide.bestPractices": "最佳实践",

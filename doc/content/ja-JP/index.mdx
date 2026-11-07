@@ -1,6 +1,6 @@
 ---
 title: Defjs
-description: TypeScript SDK の設計と公開をシンプルに。再利用可能な API 契約の定義と、アプリケーションが所有するクライアント実行を明確に分離します。
+description: 再利用可能な API 定義と、アプリケーションが所有するクライアントを使って TypeScript SDK を設計・公開します。
 ---
 
 # Defjs
@@ -58,7 +58,7 @@ Defjs は、TypeScript SDK における 2 つの責務を明確に分離しま�
 | **[SSE](/ja-JP/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | `await using` または `stream.close()` + `await stream.closed` で解放   |
 | **[WebSocket](/ja-JP/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | `await using` または `session.close()` + `await session.closed` で解放 |
 
-HTTP の失敗時、タプルは `[error, undefined, undefined]` になります。これは、レスポンスのメタデータ（`HttpMeta`）を `error` 自身がすでに保持しているためです。SSE と WebSocket の場合、失敗前に接続初期化スナップショットが取得できていれば、3 番目のスロットにそのスナップショットが格納されます。
+HTTP の失敗時、タプルは `[error, undefined, undefined]` になります。これは、レスポンスのメタデータ（`HttpMeta`）を `error` 自身がすでに保持しているためです。SSE と WebSocket の場合、失敗前に起動時のスナップショットが取得できていれば、3 番目のスロットにそのスナップショットが格納されます。
 
 ## 公式パッケージ
 

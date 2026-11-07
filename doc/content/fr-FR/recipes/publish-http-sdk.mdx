@@ -16,13 +16,15 @@ Conservez vos définitions d'opérations, les exports de point d'entrée, `packa
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/orders-sdk.ts#example
+  examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
+
   </Tab>
   <Tab value="src/index.ts">
-```ts
-export { getOrder } from "./orders";
-```
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
   </Tab>
   <Tab value="package.json">
 ```json
@@ -70,7 +72,7 @@ export { getOrder } from "./orders";
 </Tabs>
 
 - `@defjs/core` reste une dépendance externe `peerDependency` partagée avec l'application consommatrice.
-- `"sideEffects": false` permet aux bundlers de tree-shaker les endpoints non utilisés lorsqu'une application n'importe qu'un sous-ensemble d'opérations.
+- `"sideEffects": false` permet aux bundlers de tree-shaker les opérations non utilisées lorsqu'une application n'importe qu'un sous-ensemble d'opérations.
 
 ---
 
@@ -107,7 +109,7 @@ L'application crée son propre `Client` et le transmet à l'opération importée
 paid
 ```
 
-En production, remplacez l'import relatif `./orders-sdk` par `@company/orders-sdk` et supprimez `withHTTPHandle(...)` pour exploiter le `fetch` de la plateforme.
+En production, remplacez l'import relatif `./src/orders.ts` par `@company/orders-sdk` et supprimez `withHTTPHandle(...)` pour exploiter le `fetch` de la plateforme.
 
 ---
 

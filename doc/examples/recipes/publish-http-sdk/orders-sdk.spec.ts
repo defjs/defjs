@@ -6,7 +6,7 @@ import {
   withHTTPHandle,
   type FetchHandle,
 } from "@defjs/core";
-import { getOrder } from "./orders-sdk";
+import { getOrder } from "./src/orders";
 
 test("one exported SDK endpoint uses each application's client and preserves typed failures", async () => {
   const requests: { url: string; authorization: string | null }[] = [];

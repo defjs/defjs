@@ -1,34 +1,25 @@
 ---
 title: "Client"
-description: 設定應用程式點樣呼叫匯入嘅 SDK 操作，同佢哋嘅 API 定義分開。
+description: 設定應用程式點樣呼叫匯入嘅 SDK 操作，同佢哋嘅 API 定義無關。
 ---
 
 # Client
 
-`Client` 負責持有使用方應用程式嘅執行設定：包括 base URL、預設 headers、認證憑證、中介層（interceptor）、query 序列化函式同埋傳輸 handle。
+`Client` 負責持有使用方應用程式嘅執行設定：包括 base URL、預設 headers、認證憑證、攔截器、query 序列化函式同埋傳輸層 handle。
 
 呼叫 `createClient(...options)` 會回傳一個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)：
 
 - 如果唔需要單次呼叫自訂選項，可以直接將 `client` 傳入操作（例如 `getOrder(client, { id: 1 })`）。
-- 呼叫 `client(requestOptions)` 可以衍生出單次呼叫嘅 `Client` 物件（例如 `getOrder(client({ signal }), { id: 1 })`）。衍生過程唔會進行任何 I/O 操作，而衍生出嚟嘅值係一個普通純物件（唔可以再作為函式呼叫）。
+- 呼叫 `client(requestOptions)` 可以衍生出單次呼叫用嘅 client 值（例如 `getOrder(client({ signal }), { id: 1 })`）。衍生過程唔會進行任何 I/O，而衍生出嚟嘅值係一個普通物件（唔可以當函式咁呼叫）。
 
 ## 1. 設定 Client 並呼叫 SDK 操作
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
@@ -51,7 +42,7 @@ export const getOrder = defineRequest({
 
 - 所有選項按**由左至右**嘅順序套用。
 - 單值設定函式（`withEndpoint`、`withHeaders`、`withQuerySerializer`、`withCredentials`、`withXSRF`）會**覆寫**前面設定嘅舊值。
-- `withInterceptors(...items)` 會將新項目**追加**到現有嘅中介層清單尾部，並喺執行具體操作時自動按傳輸類型（`http`、`sse`、`web-socket`）過濾。
+- `withInterceptors(...items)` 會將新項目**追加**到現有嘅攔截器清單尾部，並喺執行具體操作時自動按傳輸層（`http`、`sse`、`web-socket`）過濾。
 
 ## 2. 衍生單次呼叫嘅 Client（`client(options)`）
 
@@ -66,7 +57,7 @@ export const getOrder = defineRequest({
 
 ### 單次呼叫 `RequestOptions` 參考
 
-`RequestOptions` 包含七個扁平欄位。每種傳輸只會讀取適用於自己嘅欄位，並自動忽略其餘部分：
+`RequestOptions` 包含七個扁平欄位。每種傳輸層只會讀取適用於自己嘅欄位，並自動忽略其餘部分：
 
 | 欄位                 | 適用傳輸             | 行為描述                                                                                                    |
 | -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -80,7 +71,7 @@ export const getOrder = defineRequest({
 
 ## 3. 瀏覽器單例 vs. 伺服器請求作用域
 
-- **瀏覽器應用程式**：當 endpoint、中介層同憑證屬於整個前端共用嗰陣，喺模組頂層共用一個 `DerivableClient` 單例即可。
+- **瀏覽器應用程式**：當 endpoint、攔截器同憑證屬於整個前端共用嗰陣，喺模組頂層共用一個 `DerivableClient` 單例即可。
 - **伺服器 / SSR 應用程式**：只要 headers、cookies、認證 token 或租戶 context 係隨請求變動，就一定要**喺每個傳入請求嘅處理範圍內**建立獨立嘅 client。絕唔好喺整個 process 共用嘅全域 client 上面存放個別用戶嘅身分憑證。
 
 ## 4. 多端點與負載平衡 [#multiple-endpoints]
@@ -94,13 +85,13 @@ export const getOrder = defineRequest({
   examples/client/multiple-endpoints.ts#example
 </include>
 
-只設定咗一個端點嗰陣，`withRetry` 唔會重放請求，因為每一次重試都會排除已經試過嘅端點。如果提供咗 `attemptTimeoutMs` 同 `connectTimeoutMs`，佢哋必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。
+只設定咗一個端點嗰陣，`withRetry` 唔會重放請求，因為每一次重試都會排除已經試過嘅端點。如果提供咗 `attemptTimeoutMs` 同 `connectTimeoutMs`，佢哋必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。
 
 ### 健康檢查過濾與 P2C [#health-filtering-and-p2c]
 
-對於對等伺服器節點，[`roundRobinBalancer`](/zh-Hant-HK/api/core/roundrobinbalancer) 同 [`p2cBalancer`](/zh-Hant-HK/api/core/p2cbalancer)（結合 PeakEwma RTT 與進行中請求負載）預設開啟 Linkerd 風格嘅連續失敗熔斷斷路器（`outlierDetection`）。佢計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`；原始 response `status` 只供自訂 balancer 使用。
+對於對等伺服器節點，[`roundRobinBalancer`](/zh-Hant-HK/api/core/roundrobinbalancer) 同 [`p2cBalancer`](/zh-Hant-HK/api/core/p2cbalancer)（結合 PeakEwma RTT 與進行中請求負載）預設開啟 Linkerd 風格嘅連續失敗熔斷（`outlierDetection`）。佢計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`；原始 response `status` 只供自訂 balancer 使用。
 
-關於重試預算、主動／被動健康檢查、P2C 負載估算以及自訂負載平衡器嘅完整細節，請參閱 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing) 指南。
+關於重試預算、主動／被動健康檢查、P2C 負載估算以及自訂 balancer 嘅完整細節，請參閱[負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)指南。
 
 ## 5. 注入測試傳輸層
 
@@ -118,12 +109,12 @@ export const getOrder = defineRequest({
 | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `withEndpoint(...urls)`                                                                                       | 設定一個或多個候選 base URL（會覆寫先前嘅清單）。                                                 |
 | `withHeaders(HeadersInit)`                                                                                    | 為 HTTP 同 SSE 設定靜態預設 headers（會被 builder headers 覆寫）。                                |
-| `withInterceptors(...items)`                                                                                  | 以洋蔥模型順序追加 HTTP、SSE 同 WebSocket 中介層。                                                |
+| `withInterceptors(...items)`                                                                                  | 以洋蔥模型順序追加 HTTP、SSE 同 WebSocket 攔截器。                                                |
 | `withQuerySerializer(fn)`                                                                                     | 將已套用別名嘅 query 物件序列化成 query string。                                                  |
 | `withCredentials(boolean)`                                                                                    | 設為 `true` 時，為 HTTP 同 SSE 請求設定 Fetch 嘅 `credentials: "include"`。                       |
 | `withXSRF(options?)`                                                                                          | 喺同源嘅變更類 HTTP 請求中，自動將 XSRF cookie 複製到 header。                                    |
 | `withBalancer(balancer)`                                                                                      | 替換端點選取策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。                    |
-| `withRetry(options?)`                                                                                         | 設定要自己開嘅 HTTP 重試條件、方法、backoff、單次 attempt 逾時，以及一份歸 client 所有嘅 budget。 |
+| `withRetry(options?)`                                                                                         | 設定可選啟用嘅 HTTP 重試條件、方法、backoff、單次 attempt 逾時，以及一份歸 client 所有嘅 budget。 |
 | `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | 設定 SSE 重新連線機制同無效事件監聽。                                                             |
 | `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 設定 WebSocket 會話嘅各項預設參數。                                                               |
 | `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 注入自訂或 mock 傳輸實作。                                                                        |
@@ -131,6 +122,6 @@ export const getOrder = defineRequest({
 ## 延伸閱讀
 
 - [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)
-- [中介層](/zh-Hant-HK/docs/interceptors)
+- [攔截器](/zh-Hant-HK/docs/interceptors)
 - [測試](/zh-Hant-HK/docs/testing)
 - [使用本地 Fetch Handle 進行測試](/zh-Hant-HK/recipes/test-with-handle)

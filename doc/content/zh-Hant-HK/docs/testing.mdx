@@ -1,15 +1,15 @@
 ---
 title: "測試"
-description: "用記憶體傳輸句柄（withHTTPHandle、withSSEHandle、withWebSocketHandle）測試 SDK 定義同應用程式。"
+description: "用注入式傳輸層 handle 離線測試 SDK 定義同應用程式策略，配合 tuple 斷言同可控計時器。"
 ---
 
 # 測試
 
-正因為 Defjs 將操作定義同 client 執行徹底分離，你可以喺離線環境下直接測試真實嘅 SDK 定義同應用程式中介層，完全唔需要啟動本地網絡伺服器，亦唔使 mock 函式庫內部嘅實作細節。
+正因為 Defjs 將操作定義同 client 執行徹底分離，你可以喺離線環境下直接測試真實嘅 SDK 定義同應用程式攔截器，完全唔需要啟動本地網絡伺服器，亦唔使 mock 函式庫內部嘅實作細節。
 
-## 1. 注入本地傳輸 Handle
+## 1. 注入本地傳輸層 handle
 
-喺 `createClient(...)` 上面使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 嚟替換底層嘅平台傳輸實作。Defjs 依然會跑齊完整嘅操作流程：input `struct` 驗證、`builder` 參數映射、URL 目錄邊界檢查、中介層鏈、狀態碼分發，以及 response `struct` 解碼。
+喺 `createClient(...)` 上面使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 嚟替換底層嘅平台傳輸實作。Defjs 依然會跑齊完整嘅操作流程：input `struct` 驗證、`builder` 參數映射、URL 目錄邊界檢查、攔截器鏈、狀態碼分發，以及 response `struct` 解碼。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
@@ -30,26 +30,26 @@ description: "用記憶體傳輸句柄（withHTTPHandle、withSSEHandle、withWe
 
 ## 2. 測試最佳實踐
 
-### 斷言 Error-First Tuple，而唔係內部私有狀態
+### 斷言 error-first tuple，而唔係內部私有狀態
 
 一定要用你嘅測試 client 呼叫匯出嘅 SDK 操作，並針對回傳嘅 `[error, data, response]` tuple 進行斷言：
 
 - 對於 `2xx` 成功情況，斷言 `expect(error).toBeNull()` 並驗證解碼後嘅 `data` 欄位（包括 `.alias()` 網絡欄位到邏輯命名嘅自動轉換）。
 - 對於失敗情況，如果屬於契約一部分，請斷言 `error?.code`、`error?.status`、`error?.data` 同埋 `error?.cause`。
 
-### 驗證傳出請求嘅網絡原始 Bytes
+### 驗證傳出請求嘅網絡原始 bytes
 
-喺 `withHTTPHandle(async (input, init) => ...)` 函式入面，建構 `const request = new Request(input, init)` 並檢查 `request.url`、`request.method`、`request.headers` 以及 `await request.text()`（或 `await request.json()`），確認你的 `builder` 同 struct 別名正確序列化出後端預期嘅傳輸格式。
+喺 `withHTTPHandle(async (input, init) => ...)` 函式入面，建構 `const request = new Request(input, init)` 並檢查 `request.url`、`request.method`、`request.headers` 以及 `await request.text()`（或 `await request.json()`），確認你嘅 `builder` 同 struct 別名正確序列化出後端預期嘅網絡格式。
 
 ### 用 Fake Timers 實現確定性時間控制
 
-中介層重試退避、SSE/WebSocket 重連延遲或者 WebSocket 心跳，喺 Vitest 入面用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`。呢啲假計時器唔會推動原生嘅 `AbortSignal.timeout`。想喺 Vitest 入面得到確定嘅請求期限，請用受控嘅 `setTimeout`，以 `TimeoutError` 做原因中止一個 `AbortController`：
+攔截器重試退避、SSE/WebSocket 重連延遲或者 WebSocket 心跳，喺 Vitest 入面用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`。呢啲假計時器唔會推動原生嘅 `AbortSignal.timeout`。想喺 Vitest 入面得到確定嘅請求期限，請用受控嘅 `setTimeout`，以 `TimeoutError` 做原因中止一個 `AbortController`：
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-喺 Bun test 入面用 `jest.useFakeTimers()` 同 `jest.advanceTimersByTime()`；Bun 嘅假計時器亦會控制 `AbortSignal.timeout`。唔好假定兩種 runner 控制同一套原生時鐘。只喺被等待嘅階段已經開始之後先推進時間，斷言狀態轉換或者嘗試次數，而唔係牆上時間，並喺每個測試之後恢復真實計時器。
+喺 Bun test 入面用 `jest.useFakeTimers()` 同 `jest.advanceTimersByTime()`；Bun 嘅假計時器亦會控制 `AbortSignal.timeout`。唔好假定兩種 runner 控制同一套原生時鐘。只喺被等待嘅階段已經開始之後先推進時間，斷言狀態轉換或者嘗試次數，而唔係實際經過嘅時間，並喺每個測試之後恢復真實計時器。
 
 ## 延伸閱讀
 

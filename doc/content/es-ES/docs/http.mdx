@@ -1,5 +1,5 @@
 ---
-title: "Solicitudes HTTP"
+title: "Operaciones HTTP"
 description: Diseña operaciones HTTP para tu SDK y llámalas con la configuración y la cancelación que posee la aplicación.
 ---
 
@@ -9,49 +9,21 @@ Un SDK define cada operación HTTP con `defineRequest`: su método, plantilla de
 
 ## 1. Definir la operación y llamarla
 
-Asigna a cada endpoint su propio export mediante `defineRequest` en el módulo de tu SDK, y mantén `createClient` en la aplicación consumidora:
+Asigna a cada operación su propio export mediante `defineRequest` en el módulo de tu SDK, y mantén `createClient` en la aplicación consumidora:
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts", "Vista rápida en un solo archivo"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -140,7 +112,7 @@ Pasa la señal `signal` derivando el cliente para cada llamada concreta: `client
 - **Cancelación manual (`NET_ABORTED`)**: utiliza `AbortController`.
 - **Señales combinadas**: utiliza `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`.
 
-<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
+<Tabs items={["Plazo límite (NET_TIMEOUT)", "Cancelación manual (NET_ABORTED)"]}>
 <Tab value="Deadline (NET_TIMEOUT)">
 
 <include cwd>examples/http/deadline.ts#example</include>
@@ -166,4 +138,4 @@ Cancelar una petición de escritura solo notifica que quien llama dejó de esper
 - [Enviar y validar JSON](/es-ES/recipes/post-json)
 - [Manejar una 404 declarada](/es-ES/recipes/get-declared-404)
 - [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)
-- [Probar con un manejador Fetch local](/es-ES/recipes/test-with-handle)
+- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)

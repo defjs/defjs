@@ -5,55 +5,25 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 
 # SSE 事件流
 
-在 SDK 中，通过 `defineEventStream` 声明服务端推送事件（Server-Sent Events）端点，指定 URL 路径、可选的输入参数与 `builder`、强类型的事件字典 `events`，以及针对缓冲区与等待队列的安全上限。消费方应用在自己的 Client 上配置认证凭据以及可选的自动重连策略，打开事件流，通过异步迭代器消费事件，并全权掌控连接的关闭与销毁。
+在 SDK 中，用 `defineEventStream` 声明 Server-Sent Events（SSE）操作，指定路径、可选的 `input` 与 `builder`、由 struct 组成的 `events` 字典，以及缓冲区与队列上限。消费方应用在自己的 Client 上配置认证与可选的重连策略，打开流，迭代带类型的事件，并负责关闭流。
 
 ## 1. 声明事件流并在应用中消费
 
-对于成功打开的 `EventStreamHandle` 句柄，推荐始终通过 `await using`（或在 `finally` 块中调用 `stream.close()` 并等待 `await stream.closed`）来确保连接的绝对释放：
+打开的 `EventStreamHandle` 始终用 `await using` 释放（或在 `finally` 块中调用 `stream.close()` + `await stream.closed`）：
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders-stream.ts">
 
-```ts
-import { defineEventStream, struct } from "@defjs/core";
-
-export const watchOrders = defineEventStream({
-  path: "/orders/events",
-  operation: "orders.watch",
-  events: {
-    updated: struct.object({
-      id: struct.number(),
-      status: struct.string(),
-    }),
-  },
-});
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/sdk/orders-stream.ts#example
+</include>
 
 </Tab>
 <Tab value="app/watch-orders.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { watchOrders } from "../sdk/orders-stream.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = stream;
-  for await (const event of active) {
-    console.log(event.event, event.data.id, event.data.status);
-    break;
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/app/watch-orders.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -67,17 +37,17 @@ void main();
 
 ## 2. 初始握手与返回元组
 
-调用事件流操作只有在 HTTP 响应状态码为 `2xx`、媒体类型为 `text/event-stream` 且包含可读响应体时，才会成功 resolve 为 `[error, stream, startupOpen]` 元组：
+只有当初始 HTTP 响应为 `2xx`、媒体类型为 `text/event-stream` 且带有可读 body 时，调用操作才会解析为 `[error, stream, startupOpen]`：
 
-<Tabs items={["握手检查", "流句柄生命周期"]}>
-<Tab value="握手检查">
+<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tab value="Handshake inspection">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="流句柄生命周期">
+<Tab value="Stream handle lifecycle">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -86,63 +56,63 @@ void main();
 </Tab>
 </Tabs>
 
-- **握手返回非 `2xx` 状态码**：返回 `HTTP_STATUS` 错误（若在定义中声明了 `error` struct，则 `error.data` 会携带解码后的错误体）。这对当前操作是致命错误，不会调用 `shouldReconnect`。下一次操作会重新选择端点，因此负载均衡器可能选中另一个端点。
-- **媒体类型不符或响应体不可读**：分别返回 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` 与 `stream.open` 的区别**：元组中的第三项（`startupOpen`）是首次握手响应的快照；而 `stream.open` 会随着后续重连实时更新。如果重连握手返回 `503`，迭代器会 reject，`stream.closed` 报告 `RES_DECODE_FAILED`，但 `stream.open.response.status` 仍为 `503`；请检查 `stream.open` 获取该实时响应状态。
+- **非 `2xx` 握手**：返回 `HTTP_STATUS`（定义声明了 `error` struct 时，`error.data` 是解码后的错误体）。这对当前操作是致命的；不会调用 `shouldReconnect`。下一次操作会重新选择端点，因此均衡器可能选中另一个端点。
+- **媒体类型错误或 body 不可读**：返回 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
+- **`startupOpen` 与 `stream.open`**：元组第三项（`startupOpen`）是首次握手响应的快照；`stream.open` 会在之后重连时实时更新。如果重连握手返回 `503`，迭代器会 reject，`stream.closed` 报告 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍为 `503`；请检查 `stream.open` 获取这个实时状态。
 
-## 3. 事件路由分派与解码
+## 3. 事件分发与解码
 
-当底层收到一个 SSE 数据帧时（以 WHATWG 规定的空行作为结束标识）：
+收到 SSE 帧时（按 WHATWG 规则以空行结束）：
 
-1. **事件路由匹配**：根据数据流中的 `event:` 字段匹配 `events[eventName]`；若未指定 `event:` 字段，则默认寻找 `message`。若未匹配且定义了 `events.default`，则降级由其处理；未声明且无默认分支的事件将被自动丢弃。
-2. **数据载荷解码**：若 Schema 声明为 `struct.string()`，则直接接收原始文本 `data:`；对于其他任意类型的 struct，均会先将 `data:` 解析为 JSON，然后再通过 struct 进行强类型校验。
-3. **监听无效事件**：遇到格式非法或未声明的事件时，连接不会被异常中断，它们会被安全跳过。若需排查诊断，可在 Client 上配置 `withSSEOnInvalidEvent(...)`：
+1. **事件路由**：网络上的 `event:` 字段选择 `events[eventName]`；没有该字段时默认为 `"message"`。没有匹配项时，若声明了 `events.default` 就用它；未声明且无 `events.default` 的事件会被丢弃。
+2. **载荷解码**：`struct.string()` schema 接收原始文本 `data:`。其他 struct 类型会先把 `data:` 解析为 JSON，再用 struct 校验。
+3. **观察无效事件**：无效或未声明的事件会被丢弃，不会终止流。需要在 Client 上配置 `withSSEOnInvalidEvent(...)` 进行有界诊断：
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
 ## 4. 自动重连与 `Last-Event-ID` [#reconnect]
 
-SSE 的断线自动重连是**显式开启（opt-in）**的。若未配置 `withSSEReconnect(...)`，任何网络抖动或流读取异常都会直接终结整个流。
+SSE 重连是**显式开启（opt-in）**的。没有 `withSSEReconnect(...)` 时，任何网络中断或流读取错误都会终止流。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **重试预算（`attempts`）**：调用 `withSSEReconnect` 传入配置对象时默认重试 `3` 次。每次握手成功后都会重置重试计数器和退避指数，因此即使设置 `attempts: 1`，只要每次连接都成功打开，长时间会话中仍可建立许多物理连接。服务端的正常 EOF **不属于**错误，不会触发重连。
-- **游标追踪（`Last-Event-ID`）**：只有在完整解析到事件末尾的终止空行后，才会正式提交游标 ID，并在重连时自动通过 `Last-Event-ID` 请求头发送。不论连接正常结束还是失败，不完整的数据帧都不会提交其 `id`。发生可重连的读取/网络失败后，将从最后提交的 id 恢复；服务端必须实现从该游标重放的能力。
-- **幂等性安全限制**：默认情况下，只有幂等请求方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）才会自动执行重连。对于非幂等方法（如用于大模型流式输出的 `POST` 或 `PATCH`），只有在自定义的 `shouldReconnect` 回调显式返回 `true` 时才会重连。`ReadableStream` 类型的请求体在首次调用时即被消耗，永远不会重连。
-- **握手超时保护（`connectTimeoutMs`）**：若提供，它必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它用于对每次握手请求（从发起 Fetch 到收到响应头）设置时间上限，但不会影响已建立的长连接存活时长。
+- **中断预算（`attempts`）**：向 `withSSEReconnect` 传入选项对象时默认为 `3`。每次成功握手都会重置尝试计数器和退避指数，因此只要每次都能成功打开，`attempts: 1` 也能在长会话中建立许多物理连接。服务器的正常 EOF **不是**失败，不会触发重连。
+- **游标追踪（`Last-Event-ID`）**：解析到事件末尾的空行时才提交游标，并在重连时自动作为 `Last-Event-ID` 发送。无论连接正常结束还是失败，不完整帧都不会提交其 `id`。重连后从最后一个已提交的 id 恢复；服务器必须实现从该游标重放。
+- **幂等性安全**：默认只有幂等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）会自动重连。非幂等方法（`POST`、`PATCH`，例如 LLM 流式请求）只有在自定义 `shouldReconnect` 回调显式返回 `true` 时才重连。`ReadableStream` 请求体在首次尝试时被消耗，永远不会重连。
+- **握手超时（`connectTimeoutMs`）**：提供时必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它限制每次握手从 Fetch 调用到响应头的时间，不限制已打开的流存活多久。
 
-## 5. 缓冲区与等待队列上限
+## 5. 缓冲区与队列上限
 
-默认上限为 `maxBufferSize: 64 * 1024` 字节和 `maxQueueSize: 1024` 个事件。两项阈值均必须是大于零的安全整数。没有默认握手期限：挂起的 Fetch 会等待平台完成、调用方取消，或显式配置的 `connectTimeoutMs` 到期。超出任何一项容量限制都属于致命错误（`stream.closed` 将以 `kind: "error"` 终结，异步迭代器会 reject——绝不会静默丢失事件）：
+默认值是 `maxBufferSize: 64 * 1024` 字节和 `maxQueueSize: 1024` 个事件。两个上限都必须是正的安全整数。没有默认握手期限：挂起的 Fetch 会等待平台、调用方取消或显式配置的 `connectTimeoutMs`。超出任一容量上限都是致命的（`stream.closed` 以 `kind: "error"` 解析，迭代器 reject——事件绝不会被静默丢弃）：
 
-| 定义配置项      | 控制边界                                                        | 终态 Fault 错误码     |
+| 定义选项        | 约束内容                                                        | 终态 Fault 代码       |
 | --------------- | --------------------------------------------------------------- | --------------------- |
 | `maxBufferSize` | 单个 SSE 帧在遇到空行之前所允许的最大不完整或过长字节数         | `CAP_BUFFER_EXCEEDED` |
 | `maxQueueSize`  | 已解码但尚未被 `for await` 消费的事件在内存队列中的最大积压数量 | `CAP_QUEUE_OVERFLOW`  |
 
 ## 6. 连接关闭与资源释放 [#close-and-dispose]
 
-发起并打开事件流的代码拥有其生命周期的完整所有权。在 `for await` 循环中通过 `break`、`return` 退出或抛出异常都会自动触发流的关闭，你也可以通过 `await using` 或直接调用 `stream.close()`：
+打开流的调用方负责清理。通过 `break`、`return` 或抛出异常退出 `for await` 循环都会自动关闭流，也可以使用 `await using` / `stream.close()`：
 
-<Tabs items={["使用 await using 释放资源", "仅启动阶段的截止时间"]}>
-<Tab value="使用 await using 释放资源">
+<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
+<Tab value="Dispose with await using">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="仅启动阶段的截止时间">
+<Tab value="Startup-only deadline">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 
 </Tab>
 </Tabs>
 
-通过 `client({ signal })` 传入的 `signal` 会管控整条流的生命周期。如果你只想为最初的连接握手设置超时期限，而不想在握手成功后杀死长连接，可以在 `await watchOrders(...)` 成功返回后立即清除定时器（如上方第二个选项卡所示），或者使用 `withSSEReconnect` 中的 `connectTimeoutMs`。
+通过 `client({ signal })` 传入的 `signal` 管整个流的生命周期。如果只想限制初始握手，而不在之后终止已打开的流，可以在 `await watchOrders(...)` 返回后清除定时器（如上方第二个选项卡所示），或使用 `withSSEReconnect` 中的 `connectTimeoutMs`。
 
 ## 相关阅读
 
-- [消费 SSE 事件流](/zh-Hans/recipes/consume-sse)
-- [取消进行中的 HTTP 请求](/zh-Hans/recipes/cancel-http)
+- [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [取消 HTTP 调用](/zh-Hans/recipes/cancel-http)
 - [负载均衡与故障转移](/zh-Hans/docs/load-balancing)

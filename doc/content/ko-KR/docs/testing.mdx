@@ -5,11 +5,11 @@ description: 주입된 전송 계층 핸들, 튜플 단언, 결정론적 가짜 
 
 # 테스트
 
-Defjs는 작업 정의와 클라이언트 실행을 명확히 분리하기 때문에, 별도의 네트워크 서버를 띄우거나 라이브러리 내부 함수를 모킹하지 않고도 실제 SDK 정의와 애플리케이션 인터셉터를 오프라인에서 완전하게 테스트할 수 있습니다.
+Defjs는 작업 정의와 클라이언트 실행을 명확히 분리하기 때문에, 별도의 네트워크 서버를 띄우거나 라이브러리 내부 함수를 모킹하지 않고도 실제 SDK 작업과 애플리케이션 인터셉터를 오프라인에서 완전하게 테스트할 수 있습니다.
 
 ## 1. 로컬 전송 핸들 주입하기
 
-`createClient(...)`에서 `withHTTPHandle`, `withSSEHandle`, 또는 `withWebSocketHandle`을 사용하여 기저 플랫폼 전송 계층을 교체하세요. 이때도 Defjs는 입력값 `struct` 검증, `builder` 매핑, URL 격리 검사, 인터셉터, 상태 디스패치, 응답 `struct` 디코딩 등 전체 파이프라인을 그대로 실행합니다.
+`createClient(...)`에서 `withHTTPHandle`, `withSSEHandle`, 또는 `withWebSocketHandle`을 사용하여 기반 플랫폼 전송 계층을 교체하세요. 이때도 Defjs는 입력값 `struct` 검증, `builder` 매핑, URL 격리 검사, 인터셉터, 상태 디스패치, 응답 `struct` 디코딩 등 전체 파이프라인을 그대로 실행합니다.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
@@ -32,7 +32,7 @@ Defjs는 작업 정의와 클라이언트 실행을 명확히 분리하기 때�
 
 ### 내부 구현이 아닌 error-first 튜플을 단언하세요
 
-항상 테스트 클라이언트로 export된 SDK 작업을 호출하고, 반환된 `[error, data, response]` 튜플의 결과를 검증하세요:
+항상 export된 SDK 작업을 테스트 클라이언트로 호출하고, 반환된 `[error, data, response]` 튜플의 결과를 검증하세요:
 
 - `2xx` 성공 케이스: `expect(error).toBeNull()`을 확인하고 디코딩된 `data` 필드(`.alias()` 통신 별칭 매핑 포함)를 검증합니다.
 - 실패 케이스: 계약의 일부라면 `error?.code`, `error?.status`, `error?.data`, `error?.cause`를 명시적으로 단언합니다.
@@ -53,6 +53,6 @@ Bun test에서는 `jest.useFakeTimers()`와 `jest.advanceTimersByTime()`을 사�
 
 ## 관련 문서
 
-- [로컬 HTTP 테스트](/ko-KR/recipes/test-with-handle)
+- [로컬 Fetch 핸들로 테스트하기](/ko-KR/recipes/test-with-handle)
 - [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)
 - [Client 구성](/ko-KR/docs/client)

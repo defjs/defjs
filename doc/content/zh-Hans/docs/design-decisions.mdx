@@ -1,39 +1,32 @@
 ---
 title: "设计决策"
-description: 了解为何将 API 契约定义与 Client 执行彻底解耦，能让 TypeScript SDK 的设计、发布与复用更简单高效。
+description: 了解为何将 API 定义与 Client 执行分离，能让 TypeScript SDK 的设计、发布与复用更简单。
 ---
 
 # 核心架构设计
 
-Defjs 构建于一条根本性的设计边界之上：**SDK 负责定义底层的网络传输契约，而消费方应用程序完全掌控具体的执行过程。** `@defjs/core` 中的每一条设计规则均源于这道清晰的职责划分。
+Defjs 构建在一条根本边界之上：**SDK 定义网络契约，消费方应用负责执行。** `@defjs/core` 的每条设计规则都源自这条边界。
 
-## 1. 契约定义与应用执行
+## 1. 定义与执行
 
-SDK 软件包对外导出具体的接口操作（`defineRequest`、`defineEventStream`、`defineWebSocket`）以及数据契约（`struct`）。它绝不调用 `createClient`、不维护单例全局 Client，也不读取任何外部环境变量。
+SDK 包导出操作（用 `defineRequest`、`defineEventStream`、`defineWebSocket` 创建）和数据契约（`struct`）。它绝不调用 `createClient`、不保存单例 Client，也不读取环境变量。
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -42,23 +35,23 @@ export const getOrder = defineRequest({
 </Tab>
 </Tabs>
 
-正是因为 `getOrder` 这类操作不捕获任何 Client 状态：
+因为 `getOrder` 不捕获任何 Client 状态：
 
-- 浏览器前端、后台定时任务、SSR 请求处理器以及单元测试，均可使用各自不同的 `Client` 配置来调用同一个 `getOrder` 接口定义。
-- 框架扩展（`@defjs/react`、`@defjs/vue`）以及可观测性中间件（`@defjs/opentelemetry-server`）全部直接挂载在消费方应用的 `Client` 上，从而保证发布的 SDK 模块保持 100% 零依赖。
+- 浏览器 UI、后台任务、SSR 请求处理器和单元测试，都可以用不同的 `Client` 配置调用同一个 `getOrder` 操作。
+- 框架插件（`@defjs/react`、`@defjs/vue`）和可观测性中间件插件（`@defjs/opentelemetry-server`）挂载在应用的 `Client` 上，从而让发布的 SDK 包保持 100% 零依赖。
 
-## 2. 显式参数放置与双向字段别名
+## 2. 显式放置输入与双向别名
 
-在 Defjs 中，`input` 声明调用方需要传入哪些参数，`struct` 决定数据如何编码与校验解码，而 `builder` 则负责将这些值精确放置到请求的各个部分（`path`、`query`、`headers`、`body`）。
+在 Defjs 中，`input` 声明调用方传入的值，`struct` 控制值如何编码与解码，`builder` 把每个值放到请求上（`path`、`query`、`headers`、`body`）。
 
-- **绝无隐式黑盒推断**：如果一个操作声明了 `input`，就必须提供一个显式、同步且纯净的 `builder` 函数。框架绝不会根据字段名随意猜测参数该放在 URL 还是 Body 中。
-- **双向 `.alias(wireName)`**：在 struct 字段上调用 `.alias("customer_name")`，让代码层面保持优雅的 TypeScript 驼峰命名 `customerName`，同时在底层网络通信中自动完成与 `"customer_name"` 的双向映射转换。
+- **没有隐式推断**：操作声明了 `input`，就必须提供显式、同步、纯的 `builder`。字段放置绝不根据参数名猜测。
+- **双向 `.alias(wireName)`**：在 struct 字段上声明 `.alias("customer_name")`，TypeScript 中保持 `customerName`，网络上自动与 `"customer_name"` 双向映射。
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-当 `builder` 将类型化的 struct 对象赋值给 `body`、`query` 或 `headers` 时，其定义的字段别名以及 `Date` / `bigint` 编解码规则会自动生效。而你在外层匿名包装对象中手写的键名（例如上例中的 `account_id` 或 `x-api-version`）则保持原样字面量传输。
+当 `builder` 把带类型的 struct 对象交给 `body`、`query` 或 `headers` 时，字段别名和 `Date` / `bigint` 编解码会自动生效。你在匿名包装对象中直接写出的键（例如上面的 `account_id` 或 `x-api-version`）保持字面量。
 
 ## 3. 声明即断言 [#declaration-is-an-assertion]
 
@@ -66,17 +59,17 @@ Defjs 在读取 HTTP 响应时严格遵循以下六大规则：
 
 ### 规则 1：声明什么就断言什么
 
-`output` 用于断言 `2xx` 成功响应体的结构。`error` 则用于断言非 `2xx` 响应体的结构。所有声明都是运行时的刚性保证，绝非“尽力而为”的模糊提示。
+`output` 断言 `2xx` body 的结构。`error` 断言非 `2xx` body 的结构。声明是运行时保证，不是尽力而为的提示。
 
 ### 规则 2：`ok`（`200..299`）是唯一分流点
 
-`2xx` 状态码的响应只通过 `output` 进行校验与解码。除此以外的所有状态码（`3xx`、`4xx`、`5xx`）均只走 `error` 解码路径。Defjs 绝不会在一侧解析失败时拿另一侧作为兜底尝试。
+`2xx` 响应只用 `output` 解码。其他所有状态码（`3xx`、`4xx`、`5xx`）只用 `error` 解码。Defjs 绝不从一侧回退到另一侧。
 
-### 规则 3：任何偏离声明的情况都会返回明确故障
+### 规则 3：任何偏离声明都是明确的 Fault
 
-Defjs 用 `response.ok` 选择响应的一侧：`2xx` 用 `output`，非 `2xx` 用 `error`。只有在这一侧声明了 JSON struct，才会触发解码，并可能产生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 会在读取 body 字节**之前**校验。非 `2xx` 的 HTML 网关页只有在声明了 JSON `error` struct 时才会产生 `RES_MEDIA_TYPE_INVALID`。活动的一侧没有声明时，不会读取 body；非 `2xx` 响应会返回未解码的 `HTTP_STATUS`。
+Defjs 用 `response.ok` 选择响应的一侧：`2xx` 用 `output`，非 `2xx` 用 `error`。只有该侧声明了 JSON struct 才会触发解码，并可能产生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 会在读取 body 字节**之前**校验。非 `2xx` 的 HTML 网关页只有在声明了 JSON `error` struct 时才会产生 `RES_MEDIA_TYPE_INVALID`。当前响应一侧没有声明时，不会读取 body；非 `2xx` 响应返回未解码的 `HTTP_STATUS`。
 
-| 响应读取阶段出现的异常                             | 返回的明确 Fault 错误码                                        |
+| 读取响应时出现的失败                               | 返回的 `Fault` 代码                                            |
 | -------------------------------------------------- | -------------------------------------------------------------- |
 | 媒体类型与所声明的 JSON 格式不匹配                 | `RES_MEDIA_TYPE_INVALID`（根本不会读取 body 字节流）           |
 | 底层字节流无法按所声明的格式解码                   | `RES_DECODE_FAILED`                                            |
@@ -86,25 +79,25 @@ Defjs 用 `response.ok` 选择响应的一侧：`2xx` 用 `output`，非 `2xx` �
 
 ### 规则 4：解码失败则无 Body 数据
 
-只有完整通过了解码与 Schema 校验的数据，才被称为 Body。一旦解码失败，Fault 中携带的响应对象类型即为 `HttpMeta`（该接口本身就不包含 `body` 属性），具体的解析或校验错误会挂载在 `fault.cause` 上。
+只有通过解码与校验之后才存在 body。解码失败时，`Fault` 的 `response` 类型是 `HttpMeta`（没有 `body` 属性），解析或校验错误挂在 `fault.cause` 上。
 
 ### 规则 5：省略声明即代表主动放弃读取
 
-未声明 `output` 意味着完全不关心 `2xx` 响应体，此时根本不会触发 Body 读取。同理，省略 `error` 意味着完全忽略所有非 `2xx` 状态码的响应体——哪怕服务端在 `500` 时返回了非法畸形的 JSON，也不会触发解析错误。
+省略 `output` 意味着 `2xx` body 从不读取。省略 `error` 意味着非 `2xx` body 从不读取——即使服务端在 `500` 上返回了非法 JSON。
 
 ### 规则 6：`3xx` 不属于成功状态区间
 
-`ok` 的定义严格为 `200 <= status < 300`。像 `304 Not Modified` 属于非 `2xx` 状态：你可以保持 `error` 不声明从而在应用层捕获 `HTTP_STATUS` 错误（或者在 ETag 中间件中拦截处理 `304`），或者在明确期望空文本时声明 `struct.string()`。
+`ok` 意味着 `200 <= status < 300`。`304 Not Modified` 不是 `2xx`：保持 `error` 未声明并处理 `HTTP_STATUS`（或在 ETag 拦截器中拦截 `304`），或者在期望空文本 body 时声明 `struct.string()`。
 
 ## 4. 传输专属的返回结果元组
 
-三种传输协议均采用错误优先三元组替代直接抛出异常：
+三种传输都返回三项错误优先元组，而不是在调用处抛出异常：
 
-- **HTTP** → `[error, data, response]` —— 解码后的数据载荷 + `DecodedResponse<T>`（未声明 `output` 时为 `HttpMeta`）。
-- **SSE** → `[error, stream, open]` —— `EventStreamHandle` 事件流句柄 + 初始握手快照。
-- **WebSocket** → `[error, session, connection]` —— `WebSocketSession` 会话对象 + 初始连接快照。
+- **HTTP** → `[error, data, response]` —— 解码后的载荷 + `DecodedResponse<T>`（未声明 `output` 时为 `HttpMeta`）。
+- **SSE** → `[error, stream, open]` —— `EventStreamHandle` + 初始握手快照。
+- **WebSocket** → `[error, session, connection]` —— `WebSocketSession` + 初始连接快照。
 
-Client 仅承载配置信息，并不持有处于活跃状态的连接。发起 HTTP 请求、SSE 流或 WebSocket 会话的调用者自行负责其取消或关闭（HTTP 使用 `AbortSignal`；SSE 和 WebSocket 则使用 `await using` 或 `.close()` + `await .closed`）。
+Client 承载配置，不承载活跃连接。发起 HTTP 请求、SSE 流或 WebSocket 会话的调用方负责取消或关闭它（HTTP 用 `AbortSignal`；SSE 和 WebSocket 用 `await using` 或 `.close()` + `await .closed`）。
 
 ## 相关阅读
 

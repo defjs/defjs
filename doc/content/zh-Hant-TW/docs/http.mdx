@@ -1,57 +1,29 @@
 ---
-title: "HTTP 請求"
-description: 為你的 SDK 設計 HTTP 操作，並透過應用程式掌控的 Client 設定與取消機制發起呼叫。
+title: "HTTP 操作"
+description: 為你的 SDK 設計 HTTP 操作，並以應用程式掌控的設定與取消機制呼叫它們。
 ---
 
-# HTTP 請求
+# HTTP 操作
 
-SDK 開發者使用 `defineRequest` 定義每項 HTTP 操作：包含其 HTTP 方法、路徑模板、`input` schema、同步純函式 `builder`，以及 `output` / `error` 回應 schemas。取用端應用程式匯入該操作，傳入設定好的 `Client`，並處理回傳的 `[error, data, response]` tuple。
+SDK 開發者用 `defineRequest` 定義每項 HTTP 操作：HTTP 方法、路徑模板、`input` schema、同步的 `builder`，以及 `output` / `error` 回應 schema。取用端應用程式匯入該操作、傳入自己設定好的 `Client`，並處理回傳的 `[error, data, response]` tuple。
 
 ## 1. 定義操作並呼叫它
 
-在你的 SDK 模組中，為每個端點建立專屬的 `defineRequest` 匯出，並將 `createClient` 保留在取用端應用程式中：
+在你的 SDK 模組中，為每項操作建立專屬的 `defineRequest` 匯出，並把 `createClient` 留在取用端應用程式裡：
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -63,11 +35,11 @@ void main();
 </Tab>
 </Tabs>
 
-### SDK 設計最佳實踐
+### SDK 設計最佳實務
 
-- **單一定義對應單一操作**：將每個方法、路徑與契約獨立定義，讓應用程式能對未使用的操作進行 Tree-shaking 最佳化。
-- **設定靜態 `operation` 名稱**：使用低基數（low-cardinality）識別碼（如 `"orders.read"`）。遙測外掛（`@defjs/opentelemetry-server`）與日誌攔截器會使用它，而不會意外洩漏完整 URL 或使用者 ID。
-- **絕不要在 SDK 中嵌入 Client**：僅匯出操作定義、`struct` schemas 與型別定義。
+- **每項定義只對應一項操作**：讓每個方法、路徑與契約各自成為一份定義，應用程式才能對未使用的操作進行 Tree-shaking。
+- **設定靜態的 `operation` 名稱**：使用低基數（low-cardinality）的識別碼，例如 `"orders.read"`。遙測外掛（`@defjs/opentelemetry-server`）與日誌攔截器會使用它，而不會洩漏 URL 或使用者 ID。
+- **絕不把 Client 嵌進 SDK**：只匯出定義、`struct` schema 與型別。
 
 ## 2. URL 解析與路徑參數
 
@@ -75,12 +47,12 @@ void main();
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
-- **路徑佔位符（`:name`）**：會被精確編碼為單一路徑片段。斜線、`?`、`#`、`%`、空白與 Unicode 都會被保留在該片段內——請勿事先手動編碼值。空字串、`.` 與 `..` 會直接失敗並回傳 `REQ_BUILD_FAILED`。
-- **Origin 與目錄範圍限制**：定義路徑不能是絕對 URL、不能是協定相對路徑（`//...`）、不能包含 C0 控制字元、反斜線、`?`、`#`，也不能脫離基礎端點的目錄範圍（`../`）。任何違規都會在執行攔截器或傳輸層之前，立即失敗並回傳 `REQ_BUILD_FAILED`。
+- **路徑佔位符（`:name`）**：只會被編碼一次，成為單一路徑區段。斜線、`?`、`#`、`%`、空白與 Unicode 都留在該區段內——請勿事先自行編碼。空字串、`.` 與 `..` 會以 `REQ_BUILD_FAILED` 失敗。
+- **Origin 與目錄範圍限制**：定義路徑不能是絕對 URL 或協定相對路徑（`//...`），不能包含 C0 控制字元、反斜線、`?` 或 `#`，也不能脫離基礎端點的目錄範圍（`../`）。任何違規都會在攔截器或傳輸層執行之前，立即以 `REQ_BUILD_FAILED` 失敗。
 
 ## 3. 使用 builder 放置輸入參數
 
-凡是操作宣告了 `input`，就**必須**提供一個回傳 `{ path?, query?, headers?, body? }` 的同步純函式 `builder`。只有完全沒有宣告 `input` 的操作才可以省略 `builder`。
+只要操作宣告了 `input`，就**必須**提供一個回傳 `{ path?, query?, headers?, body? }` 的同步純函式 `builder`。只有未宣告 `input` 的操作才可以省略 `builder`。
 
 <include cwd lang="typescript">
   examples/http/place-input.ts#example
@@ -88,30 +60,30 @@ void main();
 
 ### `builder` 如何處理欄位別名
 
-| Builder 運算式                                 | 網路通訊輸出                                                    |
+| Builder 運算式                                 | 傳輸實際輸出                                                    |
 | ---------------------------------------------- | --------------------------------------------------------------- |
 | `body: input.profile`                          | 具型別 struct：`.alias()` 與 `Date` / `bigint` 編解碼器自動生效 |
 | `body: { profile: input.profile }`             | 外層鍵名 `profile` 為字面值；內層物件保留其 struct 別名         |
 | `body: { ...input.profile, role: "admin" }`    | 物件展開會保留 struct 別名；`role` 則為字面值                   |
 | `body: { name: input.profile.customerName }`   | 匿名物件：所有鍵名皆為字面值                                    |
-| `query: input.filter` / `headers: input.trace` | 扁平的具型別物件：欄位的 `.alias()` 會轉換為通訊鍵名            |
+| `query: input.filter` / `headers: input.trace` | 扁平的具型別物件：欄位的 `.alias()` 會成為傳輸鍵名              |
 
 ### 自訂 Query 序列化
 
-預設情況下，純量值與純量陣列（重複鍵名）會被直接編碼，而巢狀 query 物件則會失敗並回傳 `REQ_BUILD_FAILED`。如果後端 API 需要巢狀 query 語法（例如 `filter[status]=paid`），可在 Client 上設定 `withQuerySerializer`：
+預設情況下，query 的純量與純量陣列（重複鍵名）會直接編碼，巢狀的 query 物件則會以 `REQ_BUILD_FAILED` 失敗。若後端需要巢狀 query 語法（例如 `filter[status]=paid`），請在 Client 上設定 `withQuerySerializer`：
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
 ### 請求本文格式
 
-`GET` 與 `HEAD` 請求不可夾帶本文。對於其他 HTTP 方法，本文格式會根據 `builder` 回傳的值自動判定：
+`GET` 與 `HEAD` 不能攜帶本文。其他方法的本文格式，取決於 `builder` 回傳的值：
 
 | `body` 值                                                  | 實際傳輸格式                               | 預設 `Content-Type`                       |
 | ---------------------------------------------------------- | ------------------------------------------ | ----------------------------------------- |
 | `undefined` / 省略                                         | 無本文                                     | —                                         |
 | 帶有 `urlencoded` / `formData` 編解碼器的根 struct         | `URLSearchParams` / `FormData`（套用別名） | 表單型別 / multipart boundary             |
-| 原生 `FormData` 或 `URLSearchParams`                       | 原樣透通傳輸                               | Multipart boundary / urlencoded           |
-| `Blob` / `File`                                            | 原樣透通傳輸                               | `blob.type` 或 `application/octet-stream` |
+| 原生 `FormData` 或 `URLSearchParams`                       | 原樣傳遞                                   | Multipart boundary / urlencoded           |
+| `Blob` / `File`                                            | 原樣傳遞                                   | `blob.type` 或 `application/octet-stream` |
 | `ArrayBuffer`、型別化陣列、`DataView`、`ReadableStream`    | 原始位元組 / 串流                          | `application/octet-stream`                |
 | `string`                                                   | UTF-8 字串                                 | `text/plain;charset=UTF-8`                |
 | 一般物件、陣列、有限數值、布林值、`null`、`Date`、`bigint` | Struct 編碼的 JSON                         | `application/json`                        |
@@ -120,17 +92,17 @@ void main();
   examples/http/body.ts#example
 </include>
 
-無法在 JSON 中表示的值（如 `NaN`、`±Infinity`、`Map`、`Set`、函式、未實作 `toJSON()` 的類別實例或原始迭代器）會立即失敗並回傳 `REQ_BUILD_FAILED`，而不會靜默序列化為 `{}` 或 `null`。
+無法以 JSON 表示的值（`NaN`、`±Infinity`、`Map`、`Set`、函式、未實作 `toJSON()` 的類別實例，或原始的可迭代物件）會立即以 `REQ_BUILD_FAILED` 失敗，而不會悄悄序列化成 `{}` 或 `null`。
 
 ## 4. 回應如何被解碼
 
-`output` 用於驗證 `2xx` 回應；`error` 用於驗證非 `2xx` 回應（`3xx`、`4xx`、`5xx`）。struct 的種類決定了回應串流的讀取方式（`struct.string()` → 文字，`struct.blob()` / `struct.file()` → `Blob`，`struct.arrayBuffer()` → `ArrayBuffer`，其餘皆為 JSON）：
+`output` 驗證 `2xx` 回應，`error` 驗證非 `2xx` 回應（`3xx`、`4xx`、`5xx`）。struct 的種類決定回應串流要怎麼讀（`struct.string()` → 文字，`struct.blob()` / `struct.file()` → `Blob`，`struct.arrayBuffer()` → `ArrayBuffer`，其餘皆為 JSON）：
 
-1. **依 `ok` (`200..299`) 選擇分支**：`2xx` 走 `output`，非 `2xx` 走 `error`。
-2. **省略時選擇不讀取**：若該分支未宣告 struct，回應本文完全不會被讀取（`2xx` 解析為 `data: undefined` + `HttpMeta`；非 `2xx` 解析為 `HTTP_STATUS` 且 `data: undefined`）。
-3. **優先驗證 JSON 媒體型別**：對於 JSON struct，非 JSON 的 `Content-Type` 會在讀取本文串流之前即失敗並回傳 `RES_MEDIA_TYPE_INVALID`。
-4. **讀取與剖析**：無法讀取的串流或無效的 JSON 會失敗並回傳 `RES_DECODE_FAILED`（若串流中途截斷則回傳 `NET_BODY_INCOMPLETE`）。
-5. **使用 `struct` 驗證結構**：結構不符時會失敗並回傳 `RES_STRUCT_MISMATCH`。
+1. **依 `ok` (`200..299`) 選邊**：`2xx` 走 `output`，非 `2xx` 走 `error`。
+2. **省略即不讀取**：該側沒有宣告 struct 時，回應本文完全不會被讀取（`2xx` 解析為 `data: undefined` + `HttpMeta`；非 `2xx` 解析為 `HTTP_STATUS` 且 `data: undefined`）。
+3. **先驗證 JSON 媒體型別**：對於 JSON struct，非 JSON 的 `Content-Type` 會在讀取本文串流之前以 `RES_MEDIA_TYPE_INVALID` 失敗。
+4. **讀取與剖析**：無法讀取的串流或無效的 JSON 會以 `RES_DECODE_FAILED` 失敗（若在傳輸途中被截斷則為 `NET_BODY_INCOMPLETE`）。
+5. **以 `struct` 驗證**：schema 不符時以 `RES_STRUCT_MISMATCH` 失敗。
 
 ## 5. 取消工作與設定逾時期限 [#cancel-the-work]
 
@@ -140,26 +112,26 @@ void main();
 - **手動取消（`NET_ABORTED`）**：使用 `AbortController`。
 - **組合訊號**：使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`。
 
-<Tabs items={["截止時間（NET_TIMEOUT）", "手動取消（NET_ABORTED）"]}>
-<Tab value="截止時間（NET_TIMEOUT）">
+<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
+<Tab value="Deadline (NET_TIMEOUT)">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="手動取消（NET_ABORTED）">
+<Tab value="Manual cancel (NET_ABORTED)">
 
 <include cwd>examples/http/cancel.ts#example</include>
 
 </Tab>
 </Tabs>
 
-取消寫入性質的請求僅代表呼叫端停止等待回應——並不保證伺服器端已將變更復原。
+取消寫入請求只表示呼叫端已停止等待——並不保證伺服器端已回滾該次變更。
 
 ## 6. 憑證、XSRF 與傳輸進度
 
 - **`withCredentials(true)`**：為 HTTP 與 SSE 請求設定 Fetch 的 `credentials: "include"`。
-- **`withXSRF(options?)`**：在同源且具變更性質的 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上，讀取 XSRF Cookie（預設為 `XSRF-TOKEN`）並自動注入標頭（`X-XSRF-TOKEN`）。
-- **`onDownloadProgress` / `onUploadProgress`**：透過 `client({ onDownloadProgress, onUploadProgress })` 傳入。下載進度僅在 `Content-Length` 為正值且 `Content-Encoding` 不存在或為 `identity` 時，才會回報 `lengthComputable: true`。上傳進度在伺服器端環境（Bun、Node.js）支援串流本文。若進度回呼函式拋出例外，該次呼叫會失敗並回傳 `EXT_OBSERVER_FAILED`。
+- **`withXSRF(options?)`**：在同源的變更型 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上，讀取 XSRF Cookie（預設 `XSRF-TOKEN`）並注入標頭（`X-XSRF-TOKEN`）。
+- **`onDownloadProgress` / `onUploadProgress`**：透過 `client({ onDownloadProgress, onUploadProgress })` 傳入。只有當 `Content-Length` 為正值、且沒有 `Content-Encoding` 或為 `identity` 時，下載進度才會回報 `lengthComputable: true`。上傳進度在伺服器執行環境（Bun、Node.js）會以串流方式傳送本文。進度回呼若拋出例外，該次呼叫會以 `EXT_OBSERVER_FAILED` 失敗。
 
 ## 相關閱讀
 

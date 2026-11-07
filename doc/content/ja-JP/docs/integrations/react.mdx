@@ -26,9 +26,11 @@ bun add @defjs/core @defjs/react react
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
   <Tab value="app/App.tsx">
     <include cwd>examples/react/client-provider.tsx#example</include>
+
   </Tab>
   <Tab value="app/OrderCard.tsx">
     <include cwd>examples/react/basic-setup.tsx#example</include>
+
   </Tab>
 </Tabs>
 
@@ -49,11 +51,11 @@ bun add @defjs/core @defjs/react react
 
 ## 3. TanStack Query との統合
 
-`@defjs/react` は依存性注入のみを担当し、独自に `useRequest` フックなどを提供することは **ありません**。TanStack Query などのデータフェッチライブラリと組み合わせる場合は、クエリ関数の `signal` を `client({ signal })` 経由で渡し、クエリアダプターの内部でエラーファーストのタプルを変換します。
+`@defjs/react` は依存性注入のみを担当し、`useRequest` フックを提供することは **ありません**。TanStack Query などのデータフェッチライブラリと組み合わせる場合は、クエリ関数の `signal` を `client({ signal })` 経由で渡し、クエリアダプターの内部でエラーファーストのタプルを変換します。
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
-ここでの `throw error` は、TanStack Query のエラー捕捉要件を満たすために設けたアダプター境界の明示的な処理であり、Defjs 本来の標準的な呼び出しスタイルではありません。
+ここでの `throw error` は、TanStack Query の reject 契約を満たすために設けたアダプター境界の明示的な処理であり、Defjs 本来の標準的な呼び出しスタイルではありません。
 
 ---
 
@@ -63,7 +65,7 @@ SSE や WebSocket のハンドルは、初回の `openStream(...)` や `connectC
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- WebSocket 操作に渡した `signal` を abort すると、セッションは `aborted` として終了し、`session.receive` は `AbortError` で reject されます。クリーンアップ済みの場合は `catch` ブロックでエラーをガードし、キューのオーバーフローやハートビートタイムアウトなどの真の実行時エラーのみが通知されるようにします。
+- WebSocket 操作に渡した `signal` を abort すると、セッションは `aborted` として終了し、`session.receive` は `AbortError` で reject されます。クリーンアップ済みの場合は `catch` ブロックでエラーをガードし、キューのオーバーフローやハートビートタイムアウトなどの実際の実行時エラーのみが通知されるようにします。
 - SSE ストリームを abort した場合、例外を throw することなく `for await (const msg of stream)` が安全に終了します。
 
 ---
@@ -72,13 +74,13 @@ SSE や WebSocket のハンドルは、初回の `openStream(...)` や `connectC
 
 - **ブラウザ**: エンドポイントやインターセプターがリクエストに依存しない場合、モジュールスコープの単一クライアントを共有します。
 - **SSR**: ヘッダー、Cookie、テナント、認証情報がリクエストごとに異なる場合、各サーバーリクエスト境界の中で新しいクライアントを生成します。
-- `<ClientProvider>` のアンマウントによって、実行中の HTTP 通信が中止されたり、SSE/WebSocket 接続が切断されたり、`disposeClient` が呼ばれたりすることはありません。
+- `<ClientProvider>` のアンマウントによって、実行中の HTTP 通信が中止されたり、SSE/WebSocket 接続が閉じられたり、クライアントが破棄されたりすることはありません。
 
 ---
 
 ## 公開エクスポートと関連ドキュメント
 
-- `ClientProvider` — `DerivableClient` を提供（`ClientProviderProps: { client: Client; children?: ReactNode }`）
+- `ClientProvider` — `DerivableClient` を提供（`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`）
 - `useClient(overrideClient?)` — 明示的なオーバーライドまたは最も近い親のクライアントを取得
 - 関連ガイド: [Client](/ja-JP/docs/client)、[エラーハンドリング](/ja-JP/docs/errors)、[SSE イベントストリーム](/ja-JP/docs/sse)、[WebSocket セッション](/ja-JP/docs/web-socket)
 - 関連レシピ: [宣言済み 404 の処理](/ja-JP/recipes/get-declared-404)、[HTTP 呼び出しのキャンセル](/ja-JP/recipes/cancel-http)、[SSE イベントの受信](/ja-JP/recipes/consume-sse)、[WebSocket セッションの管理](/ja-JP/recipes/websocket-session)

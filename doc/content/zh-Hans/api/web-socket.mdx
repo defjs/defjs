@@ -1,41 +1,36 @@
 ---
 title: WebSocket
-description: defineWebSocket、session，以及请求选项。
+description: defineWebSocket、会话与请求选项。
 ---
 
 # WebSocket
 
-声明一个 socket，带着 client 调用该操作，收发类型化消息，再 close。
+声明 socket，用 Client 调用操作，收发带类型的消息，然后关闭。
 
 ## defineWebSocket()
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`、一个 `incoming` struct，以及必填的正整数 `maxIncomingQueueSize`；可选 `outgoing` 和 `input` struct、`operation`、静态 `protocols`，以及非负的 `maxOutgoingQueueSize`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员写在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明了 `input` 时才必填。
-- **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即打开 session。
+- **definition** — `path`、一个 `incoming` struct，以及必填的正的安全整数 `maxIncomingQueueSize`；可选 `outgoing` 和 `input` struct、`operation`、静态 `protocols`，以及非负安全整数 `maxOutgoingQueueSize`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明 `input` 时必填。
+- **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即打开会话。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-调用返回 `[null, session, connection]` 或 `[error, undefined, connection?]`。按次选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect`，忽略 HTTP 进度字段。
+调用返回 `[null, session, connection]` 或 `[error, undefined, connection?]`。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect`，忽略 HTTP 进度字段。
 
-`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect` 各自整体替换该次调用的 client 值。protocols 的优先级是：派生 client，然后是 `withWebSocketProtocols`，最后是定义里的 `protocols`。`heartbeat.timeoutMs` 是等待确认的时间，不是请求期限。
+`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect` 各自整体覆盖该次调用的 Client 级选项。协议优先级依次为：派生的 Client、`withWebSocketProtocols`、定义的 `protocols`。`heartbeat.timeoutMs` 是等待确认的时间，不是请求期限。
 
 ## WebSocketSession
 
 <ApiSignature name="WebSocketSession" />
 
-自有作用域优先用 `await using ownedSession = session` 清理。手动 `session.close()` 和 `await session.closed` 仍可使用。
+自有作用域优先用 `await using ownedSession = session` 清理。手动 `session.close()` 和 `await session.closed` 仍可用。
 
-```ts
-async function consume(
-  session: WebSocketSession<unknown, never>,
-): Promise<void> {
-  await using ownedSession = session;
-  for await (const message of ownedSession.receive) console.log(message);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#consume
+</include>
 
-`closed` 报告逻辑终止状态。Async disposer 会请求原生 close 并等待 Defjs 自有 teardown；若一直没有 close event，则以 1 秒为界，并可能用名为 `TimeoutError` 的 `DOMException` reject。它无法证明物理 TCP 连接已经关闭。
+`closed` 报告逻辑终态。异步 disposer 会请求原生关闭并等待 Defjs 自有的清理；若一直没有 close 事件，则以 1 秒为界，并可能以名为 `TimeoutError` 的 `DOMException` reject。它无法证明物理 TCP 连接已经关闭。
 
 ### WebSocketState
 
@@ -43,13 +38,13 @@ async function consume(
 
 ### WebSocketConnectionInfo
 
-`generation`（重连就加一），以及在已知时的 `url`、`protocol` 和 `extensions`。
+`generation`（每次打开时递增），以及已知时的 `url`、`protocol` 和 `extensions`。
 
 ### WebSocketCloseInfo
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上可选，在 `error` 上必填。传入的原始 frame 或已解码消息队列溢出时，`cause.code === "CAP_QUEUE_OVERFLOW"`；同一个 cause 会让 `receive` reject，并传给 `onRuntimeError`。心跳超时和重连次数耗尽仍使用普通运行时 `Error` 作为 cause，没有单独的稳定代码。`code`、`reason` 和 `wasClean` 可以出现在每个变体上。手动 `session.close()` 会在 close 事件自己没有这两项时，填上 `{ kind: "closed" }` 的 `code` 和 `reason`。
+`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上可选，在 `error` 上必填。入站的原始帧或解码后消息队列溢出时，`cause.code === "CAP_QUEUE_OVERFLOW"`；同一个 cause 会让 `receive` reject，并传给 `onRuntimeError`。心跳超时和重连耗尽保留普通运行时 `Error` cause，没有单独的稳定代码。`code`、`reason` 和 `wasClean` 可以出现在每个变体上。手动 `session.close()` 在 close 事件没有这两项时，会为 `{ kind: "closed" }` 填入 `code` 和 `reason`。
 
 ## WebSocketExecuteOptions
 
@@ -57,31 +52,31 @@ async function consume(
 
 `WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hans/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `signal`。`WebSocketHeartbeatConfig`：`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。没有 `timeout` 或 `abort` 字段。
 
-`signal` 覆盖整个 session，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。`signal` 是这次调用的 signal；要组合 signal，在应用代码里用 `AbortSignal.any`。`heartbeat` 整体替换；它的 `timeoutMs` 等待确认，不是请求期限。
+`signal` 覆盖整个会话，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 Client 级默认期限。`signal` 是本次调用的 signal；要组合 signal，在应用代码中使用 `AbortSignal.any`。`heartbeat` 整体替换；其 `timeoutMs` 等待确认，不是请求期限。
 
-builder 和拦截器链每次操作只运行一次。重连复用已构建的 path/query 和捕获的 protocols，并在 `beforeConnect` 之前构造 URL。如果拦截器没有替换请求的基础端点，重连还会代入新选中的端点。该 hook 不能在同一个 session 内轮换 URL 或子协议凭据；请使用新的 input 或 client 配置发起新操作。
+`builder` 和拦截器链每次操作只运行一次。重连复用已构建的 path/query 和捕获的 protocols，并在 `beforeConnect` 之前构造 URL。如果拦截器没有替换请求的基础端点，重连还会代入新选择的端点。该 Hook 不能在同一个会话内轮换 URL 或子协议凭据；请用新的 input 或 Client 配置发起新操作。
 
-设了 `reconnect` 时，每次连接中断的 `attempts` 默认 3；`0` 禁用。成功 `open` 后会重置预算和退避指数，因此每次新的中断都从第 1 次重试开始。省略 `attempts` 并不表示单次中断期间可以无限重试。默认值和校验规则见 [Client](/zh-Hans/api/client)。
+设置 `reconnect` 后，每次中断的 `attempts` 默认为 3；`0` 禁用。成功 `open` 会重置预算和退避指数，因此每次新中断都从第 1 次重试开始。省略 `attempts` 并不表示单次中断内可以无限重试。默认值和校验规则见 [Client](/zh-Hans/api/client)。
 
 ## 消息
 
-`incoming` 是一个 struct。文本、`ArrayBuffer`、typed-array、`Blob` frame 都按 UTF-8 读，JSON parse，再拿这个 struct 校验。JSON parse 或 struct 失败的 frame 报到 `session.onRuntimeError`，不进队列。没有 client 级的非法 frame option。
+`incoming` 是一个 struct。文本、`ArrayBuffer`、类型化数组和 `Blob` 帧都按 UTF-8 读取，解析为 JSON，再用该 struct 校验。JSON 解析失败或 struct 校验失败的帧会报告给 `session.onRuntimeError`，不进入队列。没有 Client 级的无效帧选项。
 
-`outgoing` 是一个 struct。`session.send` 接受该 struct 的 `StructInput`，编码 alias，再 `JSON.stringify`。编码后 JSON 无法忠实表示的值会在发送或进入重连队列之前抛出 `TypeError`，包括非有限数字、函数、symbol、`Map`、`Set`、流，以及没有 JSON 表示形式的类实例。嵌套值使用与 HTTP JSON 请求体相同的检查。心跳也使用这项检查；心跳序列化失败会结束 session。多种消息类型可用 `struct.discriminatedUnion` 表达。
+`outgoing` 是一个 struct。`session.send` 接受该 struct 的 `StructInput`，编码别名，再调用 `JSON.stringify`。编码后 JSON 无法忠实表示的值会在发送或进入重连队列之前抛出 `TypeError`，包括非有限数字、函数、symbol、`Map`、`Set`、流对象，以及没有 JSON 表示形式的类实例。嵌套值使用与 HTTP JSON body 相同的检查。心跳也使用这项检查；心跳序列化失败会结束会话。多种消息类型可用 `struct.discriminatedUnion` 表达。
 
-```ts
-session.send({ type: "subscribe", symbol: "ACME" });
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#send
+</include>
 
 见 [WebSocket 指南](/zh-Hans/docs/web-socket) 和[打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)。
 
 ## WebSocketDefinition
 
-`path`、`incoming`，必填的 `maxIncomingQueueSize`，可选 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。builder 只能返回 `path` 和 `query`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
+`path`、`incoming`，必填的 `maxIncomingQueueSize`，可选 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。`builder` 只能返回 `path` 和 `query`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ## WebSocketEndpoint
 
-`defineWebSocket` 的返回值。第一个参数是 client。其余参数只是 input。
+`defineWebSocket` 返回的操作。第一个参数是 Client。其余参数只是 input。
 
 ## WebSocketRequestShape
 
@@ -97,7 +92,7 @@ session.send({ type: "subscribe", symbol: "ACME" });
 
 ## ManualSocketCloseReason
 
-用 `session.close()` 关掉时记下的原因。
+通过 `session.close()` 关闭时记录的原因。
 
 ## WebSocketHeartbeatConfig
 
@@ -105,7 +100,7 @@ session.send({ type: "subscribe", symbol: "ACME" });
 
 ## WebSocketIncomingData
 
-解码后的入站 frame：`incoming` struct 的 `Infer`。
+解码后的入站帧：`incoming` struct 的 `Infer`。
 
 ## WebSocketOutgoingData
 
@@ -113,4 +108,4 @@ session.send({ type: "subscribe", symbol: "ACME" });
 
 ## SocketLifecycleOutcome
 
-一次连接尝试的结果（`closeInfo`、`connection`、`cause`、`opened`），供重连逻辑使用。它不是 session 的最终结果；最终结果见 `WebSocketCloseInfo`。
+一次连接尝试的结果（`closeInfo`、`connection`、`cause`、`opened`），供重连逻辑使用。它不是会话的最终结果；最终结果见 `WebSocketCloseInfo`。

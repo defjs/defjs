@@ -5,7 +5,7 @@ import {
   withHTTPHandle,
   type FetchHandle,
 } from "@defjs/core";
-import { getOrder } from "./orders-sdk.ts";
+import { getOrder } from "./src/orders.ts";
 
 // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior for construction errors instead of introducing synchronous throws
 const handle: FetchHandle = async () =>

@@ -1,57 +1,29 @@
 ---
 title: "HTTP 请求"
-description: 为 SDK 设计强类型的 HTTP 操作，并在消费方应用中自由配置端点、凭证与超时取消。
+description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消方式调用它们。
 ---
 
 # HTTP 请求
 
-在 SDK 中，每个 HTTP 操作均通过 `defineRequest` 声明：包括请求方法、路径模板、`input` 参数 Schema、同步纯函数 `builder`，以及针对 `output` 成功与 `error` 业务异常的响应 Schema。消费方应用只需导入该操作，传入配置好的 `Client`，并解包处理返回的 `[error, data, response]` 元组。
+在 SDK 中，每个 HTTP 操作都用 `defineRequest` 定义：请求方法、路径模板、`input` schema、同步 `builder`，以及 `output` / `error` 响应 schema。消费方应用导入该操作，传入配置好的 `Client`，并处理返回的 `[error, data, response]` 元组。
 
-## 1. 声明操作并在应用中调用
+## 1. 定义操作并调用
 
-在 SDK 模块中为每个 API 端点单独导出 `defineRequest`，而在消费方应用中通过 `createClient` 创建 Client：
+在 SDK 模块中为每个操作单独导出一个 `defineRequest`，把 `createClient` 留在消费方应用里：
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/main.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, order, response] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-  console.log(order.status, response.status);
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/http/basic-setup/app/main.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -65,22 +37,22 @@ void main();
 
 ### SDK 设计最佳实践
 
-- **一个定义对应一个操作**：将各个请求方法、URL 路径与契约拆分为独立导出的操作定义，便于消费方应用进行 Tree-shaking 摇树优化，按需打包。
-- **配置静态 `operation` 标识**：推荐使用低基数（low-cardinality）的业务标识，例如 `"orders.read"`。可观测性插件（如 `@defjs/opentelemetry-server`）与日志拦截器可直接使用它记录指标，而无需担心在 URL 或参数中泄露用户隐私 ID。
-- **绝不在 SDK 中内嵌 Client**：SDK 模块只对外导出纯净的操作定义、`struct` 数据契约以及 TypeScript 类型。
+- **一个定义对应一个操作**：让每个方法、路径和契约各自成为独立的定义，应用才能对未使用的操作做 tree-shaking。
+- **设置静态 `operation` 名称**：使用低基数标识，例如 `"orders.read"`。遥测插件（`@defjs/opentelemetry-server`）和日志拦截器会使用它，而不会泄露 URL 或用户 ID。
+- **绝不在 SDK 内嵌 Client**：只导出定义、`struct` schema 和类型。
 
 ## 2. URL 解析与路径占位符
 
-`withEndpoint(...)` 要求传入合法的绝对 URL。传入 URL 的 pathname 会被作为请求的基础目录（基地址末尾所带的 query 参数或 hash 锚点将被自动忽略丢弃）。
+`withEndpoint(...)` 要求传入有效的绝对 URL。它的 pathname 作为基础目录（基地址上的 query 字符串或 hash 会被丢弃）。
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
-- **路径占位符（`:name`）**：会被严格且恰好编码一次，作为一个单一的路径片段。无论参数中包含斜杠 `/`、`?`、`#`、`%`、空格还是 Unicode 字符，都会被安全限制在该路径片段内部——因此切勿在外部预先编码。传入空字符串、`.` 或 `..` 会直接导致 `REQ_BUILD_FAILED`。
-- **Origin 与目录边界限制**：操作定义中的 `path` 不能是绝对 URL，不能是协议相对 URL（`//...`），不能包含 C0 控制字符、反斜杠、`?` 或 `#`，也不能通过 `../` 逃逸出基地址所在的目录范围。任何违规路径都会在触发拦截器或发起网络请求之前立即以 `REQ_BUILD_FAILED` 报错中断。
+- **路径占位符（`:name`）**：恰好编码一次，作为单个路径片段。斜杠、`?`、`#`、`%`、空格和 Unicode 字符都留在该片段内——不要预先编码。空字符串、`.` 和 `..` 会以 `REQ_BUILD_FAILED` 失败。
+- **源与目录限制**：定义中的 path 不能是绝对 URL 或协议相对 URL（`//...`），不能包含 C0 控制字符、反斜杠、`?` 或 `#`，也不能用 `../` 逃出基地址所在目录。任何违规都会在拦截器或传输层运行之前以 `REQ_BUILD_FAILED` 失败。
 
 ## 3. 使用 `builder` 放置入参
 
-只要操作声明了 `input`，就**必须**提供一个同步、纯净的 `builder` 函数，并返回 `{ path?, query?, headers?, body? }`。只有未声明 `input` 的操作才可以省略 `builder`。
+只要操作声明了 `input`，就**必须**提供同步、纯的 `builder`，返回 `{ path?, query?, headers?, body? }`。只有没有 `input` 的操作才能省略 `builder`。
 
 <include cwd lang="typescript">
   examples/http/place-input.ts#example
@@ -88,23 +60,23 @@ void main();
 
 ### `builder` 如何处理字段别名
 
-| Builder 返回表达式                             | 实际网络传输产物                                                            |
+| `builder` 表达式                               | 实际网络输出                                                                |
 | ---------------------------------------------- | --------------------------------------------------------------------------- |
 | `body: input.profile`                          | 类型化的 struct 对象：自动应用 `.alias()` 别名以及 `Date` / `bigint` 编解码 |
 | `body: { profile: input.profile }`             | 外层键名 `profile` 保持字面量；内层 struct 对象保留其别名规则               |
 | `body: { ...input.profile, role: "admin" }`    | 对象展开操作会保留 struct 别名；新增的 `role` 保持字面量                    |
-| `body: { name: input.profile.customerName }`   | 匿名手写对象：所有键名均为手写字面量                                        |
-| `query: input.filter` / `headers: input.trace` | 扁平的类型化对象：字段声明的 `.alias()` 会转换为网络传输键名                |
+| `body: { name: input.profile.customerName }`   | 匿名对象：键名都是字面量                                                    |
+| `query: input.filter` / `headers: input.trace` | 扁平类型化对象：字段的 `.alias()` 成为网络键名                              |
 
-### 自定义查询参数序列化
+### 自定义查询序列化
 
-默认情况下，基础标量值和标量数组（重复 key 格式）会直接编码，而嵌套的查询对象则会报错 `REQ_BUILD_FAILED`。如果后端接口需要解析特定的嵌套 Query 格式（如 `filter[status]=paid`），可在 Client 上配置 `withQuerySerializer`：
+默认情况下，查询标量和标量数组（重复键）直接编码，嵌套查询对象会以 `REQ_BUILD_FAILED` 失败。如果后端期望嵌套查询语法（`filter[status]=paid`），在 Client 上配置 `withQuerySerializer`：
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
 ### 请求体格式适配
 
-`GET` 和 `HEAD` 请求禁止携带请求体。针对其他请求方法，底层传输格式由 `builder` 返回的 `body` 类型自动决定：
+`GET` 和 `HEAD` 不能携带请求体。其他方法下，请求体格式由 `builder` 返回的 `body` 值决定：
 
 | `body` 取值                                                | 实际传输格式                                   | 默认 `Content-Type`                       |
 | ---------------------------------------------------------- | ---------------------------------------------- | ----------------------------------------- |
@@ -114,56 +86,56 @@ void main();
 | `Blob` / `File`                                            | 原样二进制传输                                 | `blob.type` 或 `application/octet-stream` |
 | `ArrayBuffer`、类型化数组、`DataView`、`ReadableStream`    | 原始字节流 / 流式传输                          | `application/octet-stream`                |
 | `string` 纯字符串                                          | UTF-8 文本                                     | `text/plain;charset=UTF-8`                |
-| 普通对象、数组、有限数字、布尔值、`null`、`Date`、`bigint` | 经 Struct 编码的 JSON                          | `application/json`                        |
+| 普通对象、数组、有限数字、布尔值、`null`、`Date`、`bigint` | 经 struct 编码的 JSON                          | `application/json`                        |
 
 <include cwd lang="typescript">
   examples/http/body.ts#example
 </include>
 
-无法用标准 JSON 表达的值（如 `NaN`、`±Infinity`、`Map`、`Set`、函数、未实现 `toJSON()` 的自定义类实例或裸可迭代对象）会在发送前立即失败，并在返回元组的错误项中给出 `REQ_BUILD_FAILED`，而不是被静默序列化为 `{}` 或 `null`。
+无法用 JSON 表示的值（`NaN`、`±Infinity`、`Map`、`Set`、函数、没有 `toJSON()` 的类实例或裸可迭代对象）会立即以 `REQ_BUILD_FAILED` 失败，而不是静默序列化成 `{}` 或 `null`。
 
-## 4. 响应校验与解码机制
+## 4. 响应如何解码
 
-`output` 用于校验 `2xx` 成功响应；`error` 用于校验非 `2xx` 响应（`3xx`、`4xx`、`5xx`）。声明的 struct 类型决定了响应流的读取方式（`struct.string()` → 文本，`struct.blob()` / `struct.file()` → `Blob`，`struct.arrayBuffer()` → `ArrayBuffer`，其余所有类型 → JSON）：
+`output` 校验 `2xx` 响应；`error` 校验非 `2xx` 响应（`3xx`、`4xx`、`5xx`）。struct 类型决定响应流如何读取（`struct.string()` → 文本，`struct.blob()` / `struct.file()` → `Blob`，`struct.arrayBuffer()` → `ArrayBuffer`，其他 → JSON）：
 
-1. **根据 `ok` 状态码划分分支（`200..299`）**：`2xx` 走 `output` 解码，非 `2xx` 走 `error` 解码。
-2. **未声明即代表忽略**：若某一侧未声明 struct，则响应体完全不会被读取（`2xx` 返回 `data: undefined` + `HttpMeta`；非 `2xx` 返回 `HTTP_STATUS` 且 `data: undefined`）。
-3. **优先校验 JSON 媒体类型**：对于声明为 JSON 的 struct，若服务端返回的 `Content-Type` 并非 JSON，会在读取 Body 之前立即报错 `RES_MEDIA_TYPE_INVALID`。
-4. **读取流并解析**：无法读取的流或损坏的 JSON 会导致 `RES_DECODE_FAILED`（若流在传输中途异常断开，则报 `NET_BODY_INCOMPLETE`）。
-5. **通过 `struct` 进行强类型校验**：数据结构与 Schema 不匹配时，报错 `RES_STRUCT_MISMATCH`。
+1. **按 `ok`（`200..299`）选择一侧**：`2xx` 用 `output`，非 `2xx` 用 `error`。
+2. **省略即不读取**：该侧没有声明 struct 时，响应 body 从不读取（`2xx` 解析为 `data: undefined` + `HttpMeta`；非 `2xx` 解析为 `HTTP_STATUS` 且 `data: undefined`）。
+3. **先校验 JSON 媒体类型**：对于 JSON struct，非 JSON 的 `Content-Type` 会在读取 body 流之前以 `RES_MEDIA_TYPE_INVALID` 失败。
+4. **读取并解析**：无法读取的流或无效 JSON 以 `RES_DECODE_FAILED` 失败（流中途截断时为 `NET_BODY_INCOMPLETE`）。
+5. **用 `struct` 校验**：schema 不匹配以 `RES_STRUCT_MISMATCH` 失败。
 
 ## 5. 取消请求与设置超时期限 [#cancel-the-work]
 
-在派生 Client 上传入 `signal`：`client({ signal })`。
+在派生的单次调用 Client 上传入 `signal`：`client({ signal })`。
 
-- **超时期限（`NET_TIMEOUT`）**：使用原生 `AbortSignal.timeout(ms)`。
+- **期限（`NET_TIMEOUT`）**：使用 `AbortSignal.timeout(ms)`。
 - **手动取消（`NET_ABORTED`）**：使用 `AbortController`。
-- **组合多种信号**：使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`。
+- **组合信号**：使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`。
 
-<Tabs items={["截止时间（NET_TIMEOUT）", "手动取消（NET_ABORTED）"]}>
-<Tab value="截止时间（NET_TIMEOUT）">
+<Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
+<Tab value="Deadline (NET_TIMEOUT)">
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="手动取消（NET_ABORTED）">
+<Tab value="Manual cancel (NET_ABORTED)">
 
 <include cwd>examples/http/cancel.ts#example</include>
 
 </Tab>
 </Tabs>
 
-请注意：取消一个写操作请求仅代表调用方停止等待响应，并不保证服务端已经成功回滚了该数据变更。
+取消写请求只表示调用方停止等待，并不保证服务端回滚了这次变更。
 
-## 6. 跨域凭证、XSRF 防御与传输进度
+## 6. 凭证、XSRF 与传输进度
 
-- **`withCredentials(true)`**：将 Fetch 的 `credentials` 显式设置为 `"include"`，适用于 HTTP 和 SSE 请求。
-- **`withXSRF(options?)`**：自动读取 XSRF Cookie（默认名为 `XSRF-TOKEN`），并在同源的写操作方法（`POST`、`PUT`、`PATCH`、`DELETE`）上自动注入对应的请求头（`X-XSRF-TOKEN`）。
-- **`onDownloadProgress` / `onUploadProgress`**：通过 `client({ onDownloadProgress, onUploadProgress })` 传入。下载进度仅在服务端提供了有效的正数 `Content-Length` 且未开启压缩或编码为 `identity` 时才报告 `lengthComputable: true`。在服务端运行时（Bun、Node.js）中，上传进度支持将 Body 转换为流式传输。若进度回调函数内部抛出异常，整个调用将以 `EXT_OBSERVER_FAILED` 终止。
+- **`withCredentials(true)`**：为 HTTP 和 SSE 请求设置 Fetch `credentials: "include"`。
+- **`withXSRF(options?)`**：读取 XSRF cookie（默认 `XSRF-TOKEN`），并在同源的变更类 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上注入请求头（`X-XSRF-TOKEN`）。
+- **`onDownloadProgress` / `onUploadProgress`**：通过 `client({ onDownloadProgress, onUploadProgress })` 传入。仅当 `Content-Length` 为正且 `Content-Encoding` 缺失或为 `identity` 时，下载进度才报告 `lengthComputable: true`。在服务端运行时（Bun、Node.js）上，上传进度会流式发送请求体。进度回调抛出异常会以 `EXT_OBSERVER_FAILED` 使调用失败。
 
 ## 相关阅读
 
-- [发送并校验 JSON 数据](/zh-Hans/recipes/post-json)
-- [优雅处理已声明的 404 响应](/zh-Hans/recipes/get-declared-404)
-- [取消进行中的 HTTP 请求](/zh-Hans/recipes/cancel-http)
-- [使用本地 Fetch Handle 编写离线测试](/zh-Hans/recipes/test-with-handle)
+- [发送并校验 JSON](/zh-Hans/recipes/post-json)
+- [处理声明的 404](/zh-Hans/recipes/get-declared-404)
+- [取消 HTTP 调用](/zh-Hans/recipes/cancel-http)
+- [用本地 Fetch 句柄测试](/zh-Hans/recipes/test-with-handle)

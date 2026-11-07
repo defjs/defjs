@@ -5,16 +5,16 @@ description: createClient, helpers d’options et le type Client.
 
 # Client
 
-`createClient(...)` renvoie un [`DerivableClient`](/fr-FR/api/core/derivableclient-type). Compose les options du client de gauche à droite, puis appelle `client(options?)` pour obtenir une valeur [`Client`](/fr-FR/api/core/client-type) et la passer à une opération : `getOrder(client(options), input)`.
+`createClient(...)` renvoie un [`DerivableClient`](/fr-FR/api/core/derivableclient-type). Composez les options du client de gauche à droite, puis appelez `client(options?)` pour obtenir une valeur [`Client`](/fr-FR/api/core/client-type) et la passer à une opération : `getOrder(client(options), input)`.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Les options s’appliquent dans l’ordre. Préfère créer le client dans la frontière de la requête quand les intercepteurs capturent l’auth ou des tenants. La factory renvoyée est une fonction. L’appeler renvoie une valeur `Client` et ne fait aucune I/O. La factory elle-même est aussi un `Client` et ne porte aucune option de requête.
+Les options s’appliquent dans l’ordre. Préférez créer le client dans la frontière de la requête quand les intercepteurs capturent l’auth ou des tenants. La fabrique renvoyée est une fonction. L’appeler renvoie une valeur `Client` et ne fait aucune I/O. La fabrique elle-même est aussi un `Client` et ne porte aucune option de requête.
 
 - **options** — Helpers d’options tels que `withEndpoint`.
-- **Renvoie** une factory appelable. La configuration de base est partagée par chaque valeur de client et n’est pas gelée à l’exécution. Elle est fixe par convention : rien dans la bibliothèque ne la change, et les applications ne devraient pas non plus.
+- **Renvoie** une fabrique appelable. La configuration de base est partagée par chaque valeur de client et n’est pas gelée à l’exécution. Elle est fixe par convention : rien dans la bibliothèque ne la change, et les applications ne devraient pas non plus.
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -26,25 +26,25 @@ Tous les helpers renvoient `ClientOption`. Un appel ultérieur remplace un appel
 
 <ApiSignature name="withEndpoint" />
 
-Copie les URLs de base candidates dans l’ordre de première apparition et écarte une copie ultérieure de la même chaîne. Un `withEndpoint` ultérieur remplace la liste. Il ne vérifie pas les URLs et ne remplace pas l’équilibreur. Une liste vide est admise et fait échouer l’appel avec `REQ_BUILD_FAILED`.
+Copie les URLs de base candidates dans l’ordre de première apparition et écarte une copie ultérieure de la même chaîne. Un `withEndpoint` ultérieur remplace la liste. Il ne vérifie pas les URLs et ne remplace pas le répartiteur. Une liste vide est admise et fait échouer l’appel avec `REQ_BUILD_FAILED`.
 
 ### withBalancer()
 
 <ApiSignature name="withBalancer" />
 
-Remplace l’équilibreur utilisé pour les appels suivants. L’objet est conservé par référence. Sans cette option, chaque client reçoit son propre `pickFirstBalancer()`.
+Remplace le répartiteur utilisé pour les appels suivants. L’objet est conservé par référence. Sans cette option, chaque client reçoit son propre `pickFirstBalancer()`.
 
 ### withInterceptors()
 
 <ApiSignature name="withInterceptors" />
 
-Ajoute des intercepteurs dans l’ordre d’enregistrement. Les kinds mixtes sont filtrés par transport quand l’opération s’exécute.
+Ajoute des intercepteurs dans l’ordre d’enregistrement. Les types mixtes sont filtrés par transport quand l’opération s’exécute.
 
 ### withQuerySerializer()
 
 <ApiSignature name="withQuerySerializer" />
 
-Remplace l’encodage de query pour HTTP, SSE et WebSocket. `serializer(query)` reçoit l’**objet wire déjà encodé** (aliases appliqués, `Date` en ISO, `bigint` en string) et doit renvoyer la query string sans `?` initial. Il n’est pas appelé quand la requête n’a pas de query. Un builder qui renvoie `URLSearchParams` le saute.
+Remplace l’encodage de query pour HTTP, SSE et WebSocket. `serializer(query)` reçoit l'**objet réseau déjà encodé** (alias appliqués, `Date` en ISO, `bigint` en chaîne) et doit renvoyer la query string sans `?` initial. Il n’est pas appelé quand la requête n’a pas de query. Un builder qui renvoie `URLSearchParams` le saute.
 
 ### withHeaders()
 
@@ -59,9 +59,9 @@ Préséance pour une requête :
 3. Les intercepteurs reçoivent les en-têtes fusionnés et peuvent les changer.
 4. Avec le transport HTTP par défaut, l’en-tête XSRF est ajouté en dernier, seulement s’il est encore absent (voir `withXSRF`).
 
-Utilise un intercepteur pour les valeurs qui changent par requête : un jeton Bearer renouvelé, ou un HMAC sur le corps sérialisé.
+Utilisez un intercepteur pour les valeurs qui changent par requête : un jeton Bearer renouvelé, ou un HMAC sur le corps sérialisé.
 
-Il n’y a pas d’échéance par défaut au niveau du client. Passe `signal: AbortSignal.timeout(ms)` sur un client dérivé quand un appel en a besoin. Un abort manuel est `NET_ABORTED`. `AbortSignal.timeout` se classe en `NET_TIMEOUT`.
+Il n’y a pas d’échéance par défaut au niveau du client. Passez `signal: AbortSignal.timeout(ms)` sur un client dérivé quand un appel en a besoin. Un abort manuel est `NET_ABORTED`. `AbortSignal.timeout` se classe en `NET_TIMEOUT`.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,15 +115,15 @@ Le transport HTTP par défaut ajoute l’en-tête quand tout ceci est vrai : la 
 
 <ApiSignature name="DerivableClient" />
 
-Le client racine renvoyé par `createClient`, sous deux formes. La factory est une fonction et aussi un `Client` sans options de requête, donc `getOrder(client, input)` fonctionne directement. L’appeler avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) renvoie une simple valeur `Client` pour un seul appel. Cette valeur n’est pas appelable : `client()()` échoue à la compilation et lève une `TypeError` à l’exécution. La dérivation se fait une seule fois, depuis la factory ; il n’y a pas de chaîne. Écris le type `DerivableClient` plutôt que `ReturnType<typeof createClient>`.
+Le client racine renvoyé par `createClient`, sous deux formes. La fabrique est une fonction et aussi un `Client` sans options de requête, donc `getOrder(client, input)` fonctionne directement. L’appeler avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) renvoie une simple valeur `Client` pour un seul appel. Cette valeur n’est pas appelable : `client()()` échoue à la compilation et lève une `TypeError` à l’exécution. La dérivation se fait une seule fois, depuis la fabrique ; il n’y a pas de chaîne. Écrivez le type `DerivableClient` plutôt que `ReturnType<typeof createClient>`.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-Un `Client` est une valeur, pas une fonction. Appeler le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) en renvoie une. `client()` et `client(undefined)` ne stockent aucune option de requête. `client({})` conserve un instantané vide. L’appel lit chaque champ de premier niveau une fois. Un tableau `protocols` est copié. `heartbeat` et `reconnect` copient leurs champs connus. Les blocs imbriqués absents restent absents. `signal`, `beforeConnect` et les callbacks gardent leur identité. Un getter sur un champ capturé s’exécute pendant cet appel et, s’il lève, sort de l’appel. Les nombres invalides échouent encore plus tard avec `REQ_OPTIONS_INVALID`. Dériver ne fait aucune I/O. Une valeur de client n’est pas appelable : l’appeler échoue à la compilation et lève une `TypeError` à l’exécution. Crée une valeur de client par appel. La même valeur peut être passée à beaucoup d’opérations, mais réutiliser une valeur qui porte `signal` partage ce signal. `signal` n’est pas combiné ; combine les signaux avec `AbortSignal.any` dans le code applicatif. La configuration de base de la factory reste partagée et n’est pas gelée. Les helpers `with*` standard copient les records fixes qu’ils possèdent lorsqu’ils sont appliqués.
+Un `Client` est une valeur, pas une fonction. Appeler le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) en renvoie une. `client()` et `client(undefined)` ne stockent aucune option de requête. `client({})` conserve un instantané vide. L’appel lit chaque champ de premier niveau une fois. Un tableau `protocols` est copié. `heartbeat` et `reconnect` copient leurs champs connus. Les blocs imbriqués absents restent absents. `signal`, `beforeConnect` et les callbacks gardent leur identité. Un getter sur un champ capturé s’exécute pendant cet appel et, s’il lève, sort de l’appel. Les nombres invalides échouent encore plus tard avec `REQ_OPTIONS_INVALID`. Dériver ne fait aucune I/O. Une valeur de client n’est pas appelable : l’appeler échoue à la compilation et lève une `TypeError` à l’exécution. Créez une valeur de client par appel. La même valeur peut être passée à beaucoup d’opérations, mais réutiliser une valeur qui porte `signal` partage ce signal. `signal` n’est pas combiné ; combinez les signaux avec `AbortSignal.any` dans le code applicatif. La configuration de base de la fabrique reste partagée et n’est pas gelée. Les helpers `with*` standard copient les records fixes qu’ils possèdent lorsqu’ils sont appliqués.
 
-Ne passe pas la factory à un setter d’état React (`setState(factory)` l’appellerait comme updater) et ne l’utilise pas comme source d’un `watch` ou d’un `computed` Vue (ceux-ci appellent une fonction).
+Ne passez pas la fabrique à un setter d'état React (`setState(factory)` l’appellerait comme updater) et ne l'utilisez pas comme source d’un `watch` ou d’un `computed` Vue (ceux-ci appellent une fonction).
 
 ### RequestOptions
 
@@ -147,7 +147,7 @@ Sept champs plats. Chaque protocole lit les champs qu’il comprend et ignore le
 
 <ApiSignature name="ClientOption" />
 
-Mute le `ClientConfig` que `createClient` construit. Écris-en un quand aucun helper `with*` ne convient.
+Modifie le `ClientConfig` que `createClient` construit. Écrivez-en un quand aucun helper `with*` ne convient.
 
 ### QuerySerializer
 
@@ -175,9 +175,9 @@ La reconnexion est opt-in pour les deux transports : sans `withSSEReconnect` / `
 | `jitter`     | `0`             | `0`             |
 | `maxDelayMs` | pas de plafond  | `30000`         |
 
-`connectTimeoutMs` est facultatif et doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l’opération renvoie `REQ_OPTIONS_INVALID`. Il borne Fetch jusqu’aux en-têtes de réponse pour SSE, et la construction jusqu’à `open` pour WebSocket ; il est effacé après le handshake. L’expiration signale `NET_UNREACHABLE` à l’équilibreur pour qu’une reconnexion puisse choisir l’endpoint suivant. Des tentatives épuisées finissent par `NET_TIMEOUT`.
+`connectTimeoutMs` est facultatif et doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l’opération renvoie `REQ_OPTIONS_INVALID`. Il borne Fetch jusqu’aux en-têtes de réponse pour SSE, et la construction jusqu’à `open` pour WebSocket ; il est effacé après le handshake. L’expiration signale `NET_UNREACHABLE` au répartiteur pour qu'une reconnexion puisse choisir l’endpoint suivant. Des tentatives épuisées finissent par `NET_TIMEOUT`.
 
-Pour les deux transports, un handshake réussi réinitialise le budget de nouvelles tentatives par coupure, la tentative du callback et l’exposant de backoff. `attempts: 0` désactive les nouvelles tentatives ; omettre `attempts` ne donne pas des tentatives illimitées dans une coupure. `maxDelayMs` plafonne le délai final après jitter et arrondi ; la limite de timer de la plateforme, `2_147_483_647` ms, s’applique aussi, y compris quand SSE n’a pas de plafond configuré. Une base nulle reste nulle ; un dépassement de nombres valides sature aux plafonds.
+Pour les deux transports, un handshake réussi réinitialise le budget de tentatives par coupure, la tentative du callback et l’exposant de backoff. `attempts: 0` désactive les nouvelles tentatives ; omettre `attempts` ne donne pas des tentatives illimitées dans une coupure. `maxDelayMs` plafonne le délai final après jitter et arrondi ; la limite de timer de la plateforme, `2_147_483_647` ms, s’applique aussi, y compris quand SSE n’a pas de plafond configuré. Une base nulle reste nulle ; un dépassement de nombres valides sature aux plafonds.
 
 Les options de reconnexion sont validées avant le transport : `attempts` doit être un entier sûr non négatif ; `delayMs` doit être fini et non négatif ; `maxDelayMs` doit être un nombre fini non négatif ou `Infinity` positif, ce qui retire le plafond configuré mais pas la limite de plateforme de `2_147_483_647` ms ; `factor` doit être fini et positif ; `jitter` doit être fini et dans 0–1. Les valeurs invalides renvoient `REQ_OPTIONS_INVALID`. WebSocket `attempts: 0` désactive les nouvelles tentatives suivantes, mais tous les champs de reconnexion explicitement fournis sont encore validés avant la connexion initiale, comme pour SSE. Le jitter met à l’échelle la base plafonnée dans les deux sens avant que le plafond final soit appliqué.
 
@@ -233,7 +233,7 @@ Le constructeur passé à `withWebSocketHandle`. Il doit exposer la constante de
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-Enveloppe un child avec un circuit breaking d’échecs consécutifs à la Linkerd. Le round robin et p2c l’activent par défaut (comme dans Finagle) ; `false` le désactive. Le pick-first l’active avec un objet. Le classificateur par défaut compte `NET_UNREACHABLE`, `NET_UNAVAILABLE` et `NET_SERVER_ERROR`. Après cinq échecs, les pénalités partent de 1000 ms, doublent après une sonde échouée, ajoutent un jitter positif jusqu’à 0,5 fois la base et plafonnent à 60000 ms. L’expiration admet une seule sonde, décidée à `end`, ou à `done` si aucun `end` n’est arrivé. Le succès remet le backoff à zéro ; l’annulation ne fait que libérer la place. Il n’y a pas de timeout qui suppose le succès, ni de quota, ni de protection du dernier hôte, ni de grille d’évaluation, ni de critère de pourcentage, ni de slow start. `isHealthy` lit l’état mis en cache par l’application et n’annule jamais une pénalité. Tous les hôtes peuvent couper ; le fail-open local à la liste, à la Finagle, envoie quand même les requêtes. Contrairement à Envoy/gRPC A50, il n’y a pas de quota d’éjection. Voir [Filtrage de santé et p2c](/fr-FR/docs/client#health-filtering-and-p2c).
+Enveloppe une stratégie enfant avec un circuit breaking d’échecs consécutifs à la Linkerd. Le round robin et p2c l’activent par défaut (comme dans Finagle) ; `false` le désactive. Le pick-first l’active avec un objet. Le classificateur par défaut compte `NET_UNREACHABLE`, `NET_UNAVAILABLE` et `NET_SERVER_ERROR`. Après cinq échecs, les pénalités partent de 1000 ms, doublent après une sonde échouée, ajoutent un jitter positif jusqu’à 0,5 fois la base et plafonnent à 60000 ms. L’expiration admet une seule sonde, décidée à `end`, ou à `done` si aucun `end` n’est arrivé. Le succès remet le backoff à zéro ; l’annulation ne fait que libérer la place. Il n’y a pas de timeout qui suppose le succès, ni de quota, ni de protection du dernier hôte, ni de grille d’évaluation, ni de critère de pourcentage, ni de slow start. `isHealthy` lit l’état mis en cache par l’application et n’annule jamais une pénalité. Tous les hôtes peuvent couper ; le fail-open local à la liste, à la Finagle, envoie quand même les requêtes. Contrairement à Envoy/gRPC A50, il n’y a pas de quota d’éjection. Voir [Filtrage de santé et p2c](/fr-FR/docs/client#health-filtering-and-p2c).
 
 ### withRetry()
 
@@ -243,7 +243,7 @@ Active le retry HTTP au sein du même appel, indépendamment de la sélection d�
 
 Le backoff vaut par défaut `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`, avec la même sémantique de champs que la reconnexion SSE/WebSocket. `delayMs: 0` saute l’attente. `attemptTimeoutMs` doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l’opération renvoie `REQ_OPTIONS_INVALID`. Il borne Fetch, la lecture du corps et le décodage d’une tentative ; le signal de l’appelant couvre tout l’appel, y compris les attentes de backoff.
 
-Le budget Finagle appartenant au client vaut par défaut 20 % plus une réserve de 10 retries par seconde sur un TTL de 10 s. Les crédits et les débits expirent paresseusement en dix tranches de TTL/10. `budget: false` retire la limite. Les clients dérivés qui partagent une configuration partagent son budget ; des clients distincts non, même avec un équilibreur partagé. Des options invalides renvoient `REQ_OPTIONS_INVALID` avec `Invalid retry options` lorsque HTTP s’exécute. L’option capture les champs possédés, les tableaux et le budget imbriqué au moment de l’application. `withRetry()` et `withRetry(undefined)` se comportent comme `withRetry({})`. Un `withRetry` ultérieur remplace la politique ; `withRetry({ maxAttempts: 1 })` désactive les retries après qu’ils ont été activés. Les équilibreurs et les wrappers de santé n’ont aucun réglage de retry. Voir [Équilibrage de charge et basculement](/fr-FR/docs/load-balancing).
+Le budget Finagle appartenant au client vaut par défaut 20 % plus une réserve de 10 retries par seconde sur un TTL de 10 s. Les crédits et les débits expirent paresseusement en dix tranches de TTL/10. `budget: false` retire la limite. Les clients dérivés qui partagent une configuration partagent son budget ; des clients distincts non, même avec un répartiteur partagé. Des options invalides renvoient `REQ_OPTIONS_INVALID` avec `Invalid retry options` lorsque HTTP s’exécute. L’option capture les champs possédés, les tableaux et le budget imbriqué au moment de l’application. `withRetry()` et `withRetry(undefined)` se comportent comme `withRetry({})`. Un `withRetry` ultérieur remplace la politique ; `withRetry({ maxAttempts: 1 })` désactive les retries après qu’ils ont été activés. Les répartiteurs et les wrappers de santé n’ont aucun réglage de retry. Voir [Répartition de charge & basculement](/fr-FR/docs/load-balancing).
 
 <include cwd>examples/client/http-retry.ts#example</include>
 
@@ -251,8 +251,8 @@ Le budget Finagle appartenant au client vaut par défaut 20 % plus une réserve 
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` renvoie un tuple error-first. `start` facultatif s’exécute de façon synchrone au plus une fois, immédiatement avant le démarrage du transport sélectionné ; `end` facultatif s’exécute une fois après `start`, quand la réponse du pair commence (ou en cas d’échec avant la réponse), et `done` facultatif s’exécute une fois à l’achèvement. Fetch ne peut exposer ni le premier frame de corps de Linkerd ni les frontières de stream d’Envoy. Les exceptions et les rejets de thenable de tous les hooks sont contenus. `ERR_NO_CANDIDATE` n’est qu’une `cause` de `REQ_BUILD_FAILED`. Ce n’est pas un `FaultCode`. [`isNoCandidateCause`](/fr-FR/api/core/isnocandidatecause) le reconnaît d’une copie de Core à l’autre.
+`pick` renvoie un tuple error-first. `start` facultatif s’exécute de façon synchrone au plus une fois, immédiatement avant le démarrage du transport sélectionné ; `end` facultatif s’exécute une fois après `start`, quand la réponse du pair commence (ou en cas d’échec avant la réponse), et `done` facultatif s’exécute une fois à l’achèvement. Fetch ne peut exposer ni la première trame de corps de Linkerd ni les frontières de stream d’Envoy. Les exceptions et les rejets de thenable de tous les hooks sont contenus. `ERR_NO_CANDIDATE` n’est qu’une `cause` de `REQ_BUILD_FAILED`. Ce n’est pas un `FaultCode`. [`isNoCandidateCause`](/fr-FR/api/core/isnocandidatecause) le reconnaît d’une copie de Core à l’autre.
 
-L’équilibreur ne voit que des issues neutres ; chaque transport traduit ses propres faits en `DoneInfo.code`. La détection d’outliers par défaut compte `NET_UNREACHABLE`, `NET_UNAVAILABLE` et `NET_SERVER_ERROR`. Le `DoneInfo.status` brut n’est conservé que pour les équilibreurs personnalisés et n’est jamais lu par les stratégies intégrées. `PickInfo` contient `endpoints` et `operation` facultatif, sans discriminateur de transport.
+Le répartiteur ne voit que des issues neutres ; chaque transport traduit ses propres faits en `DoneInfo.code`. La détection des anomalies par défaut compte `NET_UNREACHABLE`, `NET_UNAVAILABLE` et `NET_SERVER_ERROR`. Le `DoneInfo.status` brut n’est conservé que pour les répartiteurs personnalisés et n’est jamais lu par les stratégies intégrées. `PickInfo` contient `endpoints` et `operation` facultatif, sans discriminateur de transport.
 
 Voir le [guide Client](/fr-FR/docs/client).

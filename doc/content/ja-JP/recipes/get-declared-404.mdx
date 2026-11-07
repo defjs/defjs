@@ -1,55 +1,30 @@
 ---
 title: "宣言済み 404 の処理"
-description: 単一の GET リクエストを呼び出し、型付けされた 200 と宣言された 404 エラーを適切に分岐処理します。
+description: 単一の GET を呼び出し、型付けされた 200 と宣言された 404 で分岐します。
 ---
 
-# 宣言済み 404 の処理 (GET with a declared 404)
+# 宣言済み 404 を返す GET
 
-`defineRequest` で `output`（`2xx` レスポンス用）と `error`（`2xx` 以外のレスポンス用）の両方を宣言します。呼び出し側では、`error?.code === "HTTP_STATUS" && error.status === 404` で分岐し、型付けされた `error.data` ペイロードを安全に読み取ります。
+`defineRequest` で `output`（`2xx` レスポンス用）と `error`（`2xx` 以外のレスポンス用）の両方を宣言します。呼び出し側では、`error?.code === "HTTP_STATUS" && error.status === 404` で分岐し、型付けされた `error.data` ペイロードを読み取ります。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error?.code === "HTTP_STATUS" && error.status === 404) {
-console.log(error.data.message);
-return;
-}
-if (error) {
-console.error(error.code);
-return;
-}
-console.log(`Loaded ${order.status} from ${response.status}`);
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -57,7 +32,7 @@ void main();
 
 ```txt
 Loaded paid from 200
-````
+```
 
 - すべての非 `2xx` ステータスは `HTTP_STATUS` を生成します。`error` を宣言すると、エラーボディがデコード・検証されて `error.data` に格納されます。`error` の宣言を省略した場合は、ボディを一切読み取ることなく `error.data` は `undefined` となります。
 - 宣言された `error` ボディが不正なメディアタイプである場合、壊れた JSON である場合、または Struct バリデーションに失敗した場合は、代わりに `RES_*` Fault が返されます。単一の `error` Struct がすべての非 `2xx` ステータスをカバーするため、ステータスごとにエラーボディの形式が異なる場合は `struct.or(...)` を使用してください。

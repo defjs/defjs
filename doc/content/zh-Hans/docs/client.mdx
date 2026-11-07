@@ -1,11 +1,11 @@
 ---
 title: "Client"
-description: 在消费方应用中自由配置如何调用导入的 SDK 操作，与接口契约定义彻底解耦。
+description: 配置应用如何调用导入的 SDK 操作，与 API 定义解耦。
 ---
 
 # Client
 
-`Client` 承载了消费方应用程序的运行时执行配置：包括服务基地址、默认请求头、认证凭证、中间件拦截器、查询参数序列化器以及底层传输层句柄。
+`Client` 承载消费方应用的执行配置：基地址、默认请求头、认证凭据、拦截器、查询序列化器和传输层句柄。
 
 `createClient(...options)` 返回一个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)：
 
@@ -14,21 +14,12 @@ description: 在消费方应用中自由配置如何调用导入的 SDK 操作�
 
 ## 1. 配置 Client 并调用 SDK 操作
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
@@ -88,7 +79,7 @@ export const getOrder = defineRequest({
 `withEndpoint(...urls)` 支持传入一个或多个候选服务基地址。在默认配置下：
 
 - 每个 Client 默认使用 [`pickFirstBalancer`](/zh-Hans/api/core/pickfirstbalancer)，持续停在首个 URL，直到遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。
-- **同一次调用内的 HTTP 重试默认关闭。** `withRetry()` 与 `withRetry({})` 等价，会在安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）的连接失败上，带着退避，对一个尚未尝试过的端点再做一次尝试。Finagle 重试预算属于 client 配置，由其派生出的 client 共享，与均衡器的身份无关。
+- **同一次调用内的 HTTP 重试默认关闭。** `withRetry()` 与 `withRetry({})` 等价，会在安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）的连接失败上，带着退避，对一个尚未尝试过的端点再做一次尝试。Finagle 重试预算属于 Client 配置，由其派生出的 Client 共享，与均衡器的身份无关。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -131,6 +122,6 @@ export const getOrder = defineRequest({
 ## 相关阅读
 
 - [负载均衡与故障转移](/zh-Hans/docs/load-balancing)
-- [中间件](/zh-Hans/docs/interceptors)
+- [拦截器](/zh-Hans/docs/interceptors)
 - [测试](/zh-Hans/docs/testing)
 - [本地 HTTP 测试](/zh-Hans/recipes/test-with-handle)

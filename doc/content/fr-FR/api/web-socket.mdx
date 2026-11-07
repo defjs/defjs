@@ -5,18 +5,18 @@ description: defineWebSocket, session et options de requête.
 
 # WebSocket
 
-Déclare un socket, appelle l’opération avec un client, envoie et reçois des messages typés, puis ferme.
+Déclarez un socket, appelez l'opération avec un client, envoyez et recevez des messages typés, puis fermez.
 
 ## defineWebSocket()
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`, un struct `incoming`, et le `maxIncomingQueueSize` entier positif obligatoire ; structs `outgoing` et `input` facultatifs, `operation`, `protocols` statiques, et un `maxOutgoingQueueSize` non négatif. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`WebSocketDefinition`](/fr-FR/api/core/websocketdefinition-type). `builder` est obligatoire exactement quand `input` est déclaré.
+- **definition** — `path`, un struct `incoming` et le `maxIncomingQueueSize` obligatoire (un entier positif sûr) ; structs `outgoing` et `input`, `operation`, `protocols` statiques et `maxOutgoingQueueSize` (un entier non négatif sûr) facultatifs. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`WebSocketDefinition`](/fr-FR/api/core/websocketdefinition-type). `builder` est obligatoire exactement quand `input` est déclaré.
 - **Renvoie** une opération. Le premier argument est un [`Client`](/fr-FR/api/core/client-type). Les arguments suivants sont seulement l’entrée. L’appeler ouvre la session.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-L’appel renvoie `[null, session, connection]` ou `[error, undefined, connection?]`. Passe les options par appel en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). WebSocket lit `signal`, `beforeConnect`, `heartbeat`, `protocols` et `reconnect`, et ignore les champs de progression HTTP.
+L’appel renvoie `[null, session, connection]` ou `[error, undefined, connection?]`. Passez les options par appel en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). WebSocket lit `signal`, `beforeConnect`, `heartbeat`, `protocols` et `reconnect`, et ignore les champs de progression HTTP.
 
 `beforeConnect`, `heartbeat`, `protocols` et `reconnect` remplacent chacun la valeur du client pour cet appel en entier. La préséance des protocoles est le client dérivé, puis `withWebSocketProtocols`, puis les `protocols` de la définition. `heartbeat.timeoutMs` est l’attente d’acquittement, pas une échéance de requête.
 
@@ -24,18 +24,13 @@ L’appel renvoie `[null, session, connection]` ou `[error, undefined, connectio
 
 <ApiSignature name="WebSocketSession" />
 
-Préfère `await using ownedSession = session` pour le nettoyage d’une portée possédée. `session.close()` manuel et `await session.closed` restent disponibles.
+Préférez `await using ownedSession = session` pour le nettoyage d’une portée possédée. `session.close()` manuel et `await session.closed` restent disponibles.
 
-```ts
-async function consume(
-  session: WebSocketSession<unknown, never>,
-): Promise<void> {
-  await using ownedSession = session;
-  for await (const message of ownedSession.receive) console.log(message);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#consume
+</include>
 
-`closed` rapporte l’état terminal logique. Le disposer async demande la fermeture native et attend le teardown possédé par Defjs, mais borne un événement de fermeture manquant à une seconde et peut rejeter avec une `DOMException` nommée `TimeoutError`. Il ne peut pas prouver que la connexion TCP physique s’est fermée.
+`closed` rapporte l’état terminal logique. Le disposer async demande la fermeture native et attend la libération possédée par Defjs, mais borne un événement de fermeture manquant à une seconde et peut rejeter avec une `DOMException` nommée `TimeoutError`. Il ne peut pas prouver que la connexion TCP physique s’est fermée.
 
 ### WebSocketState
 
@@ -43,7 +38,7 @@ async function consume(
 
 ### WebSocketConnectionInfo
 
-`generation` (s’incrémente à la reconnexion), et, une fois connus, `url`, `protocol` et `extensions`.
+`generation` (s'incrémente à chaque ouverture), et, une fois connus, `url`, `protocol` et `extensions`.
 
 ### WebSocketCloseInfo
 
@@ -57,21 +52,21 @@ async function consume(
 
 `WebSocketExecuteOptions` est [`UseWebSocketConfig`](/fr-FR/api/core/usewebsocketconfig-type) : `beforeConnect`, `heartbeat`, `protocols`, `reconnect` et `signal`. `WebSocketHeartbeatConfig` : `intervalMs`, `message` facultatif, `isAck`, `timeoutMs`. Il n’y a pas de champ `timeout` ou `abort`.
 
-`signal` couvre toute la session, y compris après son ouverture. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance limitée au démarrage, ni d’échéance par défaut au niveau du client. `signal` est le signal de l’appel ; combine les signaux avec `AbortSignal.any` dans le code applicatif. `heartbeat` est remplacé en entier ; son `timeoutMs` attend un acquittement et n’est pas une échéance de requête.
+`signal` couvre toute la session, y compris après son ouverture. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance limitée au démarrage, ni d’échéance par défaut au niveau du client. `signal` est le signal de l’appel ; combinez les signaux avec `AbortSignal.any` dans le code applicatif. `heartbeat` est remplacé en entier ; son `timeoutMs` attend un acquittement et n’est pas une échéance de requête.
 
-Le builder et la chaîne d’intercepteurs s’exécutent une fois par opération. La reconnexion réutilise le chemin/la query construits et les protocoles capturés, et construit l’URL avant `beforeConnect`. Si aucun intercepteur n’a remplacé l’endpoint de base de la requête, la reconnexion substitue également un endpoint nouvellement sélectionné. Le hook ne peut pas renouveler les identifiants d’URL ou de sous-protocole au sein d’une session ; démarre une nouvelle opération avec une entrée ou une configuration client actualisée.
+Le builder et la chaîne d’intercepteurs s’exécutent une fois par opération. La reconnexion réutilise le chemin/la query construits et les protocoles capturés, et construit l’URL avant `beforeConnect`. Si aucun intercepteur n’a remplacé l’endpoint de base de la requête, la reconnexion substitue également un endpoint nouvellement sélectionné. Le hook ne peut pas renouveler les identifiants d’URL ou de sous-protocole au sein d’une session ; démarrez une nouvelle opération avec une entrée ou une configuration client actualisée.
 
 Quand `reconnect` est défini, `attempts` vaut 3 par défaut par coupure ; `0` désactive. Un `open` réussi réinitialise le budget et l’exposant de backoff, donc chaque nouvelle coupure repart à la tentative 1. Omettre `attempts` ne donne pas des tentatives illimitées dans une coupure. Voir [Client](/fr-FR/api/client) pour les défauts et les règles de validation.
 
 ## Messages
 
-`incoming` est un struct. Les frames texte, `ArrayBuffer`, typed-array et `Blob` sont lues en UTF-8, parsées en JSON, puis vérifiées contre ce struct. Une frame qui échoue le parse JSON ou le struct est rapportée à `session.onRuntimeError` et n’est pas mise en file. Il n’y a pas d’option client pour les frames invalides.
+`incoming` est un struct. Les trames texte, `ArrayBuffer`, tableau typé et `Blob` sont lues en UTF-8, analysées en JSON, puis vérifiées contre ce struct. Une trame dont l'analyse JSON ou la validation du struct échoue est rapportée à `session.onRuntimeError` et n'est pas mise en file. Il n'y a pas d'option client pour les trames invalides.
 
-`outgoing` est un struct. `session.send` accepte le `StructInput` de ce struct, encode les aliases, puis `JSON.stringify`. Les valeurs que JSON ne peut pas représenter fidèlement après encodage lèvent `TypeError` avant l’envoi ou l’entrée dans la file de reconnexion, y compris les nombres non finis, les fonctions, les symboles, `Map`, `Set`, les flux et les instances de classe sans représentation JSON. Les valeurs imbriquées utilisent la même garde que les corps JSON HTTP. Le heartbeat utilise aussi cette garde ; un échec de sérialisation de heartbeat termine la session. Plusieurs kinds de messages sont un `struct.discriminatedUnion`.
+`outgoing` est un struct. `session.send` accepte le `StructInput` de ce struct, encode les alias, puis `JSON.stringify`. Les valeurs que JSON ne peut pas représenter fidèlement après encodage lèvent `TypeError` avant l’envoi ou l’entrée dans la file de reconnexion, y compris les nombres non finis, les fonctions, les symboles, `Map`, `Set`, les flux et les instances de classe sans représentation JSON. Les valeurs imbriquées utilisent la même garde que les corps JSON HTTP. Le heartbeat utilise aussi cette garde ; un échec de sérialisation de heartbeat termine la session. Plusieurs types de messages sont un `struct.discriminatedUnion`.
 
-```ts
-session.send({ type: "subscribe", symbol: "ACME" });
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#send
+</include>
 
 Voir le [guide WebSocket](/fr-FR/docs/web-socket) et [Ouvrir une session WebSocket](/fr-FR/recipes/websocket-session).
 
@@ -105,7 +100,7 @@ Raison enregistrée quand la session est fermée via `session.close()`.
 
 ## WebSocketIncomingData
 
-Frame entrante décodée : `Infer` du struct `incoming`.
+Trame entrante décodée : `Infer` du struct `incoming`.
 
 ## WebSocketOutgoingData
 

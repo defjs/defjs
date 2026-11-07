@@ -1,6 +1,6 @@
 ---
 title: "401 後のトークン更新"
-description: 単一のインターセプター内で Authorization ヘッダーを付与し、1 度だけ再試行します。next() は常に内側へ向かって進みます。
+description: 単一のインターセプター内で Authorization ヘッダーを付与し、1 度だけリトライします。next() は常に内側へ向かって進みます。
 ---
 
 # 401 発生時の Bearer トークン自動更新
@@ -9,78 +9,29 @@ Defjs では、`next(request)` はインターセプターチェーンの残り�
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
   <Tab value="sdk/billing.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
+</include>
 
-export const getInvoice = defineRequest({
-  method: "GET",
-  path: "/v1/invoice",
-  output: struct.object({ total: struct.number() }),
-  error: struct.object({ code: struct.literal("expired_token") }),
-});
-```
   </Tab>
   <Tab value="app/auth-interceptor.ts">
-```ts
-import { createHttpInterceptor } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
 
-export type Credential = { accessToken: string };
-
-export function refreshingBearer(
-  read: () => Credential,
-  refresh: (stale: Credential) => Promise<Credential>,
-) {
-  let flight: Promise<Credential> | undefined;
-
-return createHttpInterceptor(async (request, next) => {
-const authorize = (credential: Credential) => {
-const headers = new Headers(request.headers);
-headers.set("authorization", `Bearer ${credential.accessToken}`);
-return { ...request, headers };
-};
-
-    const used = read();
-    const response = await next(authorize(used));
-    const body = response.body;
-    if (
-      (typeof ReadableStream !== "undefined" &&
-        request.body instanceof ReadableStream) ||
-      response.status !== 401 ||
-      typeof body !== "object" ||
-      body === null ||
-      !("code" in body) ||
-      body.code !== "expired_token"
-    ) {
-      return response;
-    }
-
-    const current = read();
-    if (current.accessToken !== used.accessToken) {
-      return next(authorize(current));
-    }
-
-    flight ??= refresh(used).finally(() => {
-      flight = undefined;
-    });
-    const refreshed = await flight;
-    return next(authorize(refreshed));
-
-});
-}
-
-````
   </Tab>
   <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
 ```txt
 42
-````
+```
 
 ボディを再送できることと、業務操作を繰り返してよいことは別です。このインターセプターは条件に一致する 401 のあとで JSON `POST` も再送します。HTTP 送信は 2 回行われ、最初は拒否され、次は受理されます。書き込みに使えるのは、業務ハンドラーの実行前に認証が最初の送信を拒否する場合だけです。2 回の送信で同じ安定した冪等性キーを維持し、サーバー側で重複を排除してください。この契約がなければ、書き込みを自動再送せずに 401 を返してください。完全なサンプルでは `ReadableStream` のリクエストボディを再送しません。
 
-インターセプターのオニオン実行順序やリトライ境界の詳細は、[ミドルウェア](/ja-JP/docs/interceptors) を参照してください。
+インターセプターのオニオン実行順序やリトライ境界の詳細は、[インターセプター](/ja-JP/docs/interceptors) を参照してください。

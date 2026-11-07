@@ -13,7 +13,7 @@ bun add @defjs/core @defjs/vue vue
 
 ## Lo que aporta `@defjs/vue` frente a lo que controlas tú
 
-- **Aportado por `@defjs/vue`**: `createClientPlugin(client)`, `HTTP_CLIENT` (`InjectionKey<Client>`) e `injectClient(key?)`.
+- **Aportado por `@defjs/vue`**: `createClientPlugin(client)`, `HTTP_CLIENT` (`InjectionKey<DerivableClient>`) e `injectClient(key?)`.
 - **Bajo el control de tu aplicación**: crear el [`DerivableClient`](/es-ES/api/core/derivableclient-type), abortar trabajo en curso en observadores (`onCleanup`) o composables (`onScopeDispose`), cerrar handles de SSE/WebSocket e integrar bibliotecas de consulta (como Vue Query).
 - **Importante**: `injectClient()` devuelve la función-objeto `DerivableClient`. Llama a `client({ signal })` donde se ejecuta la operación (`getOrder(client({ signal }), input)`). Nunca pases `client` como primer argumento de `watch(client, ...)` o `computed(client)` porque Vue interpreta un argumento de función como un _getter_ reactivo.
 
@@ -28,13 +28,15 @@ Crea el cliente en el punto de entrada de la aplicación, instala `createClientP
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
+
   </Tab>
   <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
+
   </Tab>
 </Tabs>
 
-- `createClientPlugin(client)` provee la instancia exacta de `DerivableClient` bajo `HTTP_CLIENT` sin clonarla ni registrar ganchos de liberación al desmontar.
+- `createClientPlugin(client)` provee la instancia exacta de `DerivableClient` bajo `HTTP_CLIENT` sin clonarla ni registrar hooks de liberación al desmontar.
 - `onCleanup` se ejecuta tanto antes de que el observador se vuelva a ejecutar como cuando el componente se desmonta.
 
 ---
@@ -69,7 +71,7 @@ Para el trabajo iniciado dentro de un composable o componente fuera de un observ
 
 - **Navegador**: comparte un único cliente por aplicación Vue cuando el endpoint y los interceptores no dependan de la petición.
 - **SSR**: crea e instala un cliente nuevo para cada petición en SSR siempre que las cabeceras, cookies, datos de tenant o credenciales varíen.
-- Desmontar la aplicación Vue o desechar el ámbito de un componente **no** aborta automáticamente peticiones HTTP, no cierra flujos SSE/WebSocket ni destruye el cliente principal de Core.
+- Desmontar la aplicación Vue o desechar el ámbito de un componente **no** aborta automáticamente peticiones HTTP, no cierra flujos SSE/WebSocket ni libera el cliente de Core.
 
 ---
 
@@ -79,8 +81,8 @@ Para el trabajo iniciado dentro de un composable o componente fuera de un observ
   examples/vue/exports.ts#example
 </include>
 
-- `HTTP_CLIENT` — `InjectionKey<Client>` para `provide` / `inject` nativo.
+- `HTTP_CLIENT` — `InjectionKey<DerivableClient>` para `provide` / `inject` nativo.
 - `createClientPlugin(client)` — `Plugin` de Vue que provee `client` bajo `HTTP_CLIENT`.
 - `injectClient(key?)` — resuelve el cliente más cercano para `key` (por defecto `HTTP_CLIENT`).
-- Guías relacionadas: [Cliente](/es-ES/docs/client), [Operaciones HTTP](/es-ES/docs/http), [Middleware](/es-ES/docs/interceptors), [Flujos de eventos SSE](/es-ES/docs/sse), [Sesiones WebSocket](/es-ES/docs/web-socket).
+- Guías relacionadas: [Cliente](/es-ES/docs/client), [Operaciones HTTP](/es-ES/docs/http), [Interceptores](/es-ES/docs/interceptors), [Flujos de eventos SSE](/es-ES/docs/sse), [Sesiones WebSocket](/es-ES/docs/web-socket).
 - Recetas relacionadas: [Manejar una 404 declarada](/es-ES/recipes/get-declared-404), [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http), [Consumir eventos SSE](/es-ES/recipes/consume-sse), [Gestionar sesiones WebSocket](/es-ES/recipes/websocket-session).

@@ -9,7 +9,7 @@ description: 재사용 가능한 API 정의와 애플리케이션 소유 클라�
 
 Defjs는 TypeScript SDK를 두 가지 영역으로 명확히 분리합니다:
 
-- **SDK 정의 (`@defjs/core`)** — SDK 작성자는 `struct` 스키마와 함께 타입이 부여된 HTTP, SSE, WebSocket 작업을 선언합니다. 정의는 순수한 데이터입니다. 정의를 import한다고 해서 네트워크 호출이 시작되거나 전역 클라이언트가 바인딩되지 않습니다.
+- **SDK 정의 (`@defjs/core`)** — SDK 작성자는 `struct` 스키마와 함께 타입화된 HTTP, SSE, WebSocket 작업을 선언합니다. 정의는 순수한 데이터입니다. 정의를 import한다고 해서 네트워크 호출이 시작되거나 전역 클라이언트가 바인딩되지 않습니다.
 - **애플리케이션 실행** — SDK를 사용하는 애플리케이션은 자체 `Client`를 직접 생성하고(`createClient(withEndpoint(...))`), 자격 증명, 인터셉터, 로드 밸런서를 연결한 뒤, 작업을 호출할 때 이 클라이언트를 전달합니다.
 
 ## 한눈에 보기: SDK 정의 vs. 애플리케이션 실행

@@ -20,11 +20,13 @@ Establece una cadena `operation` estática y de baja cardinalidad en tus definic
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
+
   </Tab>
   <Tab value="app/telemetry-client.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
@@ -46,24 +48,27 @@ Configura conmutadores por transporte (`{ enabled: false }`) y hooks de span (`s
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
+
   </Tab>
   <Tab value="app/ws-propagation.ts">
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
+
   </Tab>
   <Tab value="app/active-span.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
 ### Contrato de los hooks
 
 - `startSpanHook(request): Attributes` se ejecuta sincrónicamente antes de crear el span; los atributos devueltos se aplican al final y pueden sobreescribir los atributos predeterminados (por ejemplo, para ocultar datos sensibles de `url.full`).
-- `requestHook(span, request)` y `responseHook(span, responseOrHandle, request)` reciben el span creado y pueden ser sincrónicos o asíncronos. **No** son esperados por la canalización del transporte, y el span HTTP termina inmediatamente en cuanto finaliza la porción sincrónica de `responseHook`.
-- Los fallos en los hooks nunca abortan la llamada del cliente. Mientras `span.isRecording()` sea true, los errores en los hooks registran eventos `defjs.otel.hook.error` y `exception` en el span; para spans que no graban, los fallos se notifican a través de `diag.error` de `@opentelemetry/api` (`hook.name`, `error.type`, `traceId`, `spanId`).
+- `requestHook(span, request)` y `responseHook(span, responseOrHandle, request)` reciben el span creado y pueden ser sincrónicos o asíncronos. **No** son esperados por la canalización del transporte, y el span HTTP termina inmediatamente en cuanto finaliza la parte sincrónica de `responseHook`.
+- Los fallos en los hooks nunca abortan la llamada del cliente. Mientras `span.isRecording()` sea `true`, los errores en los hooks registran eventos `defjs.otel.hook.error` y `exception` en el span; para spans que no graban, los fallos se notifican a través de `diag.error` de `@opentelemetry/api` (`hook.name`, `error.type`, `traceId`, `spanId`).
 - `withOpenTelemetryServer` captura los bloques de opciones de `http`, `sse` y `webSocket` en el momento de creación. Pasar `{ enabled: false }` deshabilita ese transporte sin leer sus hooks.
 
 ---
@@ -72,7 +77,7 @@ Configura conmutadores por transporte (`{ enabled: false }`) y hooks de span (`s
 
 El plugin mide los ciclos de vida del transporte dentro de la cadena de interceptores:
 
-- **HTTP**: el span comienza en el interceptor HTTP y finaliza cuando retorna `HttpResponse`. Los cuerpos declarados de `output` / `error` se leen (y las representaciones JSON se verifican y analizan) **dentro** del límite del manejador antes de retornar. Un fallo en la lectura del cuerpo o de análisis de medio JSON rechaza a través del interceptor (`error.type: "BodyFailure"`), marca el span como `ERROR`, registra `BodyFailure` en las métricas y emite un registro `WARN`. Un estado `400+` marca el span como `ERROR` con la cadena del código de estado como `error.type`. La validación del struct (`RES_STRUCT_MISMATCH`) y la conversión de la tupla `HTTP_STATUS` ocurren después de la cadena de interceptores y no alteran el span de transporte ya completado.
+- **HTTP**: el span comienza en el interceptor HTTP y finaliza cuando retorna `HttpResponse`. Los cuerpos declarados de `output` / `error` se leen (y las representaciones JSON se verifican y analizan) **dentro** del límite del gestor antes de retornar. Un fallo en la lectura del cuerpo o de análisis de medio JSON rechaza a través del interceptor (`error.type: "BodyFailure"`), marca el span como `ERROR`, registra `BodyFailure` en las métricas y emite un registro `WARN`. Un estado `400+` marca el span como `ERROR` con la cadena del código de estado como `error.type`. La validación del struct (`RES_STRUCT_MISMATCH`) y la conversión de la tupla `HTTP_STATUS` ocurren después de la cadena de interceptores y no alteran el span de transporte ya completado.
 - **SSE**: un flujo lógico único (incluyendo reconexiones automáticas) genera un span que permanece abierto hasta que `stream.closed` se resuelve. Eventos registrados: `sse.connected`, seguido de `sse.closed`, `sse.aborted` (finalizando `OK` para `stream.close()` o abortos manuales sin tiempo límite) o `sse.error` (finalizando `ERROR`, incluyendo abortos por tiempo límite de quien llama).
 - **WebSocket**: una sesión lógica única (incluyendo reconexiones automáticas) genera un span hasta que `session.closed` se resuelve. Eventos registrados: `websocket.connected`, `websocket.closed`, `websocket.error`. Las tramas de cierre del servidor (cualquier código) finalizan el span como `OK` con `websocket.closed`; los abortos de quien llama finalizan el span como `ERROR` con `websocket.error` y sin registro, salvo si el motivo del abort es un `TimeoutError`, que emite un `WARN`. Caídas abruptas sin trama de cierre (`1006`) finalizan en `ERROR` con un registro en runtimes que emiten el evento `error` del socket antes de `close` (Node.js) y en `OK` donde no lo hacen (Bun).
 
@@ -128,6 +133,6 @@ Los diagnósticos registran un mensaje fijo, `exception.type` (nombre de clase d
 
 ## Recetas relacionadas
 
-- [Pruebas HTTP locales](/es-ES/recipes/test-with-handle)
+- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)
 - [Consumir eventos SSE](/es-ES/recipes/consume-sse)
 - [Gestionar sesiones WebSocket](/es-ES/recipes/websocket-session)

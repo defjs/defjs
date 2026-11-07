@@ -10,25 +10,16 @@ description: Настраивайте параметры вызова импор
 Функция `createClient(...options)` возвращает [`DerivableClient`](/ru-RU/api/core/derivableclient-type):
 
 - Передавайте `client` напрямую в операцию (`getOrder(client, { id: 1 })`), если для конкретного вызова не требуются разовые опции.
-- Вызывайте `client(requestOptions)`, чтобы получить производное значение `Client` на один вызов (`getOrder(client({ signal }), { id: 1 })`). Порождение клиента не выполняет сетевого ввода-вывода, а возвращаемое значение является простым объектом (его нельзя вызвать как функцию).
+- Вызывайте `client(requestOptions)`, чтобы получить производное значение `Client` на один вызов (`getOrder(client({ signal }), { id: 1 })`). Создание производного клиента не выполняет сетевого ввода-вывода, а возвращаемое значение является простым объектом (его нельзя вызвать как функцию).
 
 ## 1. Настройка клиента и вызов операции SDK
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
@@ -53,7 +44,7 @@ export const getOrder = defineRequest({
 - Функции установки одиночных значений (`withEndpoint`, `withHeaders`, `withQuerySerializer`, `withCredentials`, `withXSRF`) **заменяют** ранее установленные значения.
 - Вызов `withInterceptors(...items)` **добавляет** элементы в конец существующего списка перехватчиков и фильтрует их по транспорту (`http`, `sse`, `web-socket`) в момент выполнения операции.
 
-## 2. Порождение клиента на один вызов (`client(options)`)
+## 2. Создание производного клиента на один вызов (`client(options)`)
 
 Создавайте новое производное значение клиента для каждого вызова, которому требуется собственный `signal`, колбэки прогресса передачи или переопределения сессии WebSocket:
 
@@ -62,7 +53,7 @@ export const getOrder = defineRequest({
 </include>
 
 > [!IMPORTANT]
-> Поскольку `createClient(...)` возвращает вызываемую функцию (`DerivableClient`), **не передавайте** её напрямую в сеттеры состояния React `setState(client)` или источники Vue `watch(client)` / `computed(client)`, которые воспринимают переданную функцию как updater или геттер.
+> Поскольку `createClient(...)` возвращает вызываемую функцию (`DerivableClient`), **не передавайте** её напрямую в сеттеры состояния React `setState(client)` или источники Vue `watch(client)` / `computed(client)`, которые воспринимают переданную функцию как функцию-обновление или геттер.
 
 ### Справочник параметров `RequestOptions` на один вызов
 
@@ -98,7 +89,7 @@ export const getOrder = defineRequest({
 
 ### Фильтрация доступности и P2C [#health-filtering-and-p2c]
 
-Для пула равноправных реплик сервера балансировщики [`roundRobinBalancer`](/ru-RU/api/core/roundrobinbalancer) и [`p2cBalancer`](/ru-RU/api/core/p2cbalancer) (PeakEwma RTT × нагрузка в процессе) по умолчанию активируют автоматическое отключение сбойных узлов по серии последовательных ошибок (`outlierDetection`) в стиле Linkerd. Считаются `NET_UNREACHABLE`, `NET_UNAVAILABLE` и `NET_SERVER_ERROR`; сырой `status` ответа нужен только пользовательским балансировщикам.
+Для пула равноправных реплик сервера балансировщики [`roundRobinBalancer`](/ru-RU/api/core/roundrobinbalancer) и [`p2cBalancer`](/ru-RU/api/core/p2cbalancer) (PeakEwma RTT × нагрузка в процессе) по умолчанию активируют отключение сбойных узлов после серии последовательных ошибок (`outlierDetection`) в стиле Linkerd. Считаются `NET_UNREACHABLE`, `NET_UNAVAILABLE` и `NET_SERVER_ERROR`; сырой `status` ответа нужен только пользовательским балансировщикам.
 
 Подробные сведения о бюджетах повторов, активных и пассивных проверках доступности, оценке нагрузки P2C и написании собственных балансировщиков см. в руководстве [Балансировка нагрузки и отказоустойчивость](/ru-RU/docs/load-balancing).
 

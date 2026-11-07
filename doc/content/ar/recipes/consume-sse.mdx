@@ -9,51 +9,22 @@ description: افتح تدفق أحداث محدد الأنواع، وكرر ع�
 
 <Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
   <Tab value="sdk/deployments.ts">
-```ts
-import { defineEventStream, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
+</include>
 
-export const deployEvents = defineEventStream({
-  path: "/deployments/events",
-  events: {
-    line: struct.object({ text: struct.string() }),
-  },
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { deployEvents } from "../sdk/deployments.ts";
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, stream] = await deployEvents(client);
-if (error) {
-console.error(error.code);
-return;
-}
-try {
-for await (const event of stream) {
-if (event.event === "line") {
-console.log(event.data.text);
-break;
-}
-}
-} finally {
-stream.close("consumer-finished");
-await stream.closed;
-}
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="deploy-events.ts">
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -61,7 +32,7 @@ void main();
 
 ```txt
 build started
-````
+```
 
 - لا يُعيد SSE الاتصال تلقائياً عند حدوث إخفاقات في الشبكة أو القراءة ما لم تضبط [`withSSEReconnect(...)`](/ar/api/core/withssereconnect) على العميل.
-- عند تفعيل `withSSEReconnect` بتمرير كائن خيارات، تكون القيمة الافتراضية لـ `attempts` هي `3` لكل انقطاع وتُعاد ضبطها عند كل مصافحة ناجحة (بينما تعطل `attempts: 0` إعادة الاتصال). ودون دالة `shouldReconnect` مخصصة، يُعاد الاتصال تلقائياً لطلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE` ذات الأجسام القابلة لإعادة الإرسال فقط. راجع [تدفقات أحداث SSE](/ar/docs/sse).
+- عند ضبط `withSSEReconnect(...)`، تكون القيمة الافتراضية لـ `attempts` هي `3` لكل انقطاع وتُعاد ضبطها عند كل مصافحة ناجحة (وتعطّل `attempts: 0` إعادة الاتصال). ودون دالة `shouldReconnect` مخصصة، لا يُعاد اتصال إلا لطلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE`. والطلب الذي يحمل جسمًا من نوع `ReadableStream` لا يُعاد اتصاله أبدًا. راجع [تدفقات أحداث SSE](/ar/docs/sse).

@@ -20,11 +20,13 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
+
   </Tab>
   <Tab value="app/telemetry-client.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
@@ -46,22 +48,25 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
+
   </Tab>
   <Tab value="app/ws-propagation.ts">
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
+
   </Tab>
   <Tab value="app/active-span.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
 ### フックの仕様契約
 
-- `startSpanHook(request): Attributes` はスパン生成前に同期的に実行されます。返された属性は最後に適用され、組み込み属性を上書きできます（`url.full` のマスキングなど）。
+- `startSpanHook(request): Attributes` はスパン生成前に同期的に実行されます。返された属性は最後に適用され、組み込み属性を上書きできます（`url.full` の秘匿化など）。
 - `requestHook(span, request)` および `responseHook(span, responseOrHandle, request)` は生成されたスパンを受け取り、同期的または非同期的に実行できます。これらはトランスポートパイプラインによって await されることはなく、`responseHook` の同期的処理が完了した時点で HTTP スパンは即座に終了します。
 - フック内でエラーが発生しても、クライアントの呼び出し自体が中断されることはありません。`span.isRecording()` が true の間、フックエラーはスパン上に `defjs.otel.hook.error` および `exception` イベントとして記録されます。スパンが記録対象外（non-recording）の場合、エラーは `@opentelemetry/api` の `diag.error` を介して報告されます（`hook.name`、`error.type`、`traceId`、`spanId`）。
 - `withOpenTelemetryServer` は作成時に `http`、`sse`、`webSocket` のオプションブロックのスナップショットを取得します。`{ enabled: false }` を渡すと、そのトランスポートのフックを読み取ることなく無効化されます。
@@ -81,7 +86,7 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 以下は現在のインターセプターから観測できる挙動であり、独立したバランサー用テレメトリ API ではありません。
 
 - `withRetry` による各 HTTP 試行は、個別のクライアントスパンと所要時間サンプルを持ちます。アクティブなアプリケーションの親スパンがある場合、各試行はその下の兄弟スパンになります。親スパンがなければ、リトライは自動的に 1 つのトレースにまとめられません。Core は論理呼び出しの親スパンを作成しません。
-- HTTP 試行の URL は、その試行のエンドポイントを識別しますが、試行番号、リトライ理由、予算の残高／枯渇、除外／復帰の属性は出力されません。
+- HTTP 試行の URL は、その試行のエンドポイントを識別しますが、試行番号、リトライ理由、リトライバジェットの残高／枯渇、除外／復帰の属性は出力されません。
 - SSE と WebSocket は再接続をまたいで 1 つの論理セッションスパンを維持し、物理接続ごとにスパンを作成するわけではありません。フェイルオーバー後もスパンの URL とメトリクス属性は初期エンドポイントを保持します。再接続で別の `connected` イベントは出力されません。アクティブ数のメトリクスは、現在選択されたレプリカ上のソケットではなく、`closed` を待つ論理セッションを数えます。
 - ある Bun 実行では、HTTP 503 は `error.type: "503"`、接続拒否は `"TypeError"`、期限切れと呼び出し元のキャンセルはいずれも `"Error"` を生成しました。後者 2 つの戻り値は、それぞれ `NET_TIMEOUT` と `NET_ABORTED` でした。これらの Defjs タプルの Fault コードは、個別の HTTP テレメトリ属性ではありません。開いた WebSocket のデフォルトのキャンセルでは警告なしの `"AbortError"`、中止理由が `TimeoutError` の場合は `"TimeoutError"` と 1 件の警告になりました。エラークラス名はトランスポート／ランタイムからの観測結果であり、タプルやクローズ結果の確認に代わるものではありません。
 
@@ -113,14 +118,14 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 
 各リクエストまたは論理接続は、最大 1 件の最終的な `WARN` (`13`) レベルの `LogRecord` を出力します。
 
-| 観測された結果                                                                                                                                                   | 出力される Defjs LogRecord                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| HTTP OTel の `next()` が reject（ネットワーク障害、観測されたタイムアウト、宣言ボディの失敗）。タイムアウト以外の能動的中止や公開 `HTTP_STATUS` フォールトは除く | `WARN` 1 件、`http.client.request.exception`、phase `request`                                        |
-| 通常の HTTP レスポンス（宣言された `error` ボディが正常デコードされた 4xx/5xx、ボディ未宣言のレスポンス、ステータス `0` を含む）                                 | 出力なし                                                                                             |
-| 宣言された `output` / `error` のボディ読み取り失敗、または宣言された JSON 表現に対して非 JSON のメディアタイプが返されたか `JSON.parse` に失敗                   | `WARN` 1 件、`http.client.request.exception`、phase `request`、`exception.type: "BodyFailure"`       |
-| SSE または WebSocket のハンドシェイク／接続失敗（SSE の非 2xx ステータスを含む）                                                                                 | `WARN` 1 件、`defjs.client.sse.exception` または `defjs.client.websocket.exception`、phase `connect` |
-| SSE または WebSocket の致命的エラーや `closed` の reject（Node.js の `1006` ソケットエラー、キューオーバーフロー、ハートビートタイムアウトを含む）               | トランスポートイベント名を含む `WARN` 1 件、phase `connection`                                       |
-| 正常終了、メッセージ受信、EOF、サーバーからの WebSocket クローズフレーム（`1011` を含む）、またはタイムアウト以外の能動的中止                                    | 出力なし                                                                                             |
+| 観測された結果                                                                                                                                                         | 出力される Defjs LogRecord                                                                           |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| HTTP OTel の `next()` が reject（ネットワーク障害、観測されたタイムアウト、宣言ボディの失敗）。タイムアウト以外の呼び出し元キャンセルや公開 `HTTP_STATUS` Fault は除く | `WARN` 1 件、`http.client.request.exception`、phase `request`                                        |
+| 通常の HTTP レスポンス（宣言された `error` ボディが正常デコードされた 4xx/5xx、ボディ未宣言のレスポンス、ステータス `0` を含む）                                       | 出力なし                                                                                             |
+| 宣言された `output` / `error` のボディ読み取り失敗、または宣言された JSON 表現に対して非 JSON のメディアタイプが返されたか `JSON.parse` に失敗                         | `WARN` 1 件、`http.client.request.exception`、phase `request`、`exception.type: "BodyFailure"`       |
+| SSE または WebSocket のハンドシェイク／接続失敗（SSE の非 2xx ステータスを含む）                                                                                       | `WARN` 1 件、`defjs.client.sse.exception` または `defjs.client.websocket.exception`、phase `connect` |
+| SSE または WebSocket の致命的エラーや `closed` の reject（Node.js の `1006` ソケットエラー、キューオーバーフロー、ハートビートタイムアウトを含む）                     | トランスポートイベント名を含む `WARN` 1 件、phase `connection`                                       |
+| 正常終了、メッセージ受信、EOF、サーバーからの WebSocket クローズフレーム（`1011` を含む）、またはタイムアウト以外の呼び出し元キャンセル                                | 出力なし                                                                                             |
 
 診断ログには、固定メッセージ、`exception.type`（`BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError`、`Error` などのプラットフォーム／トランスポートのクラス名）、phase、静的な `operation`、サーバーアドレス／ポート、プロトコルフィールドのみが記録され、生の URL、クエリ文字列、ヘッダー、ボディ、エラースタックトレースが出力されることは決してありません。
 

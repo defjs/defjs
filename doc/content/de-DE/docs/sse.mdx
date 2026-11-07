@@ -1,11 +1,11 @@
 ---
-title: "SSE-Ereignisströme"
-description: Exportiere typisierte Event-Stream-Definitionen aus deinem SDK und lass konsumierende Anwendungen sie öffnen, verarbeiten und schließen.
+title: "SSE-Event-Streams"
+description: Exportiere typisierte Event-Stream-Definitionen aus deinem SDK und lass konsumierende Anwendungen sie öffnen, konsumieren und schließen.
 ---
 
-# SSE-Ereignisströme
+# SSE-Event-Streams
 
-Ein SDK deklariert einen Server-Sent-Events-Endpunkt mit `defineEventStream`: inklusive Pfad, optionalem Input und Builder, einem `events`-Dictionary aus Structs sowie Puffer- und Warteschlangenlimits. Die konsumierende Anwendung konfiguriert Authentifizierung und optionale Wiederverbindung an ihrem Client, öffnet den Stream, iteriert über typisierte Ereignisse und besitzt das Schließen des Streams.
+Ein SDK deklariert eine Server-Sent-Events-(SSE-)Operation mit `defineEventStream`: inklusive Pfad, optionalem Input und Builder, einem `events`-Dictionary aus Structs sowie Puffer- und Warteschlangenlimits. Die konsumierende Anwendung konfiguriert Authentifizierung und optionale Wiederverbindung an ihrem Client, öffnet den Stream, iteriert über typisierte Ereignisse und besitzt das Schließen des Streams.
 
 ## 1. Event-Stream definieren und konsumieren
 
@@ -14,46 +14,16 @@ Gib ein geöffnetes `EventStreamHandle` immer mit `await using` (oder `stream.cl
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders-stream.ts">
 
-```ts
-import { defineEventStream, struct } from "@defjs/core";
-
-export const watchOrders = defineEventStream({
-  path: "/orders/events",
-  operation: "orders.watch",
-  events: {
-    updated: struct.object({
-      id: struct.number(),
-      status: struct.string(),
-    }),
-  },
-});
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/sdk/orders-stream.ts#example
+</include>
 
 </Tab>
 <Tab value="app/watch-orders.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { watchOrders } from "../sdk/orders-stream.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = stream;
-  for await (const event of active) {
-    console.log(event.event, event.data.id, event.data.status);
-    break;
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/app/watch-orders.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -90,13 +60,13 @@ Der Aufruf der Operation liefert `[error, stream, startupOpen]` erst zurück, na
 - **Falscher Content-Type oder unlesbarer Body**: Gibt `RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED` zurück.
 - **`startupOpen` vs. `stream.open`**: Das dritte Element des Tupels (`startupOpen`) hält die erste Handshake-Antwort als Snapshot fest; `stream.open` aktualisiert sich dynamisch, falls sich der Stream später neu verbindet. Gibt ein Reconnect-Handshake `503` zurück, schlägt der Iterator fehl und `stream.closed` meldet `RES_DECODE_FAILED`, während `stream.open.response.status` `503` bleibt; prüfe `stream.open` auf diesen aktuellen Antwortstatus.
 
-## 3. Event-Dispatching und Dekodierung
+## 3. Event-Dispatch und Dekodierung
 
 Wenn ein SSE-Frame eintrifft (nach WHATWG-Regeln durch eine Leerzeile abgeschlossen):
 
 1. **Event-Routing**: Das Wire-Feld `event:` wählt `events[eventName]` aus und fällt auf `events.default` zurück, falls deklariert. Ein weggelassenes `event:`-Feld hat standardmäßig den Wert `"message"`. Undeklarierte Events ohne `events.default` werden verworfen.
 2. **Payload-Dekodierung**: Ein `struct.string()`-Schema empfängt den rohen Text von `data:`. Jede andere Struct-Art parst `data:` zuerst als JSON und validiert anschließend gegen das Struct.
-3. **Ungültige Events beobachten**: Ungültige oder undeklarierte Events werden ignoriert, ohne den Stream zu beenden. Hänge `withSSEOnInvalidEvent(...)` an den Client für eine gezielte Diagnose:
+3. **Ungültige Events beobachten**: Ungültige oder undeklarierte Events werden verworfen, ohne den Stream zu beenden. Hänge `withSSEOnInvalidEvent(...)` an den Client für eine gezielte Diagnose:
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
@@ -108,14 +78,14 @@ Die SSE-Wiederverbindung ist **Opt-in**. Ohne `withSSEReconnect(...)` beendet je
 
 - **Ausfallbudget (`attempts`)**: Standardmäßig `3`, wenn ein Optionen-Objekt an `withSSEReconnect` übergeben wird. Jeder erfolgreiche Handshake setzt den Versuchszähler und den Backoff-Exponenten zurück, sodass `attempts: 1` während einer langlebigen Sitzung dennoch viele physische Verbindungen ermöglichen kann, wenn jede erfolgreich öffnet. Ein reguläres Server-EOF gilt **nicht** als Fehler und löst keinen Reconnect aus.
 - **Cursor-Tracking (`Last-Event-ID`)**: Wird gespeichert, sobald die abschließende Leerzeile eines Events geparst ist, und beim Reconnect automatisch als `Last-Event-ID` mitgesendet. Ein unvollständiger Frame speichert seine `id` nie, unabhängig davon, ob die Verbindung regulär endet oder fehlschlägt. Die Wiederaufnahme nach einem reconnectfähigen Lese-/Netzwerkfehler beginnt bei der zuletzt gespeicherten ID; der Server muss das erneute Ausliefern ab diesem Cursor implementieren.
-- **Idempotenz-Sicherheit**: Standardmäßig verbinden sich nur idempotente Methoden (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) automatisch wieder. Nicht-idempotente Methoden (`POST`, `PATCH` – wie etwa LLM-Streaming-Requests) verbinden sich nur dann neu, wenn ein benutzerdefinierter `shouldReconnect`-Callback explizit `true` zurückgibt. `ReadableStream`-Request-Bodys werden beim ersten Versuch verbraucht und bauen niemals einen Reconnect auf.
+- **Idempotenz-Sicherheit**: Standardmäßig verbinden sich nur idempotente Methoden (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) automatisch wieder. Nicht-idempotente Methoden (`POST`, `PATCH` – wie etwa LLM-Streaming-Requests) verbinden sich nur dann neu, wenn ein benutzerdefinierter `shouldReconnect`-Callback explizit `true` zurückgibt. `ReadableStream`-Request-Bodys werden beim ersten Versuch verbraucht und nie erneut verbunden.
 - **Handshake-Timeout (`connectTimeoutMs`)**: Wenn angegeben, muss es endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück. Begrenzt jeden einzelnen Handshake vom Fetch-Aufruf bis zu den Response-Headern, ohne die Offenhaltezeit eines bereits etablierten Streams einzuschränken.
 
 ## 5. Puffer- und Warteschlangenlimits
 
 Die Defaults sind `maxBufferSize: 64 * 1024` Bytes und `maxQueueSize: 1024` Events. Beide Limits müssen positive, sichere Ganzzahlen sein. Es gibt keine Default-Handshake-Deadline: Ein ausstehender Fetch wartet auf die Plattform, einen Abbruch durch den Aufrufer oder ein explizit konfiguriertes `connectTimeoutMs`. Das Überschreiten eines Kapazitätslimits ist fatal (`stream.closed` löst mit `kind: "error"` auf und der Iterator schlägt fehl – Ereignisse werden niemals stillschweigend verworfen):
 
-| Definitions-Option | Was sie begrenzt                                                  | Fataler Fehlercode    |
+| Definitions-Option | Was sie begrenzt                                                  | Fataler Fault-Code    |
 | ------------------ | ----------------------------------------------------------------- | --------------------- |
 | `maxBufferSize`    | Unvollständige oder zu große SSE-Frame-Bytes vor einer Leerzeile  | `CAP_BUFFER_EXCEEDED` |
 | `maxQueueSize`     | Validierte Ereignisse, die auf den `for await`-Konsumenten warten | `CAP_QUEUE_OVERFLOW`  |
@@ -139,7 +109,7 @@ Der Aufrufer, der einen Stream öffnet, ist für dessen Beendigung verantwortlic
 </Tab>
 </Tabs>
 
-Das über `client({ signal })` übergebene `signal` steuert die gesamte Lebensdauer des Streams. Möchtest du nur den anfänglichen Verbindungs-Handshake zeitlich begrenzen, ohne einen bestehenden Stream später abzuwürgen, lösche den Timer mit `clearTimeout`, sobald `await watchOrders(...)` zurückkehrt (wie im zweiten Tab oben gezeigt), oder nutze `connectTimeoutMs` in `withSSEReconnect`.
+Das über `client({ signal })` übergebene `signal` steuert die gesamte Lebensdauer des Streams. Möchtest du nur den anfänglichen Verbindungs-Handshake zeitlich begrenzen, ohne einen offenen Stream später zu beenden, lösche den Timer mit `clearTimeout`, sobald `await watchOrders(...)` zurückkehrt (wie im zweiten Tab oben gezeigt), oder nutze `connectTimeoutMs` in `withSSEReconnect`.
 
 ## Weiterführende Links
 

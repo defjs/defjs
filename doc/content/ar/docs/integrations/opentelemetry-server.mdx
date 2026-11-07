@@ -1,13 +1,13 @@
 ---
 title: "خادم OpenTelemetry"
-description: قِس واستكشف استدعاءات SDK على عميل تطبيق الخادم مع الحفاظ على استقلالية تعريفات API عن إعدادات القياس.
+description: قِس وتتبّع استدعاءات SDK على عميل تطبيق الخادم مع الحفاظ على استقلالية تعريفات API عن إعدادات القياس.
 ---
 
 # خادم OpenTelemetry
 
 تقوم حزمة `@defjs/opentelemetry-server` بقياس وتتبع عمليات HTTP وSSE وWebSocket الصادرة على عميل تطبيق الخادم مع الحفاظ على استقلالية تعريفات SDK لديك تماماً عن أي إعدادات خاصة بـ OpenTelemetry.
 
-تُرجع الدالة `withOpenTelemetryServer(options)` خيار عميل [`ClientOption`](/ar/api/core/clientoption-type) خاص بـ `@defjs/core` يلحق معترضاً واحداً لكل وسيلة نقل مفعّلة (HTTP وSSE وWebSocket). وهي **لا** تُهيئ حزمة OpenTelemetry SDK ولا تقوم بتتبع طلبات الخادم الواردة.
+تُرجع الدالة `withOpenTelemetryServer(options)` خيار عميل [`ClientOption`](/ar/api/core/clientoption-type) خاص بـ `@defjs/core` يلحق معترضاً واحداً لكل وسيلة نقل مفعّلة (HTTP وSSE وWebSocket). وهي **لا** تُهيئ حزمة OpenTelemetry SDK ولا ترصد طلبات الخادم الواردة.
 
 ---
 
@@ -20,11 +20,13 @@ description: قِس واستكشف استدعاءات SDK على عميل تطب
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
+
   </Tab>
   <Tab value="app/telemetry-client.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
@@ -46,16 +48,19 @@ description: قِس واستكشف استدعاءات SDK على عميل تطب
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
+
   </Tab>
   <Tab value="app/ws-propagation.ts">
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
+
   </Tab>
   <Tab value="app/active-span.ts">
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>
+
   </Tab>
 </Tabs>
 
@@ -63,7 +68,7 @@ description: قِس واستكشف استدعاءات SDK على عميل تطب
 
 - تعمل `startSpanHook(request): Attributes` تزامناً قبل إنشاء فترة التتبع؛ وتُطبّق السمات التي تُرجعها في النهاية ويمكنها تجاوز السمات المدمجة (مثل تنقيح `url.full`).
 - تستلم الدالتان `requestHook(span, request)` و`responseHook(span, responseOrHandle, request)` فترة التتبع المُنشأة ويمكن أن تكونا تزامنيتين أو غير تزامنيتين. ولا ينتظر خط أنابيب النقل اكتمالهما، وتنتهي فترة تتبع HTTP فور اكتمال الجزء التزامني من `responseHook`.
-- إخفاقات الخطافات لا تُجهض استدعاء العميل أبداً. فطالما كانت `span.isRecording()` صحيحة، تُسجل أخطاء الخطاف كأحداث `defjs.otel.hook.error` و`exception` على الفترة؛ وفي الفترات غير المسجلة، تُبلّغ الإخفاقات عبر دالة `@opentelemetry/api` المسماة `diag.error` مع بيانات (`hook.name` و`error.type` و`traceId` و`spanId`).
+- إخفاقات الخطافات لا تُفشل استدعاء العميل أبداً. فطالما كانت `span.isRecording()` صحيحة، تُسجل أخطاء الخطاف كأحداث `defjs.otel.hook.error` و`exception` على الفترة؛ وفي الفترات غير المسجلة، تُبلّغ الإخفاقات عبر دالة `@opentelemetry/api` المسماة `diag.error` مع بيانات (`hook.name` و`error.type` و`traceId` و`spanId`).
 - تلتقط `withOpenTelemetryServer` لقطة لكتل خيارات `http` و`sse` و`webSocket` عند وقت الإنشاء. ويؤدي تمرير `{ enabled: false }` إلى تعطيل تلك الوسيلة دون قراءة خطافاتها.
 
 ---
@@ -78,7 +83,7 @@ description: قِس واستكشف استدعاءات SDK على عميل تطب
 
 ### حدود إعادة المحاولة وإعادة الاتصال
 
-هذه هي ملاحظات المعترضات الحالية، وليست واجهة قياس عن بُعد منفصلة لموزع الحمل:
+هذه هي ملاحظات المعترضات الحالية، وليست واجهة قياس عن بُعد منفصلة لموازن الحمل:
 
 - لكل محاولة HTTP عبر `withRetry` فترة تتبع عميل وعينة مدة خاصتان بها. عند وجود فترة تتبع أصلية نشطة للتطبيق، تكون المحاولات فترات شقيقة تحت ذلك الأصل؛ وبدونها لا تُجمع المحاولات تلقائيًا في تتبع واحد. لا يُنشئ Core فترة أصلية للاستدعاء المنطقي.
 - تحدّد عناوين URL لمحاولات HTTP نقطة النهاية الخاصة بكل محاولة، لكن لا تصدر سمات لرقم المحاولة أو سبب الإعادة أو رصيد الميزانية واستنفادها أو الاستبعاد والتعافي.

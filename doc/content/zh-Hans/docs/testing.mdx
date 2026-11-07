@@ -1,15 +1,15 @@
 ---
 title: "测试"
-description: 使用注入式传输句柄在离线环境下完整测试 SDK 契约、断言错误元组并利用虚拟时钟确定性验证时间逻辑。
+description: 用注入的传输句柄离线测试 SDK 定义与应用策略，断言错误优先元组并使用确定性定时器。
 ---
 
 # 测试
 
-由于 Defjs 将接口操作定义与 Client 执行完全解耦，你可以直接在本地单测中对真实的 SDK 定义及应用层拦截器进行离线测试，而无需启动真实的 HTTP 服务器，更无需侵入式 Mock 库的内部函数。
+由于 Defjs 将操作定义与 Client 执行分离，你可以在不启动网络服务器、也不 mock 库内部函数的情况下，离线测试真实的 SDK 操作和应用拦截器。
 
 ## 1. 注入本地传输句柄
 
-在调用 `createClient(...)` 时，通过 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 替换底层的平台原生网络传输。Defjs 依然会严格跑通整个操作的完整处理流水线：入参 `struct` 校验、`builder` 参数映射、URL 目录安全检查、中间件拦截器链、HTTP 状态码分流，以及最终的响应 `struct` 解码。
+在 `createClient(...)` 上使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 替换底层平台传输。Defjs 仍会跑完整的操作流水线：输入 `struct` 校验、`builder` 映射、URL 目录限制检查、拦截器、状态码分发和响应 `struct` 解码。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab value="sdk/orders.ts">
@@ -32,27 +32,27 @@ description: 使用注入式传输句柄在离线环境下完整测试 SDK 契�
 
 ### 断言错误优先元组，而非内部实现细节
 
-始终使用测试专用的 Client 调用导出的 SDK 操作函数，并对返回的 `[error, data, response]` 元组进行严格断言：
+始终用测试 Client 调用导出的 SDK 操作，并断言返回的 `[error, data, response]` 元组：
 
-- 对于 `2xx` 成功场景，断言 `expect(error).toBeNull()`，并检查解码后的 `data` 属性（包括 `.alias()` 从网络下划线到逻辑小驼峰的映射是否正确）。
-- 对于异常失败场景，根据契约要求断言 `error?.code`、`error?.status`、`error?.data` 以及 `error?.cause`。
+- 对于 `2xx` 场景，断言 `expect(error).toBeNull()`，并检查解码后的 `data` 字段（包括 `.alias()` 的网络字段到逻辑字段映射）。
+- 对于失败场景，按契约断言 `error?.code`、`error?.status`、`error?.data` 和 `error?.cause`。
 
-### 校验出站请求的原始网络字节
+### 校验出站请求的网络字节
 
-在你的 `withHTTPHandle(async (input, init) => ...)` 函数内部，构造 `const request = new Request(input, init)` 并审查 `request.url`、`request.method`、`request.headers` 以及 `await request.text()`（或 `await request.json()`），以此验证你的 `builder` 和 struct 别名是否精确序列化为后端接口所期望的网络格式。
+在 `withHTTPHandle(async (input, init) => ...)` 内部构造 `const request = new Request(input, init)`，检查 `request.url`、`request.method`、`request.headers` 以及 `await request.text()`（或 `await request.json()`），确认 `builder` 和 struct 别名序列化出的正是后端期望的网络格式。
 
-### 使用虚拟时钟实现确定性的时间测试
+### 用假定时器确定性控制时间
 
-拦截器重试退避、SSE/WebSocket 重连延迟或 WebSocket 心跳，在 Vitest 里用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`。这些假定时钟不会推动原生的 `AbortSignal.timeout`。要在 Vitest 里得到确定的请求截止时间，请用受控的 `setTimeout` 以 `TimeoutError` 为原因中止一个 `AbortController`：
+拦截器重试退避、SSE/WebSocket 重连延迟或 WebSocket 心跳，在 Vitest 中使用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`。这些假定时器不会推进原生 `AbortSignal.timeout` 的时钟。要在 Vitest 中得到确定的请求期限，用受控的 `setTimeout` 以 `TimeoutError` 为原因中止 `AbortController`：
 
 <include cwd lang="typescript">
   examples/testing/deadline.ts#example
 </include>
 
-在 Bun test 里用 `jest.useFakeTimers()` 和 `jest.advanceTimersByTime()`；Bun 的假定时钟也会控制 `AbortSignal.timeout`。不要假定两种运行器控制同一套原生时钟。只在被等待的阶段已经开始之后再推进时钟，断言状态变化或尝试次数，而不是墙上时间，并在每个测试之后恢复真实时钟。
+在 Bun test 中使用 `jest.useFakeTimers()` 和 `jest.advanceTimersByTime()`；Bun 的假定时器也会控制 `AbortSignal.timeout`。不要假定两个运行器控制相同的原生时钟。只在被等待的阶段开始后推进定时器，断言状态变化或尝试次数而不是实际耗时，并在每个测试后恢复真实定时器。
 
 ## 相关阅读
 
-- [本地 HTTP 测试](/zh-Hans/recipes/test-with-handle)
+- [用本地 Fetch 句柄测试](/zh-Hans/recipes/test-with-handle)
 - [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)
-- [Client 客户端配置](/zh-Hans/docs/client)
+- [Client 配置](/zh-Hans/docs/client)

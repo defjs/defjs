@@ -7,7 +7,7 @@ Contents: [Boundary and exports](#boundary-and-exports) · [`ClientProvider` set
 `@defjs/react` exports `ClientProvider` and `useClient`.
 
 - It is a thin Context bridge, **not** a query, cache, or state management library.
-- `ClientProvider` and `useClient` accept and return a root `DerivableClient` (created by `createClient`), never a derived `client(options)` value.
+- `ClientProvider` accepts, and `useClient` returns, a root `DerivableClient` (created by `createClient`); a derived `client(options)` value is never accepted.
 - Do not pass the `client` returned by `useClient()` into `useState(client)` or `setState(client)`—because `DerivableClient` is a function, React would invoke it as a lazy initializer or state updater.
 
 ## `ClientProvider` setup

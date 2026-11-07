@@ -1,6 +1,6 @@
 ---
 title: "クイックスタート"
-description: 最初の SDK 操作を export し、別のアプリケーションから呼び出し、オフラインモックと実サービスのそれぞれで同じ定義を再利用します。
+description: 最初の SDK 操作を export し、別のアプリケーションから呼び出し、同じ定義を別のクライアントで再利用します。
 ---
 
 # はじめに: 最初の SDK 操作 [#getting-started-one-http-request]
@@ -48,7 +48,7 @@ bun add @defjs/core
 1. **`src/define-request.ts`（SDK の定義）**:
    - `struct` を使用して `input`、`output`（`2xx` レスポンス用）、`error`（`2xx` 以外のレスポンス用）を宣言します。
    - `input` を `{ path }` にマッピングする同期的で純粋な関数 `builder` を指定します。`input` を宣言した場合は、明示的な `builder` が必須です。
-   - クライアントを作成したりキャプチャしたりすることなく、純粋な操作として `getOrder` を export します。
+   - クライアントを作成したりキャプチャしたりすることなく、`getOrder` を export します。
 2. **`src/execute-locally.ts`（オフラインテストでの実行）**:
    - `withHTTPHandle(...)` を使用してクライアントを構成し、ネットワーク通信を行わずに Defjs のパイプライン全体（入力検証、URL 解決、ステータスに応じたディスパッチ、レスポンス struct のパース）を実行します。
 3. **`src/real-api.ts`（本番環境での実行）**:
@@ -74,7 +74,7 @@ Order not found
 
 ## 4. エラーファーストタプルの理解
 
-すべての HTTP 呼び出しは `[error, data, response]` を解決します。
+すべての HTTP 呼び出しは `[error, data, response]` を返します。
 
 - **`2xx` の成功時**: `error` は `null`、`data` は検証済みの `output` 値（`Order`）、`response` は `DecodedResponse<Order>` になります。
 - **宣言された非 `2xx` ステータス時**: `error.code` は `'HTTP_STATUS'`、`error.status` はステータスコード数値（`404`）、`error.data` は検証済みの `error` struct（`NotFound`）になります。
@@ -84,7 +84,7 @@ Order not found
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — ボディの読み取り不可またはスキーマの不一致
   - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` — トランスポートエラー、手動キャンセル、または `AbortSignal.timeout(ms)` によるタイムアウト
 
-呼び出しごとの締め切りやキャンセルシグナルは、単一呼び出し用の一時クライアントを派生させて渡します: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`。
+呼び出しごとの期限やキャンセルシグナルは、単一呼び出し用のクライアント値を派生させて渡します: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`。
 
 ## 次のステップ
 

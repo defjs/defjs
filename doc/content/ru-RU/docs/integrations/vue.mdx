@@ -13,7 +13,7 @@ bun add @defjs/core @defjs/vue vue
 
 ## Зоны ответственности: что даёт `@defjs/vue`, а чем владеете вы
 
-- **Предоставляет `@defjs/vue`**: функции `createClientPlugin(client)`, `HTTP_CLIENT` (`InjectionKey<Client>`) и `injectClient(key?)`.
+- **Предоставляет `@defjs/vue`**: функции `createClientPlugin(client)`, константы `HTTP_CLIENT` (`InjectionKey<DerivableClient>`) и функции `injectClient(key?)`.
 - **Владеет ваше приложение**: создание экземпляра [`DerivableClient`](/ru-RU/api/core/derivableclient-type), отмена выполняемой работы в вотчерах (`onCleanup`) или компосаблах (`onScopeDispose`), закрытие хэндлов SSE/WebSocket и интеграция с библиотеками запросов (например, Vue Query).
 - **Важно**: функция `injectClient()` возвращает объект-функцию `DerivableClient`. Вызывайте `client({ signal })` непосредственно там, где выполняется операция (`getOrder(client({ signal }), input)`). Никогда не передавайте `client` первым аргументом в `watch(client, ...)` или `computed(client)`, так как Vue воспринимает переданную функцию как реактивный геттер.
 
@@ -28,9 +28,11 @@ bun add @defjs/core @defjs/vue vue
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
+
   </Tab>
   <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
+
   </Tab>
 </Tabs>
 
@@ -79,7 +81,7 @@ bun add @defjs/core @defjs/vue vue
   examples/vue/exports.ts#example
 </include>
 
-- `HTTP_CLIENT` — `InjectionKey<Client>` для стандартных вызовов `provide` / `inject`.
+- `HTTP_CLIENT` — `InjectionKey<DerivableClient>` для стандартных вызовов `provide` / `inject`.
 - `createClientPlugin(client)` — плагин Vue `Plugin`, предоставляющий `client` по ключу `HTTP_CLIENT`.
 - `injectClient(key?)` — разрешает ближайший клиент для ключа `key` (по умолчанию `HTTP_CLIENT`).
 - Руководства: [Клиент](/ru-RU/docs/client), [HTTP-операции](/ru-RU/docs/http), [Перехватчики](/ru-RU/docs/interceptors), [Потоки событий SSE](/ru-RU/docs/sse), [Сессии WebSocket](/ru-RU/docs/web-socket).

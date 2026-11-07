@@ -60,7 +60,7 @@ async function main() {
   }
   await using ownedSession = session;
   const unsubscribeError = ownedSession.onRuntimeError((cause) =>
-    console.error("invalid frame", cause),
+    console.error("runtime error", cause),
   );
   try {
     ownedSession.send({ type: "subscribe", symbol: "ACME" });
@@ -82,13 +82,13 @@ void main();
 
 - **One struct per direction:** model multiple message types with `struct.discriminatedUnion("type", [...])`. There is no message-map object and no automatic envelope wrapper.
 - **Inbound frames:** text, `ArrayBuffer`, TypedArray, and `Blob` frames are decoded as UTF-8, `JSON.parse`d, and validated against `incoming`. Frames that fail JSON parsing or struct validation are reported to `session.onRuntimeError(listener)` and not enqueued; the session stays open.
-- **Outbound frames (`session.send`):** validates and serializes **synchronously** (struct alias encoding, then `JSON.stringify`). `session.send` throws synchronously if the payload fails `outgoing`, contains non-JSON values (`NaN`, `±Infinity`, functions), or the session is not writable and no outgoing queue is configured.
+- **Outbound frames (`session.send`):** validates and serializes **synchronously** (validation and alias encoding, then `JSON.stringify`). `session.send` throws synchronously if the payload fails `outgoing`, contains values JSON cannot represent (`NaN`, `±Infinity`, functions, symbols, `Map`, `Set`), or the session is not writable. It sends immediately only in `open` and queues only in `reconnecting`; every other state throws, and `reconnecting` also throws when the outgoing queue is disabled or full.
 
 ## Subprotocols and builder rules
 
 - A WebSocket `builder` may return **`{ path?, query? }` only** (`headers` and `body` are forbidden because browser WebSockets do not support custom handshake headers).
-- Subprotocol precedence: `client({ protocols })` → `withWebSocketProtocols(...)` on the client → `protocols` on `defineWebSocket`.
-- The chosen `protocols` array is snapshotted when the session starts and reused across automatic reconnections. To pass a short-lived auth token in a subprotocol, obtain the token before calling the operation and pass `client({ protocols: [`auth.${token}`, "quotes.v1"] })`.
+- Subprotocol precedence: `client({ protocols })` overrides `withWebSocketProtocols(...)`, which overrides `protocols` on `defineWebSocket`.
+- The chosen `protocols` array is snapshotted when the session starts and reused across automatic reconnections. To pass a short-lived auth token in a subprotocol, obtain the token before calling the operation and pass ``client({ protocols: [`auth.${token}`, "quotes.v1"] })``.
 
 ## Heartbeat and reconnect
 
@@ -153,7 +153,7 @@ async function runWithHeartbeat() {
 void runWithHeartbeat();
 ```
 
-A server 1011 may have `wasClean: true`; that field describes the close handshake, not application success. Successful opens reset the reconnect budget (default 3 per outage). With multiple endpoints, reconnect can re-pick; it does not restore application subscriptions or delivery acknowledgments.
+A server can complete a clean close handshake with application-error code `1011`, so `wasClean: true` does not mean the application succeeded. Successful opens reset the reconnect budget (default 3 per outage). With multiple endpoints, reconnect can re-pick; it does not restore application subscriptions or delivery acknowledgments.
 
 The input, builder output, and selected protocols are captured once for the logical session. Each attempt resolves its URL before `beforeConnect`; reconnect can replace the base endpoint, not the captured path/query. `beforeConnect` runs per attempt but does not rebuild a query ticket or subprotocol token after a closure variable changes. Start a new operation with refreshed values when those credentials expire. See [load balancing](load-balancing.md) for endpoint and retry boundaries.
 

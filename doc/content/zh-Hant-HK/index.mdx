@@ -10,7 +10,7 @@ description: 用可重用嘅 API 定義同由應用程式擁有嘅 client，設�
 Defjs 將 TypeScript SDK 拆開做兩邊：
 
 - **SDK 定義 (`@defjs/core`)** — SDK 作者用 `struct` schema 宣告帶型別嘅 HTTP、SSE 同 WebSocket 操作。定義純粹係資料：淨係 import 佢唔會發起任何網絡請求，亦唔會綁死全域 client。
-- **應用程式執行** — 使用方應用程式建立自己嘅 `Client`（`createClient(withEndpoint(...))`），掛上憑證、中介層（interceptor）同負載平衡器，然後喺呼叫操作嗰陣將個 client 傳入去。
+- **應用程式執行** — 使用方應用程式建立自己嘅 `Client`（`createClient(withEndpoint(...))`），掛上憑證同攔截器、配置負載平衡，然後喺呼叫操作嗰陣將個 client 傳入去。
 
 ## 快速睇睇：SDK 定義 vs 應用程式執行
 
@@ -31,13 +31,13 @@ Defjs 將 TypeScript SDK 拆開做兩邊：
 </Tab>
 </Tabs>
 
-呼叫 `getHealth(client)` 就會真正執行 I/O，並 resolve 一個 error-first tuple。先檢查 `if (error)` 並及早 return，之後先好讀取解碼後嘅結果。
+呼叫 `getHealth(client)` 就會真正執行 I/O，並 resolve 一個 error-first tuple。先檢查 `if (error)` 並及早回傳，之後先好讀取解碼後嘅結果。
 
 ## 點解要將定義同 Client 分開？
 
 | 職責     | SDK 作者（定義）                                                                                 | 應用程式（執行）                                                |
 | -------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| **擁有** | Method、路徑模板、`input` / `output` / `error` schema、`builder` 映射，以及靜態 `operation` 名稱 | Base URL、憑證、認證中介層、負載平衡、逾時設定同資源釋放        |
+| **擁有** | Method、路徑模板、`input` / `output` / `error` schema、`builder` 映射，以及靜態 `operation` 名稱 | Base URL、憑證、認證攔截器、負載平衡、逾時設定同資源釋放        |
 | **發佈** | 可重用嘅 ESM 模組同 `.d.ts` 宣告                                                                 | 瀏覽器、伺服器或測試環境嘅 runtime 設定                         |
 | **好處** | 完全零環境耦合；無論喺瀏覽器、SSR 定係測試環境都通用                                             | 完全掌控重試、故障轉移（failover）、遙測（telemetry）同生命週期 |
 
@@ -46,13 +46,13 @@ Defjs 將 TypeScript SDK 拆開做兩邊：
 1. **[快速開始](/zh-Hant-HK/docs/start)** — 定義一個操作，用本地 Fetch handle 離線測試，然後對接真正嘅線上服務。
 2. **[核心架構](/zh-Hant-HK/docs/design-decisions)** — 了解六條回應解碼規則、error-first tuple 同資源擁有權。
 3. **[定義 SDK](/zh-Hant-HK/docs/struct)** — 用 [Struct](/zh-Hant-HK/docs/struct) 宣告網絡資料契約，並匯出 [HTTP](/zh-Hant-HK/docs/http)、[SSE](/zh-Hant-HK/docs/sse) 同 [WebSocket](/zh-Hant-HK/docs/web-socket) 操作。
-4. **[Client 與執行](/zh-Hant-HK/docs/client)** — 設定 [Client](/zh-Hant-HK/docs/client)、處理型別化嘅 [錯誤](/zh-Hant-HK/docs/errors)、掛載 [中介層](/zh-Hant-HK/docs/interceptors)、配置 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)，以及運行確定性嘅 [測試](/zh-Hant-HK/docs/testing)。
+4. **[Client 與執行](/zh-Hant-HK/docs/client)** — 設定 [Client](/zh-Hant-HK/docs/client)、處理型別化嘅 [錯誤](/zh-Hant-HK/docs/errors)、掛載 [攔截器](/zh-Hant-HK/docs/interceptors)、配置 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)，以及執行確定性嘅 [測試](/zh-Hant-HK/docs/testing)。
 
-## 支援嘅傳輸協議與回傳 Tuple
+## 支援嘅傳輸層與結果 tuple
 
 每個操作都會回傳一個三項式 error-first tuple，切合相應傳輸嘅生命週期：
 
-| 傳輸協議                                     | 入口函式            | Tuple 形狀                     | 生命週期擁有權                                                            |
+| 傳輸層                                       | 入口函式            | tuple 形狀                     | 生命週期擁有權                                                            |
 | -------------------------------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------- |
 | **[HTTP](/zh-Hant-HK/docs/http)**            | `defineRequest`     | `[error, data, response]`      | 透過 `client({ signal })` 取消進行中嘅請求                                |
 | **[SSE](/zh-Hant-HK/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | 透過 `await using` 或 `stream.close()` + `await stream.closed` 釋放資源   |
@@ -64,7 +64,7 @@ Defjs 將 TypeScript SDK 拆開做兩邊：
 
 | 套件                          | 角色                                                                       | 指南                                                                         |
 | ----------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `@defjs/core`                 | 零依賴嘅 SDK 定義、`struct`、client 與中介層                               | [快速開始](/zh-Hant-HK/docs/start)                                           |
+| `@defjs/core`                 | 零依賴嘅 SDK 定義、`struct`、client 與攔截器                               | [快速開始](/zh-Hant-HK/docs/start)                                           |
 | `@defjs/react`                | 適用於 React 18+ 嘅 `ClientProvider` 同 `useClient()` context 注入         | [React 整合](/zh-Hant-HK/docs/integrations/react)                            |
 | `@defjs/vue`                  | 適用於 Vue 3.2+ 嘅 `createClientPlugin`、`HTTP_CLIENT` 同 `injectClient()` | [Vue 整合](/zh-Hant-HK/docs/integrations/vue)                                |
 | `@defjs/opentelemetry-server` | 伺服器端 outbound span、metrics 與診斷日誌                                 | [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server) |
@@ -73,9 +73,9 @@ Defjs 將 TypeScript SDK 拆開做兩邊：
 
 - [建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)
 - [發送與驗證 JSON](/zh-Hant-HK/recipes/post-json)
-- [處理已聲明嘅 404](/zh-Hant-HK/recipes/get-declared-404)
+- [處理已宣告嘅 404](/zh-Hant-HK/recipes/get-declared-404)
 - [取消 HTTP 呼叫](/zh-Hant-HK/recipes/cancel-http)
-- [遇 401 時自動更新 Bearer Token 一次](/zh-Hant-HK/recipes/refresh-bearer-once)
+- [401 後更新 Bearer token 一次](/zh-Hant-HK/recipes/refresh-bearer-once)
 - [使用 SSE 事件流](/zh-Hant-HK/recipes/consume-sse)
 - [開啟 WebSocket 會話](/zh-Hant-HK/recipes/websocket-session)
 - [使用本地 Fetch Handle 進行測試](/zh-Hant-HK/recipes/test-with-handle)

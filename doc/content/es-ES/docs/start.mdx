@@ -50,7 +50,7 @@ Mantén la definición de la operación en su propio módulo de SDK (`src/define
    - Proporciona un `builder` síncrono y puro que mapea `input` a `{ path }`. Siempre que se declare `input`, es obligatorio incluir un `builder` explícito.
    - Exporta `getOrder` sin crear ni capturar ningún cliente.
 2. **`src/execute-locally.ts` (Ejecución de prueba local)**:
-   - Configura un cliente con `withHTTPHandle(...)` para ejecutar todo el flujo de Defjs (validación de entrada, resolución de URL, despacho por código de estado y análisis de estructuras en la respuesta) sin tocar la red.
+   - Configura un cliente con `withHTTPHandle(...)` para ejecutar todo el flujo de Defjs (validación de entrada, resolución de URL, despacho por código de estado y análisis de structs en la respuesta) sin tocar la red.
 3. **`src/real-api.ts` (Ejecución en producción)**:
    - Importa exactamente la misma operación `getOrder` y la invoca contra una URL base real configurada mediante `withEndpoint(...)`.
 
@@ -66,7 +66,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-Si cambias la entrada de `{ id: 7 }` a `{ id: 8 }`, el mock devuelve `404` y Defjs decodifica la estructura `error` declarada en `error.data`:
+Si cambias la entrada de `{ id: 7 }` a `{ id: 8 }`, el mock devuelve `404` y Defjs decodifica el struct `error` declarado en `error.data`:
 
 ```txt
 Order not found
@@ -77,7 +77,7 @@ Order not found
 Cada llamada HTTP resuelve una tupla `[error, data, response]`:
 
 - **En éxito `2xx`**: `error` es `null`, `data` es el valor de `output` validado (`Order`) y `response` es `DecodedResponse<Order>`.
-- **En un estado no `2xx` declarado**: `error.code` es `'HTTP_STATUS'`, `error.status` es el código numérico (`404`) y `error.data` es la estructura `error` validada (`NotFound`).
+- **En un estado no `2xx` declarado**: `error.code` es `'HTTP_STATUS'`, `error.status` es el código numérico (`404`) y `error.data` es el struct `error` validado (`NotFound`).
 - **En fallos de entrada, decodificación o red**: `error.code` identifica la etapa exacta del fallo:
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — entrada no válida o una excepción lanzada en el `builder`.
   - `RES_MEDIA_TYPE_INVALID` — el cuerpo JSON declarado llegó con un `Content-Type` que no es JSON (se rechaza antes de leer el cuerpo).

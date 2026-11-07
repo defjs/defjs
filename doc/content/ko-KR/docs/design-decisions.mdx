@@ -1,5 +1,5 @@
 ---
-title: "설계 결정"
+title: "핵심 아키텍처"
 description: API 정의와 클라이언트 실행을 분리하여 SDK를 설계하고 배포하며 재사용하기 쉽게 만드는 방법.
 ---
 
@@ -11,29 +11,22 @@ Defjs는 하나의 근본적인 경계를 중심으로 구축되었습니다: **
 
 SDK 패키지는 작업(`defineRequest`, `defineEventStream`, `defineWebSocket`)과 데이터 계약(`struct`)을 export합니다. SDK 모듈 안에서 `createClient`를 호출하거나 싱글톤 클라이언트를 보관하거나 환경 변수를 읽는 일은 절대 없습니다.
 
-<Tabs items={["sdk/orders.ts", "app/consumers.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.string(),
-});
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: Order,
-});
-```
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/consumers.ts">
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -44,21 +37,21 @@ export const getOrder = defineRequest({
 
 `getOrder`는 어떤 클라이언트 상태도 캡처하지 않기 때문에:
 
-- 브라우저 UI, 백그라운드 작업, SSR 요청 핸들러, 단위 테스트 모두 동일한 `getOrder` 정의를 각기 다른 `Client` 설정으로 호출할 수 있습니다.
-- 프레임워크 플러그인(`@defjs/react`, `@defjs/vue`)과 관측성 미들웨어(`@defjs/opentelemetry-server`)는 애플리케이션의 `Client`에 연결되므로, 배포된 SDK 패키지는 의존성이 전혀 없는(100% dependency-free) 상태를 유지합니다.
+- 브라우저 UI, 백그라운드 작업, SSR 요청 핸들러, 단위 테스트 모두 동일한 `getOrder` 작업을 각기 다른 `Client` 설정으로 호출할 수 있습니다.
+- 프레임워크 플러그인(`@defjs/react`, `@defjs/vue`)과 관측성 미들웨어 플러그인(`@defjs/opentelemetry-server`)은 애플리케이션의 `Client`에 연결되므로, 배포된 SDK 패키지는 의존성이 전혀 없는(100% dependency-free) 상태를 유지합니다.
 
 ## 2. 명시적인 입력 배치와 양방향 별칭(alias)
 
 Defjs에서 `input`은 호출자가 전달하는 값을 선언하고, `struct`는 값이 인코딩/디코딩되는 방식을 제어하며, `builder`는 각 값을 요청(`path`, `query`, `headers`, `body`)의 어느 위치에 둘지 배치합니다.
 
-- **마법 같은 자동 추론 없음**: 작업에 `input`을 선언했다면 반드시 동기 순수 함수인 `builder`를 명시적으로 제공해야 합니다. 매개변수 이름을 바탕으로 요청 위치를 임의로 추측하지 않습니다.
+- **마법 같은 추론은 없다**: 작업에 `input`을 선언했다면 반드시 동기 순수 함수인 `builder`를 명시적으로 제공해야 합니다. 매개변수 이름을 바탕으로 요청 위치를 임의로 추측하지 않습니다.
 - **양방향 `.alias(wireName)` 지원**: struct 필드에 `.alias("customer_name")`을 선언하면 TypeScript 코드에서는 카멜케이스인 `customerName`을 유지하면서, 통신 시에는 `"customer_name"`으로 자동 인코딩되고 응답으로부터 다시 디코딩됩니다.
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-builder가 타입이 지정된 struct 객체를 `body`, `query`, `headers`에 넘길 때 필드 별칭과 `Date` / `bigint` 코덱이 자동으로 적용됩니다. 익명 래퍼 객체에 직접 작성한 키(위 예제의 `account_id`나 `x-api-version` 등)는 문자 그대로 유지됩니다.
+`builder`가 타입화된 struct 객체를 `body`, `query`, `headers`에 넘길 때 필드 별칭과 `Date` / `bigint` 코덱이 자동으로 적용됩니다. 익명 래퍼 객체에 직접 작성한 키(위 예제의 `account_id`나 `x-api-version` 등)는 문자 그대로 유지됩니다.
 
 ## 3. 선언은 곧 단언이다 [#declaration-is-an-assertion]
 
@@ -72,21 +65,21 @@ Defjs가 HTTP 응답을 읽는 방식에는 6가지 엄격한 규칙이 적용�
 
 `2xx` 응답은 오직 `output`으로만 디코딩됩니다. 그 외의 모든 상태 코드(`3xx`, `4xx`, `5xx`)는 오직 `error`로만 디코딩됩니다. Defjs는 둘 사이에서 대체 동작(fallback)을 절대 시도하지 않습니다.
 
-### 규칙 3: 단언에서 벗어난 모든 경우는 즉시 명확한 오류로 처리된다
+### 규칙 3: 단언에서 벗어난 모든 경우는 명확한 결함으로 처리된다
 
 Defjs는 `response.ok`로 응답 쪽을 고릅니다. `2xx`는 `output`, `2xx`가 아니면 `error`입니다. 그 쪽에 선언된 JSON struct만 디코딩을 일으키고 `RES_MEDIA_TYPE_INVALID` 또는 `RES_DECODE_FAILED`를 낼 수 있으며, 그 `Content-Type`은 본문 바이트를 읽기 **전에** 검증합니다. `2xx`가 아닌 HTML 게이트웨이 페이지는 JSON `error` struct가 선언된 경우에만 `RES_MEDIA_TYPE_INVALID`를 냅니다. 활성 쪽에 선언이 없으면 본문을 읽지 않으며, `2xx`가 아닌 응답은 디코딩되지 않은 `HTTP_STATUS`를 반환합니다.
 
-| 응답을 읽는 도중 실패한 원인                       | 반환되는 결함(Fault)                                                |
+| 응답을 읽는 도중 실패한 원인                       | 반환되는 결함                                                       |
 | -------------------------------------------------- | ------------------------------------------------------------------- |
 | 미디어 타입이 선언된 JSON 표현과 일치하지 않음     | `RES_MEDIA_TYPE_INVALID` (본문 바이트를 전혀 읽지 않음)             |
 | 바이트를 선언된 표현 형식으로 디코딩할 수 없음     | `RES_DECODE_FAILED`                                                 |
 | 디코딩된 값이 `struct` 스키마 검증을 통과하지 못함 | `RES_STRUCT_MISMATCH` (HTTP) / `RES_DECODE_FAILED` (SSE 핸드셰이크) |
-| 디코딩된 `error` 구조체를 포함한 비`2xx` 상태 코드 | 타입화된 `error.data`를 포함하는 `HTTP_STATUS`                      |
+| 디코딩된 `error` struct를 포함한 비`2xx` 상태 코드 | 타입화된 `error.data`를 포함하는 `HTTP_STATUS`                      |
 | `error`가 선언되지 않은 비`2xx` 상태 코드          | `error.data: undefined`인 `HTTP_STATUS`                             |
 
 ### 규칙 4: 디코딩에 실패하면 본문도 존재하지 않는다
 
-본문은 디코딩과 검증을 통과한 후에만 존재합니다. 디코딩이 실패하면 결함 객체의 `response`는 `HttpMeta` 타입(`body` 프로퍼티가 없음)이 되며, 파서나 유효성 검사 오류는 `fault.cause`에 첨부됩니다.
+본문은 디코딩과 검증을 통과한 후에만 존재합니다. 디코딩이 실패하면 결함 객체의 `response`는 `HttpMeta` 타입(`body` 프로퍼티가 없음)이 되며, 파서/유효성 검증 오류는 `fault.cause`에 첨부됩니다.
 
 ### 규칙 5: 한쪽을 생략하는 것은 해당 본문을 읽지 않겠다는 선택이다
 

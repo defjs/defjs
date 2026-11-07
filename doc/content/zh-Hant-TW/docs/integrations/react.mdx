@@ -1,6 +1,6 @@
 ---
 title: "React"
-description: 在 React 元件樹中取用獨立於框架的 SDK，透過 Context 注入 Client 並由元件掌控請求生命週期。
+description: 以 React 提供 client、由元件掌控請求生命週期，取用獨立於框架的 SDK。
 ---
 
 # React
@@ -14,26 +14,28 @@ bun add @defjs/core @defjs/react react
 ## `@defjs/react` 負責的項目 vs. 應用程式負責的項目
 
 - **由 `@defjs/react` 提供**：`ClientProvider` 與 `useClient(overrideClient?)`。
-- **由你的應用程式掌控**：建立 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)、在元件卸載或相依性改變時取消進行中的請求（`AbortController`）、關閉 SSE/WebSocket 控制代碼，以及整合如 TanStack Query 等資料快取函式庫。
-- **重要提示**：`useClient()` 回傳的是 `DerivableClient` 函式物件。請在實際執行操作處呼叫 `client({ signal })`（如 `getOrder(client({ signal }), input)`）。切勿將 `client` 直接傳入 `setState(client)`，因為 React 會將狀態設定函式收到的函式參數視為 State Updater。
+- **由你的應用程式擁有**：建立 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)、在卸載或相依性改變時取消進行中的請求（`AbortController`）、關閉 SSE/WebSocket handle，以及整合 TanStack Query 之類的 query 快取。
+- **重要**：`useClient()` 回傳的是 `DerivableClient` 函式物件。請在實際執行操作的地方呼叫 `client({ signal })`（`getOrder(client({ signal }), input)`）。切勿把 `client` 直接傳給 `setState(client)`，因為 React 會把傳給 state setter 的函式參數當成 updater 函式。
 
 ---
 
 ## 1. 提供 Client 並在 Effect 中發起請求
 
-在應用程式進入點建立 Client，使用 `<ClientProvider client={client}>` 包裹元件樹，並在 Effect 清理函式中取消未完成的請求：
+在應用程式邊界建立 client，以 `<ClientProvider client={client}>` 包住你的元件樹，並在 effect 清理時取消進行中的工作：
 
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
   <Tab value="app/App.tsx">
     <include cwd>examples/react/client-provider.tsx#example</include>
+
   </Tab>
   <Tab value="app/OrderCard.tsx">
     <include cwd>examples/react/basic-setup.tsx#example</include>
+
   </Tab>
 </Tabs>
 
-- `ClientProvider` 是一個輕量的 React Context Provider。傳入不同的 `client` prop 會更新子代讀取的內容，而不會複製或處置先前的 Client。
-- 在開發模式（`StrictMode`）下，React 會重複掛載與清理 Effect。檢查 `controller.signal.aborted` 可避免過時的回應覆蓋當前狀態。
+- `ClientProvider` 只是個輕量的 React Context provider。傳入不同的 `client` prop 會改變子元件讀到的 client，不會複製或處置先前的 client。
+- 開發模式（`StrictMode`）下，React 會多次掛載與清理 effect。檢查 `controller.signal.aborted` 可避免過時的回應蓋掉目前狀態。
 
 ---
 
@@ -43,42 +45,42 @@ bun add @defjs/core @defjs/react react
 
 <include cwd>examples/react/read-with-use-client.tsx#example</include>
 
-- 請始終在元件或自訂 Hook 的頂層無條件呼叫 `useClient(explicitClient)`。切勿撰寫 `explicitClient ?? useClient()`，這樣做會違反 React Hooks 規範。
+- 一律在元件或自訂 Hook 的頂層無條件呼叫 `useClient(explicitClient)`。切勿寫成 `explicitClient ?? useClient()`，那會違反 React Hooks 規則。
 
 ---
 
 ## 3. 與 TanStack Query 整合
 
-`@defjs/react` 僅負責依賴注入，並**未**提供 `useRequest` 這類自訂 Hook。當搭配 TanStack Query 等資料擷取函式庫使用時，請透過 `client({ signal })` 轉發查詢函式的 `signal`，並在查詢配接器（Query adapter）內部轉換 error-first tuple：
+`@defjs/react` 只做依賴注入，**不**提供 `useRequest` hook。搭配 TanStack Query 之類的資料抓取函式庫時，請透過 `client({ signal })` 傳入查詢函式的 `signal`，並在 query adapter 內轉換 error-first tuple：
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
-在此範例中，`throw error` 是 TanStack Query 的 Promise 拒絕約定所要求的明確配接邊界——而非 Defjs 的預設呼叫風格。
+這裡的 `throw error` 是 TanStack Query 拒絕契約所要求的明確 adapter 邊界——不是 Defjs 的預設呼叫風格。
 
 ---
 
 ## 4. 在 Effect 中管理 SSE 與 WebSocket 生命週期
 
-SSE 與 WebSocket 的生命週期會延續到初始的 `openStream(...)` 或 `connectChat(...)` 呼叫之後。請在 await 啟動前先註冊清理常式、在卸載後關閉成功解析的控制代碼、消費其唯一的非同步迭代器，並等待 `.closed`：
+SSE 與 WebSocket handle 的生命週期會超過最初的 `openStream(...)` 或 `connectChat(...)` 呼叫。請在 await 啟動之前註冊清理，關閉卸載後才完成的 handle，消費它唯一的非同步迭代器，並等待 `.closed`：
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- 中斷傳入 WebSocket 操作的 `signal` 會將該工作階段終結為 `aborted`，並以 `AbortError` 拒絕 `session.receive`。在已處置的狀態下，請在 `catch` 區塊中進行防護，僅向上拋出真正的執行時期錯誤（如佇列溢位或心跳逾時）。
-- 中斷 SSE 串流會讓 `for await (const msg of stream)` 乾淨終止，而不會拋出錯誤。
+- 中止傳入 WebSocket 操作的 `signal`，會讓工作階段以 `aborted` 結束，並以 `AbortError` 拒絕 `session.receive`。元件已處置時，請在 `catch` 區塊加上防護，只讓真正的執行時期錯誤（例如佇列溢位或心跳逾時）浮現。
+- 中止 SSE 串流會讓 `for await (const msg of stream)` 正常結束，不會拋出例外。
 
 ---
 
 ## 5. SSR 與 Provider 範圍
 
-- **瀏覽器端**：當端點與攔截器不隨個別請求變更時，可在全域共用單一模組層級的 Client。
-- **SSR 伺服器端**：當標頭、Cookie、租戶或憑證因請求而異時，請在每個伺服器請求邊界內建立全新的 Client。
-- 卸載 `<ClientProvider>` **不會**自動中止進行中的 HTTP 呼叫、關閉 SSE/WebSocket 連線，也不會呼叫 `disposeClient`。
+- **瀏覽器**：當端點與攔截器不隨請求變更時，共用單一模組層級的 client。
+- **SSR**：只要標頭、Cookie、租戶或憑證會因請求而異，就在每個伺服器請求的邊界內建立新的 client。
+- 卸載 `<ClientProvider>` **不會**中止進行中的 HTTP 呼叫、關閉 SSE/WebSocket 連線，也不會處置 client。
 
 ---
 
 ## 公開匯出項目與相關指南
 
-- `ClientProvider` — 提供 `DerivableClient` 的 Context 元件（`ClientProviderProps: { client: Client; children?: ReactNode }`）。
-- `useClient(overrideClient?)` — 讀取明確指定的覆寫值或最近層級提供的 Client。
+- `ClientProvider` — 提供 `DerivableClient`（`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`）。
+- `useClient(overrideClient?)` — 讀取明確的覆寫值，或最近一層提供的 client。
 - 相關指南：[Client](/zh-Hant-TW/docs/client)、[錯誤處理](/zh-Hant-TW/docs/errors)、[SSE 事件串流](/zh-Hant-TW/docs/sse)、[WebSocket 工作階段](/zh-Hant-TW/docs/web-socket)。
-- 相關範例：[處理已宣告的 404](/zh-Hant-TW/recipes/get-declared-404)、[取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)、[使用 SSE 事件串流](/zh-Hant-TW/recipes/consume-sse)、[建立 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)。
+- 相關範例：[處理已宣告的 404](/zh-Hant-TW/recipes/get-declared-404)、[取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)、[消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)、[開啟 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)。

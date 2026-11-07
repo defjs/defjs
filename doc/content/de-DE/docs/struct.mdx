@@ -1,35 +1,33 @@
 ---
-title: "Datenstrukturen / Struct"
-description: Definiere die Datenverträge für Eingaben und Antworten, die dein SDK mit seinen Nutzern teilt – inklusive Typen und Laufzeitvalidierung.
+title: "Struct & Schemas"
+description: Definiere die Datenverträge für Eingaben und Antworten, die dein SDK mit seinen Konsumenten teilt – inklusive Typen und Laufzeitvalidierung.
 ---
 
-# Datenstrukturen / Struct
+# Struct & Schemas
 
-`struct` deklariert den Wire-Datenvertrag zwischen einem SDK und seinen Nutzern: Aufrufer-Eingaben, `2xx`-Ausgaben, deklarierte Service-Fehler, SSE-Ereignisse und WebSocket-Frames.
+`struct` deklariert den Wire-Datenvertrag zwischen einem SDK und seinen Konsumenten: Eingaben des Aufrufers, `2xx`-Ausgaben, deklarierte Service-Fehler, SSE-Events und WebSocket-Frames.
 
 - **Statische Inferenz**: Leite TypeScript-Typen mit `Infer<typeof Schema>` ab.
-- **Error-first-Validierung**: Validiere Werte zur Laufzeit mit `struct.parse(Schema, value)` — liefert `[null, data]` oder `[StructError, undefined]` ohne Exceptions zurück.
+- **Error-first-Validierung**: Validiere Werte zur Laufzeit mit `struct.parse(Schema, value)` — liefert `[null, data]` oder `[StructError, undefined]`, ohne Exceptions zu werfen.
 
 ## 1. Schema im SDK definieren, in der Anwendung validieren
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
@@ -38,11 +36,11 @@ export type Order = Infer<typeof Order>;
 </Tab>
 </Tabs>
 
-Geparste Objekte behalten ausschließlich deklarierte Felder (unbekannte Properties werden entfernt) und besitzen einen `null`-Prototyp. Jeder fehlende Pflichtschlüssel, falsche Primitivtyp oder ungültige Zweig erzeugt einen `StructError` ohne partielle Teil-Ausgabe.
+Geparste Objekte behalten ausschließlich deklarierte Felder (unbekannte Properties werden entfernt) und besitzen einen `null`-Prototyp. Jeder fehlende Pflichtschlüssel, falsche Primitivtyp oder ungültige Zweig erzeugt einen `StructError` ohne partielle Ausgabe.
 
 ## 2. Pflichtfelder, optionale und nullbare Felder
 
-Defjs unterscheidet strikt zwischen **Feld-Präsenz** (`undefined`) und **Nullbarkeit** (`null`). Jeder Struct-Konstruktor ist standardmäßig ein zwingendes Pflichtfeld und nicht-nullbar:
+Defjs unterscheidet strikt zwischen **Feld-Präsenz** (`undefined`) und **Nullbarkeit** (`null`). Jeder Struct-Konstruktor ist standardmäßig strikt erforderlich und nicht-nullbar:
 
 | Deklaration                  | Fehlend / `undefined`                        | `null`      | Gültiger Wert         |
 | ---------------------------- | -------------------------------------------- | ----------- | --------------------- |
@@ -60,7 +58,7 @@ Auch `struct.any()` und `struct.unknown()` weisen `null` und `undefined` ab, es 
 
 ## 3. Bidirektionale Wire-Aliase (`.alias()`)
 
-Verwende `.alias("wire_name")`, wenn das Backend `snake_case` oder Header-Namen verwendet, dein TypeScript-SDK aber idiomatischem `camelCase` folgt. Du deklarierst das Alias einmalig am Feld, und es wirkt automatisch in beide Richtungen:
+Verwende `.alias("wire_name")`, wenn das Backend `snake_case` oder Header-Namen verwendet, dein TypeScript-SDK aber `camelCase` nutzt. Du deklarierst das Alias einmalig am Feld, und es wirkt automatisch in beide Richtungen:
 
 | Grenze                                                                             | Verwendeter Schlüssel                           |
 | ---------------------------------------------------------------------------------- | ----------------------------------------------- |
@@ -100,9 +98,9 @@ Das Spreaden eines typisierten Objekts im `builder` (`{ ...input.order, extra: 1
   examples/struct/parse-failures.ts#example
 </include>
 
-Jedes `StructIssue` enthält `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` oder `custom`), `path`, `expected`, `received` und `message`. Standardmeldungen lassen den empfangenen Wert weg und nennen nur seinen _Typ_, aber Pfade behalten dynamische Record-Schlüssel, die sensible Werte enthalten können. `String(error)` und `error.prettify()` sind keine Schwärzungsgrenze; verwende beim Loggen eine Allowlist sicherer Felder und behandle rohe `received`-Werte sowie eigene Meldungen als sensibel.
+Jedes `StructIssue` enthält `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` oder `custom`), `path`, `expected`, `received` und `message`. Standardmeldungen lassen den empfangenen Wert weg und nennen nur seinen _Typ_, aber Pfade behalten dynamische Record-Schlüssel, die sensible Werte enthalten können. `String(error)` und `error.prettify()` sind keine Grenze für die Schwärzung; verwende beim Loggen eine Allowlist sicherer Felder und behandle rohe `received`-Werte sowie eigene Meldungen als sensibel.
 
-## 6. Konstruktoren-Übersicht
+## 6. Konstruktor-Referenz
 
 <include cwd lang="typescript">
   examples/struct/any.ts#example
@@ -115,12 +113,12 @@ Jedes `StructIssue` enthält `code` (`invalid_type`, `missing_key`, `invalid_lit
 | `struct.bigint()`                                          | `bigint` oder numerischer String           | `bigint`                                                          |
 | `struct.date()`                                            | Gültiges `Date`, Timestamp oder ISO-String | `Date`                                                            |
 | `struct.literal(value)`                                    | Exakter primitiver Literalwert             | Literal-Typ                                                       |
-| `struct.enum(values)`                                      | Deklariertes String- oder Number-Mitglied  | Union von Literalen                                               |
+| `struct.enum(values)`                                      | Deklariertes String- oder Number-Element   | Union von Literalen                                               |
 | `struct.array(item)` / `struct.tuple(items)`               | Array / Tupel fester Länge                 | `T[]` / `[...]`                                                   |
 | `struct.object(shape)` / `struct.record(val)`              | Reines Objekt                              | Typisiertes Objekt / `Record<string, V>`                          |
 | `struct.discriminatedUnion(key, options)`                  | Objekt mit literalem `key`-Diskriminator   | Union von Objekt-Zweigen                                          |
 | `struct.or(branches)`                                      | Erster passender Zweig                     | Union der Zweig-Typen                                             |
-| `struct.intersection(members)`                             | Wert, der alle Mitglieder erfüllt          | Tief gemergte Schnittmenge (Intersection)                         |
+| `struct.intersection(members)`                             | Wert, der alle Mitglieder erfüllt          | Tief zusammengeführte Schnittmenge (Intersection)                 |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`            | Binäre Repräsentation                                             |
 
 ## Weiterführende Links

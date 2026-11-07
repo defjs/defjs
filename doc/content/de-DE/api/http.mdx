@@ -11,36 +11,36 @@ Deklariere einen typisierten Request und rufe die Operation dann mit einem Clien
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`, `path`, optionaler `input`-Struct, optionale `output`- und `error`-Structs, optionales `operation`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Member stehen unter [`RequestDefinition`](/de-DE/api/core/requestdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
+- **definition** — `method`, `path`, optionaler `input`-Struct, optionale `output`- und `error`-Structs, optionales `operation`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`RequestDefinition`](/de-DE/api/core/requestdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
 - **Returns** eine Operation. Ruf sie als `getOrder(client, input)` auf, oder als `health(client)`, wenn kein Input deklariert ist. Ist der ganze Input-Struct optional, darf das Input-Argument wegfallen. Der Aufruf startet den Request. Es gibt kein drittes Options-Argument.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
-`output` ist ein Struct für den 2xx-Body; `error` ist ein Struct für jeden Non-2xx-Body. Keines von beiden
-wird nach Status gekeyt. Lässt du eines weg, wird dieser Body nie gelesen — siehe
+`output` ist ein Struct für den `2xx`-Body; `error` ist ein Struct für jeden Nicht-`2xx`-Body. Keines von beiden
+ist nach Status gegliedert. Lässt du eines weg, wird dieser Body nie gelesen — siehe
 [Deklaration ist eine Zusicherung](/de-DE/docs/design-decisions#declaration-is-an-assertion).
 
 Der Aufruf der Operation gibt ein Promise auf das Tupel zurück, das unter [`HttpAwaitResult`](/de-DE/api/core/httpawaitresult-type) beschrieben ist. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. HTTP liest `signal` und die Progress-Callbacks und ignoriert die anderen Felder.
 
-Ein Non-2xx-Status ist `HTTP_STATUS`, wenn kein `error`-Struct deklariert ist oder der deklarierte `error`-Body dekodiert wird. Das `data` des Faults ist der dekodierte
+Ein Nicht-`2xx`-Status ist `HTTP_STATUS`, wenn kein `error`-Struct deklariert ist oder der deklarierte `error`-Body dekodiert wird. `fault.data` ist der dekodierte
 `error`-Body, wenn einer deklariert war, sonst `undefined`. Lässt sich ein deklarierter `error`-Body nicht lesen (falscher Media-Type, ungültiges JSON) oder
 passt er nicht zu seinem Struct, ist der Fault stattdessen `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED` oder `RES_STRUCT_MISMATCH`, und der Response-Status steht weiterhin
-in den Metadaten. Bei einem Failure ist der dritte Tuple-Slot `undefined`; die Response-Metadaten trägt der Fault.
+in den Metadaten. Bei einem Fehler ist der dritte Slot des Tupels `undefined`; die Response-Metadaten trägt der Fault.
 
 ## fetchHandler()
 
 <ApiSignature name="fetchHandler" />
 
-Default-HTTP-Transport. `fetchImpl` ist standardmäßig das globale `fetch`, aufgelöst zum Sendezeitpunkt; `withHTTPHandle` liefert ein anderes. Unangetastetes Plattform-Fetch erhält `(url, init)`, ein ersetztes globales oder eigenes Handle erhält einen `Request`. Er lehnt ab — statt mit einer
+Standard-HTTP-Transport. `fetchImpl` ist standardmäßig das globale `fetch`, aufgelöst zum Sendezeitpunkt; `withHTTPHandle` liefert ein anderes. Unangetastetes Plattform-Fetch erhält `(url, init)`, ein ersetztes globales oder eigenes Handle erhält einen `Request`. Das Promise wird abgelehnt — statt mit einer
 synthetischen Response aufzulösen —, wenn keine Response den Client erreicht hat oder das Lesen eines deklarierten Bodys fehlschlug.
 
 ## makeResponse()
 
 <ApiSignature name="makeResponse" />
 
-Baue eine `HttpResponse` ohne Network-Call (Interceptors, Tests). Default-Status ist `0`. `ok` ist
-true für 2xx. Der zurückgegebene Wert geht durch dieselbe Media-Type-Prüfung und denselben deklarierten
-Struct wie eine Response von der Leitung; es gibt keinen Short-Circuit, der den Wert als vertrauenswürdig an der Prüfung vorbeiführt.
+Baue eine `HttpResponse` ohne Netzwerkaufruf (Interceptors, Tests). Der Standardstatus ist `0`. `ok` ist
+für `2xx` `true`. Der zurückgegebene Wert durchläuft dieselbe Media-Type-Prüfung und denselben deklarierten
+Struct wie eine Response über die Leitung; es gibt keinen vertrauenswürdigen Short-Circuit.
 
 ## HttpExecuteOptions
 
@@ -52,7 +52,7 @@ Struct wie eine Response von der Leitung; es gibt keinen Short-Circuit, der den 
 
 ### RequestDefinition
 
-`method`, `path`, optional `input`, `output`, `error`, `operation` und `builder`. Der Struct-Kind wählt, wie ein deklarierter Body gelesen wird. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+`method`, `path`, optional `input`, `output`, `error`, `operation` und `builder`. Die Art des Structs entscheidet, wie ein deklarierter Body gelesen wird. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ### HttpAwaitResult
 
@@ -63,7 +63,7 @@ Im Erfolgsfall trägt der dritte Slot nur dann `body`, wenn `output` deklariert 
 
 ### HttpRequest
 
-Normalisierter Outgoing-Request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` und `queryParams`. Wenn Interceptors ihn sehen, ist `body` bereits der Wire-Wert — bei JSON ein JSON-Text-String —, signiere HMACs und Digests also darüber, nicht über den Struct-Input. Interceptors sehen `queryParams` als `new URLSearchParams(queryString)`. Ein Builder, der `URLSearchParams` zurückgibt, reicht genau diese Instanz durch. `responseType` und `errorResponseType` sind readonly: sie werden aus den Struct-Kinds von `output` und `error` des Endpoints abgeleitet und dürfen nicht geändert werden.
+Normalisierter Outgoing-Request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` und `queryParams`. Wenn Interceptors ihn sehen, ist `body` bereits der Wire-Wert — bei JSON ein JSON-Text-String —, signiere HMACs und Digests also über diesen Wert, nicht über die Struct-Eingabe. Interceptors sehen `queryParams` als `new URLSearchParams(queryString)`. Ein Builder, der `URLSearchParams` zurückgibt, reicht genau diese Instanz durch. `responseType` und `errorResponseType` sind readonly: Sie werden aus den Struct-Arten von `output` und `error` der Definition abgeleitet und dürfen nicht geändert werden.
 
 ### HttpMeta
 
@@ -77,15 +77,15 @@ gibt es erst, wenn ein deklarierter Struct einen dekodiert hat.
 <ApiSignature name="DecodedResponse" />
 
 Eine Response, deren Body gegen den deklarierten Struct dekodiert wurde. Diesen Typ in der Hand zu haben ist der Beweis, dass
-dekodiert wurde — deshalb meldet ein Decode-Failure `HttpMeta` allein.
+dekodiert wurde — deshalb meldet ein Dekodierungsfehler allein `HttpMeta`.
 
 ### HttpResponse
 
 <ApiSignature name="HttpResponse" />
 
-`body` ist `undefined`, wenn die Response keinen hatte; ein JSON-`null` bleibt `null`. Der Typ ist gebrandet, baue ihn also mit `makeResponse` statt mit einem Object-Literal. Die Wire-Shape, die Transports produzieren und Interceptors sehen: `body` ist Text oder bereits geparstes JSON, kein
-dekodierter Wert. Bei einer JSON-Representation ist ein String eine JSON-String-Wurzel und wird nicht noch einmal
-geparst; Bytes und Blobs sind roh und werden einmal geparst. Beim Caller landet `DecodedResponse`.
+`body` ist `undefined`, wenn die Response keinen hatte; ein JSON-`null` bleibt `null`. Der Typ trägt eine Markierung, baue ihn also mit `makeResponse` statt mit einem Objektliteral. Die Wire-Form, die Transports produzieren und Interceptors sehen: `body` ist Text oder bereits geparstes JSON, kein
+dekodierter Wert. Bei einer JSON-Repräsentation ist ein String eine JSON-String-Wurzel und wird nicht noch einmal
+geparst; Bytes und Blobs sind roh und werden einmal geparst. Beim Aufrufer kommt `DecodedResponse` an.
 
 ### HttpProgressEvent
 
@@ -96,9 +96,9 @@ geparst; Bytes und Blobs sind roh und werden einmal geparst. Beim Caller landet 
 Der Upload-Fortschritt wird nur in Runtimes gemeldet, die Request-Bodys streamen können (Bun, Node); in Browsern werden
 `Blob`-/`File`-, `ArrayBuffer`- und `FormData`-Bodys unverändert gesendet und `onUploadProgress` wird nicht aufgerufen.
 
-In Server-Runtimes nutzt FormData seinen serialisierten Stream ohne den ganzen Body in ein Blob zu puffern und behält die tatsächliche Multipart-Boundary. Sein Total ist unbekannt, sofern kein gültiges explizites `Content-Length` es liefert. Explizite Content-Types überstehen die Upload-Konvertierung, außer dass FormData die Boundary seiner Serialisierung nutzen muss. `loaded` zählt Stream-Bytes, nicht Server-Bestätigungen. Downloads mit einem Nicht-identity-`Content-Encoding` melden `total: 0` und `lengthComputable: false`; ihre Stream-Bytes können bereits dekomprimiert sein.
+In Server-Laufzeitumgebungen nutzt FormData seinen serialisierten Stream, ohne den ganzen Body in einem Blob zu puffern, und behält die tatsächliche Multipart-Boundary. Sein `total`-Wert ist unbekannt, sofern kein gültiges explizites `Content-Length` ihn liefert. Explizite Content-Types überstehen die Upload-Konvertierung, außer dass FormData die Boundary seiner Serialisierung nutzen muss. `loaded` zählt Stream-Bytes, nicht Server-Bestätigungen. Downloads mit einem `Content-Encoding` ungleich `identity` melden `total: 0` und `lengthComputable: false`; ihre Stream-Bytes können bereits dekomprimiert sein.
 
-Siehe [HTTP-Guide](/de-DE/docs/http) und [Client](/de-DE/docs/client).
+Siehe [HTTP-Leitfaden](/de-DE/docs/http) und [Client](/de-DE/docs/client).
 
 ## RequestEndpoint
 
@@ -106,15 +106,15 @@ Kommt von `defineRequest`. Das erste Argument ist ein [`Client`](/de-DE/api/core
 
 ## BuilderInput
 
-Geparster Endpoint-Input, den `builder` sieht. Object-Knoten tragen den Struct, der sie erzeugt hat, damit Alias-, `Date`- und `bigint`-Encoding dem Wert folgen.
+Geparste Operation-Eingabe, die `builder` sieht. Objektknoten tragen den Struct, der sie erzeugt hat, damit Alias-, `Date`- und `bigint`-Kodierung dem Wert folgen.
 
 ## HttpRequestShape
 
 <ApiSignature name="HttpRequestShape" />
 
-Alle vier Felder sind optional. `query` ist `URLSearchParams` oder ein Record; ein genestetes Object braucht zur Laufzeit `withQuerySerializer`. `headers` ist `HeadersInit` oder ein Record aus Scalars oder Scalar-Arrays. `path` liefert einen Scalar pro `:name`-Segment.
+Alle vier Felder sind optional. `query` ist `URLSearchParams` oder ein Record; ein verschachteltes Objekt braucht zur Laufzeit `withQuerySerializer`. `headers` ist `HeadersInit` oder ein Record aus Skalaren oder Skalar-Arrays. `path` liefert einen Skalar pro `:name`-Segment.
 
-`body` ist für `GET` und `HEAD` `never`. Sonst ist es ein Wire-Wert (`string`, `Blob`, `ArrayBuffer`, ein Typed Array oder `DataView`, `FormData`, `URLSearchParams` oder `ReadableStream<Uint8Array>`) oder JSON-Daten (`number`, `boolean`, `bigint`, `Date`, `null`, ein Array oder ein Object mit String-Keys).
+`body` ist für `GET` und `HEAD` `never`. Sonst ist es ein Wire-Wert (`string`, `Blob`, `ArrayBuffer`, ein Typed Array oder `DataView`, `FormData`, `URLSearchParams` oder `ReadableStream<Uint8Array>`) oder JSON-Daten (`number`, `boolean`, `bigint`, `Date`, `null`, ein Array oder ein Objekt mit String-Schlüsseln).
 
 ## UseRequestConfig
 
@@ -122,17 +122,17 @@ Alle vier Felder sind optional. `query` ist `URLSearchParams` oder ein Record; e
 
 ## RequestSuccessData
 
-Aus dem deklarierten `output`-Struct inferierter Success-Body, oder `undefined`, wenn keiner deklariert ist.
+Aus dem deklarierten `output`-Struct inferierter Erfolgs-Body, oder `undefined`, wenn keiner deklariert ist.
 
 ## RequestErrorData
 
-Aus dem deklarierten `error`-Struct inferierter Error-Body, oder `undefined`, wenn keiner deklariert ist.
+Aus dem deklarierten `error`-Struct inferierter Fehler-Body, oder `undefined`, wenn keiner deklariert ist.
 
 ## HttpResponseType
 
 `'arraybuffer' | 'blob' | 'json' | 'text'`
 
-Kommt aus dem deklarierten Struct-Kind (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, alles andere → `json`). Kein Feld auf `defineRequest`.
+Kommt aus der deklarierten Struct-Art (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, alles andere → `json`). Kein Feld auf `defineRequest`.
 
 ## MakeResponseOptions
 

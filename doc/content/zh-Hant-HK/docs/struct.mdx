@@ -1,35 +1,33 @@
 ---
-title: "資料結構 / Struct"
-description: 用 Struct 定義 SDK 的輸入、輸出、錯誤及訊息，同時提供類型推斷與執行時驗證。
+title: "Struct 與 Schema"
+description: 用 Struct 宣告 SDK 嘅輸入、輸出、錯誤同訊息契約，同時提供型別推斷同執行時驗證。
 ---
 
-# 資料結構與 Schema / Struct
+# Struct 與 Schema
 
 `struct` 用嚟宣告 SDK 同使用方之間共享嘅網絡資料契約：包括呼叫端嘅 input、`2xx` 輸出、宣告過嘅服務錯誤、SSE 事件，以及 WebSocket frame。
 
 - **靜態型別推斷**：透過 `Infer<typeof Schema>` 推斷 TypeScript 型別。
 - **Error-first 執行時驗證**：用 `struct.parse(Schema, value)` 喺執行時驗證值 — 回傳 `[null, data]` 或 `[StructError, undefined]`，唔會拋出例外。
 
-## 1. 喺 SDK 定義 Schema，喺應用程式驗證
+## 1. 喺 SDK 定義 schema，喺應用程式驗證
 
-<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
 <Tab value="sdk/schema.ts">
 
-```ts
-import { struct, type Infer } from "@defjs/core";
-
-export const Order = struct.object({
-  id: struct.number(),
-  status: struct.enum(["pending", "paid", "shipped"] as const),
-  customerName: struct.string().alias("customer_name"),
-  notes: struct.string().optional(),
-});
-
-export type Order = Infer<typeof Order>;
-```
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
 
 </Tab>
 <Tab value="app/validate.ts">
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
@@ -38,7 +36,7 @@ export type Order = Infer<typeof Order>;
 </Tab>
 </Tabs>
 
-解析出嚟嘅物件只會保留宣告過嘅欄位（未宣告嘅未知屬性會自動被剔除），並且採用 `null` prototype。只要缺少必要 key、基本型別唔啱，或者分支無效，就會直接產生 `StructError`，絕唔會產出殘缺不全嘅部分結果。
+解析出嚟嘅物件只會保留宣告過嘅欄位（未宣告嘅未知屬性會自動被剔除），並且採用 `null` prototype。只要缺少必要 key、基本型別唔啱，或者分支無效，就會直接產生 `StructError`，唔會產出部分結果。
 
 ## 2. 必填、可選與 Nullable 欄位
 
@@ -60,20 +58,20 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
 
 ## 3. 雙向網絡別名（`.alias()`）
 
-當後端 API 習慣用 `snake_case` 或者特定 header 名稱，但你嘅 TypeScript SDK 想保持乾淨嘅 `camelCase` 嗰陣，就可以用 `.alias("wire_name")`。你只需喺欄位宣告一次 alias，佢就可以喺兩個方向自動轉換：
+當後端用 `snake_case` 或者特定 header 名稱，而你嘅 TypeScript SDK 用 `camelCase` 嗰陣，就可以用 `.alias("wire_name")`。你只需喺欄位宣告一次 alias，佢就可以喺兩個方向自動轉換：
 
 | 邊界                                                           | 使用嘅 Key 名稱                            |
 | -------------------------------------------------------------- | ------------------------------------------ |
 | 操作 `input` 與 `struct.parse(Schema, value)`                  | 邏輯名稱（`customerName`）                 |
 | `builder` 回傳嘅帶型別 struct 值（`body`、`query`、`headers`） | 網絡 alias（`customer_name`）              |
 | 解碼 JSON 回應 / SSE 事件 / WebSocket frame                    | 網絡 `customer_name` → 邏輯 `customerName` |
-| 喺 `builder` 入面直接手寫嘅匿名物件 key                        | 手寫乜就係乜，保持字面值                   |
+| 喺 `builder` 入面直接手寫嘅匿名物件 key                        | 照寫入嘅字面 key                           |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-喺 `builder` 入面展開帶型別嘅物件（例如 `{ ...input.order, extra: 1 }`）會保留佢嘅 struct 編碼同別名設定。但如果你喺同一個物件同時寫入邏輯 key 同網絡 alias，呼叫就會失敗，並喺回傳 tuple 嘅錯誤項提供 `REQ_BUILD_FAILED`。
+喺 `builder` 入面展開帶型別嘅物件（例如 `{ ...input.order, extra: 1 }`）會保留佢嘅 struct 編碼同別名設定。但如果你喺同一個物件同時寫入邏輯 key 同網絡 alias，呼叫就會以 `REQ_BUILD_FAILED` 失敗。
 
 ## 4. 請求放置與表單編碼
 
@@ -102,13 +100,13 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
 
 每個 `StructIssue` 都包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 同埋 `message`。預設訊息會省略收到嘅值，只報告佢嘅*型別*，但 path 會保留動態 record 嘅 key，入面可能有敏感值。`String(error)` 同 `error.prettify()` 唔係脫敏邊界；寫 log 時請用安全欄位嘅 allowlist，並將原始 `received` 值同自訂訊息當作敏感資料。
 
-## 6. 建構子參考
+## 6. 建構函式參考
 
 <include cwd lang="typescript">
   examples/struct/any.ts#example
 </include>
 
-| 建構子                                                     | 接受嘅輸入                         | 推斷出嘅輸出型別                                      |
+| 建構函式                                                   | 接受嘅輸入                         | 推斷出嘅輸出型別                                      |
 | ---------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------- |
 | `struct.string()` / `struct.boolean()`                     | 吻合嘅基本型別                     | `string` / `boolean`                                  |
 | `struct.number()`                                          | 除咗 `NaN` 以外嘅任何 `number`     | `number`（拒絕 `NaN`；喺 JSON body 拒絕 `±Infinity`） |

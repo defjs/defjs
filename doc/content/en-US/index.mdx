@@ -10,7 +10,7 @@ description: Design and publish TypeScript SDKs with reusable API definitions an
 Defjs separates the two sides of a TypeScript SDK:
 
 - **SDK Definition (`@defjs/core`)** — SDK authors declare typed HTTP, SSE, and WebSocket operations alongside their `struct` schemas. A definition is pure data: importing it starts no network call and binds no global client.
-- **Application Execution** — Consuming applications create their own `Client` (`createClient(withEndpoint(...))`), attach credentials, interceptors, and load balancers, and pass that client when calling an operation.
+- **Application Execution** — Consuming applications create their own `Client` (`createClient(withEndpoint(...))`), attach credentials and interceptors, configure load balancing, and pass that client when calling an operation.
 
 ## Quick look: SDK definition vs. application execution
 
@@ -43,7 +43,7 @@ Calling `getHealth(client)` performs I/O and resolves an error-first tuple. Chec
 
 ## Choose your path
 
-1. **[Quick start](/docs/start)** — Define an operation, test it offline with a local Fetch handle, and point it at a live service.
+1. **[Quick start](/docs/start)** — Define an operation, test it offline with a local Fetch handle, and point a client at a live service.
 2. **[Core architecture](/docs/design-decisions)** — Understand the six response-decoding rules, error-first tuples, and resource ownership.
 3. **[Defining SDKs](/docs/struct)** — Declare wire contracts with [Struct](/docs/struct) and export [HTTP](/docs/http), [SSE](/docs/sse), and [WebSocket](/docs/web-socket) operations.
 4. **[Client & execution](/docs/client)** — Configure [Clients](/docs/client), handle typed [Errors](/docs/errors), attach [Interceptors](/docs/interceptors), configure [Load balancing & failover](/docs/load-balancing), and run deterministic [Tests](/docs/testing).

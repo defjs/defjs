@@ -1,17 +1,17 @@
 ---
 title: Errors
-description: Fault のバリアントとファクトリー helper。
+description: Fault のバリアントとファクトリーヘルパー。
 ---
 
 # Errors
 
-Execute は判別可能な `Fault` をタプルの第一要素に返します。宣言済みの失敗で例外を throw することはありません。
+操作は判別可能な `Fault` をタプルの 1 番目の要素に返します。宣言済みの失敗で例外を throw することはありません。
 
 ## FaultCode
 
 <ApiSignature name="FaultCode" />
 
-閉じた集合ひとつです。最初の `_` より前の部分が類別で、独立した `kind` field はありません。集合を閉じたままにするのは `switch (fault.code)` を網羅的に保つためで、拡張は自分の詳細を新しい code ではなく `cause` で報告します。
+1 つの閉じた集合です。最初の `_` より前の部分がクラス名で、独立した `kind` フィールドはありません。集合を閉じたままにするのは `switch (fault.code)` を網羅的に保つためで、拡張は自身の詳細を新しい code ではなく `cause` で報告します。
 
 ## FaultClass
 
@@ -29,41 +29,41 @@ Execute は判別可能な `Fault` をタプルの第一要素に返します。
 
 <ApiSignature name="FaultOf, Fault" />
 
-`FaultOf` は、`Fault` を、それを生んだ struct ではなくデコード済みのエラーボディの型で表したものです。`HttpAwaitResult` とファクトリーはデコード済みの値で動くので、この形を使います。
+`FaultOf` は、`Fault` を、それを生成した struct ではなく、デコード済みのエラーボディの型で表現したものです。`HttpAwaitResult` とファクトリーはデコード済みの値で動くので、この形を使います。
 
 どのバリアントも `DefjsFault` という名前のネイティブ `Error` なので、`String(fault)` は `DefjsFault: <message>` を返します。`code` と各バリアントのメタデータ — `status`、`response`、`data` — は列挙可能な自前プロパティです。ネイティブの `cause` チェーンは列挙されません。
 
-デフォルトの Struct メッセージは、たとえば `Expected number at email, received string` のように `received <kind>` と表示し、受け取った値自体は含めません。`RES_DECODE_FAILED` の原因が JSON の `SyntaxError` なら、メッセージは `Response body could not be decoded` になります。issue の path は構造的で、record のキーを保持します。`struct.record(...)` は `Expected number at alice@example.com, received string` を生成し得るため、キーはデフォルトメッセージ、`prettify()`、`String(fault)` の中でも機微情報になり得ます。生の `StructIssue.received` とパーサーの原因は引き続き機密情報として扱ってください。カスタムの `errorMap` や拡張のメッセージはそのまま使われるため、ログに出す前に確認が必要です。
+デフォルトの Struct メッセージは、たとえば `Expected number at email, received string` のように `received <kind>` と表示し、受け取った値自体は含めません。`RES_DECODE_FAILED` の原因が JSON の `SyntaxError` なら、メッセージは `Response body could not be decoded` になります。issue の path は構造を反映し、record のキーを保持します。`struct.record(...)` は `Expected number at alice@example.com, received string` を生成し得るため、キーはデフォルトメッセージ、`prettify()`、`String(fault)` の中でも機密情報になり得ます。生の `StructIssue.received` とパーサーの原因は引き続き機密情報として扱ってください。カスタムの `errorMap` や拡張のメッセージはそのまま使われるため、ログに出す前に確認が必要です。
 
 <include cwd>examples/api/fault.ts#example</include>
 
-`format()`、`flatten()`、`prettify()` は `fault.cause` を `StructError` に絞り込んだあとでのみ呼んでください。これらの helper は fault にコピーされません。
+`format()`、`flatten()`、`prettify()` は `fault.cause` を `StructError` に絞り込んだあとでのみ呼んでください。これらのヘルパーは Fault にコピーされません。
 
 ### HttpStatusFault
 
 <ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
 
-2xx 以外のあらゆる status です。エンドポイントが `error` を宣言していてボディがデコードできたなら、`data` はそのボディで、`response` もそれを持ちます。`error` を省いた場合ボディは読まれないので、`data` は `undefined`、`response` はメタデータだけになります。
+2xx 以外のあらゆる status を表します。定義が `error` を宣言していてボディがデコードできたなら、`data` はそのボディで、`response` もそれを持ちます。`error` を省いた場合ボディは読まれないので、`data` は `undefined`、`response` はメタデータだけになります。
 
 ### DecodeFault
 
 <ApiSignature name="DecodeFaultCode, DecodeFault" />
 
-レスポンスは届いたものの、宣言どおりには読めませんでした。`response` はメタデータだけです。ボディ**とは**デコード済みの値であり、そのデコードが失敗したのですから、手を伸ばす `body` field は存在しません。問題の詳細は `cause` にあります — struct 不一致なら `StructError`、表現が読めないならパーサーの失敗です。
+レスポンスは届いたものの、宣言どおりには読めませんでした。`response` はメタデータだけです。ボディとはデコード済みの値であり、そのデコード自体が失敗したのですから、参照できる `body` フィールドは存在しません。問題の詳細は `cause` にあります — struct 不一致なら `StructError`、表現が読めないならパーサーの失敗です。
 
 ### PreflightFault
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-レスポンスが存在する前に失敗しえたものすべてです。`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。トランスポートが報告できるメタデータを持つまで、`response` は `undefined` です。たとえばダウンロード途中で切れたボディです。
+レスポンスが存在する前に失敗しうるものすべてです。`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。トランスポートが報告できるメタデータを持つまで、`response` は `undefined` です。たとえばダウンロード途中で切れたボディです。
 
-無効な `withRetry` の option は、HTTP トランスポートが始まる前に `REQ_OPTIONS_INVALID` を返します。メッセージは `Invalid retry options` です。これには、オブジェクトでない方針、1 以上の安全な整数でない `maxAttempts`、それに無効な条件、メソッド、タイムアウト、バックオフ、予算の設定が含まれます。`withRetry` を省くとリトライは無効になります。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。`withRetry({ maxAttempts: 1 })` は、有効にしたあとリトライを無効にします。
+無効な `withRetry` のオプションは、HTTP トランスポートが始まる前に `REQ_OPTIONS_INVALID` を返します。メッセージは `Invalid retry options` です。これには、オブジェクトでないポリシー、1 以上の安全な整数でない `maxAttempts`、それに無効な条件、メソッド、タイムアウト、バックオフ、バジェットの設定が含まれます。`withRetry` を省くとリトライは無効になります。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。`withRetry({ maxAttempts: 1 })` は、有効にしたあとリトライを無効にします。
 
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
 
-デコード済みエラーボディの型を問わない、あらゆる fault です。どのエンドポイントが出したかを気にせず fault を分類するハンドラーに使ってください。ボディの型が重要な場所では `Fault<typeof yourErrorStruct>` を選びます。
+デコード済みエラーボディの型を問わない、あらゆる Fault です。どの操作が出したかを気にせず Fault を分類するハンドラーに使ってください。ボディの型が重要な場所では `Fault<typeof yourErrorStruct>` を選びます。
 
 ## ファクトリー
 
@@ -79,11 +79,11 @@ Execute は判別可能な `Fault` をタプルの第一要素に返します。
 
 <ApiSignature name="createHttpStatusFault, createUndecodedHttpStatusFault, createDecodeFault, createNetworkFault, createPreflightFault" />
 
-`createHttpStatusFault` はデコード済みのボディを既に持つレスポンスを受け取ります。`createUndecodedHttpStatusFault` はメタデータだけを受け取り、`error` を宣言していないエンドポイント向けです。
+`createHttpStatusFault` はデコード済みのボディを既に持つレスポンスを受け取ります。`createUndecodedHttpStatusFault` はメタデータだけを受け取り、`error` を宣言していない定義向けです。
 
-`createNetworkFault` は、`NET_ABORTED` の判定に [`isAbortCause`](/ja-JP/api/core/isabortcause)、`NET_TIMEOUT` の判定に [`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) を使います。これらは、どの Core のコピーから来たものでも、対応するブランドを持つセンチネルを認識します。それぞれ、`AbortError` という名前の `DOMException`、`TimeoutError` という名前の `DOMException` または `Error` も認識します。それ以外はすべて `NET_UNREACHABLE` になります。`createPreflightFault` は code を直接受け取り、`cause` を渡さなければ code がそのまま message になります。
+`createNetworkFault` は、`NET_ABORTED` の判定に [`isAbortCause`](/ja-JP/api/core/isabortcause)、`NET_TIMEOUT` の判定に [`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) を使います。これらは、どの Core のコピーから来たものでも、対応するブランドを持つセンチネルを認識します。`isAbortCause` は `AbortError` という名前の `DOMException` も認識し、`isTimeoutCause` は `TimeoutError` という名前の `DOMException` または `Error` も認識します。それ以外はすべて `NET_UNREACHABLE` になります。`createPreflightFault` は code を直接受け取り、`cause` を渡さなければ code がそのまま message になります。
 
-どのファクトリーも、上記の構造化 field を備えたネイティブ `Error` インスタンスを返します。素のオブジェクトエラーは作らないので、`String(fault)` にアダプターは不要です。
+どのファクトリーも、上記の構造化フィールドを備えたネイティブ `Error` インスタンスを返します。素のオブジェクトエラーは作らないので、`String(fault)` にアダプターは不要です。
 
 ## センチネル
 
@@ -93,15 +93,15 @@ Execute は判別可能な `Fault` をタプルの第一要素に返します。
 
 <ApiSignature name="ERR_ABORTED, ERR_TIMEOUT" />
 
-abort と timeout で共有される `Error` センチネルで、`cause` として使います。HTTP インターセプターからどちらかを throw すると、呼び出しは `NET_ABORTED` または `NET_TIMEOUT` で解決します。SSE と WebSocket のインターセプターは、これらを含むあらゆる throw を `EXT_INTERCEPTOR_FAILED` として報告します。
+abort と timeout で共有される `Error` センチネルで、`cause` として使います。HTTP インターセプターからどちらかを throw すると、呼び出しは `NET_ABORTED` または `NET_TIMEOUT` になります。SSE と WebSocket のインターセプターは、これらを含むあらゆる throw を `EXT_INTERCEPTOR_FAILED` として報告します。
 
-センチネルには、列挙されない `Symbol.for('defjs.cause.aborted')` と `Symbol.for('defjs.cause.timeout')` のブランドが付いています。分類は、センチネルのオブジェクト同一性や、無関係な過去の実行には依存しません。
+センチネルには、列挙されない `Symbol.for('defjs.cause.aborted')` と `Symbol.for('defjs.cause.timeout')` のブランドが付いています。分類は、センチネルのオブジェクト同一性や、無関係な過去の実行に依存しません。
 
 ## 原因の判定
 
 <ApiSignature name="isAbortCause, isTimeoutCause" />
 
-[`isAbortCause`](/ja-JP/api/core/isabortcause) は、中止のブランドを持つ `Error` または `AbortError` という名前の `DOMException` を認識します。[`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) は、タイムアウトのブランドを持つ `Error` または `TimeoutError` という名前の `DOMException` / `Error` を認識します。原因となった値を分類するには `fault.cause` を渡してください。これらの関数は fault の中身を取り出しません。別の Core のコピーから来たセンチネルでも使えます。
+[`isAbortCause`](/ja-JP/api/core/isabortcause) は、中止のブランドを持つ `Error` または `AbortError` という名前の `DOMException` を認識します。[`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) は、タイムアウトのブランドを持つ `Error` または `TimeoutError` という名前の `DOMException` / `Error` を認識します。原因となった値を分類するには `fault.cause` を渡してください。これらの関数は Fault を展開しません。別の Core のコピーから来たセンチネルでも使えます。
 
 ## ERR_NO_CANDIDATE
 
@@ -109,6 +109,6 @@ abort と timeout で共有される `Error` センチネルで、`cause` とし
 
 <ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`ERR_NO_CANDIDATE` は、候補のエンドポイントを選べないとき、`REQ_BUILD_FAILED` の `cause` としてだけ現れます。`FaultCode` は増えません。センチネルには、列挙されない `Symbol.for('defjs.cause.no-endpoint')` のブランドが付いています。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーから来たそのブランドを認識します。[`isAbortCause`](/ja-JP/api/core/isabortcause) が中止を認識するのと同じです。`fault.cause` を渡してください。fault の中身は取り出しません。
+`ERR_NO_CANDIDATE` は、候補のエンドポイントを選べないとき、`REQ_BUILD_FAILED` の `cause` としてだけ現れます。`FaultCode` は増えません。センチネルには、列挙されない `Symbol.for('defjs.cause.no-endpoint')` のブランドが付いています。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーから来たそのブランドを認識します。[`isAbortCause`](/ja-JP/api/core/isabortcause) が中止を認識するのと同じです。`fault.cause` を渡してください。Fault は展開されません。
 
 [Errors ガイド](/ja-JP/docs/errors) を参照してください。

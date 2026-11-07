@@ -1,33 +1,19 @@
 ---
 title: Struct
-description: struct facade、Infer，以及 StructError。
+description: struct facade、Infer 與 StructError。
 ---
 
 # Struct
 
-組 wire 邊界的形狀、剖析值、推導 TypeScript 型別。
+建立傳輸邊界的形狀、剖析值，並推導 TypeScript 型別。
 
 ## struct
 
-Facade。請走這個，別用內部 constructors。
+Facade。請優先使用這個，不要直接用內部的建構子。
 
-```ts
-const Order = struct.object({
-  id: struct.number(),
-  customerName: struct.string().alias("customer_name"),
-});
-
-function readOrder() {
-  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(order.customerName);
-}
-
-readOrder();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### 純量與容器
 
@@ -40,24 +26,24 @@ readOrder();
 | `struct.array(item)` / `tuple(items)` / `record(value)`                     | 集合。`tuple` 接一個陣列：`struct.tuple([a, b])`                        |
 | `struct.object(shape)`                                                      | 物件；欄位可接 `.optional()`、`.null()` / `.nullable()`、`.alias(name)` |
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | 聯集                                                                    |
-| `struct.enum(values)`                                                       | 字串清單或 `{ Name: value }` map；map 接受的是它的值，不是它的 key      |
+| `struct.enum(values)`                                                       | 字串清單或 `{ Name: value }` 對照表；對照表接受的是它的值，不是它的鍵   |
 
-### Body codecs 與二進位值
+### 本文編解碼器與二進位值
 
-| Helper                                         | 用途                                                                                                                                                        |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `struct.formData(shape)` / `urlencoded(shape)` | 物件 struct 加上 codec tag。只有該值是 request body 根時，tag 才生效                                                                                        |
-| `struct.arrayBuffer()` / `blob()` / `file()`   | 二進位值。當 body 根時以 bytes 送出；當 `output`／`error` 時選那個 representation                                                                           |
-| `struct.string()`                              | 文字。當 HTTP 或 SSE 的 body 根，或當 HTTP／SSE 入站資料時，bytes 維持文字。WebSocket 進來的 frame 會先做 JSON parse，所以 string struct 預期的是 JSON 字串 |
+| Helper                                         | 用途                                                                                                                                                       |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | 物件 struct 加上 codec 標記。只有該值作為請求本文的根時，標記才生效                                                                                        |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | 二進位值。作為本文根時以位元組送出；作為 `output`／`error` 時則選用該表示法                                                                                |
+| `struct.string()`                              | 文字。作為 HTTP 或 SSE 的本文根，或作為 HTTP／SSE 的入站資料時，位元組仍維持文字。WebSocket 的入站訊框會先剖析 JSON，所以 string struct 預期的是 JSON 字串 |
 
 ### struct.parse()
 
 <ApiSignature name="struct.parse" />
 
-- **回傳** `[null, value]` 或 `[StructError, undefined]`。error 只帶一個 issue。物件欄位在第一個壞欄位就停止。`struct.or` 會試每一個分支，然後回報 `invalid_union`，不會保留第一個分支的失敗。
-- 物件欄位必填，除非標了 `.optional()` 或 `.nullish()`。形狀沒有宣告的 key 會從結果中丟掉。
-- 選填的 `options.errorMap` 只改這一次 parse 的 issue 文案。
-- 預設讀**邏輯** keys（`customerName`）。傳 `{ aliases: true }` 會讀 wire keys（`customer_name`），跟 HTTP／JSON codecs 一樣。
+- **回傳** `[null, value]` 或 `[StructError, undefined]`。錯誤只帶一個 issue。物件欄位遇到第一個有問題的欄位就停止。`struct.or` 會試過每個分支，再回報 `invalid_union`；它不會保留第一個分支的失敗。
+- 物件欄位預設必填，除非標記 `.optional()` 或 `.nullish()`。形狀未宣告的鍵會從結果中移除。
+- 選用的 `options.errorMap` 只改寫這一次剖析的 issue 訊息。
+- 預設剖析會讀取**邏輯**鍵（`customerName`）。傳入 `{ aliases: true }` 則改讀傳輸鍵（`customer_name`），與 HTTP／JSON 編解碼器的行為相同。
 
 ## ErrorMap
 
@@ -85,23 +71,23 @@ readOrder();
 
 ## STRUCT
 
-一個 `unique symbol`，用來標記從 endpoint input 剖析出來的物件。它是出站 encoder 的內部細節，只以型別形式匯出。不要讀取或設定它。
+一個 `unique symbol`，用來標記從操作 input 剖析出來的物件。它是出站編碼器的內部細節，只以型別形式匯出。請勿讀取或設定它。
 
 ## Struct
 
-能 parse 的形狀：input／output 型別，加上 `.optional()`、`.null()`／`.nullable()`、`.nullish()`、`.alias()`。
+可剖析的形狀：input／output 型別，加上 `.optional()`、`.null()`／`.nullable()`、`.nullish()` 與 `.alias()`。
 
 ## StructLike
 
-帶 `_struct` 型別載荷的東西。見 [`StructLike`](/zh-Hant-TW/api/core/structlike-type)。
+帶有 `_struct` 型別酬載的東西。見 [`StructLike`](/zh-Hant-TW/api/core/structlike-type)。
 
 ## StructMethods
 
-`.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
+`.alias()`、`.null()`／`.nullable()`、`.nullish()`、`.optional()`。
 
 ## ObjectStruct
 
-`struct.object` 做出來的物件形狀。
+由 `struct.object` 建立的物件形狀。
 
 ## StructIssue
 
@@ -109,8 +95,8 @@ readOrder();
 
 ## FormattedStructError
 
-`StructError.format()` 吐出的巢狀 `{ _errors, [key]: … }`。
+`StructError.format()` 產生的巢狀 `{ _errors, [key]: … }` 樹狀結構。
 
 ## FlattenedStructError
 
-`StructError.flatten()` 吐出的 `formErrors` 加 `fieldErrors`。
+`StructError.flatten()` 產生的 `formErrors` 加上 `fieldErrors`。

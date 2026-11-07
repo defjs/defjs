@@ -5,7 +5,7 @@ description: Configurez la façon dont votre application appelle les opérations
 
 # Client
 
-Un `Client` porte la configuration d'exécution de l'application consommatrice : URL de base, en-têtes par défaut, identifiants, intercepteurs, sérialisation des requêtes et handles de transport.
+Un `Client` porte la configuration d'exécution de l'application consommatrice : URL de base candidates, en-têtes par défaut, identifiants, intercepteurs, sérialisation des requêtes et handles de transport.
 
 `createClient(...options)` renvoie un [`DerivableClient`](/fr-FR/api/core/derivableclient-type) :
 
@@ -14,21 +14,12 @@ Un `Client` porte la configuration d'exécution de l'application consommatrice :
 
 ## 1. Configurer un client et appeler une opération de SDK
 
-<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
 <Tab value="sdk/orders.ts">
 
-```ts
-import { defineRequest, struct } from "@defjs/core";
-
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  operation: "orders.read",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-});
-```
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
 
 </Tab>
 <Tab value="app/client.ts">
@@ -38,7 +29,7 @@ export const getOrder = defineRequest({
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab value="Composed client options">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example

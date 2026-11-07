@@ -1,6 +1,6 @@
 ---
 title: "React"
-description: 在 React 中提供應用程式自己的 Client，並執行 SDK 定義、處理結果及取消。
+description: 喺 React 入面提供應用程式自己嘅 Client，並執行 SDK 定義、處理結果同取消。
 ---
 
 # React
@@ -14,26 +14,28 @@ bun add @defjs/core @defjs/react react
 ## `@defjs/react` 負責乜嘢 vs. 你負責乜嘢
 
 - **`@defjs/react` 提供**：`ClientProvider` 與 `useClient(overrideClient?)`。
-- **由你嘅應用程式負責**：建立 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)、喺 component unmount 或依賴項改變時取消進行中嘅請求（`AbortController`）、關閉 SSE/WebSocket handles，以及整合 TanStack Query 等非同步狀態快取庫。
+- **由你嘅應用程式負責**：建立 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)、喺元件卸載或者依賴項改變時取消進行中嘅請求（`AbortController`）、關閉 SSE/WebSocket handle，以及整合 TanStack Query 等非同步狀態快取庫。
 - **重要提醒**：`useClient()` 回傳嘅係一個可呼叫嘅 `DerivableClient` 函式物件。請喺呼叫具體操作嘅地方使用 `client({ signal })`（例如 `getOrder(client({ signal }), input)`）。切忌直接將 `client` 傳入 `setState(client)`，因為 React 會將傳入 state setter 嘅函式當成 updater 執行。
 
 ---
 
-## 1. 提供 Client 並喺 Effect 入面發起請求
+## 1. 提供 Client 並喺 effect 入面發起請求
 
 喺應用程式頂層建立 client，用 `<ClientProvider client={client}>` 包裝元件樹，並喺 effect 清理函式中中斷未完成嘅工作：
 
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
   <Tab value="app/App.tsx">
     <include cwd>examples/react/client-provider.tsx#example</include>
+
   </Tab>
   <Tab value="app/OrderCard.tsx">
     <include cwd>examples/react/basic-setup.tsx#example</include>
+
   </Tab>
 </Tabs>
 
-- `ClientProvider` 係一個極輕量嘅 React Context 提供者。傳入唔同嘅 `client` prop 會更新下層元件讀取到嘅值，唔會 clone 亦唔會 dispose 先前嘅 client。
-- 喺開發模式（`StrictMode`）下，React 會多次掛載同清理 effect。檢查 `controller.signal.aborted` 可以防止過時嘅過期回應覆蓋最新狀態。
+- `ClientProvider` 係一個極輕量嘅 React Context 提供者。傳入唔同嘅 `client` prop 會更新下層元件讀取到嘅值，唔會複製亦唔會銷毀先前嘅 client。
+- 喺開發模式（`StrictMode`）下，React 會多次掛載同清理 effect。檢查 `controller.signal.aborted` 可以防止過時嘅回應覆蓋最新狀態。
 
 ---
 
@@ -53,32 +55,32 @@ bun add @defjs/core @defjs/react react
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
-喺呢度 `throw error` 係 TanStack Query 嘅 Promise rejection 契約所要求嘅適配邊界——並唔係 Defjs 預設嘅呼叫風格。
+喺呢度 `throw error` 係 TanStack Query 嘅 Promise rejection 契約所要求嘅明確 adapter 邊界——並唔係 Defjs 預設嘅呼叫風格。
 
 ---
 
-## 4. 喺 Effect 入面管理 SSE 與 WebSocket 生命週期
+## 4. 喺 effect 入面管理 SSE 與 WebSocket 生命週期
 
-SSE 同 WebSocket handle 嘅生命週期遠長於最初嗰次 `openStream(...)` 或 `connectChat(...)` 呼叫。請喺 await 啟動前先註冊好清理邏輯、關閉 unmount 後先 resolve 出嚟嘅 handle、消費其單一 async iterator，並等待 `.closed`：
+SSE 同 WebSocket handle 嘅生命週期遠長於最初嗰次 `openStream(...)` 或 `connectChat(...)` 呼叫。請喺 await 啟動之前註冊好清理邏輯、關閉喺卸載之後先 resolve 出嚟嘅 handle、消費佢唯一嘅 async iterator，並等待 `.closed`：
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- 中斷傳入 WebSocket 操作嘅 `signal` 會將會話狀態置為 `aborted`，並以 `AbortError` reject `session.receive`。喺 component 已清理嘅情況下，請喺 `catch` 區塊加以保護，確保淨係向上拋出真正嘅執行時嚴重錯誤（例如佇列溢出或心跳逾時）。
+- 中斷傳入 WebSocket 操作嘅 `signal` 會將會話狀態置為 `aborted`，並以 `AbortError` reject `session.receive`。喺元件已清理嘅情況下，請喺 `catch` 區塊加以保護，確保淨係向上拋出真正嘅執行時嚴重錯誤（例如佇列溢出或心跳逾時）。
 - 中斷 SSE 串流則會令 `for await (const msg of stream)` 乾淨優雅地退出，唔會拋出例外。
 
 ---
 
 ## 5. SSR 與 Provider 作用域
 
-- **瀏覽器端**：當端點同中介層與請求無關時，喺模組作用域共用單一 client 實例。
+- **瀏覽器端**：當端點同攔截器與請求無關時，喺模組作用域共用單一 client 實例。
 - **SSR 伺服器端**：只要 headers、cookies、租戶或身分憑證隨請求變動，就一定要喺每個伺服器請求邊界內建立全新嘅 client。
-- Unmount `<ClientProvider>` **唔會**自動中斷進行中嘅 HTTP 請求、唔會關閉 SSE/WebSocket 連線，亦唔會呼叫 `disposeClient`。
+- 卸載 `<ClientProvider>` **唔會**自動中斷進行中嘅 HTTP 請求、唔會關閉 SSE/WebSocket 連線，亦唔會銷毀個 client。
 
 ---
 
 ## 公共匯出與相關指南
 
-- `ClientProvider` — 提供 `DerivableClient`（`ClientProviderProps: { client: Client; children?: ReactNode }`）。
+- `ClientProvider` — 提供 `DerivableClient`（`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`）。
 - `useClient(overrideClient?)` — 讀取顯式覆寫值或最鄰近提供嘅 client。
 - 相關指南：[Client](/zh-Hant-HK/docs/client)、[錯誤處理](/zh-Hant-HK/docs/errors)、[SSE 事件流](/zh-Hant-HK/docs/sse)、[WebSocket 會話](/zh-Hant-HK/docs/web-socket)。
-- 相關配方：[處理已聲明嘅 404](/zh-Hant-HK/recipes/get-declared-404)、[取消 HTTP 呼叫](/zh-Hant-HK/recipes/cancel-http)、[使用 SSE 事件流](/zh-Hant-HK/recipes/consume-sse)、[開啟 WebSocket 會話](/zh-Hant-HK/recipes/websocket-session)。
+- 相關配方：[處理已宣告嘅 404](/zh-Hant-HK/recipes/get-declared-404)、[取消 HTTP 呼叫](/zh-Hant-HK/recipes/cancel-http)、[使用 SSE 事件流](/zh-Hant-HK/recipes/consume-sse)、[開啟 WebSocket 會話](/zh-Hant-HK/recipes/websocket-session)。

@@ -3,9 +3,9 @@ title: "本地 HTTP 测试"
 description: 使用 withHTTPHandle 仅为单个测试 Client 替换底层 Fetch，无须改动任何 SDK 操作定义。
 ---
 
-# 使用本地 Fetch Handle 编写测试
+# 用本地 Fetch 句柄测试
 
-`withHTTPHandle(...)` 仅针对单个 Client 实例替换其底层的 `fetch` 实现，同时完整跑通入参校验、`builder` 参数映射、URL 目录安全检查、中间件拦截链、HTTP 状态码分流以及 Struct 解码等全部流程，期间完全无需打开任何真实网络 Socket：
+`withHTTPHandle(...)` 为单个 Client 替换底层 `fetch`，同时完整跑通 Defjs 流水线——输入校验、`builder` 映射、URL 解析、拦截器、状态码分类和 struct 解码——而无需打开网络 socket：
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "单文件演示"]}>
 <Tab value="sdk/orders.ts">
@@ -39,4 +39,4 @@ description: 使用 withHTTPHandle 仅为单个测试 Client 替换底层 Fetch�
 paid 200
 ```
 
-在生产环境中，只需将配置了真实服务基地址 `withEndpoint(...)` 的 Client 传入完全相同的 `getOrder` 接口定义即可。更多细节请参阅 [测试](/zh-Hans/docs/testing) 与 [Client](/zh-Hans/docs/client)。
+在生产环境中，用配置了 `withEndpoint(...)` 的 Client 调用完全相同的 `getOrder` 操作。见 [测试](/zh-Hans/docs/testing) 与 [Client](/zh-Hans/docs/client)。

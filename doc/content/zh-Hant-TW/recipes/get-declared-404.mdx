@@ -1,55 +1,30 @@
 ---
 title: "處理已宣告的 404"
-description: 發起單次 GET 請求，並依型別化的 200 成功回應與已宣告的 404 錯誤回應進行分支處理。
+description: 呼叫一次 GET，並依具型別的 200 與已宣告的 404 分支。
 ---
 
-# 處理已宣告的 404 GET 請求
+# 帶有已宣告 404 的 GET
 
-在 `defineRequest` 上同時宣告 `output`（用於 2xx 回應）與 `error`（用於非 2xx 回應）。在呼叫處，透過 `error?.code === "HTTP_STATUS" && error.status === 404` 進行條件分支，以讀取具型別的 `error.data` 錯誤負載。
+在 `defineRequest` 上同時宣告 `output`（用於 2xx 回應）與 `error`（用於非 2xx 回應）。在呼叫端以 `error?.code === "HTTP_STATUS" && error.status === 404` 分支，讀取具型別的 `error.data` 酬載。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error?.code === "HTTP_STATUS" && error.status === 404) {
-console.log(error.data.message);
-return;
-}
-if (error) {
-console.error(error.code);
-return;
-}
-console.log(`Loaded ${order.status} from ${response.status}`);
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -57,9 +32,9 @@ void main();
 
 ```txt
 Loaded paid from 200
-````
+```
 
-- 任何非 2xx 狀態碼都會產生 `HTTP_STATUS`。宣告 `error` 會將錯誤本文解碼並驗證至 `error.data`；若省略 `error`，則會將 `error.data` 設為 `undefined`，完全不讀取本文。
-- 若宣告的 `error` 本文收到錯誤的媒體型別、無效的 JSON 或未通過 Struct 驗證，該操作會回傳 `RES_*` 錯誤。因為單一 `error` Struct 會涵蓋所有非 2xx 狀態碼，當不同錯誤狀態碼回傳不同結構時，請使用 `struct.or(...)`。
+- 任何非 2xx 狀態碼都會產生 `HTTP_STATUS`。宣告 `error` 會把錯誤本文解碼並驗證進 `error.data`；省略 `error` 則讓 `error.data` 維持 `undefined`，且完全不讀取本文。
+- 若宣告的 `error` 本文媒體型別不符、JSON 無效，或未通過 struct 驗證，該操作會回傳 `RES_*` fault。由於單一 `error` struct 涵蓋所有非 2xx 狀態碼，當不同錯誤狀態回傳不同結構時，請使用 `struct.or(...)`。
 
-請參閱 [HTTP 請求](/zh-Hant-TW/docs/http) 與 [錯誤處理](/zh-Hant-TW/docs/errors)。
+請參閱 [HTTP 操作](/zh-Hant-TW/docs/http) 與 [錯誤處理](/zh-Hant-TW/docs/errors)。

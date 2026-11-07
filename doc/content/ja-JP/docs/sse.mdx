@@ -1,11 +1,11 @@
 ---
 title: "SSE イベントストリーム"
-description: 型付けされた Server-Sent Events 定義を SDK から export し、利用側アプリケーション側でストリームの接続、受信、終了を管理します。
+description: 型付けされた Server-Sent Events 定義を SDK から export し、利用側アプリケーションでストリームの接続、受信、終了を管理します。
 ---
 
 # SSE イベントストリーム
 
-SDK は、`defineEventStream` を使用して Server-Sent Events（SSE）エンドポイントを宣言します。パス、任意の入力と builder、struct で型付けされた `events` 辞書、バッファやキューの制限を指定します。利用側アプリケーションはクライアント側で認証やオプトイン方式の再接続を設定し、ストリームを開いて型付けされたイベントを反復処理し、終了処理の責務を負います。
+SDK は、`defineEventStream` を使用して Server-Sent Events（SSE）操作を宣言します。パス、任意の `input` と `builder`、struct で型付けされた `events` 辞書、バッファやキューの制限を指定します。利用側アプリケーションはクライアント側で認証やオプトイン方式の再接続を設定し、ストリームを開いて型付けされたイベントを反復処理し、ストリームのクローズを所有します。
 
 ## 1. イベントストリームの定義と受信
 
@@ -14,46 +14,16 @@ SDK は、`defineEventStream` を使用して Server-Sent Events（SSE）エン�
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
 <Tab value="sdk/orders-stream.ts">
 
-```ts
-import { defineEventStream, struct } from "@defjs/core";
-
-export const watchOrders = defineEventStream({
-  path: "/orders/events",
-  operation: "orders.watch",
-  events: {
-    updated: struct.object({
-      id: struct.number(),
-      status: struct.string(),
-    }),
-  },
-});
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/sdk/orders-stream.ts#example
+</include>
 
 </Tab>
 <Tab value="app/watch-orders.ts">
 
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { watchOrders } from "../sdk/orders-stream.ts";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-  const [error, stream] = await watchOrders(client);
-  if (error) {
-    console.error(error.code);
-    return;
-  }
-
-  await using active = stream;
-  for await (const event of active) {
-    console.log(event.event, event.data.id, event.data.status);
-    break;
-  }
-}
-
-void main();
-```
+<include cwd lang="typescript">
+  examples/sse/basic-setup/app/watch-orders.ts#example
+</include>
 
 </Tab>
 <Tab value="Single-file quick look">
@@ -67,17 +37,17 @@ void main();
 
 ## 2. 接続ハンドシェイクとタプルの構造
 
-操作を呼び出すと、初回の HTTP レスポンスが `2xx` であり、メディアタイプが `text/event-stream`、かつボディが読み取り可能であることを確認した後にのみ `[error, stream, startupOpen]` が解決されます。
+操作を呼び出すと、初回の HTTP レスポンスが `2xx` で、メディアタイプが `text/event-stream`、かつボディが読み取り可能であることを確認した後にのみ、`[error, stream, startupOpen]` が返されます。
 
-<Tabs items={["ハンドシェイクの確認", "ストリームハンドルのライフサイクル"]}>
-<Tab value="ハンドシェイクの確認">
+<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tab value="Handshake inspection">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="ストリームハンドルのライフサイクル">
+<Tab value="Stream handle lifecycle">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -94,45 +64,45 @@ void main();
 
 SSE フレームが到着したとき（WHATWG 仕様に基づき空行で区切られます）:
 
-1. **イベントのルーティング**: 受信した `event:` フィールドに基づいて `events[eventName]` を選択します。マッチしない場合は、宣言されていれば `events.default` にフォールバックします。`event:` フィールドが省略されている場合は `"message"` がデフォルトになります。未宣言かつ `events.default` もないイベントは破棄されます。
+1. **イベントのルーティング**: ワイヤーの `event:` フィールドに基づいて `events[eventName]` を選択します。マッチしない場合は、宣言されていれば `events.default` にフォールバックします。`event:` フィールドが省略されている場合は `"message"` がデフォルトになります。未宣言かつ `events.default` もないイベントは破棄されます。
 2. **ペイロードのデコード**: `struct.string()` スキーマは生のテキスト `data:` をそのまま受け取ります。その他のすべての struct は、`data:` をまず JSON としてパースした上で struct バリデーションを実行します。
-3. **無効なイベントの検知**: 無効なイベントや未宣言のイベントは、ストリームを中断することなく破棄されます。診断のためにクライアントへ `withSSEOnInvalidEvent(...)` をアタッチして安全に監視できます。
+3. **無効なイベントの検知**: 無効なイベントや未宣言のイベントは、ストリームを中断することなく破棄されます。件数を制限した診断のために、クライアントへ `withSSEOnInvalidEvent(...)` をアタッチできます。
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
-## 4. 再接続と Last-Event-ID [#reconnect]
+## 4. 再接続と `Last-Event-ID` [#reconnect]
 
 SSE の自動再接続は **オプトイン（明示的な有効化）** です。`withSSEReconnect(...)` を設定しない限り、ネットワークの切断やストリーム読み取りエラーが発生するとストリームは即座に終了します。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **リトライ回数の上限 (`attempts`)**: `withSSEReconnect` にオプションオブジェクトを渡した場合、デフォルトは `3` 回です。ハンドシェイクが成功するたびに試行回数カウンターとバックオフ指数がリセットされるため、`attempts: 1` でも各接続が正常に開けば、長時間のセッションで何度も物理接続を確立できます。サーバーからの正常な EOF は失敗では **なく**、再接続はトリガーされません。
-- **カーソルの追跡 (`Last-Event-ID`)**: イベントを区切る終端の空行が正常にパースされた時点でカーソルがコミットされ、再接続時に自動的に `Last-Event-ID` ヘッダーとして送信されます。 接続が正常終了した場合も失敗した場合も、部分的なフレームの `id` はコミットされません。再接続可能な読み取り／ネットワーク障害からの再開は、最後にコミットされた id から始まります。サーバー側で、そのカーソルからのリプレイを実装する必要があります。
+- **試行回数の上限 (`attempts`)**: `withSSEReconnect` にオプションオブジェクトを渡した場合、デフォルトは `3` 回です。ハンドシェイクが成功するたびに試行回数カウンターとバックオフ指数がリセットされるため、`attempts: 1` でも各接続が正常に開けば、長時間のセッションで何度も物理接続を確立できます。サーバーからの正常な EOF は失敗では **なく**、再接続はトリガーされません。
+- **カーソルの追跡 (`Last-Event-ID`)**: イベントを区切る終端の空行が正常にパースされた時点でカーソルがコミットされ、再接続時に自動的に `Last-Event-ID` ヘッダーとして送信されます。接続が正常終了した場合も失敗した場合も、部分的なフレームの `id` はコミットされません。再接続可能な読み取り／ネットワーク障害からの再開は、最後にコミットされた id から始まります。サーバー側で、そのカーソルからのリプレイを実装する必要があります。
 - **冪等性の安全性保護**: デフォルトでは、冪等な HTTP メソッド（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）のみが自動再接続されます。非冪等なメソッド（LLM のストリーミングリクエストなどの `POST` や `PATCH`）は、カスタムの `shouldReconnect` コールバックが明示的に `true` を返した場合にのみ再接続されます。`ReadableStream` のリクエストボディは初回の試行で消費されるため、再接続されることはありません。
 - **ハンドシェイクのタイムアウト (`connectTimeoutMs`)**: 渡したときは、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。Fetch の呼び出しからレスポンスヘッダー受信までの各接続ハンドシェイクに制限時間を設定します。すでに確立されたストリームの接続維持時間を制限するものではありません。
 
 ## 5. バッファとキューの制限
 
-デフォルトは `maxBufferSize: 64 * 1024` バイトと `maxQueueSize: 1024` イベントです。どちらの制限値も正の安全な整数である必要があります。デフォルトのハンドシェイク期限はなく、保留中の Fetch はプラットフォーム、呼び出し元のキャンセル、または明示的に設定された `connectTimeoutMs` を待ちます。いずれかの容量制限を超過すると致命的エラーとなります（`stream.closed` は `kind: "error"` で解決され、イテレーターは reject されます。イベントが暗黙的に破棄されることはありません）。
+デフォルトは `maxBufferSize: 64 * 1024` バイトと `maxQueueSize: 1024` イベントです。どちらの制限値も正の安全な整数である必要があります。デフォルトのハンドシェイク期限はなく、保留中の Fetch はプラットフォーム、呼び出し元のキャンセル、または明示的に設定された `connectTimeoutMs` を待ちます。いずれかの容量制限を超過すると致命的な失敗になります（`stream.closed` は `kind: "error"` で確定し、イテレーターは reject されます。イベントが暗黙的に破棄されることはありません）。
 
-| 定義オプション  | 制限対象                                                                     | 発生する致命的 Fault コード |
-| --------------- | ---------------------------------------------------------------------------- | --------------------------- |
-| `maxBufferSize` | 空行で区切られる前の未完了または過大な SSE フレームのバイトサイズ            | `CAP_BUFFER_EXCEEDED`       |
-| `maxQueueSize`  | `for await` コンシューマーによる消費を待つ検証済みイベントのキューイング件数 | `CAP_QUEUE_OVERFLOW`        |
+| 定義オプション  | 制限対象                                                                     | 最終的な Fault コード |
+| --------------- | ---------------------------------------------------------------------------- | --------------------- |
+| `maxBufferSize` | 空行で区切られる前の未完了または過大な SSE フレームのバイトサイズ            | `CAP_BUFFER_EXCEEDED` |
+| `maxQueueSize`  | `for await` コンシューマーによる消費を待つ検証済みイベントのキューイング件数 | `CAP_QUEUE_OVERFLOW`  |
 
-## 6. クローズと破棄 [#close-and-dispose]
+## 6. クローズと解放 [#close-and-dispose]
 
 ストリームを開いた呼び出し元が、リソース解放の責任を持ちます。`for await` ループを `break`、`return`、または throw で抜けるとストリームは自動的にクローズされます。あるいは、`await using` または `stream.close()` を明示的に使用できます。
 
-<Tabs items={["await using によるリソース解放", "開始時のみの期限"]}>
-<Tab value="await using によるリソース解放">
+<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
+<Tab value="Dispose with await using">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="開始時のみの期限">
+<Tab value="Startup-only deadline">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

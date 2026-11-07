@@ -9,47 +9,22 @@ Déclarez à la fois `output` (pour les réponses 2xx) et `error` (pour les rép
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
   <Tab value="sdk/orders.ts">
-```ts
-import { defineRequest, struct } from "@defjs/core";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
+</include>
 
-export const getOrder = defineRequest({
-  method: "GET",
-  path: "/orders/:id",
-  input: struct.object({ id: struct.number() }),
-  builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), status: struct.string() }),
-  error: struct.object({ message: struct.string() }),
-});
-```
   </Tab>
   <Tab value="app/main.ts">
-```ts
-import { createClient, withEndpoint } from "@defjs/core";
-import { getOrder } from "../sdk/orders.ts";
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
 
-const client = createClient(withEndpoint("https://api.example.com"));
-
-async function main() {
-const [error, order, response] = await getOrder(client, { id: 7 });
-if (error?.code === "HTTP_STATUS" && error.status === 404) {
-console.log(error.data.message);
-return;
-}
-if (error) {
-console.error(error.code);
-return;
-}
-console.log(`Loaded ${order.status} from ${response.status}`);
-}
-
-void main();
-
-````
   </Tab>
   <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+
   </Tab>
 </Tabs>
 
@@ -57,7 +32,7 @@ Avec un serveur répondant à `GET /orders/7` par `200` et `{ "id": 7, "status":
 
 ```txt
 Loaded paid from 200
-````
+```
 
 - Tout statut hors 2xx produit un fault `HTTP_STATUS`. Déclarer `error` décode et valide le corps d'erreur dans `error.data` ; omettre `error` laisse `error.data` à `undefined` sans lire le corps.
 - Si le corps d'un `error` déclaré a un mauvais media type, du JSON invalide ou échoue à la validation Struct, l'opération renvoie un fault `RES_*` à la place. Comme un unique Struct `error` couvre tous les statuts hors 2xx, utilisez `struct.or(...)` lorsque des statuts d'erreur différents retournent des structures distinctes.

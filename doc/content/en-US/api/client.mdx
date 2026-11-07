@@ -73,7 +73,7 @@ There is no client-level default deadline. Pass `signal: AbortSignal.timeout(ms)
 
 <ApiSignature name="withHTTPHandle, withSSEHandle, withWebSocketHandle" />
 
-Replace Fetch (HTTP/SSE) or the WebSocket constructor.
+Replaces Fetch (HTTP/SSE) or the WebSocket constructor.
 
 ### withCredentials()
 
@@ -185,7 +185,7 @@ For SSE, `delayMs` is only the starting base delay: a digits-only server `retry:
 
 SSE `onInvalidEvent` handles an event with no matching struct, including no `default` (`missing-struct`), or whose data fails its struct (`validation-failed`). The event is always dropped; the handler's return value is ignored, and an error it throws does not close the stream.
 
-For WebSocket, `beforeConnect`, `heartbeat`, `protocols` and `reconnect` can also be passed on a derived client; each replaces the client value for that call as a whole. `heartbeat.message` builds each ping; nothing is sent when it is omitted or returns `undefined`. `heartbeat.timeoutMs` waits for an acknowledgement. It is not a request deadline.
+For WebSocket, `beforeConnect`, `heartbeat`, `protocols` and `reconnect` can also be passed on a derived client; each replaces the corresponding client setting for that call as a whole. `heartbeat.message` builds each ping; nothing is sent when it is omitted or returns `undefined`. `heartbeat.timeoutMs` waits for an acknowledgement. It is not a request deadline.
 
 ### ClientOptions
 
@@ -205,7 +205,7 @@ The resolved SSE config on `ClientConfig.sse`: `ClientSSEOptions` with a require
 
 ### WebSocketHandle
 
-The WebSocket instance surface the transport uses: `WebSocket` without `binaryType`, the ready-state constants, `dispatchEvent` and the `on*` handler properties, and with a read-only `readyState: number`.
+The WebSocket instance surface the transport uses: `WebSocket` without `binaryType`, the ready-state constants, `dispatchEvent` and the `on*` handler properties, plus a read-only `readyState: number`.
 
 ### WebSocketHandleConstructor
 

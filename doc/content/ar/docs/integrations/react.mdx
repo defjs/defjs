@@ -21,18 +21,20 @@ bun add @defjs/core @defjs/react react
 
 ## 1. توفير العميل وجلب البيانات داخل Effect
 
-أنشئ العميل عند حدود التطبيق، وغلف شجرة مكوناتك بـ `<ClientProvider client={client}>`، وألغِ العمل الجاري عند تنظيف الـ Effect:
+أنشئ العميل عند حدود التطبيق، وغلف شجرة مكوناتك بـ `<ClientProvider client={client}>`، وألغِ العمل الجاري عند تنظيف Effect:
 
 <Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
   <Tab value="app/App.tsx">
     <include cwd>examples/react/client-provider.tsx#example</include>
+
   </Tab>
   <Tab value="app/OrderCard.tsx">
     <include cwd>examples/react/basic-setup.tsx#example</include>
+
   </Tab>
 </Tabs>
 
-- يُعد `ClientProvider` موفر سياق (Context provider) خفيفاً ورشيقاً. يؤدي تمرير خاصية `client` مختلفة إلى تحديث ما تقرأه المكونات التابعة دون استنساخ العميل السابق أو التخلص منه.
+- يُعد `ClientProvider` موفر سياق (Context provider) خفيفاً. يؤدي تمرير خاصية `client` مختلفة إلى تحديث ما تقرأه المكونات التابعة دون استنساخ العميل السابق أو التخلص منه.
 - في بيئة التطوير (`StrictMode`)، يُركّب React الآثار الجانبية (effects) ويقوم بتنظيفها أكثر من مرة. يمنع التحقق من `controller.signal.aborted` الاستجابة القديمة من استبدال الحالة الحالية.
 
 ---
@@ -72,13 +74,13 @@ bun add @defjs/core @defjs/react react
 
 - **المتصفح**: شارك عميلاً واحداً على نطاق الوحدة عندما تكون نقطة النهاية والمعترضات مستقلة عن الطلب.
 - **الخادم (SSR)**: أنشئ عميلاً جديداً داخل حدود كل طلب خادم كلما كانت الترويسات أو ملفات تعريف الارتباط أو المستأجرون أو بيانات الاعتماد تختلف بين طلب وآخر.
-- إلغاء تثبيت `<ClientProvider>` **لا** يُلغي تلقائياً طلبات HTTP النشطة، ولا يُغلق اتصالات SSE/WebSocket، ولا يستدعي `disposeClient`.
+- إلغاء تثبيت `<ClientProvider>` **لا** يُلغي تلقائياً طلبات HTTP النشطة، ولا يُغلق اتصالات SSE/WebSocket، ولا يتخلص من العميل.
 
 ---
 
 ## الصادرات العامة والأدلة ذات الصلة
 
-- `ClientProvider` — يوفر عميل `DerivableClient` (`ClientProviderProps: { client: Client; children?: ReactNode }`).
+- `ClientProvider` — يوفر عميل `DerivableClient` (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
 - `useClient(overrideClient?)` — يقرأ العميل المتجاوز الصريح أو أقرب عميل موفر.
 - أدلة ذات صلة: [العميل](/ar/docs/client)، [معالجة الأخطاء](/ar/docs/errors)، [تدفقات أحداث SSE](/ar/docs/sse)، [جلسات WebSocket](/ar/docs/web-socket).
 - أمثلة عملية ذات صلة: [GET مع 404 معلَن](/ar/recipes/get-declared-404)، [إلغاء طلب HTTP وإدارته بالمهلة الزمنية](/ar/recipes/cancel-http), [استهلاك تدفق أحداث SSE](/ar/recipes/consume-sse)، [إدارة جلسات WebSocket](/ar/recipes/websocket-session).
