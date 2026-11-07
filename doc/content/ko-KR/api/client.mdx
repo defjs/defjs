@@ -175,7 +175,7 @@ Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`�
 | `jitter`     | `0`          | `0`          |
 | `maxDelayMs` | 상한 없음    | `30000`      |
 
-`connectTimeoutMs`는 선택이고, 유한한 양수여야 하며 2147483647(타이머 상한)을 넘지 않아야 해요. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 돌려요. SSE에서는 Fetch부터 응답 헤더까지, WebSocket에서는 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제돼요. 만료되면 밸런서에 `NET_UNREACHABLE`을 보고해서, 재연결이 다음 엔드포인트를 고를 수 있어요. 재시도를 모두 쓰면 `NET_TIMEOUT`으로 끝나요.
+`connectTimeoutMs`는 선택이고, 유한한 양수여야 하며 2147483647(타이머 상한)을 넘지 않아야 해요. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 돌려요. SSE에서는 Fetch부터 응답 헤더까지, WebSocket에서는 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제돼요. 만료되면 밸런서에 `NET_UNREACHABLE`을 보고해서, 재연결이 다음 엔드포인트를 고를 수 있어요. 재시도를 모두 쓰면 `NET_TIMEOUT`으로 끝나요. 이 옵션은 재연결 옵션 안에만 있고, 그 객체가 있으면 `attempts`가 기본값 `3`이 되므로 `connectTimeoutMs`만 설정해도 재연결이 켜져요. 핸드셰이크만 제한하려면 `attempts: 0`을 함께 설정하세요.
 
 두 전송 모두, 핸드셰이크가 성공하면 단절마다의 재시도 예산, 콜백 시도, 백오프 지수가 초기화돼요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략해도 한 단절 안에서 무제한 재시도가 되지는 않아요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한해요. SSE에 설정한 상한이 없어도 플랫폼 타이머 한계인 `2_147_483_647` ms가 적용돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 상한에서 포화돼요.
 
@@ -221,19 +221,19 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 파생 �
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer`는 `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 504)에서 진행해요. 선택인 양의 유한한 `failbackMs`는 그 간격 뒤에 첫 엔드포인트를 동시에 하나만 탐색해요. HTTP 재시도는 `withRetry`로 설정하는, 별도의 클라이언트 정책이에요. `roundRobinBalancer`는 목록을 순서대로 돌아요. `weights`는 선택이에요. [여러 엔드포인트](/ko-KR/docs/client#multiple-endpoints)를 보세요.
+`pickFirstBalancer`는 `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 504)에서 진행해요. HTTP 재시도는 고정된 엔드포인트를 옮기지 않고, 순서는 클라이언트의 전체 엔드포인트 목록인 `members`를 따라요. 선택인 양의 유한한 `failbackMs`는 그 간격 뒤에 첫 엔드포인트를 동시에 하나만 탐색해요. 탐색은 피어 응답이 시작될 때(`end`) 판정되고, `end`에 이르지 못한 탐색은 `done`이 판정해요. HTTP 재시도는 `withRetry`로 설정하는, 별도의 클라이언트 정책이에요. `roundRobinBalancer`는 목록을 순서대로 돌아요. `weights`는 선택이에요. [여러 엔드포인트](/ko-KR/docs/client#multiple-endpoints)를 보세요.
 
 ### p2cBalancer()
 
 <ApiSignature name="p2cBalancer" />
 
-비복원으로 서로 다른 후보를 표본 뽑고(Envoy/gRPC A48과 달라요), tower PeakEwma 또는 pending 부하를 골라요. Linkerd 기본은 RTT 30ms와 감쇠 10초예요. `start`가 pending을 시작하고, `end`는 헤더나 소켓 open에서 그것을 풀며, 실패를 포함한 모든 전송의 실제 RTT를 기록해요. `end`가 없는 `done`은 RTT 샘플 없이 pending을 풀어요. p2c 실패 분류자도 페널티도 없어요. `choiceCount` 기본은 2이고 상한은 10이에요.
+비복원으로 서로 다른 후보를 표본 뽑고(Envoy/gRPC A48과 달라요), tower PeakEwma 또는 pending 부하를 골라요. Linkerd 기본은 RTT 30ms와 감쇠 10초예요. pending은 `pick`이 엔드포인트를 고를 때 예약되고, `end`는 헤더나 소켓 open에서 그것을 풀며, 실패를 포함한 모든 전송의 실제 RTT를 기록해요. `end`가 없는 `done`은 RTT 샘플 없이 pending을 풀어요. p2c 실패 분류자도 페널티도 없어요. `choiceCount` 기본은 2이고 상한은 10이에요.
 
 ### outlierDetection()
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-자식을 Linkerd식 연속 실패 서킷 브레이킹으로 감싸요. 라운드 로빈과 p2c는 기본적으로 그것을 켜고(Finagle과 같아요), `false`는 꺼요. pick-first는 객체로 그것을 켜요. 기본 분류기는 `NET_UNREACHABLE`, `NET_UNAVAILABLE`, `NET_SERVER_ERROR`를 세요. 실패가 다섯 번이면 페널티는 1000ms에서 시작하고, 실패한 탐색 뒤에 두 배가 되며, 기준의 0.5배까지의 양의 jitter를 더하고, 60000ms에서 막혀요. 만료는 `end`에서 결정되는 탐색 하나를 들이고, `end`가 없으면 `done`에서 결정해요. 성공은 백오프를 초기화하고, 취소는 칸만 풀어요. 성공으로 가정하는 타임아웃도, 할당량도, 마지막 호스트 보호도, 정산 격자도, 비율 기준도, 슬로 스타트도 없어요. `isHealthy`는 애플리케이션이 가진 캐시된 상태를 읽고, 페널티를 취소하지 않아요. 모든 호스트가 끊길 수 있어요. Finagle식의 목록 안 페일오픈은 그래도 요청을 보내요. Envoy/gRPC A50과 달리 방출 할당량은 없어요. [헬스 필터링과 p2c](/ko-KR/docs/client#health-filtering-and-p2c)를 보세요.
+자식을 Linkerd식 연속 실패 서킷 브레이킹으로 감싸요. 라운드 로빈과 p2c는 기본적으로 그것을 켜고(Finagle과 같아요), `false`는 꺼요. pick-first는 객체로 그것을 켜요. 기본 분류기는 코드가 있는 결과를 모두 실패로 세요(`NET_TIMEOUT`과 `NET_BODY_INCOMPLETE` 포함). 실패가 다섯 번이면 페널티는 1000ms에서 시작하고, 실패한 탐색 뒤에 두 배가 되며, 기준의 0.5배까지의 양의 jitter를 더하고, 60000ms에서 막혀요. 만료는 `end`에서 결정되는 탐색 하나를 들이고, `end`가 없으면 `done`에서 결정해요. 성공은 백오프를 초기화하고, 취소는 칸만 풀어요. 성공으로 가정하는 타임아웃도, 할당량도, 마지막 호스트 보호도, 정산 격자도, 비율 기준도, 슬로 스타트도 없어요. `isHealthy`는 애플리케이션이 가진 캐시된 상태를 읽고, 페널티를 취소하지 않아요. 모든 호스트가 끊길 수 있어요. Finagle식의 목록 안 페일오픈은 그래도 요청을 보내요. Envoy/gRPC A50과 달리 방출 할당량은 없어요. [헬스 필터링과 p2c](/ko-KR/docs/client#health-filtering-and-p2c)를 보세요.
 
 ### withRetry()
 
@@ -241,7 +241,7 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 파생 �
 
 엔드포인트 선택과 무관하게 같은 호출 HTTP 재시도를 켜요. 생략하면 시도는 한 번이고 예산은 없어요. `withRetry()`는 `withRetry({})`와 같고 기본값은 `maxAttempts: 2`(최초 시도 포함), `on: ["connect-failure"]`, 안전 메서드 `GET`, `HEAD`, `OPTIONS`, `TRACE`예요. 메서드는 대소문자를 가리지 않고, `[]`는 재시도를 꺼요. `maxAttempts`는 1 이상의 안전한 정수이고, 각 엔드포인트는 최대 한 번 시도해요. `"gateway-error"`는 `NET_UNAVAILABLE`(HTTP 502/503/504)과 `RES_*` 디코딩이 거절한 게이트웨이 본문을 포함하고, `"attempt-timeout"`은 `attemptTimeoutMs`를 써요. 스트리밍 요청 본문은 재시도하지 않아요.
 
-백오프 기본값은 `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`이고, SSE/WebSocket 재연결과 필드 의미가 같아요. `delayMs: 0`은 기다리지 않아요. `attemptTimeoutMs`는 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 해요. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 돌려요. 이 값은 한 시도의 Fetch, 본문 읽기, 디코딩을 덮고, 호출자 signal은 백오프 대기를 포함한 호출 전체를 덮어요.
+백오프 기본값은 `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`이고, SSE/WebSocket 재연결과 필드 의미가 같아요. `delayMs: 0`은 기다리지 않아요. `attemptTimeoutMs`는 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 해요. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 돌려요. 이 값은 고른 엔드포인트로 보낸 각 Fetch를 호출 시점부터 응답 본문을 다 읽을 때까지 재요. 전송 앞뒤의 인터셉터 작업과 struct 디코딩은 재지 않으며 엔드포인트에 불리하게 집계되지 않아요. 호출자 signal은 백오프 대기를 포함한 호출 전체를 덮어요. 재시도 라운드에서 쓸 수 있는 엔드포인트가 하나도 없으면(밸런서의 pick이 실패하거나 다음 엔드포인트의 URL을 해석할 수 없으면) 호출은 `REQ_BUILD_FAILED` 대신 직전 시도의 결함을 돌려줘요.
 
 클라이언트가 소유하는 Finagle 예산은 기본으로 20%에, 10초 TTL 동안 초당 10회의 예비를 더해요. 크레딧과 데빗은 TTL/10 슬라이스 열 개에서 지연해서 만료돼요. `budget: false`는 그 한도를 없애요. 같은 설정을 공유하는 파생 클라이언트는 그 예산을 공유하고, 클라이언트가 다르면 밸런서 하나를 공유해도 공유하지 않아요. 잘못된 옵션은 HTTP가 실행될 때 `Invalid retry options`와 함께 `REQ_OPTIONS_INVALID`를 돌려요. 이 옵션은 적용 시점에 소유 필드, 배열, 중첩 예산을 담아요. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같이 동작해요. 이후 `withRetry`는 정책을 대체하고, `withRetry({ maxAttempts: 1 })`는 재시도를 켠 뒤 꺼요. 밸런서와 헬스 래퍼에는 재시도 설정이 없어요. [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)를 보세요.
 
@@ -251,8 +251,8 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 파생 �
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick`은 error-first 튜플을 돌려줘요. 선택인 `start`는 고른 전송이 시작하기 직전에 동기적으로 많아야 한 번 실행돼요. 선택인 `end`는 `start` 뒤에 한 번, 피어 응답이 시작될 때(또는 응답 전 실패가 있을 때) 실행돼요. 선택인 `done`은 완료 때 한 번 실행돼요. Fetch는 Linkerd의 첫 본문 프레임이나 Envoy의 스트림 경계를 드러낼 수 없어요. 모든 훅의 throw와 thenable rejection은 가둬져요. `ERR_NO_CANDIDATE`은 `REQ_BUILD_FAILED`의 `cause`로만 쓰여요. `FaultCode`는 아니에요. [`isNoCandidateCause`](/ko-KR/api/core/isnocandidatecause)는 Core 사본을 넘어서도 그것을 알아봐요.
+`pick`은 error-first 튜플을 돌려줘요. 선택인 `start`는 고른 전송이 시작하기 직전에 동기적으로 많아야 한 번 실행돼요. 선택인 `end`는 `start` 뒤에 한 번, 피어 응답이 시작될 때(또는 응답 전 실패가 있을 때) 실행돼요. 선택인 `done`은 완료 때 한 번 실행돼요. Fetch는 Linkerd의 첫 본문 프레임이나 Envoy의 스트림 경계를 드러낼 수 없어요. 모든 훅의 throw와 thenable rejection은 가둬져요. 후보 밖의 선택은 `REQ_BUILD_FAILED`로 실패하고, 그 `done`은 `{ attempted: false }`로 호출돼요. `ERR_NO_CANDIDATE`은 `REQ_BUILD_FAILED`의 `cause`로만 쓰여요. `FaultCode`는 아니에요. [`isNoCandidateCause`](/ko-KR/api/core/isnocandidatecause)는 Core 사본을 넘어서도 그것을 알아봐요.
 
-밸런서는 중립 결과만 봐요. 각 전송이 자기 사실을 `DoneInfo.code`로 옮겨요. 기본 이상치 감지(outlier detection)는 `NET_UNREACHABLE`, `NET_UNAVAILABLE`, `NET_SERVER_ERROR`를 세요. 원시 `DoneInfo.status`는 커스텀 밸런서만을 위해 남고, 내장 전략은 읽지 않아요. `PickInfo`는 `endpoints`와 정의의 선택적 `operation`만 담고, 전송 구분자는 없어요.
+밸런서는 중립 결과만 봐요. 각 전송이 자기 사실을 `DoneInfo.code`로 옮겨요. 기본 이상치 감지(outlier detection)는 코드가 있는 모든 결과를 실패로 세며, `NET_TIMEOUT`과 `NET_BODY_INCOMPLETE`도 포함해요. 원시 `DoneInfo.status`는 커스텀 밸런서만을 위해 남고, 내장 전략은 읽지 않아요. `PickInfo`는 한 번의 pick에 대한 후보 `endpoints`, `members`(클라이언트의 전체 엔드포인트 목록으로 모든 시도에서 같아요), 정의의 선택적 `operation`을 담고, 전송 구분자는 없어요.
 
 [클라이언트 가이드](/ko-KR/docs/client)를 보세요.

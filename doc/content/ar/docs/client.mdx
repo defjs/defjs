@@ -78,18 +78,18 @@ description: اضبط كيفية استدعاء تطبيقك لعمليات SDK 
 
 تقبل الدالة `withEndpoint(...urls)` عنواناً أساسياً واحداً أو أكثر كمرشحين. وافتراضياً:
 
-- يستخدم كل عميل [`pickFirstBalancer`](/ar/api/core/pickfirstbalancer)، ويلتزم بالعنوان الأول حتى يتقدّم عند `NET_UNREACHABLE` أو `NET_UNAVAILABLE` (HTTP 502 أو 503 أو 504).
+- يستخدم كل عميل [`pickFirstBalancer`](/ar/api/core/pickfirstbalancer)، ويلتزم بالعنوان الأول حتى يتقدّم عند `NET_UNREACHABLE` أو `NET_UNAVAILABLE` (HTTP 502 أو 503 أو 504). ولا تحرّك إعادة محاولة HTTP نقطة النهاية الملتصقة.
 - **إعادة محاولة HTTP في نفس الاستدعاء معطّلة افتراضياً.** `withRetry()` يعادل `withRetry({})` ويفعّل محاولة ثانية على نقطة نهاية لم تُجرَّب عند فشل الاتصال للطرق الآمنة (`GET` و`HEAD` و`OPTIONS` و`TRACE`)، مع backoff. ميزانية إعادة المحاولة بنمط Finagle تملكها إعدادات العميل، ويشاركها العملاء المشتقون من ذلك الإعداد، بمعزل عن هوية الموازن.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-عند ضبط نقطة نهاية واحدة فقط، لا يعيد `withRetry` تشغيل الطلب لأن كل إعادة محاولة تستبعد نقاط النهاية التي جُرِّبت. يجب أن يكون `attemptTimeoutMs` و`connectTimeoutMs`، عند توفيرهما، محدودين وموجبين ولا يزيدان على 2147483647 (حد المؤقت)؛ وإلا تُرجع العملية `REQ_OPTIONS_INVALID`.
+عند ضبط نقطة نهاية واحدة فقط، لا يعيد `withRetry` تشغيل الطلب لأن كل إعادة محاولة تستبعد نقاط النهاية التي جُرِّبت. يجب أن يكون `attemptTimeoutMs` و`connectTimeoutMs`، عند توفيرهما، محدودين وموجبين ولا يزيدان على 2147483647 (حد المؤقت)؛ وإلا تُرجع العملية `REQ_OPTIONS_INVALID`. `connectTimeoutMs` موجود فقط داخل خيارات إعادة الاتصال في SSE وWebSocket؛ ولأن القيمة الافتراضية فيها `attempts: 3` فإن ضبطه وحده يفعّل إعادة الاتصال أيضاً، فأضف `attempts: 0` لتحديد مهلة للمصافحة فقط.
 
 ### فحص السلامة وخوارزمية p2c [#health-filtering-and-p2c]
 
-بالنسبة للنسخ المتطابقة من الخوادم النظيرة، تُفعل أدوات التوزيع [`roundRobinBalancer`](/ar/api/core/roundrobinbalancer) و[`p2cBalancer`](/ar/api/core/p2cbalancer) (خوارزمية ذروة Ewma لزمن الرحلة RTT × الحمل اللحظي) قاطع الدائرة للأخطاء المتتالية على طراز Linkerd (عبر `outlierDetection`) افتراضياً. يحصي `NET_UNREACHABLE` و`NET_UNAVAILABLE` و`NET_SERVER_ERROR`؛ و`status` الخام للاستجابة مخصص فقط لموازنات الحمل المخصصة.
+بالنسبة للنسخ المتطابقة من الخوادم النظيرة، تُفعل أدوات التوزيع [`roundRobinBalancer`](/ar/api/core/roundrobinbalancer) و[`p2cBalancer`](/ar/api/core/p2cbalancer) (خوارزمية ذروة Ewma لزمن الرحلة RTT × الحمل اللحظي) قاطع الدائرة للأخطاء المتتالية على طراز Linkerd (عبر `outlierDetection`) افتراضياً. يحصي كل نتيجة تحمل رمزاً على أنها إخفاق (بما في ذلك `NET_TIMEOUT` و`NET_BODY_INCOMPLETE`)؛ و`status` الخام للاستجابة مخصص فقط لموازنات الحمل المخصصة.
 
 راجع دليل [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing) للاطلاع على التفاصيل الكاملة لميزانيات إعادة المحاولة، وفحوصات السلامة النشطة والسلبية، وتقدير الحمل بخوارزمية P2C، وموازنات الحمل المخصصة.
 

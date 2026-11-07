@@ -175,7 +175,7 @@ Defjs 对 Fetch 实现所需的调用签名。它不是 `typeof fetch`，所以 
 | `jitter`     | `0`             | `0`             |
 | `maxDelayMs` | 无上限          | `30000`         |
 
-`connectTimeoutMs` 可选，且必须是有限正数，并且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。对 SSE，它把从 Fetch 到响应头的时间加上限；对 WebSocket，它把从构造到 `open` 的时间加上限；握手之后会被清掉。到期会向均衡器报告 `NET_UNREACHABLE`，这样重连可以选择下一个端点。重试耗尽后以 `NET_TIMEOUT` 结束。
+`connectTimeoutMs` 可选，且必须是有限正数，并且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。对 SSE，它把从 Fetch 到响应头的时间加上限；对 WebSocket，它把从构造到 `open` 的时间加上限；握手之后会被清掉。到期会向均衡器报告 `NET_UNREACHABLE`，这样重连可以选择下一个端点。重试耗尽后以 `NET_TIMEOUT` 结束。它只存在于重连选项内；只要该对象存在，`attempts` 就默认为 `3`，因此单独设置 `connectTimeoutMs` 也会启用重连。只想限制握手时，请同时设置 `attempts: 0`。
 
 两种传输在成功握手后，都会重置每次连接中断的重试预算、回调中的尝试次数和退避指数。`attempts: 0` 禁用重试；省略 `attempts` 并不表示单次中断期间可以无限重试。`maxDelayMs` 限制抖动和取整后的最终延迟；平台计时器上限 `2_147_483_647` 毫秒也始终生效，包括 SSE 未配置上限时。基础延迟为零时始终为零；有效数字溢出时会饱和到这些上限。
 
@@ -221,19 +221,19 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` 会在 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前进。可选的有限正数 `failbackMs` 在这段间隔之后，对第一个端点做至多一个同时进行的探测。HTTP 重试是用 `withRetry` 配置的另一份 client 策略。`roundRobinBalancer` 沿列表走。`weights` 可选。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
+`pickFirstBalancer` 会在 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前进；HTTP 重试从不移动其粘滞端点，顺序遵循 client 的完整端点列表 `members`。可选的有限正数 `failbackMs` 在这段间隔之后，对第一个端点做至多一个同时进行的探测；探测在对端响应开始（`end`）时判定，从未到达 `end` 的探测由 `done` 判定。HTTP 重试是用 `withRetry` 配置的另一份 client 策略。`roundRobinBalancer` 沿列表走。`weights` 可选。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
 
 ### p2cBalancer()
 
 <ApiSignature name="p2cBalancer" />
 
-不放回地抽取不同候选（与 Envoy/gRPC A48 不同），选择 tower 的 PeakEwma 或 pending 负载。Linkerd 默认值是 RTT 30 ms、衰减 10 秒。`start` 开始计入 pending，`end` 在响应头或 socket 打开时释放它，并为每种传输记录真实 RTT，包括失败。没有 `end` 的 `done` 只释放 pending，不产生 RTT 样本。p2c 没有失败分类器，也没有惩罚。`choiceCount` 默认为 2，上限为 10。
+不放回地抽取不同候选（与 Envoy/gRPC A48 不同），选择 tower 的 PeakEwma 或 pending 负载。Linkerd 默认值是 RTT 30 ms、衰减 10 秒。pending 在 `pick` 选中端点时预留，`end` 在响应头或 socket 打开时释放它，并为每种传输记录真实 RTT，包括失败。没有 `end` 的 `done` 只释放 pending，不产生 RTT 样本。p2c 没有失败分类器，也没有惩罚。`choiceCount` 默认为 2，上限为 10。
 
 ### outlierDetection()
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-用 Linkerd 风格的连续失败熔断包装子均衡器。Round robin 和 p2c 默认启用（与 Finagle 相同）；`false` 关闭。Pick-first 传入对象时启用。默认分类器计入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 和 `NET_SERVER_ERROR`。连续五次失败后，惩罚从 1000 ms 起，探测失败后翻倍，加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。到期后接纳一次探测，在 `end` 时判定；若没有 `end`，则在 `done` 时判定。成功会重置退避；取消只释放名额。没有假定成功的超时、配额、最后一台主机保护、结算网格、百分比判据或慢启动。`isHealthy` 读取应用持有的缓存状态，从不取消惩罚。所有主机都可以熔断；Finagle 式的列表内失败时放行仍会发出请求。与 Envoy/gRPC A50 不同，没有驱逐配额。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
+用 Linkerd 风格的连续失败熔断包装子均衡器。Round robin 和 p2c 默认启用（与 Finagle 相同）；`false` 关闭。Pick-first 传入对象时启用。默认分类器把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。连续五次失败后，惩罚从 1000 ms 起，探测失败后翻倍，加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。到期后接纳一次探测，在 `end` 时判定；若没有 `end`，则在 `done` 时判定。成功会重置退避；取消只释放名额。没有假定成功的超时、配额、最后一台主机保护、结算网格、百分比判据或慢启动。`isHealthy` 读取应用持有的缓存状态，从不取消惩罚。所有主机都可以熔断；Finagle 式的列表内失败时放行仍会发出请求。与 Envoy/gRPC A50 不同，没有驱逐配额。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
 
 ### withRetry()
 
@@ -241,7 +241,7 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 独立于端点选择，启用同一次调用内的 HTTP 重试。省略 `withRetry` 表示一次尝试且没有预算。`withRetry()` 与 `withRetry({})` 等价，默认值为 `maxAttempts: 2`（含首次）、`on: ["connect-failure"]`，以及安全方法 `GET`、`HEAD`、`OPTIONS`、`TRACE`。方法名不区分大小写；`[]` 关闭重试。`maxAttempts` 是至少为 1 的安全整数，且每个端点最多尝试一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504）以及被 `RES_*` 解码拒绝的网关 body；`"attempt-timeout"` 使用 `attemptTimeoutMs`。流式请求 body 从不重试。
 
-退避默认值为 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，字段语义与 SSE/WebSocket 重连相同。`delayMs: 0` 跳过等待。`attemptTimeoutMs` 必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它限制单次尝试的 Fetch、body 读取与解码；调用方 signal 覆盖整次调用，包括退避等待。
+退避默认值为 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，字段语义与 SSE/WebSocket 重连相同。`delayMs: 0` 跳过等待。`attemptTimeoutMs` 必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它为发往所选端点的每次 Fetch 计时，从发起一直到其响应 body 读取完成；发送前后的拦截器工作以及 struct 解码都不计时，也绝不会算到端点头上。调用方 signal 覆盖整次调用，包括退避等待。当某一轮重试无法使用任何端点（均衡器 pick 失败，或下一个端点的 URL 无法解析）时，调用返回上一次尝试的错误，而不是 `REQ_BUILD_FAILED`。
 
 归 Client 所有的 Finagle 预算默认为 20%，外加 10 秒 TTL 内每秒 10 次重试的储备。存入与取出在十个 TTL/10 切片上惰性过期。`budget: false` 移除该限制。共享同一配置的派生 Client 共享其预算；独立 Client 不共享，即使共用一个均衡器。无效选项会在 HTTP 运行时返回 `REQ_OPTIONS_INVALID`，消息为 `Invalid retry options`。该选项在应用时捕获自己拥有的字段、数组和嵌套 budget。`withRetry()` 与 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。后一次 `withRetry` 会替换策略；`withRetry({ maxAttempts: 1 })` 会在启用后关闭重试。均衡器和健康包装器没有重试设置。见 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)。
 
@@ -251,8 +251,8 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` 返回错误优先元组。可选的 `start` 在所选传输开始前至多同步运行一次；可选的 `end` 在 `start` 之后、对端响应开始（或响应前发生失败）时运行一次；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有 Hook 的抛出和 thenable rejection 都会被接住。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能跨 Core 副本识别它。
+`pick` 返回错误优先元组。可选的 `start` 在所选传输开始前至多同步运行一次；可选的 `end` 在 `start` 之后、对端响应开始（或响应前发生失败）时运行一次；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有 Hook 的抛出和 thenable rejection 都会被接住。选中候选集之外的值会以 `REQ_BUILD_FAILED` 失败，其 `done` 以 `{ attempted: false }` 调用。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能跨 Core 副本识别它。
 
-均衡器只看到中立结果；每种传输把自己的事实转换成 `DoneInfo.code`。默认离群检测（`outlierDetection`）计入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 和 `NET_SERVER_ERROR`。原始 `DoneInfo.status` 只保留给自定义均衡器，内置策略从不读取。`PickInfo` 包含 `endpoints` 和可选的 `operation`，没有传输类型判别字段。
+均衡器只看到中立结果；每种传输把自己的事实转换成 `DoneInfo.code`。默认离群检测（`outlierDetection`）把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。原始 `DoneInfo.status` 只保留给自定义均衡器，内置策略从不读取。`PickInfo` 包含一次 pick 的候选 `endpoints`、`members`（client 的完整端点列表，每次尝试都相同）和可选的 `operation`，没有传输类型判别字段。
 
 见 [Client 指南](/zh-Hans/docs/client)。

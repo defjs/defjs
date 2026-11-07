@@ -41,9 +41,11 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 
 ### `pickFirstBalancer` 與 `p2cBalancer` 的運作機制
 
-- **`pickFirstBalancer`**：停在第一個 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進。設定 `failbackMs: 30_000`，在備用端點上停留這段時間之後，再探測主要端點。同時最多只能有一個進行中的主要端點探測。容錯移轉後首次探測主要端點之前，必須滿足間隔已過，且離開主要端點後至少選取過一次替代端點。探測失敗會重新開始這兩項要求：下次探測前，必須重新選取過替代端點，並再次經過該間隔，即使 SSE/WebSocket 重連退避比 `failbackMs` 更長也一樣。如此健康的備用端點才有機會被使用，而非每次重連都命中失效的主要端點。
+- **`pickFirstBalancer`**：停在第一個 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進。順序與黏性端點遵循 client 的完整端點清單（`members`），且 HTTP 重試絕不會移動黏性端點：對第一個端點的逾時被重試到第二個端點後，後續呼叫仍留在第一個端點，failback 也保持待命。設定 `failbackMs: 30_000`，在備用端點上停留這段時間之後，再探測主要端點。同時最多只能有一個進行中的主要端點探測。探測在對端回應開始時判定（HTTP 回應標頭、SSE 交握或 WebSocket 開啟），因此作為探測的長時間串流不會讓整個 client 的 failback 一直被阻擋；從未到達該時刻的嘗試則在完成時判定。容錯移轉後首次探測主要端點之前，必須滿足間隔已過，且離開主要端點後至少選取過一次替代端點。探測失敗會重新開始這兩項要求：下次探測前，必須重新選取過替代端點，並再次經過該間隔，即使 SSE/WebSocket 重連退避比 `failbackMs` 更長也一樣。如此健康的備用端點才有機會被使用，而非每次重連都命中失效的主要端點。
 - **`roundRobinBalancer` 權重**：未指定的權重為 `1`；設定的權重必須是有限正數。平滑加權輪詢會維持比例（例如 `3:1` 時，權重較高的節點每四次選取會被選中三次）。極端的量級會被縮放以避免溢位；低於浮點精確度的比例可能四捨五入成零。每次選取與清理過時 current 值都要花 O(候選數量) 的工作。
-- **`p2cBalancer`（兩者隨機取優，Power of Two Choices）**：不重複地隨機抽取兩個候選端點，並選擇評分較低者：`PeakEwma RTT × (pending + 1)`（若設定 `load: "pending"` 則只計算進行中的 `pending` 請求數）。預設值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd/tower 慣例。
+- **`p2cBalancer`（兩者隨機取優，Power of Two Choices）**：不重複地隨機抽取兩個候選端點，並選擇評分較低者：`PeakEwma RTT × (pending + 1)`（若設定 `load: "pending"` 則只計算進行中的 `pending` 請求數）。預設值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd/tower 慣例。pending 在 `pick` 選取端點的那一刻就被預留，因此同一個 tick 內的一批呼叫會分散到不同端點；它在對端回應開始時（HTTP 回應標頭、SSE 交握、WebSocket 開啟）釋放，若沒有回應開始，則在嘗試完成時釋放。對 SSE 與 WebSocket 而言，這表示 p2c 平衡的是交握，而不是已開啟連線的數量。
+
+平衡器狀態（黏性端點、剔除狀態與 p2c 負載）以及重試預算都歸 Client 所有：整個應用程式只建立一次 Client，並以 `client(options)` 衍生每次呼叫的 Client：衍生的 Client 同時保留平衡器狀態與重試預算。用 `withBalancer` 把同一個平衡器值傳給多個 Client 時，只共用平衡器狀態；每個 Client 仍有各自的重試預算。每個請求都新建一個 `createClient`，則兩者都會從頭開始。
 
 ## 2. 同一次呼叫內的 HTTP 重試
 
@@ -63,7 +65,8 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
   Core 的 `withRetry` 不會讀取 `Retry-After`。這個標頭的處理方式（包含任何延遲上限）屬於[應用程式攔截器策略](/zh-Hant-TW/docs/interceptors)，不是此處退避機制的一部分。
   只設定了一個端點時，`withRetry` 不會重放請求，因為每一次重試都會排除已經試過的端點。
 
-- **單次嘗試 vs. 整次呼叫逾時**：`attemptTimeoutMs` 必須是有限正數，並且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制單次嘗試，從呼叫 Fetch 一直到本文解碼結束。呼叫端的 `client({ signal: AbortSignal.timeout(ms) })` 涵蓋每一次嘗試**以及退避等待**。等待期間取消會回傳呼叫端的取消錯誤，也不會再重新選取。
+- **單次嘗試 vs. 整次呼叫逾時**：`attemptTimeoutMs` 必須是有限正數，並且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它為送往所選端點的每次 Fetch 計時，從呼叫一直到其回應本文讀取完成。傳送前後的攔截器工作（例如 `401` 之後更新權杖）以及 struct 解碼都不計時，也絕不會算到端點頭上；傳送完成之後，呼叫端期限在攔截器工作期間到期，不會以 `NET_TIMEOUT` 回報給平衡器，回報的是端點自身的結果。呼叫端的 `client({ signal: AbortSignal.timeout(ms) })` 涵蓋每一次嘗試**以及退避等待**。等待期間取消會回傳呼叫端的取消錯誤，也不會再重新選取。
+- **重試時沒有可用端點**：當某一輪重試無法使用任何端點（平衡器 pick 失敗，或下一個端點的 URL 無法解析）時，呼叫會回傳上一次嘗試的錯誤（例如 `NET_UNREACHABLE`），而不是 `REQ_BUILD_FAILED`。
 - **Finagle / Linkerd 重試預算（`budget`）**：每一份 client 設定各自擁有一份預算，只有使用同一份設定衍生的 client 會共享，共用平衡器的 client 之間則不共享。預設值是 `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`：原始流量的 20% 再加上儲備。存入與取出都在十個 TTL/10 的時間切片上惰性到期。一次重試會在等待之前先取出額度；預算耗盡時既不等待，也不重試。設定 `budget: false` 可移除這項限制。
 - **瀏覽器離線提示**：當 `navigator.onLine === false` 時，連線失敗會回報 `{ attempted: false }`，此時不會推進平衡器，也不會觸發重試。
 
@@ -71,6 +74,7 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 
 - 瀏覽器 CORS 失敗會以連線失敗的形式傳給 Fetch，並回報為 `NET_UNREACHABLE`，無法與主機停機區分。它可能推進端點選取，並觸發明確啟用的安全方法重試；成功的容錯移轉因此可能掩蓋主要區域的 CORS 設定錯誤。
 - 即使回應缺少必要的 CORS 標頭，伺服器仍可能已處理 POST。應用程式隨後收到 `NET_UNREACHABLE`，卻不知道寫入是否成功。預設不會重播 POST；明確啟用寫入重試，需要應用程式層級保證跨副本的冪等性。
+- 在瀏覽器中，伺服器拒絕的 WebSocket 升級（例如 `401`）與端點無法連線無從區分，都會回報為 `NET_UNREACHABLE`，因此過期的憑證可能導致端點被剔除。
 - Cookie 的範圍依主機而非連接埠劃分：`localhost` 上不同連接埠的兩個端點可以共用 Cookie，但 `localhost` 與 `127.0.0.1` 不會。多來源端點集合需要審慎規劃 Cookie/Token 與 CORS 憑證策略；`withCredentials(true)` 不會改變 Cookie 範圍。
 - 明確的離線提示（`navigator.onLine === false`）會抑制端點歸屬與連線失敗重試。這只是瀏覽器提示，不是可靠的可達性檢查。
 
@@ -97,31 +101,33 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 </Tab>
 </Tabs>
 
-1. **連續失敗**：預設分類器計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 與 `NET_SERVER_ERROR`。連續出現 `consecutiveFailures` 次（預設 `5`）計入的結果後，該端點會被剔除 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`），再加上最多 `50%` 的均勻正向抖動。
-2. **單次探測復原**：懲罰到期後，會以單一請求探測該主機。若對端回應開始（`end`）且沒有計入失敗，正常流量立即恢復，懲罰等級重設為 `0`；若失敗，懲罰加倍。
-3. **有界歷史**：在衍生 Client 與每次呼叫的候選排除之間，健康歷史總共最多保留 256 個端點。優先淘汰最近最少使用的乾淨或已過期項目，接著才是尚未達到門檻的部分連續失敗紀錄。只有所有保留項目都受保護時，才會淘汰懲罰尚未到期或有進行中探測的項目，此時移除最舊的一項。僅在某次呼叫省略端點，不會重設其懲罰。P2C 的負載歷史紀錄也以 256 項為上限，先淘汰閒置項目，再淘汰忙碌項目；被遺忘的端點會從 `defaultRttMs` 重新開始。Pick-first 的 shuffle key 使用 256 項的 LRU 快取，因此被遺忘的端點再次出現時會取得新 key。加權輪詢僅保留最新候選集的 current 值；複製後的權重設定在建構時固定。可用時，時長使用平台的單調 Performance 時鐘，只有在無法使用時才以 `Date.now()` 作為後備。
-4. **應急放行（panic-mode fail-open）**：若所有設定的端點都被剔除或標記為不健康，平衡器會對 Client 的候選清單放行，而不是在本機直接丟棄所有流量。
+1. **連續失敗**：預設分類器把每個帶 code 的結果都計為失敗：`NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR`、`NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。已嘗試但沒有 code 的結果會重設連續計數；未歸屬的嘗試與被丟棄的取樣則維持計數不變。連續出現 `consecutiveFailures` 次（預設 `5`）計入的結果後，該端點會被剔除 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`），再加上最多 `50%` 的均勻正向抖動；基礎時長加抖動的總和不會超過 `maxPenaltyMs`。
+2. **單次探測復原**：懲罰到期後，會以單一請求探測該主機。若對端回應開始（`end`）且沒有計入失敗，正常流量立即恢復，懲罰等級重設為 `0`；若失敗（包括逾時），該端點會再次被剔除，懲罰加倍。
+3. **有界歷史**：在衍生 Client 與每次呼叫的候選排除之間，健康歷史總共至少保留 256 個端點，且至少涵蓋目前成員數量。優先淘汰最近最少使用的乾淨或已過期項目，接著才是尚未達到門檻的部分連續失敗紀錄。只有所有保留項目都受保護時，才會淘汰懲罰尚未到期或有進行中探測的項目，此時移除最舊的一項。僅在某次呼叫省略端點，不會重設其懲罰。P2C 的負載歷史紀錄同樣至少保留 256 項且至少涵蓋目前成員數量，因此超過 256 個端點的清單也會保留每一份估計，先淘汰閒置項目，再淘汰忙碌項目；被遺忘的端點會從 `defaultRttMs` 重新開始。Pick-first 的 shuffle key 在 LRU 快取中至少保留 256 項且至少涵蓋目前成員，因此被遺忘的端點再次出現時會取得新 key。加權輪詢為用戶端的成員保留 current 值：在某次選擇中被排除的端點（HTTP 重試或健康過濾）仍保留其值，如同 nginx 跳過已下線的節點，只有離開成員清單的端點才會丟棄其值；複製後的權重設定在建構時固定。可用時，時長使用平台的單調 Performance 時鐘，只有在無法使用時才以 `Date.now()` 作為後備。
+4. **應急放行（panic-mode fail-open）**：若 `isHealthy` 否決了所有未被剔除的端點，平衡器會忽略 `isHealthy`，改在未被剔除的端點中挑選；只有所有設定的端點都被剔除時，才會放行至 Client 的完整候選清單，而不是在本機直接丟棄所有流量。
 
 ## 4. 傳輸統計生命週期 (`pick` → `start` → `end` → `done`)
 
-自訂平衡器必須選取 `info.endpoints` 中某個完全相同的字串。若選了候選集之外的值，會回傳 `REQ_BUILD_FAILED` tuple，cause 訊息為不含敏感資訊的 `Balancer selected an endpoint outside the candidate set`；此時不會啟動任何傳輸，也不會執行任何完成回呼。這項規則讓健康過濾與每次呼叫的重試排除得以維持。
+自訂平衡器必須選取 `info.endpoints` 中某個完全相同的字串。若選了候選集之外的值，會回傳 `REQ_BUILD_FAILED` tuple，cause 訊息為不含敏感資訊的 `Balancer selected an endpoint outside the candidate set`；此時不會啟動任何傳輸，該選取的 `done` 會以 `{ attempted: false }` 執行一次。這項規則讓健康過濾與每次呼叫的重試排除得以維持。
 
-自訂平衡器要實作同步的 `pick(info)`，以及可選的 `start()`、`end(info)` 與 `done(info)` 回呼。`PickInfo` 只包含候選 `endpoints` 與可選的定義 `operation`，沒有傳輸類型的判別欄位。傳輸層會把自己的事實轉譯成中立的 `DoneInfo.code` 結果。內建平衡器從不讀取 `status`；這份原始回應資訊只保留給自訂平衡器。`start` 在嘗試之前執行，`end` 在對端回應開始或發生回應前失敗時執行，`done` 則在完成時執行。因此，之後的本文失敗可以改變最終的 code，卻不會改變更早的 `end` 取樣：
+自訂平衡器要實作同步的 `pick(info)`，以及可選的 `start()`、`end(info)` 與 `done(info)` 回呼。`PickInfo` 包含一次 pick 的候選 `endpoints`（重試以及包裝器過濾時該清單會縮小）、`members`（client 的完整端點清單，每次嘗試都相同；有狀態的平衡器以它為依據維護順序與狀態）與可選的定義 `operation`，沒有傳輸類型的判別欄位。傳輸層會把自己的事實轉譯成中立的 `DoneInfo.code` 結果。內建平衡器從不讀取 `status`；這份原始回應資訊只保留給自訂平衡器。`start` 在嘗試之前執行，`end` 在對端回應開始或發生回應前失敗時執行，`done` 則在完成時執行。因此，之後的本文失敗可以改變最終的 code，卻不會改變更早的 `end` 取樣：
 
-| 實體傳輸層結果                                               | 最終 `done(info)` 取樣資料                                 |
-| ------------------------------------------------------------ | ---------------------------------------------------------- |
-| HTTP/SSE 回應狀態 502、503 或 504                            | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
-| HTTP/SSE 其他至少為 500 的回應狀態                           | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
-| HTTP/SSE 回應狀態 2xx、3xx 或 4xx（包括 429）                | `{ attempted: true, status }`                              |
-| HTTP 回應本文中途截斷                                        | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
-| SSE 交握成功，之後串流 `reader.read()` 拒絕                  | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| SSE 正常 EOF、交握成功後的解碼失敗，或佇列上限               | `{ attempted: true, status }`                              |
-| 已連線的 WebSocket 以代碼 `1006` 關閉或 `wasClean === false` | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| 已開啟的 WebSocket 正常關閉                                  | `{ attempted: true }`                                      |
-| 呼叫端取消，或手動關閉串流／Socket                           | `{ attempted: false }`                                     |
-| 嘗試開始後呼叫端期限到期                                     | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+| 實體傳輸層結果                                                    | 最終 `done(info)` 取樣資料                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE 回應狀態 502、503 或 504                                 | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| HTTP/SSE 其他至少為 500 的回應狀態                                | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE 回應狀態 2xx、3xx 或 4xx（包括 429）                     | `{ attempted: true, status }`                              |
+| HTTP 回應本文中途截斷                                             | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE 交握成功，之後串流 `reader.read()` 拒絕                       | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE 正常 EOF、交握成功後的解碼失敗，或佇列上限                    | `{ attempted: true, status }`                              |
+| 已連線的 WebSocket 以代碼 `1006` 或 `1015` 關閉（未收到關閉訊框） | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已開啟的 WebSocket 以代碼 `1012` 或 `1013` 關閉                   | `{ attempted: true, code: "NET_UNAVAILABLE" }`             |
+| WebSocket 心跳確認逾時                                            | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已開啟的 WebSocket 以其他任何代碼關閉，無論 `wasClean` 為何       | `{ attempted: true }`                                      |
+| 呼叫端取消，或手動關閉串流／Socket                                | `{ attempted: false }`                                     |
+| 嘗試開始後呼叫端期限到期                                          | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
 
-交握解碼失敗會保留由交握狀態推導出的中立結果（例如狀態 `503` 對應 `NET_UNAVAILABLE`）。不完整的 HTTP 本文則保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使是閘道回應也一樣；預設的 outlier detection 不會計入它。
+交握解碼失敗會保留由交握狀態推導出的中立結果（例如狀態 `503` 對應 `NET_UNAVAILABLE`）。不完整的 HTTP 本文則保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使是閘道回應也一樣；如同任何帶 code 的結果，它會被預設的 outlier detection 計為失敗。無法送出的心跳（`message()` 拋出或序列化失敗）屬於本機問題，維持中立。
 
 ## 相關閱讀
 

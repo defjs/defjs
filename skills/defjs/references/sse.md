@@ -67,7 +67,7 @@ After the success tuple resolves, the caller owns the stream:
 
 ## Startup deadline vs stream lifetime
 
-`client({ signal })` applies to the **entire** stream lifetime—if the signal aborts after the stream opens, the active stream is aborted too. To enforce a timeout on the initial connection handshake only, clear the timer as soon as `followDeployLog(...)` resolves:
+`client({ signal })` applies to the **entire** stream lifetime—if the signal aborts after the stream opens, the active stream is aborted too. To enforce a timeout on the initial connection handshake only, either use `withSSEReconnect({ attempts: 0, connectTimeoutMs })` (`connectTimeoutMs` without `attempts: 0` also enables reconnect with 3 attempts), or clear your own timer as soon as `followDeployLog(...)` resolves:
 
 ```ts
 import {
@@ -104,9 +104,9 @@ export async function connectWithStartupDeadline(ms: number) {
 
 ## Reconnect and invalid events
 
-- **Reconnect is opt-in on the client** via `withSSEReconnect({ attempts, delayMs, factor, maxDelayMs, jitter, shouldReconnect })`. The `reconnect` field of `RequestOptions` (`client({ reconnect })`) is for WebSocket only and is ignored by SSE.
-- `attempts` defaults to 3 per outage; successful handshakes reset the budget and backoff. Clean EOF ends normally and does not reconnect; body read failures may reconnect. A non-2xx handshake is fatal and bypasses `shouldReconnect`, though a later operation can pick another endpoint.
-- On managed reconnect, the balancer re-picks. `id:` commits at the terminating blank line, even for an ID-only frame; a partial frame never commits it. Reconnect sends the committed cursor as `Last-Event-ID` (an empty ID clears it). The server must support resumption. After a reconnect fails with 503, inspect live `stream.open.response.status`; the runtime fault can be `RES_DECODE_FAILED`.
+- **Reconnect is opt-in on the client** via `withSSEReconnect({ attempts, connectTimeoutMs, delayMs, factor, maxDelayMs, jitter, shouldReconnect })`. The `reconnect` field of `RequestOptions` (`client({ reconnect })`) is for WebSocket only and is ignored by SSE.
+- `attempts` defaults to 3 per outage; successful handshakes reset the budget and backoff. Clean EOF ends normally and does not reconnect; body read failures may reconnect. A non-2xx handshake is fatal and bypasses `shouldReconnect`, though a later operation can pick another endpoint. `connectTimeoutMs` bounds each handshake and exists only inside this options object, so setting it alone also enables reconnect with 3 attempts; pair it with `attempts: 0` for a handshake-only deadline.
+- On managed reconnect, the balancer re-picks. `id:` commits at the terminating blank line, even for an ID-only frame; a partial frame never commits it. Reconnect sends the committed cursor as `Last-Event-ID` (an empty ID clears it). The server must support resumption. A 502/503/504 handshake (initial or reconnect) is retried like a refused connection under the same reconnect rules; other non-2xx handshakes are fatal. Exhausted retries and fatal reconnect handshakes end with `HTTP_STATUS`; inspect live `stream.open.response.status` for the status.
 - For multiple endpoints and the separate HTTP retry layer, read [load balancing](load-balancing.md).
 - Do not replay a non-idempotent `POST` SSE stream unless `shouldReconnect` verifies a server resumption contract (for example `lastEventId !== ""`).
 - An event uses the `events` entry matching its name; if there is none, it uses `events.default`. Only when neither exists is it dropped as `missing-struct`. Payload validation failures are also dropped without killing the stream. Observe both with `withSSEOnInvalidEvent(({ reason, message, cause, signal }) => ...)`.

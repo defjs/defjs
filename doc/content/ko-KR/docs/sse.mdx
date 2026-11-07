@@ -58,7 +58,7 @@ SDK는 `defineEventStream`을 사용하여 Server-Sent Events(SSE) 작업을 선
 
 - **비`2xx` 핸드셰이크**: `HTTP_STATUS`를 반환합니다(정의에 `error` struct가 선언되어 있다면 디코딩된 `error.data` 포함). 현재 작업에 치명적이며 `shouldReconnect`를 호출하지 않습니다. 다음 작업은 엔드포인트를 새로 선택하므로 밸런서가 다른 엔드포인트를 선택할 수 있습니다.
 - **잘못된 Content-Type 또는 읽을 수 없는 본문**: `RES_MEDIA_TYPE_INVALID` 또는 `RES_DECODE_FAILED`를 반환합니다.
-- **`startupOpen` vs. `stream.open`**: 튜플의 세 번째 항목(`startupOpen`)은 첫 번째 핸드셰이크 응답의 스냅샷입니다. 반면 `stream.open`은 스트림이 나중에 재연결될 때 실시간으로 갱신됩니다. 재연결 핸드셰이크가 `503`을 반환하면 이터레이터가 reject되고 `stream.closed`는 `RES_DECODE_FAILED`를 보고하지만, `stream.open.response.status`는 `503`을 유지합니다. 해당 실시간 응답 상태는 `stream.open`에서 확인하세요.
+- **`startupOpen` vs. `stream.open`**: 튜플의 세 번째 항목(`startupOpen`)은 첫 번째 핸드셰이크 응답의 스냅샷입니다. 반면 `stream.open`은 스트림이 나중에 재연결될 때 실시간으로 갱신됩니다. 재연결 핸드셰이크가 2xx가 아닌 상태로 스트림을 끝내면 이터레이터가 reject되고 `stream.closed`는 `HTTP_STATUS`를 보고하지만, `stream.open.response.status`는 그 상태를 유지합니다. 해당 실시간 응답 상태는 `stream.open`에서 확인하세요.
 
 ## 3. 이벤트 디스패치 및 디코딩
 
@@ -79,7 +79,8 @@ SSE 재연결은 **선택 사항(opt-in)**입니다. `withSSEReconnect(...)`를 
 - **단절 예산 (`attempts`)**: `withSSEReconnect`에 옵션 객체를 전달할 경우 기본값은 `3`입니다. 핸드셰이크가 성공할 때마다 시도 횟수 카운터와 백오프 지수가 초기화되므로, `attempts: 1`이어도 매번 연결이 성공적으로 열리면 긴 세션에서 여러 물리적 연결을 만들 수 있습니다. 정상적인 서버 EOF는 실패가 **아니므로** 재연결을 트리거하지 않습니다.
 - **커서 추적 (`Last-Event-ID`)**: 이벤트의 끝을 알리는 빈 줄이 파싱될 때 커서가 확정(commit)되며, 재연결 시 자동으로 `Last-Event-ID` 헤더로 전송됩니다. 연결이 정상 종료되든 실패하든 불완전한 프레임은 `id`를 확정하지 않습니다. 재연결 가능한 읽기/네트워크 실패 후에는 마지막으로 확정된 id부터 재개하며, 서버가 해당 커서부터 재전송하는 기능을 구현해야 합니다.
 - **멱등성(Idempotency) 안전장치**: 기본적으로 멱등한 메서드(`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`)만 자동 재연결됩니다. 비멱등한 메서드(`POST`, `PATCH`—예: LLM 스트리밍 요청 등)는 커스텀 `shouldReconnect` 콜백이 명시적으로 `true`를 반환할 때만 재연결됩니다. `ReadableStream` 요청 본문은 첫 번째 시도에서 완전히 소비되므로 재연결되지 않습니다.
-- **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. Fetch 호출부터 응답 헤더 수신까지의 각 핸드셰이크 시간을 제한하며, 이미 수립된 스트림의 유지 시간은 제한하지 않습니다.
+- **게이트웨이 핸드셰이크**: 최초 연결이든 재연결이든 `502`, `503`, `504` 핸드셰이크는 연결 거부와 같이 동일한 재연결 규칙(메서드, `shouldReconnect`, `attempts`, `ReadableStream` 본문)으로 재시도됩니다. 그 밖의 2xx가 아닌 핸드셰이크는 계속 치명적입니다. 재시도를 모두 소진했거나 치명적인 재연결 핸드셰이크는 `HTTP_STATUS`로 끝납니다.
+- **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. Fetch 호출부터 응답 헤더 수신까지의 각 핸드셰이크 시간을 제한하며, 이미 수립된 스트림의 유지 시간은 제한하지 않습니다. 이 옵션은 `withSSEReconnect({...})` 옵션 객체 안에만 있습니다. 그 객체를 전달하면 기본값 `attempts: 3`으로 자동 재연결이 활성화되므로 `connectTimeoutMs`만 설정해도 재연결이 켜집니다. 핸드셰이크만 제한하려면 `attempts: 0`을 함께 설정하세요.
 
 ## 5. 버퍼 및 큐 제한
 
@@ -109,7 +110,7 @@ SSE 재연결은 **선택 사항(opt-in)**입니다. `withSSEReconnect(...)`를 
 </Tab>
 </Tabs>
 
-`client({ signal })`을 통해 전달된 `signal`은 스트림의 전체 수명 주기를 제어합니다. 이미 열려 있는 스트림을 강제 종료하지 않고 초기 연결 핸드셰이크만 제한하려면, 위 두 번째 탭의 예제처럼 `await watchOrders(...)`가 반환된 후 타이머를 해제하거나 `withSSEReconnect`의 `connectTimeoutMs`를 사용하세요.
+`client({ signal })`을 통해 전달된 `signal`은 스트림의 전체 수명 주기를 제어합니다. 이미 열려 있는 스트림을 강제 종료하지 않고 초기 연결 핸드셰이크만 제한하려면, 위 두 번째 탭의 예제처럼 `await watchOrders(...)`가 반환된 후 타이머를 해제하거나 `withSSEReconnect`에서 `connectTimeoutMs`와 `attempts: 0`을 함께 설정하세요(`connectTimeoutMs`만 설정하면 3회 자동 재연결도 켜집니다).
 
 ## 관련 문서
 

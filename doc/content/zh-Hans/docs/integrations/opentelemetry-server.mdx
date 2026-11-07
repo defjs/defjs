@@ -78,8 +78,8 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 插件在拦截器链内部度量传输生命周期：
 
 - **HTTP**：Span 在 HTTP 拦截器中开始，在 `HttpResponse` 返回时结束。声明的 `output` / `error` body 会在处理函数边界**内部**读取（并校验和解析 JSON）。body 读取失败或 JSON 媒体类型/解析失败会通过拦截器 reject（`error.type: "BodyFailure"`），把 Span 标记为 `ERROR`，在指标中记录 `BodyFailure`，并输出一条 `WARN` 日志。状态码 `400+` 会把 Span 标记为 `ERROR`，并以状态码字符串作为 `error.type`。struct 校验（`RES_STRUCT_MISMATCH`）和 `HTTP_STATUS` 元组转换发生在拦截器链之后，不会改变已结束的传输 Span。
-- **SSE**：一条逻辑流（包括自动重连）产生一个 Span，保持打开到 `stream.closed` 结算。记录的事件：`sse.connected`，随后是 `sse.closed`、`sse.aborted`（`stream.close()` 或非超时的调用方中止以 `OK` 结束）或 `sse.error`（以 `ERROR` 结束，包括超时形态的调用方中止）。
-- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 结算。记录事件：`websocket.connected`、`websocket.closed`、`websocket.error`。服务端发来的关闭帧（不论 code 为何）都以 `OK` 结束 Span 并记录 `websocket.closed`；调用方中止以 `ERROR` 结束 Span 并记录 `websocket.error`，不生成日志，但取消原因是 `TimeoutError` 时例外，会生成一条 `WARN`。没有关闭帧的突然断开（`1006`）取决于运行时：在 socket 的 `error` 事件先于 `close` 触发的环境（Node.js）中以 `ERROR` 结束并记录一条日志；不触发该事件的环境（Bun）则以 `OK` 结束。
+- **SSE**：一条逻辑流（包括自动重连）产生一个 Span，保持打开到 `stream.closed` 结算。记录的事件：`sse.connected`，随后是 `sse.closed`、`sse.aborted`（`stream.close()` 或非超时的调用方中止以 `OK` 结束）或 `sse.error`（以 `ERROR` 结束，包括超时形态的调用方中止）。Span 属性 `url.full`、`server.address` 和 `server.port` 描述的是首次连接；重连到另一个端点不会改变它们。
+- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 结算。记录事件：`websocket.connected`、`websocket.closed`、`websocket.error`。服务端发来的关闭帧（不论 code 为何）都以 `OK` 结束 Span 并记录 `websocket.closed`；调用方中止以 `ERROR` 结束 Span 并记录 `websocket.error`，不生成日志，但取消原因是 `TimeoutError` 时例外，会生成一条 `WARN`。没有关闭帧的突然断开（`1006`）取决于运行时：在 socket 的 `error` 事件先于 `close` 触发的环境中以 `ERROR` 结束并记录一条日志；不触发该事件的环境（Bun）则以 `OK` 结束。与 SSE 一样，`url.full`、`server.address` 和 `server.port` 描述首次连接，重连到另一个端点时不会改变。
 
 ### 重试与重连边界
 
@@ -127,7 +127,7 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 | SSE 或 WebSocket 终态异常断开或 `closed` reject（包括 `1006` Socket 报错、队列溢出、心跳超时）                                           | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
 | 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动发起的非超时取消                                        | 不生成日志                                                                                                            |
 
-诊断记录固定消息、`exception.type`（平台/传输层类名，如 `BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError` 或 `Error`）、phase、静态 `operation`、服务端地址/端口和协议字段——从不记录原始 URL、query 字符串、请求头、body 或错误堆栈。
+诊断记录固定消息、`exception.type`（平台/传输层类名，如 `BodyFailure`、`EventStreamFatalError`（响应不是 `text/event-stream` 的 SSE 握手）、`DefjsFault`（包括返回非 2xx 的 SSE 握手）、`TypeError` 或 `Error`）、phase、静态 `operation`、服务端地址/端口和协议字段——从不记录原始 URL、query 字符串、请求头、body 或错误堆栈。
 
 ---
 

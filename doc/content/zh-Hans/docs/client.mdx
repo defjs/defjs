@@ -78,18 +78,18 @@ description: 配置应用如何调用导入的 SDK 操作，与 API 定义解耦
 
 `withEndpoint(...urls)` 支持传入一个或多个候选服务基地址。在默认配置下：
 
-- 每个 Client 默认使用 [`pickFirstBalancer`](/zh-Hans/api/core/pickfirstbalancer)，持续停在首个 URL，直到遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。
+- 每个 Client 默认使用 [`pickFirstBalancer`](/zh-Hans/api/core/pickfirstbalancer)，持续停在首个 URL，直到遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。HTTP 重试不会移动粘滞端点。
 - **同一次调用内的 HTTP 重试默认关闭。** `withRetry()` 与 `withRetry({})` 等价，会在安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）的连接失败上，带着退避，对一个尚未尝试过的端点再做一次尝试。Finagle 重试预算属于 Client 配置，由其派生出的 Client 共享，与均衡器的身份无关。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-只配置了一个端点时，`withRetry` 不会重放请求，因为每一次重试都会排除已经试过的端点。若提供了 `attemptTimeoutMs` 和 `connectTimeoutMs`，它们必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。
+只配置了一个端点时，`withRetry` 不会重放请求，因为每一次重试都会排除已经试过的端点。若提供了 `attemptTimeoutMs` 和 `connectTimeoutMs`，它们必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。`connectTimeoutMs` 只存在于 SSE 与 WebSocket 的重连选项内；这些选项默认 `attempts: 3`，所以单独设置它也会启用重连，只想限制握手时请再加上 `attempts: 0`。
 
 ### 被动健康检测与 P2C 算法 [#health-filtering-and-p2c]
 
-对于多个对等的服务端副本，[`roundRobinBalancer`](/zh-Hans/api/core/roundrobinbalancer) 与 [`p2cBalancer`](/zh-Hans/api/core/p2cbalancer)（基于 PeakEwma 衰减 RTT × 在途负载）默认开启了类似 Linkerd 的连续失败熔断剔除机制（`outlierDetection`）。它计入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 和 `NET_SERVER_ERROR`；原始响应 `status` 只供自定义均衡器使用。
+对于多个对等的服务端副本，[`roundRobinBalancer`](/zh-Hans/api/core/roundrobinbalancer) 与 [`p2cBalancer`](/zh-Hans/api/core/p2cbalancer)（基于 PeakEwma 衰减 RTT × 在途负载）默认开启了类似 Linkerd 的连续失败熔断剔除机制（`outlierDetection`）。它把每个带错误码的结果都计为失败（包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`）；原始响应 `status` 只供自定义均衡器使用。
 
 关于重试预算、主动/被动健康检测、P2C 负载估算及编写自定义均衡器的详细内容，请参阅专门的[负载均衡与故障转移](/zh-Hans/docs/load-balancing)指南。
 

@@ -175,7 +175,7 @@ Defjs が Fetch 実装に求める呼び出しシグネチャです。`typeof fe
 | `jitter`     | `0`            | `0`            |
 | `maxDelayMs` | 上限なし       | `30000`        |
 
-`connectTimeoutMs` は任意で、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。SSE では Fetch からレスポンスヘッダーまで、WebSocket では構築から `open` までを区切り、ハンドシェイクのあとで解除されます。期限が切れるとバランサーへ `NET_UNREACHABLE` を報告するので、再接続は次のエンドポイントを選べます。リトライを使い切ると `NET_TIMEOUT` で終わります。
+`connectTimeoutMs` は任意で、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。SSE では Fetch からレスポンスヘッダーまで、WebSocket では構築から `open` までを区切り、ハンドシェイクのあとで解除されます。期限が切れるとバランサーへ `NET_UNREACHABLE` を報告するので、再接続は次のエンドポイントを選べます。リトライを使い切ると `NET_TIMEOUT` で終わります。これは再接続オプションの中にしか存在せず、そのオブジェクトがあれば `attempts` は既定で `3` になるため、`connectTimeoutMs` だけを指定しても再接続が有効になります。ハンドシェイクだけを区切るには `attempts: 0` を併せて指定してください。
 
 どちらのトランスポートでも、ハンドシェイクに成功すると、障害ごとのリトライバジェット、コールバックの試行番号、バックオフの指数がリセットされます。`attempts: 0` はリトライを無効にします。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。`maxDelayMs` は、ジッターと丸め処理の後の最終的な待ち時間に上限を設けます。SSE に設定上の上限がない場合も含め、プラットフォームのタイマー上限である `2_147_483_647` ms も適用されます。基準値がゼロならゼロのままで、有効な数値からの計算でオーバーフローした場合は上限で飽和します。
 
@@ -221,19 +221,19 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` は `NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）で進みます。任意の正の有限な `failbackMs` は、その間隔のあとプライマリへフェイルバックするために、最初のエンドポイントを同時に 1 つだけプローブします。HTTP リトライは、`withRetry` で設定する別のクライアントポリシーです。`roundRobinBalancer` はリストを順に歩きます。`weights` は任意です。[複数のエンドポイント](/ja-JP/docs/client#multiple-endpoints) を参照してください。
+`pickFirstBalancer` は `NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）で進みます。HTTP リトライが固定エンドポイントを動かすことはなく、順序はクライアントの全エンドポイントリストである `members` に従います。任意の正の有限な `failbackMs` は、その間隔のあとプライマリへフェイルバックするために、最初のエンドポイントを同時に 1 つだけプローブします。プローブはピアの応答が始まった時点（`end`）で判定され、`end` に達しなかったプローブは `done` が判定します。HTTP リトライは、`withRetry` で設定する別のクライアントポリシーです。`roundRobinBalancer` はリストを順に歩きます。`weights` は任意です。[複数のエンドポイント](/ja-JP/docs/client#multiple-endpoints) を参照してください。
 
 ### p2cBalancer()
 
 <ApiSignature name="p2cBalancer" />
 
-非復元で相異なる候補を標本し（Envoy/gRPC A48 とは違います）、tower の PeakEwma か pending の負荷を選びます。Linkerd のデフォルトは RTT 30ms と減衰 10s です。`start` が pending を始め、`end` はヘッダーまたはソケットの open でそれを解放し、失敗を含むすべてのトランスポートについて実際の RTT を記録します。`end` の無い `done` は、RTT のサンプルなしで pending を解放します。p2c の失敗分類子もペナルティもありません。`choiceCount` のデフォルトは 2 で、上限は 10 です。
+非復元で相異なる候補を標本し（Envoy/gRPC A48 とは違います）、tower の PeakEwma か pending の負荷を選びます。Linkerd のデフォルトは RTT 30ms と減衰 10s です。pending は `pick` がエンドポイントを選んだ時点で確保され、`end` はヘッダーまたはソケットの open でそれを解放し、失敗を含むすべてのトランスポートについて実際の RTT を記録します。`end` の無い `done` は、RTT のサンプルなしで pending を解放します。p2c の失敗分類子もペナルティもありません。`choiceCount` のデフォルトは 2 で、上限は 10 です。
 
 ### outlierDetection()
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-子を Linkerd 流の連続失敗のサーキットブレーカーで包みます。ラウンドロビンと p2c はデフォルトでそれを有効にし（Finagle と同じです）、`false` は無効にします。pick-first はオブジェクトでそれを有効にします。デフォルトの分類子は `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` を数えます。失敗が 5 回あると、ペナルティは 1000ms から始まり、失敗したプローブのあと倍になり、ベースの 0.5 倍までの正のジッターを加え、60000ms を上限とします。期限が切れると、`end` で決まる単一のプローブを許可し、`end` が来なければ `done` で決めます。成功はバックオフをリセットし、キャンセルは枠を解放するだけです。成功したとみなすタイムアウトも、除外枠も、最後のホストの保護も、精算グリッドも、割合の基準も、スロースタートもありません。`isHealthy` はアプリケーションが所有するキャッシュされた状態を読み、ペナルティを取り消すことはありません。すべてのホストが遮断され得ます。Finagle 流の、リスト内だけのフェイルオープンは、それでもリクエストを送ります。Envoy/gRPC A50 と違い、除外枠はありません。[ヘルスフィルタリングと p2c](/ja-JP/docs/client#health-filtering-and-p2c) を参照してください。
+子を Linkerd 流の連続失敗のサーキットブレーカーで包みます。ラウンドロビンと p2c はデフォルトでそれを有効にし（Finagle と同じです）、`false` は無効にします。pick-first はオブジェクトでそれを有効にします。デフォルトの分類子は、コードを持つ結果をすべて失敗として数えます（`NET_TIMEOUT` と `NET_BODY_INCOMPLETE` を含む）。失敗が 5 回あると、ペナルティは 1000ms から始まり、失敗したプローブのあと倍になり、ベースの 0.5 倍までの正のジッターを加え、60000ms を上限とします。期限が切れると、`end` で決まる単一のプローブを許可し、`end` が来なければ `done` で決めます。成功はバックオフをリセットし、キャンセルは枠を解放するだけです。成功したとみなすタイムアウトも、除外枠も、最後のホストの保護も、精算グリッドも、割合の基準も、スロースタートもありません。`isHealthy` はアプリケーションが所有するキャッシュされた状態を読み、ペナルティを取り消すことはありません。すべてのホストが遮断され得ます。Finagle 流の、リスト内だけのフェイルオープンは、それでもリクエストを送ります。Envoy/gRPC A50 と違い、除外枠はありません。[ヘルスフィルタリングと p2c](/ja-JP/docs/client#health-filtering-and-p2c) を参照してください。
 
 ### withRetry()
 
@@ -241,7 +241,7 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を
 
 エンドポイント選択とは独立に、同一呼び出し内の HTTP リトライを有効にします。`withRetry` を省くと試行は 1 回で、リトライバジェットもありません。`withRetry()` は `withRetry({})` と同等で、デフォルトは、最初の試行を含む `maxAttempts: 2`、`on: ["connect-failure"]`、安全なメソッド `GET`、`HEAD`、`OPTIONS`、`TRACE` です。メソッド名は大文字小文字を区別しません。`[]` はリトライを無効にします。`maxAttempts` は 1 以上の安全な整数で、各エンドポイントは多くて 1 回だけ試されます。`"gateway-error"` は `NET_UNAVAILABLE`（HTTP 502/503/504）と、`RES_*` のデコードで拒否されたゲートウェイボディを含みます。`"attempt-timeout"` は `attemptTimeoutMs` を使います。ストリーミングのリクエストボディはリトライされません。
 
-バックオフのデフォルトは `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250` で、フィールドの意味は SSE/WebSocket の再接続と同じです。`delayMs: 0` は待ちを省きます。`attemptTimeoutMs` は有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。それは 1 回の試行の Fetch、ボディ読み取り、デコードを制限します。呼び出し側の signal は、バックオフの待ちも含めて呼び出し全体を対象にします。
+バックオフのデフォルトは `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250` で、フィールドの意味は SSE/WebSocket の再接続と同じです。`delayMs: 0` は待ちを省きます。`attemptTimeoutMs` は有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。それは、選択されたエンドポイントへ送られる各 Fetch を、呼び出しからレスポンスボディの読み取り完了まで計測します。送信の前後のインターセプター処理と struct のデコードは計測対象外で、エンドポイントの責任としてカウントされることもありません。呼び出し側の signal は、バックオフの待ちも含めて呼び出し全体を対象にします。リトライのラウンドで使えるエンドポイントがない場合（バランサーの pick が失敗した、または次のエンドポイントの URL が解決できない）、呼び出しは `REQ_BUILD_FAILED` ではなく直前の試行の Fault を返します。
 
 クライアント所有の Finagle リトライバジェットは、デフォルトで 20% に、10 秒の TTL にわたる毎秒 10 回の予約を加えたものです。クレジットとデビットは、TTL/10 の 10 スライスで遅延して期限切れになります。`budget: false` はその上限を外します。同じ構成を共有する派生クライアントはそのリトライバジェットを共有します。別々のクライアントは、バランサーを 1 つ共有していても共有しません。無効なオプションは、HTTP の実行時に `Invalid retry options` を伴う `REQ_OPTIONS_INVALID` を返します。このオプションは適用時に、所有するフィールド、配列、入れ子の `budget` を捕捉します。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。後から渡した `withRetry` はポリシーを置き換え、`withRetry({ maxAttempts: 1 })` は、有効にしたあとリトライを無効にします。バランサーとヘルスラッパーにリトライ設定はありません。[ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) を参照してください。
 
@@ -251,8 +251,8 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` は error-first タプルを返します。任意の `start` は、選ばれたトランスポートが始まる直前に、同期的に多くて 1 回実行されます。任意の `end` は `start` のあと 1 回、ピアの応答が始まるとき（またはレスポンス前の失敗）に実行されます。任意の `done` は完了時に 1 回実行されます。Fetch は Linkerd の最初のボディフレームの境界も、Envoy のストリームの境界も公開できません。すべてのフックからの throw と thenable の rejection は封じ込められます。`ERR_NO_CANDIDATE` は `REQ_BUILD_FAILED` の `cause` でしかありません。`FaultCode` ではありません。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーをまたいでもそれを認識します。
+`pick` は error-first タプルを返します。任意の `start` は、選ばれたトランスポートが始まる直前に、同期的に多くて 1 回実行されます。任意の `end` は `start` のあと 1 回、ピアの応答が始まるとき（またはレスポンス前の失敗）に実行されます。任意の `done` は完了時に 1 回実行されます。Fetch は Linkerd の最初のボディフレームの境界も、Envoy のストリームの境界も公開できません。すべてのフックからの throw と thenable の rejection は封じ込められます。候補外の選択は `REQ_BUILD_FAILED` で失敗し、その `done` は `{ attempted: false }` で呼ばれます。`ERR_NO_CANDIDATE` は `REQ_BUILD_FAILED` の `cause` でしかありません。`FaultCode` ではありません。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーをまたいでもそれを認識します。
 
-バランサーが見るのは中立な結果だけです。各トランスポートは自身の情報を `DoneInfo.code` へ変換します。デフォルトの外れ値検出は `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` をカウントします。生の `DoneInfo.status` はカスタムバランサーのためだけに残され、組み込み戦略は決して読みません。`PickInfo` は `endpoints` と任意の `operation` を含み、トランスポートを区別するフィールドはありません。
+バランサーが見るのは中立な結果だけです。各トランスポートは自身の情報を `DoneInfo.code` へ変換します。デフォルトの外れ値検出は、`NET_TIMEOUT` と `NET_BODY_INCOMPLETE` を含め、code を持つ結果をすべて失敗としてカウントします。生の `DoneInfo.status` はカスタムバランサーのためだけに残され、組み込み戦略は決して読みません。`PickInfo` は、1 回の pick の候補 `endpoints`、`members`（クライアントの全エンドポイントリストで、どの試行でも同じです）、任意の `operation` を含み、トランスポートを区別するフィールドはありません。
 
 [Client ガイド](/ja-JP/docs/client) を見てください。

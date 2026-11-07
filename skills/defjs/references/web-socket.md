@@ -153,7 +153,7 @@ async function runWithHeartbeat() {
 void runWithHeartbeat();
 ```
 
-A server can complete a clean close handshake with application-error code `1011`, so `wasClean: true` does not mean the application succeeded. Successful opens reset the reconnect budget (default 3 per outage). With multiple endpoints, reconnect can re-pick; it does not restore application subscriptions or delivery acknowledgments.
+A server can complete a clean close handshake with application-error code `1011`, so `wasClean: true` does not mean the application succeeded. Successful opens reset the reconnect budget (default 3 per outage). `connectTimeoutMs` (a field of the reconnect options) bounds construction to `open`; because that object applies `attempts: 3`, setting it alone also enables reconnect, so add `attempts: 0` for a handshake-only deadline. With multiple endpoints, reconnect can re-pick; it does not restore application subscriptions or delivery acknowledgments.
 
 The input, builder output, and selected protocols are captured once for the logical session. Each attempt resolves its URL before `beforeConnect`; reconnect can replace the base endpoint, not the captured path/query. `beforeConnect` runs per attempt but does not rebuild a query ticket or subprotocol token after a closure variable changes. Start a new operation with refreshed values when those credentials expire. See [load balancing](load-balancing.md) for endpoint and retry boundaries.
 

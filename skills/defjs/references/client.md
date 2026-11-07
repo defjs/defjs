@@ -53,17 +53,18 @@ await getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 2 });
 
 `client(options)` accepts seven flat fields. Each protocol reads only the fields that apply to it and ignores the rest:
 
-| Field                | Applies to           | Purpose                                                                                  |
-| -------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
-| `signal`             | HTTP, SSE, WebSocket | `AbortSignal` for the request, stream, or session                                        |
-| `onUploadProgress`   | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                                    |
-| `onDownloadProgress` | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                                    |
-| `beforeConnect`      | WebSocket            | `({ attempt, signal }) => void \| Promise<void>` hook run before each connection attempt |
-| `protocols`          | WebSocket            | `string[]` subprotocols (overrides client and definition `protocols`)                    |
-| `heartbeat`          | WebSocket            | `{ intervalMs, timeoutMs?, message, isAck }`                                             |
-| `reconnect`          | WebSocket            | `{ attempts?, delayMs?, factor?, maxDelayMs?, jitter?, shouldReconnect? }`               |
+| Field                | Applies to           | Purpose                                                                                       |
+| -------------------- | -------------------- | --------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE, WebSocket | `AbortSignal` for the request, stream, or session                                             |
+| `onUploadProgress`   | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                                         |
+| `onDownloadProgress` | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                                         |
+| `beforeConnect`      | WebSocket            | `({ attempt, signal }) => void \| Promise<void>` hook run before each connection attempt      |
+| `protocols`          | WebSocket            | `string[]` subprotocols (overrides client and definition `protocols`)                         |
+| `heartbeat`          | WebSocket            | `{ intervalMs, timeoutMs?, message, isAck }`                                                  |
+| `reconnect`          | WebSocket            | `{ attempts?, connectTimeoutMs?, delayMs?, factor?, maxDelayMs?, jitter?, shouldReconnect? }` |
 
 - Note: `client({ reconnect })` configures **WebSocket** reconnect only. SSE reconnect is configured on the client with `withSSEReconnect(...)`.
+- `connectTimeoutMs` exists only inside a reconnect options object (`withSSEReconnect`, `withWebSocketReconnect`, `client({ reconnect })`) and bounds each handshake. That object defaults `attempts` to 3, so `connectTimeoutMs` alone also enables automatic reconnect; add `attempts: 0` for a handshake-only deadline.
 - Invalid numeric options (such as negative delays) are validated when the operation executes and return a `REQ_OPTIONS_INVALID` fault on the tuple.
 
 ## Client option helpers

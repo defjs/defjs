@@ -78,18 +78,18 @@ Erzeuge für jeden Aufruf, der ein eigenes `signal`, Progress-Callbacks oder Web
 
 `withEndpoint(...urls)` akzeptiert eine oder mehrere Basis-URLs. Standardmäßig gilt:
 
-- Jeder Client verwendet [`pickFirstBalancer`](/de-DE/api/core/pickfirstbalancer) und bleibt bei der ersten URL, bis er bei `NET_UNREACHABLE` oder `NET_UNAVAILABLE` (HTTP 502, 503 oder 504) weiterschaltet.
+- Jeder Client verwendet [`pickFirstBalancer`](/de-DE/api/core/pickfirstbalancer) und bleibt bei der ersten URL, bis er bei `NET_UNREACHABLE` oder `NET_UNAVAILABLE` (HTTP 502, 503 oder 504) weiterschaltet. Ein HTTP-Retry verschiebt den haftenden Endpunkt nicht.
 - **Same-Call-HTTP-Retry ist standardmäßig aus.** `withRetry()` entspricht `withRetry({})` und aktiviert einen zweiten Versuch auf einem noch nicht versuchten Endpunkt bei Verbindungsfehlern sicherer Methoden (`GET`, `HEAD`, `OPTIONS`, `TRACE`), mit Backoff. Ein Finagle-Retry-Budget gehört zur Client-Konfiguration und wird von deren abgeleiteten Clients geteilt, unabhängig von der Balancer-Identität.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-Bei nur einem konfigurierten Endpunkt spielt `withRetry` den Request nicht erneut ab, weil jeder Retry bereits versuchte Endpunkte ausschließt. `attemptTimeoutMs` und `connectTimeoutMs` müssen, wenn sie angegeben sind, endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück.
+Bei nur einem konfigurierten Endpunkt spielt `withRetry` den Request nicht erneut ab, weil jeder Retry bereits versuchte Endpunkte ausschließt. `attemptTimeoutMs` und `connectTimeoutMs` müssen, wenn sie angegeben sind, endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück. `connectTimeoutMs` existiert nur in den Reconnect-Optionen von SSE und WebSocket; da diese standardmäßig `attempts: 3` verwenden, aktiviert es allein ebenfalls den Reconnect. Für ein reines Handshake-Zeitlimit ergänze `attempts: 0`.
 
 ### Health-Filterung und P2C [#health-filtering-and-p2c]
 
-Für Peer-Server-Replikate aktivieren [`roundRobinBalancer`](/de-DE/api/core/roundrobinbalancer) und [`p2cBalancer`](/de-DE/api/core/p2cbalancer) (PeakEwma RTT × In-Flight-Last) standardmäßig ein Circuit-Breaking im Linkerd-Stil für aufeinanderfolgende Fehler (`outlierDetection`). Es zählt `NET_UNREACHABLE`, `NET_UNAVAILABLE` und `NET_SERVER_ERROR`; der rohe Antwort-`status` ist nur für eigene Balancer bestimmt.
+Für Peer-Server-Replikate aktivieren [`roundRobinBalancer`](/de-DE/api/core/roundrobinbalancer) und [`p2cBalancer`](/de-DE/api/core/p2cbalancer) (PeakEwma RTT × In-Flight-Last) standardmäßig ein Circuit-Breaking im Linkerd-Stil für aufeinanderfolgende Fehler (`outlierDetection`). Es zählt jedes Ergebnis mit Code als Fehler (auch `NET_TIMEOUT` und `NET_BODY_INCOMPLETE`); der rohe Antwort-`status` ist nur für eigene Balancer bestimmt.
 
 Im dedizierten Leitfaden [Lastverteilung & Failover](/de-DE/docs/load-balancing) findest du alle Details zu Retry-Budgets, aktiven/passiven Health-Checks, P2C-Lastabschätzung und eigenen Balancern.
 

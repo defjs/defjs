@@ -41,9 +41,11 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 
 ### `pickFirstBalancer` 与 `p2cBalancer` 的工作机制
 
-- **`pickFirstBalancer`（主备粘性）**：始终停在第一个 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。配置 `failbackMs: 30_000`，在备用端点上停留这段时间之后，再探测主端点。同时最多只能有一个在途主端点探测。故障转移后第一次探测主端点之前，必须满足间隔已过，且离开主端点后至少选中过一次备用端点。探测失败会重新开始这两个要求：下一次探测前，必须重新选中过备用端点，并再次经过该间隔，即使 SSE/WebSocket 重连退避比 `failbackMs` 更长也不例外。这样健康的备用端点才有机会被使用，而不是每次重连都访问已经失效的主端点。
+- **`pickFirstBalancer`（主备粘性）**：始终停在第一个 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。顺序与粘滞端点遵循 client 的完整端点列表（`members`），并且 HTTP 重试从不移动粘滞端点：对第一个端点的超时被重试到第二个端点后，后续调用仍留在第一个端点上，failback 也保持待命。配置 `failbackMs: 30_000`，在备用端点上停留这段时间之后，再探测主端点。同时最多只能有一个在途主端点探测。探测在对端响应开始时判定（HTTP 响应头、SSE 握手或 WebSocket 打开），因此作为探测的长连接流不会让整个 client 的 failback 被一直阻塞；从未到达该时刻的尝试则在完成时判定。故障转移后第一次探测主端点之前，必须满足间隔已过，且离开主端点后至少选中过一次备用端点。探测失败会重新开始这两个要求：下一次探测前，必须重新选中过备用端点，并再次经过该间隔，即使 SSE/WebSocket 重连退避比 `failbackMs` 更长也不例外。这样健康的备用端点才有机会被使用，而不是每次重连都访问已经失效的主端点。
 - **`roundRobinBalancer` 权重**：未指定的权重为 `1`；配置的权重必须是有限正数。平滑加权轮询保留按比例选择的特性（例如 `3:1` 会让权重较高的节点在每四次选择中被选中三次）。极端量级会被缩放以避免溢出；低于浮点精度的比例可能舍入为零。每次选择及过期 current 值的清理都需要 O(候选数量) 的工作量。
-- **`p2cBalancer`（双选择随机 P2C 算法）**：不放回地随机抽取两个不同的候选端点，并选出综合评分更低的一个：`PeakEwma RTT × (pending + 1)`（或在配置 `load: "pending"` 时直接比较在途 `pending` 请求数）。其默认值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd 与 tower 的惯例。
+- **`p2cBalancer`（双选择随机 P2C 算法）**：不放回地随机抽取两个不同的候选端点，并选出综合评分更低的一个：`PeakEwma RTT × (pending + 1)`（或在配置 `load: "pending"` 时直接比较在途 `pending` 请求数）。其默认值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd 与 tower 的惯例。pending 在 `pick` 选中端点的那一刻就被预留，因此同一个 tick 内的一批调用会分散到不同端点；它在对端响应开始时（HTTP 响应头、SSE 握手、WebSocket 打开）释放，若没有响应开始，则在尝试完成时释放。对 SSE 和 WebSocket 而言，这意味着 p2c 均衡的是握手，而不是已打开连接的数量。
+
+均衡器状态（粘滞端点、逐出状态与 p2c 负载）以及重试预算都归 Client 所有：整个应用只创建一次 Client，并用 `client(options)` 派生每次调用的 Client：派生出的 Client 同时保留均衡器状态和重试预算。用 `withBalancer` 把同一个均衡器值传给多个 Client 时，只共享均衡器状态；每个 Client 仍有各自的重试预算。每个请求都新建一个 `createClient`，则两者都会从头开始。
 
 ## 2. 同一次调用内的 HTTP 重试
 
@@ -63,7 +65,8 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
   Core 的 `withRetry` 不读取 `Retry-After`。这个响应头的处理方式（包括任何延迟上限）属于[应用拦截器策略](/zh-Hans/docs/interceptors)，不是这里的退避机制。
   只配置了一个端点时，`withRetry` 不会重放请求，因为每一次重试都会排除已经试过的端点。
 
-- **单次尝试超时 vs. 整次调用超时**：`attemptTimeoutMs` 必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它限制单次尝试，从发起 Fetch 一直到 body 解码结束。调用方的 `client({ signal: AbortSignal.timeout(ms) })` 覆盖每一次尝试**以及退避等待**。等待期间取消会返回调用方的取消错误，并且不再 pick。
+- **单次尝试超时 vs. 整次调用超时**：`attemptTimeoutMs` 必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它为发往所选端点的每次 Fetch 计时，从发起一直到其响应 body 读取完成。发送前后的拦截器工作（例如 `401` 之后刷新令牌）以及 struct 解码都不计时，也绝不会算到端点头上；发送已完成之后，调用方期限在拦截器工作期间到期，不会以 `NET_TIMEOUT` 报告给均衡器，报告的是端点自身的结果。调用方的 `client({ signal: AbortSignal.timeout(ms) })` 覆盖每一次尝试**以及退避等待**。等待期间取消会返回调用方的取消错误，并且不再 pick。
+- **重试时没有可用端点**：当某一轮重试无法使用任何端点（均衡器 pick 失败，或下一个端点的 URL 无法解析）时，调用返回上一次尝试的错误（例如 `NET_UNREACHABLE`），而不是 `REQ_BUILD_FAILED`。
 - **Finagle / Linkerd 重试预算（`budget`）**：每份 client 配置拥有一份预算，只有使用这份配置的派生 client 会共享，共享均衡器的 client 并不共享。默认值是 `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`：原始流量的 20% 再加上储备。存入和取出都在十个 TTL/10 切片上惰性过期。一次重试会在等待之前先取出额度；预算耗尽时既不等待，也不重试。设置 `budget: false` 可去掉这一上限。
 - **浏览器离线环境感知**：当 `navigator.onLine === false` 时，连接失败会报告 `{ attempted: false }`，此时不会推进均衡器，也不会触发重试。
 
@@ -71,6 +74,7 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 
 - 浏览器 CORS 失败会以连接失败的形式传给 Fetch，并报告为 `NET_UNREACHABLE`，无法与主机宕机区分。它可能推进端点选择，并触发显式启用的安全方法重试；成功的故障转移因此可能掩盖主区域的 CORS 配置错误。
 - 即使响应缺少必需的 CORS 响应头，服务端仍可能已处理 POST。应用随后收到 `NET_UNREACHABLE`，却不知道写操作是否成功。默认不会重放 POST；显式启用写操作重试，需要应用层保证跨副本幂等性。
+- 浏览器中，服务端拒绝的 WebSocket 升级（例如 `401`）与端点不可达无法区分，都会报告为 `NET_UNREACHABLE`，因此过期的凭据可能导致端点被逐出。
 - Cookie 的作用域按主机划分，而非端口：`localhost` 上不同端口的两个端点可以共享 Cookie，但 `localhost` 和 `127.0.0.1` 不会。多来源端点集合需要明确规划 Cookie/Token 和 CORS 凭据策略；`withCredentials(true)` 不会改变 Cookie 的作用域。
 - 显式离线提示（`navigator.onLine === false`）会抑制端点归因和连接失败重试。它只是浏览器提示，不是可靠的可达性检查。
 
@@ -97,31 +101,33 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 </Tab>
 </Tabs>
 
-1. **连续失败**：默认分类器计入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 和 `NET_SERVER_ERROR`。连续出现 `consecutiveFailures` 次（默认 `5` 次）被计入的结果后，该端点在 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`）期间被逐出，并加上最高 `50%` 的均匀正向抖动。
-2. **单探测恢复**：惩罚到期后，一个请求会探测该主机。若对端响应在 `end` 开始且不是被计入的失败，正常流量立即恢复，惩罚等级重置为 `0`；若探测失败，惩罚翻倍。
-3. **有界历史记录**：在派生 client 和每次调用的候选排除之间，健康历史记录总共最多保留 256 个端点。优先淘汰最近最少使用的干净或已过期条目，然后才是尚未达到阈值的部分连续失败记录。只有所有保留条目都受保护时，才会淘汰惩罚尚未到期或有在途探测的条目，此时移除最旧的一条。仅在一次调用中省略端点，并不会重置其惩罚。P2C 的负载历史同样最多保留 256 条，先淘汰空闲条目，再淘汰繁忙条目；被遗忘的端点会从 `defaultRttMs` 重新开始。Pick-first 的 shuffle key 使用 256 条目的 LRU 缓存，因此被遗忘的端点回来时会获得新 key。加权轮询只保留最近候选集的 current 值；复制后的权重配置在构造时固定。可用时，时长使用平台的单调 Performance 时钟，仅以 `Date.now()` 作为后备。
-4. **Panic 模式 fail-open**：如果配置的所有端点都被逐出或被标记为不健康，均衡器会失败时放行，回退到 Client 的候选列表，而不是在本地丢弃所有流量。
+1. **连续失败**：默认分类器把每个带 code 的结果都计为失败：`NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR`、`NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。已尝试但没有 code 的结果会重置连续计数；未归属的尝试和被丢弃的样本则保持计数不变。连续出现 `consecutiveFailures` 次（默认 `5` 次）被计入的结果后，该端点在 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`）期间被逐出，并加上最高 `50%` 的均匀正向抖动；基础时长加抖动的总和不会超过 `maxPenaltyMs`。
+2. **单探测恢复**：惩罚到期后，一个请求会探测该主机。若对端响应在 `end` 开始且不是被计入的失败，正常流量立即恢复，惩罚等级重置为 `0`；若探测失败（包括超时），该端点会再次被逐出，惩罚翻倍。
+3. **有界历史记录**：在派生 client 和每次调用的候选排除之间，健康历史记录总共至少保留 256 个端点，且至少覆盖当前成员数量。优先淘汰最近最少使用的干净或已过期条目，然后才是尚未达到阈值的部分连续失败记录。只有所有保留条目都受保护时，才会淘汰惩罚尚未到期或有在途探测的条目，此时移除最旧的一条。仅在一次调用中省略端点，并不会重置其惩罚。P2C 的负载历史同样至少保留 256 条且至少覆盖当前成员数量，因此超过 256 个端点的列表也会保留每一份估计，先淘汰空闲条目，再淘汰繁忙条目；被遗忘的端点会从 `defaultRttMs` 重新开始。Pick-first 的 shuffle key 在 LRU 缓存中至少保留 256 条且至少覆盖当前成员，因此被遗忘的端点回来时会获得新 key。加权轮询为客户端的成员保留 current 值：在某次选择中被排除的端点（HTTP 重试或健康过滤）仍保留其值，如同 nginx 跳过已下线的节点，只有离开成员列表的端点才会丢弃其值；复制后的权重配置在构造时固定。可用时，时长使用平台的单调 Performance 时钟，仅以 `Date.now()` 作为后备。
+4. **Panic 模式 fail-open**：如果 `isHealthy` 否决了所有未被逐出的端点，均衡器会忽略 `isHealthy`，在未被逐出的端点中选择；只有当所有配置的端点都被逐出时，才会 fail-open，回退到 Client 的完整候选列表，而不是在本地丢弃所有流量。
 
 ## 4. 传输层生命周期记账（`pick` → `start` → `end` → `done`）
 
-自定义均衡器必须选择 `info.endpoints` 中某个完全一致的字符串。选中候选集之外的值时，会返回包含 `REQ_BUILD_FAILED` 的元组，非敏感的 cause 消息为 `Balancer selected an endpoint outside the candidate set`；不会启动任何传输，也不会运行任何完成回调。这条规则保证健康过滤和每次调用的重试排除仍然有效。
+自定义均衡器必须选择 `info.endpoints` 中某个完全一致的字符串。选中候选集之外的值时，会返回包含 `REQ_BUILD_FAILED` 的元组，非敏感的 cause 消息为 `Balancer selected an endpoint outside the candidate set`；不会启动任何传输，该选择的 `done` 会以 `{ attempted: false }` 运行一次。这条规则保证健康过滤和每次调用的重试排除仍然有效。
 
-自定义均衡器实现同步的 `pick(info)`，以及可选的 `start()`、`end(info)` 和 `done(info)` 回调。`PickInfo` 只包含候选 `endpoints` 和可选的定义 `operation`，没有传输类型判别字段。传输层把自己的事实翻译成中立的 `DoneInfo.code` 结果。内置均衡器从不读取 `status`；这份原始响应信息只留给自定义均衡器。`start` 在尝试之前运行，`end` 在对端响应开始或响应前失败时运行，`done` 在完成时运行。因此，更晚发生的 body 失败可以改变最终的 code，而不改变更早的 `end` 样本：
+自定义均衡器实现同步的 `pick(info)`，以及可选的 `start()`、`end(info)` 和 `done(info)` 回调。`PickInfo` 包含一次 pick 的候选 `endpoints`（重试以及包装器过滤时该列表会缩小）、`members`（client 的完整端点列表，每次尝试都相同；有状态的均衡器以它为依据维护顺序和状态）和可选的定义 `operation`，没有传输类型判别字段。传输层把自己的事实翻译成中立的 `DoneInfo.code` 结果。内置均衡器从不读取 `status`；这份原始响应信息只留给自定义均衡器。`start` 在尝试之前运行，`end` 在对端响应开始或响应前失败时运行，`done` 在完成时运行。因此，更晚发生的 body 失败可以改变最终的 code，而不改变更早的 `end` 样本：
 
-| 物理传输实际结果                                                     | 最终 `done(info)` 统计样本                                 |
-| -------------------------------------------------------------------- | ---------------------------------------------------------- |
-| HTTP/SSE 响应状态 502、503 或 504                                    | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
-| HTTP/SSE 其他至少为 500 的响应状态                                   | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
-| HTTP/SSE 响应状态 2xx、3xx 或 4xx（包括 429）                        | `{ attempted: true, status }`                              |
-| HTTP 响应体在传输流中途中断                                          | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
-| SSE 握手成功，随后流 `reader.read()` 发生 reject                     | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| SSE 正常 EOF、握手成功后的解码失败，或队列上限                       | `{ attempted: true, status }`                              |
-| 已建立的 WebSocket 异常断开，关闭码为 `1006` 或 `wasClean === false` | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| 已建立的 WebSocket 正常平稳关闭                                      | `{ attempted: true }`                                      |
-| 调用方主动取消请求，或手动关闭长连接流/Socket                        | `{ attempted: false }`                                     |
-| 请求尝试开始后调用方设置的超时期限到期                               | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+| 物理传输实际结果                                                | 最终 `done(info)` 统计样本                                 |
+| --------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE 响应状态 502、503 或 504                               | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| HTTP/SSE 其他至少为 500 的响应状态                              | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE 响应状态 2xx、3xx 或 4xx（包括 429）                   | `{ attempted: true, status }`                              |
+| HTTP 响应体在传输流中途中断                                     | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE 握手成功，随后流 `reader.read()` 发生 reject                | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE 正常 EOF、握手成功后的解码失败，或队列上限                  | `{ attempted: true, status }`                              |
+| 已建立的 WebSocket 以 `1006` 或 `1015` 关闭（没有收到关闭帧）   | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已建立的 WebSocket 以 `1012` 或 `1013` 关闭                     | `{ attempted: true, code: "NET_UNAVAILABLE" }`             |
+| WebSocket 心跳确认超时                                          | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已建立的 WebSocket 以其他任意关闭码关闭，不论 `wasClean` 为何值 | `{ attempted: true }`                                      |
+| 调用方主动取消请求，或手动关闭长连接流/Socket                   | `{ attempted: false }`                                     |
+| 请求尝试开始后调用方设置的超时期限到期                          | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
 
-握手解码失败会保留由握手状态推导出的中立结果（例如状态 `503` 对应 `NET_UNAVAILABLE`）。不完整的 HTTP body 则保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使那是网关响应；默认离群检测不计入它。
+握手解码失败会保留由握手状态推导出的中立结果（例如状态 `503` 对应 `NET_UNAVAILABLE`）。不完整的 HTTP body 则保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使那是网关响应；与任何带 code 的结果一样，它会被默认离群检测计为失败。无法发送的心跳（`message()` 抛出或序列化失败）属于本地问题，保持中立。
 
 ## 相关阅读
 

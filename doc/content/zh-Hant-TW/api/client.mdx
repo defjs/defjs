@@ -175,7 +175,7 @@ Defjs 對 Fetch 實作要求的呼叫簽章。它不是 `typeof fetch`，所以 
 | `jitter`     | `0`            | `0`            |
 | `maxDelayMs` | 無上限         | `30000`        |
 
-`connectTimeoutMs` 是選用的，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。對 SSE 而言，它限制從 Fetch 到收到回應標頭的時間；對 WebSocket 而言，它限制從建構到 `open` 的時間；交握之後就會清除。到期時會向平衡器回報 `NET_UNREACHABLE`，讓重連可以選取下一個端點。重試次數用盡時以 `NET_TIMEOUT` 結束。
+`connectTimeoutMs` 是選用的，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。對 SSE 而言，它限制從 Fetch 到收到回應標頭的時間；對 WebSocket 而言，它限制從建構到 `open` 的時間；交握之後就會清除。到期時會向平衡器回報 `NET_UNREACHABLE`，讓重連可以選取下一個端點。重試次數用盡時以 `NET_TIMEOUT` 結束。它只存在於重連選項內；只要該物件存在，`attempts` 就預設為 `3`，因此單獨設定 `connectTimeoutMs` 也會啟用重連。只想限制交握時，請同時設定 `attempts: 0`。
 
 兩種傳輸在交握成功後，都會重設每次中斷的重試額度、回呼的 attempt 與 backoff 指數。`attempts: 0` 停用重試；省略 `attempts` 並不會在同一次中斷內取得無限次重試。`maxDelayMs` 會在 jitter 與捨入之後限制最終延遲；平台計時器上限 `2_147_483_647` ms 同樣適用，包括 SSE 未設定上限的情況。base 為零時維持零；有效數值溢位時會飽和在這些上限。
 
@@ -221,19 +221,19 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事�
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` 會停在第一個端點，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進。它選用的正有限數 `failbackMs` 會在該間隔之後，對第一個端點進行一次單一並行探測。HTTP 重試是另一套以 `withRetry` 設定的 client 策略。`roundRobinBalancer` 依序走訪清單，`weights` 為選用。見[多個端點](/zh-Hant-TW/docs/client#multiple-endpoints)。
+`pickFirstBalancer` 會停在第一個端點，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進；HTTP 重試絕不會移動其黏性端點，順序遵循 client 的完整端點清單 `members`。它選用的正有限數 `failbackMs` 會在該間隔之後，對第一個端點進行一次單一並行探測；探測在對端回應開始（`end`）時判定，從未到達 `end` 的探測由 `done` 判定。HTTP 重試是另一套以 `withRetry` 設定的 client 策略。`roundRobinBalancer` 依序走訪清單，`weights` 為選用。見[多個端點](/zh-Hant-TW/docs/client#multiple-endpoints)。
 
 ### p2cBalancer()
 
 <ApiSignature name="p2cBalancer" />
 
-在不放回的情況下抽取不同的候選（與 Envoy/gRPC A48 不同），再選擇 tower 的 PeakEwma 或 pending 負載較低者。Linkerd 的預設值為 RTT 30 ms、衰減 10 秒。`start` 會開始計算 pending，`end` 在收到回應標頭或 socket 開啟時釋放它，並為每種傳輸記錄真實 RTT，包括失敗的情況。只有 `done` 而沒有 `end` 時，只會釋放 pending，不產生 RTT 樣本。沒有 p2c 失敗分類器，也沒有懲罰。`choiceCount` 預設為 2，上限為 10。
+在不放回的情況下抽取不同的候選（與 Envoy/gRPC A48 不同），再選擇 tower 的 PeakEwma 或 pending 負載較低者。Linkerd 的預設值為 RTT 30 ms、衰減 10 秒。pending 在 `pick` 選取端點時預留，`end` 在收到回應標頭或 socket 開啟時釋放它，並為每種傳輸記錄真實 RTT，包括失敗的情況。只有 `done` 而沒有 `end` 時，只會釋放 pending，不產生 RTT 樣本。沒有 p2c 失敗分類器，也沒有懲罰。`choiceCount` 預設為 2，上限為 10。
 
 ### outlierDetection()
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-以 Linkerd 風格的連續失敗斷路包裝子策略。Round robin 與 p2c 預設啟用它（與 Finagle 相同）；傳入 `false` 可關閉。Pick-first 則要傳入物件才會啟用。預設分類器計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 與 `NET_SERVER_ERROR`。連續五次失敗之後，懲罰從 1000 ms 起算，探測失敗後加倍，再加上不超過基數 0.5 倍的正向抖動，上限為 60000 ms。到期後只允許一次探測，並在 `end` 時判定；若沒有 `end`，則在 `done` 時判定。成功會重設退避；取消只會釋放名額。沒有假定成功的逾時、配額、最後一台主機保護、結算網格、百分比判準或慢啟動。`isHealthy` 讀取的是應用程式自己持有的快取狀態，永遠不會取消懲罰。所有主機都可能被斷路；Finagle 式、只限目前清單的失敗時放行仍會送出請求。與 Envoy/gRPC A50 不同，這裡沒有驅逐配額。見[健康過濾與 p2c](/zh-Hant-TW/docs/client#health-filtering-and-p2c)。
+以 Linkerd 風格的連續失敗斷路包裝子策略。Round robin 與 p2c 預設啟用它（與 Finagle 相同）；傳入 `false` 可關閉。Pick-first 則要傳入物件才會啟用。預設分類器把每個帶 code 的結果都計為失敗，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。連續五次失敗之後，懲罰從 1000 ms 起算，探測失敗後加倍，再加上不超過基數 0.5 倍的正向抖動，上限為 60000 ms。到期後只允許一次探測，並在 `end` 時判定；若沒有 `end`，則在 `done` 時判定。成功會重設退避；取消只會釋放名額。沒有假定成功的逾時、配額、最後一台主機保護、結算網格、百分比判準或慢啟動。`isHealthy` 讀取的是應用程式自己持有的快取狀態，永遠不會取消懲罰。所有主機都可能被斷路；Finagle 式、只限目前清單的失敗時放行仍會送出請求。與 Envoy/gRPC A50 不同，這裡沒有驅逐配額。見[健康過濾與 p2c](/zh-Hant-TW/docs/client#health-filtering-and-p2c)。
 
 ### withRetry()
 
@@ -241,7 +241,7 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事�
 
 獨立於端點選擇，啟用同一次呼叫內的 HTTP 重試。省略 `withRetry` 代表只嘗試一次，也不會建立預算。`withRetry()` 等於 `withRetry({})`，預設為 `maxAttempts: 2`（含首次）、`on: ["connect-failure"]`，以及安全方法 `GET`、`HEAD`、`OPTIONS`、`TRACE`。方法名稱不區分大小寫；`[]` 會關閉重試。`maxAttempts` 是至少為 1 的安全整數，且每個端點最多嘗試一次。`"gateway-error"` 涵蓋 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` 解碼拒絕的閘道本文；`"attempt-timeout"` 則使用 `attemptTimeoutMs`。串流請求本文不會重試。
 
-退避預設為 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語意與 SSE/WebSocket 重連相同。`delayMs: 0` 會跳過等待。`attemptTimeoutMs` 必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制單次嘗試的 Fetch、本文讀取與解碼；呼叫端的 signal 涵蓋整次呼叫，包括退避等待。
+退避預設為 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語意與 SSE/WebSocket 重連相同。`delayMs: 0` 會跳過等待。`attemptTimeoutMs` 必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它為送往所選端點的每次 Fetch 計時，從呼叫一直到其回應本文讀取完成；傳送前後的攔截器工作以及 struct 解碼都不計時，也絕不會算到端點頭上。呼叫端的 signal 涵蓋整次呼叫，包括退避等待。當某一輪重試無法使用任何端點（平衡器 pick 失敗，或下一個端點的 URL 無法解析）時，呼叫會回傳上一次嘗試的錯誤，而不是 `REQ_BUILD_FAILED`。
 
 由 client 擁有的 Finagle 預算預設為 20%，再加上 10 秒 TTL 內每秒 10 次的儲備。存入與取出會在十個 TTL/10 的時間切片上惰性到期。`budget: false` 會移除這項限制。共用同一份設定的衍生 client 會共用預算；各自獨立的 client 則不共用，即使共用同一個平衡器也一樣。無效選項會在 HTTP 執行時回傳 `REQ_OPTIONS_INVALID`，訊息為 `Invalid retry options`。該選項會在套用時複製自己擁有的欄位、陣列與巢狀 budget。`withRetry()` 與 `withRetry(undefined)` 的行為與 `withRetry({})` 相同。後一次 `withRetry` 會取代該策略；`withRetry({ maxAttempts: 1 })` 會在啟用之後關閉重試。平衡器與健康包裝器沒有重試設定。見[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)。
 
@@ -251,8 +251,8 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事�
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` 回傳 error-first tuple。選用的 `start` 會在所選傳輸開始之前同步執行至多一次；選用的 `end` 會在 `start` 之後、對端回應開始（或回應前發生失敗）時執行一次；選用的 `done` 則在完成時執行一次。Fetch 無法揭露 Linkerd 的首個本文訊框，也無法揭露 Envoy 的串流邊界。所有鉤子拋出的例外，以及 thenable 的 rejection，都會被接住。`ERR_NO_CANDIDATE` 只會作為 `REQ_BUILD_FAILED` 的 `cause`，不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-TW/api/core/isnocandidatecause) 也能辨識來自另一份 Core 副本的它。
+`pick` 回傳 error-first tuple。選用的 `start` 會在所選傳輸開始之前同步執行至多一次；選用的 `end` 會在 `start` 之後、對端回應開始（或回應前發生失敗）時執行一次；選用的 `done` 則在完成時執行一次。Fetch 無法揭露 Linkerd 的首個本文訊框，也無法揭露 Envoy 的串流邊界。所有鉤子拋出的例外，以及 thenable 的 rejection，都會被接住。選取候選集之外的值會以 `REQ_BUILD_FAILED` 失敗，其 `done` 會以 `{ attempted: false }` 呼叫。`ERR_NO_CANDIDATE` 只會作為 `REQ_BUILD_FAILED` 的 `cause`，不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-TW/api/core/isnocandidatecause) 也能辨識來自另一份 Core 副本的它。
 
-平衡器只看得到中立的結果；每種傳輸會把自己的事實轉譯成 `DoneInfo.code`。預設的 outlier detection 計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 與 `NET_SERVER_ERROR`。原始的 `DoneInfo.status` 只保留給自訂平衡器，內建策略從不讀取它。`PickInfo` 包含 `endpoints` 與選用的 `operation`，沒有傳輸類型的判別欄位。
+平衡器只看得到中立的結果；每種傳輸會把自己的事實轉譯成 `DoneInfo.code`。預設的 outlier detection 把每個帶 code 的結果都計為失敗，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。原始的 `DoneInfo.status` 只保留給自訂平衡器，內建策略從不讀取它。`PickInfo` 包含一次 pick 的候選 `endpoints`、`members`（client 的完整端點清單，每次嘗試都相同）與選用的 `operation`，沒有傳輸類型的判別欄位。
 
 見 [Client 指南](/zh-Hant-TW/docs/client)。

@@ -175,7 +175,7 @@ Defjs 要求 Fetch 實作具備嘅呼叫簽章。佢唔係 `typeof fetch`，所�
 | `jitter`     | `0`             | `0`             |
 | `maxDelayMs` | 冇上限          | `30000`         |
 
-`connectTimeoutMs` 可選，而且必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。對 SSE，佢限制由 Fetch 到 response headers；對 WebSocket，佢限制由建立連線到 `open`；handshake 之後會被清走。到期會向 balancer 報告 `NET_UNREACHABLE`，等重連可以 pick 下一個端點。重試用盡就以 `NET_TIMEOUT` 結束。
+`connectTimeoutMs` 可選，而且必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。對 SSE，佢限制由 Fetch 到 response headers；對 WebSocket，佢限制由建立連線到 `open`；handshake 之後會被清走。到期會向 balancer 報告 `NET_UNREACHABLE`，等重連可以 pick 下一個端點。重試用盡就以 `NET_TIMEOUT` 結束。佢只存在於重連選項入面；只要該物件存在，`attempts` 就預設係 `3`，所以淨係設定 `connectTimeoutMs` 都會啟用重連。只想限制 handshake 嘅話，請同時設定 `attempts: 0`。
 
 兩種傳輸層每次成功握手，都會重設該次斷線嘅重試預算、callback 嘅嘗試次數同退避指數。`attempts: 0` 停用重試；省略 `attempts` 唔代表同一次斷線可以無限重試。`maxDelayMs` 限制套用 jitter 同四捨五入之後嘅最終延遲；平台 timer 上限 `2_147_483_647` ms 亦適用，包括 SSE 冇設定上限嘅情況。Base 係零就會維持零；有效數值運算溢位時，會限制喺上限。
 
@@ -221,19 +221,19 @@ SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 even
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` 會喺 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前進。可選嘅有限正數 `failbackMs` 喺呢段間隔之後，對第一個端點做至多一個同時進行嘅 probe。HTTP 重試係用 `withRetry` 設定嘅另一份 client 策略。`roundRobinBalancer` 順住份清單行。`weights` 可選。睇[多個端點](/zh-Hant-HK/docs/client#multiple-endpoints)。
+`pickFirstBalancer` 會喺 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前進；HTTP 重試永遠唔會移動佢黏住嘅端點，次序跟隨 `members`，即 client 嘅完整端點清單。可選嘅有限正數 `failbackMs` 喺呢段間隔之後，對第一個端點做至多一個同時進行嘅 probe；probe 喺對端 response 開始（`end`）時判定，未去到 `end` 嘅 probe 由 `done` 判定。HTTP 重試係用 `withRetry` 設定嘅另一份 client 策略。`roundRobinBalancer` 順住份清單行。`weights` 可選。睇[多個端點](/zh-Hant-HK/docs/client#multiple-endpoints)。
 
 ### p2cBalancer()
 
 <ApiSignature name="p2cBalancer" />
 
-唔放回咁抽樣唔同嘅候選端點（同 Envoy/gRPC A48 唔同），揀 tower 嘅 PeakEwma 或者 pending load。Linkerd 預設係 RTT 30 ms、decay 10 秒。`start` 開始計入 pending，`end` 喺 headers 或者 socket open 釋放佢，並對每種傳輸層記錄真實 RTT，包括 failure。冇 `end` 嘅 `done` 只釋放 pending，唔產生 RTT sample。冇 p2c failure classifier，亦冇 penalty。`choiceCount` 預設係 2，上限係 10。
+唔放回咁抽樣唔同嘅候選端點（同 Envoy/gRPC A48 唔同），揀 tower 嘅 PeakEwma 或者 pending load。Linkerd 預設係 RTT 30 ms、decay 10 秒。pending 喺 `pick` 揀中端點時預留，`end` 喺 headers 或者 socket open 釋放佢，並對每種傳輸層記錄真實 RTT，包括 failure。冇 `end` 嘅 `done` 只釋放 pending，唔產生 RTT sample。冇 p2c failure classifier，亦冇 penalty。`choiceCount` 預設係 2，上限係 10。
 
 ### outlierDetection()
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-用 Linkerd 式嘅連續失敗熔斷包住 child。Round robin 同 p2c 預設開啟（同 Finagle 一樣）；`false` 關掉佢。Pick-first 要傳入 object 先至開啟。預設分類器計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`。五次失敗之後，penalty 由 1000 ms 起，probe 失敗就加倍，並加上唔超過 base 0.5 倍嘅正 jitter，上限 60000 ms。到期接納一次 probe，喺 `end` 判定；如果冇 `end` 到達，就喺 `done` 判定。成功會重置 backoff；取消只釋放 slot。冇假定成功嘅 timeout、quota、last-host protection、settlement grid、percentage criterion 或者 slow start。`isHealthy` 讀應用程式自己持有嘅 cached state，永遠唔會取消 penalty。所有 host 都可以熔斷；Finagle 式、只限目前清單嘅 fail-open 仍然會送 request。同 Envoy/gRPC A50 唔同，冇 ejection quota。睇[健康過濾同 p2c](/zh-Hant-HK/docs/client#health-filtering-and-p2c)。
+用 Linkerd 式嘅連續失敗熔斷包住 child。Round robin 同 p2c 預設開啟（同 Finagle 一樣）；`false` 關掉佢。Pick-first 要傳入 object 先至開啟。預設分類器將每個帶錯誤碼嘅結果都計為失敗，包括 `NET_TIMEOUT` 同 `NET_BODY_INCOMPLETE`。五次失敗之後，penalty 由 1000 ms 起，probe 失敗就加倍，並加上唔超過 base 0.5 倍嘅正 jitter，上限 60000 ms。到期接納一次 probe，喺 `end` 判定；如果冇 `end` 到達，就喺 `done` 判定。成功會重置 backoff；取消只釋放 slot。冇假定成功嘅 timeout、quota、last-host protection、settlement grid、percentage criterion 或者 slow start。`isHealthy` 讀應用程式自己持有嘅 cached state，永遠唔會取消 penalty。所有 host 都可以熔斷；Finagle 式、只限目前清單嘅 fail-open 仍然會送 request。同 Envoy/gRPC A50 唔同，冇 ejection quota。睇[健康過濾同 p2c](/zh-Hant-HK/docs/client#health-filtering-and-p2c)。
 
 ### withRetry()
 
@@ -241,7 +241,7 @@ SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 even
 
 獨立於端點選擇，啟用同一次呼叫入面嘅 HTTP 重試。省略 `withRetry` 代表一次 attempt，亦冇預算。`withRetry()` 等同 `withRetry({})`，預設係 `maxAttempts: 2`（包括最初嗰次）、`on: ["connect-failure"]`，以及安全 method `GET`、`HEAD`、`OPTIONS`、`TRACE`。method 名唔分大小寫；`[]` 停用重試。`maxAttempts` 係至少為 1 嘅安全整數，而且每個端點最多試一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` 解碼拒絕嘅 gateway body；`"attempt-timeout"` 用 `attemptTimeoutMs`。streaming request body 永遠唔會重試。
 
-Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語義同 SSE/WebSocket 重連一樣。`delayMs: 0` 跳過等待。`attemptTimeoutMs` 必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。佢限制單次 attempt 嘅 Fetch、讀 body 同解碼；caller 嘅 signal 覆蓋成次呼叫，包括 backoff 等待。
+Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語義同 SSE/WebSocket 重連一樣。`delayMs: 0` 跳過等待。`attemptTimeoutMs` 必須係有限正數，並且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。佢會為每個發送去所選端點嘅 Fetch 計時，由發起直到讀完 response body；發送前後嘅攔截器工作同 struct 解碼唔會計時，亦唔會算落端點頭上。caller 嘅 signal 覆蓋成次呼叫，包括 backoff 等待。當某一輪重試用唔到任何端點（balancer 嘅 pick 失敗，或者下一個端點嘅 URL 解析唔到），該次呼叫會回傳上一次 attempt 嘅 fault，而唔係 `REQ_BUILD_FAILED`。
 
 歸 client 所有嘅 Finagle 重試預算預設係 20%，再加 10 秒 TTL 上面每秒 10 次嘅 reserve。credit 同 debit 都喺十個 TTL/10 slice 上 lazy 過期。`budget: false` 拎走呢個限制。共享同一份配置嘅派生 client 共享佢嘅預算；各自獨立嘅 client 唔共享，即使共用一個 balancer 都係。無效選項喺 HTTP 執行時回傳 `REQ_OPTIONS_INVALID`，訊息係 `Invalid retry options`。呢個選項喺套用時捕獲自己擁有嘅欄位、array 同巢狀嘅預算。`withRetry()` 同 `withRetry(undefined)` 嘅行為同 `withRetry({})` 一樣。後一次 `withRetry` 會替換呢份策略；`withRetry({ maxAttempts: 1 })` 會喺啟用之後關閉重試。balancer 同 health wrapper 冇重試設定。睇[負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)。
 
@@ -251,8 +251,8 @@ Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` 回傳一個 error-first tuple。可選嘅 `start` 喺所選傳輸層開始之前至多同步執行一次；可選嘅 `end` 喺 `start` 之後執行一次，時機係對端 response 開始（或者 response 之前發生失敗）；可選嘅 `done` 喺完成時執行一次。Fetch 暴露唔到 Linkerd 嘅 first body frame，亦暴露唔到 Envoy 嘅 stream boundary。所有 hook 嘅 throw，同 thenable 嘅 rejection，都會被接住。`ERR_NO_CANDIDATE` 只係 `REQ_BUILD_FAILED` 嘅 `cause`。佢唔係 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-HK/api/core/isnocandidatecause) 亦可以識別另一份 Core 副本入面嘅佢。
+`pick` 回傳一個 error-first tuple。可選嘅 `start` 喺所選傳輸層開始之前至多同步執行一次；可選嘅 `end` 喺 `start` 之後執行一次，時機係對端 response 開始（或者 response 之前發生失敗）；可選嘅 `done` 喺完成時執行一次。Fetch 暴露唔到 Linkerd 嘅 first body frame，亦暴露唔到 Envoy 嘅 stream boundary。所有 hook 嘅 throw，同 thenable 嘅 rejection，都會被接住。揀咗候選以外嘅值會以 `REQ_BUILD_FAILED` 失敗，而佢嘅 `done` 會以 `{ attempted: false }` 呼叫。`ERR_NO_CANDIDATE` 只係 `REQ_BUILD_FAILED` 嘅 `cause`。佢唔係 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-HK/api/core/isnocandidatecause) 亦可以識別另一份 Core 副本入面嘅佢。
 
-balancer 只見到中立結果；每種傳輸層會將自己嘅事實翻譯成 `DoneInfo.code`。預設嘅 outlier detection 計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`。原始嘅 `DoneInfo.status` 只留給自訂 balancer，內建策略從不讀取佢。`PickInfo` 包含 `endpoints` 同可選嘅 `operation`，冇 transport 判別欄位。
+balancer 只見到中立結果；每種傳輸層會將自己嘅事實翻譯成 `DoneInfo.code`。預設嘅 outlier detection 將每個帶 code 嘅結果都計為失敗，包括 `NET_TIMEOUT` 同 `NET_BODY_INCOMPLETE`。原始嘅 `DoneInfo.status` 只留給自訂 balancer，內建策略從不讀取佢。`PickInfo` 包含單次 pick 嘅候選 `endpoints`、`members`（client 嘅完整端點清單，每次嘗試都一樣）同可選嘅 `operation`，冇 transport 判別欄位。
 
 睇 [Client 指南](/zh-Hant-HK/docs/client)。

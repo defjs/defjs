@@ -44,7 +44,7 @@ description: defineEventStream、リクエストオプション、ストリー�
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) のいずれかで、`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。`REQ_BUILD_FAILED` と `REQ_OPTIONS_INVALID` は、ストリームが開いたあとの再接続時のエンドポイント選択が失敗したことを意味します。
+`kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) のいずれかで、`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。`REQ_BUILD_FAILED` と `REQ_OPTIONS_INVALID` は、ストリームが開いたあとの再接続時のエンドポイント選択が失敗したことを意味します。`HTTP_STATUS` は、再接続のハンドシェイクが 2xx 以外のステータスで終了したことを意味します。
 
 ## EventStructs
 
@@ -54,7 +54,7 @@ description: defineEventStream、リクエストオプション、ストリー�
 
 再接続はクライアントにあります（`withSSEReconnect`）。SSE の `jitter` は WebSocket と同じ、**0–1 の乗法因子**です。
 
-リトライバジェットとバックオフの指数は、ハンドシェイクが成功するたびにリセットされ、障害ごとに適用されます。そのため、`attempts: 1` でも長いセッションでは何度も接続を確立できます。サーバーの正常な EOF では再接続せず、EOF 時点で未完了のイベントの id も確定しません。再接続時のハンドシェイクが `503` を返すと、`RES_DECODE_FAILED` で終了します。その `503` はライブの `stream.open.response.status` で確認してください。不正な数値オプションは、ストリームを開く前に `REQ_OPTIONS_INVALID` を返します。`maxDelayMs` はジッター後の最終的な待ち時間に上限を設けます。検証規則、デフォルト、UTF-8 の `Last-Event-ID` の扱いについては、[`withSSEReconnect`](/ja-JP/api/core/withssereconnect) を参照してください。
+リトライバジェットとバックオフの指数は、ハンドシェイクが成功するたびにリセットされ、障害ごとに適用されます。そのため、`attempts: 1` でも長いセッションでは何度も接続を確立できます。サーバーの正常な EOF では再接続せず、EOF 時点で未完了のイベントの id も確定しません。`502`、`503`、`504` を返すハンドシェイクは、同じ再接続ルール（メソッド、`shouldReconnect`、`attempts`、`ReadableStream` ボディ）のもとで接続拒否と同様にリトライされ、それ以外の 2xx 以外のハンドシェイクは致命的です。リトライを使い切った場合と致命的な再接続ハンドシェイクは `HTTP_STATUS` で終了します。そのステータスはライブの `stream.open.response.status` で確認してください。不正な数値オプションは、ストリームを開く前に `REQ_OPTIONS_INVALID` を返します。`maxDelayMs` はジッター後の最終的な待ち時間に上限を設けます。検証規則、デフォルト、UTF-8 の `Last-Event-ID` の扱いについては、[`withSSEReconnect`](/ja-JP/api/core/withssereconnect) を参照してください。
 
 パーサーは WHATWG SSE の行とフィールドの規則に従い、各物理ストリームの先頭にある UTF-8 BOM を 1 つだけ除去します。データや ID 値の U+FEFF は保持されます。ストリームの途中で BOM が付いたフィールド名は、未知のフィールドとして無視されます。複数行のデータは `\n` で結合され、空行でデータを持つイベントが配信されます。EOF 時点で未完了のイベントは破棄されます。
 

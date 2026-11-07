@@ -58,7 +58,7 @@ Calling the operation resolves `[error, stream, startupOpen]` only after the ini
 
 - **Non-`2xx` handshake**: Returns `HTTP_STATUS` (with decoded `error.data` when an `error` struct is declared on the definition). This is fatal for the current operation; `shouldReconnect` is not called. The next operation performs a fresh endpoint pick, so a balancer may choose another endpoint.
 - **Wrong content type or unreadable body**: Returns `RES_MEDIA_TYPE_INVALID` or `RES_DECODE_FAILED`.
-- **`startupOpen` vs. `stream.open`**: The tuple's third item (`startupOpen`) snapshots the first handshake response; `stream.open` updates live if the stream reconnects later. If a reconnect handshake returns `503`, the iterator rejects and `stream.closed` reports `RES_DECODE_FAILED`, while `stream.open.response.status` remains `503`; inspect `stream.open` for that live response status.
+- **`startupOpen` vs. `stream.open`**: The tuple's third item (`startupOpen`) snapshots the first handshake response; `stream.open` updates live if the stream reconnects later. If a reconnect handshake ends the stream with a non-2xx status, the iterator rejects and `stream.closed` reports `HTTP_STATUS`, while `stream.open.response.status` keeps that status; inspect `stream.open` for the live response status.
 
 ## 3. Event dispatch and decoding
 
@@ -79,7 +79,8 @@ SSE reconnection is **opt-in**. Without `withSSEReconnect(...)`, any network dro
 - **Outage budget (`attempts`)**: Defaults to `3` when an options object is passed to `withSSEReconnect`. Every successful handshake resets the attempt counter and backoff exponent, so `attempts: 1` can still create many physical connections over a long-lived session when each one opens successfully. Normal server EOF is **not** a failure and does not trigger reconnect.
 - **Cursor tracking (`Last-Event-ID`)**: The cursor commits when an event's terminating blank line is parsed and is sent automatically as `Last-Event-ID` on reconnect. A partial frame never commits its `id`, whether the connection ends cleanly or fails. Resume after a reconnectable read/network failure starts from the last committed id; the server must implement replay from that cursor.
 - **Idempotency safety**: By default, only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) reconnect automatically. Non-idempotent methods (`POST`, `PATCH`—such as LLM streaming requests) reconnect only when a custom `shouldReconnect` callback explicitly returns `true`. `ReadableStream` request bodies are consumed on the first attempt and never reconnect.
-- **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds each handshake from Fetch invocation to response headers without limiting how long an established stream stays open.
+- **Gateway handshakes**: A `502`, `503`, or `504` handshake, whether the initial open or a reconnect, is retried like a refused connection under the same reconnect rules (method, `shouldReconnect`, `attempts`, `ReadableStream` body). Other non-2xx handshakes stay fatal. Exhausted retries and fatal reconnect handshakes end with `HTTP_STATUS`.
+- **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds each handshake from Fetch invocation to response headers without limiting how long an established stream stays open. The option exists only inside the `withSSEReconnect({...})` options object. Passing that object enables automatic reconnect with the default `attempts: 3`, so `connectTimeoutMs` alone also reconnects; add `attempts: 0` for a handshake-only deadline.
 
 ## 5. Buffer and queue limits
 
@@ -109,7 +110,7 @@ The caller that opens a stream owns its teardown. Exiting a `for await` loop via
 </Tab>
 </Tabs>
 
-The `signal` passed via `client({ signal })` governs the entire lifetime of the stream. To bound only the initial connection handshake without killing an open stream later, clear your timer once `await watchOrders(...)` returns (as shown in the second tab above) or use `connectTimeoutMs` in `withSSEReconnect`.
+The `signal` passed via `client({ signal })` governs the entire lifetime of the stream. To bound only the initial connection handshake without killing an open stream later, clear your timer once `await watchOrders(...)` returns (as shown in the second tab above) or set `connectTimeoutMs` together with `attempts: 0` in `withSSEReconnect` (`connectTimeoutMs` alone also enables automatic reconnect with 3 attempts).
 
 ## Related reading
 

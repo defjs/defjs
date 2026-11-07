@@ -73,9 +73,9 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
 </Tab>
 </Tabs>
 
-- **재연결**: 활성화 시 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`입니다. 물리적 소켓이 `open`될 때마다 단절 예산이 재설정됩니다. `beforeConnect({ attempt, signal })`는 최초 연결 및 모든 재연결 시도 직전에 실행됩니다.
-- **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제됩니다.
-- **하트비트**: `outgoing` struct를 통해 주기적으로 `message()`를 전송하고, 최대 `timeoutMs` 동안 `isAck(msg)`와 일치하는 프레임을 기다립니다. 일치하는 확인(ack) 프레임은 하트비트 모니터가 소비하며 `session.receive`로 전달되지 않습니다. 확인을 받지 못하면 논리적 세션에 치명적 오류가 발생합니다. `closed.kind`는 `"error"`이고 `closed.cause`는 일반 `Error("WebSocket heartbeat timeout")`이며, 재연결을 시작하지 않습니다. 하트비트 직렬화 실패도 원래 cause를 유지하면서 같은 치명적 종료 경로를 따릅니다.
+- **재연결**: 활성화 시 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`입니다. 물리적 소켓이 `open`될 때마다 단절 예산이 재설정됩니다. `beforeConnect({ attempt, signal })`는 최초 연결 및 모든 재연결 시도 직전에 실행됩니다. 열린 소켓이 밸런서에 보고되는 결과는 `wasClean` 값과 무관하게 종료 코드만으로 정해집니다. `1006` 또는 `1015`(종료 프레임이 도착하지 않음)는 `NET_UNREACHABLE`, `1012` 또는 `1013`은 `NET_UNAVAILABLE`이며, 그 밖의 코드는 실패가 아닙니다.
+- **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제됩니다. 이 옵션은 `withWebSocketReconnect({...})` 옵션 객체(또는 `reconnect` 요청 옵션) 안에만 있습니다. 그 객체를 전달하면 기본값 `attempts: 3`으로 자동 재연결이 활성화되므로 `connectTimeoutMs`만 설정해도 재연결이 켜집니다. 핸드셰이크만 제한하려면 `attempts: 0`을 함께 설정하세요.
+- **하트비트**: `outgoing` struct를 통해 주기적으로 `message()`를 전송하고, 최대 `timeoutMs` 동안 `isAck(msg)`와 일치하는 프레임을 기다립니다. 일치하는 확인(ack) 프레임은 하트비트 모니터가 소비하며 `session.receive`로 전달되지 않습니다. 확인을 받지 못하면 논리적 세션에 치명적 오류가 발생합니다. `closed.kind`는 `"error"`이고 `closed.cause`는 일반 `Error("WebSocket heartbeat timeout")`이며, 재연결을 시작하지 않습니다. 확인 누락은 밸런서에도 해당 엔드포인트의 `NET_UNREACHABLE`로 보고됩니다. 하트비트 직렬화 실패나 `message()`의 throw도 원래 cause를 유지하면서 같은 치명적 종료 경로를 따르지만, 로컬 문제이므로 엔드포인트에 귀속되지 않습니다.
 - **큐 한도**:
   - `maxIncomingQueueSize` (필수 양의 정수): 디코딩을 기다리는 원시 프레임과 소비자를 기다리는 디코딩된 메시지 모두를 제한합니다. 초과하면 `CAP_QUEUE_OVERFLOW` 결함을 `closed.cause`로 하여 세션을 종료합니다. 같은 cause가 `onRuntimeError`로 전달되고 `session.receive`를 reject합니다. 세션이 열려 있는 동안 `session.receive`를 계속 소비하세요.
   - `maxOutgoingQueueSize` (선택적 0 이상의 정수, 기본값 `0`): `state === 'reconnecting'`인 동안에만 `session.send()` 호출을 버퍼링하고, 다음 `open`이 발행되기 전에 버퍼의 메시지를 비워냅니다(flush).

@@ -44,7 +44,7 @@ tuple 第三項係 `open` 嘅啟動 snapshot；重連之後，`stream.open` 會�
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` 係 `eof`、`aborted` 或者 `error`。每個變體都可以帶 `reason` 同 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-HK/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 同 `REQ_OPTIONS_INVALID` 表示串流開啟之後，重連時揀選端點失敗。
+`kind` 係 `eof`、`aborted` 或者 `error`。每個變體都可以帶 `reason` 同 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-HK/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 同 `REQ_OPTIONS_INVALID` 表示串流開啟之後，重連時揀選端點失敗。`HTTP_STATUS` 表示重連握手以非 2xx 狀態結束。
 
 ## EventStructs
 
@@ -54,7 +54,7 @@ key 係 SSE event 名稱；冇 `event:` 欄位嘅訊息名為 `message`。冇 ke
 
 重連設定喺 client（`withSSEReconnect`）。SSE `jitter` 係 **0–1 嘅乘性因子**，同 WebSocket 一樣。
 
-每次成功握手之後，重試預算同退避指數都會重設；兩者都適用於每次斷線，所以即使設定 `attempts: 1`，長時間會話入面仍然可以建立好多次連線。伺服器正常 EOF 唔會觸發重連，EOF 時未完成嘅 event 亦唔會提交佢嘅 id。重連握手回傳 `503` 時，會以 `RES_DECODE_FAILED` 結束；請查看即時嘅 `stream.open.response.status` 取得嗰個 `503`。無效嘅數值選項會喺開啟串流之前回傳 `REQ_OPTIONS_INVALID`，而 `maxDelayMs` 會限制套用 jitter 之後嘅最終延遲。驗證規則、預設值同 UTF-8 `Last-Event-ID` 處理見 [`withSSEReconnect`](/zh-Hant-HK/api/core/withssereconnect)。
+每次成功握手之後，重試預算同退避指數都會重設；兩者都適用於每次斷線，所以即使設定 `attempts: 1`，長時間會話入面仍然可以建立好多次連線。伺服器正常 EOF 唔會觸發重連，EOF 時未完成嘅 event 亦唔會提交佢嘅 id。回應 502、503 或 504 嘅握手會當作連線被拒絕咁重試，並跟同一套重連規則（方法、`shouldReconnect`、`attempts`、`ReadableStream` body）；其他非 2xx 握手係致命。重試用盡同致命嘅重連握手都會以 `HTTP_STATUS` 結束；請查看即時嘅 `stream.open.response.status` 取得嗰個狀態。無效嘅數值選項會喺開啟串流之前回傳 `REQ_OPTIONS_INVALID`，而 `maxDelayMs` 會限制套用 jitter 之後嘅最終延遲。驗證規則、預設值同 UTF-8 `Last-Event-ID` 處理見 [`withSSEReconnect`](/zh-Hant-HK/api/core/withssereconnect)。
 
 解析器遵循 WHATWG 嘅 SSE 行同欄位規則，每條實體串流只會移除開頭一個 UTF-8 BOM。data 或 ID 值入面嘅 U+FEFF 會保留；之後以 BOM 開頭嘅欄位名會當成未知欄位而被忽略。多行 data 會用 `\n` 連接，空行會送出帶 data 嘅 event，EOF 時未完成嘅 event 會被丟棄。
 

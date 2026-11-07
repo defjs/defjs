@@ -73,9 +73,9 @@ description: SDK で WebSocket メッセージの契約を定義し、アプリ�
 </Tab>
 </Tabs>
 
-- **再接続**: 有効時のデフォルト値は `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0` です。物理的な `open` が完了するたびに試行回数の予算がリセットされます。`beforeConnect({ attempt, signal })` は、初回接続および再接続試行の直前に実行されます。
-- **ハンドシェイクのタイムアウト (`connectTimeoutMs`)**: 渡したときは、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。構築から `open` までを区切り、ハンドシェイクのあとで解除されます。
-- **ハートビート**: `outgoing` struct を通じて定期的に `message()` を送信し、最大 `timeoutMs` の間 `isAck(msg)` に一致するフレームの到着を待機します。合致した ACK フレームはハートビートモニターによって消費され、`session.receive` には転送されません。ACK を受信できなければ論理セッションにとって致命的となり、`closed.kind` は `"error"`、`closed.cause` は通常の `Error("WebSocket heartbeat timeout")` になります。再接続は開始しません。ハートビートのシリアライズ失敗も、元の cause を保持して同じ致命的な終了経路をたどります。
+- **再接続**: 有効時のデフォルト値は `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0` です。物理的な `open` が完了するたびに試行回数の予算がリセットされます。`beforeConnect({ attempt, signal })` は、初回接続および再接続試行の直前に実行されます。open 済みのソケットがバランサーへ報告される結果は、`wasClean` の値にかかわらずクローズコードだけで決まります。`1006` または `1015`（クローズフレームが届かなかった）は `NET_UNREACHABLE`、`1012` または `1013` は `NET_UNAVAILABLE`、それ以外のコードは失敗として扱われません。
+- **ハンドシェイクのタイムアウト (`connectTimeoutMs`)**: 渡したときは、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。構築から `open` までを区切り、ハンドシェイクのあとで解除されます。このオプションは `withWebSocketReconnect({...})` のオプションオブジェクト（または `reconnect` リクエストオプション）の中にしか存在しません。このオブジェクトを渡すとデフォルトの `attempts: 3` で自動再接続が有効になるため、`connectTimeoutMs` だけを指定しても再接続が有効になります。ハンドシェイクだけに期限を設けたい場合は、`attempts: 0` を併せて指定してください。
+- **ハートビート**: `outgoing` struct を通じて定期的に `message()` を送信し、最大 `timeoutMs` の間 `isAck(msg)` に一致するフレームの到着を待機します。合致した ACK フレームはハートビートモニターによって消費され、`session.receive` には転送されません。ACK を受信できなければ論理セッションにとって致命的となり、`closed.kind` は `"error"`、`closed.cause` は通常の `Error("WebSocket heartbeat timeout")` になります。再接続は開始しません。ACK の未受信は、そのエンドポイントについて `NET_UNREACHABLE` としてバランサーにも報告されます。ハートビートのシリアライズ失敗や `message()` の throw も、元の cause を保持して同じ致命的な終了経路をたどりますが、ローカルの事象でありエンドポイントには帰属しません。
 - **キューの制限**:
   - `maxIncomingQueueSize`（必須の正の整数）: デコード待ちの生フレームと、コンシューマー待ちのデコード済みメッセージの両方を制限します。オーバーフロー時は `CAP_QUEUE_OVERFLOW` Fault を `closed.cause` としてセッションが終了し、同じ cause が `onRuntimeError` に通知され、`session.receive` を reject します。セッションが開いている間は、`session.receive` から継続的にメッセージを消費してください。
   - `maxOutgoingQueueSize`（任意の非負整数、デフォルトは `0`）: `state === 'reconnecting'` の間のみ `session.send()` の呼び出しをバッファリングし、次の `open` 状態が公開される直前にフラッシュ（送信）します。

@@ -58,7 +58,7 @@ SDK 作者用 `defineEventStream` 嚟宣告 Server-Sent Events（SSE）操作，
 
 - **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`（若定義中有宣告 `error` struct，則包含解碼後嘅 `error.data`）。呢個係目前操作嘅致命錯誤，唔會呼叫 `shouldReconnect`。下一次操作會重新揀選端點，所以 balancer 可能會揀另一個端點。
 - **Content-Type 唔啱或 body 無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` vs. `stream.open`**：tuple 嘅第三個欄位（`startupOpen`）記錄首次握手回應嘅 snapshot；後續重連時，`stream.open` 會即時更新。如果重連握手回傳 `503`，iterator 會 reject，`stream.closed` 會回報 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍然係 `503`；請檢查 `stream.open` 取得嗰個即時回應狀態。
+- **`startupOpen` vs. `stream.open`**：tuple 嘅第三個欄位（`startupOpen`）記錄首次握手回應嘅 snapshot；後續重連時，`stream.open` 會即時更新。如果重連握手以非 2xx 狀態結束串流，iterator 會 reject，`stream.closed` 會回報 `HTTP_STATUS`，而 `stream.open.response.status` 會保留嗰個狀態；請檢查 `stream.open` 取得嗰個即時回應狀態。
 
 ## 3. 事件分發與解碼
 
@@ -79,7 +79,8 @@ SSE 重新連線機制係 **opt-in** 嘅。如果冇配置 `withSSEReconnect(...
 - **重試預算（`attempts`）**：傳入選項物件畀 `withSSEReconnect` 時，預設為 `3` 次。每次握手成功後都會重設重試計數器同退避指數，所以即使設定 `attempts: 1`，只要每次連線都成功開啟，長時間會話入面仍然可以建立好多次實體連線。伺服器正常送出 EOF **唔算**失敗，因此唔會觸發重新連線。
 - **游標追蹤（`Last-Event-ID`）**：當成功解析事件結尾嘅空行時，ID 就會被 commit，並喺重連時自動作為 `Last-Event-ID` header 送出。無論連線正常結束定失敗，唔完整嘅 frame 都唔會提交佢嘅 `id`。遇到可以重連嘅讀取／網絡失敗之後，會由最後提交嘅 id 恢復；伺服器必須實作由嗰個游標重播嘅功能。
 - **冪等安全性**：預設情況下，只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）先會自動重連。非冪等方法（例如 `POST`、`PATCH`，常見於 LLM 串流請求）只有喺自訂嘅 `shouldReconnect` callback 明確回傳 `true` 時先會重連。傳入 `ReadableStream` 作為 request body 嘅請求喺第一次嘗試就會被消費完畢，絕唔會重連。
-- **握手逾時（`connectTimeoutMs`）**：如果提供咗，佢必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。佢用嚟限制由發起 Fetch 到收到回應 header 之間嘅握手時間，唔會影響已建立串流嘅連線時長。
+- **Gateway 握手**：回應 `502`、`503` 或 `504` 嘅握手，無論係初次開啟定重連，都會當作連線被拒絕咁重試，並跟同一套重連規則（方法、`shouldReconnect`、`attempts`、`ReadableStream` body）。其他非 2xx 握手仍然係致命。重試用盡同致命嘅重連握手都會以 `HTTP_STATUS` 結束。
+- **握手逾時（`connectTimeoutMs`）**：如果提供咗，佢必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。佢用嚟限制由發起 Fetch 到收到回應 header 之間嘅握手時間，唔會影響已建立串流嘅連線時長。呢個選項只存在於 `withSSEReconnect({...})` 嘅選項物件入面；只要傳入呢個物件，就會用預設嘅 `attempts: 3` 啟用自動重連，所以淨係設定 `connectTimeoutMs` 都會開啟重連。如果只想限制 handshake，請同時設定 `attempts: 0`。
 
 ## 5. 緩衝區與佇列限制
 
@@ -109,7 +110,7 @@ SSE 重新連線機制係 **opt-in** 嘅。如果冇配置 `withSSEReconnect(...
 </Tab>
 </Tabs>
 
-透過 `client({ signal })` 傳入嘅 `signal` 會管控成條串流嘅整個生命週期。如果只想限制初始握手連線時間，而唔想影響後續已連線嘅串流，可以喺 `await watchOrders(...)` 回傳後即時清理 timer（正如上面第二個分頁所示），或者使用 `withSSEReconnect` 入面嘅 `connectTimeoutMs`。
+透過 `client({ signal })` 傳入嘅 `signal` 會管控成條串流嘅整個生命週期。如果只想限制初始握手連線時間，而唔想影響後續已連線嘅串流，可以喺 `await watchOrders(...)` 回傳後即時清理 timer（正如上面第二個分頁所示），或者喺 `withSSEReconnect` 入面同時設定 `connectTimeoutMs` 同 `attempts: 0`（淨係設定 `connectTimeoutMs` 都會啟用 3 次自動重連）。
 
 ## 延伸閱讀
 

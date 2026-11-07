@@ -107,7 +107,7 @@ function createClientValue(
 /**
  * Creates a Defjs {@link DerivableClient} from option helpers.
  *
- * Options apply in order: a later option overwrites an earlier one for the same setting, and interceptors accumulate. Prefer creating the client inside the request boundary when interceptors close over auth or tenants. Default HTTP/SSE fetch availability is checked when an operation invokes transport.
+ * Options apply in order: a later option overwrites an earlier one for the same setting, and interceptors accumulate. Prefer creating the client inside the request boundary when interceptors close over auth or tenants. Balancer state (sticky endpoint, ejections, load) and the retry budget belong to the client, so a client created per request starts them fresh. Creating the client once and deriving per-call values keeps both; passing one shared balancer to `withBalancer` keeps the balancer state only. Default HTTP/SSE fetch availability is checked when an operation invokes transport.
  *
  * The returned factory is a function. Calling it with {@link RequestOptions} returns a {@link Client} value for one call and performs no I/O; see {@link DerivableClient} for how request fields are captured. The factory itself is also a `Client` and carries no request options, so it can be passed to an operation directly. The base configuration is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. Standard option helpers copy the fixed records they own when they are applied. A custom {@link ClientOption} may still retain a reference.
  *

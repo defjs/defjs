@@ -78,18 +78,18 @@ description: API 정의와 독립적으로 애플리케이션이 import한 SDK �
 
 `withEndpoint(...urls)`는 하나 이상의 후보 기본 URL을 전달받을 수 있습니다. 기본 동작은 다음과 같습니다:
 
-- 각 클라이언트는 [`pickFirstBalancer`](/ko-KR/api/core/pickfirstbalancer)를 사용하여, `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 504)에서 다음으로 넘어가기 전까지 첫 번째 URL을 계속 유지합니다.
+- 각 클라이언트는 [`pickFirstBalancer`](/ko-KR/api/core/pickfirstbalancer)를 사용하여, `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 504)에서 다음으로 넘어가기 전까지 첫 번째 URL을 계속 유지합니다. HTTP 재시도는 고정된 엔드포인트를 옮기지 않습니다.
 - **동일 호출 내 HTTP 재시도는 기본적으로 꺼져 있습니다.** `withRetry()`는 `withRetry({})`와 같으며, 안전한 메서드(`GET`, `HEAD`, `OPTIONS`, `TRACE`)의 연결 실패에 대해 아직 시도하지 않은 엔드포인트로의 두 번째 시도를 백오프와 함께 켭니다. Finagle 재시도 예산은 클라이언트 설정에 속하며, 밸런서 자체와는 무관하게 그 파생 클라이언트들이 공유합니다.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-설정된 엔드포인트가 하나뿐이면, 각 재시도가 이미 시도한 엔드포인트를 제외하므로 `withRetry`는 요청을 다시 보내지 않습니다. `attemptTimeoutMs`와 `connectTimeoutMs`는 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다.
+설정된 엔드포인트가 하나뿐이면, 각 재시도가 이미 시도한 엔드포인트를 제외하므로 `withRetry`는 요청을 다시 보내지 않습니다. `attemptTimeoutMs`와 `connectTimeoutMs`는 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. `connectTimeoutMs`는 SSE와 WebSocket 재연결 옵션 안에만 있습니다. 이 옵션들은 `attempts` 기본값이 `3`이라서 이것만 설정해도 재연결이 켜지므로, 핸드셰이크만 제한하려면 `attempts: 0`을 함께 설정하세요.
 
 ### 헬스 필터링 및 p2c [#health-filtering-and-p2c]
 
-동일한 역할을 하는 서버 레플리카 집합의 경우, [`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer) 및 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)(PeakEwma RTT × 진행 중인 부하)가 기본적으로 Linkerd 스타일의 연속 실패 기반 서킷 브레이킹(`outlierDetection`)을 활성화합니다. 이는 `NET_UNREACHABLE`, `NET_UNAVAILABLE`, `NET_SERVER_ERROR`를 세며, 원시 응답 `status`는 커스텀 밸런서만을 위한 것입니다.
+동일한 역할을 하는 서버 레플리카 집합의 경우, [`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer) 및 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)(PeakEwma RTT × 진행 중인 부하)가 기본적으로 Linkerd 스타일의 연속 실패 기반 서킷 브레이킹(`outlierDetection`)을 활성화합니다. 이는 코드가 있는 결과를 모두 실패로 세며(`NET_TIMEOUT`과 `NET_BODY_INCOMPLETE` 포함), 원시 응답 `status`는 커스텀 밸런서만을 위한 것입니다.
 
 재시도 예산, 능동/수동 헬스 체크, P2C 부하 추정, 커스텀 밸런서에 대한 자세한 내용은 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing) 가이드를 참조하세요.
 

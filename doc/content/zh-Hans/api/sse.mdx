@@ -44,7 +44,7 @@ description: defineEventStream、请求选项与流句柄。
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` 是 `eof`、`aborted` 或 `error`。每个变体都可以带 `reason` 和 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hans/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 和 `REQ_OPTIONS_INVALID` 表示流打开之后，重连时选择端点失败。
+`kind` 是 `eof`、`aborted` 或 `error`。每个变体都可以带 `reason` 和 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hans/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 和 `REQ_OPTIONS_INVALID` 表示流打开之后，重连时选择端点失败。`HTTP_STATUS` 表示重连握手以非 2xx 状态结束。
 
 ## EventStructs
 
@@ -54,7 +54,7 @@ description: defineEventStream、请求选项与流句柄。
 
 重连配置在 Client 上（`withSSEReconnect`）。SSE 的 `jitter` 是 **0–1 的乘性因子**，与 WebSocket 相同。
 
-每次成功握手后都会重置重试预算和退避指数；它们按每次连接中断计算，因此即使设置 `attempts: 1`，长时间会话中仍可建立许多连接。服务器正常 EOF 不会触发重连，EOF 时未完成的事件也不会提交其 id。重连握手返回 `503` 时，会以 `RES_DECODE_FAILED` 结束；请查看实时的 `stream.open.response.status` 获取该 `503`。无效的数字选项会在打开流之前返回 `REQ_OPTIONS_INVALID`，`maxDelayMs` 限制抖动后的最终延迟。校验规则、默认值和 UTF-8 `Last-Event-ID` 的处理方式见 [`withSSEReconnect`](/zh-Hans/api/core/withssereconnect)。
+每次成功握手后都会重置重试预算和退避指数；它们按每次连接中断计算，因此即使设置 `attempts: 1`，长时间会话中仍可建立许多连接。服务器正常 EOF 不会触发重连，EOF 时未完成的事件也不会提交其 id。返回 502、503 或 504 的握手会像连接被拒绝一样，按相同的重连规则（方法、`shouldReconnect`、`attempts`、`ReadableStream` 请求体）重试；其他非 2xx 握手是致命的。重试耗尽以及致命的重连握手都以 `HTTP_STATUS` 结束；请查看实时的 `stream.open.response.status` 获取该状态。无效的数字选项会在打开流之前返回 `REQ_OPTIONS_INVALID`，`maxDelayMs` 限制抖动后的最终延迟。校验规则、默认值和 UTF-8 `Last-Event-ID` 的处理方式见 [`withSSEReconnect`](/zh-Hans/api/core/withssereconnect)。
 
 解析器遵循 WHATWG SSE 的行和字段规则，只移除每条物理流开头的一个 UTF-8 BOM。data 或 ID 值中的 U+FEFF 会被保留；后续带 BOM 前缀的字段名会按未知字段忽略。多行 data 用 `\n` 连接，空行触发携带 data 的事件分发，EOF 时尚未完成的事件会被丢弃。
 

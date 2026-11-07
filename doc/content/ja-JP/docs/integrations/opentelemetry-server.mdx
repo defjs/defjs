@@ -78,8 +78,8 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 プラグインは、インターセプターチェーンの内部で各トランスポートのライフタイムを計測します。
 
 - **HTTP**: スパンは HTTP インターセプター内で開始され、`HttpResponse` が返された時点で終了します。宣言された `output` / `error` のボディ読み取り（および JSON 表現の検証とパース）は、返却前のハンドラー境界の **内側** で行われます。ボディの読み取り失敗や JSON メディアタイプ／パースの失敗はインターセプターを通過して reject され（`error.type: "BodyFailure"`）、スパンに `ERROR` をマークし、メトリクスに `BodyFailure` を記録し、1 件の `WARN` ログを出力します。ステータス `400+` は、ステータスコード文字列を `error.type` としてスパンに `ERROR` をマークします。Struct バリデーション（`RES_STRUCT_MISMATCH`）および `HTTP_STATUS` タプル変換はインターセプターチェーンの後に実行されるため、完了済みのトランスポートスパンには影響を与えません。
-- **SSE**: 自動再接続を含む 1 つの論理ストリームが 1 つのスパンを生成し、`stream.closed` が解決されるまでオープン状態を維持します。記録されるイベント: `sse.connected`、それに続く `sse.closed`、`sse.aborted`（`stream.close()` またはタイムアウト以外の呼び出し元中止時は `OK` で終了）、または `sse.error`（タイムアウトに起因する中止を含め `ERROR` で終了）。
-- **WebSocket**: 自動再接続を含む 1 つの論理セッションが 1 つのスパンを生成し、`session.closed` が解決されるまで維持されます。記録されるイベント: `websocket.connected`、`websocket.closed`、`websocket.error`。サーバーからのクローズフレーム（コード不問）は `OK` でスパンを終了し、`websocket.closed` を記録します。呼び出し元による中止は `ERROR` でスパンを終了し、`websocket.error` を記録します。ログは出力されませんが、中止理由が `TimeoutError` の場合だけは `WARN` を 1 件出力します。クローズフレームを伴わない突然の切断（`1006`）は、ソケットの `error` が `close` より前に発火するランタイム（Node.js）では 1 件のログとともに `ERROR` で終了し、発火しないランタイム（Bun）では `OK` で終了します。
+- **SSE**: 自動再接続を含む 1 つの論理ストリームが 1 つのスパンを生成し、`stream.closed` が解決されるまでオープン状態を維持します。記録されるイベント: `sse.connected`、それに続く `sse.closed`、`sse.aborted`（`stream.close()` またはタイムアウト以外の呼び出し元中止時は `OK` で終了）、または `sse.error`（タイムアウトに起因する中止を含め `ERROR` で終了）。スパン属性 `url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。
+- **WebSocket**: 自動再接続を含む 1 つの論理セッションが 1 つのスパンを生成し、`session.closed` が解決されるまで維持されます。記録されるイベント: `websocket.connected`、`websocket.closed`、`websocket.error`。サーバーからのクローズフレーム（コード不問）は `OK` でスパンを終了し、`websocket.closed` を記録します。呼び出し元による中止は `ERROR` でスパンを終了し、`websocket.error` を記録します。ログは出力されませんが、中止理由が `TimeoutError` の場合だけは `WARN` を 1 件出力します。クローズフレームを伴わない突然の切断（`1006`）は、ソケットの `error` が `close` より前に発火するランタイムでは 1 件のログとともに `ERROR` で終了し、発火しないランタイム（Bun）では `OK` で終了します。SSE と同様、`url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。
 
 ### リトライと再接続の境界
 
@@ -127,7 +127,7 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 | SSE または WebSocket の致命的エラーや `closed` の reject（`1006` ソケットエラー、キューオーバーフロー、ハートビートタイムアウトを含む）                                | トランスポートイベント名を含む `WARN` 1 件、phase `connection`                                       |
 | 正常終了、メッセージ受信、EOF、サーバーからの WebSocket クローズフレーム（`1011` を含む）、またはタイムアウト以外の呼び出し元キャンセル                                | 出力なし                                                                                             |
 
-診断ログには、固定メッセージ、`exception.type`（`BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError`、`Error` などのプラットフォーム／トランスポートのクラス名）、phase、静的な `operation`、サーバーアドレス／ポート、プロトコルフィールドのみが記録され、生の URL、クエリ文字列、ヘッダー、ボディ、エラースタックトレースが出力されることは決してありません。
+診断ログには、固定メッセージ、`exception.type`（`BodyFailure`、`EventStreamFatalError`（応答が `text/event-stream` でない SSE ハンドシェイク）、`DefjsFault`（非 2xx の SSE ハンドシェイクを含む）、`TypeError`、`Error` などのプラットフォーム／トランスポートのクラス名）、phase、静的な `operation`、サーバーアドレス／ポート、プロトコルフィールドのみが記録され、生の URL、クエリ文字列、ヘッダー、ボディ、エラースタックトレースが出力されることは決してありません。
 
 ---
 

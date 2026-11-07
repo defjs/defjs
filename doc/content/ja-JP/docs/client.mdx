@@ -78,18 +78,18 @@ description: インポートした SDK 操作の実行方法を、API 定義か�
 
 `withEndpoint(...urls)` は 1 つ以上の候補ベース URL を受け取ります。デフォルトでは以下の動作になります。
 
-- 各クライアントは [`pickFirstBalancer`](/ja-JP/api/core/pickfirstbalancer) を使い、`NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）まで最初の URL に留まります。
+- 各クライアントは [`pickFirstBalancer`](/ja-JP/api/core/pickfirstbalancer) を使い、`NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）まで最初の URL に留まります。HTTP リトライは固定エンドポイントを動かしません。
 - **同一呼び出し内の HTTP リトライはデフォルトでオフです。** `withRetry()` は `withRetry({})` と同等で、安全なメソッド（`GET`、`HEAD`、`OPTIONS`、`TRACE`）の接続失敗に対し、バックオフ付きで未試行のエンドポイントへもう 1 回の試行を有効にします。Finagle のリトライバジェットはクライアント構成に属し、バランサーの同一性とは無関係に、その派生クライアント間で共有されます。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-構成されたエンドポイントが 1 つだけのとき、`withRetry` はリクエストを再送しません。各リトライが、すでに試したエンドポイントを除外するからです。`attemptTimeoutMs` と `connectTimeoutMs` を渡す場合は、有限の正の数で、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。
+構成されたエンドポイントが 1 つだけのとき、`withRetry` はリクエストを再送しません。各リトライが、すでに試したエンドポイントを除外するからです。`attemptTimeoutMs` と `connectTimeoutMs` を渡す場合は、有限の正の数で、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。`connectTimeoutMs` は SSE と WebSocket の再接続オプションの中にしか存在しません。これらのオプションは `attempts: 3` が既定なので、単独で指定しても再接続が有効になります。ハンドシェイクだけを区切るには `attempts: 0` を併せて指定してください。
 
 ### ヘルスフィルタリングと P2C [#health-filtering-and-p2c]
 
-ピアサーバーのレプリカ群に対しては、[`roundRobinBalancer`](/ja-JP/api/core/roundrobinbalancer) や [`p2cBalancer`](/ja-JP/api/core/p2cbalancer)（PeakEwma RTT × 処理中負荷）により、Linkerd スタイルの連続失敗サーキットブレーカー（`outlierDetection`）がデフォルトで有効になります。外れ値検出は `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` をカウントします。生のレスポンス `status` はカスタムバランサー専用です。
+ピアサーバーのレプリカ群に対しては、[`roundRobinBalancer`](/ja-JP/api/core/roundrobinbalancer) や [`p2cBalancer`](/ja-JP/api/core/p2cbalancer)（PeakEwma RTT × 処理中負荷）により、Linkerd スタイルの連続失敗サーキットブレーカー（`outlierDetection`）がデフォルトで有効になります。外れ値検出は、コードを持つ結果をすべて失敗としてカウントします（`NET_TIMEOUT` と `NET_BODY_INCOMPLETE` を含む）。生のレスポンス `status` はカスタムバランサー専用です。
 
 リトライバジェット、アクティブ／パッシブヘルスチェック、P2C 負荷推定、カスタムバランサーの詳細は、専用の [ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) ガイドを参照してください。
 

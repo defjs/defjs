@@ -73,9 +73,9 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 </Tab>
 </Tabs>
 
-- **重连**：启用时的默认值为 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次物理连接 `open` 都会重置中断预算。`beforeConnect({ attempt, signal })` 在首次连接和每次重连尝试之前运行。
-- **握手超时（`connectTimeoutMs`）**：提供时必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它限制从构造到 `open` 的时间，握手后清除。
-- **心跳**：定期通过 `outgoing` struct 发送 `message()`，并在至多 `timeoutMs` 内等待匹配 `isAck(msg)` 的帧。匹配的 ack 帧由心跳监视器消费，不转发给 `session.receive`。漏掉 ack 对逻辑会话是致命的：`closed.kind` 为 `"error"`，`closed.cause` 是普通 `Error("WebSocket heartbeat timeout")`；这不会启动重连。心跳序列化失败也沿同一致命路径结束，并保留原始 cause。
+- **重连**：启用时的默认值为 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次物理连接 `open` 都会重置中断预算。`beforeConnect({ attempt, signal })` 在首次连接和每次重连尝试之前运行。已打开的 socket 向均衡器报告的结果只取决于关闭码，与 `wasClean` 无关：`1006` 或 `1015`（没有收到关闭帧）为 `NET_UNREACHABLE`，`1012` 或 `1013` 为 `NET_UNAVAILABLE`，其他关闭码都不算失败。
+- **握手超时（`connectTimeoutMs`）**：提供时必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它限制从构造到 `open` 的时间，握手后清除。该选项只存在于 `withWebSocketReconnect({...})` 的选项对象（或请求选项 `reconnect`）内；只要传入该对象，就会按默认的 `attempts: 3` 启用自动重连，因此仅设置 `connectTimeoutMs` 同样会开启重连。若只想限制握手，请同时设置 `attempts: 0`。
+- **心跳**：定期通过 `outgoing` struct 发送 `message()`，并在至多 `timeoutMs` 内等待匹配 `isAck(msg)` 的帧。匹配的 ack 帧由心跳监视器消费，不转发给 `session.receive`。漏掉 ack 对逻辑会话是致命的：`closed.kind` 为 `"error"`，`closed.cause` 是普通 `Error("WebSocket heartbeat timeout")`；这不会启动重连。漏掉的 ack 还会作为 `NET_UNREACHABLE` 报告给均衡器，归属于该端点。心跳序列化失败或 `message()` 抛出，也沿同一致命路径结束并保留原始 cause，但属于本地问题，不归属于端点。
 - **队列上限**：
   - `maxIncomingQueueSize`（必填正的安全整数）：同时限制等待解码的原始帧和等待消费者的解码后消息。溢出会以 `CAP_QUEUE_OVERFLOW` Fault 作为 `closed.cause` 终止会话；同一个 cause 会传给 `onRuntimeError` 并使 `session.receive` reject。会话打开期间请持续消费 `session.receive`。
   - `maxOutgoingQueueSize`（可选非负安全整数，默认 `0`）：仅在 `state === 'reconnecting'` 时缓冲 `session.send()` 调用，并在下一次 `open` 发布前全部刷出。

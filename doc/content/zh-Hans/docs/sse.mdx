@@ -58,7 +58,7 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 
 - **非 `2xx` 握手**：返回 `HTTP_STATUS`（定义声明了 `error` struct 时，`error.data` 是解码后的错误体）。这对当前操作是致命的；不会调用 `shouldReconnect`。下一次操作会重新选择端点，因此均衡器可能选中另一个端点。
 - **媒体类型错误或 body 不可读**：返回 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` 与 `stream.open`**：元组第三项（`startupOpen`）是首次握手响应的快照；`stream.open` 会在之后重连时实时更新。如果重连握手返回 `503`，迭代器会 reject，`stream.closed` 报告 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍为 `503`；请检查 `stream.open` 获取这个实时状态。
+- **`startupOpen` 与 `stream.open`**：元组第三项（`startupOpen`）是首次握手响应的快照；`stream.open` 会在之后重连时实时更新。如果重连握手以非 2xx 状态结束流，迭代器会 reject，`stream.closed` 报告 `HTTP_STATUS`，而 `stream.open.response.status` 保持该状态；请检查 `stream.open` 获取实时响应状态。
 
 ## 3. 事件分发与解码
 
@@ -79,7 +79,8 @@ SSE 重连是**显式开启（opt-in）**的。没有 `withSSEReconnect(...)` �
 - **中断预算（`attempts`）**：向 `withSSEReconnect` 传入选项对象时默认为 `3`。每次成功握手都会重置尝试计数器和退避指数，因此只要每次都能成功打开，`attempts: 1` 也能在长会话中建立许多物理连接。服务器的正常 EOF **不是**失败，不会触发重连。
 - **游标追踪（`Last-Event-ID`）**：解析到事件末尾的空行时才提交游标，并在重连时自动作为 `Last-Event-ID` 发送。无论连接正常结束还是失败，不完整帧都不会提交其 `id`。重连后从最后一个已提交的 id 恢复；服务器必须实现从该游标重放。
 - **幂等性安全**：默认只有幂等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）会自动重连。非幂等方法（`POST`、`PATCH`，例如 LLM 流式请求）只有在自定义 `shouldReconnect` 回调显式返回 `true` 时才重连。`ReadableStream` 请求体在首次尝试时被消耗，永远不会重连。
-- **握手超时（`connectTimeoutMs`）**：提供时必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它限制每次握手从 Fetch 调用到响应头的时间，不限制已打开的流存活多久。
+- **网关握手**：`502`、`503` 或 `504` 握手（无论是首次打开还是重连）会像连接被拒绝一样，按相同的重连规则（方法、`shouldReconnect`、`attempts`、`ReadableStream` 请求体）重试。其他非 2xx 握手仍然是致命的。重试耗尽以及致命的重连握手都以 `HTTP_STATUS` 结束。
+- **握手超时（`connectTimeoutMs`）**：提供时必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它限制每次握手从 Fetch 调用到响应头的时间，不限制已打开的流存活多久。该选项只存在于 `withSSEReconnect({...})` 的选项对象内；只要传入该对象，就会按默认的 `attempts: 3` 启用自动重连，因此仅设置 `connectTimeoutMs` 同样会开启重连。若只想限制握手，请同时设置 `attempts: 0`。
 
 ## 5. 缓冲区与队列上限
 
@@ -109,7 +110,7 @@ SSE 重连是**显式开启（opt-in）**的。没有 `withSSEReconnect(...)` �
 </Tab>
 </Tabs>
 
-通过 `client({ signal })` 传入的 `signal` 管整个流的生命周期。如果只想限制初始握手，而不在之后终止已打开的流，可以在 `await watchOrders(...)` 返回后清除定时器（如上方第二个选项卡所示），或使用 `withSSEReconnect` 中的 `connectTimeoutMs`。
+通过 `client({ signal })` 传入的 `signal` 管整个流的生命周期。如果只想限制初始握手，而不在之后终止已打开的流，可以在 `await watchOrders(...)` 返回后清除定时器（如上方第二个选项卡所示），或在 `withSSEReconnect` 中同时设置 `connectTimeoutMs` 与 `attempts: 0`（单独设置 `connectTimeoutMs` 也会启用 3 次自动重连）。
 
 ## 相关阅读
 

@@ -78,18 +78,18 @@ Create a new derived client value for each call that needs its own `signal`, pro
 
 `withEndpoint(...urls)` accepts one or more candidate base URLs. By default:
 
-- Each client uses [`pickFirstBalancer`](/api/core/pickfirstbalancer), sticking to the first URL until it advances on `NET_UNREACHABLE` or `NET_UNAVAILABLE` (HTTP 502, 503, or 504).
+- Each client uses [`pickFirstBalancer`](/api/core/pickfirstbalancer), sticking to the first URL until it advances on `NET_UNREACHABLE` or `NET_UNAVAILABLE` (HTTP 502, 503, or 504). An HTTP retry does not move the sticky endpoint.
 - **Same-call HTTP retry is off by default.** `withRetry()` is equivalent to `withRetry({})` and enables a second attempt on an untried endpoint for connection failures on safe methods (`GET`, `HEAD`, `OPTIONS`, `TRACE`), with backoff. A Finagle retry budget belongs to the client configuration and is shared by its derived clients, independently of balancer identity.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-With only one configured endpoint, `withRetry` does not replay the request because each retry excludes endpoints already tried. `attemptTimeoutMs` and `connectTimeoutMs`, when provided, must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`.
+With only one configured endpoint, `withRetry` does not replay the request because each retry excludes endpoints already tried. `attemptTimeoutMs` and `connectTimeoutMs`, when provided, must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. `connectTimeoutMs` exists only inside the SSE and WebSocket reconnect options. Those options default to `attempts: 3`, so setting it alone also enables reconnect; add `attempts: 0` for a handshake-only deadline.
 
 ### Health filtering and p2c [#health-filtering-and-p2c]
 
-For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) enable Linkerd-style consecutive-failure circuit breaking (`outlierDetection`) by default. Outlier detection counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`; raw response `status` is only for custom balancers.
+For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) enable Linkerd-style consecutive-failure circuit breaking (`outlierDetection`) by default. Outlier detection counts every coded outcome as a failure (including `NET_TIMEOUT` and `NET_BODY_INCOMPLETE`); raw response `status` is only for custom balancers.
 
 See the dedicated [Load balancing & failover](/docs/load-balancing) guide for full details on retry budgets, active/passive health checks, P2C load estimation, and custom balancers.
 

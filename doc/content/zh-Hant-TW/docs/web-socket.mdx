@@ -73,9 +73,9 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 </Tab>
 </Tabs>
 
-- **重新連線**：啟用時的預設值為 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線 `open` 都會重設中斷額度。`beforeConnect({ attempt, signal })` 會在初始連線與每次重連嘗試之前執行。
-- **交握逾時（`connectTimeoutMs`）**：有提供時，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制從建構到 `open` 的時間，交握完成後即清除。
-- **心跳**：定期透過 `outgoing` struct 送出 `message()`，並在 `timeoutMs` 內等待符合 `isAck(msg)` 的訊框。符合的 ACK 訊框會被心跳監控器吃掉，不會轉給 `session.receive`。沒收到 ACK 對邏輯工作階段是致命錯誤：`closed.kind` 為 `"error"`，`closed.cause` 是普通的 `Error("WebSocket heartbeat timeout")`；這不會啟動重連。心跳序列化失敗也會走同一條致命路徑，並保留原始的 cause。
+- **重新連線**：啟用時的預設值為 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線 `open` 都會重設中斷額度。`beforeConnect({ attempt, signal })` 會在初始連線與每次重連嘗試之前執行。已開啟的 socket 回報給平衡器的結果只取決於關閉代碼，與 `wasClean` 無關：`1006` 或 `1015`（未收到關閉訊框）為 `NET_UNREACHABLE`，`1012` 或 `1013` 為 `NET_UNAVAILABLE`，其他代碼都不算失敗。
+- **交握逾時（`connectTimeoutMs`）**：有提供時，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制從建構到 `open` 的時間，交握完成後即清除。此選項只存在於 `withWebSocketReconnect({...})` 的選項物件（或 `reconnect` 請求選項）內；只要傳入該物件，就會以預設的 `attempts: 3` 啟用自動重連，因此單獨設定 `connectTimeoutMs` 同樣會開啟重連。若只想限制交握，請同時設定 `attempts: 0`。
+- **心跳**：定期透過 `outgoing` struct 送出 `message()`，並在 `timeoutMs` 內等待符合 `isAck(msg)` 的訊框。符合的 ACK 訊框會被心跳監控器吃掉，不會轉給 `session.receive`。沒收到 ACK 對邏輯工作階段是致命錯誤：`closed.kind` 為 `"error"`，`closed.cause` 是普通的 `Error("WebSocket heartbeat timeout")`；這不會啟動重連。沒收到的 ACK 也會以 `NET_UNREACHABLE` 回報給平衡器，歸屬於該端點。心跳序列化失敗或 `message()` 拋出，也會走同一條致命路徑並保留原始的 cause，但屬於本機問題，不歸屬於端點。
 - **佇列上限**：
   - `maxIncomingQueueSize`（必填的正安全整數）：同時限制等待解碼的原始訊框，以及等待消費端的已解碼訊息。溢位會以 `CAP_QUEUE_OVERFLOW` Fault 作為 `closed.cause` 終止工作階段；同一個 cause 也會傳給 `onRuntimeError`，並讓 `session.receive` 拒絕。工作階段開啟期間請持續消費 `session.receive`。
   - `maxOutgoingQueueSize`（選用的非負安全整數，預設 `0`）：只在 `state === 'reconnecting'` 時緩衝 `session.send()` 呼叫，並在下一次 `open` 發布前送完。

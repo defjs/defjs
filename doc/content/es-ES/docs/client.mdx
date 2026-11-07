@@ -78,18 +78,18 @@ Crea un nuevo valor derivado de cliente para cada llamada que necesite su propia
 
 `withEndpoint(...urls)` acepta una o más URLs base candidatas. Por defecto:
 
-- Cada cliente utiliza [`pickFirstBalancer`](/es-ES/api/core/pickfirstbalancer), manteniéndose en la primera URL hasta avanzar ante `NET_UNREACHABLE` o `NET_UNAVAILABLE` (HTTP 502, 503 o 504).
+- Cada cliente utiliza [`pickFirstBalancer`](/es-ES/api/core/pickfirstbalancer), manteniéndose en la primera URL hasta avanzar ante `NET_UNREACHABLE` o `NET_UNAVAILABLE` (HTTP 502, 503 o 504). Un reintento HTTP no mueve el endpoint fijo.
 - **El reintento HTTP en la misma llamada está desactivado por defecto.** `withRetry()` equivale a `withRetry({})` y habilita un segundo intento en un endpoint no probado ante fallos de conexión en los métodos seguros (`GET`, `HEAD`, `OPTIONS`, `TRACE`), con backoff. El presupuesto de reintentos de Finagle pertenece a la configuración del cliente y lo comparten sus clientes derivados, con independencia de la identidad del balanceador.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-Con un solo endpoint configurado, `withRetry` no vuelve a enviar la petición porque cada reintento excluye los endpoints ya probados. `attemptTimeoutMs` y `connectTimeoutMs`, cuando se proporcionan, deben ser finitos, positivos y no mayores que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`.
+Con un solo endpoint configurado, `withRetry` no vuelve a enviar la petición porque cada reintento excluye los endpoints ya probados. `attemptTimeoutMs` y `connectTimeoutMs`, cuando se proporcionan, deben ser finitos, positivos y no mayores que 2147483647 (el límite del temporizador); si no, la operación devuelve `REQ_OPTIONS_INVALID`. `connectTimeoutMs` solo existe dentro de las opciones de reconexión de SSE y WebSocket; como estas usan `attempts: 3` por defecto, definirlo por sí solo también activa la reconexión. Añade `attempts: 0` para un plazo solo del handshake.
 
 ### Filtrado por salud y P2C [#health-filtering-and-p2c]
 
-Para réplicas equivalentes entre servidores, [`roundRobinBalancer`](/es-ES/api/core/roundrobinbalancer) y [`p2cBalancer`](/es-ES/api/core/p2cbalancer) (PeakEwma RTT × carga en vuelo) habilitan por defecto un disyuntor por fallos consecutivos estilo Linkerd (`outlierDetection`). Cuenta `NET_UNREACHABLE`, `NET_UNAVAILABLE` y `NET_SERVER_ERROR`; el `status` crudo de la respuesta es solo para balanceadores personalizados.
+Para réplicas equivalentes entre servidores, [`roundRobinBalancer`](/es-ES/api/core/roundrobinbalancer) y [`p2cBalancer`](/es-ES/api/core/p2cbalancer) (PeakEwma RTT × carga en vuelo) habilitan por defecto un disyuntor por fallos consecutivos estilo Linkerd (`outlierDetection`). Cuenta como fallo cualquier resultado con código (incluidos `NET_TIMEOUT` y `NET_BODY_INCOMPLETE`); el `status` crudo de la respuesta es solo para balanceadores personalizados.
 
 Consulta la guía específica de [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing) para conocer todos los detalles sobre presupuestos de reintento, sondas de salud activas/pasivas, estimación de carga P2C y balanceadores personalizados.
 

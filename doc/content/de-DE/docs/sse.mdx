@@ -58,7 +58,7 @@ Der Aufruf der Operation liefert `[error, stream, startupOpen]` erst zurück, na
 
 - **Nicht-`2xx`-Handshake**: Gibt `HTTP_STATUS` zurück (mit dekodiertem `error.data`, falls ein `error`-Struct an der Definition deklariert ist). Das ist für die aktuelle Operation fatal; `shouldReconnect` wird nicht aufgerufen. Die nächste Operation wählt einen Endpunkt neu, sodass ein Balancer einen anderen Endpunkt wählen kann.
 - **Falscher Content-Type oder unlesbarer Body**: Gibt `RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED` zurück.
-- **`startupOpen` vs. `stream.open`**: Das dritte Element des Tupels (`startupOpen`) hält die erste Handshake-Antwort als Snapshot fest; `stream.open` aktualisiert sich dynamisch, falls sich der Stream später neu verbindet. Gibt ein Reconnect-Handshake `503` zurück, schlägt der Iterator fehl und `stream.closed` meldet `RES_DECODE_FAILED`, während `stream.open.response.status` `503` bleibt; prüfe `stream.open` auf diesen aktuellen Antwortstatus.
+- **`startupOpen` vs. `stream.open`**: Das dritte Element des Tupels (`startupOpen`) hält die erste Handshake-Antwort als Snapshot fest; `stream.open` aktualisiert sich dynamisch, falls sich der Stream später neu verbindet. Beendet ein Reconnect-Handshake den Stream mit einem Nicht-2xx-Status, schlägt der Iterator fehl und `stream.closed` meldet `HTTP_STATUS`, während `stream.open.response.status` diesen Status behält; prüfe `stream.open` auf den aktuellen Antwortstatus.
 
 ## 3. Event-Dispatch und Dekodierung
 
@@ -79,7 +79,8 @@ Die SSE-Wiederverbindung ist **Opt-in**. Ohne `withSSEReconnect(...)` beendet je
 - **Ausfallbudget (`attempts`)**: Standardmäßig `3`, wenn ein Optionen-Objekt an `withSSEReconnect` übergeben wird. Jeder erfolgreiche Handshake setzt den Versuchszähler und den Backoff-Exponenten zurück, sodass `attempts: 1` während einer langlebigen Sitzung dennoch viele physische Verbindungen ermöglichen kann, wenn jede erfolgreich öffnet. Ein reguläres Server-EOF gilt **nicht** als Fehler und löst keinen Reconnect aus.
 - **Cursor-Tracking (`Last-Event-ID`)**: Wird gespeichert, sobald die abschließende Leerzeile eines Events geparst ist, und beim Reconnect automatisch als `Last-Event-ID` mitgesendet. Ein unvollständiger Frame speichert seine `id` nie, unabhängig davon, ob die Verbindung regulär endet oder fehlschlägt. Die Wiederaufnahme nach einem reconnectfähigen Lese-/Netzwerkfehler beginnt bei der zuletzt gespeicherten ID; der Server muss das erneute Ausliefern ab diesem Cursor implementieren.
 - **Idempotenz-Sicherheit**: Standardmäßig verbinden sich nur idempotente Methoden (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) automatisch wieder. Nicht-idempotente Methoden (`POST`, `PATCH` – wie etwa LLM-Streaming-Requests) verbinden sich nur dann neu, wenn ein benutzerdefinierter `shouldReconnect`-Callback explizit `true` zurückgibt. `ReadableStream`-Request-Bodys werden beim ersten Versuch verbraucht und nie erneut verbunden.
-- **Handshake-Timeout (`connectTimeoutMs`)**: Wenn angegeben, muss es endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück. Begrenzt jeden einzelnen Handshake vom Fetch-Aufruf bis zu den Response-Headern, ohne die Offenhaltezeit eines bereits etablierten Streams einzuschränken.
+- **Gateway-Handshakes**: Ein Handshake mit `502`, `503` oder `504`, ob erstes Öffnen oder Reconnect, wird wie eine verweigerte Verbindung unter denselben Reconnect-Regeln wiederholt (Methode, `shouldReconnect`, `attempts`, `ReadableStream`-Body). Andere Nicht-2xx-Handshakes bleiben fatal. Erschöpfte Retries und fatale Reconnect-Handshakes enden mit `HTTP_STATUS`.
+- **Handshake-Timeout (`connectTimeoutMs`)**: Wenn angegeben, muss es endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück. Begrenzt jeden einzelnen Handshake vom Fetch-Aufruf bis zu den Response-Headern, ohne die Offenhaltezeit eines bereits etablierten Streams einzuschränken. Die Option existiert nur innerhalb des Optionsobjekts von `withSSEReconnect({...})`. Dieses Objekt aktiviert den automatischen Reconnect mit dem Standardwert `attempts: 3`; `connectTimeoutMs` allein schaltet ihn also ebenfalls ein. Für ein reines Handshake-Zeitlimit setze zusätzlich `attempts: 0`.
 
 ## 5. Puffer- und Warteschlangenlimits
 
@@ -109,7 +110,7 @@ Der Aufrufer, der einen Stream öffnet, ist für dessen Beendigung verantwortlic
 </Tab>
 </Tabs>
 
-Das über `client({ signal })` übergebene `signal` steuert die gesamte Lebensdauer des Streams. Möchtest du nur den anfänglichen Verbindungs-Handshake zeitlich begrenzen, ohne einen offenen Stream später zu beenden, lösche den Timer mit `clearTimeout`, sobald `await watchOrders(...)` zurückkehrt (wie im zweiten Tab oben gezeigt), oder nutze `connectTimeoutMs` in `withSSEReconnect`.
+Das über `client({ signal })` übergebene `signal` steuert die gesamte Lebensdauer des Streams. Möchtest du nur den anfänglichen Verbindungs-Handshake zeitlich begrenzen, ohne einen offenen Stream später zu beenden, lösche den Timer mit `clearTimeout`, sobald `await watchOrders(...)` zurückkehrt (wie im zweiten Tab oben gezeigt), oder setze in `withSSEReconnect` `connectTimeoutMs` zusammen mit `attempts: 0` (`connectTimeoutMs` allein aktiviert zusätzlich den automatischen Reconnect mit 3 Versuchen).
 
 ## Weiterführende Links
 

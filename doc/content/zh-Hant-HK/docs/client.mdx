@@ -78,18 +78,18 @@ description: 設定應用程式點樣呼叫匯入嘅 SDK 操作，同佢哋嘅 A
 
 `withEndpoint(...urls)` 接受傳入一個或多個候選 base URL。預設情況下：
 
-- 每個 client 預設使用 [`pickFirstBalancer`](/zh-Hant-HK/api/core/pickfirstbalancer)，停喺第一個 URL，直至遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）先至前進。
+- 每個 client 預設使用 [`pickFirstBalancer`](/zh-Hant-HK/api/core/pickfirstbalancer)，停喺第一個 URL，直至遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）先至前進。HTTP 重試唔會移動黏住嘅端點。
 - **同一次呼叫內嘅 HTTP 重試預設關閉。** `withRetry()` 等同 `withRetry({})`，會喺安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）嘅連線失敗上，帶住 backoff，對一個未試過嘅端點再試一次。Finagle 重試預算屬於 client 配置，由佢派生出嚟嘅 client 共享，同 balancer 嘅 identity 無關。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-只設定咗一個端點嗰陣，`withRetry` 唔會重放請求，因為每一次重試都會排除已經試過嘅端點。如果提供咗 `attemptTimeoutMs` 同 `connectTimeoutMs`，佢哋必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。
+只設定咗一個端點嗰陣，`withRetry` 唔會重放請求，因為每一次重試都會排除已經試過嘅端點。如果提供咗 `attemptTimeoutMs` 同 `connectTimeoutMs`，佢哋必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。`connectTimeoutMs` 只存在於 SSE 同 WebSocket 嘅重連選項入面；呢啲選項預設 `attempts: 3`，所以淨係設定佢都會啟用重連，只想限制 handshake 嘅話要再加 `attempts: 0`。
 
 ### 健康檢查過濾與 P2C [#health-filtering-and-p2c]
 
-對於對等伺服器節點，[`roundRobinBalancer`](/zh-Hant-HK/api/core/roundrobinbalancer) 同 [`p2cBalancer`](/zh-Hant-HK/api/core/p2cbalancer)（結合 PeakEwma RTT 與進行中請求負載）預設開啟 Linkerd 風格嘅連續失敗熔斷（`outlierDetection`）。佢計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`；原始 response `status` 只供自訂 balancer 使用。
+對於對等伺服器節點，[`roundRobinBalancer`](/zh-Hant-HK/api/core/roundrobinbalancer) 同 [`p2cBalancer`](/zh-Hant-HK/api/core/p2cbalancer)（結合 PeakEwma RTT 與進行中請求負載）預設開啟 Linkerd 風格嘅連續失敗熔斷（`outlierDetection`）。佢將每個帶錯誤碼嘅結果都計為失敗（包括 `NET_TIMEOUT` 同 `NET_BODY_INCOMPLETE`）；原始 response `status` 只供自訂 balancer 使用。
 
 關於重試預算、主動／被動健康檢查、P2C 負載估算以及自訂 balancer 嘅完整細節，請參閱[負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)指南。
 

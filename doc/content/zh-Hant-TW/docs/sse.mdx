@@ -58,7 +58,7 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 
 - **非 `2xx` 交握**：回傳 `HTTP_STATUS`（若定義上宣告了 `error` struct，則帶有解碼後的 `error.data`）。這對目前的操作是致命錯誤，不會呼叫 `shouldReconnect`。下一次操作會重新選取端點，因此平衡器可能選到另一個端點。
 - **Content-Type 不符或本文無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` 與 `stream.open`**：tuple 的第三項（`startupOpen`）是首次交握回應的快照；`stream.open` 會在串流之後重連時即時更新。若重連交握回傳 `503`，迭代器會拒絕，`stream.closed` 回報 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍為 `503`；即時的回應狀態請看 `stream.open`。
+- **`startupOpen` 與 `stream.open`**：tuple 的第三項（`startupOpen`）是首次交握回應的快照；`stream.open` 會在串流之後重連時即時更新。若重連交握以非 2xx 狀態結束串流，迭代器會拒絕，`stream.closed` 回報 `HTTP_STATUS`，而 `stream.open.response.status` 保持該狀態；即時的回應狀態請看 `stream.open`。
 
 ## 3. 事件分派與解碼
 
@@ -79,7 +79,8 @@ SSE 的重新連線是**需主動啟用（opt-in）**的功能。沒有設定 `w
 - **中斷額度（`attempts`）**：傳入設定物件給 `withSSEReconnect` 時，預設為 `3`。每次交握成功都會重設嘗試次數與退避指數，因此只要每次連線都成功開啟，即使設定 `attempts: 1`，長時間的工作階段仍可能建立多次實體連線。伺服器正常的 EOF **不算**失敗，不會觸發重連。
 - **游標追蹤（`Last-Event-ID`）**：事件結尾的空行被剖析時，游標才會提交，並在重連時自動以 `Last-Event-ID` 送出。不完整的訊框不論連線是正常結束或失敗，都不會提交其 `id`。在可重連的讀取或網路失敗之後，會從最後提交的 id 續傳；伺服器必須支援從該游標重播。
 - **冪等安全性**：預設只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）會自動重連。非冪等方法（`POST`、`PATCH`——例如 LLM 串流請求）只有在自訂 `shouldReconnect` 明確回傳 `true` 時才會重連。帶有 `ReadableStream` 請求本文的請求會在第一次嘗試時用掉本文，因此永遠不會重連。
-- **交握逾時（`connectTimeoutMs`）**：有提供時，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制每次交握從呼叫 Fetch 到收到回應標頭的時間，但不限制已建立串流的存活時間。
+- **閘道交握**：`502`、`503` 或 `504` 交握（無論是初次開啟或重連）會像連線被拒絕一樣，依相同的重連規則（方法、`shouldReconnect`、`attempts`、`ReadableStream` 請求本文）重試。其他非 2xx 交握仍然是致命的。重試用盡以及致命的重連交握都以 `HTTP_STATUS` 結束。
+- **交握逾時（`connectTimeoutMs`）**：有提供時，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制每次交握從呼叫 Fetch 到收到回應標頭的時間，但不限制已建立串流的存活時間。此選項只存在於 `withSSEReconnect({...})` 的選項物件內；只要傳入該物件，就會以預設的 `attempts: 3` 啟用自動重連，因此單獨設定 `connectTimeoutMs` 同樣會開啟重連。若只想限制交握，請同時設定 `attempts: 0`。
 
 ## 5. 緩衝區與佇列上限
 
@@ -109,7 +110,7 @@ SSE 的重新連線是**需主動啟用（opt-in）**的功能。沒有設定 `w
 </Tab>
 </Tabs>
 
-透過 `client({ signal })` 傳入的 `signal` 會掌管串流的整個生命週期。若只想限制初始連線交握、又不想在之後殺掉已開啟的串流，請在 `await watchOrders(...)` 回傳後清除計時器（如上方的第二個分頁），或改用 `withSSEReconnect` 的 `connectTimeoutMs`。
+透過 `client({ signal })` 傳入的 `signal` 會掌管串流的整個生命週期。若只想限制初始連線交握、又不想在之後殺掉已開啟的串流，請在 `await watchOrders(...)` 回傳後清除計時器（如上方的第二個分頁），或在 `withSSEReconnect` 中同時設定 `connectTimeoutMs` 與 `attempts: 0`（單獨設定 `connectTimeoutMs` 也會啟用 3 次自動重連）。
 
 ## 相關閱讀
 

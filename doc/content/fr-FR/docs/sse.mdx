@@ -58,7 +58,7 @@ L'appel de l'opération ne résout `[error, stream, startupOpen]` qu'une fois qu
 
 - **Handshake hors `2xx`** : Renvoie `HTTP_STATUS` (avec `error.data` décodé lorsqu'un struct `error` est déclaré sur la définition). C’est fatal pour l’opération courante ; `shouldReconnect` n’est pas appelé. L’opération suivante effectue une nouvelle sélection d’endpoint, donc un répartiteur peut choisir un autre endpoint.
 - **Media type invalide ou corps illisible** : Renvoie `RES_MEDIA_TYPE_INVALID` ou `RES_DECODE_FAILED`.
-- **`startupOpen` vs `stream.open`** : Le troisième élément du tuple (`startupOpen`) capture l'instantané de la première réponse du handshake ; `stream.open` est mis à jour dynamiquement si le flux se reconnecte ultérieurement. Si un handshake de reconnexion renvoie `503`, l’itérateur rejette et `stream.closed` signale `RES_DECODE_FAILED`, tandis que `stream.open.response.status` reste `503` ; consultez `stream.open` pour ce statut de réponse dynamique.
+- **`startupOpen` vs `stream.open`** : Le troisième élément du tuple (`startupOpen`) capture l'instantané de la première réponse du handshake ; `stream.open` est mis à jour dynamiquement si le flux se reconnecte ultérieurement. Si un handshake de reconnexion met fin au flux avec un statut non 2xx, l’itérateur rejette et `stream.closed` signale `HTTP_STATUS`, tandis que `stream.open.response.status` conserve ce statut ; consultez `stream.open` pour le statut de réponse dynamique.
 
 ## 3. Routage et décodage des événements
 
@@ -79,7 +79,8 @@ La reconnexion SSE est **opt-in**. Sans `withSSEReconnect(...)`, toute perte ré
 - **Budget de tentatives (`attempts`)** : Vaut `3` par défaut lorsqu’un objet d’options est transmis à `withSSEReconnect`. Chaque handshake réussi réinitialise le compteur de tentatives et l’exposant de backoff ; `attempts: 1` peut donc encore créer de nombreuses connexions physiques sur une longue session si chacune s’ouvre avec succès. Une fin de flux serveur normale (EOF) **n’est pas** un échec et ne déclenche aucune reconnexion.
 - **Suivi du curseur (`Last-Event-ID`)** : Le curseur est validé dès que la ligne vide finale d'un événement est analysée, puis envoyé automatiquement sous forme d'en-tête `Last-Event-ID` lors de la reconnexion. Une trame partielle ne valide jamais son `id`, que la connexion se termine normalement ou échoue. La reprise après un échec de lecture/réseau autorisant la reconnexion part du dernier ID validé ; le serveur doit implémenter le rejeu depuis ce curseur.
 - **Sécurité et idempotence** : Par défaut, seules les méthodes idempotentes (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) se reconnectent automatiquement. Les méthodes non idempotentes (`POST`, `PATCH` — comme les requêtes de génération en streaming pour LLM) ne se reconnectent que si un callback `shouldReconnect` personnalisé renvoie explicitement `true`. Les corps de requête `ReadableStream` sont consommés à la première tentative et ne se reconnectent jamais.
-- **Délai de connexion (`connectTimeoutMs`)** : Lorsqu'il est fourni, il doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`. Il délimite chaque handshake depuis l'appel Fetch jusqu'aux en-têtes de réponse, sans limiter la durée d'ouverture d'un flux établi.
+- **Handshakes de passerelle** : Un handshake répondu par `502`, `503` ou `504`, qu'il s'agisse de l'ouverture initiale ou d'une reconnexion, est retenté comme une connexion refusée selon les mêmes règles de reconnexion (méthode, `shouldReconnect`, `attempts`, corps `ReadableStream`). Les autres handshakes non 2xx restent fatals. Les retries épuisés et les handshakes de reconnexion fatals se terminent avec `HTTP_STATUS`.
+- **Délai de connexion (`connectTimeoutMs`)** : Lorsqu'il est fourni, il doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`. Il délimite chaque handshake depuis l'appel Fetch jusqu'aux en-têtes de réponse, sans limiter la durée d'ouverture d'un flux établi. L'option n'existe que dans l'objet d'options de `withSSEReconnect({...})` ; cet objet active la reconnexion automatique avec `attempts: 3` par défaut, donc `connectTimeoutMs` seul l'active aussi. Pour une échéance limitée au handshake, ajoutez `attempts: 0`.
 
 ## 5. Limites de tampon et de file
 
@@ -109,7 +110,7 @@ L'appelant qui ouvre un flux possède son cycle de nettoyage. Quitter une boucle
 </Tab>
 </Tabs>
 
-Le `signal` transmis via `client({ signal })` régit toute la durée de vie du flux. Pour limiter uniquement le handshake initial sans interrompre un flux ouvert ultérieurement, désactivez votre minuteur dès que `await watchOrders(...)` a retourné (comme illustré dans le second onglet ci-dessus) ou utilisez `connectTimeoutMs` dans `withSSEReconnect`.
+Le `signal` transmis via `client({ signal })` régit toute la durée de vie du flux. Pour limiter uniquement le handshake initial sans interrompre un flux ouvert ultérieurement, désactivez votre minuteur dès que `await watchOrders(...)` a retourné (comme illustré dans le second onglet ci-dessus) ou définissez `connectTimeoutMs` avec `attempts: 0` dans `withSSEReconnect` (`connectTimeoutMs` seul active aussi la reconnexion avec 3 tentatives).
 
 ## Lectures connexes
 
