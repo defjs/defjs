@@ -8,19 +8,19 @@ description: Trata el 304 como un fallo de estado HTTP; mantén el Map de caché
 En Defjs, únicamente las respuestas `2xx` toman la rama de éxito, por lo que `304 Not Modified` llega como un fallo `HTTP_STATUS`. Deja `error` sin declarar en `defineRequest` para que el cuerpo vacío del `304` nunca se lea, y mantén tu caché `Map` en un envoltorio de aplicación alrededor de la llamada a la operación:
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
-  <Tab value="sdk/catalog.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/reader.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/app/reader.ts#example
 </include>
 
   </Tab>
-  <Tab value="etag-cache.ts">
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>

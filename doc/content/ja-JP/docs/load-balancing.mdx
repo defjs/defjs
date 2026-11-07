@@ -16,21 +16,21 @@ description: 複数エンドポイントへトラフィックを分散し、異�
 | [`p2cBalancer(options?)`](/ja-JP/api/core/p2cbalancer)                            | レプリカごとのレイテンシや処理中負荷が変動するサーバー間通信              | 有効（`5` 回の連続失敗で発動）                        |
 
 <Tabs items={["プライマリ・バックアップ（Pick-first）", "対等なサーバー（Round-robin と P2C）", "カスタムバランサー"]}>
-<Tab value="プライマリ・バックアップ（Pick-first）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="対等なサーバー（Round-robin と P2C）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="カスタムバランサー">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -81,14 +81,14 @@ description: 複数エンドポイントへトラフィックを分散し、異�
 `roundRobinBalancer()` および `p2cBalancer()` は、デフォルトで候補の選択処理を [`outlierDetection`](/ja-JP/api/core/outlierdetection) でラップしています。
 
 <Tabs items={["単一プローブによる復旧", "アクティブヘルスチェックのキャッシュ"]}>
-<Tab value="単一プローブによる復旧">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="アクティブヘルスチェックのキャッシュ">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

@@ -16,21 +16,21 @@ description: وزّع حركة المرور عبر نقاط نهاية متعد�
 | [`p2cBalancer(options?)`](/ar/api/core/p2cbalancer)                            | اتصالات الخادم حيث يتباين زمن الاستجابة أو الحمل اللحظي بين النسخ        | مفعلة (`5` إخفاقات متتالية)                       |
 
 <Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
-<Tab value="Primary / backup (Pick-first)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="Server peers (Round-robin & P2C)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="Custom balancer">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -81,14 +81,14 @@ description: وزّع حركة المرور عبر نقاط نهاية متعد�
 تُغلّف `roundRobinBalancer()` و`p2cBalancer()` اختيار المرشحين داخل [`outlierDetection`](/ar/api/core/outlierdetection) افتراضياً:
 
 <Tabs items={["Single-probe recovery", "Active health cache"]}>
-<Tab value="Single-probe recovery">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="Active health cache">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

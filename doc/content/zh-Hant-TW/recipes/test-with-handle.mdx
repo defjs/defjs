@@ -8,19 +8,19 @@ description: 用 withHTTPHandle 為單一 client 換掉 Fetch，操作定義完�
 `withHTTPHandle(...)` 會為單一 client 替換底層的 `fetch`，同時跑完 Defjs 的整條管線——輸入驗證、`builder` 對應、URL 解析、攔截器、狀態分類與 struct 解碼——完全不開網路 socket：
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="test/orders.spec.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="Single-file demonstration">
+  <Tab>
 這是一份獨立的單檔示範，不是測試執行器的 spec。若要對共用的 SDK 定義做斷言，請用前面的測試分頁。
 
 <include cwd meta="get-order.ts">

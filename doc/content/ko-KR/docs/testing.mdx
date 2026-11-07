@@ -12,14 +12,14 @@ Defjs는 작업 정의와 클라이언트 실행을 명확히 분리하기 때�
 `createClient(...)`에서 `withHTTPHandle`, `withSSEHandle`, 또는 `withWebSocketHandle`을 사용하여 기반 플랫폼 전송 계층을 교체하세요. 이때도 Defjs는 입력값 `struct` 검증, `builder` 매핑, URL 격리 검사, 인터셉터, 상태 디스패치, 응답 `struct` 디코딩 등 전체 파이프라인을 그대로 실행합니다.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="test/orders.spec.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example

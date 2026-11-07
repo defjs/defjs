@@ -12,14 +12,14 @@ description: 用注入的传输句柄离线测试 SDK 定义与应用策略，�
 在 `createClient(...)` 上使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 替换底层平台传输。Defjs 仍会跑完整的操作流水线：输入 `struct` 校验、`builder` 映射、URL 目录限制检查、拦截器、状态码分发和响应 `struct` 解码。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="test/orders.spec.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example

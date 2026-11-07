@@ -10,21 +10,21 @@ description: 在 SDK 中声明服务错误契约，并在消费方应用中处�
 ## 1. 在 SDK 中声明业务错误，在应用中进行分流
 
 <Tabs items={["穷尽代码分支", "基本状态码检查", "各传输的元组结构"]}>
-<Tab value="穷尽代码分支">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="基本状态码检查">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="各传输协议的元组结构">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ HTTP 失败时，元组是 `[error, undefined, undefined]`。到达的响应元�
 由于同一个 `error` struct 需要承载所有非 `2xx` 状态码的错误结构，当不同 HTTP 状态码返回不同的 JSON 格式时，请声明一个联合类型：
 
 <Tabs items={["按 kind 区分", "按响应体状态区分", "普通联合（struct.or）"]}>
-<Tab value="按 kind 区分">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="按响应体状态区分">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="普通联合（struct.or）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ HTTP 失败时，元组是 `[error, undefined, undefined]`。到达的响应元�
 每个 `Fault` 均为原生 `Error` 实例（`instanceof Error === true`），并且拥有可枚举的 `code`、`status`、`response` 和 `data` 属性。
 
 <Tabs items={["检查 StructError 原因", "脱敏诊断摘要"]}>
-<Tab value="检查 StructError 原因">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="脱敏诊断摘要">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

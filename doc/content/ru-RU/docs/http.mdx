@@ -12,21 +12,21 @@ SDK определяет каждую HTTP-операцию с помощью `d
 Экспортируйте для каждой операции отдельный `defineRequest` из модуля вашего SDK, а создание клиента через `createClient` оставьте на стороне приложения:
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup/app/main.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup.ts#example
@@ -113,12 +113,12 @@ SDK определяет каждую HTTP-операцию с помощью `d
 - **Комбинированные сигналы**: используйте `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`.
 
 <Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
-<Tab value="Deadline (NET_TIMEOUT)">
+<Tab>
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="Manual cancel (NET_ABORTED)">
+<Tab>
 
 <include cwd>examples/http/cancel.ts#example</include>
 

@@ -8,19 +8,19 @@ description: Выполните один GET-запрос и разделите 
 Объявите и `output` (для ответов 2xx), и `error` (для ответов вне диапазона 2xx) в `defineRequest`. В месте вызова проверяйте условие `error?.code === "HTTP_STATUS" && error.status === 404`, чтобы прочитать типизированную полезную нагрузку `error.data`.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="get-order.ts">
+  <Tab>
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>

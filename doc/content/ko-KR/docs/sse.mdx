@@ -12,21 +12,21 @@ SDK는 `defineEventStream`을 사용하여 Server-Sent Events(SSE) 작업을 선
 열린 `EventStreamHandle`은 항상 `await using`(또는 `finally` 블록의 `stream.close()` + `await stream.closed`)을 통해 해제해야 합니다:
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders-stream.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/sdk/orders-stream.ts#example
 </include>
 
 </Tab>
-<Tab value="app/watch-orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/app/watch-orders.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup.ts#example
@@ -40,14 +40,14 @@ SDK는 `defineEventStream`을 사용하여 Server-Sent Events(SSE) 작업을 선
 초기 HTTP 응답이 `2xx`이고 미디어 타입이 `text/event-stream`이며 읽을 수 있는 본문이 포함되어 있을 때 비로소 `[error, stream, startupOpen]` 튜플이 반환됩니다:
 
 <Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -95,14 +95,14 @@ SSE 재연결은 **선택 사항(opt-in)**입니다. `withSSEReconnect(...)`를 
 스트림을 연 호출자가 리소스 해제 책임을 갖습니다. `break`, `return` 또는 예외 발생으로 `for await` 루프를 벗어나면 스트림이 자동으로 닫히며, `await using` 또는 `stream.close()`를 명시적으로 사용할 수도 있습니다:
 
 <Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab>
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

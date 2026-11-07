@@ -16,21 +16,21 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 | [`p2cBalancer(options?)`](/zh-Hant-TW/api/core/p2cbalancer)                      | 副本節點延遲或進行中請求負載差異較大的伺服器呼叫 | 開啟（連續失敗 `5` 次觸發）                |
 
 <Tabs items={["主備（Pick-first）", "對等伺服器（Round-robin 與 P2C）", "自訂負載平衡器"]}>
-<Tab value="主備（Pick-first）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="對等伺服器（Round-robin 與 P2C）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="自訂負載平衡器">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -81,14 +81,14 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 `roundRobinBalancer()` 與 `p2cBalancer()` 預設會將候選端點選擇邏輯包裝在 [`outlierDetection`](/zh-Hant-TW/api/core/outlierdetection) 中：
 
 <Tabs items={["單一探測復原", "主動健康檢查快取"]}>
-<Tab value="單一探測復原">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="主動健康檢查快取">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

@@ -33,19 +33,19 @@ description: Расширяйте клиент Defjs в приложении с 
 Плагин фреймворка передаёт существующий [`DerivableClient`](/ru-RU/api/core/derivableclient-type) вниз по дереву компонентов с помощью стандартного механизма внедрения зависимостей (React Context или Vue `provide` / `inject`):
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/main.tsx#example
 </include>
 
   </Tab>
-  <Tab value="app/OrderCard.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/OrderCard.tsx#example
 </include>
@@ -58,13 +58,13 @@ description: Расширяйте клиент Defjs в приложении с 
 Middleware-плагин представляет собой фабрику, возвращающую [`ClientOption`](/ru-RU/api/core/clientoption-type). При передаче в `createClient(...)` он добавляет перехватчики HTTP, SSE и/или WebSocket через `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-  <Tab value="plugins/request-id.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/client.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/app/client.ts#example
 </include>

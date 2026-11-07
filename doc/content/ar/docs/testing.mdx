@@ -12,14 +12,14 @@ description: اختبر تعريفات SDK وسياسات التطبيق محل�
 استخدم `withHTTPHandle` أو `withSSEHandle` أو `withWebSocketHandle` عند استدعاء `createClient(...)` لاستبدال وسيلة النقل الأصلية في بيئة التشغيل. يظل Defjs يشغل خط الأنابيب الكامل للعملية: التحقق من مخطط `struct` للمدخلات، وتطبيق دالة `builder`، وفحوصات نطاق الروابط، والمعترضات، وتوزيع حالات الاستجابة، وفك ترميز كائنات `struct` للاستجابة.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="test/orders.spec.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example

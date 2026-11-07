@@ -10,21 +10,21 @@ Defjs에서는 요청, 전송, 디코딩 실패가 발생해도 호출 지점에
 ## 1. SDK에서 서비스 오류 선언하고 애플리케이션에서 분류하기
 
 <Tabs items={["오류 코드 전체 분기", "기본 상태 코드 확인", "전송 방식별 튜플 구조"]}>
-<Tab value="오류 코드 전체 분기">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="기본 상태 코드 확인">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="전송 방식별 튜플 구조">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ HTTP 실패 시 반환되는 튜플은 `[error, undefined, undefined]`입니다.
 하나의 `error` struct가 모든 비`2xx` 상태 코드를 포괄하므로, 상태 코드별로 서로 다른 JSON 형태를 반환하는 API라면 유니온 스키마를 선언하세요:
 
 <Tabs items={["kind로 구분", "본문 상태로 구분", "일반 유니온 (struct.or)"]}>
-<Tab value="kind로 구분">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="본문 상태로 구분">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="일반 유니온 (struct.or)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ API 응답에 리터럴 태그(`kind`, `type`, 또는 본문 내부의 `status` 
 모든 `Fault`는 `code`, `status`, `response`, `data` 열거 가능(enumerable) 프로퍼티를 가진 네이티브 `Error`(`instanceof Error === true`)입니다.
 
 <Tabs items={["StructError 원인 확인", "민감 정보를 제거한 진단 요약"]}>
-<Tab value="StructError 원인 확인">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="민감 정보를 제거한 진단 요약">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

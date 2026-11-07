@@ -12,14 +12,14 @@ description: "用注入式傳輸層 handle 離線測試 SDK 定義同應用程�
 喺 `createClient(...)` 上面使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 嚟替換底層嘅平台傳輸實作。Defjs 依然會跑齊完整嘅操作流程：input `struct` 驗證、`builder` 參數映射、URL 目錄邊界檢查、攔截器鏈、狀態碼分發，以及 response `struct` 解碼。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="test/orders.spec.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example

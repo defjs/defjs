@@ -12,21 +12,21 @@ SDK は、各 HTTP 操作を `defineRequest` を使って定義します。HTTP 
 SDK モジュール内で各操作ごとに個別の `defineRequest` を export し、`createClient` によるクライアント生成は利用側アプリケーションで行います。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup/app/main.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup.ts#example
@@ -113,12 +113,12 @@ JSON で表現できない値（`NaN`、`±Infinity`、`Map`、`Set`、関数、
 - **シグナルの結合**: `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])` を使用します。
 
 <Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
-<Tab value="Deadline (NET_TIMEOUT)">
+<Tab>
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="Manual cancel (NET_ABORTED)">
+<Tab>
 
 <include cwd>examples/http/cancel.ts#example</include>
 

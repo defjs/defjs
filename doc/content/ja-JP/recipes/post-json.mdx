@@ -8,19 +8,19 @@ description: 型付けされた JSON リクエストボディを送信し、宣�
 型付けされた入力オブジェクトを `builder` に渡し、`{ body: input }` を返します。`.alias("customer_name")` を指定することで、TypeScript 上では `customerName` というプロパティ名を維持したまま、ワイヤ上では `"customer_name"` としてエンコードし、`201` レスポンスからは元の論理名へデコードします。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="create-order.ts">
+  <Tab>
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>

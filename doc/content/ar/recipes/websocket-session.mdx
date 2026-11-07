@@ -8,19 +8,19 @@ description: اتصل وأرسل غلافاً محدد الأنواع واستق
 صرّح عن بنيتي الرسائل الواردة `incoming` والصادرة `outgoing` في `defineWebSocket`، إلى جانب `maxIncomingQueueSize` الذي يقيّد قائمة الانتظار الواردة. وفي تطبيقك، اشترك في أحداث `session.onRuntimeError(...)`، واستهلك مكرر `session.receive`، واحرص دائماً على إلغاء الاشتراك، واستدعاء `session.close(...)`، وانتظار `await session.closed` داخل كتلة `finally`:
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
-  <Tab value="sdk/quotes.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="quotes.ts">
+  <Tab>
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>

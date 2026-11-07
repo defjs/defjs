@@ -14,19 +14,19 @@ Defjs SDK 以 npm 套件的形式匯出純粹的操作定義與 struct schema，
 把操作定義、barrel 匯出、`package.json` 與 `tsconfig.json` 放在專屬的套件目錄中，並將 `@defjs/core` 宣告為 `peerDependency`：
 
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
-  <Tab value="src/orders.ts">
+  <Tab>
 <include cwd meta='title="src/orders.ts"'>
   examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="src/index.ts">
+  <Tab>
 <include cwd meta='title="src/index.ts"'>
   examples/recipes/publish-http-sdk/src/index.ts#example
 </include>
 
   </Tab>
-  <Tab value="package.json">
+  <Tab>
 ```json
 {
   "name": "@company/orders-sdk",
@@ -54,7 +54,7 @@ Defjs SDK 以 npm 套件的形式匯出純粹的操作定義與 struct schema，
 }
 ```
   </Tab>
-  <Tab value="tsconfig.json">
+  <Tab>
 ```json
 {
   "compilerOptions": {

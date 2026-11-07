@@ -12,14 +12,14 @@ description: 以注入的傳輸層 Handle、tuple 斷言與確定性計時器，
 在 `createClient(...)` 上使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle`，替換底層的平台傳輸。Defjs 仍會執行完整的操作管線：輸入 `struct` 驗證、`builder` 對應、URL 範圍檢查、攔截器、狀態分派，以及回應 `struct` 解碼。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="test/orders.spec.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example

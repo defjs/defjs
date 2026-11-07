@@ -8,19 +8,19 @@ description: 開啟帶型別嘅事件流，迭代一次，然後關閉並等待 
 每個 `EventStreamHandle` 都只提供單一嘅非同步迭代器（async iterator）。請務必將 `stream.close(...)` 與 `await stream.closed` 擺喺 `finally` 區塊入面，確保就算提早 `break` 或 `return` 亦絕唔會洩漏底層嘅 Fetch 串流資源：
 
 <Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
-  <Tab value="sdk/deployments.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="deploy-events.ts">
+  <Tab>
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>

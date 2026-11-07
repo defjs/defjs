@@ -12,21 +12,21 @@ Un SDK define cada operación HTTP con `defineRequest`: su método, plantilla de
 Asigna a cada operación su propio export mediante `defineRequest` en el módulo de tu SDK, y mantén `createClient` en la aplicación consumidora:
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Vista rápida en un solo archivo"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup/app/main.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup.ts#example
@@ -113,12 +113,12 @@ Pasa la señal `signal` derivando el cliente para cada llamada concreta: `client
 - **Señales combinadas**: utiliza `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`.
 
 <Tabs items={["Plazo límite (NET_TIMEOUT)", "Cancelación manual (NET_ABORTED)"]}>
-<Tab value="Deadline (NET_TIMEOUT)">
+<Tab>
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="Manual cancel (NET_ABORTED)">
+<Tab>
 
 <include cwd>examples/http/cancel.ts#example</include>
 

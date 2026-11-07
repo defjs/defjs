@@ -16,21 +16,21 @@ description: 여러 엔드포인트로 트래픽을 분산하고 비정상 레�
 | [`p2cBalancer(options?)`](/ko-KR/api/core/p2cbalancer)                        | 레플리카별 레이턴시나 진행 중인 부하 차이가 큰 서버 환경              | 활성화 (`5`회 연속 실패 시)                    |
 
 <Tabs items={["기본·백업 (Pick-first)", "동등한 서버 (Round-robin 및 P2C)", "사용자 정의 밸런서"]}>
-<Tab value="기본·백업 (Pick-first)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="동등한 서버 (Round-robin 및 P2C)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="사용자 정의 밸런서">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -81,14 +81,14 @@ description: 여러 엔드포인트로 트래픽을 분산하고 비정상 레�
 `roundRobinBalancer()`와 `p2cBalancer()`는 기본적으로 후보 선택 로직을 [`outlierDetection`](/ko-KR/api/core/outlierdetection)으로 감싸서 제공합니다:
 
 <Tabs items={["단일 프로브 복구", "능동 상태 검사 캐시"]}>
-<Tab value="단일 프로브 복구">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="능동 상태 검사 캐시">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

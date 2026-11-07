@@ -8,19 +8,19 @@ description: 将 304 视为 HTTP 状态 Fault，并把缓存 Map 留在操作调
 在 Defjs 中，只有 `2xx` 响应进入成功分支，因此 `304 Not Modified` 会以 `HTTP_STATUS` Fault 到达。在 `defineRequest` 上保持 `error` 未声明，这样空的 `304` body 从不读取；并在操作调用外层的应用包装器中维护 `Map` 缓存：
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
-  <Tab value="sdk/catalog.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/reader.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/app/reader.ts#example
 </include>
 
   </Tab>
-  <Tab value="etag-cache.ts">
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>

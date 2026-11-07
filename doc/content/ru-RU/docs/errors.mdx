@@ -10,21 +10,21 @@ description: Объявляйте контракты ошибок сервиса
 ## 1. Объявление ошибок сервиса в SDK и их разбор в приложении
 
 <Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>
-<Tab value="Exhaustive code switch">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="Basic status check">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Tuple shapes by transport">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ description: Объявляйте контракты ошибок сервиса
 Поскольку одна структура `error` охватывает все ответы вне диапазона `2xx`, используйте объединение (union), если разные статусы ошибок возвращают разные JSON-структуры:
 
 <Tabs items={["Discriminate by kind", "Discriminate by body status", "Plain union (struct.or)"]}>
-<Tab value="Discriminate by kind">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="Discriminate by body status">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="Plain union (struct.or)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ description: Объявляйте контракты ошибок сервиса
 Каждый `Fault` является экземпляром нативного `Error` (`instanceof Error === true`) с перечислимыми свойствами `code`, `status`, `response` и `data`.
 
 <Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
-<Tab value="Inspect StructError cause">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="Redacted diagnostic summary">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

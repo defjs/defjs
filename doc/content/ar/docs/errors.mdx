@@ -10,21 +10,21 @@ description: صرّح عن عقود أخطاء الخدمة في حزمة SDK و
 ## 1. التصريح عن أخطاء الخدمة في SDK، وفرزها في التطبيق
 
 <Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>
-<Tab value="Exhaustive code switch">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="Basic status check">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Tuple shapes by transport">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ description: صرّح عن عقود أخطاء الخدمة في حزمة SDK و
 نظراً لأن بنية `error` واحدة تغطي جميع الحالات غير `2xx`، يمكنك التصريح عن اتحاد (union) عندما تُرجع حالات الخطأ المختلفة أشكال JSON متباينة:
 
 <Tabs items={["Discriminate by kind", "Discriminate by body status", "Plain union (struct.or)"]}>
-<Tab value="Discriminate by kind">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="Discriminate by body status">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="Plain union (struct.or)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ description: صرّح عن عقود أخطاء الخدمة في حزمة SDK و
 كل كائن `Fault` هو كائن `Error` أصلي (`instanceof Error === true`) يحتوي على خصائص قابلة للتعداد: `code` و`status` و`response` و`data`.
 
 <Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
-<Tab value="Inspect StructError cause">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="Redacted diagnostic summary">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

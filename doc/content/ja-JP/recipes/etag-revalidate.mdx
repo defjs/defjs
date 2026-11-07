@@ -8,19 +8,19 @@ description: 304 を HTTP ステータス Fault として扱い、キャッシ�
 Defjs では、成功分岐を通過するのは `2xx` レスポンスのみであるため、`304 Not Modified` は `HTTP_STATUS` Fault として返ります。空の `304` ボディが読み取られないように `defineRequest` で `error` を未宣言のままにしておき、キャッシュ用の `Map` は操作呼び出しをラップするアプリケーションコード側で保持します。
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
-  <Tab value="sdk/catalog.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/reader.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/app/reader.ts#example
 </include>
 
   </Tab>
-  <Tab value="etag-cache.ts">
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>

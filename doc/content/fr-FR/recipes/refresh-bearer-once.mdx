@@ -8,19 +8,19 @@ description: Attachez Authorization et rejouez une seule fois dans un unique int
 Dans Defjs, `next(request)` invoque la portion restante de la chaîne d'intercepteurs vers l'intérieur — sans jamais relancer le flux depuis l'intercepteur le plus externe. Regroupez l'injection du jeton, la déduplication du rafraîchissement (single-flight) et le rejeu unique suite à une réponse `401` dans **un seul** intercepteur HTTP afin que les intercepteurs externes de journalisation ou de mesure ne s'exécutent pas deux fois :
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
-  <Tab value="sdk/billing.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/auth-interceptor.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
 </include>
 
   </Tab>
-  <Tab value="refresh-bearer.ts">
+  <Tab>
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>

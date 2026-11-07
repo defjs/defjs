@@ -8,19 +8,19 @@ description: Annulez ou fixez un délai d'attente pour un appel et lisez NET_ABO
 Combinez un `AbortController` appelant avec un délai d'expiration à l'aide de `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` et transmettez le signal combiné via `client({ signal })`. Defjs classe une annulation manuelle en `NET_ABORTED` et une expiration de délai en `NET_TIMEOUT`.
 
 <Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
-  <Tab value="sdk/reports.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="cancel-report.ts">
+  <Tab>
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>

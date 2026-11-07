@@ -8,19 +8,19 @@ description: Remplacez Fetch pour un client avec withHTTPHandle tout en gardant 
 `withHTTPHandle(...)` remplace la fonction `fetch` sous-jacente pour une instance de client unique tout en sollicitant l'intégralité du pipeline Defjs — validation des entrées, projection par le `builder`, résolution d'URL, intercepteurs, aiguillage par statut et décodage Struct — sans jamais ouvrir de socket réseau :
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Démonstration en un seul fichier"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="test/orders.spec.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="Démonstration en un seul fichier">
+  <Tab>
 Il s'agit d'une démonstration autonome en un seul fichier, pas d'une spec de lanceur de tests. Pour des assertions sur la définition de SDK partagée, utilisez l'onglet de test précédent.
 
 <include cwd meta="get-order.ts">

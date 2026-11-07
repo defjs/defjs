@@ -8,19 +8,19 @@ description: Считайте статус 304 сбоем `HTTP_STATUS` и хр�
 В Defjs только ответы диапазона `2xx` попадают в успешную ветку, поэтому статус `304 Not Modified` возвращается как сбой `HTTP_STATUS`. Оставьте `error` необъявленным в `defineRequest`, чтобы пустое тело `304` даже не читалось, и храните кэш `Map` в прикладной обёртке вокруг вызова операции:
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
-  <Tab value="sdk/catalog.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/reader.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/app/reader.ts#example
 </include>
 
   </Tab>
-  <Tab value="etag-cache.ts">
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>

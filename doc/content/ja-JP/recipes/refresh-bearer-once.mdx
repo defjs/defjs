@@ -8,19 +8,19 @@ description: 単一のインターセプター内で Authorization ヘッダー�
 Defjs では、`next(request)` はインターセプターチェーンの残りの内側のみを呼び出し、最外層から再ディスパッチすることはありません。トークンの付与、並行リフレッシュの重複排除（シングルフライト）、そして `401` 発生時の 1 度限りの再実行処理を **単一の** HTTP インターセプター内に集約することで、外側のロギングやレイテンシ計測のインターセプターが 2 度実行されるのを防ぎます。
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
-  <Tab value="sdk/billing.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/auth-interceptor.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
 </include>
 
   </Tab>
-  <Tab value="refresh-bearer.ts">
+  <Tab>
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>

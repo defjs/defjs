@@ -12,21 +12,21 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 已開啟的 `EventStreamHandle` 一律要用 `await using` 釋放（或在 `finally` 區塊中執行 `stream.close()` + `await stream.closed`）：
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders-stream.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/sdk/orders-stream.ts#example
 </include>
 
 </Tab>
-<Tab value="app/watch-orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/app/watch-orders.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup.ts#example
@@ -40,14 +40,14 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 只有在初始 HTTP 回應為 `2xx`、媒體型別為 `text/event-stream` 且帶有可讀取的本文時，呼叫該操作才會解析為 `[error, stream, startupOpen]`：
 
 <Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -95,14 +95,14 @@ SSE 的重新連線是**需主動啟用（opt-in）**的功能。沒有設定 `w
 開啟串流的呼叫端負責收拾善後。以 `break`、`return` 或拋出例外離開 `for await` 迴圈會自動關閉串流，也可以使用 `await using` 或 `stream.close()`：
 
 <Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab>
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

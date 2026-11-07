@@ -8,19 +8,19 @@ description: 中止或逾時 HTTP 呼叫，並判讀 NET_ABORTED 與 NET_TIMEOUT
 用 `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 把呼叫端的 `AbortController` 與期限結合，再透過 `client({ signal })` 傳入合併後的 signal。Defjs 會把呼叫端手動中止歸類為 `NET_ABORTED`，把逾時中止歸類為 `NET_TIMEOUT`。
 
 <Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
-  <Tab value="sdk/reports.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="cancel-report.ts">
+  <Tab>
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>

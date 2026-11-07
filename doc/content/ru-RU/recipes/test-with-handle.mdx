@@ -8,19 +8,19 @@ description: Подмените Fetch для одного клиента чер�
 Функция `withHTTPHandle(...)` подменяет базовую функцию `fetch` для отдельного экземпляра клиента, полностью выполняя весь конвейер Defjs — валидацию входных данных, маппинг в `builder`, разрешение URL, перехватчики, классификацию статусов и декодирование Struct — без открытия реального сетевого сокета:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="test/orders.spec.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="Single-file demonstration">
+  <Tab>
 Это отдельная однофайловая демонстрация, а не спецификация тест-раннера. Для проверок общего определения SDK используйте предыдущую вкладку с тестом.
 
 <include cwd meta="get-order.ts">

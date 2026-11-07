@@ -10,21 +10,21 @@ En Defjs, los fallos de petición, transporte y decodificación no lanzan excepc
 ## 1. Declarar errores del servicio en el SDK y clasificarlos en la aplicación
 
 <Tabs items={["Switch exhaustivo por código", "Comprobación básica de estado", "Formas de tupla por transporte"]}>
-<Tab value="Exhaustive code switch">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="Basic status check">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Tuple shapes by transport">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ El prefijo antes del primer guion bajo `_` identifica la clase del fallo (`HTTP`
 Dado que un único struct de `error` cubre todos los códigos de estado no `2xx`, declara una unión cuando diferentes estados de error devuelvan distintas estructuras JSON:
 
 <Tabs items={["Discriminar por kind", "Discriminar por estado del cuerpo", "Unión simple (struct.or)"]}>
-<Tab value="Discriminate by kind">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="Discriminate by body status">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="Plain union (struct.or)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ En conexiones de larga duración, la tupla de la operación notifica los fallos 
 Cada `Fault` es un `Error` nativo (`instanceof Error === true`) con propiedades enumerables `code`, `status`, `response` y `data`.
 
 <Tabs items={["Inspeccionar la causa de StructError", "Resumen de diagnóstico redactado"]}>
-<Tab value="Inspect StructError cause">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="Redacted diagnostic summary">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

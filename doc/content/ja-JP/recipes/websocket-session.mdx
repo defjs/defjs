@@ -8,19 +8,19 @@ description: 接続を確立し、型付けされたエンベロープを送信�
 `defineWebSocket` で `incoming` と `outgoing` の Struct スキーマを、受信キューを制限する `maxIncomingQueueSize` とともに宣言します。アプリケーション側では、`session.onRuntimeError(...)` を購読し、`session.receive` を消費し、`finally` ブロック内で必ず購読解除、`session.close(...)` の呼び出し、および `await session.closed` を行います。
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
-  <Tab value="sdk/quotes.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="quotes.ts">
+  <Tab>
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>

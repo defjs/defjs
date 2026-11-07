@@ -14,21 +14,21 @@ description: SDK の API 定義を変更することなく、アプリケーシ�
 各トランスポートごとに専用の型付きファクトリ（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）が用意されています。これらを任意の組み合わせで `withInterceptors(...)` に渡します。
 
 <Tabs items={["基本設定", "オニオンモデルの実行順序", "複製とヘッダーの追加"]}>
-<Tab value="基本設定">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="オニオンモデルの実行順序">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
 </Tab>
-<Tab value="複製とヘッダーの追加">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example

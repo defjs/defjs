@@ -2,6 +2,8 @@ import { posix } from "node:path";
 
 import { createScanner, LanguageVariant, SyntaxKind } from "typescript/ast";
 
+import { tabItems } from "../app/lib/tab-items";
+
 function importPaths(code: string): string[] {
   const scanner = createScanner(true, LanguageVariant.JSX, code);
   const paths: string[] = [];
@@ -26,17 +28,56 @@ function importPaths(code: string): string[] {
   return paths;
 }
 
+const tabsGroup = /(<Tabs\b[^>]*>)([\s\S]*?)<\/Tabs>/g;
+
+function tabGroups(markdown: string): { open: string; body: string }[] {
+  const groups: { open: string; body: string }[] = [];
+  markdown.replace(tabsGroup, (match, open: string, body: string) => {
+    groups.push({ open, body });
+    return match;
+  });
+  return groups;
+}
+const tabElement = /<Tab(?:\s[^>]*)?>[\s\S]*?<\/Tab>/g;
+
+/**
+ * A `<Tab>` is matched to its trigger by position in `<Tabs items>`, so every
+ * `Tabs` needs a parsable `items` array, no `Tab` may carry a `value` (a
+ * translated label there silently hides the panel), and the counts must match.
+ */
+export function tabStructureIssues(markdown: string): string[] {
+  const issues: string[] = [];
+  for (const { open, body } of tabGroups(markdown)) {
+    const items = tabItems(open);
+    const label = open.replace(/\s+/g, " ");
+    if (!items) {
+      issues.push(`${label}: items must be a literal array of strings`);
+      continue;
+    }
+    const tabs = [...body.matchAll(/<Tab\b[^>]*>/g)];
+    for (const [tag] of tabs) {
+      if (tag !== "<Tab>")
+        issues.push(`${label}: ${tag} must be <Tab>; labels come from items`);
+    }
+    if (tabs.length !== items.length)
+      issues.push(
+        `${label}: ${tabs.length} <Tab> children for ${items.length} items`,
+      );
+  }
+  return issues;
+}
+
 export async function tabLayoutIssues(
   markdown: string,
   readInclude: (reference: string) => Promise<string>,
 ): Promise<string[]> {
   const issues: string[] = [];
-  for (const group of markdown.matchAll(/<Tabs\b[^>]*>([\s\S]*?)<\/Tabs>/g)) {
+  for (const { open, body: group } of tabGroups(markdown)) {
     const files = new Map<string, string>();
-    for (const tab of group[0].matchAll(
-      /<Tab\s+value=["']([^"']+)["']\s*>[\s\S]*?<\/Tab>/g,
-    )) {
-      const [, label] = tab;
+    const items = tabItems(open) ?? [];
+    let index = 0;
+    for (const tab of group.matchAll(tabElement)) {
+      const label = items[index++];
       if (!label || !/\.[a-z0-9]+$/i.test(label)) continue;
       const body = tab[0].slice(
         tab[0].indexOf(">") + 1,

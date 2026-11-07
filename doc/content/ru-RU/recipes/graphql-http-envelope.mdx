@@ -8,19 +8,19 @@ description: Обрабатывайте GraphQL как HTTP 200 плюс при�
 В Defjs нет встроенного клиента GraphQL или встроенной политики `errorPolicy`. Моделируйте GraphQL поверх HTTP как стандартную операцию `POST`, чей `builder` отправляет `{ query, operationName, variables }`. Пометьте `data` как `.nullish()` в Struct-оболочке, чтобы как пропущенное `data`, так и `data: null` успешно проходили структурную валидацию, а затем распаковывайте `errors[]` во вспомогательной функции приложения:
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
-  <Tab value="sdk/viewer.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/load-viewer.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
 </include>
 
   </Tab>
-  <Tab value="graphql-viewer.ts">
+  <Tab>
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>

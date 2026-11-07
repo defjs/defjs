@@ -12,21 +12,21 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 当 `incoming` 或 `outgoing` 有多种帧类型时，用 `struct.discriminatedUnion(...)` 建模。用 `await using` 或 `session.close()` + `await session.closed` 释放返回的 `WebSocketSession`：
 
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
-<Tab value="sdk/ticks-socket.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
 </include>
 
 </Tab>
-<Tab value="app/session.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup/app/session.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup.ts#example
@@ -61,12 +61,12 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 重连与心跳都需显式开启（opt-in），可通过 Client 选项（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或单次调用的派生 Client 选项（`client({ reconnect, heartbeat })`）配置：
 
 <Tabs items={["Reconnect policy", "Application heartbeat"]}>
-<Tab value="Reconnect policy">
+<Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="Application heartbeat">
+<Tab>
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 

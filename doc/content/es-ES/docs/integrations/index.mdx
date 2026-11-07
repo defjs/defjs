@@ -33,19 +33,19 @@ Cada plugin de Defjs respeta el **contrato de plugin ligero**:
 Un plugin de framework transmite un [`DerivableClient`](/es-ES/api/core/derivableclient-type) existente a través del árbol de componentes mediante inyección de dependencias nativa (Context de React o `provide` / `inject` de Vue):
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/main.tsx#example
 </include>
 
   </Tab>
-  <Tab value="app/OrderCard.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/OrderCard.tsx#example
 </include>
@@ -58,13 +58,13 @@ Un plugin de framework transmite un [`DerivableClient`](/es-ES/api/core/derivabl
 Un plugin de middleware es una factoría que devuelve un [`ClientOption`](/es-ES/api/core/clientoption-type). Al pasarse a `createClient(...)`, añade interceptores HTTP, SSE o WebSocket mediante `withInterceptors`:
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-  <Tab value="plugins/request-id.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/client.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/app/client.ts#example
 </include>

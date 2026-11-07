@@ -8,19 +8,19 @@ description: 連線、傳送一個帶型別嘅 envelope、接收一次，然後�
 喺 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` Struct，並設定有上限嘅 `maxIncomingQueueSize`。喺你嘅應用程式入面，訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並保證喺 `finally` 區塊入面取消訂閱監聽器、呼叫 `session.close(...)` 並等待 `await session.closed`：
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
-  <Tab value="sdk/quotes.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="quotes.ts">
+  <Tab>
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>

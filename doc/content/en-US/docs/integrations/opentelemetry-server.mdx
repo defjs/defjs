@@ -16,13 +16,13 @@ description: Instrument SDK calls on the server application's client while keepi
 Set a static, low-cardinality `operation` string on your SDK definitions (`defineRequest`, `defineEventStream`, `defineWebSocket`), then pass your OpenTelemetry `tracer`, `meter`, `logger`, or `propagator` to `withOpenTelemetryServer(...)` when constructing the client:
 
 <Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab value="sdk/operations.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/telemetry-client.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
@@ -44,19 +44,19 @@ Set a static, low-cardinality `operation` string on your SDK definitions (`defin
 Configure per-transport switches (`{ enabled: false }`) and span hooks (`startSpanHook`, `requestHook`, `responseHook`) inside `http`, `sse`, and `webSocket`. For WebSocket connections where downstream services expect trace context in the handshake query string, opt into `queryPropagation: true`:
 
 <Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
-  <Tab value="app/hooks.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/ws-propagation.ts">
+  <Tab>
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/active-span.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>

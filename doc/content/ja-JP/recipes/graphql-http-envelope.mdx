@@ -8,19 +8,19 @@ description: GraphQL を HTTP 200 の送受信とアプリケーション側の�
 Defjs は、GraphQL クライアントや独自の `errorPolicy` をコアに内蔵していません。HTTP 経由の GraphQL は、`builder` が `{ query, operationName, variables }` を送信する標準的な `POST` 操作としてモデル化します。エンベロープ Struct 上で `data` を `.nullish()` としてマークすることで、`data` の欠落と `data: null` の両方を構造バリデーションで受け入れられるようにし、アプリケーションのヘルパー関数内で `errors[]` をアンラップします。
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
-  <Tab value="sdk/viewer.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/load-viewer.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
 </include>
 
   </Tab>
-  <Tab value="graphql-viewer.ts">
+  <Tab>
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>

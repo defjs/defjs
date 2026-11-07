@@ -8,19 +8,19 @@ description: 在单个拦截器内附加 Authorization 并在 401 后重放一�
 在 Defjs 中，`next(request)` 调用拦截器链内部剩余的部分——不会从最外层拦截器重新分发。把令牌附加、单飞刷新去重和一次性 `401` 重放都放在**同一个** HTTP 拦截器中，这样外层日志或计时拦截器不会运行两次：
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
-  <Tab value="sdk/billing.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/auth-interceptor.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
 </include>
 
   </Tab>
-  <Tab value="refresh-bearer.ts">
+  <Tab>
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>

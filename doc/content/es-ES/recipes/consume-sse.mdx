@@ -8,19 +8,19 @@ description: Abre un flujo de eventos tipado, itera una vez y luego cierra y esp
 Cada `EventStreamHandle` expone un único iterador asíncrono. Coloca siempre `stream.close(...)` y `await stream.closed` dentro de un bloque `finally` para que una salida temprana con `break` o `return` nunca deje escapar el flujo Fetch subyacente:
 
 <Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
-  <Tab value="sdk/deployments.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="deploy-events.ts">
+  <Tab>
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>

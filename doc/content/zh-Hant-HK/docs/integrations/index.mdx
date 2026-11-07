@@ -33,19 +33,19 @@ description: 喺已定義嘅擴充點上擴充應用程式自己嘅 Defjs Client
 框架外掛透過原生依賴注入（React Context 或 Vue `provide` / `inject`），將現有嘅 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 傳遞畀元件樹下層：
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/main.tsx#example
 </include>
 
   </Tab>
-  <Tab value="app/OrderCard.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/OrderCard.tsx#example
 </include>
@@ -58,13 +58,13 @@ description: 喺已定義嘅擴充點上擴充應用程式自己嘅 Defjs Client
 中介層外掛係一個回傳 [`ClientOption`](/zh-Hant-HK/api/core/clientoption-type) 嘅工廠函式。當傳入 `createClient(...)` 時，佢會透過 `withInterceptors` 追加 HTTP、SSE 及／或 WebSocket 攔截器：
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-  <Tab value="plugins/request-id.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/client.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/app/client.ts#example
 </include>

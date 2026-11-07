@@ -12,14 +12,14 @@ Comme Defjs sépare les définitions d'opérations de l'exécution du client, vo
 Utilisez `withHTTPHandle`, `withSSEHandle` ou `withWebSocketHandle` sur `createClient(...)` pour substituer le transport sous-jacent de la plateforme. Defjs exécute l'intégralité du pipeline de l'opération : validation `struct` des entrées, projection par le `builder`, vérification du confinement de l'URL, intercepteurs, aiguillage par statut et décodage du `struct` de réponse.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="test/orders.spec.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example

@@ -14,21 +14,21 @@ La validación de entrada y el mapeo en `builder` se ejecutan **antes** de la ca
 Cada transporte cuenta con su propia factoría tipada de interceptores (`createHttpInterceptor`, `createSSEInterceptor`, `createWebSocketInterceptor`). Pasa cualquier combinación a `withInterceptors(...)`:
 
 <Tabs items={["Configuración básica", "Orden de ejecución en capas", "Clonar y añadir cabeceras"]}>
-<Tab value="Basic setup">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Onion execution order">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
 </Tab>
-<Tab value="Clone & add headers">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example

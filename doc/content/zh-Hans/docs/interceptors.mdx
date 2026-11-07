@@ -14,21 +14,21 @@ description: 在应用 Client 上挂载认证与传输策略，无须改动 SDK 
 每种传输都有各自的类型化拦截器工厂（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。把任意组合传给 `withInterceptors(...)`：
 
 <Tabs items={["基本配置", "洋葱模型执行顺序", "克隆并添加请求头"]}>
-<Tab value="基本配置">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="洋葱模型执行顺序">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
 </Tab>
-<Tab value="克隆并添加请求头">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example

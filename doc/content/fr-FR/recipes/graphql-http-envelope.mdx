@@ -8,19 +8,19 @@ description: Traitez GraphQL comme un HTTP 200 avec extraction applicative ; le 
 Defjs n'intègre aucun client GraphQL ni politique `errorPolicy`. Modélisez GraphQL sur HTTP comme une opération `POST` standard dont le `builder` transmet `{ query, operationName, variables }`. Déclarez `data` comme `.nullish()` sur le Struct de l'enveloppe afin qu'une propriété `data` omise ou valant `null` satisfasse la validation structurelle, puis extrayez `errors[]` dans une fonction utilitaire applicative :
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
-  <Tab value="sdk/viewer.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/load-viewer.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
 </include>
 
   </Tab>
-  <Tab value="graphql-viewer.ts">
+  <Tab>
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>

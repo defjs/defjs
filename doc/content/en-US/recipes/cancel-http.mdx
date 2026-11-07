@@ -8,19 +8,19 @@ description: Abort or time out a call and read NET_ABORTED / NET_TIMEOUT.
 Combine a caller `AbortController` with a deadline using `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` and pass the combined signal via `client({ signal })`. Defjs classifies a manual caller abort as `NET_ABORTED` and a timeout abort as `NET_TIMEOUT`.
 
 <Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
-  <Tab value="sdk/reports.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="cancel-report.ts">
+  <Tab>
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>

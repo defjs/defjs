@@ -8,19 +8,19 @@ description: 傳送具型別的 JSON 請求本文，並解碼已宣告的 201 �
 把具型別的輸入物件傳給 `builder`，回傳 `{ body: input }`。`.alias("customer_name")` 讓 TypeScript 端保留 `customerName`，在傳輸時編碼成 `"customer_name"`，再從 `201` 回應解碼回來。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="create-order.ts">
+  <Tab>
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>

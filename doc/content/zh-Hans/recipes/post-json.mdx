@@ -8,19 +8,19 @@ description: 发送带类型的 JSON body，并解码声明的 201。
 把带类型的输入对象传给 `builder`，返回 `{ body: input }`。`.alias("customer_name")` 让你在 TypeScript 中保持 `customerName`，在网络上编码为 `"customer_name"`，并从 `201` 响应中解码回来。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="create-order.ts">
+  <Tab>
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>

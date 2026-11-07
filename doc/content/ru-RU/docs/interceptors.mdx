@@ -14,21 +14,21 @@ description: Применяйте политики аутентификации 
 У каждого транспорта есть собственная типизированная фабрика перехватчиков (`createHttpInterceptor`, `createSSEInterceptor`, `createWebSocketInterceptor`). Передавайте любые их комбинации в `withInterceptors(...)`:
 
 <Tabs items={["Basic setup", "Onion execution order", "Clone & add headers"]}>
-<Tab value="Basic setup">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Onion execution order">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
 </Tab>
-<Tab value="Clone & add headers">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example

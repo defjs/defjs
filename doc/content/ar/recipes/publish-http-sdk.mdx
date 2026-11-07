@@ -14,19 +14,19 @@ description: صدّر تعريفات API كحزمة npm مع تصريحات ال
 احتفظ بتعريفات العمليات، وملف التصدير الشامل (barrel export)، وملفي `package.json` و`tsconfig.json` في دليل حزمة مخصص، مع التصريح عن `@defjs/core` كاعتمادية نظيرة `peerDependency`:
 
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
-  <Tab value="src/orders.ts">
+  <Tab>
 <include cwd meta='title="src/orders.ts"'>
   examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="src/index.ts">
+  <Tab>
 <include cwd meta='title="src/index.ts"'>
   examples/recipes/publish-http-sdk/src/index.ts#example
 </include>
 
   </Tab>
-  <Tab value="package.json">
+  <Tab>
 ```json
 {
   "name": "@company/orders-sdk",
@@ -54,7 +54,7 @@ description: صدّر تعريفات API كحزمة npm مع تصريحات ال
 }
 ```
   </Tab>
-  <Tab value="tsconfig.json">
+  <Tab>
 ```json
 {
   "compilerOptions": {

@@ -1,5 +1,6 @@
 import { apiEntries } from "../data/api-catalog";
 import { localePrefix } from "./i18n";
+import { tabItems } from "./tab-items";
 interface TableField {
   type: string;
   required?: boolean;
@@ -37,11 +38,18 @@ export function mapOutsideFences(
 }
 export function readableMarkdown(text: string, locale: string): string {
   const prefix = localePrefix(locale);
+  // A `<Tab>` takes its heading from the enclosing `<Tabs items>` by position.
+  let items: string[] = [];
+  let tab = 0;
   return mapOutsideFences(text, (line) => {
+    if (/^\s*<Tabs\b/.test(line)) {
+      items = tabItems(line) ?? [];
+      tab = 0;
+    }
     const converted = line
       .replace(/^(#{1,6} .*?)\s*\[#[^\]]+\]$/, "$1")
       .replace(/<Tabs\b[^>]*>|<\/Tabs>|<\/Tab>/g, "")
-      .replace(/^\s*<Tab value="([^"]+)"\s*>/g, "### $1")
+      .replace(/^\s*<Tab>/g, () => `### ${items[tab++] ?? ""}`)
       .replace(/<ApiIndex\s*\/>/g, () =>
         apiEntries
           .map(

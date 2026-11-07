@@ -10,21 +10,21 @@ description: 由 SDK 宣告服務錯誤契約，使用方應用程式按型別�
 ## 1. 喺 SDK 宣告服務錯誤，喺應用程式分流處理
 
 <Tabs items={["完整列舉錯誤碼分支", "基本狀態碼檢查", "各傳輸方式嘅 tuple 結構"]}>
-<Tab value="完整列舉錯誤碼分支">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="基本狀態碼檢查">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="各傳輸方式嘅 tuple 結構">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ description: 由 SDK 宣告服務錯誤契約，使用方應用程式按型別�
 因為單一 `error` struct 涵蓋所有非 `2xx` 狀態碼，當唔同錯誤狀態碼回傳唔同嘅 JSON 結構時，可以使用 union 宣告：
 
 <Tabs items={["按 kind 區分", "按 body 狀態區分", "一般聯合型別（struct.or）"]}>
-<Tab value="按 kind 區分">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="按 body 狀態區分">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="一般聯合型別（struct.or）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ description: 由 SDK 宣告服務錯誤契約，使用方應用程式按型別�
 每個 `Fault` 都係原生 `Error`（`instanceof Error === true`），並且帶有可列舉嘅 `code`、`status`、`response` 同 `data` 屬性。
 
 <Tabs items={["檢查 StructError 原因", "隱去敏感資料嘅診斷摘要"]}>
-<Tab value="檢查 StructError 原因">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="隱去敏感資料嘅診斷摘要">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

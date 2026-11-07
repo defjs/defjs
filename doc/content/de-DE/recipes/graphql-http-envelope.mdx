@@ -8,19 +8,19 @@ description: GraphQL als HTTP-`200`-Envelope mit anwendungsseitigem Entpacken mo
 Defjs bettet weder einen GraphQL-Client noch eine eigene `errorPolicy` ein. Modelliere GraphQL über HTTP als reguläre `POST`-Operation, deren `builder` `{ query, operationName, variables }` sendet. Markiere `data` am Envelope-Struct als `.nullish()`, sodass sowohl ein weggelassenes `data` als auch `data: null` die strukturelle Validierung passieren, und entpacke `errors[]` in einer Anwendungs-Hilfsfunktion:
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
-  <Tab value="sdk/viewer.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/load-viewer.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
 </include>
 
   </Tab>
-  <Tab value="graphql-viewer.ts">
+  <Tab>
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>

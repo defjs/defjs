@@ -10,21 +10,21 @@ Dans Defjs, les échecs de requête, de transport et de décodage ne lèvent auc
 ## 1. Déclarer les erreurs dans le SDK, trier dans l'application
 
 <Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>
-<Tab value="Exhaustive code switch">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="Basic status check">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Tuple shapes by transport">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ Le préfixe avant le premier tiret bas `_` nomme la classe du fault (`HTTP`, `RE
 Comme un unique struct `error` couvre tous les statuts hors `2xx`, déclarez une union lorsque des statuts d'erreur distincts renvoient des structures JSON différentes :
 
 <Tabs items={["Discriminate by kind", "Discriminate by body status", "Plain union (struct.or)"]}>
-<Tab value="Discriminate by kind">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="Discriminate by body status">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="Plain union (struct.or)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ Pour les connexions persistantes, le tuple de l'opération signale les échecs s
 Tout `Fault` est une instance d'`Error` native (`instanceof Error === true`) dotée de propriétés énumérables `code`, `status`, `response` et `data`.
 
 <Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
-<Tab value="Inspect StructError cause">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="Redacted diagnostic summary">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

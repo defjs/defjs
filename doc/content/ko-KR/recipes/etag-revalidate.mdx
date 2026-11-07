@@ -8,19 +8,19 @@ description: 304를 HTTP 상태 결함으로 처리하고, 캐시 Map을 작업 
 Defjs에서는 오직 `2xx` 응답만이 성공 브랜치를 타므로, `304 Not Modified`는 `HTTP_STATUS` 결함으로 도착합니다. `defineRequest`에 `error`를 선언하지 않아 비어 있는 `304` 본문을 읽지 않도록 하고, 캐시 `Map`은 작업 호출을 감싸는 애플리케이션 래퍼에서 관리하세요:
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
-  <Tab value="sdk/catalog.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/reader.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/app/reader.ts#example
 </include>
 
   </Tab>
-  <Tab value="etag-cache.ts">
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>

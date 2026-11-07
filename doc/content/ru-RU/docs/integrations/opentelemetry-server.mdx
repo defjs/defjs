@@ -16,13 +16,13 @@ description: Инструментируйте вызовы SDK на клиент
 Укажите статическую строку `operation` с низкой кардинальностью в ваших определениях SDK (`defineRequest`, `defineEventStream`, `defineWebSocket`), затем передайте `tracer`, `meter`, `logger` или `propagator` из OpenTelemetry в `withOpenTelemetryServer(...)` при создании клиента:
 
 <Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab value="sdk/operations.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/telemetry-client.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
@@ -44,19 +44,19 @@ description: Инструментируйте вызовы SDK на клиент
 Настраивайте флаги включения конкретного транспорта (`{ enabled: false }`) и спан-хуки (`startSpanHook`, `requestHook`, `responseHook`) внутри конфигурационных объектов `http`, `sse` и `webSocket`. Для WebSocket-соединений, где downstream-сервисы ожидают контекст трассировки в query-параметрах хэндшейка, включите `queryPropagation: true`:
 
 <Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
-  <Tab value="app/hooks.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/ws-propagation.ts">
+  <Tab>
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/active-span.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>

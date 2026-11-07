@@ -12,14 +12,14 @@ description: Тестируйте определения SDK и политики
 Используйте `withHTTPHandle`, `withSSEHandle` или `withWebSocketHandle` в `createClient(...)`, чтобы заменить базовый платформенный транспорт. Defjs по-прежнему выполняет полный конвейер операции: валидацию входной структуры `struct`, маппинг в `builder`, проверки ограничения URL, перехватчики, маршрутизацию статусов и декодирование структуры ответа `struct`.
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="test/orders.spec.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example

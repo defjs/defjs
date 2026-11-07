@@ -8,19 +8,19 @@ description: ألغِ طلباً أو عيّن مهلة زمنية وميّز ب
 اجمع بين `AbortController` الخاص بالمستدعي ومهلة زمنية محددة عبر `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` ومرّر الإشارة المدمجة عبر `client({ signal })`. يصنف Defjs الإلغاء اليدوي من المستدعي كـ `NET_ABORTED` والإلغاء الناتج عن انتهاء المهلة كـ `NET_TIMEOUT`.
 
 <Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
-  <Tab value="sdk/reports.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="cancel-report.ts">
+  <Tab>
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>

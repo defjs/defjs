@@ -12,21 +12,21 @@ SDK는 `defineRequest`를 사용하여 각 HTTP 작업을 정의합니다: HTTP 
 SDK 모듈에서 각 작업마다 별도의 `defineRequest`를 export하고, `createClient` 호출은 사용하는 애플리케이션에 둡니다:
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="app/main.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup/app/main.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/http/basic-setup.ts#example
@@ -113,12 +113,12 @@ JSON으로 표현할 수 없는 값(`NaN`, `±Infinity`, `Map`, `Set`, 함수, `
 - **신호 결합**: `AbortSignal.any([controller.signal, AbortSignal.timeout(ms)])`를 사용하세요.
 
 <Tabs items={["Deadline (NET_TIMEOUT)", "Manual cancel (NET_ABORTED)"]}>
-<Tab value="Deadline (NET_TIMEOUT)">
+<Tab>
 
 <include cwd>examples/http/deadline.ts#example</include>
 
 </Tab>
-<Tab value="Manual cancel (NET_ABORTED)">
+<Tab>
 
 <include cwd>examples/http/cancel.ts#example</include>
 

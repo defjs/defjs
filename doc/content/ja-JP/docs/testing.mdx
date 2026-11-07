@@ -12,14 +12,14 @@ Defjs は操作の定義とクライアントの実行を明確に分離して�
 `createClient(...)` で `withHTTPHandle`、`withSSEHandle`、`withWebSocketHandle` を使用すると、内部のプラットフォーム標準トランスポートを差し替えることができます。Defjs は通常通り、入力の `struct` バリデーション、`builder` による配置、URL の制限チェック、インターセプター、ステータス分岐、レスポンスの `struct` デコードといったパイプライン全体を実行します。
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="test/orders.spec.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example

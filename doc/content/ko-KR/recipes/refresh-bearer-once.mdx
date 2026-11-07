@@ -8,19 +8,19 @@ description: 인증 헤더를 첨부하고 단일 인터셉터 내부에서 1회
 Defjs에서 `next(request)`는 인터셉터 체인의 남은 안쪽 단계들을 호출하며, 가장 바깥쪽 인터셉터부터 전체 체인을 다시 디스패치하지 않습니다. 토큰 첨부, 동시 갱신의 단일 실행(single-flight deduplication), 그리고 `401` 수신 시 1회 재요청 처리를 **단일** HTTP 인터셉터 내부에 배치하세요. 이렇게 하면 바깥쪽의 로깅이나 타이밍 인터셉터가 중복으로 두 번 실행되는 문제를 방지할 수 있습니다:
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
-  <Tab value="sdk/billing.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/auth-interceptor.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
 </include>
 
   </Tab>
-  <Tab value="refresh-bearer.ts">
+  <Tab>
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>

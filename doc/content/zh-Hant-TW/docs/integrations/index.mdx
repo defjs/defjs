@@ -33,19 +33,19 @@ description: 在不耦合 SDK 定義的前提下，以框架注入、伺服器�
 框架外掛透過原生依賴注入（React Context 或 Vue `provide` / `inject`），把既有的 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 沿著元件樹往下傳：
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/main.tsx#example
 </include>
 
   </Tab>
-  <Tab value="app/OrderCard.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/OrderCard.tsx#example
 </include>
@@ -58,13 +58,13 @@ description: 在不耦合 SDK 定義的前提下，以框架注入、伺服器�
 中介層外掛是一個回傳 [`ClientOption`](/zh-Hant-TW/api/core/clientoption-type) 的 factory 函式。傳入 `createClient(...)` 後，它會透過 `withInterceptors` 附加 HTTP、SSE 與／或 WebSocket 攔截器：
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-  <Tab value="plugins/request-id.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/client.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/app/client.ts#example
 </include>

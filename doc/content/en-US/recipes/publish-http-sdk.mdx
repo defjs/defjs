@@ -14,19 +14,19 @@ A Defjs SDK exports pure operation definitions and Struct schemas as an npm pack
 Keep your operation definitions, barrel exports, `package.json`, and `tsconfig.json` in a dedicated package directory with `@defjs/core` declared as a `peerDependency`:
 
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
-  <Tab value="src/orders.ts">
+  <Tab>
 <include cwd meta='title="src/orders.ts"'>
   examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="src/index.ts">
+  <Tab>
 <include cwd meta='title="src/index.ts"'>
   examples/recipes/publish-http-sdk/src/index.ts#example
 </include>
 
   </Tab>
-  <Tab value="package.json">
+  <Tab>
 ```json
 {
   "name": "@company/orders-sdk",
@@ -54,7 +54,7 @@ Keep your operation definitions, barrel exports, `package.json`, and `tsconfig.j
 }
 ```
   </Tab>
-  <Tab value="tsconfig.json">
+  <Tab>
 ```json
 {
   "compilerOptions": {

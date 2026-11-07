@@ -14,21 +14,21 @@ description: 在應用程式 Client 上套用身分驗證與傳輸策略，不�
 每種傳輸都有專屬的具型別攔截器 factory（`createHttpInterceptor`、`createSSEInterceptor`、`createWebSocketInterceptor`）。把任意組合傳給 `withInterceptors(...)`：
 
 <Tabs items={["基本設定", "洋蔥模型執行順序", "複製並新增標頭"]}>
-<Tab value="基本設定">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="洋蔥模型執行順序">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/onion-order.ts#example
 </include>
 
 </Tab>
-<Tab value="複製並新增標頭">
+<Tab>
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example

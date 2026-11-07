@@ -14,19 +14,19 @@ Defjs 기반 SDK는 순수한 작업 정의와 Struct 스키마만을 npm 패키
 작업 정의, 배럴(barrel) export, `package.json`, `tsconfig.json`을 전용 패키지 디렉터리에 구성하고, `@defjs/core`를 `peerDependency`로 선언하세요:
 
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
-  <Tab value="src/orders.ts">
+  <Tab>
 <include cwd meta='title="src/orders.ts"'>
   examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="src/index.ts">
+  <Tab>
 <include cwd meta='title="src/index.ts"'>
   examples/recipes/publish-http-sdk/src/index.ts#example
 </include>
 
   </Tab>
-  <Tab value="package.json">
+  <Tab>
 ```json
 {
   "name": "@company/orders-sdk",
@@ -54,7 +54,7 @@ Defjs 기반 SDK는 순수한 작업 정의와 Struct 스키마만을 npm 패키
 }
 ```
   </Tab>
-  <Tab value="tsconfig.json">
+  <Tab>
 ```json
 {
   "compilerOptions": {

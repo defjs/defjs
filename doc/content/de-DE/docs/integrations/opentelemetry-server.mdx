@@ -16,14 +16,14 @@ description: Instrumentiere SDK-Aufrufe auf dem Client einer Server-Anwendung, w
 Setze einen statischen Bezeichner mit geringer Kardinalität als `operation` in deinen SDK-Definitionen (`defineRequest`, `defineEventStream`, `defineWebSocket`) und übergib deinen OpenTelemetry-`tracer`, `meter`, `logger` oder `propagator` beim Erstellen des Clients an `withOpenTelemetryServer(...)`:
 
 <Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-<Tab value="sdk/operations.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/operation-names.ts#example
 </include>
 
 </Tab>
-<Tab value="app/telemetry-client.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/basic-setup.ts#example
@@ -46,21 +46,21 @@ Setze einen statischen Bezeichner mit geringer Kardinalität als `operation` in 
 Konfiguriere transportspezifische Schalter (`{ enabled: false }`) und Span-Hooks (`startSpanHook`, `requestHook`, `responseHook`) innerhalb von `http`, `sse` und `webSocket`. Bei WebSocket-Verbindungen, bei denen nachgelagerte Dienste den Trace-Kontext im Query-String des Handshakes erwarten, aktiviere `queryPropagation: true`:
 
 <Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
-<Tab value="app/hooks.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
 </include>
 
 </Tab>
-<Tab value="app/ws-propagation.ts">
+<Tab>
 
 <include cwd>
   examples/opentelemetry-server/websocket-query-propagation.ts#example
 </include>
 
 </Tab>
-<Tab value="app/active-span.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/active-span.ts#example

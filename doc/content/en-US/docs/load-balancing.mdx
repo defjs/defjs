@@ -16,21 +16,21 @@ When an application configures multiple base URLs by calling `withEndpoint(...ur
 | [`p2cBalancer(options?)`](/api/core/p2cbalancer)                         | Server calls where replica latency or in-flight load varies                | Enabled (`5` consecutive failures)         |
 
 <Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
-<Tab value="Primary / backup (Pick-first)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="Server peers (Round-robin & P2C)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="Custom balancer">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -81,14 +81,14 @@ A later `withRetry` replaces the policy. `withRetry()` and `withRetry(undefined)
 `roundRobinBalancer()` and `p2cBalancer()` wrap their candidate selection in [`outlierDetection`](/api/core/outlierdetection) by default:
 
 <Tabs items={["Single-probe recovery", "Active health cache"]}>
-<Tab value="Single-probe recovery">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="Active health cache">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

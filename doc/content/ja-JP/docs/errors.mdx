@@ -10,21 +10,21 @@ Defjs では、リクエスト、トランスポート、デコードの各処�
 ## 1. SDK でエラーを宣言し、アプリケーションで分岐処理する
 
 <Tabs items={["エラーコードの網羅的な分岐", "基本的なステータス確認", "トランスポート別のタプル構造"]}>
-<Tab value="エラーコードの網羅的な分岐">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="基本的なステータス確認">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="トランスポート別のタプル構造">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ HTTP 通信の失敗時、返されるタプルは `[error, undefined, undefined
 単一の `error` struct がすべての非 `2xx` ステータスをカバーするため、異なるエラーステータスが異なる形状の JSON を返す場合は union 型を宣言します。
 
 <Tabs items={["kind による判別", "ボディのステータスによる判別", "通常のユニオン（struct.or）"]}>
-<Tab value="kind による判別">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="ボディのステータスによる判別">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="通常のユニオン（struct.or）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ API レスポンスにリテラルのタグ（`kind`、`type`、または埋め�
 すべての `Fault` はネイティブの `Error`（`instanceof Error === true`）であり、`code`、`status`、`response`、`data` の各プロパティを列挙可能です。
 
 <Tabs items={["StructError の原因の確認", "機密情報を除いた診断概要"]}>
-<Tab value="StructError の原因の確認">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="機密情報を除いた診断概要">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

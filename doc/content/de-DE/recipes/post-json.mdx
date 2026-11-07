@@ -8,19 +8,19 @@ description: Einen typisierten JSON-Body senden und eine deklarierte 201-Antwort
 Übergib ein typisiertes Eingabeobjekt an den `builder` und gib `{ body: input }` zurück. Mit `.alias("customer_name")` verwendest du in TypeScript weiterhin `customerName`, während auf Wire-Ebene automatisch `"customer_name"` kodiert und aus der `201`-Antwort dekodiert wird.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="create-order.ts">
+  <Tab>
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>

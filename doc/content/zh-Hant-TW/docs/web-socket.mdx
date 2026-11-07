@@ -12,21 +12,21 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 用 `struct.discriminatedUnion(...)` 在 `incoming` 或 `outgoing` 上建立多種訊框型別。回傳的 `WebSocketSession` 要用 `await using` 釋放，或明確呼叫 `session.close()` + `await session.closed`：
 
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
-<Tab value="sdk/ticks-socket.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
 </include>
 
 </Tab>
-<Tab value="app/session.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup/app/session.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup.ts#example
@@ -61,12 +61,12 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 重新連線與心跳都需要主動啟用，可透過 Client 選項（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或單次呼叫的衍生 Client 選項（`client({ reconnect, heartbeat })`）設定：
 
 <Tabs items={["Reconnect policy", "Application heartbeat"]}>
-<Tab value="Reconnect policy">
+<Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="Application heartbeat">
+<Tab>
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 

@@ -8,19 +8,19 @@ description: 將 304 視為 HTTP 狀態錯誤；快取 Map 留喺操作呼叫外
 喺 Defjs 入面，只有 `2xx` 狀態碼會進入成功分支，所以 `304 Not Modified` 會作為 `HTTP_STATUS` fault 回傳。喺 `defineRequest` 上面保持唔宣告 `error`，咁空嘅 `304` body 就根本唔會被讀取；然後將你嘅 `Map` 快取放喺操作呼叫外層嘅應用程式包裝函式入面：
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
-  <Tab value="sdk/catalog.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/reader.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/app/reader.ts#example
 </include>
 
   </Tab>
-  <Tab value="etag-cache.ts">
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>

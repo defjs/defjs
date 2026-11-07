@@ -33,19 +33,19 @@ description: SDK 定義を結合させることなく、フレームワーク注
 フレームワークプラグインは、既存の [`DerivableClient`](/ja-JP/api/core/derivableclient-type) をネイティブの依存性注入機能（React Context または Vue の `provide` / `inject`）を通じてコンポーネントツリーの下位へ渡します。
 
 <Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/main.tsx#example
 </include>
 
   </Tab>
-  <Tab value="app/OrderCard.tsx">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/react/app/OrderCard.tsx#example
 </include>
@@ -58,13 +58,13 @@ description: SDK 定義を結合させることなく、フレームワーク注
 ミドルウェアプラグインは、[`ClientOption`](/ja-JP/api/core/clientoption-type) を返すファクトリ関数です。`createClient(...)` に渡されると、`withInterceptors` を介して HTTP、SSE、WebSocket のインターセプターを追加します。
 
 <Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
-  <Tab value="plugins/request-id.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/plugins/request-id.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/client.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/integrations/request-id/app/client.ts#example
 </include>

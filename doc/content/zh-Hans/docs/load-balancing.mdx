@@ -16,21 +16,21 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 | [`p2cBalancer(options?)`](/zh-Hans/api/core/p2cbalancer)                        | 服务端调用，各副本间响应耗时或在途负载不均衡的场景    | 默认开启（连续 `5` 次失败后熔断剔除）              |
 
 <Tabs items={["主备（Pick-first）", "对等服务端（Round-robin 与 P2C）", "自定义均衡器"]}>
-<Tab value="主备（Pick-first）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="对等服务端（Round-robin 与 P2C）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="自定义均衡器">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -81,14 +81,14 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 `roundRobinBalancer()` 和 `p2cBalancer()` 默认在候选选择外包裹 [`outlierDetection`](/zh-Hans/api/core/outlierdetection) 离群检测：
 
 <Tabs items={["单探测恢复", "主动健康检查缓存"]}>
-<Tab value="单探测恢复">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="主动健康检查缓存">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active

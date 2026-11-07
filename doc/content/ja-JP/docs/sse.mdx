@@ -12,21 +12,21 @@ SDK は、`defineEventStream` を使用して Server-Sent Events（SSE）操作�
 開いた `EventStreamHandle` は、必ず `await using`（または `finally` ブロック内での `stream.close()` + `await stream.closed`）によって確実に解放してください。
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders-stream.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/sdk/orders-stream.ts#example
 </include>
 
 </Tab>
-<Tab value="app/watch-orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/app/watch-orders.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup.ts#example
@@ -40,14 +40,14 @@ SDK は、`defineEventStream` を使用して Server-Sent Events（SSE）操作�
 操作を呼び出すと、初回の HTTP レスポンスが `2xx` で、メディアタイプが `text/event-stream`、かつボディが読み取り可能であることを確認した後にのみ、`[error, stream, startupOpen]` が返されます。
 
 <Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -95,14 +95,14 @@ SSE の自動再接続は **オプトイン（明示的な有効化）** です�
 ストリームを開いた呼び出し元が、リソース解放の責任を持ちます。`for await` ループを `break`、`return`、または throw で抜けるとストリームは自動的にクローズされます。あるいは、`await using` または `stream.close()` を明示的に使用できます。
 
 <Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab>
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

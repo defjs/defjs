@@ -8,19 +8,19 @@ description: Swap Fetch for one client with withHTTPHandle and keep the operatio
 `withHTTPHandle(...)` replaces the underlying `fetch` function for a single client while exercising the entire Defjs pipeline—input validation, `builder` mapping, URL resolution, interceptors, status classification, and Struct decoding—without opening a network socket:
 
 <Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="test/orders.spec.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/testing/test/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="Single-file demonstration">
+  <Tab>
 This is a standalone single-file demonstration, not a test-runner spec. For assertions against the shared SDK definition, use the preceding test tab.
 
 <include cwd meta="get-order.ts">

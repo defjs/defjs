@@ -8,19 +8,19 @@ description: Aborta o aplica un plazo a una llamada y lee NET_ABORTED / NET_TIME
 Combina un `AbortController` de quien llama con un plazo límite mediante `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` y pasa la señal combinada con `client({ signal })`. Defjs clasifica una cancelación manual de quien llama como `NET_ABORTED` y el vencimiento de un plazo como `NET_TIMEOUT`.
 
 <Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
-  <Tab value="sdk/reports.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="cancel-report.ts">
+  <Tab>
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>

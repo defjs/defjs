@@ -10,21 +10,21 @@ In Defjs werfen Request-, Transport- und Dekodierungsfehler an der Aufrufstelle 
 ## 1. Service-Fehler im SDK deklarieren, in der Anwendung triagieren
 
 <Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>
-<Tab value="Exhaustive code switch">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="Basic status check">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="Tuple shapes by transport">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ Das Präfix vor dem ersten `_` benennt die Fault-Klasse (`HTTP`, `REQ`, `NET`, `
 Da ein einzelnes `error`-Struct alle Nicht-`2xx`-Status abdeckt, deklariere eine Union, wenn unterschiedliche Fehler-Statuscodes abweichende JSON-Strukturen liefern:
 
 <Tabs items={["Discriminate by kind", "Discriminate by body status", "Plain union (struct.or)"]}>
-<Tab value="Discriminate by kind">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="Discriminate by body status">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="Plain union (struct.or)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ Bei langlebigen Verbindungen meldet das Tupel der Operation **Startup**-Fehler (
 Jeder `Fault` ist ein nativer `Error` (`instanceof Error === true`) mit aufzählbaren Eigenschaften für `code`, `status`, `response` und `data`.
 
 <Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
-<Tab value="Inspect StructError cause">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="Redacted diagnostic summary">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

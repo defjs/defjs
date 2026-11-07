@@ -12,21 +12,21 @@ Defjs는 하나의 근본적인 경계를 중심으로 구축되었습니다: **
 SDK 패키지는 작업(`defineRequest`, `defineEventStream`, `defineWebSocket`)과 데이터 계약(`struct`)을 export합니다. SDK 모듈 안에서 `createClient`를 호출하거나 싱글톤 클라이언트를 보관하거나 환경 변수를 읽는 일은 절대 없습니다.
 
 <Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="app/consumers.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions/app/consumers.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example

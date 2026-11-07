@@ -16,13 +16,13 @@ description: API 定義をテレメトリ設定から完全に独立させたま
 SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静的でカーディナリティの低い `operation` 文字列を設定し、クライアント構築時に OpenTelemetry の `tracer`、`meter`、`logger`、`propagator` を `withOpenTelemetryServer(...)` に渡します。
 
 <Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab value="sdk/operations.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/telemetry-client.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
@@ -44,19 +44,19 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 `http`、`sse`、`webSocket` ごとにトランスポート単位の有効／無効スイッチ（`{ enabled: false }`）やスパンフック（`startSpanHook`、`requestHook`、`responseHook`）を設定できます。下流サービスがハンドシェイク時のクエリ文字列にトレースコンテキストを期待する WebSocket 接続では、`queryPropagation: true` をオプトインします。
 
 <Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
-  <Tab value="app/hooks.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/ws-propagation.ts">
+  <Tab>
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/active-span.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>

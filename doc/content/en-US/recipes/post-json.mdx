@@ -8,19 +8,19 @@ description: Send a typed JSON body and decode a declared 201.
 Pass a typed input object to `builder` and return `{ body: input }`. `.alias("customer_name")` keeps `customerName` in TypeScript while encoding `"customer_name"` on the wire and decoding it back from the `201` response.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="create-order.ts">
+  <Tab>
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>

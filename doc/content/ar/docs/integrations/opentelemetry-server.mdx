@@ -16,13 +16,13 @@ description: قِس وتتبّع استدعاءات SDK على عميل تطبي
 حدّد نص `operation` ثابتاً ومنخفض التباين في تعريفات SDK لديك (`defineRequest` و`defineEventStream` و`defineWebSocket`)، ثم مرّر كائنات `tracer` أو `meter` أو `logger` أو `propagator` الخاصة بـ OpenTelemetry إلى `withOpenTelemetryServer(...)` عند بناء العميل:
 
 <Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab value="sdk/operations.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/telemetry-client.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
@@ -44,19 +44,19 @@ description: قِس وتتبّع استدعاءات SDK على عميل تطبي
 اضبط مفاتيح التشغيل لكل وسيلة نقل (`{ enabled: false }`) وخطافات فترات التتبع (`startSpanHook` و`requestHook` و`responseHook`) داخل `http` و`sse` و`webSocket`. وفي اتصالات WebSocket حيث تتوقع الخدمات التابعة سياق التتبع داخل نص استعلام المصافحة، فعّل الخيار `queryPropagation: true`:
 
 <Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
-  <Tab value="app/hooks.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/ws-propagation.ts">
+  <Tab>
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/active-span.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>

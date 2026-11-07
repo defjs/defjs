@@ -8,19 +8,19 @@ description: تعامل مع 304 كخطأ في حالة HTTP، واحتفظ بذ
 في Defjs، تسلك استجابات `2xx` فقط فرع النجاح، لذا تصل استجابة `304 Not Modified` كخطأ `HTTP_STATUS`. اترك `error` غير معلن في `defineRequest` حتى لا يُقرأ جسم استجابة `304` الفارغ أبداً، واحتفظ بذاكرة التخزين المؤقت `Map` داخل غلاف تطبيقي حول استدعاء العملية:
 
 <Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
-  <Tab value="sdk/catalog.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/reader.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/app/reader.ts#example
 </include>
 
   </Tab>
-  <Tab value="etag-cache.ts">
+  <Tab>
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>

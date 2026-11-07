@@ -14,19 +14,19 @@ Un SDK basado en Defjs exporta definiciones de operaciones puras y esquemas Stru
 Mantén las definiciones de tus operaciones, las exportaciones del punto de entrada (barrel), `package.json` y `tsconfig.json` en un directorio de paquete dedicado, declarando `@defjs/core` como una `peerDependency`:
 
 <Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
-  <Tab value="src/orders.ts">
+  <Tab>
 <include cwd meta='title="src/orders.ts"'>
   examples/recipes/publish-http-sdk/src/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="src/index.ts">
+  <Tab>
 <include cwd meta='title="src/index.ts"'>
   examples/recipes/publish-http-sdk/src/index.ts#example
 </include>
 
   </Tab>
-  <Tab value="package.json">
+  <Tab>
 ```json
 {
   "name": "@company/orders-sdk",
@@ -54,7 +54,7 @@ Mantén las definiciones de tus operaciones, las exportaciones del punto de entr
 }
 ```
   </Tab>
-  <Tab value="tsconfig.json">
+  <Tab>
 ```json
 {
   "compilerOptions": {

@@ -12,21 +12,21 @@ Un SDK declara una operación de Server-Sent Events (SSE) con `defineEventStream
 Libera siempre un `EventStreamHandle` abierto mediante `await using` (o con `stream.close()` + `await stream.closed` en un bloque `finally`):
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Vista rápida en un solo archivo"]}>
-<Tab value="sdk/orders-stream.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/sdk/orders-stream.ts#example
 </include>
 
 </Tab>
-<Tab value="app/watch-orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/app/watch-orders.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup.ts#example
@@ -40,14 +40,14 @@ Libera siempre un `EventStreamHandle` abierto mediante `await using` (o con `str
 Llamar a la operación resuelve `[error, stream, startupOpen]` solo después de que la respuesta HTTP inicial sea `2xx`, tenga tipo de medio `text/event-stream` y posea un cuerpo legible:
 
 <Tabs items={["Inspección del handshake", "Ciclo de vida del handle de flujo"]}>
-<Tab value="Handshake inspection">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -95,14 +95,14 @@ Los valores por defecto son `maxBufferSize: 64 * 1024` bytes y `maxQueueSize: 10
 Quien abre un flujo es responsable de su limpieza. Salir de un bucle `for await` con `break`, `return` o una excepción cierra automáticamente el flujo, o puedes usar `await using` / `stream.close()`:
 
 <Tabs items={["Liberar con await using", "Plazo límite solo para el inicio"]}>
-<Tab value="Dispose with await using">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab>
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

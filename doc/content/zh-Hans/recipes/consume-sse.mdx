@@ -8,19 +8,19 @@ description: 打开强类型的 Server-Sent Events 流，通过异步迭代器�
 每个 `EventStreamHandle` 暴露一个单消费者异步迭代器。始终把 `stream.close(...)` 和 `await stream.closed` 放在 `finally` 块中，这样提前 `break` 或 `return` 也不会泄漏底层 Fetch 流：
 
 <Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
-  <Tab value="sdk/deployments.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="deploy-events.ts">
+  <Tab>
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>

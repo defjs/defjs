@@ -8,19 +8,19 @@ description: Einen GET-Aufruf ausführen und zwischen einer typisierten 200- und
 Deklariere sowohl `output` (für 2xx-Antworten) als auch `error` (für Nicht-2xx-Antworten) an `defineRequest`. Verzweige an der Aufrufstelle auf `error?.code === "HTTP_STATUS" && error.status === 404`, um die typisierte `error.data`-Payload auszulesen.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="get-order.ts">
+  <Tab>
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>

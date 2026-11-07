@@ -12,21 +12,21 @@ Un SDK déclare une opération Server-Sent Events (SSE) avec `defineEventStream`
 Libérez toujours un handle `EventStreamHandle` ouvert avec `await using` (ou par `stream.close()` + `await stream.closed` dans un bloc `finally`) :
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders-stream.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/sdk/orders-stream.ts#example
 </include>
 
 </Tab>
-<Tab value="app/watch-orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/app/watch-orders.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup.ts#example
@@ -40,14 +40,14 @@ Libérez toujours un handle `EventStreamHandle` ouvert avec `await using` (ou pa
 L'appel de l'opération ne résout `[error, stream, startupOpen]` qu'une fois que la réponse HTTP initiale est `2xx`, que son media type est `text/event-stream` et qu'elle présente un corps lisible :
 
 <Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -95,14 +95,14 @@ Les valeurs par défaut sont `maxBufferSize: 64 * 1024` octets et `maxQueueSize:
 L'appelant qui ouvre un flux possède son cycle de nettoyage. Quitter une boucle `for await` via `break`, `return` ou une exception ferme automatiquement le flux, ou vous pouvez utiliser `await using` / `stream.close()` :
 
 <Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab>
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

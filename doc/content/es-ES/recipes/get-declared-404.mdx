@@ -8,19 +8,19 @@ description: Llama a un GET y bifurca entre un 200 tipado y un 404 declarado.
 Declara tanto `output` (para respuestas 2xx) como `error` (para respuestas no 2xx) en `defineRequest`. En el punto de llamada, comprueba `error?.code === "HTTP_STATUS" && error.status === 404` para leer la carga tipada en `error.data`.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="get-order.ts">
+  <Tab>
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>

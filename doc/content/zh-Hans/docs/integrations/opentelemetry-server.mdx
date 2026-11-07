@@ -16,13 +16,13 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 在 SDK 定义中（`defineRequest`、`defineEventStream`、`defineWebSocket`）设置静态、低基数的 `operation` 字符串，然后在创建 Client 时把 OpenTelemetry 的 `tracer`、`meter`、`logger` 或 `propagator` 传给 `withOpenTelemetryServer(...)`：
 
 <Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab value="sdk/operations.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/operation-names.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/telemetry-client.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/basic-setup.ts#example
     </include>
@@ -44,19 +44,19 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 在 `http`、`sse` 和 `webSocket` 中配置每种传输的开关（`{ enabled: false }`）与 Span Hook（`startSpanHook`、`requestHook`、`responseHook`）。如果下游服务期望在 WebSocket 握手 query 字符串中收到 trace context，可显式开启 `queryPropagation: true`：
 
 <Tabs items={["app/hooks.ts", "app/ws-propagation.ts", "app/active-span.ts"]}>
-  <Tab value="app/hooks.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/options-and-hooks.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/ws-propagation.ts">
+  <Tab>
     <include cwd>
       examples/opentelemetry-server/websocket-query-propagation.ts#example
     </include>
 
   </Tab>
-  <Tab value="app/active-span.ts">
+  <Tab>
     <include cwd lang="typescript">
       examples/opentelemetry-server/active-span.ts#example
     </include>

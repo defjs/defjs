@@ -8,19 +8,19 @@ description: Open a typed event stream, iterate once, then close and await close
 Each `EventStreamHandle` exposes a single async iterator. Always place `stream.close(...)` and `await stream.closed` inside a `finally` block so early `break` or `return` statements never leak the underlying Fetch stream:
 
 <Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
-  <Tab value="sdk/deployments.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="deploy-events.ts">
+  <Tab>
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>

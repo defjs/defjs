@@ -8,19 +8,19 @@ description: استدعِ طلب GET وتفرع بدقة بين استجابة �
 صرّح عن كل من `output` (لاستجابات حالات 2xx) و`error` (للاستجابات غير 2xx) في `defineRequest`. وعند نقطة الاستدعاء، تفرّع بالتحقق من `error?.code === "HTTP_STATUS" && error.status === 404` لقراءة حمولة `error.data` محددة الأنواع.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="get-order.ts">
+  <Tab>
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>

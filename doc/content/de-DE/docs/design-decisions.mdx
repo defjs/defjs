@@ -12,21 +12,21 @@ Defjs basiert auf einer grundlegenden Grenze: **Ein SDK definiert den Wire-Vertr
 Ein SDK-Paket exportiert Operationen (`defineRequest`, `defineEventStream`, `defineWebSocket`) und Datenverträge (`struct`). Es ruft niemals `createClient` auf, speichert keinen Singleton-Client und liest keine Umgebungsvariablen aus.
 
 <Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="app/consumers.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions/app/consumers.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example

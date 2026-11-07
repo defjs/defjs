@@ -8,19 +8,19 @@ description: Отправьте типизированное тело JSON и д
 Передайте типизированный объект параметров в `builder` и верните `{ body: input }`. Вызов `.alias("customer_name")` сохраняет свойство `customerName` в TypeScript, отправляя `"customer_name"` по сети и декодируя его обратно из ответа `201`.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
-  <Tab value="sdk/orders.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="create-order.ts">
+  <Tab>
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>

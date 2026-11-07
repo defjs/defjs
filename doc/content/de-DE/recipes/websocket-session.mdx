@@ -8,19 +8,19 @@ description: Verbinden, einen typisierten Envelope senden, einmalig empfangen, d
 Deklariere `incoming`- und `outgoing`-Structs an `defineWebSocket` zusammen mit einem `maxIncomingQueueSize`, das die eingehende Warteschlange begrenzt. Abonniere in deiner Anwendung `session.onRuntimeError(...)`, konsumiere `session.receive` und melde Listener immer ab, rufe `session.close(...)` auf und warte im `finally`-Block auf `await session.closed`:
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
-  <Tab value="sdk/quotes.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
 </include>
 
   </Tab>
-  <Tab value="app/main.ts">
+  <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
 </include>
 
   </Tab>
-  <Tab value="quotes.ts">
+  <Tab>
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>

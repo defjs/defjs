@@ -12,21 +12,21 @@ Defjs 圍繞住一個基本邊界建立：**SDK 負責定義網絡契約；使�
 SDK 套件匯出操作（`defineRequest`、`defineEventStream`、`defineWebSocket`）同埋資料契約（`struct`）。佢永遠唔會呼叫 `createClient`、唔會保留單例 client，亦唔會直接讀取環境變數。
 
 <Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions/sdk/orders.ts#example
 </include>
 
 </Tab>
-<Tab value="app/consumers.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions/app/consumers.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example

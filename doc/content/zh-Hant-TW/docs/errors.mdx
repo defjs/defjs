@@ -10,21 +10,21 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 ## 1. 在 SDK 宣告服務錯誤，在應用程式中進行分類處理
 
 <Tabs items={["完整列舉錯誤碼分支", "基本狀態碼檢查", "各傳輸方式的 tuple 結構"]}>
-<Tab value="完整列舉錯誤碼分支">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/triage.ts#example
 </include>
 
 </Tab>
-<Tab value="基本狀態碼檢查">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/basic-setup.ts#example
 </include>
 
 </Tab>
-<Tab value="各傳輸方式的 tuple 結構">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/tuple-shapes.ts#example
@@ -64,21 +64,21 @@ HTTP 失敗時，tuple 是 `[error, undefined, undefined]`。收到的回應中�
 單一 `error` struct 會涵蓋所有非 `2xx` 狀態碼，因此當不同錯誤狀態碼回傳不同結構的 JSON 時，請宣告聯集：
 
 <Tabs items={["依 kind 區分", "依本文狀態區分", "一般聯合型別（struct.or）"]}>
-<Tab value="依 kind 區分">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-kind.ts#example
 </include>
 
 </Tab>
-<Tab value="依本文狀態區分">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-by-status.ts#example
 </include>
 
 </Tab>
-<Tab value="一般聯合型別（struct.or）">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/narrow-union.ts#example
@@ -104,14 +104,14 @@ HTTP 失敗時，tuple 是 `[error, undefined, undefined]`。收到的回應中�
 每個 `Fault` 都是原生 `Error`（`instanceof Error === true`），並帶有可列舉的 `code`、`status`、`response` 與 `data` 屬性。
 
 <Tabs items={["檢查 StructError 原因", "去識別化診斷摘要"]}>
-<Tab value="檢查 StructError 原因">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/log-fault.ts#example
 </include>
 
 </Tab>
-<Tab value="去識別化診斷摘要">
+<Tab>
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example

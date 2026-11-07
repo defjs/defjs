@@ -12,21 +12,21 @@ SDK объявляет операцию Server-Sent Events (SSE) с помощь
 Всегда освобождайте открытый `EventStreamHandle` с помощью `await using` (или связки `stream.close()` + `await stream.closed` в блоке `finally`):
 
 <Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
-<Tab value="sdk/orders-stream.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/sdk/orders-stream.ts#example
 </include>
 
 </Tab>
-<Tab value="app/watch-orders.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup/app/watch-orders.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/basic-setup.ts#example
@@ -40,14 +40,14 @@ SDK объявляет операцию Server-Sent Events (SSE) с помощь
 Вызов операции возвращает кортеж `[error, stream, startupOpen]` только когда исходный HTTP-ответ имеет статус `2xx`, тип медиа `text/event-stream` и читаемое тело:
 
 <Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
-<Tab value="Handshake inspection">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
 </Tab>
-<Tab value="Stream handle lifecycle">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -95,14 +95,14 @@ SDK объявляет операцию Server-Sent Events (SSE) с помощь
 Вызывающий код, открывший поток, полностью отвечает за его завершение. Выход из цикла `for await` через `break`, `return` или throw автоматически закрывает поток; также можно использовать `await using` или явный вызов `stream.close()`:
 
 <Tabs items={["Dispose with await using", "Startup-only deadline"]}>
-<Tab value="Dispose with await using">
+<Tab>
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
 </Tab>
-<Tab value="Startup-only deadline">
+<Tab>
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

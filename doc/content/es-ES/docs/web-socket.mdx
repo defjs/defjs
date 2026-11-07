@@ -12,21 +12,21 @@ description: Define el contrato de mensajes WebSocket de tu SDK mientras las apl
 Modela múltiples tipos de tramas en `incoming` o `outgoing` con `struct.discriminatedUnion(...)`. Libera el `WebSocketSession` devuelto con `await using` o mediante `session.close()` explícito + `await session.closed`:
 
 <Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Vista rápida en un solo archivo"]}>
-<Tab value="sdk/ticks-socket.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
 </include>
 
 </Tab>
-<Tab value="app/session.ts">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup/app/session.ts#example
 </include>
 
 </Tab>
-<Tab value="Single-file quick look">
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup.ts#example
@@ -61,12 +61,12 @@ Modela múltiples tipos de tramas en `incoming` o `outgoing` con `struct.discrim
 Tanto la reconexión como los latidos (_heartbeat_) son opcionales mediante opciones de cliente (`withWebSocketReconnect`, `withWebSocketHeartbeat`) o derivadas por llamada (`client({ reconnect, heartbeat })`):
 
 <Tabs items={["Política de reconexión", "Latido de la aplicación"]}>
-<Tab value="Reconnect policy">
+<Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 </Tab>
-<Tab value="Application heartbeat">
+<Tab>
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 

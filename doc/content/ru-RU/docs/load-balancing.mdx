@@ -16,21 +16,21 @@ description: Распределяйте трафик по нескольким �
 | [`p2cBalancer(options?)`](/ru-RU/api/core/p2cbalancer)                              | Серверных вызовов с разбросом задержек реплик или нагрузки в процессе       | Включена (`5` последовательных ошибок)                |
 
 <Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
-<Tab value="Primary / backup (Pick-first)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
 </Tab>
-<Tab value="Server peers (Round-robin & P2C)">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#passive
 </include>
 
 </Tab>
-<Tab value="Custom balancer">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/custom-endpoint-balancer.ts#example
@@ -83,14 +83,14 @@ description: Распределяйте трафик по нескольким �
 Балансировщики `roundRobinBalancer()` и `p2cBalancer()` по умолчанию оборачивают выбор узлов в [`outlierDetection`](/ru-RU/api/core/outlierdetection):
 
 <Tabs items={["Single-probe recovery", "Active health cache"]}>
-<Tab value="Single-probe recovery">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#recovery
 </include>
 
 </Tab>
-<Tab value="Active health cache">
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/endpoint-health.ts#active
