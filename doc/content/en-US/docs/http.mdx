@@ -131,7 +131,7 @@ Canceling a write request only reports that the caller stopped waiting—it does
 
 - **`withCredentials(true)`**: Sets Fetch `credentials: "include"` for HTTP and SSE requests.
 - **`withXSRF(options?)`**: Reads the XSRF cookie (`XSRF-TOKEN` by default) and injects the header (`X-XSRF-TOKEN`) on same-origin mutating HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: Pass on `client({ onDownloadProgress, onUploadProgress })`. Download progress reports `lengthComputable: true` only when `Content-Length` is positive and `Content-Encoding` is absent or `identity`. Upload progress streams bodies on server runtimes (Bun, Node.js). A throwing progress callback fails the call with `EXT_OBSERVER_FAILED`.
+- **`onDownloadProgress` / `onUploadProgress`**: Pass on `client({ onDownloadProgress, onUploadProgress })`. Download progress reports `lengthComputable: true` only when `Content-Length` is positive and `Content-Encoding` is absent or `identity`. Upload progress streams bodies on server runtimes (Bun). A throwing progress callback fails the call with `EXT_OBSERVER_FAILED`.
 
 ## Related reading
 

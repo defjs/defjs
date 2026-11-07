@@ -91,7 +91,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 `loaded` و`total` و`lengthComputable`. قد تكون ردود النداء غير متزامنة. `onDownloadProgress` أو `onUploadProgress` الذي يُلقي استثناءً يُفشل الاستدعاء بـ
 `EXT_OBSERVER_FAILED`، مع القيمة المُلقاة في `cause`؛ ويظل الإلغاء يُبلَّغ `NET_ABORTED`، أو `NET_TIMEOUT` عندما يكون سبب الإلغاء مهلة.
-يُبلَّغ تقدّم الرفع فقط حيث يستطيع وقت التشغيل بث أجسام الطلب (Bun وNode)؛ وفي المتصفحات، تُرسَل أجسام `Blob` / `File`
+يُبلَّغ تقدّم الرفع فقط حيث يستطيع وقت التشغيل بث أجسام الطلب (Bun)؛ وفي المتصفحات، تُرسَل أجسام `Blob` / `File`
 و`ArrayBuffer` و`FormData` دون تغيير ولا يُستدعى `onUploadProgress`.
 
 في بيئات الخادم، يستخدم FormData تدفقه المسلسَل دون تخزين الجسم كاملًا كـ Blob ويحافظ على حد multipart الفعلي. مجموعه غير معروف إلا إذا وفّره `Content-Length` صريح صالح. تبقى أنواع المحتوى الصريحة بعد تحويل الرفع، إلا أن FormData يجب أن يستخدم حد تسلسله. يعدّ `loaded` بايتات التدفق، لا إقرارات الخادم. التنزيلات ذات `Content-Encoding` غير `identity` تبلّغ `total: 0` و`lengthComputable: false`؛ وقد تكون بايتات تدفقها مفكوكة الضغط أصلًا.

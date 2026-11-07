@@ -131,7 +131,7 @@ description: صمّم عمليات HTTP لحزمة SDK الخاصة بك واس�
 
 - **`withCredentials(true)`**: يضبط خيار Fetch على `credentials: "include"` لطلبات HTTP وتدفقات أحداث SSE.
 - **`withXSRF(options?)`**: يقرأ ملف تعريف ارتباط XSRF (`XSRF-TOKEN` افتراضياً) ويحقن الترويسة (`X-XSRF-TOKEN`) مع طرق HTTP المعدِّلة من نفس المصدر (`POST` و`PUT` و`PATCH` و`DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: تُمرَّر عبر `client({ onDownloadProgress, onUploadProgress })`. يُبلغ تقدم التنزيل عن `lengthComputable: true` فقط عندما تكون ترويسة `Content-Length` موجبة وتكون `Content-Encoding` غائبة أو مضبوطة على `identity`. ويتيح تقدم الرفع دفق الأجسام على بيئات تشغيل الخادم (Bun وNode.js). ويؤدي إلقاء استثناء داخل دالة رد نداء التقدم إلى فشل الاستدعاء بخطأ `EXT_OBSERVER_FAILED`.
+- **`onDownloadProgress` / `onUploadProgress`**: تُمرَّر عبر `client({ onDownloadProgress, onUploadProgress })`. يُبلغ تقدم التنزيل عن `lengthComputable: true` فقط عندما تكون ترويسة `Content-Length` موجبة وتكون `Content-Encoding` غائبة أو مضبوطة على `identity`. ويتيح تقدم الرفع دفق الأجسام على بيئات تشغيل الخادم (Bun). ويؤدي إلقاء استثناء داخل دالة رد نداء التقدم إلى فشل الاستدعاء بخطأ `EXT_OBSERVER_FAILED`.
 
 ## قراءات ذات صلة
 

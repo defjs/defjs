@@ -78,7 +78,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ### HttpProgressFn
 
-`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소는 여전히 `NET_ABORTED`를 보고하고, abort 이유가 타임아웃이면 `NET_TIMEOUT`을 보고해요. 업로드 진행률은 요청 본문 스트리밍을 지원하는 런타임에서만 보고돼요(Bun, Node). 브라우저에서는 `Blob` / `File`, `ArrayBuffer`, `FormData` 본문이 그대로 보내지고 `onUploadProgress`는 호출되지 않아요.
+`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소는 여전히 `NET_ABORTED`를 보고하고, abort 이유가 타임아웃이면 `NET_TIMEOUT`을 보고해요. 업로드 진행률은 요청 본문 스트리밍을 지원하는 런타임에서만 보고돼요(Bun). 브라우저에서는 `Blob` / `File`, `ArrayBuffer`, `FormData` 본문이 그대로 보내지고 `onUploadProgress`는 호출되지 않아요.
 
 서버 런타임에서 FormData는 본문 전체를 Blob으로 버퍼링하지 않고 직렬화된 스트림을 쓰며, 실제 multipart boundary를 유지해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 명시 content type은 업로드 변환 뒤에도 남지만, FormData는 그 직렬화의 boundary를 써야 해요. `loaded`는 서버 확인이 아니라 스트림 바이트를 세요. identity가 아닌 `Content-Encoding`의 다운로드는 `total: 0`과 `lengthComputable: false`를 보고하고, 스트림 바이트는 이미 압축이 풀려 있을 수 있어요.
 

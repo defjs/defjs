@@ -124,7 +124,7 @@ SDK 정의(`defineRequest`, `defineEventStream`, `defineWebSocket`)에 카디널
 | 일반 HTTP 응답 (선언된 `error` 본문이 디코딩되거나 선언 본문이 없는 4xx/5xx, 또는 상태 `0` 포함)                                    | 없음                                                                                              |
 | 선언된 `output` / `error` 본문 읽기 실패, 선언된 JSON 표현의 비JSON 미디어 타입, 또는 `JSON.parse` 실패                             | 단일 `WARN`, `http.client.request.exception`, 단계 `request`, `exception.type: "BodyFailure"`     |
 | SSE 또는 WebSocket 핸드셰이크/연결 실패 (SSE 비2xx 상태 포함)                                                                       | 단일 `WARN`, `defjs.client.sse.exception` 또는 `defjs.client.websocket.exception`, 단계 `connect` |
-| SSE 또는 WebSocket 최종 오류 또는 reject된 `closed` (Node.js `1006` 소켓 오류, 큐 오버플로, 하트비트 타임아웃 포함)                 | 전송 이벤트 이름을 가진 단일 `WARN`, 단계 `connection`                                            |
+| SSE 또는 WebSocket 최종 오류 또는 reject된 `closed` (`1006` 소켓 오류, 큐 오버플로, 하트비트 타임아웃 포함)                         | 전송 이벤트 이름을 가진 단일 `WARN`, 단계 `connection`                                            |
 | 정상 완료, 메시지, EOF, 서버 WebSocket 종료 프레임(`1011` 포함), 또는 타임아웃이 아닌 활성 취소                                     | 없음                                                                                              |
 
 진단 기록에는 고정 메시지, `exception.type`(플랫폼/전송 클래스 이름인 `BodyFailure`, `EventStreamFatalError`, `DefjsFault`, `TypeError`, `Error` 등), 단계(phase), 고정 `operation`, 서버 주소/포트, 프로토콜 필드만이 기록되며, 원시 URL, 쿼리 스트링, 헤더, 본문, 오류 스택은 절대 기록되지 않습니다.

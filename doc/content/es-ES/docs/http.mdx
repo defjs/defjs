@@ -131,7 +131,7 @@ Cancelar una petición de escritura solo notifica que quien llama dejó de esper
 
 - **`withCredentials(true)`**: establece `credentials: "include"` en Fetch para peticiones HTTP y SSE.
 - **`withXSRF(options?)`**: lee la cookie de XSRF (`XSRF-TOKEN` por defecto) e inyecta la cabecera (`X-XSRF-TOKEN`) en métodos HTTP mutantes de mismo origen (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: pásalos en `client({ onDownloadProgress, onUploadProgress })`. El progreso de descarga reporta `lengthComputable: true` solo cuando `Content-Length` es positivo y `Content-Encoding` está ausente o es `identity`. El progreso de subida transmite cuerpos en entornos de servidor (Bun, Node.js). Si la función de callback de progreso lanza una excepción, la llamada falla con `EXT_OBSERVER_FAILED`.
+- **`onDownloadProgress` / `onUploadProgress`**: pásalos en `client({ onDownloadProgress, onUploadProgress })`. El progreso de descarga reporta `lengthComputable: true` solo cuando `Content-Length` es positivo y `Content-Encoding` está ausente o es `identity`. El progreso de subida transmite cuerpos en entornos de servidor (Bun). Si la función de callback de progreso lanza una excepción, la llamada falla con `EXT_OBSERVER_FAILED`.
 
 ## Lecturas relacionadas
 

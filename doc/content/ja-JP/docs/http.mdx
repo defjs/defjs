@@ -131,7 +131,7 @@ JSON で表現できない値（`NaN`、`±Infinity`、`Map`、`Set`、関数、
 
 - **`withCredentials(true)`**: HTTP および SSE リクエストの Fetch 設定に `credentials: "include"` を適用します。
 - **`withXSRF(options?)`**: 同一オリジンに対するデータ変更 HTTP メソッド（`POST`、`PUT`、`PATCH`、`DELETE`）において、XSRF クッキー（デフォルトは `XSRF-TOKEN`）を読み取り、対応するヘッダー（`X-XSRF-TOKEN`）を自動注入します。
-- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })` に渡します。ダウンロード進捗は、正の `Content-Length` が存在し `Content-Encoding` が未指定または `identity` の場合にのみ `lengthComputable: true` を報告します。アップロード進捗は、サーバーランタイム（Bun、Node.js）でボディをストリーミングします。進捗コールバック内で例外が throw された場合、呼び出しは `EXT_OBSERVER_FAILED` で失敗します。
+- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })` に渡します。ダウンロード進捗は、正の `Content-Length` が存在し `Content-Encoding` が未指定または `identity` の場合にのみ `lengthComputable: true` を報告します。アップロード進捗は、サーバーランタイム（Bun）でボディをストリーミングします。進捗コールバック内で例外が throw された場合、呼び出しは `EXT_OBSERVER_FAILED` で失敗します。
 
 ## 関連ドキュメント
 

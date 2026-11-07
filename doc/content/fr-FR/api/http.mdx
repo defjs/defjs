@@ -93,7 +93,7 @@ et les blobs sont bruts et sont analysés une fois. `DecodedResponse` est ce qui
 
 `loaded`, `total`, `lengthComputable`. Les callbacks peuvent être async. Un `onDownloadProgress` ou `onUploadProgress` qui lève fait échouer l’appel avec
 `EXT_OBSERVER_FAILED`, la valeur levée servant de `cause` ; l’annulation signale toujours `NET_ABORTED`, ou `NET_TIMEOUT` quand la raison de l’abort est un timeout.
-La progression de l’envoi n’est signalée que là où le runtime peut transmettre les corps de requête en flux (Bun, Node) ; dans les navigateurs, les corps `Blob` / `File`,
+La progression de l’envoi n’est signalée que là où le runtime peut transmettre les corps de requête en flux (Bun) ; dans les navigateurs, les corps `Blob` / `File`,
 `ArrayBuffer` et `FormData` sont envoyés inchangés et `onUploadProgress` n’est pas appelé.
 
 Dans les runtimes serveur, FormData utilise son flux sérialisé sans mise en tampon Blob du corps entier et conserve la boundary multipart réelle. Son total est inconnu sauf si un `Content-Length` explicite valide le fournit. Les types de contenu explicites survivent à la conversion d’envoi, sauf que FormData doit utiliser la boundary de sa sérialisation. `loaded` compte les octets du flux, pas les acquittements du serveur. Les téléchargements dont le `Content-Encoding` n’est pas identity signalent `total: 0` et `lengthComputable: false` ; les octets de leur flux peuvent déjà être décompressés.

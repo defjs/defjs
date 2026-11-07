@@ -131,7 +131,7 @@ JSON으로 표현할 수 없는 값(`NaN`, `±Infinity`, `Map`, `Set`, 함수, `
 
 - **`withCredentials(true)`**: HTTP 및 SSE 요청에 대해 Fetch의 `credentials: "include"`를 설정합니다.
 - **`withXSRF(options?)`**: XSRF 쿠키(기본값 `XSRF-TOKEN`)를 읽어 동일 출처의 변경 HTTP 메서드(`POST`, `PUT`, `PATCH`, `DELETE`)에 해당 헤더(`X-XSRF-TOKEN`)를 주입합니다.
-- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })`로 전달합니다. 다운로드 진행률은 `Content-Length`가 양수이고 `Content-Encoding`이 없거나 `identity`일 때만 `lengthComputable: true`를 보고합니다. 업로드 진행률은 서버 런타임(Bun, Node.js)에서 본문을 스트리밍합니다. 진행률 콜백에서 예외가 발생하면 호출은 `EXT_OBSERVER_FAILED`로 실패합니다.
+- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })`로 전달합니다. 다운로드 진행률은 `Content-Length`가 양수이고 `Content-Encoding`이 없거나 `identity`일 때만 `lengthComputable: true`를 보고합니다. 업로드 진행률은 서버 런타임(Bun)에서 본문을 스트리밍합니다. 진행률 콜백에서 예외가 발생하면 호출은 `EXT_OBSERVER_FAILED`로 실패합니다.
 
 ## 관련 문서
 

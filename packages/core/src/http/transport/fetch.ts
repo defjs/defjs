@@ -565,7 +565,7 @@ function isBrowserWindowOrWorker(): boolean {
 
 /**
  * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where the runtime streams
- * request bodies over any HTTP version (Bun, Node). Browsers are excluded: Chromium rejects a streamed
+ * request bodies over any HTTP version (Bun). Browsers are excluded: Chromium rejects a streamed
  * body on HTTP/1.1 and the protocol is unknown beforehand, and Firefox cannot stream request bodies.
  * `location`, `document`, or `importScripts` mark browser windows/workers: there the body is sent unchanged
  * and `onUploadProgress` is not called. Download progress is unaffected.

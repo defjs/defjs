@@ -78,7 +78,7 @@ description: defineRequest、請求選項，以及 HTTP 請求／回應型別。
 
 ### HttpProgressFn
 
-`loaded`、`total`、`lengthComputable`。回呼可以是非同步函式。`onDownloadProgress` 或 `onUploadProgress` 拋出例外時，該次呼叫會以 `EXT_OBSERVER_FAILED` 失敗，並以拋出的值作為 `cause`；取消仍回報 `NET_ABORTED`，中止原因為逾時時則回報 `NET_TIMEOUT`。只有能串流請求本文的執行環境（Bun、Node）才會回報上傳進度；在瀏覽器中，`Blob`／`File`、`ArrayBuffer` 與 `FormData` 本文會原樣送出，不會呼叫 `onUploadProgress`。
+`loaded`、`total`、`lengthComputable`。回呼可以是非同步函式。`onDownloadProgress` 或 `onUploadProgress` 拋出例外時，該次呼叫會以 `EXT_OBSERVER_FAILED` 失敗，並以拋出的值作為 `cause`；取消仍回報 `NET_ABORTED`，中止原因為逾時時則回報 `NET_TIMEOUT`。只有能串流請求本文的執行環境（Bun）才會回報上傳進度；在瀏覽器中，`Blob`／`File`、`ArrayBuffer` 與 `FormData` 本文會原樣送出，不會呼叫 `onUploadProgress`。
 
 在伺服器執行環境中，FormData 會使用序列化後的串流，不會把整個本文緩衝成 Blob，並保留實際的 multipart boundary。除非有效且明確的 `Content-Length` 提供總量，否則 total 未知。明確的 content type 經過上傳轉換後仍會保留，但 FormData 必須使用其序列化產生的 boundary。`loaded` 計算的是串流位元組，不是伺服器已確認的位元組。帶有非 identity `Content-Encoding` 的下載會回報 `total: 0` 與 `lengthComputable: false`；這些串流位元組可能早已解壓縮。
 

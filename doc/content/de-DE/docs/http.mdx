@@ -131,7 +131,7 @@ Das Abbrechen eines schreibenden Requests signalisiert lediglich, dass der Aufru
 
 - **`withCredentials(true)`**: Setzt Fetch `credentials: "include"` für HTTP- und SSE-Anfragen.
 - **`withXSRF(options?)`**: Liest das XSRF-Cookie (standardmäßig `XSRF-TOKEN`) aus und injiziert den Header (`X-XSRF-TOKEN`) bei Same-Origin-mutierenden HTTP-Methoden (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: Übergibst du an `client({ onDownloadProgress, onUploadProgress })`. Der Download-Fortschritt meldet `lengthComputable: true` nur dann, wenn `Content-Length` positiv ist und `Content-Encoding` fehlt oder `identity` lautet. Der Upload-Fortschritt streamt Bodys auf Server-Laufzeitumgebungen (Bun, Node.js). Ein Fortschritts-Callback, der eine Exception wirft, lässt den Aufruf mit `EXT_OBSERVER_FAILED` fehlschlagen.
+- **`onDownloadProgress` / `onUploadProgress`**: Übergibst du an `client({ onDownloadProgress, onUploadProgress })`. Der Download-Fortschritt meldet `lengthComputable: true` nur dann, wenn `Content-Length` positiv ist und `Content-Encoding` fehlt oder `identity` lautet. Der Upload-Fortschritt streamt Bodys auf Server-Laufzeitumgebungen (Bun). Ein Fortschritts-Callback, der eine Exception wirft, lässt den Aufruf mit `EXT_OBSERVER_FAILED` fehlschlagen.
 
 ## Weiterführende Links
 

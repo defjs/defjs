@@ -124,7 +124,7 @@ description: 為伺服器端應用程式 client 的 SDK 呼叫加上遙測，同
 | 一般 HTTP 回應（包含 4xx/5xx 已宣告的 `error` 本文成功解碼、未宣告本文，或狀態碼為 `0`）                                  | 無                                                                                                |
 | 已宣告的 `output` / `error` 本文讀取失敗，或宣告的 JSON 收到非 JSON 媒體型別或 `JSON.parse` 失敗                          | 單條 `WARN`，`http.client.request.exception`，階段為 `request`，`exception.type: "BodyFailure"`   |
 | SSE 或 WebSocket 交握/連線失敗（包含 SSE 非 2xx 狀態碼）                                                                  | 單條 `WARN`，`defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，階段為 `connect` |
-| SSE 或 WebSocket 終結錯誤或被拒絕的 `closed`（包含 Node.js `1006` Socket 錯誤、佇列溢位、心跳逾時）                       | 單條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                |
+| SSE 或 WebSocket 終結錯誤或被拒絕的 `closed`（包含 `1006` Socket 錯誤、佇列溢位、心跳逾時）                               | 單條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                |
 | 正常完成、收到訊息、EOF、伺服器端 WebSocket 關閉訊框（包含 `1011`），或主動非逾時中斷                                     | 無                                                                                                |
 
 診斷記錄會寫入固定訊息、`exception.type`（平台／傳輸類別名稱，例如 `BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError` 或 `Error`）、階段、靜態 `operation`、伺服器位址／連接埠與協定欄位——絕不寫入原始 URL、query string、標頭、本文或錯誤堆疊。

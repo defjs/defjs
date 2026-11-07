@@ -124,7 +124,7 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 | 通常の HTTP レスポンス（宣言された `error` ボディが正常デコードされた 4xx/5xx、ボディ未宣言のレスポンス、ステータス `0` を含む）                                       | 出力なし                                                                                             |
 | 宣言された `output` / `error` のボディ読み取り失敗、または宣言された JSON 表現に対して非 JSON のメディアタイプが返されたか `JSON.parse` に失敗                         | `WARN` 1 件、`http.client.request.exception`、phase `request`、`exception.type: "BodyFailure"`       |
 | SSE または WebSocket のハンドシェイク／接続失敗（SSE の非 2xx ステータスを含む）                                                                                       | `WARN` 1 件、`defjs.client.sse.exception` または `defjs.client.websocket.exception`、phase `connect` |
-| SSE または WebSocket の致命的エラーや `closed` の reject（Node.js の `1006` ソケットエラー、キューオーバーフロー、ハートビートタイムアウトを含む）                     | トランスポートイベント名を含む `WARN` 1 件、phase `connection`                                       |
+| SSE または WebSocket の致命的エラーや `closed` の reject（`1006` ソケットエラー、キューオーバーフロー、ハートビートタイムアウトを含む）                                | トランスポートイベント名を含む `WARN` 1 件、phase `connection`                                       |
 | 正常終了、メッセージ受信、EOF、サーバーからの WebSocket クローズフレーム（`1011` を含む）、またはタイムアウト以外の呼び出し元キャンセル                                | 出力なし                                                                                             |
 
 診断ログには、固定メッセージ、`exception.type`（`BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError`、`Error` などのプラットフォーム／トランスポートのクラス名）、phase、静的な `operation`、サーバーアドレス／ポート、プロトコルフィールドのみが記録され、生の URL、クエリ文字列、ヘッダー、ボディ、エラースタックトレースが出力されることは決してありません。

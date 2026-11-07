@@ -131,7 +131,7 @@ Annuler une requête de mutation indique uniquement que l'appelant a cessé d'at
 
 - **`withCredentials(true)`** : Active Fetch `credentials: "include"` pour les requêtes HTTP et SSE.
 - **`withXSRF(options?)`** : Lit le cookie XSRF (`XSRF-TOKEN` par défaut) et injecte l'en-tête (`X-XSRF-TOKEN`) sur les méthodes HTTP mutantes de même origine (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`** : À passer via `client({ onDownloadProgress, onUploadProgress })`. La progression de téléchargement n'indique `lengthComputable: true` que si `Content-Length` est positif et si `Content-Encoding` est absent ou `identity`. La progression d'envoi lit les corps en continu sur les runtimes serveur (Bun, Node.js). Tout callback de progression levant une exception interrompt l'appel avec `EXT_OBSERVER_FAILED`.
+- **`onDownloadProgress` / `onUploadProgress`** : À passer via `client({ onDownloadProgress, onUploadProgress })`. La progression de téléchargement n'indique `lengthComputable: true` que si `Content-Length` est positif et si `Content-Encoding` est absent ou `identity`. La progression d'envoi lit les corps en continu sur les runtimes serveur (Bun). Tout callback de progression levant une exception interrompt l'appel avec `EXT_OBSERVER_FAILED`.
 
 ## Lectures connexes
 

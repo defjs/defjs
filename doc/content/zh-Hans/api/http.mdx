@@ -79,7 +79,7 @@ body 已按声明的 struct 解码成功的响应。持有这个类型就证明�
 
 ### HttpProgressFn
 
-`loaded`、`total`、`lengthComputable`。回调可以异步执行。`onDownloadProgress` 或 `onUploadProgress` 抛出异常时，调用会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`；取消仍报告 `NET_ABORTED`，中止原因是超时时报告 `NET_TIMEOUT`。只有支持流式发送请求体的运行时（Bun、Node）才会报告上传进度；在浏览器中，`Blob` / `File`、`ArrayBuffer` 和 `FormData` 请求体会原样发送，不会调用 `onUploadProgress`。
+`loaded`、`total`、`lengthComputable`。回调可以异步执行。`onDownloadProgress` 或 `onUploadProgress` 抛出异常时，调用会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`；取消仍报告 `NET_ABORTED`，中止原因是超时时报告 `NET_TIMEOUT`。只有支持流式发送请求体的运行时（Bun）才会报告上传进度；在浏览器中，`Blob` / `File`、`ArrayBuffer` 和 `FormData` 请求体会原样发送，不会调用 `onUploadProgress`。
 
 在服务端运行时，FormData 使用其序列化后的流，不会把整个 body 缓冲成 Blob，并保留实际的 multipart 边界。除非提供了有效的显式 `Content-Length`，否则总长度未知。显式内容类型会在上传转换中保留，但 FormData 必须使用其序列化产生的边界。`loaded` 统计流中的字节，不代表服务端确认。带非 identity `Content-Encoding` 的下载报告 `total: 0` 和 `lengthComputable: false`；其流字节可能已经解压。
 

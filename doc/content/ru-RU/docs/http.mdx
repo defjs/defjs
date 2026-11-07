@@ -131,7 +131,7 @@ SDK определяет каждую HTTP-операцию с помощью `d
 
 - **`withCredentials(true)`**: устанавливает `credentials: "include"` в Fetch для HTTP и SSE.
 - **`withXSRF(options?)`**: читает cookie XSRF (по умолчанию `XSRF-TOKEN`) и устанавливает заголовок (`X-XSRF-TOKEN`) для мутирующих HTTP-методов одного origin (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: передавайте через `client({ onDownloadProgress, onUploadProgress })`. Прогресс скачивания возвращает `lengthComputable: true`, только если заголовок `Content-Length` положителен, а `Content-Encoding` отсутствует или равен `identity`. Прогресс загрузки потоково передаёт тело на серверных средах (Bun, Node.js). Выброс ошибки в колбэке прогресса завершает вызов сбоем `EXT_OBSERVER_FAILED`.
+- **`onDownloadProgress` / `onUploadProgress`**: передавайте через `client({ onDownloadProgress, onUploadProgress })`. Прогресс скачивания возвращает `lengthComputable: true`, только если заголовок `Content-Length` положителен, а `Content-Encoding` отсутствует или равен `identity`. Прогресс загрузки потоково передаёт тело на серверных средах (Bun). Выброс ошибки в колбэке прогресса завершает вызов сбоем `EXT_OBSERVER_FAILED`.
 
 ## Связанные материалы
 

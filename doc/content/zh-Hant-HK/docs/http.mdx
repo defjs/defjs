@@ -131,7 +131,7 @@ SDK 作者用 `defineRequest` 嚟定義每個 HTTP 操作：包括佢嘅 HTTP me
 
 - **`withCredentials(true)`**：為 HTTP 同 SSE 請求設定 Fetch 嘅 `credentials: "include"`。
 - **`withXSRF(options?)`**：讀取 XSRF cookie（預設為 `XSRF-TOKEN`），並喺同源嘅變更類 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上自動注入 header（`X-XSRF-TOKEN`）。
-- **`onDownloadProgress` / `onUploadProgress`**：透過 `client({ onDownloadProgress, onUploadProgress })` 傳入。下載進度淨係喺 `Content-Length` 為正數而且冇 `Content-Encoding`（或為 `identity`）嗰陣，先會報告 `lengthComputable: true`。上傳進度支援喺伺服器環境（Bun、Node.js）串流 body。如果進度 callback 拋出例外，成個呼叫會以 `EXT_OBSERVER_FAILED` 失敗。
+- **`onDownloadProgress` / `onUploadProgress`**：透過 `client({ onDownloadProgress, onUploadProgress })` 傳入。下載進度淨係喺 `Content-Length` 為正數而且冇 `Content-Encoding`（或為 `identity`）嗰陣，先會報告 `lengthComputable: true`。上傳進度支援喺伺服器環境（Bun）串流 body。如果進度 callback 拋出例外，成個呼叫會以 `EXT_OBSERVER_FAILED` 失敗。
 
 ## 延伸閱讀
 
