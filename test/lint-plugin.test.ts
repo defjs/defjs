@@ -14,6 +14,19 @@ export function effectful() {
 export function positive(y: unknown) {
   return typeof y === "string" || typeof y === "number";
 }
+declare global { var runtimeKind: unknown; }
+let reads = 0;
+Object.defineProperty(globalThis, "runtimeKind", { get: () => ++reads === 1 ? 1 : "ready" });
+export function globalAccessor() {
+  return typeof runtimeKind !== "string" && typeof runtimeKind !== "number";
+}
+export function memberAccessor(value: { readonly current: unknown }) {
+  return typeof value.current !== "string" && typeof value.current !== "number";
+}
+declare const ambientKind: unknown;
+export function ambientAccessor() {
+  return typeof ambientKind !== "string" && typeof ambientKind !== "number";
+}
 `;
 
 function isRecord(value: unknown): value is Record<string, unknown> {

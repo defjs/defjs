@@ -17,10 +17,32 @@ const preferTypeofSwitch: Rule.RuleModule = {
   create(context) {
     const { sourceCode } = context;
 
-    // A switch reads its subject once. Only report subjects whose repeated reads
-    // cannot differ: a call, getter, or update in the chain would change behaviour.
-    const isStableSubject = (node: Expression): boolean =>
-      node.type === "Identifier" || node.type === "ThisExpression";
+    // Unresolved and global identifiers can read host accessors, unlike lexical bindings.
+    const isStableSubject = (node: Expression): boolean => {
+      if (node.type === "ThisExpression") return true;
+      if (node.type !== "Identifier") return false;
+      let scope = sourceCode.getScope(node);
+      for (;;) {
+        const variable = scope.set.get(node.name);
+        if (variable) {
+          return (
+            scope.type !== "global" &&
+            variable.defs.some(({ node, parent }) => {
+              const declared: unknown = Object.getOwnPropertyDescriptor(
+                node,
+                "declare",
+              )?.value;
+              const parentDeclared: unknown =
+                parent &&
+                Object.getOwnPropertyDescriptor(parent, "declare")?.value;
+              return declared !== true && parentDeclared !== true;
+            })
+          );
+        }
+        if (!scope.upper) return false;
+        scope = scope.upper;
+      }
+    };
 
     const argumentOf = (node: Expression): Expression | undefined => {
       if (node.type !== "BinaryExpression" || node.operator !== "!==") {
