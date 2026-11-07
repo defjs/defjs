@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上可选，在 `error` 上必填。`code`、`reason` 和 `wasClean` 可以出现在每个变体上。手动 `session.close()` 会在 close 事件自己没有这两项时，填上 `{ kind: "closed" }` 的 `code` 和 `reason`。
+`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上可选，在 `error` 上必填。传入的原始 frame 或已解码消息队列溢出时，`cause.code === "CAP_QUEUE_OVERFLOW"`；同一个 cause 会让 `receive` reject，并传给 `onRuntimeError`。心跳超时和重连次数耗尽仍使用普通运行时 `Error` 作为 cause，没有单独的稳定代码。`code`、`reason` 和 `wasClean` 可以出现在每个变体上。手动 `session.close()` 会在 close 事件自己没有这两项时，填上 `{ kind: "closed" }` 的 `code` 和 `reason`。
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hans/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `signal`。`WebSocketHeartbeatConfig`：`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。没有 `timeout` 或 `abort` 字段。
 
 `signal` 覆盖整个 session，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。`signal` 是这次调用的 signal；要组合 signal，在应用代码里用 `AbortSignal.any`。`heartbeat` 整体替换；它的 `timeoutMs` 等待确认，不是请求期限。
+
+builder 和拦截器链每次操作只运行一次。重连复用已构建的 path/query 和捕获的 protocols，并在 `beforeConnect` 之前构造 URL。如果拦截器没有替换请求的基础端点，重连还会代入新选中的端点。该 hook 不能在同一个 session 内轮换 URL 或子协议凭据；请使用新的 input 或 client 配置发起新操作。
 
 设了 `reconnect` 时，每次连接中断的 `attempts` 默认 3；`0` 禁用。成功 `open` 后会重置预算和退避指数，因此每次新的中断都从第 1 次重试开始。省略 `attempts` 并不表示单次中断期间可以无限重试。默认值和校验规则见 [Client](/zh-Hans/api/client)。
 

@@ -74,7 +74,16 @@ description: 在服务端应用 Client 上为出站 SDK 请求注入观测能力
 
 - **HTTP**：Span 在 HTTP 拦截器开始处创建，在收到 `HttpResponse` 时结束。声明的 `output` / `error` 响应体会在拦截器边界**内部**完成读取（以及 JSON 校验和解析）。读取响应体失败或媒体类型不符会触发拦截器 reject（`error.type: "BodyFailure"`），标记 Span 为 `ERROR`，并在指标中记录 `BodyFailure`，同时生成一条 `WARN` 日志。HTTP 状态码大于等于 `400` 会将 Span 标记为 `ERROR`，并将状态码字符串作为 `error.type`。后续的 Struct 强类型校验（`RES_STRUCT_MISMATCH`）发生在拦截器链之外，不会篡改已结束的传输 Span。
 - **SSE**：单条逻辑事件流（包括自动重连）对应一个 Span，保持开启状态直至 `stream.closed` 终结。按顺序记录事件：`sse.connected`，随后为 `sse.closed`、`sse.aborted`（对于 `stream.close()` 或非超时的手动取消，Span 以 `OK` 结束）或 `sse.error`（对于包含超时在内的异常中止，Span 以 `ERROR` 结束）。
-- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 终结。按顺序记录事件：`websocket.connected`、`websocket.closed`、`websocket.error`。服务端主动发送的 Close Frame（不论关闭码为何）均以 `OK` 结束 Span 并记录 `websocket.closed`；调用方主动取消则以 `ERROR` 结束 Span 并记录 `websocket.error`（不生成日志）。无 Close Frame 的意外断开（`1006`）取决于运行时：在关闭前会触发 Socket Error 的环境（Node.js）中以 `ERROR` 结束并生成日志；在不触发 Error 的环境（Bun）中则以 `OK` 结束。
+- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 终结。记录事件：`websocket.connected`、`websocket.closed`、`websocket.error`。服务端主动发送的 Close Frame（不论关闭码为何）均以 `OK` 结束 Span 并记录 `websocket.closed`；调用方主动取消则以 `ERROR` 结束 Span 并记录 `websocket.error`，不生成日志，但取消原因是 `TimeoutError` 时例外，会生成一条 `WARN`。无 Close Frame 的意外断开（`1006`）取决于运行时：在 Socket 的 `error` 事件先于 `close` 触发的环境（Node.js）中以 `ERROR` 结束并生成一条日志；不触发该事件的环境（Bun）则以 `OK` 结束。
+
+### 重试与重连边界
+
+以下是当前拦截器观测到的行为，并非独立的负载均衡器遥测 API：
+
+- 每次 `withRetry` HTTP 尝试都有独立的客户端 Span 和耗时样本。存在活跃的应用父 Span 时，各次尝试是该父 Span 下的兄弟节点；否则，重试不会自动归入同一条 Trace。Core 不会创建逻辑调用的父 Span。
+- HTTP 尝试的 URL 标识该次尝试的端点，但不会输出尝试序号、重试原因、预算余额/耗尽，或逐出/恢复属性。
+- SSE 和 WebSocket 在重连过程中保留同一个逻辑会话 Span，不会为每条物理连接分别创建 Span。即使发生故障转移，Span 的 URL 和指标属性仍保留初始端点。重连不会再次输出 `connected` 事件。活跃指标统计的是等待 `closed` 的逻辑会话，而不是当前选中副本上的 socket。
+- 在一次 Bun 运行中，HTTP 503 产生了 `error.type: "503"`，连接被拒绝产生了 `"TypeError"`，而期限到期和调用方取消均产生了 `"Error"`。后两者分别返回 `NET_TIMEOUT` 和 `NET_ABORTED`；这些 Defjs 元组错误码并不是独立的 HTTP 遥测属性。对于已打开的 WebSocket，默认取消产生了 `"AbortError"`，不记录警告；以 `TimeoutError` 为取消原因时，则产生了 `"TimeoutError"` 和一条警告。错误类名是对传输/运行时的观测，不能代替检查元组或关闭结果。
 
 ### 导出的指标列表
 
@@ -82,7 +91,7 @@ description: 在服务端应用 Client 上为出站 SDK 请求注入观测能力
 
 | 指标名称                                     | 业务含义                                    |
 | -------------------------------------------- | ------------------------------------------- |
-| `http.client.request.duration`               | HTTP 请求耗时（秒）                         |
+| `http.client.request.duration`               | HTTP 单次尝试耗时（秒）                     |
 | `defjs.client.sse.connect.duration`          | 截至返回 SSE 句柄的耗时                     |
 | `defjs.client.sse.connection.duration`       | 从获得句柄到流最终 `stream.closed` 的总时长 |
 | `defjs.client.sse.active_streams`            | 当前活跃的逻辑 SSE 流数量                   |
@@ -104,14 +113,14 @@ description: 在服务端应用 Client 上为出站 SDK 请求注入观测能力
 
 每个请求或长连接生命周期最多只会生成一条终态 `WARN`（等级 `13`）的 `LogRecord`：
 
-| 观察到的物理传输结果                                                                                                    | 生成的 Defjs LogRecord 诊断日志                                                                                       |
-| ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| HTTP 拦截器 `next()` 被 reject 拒绝（底层网络故障、请求超时或已声明的响应体读取失败，排除主动取消与业务 `HTTP_STATUS`） | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`                                    |
-| 普通的 HTTP 响应（包括已声明 `error` 成功解码的 4xx/5xx，未声明响应体的响应，或 status 为 0）                           | 不生成日志                                                                                                            |
-| 声明的 `output` / `error` 响应体读取失败，或 JSON 格式的响应体媒体类型不匹配/JSON 解析失败                              | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`，`exception.type: "BodyFailure"`   |
-| SSE 或 WebSocket 握手建连失败（包括 SSE 非 2xx 状态码）                                                                 | 生成一条 `WARN` 日志，事件名为 `defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，phase 为 `connect` |
-| SSE 或 WebSocket 终态异常断开或 `closed` reject（包括 Node.js 下的 `1006` Socket 报错、队列溢出、心跳超时）             | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
-| 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动发起的非超时取消                       | 不生成日志                                                                                                            |
+| 观察到的物理传输结果                                                                                                                     | 生成的 Defjs LogRecord 诊断日志                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| HTTP OTel `next()` 被 reject 拒绝（底层网络故障、观测到的超时或已声明的响应体读取失败），排除非超时的主动取消与公开的 `HTTP_STATUS` 故障 | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`                                    |
+| 普通的 HTTP 响应（包括已声明 `error` 成功解码的 4xx/5xx，未声明响应体的响应，或 status 为 0）                                            | 不生成日志                                                                                                            |
+| 声明的 `output` / `error` 响应体读取失败，或 JSON 格式的响应体媒体类型不匹配/JSON 解析失败                                               | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`，`exception.type: "BodyFailure"`   |
+| SSE 或 WebSocket 握手建连失败（包括 SSE 非 2xx 状态码）                                                                                  | 生成一条 `WARN` 日志，事件名为 `defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，phase 为 `connect` |
+| SSE 或 WebSocket 终态异常断开或 `closed` reject（包括 Node.js 下的 `1006` Socket 报错、队列溢出、心跳超时）                              | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
+| 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动发起的非超时取消                                        | 不生成日志                                                                                                            |
 
 所有诊断日志均严格记录固定消息文本、`exception.type`（如 `BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError` 或 `Error`）、所处 phase 阶段、静态 `operation` 标识、服务端地址/端口与协议信息——绝不打印原始 URL、Query 参数、请求头、Body 载荷或异常堆栈。
 

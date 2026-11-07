@@ -23,13 +23,13 @@ bun add @defjs/core @defjs/vue vue
 
 Создайте клиент в точке входа вашего приложения, подключите плагин `createClientPlugin(client)` и зарегистрируйте `onCleanup` перед запуском асинхронной работы внутри watcher:
 
-<Tabs items={["src/main.ts", "src/OrderView.vue"]}>
+<Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
   </Tab>
-  <Tab value="src/OrderView.vue">
+  <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
   </Tab>
 </Tabs>
@@ -57,6 +57,8 @@ bun add @defjs/core @defjs/vue vue
 Для операций, запущенных внутри composable или компонента вне watcher, используйте связку `AbortController` и `onScopeDispose`. Прерывайте запуск, закрывайте любой хэндл, разрешившийся после уничтожения скоупа, читайте единственный асинхронный итератор и дожидайтесь завершения через `.closed`:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
+
+- Ветка ошибки кортежа показывает сбои первоначального хэндшейка (включая HTTP 503). Блок `catch` итератора показывает сбои после старта; блок `finally` по-прежнему закрывает поток и дожидается его завершения.
 
 - Остановка скоупа штатно завершает цикл `for await` потока SSE.
 - Прерывание сессии WebSocket завершает её в статусе `aborted` и отклоняет `session.receive` ошибкой `AbortError`, поэтому обрабатывайте блок `catch` после уничтожения скоупа и обязательно отписывайте слушателей `onStateChange` / `onRuntimeError` в блоке `finally`.

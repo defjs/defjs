@@ -23,13 +23,13 @@ bun add @defjs/core @defjs/vue vue
 
 在应用入口处创建 Client，安装 `createClientPlugin(client)`，并在 Watcher 内部启动异步任务前注册 `onCleanup`：
 
-<Tabs items={["src/main.ts", "src/OrderView.vue"]}>
+<Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
   </Tab>
-  <Tab value="src/OrderView.vue">
+  <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
   </Tab>
 </Tabs>
@@ -57,6 +57,8 @@ bun add @defjs/core @defjs/vue vue
 对于在 Watcher 之外（例如普通的 Composable 或组件生命周期中）发起的异步任务，可结合使用 `AbortController` 与 `onScopeDispose`。在作用域销毁时取消握手、关闭在销毁后才 resolve 的晚到句柄、消费唯一的异步迭代器，并等待 `.closed`：
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
+
+- 元组的错误分支展示初始握手失败（包括 HTTP 503）。迭代器的 `catch` 展示启动后的失败；`finally` 块仍会关闭并等待流结束。
 
 - 停止当前作用域会使 SSE 的 `for await` 循环正常结束。
 - 取消 WebSocket 会话会使其以 `aborted` 终结，并使 `session.receive` 以 `AbortError` 报错。因此在销毁后请保护好 `catch` 块，并在 `finally` 中注销 `onStateChange` 与 `onRuntimeError` 监听器。

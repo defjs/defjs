@@ -74,7 +74,16 @@ El plugin mide los ciclos de vida del transporte dentro de la cadena de intercep
 
 - **HTTP**: el span comienza en el interceptor HTTP y finaliza cuando retorna `HttpResponse`. Los cuerpos declarados de `output` / `error` se leen (y las representaciones JSON se verifican y analizan) **dentro** del límite del manejador antes de retornar. Un fallo en la lectura del cuerpo o de análisis de medio JSON rechaza a través del interceptor (`error.type: "BodyFailure"`), marca el span como `ERROR`, registra `BodyFailure` en las métricas y emite un registro `WARN`. Un estado `400+` marca el span como `ERROR` con la cadena del código de estado como `error.type`. La validación del struct (`RES_STRUCT_MISMATCH`) y la conversión de la tupla `HTTP_STATUS` ocurren después de la cadena de interceptores y no alteran el span de transporte ya completado.
 - **SSE**: un flujo lógico único (incluyendo reconexiones automáticas) genera un span que permanece abierto hasta que `stream.closed` se resuelve. Eventos registrados: `sse.connected`, seguido de `sse.closed`, `sse.aborted` (finalizando `OK` para `stream.close()` o abortos manuales sin tiempo límite) o `sse.error` (finalizando `ERROR`, incluyendo abortos por tiempo límite de quien llama).
-- **WebSocket**: una sesión lógica única (incluyendo reconexiones automáticas) genera un span hasta que `session.closed` se resuelve. Eventos registrados: `websocket.connected`, `websocket.closed`, `websocket.error`. Las tramas de cierre del servidor (cualquier código) finalizan el span como `OK` con `websocket.closed`; los abortos de quien llama finalizan el span como `ERROR` con `websocket.error` y sin registro. Caídas abruptas sin trama de cierre (`1006`) finalizan en `ERROR` con un registro en runtimes que emiten el evento `error` del socket antes de `close` (Node.js) y en `OK` donde no lo hacen (Bun).
+- **WebSocket**: una sesión lógica única (incluyendo reconexiones automáticas) genera un span hasta que `session.closed` se resuelve. Eventos registrados: `websocket.connected`, `websocket.closed`, `websocket.error`. Las tramas de cierre del servidor (cualquier código) finalizan el span como `OK` con `websocket.closed`; los abortos de quien llama finalizan el span como `ERROR` con `websocket.error` y sin registro, salvo si el motivo del abort es un `TimeoutError`, que emite un `WARN`. Caídas abruptas sin trama de cierre (`1006`) finalizan en `ERROR` con un registro en runtimes que emiten el evento `error` del socket antes de `close` (Node.js) y en `OK` donde no lo hacen (Bun).
+
+### Límites de reintentos y reconexiones
+
+Estas son las observaciones actuales de los interceptores, no una API de telemetría separada del balanceador:
+
+- Cada intento HTTP de `withRetry` tiene su propio span de cliente y muestra de duración. Con un span padre activo de la aplicación, los intentos son hermanos bajo ese padre; sin él, los reintentos no se agrupan automáticamente en una única traza. Core no crea un span padre para la llamada lógica.
+- Las URL de los intentos HTTP identifican el endpoint de cada intento, pero no se emiten atributos de número de intento, motivo del reintento, saldo/agotamiento del presupuesto ni expulsión/recuperación.
+- SSE y WebSocket mantienen un span de sesión lógica a través de las reconexiones, no un span por conexión física. La URL del span y los atributos de métricas conservan el endpoint inicial incluso tras una conmutación por error. Las reconexiones no emiten otro evento `connected`. Las métricas de actividad cuentan sesiones lógicas pendientes de `closed`, no sockets en la réplica seleccionada actualmente.
+- En una ejecución de Bun, HTTP 503 produjo `error.type: "503"`, un rechazo de conexión produjo `"TypeError"`, y tanto un plazo como una cancelación de quien llama produjeron `"Error"`. Estos dos últimos devolvieron `NET_TIMEOUT` y `NET_ABORTED`, respectivamente; estos códigos de fallo de las tuplas de Defjs no son atributos separados de telemetría HTTP. Para un WebSocket abierto, la cancelación predeterminada produjo `"AbortError"` sin advertencia, mientras que un motivo de abort `TimeoutError` produjo `"TimeoutError"` y una advertencia. Los nombres de clases de error son observaciones del transporte/runtime, no un sustituto de inspeccionar la tupla o el resultado del cierre.
 
 ### Métricas emitidas
 
@@ -82,7 +91,7 @@ Cuando se suministra un `meter`, los instrumentos se inicializan cada vez que la
 
 | Métrica                                      | Significado                                                  |
 | -------------------------------------------- | ------------------------------------------------------------ |
-| `http.client.request.duration`               | Duración de la petición HTTP (segundos)                      |
+| `http.client.request.duration`               | Duración del intento HTTP (segundos)                         |
 | `defjs.client.sse.connect.duration`          | Tiempo hasta que se devuelve el handle de SSE                |
 | `defjs.client.sse.connection.duration`       | Desde que se devuelve el handle hasta `stream.closed`        |
 | `defjs.client.sse.active_streams`            | Flujos lógicos activos de SSE pendientes de `closed`         |
@@ -104,14 +113,14 @@ Cuando se suministra un `meter`, los instrumentos se inicializan cada vez que la
 
 Cada petición o conexión lógica emite como máximo un `LogRecord` terminal de nivel `WARN` (`13`):
 
-| Resultado observado                                                                                                                              | LogRecord de Defjs                                                                           |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `next()` rechaza en HTTP OTel (fallo de red, timeout, fallo de cuerpo declarado), excluyendo cancelaciones y fallos `HTTP_STATUS`                | Un `WARN`, `http.client.request.exception`, fase `request`                                   |
-| Respuesta HTTP normal (incluyendo 4xx/5xx cuyo cuerpo de `error` decodifica o carece de cuerpo declarado, o estado `0`)                          | Ninguno                                                                                      |
-| La lectura del cuerpo declarado de `output` / `error` falla, o un JSON declarado tiene otro tipo de medio o falla `JSON.parse`                   | Un `WARN`, `http.client.request.exception`, fase `request`, `exception.type: "BodyFailure"`  |
-| El handshake o conexión de SSE o WebSocket falla (incluyendo estado no 2xx en SSE)                                                               | Un `WARN`, `defjs.client.sse.exception` o `defjs.client.websocket.exception`, fase `connect` |
-| Error terminal en SSE o WebSocket o `closed` rechazado (incluyendo error de socket `1006` en Node.js, desbordamiento de cola, timeout de latido) | Un `WARN` con el nombre de evento del transporte, fase `connection`                          |
-| Finalización normal, mensajes, EOF, tramas de cierre de servidor WebSocket (incluyendo `1011`) o cancelación activa sin timeout                  | Ninguno                                                                                      |
+| Resultado observado                                                                                                                                            | LogRecord de Defjs                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `next()` rechaza en HTTP OTel (fallo de red, timeout, fallo de cuerpo declarado), excluyendo cancelaciones activas sin timeout y fallos públicos `HTTP_STATUS` | Un `WARN`, `http.client.request.exception`, fase `request`                                   |
+| Respuesta HTTP normal (incluyendo 4xx/5xx cuyo cuerpo de `error` decodifica o carece de cuerpo declarado, o estado `0`)                                        | Ninguno                                                                                      |
+| La lectura del cuerpo declarado de `output` / `error` falla, o un JSON declarado tiene otro tipo de medio o falla `JSON.parse`                                 | Un `WARN`, `http.client.request.exception`, fase `request`, `exception.type: "BodyFailure"`  |
+| El handshake o conexión de SSE o WebSocket falla (incluyendo estado no 2xx en SSE)                                                                             | Un `WARN`, `defjs.client.sse.exception` o `defjs.client.websocket.exception`, fase `connect` |
+| Error terminal en SSE o WebSocket o `closed` rechazado (incluyendo error de socket `1006` en Node.js, desbordamiento de cola, timeout de latido)               | Un `WARN` con el nombre de evento del transporte, fase `connection`                          |
+| Finalización normal, mensajes, EOF, tramas de cierre de servidor WebSocket (incluyendo `1011`) o cancelación activa sin timeout                                | Ninguno                                                                                      |
 
 Los diagnósticos registran un mensaje fijo, `exception.type` (nombre de clase de plataforma o transporte como `BodyFailure`, `EventStreamFatalError`, `DefjsFault`, `TypeError` o `Error`), fase, `operation` estática, dirección/puerto del servidor y campos de protocolo; nunca URLs sin procesar, query strings, cabeceras, cuerpos ni trazas de pila.
 

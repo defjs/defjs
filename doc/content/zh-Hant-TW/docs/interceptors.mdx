@@ -55,14 +55,21 @@ HTTP 攔截器可以使用 `makeResponse(...)` 建構合成回應，而不呼叫
 
 ## 3. 重試安全的 HTTP 讀取請求
 
-Defjs 預設不會自動重試應用程式層級的 HTTP 狀態碼。當你需要根據狀態碼進行重試時（例如在冪等的 `GET` / `HEAD` / `OPTIONS` 請求上遇到 `429`、`502`、`503`、`504`），可以在 HTTP 攔截器中實作有次數限制的重試迴圈：
+HTTP 重試預設關閉。若要在 `502`、`503` 或 `504` 時容錯移轉到另一個端點，請使用 [`withRetry({ on: ["gateway-error"] })`](/zh-Hant-TW/docs/load-balancing)。它會重新選取尚未嘗試的端點、重新建構請求，並重新執行完整的攔截器鏈。
+
+應用程式攔截器也可以改為處理同一端點的狀態碼，例如 `429` 與 `Retry-After`。以下有次數限制的安全讀取範例也會處理 `502`/`503`/`504`：
 
 <include cwd lang="typescript">
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
+- **兩層重試**：這個 `next(request)` 迴圈會留在選取的端點，不會重新執行外層驗證或 builder。將三次內層傳送與 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` 組合使用，可能送出四次 HTTP 請求（三次送往故障主端點，一次送往健康備援端點）；`maxAttempts` 限制的是外層嘗試次數，不是實際傳送次數。請明確決定各項條件由哪一層負責，避免無意間疊加。
+- **`Retry-After` 策略**：Core 的 `withRetry` 不會讀取這個標頭。範例中的 30 秒上限與 250 ms 後備值是應用程式的選擇。若伺服器要求的延遲更長，設定上限可能導致提早重試；若無法接受，請等待完整延遲，或直接回傳回應。
+- **401 寫入**：[Bearer 更新範例](/zh-Hant-TW/recipes/refresh-bearer-once) 可能傳遞同一個 JSON POST 兩次。必須確保驗證在業務處理前拒絕請求，並使用穩定的冪等鍵與伺服器端去重，否則不要自動重播寫入。串流請求本文不會重播。
 - **處理傳輸層拒絕**：當發生網路錯誤時，`next(request)` 會拋出拒絕（不會有狀態碼為 0 的回應）。捕捉並重新拋出該拒絕能完整保留原本的 `NET_*` 錯誤碼。
 - **攔截器內部拋出例外**：未處理的拋出例外（或回傳非 Response 物件）會讓操作 tuple 解析為 `EXT_INTERCEPTOR_FAILED` 並設定 `fault.cause`。若拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，則會精確解析為 `NET_ABORTED` 或 `NET_TIMEOUT`。
+
+對於 SSE，請優先使用 `withSSEReconnect`，而非反覆呼叫 `next()` 的攔截器。多次呼叫攔截器的 `next()` 會停用這些替代串流的端點歸因與重新選取；這和使用迭代器的 `next()` 消費事件無關。
 
 ## 4. 包裝 WebSocket 工作階段
 

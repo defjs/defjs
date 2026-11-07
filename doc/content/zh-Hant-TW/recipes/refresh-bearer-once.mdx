@@ -43,6 +43,8 @@ return { ...request, headers };
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||
@@ -78,5 +80,7 @@ return { ...request, headers };
 ```txt
 42
 ````
+
+請求 body 可以重播，不代表業務操作可以重複執行。符合條件的 401 之後，這個攔截器也會重新傳送 JSON `POST`：共兩次 HTTP 傳遞，第一次被拒絕，第二次被接受。只有當驗證在業務處理函式執行前拒絕第一次傳遞時，才能將它用於寫入；兩次傳遞之間必須保留同一個穩定的冪等鍵，並由伺服器端去除重複。如果沒有這項契約，就應回傳 401，而不是自動重播寫入操作。完整範例不會重播 `ReadableStream` 請求 body。
 
 關於洋蔥模型執行順序與重試邊界規範，請參閱[中介層](/zh-Hant-TW/docs/interceptors)。

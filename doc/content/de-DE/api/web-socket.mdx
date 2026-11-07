@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` ist `closed`, `aborted` oder `error`. `cause` fehlt bei `closed`, ist bei `aborted` optional und bei `error` erforderlich. `code`, `reason` und `wasClean` können in jeder Variante stehen. Ein manuelles `session.close()` füllt `code` und `reason` von `{ kind: "closed" }`, wenn das Close-Event sie nicht trägt.
+`kind` ist `closed`, `aborted` oder `error`. `cause` fehlt bei `closed`, ist bei `aborted` optional und bei `error` erforderlich. Ein Überlauf der Warteschlange für eingehende Roh-Frames oder dekodierte Nachrichten hat `cause.code === "CAP_QUEUE_OVERFLOW"`; dieselbe Ursache lässt `receive` fehlschlagen und erreicht `onRuntimeError`. Heartbeat-Timeout und ausgeschöpfte Reconnects behalten gewöhnliche Laufzeit-`Error`-Ursachen ohne separaten stabilen Code. `code`, `reason` und `wasClean` können in jeder Variante stehen. Ein manuelles `session.close()` füllt `code` und `reason` von `{ kind: "closed" }`, wenn das Close-Event sie nicht trägt.
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions` ist [`UseWebSocketConfig`](/de-DE/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` und `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, optionales `message`, `isAck`, `timeoutMs`. Es gibt kein `timeout`- oder `abort`-Feld.
 
 `signal` deckt die ganze Session ab, auch nachdem sie sich öffnet. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Deadline nur für den Start und keine Default-Deadline auf Client-Ebene. `signal` ist das Signal des Aufrufs; kombiniere Signale in Anwendungscode mit `AbortSignal.any`. `heartbeat` wird als Ganzes ersetzt; sein `timeoutMs` wartet auf eine Bestätigung und ist keine Request-Deadline.
+
+Builder und Interceptor-Kette laufen einmal pro Operation. Ein Reconnect verwendet den gebauten Pfad/die Query und die erfassten Protokolle erneut und konstruiert die URL vor `beforeConnect`. Hat kein Interceptor den Basis-Endpunkt des Requests ersetzt, setzt der Reconnect außerdem einen neu ausgewählten Endpunkt ein. Der Hook kann URL- oder Subprotokoll-Zugangsdaten nicht innerhalb einer Session austauschen; starte eine neue Operation mit frischem Input oder neuer Client-Konfiguration.
 
 Ist `reconnect` gesetzt, ist der Default für `attempts` 3 je Ausfall; `0` schaltet aus. Ein erfolgreiches `open` setzt Budget und Backoff-Exponenten zurück, daher beginnt jeder neue Ausfall bei Retry 1. `attempts` wegzulassen ergibt innerhalb eines Ausfalls keine unbegrenzten Retries. Defaults und Validierungsregeln stehen unter [Client](/de-DE/api/client).
 

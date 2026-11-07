@@ -123,10 +123,12 @@ void main();
 
 - **再接続**: 有効時のデフォルト値は `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0` です。物理的な `open` が完了するたびにリトライ回数上限がリセットされます。`beforeConnect({ attempt, signal })` は、初回接続および再接続試行の直前に実行されます。
 - **ハンドシェイクのタイムアウト (`connectTimeoutMs`)**: 渡したときは、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。構築から `open` までを区切り、ハンドシェイクのあとで解除されます。
-- **ハートビート**: `outgoing` struct を通じて定期的に `message()` を送信し、最大 `timeoutMs` の間 `isAck(msg)` に一致するフレームの到着を待機します。合致した ACK フレームはハートビートモニターによって消費され、`session.receive` には転送されません。ACK を受信できなかった場合はセッションの致命的エラーとなります。
+- **ハートビート**: `outgoing` struct を通じて定期的に `message()` を送信し、最大 `timeoutMs` の間 `isAck(msg)` に一致するフレームの到着を待機します。合致した ACK フレームはハートビートモニターによって消費され、`session.receive` には転送されません。ACK を受信できなければ論理セッションに対する致命的エラーとなり、`closed.kind` は `"error"`、`closed.cause` は通常の `Error("WebSocket heartbeat timeout")` になります。再接続は開始しません。ハートビートのシリアライズ失敗も、元の cause を保持して同じ致命的な終了経路をたどります。
 - **キューの制限**:
-  - `maxIncomingQueueSize`（必須の正の整数）: オーバーフロー時は `CAP_QUEUE_OVERFLOW` でセッションが終了します。セッションが開いている間は、`session.receive` から継続的にメッセージを消費してください。
+  - `maxIncomingQueueSize`（必須の正の整数）: デコード待ちの生フレームと、コンシューマー待ちのデコード済みメッセージの両方を制限します。オーバーフロー時は `CAP_QUEUE_OVERFLOW` Fault を `closed.cause` としてセッションが終了し、同じ cause が `onRuntimeError` に通知され、`session.receive` を reject します。セッションが開いている間は、`session.receive` から継続的にメッセージを消費してください。
   - `maxOutgoingQueueSize`（任意の非負整数、デフォルトは `0`）: `state === 'reconnecting'` の間のみ `session.send()` の呼び出しをバッファリングし、次の `open` 状態が公開される直前にフラッシュ（送信）します。
+
+`shouldReconnect` はネイティブのクローズコードと `wasClean` を受け取ります。サーバーはアプリケーションエラーコード `1011` でも正常なクローズハンドシェイクを完了できるため、`wasClean === true` はアプリケーションの成功を意味しません。サンプルは `1011` を明示的に許可しています。`!wasClean` だけに頼らず、プロトコルに応じてアプリケーションのコードを選んでください。
 
 ## 5. サブプロトコルと認証 [#protocols-and-authentication]
 
@@ -135,6 +137,7 @@ void main();
 - **サブプロトコルの優先順位**: `client({ protocols })` が `withWebSocketProtocols(...)` を上書きし、それが `defineWebSocket({ protocols })` を上書きします。
 - **URL の自動変換**: Defjs は、解決されたエンドポイントのスキームを自動的に `http:` → `ws:`、`https:` → `wss:` へと変換します。
 - **認証情報**: `withCredentials(true)` は Fetch（HTTP/SSE）のみに適用されます。WebSocket の認証は、Cookie／セッションポリシー、サブプロトコル、または短寿命の接続トークン（チケット）を使用して行います（クエリ文字列に長寿命のシークレットを配置することは避けてください）。
+- **`beforeConnect` はリクエストを書き換えるフックではありません**: 入力のパース、同期的な純粋関数である `builder`、インターセプターチェーンは、操作ごとに 1 回だけ実行されます。インターセプターがベースエンドポイントを置き換えていないリクエストでは、各再接続でエンドポイントを選び直し、そのエンドポイントで URL を再構築しますが、構築済みの path/query と取り込んだプロトコル一覧は再利用します。同じエンドポイントでもフェイルオーバー後でも、URL はその試行の `beforeConnect` が実行される前に確定します。フック内でクロージャ変数、input、プロトコル配列を変更しても、現在のハンドシェイクに新しいチケットを渡すことはできません。1 つのセッション内での URL／サブプロトコル認証情報の更新は未対応です。新しい認証情報を先に取得し、新たな操作に input またはクライアント設定として渡して、置き換えたセッションのクリーンアップを管理してください。
 
 ## 6. クローズと所有権
 
@@ -144,7 +147,7 @@ void main();
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-コンポーネントやワーカーが破棄される際は、登録した `onStateChange` や `onRuntimeError` のリスナーを必ず解除（unsubscribe）してください。
+1 回の障害に対する再接続の試行回数を使い切ると、セッションは `closed.kind: "error"` で終了し、ネイティブのクローズスナップショット（アップグレード失敗では多くの場合コード `1006`）を保持し、通常のトランスポートエラーを `closed.cause` とします。使い切り専用の安定したコードは公開しません。コンポーネントやワーカーの処理が終わったら、`onStateChange` と `onRuntimeError` のリスナーを必ず解除してください。
 
 ## 関連ドキュメント
 

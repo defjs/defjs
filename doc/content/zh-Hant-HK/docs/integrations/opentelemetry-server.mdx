@@ -74,7 +74,16 @@ description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使
 
 - **HTTP**：Span 喺 HTTP 中介層開始，並喺 `HttpResponse` 回傳時結束。宣告過嘅 `output` / `error` body 會喺回傳**之前**喺中介層邊界內讀取完畢（包括檢查同解析 JSON 格式）。如果讀取 body 或 JSON media-type / 解析出錯，會喺中介層 reject（`error.type: "BodyFailure"`），將 span 標記為 `ERROR`，喺 metrics 記錄 `BodyFailure`，並發出一條 `WARN` 日誌。狀態碼 `400+` 會將 span 標記為 `ERROR`，並以狀態碼字串作為 `error.type`。Struct 驗證（`RES_STRUCT_MISMATCH`）同 `HTTP_STATUS` tuple 轉換都喺中介層鏈之後發生，唔會改動已結束嘅傳輸 span。
 - **SSE**：一條邏輯串流（包括自動重新連線）對應一個 span，保持開啟直到 `stream.closed` 結算。記錄嘅事件包括：`sse.connected`，隨後為 `sse.closed`、`sse.aborted`（主動呼叫 `stream.close()` 或非逾時中斷以 `OK` 結束），或 `sse.error`（以 `ERROR` 結束，包括呼叫端逾時類別嘅中斷）。
-- **WebSocket**：一個邏輯會話（包括自動重新連線）對應一個 span，直到 `session.closed` 結算。記錄嘅事件包括：`websocket.connected`、`websocket.closed`、`websocket.error`。伺服器主動送出關閉 frame（任何代碼）都會以 `websocket.closed` 將 span 標記為 `OK` 結束；呼叫端主動中斷會以 `websocket.error` 將 span 標記為 `ERROR` 結束且唔出 log。冇關閉 frame 嘅異常斷線（`1006`），喺先觸發 socket `error` 先至 `close` 嘅 runtime（Node.js）會以 `ERROR` 結束並記錄一條日誌，喺唔觸發 error 嘅 runtime（Bun）則以 `OK` 結束。
+- **WebSocket**：一個邏輯會話（包括自動重新連線）對應一個 span，直到 `session.closed` 結算。記錄嘅事件包括：`websocket.connected`、`websocket.closed`、`websocket.error`。伺服器主動送出關閉 frame（任何代碼）都會以 `OK` 結束 span 並記錄 `websocket.closed`；呼叫端主動中斷會以 `ERROR` 結束 span 並記錄 `websocket.error`，唔出 log，但中斷原因係 `TimeoutError` 時例外，會發出一條 `WARN`。冇關閉 frame 嘅異常斷線（`1006`），喺 socket `error` 先於 `close` 觸發嘅 runtime（Node.js）會以 `ERROR` 結束並記錄一條日誌，喺唔觸發 error 嘅 runtime（Bun）則以 `OK` 結束。
+
+### 重試與重連邊界
+
+以下係目前中介層觀察到嘅行為，唔係獨立嘅負載平衡器遙測 API：
+
+- 每次 `withRetry` HTTP 嘗試都有自己嘅 client span 同耗時樣本。如果有活躍嘅應用程式父級 span，各次嘗試會係同一父級之下嘅同級 span；否則，重試唔會自動歸入同一條 trace。Core 唔會建立邏輯呼叫嘅父級 span。
+- HTTP 嘗試嘅 URL 會標示嗰次嘗試嘅端點，但唔會輸出嘗試編號、重試原因、預算餘額／用盡，或者逐出／恢復屬性。
+- SSE 同 WebSocket 喺重連期間會保留同一個邏輯會話 span，唔會為每條實體連線分別建立 span。即使故障轉移之後，span URL 同 metric 屬性仍然保留初始端點。重連唔會再次發出 `connected` 事件。活躍指標計算嘅係等待 `closed` 嘅邏輯會話，唔係目前選中副本上嘅 sockets。
+- 喺一次 Bun 執行中，HTTP 503 產生咗 `error.type: "503"`，連線被拒絕產生咗 `"TypeError"`，而 deadline 到期同呼叫端取消都產生咗 `"Error"`。後兩者分別回傳 `NET_TIMEOUT` 同 `NET_ABORTED`；呢啲 Defjs tuple fault code 唔係獨立嘅 HTTP 遙測屬性。對於已開啟嘅 WebSocket，預設取消產生咗 `"AbortError"`，唔會有 warning；以 `TimeoutError` 做中斷原因時，就會產生 `"TimeoutError"` 同一條 warning。錯誤 class 名稱係對傳輸／runtime 嘅觀察，唔可以代替檢查 tuple 或關閉結果。
 
 ### 發佈嘅 Metrics 指標
 
@@ -82,7 +91,7 @@ description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使
 
 | 指標名稱                                     | 意思                                            |
 | -------------------------------------------- | ----------------------------------------------- |
-| `http.client.request.duration`               | HTTP 請求耗時（秒）                             |
+| `http.client.request.duration`               | HTTP 單次嘗試耗時（秒）                         |
 | `defjs.client.sse.connect.duration`          | 直至回傳 SSE handle 所需時間                    |
 | `defjs.client.sse.connection.duration`       | 由回傳 handle 直至最終 `stream.closed` 嘅時長   |
 | `defjs.client.sse.active_streams`            | 等待 `closed` 結算中嘅活躍邏輯 SSE 串流數       |
@@ -104,14 +113,14 @@ description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使
 
 每個請求或邏輯連線最多只會發出一條終止階段嘅 `WARN` (`13`) `LogRecord`：
 
-| 觀察到嘅執行結果                                                                                             | Defjs 發出嘅 LogRecord                                                                                         |
-| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| HTTP OTel `next()` reject（網絡故障、觀察到逾時、宣告 body 出錯），主動取消同公開嘅 `HTTP_STATUS` fault 除外 | 發出一條 `WARN`，事件名 `http.client.request.exception`，階段為 `request`                                      |
-| 普通正常 HTTP 回應（包括宣告 `error` body 解碼成功或未宣告 body 嘅 4xx/5xx，或 status 0）                    | 唔發送任何日誌                                                                                                 |
-| 宣告過嘅 `output` / `error` body 讀取失敗，或者宣告嘅 JSON 格式收到非 JSON media-type 或通唔過 `JSON.parse`  | 發出一條 `WARN`，事件名 `http.client.request.exception`，階段為 `request`，`exception.type: "BodyFailure"`     |
-| SSE 或 WebSocket 握手／連線失敗（包括 SSE 收到非 2xx 狀態碼）                                                | 發出一條 `WARN`，事件名為 `defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，階段為 `connect` |
-| SSE 或 WebSocket 出現終止錯誤或 `closed` reject（包括 Node.js `1006` socket 錯誤、佇列溢出、心跳逾時）       | 發出一條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                         |
-| 正常完成、普通訊息、EOF、伺服器 WebSocket 關閉 frame（包括 `1011`），或主動非逾時中斷                        | 唔發送任何日誌                                                                                                 |
+| 觀察到嘅執行結果                                                                                                     | Defjs 發出嘅 LogRecord                                                                                         |
+| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| HTTP OTel `next()` reject（網絡故障、觀察到逾時、宣告 body 出錯），非逾時嘅主動取消同公開嘅 `HTTP_STATUS` fault 除外 | 發出一條 `WARN`，事件名 `http.client.request.exception`，階段為 `request`                                      |
+| 普通正常 HTTP 回應（包括宣告 `error` body 解碼成功或未宣告 body 嘅 4xx/5xx，或 status 0）                            | 唔發送任何日誌                                                                                                 |
+| 宣告過嘅 `output` / `error` body 讀取失敗，或者宣告嘅 JSON 格式收到非 JSON media-type 或通唔過 `JSON.parse`          | 發出一條 `WARN`，事件名 `http.client.request.exception`，階段為 `request`，`exception.type: "BodyFailure"`     |
+| SSE 或 WebSocket 握手／連線失敗（包括 SSE 收到非 2xx 狀態碼）                                                        | 發出一條 `WARN`，事件名為 `defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，階段為 `connect` |
+| SSE 或 WebSocket 出現終止錯誤或 `closed` reject（包括 Node.js `1006` socket 錯誤、佇列溢出、心跳逾時）               | 發出一條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                         |
+| 正常完成、普通訊息、EOF、伺服器 WebSocket 關閉 frame（包括 `1011`），或主動非逾時中斷                                | 唔發送任何日誌                                                                                                 |
 
 診斷記錄包含固定訊息、`exception.type`（平台／傳輸層 class 名稱，例如 `BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError` 或 `Error`）、phase 階段、靜態 `operation`、伺服器位址／埠號同協議欄位——絕唔會記錄原始 URL、query string、headers、body 或錯誤堆疊 trace。
 

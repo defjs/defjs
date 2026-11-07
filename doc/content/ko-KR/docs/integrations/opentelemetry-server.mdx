@@ -74,7 +74,16 @@ SDK 정의(`defineRequest`, `defineEventStream`, `defineWebSocket`)에 고정된
 
 - **HTTP**: span은 HTTP 인터셉터에서 시작되어 `HttpResponse`가 반환될 때 끝납니다. 선언된 `output` / `error` 본문은 핸들러 경계 내부에서 반환 전에 읽힙니다(JSON 표현 검사 및 파싱 포함). 본문 읽기 실패나 JSON 미디어 타입/파싱 실패는 인터셉터를 통해 reject되며(`error.type: "BodyFailure"`), span을 `ERROR`로 표시하고, 메트릭에 `BodyFailure`를 기록하며, `WARN` 로그 하나를 내보냅니다. 상태 코드 `400+`는 상태 코드 문자열을 `error.type`으로 하여 span을 `ERROR`로 표시합니다. Struct 유효성 검증(`RES_STRUCT_MISMATCH`) 및 `HTTP_STATUS` 튜플 변환은 인터셉터 체인 이후에 발생하므로 이미 완료된 전송 span을 변경하지 않습니다.
 - **SSE**: 자동 재연결을 포함한 하나의 논리적 스트림이 `stream.closed`가 해결될 때까지 열려 있는 하나의 span을 생성합니다. 기록되는 이벤트: `sse.connected`, 이어서 `sse.closed`, `sse.aborted`(`stream.close()` 또는 타임아웃이 아닌 호출자 abort의 경우 `OK`로 종료), 또는 `sse.error`(타임아웃 형태의 호출자 abort를 포함하여 `ERROR`로 종료).
-- **WebSocket**: 자동 재연결을 포함한 하나의 논리적 세션이 `session.closed`가 해결될 때까지 하나의 span을 유지합니다. 기록되는 이벤트: `websocket.connected`, `websocket.closed`, `websocket.error`. 서버의 종료 프레임(모든 코드)은 `websocket.closed`와 함께 span을 `OK`로 종료합니다. 호출자 abort는 로그 없이 `websocket.error`와 함께 span을 `ERROR`로 종료합니다. 종료 프레임 없는 비정상 단절(`1006`)의 경우, 소켓 `close` 전에 `error`를 발생시키는 런타임(Node.js)에서는 로그 하나와 함께 `ERROR`로 종료되고, 그렇지 않은 런타임(Bun)에서는 `OK`로 종료됩니다.
+- **WebSocket**: 자동 재연결을 포함한 하나의 논리적 세션이 `session.closed`가 해결될 때까지 하나의 span을 유지합니다. 기록되는 이벤트: `websocket.connected`, `websocket.closed`, `websocket.error`. 서버의 종료 프레임(모든 코드)은 span을 `OK`로 종료하고 `websocket.closed`를 기록합니다. 호출자 abort는 span을 `ERROR`로 종료하고 `websocket.error`를 기록하며 로그를 남기지 않지만, abort 사유가 `TimeoutError`일 때는 예외로 `WARN` 하나를 남깁니다. 종료 프레임 없는 비정상 단절(`1006`)의 경우, 소켓 `error`가 `close`보다 먼저 발생하는 런타임(Node.js)에서는 로그 하나와 함께 `ERROR`로 종료되고, 그렇지 않은 런타임(Bun)에서는 `OK`로 종료됩니다.
+
+### 재시도 및 재연결 경계
+
+아래는 현재 인터셉터에서 관측되는 동작이며, 별도의 밸런서 텔레메트리 API가 아닙니다:
+
+- 각 `withRetry` HTTP 시도는 자체 클라이언트 span과 소요 시간 샘플을 갖습니다. 활성 애플리케이션 상위 span이 있으면 시도들은 그 아래의 형제 span이 됩니다. 없으면 재시도들이 자동으로 하나의 trace로 묶이지 않습니다. Core는 논리 호출의 상위 span을 생성하지 않습니다.
+- HTTP 시도 URL은 해당 시도의 엔드포인트를 식별하지만 시도 번호, 재시도 사유, 예산 잔액/소진, 제외/복구 속성은 발행하지 않습니다.
+- SSE와 WebSocket은 재연결을 거쳐도 하나의 논리적 세션 span을 유지하며, 물리적 연결마다 span을 만들지 않습니다. 장애 조치 후에도 span URL과 메트릭 속성은 초기 엔드포인트를 유지합니다. 재연결은 별도의 `connected` 이벤트를 발행하지 않습니다. 활성 메트릭은 현재 선택된 복제본의 소켓이 아니라 `closed`를 기다리는 논리적 세션 수를 셉니다.
+- 한 Bun 실행에서 HTTP 503은 `error.type: "503"`, 연결 거부는 `"TypeError"`, 데드라인과 호출자 취소는 모두 `"Error"`를 생성했습니다. 뒤의 두 경우에는 각각 `NET_TIMEOUT`과 `NET_ABORTED`가 반환됐습니다. 이 Defjs 튜플 결함 코드는 별도의 HTTP 텔레메트리 속성이 아닙니다. 열린 WebSocket의 기본 취소는 경고 없이 `"AbortError"`를 생성했지만, abort 사유가 `TimeoutError`이면 `"TimeoutError"`와 경고 하나를 생성했습니다. 오류 클래스 이름은 전송/런타임 관측값이므로 튜플이나 종료 결과 확인을 대신할 수 없습니다.
 
 ### 발행되는 메트릭
 
@@ -82,7 +91,7 @@ SDK 정의(`defineRequest`, `defineEventStream`, `defineWebSocket`)에 고정된
 
 | 메트릭                                       | 의미                                           |
 | -------------------------------------------- | ---------------------------------------------- |
-| `http.client.request.duration`               | HTTP 요청 소요 시간 (초)                       |
+| `http.client.request.duration`               | HTTP 시도 소요 시간 (초)                       |
 | `defjs.client.sse.connect.duration`          | SSE 핸들이 반환될 때까지의 시간                |
 | `defjs.client.sse.connection.duration`       | 핸들 반환부터 최종 `stream.closed`까지의 시간  |
 | `defjs.client.sse.active_streams`            | `closed` 대기 중인 활성 논리 SSE 스트림 수     |
@@ -104,14 +113,14 @@ SDK 정의(`defineRequest`, `defineEventStream`, `defineWebSocket`)에 고정된
 
 각 요청 또는 논리적 연결은 최대 하나의 최종 `WARN` (`13`) `LogRecord`를 발행합니다:
 
-| 관측된 결과                                                                                                         | Defjs LogRecord                                                                                   |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| HTTP OTel `next()` 거부 (네트워크 실패, 관측된 타임아웃, 선언 본문 실패; 활성 취소 및 공용 `HTTP_STATUS` 결함 제외) | 단일 `WARN`, `http.client.request.exception`, 단계 `request`                                      |
-| 일반 HTTP 응답 (선언된 `error` 본문이 디코딩되거나 선언 본문이 없는 4xx/5xx, 또는 상태 `0` 포함)                    | 없음                                                                                              |
-| 선언된 `output` / `error` 본문 읽기 실패, 선언된 JSON 표현의 비JSON 미디어 타입, 또는 `JSON.parse` 실패             | 단일 `WARN`, `http.client.request.exception`, 단계 `request`, `exception.type: "BodyFailure"`     |
-| SSE 또는 WebSocket 핸드셰이크/연결 실패 (SSE 비2xx 상태 포함)                                                       | 단일 `WARN`, `defjs.client.sse.exception` 또는 `defjs.client.websocket.exception`, 단계 `connect` |
-| SSE 또는 WebSocket 최종 오류 또는 reject된 `closed` (Node.js `1006` 소켓 오류, 큐 오버플로, 하트비트 타임아웃 포함) | 전송 이벤트 이름을 가진 단일 `WARN`, 단계 `connection`                                            |
-| 정상 완료, 메시지, EOF, 서버 WebSocket 종료 프레임(`1011` 포함), 또는 타임아웃이 아닌 활성 취소                     | 없음                                                                                              |
+| 관측된 결과                                                                                                                         | Defjs LogRecord                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| HTTP OTel `next()` 거부 (네트워크 실패, 관측된 타임아웃, 선언 본문 실패; 타임아웃이 아닌 활성 취소 및 공용 `HTTP_STATUS` 결함 제외) | 단일 `WARN`, `http.client.request.exception`, 단계 `request`                                      |
+| 일반 HTTP 응답 (선언된 `error` 본문이 디코딩되거나 선언 본문이 없는 4xx/5xx, 또는 상태 `0` 포함)                                    | 없음                                                                                              |
+| 선언된 `output` / `error` 본문 읽기 실패, 선언된 JSON 표현의 비JSON 미디어 타입, 또는 `JSON.parse` 실패                             | 단일 `WARN`, `http.client.request.exception`, 단계 `request`, `exception.type: "BodyFailure"`     |
+| SSE 또는 WebSocket 핸드셰이크/연결 실패 (SSE 비2xx 상태 포함)                                                                       | 단일 `WARN`, `defjs.client.sse.exception` 또는 `defjs.client.websocket.exception`, 단계 `connect` |
+| SSE 또는 WebSocket 최종 오류 또는 reject된 `closed` (Node.js `1006` 소켓 오류, 큐 오버플로, 하트비트 타임아웃 포함)                 | 전송 이벤트 이름을 가진 단일 `WARN`, 단계 `connection`                                            |
+| 정상 완료, 메시지, EOF, 서버 WebSocket 종료 프레임(`1011` 포함), 또는 타임아웃이 아닌 활성 취소                                     | 없음                                                                                              |
 
 진단 기록에는 고정 메시지, `exception.type`(플랫폼/전송 클래스 이름인 `BodyFailure`, `EventStreamFatalError`, `DefjsFault`, `TypeError`, `Error` 등), 단계(phase), 고정 `operation`, 서버 주소/포트, 프로토콜 필드만이 기록되며, 원시 URL, 쿼리 스트링, 헤더, 본문, 오류 스택은 절대 기록되지 않습니다.
 

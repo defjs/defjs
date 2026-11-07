@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` est `closed`, `aborted` ou `error`. `cause` est absent sur `closed`, facultatif sur `aborted`, et obligatoire sur `error`. `code`, `reason` et `wasClean` peuvent apparaître sur chaque variante. Un `session.close()` manuel remplit `code` et `reason` sur `{ kind: "closed" }` quand l’événement de fermeture n’en porte pas.
+`kind` est `closed`, `aborted` ou `error`. `cause` est absent sur `closed`, facultatif sur `aborted`, et obligatoire sur `error`. Un débordement de la file de trames brutes entrantes ou de messages décodés a `cause.code === "CAP_QUEUE_OVERFLOW"` ; la même cause rejette `receive` et parvient à `onRuntimeError`. Un timeout de heartbeat et des reconnexions épuisées conservent des causes `Error` runtime ordinaires, sans code stable distinct. `code`, `reason` et `wasClean` peuvent apparaître sur chaque variante. Un `session.close()` manuel remplit `code` et `reason` sur `{ kind: "closed" }` quand l’événement de fermeture n’en porte pas.
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions` est [`UseWebSocketConfig`](/fr-FR/api/core/usewebsocketconfig-type) : `beforeConnect`, `heartbeat`, `protocols`, `reconnect` et `signal`. `WebSocketHeartbeatConfig` : `intervalMs`, `message` facultatif, `isAck`, `timeoutMs`. Il n’y a pas de champ `timeout` ou `abort`.
 
 `signal` couvre toute la session, y compris après son ouverture. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance limitée au démarrage, ni d’échéance par défaut au niveau du client. `signal` est le signal de l’appel ; combine les signaux avec `AbortSignal.any` dans le code applicatif. `heartbeat` est remplacé en entier ; son `timeoutMs` attend un acquittement et n’est pas une échéance de requête.
+
+Le builder et la chaîne d’intercepteurs s’exécutent une fois par opération. La reconnexion réutilise le chemin/la query construits et les protocoles capturés, et construit l’URL avant `beforeConnect`. Si aucun intercepteur n’a remplacé l’endpoint de base de la requête, la reconnexion substitue également un endpoint nouvellement sélectionné. Le hook ne peut pas renouveler les identifiants d’URL ou de sous-protocole au sein d’une session ; démarre une nouvelle opération avec une entrée ou une configuration client actualisée.
 
 Quand `reconnect` est défini, `attempts` vaut 3 par défaut par coupure ; `0` désactive. Un `open` réussi réinitialise le budget et l’exposant de backoff, donc chaque nouvelle coupure repart à la tentative 1. Omettre `attempts` ne donne pas des tentatives illimitées dans une coupure. Voir [Client](/fr-FR/api/client) pour les défauts et les règles de validation.
 

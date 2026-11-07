@@ -43,6 +43,8 @@ return { ...request, headers };
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||
@@ -78,5 +80,7 @@ return { ...request, headers };
 ```txt
 42
 ````
+
+قابلية إعادة إرسال الجسم لا تعني قابلية تكرار العملية التجارية. يعيد هذا المعترض أيضًا إرسال `POST` بصيغة JSON بعد استجابة 401 مطابقة: عمليتا تسليم عبر HTTP، تُرفض الأولى ثم تُقبل الثانية. لا تستخدمه للكتابة إلا عندما ترفض المصادقة التسليم الأول قبل تشغيل معالج الأعمال؛ واحتفظ بمفتاح ثابت لتساوي الأثر عبر التسليمين، مع إزالة التكرار على الخادم. إذا لم يتوفر هذا العقد، فأرجع استجابة 401 بدلاً من إعادة إرسال عملية الكتابة تلقائيًا. لا يعيد المثال الكامل إرسال جسم طلب من نوع `ReadableStream`.
 
 راجع دليل [الوسائط (Interceptors)](/ar/docs/interceptors) للتعرف على ترتيب طبقات البصلة وحدود إعادة المحاولة.

@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` は `closed`、`aborted`、`error` のいずれかです。`cause` は `closed` にはなく、`aborted` では任意、`error` では必須です。`code`、`reason`、`wasClean` はどのバリアントにも現れ得ます。手動の `session.close()` は、close イベント側にそれらが無いとき、`{ kind: "closed" }` の `code` と `reason` を埋めます。
+`kind` は `closed`、`aborted`、`error` のいずれかです。`cause` は `closed` にはなく、`aborted` では任意、`error` では必須です。受信した生フレームやデコード済みメッセージのキューがあふれると、`cause.code === "CAP_QUEUE_OVERFLOW"` になります。同じ cause で `receive` が reject され、`onRuntimeError` にも通知されます。ハートビートのタイムアウトや再接続回数の使い切りでは、通常の実行時 `Error` が cause となり、個別の安定したコードはありません。`code`、`reason`、`wasClean` はどのバリアントにも現れ得ます。手動の `session.close()` は、close イベント側にそれらが無いとき、`{ kind: "closed" }` の `code` と `reason` を埋めます。
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`signal` です。`WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。`timeout` フィールドも `abort` フィールドもありません。
 
 `signal` は開いたあとも含むセッション全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
+
+ビルダーとインターセプターチェーンは操作ごとに 1 回だけ実行されます。再接続では構築済みの path/query と取り込んだ protocols を再利用し、`beforeConnect` より前に URL を構築します。インターセプターがリクエストのベースエンドポイントを置き換えていない場合、再接続では新たに選んだエンドポイントも代入します。このフックではセッション内で URL やサブプロトコルの認証情報を更新できません。新しい input またはクライアント設定で新たな操作を開始してください。
 
 `reconnect` を指定したとき、`attempts` のデフォルトは障害ごとに 3 です。`0` はリトライを無効にします。`open` に成功すると予算とバックオフの指数がリセットされるため、新たな障害ではリトライ 1 から始まります。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。デフォルトと検証規則は [Client](/ja-JP/api/client) を参照してください。
 

@@ -86,9 +86,9 @@ L'appel de l'opération ne résout `[error, stream, startupOpen]` qu'une fois qu
 </Tab>
 </Tabs>
 
-- **Handshake hors `2xx`** : Renvoie `HTTP_STATUS` (avec `error.data` décodé lorsqu'un struct `error` est déclaré sur la définition).
+- **Handshake hors `2xx`** : Renvoie `HTTP_STATUS` (avec `error.data` décodé lorsqu'un struct `error` est déclaré sur la définition). C’est fatal pour l’opération courante ; `shouldReconnect` n’est pas appelé. L’opération suivante effectue une nouvelle sélection d’endpoint, donc un répartiteur peut choisir un autre endpoint.
 - **Media type invalide ou corps illisible** : Renvoie `RES_MEDIA_TYPE_INVALID` ou `RES_DECODE_FAILED`.
-- **`startupOpen` vs `stream.open`** : Le troisième élément du tuple (`startupOpen`) capture l'instantané de la première réponse du handshake ; `stream.open` est mis à jour dynamiquement si le flux se reconnecte ultérieurement.
+- **`startupOpen` vs `stream.open`** : Le troisième élément du tuple (`startupOpen`) capture l'instantané de la première réponse du handshake ; `stream.open` est mis à jour dynamiquement si le flux se reconnecte ultérieurement. Si un handshake de reconnexion renvoie `503`, l’itérateur rejette et `stream.closed` signale `RES_DECODE_FAILED`, tandis que `stream.open.response.status` reste `503` ; consultez `stream.open` pour ce statut de réponse dynamique.
 
 ## 3. Routage et décodage des événements
 
@@ -106,14 +106,14 @@ La reconnexion SSE est **opt-in**. Sans `withSSEReconnect(...)`, toute perte ré
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **Budget de tentatives (`attempts`)** : Vaut `3` par défaut lorsqu'un objet d'options est transmis à `withSSEReconnect`. Un handshake réussi réinitialise le compteur de tentatives et l'exposant de backoff. Une fin de flux serveur normale (EOF) **n'est pas** un échec et ne déclenche aucune reconnexion.
-- **Suivi du curseur (`Last-Event-ID`)** : Validé dès lors que la ligne vide finale d'un événement est analysée, et automatiquement envoyé sous forme d'en-tête `Last-Event-ID` lors de la reconnexion.
+- **Budget de tentatives (`attempts`)** : Vaut `3` par défaut lorsqu’un objet d’options est transmis à `withSSEReconnect`. Chaque handshake réussi réinitialise le compteur de tentatives et l’exposant de backoff ; `attempts: 1` peut donc encore créer de nombreuses connexions physiques sur une longue session si chacune s’ouvre avec succès. Une fin de flux serveur normale (EOF) **n’est pas** un échec et ne déclenche aucune reconnexion.
+- **Suivi du curseur (`Last-Event-ID`)** : Validé dès lors que la ligne vide finale d'un événement est analysée, et automatiquement envoyé sous forme d'en-tête `Last-Event-ID` lors de la reconnexion. Une trame partielle ne valide jamais son `id`, que la connexion se termine normalement ou échoue. La reprise après un échec de lecture/réseau autorisant la reconnexion part du dernier ID validé ; le serveur doit implémenter le rejeu depuis ce curseur.
 - **Sécurité et idempotence** : Par défaut, seules les méthodes idempotentes (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) se reconnectent automatiquement. Les méthodes non idempotentes (`POST`, `PATCH` — comme les requêtes de génération en streaming pour LLM) ne se reconnectent que si un callback `shouldReconnect` personnalisé renvoie explicitement `true`. Les corps de requête `ReadableStream` sont consommés à la première tentative et ne se reconnectent jamais.
 - **Délai de connexion (`connectTimeoutMs`)** : Lorsqu'il est fourni, il doit être fini, positif et ne pas dépasser 2147483647 (la limite du minuteur) ; sinon l'opération renvoie `REQ_OPTIONS_INVALID`. Délimite chaque handshake depuis l'appel Fetch jusqu'aux en-têtes de réponse, sans limiter la durée d'ouverture d'un flux établi.
 
 ## 5. Limites de tampon et de file
 
-Les deux limites doivent être des entiers sûrs positifs. Dépasser l'une de ces limites est fatal (`stream.closed` résout avec `kind: "error"` et l'itérateur rejette — aucun événement n'est abandonné silencieusement) :
+Les valeurs par défaut sont `maxBufferSize: 64 * 1024` octets et `maxQueueSize: 1024` événements. Les deux limites doivent être des entiers sûrs positifs. Il n’existe pas d’échéance de handshake par défaut : un Fetch en attente dépend de la plateforme, d’une annulation de l’appelant ou d’un `connectTimeoutMs` explicitement configuré. Dépasser l’une des limites de capacité est fatal (`stream.closed` résout avec `kind: "error"` et l’itérateur rejette — aucun événement n’est abandonné silencieusement) :
 
 | Option de définition | Ce qu'elle délimite                                                    | Code de fault terminal |
 | -------------------- | ---------------------------------------------------------------------- | ---------------------- |

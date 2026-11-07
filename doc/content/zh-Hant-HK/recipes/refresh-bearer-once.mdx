@@ -43,6 +43,8 @@ return { ...request, headers };
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||
@@ -78,5 +80,7 @@ return { ...request, headers };
 ```txt
 42
 ````
+
+Request body 可以重播，唔代表業務操作可以重複執行。符合條件嘅 401 之後，呢個中介層亦會重新傳送 JSON `POST`：共兩次 HTTP 傳遞，第一次被拒絕，第二次被接受。只有當認證喺業務 handler 執行之前拒絕第一次傳遞，先可以用佢處理寫入；兩次傳遞之間必須保留同一個穩定嘅冪等鍵，並由伺服器端去重。如果冇呢個契約，就應該回傳 401，而唔係自動重播寫入操作。完整範例唔會重播 `ReadableStream` request body。
 
 關於洋蔥模型順序與重試邊界，請參閱[中介層](/zh-Hant-HK/docs/interceptors)指南。

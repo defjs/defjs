@@ -86,9 +86,9 @@ void main();
 </Tab>
 </Tabs>
 
-- **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`（若定義中有宣告 `error` struct，則包含解碼後嘅 `error.data`）。
+- **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`（若定義中有宣告 `error` struct，則包含解碼後嘅 `error.data`）。呢個係目前操作嘅致命錯誤，唔會呼叫 `shouldReconnect`。下一次操作會重新揀選端點，所以負載平衡器可能會揀另一個端點。
 - **Content-Type 唔啱或 body 無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` vs. `stream.open`**：Tuple 嘅第三個欄位（`startupOpen`）記錄咗首次握手成功時嘅 snapshot；如果後續觸發重新連線，`stream.open` 會即時更新為最新握手狀態。
+- **`startupOpen` vs. `stream.open`**：Tuple 嘅第三個欄位（`startupOpen`）記錄首次握手回應嘅 snapshot；後續重連時，`stream.open` 會即時更新。如果重連握手回傳 `503`，iterator 會 reject，`stream.closed` 會回報 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍然係 `503`；請檢查 `stream.open` 取得嗰個即時回應狀態。
 
 ## 3. 事件分發與解碼
 
@@ -106,14 +106,14 @@ SSE 重新連線機制係 **opt-in** 嘅。如果冇配置 `withSSEReconnect(...
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **重試預算（`attempts`）**：傳入選項物件畀 `withSSEReconnect` 時，預設為 `3` 次。握手成功後會重設重試計數器同退避指數。伺服器正常送出 EOF **唔算**失敗，因此唔會觸發重新連線。
-- **游標追蹤（`Last-Event-ID`）**：當成功解析事件結尾嘅空行時，ID 就會被 commit，並喺重連時自動作為 `Last-Event-ID` header 送出。
+- **重試預算（`attempts`）**：傳入選項物件畀 `withSSEReconnect` 時，預設為 `3` 次。每次握手成功後都會重設重試計數器同退避指數，所以即使設定 `attempts: 1`，只要每次連線都成功開啟，長時間 session 入面仍然可以建立好多次實體連線。伺服器正常送出 EOF **唔算**失敗，因此唔會觸發重新連線。
+- **游標追蹤（`Last-Event-ID`）**：當成功解析事件結尾嘅空行時，ID 就會被 commit，並喺重連時自動作為 `Last-Event-ID` header 送出。無論連線正常結束定失敗，唔完整嘅 frame 都唔會提交佢嘅 `id`。遇到可以重連嘅讀取／網絡失敗之後，會由最後提交嘅 id 恢復；伺服器必須實作由嗰個游標重播嘅功能。
 - **冪等安全性**：預設情況下，只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）先會自動重連。非冪等方法（例如 `POST`、`PATCH`，常見於 LLM 串流請求）只有喺自訂嘅 `shouldReconnect` callback 明確回傳 `true` 時先會重連。傳入 `ReadableStream` 作為 request body 嘅請求喺第一次嘗試就會被消費完畢，絕唔會重連。
 - **握手逾時（`connectTimeoutMs`）**：如果提供咗，佢必須係有限正數，而且唔可以大過 2147483647（timer 上限）；否則該操作 return `REQ_OPTIONS_INVALID`。佢用嚟限制由發起 Fetch 到收到回應 header 之間嘅握手時間，唔會影響已建立串流嘅連線時長。
 
 ## 5. 緩衝區與佇列限制
 
-呢兩項限制都必須係正嘅安全整數（safe integer）。一旦超出任何一個限制，都會導致嚴重錯誤（`stream.closed` 會以 `kind: "error"` 結束，而且 iterator 會 reject——事件絕唔會被靜雞雞丟棄）：
+預設上限係 `maxBufferSize: 64 * 1024` bytes 同 `maxQueueSize: 1024` 個 events。呢兩項限制都必須係正嘅安全整數。冇預設握手 deadline：未完成嘅 Fetch 會等待平台、呼叫端取消，或者明確設定嘅 `connectTimeoutMs`。一旦超出任何一個容量限制，都會導致致命錯誤（`stream.closed` 會以 `kind: "error"` 結束，而且 iterator 會 reject——事件絕唔會被靜雞雞丟棄）：
 
 | 定義選項        | 限制範圍                                    | 終止錯誤代碼          |
 | --------------- | ------------------------------------------- | --------------------- |

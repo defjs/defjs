@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` هو `closed` أو `aborted` أو `error`. `cause` غائب في `closed`، واختياري في `aborted`، ومطلوب في `error`. قد تظهر `code` و`reason` و`wasClean` في كل صيغة. يملأ `session.close()` اليدوي `code` و`reason` على `{ kind: "closed" }` عندما لا يحمل حدث الإغلاق أيًا منهما.
+`kind` هو `closed` أو `aborted` أو `error`. `cause` غائب في `closed`، واختياري في `aborted`، ومطلوب في `error`. عند تجاوز حد طابور الإطارات الواردة الخام أو الرسائل المفكوكة، تكون `cause.code === "CAP_QUEUE_OVERFLOW"`؛ ويرفض السبب نفسه `receive` ويصل إلى `onRuntimeError`. تحتفظ مهلة النبض واستنفاد محاولات إعادة الاتصال بأسباب `Error` عادية وقت التشغيل دون رمز ثابت منفصل. قد تظهر `code` و`reason` و`wasClean` في كل صيغة. يملأ `session.close()` اليدوي `code` و`reason` على `{ kind: "closed" }` عندما لا يحمل حدث الإغلاق أيًا منهما.
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions` هو [`UseWebSocketConfig`](/ar/api/core/usewebsocketconfig-type): `beforeConnect` و`heartbeat` و`protocols` و`reconnect` و`signal`. `WebSocketHeartbeatConfig`: `intervalMs`، و`message` و`isAck` و`timeoutMs` الاختيارية. لا يوجد حقل `timeout` أو `abort`.
 
 يغطي `signal` الجلسة كاملة، بما فيها ما بعد فتحها. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة للبدء فقط ولا مهلة افتراضية على مستوى العميل. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. يُستبدل `heartbeat` كاملًا؛ وينتظر `timeoutMs` فيه إقرارًا وليس مهلة للطلب.
+
+تعمل دالة builder وسلسلة المعترضات مرة واحدة لكل عملية. تعيد إعادة الاتصال استخدام المسار والاستعلام المبنيين والبروتوكولات الملتقطة، وتُنشئ عنوان URL قبل `beforeConnect`. إذا لم يستبدل معترض نقطة النهاية الأساسية للطلب، تستبدل إعادة الاتصال أيضًا نقطة النهاية بأخرى مختارة حديثًا. لا يستطيع الخطاف تبديل بيانات اعتماد عنوان URL أو البروتوكول الفرعي داخل الجلسة؛ ابدأ عملية جديدة بمدخلات أو إعدادات عميل حديثة.
 
 عندما يُضبط `reconnect`، تكون `attempts` افتراضيًا 3 لكل انقطاع؛ و`0` يعطّل. يعيد `open` الناجح ضبط الميزانية وأُس التراجع، فيبدأ كل انقطاع جديد عند إعادة المحاولة 1. حذف `attempts` لا يمنح محاولات غير محدودة داخل انقطاع واحد. انظر [العميل](/ar/api/client) للافتراضيات وقواعد التحقق.
 

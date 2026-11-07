@@ -23,13 +23,13 @@ bun add @defjs/core @defjs/vue vue
 
 أنشئ العميل في نقطة إدخال تطبيقك، وثبّت الإضافة `createClientPlugin(client)`، وسجّل `onCleanup` قبل بدء العمليات غير المتزامنة داخل المراقب:
 
-<Tabs items={["src/main.ts", "src/OrderView.vue"]}>
+<Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
   </Tab>
-  <Tab value="src/OrderView.vue">
+  <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
   </Tab>
 </Tabs>
@@ -58,6 +58,7 @@ bun add @defjs/core @defjs/vue vue
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
+- يعرض فرع الخطأ في مصفوفة النتائج إخفاقات المصافحة الأولية (بما فيها HTTP 503). وتعرض كتلة `catch` في المكرر الإخفاقات التي تحدث بعد بدء التشغيل؛ وتظل كتلة `finally` تُغلق التدفق وتنتظر اكتمال إغلاقه.
 - يؤدي إيقاف النطاق إلى إنهاء حلقة `for await` لتدفق SSE بشكل طبيعي.
 - يؤدي إلغاء جلسة WebSocket إلى إنهائها كـ `aborted` ورفض `session.receive` بخطأ `AbortError`، لذا احرص على حماية كتلة `catch` بعد التخلص من النطاق وإلغاء اشتراك مستمعي `onStateChange` و`onRuntimeError` داخل كتلة `finally`.
 

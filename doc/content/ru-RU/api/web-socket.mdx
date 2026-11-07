@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` — это `closed`, `aborted` или `error`. `cause` отсутствует у `closed`, необязателен у `aborted` и обязателен у `error`. `code`, `reason` и `wasClean` могут быть у каждого варианта. Ручной `session.close()` заполняет `code` и `reason` у `{ kind: "closed" }`, если событие close их не несёт.
+`kind` — это `closed`, `aborted` или `error`. `cause` отсутствует у `closed`, необязателен у `aborted` и обязателен у `error`. При переполнении очереди входящих сырых кадров или декодированных сообщений `cause.code === "CAP_QUEUE_OVERFLOW"`; та же причина отклоняет `receive` и передаётся в `onRuntimeError`. Таймаут heartbeat и исчерпание попыток переподключения сохраняют обычные причины типа `Error` среды выполнения без отдельного стабильного кода. `code`, `reason` и `wasClean` могут быть у каждого варианта. Ручной `session.close()` заполняет `code` и `reason` у `{ kind: "closed" }`, если событие close их не несёт.
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательные `message`, `isAck`, `timeoutMs`. Полей `timeout` или `abort` нет.
 
 `signal` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. `signal` — сигнал вызова; объединяй сигналы через `AbortSignal.any` в коде приложения. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
+
+Builder и цепочка перехватчиков выполняются один раз на операцию. Переподключение повторно использует собранные path/query и зафиксированные протоколы и строит URL до `beforeConnect`. Если перехватчик не заменил базовый эндпоинт запроса, переподключение также подставляет заново выбранный эндпоинт. Хук не может обновлять учётные данные URL или субпротокола внутри одной сессии; начни новую операцию со свежими входными данными или конфигурацией клиента.
 
 Когда задан `reconnect`, `attempts` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени для задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. Значения по умолчанию и правила проверки см. в [Клиент](/ru-RU/api/client).
 

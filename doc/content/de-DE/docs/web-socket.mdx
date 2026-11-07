@@ -123,10 +123,12 @@ Sowohl Reconnect als auch Heartbeat sind Opt-in über Client-Optionen (`withWebS
 
 - **Reconnect**: Standardwerte im aktivierten Zustand sind `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Jedes physische `open` setzt das Ausfallbudget zurück. `beforeConnect({ attempt, signal })` wird vor dem ersten Verbindungsaufbau und vor jedem Reconnect-Versuch ausgeführt.
 - **Handshake-Timeout (`connectTimeoutMs`)**: Wenn angegeben, muss es endlich, positiv und nicht größer als 2147483647 (die Timer-Obergrenze) sein; sonst gibt die Operation `REQ_OPTIONS_INVALID` zurück. Es begrenzt die Konstruktion bis `open` und wird nach dem Handshake gelöscht.
-- **Heartbeat**: Sendet periodisch `message()` durch das `outgoing`-Struct und wartet bis zu `timeoutMs` auf einen Frame, der `isAck(msg)` erfüllt. Passende Bestätigungs-Frames werden vom Heartbeat-Monitor konsumiert und nicht an `session.receive` weitergeleitet. Ein ausbleibendes Ack beendet die Sitzung fatal.
+- **Heartbeat**: Sendet periodisch `message()` durch das `outgoing`-Struct und wartet bis zu `timeoutMs` auf einen Frame, der `isAck(msg)` erfüllt. Passende Bestätigungs-Frames werden vom Heartbeat-Monitor konsumiert und nicht an `session.receive` weitergeleitet. Ein ausbleibendes Ack ist für die logische Sitzung fatal: `closed.kind` ist `"error"` und `closed.cause` der gewöhnliche `Error("WebSocket heartbeat timeout")`; es startet keinen Reconnect. Heartbeat-Serialisierungsfehler folgen demselben fatalen Pfad mit ihrer ursprünglichen Ursache.
 - **Warteschlangenlimits**:
-  - `maxIncomingQueueSize` (erforderliche positive Ganzzahl): Ein Überlauf beendet die Sitzung mit `CAP_QUEUE_OVERFLOW`. Stelle sicher, dass `session.receive` kontinuierlich konsumiert wird, solange die Sitzung geöffnet ist.
+  - `maxIncomingQueueSize` (erforderliche positive Ganzzahl): Begrenzt sowohl Roh-Frames, die auf Dekodierung warten, als auch dekodierte Nachrichten, die auf den Konsumenten warten. Ein Überlauf beendet die Sitzung mit einem `CAP_QUEUE_OVERFLOW`-Fault als `closed.cause`; dieselbe Ursache wird an `onRuntimeError` gesendet und lässt `session.receive` fehlschlagen. Stelle sicher, dass `session.receive` kontinuierlich konsumiert wird, solange die Sitzung geöffnet ist.
   - `maxOutgoingQueueSize` (optionale nicht-negative Ganzzahl, Standard `0`): Puffert `session.send()`-Aufrufe ausschließlich während `state === 'reconnecting'` und leert sie vor dem Veröffentlichen des nächsten `open`.
+
+`shouldReconnect` erhält den nativen Close-Code und `wasClean`. Ein Server kann einen regulären Close-Handshake mit dem Anwendungsfehlercode `1011` abschließen; `wasClean === true` bedeutet daher nicht, dass die Anwendung erfolgreich war. Das Beispiel erlaubt `1011` ausdrücklich; wähle Anwendungscodes nach deinem Protokoll, statt dich allein auf `!wasClean` zu verlassen.
 
 ## 5. Subprotokolle und Authentifizierung [#protocols-and-authentication]
 
@@ -135,6 +137,7 @@ Browser-WebSockets unterstützen keine beliebigen Handshake-Header, weshalb WebS
 - **Vorrang von Subprotokollen**: `client({ protocols })` überschreibt `withWebSocketProtocols(...)`, was wiederum `defineWebSocket({ protocols })` überschreibt.
 - **URL-Konvertierung**: Defjs wandelt `http:` automatisch in `ws:` und `https:` in `wss:` auf dem aufgelösten Endpunkt um.
 - **Zugangsdaten**: `withCredentials(true)` gilt ausschließlich für Fetch (HTTP/SSE). Authentifiziere WebSockets über Cookies/Session-Richtlinien, Subprotokolle oder kurzlebige Connection-Tickets – vermeide langlebige Geheimnisse in Query-Parametern.
+- **`beforeConnect` verändert keinen Request**: Input-Parsing, der synchrone reine `builder` und die Interceptor-Kette laufen einmal pro Operation. Bei einem Request, dessen Basis-Endpunkt nicht von einem Interceptor ersetzt wurde, wählt jeder Reconnect erneut einen Endpunkt und baut die URL damit neu auf, verwendet aber den gebauten Pfad/die Query und die erfasste Protokollliste wieder. Die URL steht vor dem `beforeConnect` dieses Versuchs fest, sowohl am selben Endpunkt als auch nach einem Failover. Das Ändern einer Closure-Variablen, des Inputs oder des Protokoll-Arrays im Hook kann dem aktuellen Handshake kein frisches Ticket geben. URL-/Subprotokoll-Zugangsdaten innerhalb einer Sitzung auszutauschen wird nicht unterstützt; beschaffe zuerst die neuen Zugangsdaten, übergib sie als Input oder Client-Konfiguration an eine neue Operation und übernimm dann die Bereinigung dieser Ersatz-Sitzung.
 
 ## 6. Schließen und Besitz
 
@@ -144,7 +147,7 @@ Rufe `session.close(code?, reason?)` auf (wobei `code` den Wert `1000` oder `300
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-Melde Listener von `onStateChange` und `onRuntimeError` stets ab, wenn deine Komponente oder dein Worker beendet wird.
+Sind bei einem Reconnect-Ausfall alle Versuche ausgeschöpft, endet die Sitzung mit `closed.kind: "error"`, dem nativen Close-Snapshot (bei einem fehlgeschlagenen Upgrade oft Code `1006`) und dem gewöhnlichen Transportfehler als `closed.cause`; sie stellt keinen separaten stabilen Code für die Erschöpfung bereit. Melde Listener von `onStateChange` und `onRuntimeError` stets ab, wenn deine Komponente oder dein Worker beendet wird.
 
 ## Weiterführende Links
 

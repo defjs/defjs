@@ -55,14 +55,22 @@ Un interceptor HTTP puede devolver una respuesta sintética sin llamar a `next(r
 
 ## 3. Reintentar lecturas HTTP seguras
 
-Defjs no reintenta automáticamente códigos de estado HTTP de la aplicación. Cuando necesites reintentar según el código de respuesta (por ejemplo `429`, `502`, `503`, `504` en llamadas idempotentes `GET` / `HEAD` / `OPTIONS`), implementa un bucle acotado dentro de un interceptor HTTP:
+Los reintentos HTTP están desactivados por defecto. Para conmutar a otro endpoint ante `502`, `503` o `504`, usa [`withRetry({ on: ["gateway-error"] })`](/es-ES/docs/load-balancing). Vuelve a seleccionar un endpoint aún no probado, reconstruye la petición y ejecuta de nuevo toda la cadena de interceptores.
+
+Un interceptor de la aplicación puede, en cambio, tratar estados en el mismo endpoint, como `429` y `Retry-After`. Esta receta acotada de lecturas seguras también trata `502`/`503`/`504`:
 
 <include cwd lang="typescript">
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
+- **Dos capas de reintentos**: Este bucle `next(request)` permanece en el endpoint seleccionado y no vuelve a ejecutar la autenticación externa ni el builder. Combinar tres envíos internos con `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` puede enviar cuatro peticiones HTTP (tres a un primario fallido y una a un respaldo saludable); `maxAttempts` limita los intentos externos, no los envíos físicos. Elige qué capa controla cada condición en lugar de acumularlas por accidente.
+- **Política de `Retry-After`**: El `withRetry` de Core no lee esta cabecera. El tope de 30 segundos y la alternativa de 250 ms de la receta son decisiones de la aplicación. Limitar un retardo mayor del servidor puede reintentar antes de lo solicitado; si no es aceptable, espera el retardo completo o devuelve la respuesta.
+- **Escrituras tras 401**: La [receta de renovación Bearer](/es-ES/recipes/refresh-bearer-once) puede entregar un POST JSON dos veces. Exige un rechazo de autenticación antes del procesamiento de negocio y una clave de idempotencia estable con desduplicación en el servidor, o no repitas automáticamente las escrituras. Los cuerpos de petición en streaming no se repiten.
+
 - **Tratamiento de rechazos de transporte**: `next(request)` rechaza cuando ocurre un error de red (no existe una respuesta con estado 0). Capturar y relanzar ese rechazo preserva el código de fallo original `NET_*`.
 - **Lanzar excepciones dentro de un interceptor**: una excepción no capturada (o devolver un valor que no sea una respuesta) resuelve la tupla de la operación con `EXT_INTERCEPTOR_FAILED` y asigna `fault.cause`. Lanzar `ERR_ABORTED` o `ERR_TIMEOUT` resuelve con `NET_ABORTED` o `NET_TIMEOUT`.
+
+Para SSE, prefiere `withSSEReconnect` a un interceptor que llame a `next()` repetidamente. Llamar al `next()` del interceptor más de una vez desactiva la atribución al endpoint y la reselección para esos flujos de reemplazo; no está relacionado con consumir eventos mediante el `next()` de un iterador.
 
 ## 4. Envolver sesiones WebSocket
 

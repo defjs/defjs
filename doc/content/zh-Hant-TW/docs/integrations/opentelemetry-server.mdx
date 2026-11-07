@@ -74,7 +74,16 @@ description: 在伺服器端應用程式 Client 上檢測 SDK 呼叫，同時讓
 
 - **HTTP**：Span 始於 HTTP 攔截器，終於 `HttpResponse` 回傳之時。已宣告的 `output` / `error` 本文會在回傳**之前**於處理器邊界內完成讀取（並檢查與剖析 JSON 表示法）。若本文讀取失敗或 JSON 媒體型別/剖析失敗，會向攔截器拋出拒絕（`error.type: "BodyFailure"`），將 Span 標記為 `ERROR`，在 Metrics 中記錄 `BodyFailure`，並輸出單條 `WARN` 日誌。狀態碼 `400+` 會將 Span 標記為 `ERROR`，並以狀態碼字串作為 `error.type`。Struct 驗證（`RES_STRUCT_MISMATCH`）與 `HTTP_STATUS` tuple 轉換發生在攔截器鏈之後，不會改變已完成的傳輸 Span。
 - **SSE**：一個邏輯串流（包含自動重連）產生一個 Span，該 Span 會持續保持開啟直到 `stream.closed` 確定為止。記錄的事件：`sse.connected`，接著依序為 `sse.closed`、`sse.aborted`（對於呼叫 `stream.close()` 或非逾時的呼叫端中斷以 `OK` 結束），或 `sse.error`（以 `ERROR` 結束，包含逾時性質的呼叫端中斷）。
-- **WebSocket**：一個邏輯工作階段（包含自動重連）產生一個 Span，直到 `session.closed` 確定為止。記錄的事件：`websocket.connected`、`websocket.closed`、`websocket.error`。伺服器關閉訊框（任何代碼）皆會以 `OK` 結束 Span 並記錄 `websocket.closed`；呼叫端中斷則以 `ERROR` 結束 Span 並記錄 `websocket.error`，但不產生額外日誌。無關閉訊框的突發斷線（`1006`）在會在關閉前觸發 Socket `error` 的執行時期（Node.js）以 `ERROR` 與單條日誌結束；在不觸發的環境（Bun）中則以 `OK` 結束。
+- **WebSocket**：一個邏輯工作階段（包含自動重連）產生一個 Span，直到 `session.closed` 確定為止。記錄的事件：`websocket.connected`、`websocket.closed`、`websocket.error`。伺服器關閉訊框（任何代碼）皆會以 `OK` 結束 Span 並記錄 `websocket.closed`；呼叫端中斷則以 `ERROR` 結束 Span 並記錄 `websocket.error`，不產生日誌，但中斷原因為 `TimeoutError` 時例外，會輸出單條 `WARN`。無關閉訊框的突發斷線（`1006`）在 Socket `error` 先於 `close` 觸發的執行時期（Node.js）以 `ERROR` 與單條日誌結束；在不觸發的環境（Bun）中則以 `OK` 結束。
+
+### 重試與重連邊界
+
+以下是目前攔截器觀測到的行為，並非獨立的負載平衡器遙測 API：
+
+- 每次 `withRetry` HTTP 嘗試都有自己的 Client Span 與耗時樣本。若有活躍的應用程式父層 Span，各次嘗試會是該父層之下的同層 Span；否則，重試不會自動歸入同一條 Trace。Core 不會建立邏輯呼叫的父層 Span。
+- HTTP 嘗試的 URL 會識別該次嘗試的端點，但不會輸出嘗試編號、重試原因、額度餘額/耗盡，或逐出/復原屬性。
+- SSE 與 WebSocket 在重連期間保留同一個邏輯工作階段 Span，不會為每條實體連線各建一個 Span。即使發生容錯移轉，Span URL 與指標屬性仍保留初始端點。重連不會再次輸出 `connected` 事件。活躍指標計算的是等待 `closed` 的邏輯工作階段，而非目前選取之副本上的 Socket。
+- 在一次 Bun 執行中，HTTP 503 產生 `error.type: "503"`，連線遭拒產生 `"TypeError"`，而期限到期與呼叫端取消皆產生 `"Error"`。後兩者分別回傳 `NET_TIMEOUT` 與 `NET_ABORTED`；這些 Defjs tuple 錯誤碼並非獨立的 HTTP 遙測屬性。對於已開啟的 WebSocket，預設取消產生 `"AbortError"` 而不記錄警告；以 `TimeoutError` 為中斷原因時，則產生 `"TimeoutError"` 與一條警告。錯誤類別名稱是對傳輸/執行時期的觀測，不能取代檢查 tuple 或關閉結果。
 
 ### 發布的指標度量（Metrics）
 
@@ -82,7 +91,7 @@ description: 在伺服器端應用程式 Client 上檢測 SDK 呼叫，同時讓
 
 | 指標名稱                                     | 意涵                                                    |
 | -------------------------------------------- | ------------------------------------------------------- |
-| `http.client.request.duration`               | HTTP 請求耗時（秒）                                     |
+| `http.client.request.duration`               | HTTP 單次嘗試耗時（秒）                                 |
 | `defjs.client.sse.connect.duration`          | 直到回傳 SSE 控制代碼所耗費的時間                       |
 | `defjs.client.sse.connection.duration`       | 自回傳控制代碼至最終 `stream.closed` 的時長             |
 | `defjs.client.sse.active_streams`            | 處於待處理 `closed` 狀態的活躍邏輯 SSE 串流數           |
@@ -104,14 +113,14 @@ description: 在伺服器端應用程式 Client 上檢測 SDK 呼叫，同時讓
 
 每次請求或邏輯連線最多發送一條終結 `WARN`（`13`）層級的 `LogRecord`：
 
-| 觀察到的結果                                                                                                     | Defjs LogRecord                                                                                   |
-| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| HTTP OTel `next()` 拋出拒絕（網路失敗、觀測到的逾時、宣告本文讀取失敗），排除主動取消與公開的 `HTTP_STATUS` 錯誤 | 單條 `WARN`，`http.client.request.exception`，階段為 `request`                                    |
-| 一般 HTTP 回應（包含 4xx/5xx 已宣告的 `error` 本文成功解碼、未宣告本文，或狀態碼為 `0`）                         | 無                                                                                                |
-| 已宣告的 `output` / `error` 本文讀取失敗，或宣告的 JSON 收到非 JSON 媒體型別或 `JSON.parse` 失敗                 | 單條 `WARN`，`http.client.request.exception`，階段為 `request`，`exception.type: "BodyFailure"`   |
-| SSE 或 WebSocket 交握/連線失敗（包含 SSE 非 2xx 狀態碼）                                                         | 單條 `WARN`，`defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，階段為 `connect` |
-| SSE 或 WebSocket 終結錯誤或被拒絕的 `closed`（包含 Node.js `1006` Socket 錯誤、佇列溢位、心跳逾時）              | 單條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                |
-| 正常完成、收到訊息、EOF、伺服器端 WebSocket 關閉訊框（包含 `1011`），或主動非逾時中斷                            | 無                                                                                                |
+| 觀察到的結果                                                                                                             | Defjs LogRecord                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| HTTP OTel `next()` 拋出拒絕（網路失敗、觀測到的逾時、宣告本文讀取失敗），排除非逾時的主動取消與公開的 `HTTP_STATUS` 錯誤 | 單條 `WARN`，`http.client.request.exception`，階段為 `request`                                    |
+| 一般 HTTP 回應（包含 4xx/5xx 已宣告的 `error` 本文成功解碼、未宣告本文，或狀態碼為 `0`）                                 | 無                                                                                                |
+| 已宣告的 `output` / `error` 本文讀取失敗，或宣告的 JSON 收到非 JSON 媒體型別或 `JSON.parse` 失敗                         | 單條 `WARN`，`http.client.request.exception`，階段為 `request`，`exception.type: "BodyFailure"`   |
+| SSE 或 WebSocket 交握/連線失敗（包含 SSE 非 2xx 狀態碼）                                                                 | 單條 `WARN`，`defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，階段為 `connect` |
+| SSE 或 WebSocket 終結錯誤或被拒絕的 `closed`（包含 Node.js `1006` Socket 錯誤、佇列溢位、心跳逾時）                      | 單條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                |
+| 正常完成、收到訊息、EOF、伺服器端 WebSocket 關閉訊框（包含 `1011`），或主動非逾時中斷                                    | 無                                                                                                |
 
 診斷日誌會記錄固定訊息、`exception.type`（平台/傳輸類別名稱，如 `BodyFailure`、`EventStreamFatalError`、`DefjsFault`、`TypeError` 或 `Error`）、階段、靜態 `operation`、伺服器位址/連接埠與協定欄位——絕不記錄原始 URL、Query 字串、標頭、本文或錯誤堆疊追蹤。
 

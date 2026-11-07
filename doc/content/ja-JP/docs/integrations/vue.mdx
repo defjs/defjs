@@ -23,13 +23,13 @@ bun add @defjs/core @defjs/vue vue
 
 アプリケーションのエントリポイントでクライアントを作成し、`createClientPlugin(client)` をインストールします。Watcher 内で非同期処理を開始する前に `onCleanup` を登録します。
 
-<Tabs items={["src/main.ts", "src/OrderView.vue"]}>
+<Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
   </Tab>
-  <Tab value="src/OrderView.vue">
+  <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
   </Tab>
 </Tabs>
@@ -57,6 +57,8 @@ Vue ネイティブの `provide(HTTP_CLIENT, childClient)` を使用して、特
 Watcher の外側のコンポーザブルやコンポーネント内で処理を開始する場合、`AbortController` と `onScopeDispose` を組み合わせます。接続開始処理を中断し、破棄後に解決されたハンドルも確実にクローズし、単一の非同期イテレーターを消費して `.closed` を await します。
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
+
+- タプルのエラー分岐では、HTTP 503 を含む初回ハンドシェイクの失敗を表示します。イテレーターの `catch` では起動後の失敗を表示し、`finally` ブロックでは引き続きストリームを閉じて終了を待ちます。
 
 - スコープの停止によって、SSE の `for await` ループは通常通り終了します。
 - WebSocket セッションを abort すると、セッションは `aborted` として終了し、`session.receive` は `AbortError` で reject されます。そのため、破棄後は `catch` ブロックでエラーをガードし、`finally` で `onStateChange` / `onRuntimeError` のリスナーを確実に解除（unsubscribe）してください。

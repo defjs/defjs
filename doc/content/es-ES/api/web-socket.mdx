@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` es `closed`, `aborted` o `error`. `cause` está ausente en `closed`, es opcional en `aborted` y es obligatorio en `error`. `code`, `reason` y `wasClean` pueden aparecer en cada variante. Un `session.close()` manual rellena `code` y `reason` en `{ kind: "closed" }` cuando el evento de cierre no los trae.
+`kind` es `closed`, `aborted` o `error`. `cause` está ausente en `closed`, es opcional en `aborted` y es obligatorio en `error`. Un desbordamiento de la cola de frames entrantes en bruto o mensajes decodificados tiene `cause.code === "CAP_QUEUE_OVERFLOW"`; la misma causa rechaza `receive` y llega a `onRuntimeError`. El timeout del heartbeat y las reconexiones agotadas conservan causas `Error` ordinarias del runtime, sin un código estable separado. `code`, `reason` y `wasClean` pueden aparecer en cada variante. Un `session.close()` manual rellena `code` y `reason` en `{ kind: "closed" }` cuando el evento de cierre no los trae.
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions` es [`UseWebSocketConfig`](/es-ES/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` y `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, `message` opcional, `isAck`, `timeoutMs`. No hay campo `timeout` ni `abort`.
 
 `signal` cubre toda la sesión, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. `heartbeat` se sustituye entero; su `timeoutMs` espera un acuse y no es un plazo de la solicitud.
+
+El builder y la cadena de interceptores se ejecutan una vez por operación. La reconexión reutiliza el path/query construido y los protocolos capturados, y construye la URL antes de `beforeConnect`. Si ningún interceptor ha reemplazado el endpoint base de la solicitud, la reconexión también sustituye un endpoint recién seleccionado. El hook no puede rotar credenciales de URL o subprotocolo dentro de una sesión; inicia una operación nueva con entrada o configuración del cliente actualizadas.
 
 Cuando se define `reconnect`, `attempts` vale por defecto 3 por interrupción; `0` lo desactiva. Un `open` correcto reinicia el presupuesto y el exponente de backoff, así que cada interrupción nueva empieza en el reintento 1. Omitir `attempts` no da reintentos ilimitados dentro de una interrupción. Consulta [Cliente](/es-ES/api/client) para los valores por defecto y las reglas de validación.
 

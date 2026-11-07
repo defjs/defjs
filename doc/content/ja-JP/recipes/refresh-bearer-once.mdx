@@ -43,6 +43,8 @@ return { ...request, headers };
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||
@@ -78,5 +80,7 @@ return { ...request, headers };
 ```txt
 42
 ````
+
+ボディを再送できることと、業務操作を繰り返してよいことは別です。このインターセプターは条件に一致する 401 のあとで JSON `POST` も再送します。HTTP 送信は 2 回行われ、最初は拒否され、次は受理されます。書き込みに使えるのは、業務ハンドラーの実行前に認証が最初の送信を拒否する場合だけです。2 回の送信で同じ安定した冪等性キーを維持し、サーバー側で重複を排除してください。この契約がなければ、書き込みを自動再送せずに 401 を返してください。完全なサンプルでは `ReadableStream` のリクエストボディを再送しません。
 
 インターセプターのオニオン実行順序やリトライ境界の詳細は、[ミドルウェア](/ja-JP/docs/interceptors) を参照してください。

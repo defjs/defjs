@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind`는 `closed`, `aborted`, `error` 중 하나예요. `cause`는 `closed`에는 없고, `aborted`에서는 선택, `error`에서는 필수예요. `code`, `reason`, `wasClean`은 모든 변형에 있을 수 있어요. 수동 `session.close()`는 close 이벤트가 그 값을 주지 않을 때 `{ kind: "closed" }`의 `code`와 `reason`을 채워요.
+`kind`는 `closed`, `aborted`, `error` 중 하나예요. `cause`는 `closed`에는 없고, `aborted`에서는 선택, `error`에서는 필수예요. 수신한 원시 프레임이나 디코딩된 메시지 큐가 넘치면 `cause.code === "CAP_QUEUE_OVERFLOW"`가 돼요. 같은 cause가 `receive`를 reject하고 `onRuntimeError`에도 전달돼요. heartbeat 타임아웃과 재연결 횟수 소진은 별도의 안정적인 코드 없이 일반 런타임 `Error`를 cause로 유지해요. `code`, `reason`, `wasClean`은 모든 변형에 있을 수 있어요. 수동 `session.close()`는 close 이벤트가 그 값을 주지 않을 때 `{ kind: "closed" }`의 `code`와 `reason`을 채워요.
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions`는 [`UseWebSocketConfig`](/ko-KR/api/core/usewebsocketconfig-type)예요. `beforeConnect`, `heartbeat`, `protocols`, `reconnect`, `signal`이에요. `WebSocketHeartbeatConfig`: `intervalMs`, 선택 `message`, `isAck`, `timeoutMs`예요. `timeout`이나 `abort` 필드는 없어요.
 
 `signal`은 열린 뒤를 포함해 세션 전체를 덮어요. 데드라인은 `AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 시작 전용 데드라인도, 클라이언트 기본 데드라인도 없어요. `signal`은 그 호출의 신호예요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. `heartbeat`는 통째로 바뀌고, 그 `timeoutMs`는 확인을 기다리는 시간이지 요청 데드라인이 아니에요.
+
+빌더와 인터셉터 체인은 작업마다 한 번만 실행돼요. 재연결은 만들어 둔 path/query와 캡처한 protocols를 재사용하고, `beforeConnect` 전에 URL을 구성해요. 인터셉터가 요청의 기본 엔드포인트를 바꾸지 않았다면 재연결 시 새로 선택한 엔드포인트도 대입해요. 이 훅으로 세션 안에서 URL이나 서브프로토콜 인증 정보를 갱신할 수는 없어요. 새 input이나 클라이언트 설정으로 새 작업을 시작하세요.
 
 `reconnect`를 주면 `attempts` 기본값은 단절마다 3이고, `0`은 꺼요. `open`이 성공하면 예산과 백오프 지수가 초기화되어, 다음 단절은 재시도 1부터 시작해요. `attempts`를 빼도 한 단절 안에서 무제한 재시도가 되지는 않아요. 기본값과 검증 규칙은 [클라이언트](/ko-KR/api/client)를 보세요.
 

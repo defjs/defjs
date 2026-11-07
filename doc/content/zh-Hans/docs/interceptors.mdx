@@ -55,14 +55,21 @@ HTTP 拦截器可以在不实际调用 `next(req)` 的情况下，通过 `makeRe
 
 ## 3. 对安全的读请求执行重试
 
-Defjs 核心库默认不会根据业务 HTTP 状态码自动重试。当需要基于特定响应码进行安全重试时（例如针对幂等的 `GET` / `HEAD` / `OPTIONS` 调用，遇到 `429`、`502`、`503`、`504` 时），请在 HTTP 拦截器内部实现有界的重试循环：
+HTTP 重试默认关闭。要在 `502`、`503` 或 `504` 时故障转移到另一个端点，请使用 [`withRetry({ on: ["gateway-error"] })`](/zh-Hans/docs/load-balancing)。它会重新选择尚未尝试的端点、重新构建请求，并重新运行完整的拦截器链。
+
+应用拦截器也可以自行处理同一端点的状态码，例如 `429` 和 `Retry-After`。下面这个有界的安全读取配方也处理 `502`/`503`/`504`：
 
 <include cwd lang="typescript">
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
+- **两层重试**：这个 `next(request)` 循环始终使用选中的端点，不会重新运行外层认证或 builder。把三次内层发送与 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` 组合起来，可能发送四次 HTTP 请求（三次发给故障主端点，一次发给健康备用端点）；`maxAttempts` 限制外层尝试次数，而不是物理发送次数。应明确每种条件由哪一层负责，避免无意间叠加。
+- **`Retry-After` 策略**：Core 的 `withRetry` 不读取这个响应头。配方中 30 秒的上限和 250 ms 的回退值是应用层的选择。对更长的服务器延迟设置上限，可能比服务器要求的时间更早重试；若不能接受，请等待完整延迟或直接返回响应。
+- **401 写操作**：[Bearer 刷新配方](/zh-Hans/recipes/refresh-bearer-once) 可能投递同一个 JSON POST 两次。必须确保认证在业务处理前拒绝请求，并使用稳定的幂等键和服务端去重，否则就不要自动重放写操作。流式请求体不会重放。
 - **处理传输层 Reject 异常**：当发生底层网络错误时，`next(request)` 会返回 rejected promise（底层不存在所谓的 status 为 0 的响应对象）。通过 `try...catch` 捕获并重新将其 throw 出去，即可完整保留原始的 `NET_*` 错误码。
 - **在拦截器内部抛出异常**：未捕获的 throw（或返回了非预期的响应对象）会使操作元组直接返回 `EXT_INTERCEPTOR_FAILED` 故障，并将异常原因挂在 `fault.cause` 上。若在拦截器中显式抛出 `ERR_ABORTED` 或 `ERR_TIMEOUT`，则会精准结算为 `NET_ABORTED` 或 `NET_TIMEOUT`。
+
+对于 SSE，优先使用 `withSSEReconnect`，而不是反复调用 `next()` 的拦截器。多次调用拦截器的 `next()` 会禁用这些替换流的端点归因和重新选择；这与通过迭代器的 `next()` 消费事件无关。
 
 ## 4. 包装并扩展 WebSocket 会话
 

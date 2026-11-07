@@ -86,9 +86,9 @@ void main();
 </Tab>
 </Tabs>
 
-- **握手返回非 `2xx` 状态码**：返回 `HTTP_STATUS` 错误（若在定义中声明了 `error` struct，则 `error.data` 会携带解码后的错误体）。
+- **握手返回非 `2xx` 状态码**：返回 `HTTP_STATUS` 错误（若在定义中声明了 `error` struct，则 `error.data` 会携带解码后的错误体）。这对当前操作是致命错误，不会调用 `shouldReconnect`。下一次操作会重新选择端点，因此负载均衡器可能选中另一个端点。
 - **媒体类型不符或响应体不可读**：分别返回 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` 与 `stream.open` 的区别**：元组中的第三项 `startupOpen` 是首次建立连接时的握手快照；而 `stream.open` 则会随着后续发生的自动重连动态更新为最新一次物理连接的快照。
+- **`startupOpen` 与 `stream.open` 的区别**：元组中的第三项（`startupOpen`）是首次握手响应的快照；而 `stream.open` 会随着后续重连实时更新。如果重连握手返回 `503`，迭代器会 reject，`stream.closed` 报告 `RES_DECODE_FAILED`，但 `stream.open.response.status` 仍为 `503`；请检查 `stream.open` 获取该实时响应状态。
 
 ## 3. 事件路由分派与解码
 
@@ -106,14 +106,14 @@ SSE 的断线自动重连是**显式开启（opt-in）**的。若未配置 `with
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **重试预算（`attempts`）**：调用 `withSSEReconnect` 传入配置时默认重试 `3` 次。握手成功后会重置重试计数器和退避指数。服务端的正常 EOF 断开**不属于**错误，不会触发重连。
-- **游标追踪（`Last-Event-ID`）**：只有在完整解析到事件末尾的终止空行后，才会正式提交游标 ID，并在重连时自动通过 `Last-Event-ID` 请求头发送。
+- **重试预算（`attempts`）**：调用 `withSSEReconnect` 传入配置对象时默认重试 `3` 次。每次握手成功后都会重置重试计数器和退避指数，因此即使设置 `attempts: 1`，只要每次连接都成功打开，长时间会话中仍可建立许多物理连接。服务端的正常 EOF **不属于**错误，不会触发重连。
+- **游标追踪（`Last-Event-ID`）**：只有在完整解析到事件末尾的终止空行后，才会正式提交游标 ID，并在重连时自动通过 `Last-Event-ID` 请求头发送。不论连接正常结束还是失败，不完整的数据帧都不会提交其 `id`。发生可重连的读取/网络失败后，将从最后提交的 id 恢复；服务端必须实现从该游标重放的能力。
 - **幂等性安全限制**：默认情况下，只有幂等请求方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）才会自动执行重连。对于非幂等方法（如用于大模型流式输出的 `POST` 或 `PATCH`），只有在自定义的 `shouldReconnect` 回调显式返回 `true` 时才会重连。`ReadableStream` 类型的请求体在首次调用时即被消耗，永远不会重连。
 - **握手超时保护（`connectTimeoutMs`）**：若提供，它必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它用于对每次握手请求（从发起 Fetch 到收到响应头）设置时间上限，但不会影响已建立的长连接存活时长。
 
 ## 5. 缓冲区与等待队列上限
 
-这两项阈值均必须是大于零的安全整数。超出任何一项限制都属于致命错误（`stream.closed` 将以 `kind: "error"` 终结，异步迭代器会直接抛出异常——绝不会静默丢失事件）：
+默认上限为 `maxBufferSize: 64 * 1024` 字节和 `maxQueueSize: 1024` 个事件。两项阈值均必须是大于零的安全整数。没有默认握手期限：挂起的 Fetch 会等待平台完成、调用方取消，或显式配置的 `connectTimeoutMs` 到期。超出任何一项容量限制都属于致命错误（`stream.closed` 将以 `kind: "error"` 终结，异步迭代器会 reject——绝不会静默丢失事件）：
 
 | 定义配置项      | 控制边界                                                        | 终态 Fault 错误码     |
 | --------------- | --------------------------------------------------------------- | --------------------- |

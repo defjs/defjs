@@ -123,10 +123,12 @@ void main();
 
 - **自动重连**：启用时的默认参数为 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次物理连接成功进入 `open` 状态均会重置重试预算。`beforeConnect({ attempt, signal })` 钩子会在首次连接以及后续每一次重连尝试前触发运行。
 - **握手超时（`connectTimeoutMs`）**：若提供，它必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它把从构造到 `open` 的时间加上限，握手之后会被清掉。
-- **心跳保活**：定时通过 `outgoing` struct 发送由 `message()` 构造的探测帧，并在至多 `timeoutMs` 毫秒内等待匹配 `isAck(msg)` 的确认帧。匹配的 Ack 确认帧会被心跳监控层内部消耗，不会转发给 `session.receive`。若在规定时间内未收到 Ack，整个会话将被作为致命错误终结。
+- **心跳保活**：定时通过 `outgoing` struct 发送由 `message()` 构造的探测帧，并在至多 `timeoutMs` 内等待匹配 `isAck(msg)` 的确认帧。匹配的 Ack 帧会被心跳监控层内部消耗，不会转发给 `session.receive`。未收到 Ack 对逻辑会话是致命错误：`closed.kind` 为 `"error"`，`closed.cause` 为普通的 `Error("WebSocket heartbeat timeout")`；这不会启动重连。心跳序列化失败也沿着同一致命路径结束，并保留其原始 cause。
 - **队列容量限制**：
-  - `maxIncomingQueueSize`（必填正整数）：入站队列溢出将直接以 `CAP_QUEUE_OVERFLOW` 报错关闭会话。在会话存活期间，请确保持续消费 `session.receive`。
+  - `maxIncomingQueueSize`（必填正整数）：同时限制等待解码的原始帧和等待消费者的已解码消息。溢出会以 `CAP_QUEUE_OVERFLOW` Fault 作为 `closed.cause` 终结会话；同一个 cause 会传给 `onRuntimeError` 并使 `session.receive` reject。在会话存活期间，请确保持续消费 `session.receive`。
   - `maxOutgoingQueueSize`（可选非负整数，默认为 `0`）：仅在 `state === 'reconnecting'` 重连期间对 `session.send()` 调用进行排队缓冲，并在下一次物理连接发布 `open` 状态之前全部刷送出去。
+
+`shouldReconnect` 接收原生关闭码和 `wasClean`。服务端可能以应用错误码 `1011` 完成正常的关闭握手，因此 `wasClean === true` 不代表应用处理成功。示例显式允许 `1011`；请根据自己的协议选择应用关闭码，而不要只依赖 `!wasClean`。
 
 ## 5. 子协议与身份认证 [#protocols-and-authentication]
 
@@ -135,6 +137,7 @@ void main();
 - **子协议优先级**：单次调用的 `client({ protocols })` > Client 配置的 `withWebSocketProtocols(...)` > 操作声明的 `defineWebSocket({ protocols })`。
 - **URL 自动转换**：Defjs 会自动将解析出的端点协议中的 `http:` 转换为 `ws:`，将 `https:` 转换为 `wss:`。
 - **身份认证凭证**：`withCredentials(true)` 仅适用于基于 Fetch 的 HTTP 和 SSE 请求。对于 WebSocket，推荐通过 Cookie/Session 机制、协商子协议或短期连接 Ticket 进行鉴权——请避免在 Query 参数中放置长期有效的敏感密钥。
+- **`beforeConnect` 不会修改请求**：输入解析、同步纯函数 `builder` 和拦截器链每次操作只运行一次。如果请求的基础端点未被拦截器替换，每次重连都会重新选择端点并用它重建 URL，但会复用已构建的 path/query 和捕获的协议列表。不论仍使用原端点还是发生故障转移，URL 都会在该次尝试的 `beforeConnect` 运行之前确定。在 hook 中修改闭包变量、input 或协议数组，不能为当前握手提供新的 ticket。同一个会话内不支持轮换 URL/子协议凭据；请先获取新凭据，再通过 input 或 client 配置发起新操作，并负责替代会话的清理。
 
 ## 6. 连接关闭与资源回收
 
@@ -144,7 +147,7 @@ void main();
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-当组件卸载或后台 Worker 结束工作时，请记得始终调用退订函数注销通过 `onStateChange` 和 `onRuntimeError` 挂载的监听器。
+一次连接中断的重连尝试耗尽后，会话以 `closed.kind: "error"` 结束，保留原生关闭快照（升级失败时通常为代码 `1006`），并以普通传输错误作为 `closed.cause`；没有单独的稳定耗尽代码。当组件卸载或后台 Worker 结束工作时，请始终注销 `onStateChange` 和 `onRuntimeError` 监听器。
 
 ## 相关阅读
 

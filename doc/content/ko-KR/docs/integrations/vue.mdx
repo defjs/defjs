@@ -23,13 +23,13 @@ bun add @defjs/core @defjs/vue vue
 
 애플리케이션 진입점에서 클라이언트를 생성하고, `createClientPlugin(client)`를 설치한 뒤, watcher 내부에서 비동기 작업을 시작하기 전에 `onCleanup`을 등록하세요:
 
-<Tabs items={["src/main.ts", "src/OrderView.vue"]}>
+<Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
   </Tab>
-  <Tab value="src/OrderView.vue">
+  <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
   </Tab>
 </Tabs>
@@ -57,6 +57,8 @@ Vue의 네이티브 `provide(HTTP_CLIENT, childClient)`를 사용하여 특정 �
 watcher 외부의 composable이나 컴포넌트 내부에서 시작된 작업의 경우, `AbortController`를 `onScopeDispose`와 함께 사용하세요. 시작 단계를 abort하고, 스코프 해제 후에 확인된 핸들을 닫아주며, 단일 비동기 이터레이터를 소비하고 `.closed`를 await하세요:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
+
+- 튜플의 오류 분기는 HTTP 503을 포함한 초기 핸드셰이크 실패를 표시합니다. 이터레이터의 `catch`는 시작 후 실패를 표시하며, `finally` 블록은 여전히 스트림을 닫고 종료를 기다립니다.
 
 - 스코프가 중지되면 SSE의 `for await` 루프는 정상적으로 종료됩니다.
 - WebSocket 세션을 abort하면 세션이 `aborted` 상태로 종료되고 `session.receive`가 `AbortError`로 reject되므로, 스코프 해제 후 `catch` 블록을 방어하고 `finally`에서 `onStateChange` / `onRuntimeError` 리스너를 구독 해제하세요.

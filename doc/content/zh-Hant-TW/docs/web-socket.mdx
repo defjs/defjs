@@ -123,10 +123,12 @@ void main();
 
 - **重新連線**：啟用時的預設值為 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線 `open` 都會重設斷線重試預算。`beforeConnect({ attempt, signal })` 會在初始連線與每次重連嘗試之前執行。
 - **交握逾時（`connectTimeoutMs`）**：若有提供，它必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它把從建構到 `open` 的時間加上限，握手之後會被清掉。
-- **心跳檢測**：定期透過 `outgoing` struct 發送 `message()`，並在 `timeoutMs` 內等待符合 `isAck(msg)` 的確認封包。相符的 ACK 封包會被心跳監控器消耗，不會轉發至 `session.receive`。遺漏 ACK 會終結該工作階段。
+- **心跳檢測**：定期透過 `outgoing` struct 發送 `message()`，並在 `timeoutMs` 內等待符合 `isAck(msg)` 的確認訊框。相符的 ACK 訊框會被心跳監控器消耗，不會轉發至 `session.receive`。未收到 ACK 對邏輯工作階段是致命錯誤：`closed.kind` 為 `"error"`，`closed.cause` 為一般的 `Error("WebSocket heartbeat timeout")`；這不會啟動重連。心跳序列化失敗也會沿著同一致命路徑結束，並保留原始 cause。
 - **佇列邊界**：
-  - `maxIncomingQueueSize`（必填正整數）：佇列溢位會以 `CAP_QUEUE_OVERFLOW` 終止工作階段。在工作階段開啟期間請持續消費 `session.receive`。
+  - `maxIncomingQueueSize`（必填正整數）：同時限制等待解碼的原始訊框與等待消費端的已解碼訊息。溢位會以 `CAP_QUEUE_OVERFLOW` Fault 作為 `closed.cause` 終止工作階段；同一個 cause 會傳給 `onRuntimeError` 並拒絕 `session.receive`。在工作階段開啟期間請持續消費 `session.receive`。
   - `maxOutgoingQueueSize`（選用非負整數，預設為 `0`）：僅在 `state === 'reconnecting'` 期間緩衝 `session.send()` 呼叫，並在發布下一次 `open` 之前將它們排空發出。
+
+`shouldReconnect` 會收到原生關閉代碼與 `wasClean`。伺服器可以使用應用程式錯誤碼 `1011` 完成正常的關閉交握，因此 `wasClean === true` 不代表應用程式處理成功。範例明確允許 `1011`；請依照你的通訊協定選擇應用程式代碼，不要只依賴 `!wasClean`。
 
 ## 5. 子協定與身分驗證 [#protocols-and-authentication]
 
@@ -135,6 +137,7 @@ void main();
 - **子協定優先權順序**：`client({ protocols })` 覆蓋 `withWebSocketProtocols(...)`，後者再覆蓋 `defineWebSocket({ protocols })`。
 - **URL 協定轉換**：Defjs 會自動將解析後的端點從 `http:` 轉為 `ws:`，或從 `https:` 轉為 `wss:`。
 - **憑證**：`withCredentials(true)` 僅適用於 Fetch（HTTP/SSE）。請使用 Cookie / Session 機制、子協定或短期連線票證（Ticket）驗證 WebSocket——避免將長期密鑰放入 query string。
+- **`beforeConnect` 不是請求修改器**：輸入剖析、同步純函式 `builder` 與攔截器鏈每次操作只執行一次。如果請求的基礎端點未被攔截器取代，每次重連都會重新選取端點並以該端點重建 URL，但會重用已建構的 path/query 與擷取的協定清單。無論仍使用同一端點或已容錯移轉，URL 都會在該次嘗試的 `beforeConnect` 執行前確定。在 hook 中變更閉包變數、input 或協定陣列，無法為目前交握提供新的票證。同一個工作階段內不支援輪替 URL/子協定憑證；請先取得新憑證，再透過 input 或 Client 設定發起新操作，並負責替代工作階段的清理。
 
 ## 6. 關閉機制與擁有權
 
@@ -144,7 +147,7 @@ void main();
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-當你的元件或背景 Worker 執行完畢時，務必呼叫取消訂閱函式以移除 `onStateChange` 與 `onRuntimeError` 監聽器。
+一次斷線的重連嘗試耗盡後，工作階段會以 `closed.kind: "error"` 結束，保留原生關閉快照（升級失敗時通常為代碼 `1006`），並以一般傳輸錯誤作為 `closed.cause`；不會提供獨立且穩定的耗盡代碼。當元件或背景 Worker 執行完畢時，務必取消訂閱 `onStateChange` 與 `onRuntimeError` 監聽器。
 
 ## 相關閱讀
 

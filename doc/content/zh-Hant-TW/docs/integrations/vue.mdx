@@ -23,13 +23,13 @@ bun add @defjs/core @defjs/vue vue
 
 在應用程式進入點建立 Client，安裝 `createClientPlugin(client)`，並在 Watcher 內部開始非同步工作前註冊 `onCleanup`：
 
-<Tabs items={["src/main.ts", "src/OrderView.vue"]}>
+<Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
   </Tab>
-  <Tab value="src/OrderView.vue">
+  <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
   </Tab>
 </Tabs>
@@ -57,6 +57,8 @@ bun add @defjs/core @defjs/vue vue
 若工作是在 Composable 內部或 Watcher 之外的元件邏輯中啟動，請將 `AbortController` 與 `onScopeDispose` 搭配使用。先中止啟動階段、關閉在銷毀後才成功解析的控制代碼、消費其唯一的非同步迭代器，並等待 `.closed`：
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
+
+- Tuple 的錯誤分支會顯示初始握手失敗（包含 HTTP 503）。迭代器的 `catch` 會顯示啟動後的失敗；`finally` 區塊仍會關閉並等待串流結束。
 
 - 停止 Scope 會讓 SSE 的 `for await` 迴圈正常結束。
 - 中斷 WebSocket 工作階段會將其終結為 `aborted`，並以 `AbortError` 拒絕 `session.receive`，因此在處置後請對 `catch` 區塊進行防護，並在 `finally` 中取消訂閱 `onStateChange` / `onRuntimeError` 監聽器。

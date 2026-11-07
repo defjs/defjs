@@ -41,7 +41,8 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 
 ### `pickFirstBalancer` 與 `p2cBalancer` 的運作機制
 
-- **`pickFirstBalancer`**：停在第一個 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進。設定 `failbackMs: 30_000`，在備用端點上停留這段時間之後，再探測一次主要端點。
+- **`pickFirstBalancer`**：停在第一個 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進。設定 `failbackMs: 30_000`，在備用端點上停留這段時間之後，再探測主要端點。同時最多只能有一個進行中的主要端點探測。容錯移轉後首次探測主要端點之前，必須滿足間隔已過，且離開主要端點後至少選取過一次替代端點。探測失敗會重新開始這兩項要求：下次探測前，必須重新選取過替代端點，並再次經過該間隔，即使 SSE/WebSocket 重連退避比 `failbackMs` 更長也一樣。如此健康的備用端點才有機會被使用，而非每次重連都命中失效的主要端點。
+- **`roundRobinBalancer` 權重**：未指定的權重為 `1`；設定的權重必須是有限正數。平滑加權輪詢保留按比例選取的特性（例如 `3:1` 會讓權重較高的節點在每四次選取中被選中三次）。極端量級會被縮放以避免溢位；低於浮點精確度的比例可能四捨五入為零。每次選取與清理過時 current 值的工作量皆為 O(候選數量)。
 - **`p2cBalancer`（兩者隨機取優，Power of Two Choices）**：不重複地隨機抽取兩個候選端點，並選擇評分較低者：`PeakEwma RTT × (pending + 1)`（若設定 `load: "pending"` 則只計算進行中的 `pending` 請求數）。預設值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd/tower 慣例。
 
 ## 2. 同一次呼叫內的 HTTP 重試
@@ -56,14 +57,22 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
   examples/client/http-retry.ts#example
 </include>
 
-- **總嘗試次數（`maxAttempts`）**：包含首次嘗試，與 gRPC 的 `retryPolicy.maxAttempts` 以及 go-kit `lb.Retry` 的 `max` 一致。該值必須是至少為 1 的安全整數；`1` 表示不重試。沒有設定上的上限，但每個端點最多嘗試一次。串流請求 body 不會重試。`methods` 不區分大小寫；`methods: []` 會關閉所有方法的重試。
+- **總嘗試次數（`maxAttempts`）**：包含首次嘗試，與 gRPC 的 `retryPolicy.maxAttempts` 以及 go-kit `lb.Retry` 的 `max` 一致。該值必須是至少為 1 的安全整數；`1` 表示不重試。沒有設定上的上限，但平衡器每次選取都會排除該次呼叫內已選取過的端點。這裡計算的是外層嘗試，而非應用程式攔截器內部的實際傳送次數：循環呼叫 `next()` 的攔截器可以多次傳送至同一端點。例如，使用 `maxAttempts: 2` 時，攔截器向故障主要端點傳送三次，再由外層向健康備用端點重試一次，就會產生四次網路請求；builder 與攔截器鏈外層的驗證只執行兩次，而非四次。串流請求 body 不會重試。`methods` 不區分大小寫；`methods: []` 會關閉所有方法的重試。
 - **重試條件（`on`）**：預設為 `["connect-failure"]`。可以追加 `"gateway-error"`，對應 `NET_UNAVAILABLE`（HTTP `502`/`503`/`504`），包括被 `RES_*` 解碼拒絕的閘道錯誤本文；設定了 `attemptTimeoutMs` 時還可以追加 `"attempt-timeout"`。一次符合條件的重試會重建請求，並從最外層重新執行整條攔截器鏈。
 - **退避（`delayMs`、`factor`、`jitter`、`maxDelayMs`）**：第 n 次重試之前，等待 `delayMs × factor^(n−1)`，並加上乘性抖動，在抖動與取整之後封頂。預設值是 `25`、`2`、`0.2` 與 `250`。`delayMs: 0` 略過等待。與重新連線一樣，`delayMs` 必須是非負有限數，`factor` 必須是正的有限數，`jitter` 必須是 `[0, 1]` 內的有限數，`maxDelayMs` 必須是非負有限數或正 `Infinity`。平台計時器上限仍然生效。
+  Core 的 `withRetry` 不會讀取 `Retry-After`。這個標頭的處理方式（包含任何延遲上限）屬於[應用程式攔截器策略](/zh-Hant-TW/docs/interceptors)，不是此處退避機制的一部分。
   只設定了一個端點時，`withRetry` 不會重放請求，因為每一次重試都會排除已經試過的端點。
 
 - **單次嘗試 vs. 整次呼叫逾時**：`attemptTimeoutMs` 必須是有限正數，並且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制單次嘗試，從呼叫 Fetch 一直到本文解碼結束。呼叫端的 `client({ signal: AbortSignal.timeout(ms) })` 覆蓋每一次嘗試**以及退避等待**。等待期間取消會傳回呼叫端的取消錯誤，並且不再 pick。
 - **Finagle / Linkerd 重試預算（`budget`）**：每份 client 設定擁有一份預算，只有使用這份設定的派生 client 會共享，共享平衡器的 client 並不共享。預設值是 `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`：原始流量的 20% 再加上儲備。存入和取出都在十個 TTL/10 切片上惰性過期。一次重試會在等待之前先取出額度；預算耗盡時既不等待，也不重試。設定 `budget: false` 可去掉這一上限。
 - **瀏覽器離線提示**：當 `navigator.onLine === false` 時，連線失敗會回報 `{ attempted: false }`，此時不會推進平衡器，也不會觸發重試。
+
+### 瀏覽器部署邊界
+
+- 瀏覽器 CORS 失敗會以連線失敗的形式傳給 Fetch，並回報為 `NET_UNREACHABLE`，無法與主機停機區分。它可能推進端點選取，並觸發明確啟用的安全方法重試；成功的容錯移轉因此可能掩蓋主要區域的 CORS 設定錯誤。
+- 即使回應缺少必要的 CORS 標頭，伺服器仍可能已處理 POST。應用程式隨後收到 `NET_UNREACHABLE`，卻不知道寫入是否成功。預設不會重播 POST；明確啟用寫入重試，需要應用程式層級保證跨副本的冪等性。
+- Cookie 的範圍依主機而非連接埠劃分：`localhost` 上不同連接埠的兩個端點可以共用 Cookie，但 `localhost` 與 `127.0.0.1` 不會。多來源端點集合需要審慎規劃 Cookie/Token 與 CORS 憑證策略；`withCredentials(true)` 不會改變 Cookie 範圍。
+- 明確的離線提示（`navigator.onLine === false`）會抑制端點歸因與連線失敗重試。這只是瀏覽器提示，不是可靠的可達性檢查。
 
 後一次 `withRetry` 會替換該策略。`withRetry()` 與 `withRetry(undefined)` 的行為與 `withRetry({})` 相同。啟用之後若要關閉重試，傳入 `withRetry({ maxAttempts: 1 })`。無效的重試設定會在 HTTP 操作執行時回傳 `REQ_OPTIONS_INVALID`，訊息為 `Invalid retry options`。
 
@@ -90,9 +99,12 @@ description: 在多端點間分發流量、剔除不健康的副本伺服器，�
 
 1. **連續失敗懲罰**：預設分類器計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 與 `NET_SERVER_ERROR`。連續出現 `consecutiveFailures` 次（預設 `5` 次）被計入的結果後，該端點會被剔除 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`），並加上最多 `50%` 的均勻正向抖動。
 2. **單一探針恢復**：懲罰期滿後，系統會派出單一請求作為探針測試該主機。若對端回應在 `end` 開始，且不是被計入的失敗，正常流量立即恢復，懲罰等級重設為 `0`；若失敗，懲罰時間加倍。
-3. **全員故障應急機制（Panic-mode fail-open）**：若所有設定的端點皆被剔除或判定為不健康，負載平衡器會自動對 Client 的完整候選清單 Fail-open，而不會在本機直接丟棄所有流量。
+3. **有界歷史紀錄**：在衍生 Client 與每次呼叫的候選排除之間，健康歷史紀錄總共最多保留 256 個端點。優先淘汰最近最少使用的乾淨或已過期項目，接著才是尚未達到門檻的部分連續失敗紀錄。只有所有保留項目都受保護時，才會淘汰懲罰尚未到期或有進行中探測的項目，此時移除最舊的一項。僅在某次呼叫省略端點，不會重設其懲罰。P2C 的負載歷史紀錄也以 256 項為上限，先淘汰閒置項目，再淘汰忙碌項目；被遺忘的端點會從 `defaultRttMs` 重新開始。Pick-first 的 shuffle key 使用 256 項的 LRU 快取，因此被遺忘的端點再次出現時會取得新 key。加權輪詢僅保留最新候選集的 current 值；複製後的權重設定在建構時固定。可用時，時長使用平台的單調 Performance 時鐘，只有在無法使用時才以 `Date.now()` 作為後備。
+4. **全員故障應急機制（Panic-mode fail-open）**：若所有設定的端點皆被剔除或判定為不健康，負載平衡器會自動對 Client 的完整候選清單 Fail-open，而不會在本機直接丟棄所有流量。
 
 ## 4. 傳輸統計生命週期 (`pick` → `start` → `end` → `done`)
+
+自訂平衡器必須選取 `info.endpoints` 中某個完全相同的字串。若選取候選集之外的值，會回傳 `REQ_BUILD_FAILED` tuple，非機敏的 cause 訊息為 `Balancer selected an endpoint outside the candidate set`；不會啟動任何傳輸，也不會執行任何完成回呼。這項規則確保健康狀態過濾與每次呼叫的重試排除仍然有效。
 
 自訂平衡器實作同步的 `pick(info)`，以及可選的 `start()`、`end(info)` 與 `done(info)` 回呼。`PickInfo` 只包含候選 `endpoints` 與可選的定義 `operation`，沒有傳輸類型判別欄位。傳輸層把自己的事實翻譯成中立的 `DoneInfo.code` 結果。內建平衡器從不讀取 `status`；這份原始回應資訊只留給自訂平衡器。`start` 在嘗試之前執行，`end` 在對端回應開始或回應前失敗時執行，`done` 在完成時執行。因此，更晚發生的 body 失敗可以改變最終的 code，而不改變更早的 `end` 樣本：
 

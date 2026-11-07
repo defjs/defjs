@@ -8,8 +8,7 @@ description: 在单个拦截器内部注入 Authorization 并在 401 失败时�
 在 Defjs 中，`next(request)` 调用的是当前拦截器链向内深入的剩余逻辑——它绝不会从最外层的拦截器重新发起调用。因此，请将 Token 注入、并发刷新请求合并（Single-flight Deduplication）以及 `401` 后的单次重放逻辑封装在**同一个** HTTP 拦截器内，从而避免外层的耗时统计或日志记录拦截器被重复执行两次：
 
 <Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
-<Tab value="sdk/billing.ts">
-
+  <Tab value="sdk/billing.ts">
 ```ts
 import { defineRequest, struct } from "@defjs/core";
 
@@ -20,10 +19,8 @@ export const getInvoice = defineRequest({
   error: struct.object({ code: struct.literal("expired_token") }),
 });
 ```
-
-</Tab>
-<Tab value="app/auth-interceptor.ts">
-
+  </Tab>
+  <Tab value="app/auth-interceptor.ts">
 ```ts
 import { createHttpInterceptor } from "@defjs/core";
 
@@ -35,17 +32,19 @@ export function refreshingBearer(
 ) {
   let flight: Promise<Credential> | undefined;
 
-  return createHttpInterceptor(async (request, next) => {
-    const authorize = (credential: Credential) => {
-      const headers = new Headers(request.headers);
-      headers.set("authorization", `Bearer ${credential.accessToken}`);
-      return { ...request, headers };
-    };
+return createHttpInterceptor(async (request, next) => {
+const authorize = (credential: Credential) => {
+const headers = new Headers(request.headers);
+headers.set("authorization", `Bearer ${credential.accessToken}`);
+return { ...request, headers };
+};
 
     const used = read();
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||
@@ -65,24 +64,25 @@ export function refreshingBearer(
     });
     const refreshed = await flight;
     return next(authorize(refreshed));
-  });
+
+});
 }
-```
 
-</Tab>
-<Tab value="refresh-bearer.ts">
-
+````
+  </Tab>
+  <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
-
-</Tab>
+  </Tab>
 </Tabs>
 
 运行输出：
 
 ```txt
 42
-```
+````
+
+请求体可重放，不代表业务操作可以重复执行。匹配到 401 后，这个拦截器也会重新发送 JSON `POST`：共两次 HTTP 投递，第一次被拒绝，第二次被接受。只有当认证在业务处理器运行之前拒绝第一次投递时，才能将它用于写操作；两次投递之间必须保留同一个稳定的幂等键，并由服务端去重。如果没有这个契约，就应返回 401，而不是自动重放写操作。完整示例不会重放 `ReadableStream` 请求体。
 
 关于洋葱拦截链顺序与重试边界的详细说明，请参阅[中间件](/zh-Hans/docs/interceptors)。

@@ -23,13 +23,13 @@ bun add @defjs/core @defjs/vue vue
 
 Crea el cliente en el punto de entrada de la aplicación, instala `createClientPlugin(client)` y registra `onCleanup` antes de iniciar tareas asíncronas dentro de un observador:
 
-<Tabs items={["src/main.ts", "src/OrderView.vue"]}>
+<Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
   <Tab value="src/main.ts">
     <include cwd lang="typescript">
       examples/vue/main.ts#example
     </include>
   </Tab>
-  <Tab value="src/OrderView.vue">
+  <Tab value="src/basic-setup.vue">
     <include cwd>examples/vue/basic-setup.vue#example</include>
   </Tab>
 </Tabs>
@@ -57,6 +57,8 @@ Puedes sobreescribir el cliente para un subárbol de componentes mediante el mé
 Para el trabajo iniciado dentro de un composable o componente fuera de un observador, combina `AbortController` con `onScopeDispose`. Aborta el inicio, cierra cualquier handle que se resuelva tras la liberación, consume su iterador asíncrono único y espera con `await .closed`:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
+
+- La rama de error de la tupla muestra los fallos del handshake inicial (incluido HTTP 503). El `catch` del iterador muestra los fallos posteriores al inicio; el bloque `finally` sigue cerrando el flujo y esperando su cierre.
 
 - Detener el ámbito finaliza el bucle `for await` de SSE de forma normal.
 - Abortar una sesión WebSocket la finaliza como `aborted` y rechaza `session.receive` con `AbortError`, por lo que debes proteger el bloque `catch` tras la liberación y cancelar las suscripciones a `onStateChange` / `onRuntimeError` en `finally`.

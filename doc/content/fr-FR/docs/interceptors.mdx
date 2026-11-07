@@ -55,14 +55,22 @@ Un intercepteur HTTP peut renvoyer une réponse synthétique sans appeler `next(
 
 ## 3. Rejouer les lectures HTTP sûres
 
-Defjs ne réessaie pas automatiquement les statuts HTTP applicatifs. Lorsque vous avez besoin d'un rejeu basé sur le statut (par exemple sur `429`, `502`, `503`, `504` pour des appels idempotents `GET` / `HEAD` / `OPTIONS`), implémentez une boucle bornée dans un intercepteur HTTP :
+Les retries HTTP sont désactivés par défaut. Pour basculer vers un autre endpoint sur `502`, `503` ou `504`, utilisez [`withRetry({ on: ["gateway-error"] })`](/fr-FR/docs/load-balancing). Il sélectionne un endpoint non encore tenté, reconstruit la requête et réexécute toute la chaîne d’intercepteurs.
+
+Un intercepteur applicatif peut plutôt traiter les statuts sur le même endpoint, tels que `429` et `Retry-After`. Cette recette bornée de lectures sûres traite aussi `502`/`503`/`504` :
 
 <include cwd lang="typescript">
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
+- **Deux couches de retry** : Cette boucle `next(request)` reste sur l’endpoint sélectionné et ne réexécute ni l’authentification externe ni le builder. Combiner trois envois internes avec `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` peut envoyer quatre requêtes HTTP (trois vers un primaire défaillant, une vers un secours sain) ; `maxAttempts` borne les tentatives externes, pas les envois physiques. Décidez quelle couche possède chaque condition plutôt que de les empiler par inadvertance.
+- **Politique `Retry-After`** : Le `withRetry` de Core ne lit pas cet en-tête. Le plafond de 30 secondes et le repli à 250 ms de la recette sont des choix applicatifs. Plafonner un délai serveur plus long peut relancer plus tôt que demandé ; si cela est inacceptable, attendez le délai complet ou renvoyez plutôt la réponse.
+- **Écritures après 401** : La [recette de renouvellement Bearer](/fr-FR/recipes/refresh-bearer-once) peut livrer deux fois un POST JSON. Exigez un rejet d’authentification avant le traitement métier et une clé d’idempotence stable avec déduplication côté serveur, ou ne rejouez pas automatiquement les écritures. Les corps de requête en flux ne sont pas rejoués.
+
 - **Gestion des rejets de transport** : `next(request)` rejette lorsqu'une erreur réseau survient (il n'existe aucune réponse de statut 0). Intercepter et relancer ce rejet préserve le code de fault `NET_*` initial.
 - **Exceptions au sein d'un intercepteur** : Une exception non gérée (ou le renvoi d'une valeur inadéquate) résout le tuple de l'opération avec `EXT_INTERCEPTOR_FAILED` et renseigne `fault.cause`. Lever `ERR_ABORTED` ou `ERR_TIMEOUT` résout avec `NET_ABORTED` ou `NET_TIMEOUT`.
+
+Pour SSE, préférez `withSSEReconnect` à un intercepteur appelant `next()` à répétition. Appeler le `next()` de l’intercepteur plus d’une fois désactive l’attribution à l’endpoint et sa resélection pour ces flux de remplacement ; cela est sans rapport avec la consommation d’événements par le `next()` d’un itérateur.
 
 ## 4. Envelopper des sessions WebSocket
 

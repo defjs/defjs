@@ -86,9 +86,9 @@ void main();
 </Tab>
 </Tabs>
 
-- **非 `2xx` 交握失敗**：回傳 `HTTP_STATUS`（若定義中宣告了 `error` struct，則會包含解碼後的 `error.data`）。
+- **非 `2xx` 交握失敗**：回傳 `HTTP_STATUS`（若定義中宣告了 `error` struct，則會包含解碼後的 `error.data`）。這對目前操作是致命錯誤，不會呼叫 `shouldReconnect`。下一次操作會重新選取端點，因此負載平衡器可能選擇另一個端點。
 - **Content-Type 錯誤或本文無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
-- **`startupOpen` vs. `stream.open`**：Tuple 中的第三項（`startupOpen`）保存首次交握成功的靜態快照；而 `stream.open` 則會在串流後續重新連線時即時更新。
+- **`startupOpen` vs. `stream.open`**：Tuple 中的第三項（`startupOpen`）保存首次交握回應的快照；而 `stream.open` 會在串流後續重連時即時更新。如果重連交握回傳 `503`，迭代器會被拒絕，`stream.closed` 會回報 `RES_DECODE_FAILED`，而 `stream.open.response.status` 仍為 `503`；請檢查 `stream.open` 取得該即時回應狀態。
 
 ## 3. 事件分派與解碼
 
@@ -106,14 +106,14 @@ SSE 的自動重新連線機制屬於**選擇性啟用（opt-in）**。若未設
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **斷線重試預算（`attempts`）**：傳入設定物件至 `withSSEReconnect` 時，預設為 `3` 次。交握成功後會重設重試次數與退避指數。伺服器正常的 EOF 結束**不屬於**失敗，不會觸發重新連線。
-- **游標追蹤（`Last-Event-ID`）**：在事件結尾的空白行完成剖析時確認並提交，重新連線時會自動作為 `Last-Event-ID` 標頭送出。
+- **斷線重試預算（`attempts`）**：傳入設定物件至 `withSSEReconnect` 時，預設為 `3` 次。每次交握成功後都會重設重試次數與退避指數，因此即使設定 `attempts: 1`，只要每次連線都成功開啟，長時間工作階段中仍可建立多次實體連線。伺服器正常的 EOF 結束**不屬於**失敗，不會觸發重新連線。
+- **游標追蹤（`Last-Event-ID`）**：在事件結尾的空白行完成剖析時確認並提交，重新連線時會自動作為 `Last-Event-ID` 標頭送出。不論連線正常結束或失敗，不完整的訊框都不會提交其 `id`。在可重新連線的讀取/網路失敗之後，會從最後提交的 id 恢復；伺服器必須實作從該游標重播的能力。
 - **冪等安全性**：預設情況下，只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）會自動重新連線。非冪等方法（`POST`、`PATCH`，例如 LLM 串流生成請求）只有在自訂 `shouldReconnect` 回呼明確回傳 `true` 時才會重連。使用 `ReadableStream` 請求本文的請求在第一次嘗試時即會消耗串流，因此絕不會重連。
 - **交握逾時（`connectTimeoutMs`）**：若有提供，它必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制從呼叫 Fetch 到接收回應標頭之間的交握時間，而不會限制已建立串流的存活時長。
 
 ## 5. 緩衝區與佇列上限
 
-兩項上限值皆必須為大於零的安全整數。超過任一上限皆屬於嚴重錯誤（`stream.closed` 會以 `kind: "error"` 解析且迭代器會被拒絕——事件絕不會被靜默丟棄）：
+預設上限為 `maxBufferSize: 64 * 1024` 位元組與 `maxQueueSize: 1024` 個事件。兩項上限值皆必須為大於零的安全整數。沒有預設的交握期限：尚未完成的 Fetch 會等待平台、呼叫端取消，或明確設定的 `connectTimeoutMs`。超過任一容量上限皆屬於致命錯誤（`stream.closed` 會以 `kind: "error"` 解析且迭代器會被拒絕——事件絕不會被靜默丟棄）：
 
 | 定義選項        | 限制項目                                  | 致命錯誤碼            |
 | --------------- | ----------------------------------------- | --------------------- |

@@ -43,6 +43,8 @@ return { ...request, headers };
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||
@@ -78,5 +80,7 @@ return { ...request, headers };
 ```txt
 42
 ````
+
+본문을 재전송할 수 있다고 해서 비즈니스 작업도 반복해도 되는 것은 아닙니다. 이 인터셉터는 조건에 맞는 401 뒤에 JSON `POST`도 재전송합니다. HTTP 전달은 두 번이며, 처음에는 거부되고 다음에는 수락됩니다. 인증이 비즈니스 핸들러 실행 전에 첫 번째 전달을 거부하는 경우에만 쓰기 작업에 사용하세요. 두 전달에 동일하고 안정적인 멱등성 키를 유지하고 서버 측 중복 제거를 사용해야 합니다. 이 계약을 보장할 수 없다면 쓰기를 자동 재전송하지 말고 401을 반환하세요. 전체 예제는 `ReadableStream` 요청 본문을 재전송하지 않습니다.
 
 인터셉터의 양파 껍질 실행 순서와 재시도 경계에 대한 자세한 내용은 [미들웨어](/ko-KR/docs/interceptors) 문서를 참조하세요.

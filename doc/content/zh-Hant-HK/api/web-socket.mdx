@@ -49,7 +49,7 @@ async function consume(
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` 係 `closed`、`aborted` 或者 `error`。`cause` 喺 `closed` 上唔存在，喺 `aborted` 上可選，喺 `error` 上必填。`code`、`reason` 同 `wasClean` 可以出現喺每個 variant。手動 `session.close()` 會喺 close event 自己冇呢兩項時，填上 `{ kind: "closed" }` 嘅 `code` 同 `reason`。
+`kind` 係 `closed`、`aborted` 或者 `error`。`cause` 喺 `closed` 上唔存在，喺 `aborted` 上可選，喺 `error` 上必填。傳入嘅原始 frame 或已解碼訊息 queue 溢出時，`cause.code === "CAP_QUEUE_OVERFLOW"`；同一個 cause 會令 `receive` reject，並傳俾 `onRuntimeError`。Heartbeat 逾時同重連次數用盡仍然用一般 runtime `Error` 做 cause，冇獨立嘅穩定代碼。`code`、`reason` 同 `wasClean` 可以出現喺每個 variant。手動 `session.close()` 會喺 close event 自己冇呢兩項時，填上 `{ kind: "closed" }` 嘅 `code` 同 `reason`。
 
 ## WebSocketExecuteOptions
 
@@ -58,6 +58,8 @@ async function consume(
 `WebSocketExecuteOptions` 係 [`UseWebSocketConfig`](/zh-Hant-HK/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 同 `signal`。`WebSocketHeartbeatConfig`：`intervalMs`，可選 `message`、`isAck`、`timeoutMs`。冇 `timeout` 或 `abort` field。
 
 `signal` 覆蓋成個 session，包括 open 之後。Deadline 係 `AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。冇只限啟動嘅 deadline，亦冇 client 層級嘅預設 deadline。`signal` 係該次呼叫嘅 signal；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。`heartbeat` 成個換走；佢嘅 `timeoutMs` 等確認，唔係請求 deadline。
+
+Builder 同 interceptor chain 每次操作只會執行一次。重連會重用已建構嘅 path/query 同擷取嘅 protocols，並喺 `beforeConnect` 之前建構 URL。如果 interceptor 冇取代 request 嘅 base endpoint，重連亦會代入新揀選嘅 endpoint。呢個 hook 唔可以喺同一個 session 內輪換 URL 或 subprotocol 憑證；請用新嘅 input 或 client 設定開始新操作。
 
 設定 `reconnect` 時，`attempts` 預設係每次斷線 3 次；`0` 就停用。成功 `open` 會重設預算同退避指數，所以每次新嘅斷線都由第 1 次重試開始。省略 `attempts` 唔代表同一次斷線可以無限重試。預設值同驗證規則請見 [Client](/zh-Hant-HK/api/client)。
 
