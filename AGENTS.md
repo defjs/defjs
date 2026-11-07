@@ -214,7 +214,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 - Tag names are the package name without its `@defjs/` scope, `@`, then the published version: `core@0.6.0`, `react@0.0.3`, `vue@0.0.3`, `opentelemetry-server@0.0.3`. One tag per package, not one per release, because the packages version independently. Push explicit refs (`git push origin refs/tags/core@0.6.0`). The workflow neither reads nor creates tags, so a tag records a release and never drives one. `0.1.0`–`0.3.3` are the pre-convention core-only series; leave them in place.
 - Each package builds with `tsdown`, publishes from `dist`, and uses `publishConfig.directory`. The build writes `dist/package.json`, copies `LICENSE` and the package `README.md`. The `build` scripts call `bun --bun tsdown`, so they run on Bun from any directory, not only the repository root.
 - `bun test/assert-pack.ts <publish-dir>` must pass before publishing: it checks that `npm pack --dry-run` includes `LICENSE`, `README.md`, `package.json`, and every file referenced by the entry fields.
-- Packages that depend on Core build Core first. A Core patch within the plugins' `^0.6.0` peer range does not require a plugin release.
+- Packages that depend on Core build Core first. A Core patch within the plugins' `^0.7.0` peer range does not require a plugin release.
 - CI runs the six gates on pull requests and `main`. The release workflow does not wait for CI; verify the intended revision first.
 
 ## Do not

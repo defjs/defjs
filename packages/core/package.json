@@ -1,6 +1,6 @@
 {
   "name": "@defjs/core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Define and execute typed HTTP, SSE, and WebSocket APIs.",
   "bugs": {
     "url": "https://github.com/defjs/defjs/issues"

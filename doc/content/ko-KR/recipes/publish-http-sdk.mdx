@@ -44,10 +44,10 @@ Defjs 기반 SDK는 순수한 작업 정의와 Struct 스키마만을 npm 패키
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.6.0"
+    "@defjs/core": "^0.7.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.6.0",
+    "@defjs/core": "^0.7.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -96,7 +96,7 @@ Tarball 내에 `dist/index.js`와 `dist/index.d.ts`가 정상적으로 포함되
 애플리케이션에 작성한 SDK와 `@defjs/core`를 함께 설치합니다:
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.6.0
+bun add @company/orders-sdk @defjs/core@^0.7.0
 ```
 
 애플리케이션은 자체 `Client`를 직접 생성하고, 이를 import한 작업 함수에 전달하여 호출합니다:
