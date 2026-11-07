@@ -92,11 +92,13 @@ function refreshingBearer(
 }
 ```
 
+A JSON POST is replayable at the byte level but may not be safe to execute twice. The 401-refresh interceptor delivers it twice (rejected, then accepted). Require authentication rejection before business handling and stable-key server-side deduplication, or do not automatically replay writes.
+
 ## Retry safe reads with `Retry-After`
 
 Only retry idempotent methods (`GET`, `HEAD`, `OPTIONS`) whose body is replayable (not a `ReadableStream`). Always respect `request.signal` while waiting:
 
-`Retry-After` accepts seconds or an HTTP date; waits are capped at 30 seconds, with a 250 ms fallback. Abort signals cancel the wait without another attempt.
+`Retry-After` accepts seconds or an HTTP date; this application recipe caps waits at 30 seconds, with a 250 ms fallback. The cap can retry earlier than the server requested: wait the full delay or return the response if that is unacceptable. Core `withRetry` does not read this header. Abort signals cancel the wait without another attempt.
 
 ```ts
 import {
@@ -175,12 +177,15 @@ const retrySafeReads = createHttpInterceptor(async (request, next) => {
 });
 ```
 
+This `next()` loop stays on the selected endpoint without rerunning the builder or outer auth. For gateway failover, prefer `withRetry({ on: ["gateway-error"] })`; stacking the layers can send three primary requests plus one backup request with `maxAttempts: 2`. See [load balancing](load-balancing.md) before composing policies.
+
 ## Short-circuiting and ETag caching
 
 An HTTP interceptor can return a synthetic response with `makeResponse({ status, statusText, headers, body, url })` without calling `next`, or replace a `304 Not Modified` response with a cached `200` `HttpResponse`. When returning a synthetic response for a JSON `output` or `error`, include a JSON `content-type` header and pass the already-parsed value as `body`.
 
 ## SSE and WebSocket interceptors
 
+- Calling an SSE interceptor's `next()` repeatedly disables endpoint attribution and re-picking for replacement streams. Prefer `withSSEReconnect`; this does not refer to the event iterator's `next()`.
 - `createSSEInterceptor((request, next) => ...)`: wraps SSE connection startup and returns an `EventStreamHandle`.
 - `createWebSocketInterceptor((request, next) => ...)`: wraps WebSocket session startup and returns a `WebSocketSessionLike`.
 - Any wrapper or short-circuit handle/session must implement `[Symbol.asyncDispose]()` forwarding to the same `close` / `closed` teardown lifecycle.

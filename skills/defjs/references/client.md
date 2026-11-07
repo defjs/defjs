@@ -26,7 +26,8 @@ export const client = createClient(
 );
 ```
 
-- `withEndpoint(url)` sets the base URL. Its pathname is treated as a directory; query and hash on the base URL are dropped. Joining `https://api.example.com/v1` with `/orders/7` produces `https://api.example.com/v1/orders/7`. Path traversal outside the base directory (`../other`) fails with `REQ_BUILD_FAILED`.
+- `withEndpoint(...urls)` sets one or more base URLs for replicas of one service. Its pathname is treated as a directory; query and hash on the base URL are dropped. Joining `https://api.example.com/v1` with `/orders/7` produces `https://api.example.com/v1/orders/7`. Path traversal outside the base directory (`../other`) fails with `REQ_BUILD_FAILED`.
+- For strategy defaults, HTTP retry options/budget, and reconnect boundaries, read [load balancing](load-balancing.md).
 - When an application talks to multiple external services, create one `createClient(...)` per service. There is no global client.
 
 ## `DerivableClient` vs `Client` value
@@ -52,15 +53,15 @@ await getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 2 });
 
 `client(options)` accepts seven flat fields. Each protocol reads only the fields that apply to it and ignores the rest:
 
-| Field                | Applies to           | Purpose                                                                    |
-| -------------------- | -------------------- | -------------------------------------------------------------------------- |
-| `signal`             | HTTP, SSE, WebSocket | `AbortSignal` for the request, stream, or session                          |
-| `onUploadProgress`   | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                      |
-| `onDownloadProgress` | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                      |
-| `beforeConnect`      | WebSocket            | `() => void \| Promise<void>` hook run before each connection attempt      |
-| `protocols`          | WebSocket            | `string[]` subprotocols (overrides client and definition `protocols`)      |
-| `heartbeat`          | WebSocket            | `{ intervalMs, timeoutMs?, message, isAck }`                               |
-| `reconnect`          | WebSocket            | `{ attempts?, delayMs?, factor?, maxDelayMs?, jitter?, shouldReconnect? }` |
+| Field                | Applies to           | Purpose                                                                                  |
+| -------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE, WebSocket | `AbortSignal` for the request, stream, or session                                        |
+| `onUploadProgress`   | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                                    |
+| `onDownloadProgress` | HTTP                 | `(event: HttpProgressEvent) => void \| Promise<void>`                                    |
+| `beforeConnect`      | WebSocket            | `({ attempt, signal }) => void \| Promise<void>` hook run before each connection attempt |
+| `protocols`          | WebSocket            | `string[]` subprotocols (overrides client and definition `protocols`)                    |
+| `heartbeat`          | WebSocket            | `{ intervalMs, timeoutMs?, message, isAck }`                                             |
+| `reconnect`          | WebSocket            | `{ attempts?, delayMs?, factor?, maxDelayMs?, jitter?, shouldReconnect? }`               |
 
 - Note: `client({ reconnect })` configures **WebSocket** reconnect only. SSE reconnect is configured on the client with `withSSEReconnect(...)`.
 - Invalid numeric options (such as negative delays) are validated when the operation executes and return a `REQ_OPTIONS_INVALID` fault on the tuple.
@@ -69,7 +70,9 @@ await getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 2 });
 
 | Helper                           | Effect                                                                   |
 | -------------------------------- | ------------------------------------------------------------------------ |
-| `withEndpoint(url)`              | Absolute base URL for HTTP, SSE, and WebSocket                           |
+| `withEndpoint(...urls)`          | Base URL candidates for HTTP, SSE, and WebSocket                         |
+| `withBalancer(strategy)`         | Shared endpoint selection strategy; defaults to sticky pick-first        |
+| `withRetry(options?)`            | Opt-in same-call HTTP failover; separate from SSE/WebSocket reconnect    |
 | `withHeaders(HeadersInit)`       | Static default headers for HTTP and SSE (builder headers override)       |
 | `withCredentials(boolean)`       | Sets Fetch `credentials: "include"` for HTTP and SSE when `true`         |
 | `withXSRF(options?)`             | Copies XSRF cookie into header on mutating/same-origin HTTP requests     |

@@ -86,9 +86,9 @@ Calling the operation resolves `[error, stream, startupOpen]` only after the ini
 </Tab>
 </Tabs>
 
-- **Non-`2xx` handshake**: Returns `HTTP_STATUS` (with decoded `error.data` when an `error` struct is declared on the definition).
+- **Non-`2xx` handshake**: Returns `HTTP_STATUS` (with decoded `error.data` when an `error` struct is declared on the definition). This is fatal for the current operation; `shouldReconnect` is not called. The next operation performs a fresh endpoint pick, so a balancer may choose another endpoint.
 - **Wrong content type or unreadable body**: Returns `RES_MEDIA_TYPE_INVALID` or `RES_DECODE_FAILED`.
-- **`startupOpen` vs. `stream.open`**: The tuple's third item (`startupOpen`) snapshots the first handshake response; `stream.open` updates live if the stream reconnects later.
+- **`startupOpen` vs. `stream.open`**: The tuple's third item (`startupOpen`) snapshots the first handshake response; `stream.open` updates live if the stream reconnects later. If a reconnect handshake returns `503`, the iterator rejects and `stream.closed` reports `RES_DECODE_FAILED`, while `stream.open.response.status` remains `503`; inspect `stream.open` for that live response status.
 
 ## 3. Event dispatch and decoding
 
@@ -106,14 +106,14 @@ SSE reconnection is **opt-in**. Without `withSSEReconnect(...)`, any network dro
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **Outage budget (`attempts`)**: Defaults to `3` when an options object is passed to `withSSEReconnect`. A successful handshake resets the attempt counter and backoff exponent. Normal server EOF is **not** a failure and does not trigger reconnect.
-- **Cursor tracking (`Last-Event-ID`)**: Committed when an event's terminating blank line is parsed and automatically sent as `Last-Event-ID` on reconnect.
+- **Outage budget (`attempts`)**: Defaults to `3` when an options object is passed to `withSSEReconnect`. Every successful handshake resets the attempt counter and backoff exponent, so `attempts: 1` can still create many physical connections over a long-lived session when each one opens successfully. Normal server EOF is **not** a failure and does not trigger reconnect.
+- **Cursor tracking (`Last-Event-ID`)**: Committed when an event's terminating blank line is parsed and automatically sent as `Last-Event-ID` on reconnect. A partial frame never commits its `id`, whether the connection ends cleanly or fails. Resume after a reconnectable read/network failure starts from the last committed id; the server must implement replay from that cursor.
 - **Idempotency safety**: By default, only idempotent methods (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) reconnect automatically. Non-idempotent methods (`POST`, `PATCH`—such as LLM streaming requests) reconnect only when a custom `shouldReconnect` callback explicitly returns `true`. `ReadableStream` request bodies are consumed on the first attempt and never reconnect.
 - **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. Bounds each handshake from Fetch invocation to response headers without limiting how long an established stream stays open.
 
 ## 5. Buffer and queue limits
 
-Both limits must be positive safe integers. Exceeding either limit is fatal (`stream.closed` resolves with `kind: "error"` and the iterator rejects—events are never silently dropped):
+The defaults are `maxBufferSize: 64 * 1024` bytes and `maxQueueSize: 1024` events. Both limits must be positive safe integers. There is no default handshake deadline: a pending Fetch waits for the platform, caller cancellation, or an explicitly configured `connectTimeoutMs`. Exceeding either capacity limit is fatal (`stream.closed` resolves with `kind: "error"` and the iterator rejects—events are never silently dropped):
 
 | Definition option | What it bounds                                              | Terminal fault code   |
 | ----------------- | ----------------------------------------------------------- | --------------------- |

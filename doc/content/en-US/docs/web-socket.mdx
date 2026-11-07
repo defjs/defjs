@@ -123,10 +123,12 @@ Both reconnection and heartbeat are opt-in via client options (`withWebSocketRec
 
 - **Reconnect**: Defaults when enabled are `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Each physical `open` resets the outage budget. `beforeConnect({ attempt, signal })` runs before initial connect and every reconnect attempt.
 - **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds construction to `open` and is cleared after the handshake.
-- **Heartbeat**: Periodically sends `message()` through the `outgoing` struct and waits up to `timeoutMs` for a frame matching `isAck(msg)`. Matching ack frames are consumed by the heartbeat monitor and not forwarded to `session.receive`. A missed ack is fatal to the session.
+- **Heartbeat**: Periodically sends `message()` through the `outgoing` struct and waits up to `timeoutMs` for a frame matching `isAck(msg)`. Matching ack frames are consumed by the heartbeat monitor and not forwarded to `session.receive`. A missed ack is fatal to the logical session: `closed.kind` is `"error"` and `closed.cause` is the ordinary `Error("WebSocket heartbeat timeout")`; it does not start reconnect. Heartbeat serialization failures follow the same fatal path with their original cause.
 - **Queue bounds**:
-  - `maxIncomingQueueSize` (required positive integer): Overflow terminates the session with `CAP_QUEUE_OVERFLOW`. Keep consuming `session.receive` while the session is open.
+  - `maxIncomingQueueSize` (required positive integer): Bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow terminates the session with a `CAP_QUEUE_OVERFLOW` Fault as `closed.cause`; the same cause is sent to `onRuntimeError` and rejects `session.receive`. Keep consuming `session.receive` while the session is open.
   - `maxOutgoingQueueSize` (optional non-negative integer, default `0`): Buffers `session.send()` calls only while `state === 'reconnecting'` and flushes them before publishing the next `open`.
+
+`shouldReconnect` receives the native close code and `wasClean`. A server can complete a clean close handshake with application-error code `1011`, so `wasClean === true` does not mean the application succeeded. The example explicitly permits `1011`; choose application codes according to your protocol rather than relying on `!wasClean` alone.
 
 ## 5. Subprotocols and authentication [#protocols-and-authentication]
 
@@ -135,6 +137,7 @@ Browser WebSockets do not support arbitrary handshake headers, so WebSocket `bui
 - **Subprotocol precedence**: `client({ protocols })` overrides `withWebSocketProtocols(...)`, which overrides `defineWebSocket({ protocols })`.
 - **URL conversion**: Defjs automatically converts `http:` → `ws:` and `https:` → `wss:` on the resolved endpoint.
 - **Credentials**: `withCredentials(true)` applies to Fetch (HTTP/SSE) only. Authenticate WebSockets using cookies/session policies, subprotocols, or short-lived connection tickets—avoid placing long-lived secrets in query strings.
+- **`beforeConnect` is not a request mutator**: Input parsing, the synchronous pure `builder`, and the interceptor chain run once per operation. For a request whose base endpoint is not replaced by an interceptor, each reconnect re-picks an endpoint and reconstructs the URL with that endpoint but reuses the built path/query and the captured protocol list. The URL is fixed before that attempt's `beforeConnect` runs, both on the same endpoint and after failover. Changing a closure variable, input, or protocol array in the hook cannot supply a fresh ticket to the current handshake. Rotating a URL/subprotocol credential within one session is unsupported; obtain the new credential first, pass it as input or client configuration to a new operation, then own that replacement session's cleanup.
 
 ## 6. Closure and ownership
 
@@ -144,7 +147,7 @@ Call `session.close(code?, reason?)` (where `code` is `1000` or `3000..4999` and
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-Always unsubscribe `onStateChange` and `onRuntimeError` listeners when your component or worker finishes.
+When a reconnect outage exhausts its attempts, the session ends with `closed.kind: "error"`, the native close snapshot (often code `1006` for a failed upgrade), and the ordinary transport error as `closed.cause`; it does not expose a separate stable exhaustion code. Always unsubscribe `onStateChange` and `onRuntimeError` listeners when your component or worker finishes.
 
 ## Related reading
 

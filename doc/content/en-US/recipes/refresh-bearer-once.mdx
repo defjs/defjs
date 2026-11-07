@@ -43,6 +43,8 @@ return { ...request, headers };
     const response = await next(authorize(used));
     const body = response.body;
     if (
+      (typeof ReadableStream !== "undefined" &&
+        request.body instanceof ReadableStream) ||
       response.status !== 401 ||
       typeof body !== "object" ||
       body === null ||
@@ -78,5 +80,7 @@ return { ...request, headers };
 ```txt
 42
 ````
+
+A replayable body is not the same as a repeatable business operation. This interceptor also resends a JSON `POST` after a matching 401: two HTTP deliveries, first rejected and then accepted. Use it for writes only when authentication rejects the first delivery before the business handler runs; preserve a stable idempotency key across both deliveries and use server-side deduplication. If that contract is unavailable, return the 401 instead of automatically replaying the write. The complete example does not replay a `ReadableStream` request body.
 
 See [Interceptors](/docs/interceptors) for onion ordering and retry boundaries.

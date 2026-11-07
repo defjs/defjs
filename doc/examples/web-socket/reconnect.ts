@@ -17,7 +17,10 @@ const client = createClient(
     maxDelayMs: 10_000,
     jitter: 0.2,
     shouldReconnect({ attempt, code, wasClean }) {
-      return attempt <= 3 && (wasClean !== true || code === 1006);
+      // `wasClean: true` does not mean the application close was healthy: 1011 is clean too.
+      return (
+        attempt <= 3 && (wasClean !== true || code === 1006 || code === 1011)
+      );
     },
   }),
 );

@@ -111,8 +111,11 @@ const client = createClient(
     factor: 2,
     maxDelayMs: 10_000,
     jitter: 0.2,
-    shouldReconnect({ attempt, code, wasClean }) {
-      return attempt <= 3 && (wasClean !== true || code === 1006);
+    shouldReconnect({ attempt, code }) {
+      return (
+        attempt <= 3 &&
+        (code === 1006 || code === 1011 || code === 1012 || code === 1013)
+      );
     },
   }),
 );
@@ -149,6 +152,10 @@ async function runWithHeartbeat() {
 
 void runWithHeartbeat();
 ```
+
+A server 1011 may have `wasClean: true`; that field describes the close handshake, not application success. Successful opens reset the reconnect budget (default 3 per outage). With multiple endpoints, reconnect can re-pick; it does not restore application subscriptions or delivery acknowledgments.
+
+The input, builder output, and selected protocols are captured once for the logical session. Each attempt resolves its URL before `beforeConnect`; reconnect can replace the base endpoint, not the captured path/query. `beforeConnect` runs per attempt but does not rebuild a query ticket or subprotocol token after a closure variable changes. Start a new operation with refreshed values when those credentials expire. See [load balancing](load-balancing.md) for endpoint and retry boundaries.
 
 ## Session ownership and disposal
 
