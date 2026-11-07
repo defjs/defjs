@@ -322,7 +322,8 @@ describe("heartbeat", () => {
       vi.advanceTimersByTime(1_000);
       expect(method(socket, "send")).toHaveBeenCalledOnce();
       expect(onFatal).toHaveBeenCalledTimes(action === "ack" ? 1 : 0);
-      if (action === "ack") expect(onFatal).toHaveBeenCalledWith(failure);
+      if (action === "ack")
+        expect(onFatal).toHaveBeenCalledWith(failure, false);
     },
   );
 
@@ -450,6 +451,8 @@ describe("heartbeat", () => {
       );
       vi.advanceTimersByTime(100);
       expect(onFatal).toHaveBeenCalledTimes(1);
+      // A local failure is never reported as an unanswered heartbeat.
+      expect(onFatal.mock.calls[0]?.[1]).toBe(false);
       expect(session.heartbeat).toBeUndefined();
       expect(vi.getTimerCount()).toBe(0);
       vi.advanceTimersByTime(1_000);
@@ -503,6 +506,7 @@ describe("heartbeat", () => {
     vi.advanceTimersByTime(150);
     expect(onFatal).toHaveBeenCalledWith(
       new Error("WebSocket heartbeat timeout"),
+      true,
     );
   });
 
@@ -532,6 +536,7 @@ describe("heartbeat", () => {
     expect(onFatal).toHaveBeenCalledOnce();
     expect(onFatal).toHaveBeenCalledWith(
       new Error("WebSocket heartbeat timeout"),
+      true,
     );
 
     vi.advanceTimersByTime(100);

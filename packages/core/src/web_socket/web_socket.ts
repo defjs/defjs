@@ -363,7 +363,7 @@ export type ManualSocketCloseReason = {
  *
  * - `isAck(message)` receives each decoded incoming message. When it returns `true`, the message is treated as the acknowledgement and is not delivered to `receive`.
  *
- * - `timeoutMs` is how long to wait for an acknowledgement after a heartbeat. Missing it fails the session.
+ * - `timeoutMs` is how long to wait for an acknowledgement after a heartbeat. Missing it fails the session and reports `NET_UNREACHABLE` for the endpoint to the balancer. A throwing `message()` or a serialization failure also fails the session, but is not attributed to the endpoint.
  *
  * - `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`.
  *
@@ -839,9 +839,22 @@ async function runWebSocketCommand<
             if (connectTimedOut) {
               return { attempted: true, code: "NET_UNREACHABLE" };
             }
-            if (opened && cause === undefined) {
-              return closeInfo.code === 1006 || closeInfo.wasClean === false
-                ? { attempted: true, code: "NET_UNREACHABLE" }
+            // 1006 and 1015 mean no close frame arrived. Any other code came in the peer's close frame,
+            // so the handshake completed even without an open event: Firefox can skip `open` when the
+            // server closes right after accepting.
+            const closeFrame =
+              closeInfo.code !== undefined &&
+              closeInfo.code !== 1006 &&
+              closeInfo.code !== 1015;
+            if (cause === undefined && (opened || closeFrame)) {
+              // The close code describes the peer. `wasClean` also reflects TCP teardown, which engines
+              // report differently: Firefox reports false for a server-initiated close frame.
+              if (closeInfo.code === 1006 || closeInfo.code === 1015) {
+                return { attempted: true, code: "NET_UNREACHABLE" };
+              }
+              // 1012 Service Restart and 1013 Try Again Later are the WebSocket form of HTTP 503.
+              return closeInfo.code === 1012 || closeInfo.code === 1013
+                ? { attempted: true, code: "NET_UNAVAILABLE" }
                 : { attempted: true };
             }
             return doneInfoForNetworkCause(
@@ -1205,7 +1218,10 @@ async function runWebSocketCommand<
                       sessionController,
                       heartbeatConfig,
                       endpoint.outgoing,
-                      (cause) => {
+                      (cause, timedOut) => {
+                        // An unanswered ping is a connection failure, as in gRPC keepalive; a failing
+                        // local heartbeat callback or serializer is not the endpoint's fault.
+                        if (timedOut) runtimeCause = cause;
                         finish({ cause, kind: "error" });
                       },
                       WebSocketCtor.OPEN,

@@ -281,7 +281,7 @@ export function withWebSocketProtocols(
  *
  * - Every `intervalMs`, `message()` is called and its result is sent through the endpoint's `outgoing` struct. No message is sent when `message` is omitted or returns `undefined`.
  * - With `timeoutMs`, an acknowledgement is expected after each heartbeat. `isAck` receives the decoded incoming message; when it returns `true`, the timer is cleared and that message is **not** delivered to `receive`.
- * - If no ack arrives within `timeoutMs`, or a heartbeat cannot be sent, the session fails. This does not trigger a reconnect.
+ * - If no ack arrives within `timeoutMs`, or a heartbeat cannot be sent, the session fails. This does not trigger a reconnect. A missing ack is reported to the balancer as `NET_UNREACHABLE`; a heartbeat that cannot be sent is a local failure and is not attributed to the endpoint.
  * - Heartbeat uses the same JSON guard as `session.send`: a value JSON cannot represent after struct encoding causes `TypeError` and ends the logical session.
  * - `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`; otherwise the operation fails with `REQ_OPTIONS_INVALID`.
  * - A `heartbeat` in the request options replaces this one for that call.
@@ -394,6 +394,7 @@ export function withSSEOnInvalidEvent(
  * - `attempts` is the retry budget for each outage. It defaults to `3` when `reconnect` is set, and `0` disables retries. A successful handshake resets the budget, callback `attempt`, and backoff exponent. Omitting it does not give unlimited retries within one outage. Repeated successful opens followed immediately by retryable stream failures can keep reconnecting at the current base delay (subject to jitter and caps), because each open resets the budget; use `shouldReconnect` to stop them. Normal EOF remains terminal.
  * - Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect. With it, its result decides for every method, `POST` included; `method` in the context tells endpoints apart. Return `false` to stop for this failure. It runs before the attempts limit is checked.
  * - A request with a `ReadableStream` body never reconnects, and `shouldReconnect` is not called for it.
+ * - A handshake answered with 502, 503, or 504 is retried like a refused connection, under the same rules; other non-2xx handshakes are fatal. Exhausted retries end with `HTTP_STATUS`.
  * - `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.
  * - `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.
  * - An `id:` field updates a buffer. The reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message; a stream ending before that blank line leaves it unchanged. The committed ID is sent as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it at that blank line; an ID containing NUL is ignored.

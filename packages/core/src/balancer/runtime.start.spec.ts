@@ -118,15 +118,16 @@ function pick(b: Balancer, endpoints = ["a", "b"]) {
   if (!p) throw new Error("missing pick");
   return p;
 }
-test("p2c pending excludes picked interceptor work and counts only started transports", () => {
+test("p2c pending counts a pick from selection until its response begins", () => {
   vi.spyOn(Math, "random").mockReturnValue(0);
   const b = p2cBalancer({ load: "pending", outlierDetection: false });
   const waiting = pick(b);
   expect(waiting.endpoint).toBe("a");
-  expect(pick(b).endpoint).toBe("a");
+  const second = pick(b);
+  expect(second.endpoint).toBe("b");
+  second.done({ attempted: false });
   waiting.start();
-  expect(pick(b).endpoint).toBe("b");
-  waiting.done({ attempted: false });
+  waiting.end({ attempted: true, status: 200 });
   expect(pick(b).endpoint).toBe("a");
 });
 test("p2c unstarted done cannot decrement a different single-host transport", () => {
@@ -141,7 +142,7 @@ test("p2c unstarted done cannot decrement a different single-host transport", ()
   expect(pick(b).endpoint).toBe("a");
 });
 
-// Coverage-only: direct callers bypassing the runtime's once-only wrapper.
+// Direct callers bypass the runtime's once-only wrapper.
 test("repeated raw p2c starts increment pending only once", () => {
   vi.spyOn(Math, "random").mockReturnValue(0);
   const b = p2cBalancer({ load: "pending", outlierDetection: false });

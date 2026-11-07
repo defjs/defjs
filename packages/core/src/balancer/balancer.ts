@@ -12,7 +12,8 @@ import {
  * for an empty candidate list or for invalid factory options. Built-in
  * factories record invalid options at construction and return that error from
  * every later `pick`. A selected endpoint must belong to the candidates supplied
- * to that pick; foreign selections become `REQ_BUILD_FAILED`.
+ * to that pick; a foreign selection becomes `REQ_BUILD_FAILED`, and its `done`
+ * is called with `{ attempted: false }`.
  *
  * @group client
  */
@@ -42,12 +43,21 @@ export type PickOutcome =
  *
  * `endpoints` is the candidate list in first-seen order. It may be empty and
  * must not be modified. An empty list returns `[ERR_NO_CANDIDATE, undefined]`.
+ * A retried HTTP call leaves out the endpoints it already tried, and a wrapping
+ * balancer can leave out endpoints it filtered, so the list can shrink between
+ * attempts of one call.
+ *
+ * `members` is the client's whole endpoint list, the same for every attempt.
+ * A narrower `endpoints` is a per-pick filter, not a membership change, so
+ * balancers that keep order or per-endpoint state key it on `members`.
  *
  * @group client
  */
 export interface PickInfo {
-  /** Candidate endpoints. Already deduplicated by first occurrence. Do not modify. */
+  /** Candidate endpoints for this pick. Already deduplicated by first occurrence. Do not modify. */
   readonly endpoints: readonly string[];
+  /** Every client endpoint, a superset of `endpoints`. Absent means `endpoints`. Do not modify. */
+  readonly members?: readonly string[];
   /** `operation` from the definition, when it has one. */
   readonly operation?: string;
 }
@@ -95,9 +105,13 @@ export interface PickResult {
  * Transport mapping: HTTP and SSE statuses 502, 503, and 504 map to
  * `NET_UNAVAILABLE`; other statuses at least 500 map to `NET_SERVER_ERROR`.
  * Incomplete HTTP bodies retain `NET_BODY_INCOMPLETE` and their status.
- * An SSE body-read rejection or an opened WebSocket's close code 1006 or
- * strictly false `wasClean` maps to `NET_UNREACHABLE`, without a status,
- * unless timeout or cancellation takes priority.
+ * An SSE body-read rejection, a WebSocket heartbeat acknowledgement timeout,
+ * or an opened WebSocket's close code 1006 or 1015 (no close frame arrived)
+ * maps to `NET_UNREACHABLE`, without a status; a WebSocket close frame with
+ * 1012 or 1013 maps to `NET_UNAVAILABLE`, even when the engine dispatched no
+ * `open` event before it; both unless timeout or cancellation takes priority.
+ * Other close codes are not failures, whatever `wasClean` reports: engines
+ * disagree on it for a server-initiated close.
  *
  * @group client
  */
@@ -191,30 +205,48 @@ export function isBalancerOptionError(error: Error): boolean {
   return OPTION_ERROR in error;
 }
 
-interface PickFirstOptions {
+/**
+ * Options for {@link pickFirstBalancer}.
+ *
+ * @group client
+ * @see {@link pickFirstBalancer}
+ */
+export interface PickFirstOptions {
+  /** Health filtering around the sticky order; off by default. `{}` enables the defaults. */
   readonly outlierDetection?: OutlierDetectionOptions | false;
+  /** Random but stable endpoint order instead of list order; defaults to `false`. */
   readonly shuffle?: boolean;
+  /** Finite positive interval before one probe of the first endpoint after leaving it; unset disables failback. */
   readonly failbackMs?: number;
 }
 
 /**
  * Sticky failover balancer. The default when a client sets no balancer.
  *
- * Uses the first candidate until `done` reports
+ * Uses the first endpoint until `done` reports
  * `{ attempted: true, code: "NET_UNREACHABLE" }` or `NET_UNAVAILABLE` for the
  * endpoint that is still sticky. The next `pick` then moves
- * to the following candidate and wraps to the first. Other results, including timeouts and
+ * to the following endpoint and wraps to the first. Other results, including timeouts and
  * `attempted: false`, keep the current endpoint. Overlapping failures advance
  * one step: a `done` that finds the sticky endpoint already changed does nothing.
  *
+ * Order and the sticky endpoint follow `members`. When the sticky endpoint is
+ * not among this pick's `endpoints`, as on an HTTP retry, the pick takes the
+ * next candidate after it in member order without moving it, so a retry never
+ * changes where later calls go. Only a sticky endpoint missing from `members`
+ * resets the order to the first.
+ *
  * `shuffle: true` assigns each endpoint a random sort key on first sight and
- * sticks to that order. Keys survive a shorter candidate list. The default is
- * `false`. Shuffle history keeps at most 256 endpoints in least-recently-used
- * order; a forgotten endpoint gets a new random key when it returns.
+ * sticks to that order. Keys survive a shorter endpoint list. The default is
+ * `false`. Shuffle history keeps at least 256 endpoints, and at least the
+ * current members, in least-recently-used order; a forgotten endpoint gets a new
+ * random key when it returns.
  *
  * `failbackMs`, when finite and positive, permits one concurrent probe of the
- * first candidate only after that interval away from it and at least one alternate
- * selection since leaving it. A successful probe restores the first; an advance
+ * first endpoint only after that interval away from it and at least one alternate
+ * selection since leaving it. The probe is decided when the peer response begins
+ * (`end`), so a long-lived stream releases it at its handshake; `done` decides a
+ * probe that never reached `end`. A successful probe restores the first; an advance
  * outcome restarts the interval and requires a fresh alternate selection before
  * another primary probe, even if reconnect backoff exceeds `failbackMs`.
  * Unattributed probes only release the probe slot. No background timer is created.
@@ -229,6 +261,7 @@ interface PickFirstOptions {
  * @param options - Optional shuffled order, failback interval, health filtering.
  * @returns A new balancer. Each call has its own sticky endpoint.
  * @group client
+ * @see {@link PickFirstOptions}
  */
 export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   const invalid = invalidPickFirst(options);
@@ -245,50 +278,68 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
       if (invalid !== undefined) {
         return [invalid, undefined];
       }
-      const order = candidateOrder(info.endpoints, shuffle, keys);
+      const candidates = info.endpoints;
+      if (candidates.length === 0) {
+        return [ERR_NO_CANDIDATE, undefined];
+      }
+      const order = candidateOrder(
+        memberList(info.members, candidates),
+        shuffle,
+        keys,
+      );
       const first = order[0];
       if (first === undefined) {
         return [ERR_NO_CANDIDATE, undefined];
       }
-      let chosen = sticky;
-      if (chosen === undefined || !order.includes(chosen)) {
-        chosen = first;
+      if (sticky === undefined || !order.includes(sticky)) {
         sticky = first;
       }
       const probe =
-        chosen !== first &&
+        sticky !== first &&
+        candidates.includes(first) &&
         failbackMs !== undefined &&
         leftFirstAt !== undefined &&
         monotonicNow() - leftFirstAt >= failbackMs &&
         !probing &&
         backupBeforeProbe === undefined;
-      if (!probe && chosen !== backupBeforeProbe) backupBeforeProbe = undefined;
-      if (probe) {
-        chosen = first;
-        probing = true;
+      const chosen = probe
+        ? first
+        : nextCandidate(order, order.indexOf(sticky), candidates);
+      if (chosen === undefined) {
+        return [ERR_NO_CANDIDATE, undefined];
       }
+      if (!probe && chosen !== backupBeforeProbe) backupBeforeProbe = undefined;
+      if (probe) probing = true;
+      let decided = !probe;
+      const advances = (report: DoneInfo) =>
+        report.attempted &&
+        (report.code === "NET_UNREACHABLE" ||
+          report.code === "NET_UNAVAILABLE");
+      const decideProbe = (report: DoneInfo) => {
+        decided = true;
+        probing = false;
+        if (!report.attempted) return;
+        if (advances(report)) {
+          leftFirstAt = monotonicNow();
+          backupBeforeProbe = first;
+        } else {
+          sticky = first;
+          leftFirstAt = undefined;
+        }
+      };
       return [
         null,
         {
           endpoint: chosen,
+          end(report) {
+            if (!decided) decideProbe(report);
+          },
           done(report) {
-            const advance =
-              report.attempted === true &&
-              (report.code === "NET_UNREACHABLE" ||
-                report.code === "NET_UNAVAILABLE");
-            if (probe) {
-              probing = false;
-              if (!report.attempted) return;
-              if (advance) {
-                leftFirstAt = monotonicNow();
-                backupBeforeProbe = first;
-              } else {
-                sticky = first;
-                leftFirstAt = undefined;
-              }
+            if (!decided) {
+              decideProbe(report);
               return;
             }
-            if (!advance || sticky !== chosen) return;
+            if (!advances(report) || sticky !== chosen) return;
             const next = order[(order.indexOf(chosen) + 1) % order.length];
             if (next !== undefined) {
               if (chosen === first && next !== first) {
@@ -304,6 +355,30 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   };
   if (invalid !== undefined) return child;
   return withHealthFilter(child, options?.outlierDetection, false);
+}
+
+/** First member at or after `offset`, wrapping, that is a candidate of this pick. */
+function nextCandidate(
+  order: readonly string[],
+  offset: number,
+  candidates: readonly string[],
+): string | undefined {
+  return [...order.slice(offset), ...order.slice(0, offset)].find((endpoint) =>
+    candidates.includes(endpoint),
+  );
+}
+
+/**
+ * Members in their own order, plus any candidate a caller left out of them, so
+ * every candidate stays selectable.
+ */
+export function memberList(
+  members: readonly string[] | undefined,
+  candidates: readonly string[],
+): readonly string[] {
+  if (members === undefined || members === candidates) return candidates;
+  const missing = candidates.filter((endpoint) => !members.includes(endpoint));
+  return missing.length === 0 ? members : [...members, ...missing];
 }
 
 function invalidPickFirst(options: unknown): Error | undefined {
@@ -359,7 +434,7 @@ function candidateOrder(
     if (key === undefined) {
       key = Math.random();
     }
-    rememberEndpoint(keys, endpoint, key, () => 0);
+    rememberEndpoint(keys, endpoint, key, () => 0, endpoints.length);
     ranked.push({ endpoint, index, key });
   }
   ranked.sort(
@@ -368,8 +443,16 @@ function candidateOrder(
   return ranked.map((item) => item.endpoint);
 }
 
-interface RoundRobinOptions {
+/**
+ * Options for {@link roundRobinBalancer}.
+ *
+ * @group client
+ * @see {@link roundRobinBalancer}
+ */
+export interface RoundRobinOptions {
+  /** Health filtering; enabled with defaults when omitted. `false` disables it. */
   readonly outlierDetection?: OutlierDetectionOptions | false;
+  /** Finite positive weight per endpoint; a missing weight is 1. Copied at construction. */
   readonly weights?: ReadonlyMap<string, number>;
 }
 
@@ -380,9 +463,11 @@ interface RoundRobinOptions {
  * returns `endpoints[counter % length]`, then increments the counter modulo
  * 2^32. With `weights`, each pick adds an endpoint's weight to its current
  * value, selects the highest value (earlier candidate on a tie), and subtracts
- * the total weight of this candidate list. A missing weight is 1. Weights for
- * endpoints not in the list are ignored. Current values for endpoints that
- * left the list are dropped in O(candidate count) work per pick. Extreme weights
+ * the total weight of this candidate list. Members left out of this pick's
+ * candidates keep their current value, as nginx skips a peer that is down. A
+ * missing weight is 1. Weights for endpoints not in the list are ignored.
+ * Current values for endpoints that left the members are dropped in
+ * O(member count) work per pick. Extreme weights
  * are scaled to avoid overflow; ratios below floating-point precision may round
  * to zero. Finite positive weights never produce a non-candidate selection.
  *
@@ -395,6 +480,7 @@ interface RoundRobinOptions {
  * @param options - Optional positive finite weights, health filtering.
  * @returns A new balancer. Each call has its own counter and weight state.
  * @group client
+ * @see {@link RoundRobinOptions}
  */
 export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
   const invalid = invalidRoundRobin(options);
@@ -426,8 +512,10 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
         }
         return [null, { endpoint }];
       }
+      const members = memberList(info.members, endpoints);
+      const narrowed = members === endpoints ? undefined : new Set(endpoints);
       let scale = 0;
-      for (const endpoint of endpoints)
+      for (const endpoint of members)
         scale = Math.max(scale, weights.get(endpoint) ?? 1);
       // Powers of two preserve the ordinary smooth-RR sequence without rounding its weights.
       scale = 2 ** Math.min(1023, Math.floor(Math.log2(scale)));
@@ -435,10 +523,15 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
       let best: string | undefined;
       let bestValue = Number.NEGATIVE_INFINITY;
       let total = 0;
-      for (const endpoint of endpoints) {
-        const weight = (weights.get(endpoint) ?? 1) / scale;
+      for (const endpoint of members) {
         const carried = (current.get(endpoint) ?? 0) * (previousScale / scale);
-        const value = (Number.isFinite(carried) ? carried : 0) + weight;
+        const kept = Number.isFinite(carried) ? carried : 0;
+        if (narrowed !== undefined && !narrowed.has(endpoint)) {
+          next.set(endpoint, kept);
+          continue;
+        }
+        const weight = (weights.get(endpoint) ?? 1) / scale;
+        const value = kept + weight;
         next.set(endpoint, value);
         total += weight;
         if (value > bestValue) {

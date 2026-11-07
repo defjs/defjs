@@ -821,7 +821,7 @@ describe("SSE final endpoint attribution", () => {
     },
     {
       mode: "handshake-status",
-      code: "RES_DECODE_FAILED",
+      code: "HTTP_STATUS",
       startup: true,
       status: 503,
     },
@@ -903,8 +903,16 @@ describe("SSE final endpoint attribution", () => {
           ...(status === 503 ? { code: "NET_UNAVAILABLE" } : {}),
         });
         expect(pickNext).not.toHaveBeenCalled();
+        // A 503 handshake is retryable, so the declining policy is consulted for it too.
         expect(policy).toHaveBeenCalledTimes(
-          mode === "getReader" || mode === "policy" ? 1 : 0,
+          [
+            "getReader",
+            "policy",
+            "handshake-body",
+            "handshake-status",
+          ].includes(mode)
+            ? 1
+            : 0,
         );
       } finally {
         owner?.releaseLock();

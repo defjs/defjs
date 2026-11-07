@@ -74,7 +74,7 @@ describe("http balancer in browsers", () => {
   });
 });
 
-test("default health-filtered round robin stops selecting the 503 browser fixture", async () => {
+test("health-filtered round robin stops selecting the 503 browser fixture", async () => {
   const { roundRobinBalancer } = await import("../balancer");
   const fixture = inject("testServerHost");
   const good = `${fixture}/balancer/good`;
@@ -82,7 +82,16 @@ test("default health-filtered round robin stops selecting the 503 browser fixtur
   const hits: string[] = [];
   const client = createClient(
     withEndpoint(bad, good),
-    withBalancer(roundRobinBalancer()),
+    // A penalty longer than the test keeps the ejected replica out regardless of machine speed.
+    withBalancer(
+      roundRobinBalancer({
+        outlierDetection: {
+          minPenaltyMs: 60_000,
+          maxPenaltyMs: 60_000,
+          jitterRatio: 0,
+        },
+      }),
+    ),
     withInterceptors(
       createHttpInterceptor(async (request, next) => {
         hits.push(request.baseEndpoint ?? "");

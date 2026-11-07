@@ -15,6 +15,9 @@ import { defineRequest } from "./http";
 import { struct } from "../struct";
 import { ERR_TIMEOUT } from "../error";
 import { makeResponse } from "../internal/http_response";
+import { createHttpInterceptor } from "../interceptor";
+import { pickFirstBalancer } from "../balancer/balancer";
+import type { BodyValue } from "../internal/builder_types";
 
 const endpoints = ["https://first.test", "https://second.test"];
 const policy = (options: RetryOptions = {}): ClientOption =>
@@ -614,4 +617,198 @@ test("a lowercase transported method remains eligible for retry", async () => {
   const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
   expect(fault).toBeNull();
   expect(requests.map((request) => request.method)).toEqual(["GET", "GET"]);
+});
+
+test("a retry whose endpoint selection fails returns the attempt that failed", async () => {
+  let picks = 0;
+  const { client, requests } = fixture(
+    withBalancer({
+      pick(info) {
+        picks++;
+        return picks === 1
+          ? [null, { endpoint: info.endpoints[0] ?? "" }]
+          : [new Error("no healthy replica"), undefined];
+      },
+    }),
+  );
+  const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
+  expect(picks).toBe(2);
+  expect(requests).toHaveLength(1);
+  expect(fault?.code).toBe("NET_UNREACHABLE");
+});
+
+test("a retry onto an endpoint whose URL does not resolve returns the attempt that failed", async () => {
+  const { client, requests } = fixture(
+    withEndpoint("https://first.test", "not-a-url"),
+  );
+  const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
+  expect(requests).toHaveLength(1);
+  expect(fault?.code).toBe("NET_UNREACHABLE");
+});
+
+test("a retried pick sees the client members while candidates shrink", async () => {
+  const { client, picks } = fixture();
+  await defineRequest({ method: "GET", path: "/" })(client);
+  expect(picks).toEqual([
+    { endpoints, operation: undefined },
+    { endpoints: [endpoints[1]], members: endpoints, operation: undefined },
+  ]);
+});
+
+test("attempt timeout covers the send but not interceptor work after it", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  for (const deadline of [false, true]) {
+    let sends = 0;
+    let refreshed = false;
+    const controller = new AbortController();
+    const { client, reports } = fixture(
+      policy({ on: ["attempt-timeout"], attemptTimeoutMs: 100 }),
+      withHTTPHandle(() => {
+        sends++;
+        return Promise.resolve(new Response("ok"));
+      }),
+      withInterceptors(
+        createHttpInterceptor(async (request, next) => {
+          const response = await next(request);
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          refreshed = true;
+          if (deadline) controller.abort(ERR_TIMEOUT);
+          return response;
+        }),
+      ),
+    );
+    const pending = defineRequest({
+      method: "GET",
+      path: "/",
+      output: struct.string(),
+    })(client({ signal: controller.signal }));
+    await vi.waitFor(() => expect(sends).toBe(1));
+    await vi.advanceTimersByTimeAsync(150);
+    const [fault, data] = await pending;
+    expect(refreshed).toBe(true);
+    expect(sends).toBe(1);
+    expect(fault?.code ?? null).toBe(deadline ? "NET_TIMEOUT" : null);
+    expect(data).toBe(deadline ? undefined : "ok");
+    expect(reports).toEqual([{ attempted: true, status: 200 }]);
+    expect(vi.getTimerCount()).toBe(0);
+  }
+});
+
+test("a retried attempt timeout keeps later pick-first calls on the first endpoint", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const hosts: string[] = [];
+  const client = createClient(
+    withEndpoint(...endpoints),
+    withBalancer(pickFirstBalancer({ failbackMs: 1000 })),
+    policy({ on: ["attempt-timeout"], attemptTimeoutMs: 100 }),
+    withHTTPHandle((input) => {
+      hosts.push(new URL(new Request(input).url).origin);
+      return hosts.length === 1
+        ? new Promise<Response>(() => {})
+        : Promise.resolve(new Response("ok"));
+    }),
+  );
+  const read = defineRequest({ method: "GET", path: "/" });
+  const first = read(client);
+  await vi.waitFor(() => expect(hosts).toHaveLength(1));
+  await vi.advanceTimersByTimeAsync(100);
+  expect((await first)[0]).toBeNull();
+  expect((await read(client))[0]).toBeNull();
+  expect(hosts).toEqual([endpoints[0], endpoints[1], endpoints[0]]);
+});
+
+test.each([
+  { kind: "JSON", body: (): BodyValue => ({ id: 1, tags: ["a"] }) },
+  { kind: "text", body: (): BodyValue => "plain" },
+  { kind: "Blob", body: (): BodyValue => new Blob(["blob bytes"]) },
+  { kind: "Uint8Array", body: (): BodyValue => new Uint8Array([1, 2, 3]) },
+])(
+  "opted-in POST failover resends an identical $kind body",
+  async ({ body }) => {
+    const { client, requests } = fixture(policy({ methods: ["POST"] }));
+    const [fault] = await defineRequest({
+      method: "POST",
+      path: "/",
+      builder: () => ({ body: body() }),
+    })(client);
+    expect(fault).toBeNull();
+    expect(requests).toHaveLength(2);
+    const sent = await Promise.all(
+      requests.map(async (request) => ({
+        type: request.headers.get("content-type"),
+        bytes: [...new Uint8Array(await request.arrayBuffer())],
+      })),
+    );
+    expect(sent[0]?.bytes.length).toBeGreaterThan(0);
+    expect(sent[1]).toEqual(sent[0]);
+  },
+);
+
+test("opted-in POST failover resends the same FormData fields", async () => {
+  const { client, requests } = fixture(policy({ methods: ["POST"] }));
+  const [fault] = await defineRequest({
+    method: "POST",
+    path: "/",
+    builder: () => {
+      const form = new FormData();
+      form.append("name", "value");
+      form.append("file", new File(["file bytes"], "a.txt"));
+      return { body: form };
+    },
+  })(client);
+  expect(fault).toBeNull();
+  expect(requests).toHaveLength(2);
+  const fields = await Promise.all(
+    requests.map(async (request) => {
+      const form = await request.formData();
+      const file = form.get("file");
+      return [
+        form.get("name"),
+        file instanceof File ? await file.text() : file,
+      ];
+    }),
+  );
+  expect(fields).toEqual([
+    ["value", "file bytes"],
+    ["value", "file bytes"],
+  ]);
+});
+
+test("an interceptor that substitutes a ReadableStream body disables failover", async () => {
+  const { client, requests } = fixture(
+    policy({ methods: ["POST"] }),
+    withInterceptors(
+      createHttpInterceptor((request, next) =>
+        next({
+          ...request,
+          body: new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        }),
+      ),
+    ),
+  );
+  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+  expect(fault?.code).toBe("NET_UNREACHABLE");
+  expect(requests).toHaveLength(1);
+});
+
+test("a send still in flight when an interceptor answers leaves no attempt timer behind", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+  const { client, reports } = fixture(
+    policy({ on: ["attempt-timeout"], attemptTimeoutMs: 100 }),
+    withHTTPHandle(() => new Promise<Response>(() => {})),
+    withInterceptors(
+      createHttpInterceptor((request, next) => {
+        void next(request).catch(() => undefined);
+        return Promise.resolve(makeResponse({ status: 204 }));
+      }),
+    ),
+  );
+  const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
+  expect(fault).toBeNull();
+  expect(vi.getTimerCount()).toBe(0);
+  expect(reports).toHaveLength(1);
 });

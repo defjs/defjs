@@ -26,24 +26,21 @@ test("pending is released at end, not at done, including a single candidate", ()
   a.done({ attempted: false });
   expect(pick(b).endpoint).toBe("a");
 });
-test.each(["http", "sse", "websocket"] as const)(
-  "%s RTT uses start to end, never interceptor or session lifetime",
-  () => {
-    const b = p2cBalancer({ defaultRttMs: 1, outlierDetection: false });
-    const slow = pick(b, ["b"]);
-    slow.start();
-    vi.advanceTimersByTime(50 - performance.now());
-    slow.end({ attempted: true });
-    const fast = pick(b, ["a"]);
-    vi.advanceTimersByTime(130 - performance.now());
-    fast.start();
-    vi.advanceTimersByTime(140 - performance.now());
-    fast.end({ attempted: true });
-    vi.advanceTimersByTime(220 - performance.now());
-    expect(pick(b).endpoint).toBe("a");
-    fast.done({ attempted: true });
-  },
-);
+test("RTT uses start to end, never interceptor or session lifetime", () => {
+  const b = p2cBalancer({ defaultRttMs: 1, outlierDetection: false });
+  const slow = pick(b, ["b"]);
+  slow.start();
+  vi.advanceTimersByTime(50 - performance.now());
+  slow.end({ attempted: true });
+  const fast = pick(b, ["a"]);
+  vi.advanceTimersByTime(130 - performance.now());
+  fast.start();
+  vi.advanceTimersByTime(140 - performance.now());
+  fast.end({ attempted: true });
+  vi.advanceTimersByTime(220 - performance.now());
+  expect(pick(b).endpoint).toBe("a");
+  fast.done({ attempted: true });
+});
 test("quick failures use real RTT rather than a default penalty", () => {
   const b = p2cBalancer({
     defaultRttMs: 1,
@@ -84,7 +81,7 @@ test("removed p2c classifier is an option error even when it is a function", () 
   );
 });
 
-// Coverage-only: direct callers bypassing the runtime's lifecycle guards.
+// Direct callers bypass the runtime's lifecycle guards.
 test("raw p2c end ignores unstarted, ended and terminal attempts", () => {
   const b = p2cBalancer({ load: "pending", outlierDetection: false });
   const [, raw] = b.pick({ endpoints: ["a"] });

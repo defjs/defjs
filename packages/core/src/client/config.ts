@@ -72,7 +72,7 @@ export type WebSocketHandleConstructor = {
  *
  * - **handle** — WebSocket constructor; defaults to `globalThis.WebSocket`.
  * - **beforeConnect** — Runs before each connect and reconnect attempt.
- * - **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement marks the connection unhealthy. `intervalMs` and `timeoutMs` must be positive and at most 2147483647.
+ * - **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement fails the session and reports `NET_UNREACHABLE` to the balancer. `intervalMs` and `timeoutMs` must be positive and at most 2147483647.
  * - **protocols** — Subprotocols passed to the constructor.
  * - **reconnect** — Opt-in. `attempts` defaults to **3**; `0` disables retry, and omitting `attempts` is not unlimited. Other defaults: `delayMs` 1000, `factor` 2, `jitter` 0 (a 0-1 multiplicative factor), `maxDelayMs` 30000. `shouldReconnect` receives the close `code`, `reason`, and `wasClean` and can veto a retry.
  *
@@ -134,7 +134,7 @@ export interface ClientWebSocketOptions {
  *
  * - **handle** — Fetch implementation that opens the stream. The default resolves `globalThis.fetch` on each attempt, including replacements installed after import. Every SSE handle receives a `Request`. Missing global Fetch fails default execution with `ENV_UNSUPPORTED`; a custom handle remains usable.
  * - **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.
- * - **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. An `id:` field updates a buffer; the reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message. A stream ending before that blank line leaves the cursor unchanged. Reconnect sends the committed ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it at that blank line and an ID containing NUL is ignored.
+ * - **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. A 502, 503, or 504 handshake is retried like a refused connection; other non-2xx handshakes are fatal. An `id:` field updates a buffer; the reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message. A stream ending before that blank line leaves the cursor unchanged. Reconnect sends the committed ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it at that blank line and an ID containing NUL is ignored.
  *
  * Reconnect options are validated before interceptors or Fetch: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs.
  *
@@ -206,6 +206,8 @@ export type RetryCondition =
  * Call {@link withRetry}() or pass `{}` to enable retries. Omission disables retries
  * and creates no retry budget. Streaming request bodies are
  * never replayed. Invalid options return `REQ_OPTIONS_INVALID` at HTTP execution.
+ * When a retry cannot use any endpoint — the balancer's pick fails or the next
+ * endpoint's URL does not resolve — the call returns the previous attempt's fault.
  * @exampleFile examples/client/http-retry.ts#example
  * @group client
  */
@@ -222,7 +224,12 @@ export interface RetryOptions {
   readonly on?: readonly RetryCondition[];
   /** Allowed methods, case-insensitive. Every method sent by an attempt after interceptor rewrites must qualify; without a transport invocation, the defined method is used. Defaults to GET, HEAD, OPTIONS, TRACE. */
   readonly methods?: readonly string[];
-  /** Positive finite timeout from Fetch invocation through body reading and decoding, per attempt; at most `2_147_483_647` ms. */
+  /**
+   * Positive finite timeout for each Fetch sent to the selected endpoint, from
+   * invocation until its response body has been read; at most `2_147_483_647` ms.
+   * Interceptor work around the send and struct decoding are not timed, so local
+   * delays never count against the endpoint.
+   */
   readonly attemptTimeoutMs?: number;
   /** Initial finite non-negative backoff delay in milliseconds; defaults to 25. Zero skips waiting. */
   readonly delayMs?: number;

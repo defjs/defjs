@@ -178,7 +178,9 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
     value: { attempt: 2, type: "reconnected" },
   });
   expect(recorded.picks).toEqual([fixture, fixture]);
-  expect(recorded.dones).toEqual([{ attempted: true }]);
+  expect(recorded.dones).toEqual([
+    { attempted: true, code: "NET_UNAVAILABLE" },
+  ]);
 
   socket.close(1000, "done");
   await socket.closed;
@@ -300,7 +302,7 @@ test("health filtering attributes each same-call failover attempt to its own end
   expect(choices).toEqual([[refused, fixture], [fixture], [fixture]]);
 });
 
-test("default round robin stops routing a persistent 503 replica after five failures", async () => {
+test("health-filtered round robin stops routing a persistent 503 replica after five failures", async () => {
   const { roundRobinBalancer } = await import("../src");
   const fixture = inject("testServerHost");
   const good = `${fixture}/balancer/good`;
@@ -308,7 +310,16 @@ test("default round robin stops routing a persistent 503 replica after five fail
   const hits: string[] = [];
   const client = createClient(
     withEndpoint(bad, good),
-    withBalancer(roundRobinBalancer()),
+    // A penalty longer than the test keeps the ejected replica out regardless of machine speed.
+    withBalancer(
+      roundRobinBalancer({
+        outlierDetection: {
+          minPenaltyMs: 60_000,
+          maxPenaltyMs: 60_000,
+          jitterRatio: 0,
+        },
+      }),
+    ),
 
     withInterceptors(
       createHttpInterceptor(async (request, next) => {

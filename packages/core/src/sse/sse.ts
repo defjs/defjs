@@ -5,10 +5,8 @@ import { DEFAULT_FETCH, ERR_FETCH_UNSUPPORTED } from "../client/config";
 import type { AnyFault, Fault, PreflightFault } from "../error";
 import {
   createDecodeFault,
-  createHttpStatusFault,
   createNetworkFault,
   createPreflightFault,
-  createUndecodedHttpStatusFault,
 } from "../error";
 import type { SSEHandler } from "../interceptor/interceptor";
 import { makeChain, resolveSSEInterceptors } from "../interceptor/interceptor";
@@ -27,7 +25,7 @@ import { parseEndpointInput } from "../internal/endpoint_input";
 import { createTransportOrigin } from "../internal/transport_origin";
 import { normalizeReconnectOptions } from "../internal/reconnect_options";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
-import type { HttpMeta, HttpResponse } from "../internal/http_response";
+import type { HttpResponse } from "../internal/http_response";
 import type {
   BuilderField,
   EventStreamRequestShape,
@@ -48,11 +46,12 @@ import type {
 } from "./transport/event_stream";
 import { SSE_RECONNECT_DEFAULTS } from "./transport/event_stream";
 import {
+  createHandshakeStatusFault,
   fetchEventStream,
   getEventStreamFatalCode,
   handshakeDecodeCause,
   isEventStreamPickFault,
-  isHandshakeStatusSignal,
+  toEventStreamMeta,
 } from "./transport/event_stream";
 import type { EventStreamMessage } from "./transport/parser";
 
@@ -505,11 +504,8 @@ async function runEventStreamCommand<
         const endpointAttempt =
           attributed && !settled
             ? {
-                // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve callback identity and bare invocation; undefined passes through unchanged
                 start: resolved.start,
-                // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve callback identity and bare invocation; undefined passes through unchanged
                 end: resolved.end,
-                // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve callback identity and bare invocation; undefined passes through unchanged
                 done: resolved.done,
                 pickNext: () =>
                   pickEndpoint(clientConfig.balancer, {
@@ -752,16 +748,6 @@ function decodeSSEEventData(struct: AnyStruct, data: string): unknown {
   return decodeJson(struct, JSON.parse(data));
 }
 
-function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
-  return {
-    headers: response.headers,
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    url: response.url,
-  };
-}
-
 function createEventStreamFault(
   cause: unknown,
   fromTransport: boolean,
@@ -783,15 +769,13 @@ function createEventStreamFault(
   }
 
   if (response && !response.ok) {
-    const meta = toEventStreamMeta(response);
-    // Decoded null is a real body. Only an unread handshake leaves `body` undefined.
-    if (response.body !== undefined) {
-      return createHttpStatusFault({ ...meta, body: response.body });
-    }
-    if (fatal === "RES_DECODE_FAILED" && !isHandshakeStatusSignal(cause)) {
-      return createDecodeFault(fatal, handshakeDecodeCause(cause), meta);
-    }
-    return createUndecodedHttpStatusFault(meta);
+    return fatal === "RES_DECODE_FAILED"
+      ? createDecodeFault(
+          fatal,
+          handshakeDecodeCause(cause),
+          toEventStreamMeta(response),
+        )
+      : createHandshakeStatusFault(response);
   }
 
   // `CAP_*` and `EXT_*` happen after the stream opens, so they settle `closed` rather than startup.

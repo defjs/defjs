@@ -163,7 +163,7 @@ test("active-all-false falls back but still respects passive ejections", () => {
   expect(h.candidates()).toEqual(["b", "c"]);
 });
 
-test("uncoded 5xx ejects by default; timeout, incomplete body and unattributed outcomes do not", () => {
+test("every coded outcome ejects by default, including timeout and incomplete body; unattributed outcomes do not", () => {
   const h = setup({ consecutiveFailures: 2 });
   h.report("a", { attempted: true, code: "NET_UNAVAILABLE" });
   h.report("a", { attempted: false });
@@ -171,11 +171,22 @@ test("uncoded 5xx ejects by default; timeout, incomplete body and unattributed o
   h.pick();
   expect(h.candidates()).not.toContain("a");
   for (const code of ["NET_TIMEOUT", "NET_BODY_INCOMPLETE"] as const) {
-    const safe = setup({ consecutiveFailures: 1 });
-    safe.report("a", { attempted: true, code, status: 503 });
-    safe.pick();
-    expect(safe.candidates()).toContain("a");
+    const failing = setup({ consecutiveFailures: 1 });
+    failing.report("a", { attempted: true, code });
+    failing.pick();
+    expect(failing.candidates()).not.toContain("a");
   }
+});
+
+test("a timeout between failures extends the streak instead of resetting it", () => {
+  const h = setup({ consecutiveFailures: 3 });
+  h.report("a", { attempted: true, code: "NET_UNAVAILABLE" });
+  h.report("a", { attempted: true, code: "NET_TIMEOUT" });
+  h.pick();
+  expect(h.candidates()).toContain("a");
+  h.report("a", { attempted: true, code: "NET_UNAVAILABLE" });
+  h.pick();
+  expect(h.candidates()).not.toContain("a");
 });
 
 test("built-in configuration matches the exported wrapper and false restores no-done round robin", () => {

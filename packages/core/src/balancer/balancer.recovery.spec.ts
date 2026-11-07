@@ -186,7 +186,7 @@ test.each([
   },
 );
 
-// Coverage-only: boundary combinations of the recovery transitions exercised above.
+// Boundary combinations of the recovery transitions exercised above.
 test("a fallback pick can occupy the probe when every active check excludes recovery", () => {
   let active = false;
   const h = setup({ isHealthy: () => active });

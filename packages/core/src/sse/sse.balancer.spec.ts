@@ -516,7 +516,7 @@ test.each([false, true])(
 );
 
 test("default health filtering receives read failures and breaks only after five samples", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   const primary = "https://primary.example";
   const secondary = "https://secondary.example";
@@ -1058,7 +1058,8 @@ test("calls done once when sseHandler sees a replaced base and does not record i
   expect(error?.code).toBe("HTTP_STATUS");
   expect(open?.response.status).toBe(503);
   expect(origin.requests).toHaveLength(0);
-  expect(replaced.requests).toHaveLength(1);
+  // An unattributed 503 is retried on the same base, like the refused connection below.
+  expect(replaced.requests).toHaveLength(RECONNECT.attempts + 1);
   expect(recorded.dones).toEqual([
     { endpoint: origin.url, info: { attempted: false } },
   ]);
@@ -1343,4 +1344,307 @@ test("keeps EXT_INTERCEPTOR_FAILED when an interceptor throws a REQ_BUILD_FAILED
     { endpoint: "https://example.com", info: { attempted: false } },
   ]);
   expect(recorded.pending()).toBe(0);
+});
+
+test.each([502, 503, 504])(
+  "retries a %s handshake on a fresh pick at startup and after a drop",
+  async (status) => {
+    const busy = await listen((_req, res) => {
+      res.writeHead(status);
+      res.end("busy");
+    });
+    const healthy = await listen((_req, res) => {
+      res.writeHead(200, SSE_HEADERS);
+      res.end("data: recovered\n\n");
+    });
+    const shouldReconnect = vi.fn((_context: unknown) => true);
+    const startup = track((index) => (index === 1 ? busy.url : healthy.url));
+    const [error, stream, open] = await orders(
+      createClient(
+        withEndpoint(busy.url, healthy.url),
+        withBalancer(startup.balancer),
+        withSSEReconnect({ ...RECONNECT, shouldReconnect }),
+      ),
+    );
+    expect(error).toBeNull();
+    if (!stream) throw new Error("expected a stream");
+    expect(open?.response.status).toBe(200);
+    await expect(stream[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      value: { data: "recovered" },
+    });
+    expect(await stream.closed).toEqual({ kind: "eof" });
+    expect(startup.dones).toEqual([
+      {
+        endpoint: busy.url,
+        info: { attempted: true, code: "NET_UNAVAILABLE", status },
+      },
+      { endpoint: healthy.url, info: { attempted: true, status: 200 } },
+    ]);
+    expect(shouldReconnect).toHaveBeenCalledOnce();
+    expect(shouldReconnect.mock.calls[0]?.[0]).toMatchObject({
+      attempt: 1,
+      cause: { code: "HTTP_STATUS", status },
+      open: { response: { status } },
+    });
+    expect(busy.requests).toHaveLength(1);
+    expect(healthy.requests).toHaveLength(1);
+
+    const primary = await listen((_req, res) => writeEvent(res));
+    const reconnecting = track((index) =>
+      index === 1 ? primary.url : index === 2 ? busy.url : healthy.url,
+    );
+    const [openError, opened] = await orders(
+      createClient(
+        withEndpoint(primary.url, busy.url, healthy.url),
+        withBalancer(reconnecting.balancer),
+        withSSEReconnect({ ...RECONNECT, attempts: 2 }),
+      ),
+    );
+    expect(openError).toBeNull();
+    if (!opened) throw new Error("expected a stream");
+    const iterator = opened[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { data: "hi" },
+    });
+    primary.dropHeld();
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { data: "recovered" },
+    });
+    expect(await opened.closed).toEqual({ kind: "eof" });
+    expect(opened.open.response.status).toBe(200);
+    expect(reconnecting.dones).toEqual([
+      {
+        endpoint: primary.url,
+        info: { attempted: true, code: "NET_UNREACHABLE" },
+      },
+      {
+        endpoint: busy.url,
+        info: { attempted: true, code: "NET_UNAVAILABLE", status },
+      },
+      { endpoint: healthy.url, info: { attempted: true, status: 200 } },
+    ]);
+    expect(busy.requests).toHaveLength(2);
+    expect(healthy.requests).toHaveLength(2);
+    expect(reconnecting.pending()).toBe(0);
+    expectPicks(reconnecting);
+  },
+);
+
+test("default pick-first moves past a 503 reconnect handshake back to the recovered endpoint", async () => {
+  let served = 0;
+  const flaky = await listen((_req, res) => {
+    served += 1;
+    if (served === 1) {
+      writeEvent(res);
+      return;
+    }
+    res.writeHead(200, SSE_HEADERS);
+    res.end("data: again\n\n");
+  });
+  const busy = await listen((_req, res) => {
+    res.writeHead(503);
+    res.end("busy");
+  });
+  const [error, stream] = await orders(
+    createClient(
+      withEndpoint(flaky.url, busy.url),
+      withSSEReconnect({ ...RECONNECT, attempts: 3 }),
+    ),
+  );
+  expect(error).toBeNull();
+  if (!stream) throw new Error("expected a stream");
+  const iterator = stream[Symbol.asyncIterator]();
+  await expect(iterator.next()).resolves.toMatchObject({
+    value: { data: "hi" },
+  });
+  flaky.dropHeld();
+  await expect(iterator.next()).resolves.toMatchObject({
+    value: { data: "again" },
+  });
+  expect(await stream.closed).toEqual({ kind: "eof" });
+  expect(flaky.requests).toHaveLength(2);
+  expect(busy.requests).toHaveLength(1);
+});
+
+test.each([400, 401, 404])(
+  "keeps a %s handshake fatal at startup and after a drop with reconnect enabled",
+  async (status) => {
+    const rejecting = await listen((_req, res) => {
+      res.writeHead(status);
+      res.end("no");
+    });
+    const shouldReconnect = vi.fn(() => true);
+    const startup = track(() => rejecting.url);
+    const [error, stream, open] = await orders(
+      createClient(
+        withEndpoint(rejecting.url),
+        withBalancer(startup.balancer),
+        withSSEReconnect({ ...RECONNECT, shouldReconnect }),
+      ),
+    );
+    expect(stream).toBeUndefined();
+    expect(error).toMatchObject({ code: "HTTP_STATUS", status });
+    expect(open?.response.status).toBe(status);
+    expect(rejecting.requests).toHaveLength(1);
+    expect(startup.picks).toHaveLength(1);
+    expect(startup.dones).toEqual([
+      { endpoint: rejecting.url, info: { attempted: true, status } },
+    ]);
+    expect(shouldReconnect).not.toHaveBeenCalled();
+
+    const primary = await listen((_req, res) => writeEvent(res));
+    const reconnecting = track((index) =>
+      index === 1 ? primary.url : rejecting.url,
+    );
+    const [openError, opened] = await orders(
+      createClient(
+        withEndpoint(primary.url, rejecting.url),
+        withBalancer(reconnecting.balancer),
+        withSSEReconnect({ ...RECONNECT, shouldReconnect }),
+      ),
+    );
+    expect(openError).toBeNull();
+    if (!opened) throw new Error("expected a stream");
+    const iterator = opened[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toMatchObject({
+      value: { data: "hi" },
+    });
+    primary.dropHeld();
+    const failure = await iterator.next().catch((cause: unknown) => cause);
+    const closed = await opened.closed;
+    expect(closed).toMatchObject({
+      cause: { code: "HTTP_STATUS", status },
+      code: "HTTP_STATUS",
+      kind: "error",
+    });
+    if (closed.kind !== "error") throw new Error("expected an error close");
+    expect(failure).toBe(closed.cause);
+    expect(opened.open.response.status).toBe(status);
+    expect(shouldReconnect).toHaveBeenCalledOnce();
+    expect(reconnecting.picks).toHaveLength(2);
+    expect(rejecting.requests).toHaveLength(2);
+    expect(reconnecting.pending()).toBe(0);
+  },
+);
+
+test("ends exhausted 503 retries with the HTTP_STATUS fault of a failed first handshake", async () => {
+  const busy = await listen((_req, res) => {
+    res.writeHead(503);
+    res.end("busy");
+  });
+  const [plain, , plainOpen] = await orders(
+    createClient(withEndpoint(busy.url)),
+  );
+  const [exhausted, stream, open] = await orders(
+    createClient(withEndpoint(busy.url), withSSEReconnect(RECONNECT)),
+  );
+  expect(stream).toBeUndefined();
+  expect(busy.requests).toHaveLength(1 + RECONNECT.attempts + 1);
+  expect(plain).toMatchObject({ code: "HTTP_STATUS", status: 503 });
+  expect(exhausted).toMatchObject({ code: "HTTP_STATUS", status: 503 });
+  expect(exhausted?.message).toBe(plain?.message);
+  expect(plainOpen?.response.status).toBe(503);
+  expect(open?.response.status).toBe(503);
+
+  const primary = await listen((_req, res) => writeEvent(res));
+  const reconnecting = track((index) => (index === 1 ? primary.url : busy.url));
+  const [openError, opened] = await orders(
+    createClient(
+      withEndpoint(primary.url, busy.url),
+      withBalancer(reconnecting.balancer),
+      withSSEReconnect(RECONNECT),
+    ),
+  );
+  expect(openError).toBeNull();
+  if (!opened) throw new Error("expected a stream");
+  const iterator = opened[Symbol.asyncIterator]();
+  await expect(iterator.next()).resolves.toMatchObject({
+    value: { data: "hi" },
+  });
+  primary.dropHeld();
+  const failure = await iterator.next().catch((cause: unknown) => cause);
+  const closed = await opened.closed;
+  expect(closed).toMatchObject({
+    cause: { code: "HTTP_STATUS", message: plain?.message, status: 503 },
+    code: "HTTP_STATUS",
+    kind: "error",
+    reason: plain?.message,
+  });
+  if (closed.kind !== "error") throw new Error("expected an error close");
+  expect(failure).toBe(closed.cause);
+  expect(opened.open.response.status).toBe(503);
+  expect(reconnecting.dones).toEqual([
+    {
+      endpoint: primary.url,
+      info: { attempted: true, code: "NET_UNREACHABLE" },
+    },
+    {
+      endpoint: busy.url,
+      info: { attempted: true, code: "NET_UNAVAILABLE", status: 503 },
+    },
+  ]);
+  expect(reconnecting.pending()).toBe(0);
+});
+
+test("reports only the last startup attempt after a retried 503", async () => {
+  let calls = 0;
+  const [error, stream, open] = await orders(
+    createClient(
+      withEndpoint("https://example.com"),
+      withSSEHandle(() => {
+        calls += 1;
+        return calls === 1
+          ? Promise.resolve(new Response("busy", { status: 503 }))
+          : Promise.reject(new TypeError("connection refused"));
+      }),
+      withSSEReconnect(RECONNECT),
+    ),
+  );
+  expect(stream).toBeUndefined();
+  expect(error?.code).toBe("NET_UNREACHABLE");
+  expect(open).toBeUndefined();
+  expect(calls).toBe(2);
+});
+
+test("applies the reconnect gates to a 503 handshake", async () => {
+  const busy = vi.fn(() =>
+    Promise.resolve(new Response("busy", { status: 503 })),
+  );
+  const post = defineEventStream({
+    events: { message: struct.string() },
+    method: "POST",
+    operation: "orders",
+    path: "/events",
+  });
+  const streamBody = defineEventStream({
+    builder: () => ({
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1]));
+          controller.close();
+        },
+      }),
+    }),
+    events: { message: struct.string() },
+    method: "POST",
+    operation: "orders",
+    path: "/events",
+  });
+  for (const [definition, reconnect] of [
+    [post, RECONNECT],
+    [orders, { ...RECONNECT, shouldReconnect: () => false }],
+    [orders, { ...RECONNECT, attempts: 0 }],
+    [streamBody, { ...RECONNECT, shouldReconnect: () => true }],
+  ] as const) {
+    busy.mockClear();
+    const [error] = await definition(
+      createClient(
+        withEndpoint("https://example.com"),
+        withSSEHandle(busy),
+        withSSEReconnect(reconnect),
+      ),
+    );
+    expect(error).toMatchObject({ code: "HTTP_STATUS", status: 503 });
+    expect(busy).toHaveBeenCalledOnce();
+  }
 });

@@ -31,6 +31,14 @@ const room = defineWebSocket({
   path: "/ws",
 });
 
+const pinged = defineWebSocket({
+  incoming: struct.unknown(),
+  maxIncomingQueueSize: 4,
+  operation: "room.join",
+  outgoing: struct.unknown(),
+  path: "/ws",
+});
+
 type ScriptStep = { endpoint: string } | { error: Error };
 
 function scriptedBalancer(script: readonly ScriptStep[]): {
@@ -642,7 +650,7 @@ describe("web socket endpoint balancer", () => {
     expect(foreignFault?.cause).toEqual(
       new Error("Balancer selected an endpoint outside the candidate set"),
     );
-    expect(done).not.toHaveBeenCalled();
+    expect(done).toHaveBeenCalledExactlyOnceWith({ attempted: false });
     expect(sockets).toHaveLength(1);
   });
 
@@ -746,13 +754,17 @@ describe("web socket endpoint balancer", () => {
   });
 
   test.each([
-    [1006, false],
-    [1006, undefined],
-    [1006, true],
-    [1000, false],
-  ])(
-    "default pick-first advances on close-only code %s with wasClean %s",
-    async (code, wasClean) => {
+    [1006, false, "NET_UNREACHABLE"],
+    [1006, undefined, "NET_UNREACHABLE"],
+    [1006, true, "NET_UNREACHABLE"],
+    [1015, false, "NET_UNREACHABLE"],
+    [1012, false, "NET_UNAVAILABLE"],
+    [1012, true, "NET_UNAVAILABLE"],
+    [1013, true, "NET_UNAVAILABLE"],
+    [1013, undefined, "NET_UNAVAILABLE"],
+  ] as const)(
+    "default pick-first advances on close-only code %s with wasClean %s as %s",
+    async (code, wasClean, failure) => {
       const child = pickFirstBalancer();
       const dones: DoneInfo[] = [];
       const ends: DoneInfo[] = [];
@@ -789,7 +801,7 @@ describe("web socket endpoint balancer", () => {
       try {
         socketAt(0).disconnect(code, wasClean);
         await vi.waitFor(() => expect(sockets).toHaveLength(2));
-        expect(dones).toEqual([{ attempted: true, code: "NET_UNREACHABLE" }]);
+        expect(dones).toEqual([{ attempted: true, code: failure }]);
         expect(ends).toEqual([{ attempted: true }]);
         expect(socketAt(1).url).toBe("ws://127.0.0.1:2/ws");
         socketAt(1).open();
@@ -800,7 +812,7 @@ describe("web socket endpoint balancer", () => {
         await session.closed;
       }
       expect(dones).toEqual([
-        { attempted: true, code: "NET_UNREACHABLE" },
+        { attempted: true, code: failure },
         { attempted: false },
       ]);
     },
@@ -811,11 +823,12 @@ describe("web socket endpoint balancer", () => {
     [1001, true],
     [1005, true],
     [1011, true],
-    [1012, true],
-    [1013, true],
     [4001, true],
     [1000, undefined],
     [1011, undefined],
+    // Firefox reports a server-initiated close frame with wasClean false; the code still describes the peer.
+    [1000, false],
+    [1001, false],
   ])(
     "does not add a network failure for code %s with wasClean %s",
     async (code, wasClean) => {
@@ -833,12 +846,47 @@ describe("web socket endpoint balancer", () => {
     },
   );
 
-  test.each(["cancel", "manual", "timeout"])(
-    "%s takes priority over a late close-only abnormal snapshot",
-    async (mode) => {
+  test.each([
+    [1012, { attempted: true, code: "NET_UNAVAILABLE" }],
+    [1000, { attempted: true }],
+    [1006, { attempted: true, code: "NET_UNREACHABLE" }],
+    [1015, { attempted: true, code: "NET_UNREACHABLE" }],
+  ] as const)(
+    "classifies close code %s that arrives before the open event by the code",
+    async (code, report) => {
+      const record = scriptedBalancer([{ endpoint: PRIMARY }]);
+      const pending = room(
+        clientFor(record.balancer)({ reconnect: { attempts: 1, delayMs: 0 } }),
+      );
+      await flush();
+      // Firefox can dispatch the peer's close frame without `open` when the server closes right after accepting.
+      socketAt(0).disconnect(code, false);
+      await vi.waitFor(() => expect(sockets).toHaveLength(2));
+      expect(record.dones).toEqual([report]);
+      expect(record.ends).toEqual([report]);
+      socketAt(1).open();
+      const [error, session] = await pending;
+      expect(error).toBeNull();
+      if (!session) throw new Error("expected session");
+      session.close(1000, "stop");
+      await session.closed;
+      expect(record.pending()).toBe(0);
+    },
+  );
+
+  test.each([
+    ["cancel", 1006],
+    ["manual", 1006],
+    ["timeout", 1006],
+    ["cancel", 1013],
+    ["manual", 1013],
+    ["timeout", 1013],
+  ] as const)(
+    "%s takes priority over a late close-only %s snapshot",
+    async (mode, code) => {
       class AbnormalOnClose extends ControllableSocket {
         override close(): void {
-          this.disconnect(1006, false);
+          this.disconnect(code, code !== 1006);
         }
       }
       const record = scriptedBalancer([{ endpoint: PRIMARY }]);
@@ -887,6 +935,60 @@ describe("web socket endpoint balancer", () => {
     expect(record.pending()).toBe(0);
   });
 
+  test.each([
+    {
+      name: "an unanswered heartbeat as an unreachable endpoint",
+      message: (): unknown => "ping",
+      reason: "WebSocket heartbeat timeout",
+      done: { attempted: true, code: "NET_UNREACHABLE" },
+    },
+    {
+      name: "a throwing heartbeat message as neutral",
+      message: (): unknown => {
+        throw new Error("local heartbeat failed");
+      },
+      reason: "local heartbeat failed",
+      done: { attempted: true },
+    },
+    {
+      name: "an unserializable heartbeat message as neutral",
+      message: (): unknown => Number.POSITIVE_INFINITY,
+      reason: "is not JSON data: Infinity",
+      done: { attempted: true },
+    },
+  ])("reports $name", async ({ message, reason, done }) => {
+    vi.useFakeTimers({
+      toFake: [
+        "setTimeout",
+        "clearTimeout",
+        "setInterval",
+        "clearInterval",
+        "Date",
+        "performance",
+      ],
+    });
+    const record = scriptedBalancer([{ endpoint: PRIMARY }]);
+    const pending = pinged(
+      clientFor(record.balancer)({
+        heartbeat: { intervalMs: 10, message, timeoutMs: 20 },
+      }),
+    );
+    await flush();
+    socketAt(0).open();
+    const [, session] = await pending;
+    if (!session) throw new Error("expected session");
+    expect(record.dones).toEqual([]);
+    await vi.advanceTimersByTimeAsync(30);
+    const closed = await session.closed;
+    expect(closed.kind).toBe("error");
+    if (closed.kind !== "error") throw new Error("expected error close");
+    expect(closed.cause).toBeInstanceOf(Error);
+    expect(String(closed.cause)).toContain(reason);
+    expect(record.dones).toEqual([done]);
+    expect(record.ends).toEqual([{ attempted: true }]);
+    expect(record.pending()).toBe(0);
+  });
+
   test("keeps an observed abnormal close sample if the draining message pump later overflows", async () => {
     const bytes = Promise.withResolvers<ArrayBuffer>();
     const read = vi.fn(() => bytes.promise);
@@ -928,7 +1030,7 @@ describe("web socket endpoint balancer", () => {
   });
 
   test("default health filtering receives close-only failures and breaks after five samples", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime(0);
     const picked: string[] = [];
     const dones: DoneInfo[] = [];

@@ -433,7 +433,7 @@
     "slug": "core/withssereconnect",
     "source": "packages/core/src/client/option.ts",
     "group": "client",
-    "description": "Configures automatic reconnection after an SSE stream fails.\n\nReconnection is opt-in: without this option a failed stream is not retried. Passing `undefined` clears an earlier setting.\n\n```ts\ntype SSEReconnect = {\n  attempts?: number;\n  delayMs?: number;\n  factor?: number;\n  jitter?: number;\n  maxDelayMs?: number;\n  shouldReconnect?: (context: {\n    attempt: number;\n    cause?: unknown;\n    lastEventId: string;\n    method: string;\n    open?: {\n      response: { status: number; statusText: string; url: string };\n      url: string;\n    };\n  }) => boolean | Promise<boolean>;\n};\n```\n\n- `attempts` is the retry budget for each outage. It defaults to `3` when `reconnect` is set, and `0` disables retries. A successful handshake resets the budget, callback `attempt`, and backoff exponent. Omitting it does not give unlimited retries within one outage. Repeated successful opens followed immediately by retryable stream failures can keep reconnecting at the current base delay (subject to jitter and caps), because each open resets the budget; use `shouldReconnect` to stop them. Normal EOF remains terminal.\n- Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect. With it, its result decides for every method, `POST` included; `method` in the context tells endpoints apart. Return `false` to stop for this failure. It runs before the attempts limit is checked.\n- A request with a `ReadableStream` body never reconnects, and `shouldReconnect` is not called for it.\n- `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.\n- `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.\n- An `id:` field updates a buffer. The reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message; a stream ending before that blank line leaves it unchanged. The committed ID is sent as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it at that blank line; an ID containing NUL is ignored.\n- `connectTimeoutMs` optionally bounds each handshake, is finite and positive, must not exceed `2_147_483_647` ms, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.\n- Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs. The seven fields are copied when this option is applied, and `shouldReconnect` keeps its identity. `undefined` clears an earlier policy. A getter runs then, once, and its exception escapes `createClient`.",
+    "description": "Configures automatic reconnection after an SSE stream fails.\n\nReconnection is opt-in: without this option a failed stream is not retried. Passing `undefined` clears an earlier setting.\n\n```ts\ntype SSEReconnect = {\n  attempts?: number;\n  delayMs?: number;\n  factor?: number;\n  jitter?: number;\n  maxDelayMs?: number;\n  shouldReconnect?: (context: {\n    attempt: number;\n    cause?: unknown;\n    lastEventId: string;\n    method: string;\n    open?: {\n      response: { status: number; statusText: string; url: string };\n      url: string;\n    };\n  }) => boolean | Promise<boolean>;\n};\n```\n\n- `attempts` is the retry budget for each outage. It defaults to `3` when `reconnect` is set, and `0` disables retries. A successful handshake resets the budget, callback `attempt`, and backoff exponent. Omitting it does not give unlimited retries within one outage. Repeated successful opens followed immediately by retryable stream failures can keep reconnecting at the current base delay (subject to jitter and caps), because each open resets the budget; use `shouldReconnect` to stop them. Normal EOF remains terminal.\n- Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect. With it, its result decides for every method, `POST` included; `method` in the context tells endpoints apart. Return `false` to stop for this failure. It runs before the attempts limit is checked.\n- A request with a `ReadableStream` body never reconnects, and `shouldReconnect` is not called for it.\n- A handshake answered with 502, 503, or 504 is retried like a refused connection, under the same rules; other non-2xx handshakes are fatal. Exhausted retries end with `HTTP_STATUS`.\n- `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.\n- `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.\n- An `id:` field updates a buffer. The reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message; a stream ending before that blank line leaves it unchanged. The committed ID is sent as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it at that blank line; an ID containing NUL is ignored.\n- `connectTimeoutMs` optionally bounds each handshake, is finite and positive, must not exceed `2_147_483_647` ms, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.\n- Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs. The seven fields are copied when this option is applied, and `shouldReconnect` keeps its identity. `undefined` clears an earlier policy. A getter runs then, once, and its exception escapes `createClient`.",
     "signatures": [
       "function withSSEReconnect(\n  options: ClientSSEOptions[\"reconnect\"],\n): ClientOption;"
     ],
@@ -617,7 +617,7 @@
     "slug": "core/withwebsocketheartbeat",
     "source": "packages/core/src/client/option.ts",
     "group": "client",
-    "description": "Enables WebSocket heartbeat messages with optional acknowledgement detection.\n\nPassing `undefined` clears an earlier setting. The option type is:\n\n```ts\n{\n  intervalMs: number\n  isAck?: (message: unknown) => boolean\n  message?: <T = unknown>() => T | unknown\n  timeoutMs?: number\n}\n```\n\n- Every `intervalMs`, `message()` is called and its result is sent through the endpoint's `outgoing` struct. No message is sent when `message` is omitted or returns `undefined`.\n- With `timeoutMs`, an acknowledgement is expected after each heartbeat. `isAck` receives the decoded incoming message; when it returns `true`, the timer is cleared and that message is **not** delivered to `receive`.\n- If no ack arrives within `timeoutMs`, or a heartbeat cannot be sent, the session fails. This does not trigger a reconnect.\n- Heartbeat uses the same JSON guard as `session.send`: a value JSON cannot represent after struct encoding causes `TypeError` and ends the logical session.\n- `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`; otherwise the operation fails with `REQ_OPTIONS_INVALID`.\n- A `heartbeat` in the request options replaces this one for that call.\n- `intervalMs`, `isAck`, `message`, and `timeoutMs` are copied when this option is applied. `message` and `isAck` keep their identity. A missing value stays missing; `undefined` clears an earlier heartbeat. A getter runs at that moment and its exception escapes `createClient`. Numeric checks still run when the operation starts.",
+    "description": "Enables WebSocket heartbeat messages with optional acknowledgement detection.\n\nPassing `undefined` clears an earlier setting. The option type is:\n\n```ts\n{\n  intervalMs: number\n  isAck?: (message: unknown) => boolean\n  message?: <T = unknown>() => T | unknown\n  timeoutMs?: number\n}\n```\n\n- Every `intervalMs`, `message()` is called and its result is sent through the endpoint's `outgoing` struct. No message is sent when `message` is omitted or returns `undefined`.\n- With `timeoutMs`, an acknowledgement is expected after each heartbeat. `isAck` receives the decoded incoming message; when it returns `true`, the timer is cleared and that message is **not** delivered to `receive`.\n- If no ack arrives within `timeoutMs`, or a heartbeat cannot be sent, the session fails. This does not trigger a reconnect. A missing ack is reported to the balancer as `NET_UNREACHABLE`; a heartbeat that cannot be sent is a local failure and is not attributed to the endpoint.\n- Heartbeat uses the same JSON guard as `session.send`: a value JSON cannot represent after struct encoding causes `TypeError` and ends the logical session.\n- `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`; otherwise the operation fails with `REQ_OPTIONS_INVALID`.\n- A `heartbeat` in the request options replaces this one for that call.\n- `intervalMs`, `isAck`, `message`, and `timeoutMs` are copied when this option is applied. `message` and `isAck` keep their identity. A missing value stays missing; `undefined` clears an earlier heartbeat. A getter runs at that moment and its exception escapes `createClient`. Numeric checks still run when the operation starts.",
     "signatures": [
       "function withWebSocketHeartbeat(\n  options: ClientWebSocketOptions[\"heartbeat\"],\n): ClientOption;"
     ],
@@ -1102,7 +1102,7 @@
     "slug": "core/clientsseoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Optional SSE settings applied when creating a client: fetch handle, invalid-event hook, and reconnect policy.\n\n- **handle** — Fetch implementation that opens the stream. The default resolves `globalThis.fetch` on each attempt, including replacements installed after import. Every SSE handle receives a `Request`. Missing global Fetch fails default execution with `ENV_UNSUPPORTED`; a custom handle remains usable.\n- **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.\n- **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. An `id:` field updates a buffer; the reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message. A stream ending before that blank line leaves the cursor unchanged. Reconnect sends the committed ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it at that blank line and an ID containing NUL is ignored.\n\nReconnect options are validated before interceptors or Fetch: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs.\n\nSet these with `withSSEHandle`, `withSSEOnInvalidEvent`, and `withSSEReconnect`. Omitting `withSSEReconnect` disables retry.",
+    "description": "Optional SSE settings applied when creating a client: fetch handle, invalid-event hook, and reconnect policy.\n\n- **handle** — Fetch implementation that opens the stream. The default resolves `globalThis.fetch` on each attempt, including replacements installed after import. Every SSE handle receives a `Request`. Missing global Fetch fails default execution with `ENV_UNSUPPORTED`; a custom handle remains usable.\n- **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.\n- **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. A 502, 503, or 504 handshake is retried like a refused connection; other non-2xx handshakes are fatal. An `id:` field updates a buffer; the reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message. A stream ending before that blank line leaves the cursor unchanged. Reconnect sends the committed ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it at that blank line and an ID containing NUL is ignored.\n\nReconnect options are validated before interceptors or Fetch: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs.\n\nSet these with `withSSEHandle`, `withSSEOnInvalidEvent`, and `withSSEReconnect`. Omitting `withSSEReconnect` disables retry.",
     "signatures": [
       "interface ClientSSEOptions {\n  handle?: FetchHandle;\n  onInvalidEvent?: (context: {\n    reason: \"missing-struct\" | \"validation-failed\";\n    message: { id: string; event: string; data: string };\n    cause?: unknown;\n    signal: AbortSignal;\n  }) => unknown;\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      lastEventId: string;\n      method: string;\n      open?: {\n        response: { status: number; statusText: string; url: string };\n        url: string;\n      };\n    }) => boolean | Promise<boolean>;\n  };\n}"
     ],
@@ -1210,7 +1210,7 @@
     "slug": "core/clientwebsocketoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Optional WebSocket settings applied when creating a client: constructor, `beforeConnect` hook, heartbeat, protocols, and reconnect policy.\n\n- **handle** — WebSocket constructor; defaults to `globalThis.WebSocket`.\n- **beforeConnect** — Runs before each connect and reconnect attempt.\n- **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement marks the connection unhealthy. `intervalMs` and `timeoutMs` must be positive and at most 2147483647.\n- **protocols** — Subprotocols passed to the constructor.\n- **reconnect** — Opt-in. `attempts` defaults to **3**; `0` disables retry, and omitting `attempts` is not unlimited. Other defaults: `delayMs` 1000, `factor` 2, `jitter` 0 (a 0-1 multiplicative factor), `maxDelayMs` 30000. `shouldReconnect` receives the close `code`, `reason`, and `wasClean` and can veto a retry.\n\nThe retry budget applies per outage. Successful `open` resets the budget, callback attempt, and backoff exponent; the next outage starts at retry 1. `maxDelayMs` caps the final delay after jitter and rounding, also bounded by `2_147_483_647` ms. See {@link withWebSocketReconnect} for validation rules and overflow behavior.\n\nSet these with `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols`, and `withWebSocketReconnect`. `WebSocketExecuteOptions` can override `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` per call.",
+    "description": "Optional WebSocket settings applied when creating a client: constructor, `beforeConnect` hook, heartbeat, protocols, and reconnect policy.\n\n- **handle** — WebSocket constructor; defaults to `globalThis.WebSocket`.\n- **beforeConnect** — Runs before each connect and reconnect attempt.\n- **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement fails the session and reports `NET_UNREACHABLE` to the balancer. `intervalMs` and `timeoutMs` must be positive and at most 2147483647.\n- **protocols** — Subprotocols passed to the constructor.\n- **reconnect** — Opt-in. `attempts` defaults to **3**; `0` disables retry, and omitting `attempts` is not unlimited. Other defaults: `delayMs` 1000, `factor` 2, `jitter` 0 (a 0-1 multiplicative factor), `maxDelayMs` 30000. `shouldReconnect` receives the close `code`, `reason`, and `wasClean` and can veto a retry.\n\nThe retry budget applies per outage. Successful `open` resets the budget, callback attempt, and backoff exponent; the next outage starts at retry 1. `maxDelayMs` caps the final delay after jitter and rounding, also bounded by `2_147_483_647` ms. See {@link withWebSocketReconnect} for validation rules and overflow behavior.\n\nSet these with `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols`, and `withWebSocketReconnect`. `WebSocketExecuteOptions` can override `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` per call.",
     "signatures": [
       "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: {\n    intervalMs: number;\n    isAck?: (message: unknown) => boolean;\n    // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- INTENT: preserve the original generic callback text and explicit message<T>() calls\n    message?: <T = unknown>() => T | unknown;\n    timeoutMs?: number;\n  };\n  protocols?: readonly string[];\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      code?: number;\n      reason?: string;\n      wasClean?: boolean;\n    }) => boolean;\n  };\n}"
     ],
@@ -6562,7 +6562,7 @@
     "slug": "core/eventstreamcloseinfo-type",
     "source": "packages/core/src/sse/transport/event_stream.ts",
     "group": "sse",
-    "description": "How an SSE stream ended: clean EOF, abort, or an error carrying its fault `code`.\n\nThe discriminant is `kind` so that `code` can mean the same thing it means on a fault.\n\nThe value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error.",
+    "description": "How an SSE stream ended: clean EOF, abort, or an error carrying its fault `code`.\n\nThe discriminant is `kind` so that `code` can mean the same thing it means on a fault.\n\nThe value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake.",
     "signatures": [
       "type EventStreamCloseInfo =\n  | (EventStreamCloseInfoBase & { kind: \"eof\" })\n  | (EventStreamCloseInfoBase & { kind: \"aborted\" })\n  | (EventStreamCloseInfoBase & { code: EventStreamFaultCode; kind: \"error\" });"
     ],
@@ -7339,7 +7339,7 @@
     "slug": "core/websocketheartbeatconfig-type",
     "source": "packages/core/src/web_socket/web_socket.ts",
     "group": "web-socket",
-    "description": "Heartbeat ping and acknowledgement settings for a live WebSocket session.\n\n- `intervalMs` is the delay between heartbeat messages.\n\n- `message()` builds the payload. It is sent through the `outgoing` struct. Nothing is sent when it is omitted or returns `undefined`.\n\n- After struct encoding, non-JSON values fail with `TypeError` through the same serializer as `session.send`; that heartbeat failure ends the logical session without reconnecting.\n\n- `isAck(message)` receives each decoded incoming message. When it returns `true`, the message is treated as the acknowledgement and is not delivered to `receive`.\n\n- `timeoutMs` is how long to wait for an acknowledgement after a heartbeat. Missing it fails the session.\n\n- `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`.\n\nSet it with {@link withWebSocketHeartbeat} or the `heartbeat` request option.",
+    "description": "Heartbeat ping and acknowledgement settings for a live WebSocket session.\n\n- `intervalMs` is the delay between heartbeat messages.\n\n- `message()` builds the payload. It is sent through the `outgoing` struct. Nothing is sent when it is omitted or returns `undefined`.\n\n- After struct encoding, non-JSON values fail with `TypeError` through the same serializer as `session.send`; that heartbeat failure ends the logical session without reconnecting.\n\n- `isAck(message)` receives each decoded incoming message. When it returns `true`, the message is treated as the acknowledgement and is not delivered to `receive`.\n\n- `timeoutMs` is how long to wait for an acknowledgement after a heartbeat. Missing it fails the session and reports `NET_UNREACHABLE` for the endpoint to the balancer. A throwing `message()` or a serialization failure also fails the session, but is not attributed to the endpoint.\n\n- `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`.\n\nSet it with {@link withWebSocketHeartbeat} or the `heartbeat` request option.",
     "signatures": [
       "interface WebSocketHeartbeatConfig<\n  TIncoming = unknown,\n  TOutgoing = unknown,\n> {\n  intervalMs: number;\n  isAck?: (message: TIncoming) => boolean;\n  message?: () => TOutgoing;\n  timeoutMs?: number;\n}"
     ],
@@ -8421,9 +8421,9 @@
     "slug": "core/eventstreamfaultcode-type",
     "source": "packages/core/src/sse/transport/event_stream.ts",
     "group": "sse",
-    "description": "Fault codes an event stream can end with, drawn from the one shared `FaultCode` namespace.\n\nA subset of the shared `FaultCode` set. It is the `code` of an `EventStreamCloseInfo` with `kind: 'error'`.\n`REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened. They stay those codes; they are not rewritten to `NET_UNREACHABLE`.",
+    "description": "Fault codes an event stream can end with, drawn from the one shared `FaultCode` namespace.\n\nA subset of the shared `FaultCode` set. It is the `code` of an `EventStreamCloseInfo` with `kind: 'error'`.\n`REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened. They stay those codes; they are not rewritten to `NET_UNREACHABLE`.\n`HTTP_STATUS` means a reconnect handshake answered with a non-2xx status; `cause` is then the same `HTTP_STATUS` fault a failed first handshake returns.",
     "signatures": [
-      "type EventStreamFaultCode = Extract<\n  FaultCode,\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"CAP_QUEUE_OVERFLOW\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_OPTIONS_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n>;"
+      "type EventStreamFaultCode = Extract<\n  FaultCode,\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"CAP_QUEUE_OVERFLOW\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_OPTIONS_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n>;"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8434,7 +8434,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type EventStreamFaultCode = Extract<\n  FaultCode,\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"CAP_QUEUE_OVERFLOW\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_OPTIONS_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n>;",
+        "signature": "type EventStreamFaultCode = Extract<\n  FaultCode,\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"CAP_QUEUE_OVERFLOW\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_OPTIONS_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n>;",
         "parameters": [],
         "returns": []
       }
@@ -8516,7 +8516,7 @@
     "slug": "core/balancer-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Chooses one endpoint for a call.\n\n`pick` is synchronous and returns an error-first tuple. It does not throw\nfor an empty candidate list or for invalid factory options. Built-in\nfactories record invalid options at construction and return that error from\nevery later `pick`. A selected endpoint must belong to the candidates supplied\nto that pick; foreign selections become `REQ_BUILD_FAILED`.",
+    "description": "Chooses one endpoint for a call.\n\n`pick` is synchronous and returns an error-first tuple. It does not throw\nfor an empty candidate list or for invalid factory options. Built-in\nfactories record invalid options at construction and return that error from\nevery later `pick`. A selected endpoint must belong to the candidates supplied\nto that pick; a foreign selection becomes `REQ_BUILD_FAILED`, and its `done`\nis called with `{ attempted: false }`.",
     "signatures": [
       "interface Balancer {\n  pick(info: PickInfo): PickOutcome;\n}"
     ],
@@ -8578,9 +8578,9 @@
     "slug": "core/pickinfo-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "What the runtime tells `pick` about this call.\n\n`endpoints` is the candidate list in first-seen order. It may be empty and\nmust not be modified. An empty list returns `[ERR_NO_CANDIDATE, undefined]`.",
+    "description": "What the runtime tells `pick` about this call.\n\n`endpoints` is the candidate list in first-seen order. It may be empty and\nmust not be modified. An empty list returns `[ERR_NO_CANDIDATE, undefined]`.\nA retried HTTP call leaves out the endpoints it already tried, and a wrapping\nbalancer can leave out endpoints it filtered, so the list can shrink between\nattempts of one call.\n\n`members` is the client's whole endpoint list, the same for every attempt.\nA narrower `endpoints` is a per-pick filter, not a membership change, so\nbalancers that keep order or per-endpoint state key it on `members`.",
     "signatures": [
-      "interface PickInfo {\n  readonly endpoints: readonly string[];\n  readonly operation?: string;\n}"
+      "interface PickInfo {\n  readonly endpoints: readonly string[];\n  readonly members?: readonly string[];\n  readonly operation?: string;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8590,10 +8590,19 @@
     "typeTable": [
       {
         "name": "endpoints",
-        "description": "Candidate endpoints. Already deduplicated by first occurrence. Do not modify.",
+        "description": "Candidate endpoints for this pick. Already deduplicated by first occurrence. Do not modify.",
         "type": "readonly string[]",
         "simplifiedType": "array",
         "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "members",
+        "description": "Every client endpoint, a superset of `endpoints`. Absent means `endpoints`. Do not modify.",
+        "type": "readonly string[] | undefined",
+        "simplifiedType": "array",
+        "required": false,
         "deprecated": false,
         "tags": []
       },
@@ -8610,7 +8619,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface PickInfo {\n  readonly endpoints: readonly string[];\n  readonly operation?: string;\n}",
+        "signature": "interface PickInfo {\n  readonly endpoints: readonly string[];\n  readonly members?: readonly string[];\n  readonly operation?: string;\n}",
         "parameters": [],
         "returns": []
       }
@@ -8686,7 +8695,7 @@
     "slug": "core/pickfaultcode-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Neutral attempt outcome codes observed through `end` and `done`.\n\n`end` reports the beginning of a peer response; later failures can still give\n`done` a different `code`. Unavailability and server failures describe a peer\nthat answered, while unreachable and timeout outcomes describe transport failures.\nNormal completion and application errors do not themselves create failure samples.\n\nTransport mapping: HTTP and SSE statuses 502, 503, and 504 map to\n`NET_UNAVAILABLE`; other statuses at least 500 map to `NET_SERVER_ERROR`.\nIncomplete HTTP bodies retain `NET_BODY_INCOMPLETE` and their status.\nAn SSE body-read rejection or an opened WebSocket's close code 1006 or\nstrictly false `wasClean` maps to `NET_UNREACHABLE`, without a status,\nunless timeout or cancellation takes priority.",
+    "description": "Neutral attempt outcome codes observed through `end` and `done`.\n\n`end` reports the beginning of a peer response; later failures can still give\n`done` a different `code`. Unavailability and server failures describe a peer\nthat answered, while unreachable and timeout outcomes describe transport failures.\nNormal completion and application errors do not themselves create failure samples.\n\nTransport mapping: HTTP and SSE statuses 502, 503, and 504 map to\n`NET_UNAVAILABLE`; other statuses at least 500 map to `NET_SERVER_ERROR`.\nIncomplete HTTP bodies retain `NET_BODY_INCOMPLETE` and their status.\nAn SSE body-read rejection, a WebSocket heartbeat acknowledgement timeout,\nor an opened WebSocket's close code 1006 or 1015 (no close frame arrived)\nmaps to `NET_UNREACHABLE`, without a status; a WebSocket close frame with\n1012 or 1013 maps to `NET_UNAVAILABLE`, even when the engine dispatched no\n`open` event before it; both unless timeout or cancellation takes priority.\nOther close codes are not failures, whatever `wasClean` reports: engines\ndisagree on it for a server-initiated close.",
     "signatures": [
       "type PickFaultCode =\n  | \"NET_UNREACHABLE\"\n  | \"NET_UNAVAILABLE\"\n  | \"NET_SERVER_ERROR\"\n  | \"NET_TIMEOUT\"\n  | \"NET_BODY_INCOMPLETE\";"
     ],
@@ -8834,11 +8843,11 @@
     "slug": "core/pickfirstbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first candidate until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following candidate and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter candidate list. The default is\n`false`. Shuffle history keeps at most 256 endpoints in least-recently-used\norder; a forgotten endpoint gets a new random key when it returns.\n\n`failbackMs`, when finite and positive, permits one concurrent probe of the\nfirst candidate only after that interval away from it and at least one alternate\nselection since leaving it. A successful probe restores the first; an advance\noutcome restarts the interval and requires a fresh alternate selection before\nanother primary probe, even if reconnect backoff exceeds `failbackMs`.\nUnattributed probes only release the probe slot. No background timer is created.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health callback.",
+    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first endpoint until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following endpoint and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\nOrder and the sticky endpoint follow `members`. When the sticky endpoint is\nnot among this pick's `endpoints`, as on an HTTP retry, the pick takes the\nnext candidate after it in member order without moving it, so a retry never\nchanges where later calls go. Only a sticky endpoint missing from `members`\nresets the order to the first.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter endpoint list. The default is\n`false`. Shuffle history keeps at least 256 endpoints, and at least the\ncurrent members, in least-recently-used order; a forgotten endpoint gets a new\nrandom key when it returns.\n\n`failbackMs`, when finite and positive, permits one concurrent probe of the\nfirst endpoint only after that interval away from it and at least one alternate\nselection since leaving it. The probe is decided when the peer response begins\n(`end`), so a long-lived stream releases it at its handshake; `done` decides a\nprobe that never reached `end`. A successful probe restores the first; an advance\noutcome restarts the interval and requires a fresh alternate selection before\nanother primary probe, even if reconnect backoff exceeds `failbackMs`.\nUnattributed probes only release the probe slot. No background timer is created.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health callback.",
     "signatures": [
       "function pickFirstBalancer(options?: PickFirstOptions): Balancer;"
     ],
-    "related": [],
+    "related": ["@defjs/core:PickFirstOptions"],
     "exampleFiles": [],
     "returns": ["A new balancer. Each call has its own sticky endpoint."],
     "throws": [],
@@ -8875,16 +8884,70 @@
   },
   {
     "package": "@defjs/core",
+    "name": "PickFirstOptions",
+    "kind": "type",
+    "slug": "core/pickfirstoptions-type",
+    "source": "packages/core/src/balancer/balancer.ts",
+    "group": "client",
+    "description": "Options for {@link pickFirstBalancer}.",
+    "signatures": [
+      "interface PickFirstOptions {\n  readonly outlierDetection?: OutlierDetectionOptions | false;\n  readonly shuffle?: boolean;\n  readonly failbackMs?: number;\n}"
+    ],
+    "related": ["@defjs/core:pickFirstBalancer"],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "outlierDetection",
+        "description": "Health filtering around the sticky order; off by default. `{}` enables the defaults.",
+        "type": "false | OutlierDetectionOptions | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "shuffle",
+        "description": "Random but stable endpoint order instead of list order; defaults to `false`.",
+        "type": "boolean | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "failbackMs",
+        "description": "Finite positive interval before one probe of the first endpoint after leaving it; unset disables failback.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface PickFirstOptions {\n  readonly outlierDetection?: OutlierDetectionOptions | false;\n  readonly shuffle?: boolean;\n  readonly failbackMs?: number;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
     "name": "roundRobinBalancer",
     "kind": "function",
     "slug": "core/roundrobinbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. A missing weight is 1. Weights for\nendpoints not in the list are ignored. Current values for endpoints that\nleft the list are dropped in O(candidate count) work per pick. Extreme weights\nare scaled to avoid overflow; ratios below floating-point precision may round\nto zero. Finite positive weights never produce a non-candidate selection.\n\nHealth filtering is enabled by default: five consecutive attributed failures\neject an endpoint temporarily. Set `outlierDetection: false` to disable it;\nonly those unfiltered successful picks omit `done`. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
+    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. Members left out of this pick's\ncandidates keep their current value, as nginx skips a peer that is down. A\nmissing weight is 1. Weights for endpoints not in the list are ignored.\nCurrent values for endpoints that left the members are dropped in\nO(member count) work per pick. Extreme weights\nare scaled to avoid overflow; ratios below floating-point precision may round\nto zero. Finite positive weights never produce a non-candidate selection.\n\nHealth filtering is enabled by default: five consecutive attributed failures\neject an endpoint temporarily. Set `outlierDetection: false` to disable it;\nonly those unfiltered successful picks omit `done`. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
     "signatures": [
       "function roundRobinBalancer(options?: RoundRobinOptions): Balancer;"
     ],
-    "related": [],
+    "related": ["@defjs/core:RoundRobinOptions"],
     "exampleFiles": [],
     "returns": [
       "A new balancer. Each call has its own counter and weight state."
@@ -8920,6 +8983,51 @@
         "returns": [
           "A new balancer. Each call has its own counter and weight state."
         ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RoundRobinOptions",
+    "kind": "type",
+    "slug": "core/roundrobinoptions-type",
+    "source": "packages/core/src/balancer/balancer.ts",
+    "group": "client",
+    "description": "Options for {@link roundRobinBalancer}.",
+    "signatures": [
+      "interface RoundRobinOptions {\n  readonly outlierDetection?: OutlierDetectionOptions | false;\n  readonly weights?: ReadonlyMap<string, number>;\n}"
+    ],
+    "related": ["@defjs/core:roundRobinBalancer"],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "outlierDetection",
+        "description": "Health filtering; enabled with defaults when omitted. `false` disables it.",
+        "type": "false | OutlierDetectionOptions | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "weights",
+        "description": "Finite positive weight per endpoint; a missing weight is 1. Copied at construction.",
+        "type": "ReadonlyMap<string, number> | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface RoundRobinOptions {\n  readonly outlierDetection?: OutlierDetectionOptions | false;\n  readonly weights?: ReadonlyMap<string, number>;\n}",
+        "parameters": [],
+        "returns": []
       }
     ]
   },
@@ -9054,7 +9162,7 @@
     "slug": "core/retryoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Opt-in same-call HTTP retry policy. Omitted fields use defaults.\n\nCall {@link withRetry}() or pass `{}` to enable retries. Omission disables retries\nand creates no retry budget. Streaming request bodies are\nnever replayed. Invalid options return `REQ_OPTIONS_INVALID` at HTTP execution.",
+    "description": "Opt-in same-call HTTP retry policy. Omitted fields use defaults.\n\nCall {@link withRetry}() or pass `{}` to enable retries. Omission disables retries\nand creates no retry budget. Streaming request bodies are\nnever replayed. Invalid options return `REQ_OPTIONS_INVALID` at HTTP execution.\nWhen a retry cannot use any endpoint — the balancer's pick fails or the next\nendpoint's URL does not resolve — the call returns the previous attempt's fault.",
     "signatures": [
       "interface RetryOptions {\n  readonly maxAttempts?: number;\n  readonly on?: readonly RetryCondition[];\n  readonly methods?: readonly string[];\n  readonly attemptTimeoutMs?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly jitter?: number;\n  readonly maxDelayMs?: number;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}"
     ],
@@ -9099,7 +9207,7 @@
       },
       {
         "name": "attemptTimeoutMs",
-        "description": "Positive finite timeout from Fetch invocation through body reading and decoding, per attempt; at most `2_147_483_647` ms.",
+        "description": "Positive finite timeout for each Fetch sent to the selected endpoint, from\ninvocation until its response body has been read; at most `2_147_483_647` ms.\nInterceptor work around the send and struct decoding are not timed, so local\ndelays never count against the endpoint.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9249,7 +9357,7 @@
     "slug": "core/outlierdetection",
     "source": "packages/core/src/balancer/outlier_detection.ts",
     "group": "client",
-    "description": "Wraps a strategy with Linkerd-style consecutive-failure circuit breaking.\nFive attributed failures break an endpoint by default. Penalties start at 1s,\ndouble after failed probes, add uniform positive jitter of up to 0.5 times the\nbase, and cap at 60s. A successful probe resets the backoff. Expiry admits one\nprobe, decided at `end` (the peer response begins), as in Finagle.\n`done` without `end` decides the probe instead; later done is an ordinary sample.\nNET_UNREACHABLE, NET_UNAVAILABLE, and NET_SERVER_ERROR fail by default,\nnot timeouts or incomplete bodies.\nActive true cannot cancel a penalty. Empty candidates first ignore active checks,\nthen fall back to the original current list (Finagle panic mode). Unlike Envoy\nand gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer\nis created. Configuration is captured at construction.\nHistory is capped at 256 endpoints, shared across candidate lists. LRU clean\nor expired states are evicted first, then partial failure sequences, then\nthe oldest protected state only if every retained endpoint is penalised or has a probe in flight. Temporary\ncandidate exclusion does not itself erase a penalty or an in-flight probe.",
+    "description": "Wraps a strategy with Linkerd-style consecutive-failure circuit breaking.\nFive attributed failures break an endpoint by default. Penalties start at 1s,\ndouble after failed probes, add uniform positive jitter of up to 0.5 times the\nbase, and cap at 60s. A successful probe resets the backoff. Expiry admits one\nprobe, decided at `end` (the peer response begins), as in Finagle.\n`done` without `end` decides the probe instead; later done is an ordinary sample.\nEvery classified failure code fails by default, including NET_TIMEOUT and\nNET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection\ncount timeouts and resets. An attempted outcome without a code resets the\nstreak; unattributed attempts and discarded samples leave it unchanged.\nThe child receives the filtered candidates as `endpoints` and the unfiltered\n`members`, so ejection does not look like a membership change to it. Active\ntrue cannot cancel a penalty. Empty candidates first ignore active checks,\nthen fall back to the original current list (Finagle panic mode). Unlike Envoy\nand gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer\nis created. Configuration is captured at construction.\nHistory holds at least 256 endpoints, and at least the current list, shared\nacross endpoint lists. LRU clean\nor expired states are evicted first, then partial failure sequences, then\nthe oldest protected state only if every retained endpoint is penalised or has a probe in flight. Temporary\ncandidate exclusion does not itself erase a penalty or an in-flight probe.",
     "signatures": [
       "function outlierDetection(\n  child: Balancer,\n  options?: OutlierDetectionOptions,\n): Balancer;"
     ],
@@ -9321,9 +9429,10 @@
     "slug": "core/p2cbalancer",
     "source": "packages/core/src/balancer/p2c.ts",
     "group": "client",
-    "description": "Samples candidates without replacement and selects the least loaded draw.\n\nDefaults to two choices and PeakEwma load: decaying RTT times (pending + 1).\n`load: \"pending\"` selects the fewest in-flight attempts in the sample. Ties\nfavor the first draw. `choiceCount` is an integer at least 2, capped at 10.\n`defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be\npositive and finite. Pending starts at transport `start` and releases at `end`,\nthe beginning of a peer response (tower CompleteOnResponse).\nRTT is the real start-to-end duration for every transport, including failures.\nHigher samples replace the estimate; lower samples blend exponentially, as in\ntower PeakEwma. Idle estimates decay toward zero. A done without end releases\npending without creating a sample. Health filtering, enabled by default, breaks\nquickly failing endpoints; there is no synthetic failure penalty.\nUnlike Envoy and gRPC A48, draws are without replacement.\nLoad history keeps at most 256 endpoints in LRU order, evicting idle entries\nfirst; an in-flight entry is evicted only if all retained entries are busy.\nEvicted endpoints restart from the configured initial estimate.",
+    "description": "Samples candidates without replacement and selects the least loaded draw.\n\nDefaults to two choices and PeakEwma load: decaying RTT times (pending + 1).\n`load: \"pending\"` selects the fewest in-flight attempts in the sample. Ties\nfavor the first draw. `choiceCount` is an integer at least 2, capped at 10.\n`defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be\npositive and finite. Pending is reserved when `pick` selects the endpoint, so\nconcurrent picks in one tick see each other, and releases at `end`, the\nbeginning of a peer response (tower CompleteOnResponse), or at `done` when no\nresponse began. RTT is the real start-to-end duration for every transport,\nincluding failures. Higher samples replace the estimate; lower samples blend\nexponentially, as in tower PeakEwma. Idle estimates decay toward zero. A done\nwithout end creates no sample. Health filtering, enabled by default, breaks\nquickly failing endpoints; there is no synthetic failure penalty.\nUnlike Envoy and gRPC A48, draws are without replacement.\nLoad history keeps at least 256 endpoints, and at least the current members, in\nLRU order, evicting idle entries first; an in-flight entry is evicted only if\nall retained entries are busy. Evicted endpoints restart from the configured\ninitial estimate.",
     "signatures": ["function p2cBalancer(options?: P2cOptions): Balancer;"],
     "related": [
+      "@defjs/core:P2cOptions",
       "@defjs/core:outlierDetection",
       "@defjs/core:roundRobinBalancer"
     ],
@@ -9362,6 +9471,78 @@
         "returns": [
           "A new independent balancer; invalid options are returned by every pick."
         ]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "P2cOptions",
+    "kind": "type",
+    "slug": "core/p2coptions-type",
+    "source": "packages/core/src/balancer/p2c.ts",
+    "group": "client",
+    "description": "Options for {@link p2cBalancer}.",
+    "signatures": [
+      "interface P2cOptions {\n  readonly load?: \"peakEwma\" | \"pending\";\n  readonly choiceCount?: number;\n  readonly defaultRttMs?: number;\n  readonly decayMs?: number;\n  readonly outlierDetection?: OutlierDetectionOptions | false;\n}"
+    ],
+    "related": ["@defjs/core:p2cBalancer"],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "load",
+        "description": "Load signal: `\"peakEwma\"` (default) or `\"pending\"` in-flight attempts.",
+        "type": "\"peakEwma\" | \"pending\" | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "choiceCount",
+        "description": "Integer at least 2, capped at 10; defaults to 2.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "defaultRttMs",
+        "description": "Positive finite initial RTT estimate in milliseconds; defaults to 30.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "decayMs",
+        "description": "Positive finite RTT decay time in milliseconds; defaults to 10000.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "outlierDetection",
+        "description": "Health filtering; enabled with defaults when omitted. `false` disables it.",
+        "type": "false | OutlierDetectionOptions | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface P2cOptions {\n  readonly load?: \"peakEwma\" | \"pending\";\n  readonly choiceCount?: number;\n  readonly defaultRttMs?: number;\n  readonly decayMs?: number;\n  readonly outlierDetection?: OutlierDetectionOptions | false;\n}",
+        "parameters": [],
+        "returns": []
       }
     ]
   }

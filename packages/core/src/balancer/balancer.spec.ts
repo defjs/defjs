@@ -270,6 +270,20 @@ describe("roundRobinBalancer", () => {
     expect(endpointOf(balancer, ["a", "b"])).toBe("b");
   });
 
+  test("keeps a member's current weight while one pick leaves it out", () => {
+    const balancer = roundRobinBalancer({
+      weights: new Map([
+        ["a", 1],
+        ["b", 3],
+      ]),
+    });
+    expect(endpointOf(balancer, ["a", "b"])).toBe("b");
+    expect(
+      balancer.pick({ endpoints: ["a"], members: ["a", "b"] })[1]?.endpoint,
+    ).toBe("a");
+    expect(endpointOf(balancer, ["a", "b"])).toBe("a");
+  });
+
   test("copies weights at construction", () => {
     const weights = new Map([
       ["a", 1],

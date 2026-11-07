@@ -552,7 +552,7 @@ describe("HTTP endpoint balancer", () => {
     expect(watched.dones).toEqual([{ attempted: false }]);
   });
 
-  test("drops a recorded status when the call ends as NET_TIMEOUT", async () => {
+  test("keeps the endpoint outcome when a timeout comes from interceptor work after the send settled", async () => {
     const live = await serve((_req, res) => {
       res.writeHead(200);
       res.end("ok");
@@ -577,8 +577,8 @@ describe("HTTP endpoint balancer", () => {
       expect(again?.code).toBe("NET_TIMEOUT");
       expect(live.hits).toEqual(["/", "/"]);
       expect(watched.dones).toEqual([
-        { attempted: true, code: "NET_TIMEOUT" },
-        { attempted: true, code: "NET_TIMEOUT" },
+        { attempted: true, status: 200 },
+        { attempted: true, status: 200 },
       ]);
     });
   });

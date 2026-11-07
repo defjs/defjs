@@ -1,7 +1,7 @@
 import { rememberEndpoint } from "./retention";
 import { monotonicNow } from "../internal/clock";
 import type { Balancer, DoneInfo } from "./balancer";
-import { balancerOptionError } from "./balancer";
+import { balancerOptionError, memberList } from "./balancer";
 import { ignoreRejection } from "./runtime";
 
 /**
@@ -32,13 +32,9 @@ interface HealthState {
   consecutive: number;
   probe: object | undefined;
 }
-/** Default classifier uses only neutral unavailability and server-failure outcomes. */
+/** Default classifier: every classified attempt failure, including timeouts and incomplete bodies. */
 export function defaultEndpointFailure(info: DoneInfo): boolean {
-  return (
-    info.code === "NET_UNREACHABLE" ||
-    info.code === "NET_UNAVAILABLE" ||
-    info.code === "NET_SERVER_ERROR"
-  );
+  return info.code !== undefined;
 }
 /** Invalid application classifiers discard samples. */
 export function classifyEndpointFailure(
@@ -60,13 +56,18 @@ export function classifyEndpointFailure(
  * base, and cap at 60s. A successful probe resets the backoff. Expiry admits one
  * probe, decided at `end` (the peer response begins), as in Finagle.
  * `done` without `end` decides the probe instead; later done is an ordinary sample.
- * NET_UNREACHABLE, NET_UNAVAILABLE, and NET_SERVER_ERROR fail by default,
- * not timeouts or incomplete bodies.
- * Active true cannot cancel a penalty. Empty candidates first ignore active checks,
+ * Every classified failure code fails by default, including NET_TIMEOUT and
+ * NET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection
+ * count timeouts and resets. An attempted outcome without a code resets the
+ * streak; unattributed attempts and discarded samples leave it unchanged.
+ * The child receives the filtered candidates as `endpoints` and the unfiltered
+ * `members`, so ejection does not look like a membership change to it. Active
+ * true cannot cancel a penalty. Empty candidates first ignore active checks,
  * then fall back to the original current list (Finagle panic mode). Unlike Envoy
  * and gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer
  * is created. Configuration is captured at construction.
- * History is capped at 256 endpoints, shared across candidate lists. LRU clean
+ * History holds at least 256 endpoints, and at least the current list, shared
+ * across endpoint lists. LRU clean
  * or expired states are evicted first, then partial failure sequences, then
  * the oldest protected state only if every retained endpoint is penalised or has a probe in flight. Temporary
  * candidate exclusion does not itself erase a penalty or an in-flight probe.
@@ -91,7 +92,7 @@ export function outlierDetection(
   const isFailure = options?.isFailure ?? defaultEndpointFailure;
   const isHealthy = options?.isHealthy;
   const states = new Map<string, HealthState>();
-  function stateFor(endpoint: string): HealthState {
+  function stateFor(endpoint: string, members: number): HealthState {
     let state = states.get(endpoint);
     if (state === undefined) {
       state = {
@@ -102,14 +103,20 @@ export function outlierDetection(
         probe: undefined,
       };
     }
-    rememberEndpoint(states, endpoint, state, (value) => {
-      if (
-        value.probe !== undefined ||
-        (value.phase === "broken" && monotonicNow() < value.until)
-      )
-        return 2;
-      return value.consecutive === 0 ? 0 : 1;
-    });
+    rememberEndpoint(
+      states,
+      endpoint,
+      state,
+      (value) => {
+        if (
+          value.probe !== undefined ||
+          (value.phase === "broken" && monotonicNow() < value.until)
+        )
+          return 2;
+        return value.consecutive === 0 ? 0 : 1;
+      },
+      members,
+    );
     return state;
   }
   function refresh(state: HealthState, now: number): void {
@@ -168,6 +175,7 @@ export function outlierDetection(
   return {
     pick(info) {
       const now = monotonicNow();
+      const members = memberList(info.members, info.endpoints);
       let eligible = info.endpoints.filter((endpoint) => {
         const state = states.get(endpoint);
         if (state === undefined) return true;
@@ -208,12 +216,16 @@ export function outlierDetection(
         candidates.length === info.endpoints.length
       )
         candidates = info.endpoints;
-      const outcome = child.pick({ ...info, endpoints: candidates });
+      const outcome = child.pick(
+        candidates === info.endpoints
+          ? info
+          : { ...info, endpoints: candidates, members },
+      );
       ignoreRejection(outcome);
       const [error, result] = outcome;
       if (error !== null) return [error, undefined];
       const state = candidates.includes(result.endpoint)
-        ? stateFor(result.endpoint)
+        ? stateFor(result.endpoint, members.length)
         : undefined;
       const probe =
         state?.phase === "probing" ? (state.probe ?? {}) : undefined;

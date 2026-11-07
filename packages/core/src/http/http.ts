@@ -302,6 +302,8 @@ type RetryAttempt = {
   info?: DoneInfo;
   replayable: boolean;
   timedOut: boolean;
+  /** No endpoint could be used: the pick failed or the selected URL did not resolve. */
+  unselected?: boolean;
 };
 
 async function executeHttpCommand<
@@ -364,6 +366,7 @@ async function executeHttpCommand<
   budget.deposit();
   const { maxAttempts, on, methods, attemptTimeoutMs } = policy;
   let candidates = clientConfig.endpoints;
+  let previous: HttpExecuteAwaitResult<TOutput, TError> | undefined;
   for (let index = 0; ; index++) {
     const state: RetryAttempt = { replayable: true, timedOut: false };
     const result = await executeHttpAttempt(
@@ -375,6 +378,9 @@ async function executeHttpCommand<
       state,
       attemptTimeoutMs,
     );
+    // A retry that could not use any endpoint has nothing new to report; the attempt that failed is the outcome.
+    if (previous !== undefined && state.unselected === true) return previous;
+    previous = result;
     const condition = retryCondition(state, result[0]);
     candidates = candidates.filter((endpoint) => endpoint !== state.endpoint);
     const sentMethods = state.methods ?? [definition.method];
@@ -542,13 +548,20 @@ async function executeHttpAttempt<
 
   const picked = pickEndpoint(clientConfig.balancer, {
     endpoints: candidates,
+    ...(candidates === clientConfig.endpoints
+      ? {}
+      : { members: clientConfig.endpoints }),
     operation: definition.operation,
   });
   if (picked[0] !== null) {
+    state.unselected = true;
     return stopBeforeTransport(picked[0]);
   }
   const resolved = picked[1];
-  let attemptTimer: ReturnType<typeof setTimeout> | undefined;
+  // Each send to the selected endpoint has its own timer; interceptor work and decoding are not timed.
+  const sendTimers = new Set<ReturnType<typeof setTimeout>>();
+  let sending = 0;
+  let abortedWhileSending = false;
   state.endpoint = resolved.endpoint;
 
   // One pick for every next(). The last matching attempt wins, even if an earlier one settles later.
@@ -595,6 +608,7 @@ async function executeHttpAttempt<
       const fault =
         resolveAbortFault(requestSignal) ??
         createPreflightFault("REQ_BUILD_FAILED", error);
+      if (error instanceof RequestUrlError) state.unselected = true;
       finish(fault);
       return stopBeforeTransport(fault);
     }
@@ -664,6 +678,16 @@ async function executeHttpAttempt<
       }
       if (isReadableStreamBody(nextRequest.body)) state.replayable = false;
       let started = false;
+      let sendTimer: ReturnType<typeof setTimeout> | undefined;
+      // Runs once: the fulfilled and rejected handlers below are exclusive.
+      const settleSend = () => {
+        if (!matches || !started) return;
+        sending -= 1;
+        if (sendTimer !== undefined) {
+          clearTimeout(sendTimer);
+          sendTimers.delete(sendTimer);
+        }
+      };
       const pending = fetchHandlerWithLifecycle(
         {
           ...nextRequest,
@@ -674,12 +698,16 @@ async function executeHttpAttempt<
           start() {
             started = true;
             (state.methods ??= []).push(nextRequest.method);
-            if (matches) resolved.start();
-            if (attemptTimeoutMs !== undefined && attemptTimer === undefined)
-              attemptTimer = setTimeout(() => {
+            if (!matches) return;
+            resolved.start();
+            sending += 1;
+            if (attemptTimeoutMs !== undefined) {
+              sendTimer = setTimeout(() => {
                 state.timedOut = true;
                 controller.abort(ERR_TIMEOUT);
               }, attemptTimeoutMs);
+              sendTimers.add(sendTimer);
+            }
           },
           response(response) {
             if (matches)
@@ -693,6 +721,7 @@ async function executeHttpAttempt<
       )
         .then(
           (settled) => {
+            settleSend();
             note({
               landed: true,
               info: {
@@ -704,6 +733,7 @@ async function executeHttpAttempt<
             return settled;
           },
           (error: unknown) => {
+            settleSend();
             const classified = classifyHttpAttempt(error, started);
             if (matches)
               resolved.end(
@@ -712,6 +742,7 @@ async function executeHttpAttempt<
                   createNetworkFault(
                     resolveAbortCause(transportAbort) ?? error,
                   ),
+                  true,
                 ),
               );
             note(classified);
@@ -731,6 +762,7 @@ async function executeHttpAttempt<
     };
 
     const abortTransport = () => {
+      abortedWhileSending = sending > 0;
       if (!transportController.signal.aborted) {
         transportController.abort(requestSignal.reason);
       }
@@ -892,8 +924,8 @@ async function executeHttpAttempt<
     finish(fault);
     return fail(fault);
   } finally {
-    clearTimeout(attemptTimer);
-    state.info = httpAttemptDone(attempt, finalFault);
+    for (const timer of sendTimers) clearTimeout(timer);
+    state.info = httpAttemptDone(attempt, finalFault, abortedWhileSending);
     resolved.done(state.info);
   }
 }
@@ -962,17 +994,24 @@ function classifyHttpAttempt(error: unknown, started: boolean): HttpAttempt {
  * Fold the transport note and the call's final fault into the one `done` report.
  *
  * No landed attempt is `{ attempted: false }`, including a timeout that fired
- * before fetch. A landed attempt whose call ends as `NET_TIMEOUT` drops any
- * status already noted. `NET_ABORTED` is never an attempt.
+ * before fetch. A call that ends as `NET_TIMEOUT` while a send to the endpoint
+ * was in flight reports `NET_TIMEOUT` and drops any status already noted; a
+ * timeout during interceptor work after the send settled keeps the endpoint's
+ * own outcome. `NET_ABORTED` is never an attempt.
  */
 function httpAttemptDone(
   attempt: HttpAttempt | undefined,
   fault: AnyFault | null | undefined,
+  abortedWhileSending: boolean,
 ): DoneInfo {
   if (fault?.code === "NET_ABORTED") {
     return { attempted: false };
   }
-  if (attempt?.landed === true && fault?.code === "NET_TIMEOUT") {
+  if (
+    attempt?.landed === true &&
+    fault?.code === "NET_TIMEOUT" &&
+    abortedWhileSending
+  ) {
     return { attempted: true, code: "NET_TIMEOUT" };
   }
   return attempt?.info ?? { attempted: false };

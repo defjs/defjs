@@ -158,11 +158,35 @@ test("state pruning forgets idle absent hosts but retains outstanding picks", ()
   held.end?.({ attempted: true });
   held.done?.({ attempted: true });
   const outstanding = pick(b, ["held"]);
-  const many = Array.from({ length: 257 }, (_, i) => `new${i}`);
-  pick(b, many).done?.({ attempted: false });
+  for (let group = 0; group < 26; group += 1) {
+    const fresh = Array.from({ length: 10 }, (_, i) => `new${group}-${i}`);
+    pick(b, fresh).done?.({ attempted: false });
+  }
   expect(pick(b, ["old", "fresh"]).endpoint).toBe("old");
   expect(pick(b, ["held", "fresh2"]).endpoint).toBe("fresh2");
   outstanding.done?.({ attempted: false });
+});
+
+test("a candidate list larger than the history floor keeps every estimate", () => {
+  const b = p2cBalancer({ outlierDetection: false });
+  complete(b, "slow", { attempted: true, sampleMs: 2000 });
+  const many = ["slow", ...Array.from({ length: 299 }, (_, i) => `peer${i}`)];
+  expect(pick(b, many).endpoint).toBe("peer0");
+});
+
+test("pending is reserved at pick, so a same-tick burst spreads before any start", () => {
+  const b = p2cBalancer({ load: "pending", outlierDetection: false });
+  const burst = Array.from({ length: 4 }, () =>
+    b.pick({ endpoints: ["a", "b"] }),
+  );
+  expect(burst.map(([, result]) => result?.endpoint)).toEqual([
+    "a",
+    "b",
+    "a",
+    "b",
+  ]);
+  for (const [, result] of burst) result?.done?.({ attempted: false });
+  expect(pick(b).endpoint).toBe("a");
 });
 
 test("sparse runtime candidate arrays cannot produce an undefined endpoint", () => {

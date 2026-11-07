@@ -1245,14 +1245,28 @@
     "name": "pickFirstBalancer",
     "kind": "function",
     "slug": "core/pickfirstbalancer",
-    "related": []
+    "related": ["@defjs/core:PickFirstOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickFirstOptions",
+    "kind": "type",
+    "slug": "core/pickfirstoptions-type",
+    "related": ["@defjs/core:pickFirstBalancer"]
   },
   {
     "package": "@defjs/core",
     "name": "roundRobinBalancer",
     "kind": "function",
     "slug": "core/roundrobinbalancer",
-    "related": []
+    "related": ["@defjs/core:RoundRobinOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RoundRobinOptions",
+    "kind": "type",
+    "slug": "core/roundrobinoptions-type",
+    "related": ["@defjs/core:roundRobinBalancer"]
   },
   {
     "package": "@defjs/core",
@@ -1310,8 +1324,16 @@
     "kind": "function",
     "slug": "core/p2cbalancer",
     "related": [
+      "@defjs/core:P2cOptions",
       "@defjs/core:outlierDetection",
       "@defjs/core:roundRobinBalancer"
     ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "P2cOptions",
+    "kind": "type",
+    "slug": "core/p2coptions-type",
+    "related": ["@defjs/core:p2cBalancer"]
   }
 ]

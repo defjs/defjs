@@ -174,7 +174,9 @@ export const apiOrder = [
   "@defjs/core:ERR_NO_CANDIDATE",
   "@defjs/core:isNoCandidateCause",
   "@defjs/core:pickFirstBalancer",
+  "@defjs/core:PickFirstOptions",
   "@defjs/core:roundRobinBalancer",
+  "@defjs/core:RoundRobinOptions",
   "@defjs/core:withBalancer",
   "@defjs/core:withRetry",
   "@defjs/core:RetryCondition",
@@ -182,6 +184,7 @@ export const apiOrder = [
   "@defjs/core:OutlierDetectionOptions",
   "@defjs/core:outlierDetection",
   "@defjs/core:p2cBalancer",
+  "@defjs/core:P2cOptions",
 ] as const;
 
 const rank = new Map<string, number>(

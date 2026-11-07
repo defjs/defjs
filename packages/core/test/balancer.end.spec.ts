@@ -105,7 +105,7 @@ test("HTTP end is synchronous at response headers before body decoding or post-i
   expect(h.events).toEqual(["start", "end", "done"]);
 });
 test.each(["failure", "cancel", "timeout"])(
-  "HTTP %s emits end once with phase-2a attribution",
+  "HTTP %s emits end once, attributed by how the transport settled",
   async (mode) => {
     const h = recorder();
     const controller = new AbortController();
@@ -256,7 +256,7 @@ test("WebSocket constructor failure ends before done", async () => {
   expect(h.ends).toEqual([{ attempted: true, code: "NET_UNREACHABLE" }]);
 });
 
-// Coverage-only: a failed transport belonging to an interceptor-replaced base.
+// A failed transport belonging to an interceptor-replaced base.
 test("a replaced base failing before headers never ends the selected endpoint", async () => {
   const h = recorder();
   const client = createClient(

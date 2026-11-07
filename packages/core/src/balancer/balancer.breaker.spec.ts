@@ -138,20 +138,17 @@ test("probe end failure immediately reopens the breaker without waiting for done
   vi.advanceTimersByTime(3000 - performance.now());
   expect(h.pick().endpoint).toBe("a");
 });
-test.each(["sse", "websocket"] as const)(
-  "%s probe is decided by handshake end rather than session lifetime",
-  () => {
-    const h = setup();
-    h.pick().done(bad);
-    vi.advanceTimersByTime(1000 - performance.now());
-    const [, probe] = pickEndpoint(h.b, { endpoints: list });
-    probe?.start();
-    vi.advanceTimersByTime(100000 - performance.now());
-    expect(h.pick().endpoint).toBe("b");
-    probe?.end(ok);
-    expect(h.pick().endpoint).toBe("a");
-  },
-);
+test("a probe is decided by handshake end rather than session lifetime", () => {
+  const h = setup();
+  h.pick().done(bad);
+  vi.advanceTimersByTime(1000 - performance.now());
+  const [, probe] = pickEndpoint(h.b, { endpoints: list });
+  probe?.start();
+  vi.advanceTimersByTime(100000 - performance.now());
+  expect(h.pick().endpoint).toBe("b");
+  probe?.end(ok);
+  expect(h.pick().endpoint).toBe("a");
+});
 test("done after a successful probe end is an ordinary failure sample", () => {
   const h = setup();
   h.pick().done(bad);
@@ -234,7 +231,7 @@ test.each([
   },
 );
 
-// Coverage-only: uncoded socket results and discarded terminal probe samples.
+// Uncoded socket results and discarded terminal probe samples.
 test("uncoded open resets a streak and invalid probe end stays pending until terminal release", () => {
   let valid = true;
   const h = setup({ isFailure: () => (valid ? true : undefined) });

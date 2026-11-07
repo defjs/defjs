@@ -174,9 +174,7 @@ test.each(["builder", "short-circuit", "abort", "replacement"])(
     expect(events).toEqual([`start:${host}`, `done:${host}`]);
   },
 );
-test("p2c excludes both 80ms interceptor phases while a slow physical request remains pending", async () => {
-  vi.useFakeTimers({ toFake: ["Date", "performance"] });
-  vi.setSystemTime(0);
+test("p2c counts a call as pending from its pick through interceptor work until the response begins", async () => {
   vi.spyOn(Math, "random").mockReturnValue(0);
   const b = p2cBalancer({ load: "pending", outlierDetection: false });
   const [, slow] = b.pick({
@@ -184,42 +182,40 @@ test("p2c excludes both 80ms interceptor phases while a slow physical request re
   });
   slow?.start?.();
   const selections: string[] = [];
+  const probe = () => {
+    const [, result] = b.pick({
+      endpoints: ["https://fast.test", "https://idle.test"],
+    });
+    result?.done?.({ attempted: false });
+    selections.push(result?.endpoint ?? "");
+  };
   const client = createClient(
     withEndpoint("https://fast.test", "https://slow.test"),
-
     withBalancer(b),
     withHTTPHandle(() => {
-      selections.push(
-        b.pick({
-          endpoints: ["https://fast.test", "https://slow.test"],
-        })[1]?.endpoint ?? "",
-      );
+      probe();
       return Promise.resolve(new Response(null));
     }),
     withInterceptors({
       kind: "http",
       async fn(req, next) {
-        vi.advanceTimersByTime(80);
-        selections.push(
-          b.pick({
-            endpoints: ["https://fast.test", "https://slow.test"],
-          })[1]?.endpoint ?? "",
-        );
+        probe();
         const response = await next(req);
-        vi.advanceTimersByTime(80);
-        selections.push(
-          b.pick({
-            endpoints: ["https://fast.test", "https://slow.test"],
-          })[1]?.endpoint ?? "",
-        );
+        probe();
         return response;
       },
     }),
   );
-  for (let i = 0; i < 8; i++)
+  for (let i = 0; i < 4; i++)
     expect(
       (await defineRequest({ method: "GET", path: "/" })(client))[0],
     ).toBeNull();
-  expect(selections).toEqual(Array(24).fill("https://fast.test"));
+  expect(selections).toEqual(
+    Array.from({ length: 4 }, () => [
+      "https://idle.test",
+      "https://idle.test",
+      "https://fast.test",
+    ]).flat(),
+  );
   slow?.done?.({ attempted: false });
 });

@@ -19,18 +19,18 @@ export interface ResolvedEndpoint {
   /** Endpoint string returned by `pick`. Not checked as a URL. */
   readonly endpoint: string;
   /** Starts the selected transport at most once; ignored after completion. Callback failures are contained. */
-  start(): void;
+  start: () => void;
   /** Reports the transport response once, only after start and before done. */
-  end(info: DoneInfo): void;
+  end: (info: DoneInfo) => void;
   /**
    * Reports the attempt outcome. The first call invokes the balancer's `done`
    * synchronously and swallows a throw. `done` must be synchronous; a returned
    * promise is not awaited and its rejection is ignored. Later calls do nothing.
    * When `pick` omitted `done`, the first call only marks this attempt finished.
    */
-  done(info: DoneInfo): void;
+  done: (info: DoneInfo) => void;
   /** Whether `done` has already been entered. */
-  finished(): boolean;
+  finished: () => boolean;
 }
 
 /**
@@ -45,7 +45,9 @@ export interface ResolvedEndpoint {
  *   value itself.
  * - `pick`, `start`, and `done` must be synchronous. A returned promise is not awaited
  *   and its rejection is ignored. A promise returned by `pick` is an invalid shape.
- * - Those failures do not call `done`.
+ * - A selection outside `endpoints` or with an invalid callback calls the
+ *   result's `done` with `{ attempted: false }` when `done` is a function, so
+ *   state reserved by that pick is released.
  * - Success returns the selected endpoint and a `done` wrapper. Call that
  *   wrapper, not the function on the raw pick result.
  *
@@ -81,6 +83,7 @@ export function pickEndpoint(
           isOptionalCallback<(info: DoneInfo) => void>(end)
         ) {
           if (!info.endpoints.includes(endpoint)) {
+            releasePick(done);
             return [
               createPreflightFault(
                 "REQ_BUILD_FAILED",
@@ -94,6 +97,9 @@ export function pickEndpoint(
           // The callable check is the runtime boundary for custom balancers.
           return [null, resolve({ endpoint, done, start, end })];
         }
+        // A rejected shape still owns whatever its pick reserved, such as a probe slot.
+        if (isOptionalCallback<(info: DoneInfo) => void>(done))
+          releasePick(done);
       }
     }
     ignoreRejection(outcome);
@@ -146,6 +152,16 @@ function resolve(result: PickResult): ResolvedEndpoint {
       }
     },
   };
+}
+
+/** Ends a pick the runtime rejected, so state reserved by `pick` is released. */
+function releasePick(done: ((info: DoneInfo) => unknown) | undefined): void {
+  if (done === undefined) return;
+  try {
+    ignoreRejection(done({ attempted: false }));
+  } catch {
+    // A throwing done must not replace the operation tuple.
+  }
 }
 
 /** `[object Error]` also matches errors constructed in another realm. */

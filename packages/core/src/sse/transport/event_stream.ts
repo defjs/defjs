@@ -1,9 +1,11 @@
 import { statusOutcome } from "../../internal/attempt_outcome";
 import type { ClientSSEOptions, FetchHandle } from "../../client/config";
-import type { FaultCode, PreflightFault } from "../../error";
+import type { FaultCode, HttpStatusFaultOf, PreflightFault } from "../../error";
 import {
+  createHttpStatusFault,
   createNetworkFault,
   createPreflightFault,
+  createUndecodedHttpStatusFault,
   ERR_TIMEOUT,
   isTimeoutCause,
 } from "../../error";
@@ -30,7 +32,7 @@ import type {
   HttpRequest,
   HttpResponseType,
 } from "../../internal/http_request";
-import type { HttpResponse } from "../../internal/http_response";
+import type { HttpMeta, HttpResponse } from "../../internal/http_response";
 import { makeResponse } from "../../internal/http_response";
 import { resolveInboundRepresentation } from "../../internal/inbound_representation";
 import { resolveRequestUrl } from "../../internal/url";
@@ -80,6 +82,7 @@ export interface EventStreamOpenInfo {
  *
  * A subset of the shared `FaultCode` set. It is the `code` of an `EventStreamCloseInfo` with `kind: 'error'`.
  * `REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened. They stay those codes; they are not rewritten to `NET_UNREACHABLE`.
+ * `HTTP_STATUS` means a reconnect handshake answered with a non-2xx status; `cause` is then the same `HTTP_STATUS` fault a failed first handshake returns.
  *
  * @group sse
  */
@@ -89,6 +92,7 @@ export type EventStreamFaultCode = Extract<
   | "CAP_QUEUE_OVERFLOW"
   | "EXT_HOOK_FAILED"
   | "EXT_OBSERVER_FAILED"
+  | "HTTP_STATUS"
   | "NET_TIMEOUT"
   | "NET_UNREACHABLE"
   | "REQ_BUILD_FAILED"
@@ -107,7 +111,7 @@ interface EventStreamCloseInfoBase {
  *
  * The discriminant is `kind` so that `code` can mean the same thing it means on a fault.
  *
- * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error.
+ * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake.
  *
  * @group sse
  */
@@ -201,36 +205,36 @@ export interface FetchEventStreamErrorContext {
 
 type EventStreamFatalCode = Exclude<
   EventStreamFaultCode,
-  "NET_TIMEOUT" | "NET_UNREACHABLE" | "REQ_BUILD_FAILED" | "REQ_OPTIONS_INVALID"
+  | "HTTP_STATUS"
+  | "NET_TIMEOUT"
+  | "NET_UNREACHABLE"
+  | "REQ_BUILD_FAILED"
+  | "REQ_OPTIONS_INVALID"
 >;
 
 class EventStreamFatalError extends Error {
   readonly code: EventStreamFatalCode;
-  readonly statusSignal: boolean;
   cause?: unknown;
 
   constructor(
     code: EventStreamFatalCode,
     message: string,
-    options?: { cause?: unknown; statusSignal?: boolean },
+    options?: { cause?: unknown },
   ) {
     super(message);
     this.name = "EventStreamFatalError";
     this.code = code;
     this.cause = options?.cause;
-    // A non-2xx status is not itself a decode failure. Real body failures leave this unset.
-    this.statusSignal = options?.statusSignal === true;
   }
 }
+
+// Only faults built here are handshake statuses; a coded error from a custom fetch is not one.
+const handshakeStatusFaults = new WeakSet<object>();
 
 export function getEventStreamFatalCode(
   error: unknown,
 ): EventStreamFatalCode | undefined {
   return error instanceof EventStreamFatalError ? error.code : undefined;
-}
-
-export function isHandshakeStatusSignal(error: unknown): boolean {
-  return error instanceof EventStreamFatalError && error.statusSignal;
 }
 
 export function handshakeDecodeCause(error: unknown): unknown {
@@ -240,10 +244,36 @@ export function handshakeDecodeCause(error: unknown): unknown {
   return error;
 }
 
-function toEventStreamFatalError(
-  error: unknown,
-): EventStreamFatalError | undefined {
-  if (error instanceof EventStreamFatalError) {
+export function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
+  return {
+    headers: response.headers,
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    url: response.url,
+  };
+}
+
+/** The `HTTP_STATUS` fault for a non-2xx handshake, with `data` when the declared error body decoded. */
+export function createHandshakeStatusFault(
+  response: HttpResponse<unknown>,
+): HttpStatusFaultOf<unknown> | HttpStatusFaultOf<undefined> {
+  const meta = toEventStreamMeta(response);
+  // Decoded null is a real body. Only an unread handshake leaves `body` undefined.
+  const fault =
+    response.body !== undefined
+      ? createHttpStatusFault({ ...meta, body: response.body })
+      : createUndecodedHttpStatusFault(meta);
+  handshakeStatusFaults.add(fault);
+  return fault;
+}
+
+function isHandshakeStatusFault(error: unknown): error is Error {
+  return error instanceof Error && handshakeStatusFaults.has(error);
+}
+
+function toEventStreamFatalError(error: unknown): Error | undefined {
+  if (error instanceof EventStreamFatalError || isHandshakeStatusFault(error)) {
     return error;
   }
   if (error instanceof SSEParserLimitError) {
@@ -466,6 +496,8 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
       ]);
       let response: Response | undefined;
       let readerStarted = false;
+      // A startup failure reports this attempt's response only, not one left by a retried 503.
+      if (!settledOpen) latestOpen = undefined;
 
       try {
         if (lastEventIdDirty) {
@@ -580,7 +612,13 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         }
 
         const retryError = normalizedError ?? error;
-        const fatalError = toEventStreamFatalError(retryError);
+        // A 502, 503 or 504 handshake retries like a refused connection, even when its declared error
+        // body fails to decode; every other non-2xx handshake stays fatal.
+        const fatalError =
+          response !== undefined &&
+          statusOutcome(response.status) === "NET_UNAVAILABLE"
+            ? undefined
+            : toEventStreamFatalError(retryError);
         if (fatalError) {
           await observeFatalError(fatalError, attemptAbort);
           if (closeController.signal.aborted || request.signal?.aborted) {
@@ -773,7 +811,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   }
 
   async function observeFatalError(
-    error: EventStreamFatalError,
+    error: Error,
     signal: AbortSignal,
   ): Promise<void> {
     if (!options.onerror) {
@@ -888,6 +926,9 @@ export function isEventStreamPickFault(
 }
 
 function getEventStreamFaultCode(error: unknown): EventStreamFaultCode {
+  if (isHandshakeStatusFault(error)) {
+    return "HTTP_STATUS";
+  }
   const fatal = getEventStreamFatalCode(error);
   if (fatal) {
     return fatal;
@@ -1032,14 +1073,8 @@ function createEventStreamRequestInit(
 
 function validateOpenResponse(open: EventStreamOpenInfo): void {
   const { response } = open;
-  // A non-2xx handshake is a status fault, which the event-stream operation builds from the open
-  // info; the code here is only the fallback for a response that never carried a status.
   if (!response.ok) {
-    throw new EventStreamFatalError(
-      "RES_DECODE_FAILED",
-      "Event stream request failed",
-      { statusSignal: true },
-    );
+    throw createHandshakeStatusFault(response);
   }
 
   const contentType = response.headers.get("content-type") || "";

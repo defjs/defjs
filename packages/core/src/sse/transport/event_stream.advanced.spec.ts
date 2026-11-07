@@ -2348,7 +2348,11 @@ describe("raw transport handshake decoding", () => {
             failure,
           },
         ),
-      ).rejects.toThrow("Event stream request failed");
+      ).rejects.toMatchObject({
+        code: "HTTP_STATUS",
+        data: expected,
+        status: 403,
+      });
       expect(failure.open?.response.body).toEqual(expected);
     },
   );

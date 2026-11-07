@@ -249,7 +249,7 @@ describe("operation diagnostic boundary", () => {
     },
   );
 
-  test("SSE non-2xx handshake logs one connect failure before core converts it to HTTP_STATUS", async () => {
+  test("SSE non-2xx handshake logs one connect failure as the HTTP_STATUS fault", async () => {
     const { logger, records } = createMockLogger();
     const client = createClient(
       withEndpoint(inject("testServerHost")),
@@ -266,7 +266,7 @@ describe("operation diagnostic boundary", () => {
       severityNumber: 13,
       attributes: {
         "defjs.phase": "connect",
-        "exception.type": "EventStreamFatalError",
+        "exception.type": "DefjsFault",
       },
     });
   });

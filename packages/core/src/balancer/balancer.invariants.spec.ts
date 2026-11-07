@@ -141,7 +141,7 @@ test.each([86_400_000, -3_600_000])(
   },
 );
 
-test("custom balancers cannot select outside their candidate set", () => {
+test("custom balancers cannot select outside their candidate set, and the rejected pick is released", () => {
   const done = vi.fn();
   const [fault, result] = pickEndpoint(
     { pick: () => [null, { endpoint: "https://private.invalid", done }] },
@@ -152,7 +152,7 @@ test("custom balancers cannot select outside their candidate set", () => {
     new Error("Balancer selected an endpoint outside the candidate set"),
   );
   expect(result).toBeUndefined();
-  expect(done).not.toHaveBeenCalled();
+  expect(done).toHaveBeenCalledExactlyOnceWith({ attempted: false });
 });
 
 test.each(["HTTP", "SSE", "WS"])(
@@ -236,15 +236,14 @@ test.each(["health", "shuffle", "p2c"])(
   "%s endpoint retention is bounded under churn",
   (kind) => {
     const maps = new Set<Map<unknown, unknown>>();
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: the instrumentation forwards the original Map receiver with call
-    const original = Map.prototype.set;
+    const original = Reflect.get(Map.prototype, "set");
     vi.spyOn(Map.prototype, "set").mockImplementation(function <K, V>(
       this: Map<K, V>,
       key: K,
       value: V,
     ): Map<K, V> {
       if (typeof key === "string" && key.startsWith("churn-")) maps.add(this);
-      original.call(this, key, value);
+      Reflect.apply(original, this, [key, value]);
       return this;
     });
     const balancer =
