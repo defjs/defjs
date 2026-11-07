@@ -453,7 +453,7 @@ describe("pickEndpoint", () => {
       pickEndpoint(
         {
           pick() {
-            // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
+            // eslint-disable-next-line @typescript-eslint/only-throw-error -- pick() under test throws a string primitive to exercise how pickEndpoint handles a non-Error throw
             throw "boom";
           },
         },

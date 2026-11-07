@@ -2,8 +2,10 @@ import type { AnyStruct, Infer } from "../struct";
 import type { AnyStructLike } from "../struct/types";
 import { decodeBytes, readBytesText } from "../internal/bytes";
 import { rejectNonJson } from "../internal/outbound_request";
-import { decodeJson, encodeJson } from "../struct/codec/json";
-import { parseStructValue } from "../struct/introspection";
+import { encodeAliasedStruct } from "../struct/codec/common";
+import { decodeJson } from "../struct/codec/json";
+import { parseRuntimeValue } from "../struct/introspection";
+import { assertStruct } from "../struct/shape";
 
 export function serializeOutgoingWebSocketMessage(
   outgoing: AnyStruct | undefined,
@@ -15,9 +17,16 @@ export function serializeOutgoingWebSocketMessage(
     );
   }
 
+  // One struct check covers both the parse and the encode.
+  assertStruct(outgoing, "struct");
   // Same guard as an HTTP JSON body: non-finite numbers, functions, symbols and non-plain objects throw.
   const wire = JSON.stringify(
-    encodeJson(outgoing, parseStructValue(outgoing, message)),
+    encodeAliasedStruct(
+      outgoing,
+      parseRuntimeValue(outgoing, message),
+      "json",
+      0,
+    ),
     (key, value: unknown) =>
       rejectNonJson(key, value, "Outgoing WebSocket message"),
   );

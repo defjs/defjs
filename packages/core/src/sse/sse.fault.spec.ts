@@ -230,10 +230,7 @@ describe("sse startup faults", () => {
 
   test("should report an unreachable transport as NET_UNREACHABLE", async () => {
     const cause = new TypeError("fetch failed");
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const client = clientReturning(async () => {
-      throw cause;
-    });
+    const client = clientReturning(() => Promise.reject(cause));
 
     const [fault] = await useStream(client);
 
@@ -248,12 +245,7 @@ describe("sse startup faults", () => {
         Promise.resolve(
           new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
         ),
-      withInterceptors(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        createSSEInterceptor(async () => {
-          throw cause;
-        }),
-      ),
+      withInterceptors(createSSEInterceptor(() => Promise.reject(cause))),
     );
 
     const [fault] = await useStream(client);
@@ -471,9 +463,8 @@ test("should return REQ_BUILD_FAILED when the JSON body is an async iterable obj
   const useStream = defineEventStream({
     builder: () => ({
       body: {
-        // eslint-disable-next-line @typescript-eslint/require-await -- an async generator yields asynchronously without awaiting
         async *[Symbol.asyncIterator]() {
-          yield new TextEncoder().encode("chunk");
+          yield await Promise.resolve(new TextEncoder().encode("chunk"));
         },
       },
     }),
@@ -565,13 +556,14 @@ describe("ReadableStream body and reconnect", () => {
     const failure = new TypeError("network down");
     const shouldReconnect = vi.fn(() => true);
     let attempt = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const handle = vi.fn(async () => {
+    const handle = vi.fn(() => {
       attempt += 1;
       if (attempt === 1) {
-        throw failure;
+        return Promise.reject(failure);
       }
-      return new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS });
+      return Promise.resolve(
+        new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
+      );
     });
     const client = createClient(
       withEndpoint("https://example.com"),

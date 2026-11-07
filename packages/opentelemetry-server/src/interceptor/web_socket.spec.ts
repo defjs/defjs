@@ -76,10 +76,7 @@ describe("WebSocket client diagnostic logs", () => {
         propagator: createMockWsPropagator(),
       });
       await expect(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        interceptor.fn(makeWsRequest(), async () => {
-          throw cause;
-        }),
+        interceptor.fn(makeWsRequest(), () => Promise.reject(cause)),
       ).rejects.toBe(cause);
       expect(records).toHaveLength(count);
       if (count)
@@ -325,10 +322,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       metrics,
     });
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeWsRequest(), async () => {
-        throw error;
-      }),
+      interceptor.fn(makeWsRequest(), () => Promise.reject(error)),
     ).rejects.toBe(error);
     expect(metrics.connectDuration.record).toHaveBeenCalledTimes(1);
     expect(metrics.connectDuration.record).toHaveBeenCalledWith(
@@ -782,10 +776,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeWsRequest(), async () => {
-        throw new TypeError("connect failed");
-      }),
+      interceptor.fn(makeWsRequest(), () =>
+        Promise.reject(new TypeError("connect failed")),
+      ),
     ).rejects.toThrow("connect failed");
 
     expect(activeSpans[0]?.ended).toBe(true);

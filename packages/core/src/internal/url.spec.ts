@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { appendHeaderEntries } from "./url";
 import {
   appendRecordToHeaders,
   createResolvedRequestUrl,
@@ -261,9 +262,26 @@ describe("url helpers", () => {
     expect(fillUrl("/files/:__proto__", record)).toBe("/files/safe");
     expect(createSearchParams(record).get("__proto__")).toBe("safe");
     expect(headers.get("__proto__")).toBe("safe");
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
+  });
+});
+
+describe("header entries from untyped input", () => {
+  test("destructures each entry and converts its value the way Headers does", () => {
+    const headers = new Headers();
+    appendHeaderEntries(headers, ["ab", ["x-number", 1], ["x-missing"]]);
+
+    expect(headers.get("a")).toBe("b");
+    expect(headers.get("x-number")).toBe("1");
+    expect(headers.get("x-missing")).toBe("undefined");
+  });
+
+  test("rejects a name that is not a string and a symbol value", () => {
+    expect(() => appendHeaderEntries(new Headers(), [[1, "value"]])).toThrow(
+      "header name must be a string",
+    );
+    expect(() =>
+      appendHeaderEntries(new Headers(), [["x-symbol", Symbol("value")]]),
+    ).toThrow('header value for "x-symbol" must not be a symbol');
   });
 });

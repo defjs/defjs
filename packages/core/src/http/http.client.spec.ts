@@ -51,14 +51,16 @@ describe("request http runtime with client config", () => {
   });
 
   test("should use client http handle after interceptors", async () => {
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the transport assertions must fail through a rejected promise
-    const fetchMock = vi.fn<FetchHandle>(async (input) => {
-      if (!(input instanceof Request)) throw new Error("expected Request");
+    const fetchMock = vi.fn<FetchHandle>((input) => {
+      if (!(input instanceof Request))
+        return Promise.reject(new Error("expected Request"));
       const request = input;
       expect(request.url).toBe("https://example.com/query?A=1&B=2");
-      return new Response(null, {
-        status: 200,
-      });
+      return Promise.resolve(
+        new Response(null, {
+          status: 200,
+        }),
+      );
     });
     let interceptorCalls = 0;
 

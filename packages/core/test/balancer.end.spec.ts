@@ -113,11 +113,11 @@ test.each(["failure", "cancel", "timeout"])(
       withEndpoint("https://test.invalid"),
       withBalancer(h.b),
 
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      withHTTPHandle(async () => {
-        if (mode === "failure") throw new TypeError("refused");
+      withHTTPHandle(() => {
+        if (mode === "failure") return Promise.reject(new TypeError("refused"));
         controller.abort(mode === "timeout" ? ERR_TIMEOUT : undefined);
-        throw controller.signal.reason;
+        const reason: unknown = controller.signal.reason;
+        return Promise.reject(reason);
       }),
     );
     await defineRequest({ method: "GET", path: "/" })(
@@ -191,11 +191,11 @@ test.each(["failure", "cancel", "timeout"])(
     const client = createClient(
       withEndpoint("https://test.invalid"),
       withBalancer(h.b),
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      withSSEHandle(async () => {
-        if (mode === "failure") throw new TypeError("refused");
+      withSSEHandle(() => {
+        if (mode === "failure") return Promise.reject(new TypeError("refused"));
         controller.abort(mode === "timeout" ? ERR_TIMEOUT : undefined);
-        throw controller.signal.reason;
+        const reason: unknown = controller.signal.reason;
+        return Promise.reject(reason);
       }),
     );
     await defineEventStream({ path: "/", events: { tick: struct.string() } })(
@@ -262,10 +262,7 @@ test("a replaced base failing before headers never ends the selected endpoint", 
   const client = createClient(
     withEndpoint("https://first.test"),
     withBalancer(h.b),
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    withHTTPHandle(async () => {
-      throw new TypeError("refused");
-    }),
+    withHTTPHandle(() => Promise.reject(new TypeError("refused"))),
     withInterceptors({
       kind: "http",
       fn: (req, next) =>

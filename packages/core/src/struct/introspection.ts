@@ -11,6 +11,7 @@ import type {
   ObjectShape,
   ParsedStructOutput,
   ParseResult,
+  RuntimeStruct,
   StructLike,
 } from "./types";
 
@@ -22,7 +23,7 @@ export interface StructField {
 
 export function isObjectStruct(
   value: unknown,
-): value is ObjectStruct<ObjectShape> {
+): value is ObjectStruct<ObjectShape> & RuntimeStruct {
   return isStruct(value) && value[DEFINITION].kind === "object";
 }
 
@@ -128,6 +129,21 @@ export function parseStructValue<
   },
 ): ParsedStructOutput<S, Tagged> {
   assertStruct(struct, "struct");
+  const parsed = parseRuntimeValue(struct, value, options);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the parser builds this value at run time, while its type is the struct's compile-time-only `_struct` brand (Infer<S> or TaggedStructOutput<S>); no runtime value carries that brand, so it can only be attached here, the decoders' single typed boundary (codec decode and HTTP/SSE bodies call through it). Unasserted: TS2322, `unknown` is not assignable to `ParsedStructOutput<S, Tagged>`
+  return parsed as ParsedStructOutput<S, Tagged>;
+}
+
+/** {@link parseStructValue} for a struct the caller already checked: the output is not typed from it. */
+export function parseRuntimeValue(
+  struct: RuntimeStruct,
+  value: unknown,
+  options?: {
+    tagObjects?: boolean;
+    useAliases?: boolean;
+    guides?: WeakMap<object, Guide>;
+  },
+): unknown {
   const result = parseRootValue(
     struct,
     value,
@@ -139,6 +155,5 @@ export function parseStructValue<
   if (!result.ok) {
     throw new StructError([result.issue]);
   }
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original public Infer conditional and the already checked parse result, rather than relaxing generic user programs or adding runtime validation
-  return result.value as ParsedStructOutput<S, Tagged>;
+  return result.value;
 }

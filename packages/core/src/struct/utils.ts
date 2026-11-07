@@ -10,8 +10,14 @@ import type {
 // Bound data-driven recursion independently of the engine's stack size. Opaque any/unknown values are not traversed.
 export const MAX_DEPTH = 256;
 
-export type IntersectionMerge =
-  { ok: true; value: unknown } | { ok: false; path: Path; received: unknown };
+type MergeConflict = { ok: false; path: Path; received: unknown };
+
+export type IntersectionMerge = { ok: true; value: unknown } | MergeConflict;
+
+export type PlainObjectMerge =
+  { ok: true; value: { [key: string]: unknown } } | MergeConflict;
+
+type MergeContext = { owned: WeakSet<object>; guides: WeakMap<object, Guide> };
 
 /**
  * Deep-merge two intersection outputs.
@@ -30,7 +36,7 @@ export function mergeIntersectionValues(
   right: unknown,
   tagNodes: boolean,
   depth: number,
-  context?: { owned: WeakSet<object>; guides: WeakMap<object, Guide> },
+  context?: MergeContext,
 ): IntersectionMerge {
   if (Object.is(left, right)) {
     return { ok: true, value: left };
@@ -43,45 +49,7 @@ export function mergeIntersectionValues(
     return { ok: true, value: left };
   }
   if (isPlainObject(left) && isPlainObject(right)) {
-    if (depth >= MAX_DEPTH) {
-      return { ok: false, path: [], received: right };
-    }
-    const output = nullObject();
-    for (const key of Object.keys(left)) {
-      output[key] = left[key];
-    }
-    for (const key of Object.keys(right)) {
-      if (!hasOwnKey(output, key)) {
-        output[key] = right[key];
-        continue;
-      }
-      const merged = mergeIntersectionValues(
-        output[key],
-        right[key],
-        tagNodes,
-        depth + 1,
-        context,
-      );
-      if (!merged.ok) {
-        return {
-          ok: false,
-          path: [key, ...merged.path],
-          received: merged.received,
-        };
-      }
-      output[key] = merged.value;
-    }
-    if (tagNodes) {
-      context?.owned.add(output);
-      const tag = combineGuides(
-        readOwnGuide(left, context?.guides),
-        readOwnGuide(right, context?.guides),
-      );
-      if (tag) {
-        tagOwnNode(output, tag);
-      }
-    }
-    return { ok: true, value: output };
+    return mergePlainObjects(left, right, tagNodes, depth, context);
   }
   if (Array.isArray(left) && Array.isArray(right)) {
     if (left.length !== right.length || depth >= MAX_DEPTH) {
@@ -108,6 +76,55 @@ export function mergeIntersectionValues(
     return { ok: true, value: output };
   }
   return { ok: false, path: [], received: right };
+}
+
+/** The plain-object case of {@link mergeIntersectionValues}, for two distinct objects. */
+export function mergePlainObjects(
+  left: { [key: string]: unknown },
+  right: { [key: string]: unknown },
+  tagNodes: boolean,
+  depth: number,
+  context?: MergeContext,
+): PlainObjectMerge {
+  if (depth >= MAX_DEPTH) {
+    return { ok: false, path: [], received: right };
+  }
+  const output = nullObject();
+  for (const key of Object.keys(left)) {
+    output[key] = left[key];
+  }
+  for (const key of Object.keys(right)) {
+    if (!hasOwnKey(output, key)) {
+      output[key] = right[key];
+      continue;
+    }
+    const merged = mergeIntersectionValues(
+      output[key],
+      right[key],
+      tagNodes,
+      depth + 1,
+      context,
+    );
+    if (!merged.ok) {
+      return {
+        ok: false,
+        path: [key, ...merged.path],
+        received: merged.received,
+      };
+    }
+    output[key] = merged.value;
+  }
+  if (tagNodes) {
+    context?.owned.add(output);
+    const tag = combineGuides(
+      readOwnGuide(left, context?.guides),
+      readOwnGuide(right, context?.guides),
+    );
+    if (tag) {
+      tagOwnNode(output, tag);
+    }
+  }
+  return { ok: true, value: output };
 }
 
 export function intersectionEncodeError(path: Path): TypeError {
@@ -138,13 +155,13 @@ export function matchesEnum(
   // One-shot schemas avoid allocating a Set. A second lookup pays for the reusable index.
   if (definition.valueSet === undefined) {
     definition.valueSet = null;
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: original enum membership can match unchecked non-string/number members and performs the same lazy Set creation on every probe
-    return definition.values.includes(value as string | number);
+    const values: readonly unknown[] = definition.values;
+    return values.includes(value);
   }
-  return (definition.valueSet ??= new Set(definition.values)).has(
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: original enum membership can match unchecked non-string/number members and performs the same lazy Set creation on every probe
-    value as string | number,
-  );
+  const valueSet: ReadonlySet<unknown> = (definition.valueSet ??= new Set(
+    definition.values,
+  ));
+  return valueSet.has(value);
 }
 
 /** What a decode hook returns for a value it accepts: the decoded value itself. */
@@ -234,6 +251,31 @@ export function hasOwnKey(
   key: string,
 ): boolean {
   return Object.hasOwn(value, key);
+}
+
+/** `value[name]()` for an object or function. Any other value, or one without that method, throws TypeError. */
+export function invokeMethod(value: unknown, name: string): unknown {
+  const method: unknown =
+    (typeof value === "object" && value !== null) || typeof value === "function"
+      ? Reflect.get(value, name)
+      : undefined;
+  if (typeof method !== "function") {
+    throw new TypeError(`${name}() is not available on ${describeKind(value)}`);
+  }
+  const result: unknown = Reflect.apply(method, value, []);
+  return result;
+}
+
+/** A value that is neither null, undefined, an object nor a function. */
+export function isPrimitive(
+  value: unknown,
+): value is bigint | boolean | number | string | symbol {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof value !== "object" &&
+    typeof value !== "function"
+  );
 }
 
 export function isPlainObject(

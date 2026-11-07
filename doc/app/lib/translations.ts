@@ -3,11 +3,14 @@ import { i18nProvider, uiTranslations } from "fumadocs-ui/i18n";
 import { i18n } from "./i18n";
 import { messages, type MessageKey, type Messages } from "./messages";
 
+function isMessageKey(key: string): key is MessageKey {
+  return Object.hasOwn(messages["en-US"], key);
+}
+
 const registry = i18n
   .translations()
   .extend(uiTranslations())
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the exact key array without an additional filtering pass or property checks
-  .extend({ keys: Object.keys(messages["en-US"]) as MessageKey[] })
+  .extend({ keys: Object.keys(messages["en-US"]).filter(isMessageKey) })
   .add(messages);
 
 export type Translator = (

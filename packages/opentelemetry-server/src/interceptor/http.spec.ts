@@ -54,10 +54,9 @@ describe("HTTP client diagnostic logs", () => {
       });
       const cause = new TypeError("private network detail");
       await expect(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        interceptor.fn(makeHttpRequest(), async () => {
+        interceptor.fn(makeHttpRequest(), () => {
           active.mockReturnValue(ROOT_CONTEXT);
-          throw cause;
+          return Promise.reject(cause);
         }),
       ).rejects.toBe(cause);
       expect(records).toHaveLength(1);
@@ -86,10 +85,7 @@ describe("HTTP client diagnostic logs", () => {
       propagator: createMockPropagator(),
     });
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeHttpRequest(), async () => {
-        throw cause;
-      }),
+      interceptor.fn(makeHttpRequest(), () => Promise.reject(cause)),
     ).rejects.toBe(cause);
     expect(records).toEqual([]);
   });
@@ -103,10 +99,7 @@ describe("HTTP client diagnostic logs", () => {
     await expect(
       interceptor.fn(
         { ...makeHttpRequest(), signal: AbortSignal.abort(ERR_TIMEOUT) },
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        async () => {
-          throw ERR_TIMEOUT;
-        },
+        () => Promise.reject(ERR_TIMEOUT),
       ),
     ).rejects.toBe(ERR_TIMEOUT);
     expect(records).toHaveLength(1);
@@ -145,10 +138,7 @@ describe("HTTP client diagnostic logs", () => {
       propagator: createMockPropagator(),
     });
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeHttpRequest(), async () => {
-        throw cause;
-      }),
+      interceptor.fn(makeHttpRequest(), () => Promise.reject(cause)),
     ).rejects.toBe(cause);
     expect(logger.emit).toHaveBeenCalledTimes(1);
     expect(spans[0]?.ended).toBe(true);
@@ -281,10 +271,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeHttpRequest(), async () => {
-        throw error;
-      }),
+      interceptor.fn(makeHttpRequest(), () => Promise.reject(error)),
     ).rejects.toBe(error);
 
     expect(metrics.requestDuration.record).toHaveBeenCalledTimes(1);
@@ -457,7 +444,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       tracer,
       propagator: mockPropagator,
       startSpanHook: () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: startSpanHook must be fed a thrown undefined, which is not an Error
         throw undefined;
       },
     });
@@ -566,10 +553,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeHttpRequest(), async () => {
-        throw new Error("network error");
-      }),
+      interceptor.fn(makeHttpRequest(), () =>
+        Promise.reject(new Error("network error")),
+      ),
     ).rejects.toThrow("network error");
 
     expect(activeSpans[0]?.ended).toBe(true);
@@ -766,10 +752,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeHttpRequest(), async () => {
-        throw new TypeError("fail");
-      }),
+      interceptor.fn(makeHttpRequest(), () =>
+        Promise.reject(new TypeError("fail")),
+      ),
     ).rejects.toThrow("fail");
 
     expect(metrics.requestDuration.record).toHaveBeenCalledWith(

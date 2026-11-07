@@ -7,7 +7,7 @@ import { STRUCT } from "../../src/struct/symbols";
 // Three parse+encode passes of 100_000 nodes have exceeded vitest's 5s default once under full-suite load.
 test.each([10_000, 100_000])(
   "tags and encodes %s object nodes without touching public parse output",
-  async (size) => {
+  (size) => {
     const Item = struct.object({
       id: struct.number().alias("item_id"),
       count: struct.bigint(),
@@ -20,8 +20,7 @@ test.each([10_000, 100_000])(
     const samples: { parseMs: number; encodeMs: number }[] = [];
     for (let run = 0; run < 3; run += 1) {
       const start = performance.now();
-      // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-      const parsed = await parseEndpointInput(Schema, input);
+      const parsed = parseEndpointInput(Schema, input);
       const parsedAt = performance.now();
       const encoded = encodeOutbound(parsed);
       const encodedAt = performance.now();

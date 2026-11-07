@@ -1,5 +1,5 @@
 import { DEFINITION } from "./symbols";
-import type { RuntimeStruct, StructDefinition } from "./types";
+import type { ObjectRuntimeStruct, RuntimeStruct } from "./types";
 
 const KNOWN_KINDS = new Set<unknown>([
   "any",
@@ -33,23 +33,28 @@ export function isStruct(value: unknown): value is RuntimeStruct {
     return false;
   }
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep direct metadata gets; added in checks invoke Proxy has traps and reject values the original guard accepted
-  const definition = (value as { [DEFINITION]?: Partial<StructDefinition> })[
-    DEFINITION
-  ];
+  // Reflect.get is one ordinary [[Get]] per field, in the same order as property reads. An `in` check
+  // would also call a proxy's has trap and could reject a value these reads accept.
+  const definition: unknown = Reflect.get(value, DEFINITION);
   if (typeof definition !== "object" || definition === null) {
     return false;
   }
 
-  if (!KNOWN_KINDS.has(definition.kind)) {
+  if (!KNOWN_KINDS.has(Reflect.get(definition, "kind"))) {
     return false;
   }
 
-  const flags = definition.flags;
+  const flags: unknown = Reflect.get(definition, "flags");
   return (
     typeof flags === "object" &&
     flags !== null &&
-    typeof flags.nullable === "boolean" &&
-    typeof flags.optional === "boolean"
+    typeof Reflect.get(flags, "nullable") === "boolean" &&
+    typeof Reflect.get(flags, "optional") === "boolean"
   );
+}
+
+export function isObjectRuntimeStruct(
+  struct: RuntimeStruct,
+): struct is ObjectRuntimeStruct {
+  return struct[DEFINITION].kind === "object";
 }

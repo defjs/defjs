@@ -26,11 +26,11 @@ export function ApiEntryPage({ view }: { view: RenderedApiEntry }) {
         event.preventDefault();
         const pre = button.closest("figure")?.querySelector("pre");
         if (!pre) return;
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve copying from any pre clone without a realm-dependent instanceof rejection
-        const clone = pre.cloneNode(true) as HTMLElement;
-        for (const ignored of clone.querySelectorAll(".nd-copy-ignore"))
+        const scratch = document.createElement("div");
+        scratch.append(pre.cloneNode(true));
+        for (const ignored of scratch.querySelectorAll(".nd-copy-ignore"))
           ignored.replaceWith("\n");
-        const text = clone.textContent ?? "";
+        const text = scratch.textContent ?? "";
         const copied = button.getAttribute("data-copied-label") ?? "";
         const label = button.querySelector(".sr-only");
         const idle = label?.textContent ?? "";

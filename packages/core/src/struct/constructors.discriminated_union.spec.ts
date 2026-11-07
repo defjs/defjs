@@ -200,3 +200,16 @@ describe("constructors.ts discriminatedUnion", () => {
     expect(err).toBeInstanceOf(StructError);
   });
 });
+
+describe("constructors.ts discriminatedUnion from untyped input", () => {
+  test("rejects a discriminator field that is not a struct", () => {
+    expect(() =>
+      struct.discriminatedUnion("type", [
+        // @ts-expect-error the discriminator field is a plain string, not a literal struct
+        struct.object({ type: "click" }),
+      ]),
+    ).toThrow(
+      'discriminatedUnion option discriminator "type" must be a literal struct',
+    );
+  });
+});

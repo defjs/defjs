@@ -210,9 +210,7 @@ interface PreservedStruct<T, I, O, OO extends boolean>
  *
  * @group struct
  */
-// Type boundary: AnyStruct is the broad constraint used by endpoint generics. The concrete struct.any()
-// return type excludes nullish input until a modifier explicitly adds it.
-// oxlint-disable-next-line typescript/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- INTENT: published as `type AnyStruct = Struct<any, any, boolean>`. With `Struct<unknown, unknown, boolean>` a generic `TInput extends AnyStruct` no longer relates StructInput<TInput> to EndpointInput<TInput>: TS2322 in defineRequest (2), defineEventStream and defineWebSocket
 export type AnyStruct = Struct<any, any, boolean>;
 
 /**
@@ -269,9 +267,7 @@ export type FieldOutput<S> =
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-// Type boundary: ObjectShape accepts any field struct type; `any` is the only way to express "a record whose
-// values are arbitrary struct instances" before the caller provides a concrete shape.
-// oxlint-disable-next-line typescript/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- INTENT: published, and documented on struct.object(), as `{ [key: string]: any }`. With `unknown` values the `T[K]["_struct"]` lookups fail (TS2322 in outbound_request.spec.ts and json.spec.ts); with `AnyStructLike` values a recursive shape loses inference (TS7022 in json.spec.ts "caches recursive discriminator metadata…") and a hand-built shape in coverage.spec.ts no longer type-checks (TS2322)
 export type ObjectShape = { [key: string]: any };
 
 export type ObjectInput<T extends ObjectShape> = Simplify<
@@ -709,7 +705,8 @@ export type PrimitiveDefinition<
     path: Path,
     fail: DecodeFailure,
   ) => TOutput | typeof FAILED;
-  encode?: (value: TOutput) => unknown;
+  /** Receives whatever value is being encoded, which this struct did not necessarily produce. */
+  encode?: (value: unknown) => unknown;
   expected: string;
   is: (value: unknown) => value is TInput;
   kind: K;
@@ -748,6 +745,7 @@ export type ObjectDefinitionCache = {
   declaredDescriptors: PropertyDescriptorMap;
   fields?: readonly ResolvedStructField[];
   resolvedShape?: RuntimeObjectShape;
+  shapeEntries?: readonly (readonly [key: string, struct: RuntimeStruct])[];
 };
 
 export type ObjectDefinition = BaseDefinition & {
@@ -784,12 +782,16 @@ export type DiscriminatedUnionDefinition = BaseDefinition & {
   wireKeyByValue?: Map<unknown, string>;
 };
 
-export type IntersectionDefinition = BaseDefinition & {
-  expected: string;
-  kind: "intersection";
-  objectSides: boolean;
-  options: readonly RuntimeStruct[];
-};
+/** Set only when construction flattened every member to an object struct, so those options are typed as such. */
+type IntersectionSides =
+  | { objectSides: true; options: readonly ObjectRuntimeStruct[] }
+  | { objectSides: false; options: readonly RuntimeStruct[] };
+
+export type IntersectionDefinition = BaseDefinition &
+  IntersectionSides & {
+    expected: string;
+    kind: "intersection";
+  };
 
 export type StructDefinition =
   | ArrayDefinition
@@ -816,6 +818,8 @@ export type ParseSuccess<T> = {
 };
 
 export type InternalParseResult<T> = ParseFailure | ParseSuccess<T>;
+
+export type ObjectRuntimeStruct = RuntimeStruct<ObjectDefinition>;
 
 export interface RuntimeStruct<D extends StructDefinition = StructDefinition> {
   readonly [DEFINITION]: D;

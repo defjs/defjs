@@ -40,7 +40,7 @@ test("example regions keep their body and reject a missing marker", async () => 
   );
   await expect(
     loadExample(docRoot, "examples/api/create-client.ts#example", () =>
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: rejects with a string to cover loadExample's non-Error message branch
       Promise.reject("disk"),
     ),
   ).rejects.toThrow("disk");

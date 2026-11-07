@@ -7,7 +7,6 @@ describe("endpoint input helpers", () => {
   describe.each([
     { name: "unknown", schema: struct.unknown() },
     { name: "any", schema: struct.any() },
-    { name: "omitted struct", schema: undefined },
   ])("$name root input", ({ schema }) => {
     test.each(["pending", "resolving", "throwing getter", "Promise"] as const)(
       "returns %s data without reading or invoking then",
@@ -37,17 +36,12 @@ describe("endpoint input helpers", () => {
     );
   });
 
-  test("should parse endpoint input and keep raw input when struct is omitted", async () => {
-    const input = {
-      id: "1",
-    };
+  test("should parse endpoint input and tag the parsed object with its struct", () => {
     const User = struct.object({
       id: struct.number(),
     });
 
-    expect(await parseEndpointInput(undefined, input)).toBe(input);
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(User, { id: 1 });
+    const parsed = parseEndpointInput(User, { id: 1 });
     expect(parsed.id).toBe(1);
     expect(Object.keys(parsed)).toEqual(["id"]);
     expect(STRUCT in parsed ? parsed[STRUCT] : undefined).toBe(User);

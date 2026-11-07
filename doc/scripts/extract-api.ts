@@ -13,15 +13,21 @@ import type {
   RawCompilerOptions,
   Symbol,
 } from "typescript/async";
-import { SyntaxKind } from "typescript/ast";
+import {
+  SyntaxKind,
+  isFunctionDeclaration,
+  isPropertyAssignment,
+  isTypeAliasDeclaration,
+  isVariableDeclaration,
+} from "typescript/ast";
 
 export { SyntaxKind };
 import type {
   ConstructorTypeNode,
-  ExportSpecifier,
   FunctionDeclaration,
   FunctionTypeNode,
   Node,
+  ObjectLiteralExpression,
   VariableDeclaration,
 } from "typescript/ast";
 import { compareApiIdentity } from "./api-order";
@@ -39,9 +45,9 @@ import {
   overloadNodes,
   parameterRequired,
   parameterTypeText,
-  projectChecker,
   referenceRecord,
   requireKind,
+  requireNode,
   serializeCatalog,
   serializeReference,
   serializeSummaries,
@@ -51,7 +57,12 @@ import {
   zipOverloads,
   zipParameters,
 } from "./api-model";
-import type { ApiReferenceEntry, ParamDraft, WorkerEntry } from "./api-model";
+import type {
+  ApiReferenceEntry,
+  ParamDraft,
+  WorkerEntry,
+  WrappedNode,
+} from "./api-model";
 import { apiSlug } from "./api-slug";
 import {
   annotatedTypeText,
@@ -118,45 +129,48 @@ export function declarationCategory(
 }
 
 export function specifierIsTypeOnly(node: {
-  kind: number;
+  kind: SyntaxKind;
   isTypeOnly?: boolean | undefined;
   parent?:
     | {
-        kind: number;
-        parent?: { kind: number; isTypeOnly?: boolean | undefined } | undefined;
+        kind: SyntaxKind;
+        parent?:
+          { kind: SyntaxKind; isTypeOnly?: boolean | undefined } | undefined;
       }
     | undefined;
 }): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
   if (node.kind !== SyntaxKind.ExportSpecifier) return false;
   if (node.isTypeOnly) return true;
   const named = node.parent;
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
   if (!named || named.kind !== SyntaxKind.NamedExports) return false;
   const decl = named.parent;
   return Boolean(
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
     decl && decl.kind === SyntaxKind.ExportDeclaration && decl.isTypeOnly,
   );
 }
 
-export function functionTypeOf(node: {
-  kind: number;
-  type?: { kind: number; type?: { kind: number } | undefined } | undefined;
-}): { kind: number } | undefined {
-  let current:
-    { kind: number; type?: { kind: number } | undefined } | undefined = node;
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
+interface TypeShape {
+  kind: SyntaxKind;
+  type?: TypeShape | undefined;
+}
+
+function isCallableShape(
+  node: TypeShape,
+): node is FunctionTypeNode | ConstructorTypeNode {
+  return (
+    node.kind === SyntaxKind.FunctionType ||
+    node.kind === SyntaxKind.ConstructorType
+  );
+}
+
+export function functionTypeOf(
+  node: TypeShape,
+): FunctionTypeNode | ConstructorTypeNode | undefined {
+  let current: TypeShape | undefined = node;
   while (current && current.kind === SyntaxKind.ParenthesizedType)
     current = current.type;
   if (!current) return undefined;
-  if (
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
-    current.kind === SyntaxKind.FunctionType ||
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
-    current.kind === SyntaxKind.ConstructorType
-  )
-    return current;
+  if (isCallableShape(current)) return current;
   return undefined;
 }
 
@@ -272,18 +286,18 @@ function parameterPieces(
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
-async function callablePages(
+function callablePages(
   nodes: readonly Node[],
   tags: readonly DocTag[],
   jobs: Map<string, FileJob>,
-): Promise<{ signatures: string[]; parameterQueries: ParameterQuery[] }> {
-  const selected = overloadNodes(nodes, SyntaxKind.FunctionDeclaration);
+): { signatures: string[]; parameterQueries: ParameterQuery[] } {
+  const selected = overloadNodes(
+    nodes.filter(isFunctionDeclaration),
+    SyntaxKind.FunctionDeclaration,
+  );
   const signatures: string[] = [];
   const parameterQueries: ParameterQuery[] = [];
-  for (const node of selected) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing function-kind selection controls the node without changing overload selection or validation
-    const fn = node as FunctionDeclaration;
+  for (const fn of selected) {
     const fileText = fn.getSourceFile().text;
     const signature = cleanSignature(
       fileText.slice(fn.getStart(), cutEnd("body", fn.body?.pos, fn.end)),
@@ -325,8 +339,7 @@ async function readPage(
   const tags = await checker.getJsDocTagsOfSymbol(aliased);
   const kind = catalogKind({
     typeOnlyExport: typeOnlyExport(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve type-only flag inspection for every export node, including assignments
-      exportNodes.map((node) => specifierIsTypeOnly(node as ExportSpecifier)),
+      exportNodes.map((node) => specifierIsTypeOnly(node)),
     ),
     declarationKind: declarationCategory(impl.kind),
   });
@@ -339,17 +352,15 @@ async function readPage(
   let table: PageDraft["typeTable"] = null;
   const file = impl.getSourceFile().fileName;
   const fileText = impl.getSourceFile().text;
-  if (impl.kind === SyntaxKind.FunctionDeclaration) {
-    const callable = await callablePages(nodes, tags, jobs);
+  if (isFunctionDeclaration(impl)) {
+    const callable = callablePages(nodes, tags, jobs);
     signatures = callable.signatures;
     parameterQueries = callable.parameterQueries;
-  } else if (impl.kind === SyntaxKind.TypeAliasDeclaration) {
+  } else if (isTypeAliasDeclaration(impl)) {
     signatures = [cleanSignature(impl.getText())];
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing type-alias kind branch controls the original property read without a new guard
-    const callable = functionTypeOf((impl as unknown as { type: Node }).type);
+    const callable = functionTypeOf(impl.type);
     if (callable) {
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve handling of both callable syntax kinds without changing the helper input contract
-      const pieces = parameterPieces(callable as FunctionTypeNode, tags);
+      const pieces = parameterPieces(callable, tags);
       parameterQueries = [
         {
           file,
@@ -359,22 +370,13 @@ async function readPage(
           drafts: pieces.drafts,
         },
       ];
-    } else if (
-      typeAliasHasMembers(
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unnecessary-type-assertion -- INTENT: preserve original type-alias member queries without narrowing the accepted helper input
-        impl as unknown as {
-          kind: number;
-          type?: { kind: number; type?: { kind: number } };
-        },
-      )
-    )
+    } else if (typeAliasHasMembers(impl))
       table = typeTableQuery(includeTypeTable, file, name);
   } else if (impl.kind === SyntaxKind.ClassDeclaration) {
     signatures = [cleanSignature(impl.getText())];
     table = typeTableQuery(includeTypeTable, file, name);
-  } else if (impl.kind === SyntaxKind.VariableDeclaration) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing variable-kind branch controls the node without adding validation
-    const variable = impl as VariableDeclaration;
+  } else if (isVariableDeclaration(impl)) {
+    const variable = impl;
     const initializer = nestedExpression(variable.initializer, [
       SyntaxKind.AsExpression,
       SyntaxKind.SatisfiesExpression,
@@ -433,6 +435,15 @@ async function readPage(
   };
 }
 
+/** `WrappedNode.kind` is a plain number, so compare against the enum member widened to one. */
+const objectLiteralKind: number = SyntaxKind.ObjectLiteralExpression;
+
+function isObjectLiteralShape(
+  node: WrappedNode,
+): node is ObjectLiteralExpression {
+  return node.kind === objectLiteralKind;
+}
+
 async function readStructMembers(
   variable: VariableDeclaration,
   checker: Checker,
@@ -446,24 +457,19 @@ async function readStructMembers(
     ]),
     "struct initializer",
   );
-  requireKind(
-    initializer.kind,
-    SyntaxKind.ObjectLiteralExpression,
+  const literal = requireNode(
+    initializer,
+    isObjectLiteralShape,
     "struct initializer is not an object literal",
   );
   const pages: PageDraft[] = [];
   const descriptions = new Map<string, string>();
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original initializer-kind check and direct property access ordering
-  const properties = (initializer as unknown as { properties: readonly Node[] })
-    .properties;
-  for (const property of properties) {
-    requireKind(
-      property.kind,
-      SyntaxKind.PropertyAssignment,
+  for (const property of literal.properties) {
+    const assignment = requireNode(
+      property,
+      isPropertyAssignment,
       `unsupported struct property ${property.getText()}`,
     );
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the existing property-kind check and original name/initializer reads
-    const assignment = property as unknown as { name: Node; initializer: Node };
     const name = objectPropertyName(
       assignment.name.getText(),
       assignment.name.kind,
@@ -659,10 +665,7 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
       packages.map((pkg) => joinPath(repoRoot, pkg.entry)),
       compilerOptions,
     );
-    const checker = projectChecker(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the existing project field without invoking getProject or changing lookup side effects
-      program as unknown as { project?: { checker?: Checker } },
-    );
+    const checker = program.getProject().checker;
     const jobs = new Map<string, FileJob>();
     const drafts: PageDraft[] = [];
     for (const pkg of packages) {
@@ -696,8 +699,11 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
             SyntaxKind.ExportAssignment,
           );
           const members = await readStructMembers(
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original struct extraction and its errors without a new early declaration-kind error
-            impl as VariableDeclaration,
+            requireNode(
+              impl,
+              isVariableDeclaration,
+              "struct is not a variable declaration",
+            ),
             checker,
             jobs,
           );
@@ -725,10 +731,7 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
         fileForJob.set(job.file, temp);
       }
       const tableProgram = await api.createProgram(roots, compilerOptions);
-      const tableChecker = projectChecker(
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the existing project field without invoking getProject or changing lookup side effects
-        tableProgram as unknown as { project?: { checker?: Checker } },
-      );
+      const tableChecker = tableProgram.getProject().checker;
       for (const job of jobs.values()) {
         const root = defined(fileForJob.get(job.file), job.file);
         for (const query of job.queries) {
@@ -759,18 +762,16 @@ export function syntheticQuery(
 
 /** Object-shaped aliases keep a member table. Unions and conditionals do not. */
 export function typeAliasHasMembers(node: {
-  kind: number;
-  type?: { kind: number; type?: { kind: number } | undefined } | undefined;
+  kind: SyntaxKind;
+  type?:
+    { kind: SyntaxKind; type?: { kind: SyntaxKind } | undefined } | undefined;
 }): boolean {
   let current = node.type;
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
   while (current && current.kind === SyntaxKind.ParenthesizedType)
     current = current.type;
   if (!current) return false;
   return (
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
     current.kind === SyntaxKind.TypeLiteral ||
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
     current.kind === SyntaxKind.IntersectionType
   );
 }

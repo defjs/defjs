@@ -174,3 +174,19 @@ function makeRequest(
     ...init,
   };
 }
+
+describe("shared-memory views", () => {
+  test("sends a view over a SharedArrayBuffer as a copy of its bytes", () => {
+    const shared = new SharedArrayBuffer(4);
+    new Uint8Array(shared).set([9, 1, 2, 3]);
+    const view = new Uint8Array(shared, 1, 3);
+
+    const body = serializeHttpBody(view);
+
+    expect(body).not.toBe(view);
+    expect(
+      body instanceof Uint8Array && body.buffer instanceof ArrayBuffer,
+    ).toBe(true);
+    expect(body).toEqual(new Uint8Array([1, 2, 3]));
+  });
+});

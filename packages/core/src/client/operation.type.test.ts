@@ -25,8 +25,7 @@ const derived: Client = client({ signal });
 const noOptions: Client = client();
 void [derived, noOptions];
 // @ts-expect-error A derived client is not callable.
-// eslint-disable-next-line @typescript-eslint/no-unsafe-call -- the type error above is the assertion
-client({ signal })({ protocols: ["chat.v1"] })();
+client({ signal })({ protocols: ["chat.v1"] });
 
 // @ts-expect-error timeout was removed from request options.
 client({ timeout: 100 });

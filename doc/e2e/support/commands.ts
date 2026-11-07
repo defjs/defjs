@@ -17,22 +17,49 @@ function sessionOf(token: string): Session {
   return session;
 }
 
+const isRegExpParts = (value: unknown): value is [string, string] =>
+  Array.isArray(value) &&
+  value.length === 2 &&
+  typeof value[0] === "string" &&
+  typeof value[1] === "string";
+
+const isRef = (value: unknown): value is Ref =>
+  typeof value === "object" &&
+  value !== null &&
+  "handle" in value &&
+  (typeof value.handle === "number" || value.handle === "browser") &&
+  "steps" in value &&
+  Array.isArray(value.steps);
+
+/**
+ * Playwright sends a page function to the page as `String(fn)` and runs it only there, so the
+ * transmitted source becomes the function's text instead of being evaluated in this process.
+ */
+function pageFunction(source: string): () => never {
+  const fn = (): never => {
+    throw new TypeError("A page function runs only in the browser page");
+  };
+  fn.toString = () => source;
+  return fn;
+}
+
 function revive(session: Session, browser: Browser, value: Encoded): unknown {
   if (Array.isArray(value))
     return value.map((v) => revive(session, browser, v));
   if (typeof value !== "object" || value === null) return value;
-  if ("__fn" in value)
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-base-to-string -- INTENT: preserve original serialized-function coercion, invocation, and promise-based closer behavior
-    return new Function(`return (${String(value["__fn"])})`)();
-  if ("__re" in value) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve native RegExp coercion and failures for serialized values without new validation
-    const [source, flags] = value["__re"] as [string, string];
+  if ("__fn" in value && typeof value["__fn"] === "string")
+    return pageFunction(value["__fn"]);
+  if ("__re" in value && isRegExpParts(value["__re"])) {
+    const [source, flags] = value["__re"];
     return new RegExp(source, flags);
   }
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original remote-handle lookup and failure behavior without validating the wire object
-  if ("__ref" in value) return walk(session, browser, value["__ref"] as Ref);
+  if ("__ref" in value && isRef(value["__ref"]))
+    return walk(session, browser, value["__ref"]);
   return Object.fromEntries(
-    Object.entries(value).map(([key, v]) => [key, revive(session, browser, v)]),
+    Object.entries(value).map(([key, v]: [string, Encoded]) => [
+      key,
+      revive(session, browser, v),
+    ]),
   );
 }
 
@@ -42,16 +69,24 @@ function walk(session: Session, browser: Browser, ref: Ref): unknown {
   if (current === undefined)
     throw new Error(`Unknown e2e handle: ${ref.handle}`);
   for (const step of ref.steps) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve JavaScript member access on callable and primitive remote owners
-    const owner = current as Record<string, unknown>;
-    const member = owner[step.name];
-    current = step.args
-      ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original member.apply lookup and invocation ordering
-        (member as (...args: unknown[]) => unknown).apply(
-          owner,
-          step.args.map((arg) => revive(session, browser, arg)),
-        )
-      : member;
+    const owner = current;
+    if (
+      (typeof owner !== "object" || owner === null) &&
+      typeof owner !== "function"
+    )
+      throw new TypeError(`Cannot read "${step.name}" of ${typeof owner}`);
+    const member: unknown = Reflect.get(owner, step.name);
+    if (!step.args) {
+      current = member;
+      continue;
+    }
+    if (typeof member !== "function")
+      throw new TypeError(`"${step.name}" is not a function`);
+    current = Reflect.apply(
+      member,
+      owner,
+      step.args.map((arg) => revive(session, browser, arg)),
+    );
   }
   return current;
 }
@@ -68,11 +103,29 @@ function browserOf(context: BrowserContext): Browser {
   return browser;
 }
 
-const isPlainValue = (value: unknown) =>
-  typeof value !== "object" ||
-  value === null ||
-  Array.isArray(value) ||
-  Object.getPrototypeOf(value) === Object.prototype;
+/** A Playwright object that stays in this process and is passed back by handle. */
+const isHandleValue = (value: unknown): value is object =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.getPrototypeOf(value) !== Object.prototype;
+
+interface Closable {
+  close(): Promise<void>;
+}
+
+const isCloseable = (value: object): value is Page | BrowserContext =>
+  "close" in value && typeof value.close === "function";
+
+const isPage = (value: unknown): value is Page =>
+  typeof value === "object" &&
+  value !== null &&
+  "route" in value &&
+  typeof value.route === "function" &&
+  "on" in value &&
+  typeof value.on === "function" &&
+  "addInitScript" in value &&
+  typeof value.addInitScript === "function";
 
 export const e2eOpen: BrowserCommand<[]> = () => {
   const token = `e2e-${++counter}`;
@@ -88,17 +141,20 @@ export const e2eCall: BrowserCommand<[string, Ref]> = async (
   const session = sessionOf(token);
   const result = await walk(session, browserOf(context), ref);
   const last = ref.steps.at(-1)?.name;
-  if ((last === "newPage" || last === "newContext") && !isPlainValue(result)) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve context-based closer ownership without duck-typing or skipping returned handles
-    const created = result as Page | BrowserContext;
+  if (!isHandleValue(result)) return { kind: "value", value: result };
+  if (last === "newPage" || last === "newContext") {
+    if (!isCloseable(result))
+      throw new TypeError(
+        `${last} did not return a closable Playwright object`,
+      );
+    const created = result;
     session.closers.push(async () => {
-      const owner = "context" in created ? created.context() : created;
+      const owner: Closable =
+        "context" in created ? created.context() : created;
       await owner.close();
     });
   }
-  if (isPlainValue(result)) return { kind: "value", value: result };
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original registration and native WeakMap failures for non-plain results
-  return { kind: "handle", handle: register(session, result as object) };
+  return { kind: "handle", handle: register(session, result) };
 };
 
 export const e2eExtend: BrowserCommand<
@@ -106,8 +162,8 @@ export const e2eExtend: BrowserCommand<
 > = async ({ context }, token, name, pageRef, ...options) => {
   const session = sessionOf(token);
   const browser = browserOf(context);
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original page operation failures without an added page-shape check
-  const page = walk(session, browser, pageRef) as Page;
+  const page = walk(session, browser, pageRef);
+  if (!isPage(page)) throw new TypeError("e2eExtend needs a Playwright page");
   const [first] = options.map((option) => revive(session, browser, option));
   if (name === "errors") {
     const errors: string[] = [];
@@ -149,10 +205,10 @@ export const e2eExtend: BrowserCommand<
   const hold = {
     release: () => gate.resolve(),
   };
-  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve original serialized-function coercion, invocation, and promise-based closer behavior
-  session.closers.unshift(async () => gate.resolve());
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the route matcher values accepted by Playwright without restricting them to this realm RegExp
-  await page.route(first as RegExp, async (route) => {
+  session.closers.unshift(() => Promise.resolve(gate.resolve()));
+  if (typeof first !== "string" && !(first instanceof RegExp))
+    throw new TypeError("hold needs a URL string or a RegExp");
+  await page.route(first, async (route) => {
     await gate.promise;
     await route.continue();
   });

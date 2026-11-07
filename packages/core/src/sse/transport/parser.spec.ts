@@ -25,7 +25,6 @@ function settleWithin<T>(promise: Promise<T>): Promise<T> {
       },
       (error: unknown) => {
         clearTimeout(timeout);
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
         reject(error);
       },
     );

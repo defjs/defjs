@@ -19,8 +19,7 @@ export async function setup({ provide }: TestProject) {
   const app = new Hono();
 
   // HTTP: echo back received headers
-  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior when request header reads or response construction fail
-  app.post("/echo-headers", async (c) => {
+  app.post("/echo-headers", (c) => {
     const headers: { [key: string]: string } = {};
     c.req.raw.headers.forEach((value, key) => {
       headers[key] = value;

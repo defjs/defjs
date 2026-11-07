@@ -41,9 +41,8 @@ describe("outbound request non-JSON bodies", () => {
 
   test("passes a web ReadableStream body through unchanged", () => {
     const fromAsync = streamFrom(
-      // eslint-disable-next-line @typescript-eslint/require-await -- an async generator yields asynchronously without awaiting
       (async function* () {
-        yield new TextEncoder().encode("x");
+        yield await Promise.resolve(new TextEncoder().encode("x"));
       })(),
     );
 

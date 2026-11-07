@@ -446,10 +446,11 @@ test("a WebSocket endpoint retains its definition when the configuration object 
   const client = createClient(
     withEndpoint("https://example.test"),
     withInterceptors(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      createWebSocketInterceptor(async (request) => {
+      createWebSocketInterceptor((request) => {
         paths.push(request.endpoint);
-        throw new Error("Audit capture before constructing a socket");
+        return Promise.reject(
+          new Error("Audit capture before constructing a socket"),
+        );
       }),
     ),
   );

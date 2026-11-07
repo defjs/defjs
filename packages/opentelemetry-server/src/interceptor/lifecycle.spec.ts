@@ -240,11 +240,10 @@ describe("retry propagation lifecycle", () => {
         }
       });
       const result = await retry.fn(req, (request) =>
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        telemetry.fn(request, async (outgoing) => {
+        telemetry.fn(request, (outgoing) => {
           sent.push(outgoing);
-          if (sent.length === 1) throw failure;
-          return stream.stream;
+          if (sent.length === 1) return Promise.reject(failure);
+          return Promise.resolve(stream.stream);
         }),
       );
       expect(result).toBe(stream.stream);
@@ -515,7 +514,7 @@ describe("span hook recording lifecycle", () => {
       span.end();
       expect(() =>
         runSpanHook(span, "requestHook", () => {
-          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: the table feeds non-Error values (see $type) to an already ended span
           throw error;
         }),
       ).not.toThrow();
@@ -540,8 +539,7 @@ describe("span hook recording lifecycle", () => {
       tracer,
       propagator,
       metrics,
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: the hook must isolate a deliberate string rejection
-      responseHook: () => Promise.reject("private hook detail"),
+      responseHook: () => Promise.reject(new Error("private hook detail")),
     });
     expect(
       await interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
@@ -555,8 +553,7 @@ describe("span hook recording lifecycle", () => {
     if (!record) throw new Error("Expected a recorded HTTP span");
     expect(() =>
       runSpanHook(record.span, "requestHook", () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the hook must tolerate a thrown null
-        throw null;
+        throw new Error("private hook detail");
       }),
     ).not.toThrow();
     expect(diagnostic).toHaveBeenCalledTimes(2);

@@ -1,6 +1,6 @@
-import { resolveObjectShape } from "./shape";
+import { resolveObjectShapeEntries } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { RuntimeStruct, StructDefinition, StructLike } from "./types";
+import type { RuntimeStruct, StructDefinition } from "./types";
 import { hasOwnKey, isPlainObject, matchesEnum, MAX_DEPTH } from "./utils";
 
 export function matchesRuntimeValue(
@@ -12,16 +12,14 @@ export function matchesRuntimeValue(
 }
 
 export function selectUnionOptions(
-  options: readonly StructLike<unknown, unknown, boolean>[],
+  options: readonly RuntimeStruct[],
   value: unknown,
   depth = 0,
 ): RuntimeStruct[] {
   const matches: RuntimeStruct[] = [];
   for (const option of options) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep original live field and metadata reads without new validation or cached key/value snapshots
-    const runtime = option as unknown as RuntimeStruct;
-    if (matchesRuntimeValue(runtime, value, depth)) {
-      matches.push(runtime);
+    if (matchesRuntimeValue(option, value, depth)) {
+      matches.push(option);
     }
   }
   return matches;
@@ -129,11 +127,7 @@ function matchesObjectValue(
     return true;
   }
 
-  const shape = resolveObjectShape(struct, definition);
-  for (const key in shape) {
-    const fieldStruct = shape[key];
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep original live field and metadata reads without new validation or cached key/value snapshots
-    const field = fieldStruct as unknown as RuntimeStruct;
+  for (const [key, field] of resolveObjectShapeEntries(struct, definition)) {
     const fieldDefinition = field[DEFINITION];
     if (!hasOwnKey(value, key)) {
       if (isRequiredField(fieldDefinition)) {

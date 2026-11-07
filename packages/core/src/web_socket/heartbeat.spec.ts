@@ -477,11 +477,11 @@ describe("heartbeat", () => {
     expect(method(socket, "send")).not.toHaveBeenCalled();
     expect(onFatal).toHaveBeenCalledTimes(1);
     expect(onFatal.mock.calls[0]?.[0]).toBeInstanceOf(TypeError);
+    const messageMatcher: unknown = expect.stringContaining(
+      "is not JSON data: Infinity",
+    );
     expect(onFatal.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: preserve the original asymmetric matcher for the fatal observer argument
-        message: expect.stringContaining("is not JSON data: Infinity"),
-      }),
+      expect.objectContaining({ message: messageMatcher }),
     );
   });
 

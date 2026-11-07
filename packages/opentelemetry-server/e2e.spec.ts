@@ -82,10 +82,7 @@ describe("operation diagnostic boundary", () => {
       const cause = new TypeError("local transport unavailable");
       const client = createClient(
         withEndpoint("https://example.invalid"),
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        withHTTPHandle(async () => {
-          throw cause;
-        }),
+        withHTTPHandle(() => Promise.reject(cause)),
         withOpenTelemetryServer({ logger }),
       );
       const request = defineRequest({ method: "GET", path: "/inventory" });
@@ -275,10 +272,9 @@ describe("operation diagnostic boundary", () => {
     const { logger, records } = createMockLogger();
     const client = createClient(
       withEndpoint("https://example.invalid"),
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      withSSEHandle(async () => {
-        throw new TypeError("local transport unavailable");
-      }),
+      withSSEHandle(() =>
+        Promise.reject(new TypeError("local transport unavailable")),
+      ),
       withOpenTelemetryServer({ logger }),
     );
     const [fault] = await defineEventStream({

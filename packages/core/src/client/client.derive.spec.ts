@@ -157,10 +157,9 @@ describe("client factory and client values", () => {
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
       withInterceptors(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        createHttpInterceptor(async () => {
-          throw new Error("transport must not run");
-        }),
+        createHttpInterceptor(() =>
+          Promise.reject(new Error("transport must not run")),
+        ),
       ),
     );
     const read = defineRequest({
@@ -444,8 +443,10 @@ describe("AbortSignal.timeout classification", () => {
           new Promise<Response>((_resolve, reject) => {
             init?.signal?.addEventListener(
               "abort",
-              // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
-              () => reject(init.signal?.reason),
+              () => {
+                const reason: unknown = init.signal?.reason;
+                reject(reason);
+              },
               { once: true },
             );
           }),
@@ -471,8 +472,10 @@ describe("AbortSignal.timeout classification", () => {
           new Promise<Response>((_resolve, reject) => {
             init?.signal?.addEventListener(
               "abort",
-              // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
-              () => reject(init.signal?.reason),
+              () => {
+                const reason: unknown = init.signal?.reason;
+                reject(reason);
+              },
               { once: true },
             );
           }),

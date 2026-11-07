@@ -484,3 +484,25 @@ describe("encode.ts", () => {
     expect(encode(s, "c")).toBe("c");
   });
 });
+
+describe("encode hooks given a value their struct did not produce", () => {
+  test("bigint encode calls toString() on any value that has it", () => {
+    expect(encode(struct.bigint(), 12n)).toBe("12");
+    expect(encode(struct.bigint(), 5)).toBe("5");
+    expect(encode(struct.bigint(), { toString: () => "custom" })).toBe(
+      "custom",
+    );
+    expect(() => encode(struct.bigint(), Object.create(null))).toThrow(
+      "toString() is not available on object",
+    );
+  });
+
+  test("Date encode calls toISOString() on a date-like value and rejects anything else", () => {
+    const dateLike = { toISOString: () => "2026-01-01T00:00:00.000Z" };
+    expect(encode(struct.date(), dateLike)).toBe("2026-01-01T00:00:00.000Z");
+    expect(() => encode(struct.date(), "2026-01-01")).toThrow(
+      "toISOString() is not available on string",
+    );
+    expect(() => encode(struct.date(), null)).toThrow(TypeError);
+  });
+});

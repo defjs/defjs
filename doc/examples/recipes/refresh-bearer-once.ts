@@ -61,20 +61,20 @@ function refreshingBearer(
 let credential: Credential = { accessToken: "v1" };
 const client = createClient(
   withEndpoint("https://billing.example.test"),
-  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior for construction errors instead of introducing synchronous throws
-  withHTTPHandle(async (input, init) => {
+  withHTTPHandle((input, init) => {
     const auth = new Request(input, init).headers.get("authorization");
     if (auth === "Bearer v1")
-      return Response.json({ code: "expired_token" }, { status: 401 });
-    return Response.json({ total: 42 }, { status: 200 });
+      return Promise.resolve(
+        Response.json({ code: "expired_token" }, { status: 401 }),
+      );
+    return Promise.resolve(Response.json({ total: 42 }, { status: 200 }));
   }),
   withInterceptors(
     refreshingBearer(
       () => credential,
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior for construction errors instead of introducing synchronous throws
-      async () => {
+      () => {
         credential = { accessToken: "v2" };
-        return credential;
+        return Promise.resolve(credential);
       },
     ),
   ),

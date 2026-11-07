@@ -7,16 +7,19 @@ import {
 } from "@defjs/core";
 import { getOrder } from "./define-request.ts";
 
-// eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior for construction errors instead of introducing synchronous throws
-const handle: FetchHandle = async (input, init) => {
+const handle: FetchHandle = (input, init) => {
   const request = new Request(input, init);
   const id = new URL(request.url).pathname.split("/").at(-1);
 
   if (id === "7") {
-    return Response.json({ id: 7, status: "paid" }, { status: 200 });
+    return Promise.resolve(
+      Response.json({ id: 7, status: "paid" }, { status: 200 }),
+    );
   }
 
-  return Response.json({ message: "Order not found" }, { status: 404 });
+  return Promise.resolve(
+    Response.json({ message: "Order not found" }, { status: 404 }),
+  );
 };
 
 const client = createClient(

@@ -501,9 +501,8 @@ describe("request http runtime errors", () => {
     const useRequest = defineRequest({
       builder: () => ({
         body: {
-          // eslint-disable-next-line @typescript-eslint/require-await -- an async generator yields asynchronously without awaiting
           async *[Symbol.asyncIterator]() {
-            yield new TextEncoder().encode("chunk");
+            yield await Promise.resolve(new TextEncoder().encode("chunk"));
           },
         },
       }),
@@ -524,10 +523,9 @@ describe("request http runtime errors", () => {
   });
 
   test("should return a definition error when interceptor chain throws", async () => {
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const throwingInterceptor = createHttpInterceptor(async () => {
-      throw new Error("interceptor boom");
-    });
+    const throwingInterceptor = createHttpInterceptor(() =>
+      Promise.reject(new Error("interceptor boom")),
+    );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -778,10 +776,7 @@ describe("request http runtime errors", () => {
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        createHttpInterceptor(async () => {
-          throw ERR_ABORTED;
-        }),
+        createHttpInterceptor(() => Promise.reject(ERR_ABORTED)),
       ),
     );
     const useRequest = defineRequest({
@@ -814,9 +809,8 @@ describe("request http runtime errors", () => {
 
     const [error, result, response] = await useRequest(
       guardedClient({
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        async onDownloadProgress() {
-          throw observerError;
+        onDownloadProgress() {
+          return Promise.reject(observerError);
         },
       }),
     );
@@ -1179,11 +1173,8 @@ describe("request http runtime errors", () => {
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        createHttpInterceptor(async () => {
-          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
-          throw "interceptor boom";
-        }),
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the interceptor under test rejects with a string, which must be classified as INTERCEPTOR_FAILED
+        createHttpInterceptor(() => Promise.reject("interceptor boom")),
       ),
     );
     const useRequest = defineRequest({ method: "GET", path: "/intercepted" });

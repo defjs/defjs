@@ -23,7 +23,6 @@ import type {
   IntersectionDefinition,
   ObjectDefinition,
   Path,
-  RecordDefinition,
   RuntimeStruct,
   UnionDefinition,
 } from "../struct/types";
@@ -31,7 +30,9 @@ import {
   intersectionEncodeError,
   isIntersectionIdentity,
   isPlainObject,
+  isPrimitive,
   mergeIntersectionValues,
+  mergePlainObjects,
   nullObject,
   sameWireValue,
 } from "../struct/utils";
@@ -42,9 +43,10 @@ export type OutboundTransport = "http" | "sse" | "webSocket";
 export type OutboundBuilder = (input: never) => unknown;
 
 export type MaterializedRequest = {
-  body?: unknown;
+  body?: object | string;
   defaultContentType?: string;
-  headers?: HeadersInit | { [key: string]: unknown };
+  /** A builder's header array is kept as given and applied by appendHeaderEntries. */
+  headers?: HeadersInit | unknown[] | { [key: string]: unknown };
   params?: { [key: string]: string };
   query?: URLSearchParams | { [key: string]: unknown };
 };
@@ -69,7 +71,7 @@ export function runOutboundBuilder(
     return {};
   }
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original erased builder contract and definition getter order; PERF: 9/9 interleaved runs slower +0.5..2.9% when the builder is captured typed
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published OutboundBuilder type, `(input: never) => unknown` in RequestDefinition, EventStreamDefinition and WebSocketDefinition, erases each builder's parameter, so no value can be passed to it unasserted (TS2345, `unknown` is not assignable to `never`). Keeping each definition's own `(input: BuilderInput<TInput>) => …` type would need ParsedInput<TInput> to relate to BuilderInput<TInput>, two conditionals on the caller's generic
   const result = builder(input as never);
   return result === undefined ? {} : result;
 }
@@ -174,12 +176,15 @@ function encodeGuided(
   if (isGuideSet(guide)) {
     return encodeMembers(value, guide.members, path, guides);
   }
-  if (guide?.[DEFINITION].kind === "intersection") {
-    return encodeIntersectionGuide(value, guide, path, guides);
-  }
-  // Peel unions before container dispatch so every match uses this same recursion.
-  if (guide?.[DEFINITION].kind === "or") {
-    return encodeMatchingUnion(value, guide, path, guides);
+  if (guide !== undefined) {
+    const definition = guide[DEFINITION];
+    if (definition.kind === "intersection") {
+      return encodeIntersectionGuide(value, guide, definition, path, guides);
+    }
+    // Peel unions before container dispatch so every match uses this same recursion.
+    if (definition.kind === "or") {
+      return encodeMatchingUnion(value, definition.options, path, guides);
+    }
   }
   if (Array.isArray(value)) {
     return encodeGuidedArray(value, guide, path, guides);
@@ -211,12 +216,8 @@ function narrowToParent(
       shared.push(member);
     }
   }
-  if (shared.length === 0) {
-    return own;
-  }
-  // shared is non-empty, so guideTag returns the one struct or a conjunction.
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the existing non-empty shared-guide branch without an additional hot-path predicate call
-  return guideTag(shared) as Guide;
+  // guideTag returns undefined only for an empty list: with no shared member, keep the own guide.
+  return guideTag(shared) ?? own;
 }
 
 function encodeOwnGuide(
@@ -234,11 +235,10 @@ function encodeOwnGuide(
 function encodeIntersectionGuide(
   value: unknown,
   guide: RuntimeStruct,
+  definition: IntersectionDefinition,
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): unknown {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the caller already selected an intersection; preserve the original encoder arguments and definition reads
-  const definition = guide[DEFINITION] as IntersectionDefinition;
   if (definition.objectSides && isPlainObject(value)) {
     return encodeMembers(value, definition.options, path, guides);
   }
@@ -395,17 +395,21 @@ function materializePath(
     throw new TypeError("path value must be an object");
   }
 
-  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: create the original null-prototype path dictionary directly rather than changing its prototype or adding a factory call
-  const params: { [key: string]: string } = Object.create(null);
+  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key, so the record has none.
+  const params: { [key: string]: string } = {};
+  Object.setPrototypeOf(params, null);
   for (const [key, item] of Object.entries(encoded)) {
     if (item === null) {
       throw new TypeError(`path value for "${key}" must not be null`);
     }
-    if (typeof item === "object") {
+    if (
+      !isPrimitive(item) &&
+      item !== undefined &&
+      typeof item !== "function"
+    ) {
       throw new TypeError(`path value for "${key}" must be a scalar`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve String conversion of all original non-null non-object values instead of rejecting functions, symbols, or undefined
+    // Every other value, including a symbol, a function or undefined, is converted with String().
     params[key] = String(item);
   }
   return params;
@@ -430,13 +434,13 @@ function materializeQuery(
 function materializeHeaders(
   value: unknown,
   guides?: WeakMap<object, Guide>,
-): HeadersInit | { [key: string]: unknown } {
+): HeadersInit | unknown[] | { [key: string]: unknown } {
   if (typeof Headers !== "undefined" && value instanceof Headers) {
     return value;
   }
   if (Array.isArray(value)) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: return the original header-pair array by identity without copying or normalising its entries
-    return value as HeadersInit;
+    const entries: unknown[] = value;
+    return entries;
   }
 
   const encoded = encodeOutbound(value, guides);
@@ -453,12 +457,12 @@ function materializeBody(
   body: unknown,
   guides?: WeakMap<object, Guide>,
 ): {
-  body?: unknown;
+  body?: object | string;
   defaultContentType?: string;
 } {
-  const codec = codecOf(body, guides);
-  if (codec && isPlainObject(body)) {
-    return { body: encodeCodecBody(body, codec, guides) };
+  const codecBody = codecBodyOf(body, guides);
+  if (codecBody) {
+    return { body: encodeCodecBody(codecBody, guides) };
   }
   if (
     isFormData(body) ||
@@ -502,8 +506,7 @@ export function rejectNonJson(
       typeof value === "number"
         ? String(value)
         : typeof value === "object"
-          ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original constructor.name lookup including non-function constructors and proxy/getter side effects
-            (value as { constructor?: { name?: string } }).constructor?.name ||
+          ? value?.constructor?.name ||
             Object.prototype.toString.call(value).slice(8, -1)
           : typeof value;
     const advice =
@@ -518,12 +521,11 @@ export function rejectNonJson(
 }
 
 function encodeCodecBody(
-  body: { [key: string]: unknown },
-  codec: FormCodec,
+  { body, codec, struct }: CodecBody,
   guides?: WeakMap<object, Guide>,
 ): FormData | URLSearchParams {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: use the original shared outbound encoder without replacing its guide traversal or allocating codec wrappers
-  const encoded = encodeOutbound(body, guides) as { [key: string]: unknown };
+  // The object struct that selected the codec is the body's own guide.
+  const encoded = encodeTaggedObject(body, struct, [], guides);
   if (codec === "formData") {
     const form = new FormData();
     for (const [key, value] of Object.entries(encoded)) {
@@ -554,13 +556,9 @@ function appendFormValue(
     }
     return;
   }
-  if (
-    codec === "formData" &&
-    typeof Blob !== "undefined" &&
-    value instanceof Blob
-  ) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: append Blob values to the original FormData target without extra per-field callback wrappers
-    (target as FormData).append(key, value);
+  // Only the formData codec appends to a FormData target.
+  if (isFormData(target) && isBlob(value)) {
+    target.append(key, value);
     return;
   }
   if (
@@ -623,14 +621,11 @@ function keySetsOf(fields: readonly ResolvedStructField[]): ObjectKeySets {
 function encodeSingleObject(
   value: { [key: string]: unknown },
   struct: RuntimeStruct,
+  definition: ObjectDefinition,
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  const fields = resolveStructFields(
-    struct,
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the object encoder is selected by its caller; preserve the original definition lookup without another guard
-    struct[DEFINITION] as ObjectDefinition,
-  );
+  const fields = resolveStructFields(struct, definition);
   const output = nullObject();
   for (const field of fields) {
     if (!Object.hasOwn(value, field.key)) {
@@ -671,26 +666,10 @@ function encodeObjectNode(
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  if (
-    members.length === 1 &&
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the length-one branch uses its sole member directly without extra wrapper state or an indexed-read guard
-    (members[0] as RuntimeStruct)[DEFINITION].kind === "object"
-  ) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original sole-member encoder call without a new allocation or validation branch
-    return encodeSingleObject(value, members[0] as RuntimeStruct, path, guides);
-  }
-  const objects: RuntimeStruct[] = [];
-  const records: RuntimeStruct[] = [];
-  const passthroughs: RuntimeStruct[] = [];
-  for (const member of members) {
-    const kind = member[DEFINITION].kind;
-    if (kind === "object") {
-      objects.push(member);
-    } else if (kind === "record") {
-      records.push(member);
-    } else if (isPassthroughStruct(member)) {
-      passthroughs.push(member);
-    }
+  const sole = members.length === 1 ? members[0] : undefined;
+  const soleDefinition = sole?.[DEFINITION];
+  if (sole !== undefined && soleDefinition?.kind === "object") {
+    return encodeSingleObject(value, sole, soleDefinition, path, guides);
   }
 
   const output = nullObject();
@@ -698,26 +677,29 @@ function encodeObjectNode(
   const wireKeys = new Set<string>();
   const plans = new Map<string, WireGroup[]>();
   const order: string[] = [];
+  const recordValues: RuntimeStruct[] = [];
+  const passthroughs: RuntimeStruct[] = [];
 
-  for (const member of objects) {
-    for (const field of resolveStructFields(
-      member,
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: objects contains the members selected by kind; preserve the original field-plan traversal and reads
-      member[DEFINITION] as ObjectDefinition,
-    )) {
-      fieldKeys.add(field.key);
-      wireKeys.add(field.wireKey);
-      addWireGroup(plans, order, field.key, field.wireKey, field.struct);
+  // Object fields are planned in member order; record values and passthroughs are applied after them.
+  for (const member of members) {
+    const definition = member[DEFINITION];
+    if (definition.kind === "object") {
+      for (const field of resolveStructFields(member, definition)) {
+        fieldKeys.add(field.key);
+        wireKeys.add(field.wireKey);
+        addWireGroup(plans, order, field.key, field.wireKey, field.struct);
+      }
+    } else if (definition.kind === "record") {
+      recordValues.push(definition.value);
+    } else if (isPassthroughStruct(member)) {
+      passthroughs.push(member);
     }
   }
 
-  const recordValues = records.map(
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: records contains the members selected by kind; retain the original map traversal without side arrays
-    (record) => (record[DEFINITION] as RecordDefinition).value,
-  );
   // A record declares every key at this node, so there is no separate literal pass.
-  const keys = records.length > 0 ? declaredRecordKeys(value, order) : order;
-  if (records.length > 0) {
+  const keys =
+    recordValues.length > 0 ? declaredRecordKeys(value, order) : order;
+  if (recordValues.length > 0) {
     for (const key of keys) {
       for (const valueStruct of recordValues) {
         addWireGroup(plans, order, key, key, valueStruct);
@@ -725,25 +707,19 @@ function encodeObjectNode(
     }
   }
   for (const key of keys) {
-    if (!Object.hasOwn(value, key)) {
+    // Every key in `keys` was inserted into `plans` above.
+    const groups = plans.get(key);
+    if (groups === undefined || !Object.hasOwn(value, key)) {
       continue;
     }
     const fieldValue = value[key];
     if (fieldValue === undefined) {
       continue;
     }
-    // Every key in `keys` was inserted into `plans` above.
-    writeWireGroups(
-      output,
-      fieldValue,
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: every traversed key was inserted into plans; retain the original lookup without an extra entries array
-      plans.get(key) as WireGroup[],
-      [...path, key],
-      guides,
-    );
+    writeWireGroups(output, fieldValue, groups, [...path, key], guides);
   }
 
-  if (records.length > 0) {
+  if (recordValues.length > 0) {
     return applyPassthrough(output, value, passthroughs, path, guides);
   }
 
@@ -777,17 +753,32 @@ function applyPassthrough(
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  let merged: unknown = output;
-  for (const guide of passthroughs) {
-    const passed = encodeGuided(value, guide, path, guides);
-    const result = mergeIntersectionValues(merged, passed, false, path.length);
+  let merged = output;
+  // Every passthrough encodes this node the same way, so one encoded record is merged once per passthrough.
+  for (let index = 0; index < passthroughs.length; index += 1) {
+    const result = mergePlainObjects(
+      merged,
+      encodePassthroughObject(value, path, guides),
+      false,
+      path.length,
+    );
     if (!result.ok) {
       throw intersectionEncodeError([...path, ...result.path]);
     }
     merged = result.value;
   }
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the value produced by the original guided shared merge rather than reimplementing its semantics
-  return merged as { [key: string]: unknown };
+  return merged;
+}
+
+/** What encodeGuided returns for an object node under an any/unknown guide: a tagged node as is, else its fields. */
+function encodePassthroughObject(
+  value: { [key: string]: unknown },
+  path: Path,
+  guides?: WeakMap<object, Guide>,
+): { [key: string]: unknown } {
+  return readOwnGuide(value, guides)
+    ? value
+    : encodeAnonymousObject(value, path, guides);
 }
 
 function addWireGroup(
@@ -1030,15 +1021,11 @@ function containerOf(
 
 function encodeMatchingUnion(
   value: unknown,
-  guide: RuntimeStruct,
+  options: UnionDefinition["options"],
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): unknown {
-  const matches = selectUnionOptions(
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the caller selected a union; retain its original definition lookup and encoder signature
-    (guide[DEFINITION] as UnionDefinition).options,
-    value,
-  );
+  const matches = selectUnionOptions(options, value);
   const first = matches[0];
   if (!first) {
     return encodeGuided(value, undefined, path, guides);
@@ -1063,9 +1050,8 @@ function encodeRecord(
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: create the original null-prototype record directly without an additional hot-path factory call
-  const output: { [key: string]: unknown } = Object.create(null);
+  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key, so the record has none.
+  const output: { [key: string]: unknown } = { __proto__: null };
   for (const [key, entry] of Object.entries(value)) {
     output[key] = encodeGuided(entry, valueStruct, [...path, key], guides);
   }
@@ -1134,10 +1120,16 @@ function assertHeaderValue(value: unknown, key: string): void {
   }
 }
 
-function codecOf(
+type CodecBody = {
+  body: { [key: string]: unknown };
+  codec: FormCodec;
+  struct: RuntimeStruct;
+};
+
+function codecBodyOf(
   value: unknown,
   guides?: WeakMap<object, Guide>,
-): FormCodec | undefined {
+): CodecBody | undefined {
   if (!isPlainObject(value)) {
     return undefined;
   }
@@ -1146,13 +1138,13 @@ function codecOf(
     return undefined;
   }
   const definition = tag[DEFINITION];
-  if (definition.kind !== "object") {
+  if (definition.kind !== "object" || definition.codec === undefined) {
     return undefined;
   }
-  return definition.codec;
+  return { body: value, codec: definition.codec, struct: tag };
 }
 
 function structTag(value: { [key: string]: unknown }): unknown {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the symbol directly without adding a proxy has trap before the original property get
-  return (value as { [STRUCT]?: unknown })[STRUCT];
+  const tag: unknown = Reflect.get(value, STRUCT);
+  return tag;
 }

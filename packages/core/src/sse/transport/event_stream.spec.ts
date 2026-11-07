@@ -52,15 +52,30 @@ function latin1(bytes: Uint8Array): string {
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
-  "maxBufferSize" | "maxQueueSize"
+  "maxBufferSize" | "maxQueueSize" | "transformMessage"
 > & {
   maxBufferSize?: number;
   maxQueueSize?: number;
 };
 
-function fetchEventStream<T = EventStreamMessage>(
+/** Streams the raw parsed messages. */
+function fetchEventStream(
   request: HttpRequest,
-  options: TestOptions<T> = {},
+  options: TestOptions<EventStreamMessage> = {},
+) {
+  return fetchEventStreamInternal(request, {
+    maxBufferSize: 1024,
+    maxQueueSize: 16,
+    transformMessage: (message) => message,
+    ...options,
+  });
+}
+
+/** Streams what `transformMessage` returns for each parsed message. */
+function fetchTransformedEventStream<T>(
+  request: HttpRequest,
+  options: TestOptions<T> &
+    Pick<FetchEventStreamOptions<T>, "transformMessage">,
 ) {
   return fetchEventStreamInternal(request, {
     maxBufferSize: 1024,
@@ -216,7 +231,7 @@ describe("fetchEventStream", () => {
         },
       });
       try {
-        const stream = await fetchEventStream(
+        const stream = await fetchTransformedEventStream(
           {
             baseEndpoint: `http://127.0.0.1:${listener.port}`,
             endpoint: "/events",
@@ -859,7 +874,7 @@ describe("SSE final endpoint attribution", () => {
         ? response.body?.getReader()
         : undefined;
       try {
-        const pending = fetchEventStream(
+        const pending = fetchTransformedEventStream(
           {
             baseEndpoint: "https://example.com",
             endpoint: "/events",

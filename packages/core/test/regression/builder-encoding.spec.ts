@@ -90,7 +90,7 @@ function responseStream(text: string): Response {
 }
 
 describe("builder refactor adversarial audit", () => {
-  test("propagates struct tags through unions, intersections, nullable values, arrays, and deep spreads", async () => {
+  test("propagates struct tags through unions, intersections, nullable values, arrays, and deep spreads", () => {
     const Alpha = struct.object({
       kind: struct.literal("alpha"),
       displayName: struct.string().alias("display_name"),
@@ -115,8 +115,7 @@ describe("builder refactor adversarial audit", () => {
       optional: Child.optional(),
     });
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(Root, {
+    const parsed = parseEndpointInput(Root, {
       choice: { displayName: "Ada", kind: "alpha" },
       both: { leftId: 7, rightName: "Lovelace" },
       items: [{ name: "A", when: iso }],
@@ -161,12 +160,11 @@ describe("builder refactor adversarial audit", () => {
     );
   });
 
-  test("keeps endpoint tags visible only to symbol-aware code", async () => {
+  test("keeps endpoint tags visible only to symbol-aware code", () => {
     const User = struct.object({
       displayName: struct.string().alias("display_name"),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(User, { displayName: "Ada" });
+    const parsed = parseEndpointInput(User, { displayName: "Ada" });
 
     const parsedObject = assertObject(parsed, "parsed user");
     expect(Object.keys(parsedObject)).toEqual(["displayName"]);
@@ -178,13 +176,12 @@ describe("builder refactor adversarial audit", () => {
     expect(Object.getOwnPropertySymbols(publicObject)).not.toContain(STRUCT);
   });
 
-  test("rejects alias collisions after a deep spread", async () => {
+  test("rejects alias collisions after a deep spread", () => {
     const Child = struct.object({
       displayName: struct.string().alias("display_name"),
     });
     const Root = struct.object({ child: Child });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(Root, {
+    const parsed = parseEndpointInput(Root, {
       child: { displayName: "Ada" },
     });
 
@@ -221,10 +218,7 @@ describe("builder refactor adversarial audit", () => {
 
     expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
     expect(decoded["__proto__"]).toBe("safe");
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as Record<string, unknown>)["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("preserves an own __proto__ query field for serializers", () => {
@@ -245,10 +239,7 @@ describe("builder refactor adversarial audit", () => {
     }
     expect(Object.hasOwn(request.query, "__proto__")).toBe(true);
     expect(request.query["__proto__"]).toBe("safe");
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as Record<string, unknown>)["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("preserves an own __proto__ header field instead of silently dropping it", () => {
@@ -266,10 +257,7 @@ describe("builder refactor adversarial audit", () => {
     }
     expect(Object.hasOwn(request.headers, "__proto__")).toBe(true);
     expect(request.headers["__proto__"]).toBe("safe");
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as Record<string, unknown>)["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("keeps an own constructor key in body, query, and headers", () => {
@@ -445,7 +433,7 @@ describe("builder refactor adversarial audit", () => {
     );
     const throwsValue = defineRequest({
       builder: () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the builder under test throws a string primitive to exercise handling of a non-Error throw
         throw "boom";
       },
       method: "POST",
@@ -1419,7 +1407,7 @@ describe("builder fixes re-audit", () => {
     expect(error).toMatchObject({ code: "NET_ABORTED" });
   });
 
-  test("BUILDER-PROTOTYPE-002: accepts an intersection with a logical __proto__ field", async () => {
+  test("BUILDER-PROTOTYPE-002: accepts an intersection with a logical __proto__ field", () => {
     const Left = struct.object({
       ["__proto__"]: struct.string().alias("proto_value"),
     });
@@ -1427,8 +1415,7 @@ describe("builder fixes re-audit", () => {
       Left,
       struct.object({ label: struct.string() }),
     );
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(Input, {
+    const parsed = parseEndpointInput(Input, {
       ["__proto__"]: "safe",
       label: "left",
     });
@@ -1474,7 +1461,7 @@ describe("builder fixes re-audit", () => {
     );
     expect(decoded).toEqual({ code: "DENIED" });
 
-    let opened: FakeSocket | undefined;
+    const constructed: FakeSocket[] = [];
     class FakeSocket {
       static OPEN = 1;
       static CONNECTING = 0;
@@ -1494,8 +1481,7 @@ describe("builder fixes re-audit", () => {
 
       constructor(url: string) {
         this.url = url;
-        // oxlint-disable-next-line typescript/no-this-alias -- the test has to emit a frame on the constructed socket
-        opened = this;
+        constructed.push(this);
         queueMicrotask(() => {
           this.readyState = FakeSocket.OPEN;
           this.emit("open", {});
@@ -1544,6 +1530,7 @@ describe("builder fixes re-audit", () => {
     });
     const [openError, session] = await endpoint(client);
     expect(openError).toBeNull();
+    const opened = constructed[0];
     if (!session || !opened) {
       throw new Error("Expected socket");
     }
@@ -1671,16 +1658,13 @@ const Profile = struct.object({
 });
 const Input = struct.object({ profile: Profile });
 
-test("runtime tags survive records, tuples, and chained modifiers used by the type probes", async () => {
+test("runtime tags survive records, tuples, and chained modifiers used by the type probes", () => {
   const User = struct.object({ id: struct.string().alias("user_id") });
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const record = await parseEndpointInput(struct.record(User), {
+  const record = parseEndpointInput(struct.record(User), {
     selected: { id: "42" },
   });
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const tuple = await parseEndpointInput(struct.tuple([User]), [{ id: "42" }]);
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const modified = await parseEndpointInput(User.optional().nullable(), {
+  const tuple = parseEndpointInput(struct.tuple([User]), [{ id: "42" }]);
+  const modified = parseEndpointInput(User.optional().nullable(), {
     id: "42",
   });
   for (const value of [record["selected"], tuple[0], modified]) {

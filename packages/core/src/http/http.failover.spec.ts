@@ -46,13 +46,12 @@ function fixture(...options: ClientOption[]) {
         ];
       },
     }),
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    withHTTPHandle(async (input) => {
+    withHTTPHandle((input) => {
       const request = new Request(input);
       requests.push(request);
       if (request.url.startsWith(endpoints[0] ?? ""))
-        throw new TypeError("connection refused");
-      return new Response("ok");
+        return Promise.reject(new TypeError("connection refused"));
+      return Promise.resolve(new Response("ok"));
     }),
     policy(),
     ...options,
@@ -414,11 +413,10 @@ test("non-stream failover does not require a global ReadableStream constructor",
   const response = new Response(null, { status: 204 });
   vi.stubGlobal("ReadableStream", undefined);
   const { client } = fixture(
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    withHTTPHandle(async (input) => {
+    withHTTPHandle((input) => {
       if (new Request(input).url.startsWith(endpoints[0] ?? ""))
-        throw new Error("connection refused");
-      return response;
+        return Promise.reject(new Error("connection refused"));
+      return Promise.resolve(response);
     }),
   );
   expect(

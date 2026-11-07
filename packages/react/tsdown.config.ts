@@ -1,10 +1,16 @@
 import { defineConfig, type UserConfig } from "tsdown";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 async function writeDistPackageJson(): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original JSON values, property writes and native failures instead of adding an object-validation error
-  const packageJson = (await Bun.file(
+  const packageJson: unknown = await Bun.file(
     new URL("./package.json", import.meta.url),
-  ).json()) as Record<string, unknown>;
+  ).json();
+  if (!isRecord(packageJson)) {
+    throw new TypeError("package.json must contain a JSON object");
+  }
 
   packageJson["main"] = "./index.js";
   packageJson["module"] = "./index.js";

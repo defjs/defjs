@@ -30,7 +30,7 @@ import {
 } from "../internal/abort";
 import { AsyncQueue } from "../internal/async_queue";
 import type { EndpointArgs } from "../internal/endpoint_command";
-import type { EndpointInput, ParsedInput } from "../internal/endpoint_input";
+import type { EndpointInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
 import type { HttpRequest } from "../internal/http_request";
 import type {
@@ -513,9 +513,12 @@ function parseInput<TInput extends AnyStruct | undefined>(
   input: EndpointInput<TInput> | undefined,
   guides: WeakMap<object, Guide>,
   signal: AbortSignal,
-): StageOutcome<ParsedInput<TInput>> {
+): StageOutcome<unknown> {
   try {
-    return [undefined, parseEndpointInput<TInput>(inputStruct, input, guides)];
+    return [
+      undefined,
+      inputStruct ? parseEndpointInput(inputStruct, input, guides) : input,
+    ];
   } catch (error) {
     return [
       resolveAbortFault(signal) ??
@@ -724,7 +727,7 @@ async function runWebSocketCommand<
       return stopBeforeTransport(constructorStage[0]);
     }
     const WebSocketCtor = constructorStage[1];
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: constructor guard helper took 11.785/11.825/11.870 ns versus the original inline check's 3.168/3.153/2.766 ns in three interleaved runs
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published WebSocketHandleConstructor is `{ readonly OPEN: number } & (new (...args: never[]) => WebSocketHandle)`, so its construct parameters are erased and `new` cannot pass the URL unasserted (TS2345, `string` is not assignable to `never`); giving it real parameters changes that published declaration
     const WebSocketImpl = WebSocketCtor as unknown as new (
       url: string | URL,
       protocols?: string | string[],
@@ -1292,9 +1295,13 @@ async function runWebSocketCommand<
                   }
                   messagePumpRunning = true;
                   try {
-                    while (!finished && rawMessages.length > 0) {
-                      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: probing an empty queue with shift took 23.359/24.081/23.991 ns versus the original length guard's 11.859/11.938/11.997 ns in three interleaved runs
-                      const event = rawMessages.shift() as MessageEvent;
+                    // The length guard stays first: shifting an empty queue measured twice as slow.
+                    let event: MessageEvent | undefined;
+                    while (
+                      !finished &&
+                      rawMessages.length > 0 &&
+                      (event = rawMessages.shift()) !== undefined
+                    ) {
                       await handleMessage(event);
                     }
                     if (!finished && closeOutcome && rawMessages.length === 0) {
@@ -1682,7 +1689,7 @@ async function runWebSocketCommand<
         startupConnection = undefined;
         releaseAbortSignal(signal);
       }
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: an interceptor-returned session is delivered as is (identity, no per-message validation); the typed alternative replaces it with a validating adapter; PERF: +200 ns/message on custom receive
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published WebSocketInterceptor/WebSocketHandler types carry WebSocketSessionLike, and an interceptor may return its own session, which is delivered by identity, while the published SocketAwaitResult needs the endpoint's WebSocketSession types. Unasserted: TS2322, `WebSocketSessionLike` is not assignable to `WebSocketSession<StructOutput<TIncoming>, WebSocketOutgoingData<TOutgoing>>`. A validating adapter would replace the delivered session
       const typedSession = session as WebSocketSession<
         WebSocketIncomingData<TIncoming>,
         WebSocketOutgoingData<TOutgoing>
@@ -1869,10 +1876,9 @@ function createWebSocketSession<
         );
       }
 
-      if (destination === "socket") {
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: use the captured readyState snapshot; narrowing by reading socket.readyState again changes getter side effects and ordering
-        const openSocket = socket as WebSocketHandle;
-        openSocket.send(serialized);
+      // "socket" was chosen from the captured readyState, so this narrows without reading it again.
+      if (destination === "socket" && socket !== undefined) {
+        socket.send(serialized);
         return;
       }
       if (maxOutgoingQueueSize === 0) {
@@ -2123,7 +2129,7 @@ function caughtRequestFault(error: unknown): Fault<undefined> {
   if (!isFault(error)) {
     return createPreflightFault("EXT_INTERCEPTOR_FAILED", error);
   }
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: an interceptor-thrown fault passes through unchanged and the published operation type stays Fault<undefined>
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: an interceptor may throw any Defjs fault, which is returned unchanged, but the published SocketAwaitResult error slot is `Fault<undefined>`. Unasserted: TS2322, `AnyFault` is not assignable to `Fault<undefined>`; narrowing would rewrap a thrown HTTP_STATUS fault whose data is not undefined, and widening the slot changes that published declaration
   return error as Fault<undefined>;
 }
 

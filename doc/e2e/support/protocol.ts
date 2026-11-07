@@ -15,6 +15,7 @@ export interface Ref {
 export type Encoded =
   | string
   | number
+  | bigint
   | boolean
   | null
   | undefined

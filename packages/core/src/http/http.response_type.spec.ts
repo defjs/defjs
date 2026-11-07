@@ -291,18 +291,19 @@ describe("inbound representation by struct kind", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        createHttpInterceptor(async () => {
+        createHttpInterceptor(() => {
           const body = payloads[index];
           index += 1;
           if (body === undefined) {
-            throw new Error("missing payload");
+            return Promise.reject(new Error("missing payload"));
           }
-          return makeResponse({
-            body,
-            headers: new Headers(JSON_HEADERS),
-            status: 404,
-          });
+          return Promise.resolve(
+            makeResponse({
+              body,
+              headers: new Headers(JSON_HEADERS),
+              status: 404,
+            }),
+          );
         }),
       ),
     );

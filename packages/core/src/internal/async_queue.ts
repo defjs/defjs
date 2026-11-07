@@ -10,7 +10,8 @@ export interface AsyncQueueOptions {
 }
 
 export class AsyncQueue<T> implements AsyncIterable<T> {
-  private readonly values: T[] = [];
+  // Queued values are stored as the results `next()` hands out, so an `undefined` value is still a queued result.
+  private readonly values: IteratorYieldResult<T>[] = [];
   private readonly waiting: PendingNext<T>[] = [];
   private readonly maxSize: number;
   private done = false;
@@ -39,7 +40,7 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
       throw new Error("AsyncQueue overflow");
     }
 
-    this.values.push(value);
+    this.values.push({ done: false, value });
   }
 
   close(): void {
@@ -74,16 +75,12 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
 
     return {
       next: () => {
-        if (this.values.length > 0) {
-          return Promise.resolve({
-            done: false,
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: deliver exactly the queued shift result without an additional indexed read or per-event guard
-            value: this.values.shift() as T,
-          });
+        const queued = this.values.shift();
+        if (queued) {
+          return Promise.resolve(queued);
         }
 
         if (this.error !== NO_ERROR) {
-          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: reject the stored fault value unchanged
           return Promise.reject(this.error);
         }
 

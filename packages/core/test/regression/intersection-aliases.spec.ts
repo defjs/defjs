@@ -41,15 +41,14 @@ test("public parse and direct encode merge nested array members", () => {
   expect(plain(encodeJson(rows, [logical]))).toEqual([wire]);
 });
 
-test("shared object field preserves its agreed parent alias", async () => {
+test("shared object field preserves its agreed parent alias", () => {
   const schema = struct.intersection(
     struct.object({ profile: Left.alias("wire_profile") }),
     struct.object({ profile: Right.alias("wire_profile") }),
   );
   const input = { profile: logical };
   expect(plain(encodeJson(schema, input))).toEqual({ wire_profile: wire });
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, input);
+  const parsed = parseEndpointInput(schema, input);
   notAStruct(symbolValue(parsed, firstSymbol(parsed)));
   const actual: unknown = JSON.parse(
     wireText(materializeOutboundRequest({ body: parsed }, "http").body),
@@ -59,13 +58,12 @@ test("shared object field preserves its agreed parent alias", async () => {
 
 test.each(["http", "sse", "webSocket"] as const)(
   "extracted merged child retains both aliases for %s query",
-  async (transport) => {
+  (transport) => {
     const schema = struct.intersection(
       struct.object({ profile: Left }),
       struct.object({ profile: Right }),
     );
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(schema, { profile: logical });
+    const parsed = parseEndpointInput(schema, { profile: logical });
     const profile = parsed.profile;
     const actual = materializeOutboundRequest(
       { query: profile },
@@ -75,10 +73,9 @@ test.each(["http", "sse", "webSocket"] as const)(
   },
 );
 
-test("root array intersection tags merged items", async () => {
+test("root array intersection tags merged items", () => {
   const schema = struct.intersection(struct.array(Left), struct.array(Right));
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, [logical]);
+  const parsed = parseEndpointInput(schema, [logical]);
   const actual: unknown = JSON.parse(
     wireText(materializeOutboundRequest({ body: parsed }, "http").body),
   );
@@ -109,39 +106,36 @@ test("shared array field keeps both member aliases at the HTTP boundary", async 
   expect(actual).toEqual({ rows: [wire] });
 });
 
-test("shared record field keeps both member aliases", async () => {
+test("shared record field keeps both member aliases", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.record(Left) }),
     struct.object({ rows: struct.record(Right) }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, { rows: { one: logical } });
+  const parsed = parseEndpointInput(schema, { rows: { one: logical } });
   const actual: unknown = JSON.parse(
     wireText(materializeOutboundRequest({ body: parsed }, "http").body),
   );
   expect(actual).toEqual({ rows: { one: wire } });
 });
 
-test("shared tuple field keeps both member aliases", async () => {
+test("shared tuple field keeps both member aliases", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.tuple([Left]) }),
     struct.object({ rows: struct.tuple([Right]) }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, { rows: [logical] });
+  const parsed = parseEndpointInput(schema, { rows: [logical] });
   const actual: unknown = JSON.parse(
     wireText(materializeOutboundRequest({ body: parsed }, "http").body),
   );
   expect(actual).toEqual({ rows: [wire] });
 });
 
-test("a fresh array under an object intersection guide uses every member", async () => {
+test("a fresh array under an object intersection guide uses every member", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.array(Left) }),
     struct.object({ rows: struct.array(Right) }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, { rows: [] });
+  const parsed = parseEndpointInput(schema, { rows: [] });
   const actual: unknown = JSON.parse(
     wireText(
       materializeOutboundRequest(
@@ -234,13 +228,12 @@ test("outbound encode writes both wire keys when a fresh object aliases one logi
   expect(actual).toEqual({ note: "hi", row: { first: "Ada", second: "Ada" } });
 });
 
-test("an array standing in for an object field keeps literal items", async () => {
+test("an array standing in for an object field keeps literal items", () => {
   const schema = struct.intersection(
     struct.object({ note: struct.string() }),
     struct.object({ extra: struct.string() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, { extra: "x", note: "hi" });
+  const parsed = parseEndpointInput(schema, { extra: "x", note: "hi" });
   const actual: unknown = JSON.parse(
     wireText(
       materializeOutboundRequest({ body: { ...parsed, note: ["a"] } }, "http")
@@ -250,13 +243,12 @@ test("an array standing in for an object field keeps literal items", async () =>
   expect(actual).toEqual({ extra: "x", note: ["a"] });
 });
 
-test("unknown and any field guides leave a fresh object literal", async () => {
+test("unknown and any field guides leave a fresh object literal", () => {
   const schema = struct.intersection(
     struct.object({ note: struct.unknown() }),
     struct.object({ note: struct.any() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, { note: { kept: 1 } });
+  const parsed = parseEndpointInput(schema, { note: { kept: 1 } });
   const actual: unknown = JSON.parse(
     wireText(
       materializeOutboundRequest(
@@ -268,13 +260,12 @@ test("unknown and any field guides leave a fresh object literal", async () => {
   expect(actual).toEqual({ note: { extra: 2, kept: 1 } });
 });
 
-test("an unknown field passthrough keeps stored keys beside a record field", async () => {
+test("an unknown field passthrough keeps stored keys beside a record field", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.record(Left) }),
     struct.object({ rows: struct.unknown() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, { rows: {} });
+  const parsed = parseEndpointInput(schema, { rows: {} });
   const actual: unknown = JSON.parse(
     wireText(
       materializeOutboundRequest(
@@ -290,7 +281,7 @@ test("an unknown field passthrough keeps stored keys beside a record field", asy
   });
 });
 
-test("a nested object intersection guide contributes every object side", async () => {
+test("a nested object intersection guide contributes every object side", () => {
   const inner = struct.intersection(Left, Right);
   const schema = struct.intersection(
     struct.object({ profile: inner }),
@@ -298,8 +289,7 @@ test("a nested object intersection guide contributes every object side", async (
       profile: struct.object({ title: struct.string().alias("title_name") }),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, {
+  const parsed = parseEndpointInput(schema, {
     profile: { ...logical, title: "Countess" },
   });
   const actual: unknown = JSON.parse(
@@ -319,7 +309,7 @@ test("a nested object intersection guide contributes every object side", async (
   });
 });
 
-test("a mixed intersection field does not rename a fresh sibling object", async () => {
+test("a mixed intersection field does not rename a fresh sibling object", () => {
   const mixed = struct.intersection(
     struct.object({ firstName: struct.string().alias("first_name") }),
     struct.number(),
@@ -332,8 +322,7 @@ test("a mixed intersection field does not rename a fresh sibling object", async 
         .optional(),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, {});
+  const parsed = parseEndpointInput(schema, {});
   const actual: unknown = JSON.parse(
     wireText(
       materializeOutboundRequest(
@@ -345,7 +334,7 @@ test("a mixed intersection field does not rename a fresh sibling object", async 
   expect(actual).toEqual({ box: { firstName: "Ada", title_name: "Countess" } });
 });
 
-test("union and discriminated guides inside an intersection pick the matching branch", async () => {
+test("union and discriminated guides inside an intersection pick the matching branch", () => {
   const Cat = struct.object({
     kind: struct.literal("cat"),
     name: struct.string().alias("cat_name"),
@@ -360,8 +349,7 @@ test("union and discriminated guides inside an intersection pick the matching br
       pet: struct.object({ title: struct.string().alias("title_name") }),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(unionSchema, {
+  const parsed = parseEndpointInput(unionSchema, {
     pet: { kind: "cat", name: "N", title: "T" },
   });
   const fresh = { kind: "cat", name: "N", title: "T" };
@@ -392,8 +380,7 @@ test("union and discriminated guides inside an intersection pick the matching br
       pet: struct.object({ title: struct.string().alias("title_name") }),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const tagged = await parseEndpointInput(discriminated, {
+  const tagged = parseEndpointInput(discriminated, {
     pet: { kind: "dog", name: "M", title: "T" },
   });
   expect(
@@ -420,14 +407,13 @@ test("union and discriminated guides inside an intersection pick the matching br
   });
 });
 
-test("object then record tags both containers and emits every wire key", async () => {
+test("object then record tags both containers and emits every wire key", () => {
   const schema = struct.intersection(
     struct.object({ name: struct.string().alias("display_name") }),
     struct.record(struct.string()),
   );
   const input = { extra: "kept", name: "Ada" };
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, input);
+  const parsed = parseEndpointInput(schema, input);
   const tag = assertObject(symbolValue(parsed, firstSymbol(parsed)), "tag");
   expect(Object.hasOwn(tag, DEFINITION)).toBe(false);
   expect(
@@ -437,11 +423,10 @@ test("object then record tags both containers and emits every wire key", async (
   ).toEqual(plain(encodeJson(schema, input)));
 });
 
-test("repeating one object struct keeps that struct as the tag", async () => {
+test("repeating one object struct keeps that struct as the tag", () => {
   const Person = struct.object({ name: struct.string().alias("display_name") });
   const schema = struct.intersection(Person, Person);
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, { name: "Ada" });
+  const parsed = parseEndpointInput(schema, { name: "Ada" });
   expect(symbolValue(parsed, STRUCT)).toBe(Person);
   expect(
     JSON.parse(
@@ -450,13 +435,12 @@ test("repeating one object struct keeps that struct as the tag", async () => {
   ).toEqual({ display_name: "Ada" });
 });
 
-test("an array under two object field guides stays literal", async () => {
+test("an array under two object field guides stays literal", () => {
   const schema = struct.intersection(
     struct.object({ note: struct.object({ title: struct.string() }) }),
     struct.object({ note: struct.object({ extra: struct.number() }) }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(struct.object({ item: schema }), {
+  const parsed = parseEndpointInput(struct.object({ item: schema }), {
     item: { note: { extra: 1, title: "t" } },
   });
   const actual: unknown = JSON.parse(
@@ -470,7 +454,7 @@ test("an array under two object field guides stays literal", async () => {
   expect(actual).toEqual({ item: { note: ["a"] } });
 });
 
-test("an unmatched discriminated guide leaves the fresh object literal", async () => {
+test("an unmatched discriminated guide leaves the fresh object literal", () => {
   const Cat = struct.object({
     kind: struct.literal("cat"),
     name: struct.string().alias("cat_name"),
@@ -483,8 +467,7 @@ test("an unmatched discriminated guide leaves the fresh object literal", async (
     struct.object({ pet: struct.discriminatedUnion("kind", [Cat]).optional() }),
     struct.object({ pet: struct.discriminatedUnion("kind", [Dog]).optional() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(struct.object({ row: schema }), {
+  const parsed = parseEndpointInput(struct.object({ row: schema }), {
     row: {},
   });
   const actual: unknown = JSON.parse(
@@ -498,7 +481,7 @@ test("an unmatched discriminated guide leaves the fresh object literal", async (
   expect(actual).toEqual({ row: { pet: { kind: "bird", name: "N" } } });
 });
 
-test("a non-array member does not supply positional guides", async () => {
+test("a non-array member does not supply positional guides", () => {
   const Item = struct.object({ name: struct.string().alias("n") });
   const schema = struct.intersection(
     struct.object({ rows: struct.array(Item).optional() }),
@@ -508,8 +491,7 @@ test("a non-array member does not supply positional guides", async () => {
         .optional(),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(struct.object({ payload: schema }), {
+  const parsed = parseEndpointInput(struct.object({ payload: schema }), {
     payload: {},
   });
   const actual: unknown = JSON.parse(
@@ -523,14 +505,13 @@ test("a non-array member does not supply positional guides", async () => {
   expect(actual).toEqual({ payload: { rows: [{ extra: 1, n: "Ada" }] } });
 });
 
-test("a string item beside an object item keeps the object aliases", async () => {
+test("a string item beside an object item keeps the object aliases", () => {
   const Item = struct.object({ name: struct.string().alias("n") });
   const schema = struct.intersection(
     struct.object({ rows: struct.array(struct.string()).optional() }),
     struct.object({ rows: struct.array(Item).optional() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(struct.object({ payload: schema }), {
+  const parsed = parseEndpointInput(struct.object({ payload: schema }), {
     payload: {},
   });
   const actual: unknown = JSON.parse(

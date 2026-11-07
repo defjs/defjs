@@ -239,16 +239,16 @@ type AttemptFailure = {
   label: string;
 };
 
-async function runAttempts(
+function runAttempts(
   seed: number,
   attempts: number,
   maxDepth: number,
   exotic = false,
-): Promise<{
+): {
   failed: AttemptFailure[];
   passed: number;
   rejectedInput: number;
-}> {
+} {
   const pick = makeRandom(seed);
   const failed: AttemptFailure[] = [];
   let passed = 0;
@@ -267,8 +267,7 @@ async function runAttempts(
     let expected: unknown;
     let actual: unknown;
     try {
-      // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-      const parsed = await parseEndpointInput(schema, input);
+      const parsed = parseEndpointInput(schema, input);
       expected = plain(encodeJson(schema, parsed));
       actual = plain(encodeOutbound(parsed));
       compare(actual, expected);
@@ -298,12 +297,12 @@ function readCount(name: string, fallback: number): number {
   return parsed;
 }
 
-test("parsed outbound encoding matches encodeJson except literal extras", async () => {
+test("parsed outbound encoding matches encodeJson except literal extras", () => {
   const seed = readCount("ROUND13_SEED", 0x13c0ffee);
   const attempts = readCount("ROUND13_ATTEMPTS", 1_000);
   const maxDepth = readCount("ROUND13_DEPTH", 4);
   const exotic = Bun.env["ROUND13_EXOTIC"] === "1";
-  const result = await runAttempts(seed, attempts, maxDepth, exotic);
+  const result = runAttempts(seed, attempts, maxDepth, exotic);
   const summary = {
     attempts,
     examples: result.failed.slice(0, 5).map((failure) => ({

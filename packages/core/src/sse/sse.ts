@@ -14,13 +14,13 @@ import {
   awaitWithSignal,
   mergeAbortSignals,
   releaseAbortSignal,
-  resolveAbortCause,
+  resolveAbortedCause,
   resolveAbortedFault,
   resolveAbortFault,
 } from "../internal/abort";
 import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
-import type { EndpointInput, ParsedInput } from "../internal/endpoint_input";
+import type { EndpointInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
 import { createTransportOrigin } from "../internal/transport_origin";
 import { normalizeReconnectOptions } from "../internal/reconnect_options";
@@ -201,13 +201,14 @@ export type EventStreamEndpoint<
 
 type ResolvedEventStreamDefinition<
   TInput extends AnyStruct | undefined = undefined,
-  TEvents extends EventStructs = EventStructs,
   TError extends AnyStruct | undefined = undefined,
 > = Omit<
-  EventStreamDefinitionBase<TEvents>,
-  "maxBufferSize" | "maxQueueSize"
+  EventStreamDefinitionBase,
+  "events" | "maxBufferSize" | "maxQueueSize"
 > & {
   builder?: OutboundBuilder;
+  /** The copied dictionary. Its event types live in the operation's own type, not in this copy. */
+  events: EventStructs;
   input?: TInput;
   error?: TError;
   readonly maxBufferSize: number;
@@ -215,22 +216,27 @@ type ResolvedEventStreamDefinition<
   readonly method: string;
 };
 
-function snapshotEventDictionary<T>(events: T): T {
+// A descriptor's getter is a plain function value here, so it is typed as a property, not a method.
+type SnapshotDescriptor = Omit<PropertyDescriptor, "get"> & {
+  get?: (this: unknown) => unknown;
+};
+
+function snapshotEventDictionary(events: EventStructs): EventStructs {
   if (typeof events !== "object" || events === null) {
     return events;
   }
-  const descriptors = Object.getOwnPropertyDescriptors(events);
+  const descriptors: { [key: string]: SnapshotDescriptor } =
+    Object.getOwnPropertyDescriptors(events);
   for (const descriptor of Object.values(descriptors)) {
-    // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: capture the original getter once and dispatch its own call property with events as receiver
     const get = descriptor.get;
     if (get) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- INTENT: forward the getter's exact return through its own call property without binding or transforming it
       descriptor.get = () => get.call(events);
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: typed setPrototypeOf/defineProperties clone was +3.68%, +5.15%, +6.46% slower in three interleaved 21-pair runs; preserve Object.create(null, descriptors)
-  const snapshot: T = Object.create(null, descriptors);
-  return snapshot;
+  // Runs once per definition. The copy has no prototype, so only own declarations name events.
+  const snapshot: EventStructs = {};
+  Object.setPrototypeOf(snapshot, null);
+  return Object.defineProperties(snapshot, descriptors);
 }
 
 /**
@@ -308,7 +314,7 @@ async function runEventStreamCommand<
   TError extends AnyStruct | undefined = undefined,
 >(
   clientConfig: ClientConfig,
-  endpoint: ResolvedEventStreamDefinition<TInput, TEvents, TError>,
+  endpoint: ResolvedEventStreamDefinition<TInput, TError>,
   input: EndpointInput<TInput> | undefined,
   config: EventStreamExecuteOptions | undefined,
   controller: AbortController,
@@ -352,13 +358,11 @@ async function runEventStreamCommand<
   };
 
   const inputGuides = new WeakMap<object, Guide>();
-  let parsedInput: ParsedInput<TInput>;
+  let parsedInput: unknown;
   try {
-    parsedInput = parseEndpointInput<TInput>(
-      endpoint.input,
-      input,
-      inputGuides,
-    );
+    parsedInput = endpoint.input
+      ? parseEndpointInput(endpoint.input, input, inputGuides)
+      : input;
   } catch (error) {
     return stopBeforeTransport(
       resolveAbortFault(requestSignal) ??
@@ -457,7 +461,6 @@ async function runEventStreamCommand<
           resolveRequestUrl(req);
         } catch (error) {
           settleUnattempted();
-          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- rejects the library fault value unchanged
           const rejected = Promise.reject<EventStreamHandle<unknown>>(error);
           void rejected.catch(() => undefined);
           return rejected;
@@ -469,8 +472,7 @@ async function runEventStreamCommand<
           // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
           // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
           const rejected = Promise.reject<EventStreamHandle<unknown>>(
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: this rejection follows the already-aborted check; preserve HEAD's cancellation helper and sentinel path
-            transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
+            transportOrigin.mark(resolveAbortedCause(transportAbort)),
           );
           releaseAbortSignal(transportAbort);
           void rejected.catch(() => undefined);
@@ -595,7 +597,7 @@ async function runEventStreamCommand<
       );
       // Only transfer listener ownership after every startup operation has succeeded.
       streamDelivered = true;
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: an interceptor-returned handle is delivered as is (identity, no per-event validation); the typed alternative replaces it with a validating adapter
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published SSEInterceptor/SSEHandler types carry EventStreamHandle<unknown>, and an interceptor may return its own handle, which is delivered by identity, while the published StreamAwaitResult needs EventStreamData<TEvents>, a type that exists only in the caller's generic. Unasserted: TS2322, `EventStreamHandle<unknown>` is not assignable to `EventStreamHandle<EventStreamData<TEvents>>`. A validating wrapper would replace the delivered handle
       const delivered = stream as EventStreamHandle<EventStreamData<TEvents>>;
       return [null, delivered, open];
     } catch (error) {
@@ -610,7 +612,7 @@ async function runEventStreamCommand<
         : error instanceof RequestUrlError
           ? createPreflightFault("REQ_BUILD_FAILED", error)
           : createEventStreamFault(cause, fromTransport, openInfo?.response);
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: handshake bodies decode inside the transport and faults are classified after chain rejection; the typed channel moves fault construction and response getter reads earlier
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the transport decoded a handshake error body with this definition's `error` struct, but the published StreamAwaitResult error slot is Fault<TError>, a conditional on the caller's generic TError. Unasserted: TS2322, `AnyFault` is not assignable to `Fault<TError> | null`
       return [fault as Fault<TError>, undefined, openInfo];
     } finally {
       if (!streamDelivered) {
@@ -644,13 +646,20 @@ async function runEventStreamCommand<
   }
 }
 
+/** An event decoded with the struct its name selects. The operation's own type relates `event` to `data`. */
+type DecodedStreamEvent = {
+  data: unknown;
+  event: string;
+  id: string | undefined;
+};
+
 // Synchronous on the valid path. Only an invalid event awaits the observer.
-function transformStreamMessage<TEvents extends EventStructs>(
-  events: TEvents,
+function transformStreamMessage(
+  events: EventStructs,
   message: EventStreamMessage,
   onInvalidEvent: ClientSSEOptions["onInvalidEvent"],
   signal: AbortSignal,
-): EventStreamData<TEvents> | Promise<undefined> {
+): DecodedStreamEvent | Promise<undefined> {
   const eventName = message.event || "message";
   const eventStruct = resolveEventStruct(events, eventName);
 
@@ -667,13 +676,11 @@ function transformStreamMessage<TEvents extends EventStructs>(
   }
 
   try {
-    const decoded = {
+    return {
       data: decodeSSEEventData(eventStruct, message.data),
       event: eventName,
       id: message.id || undefined,
     };
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- IRREDUCIBLE: runtime event key cannot select the correlated default/numeric mapped union member after schema decoding; repro: sse.event_union.type.test.ts
-    return decoded as EventStreamData<TEvents>;
   } catch (error) {
     return notifyInvalidEvent(onInvalidEvent, {
       reason: "validation-failed",

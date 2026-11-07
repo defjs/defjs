@@ -11,7 +11,7 @@ const GUIDE_SET = Symbol.for("defjs.struct.guideSet");
  */
 export interface GuideSet {
   readonly [GUIDE_SET]: true;
-  readonly members: readonly RuntimeStruct[];
+  readonly members: readonly [RuntimeStruct, ...RuntimeStruct[]];
 }
 
 export type Guide = GuideSet | RuntimeStruct;
@@ -20,8 +20,7 @@ export function isGuideSet(value: unknown): value is GuideSet {
   return (
     typeof value === "object" &&
     value !== null &&
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve direct symbol gets even when a Proxy has trap disagrees; do not insert an in check before the original read
-    (value as { [GUIDE_SET]?: unknown })[GUIDE_SET] === true
+    Reflect.get(value, GUIDE_SET) === true
   );
 }
 
@@ -30,22 +29,25 @@ export function guideTag(
 ): Guide;
 export function guideTag(members: readonly RuntimeStruct[]): Guide | undefined;
 export function guideTag(members: readonly RuntimeStruct[]): Guide | undefined {
-  const unique: RuntimeStruct[] = [];
+  const first = members[0];
+  if (first === undefined) {
+    return undefined;
+  }
+  const unique: [RuntimeStruct, ...RuntimeStruct[]] = [first];
   for (const member of members) {
     if (!unique.includes(member)) {
       unique.push(member);
     }
   }
-  if (unique.length === 0) {
-    return undefined;
-  }
   if (unique.length === 1) {
-    return unique[0];
+    return first;
   }
   return { [GUIDE_SET]: true, members: unique };
 }
 
-export function guideMembers(guide: Guide): readonly RuntimeStruct[] {
+export function guideMembers(
+  guide: Guide,
+): readonly [RuntimeStruct, ...RuntimeStruct[]] {
   return isGuideSet(guide) ? guide.members : [guide];
 }
 
@@ -66,8 +68,8 @@ export function readOwnGuide(
   value: object,
   guides?: WeakMap<object, Guide>,
 ): Guide | undefined {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve direct symbol gets even when a Proxy has trap disagrees; do not insert an in check before the original read
-  const tag = guides?.get(value) ?? (value as { [STRUCT]?: unknown })[STRUCT];
+  // Reflect.get is one ordinary [[Get]], like `value[STRUCT]`; an `in` check would also call a proxy's has trap.
+  const tag: unknown = guides?.get(value) ?? Reflect.get(value, STRUCT);
   if (isGuideSet(tag)) {
     return tag;
   }
@@ -85,7 +87,7 @@ export function readOwnGuide(
 /** Tag a null-prototype node this parse just created. Enumerable so object spread keeps its guide. */
 export function tagOwnNode(
   value: { [STRUCT]?: Guide; [key: string]: unknown },
-  tag: Guide,
+  tag: Guide | undefined,
 ): void {
   value[STRUCT] = tag;
 }

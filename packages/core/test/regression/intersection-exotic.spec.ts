@@ -140,15 +140,14 @@ test("passthrough any conflicts with an encoded date on the same key", async () 
   expect(() => encodeOutbound(parsed)).toThrow(/invalid intersection encode/);
 });
 
-test("a passthrough array item conflicts with an encoded date", async () => {
+test("a passthrough array item conflicts with an encoded date", () => {
   const schema = struct.object({
     rows: struct.intersection(
       struct.array(struct.any()),
       struct.array(struct.date()),
     ),
   });
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, {
+  const parsed = parseEndpointInput(schema, {
     rows: [new Date("2026-01-02T00:00:00.000Z")],
   });
   expect(() => encodeJson(schema, parsed)).toThrow(

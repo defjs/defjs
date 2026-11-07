@@ -5,6 +5,28 @@ interface TableField {
   type: string;
   required?: boolean;
 }
+function isTableField(value: unknown): value is TableField {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    typeof value.type === "string" &&
+    (!("required" in value) || typeof value.required === "boolean")
+  );
+}
+function isTableFields(value: unknown): value is Record<string, TableField> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.values(value).every(isTableField)
+  );
+}
+function tableFields(data: string): Record<string, TableField> {
+  const parsed: unknown = JSON.parse(data);
+  if (!isTableFields(parsed))
+    throw new Error(`Invalid TypeTable data: ${data}`);
+  return parsed;
+}
 function table(fields: Record<string, TableField>): string {
   return (
     "| Name | Type | Required |\n| --- | --- | --- |\n" +
@@ -59,8 +81,7 @@ export function readableMarkdown(text: string, locale: string): string {
           .join("\n"),
       )
       .replace(/<TypeTable type=\{(\{.*\})\}\s*\/>/g, (_match, data: string) =>
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- INTENT: render the original JSON field values and truthy required flags without copying or introducing validation errors
-        table(JSON.parse(data)),
+        table(tableFields(data)),
       );
     // `\<Type>` is an escaped type argument, not an MDX component.
     if (

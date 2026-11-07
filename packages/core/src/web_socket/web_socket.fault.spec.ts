@@ -122,12 +122,7 @@ describe("web socket startup faults", () => {
     const cause = new Error("interceptor exploded");
     const client = createClient(
       withEndpoint("http://127.0.0.1:1"),
-      withInterceptors(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        createWebSocketInterceptor(async () => {
-          throw cause;
-        }),
-      ),
+      withInterceptors(createWebSocketInterceptor(() => Promise.reject(cause))),
     );
 
     const [fault, session] = await useRoom(client);

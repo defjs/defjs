@@ -18,6 +18,11 @@ plugins = ["./lint/plugin.ts"]
   { assertionStyle = "never" },
 ]
 "typescript/no-non-null-assertion" = "error"
+# Forwarding a caught or observed `unknown` value is allowed for reject as it is for throw (only-throw-error's default).
+"typescript/prefer-promise-reject-errors" = [
+  "error",
+  { allowThrowingUnknown = true },
+]
 "typescript/no-unsafe-assignment" = "error"
 "typescript/no-unsafe-member-access" = "error"
 "typescript/no-unsafe-call" = "error"

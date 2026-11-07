@@ -17,8 +17,9 @@ const getOrder = defineRequest({
 
 const client = createClient(
   withEndpoint("https://fixture.invalid"),
-  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior for construction errors instead of introducing synchronous throws
-  withHTTPHandle(async () => Response.json({ id: 7, status: "paid" })),
+  withHTTPHandle(() =>
+    Promise.resolve(Response.json({ id: 7, status: "paid" })),
+  ),
 );
 async function main() {
   const [error, order] = await getOrder(client, { id: 7 });

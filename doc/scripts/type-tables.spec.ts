@@ -1,7 +1,5 @@
 import { expect, test } from "vitest";
 import { API } from "typescript/async";
-import type { Checker } from "typescript/async";
-import { projectChecker } from "./api-model";
 import { tableEntries } from "./type-tables";
 import { removeDirectory, tempDirectory } from "./tmp";
 
@@ -80,12 +78,7 @@ async function fixtureProgram(): Promise<{
 test("type tables cover aliases, unions, tuples, arrays, functions, and tags", async () => {
   const { api, directory, file, program } = await fixtureProgram();
   try {
-    const checker = projectChecker(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the existing project field without invoking getProject
-      program as unknown as {
-        project?: { checker?: Checker };
-      },
-    );
+    const checker = program.getProject().checker;
     const entries = await tableEntries(file, "Fixture", program, checker);
     const byName = new Map(entries.map((entry) => [entry.name, entry]));
 
@@ -136,12 +129,7 @@ test("type tables cover aliases, unions, tuples, arrays, functions, and tags", a
 test("class tables skip private members and alias exports resolve", async () => {
   const { api, directory, file, program } = await fixtureProgram();
   try {
-    const checker = projectChecker(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the existing project field without invoking getProject
-      program as unknown as {
-        project?: { checker?: Checker };
-      },
-    );
+    const checker = program.getProject().checker;
     const entries = await tableEntries(file, "Klass", program, checker);
     expect(entries.map((entry) => entry.name)).toEqual(["visible"]);
     const renamed = await tableEntries(file, "Renamed", program, checker);

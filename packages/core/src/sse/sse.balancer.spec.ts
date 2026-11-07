@@ -396,9 +396,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     }
     res.end();
   });
-  const allowedRecord = track((index) =>
-    index === 1 ? allowed.url : allowed.url,
-  );
+  const allowedRecord = track(() => allowed.url);
   const [allowedError, allowedStream] = await post(
     createClient(
       withEndpoint(allowed.url),
@@ -424,10 +422,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     operation: "orders",
     path: "/events",
   });
-  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-  const handle = vi.fn(async () => {
-    throw new TypeError("down");
-  });
+  const handle = vi.fn(() => Promise.reject(new TypeError("down")));
   const streamRecord = track(() => "https://example.com");
   const [streamError] = await streamBody(
     createClient(
@@ -978,10 +973,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
     createClient(
       withEndpoint("https://example.com"),
       withBalancer(thrownTimeout.balancer),
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      withSSEHandle(async () => {
-        throw ERR_TIMEOUT;
-      }),
+      withSSEHandle(() => Promise.reject(ERR_TIMEOUT)),
     ),
   );
   expect(thrownTimeoutError?.code).toBe("NET_TIMEOUT");
@@ -997,10 +989,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
     createClient(
       withEndpoint("https://example.com"),
       withBalancer(thrownAbort.balancer),
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      withSSEHandle(async () => {
-        throw ERR_ABORTED;
-      }),
+      withSSEHandle(() => Promise.reject(ERR_ABORTED)),
     ),
   );
   expect(thrownAbortError?.code).toBe("NET_ABORTED");
@@ -1014,10 +1003,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
     createClient(
       withEndpoint("https://example.com"),
       withBalancer(thrownCoded.balancer),
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      withSSEHandle(async () => {
-        throw coded;
-      }),
+      withSSEHandle(() => Promise.reject(coded)),
     ),
   );
   expect(codedError?.code).toBe("NET_UNREACHABLE");
@@ -1098,13 +1084,12 @@ test("does not pick or call done for a second next, and repicks the first stream
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   let fetches = 0;
   const recorded = track(() => "https://example.com");
-  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-  const handle = vi.fn(async () => {
+  const handle = vi.fn(() => {
     fetches += 1;
     if (fetches === 1) {
-      throw new TypeError("down");
+      return Promise.reject(new TypeError("down"));
     }
-    return sseResponse("data: hi\n\n");
+    return Promise.resolve(sseResponse("data: hi\n\n"));
   });
   const pending = orders(
     createClient(

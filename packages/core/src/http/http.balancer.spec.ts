@@ -250,12 +250,11 @@ describe("HTTP endpoint balancer", () => {
   });
 
   test("returns REQ_BUILD_FAILED with the thrown pick cause and does not throw", async () => {
-    const reason = { why: "pick" };
+    const reason = new Error("pick");
     const client = createClient(
       withEndpoint("https://example.com"),
       withBalancer({
         pick() {
-          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
           throw reason;
         },
       }),
@@ -435,11 +434,10 @@ describe("HTTP endpoint balancer", () => {
   });
 
   test("calls done once when the builder throws", async () => {
-    const reason = { why: "build" };
+    const reason = new Error("build");
     const watched = watch(pickFirstBalancer());
     const read = defineRequest({
       builder: () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
         throw reason;
       },
       input: struct.object({}),
@@ -912,10 +910,10 @@ describe("HTTP endpoint balancer", () => {
             null,
             {
               endpoint: live.url,
-              // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-misused-promises -- INTENT: done must return a rejected promise to exercise asynchronous completion failure
-              async done(report) {
+              // eslint-disable-next-line @typescript-eslint/no-misused-promises -- done is typed to return void; returning a rejected promise exercises the balancer's handling of an asynchronous completion failure
+              done(report) {
                 reports.push(report);
-                throw new Error("HTTP async done rejection");
+                return Promise.reject(new Error("HTTP async done rejection"));
               },
             },
           ],

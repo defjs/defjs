@@ -204,7 +204,7 @@ describe("runtime.ts chain methods", () => {
     expect(isStruct({ [DEFINITION]: { kind: "string", flags } })).toBe(false);
   });
 
-  test("an unreported decoder failure retains the original error-first tuple", () => {
+  test("an unreported decoder failure still returns an error-first tuple with a generic issue", () => {
     const Malformed = createPrimitiveStruct({
       kind: "string",
       expected: "string",
@@ -213,8 +213,18 @@ describe("runtime.ts chain methods", () => {
     });
     const [error, value] = parse(Malformed, "value");
     expect(error).toBeInstanceOf(StructError);
-    expect(error?.message).toBe("Struct parse failed");
-    expect(error?.issues).toEqual([undefined]);
+    expect(error?.message).toBe(
+      "Expected a decodable value at <root>, received string",
+    );
+    expect(error?.issues).toEqual([
+      {
+        code: "custom",
+        expected: "a decodable value",
+        message: "Expected a decodable value at <root>, received string",
+        path: [],
+        received: "value",
+      },
+    ]);
     expect(value).toBeUndefined();
     expect(parse(struct.string(), "next")).toEqual([null, "next"]);
   });
@@ -250,5 +260,30 @@ describe("runtime.ts chain methods", () => {
     expect("_struct" in value).toBe(false);
     expect(isStruct(value)).toBe(true);
     expect(Object.getOwnPropertySymbols(value)).toEqual([DEFINITION]);
+  });
+});
+
+describe("primitive decode hooks", () => {
+  test("a stored decode hook reports a value its struct does not accept", () => {
+    const definition = runtimeOf(struct.date())[DEFINITION];
+    if (definition.kind !== "date" || !definition.decode) {
+      throw new Error("expected a date decode hook");
+    }
+    const reported: unknown[] = [];
+    const result = definition.decode(true, ["at"], (issue) => {
+      reported.push(issue);
+      return FAILED;
+    });
+
+    expect(result).toBe(FAILED);
+    expect(reported).toEqual([
+      {
+        code: "invalid_type",
+        expected: "Date",
+        message: "Expected Date at at, received boolean",
+        path: ["at"],
+        received: true,
+      },
+    ]);
   });
 });

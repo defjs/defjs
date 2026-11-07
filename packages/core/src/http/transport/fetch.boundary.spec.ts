@@ -106,10 +106,7 @@ describe("HTTP transport boundary regressions", () => {
 
   test("should preserve a start observer failure even when converted stream cancellation rejects", async () => {
     const body = new Blob(["bytes"]);
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const cancel = vi.fn(async () => {
-      throw new Error("cancel refused");
-    });
+    const cancel = vi.fn(() => Promise.reject(new Error("cancel refused")));
     const source = new ReadableStream<Uint8Array<ArrayBuffer>>({ cancel });
     vi.spyOn(body, "stream").mockReturnValue(source);
     const cause = new Error("observer failed");
@@ -576,12 +573,11 @@ describe("HTTP transport boundary regressions", () => {
             tokenProvider,
           };
         },
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the transport assertions must fail through a rejected promise
-        withHTTPHandle(async (input) => {
+        withHTTPHandle((input) => {
           expect(requireRequest(input).headers.get("x-xsrf-token")).toBe(
             baseEndpoint === "https://example.com" ? "worker-token" : null,
           );
-          return new Response(null, { status: 204 });
+          return Promise.resolve(new Response(null, { status: 204 }));
         }),
       );
       const [fault] = await defineRequest({ method: "POST", path: "/" })(

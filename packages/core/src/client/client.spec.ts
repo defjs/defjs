@@ -146,16 +146,17 @@ describe("Client", () => {
   });
 
   test("HTTP handle, credentials, interceptors, serializer, and xsrf apply when an operation runs", async () => {
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the transport assertions must fail through a rejected promise
-    const customFetch = vi.fn<FetchHandle>(async (input, init) => {
+    const customFetch = vi.fn<FetchHandle>((input, init) => {
       const request = new Request(input, init);
       expect(request.headers.get("x-custom-xsrf-token")).toBe("xsrf-token");
       expect(request.credentials).toBe("include");
       expect(new URL(request.url).search).toBe("?serialized=zen");
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { "content-type": "application/json" },
-        status: 200,
-      });
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { "content-type": "application/json" },
+          status: 200,
+        }),
+      );
     });
     const interceptor = createHttpInterceptor(async (request, next) =>
       next(request),

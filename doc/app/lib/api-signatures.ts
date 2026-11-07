@@ -12,17 +12,20 @@ export interface SignatureFile {
   history?: readonly string[];
 }
 
-interface MdNode {
+/** The file and mdast nodes that remark passes to plugins and that `replaceSource` records an edit against. */
+export type SignatureSourceFile = Parameters<typeof replaceSource>[0];
+type SourceNode = Parameters<typeof replaceSource>[1];
+export type SignatureContent = Exclude<SourceNode, { type: "root" }>;
+export type SignatureRoot = Extract<SourceNode, { type: "root" }>;
+type SignatureElement = Extract<
+  SignatureContent,
+  { type: "mdxJsxFlowElement" | "mdxJsxTextElement" }
+>;
+
+/** Any mdast node; a signature tag among its children is replaced in place, as in an mdast `Parent`. */
+export interface SignatureTree {
   type: string;
-  name?: string | null;
-  lang?: string | null;
-  value?: string;
-  attributes?: {
-    type: string;
-    name?: string;
-    value?: string | null;
-  }[];
-  children?: MdNode[];
+  children?: SignatureContent[];
 }
 
 interface CatalogCache {
@@ -32,6 +35,18 @@ interface CatalogCache {
 }
 
 let catalogCache: CatalogCache | undefined;
+
+function isSignatureEntry(value: unknown): value is SignatureEntry {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "name" in value &&
+    typeof value.name === "string" &&
+    "signatures" in value &&
+    Array.isArray(value.signatures) &&
+    value.signatures.every((signature) => typeof signature === "string")
+  );
+}
 
 /** Names are unique. An empty signature list cannot be rendered. */
 export function signatureCatalog(
@@ -73,8 +88,9 @@ export function readSignatureCatalog(path: string): SignatureCatalog {
   }
   if (!Array.isArray(parsed))
     throw new Error(`API reference is not a list: ${path}`);
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original catalog errors and accepted entries instead of validating every field first
-  const catalog = signatureCatalog(parsed as SignatureEntry[]);
+  if (!parsed.every(isSignatureEntry))
+    throw new Error(`API reference has a malformed entry: ${path}`);
+  const catalog = signatureCatalog(parsed);
   catalogCache = { path, mtimeMs, catalog };
   return catalog;
 }
@@ -107,16 +123,21 @@ export function signatureText(
     .join("\n\n");
 }
 
-function signatureAttribute(node: MdNode, file: string): string {
-  const attribute = node.attributes?.find((item) => item.name === "name");
+function signatureAttribute(node: SignatureElement, file: string): string {
+  const attribute = node.attributes.find(
+    (item) => item.type === "mdxJsxAttribute" && item.name === "name",
+  );
   if (!attribute || typeof attribute.value !== "string")
     throw new Error(`API signature name in ${file} must be a string`);
   return attribute.value;
 }
 
 /** `.md` pages parse the tag as raw HTML. `.mdx` pages parse it as JSX. */
-function signatureName(node: MdNode, file: string): string | undefined {
-  if (node.type === "html" && node.value) {
+function signatureName(
+  node: SignatureContent,
+  file: string,
+): string | undefined {
+  if (node.type === "html") {
     const text = node.value.trim();
     if (!text.startsWith("<ApiSignature")) return undefined;
     const name = /\bname="([^"]*)"/.exec(text)?.[1];
@@ -124,20 +145,17 @@ function signatureName(node: MdNode, file: string): string | undefined {
       throw new Error(`API signature name in ${file} must be a string`);
     return name;
   }
-  if (!isApiSignature(node)) return undefined;
+  if (
+    (node.type !== "mdxJsxFlowElement" && node.type !== "mdxJsxTextElement") ||
+    node.name !== "ApiSignature"
+  )
+    return undefined;
   return signatureAttribute(node, file);
 }
 
-function isApiSignature(node: MdNode): boolean {
-  return (
-    (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") &&
-    node.name === "ApiSignature"
-  );
-}
-
 export function replaceApiSignatures(
-  tree: MdNode,
-  file: SignatureFile,
+  tree: SignatureTree,
+  file: SignatureSourceFile,
   catalog: SignatureCatalog,
 ): void {
   const children = tree.children;
@@ -152,18 +170,17 @@ export function replaceApiSignatures(
     }
     const value = signatureText(catalog, attribute, signatureFile(file));
     // Processed Markdown is sliced from the authored source, so the fence has to be recorded on the original node.
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve lightweight Markdown nodes and optional file metadata accepted by the original walker
-    replaceSource(file as never, child as never, "```ts\n" + value + "\n```");
+    replaceSource(file, child, "```ts\n" + value + "\n```");
     children[index] = { type: "code", lang: "ts", value };
   }
 }
 
 /** Attacher: unified calls this once, then the returned function for every page. */
 export function remarkApiSignatures(): (
-  tree: MdNode,
-  file?: SignatureFile,
+  tree: SignatureRoot,
+  file: SignatureSourceFile,
 ) => void {
-  return (tree, file = {}) => {
+  return (tree, file) => {
     replaceApiSignatures(tree, file, readSignatureCatalog(apiReferenceFile()));
   };
 }

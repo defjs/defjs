@@ -144,14 +144,26 @@ export function withHeaders(headers: HeadersInit): ClientOption {
 export function withInterceptors(...interceptors: Interceptor[]): ClientOption {
   return (config) => {
     for (const interceptor of interceptors) {
-      // Both fields come from the same discriminated-union member.
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original kind/fn snapshot for every runtime discriminator, including unknown kinds
-      config.interceptors.push({
-        kind: interceptor.kind,
-        fn: interceptor.fn,
-      } as Interceptor);
+      config.interceptors.push(
+        copyInterceptor<Interceptor["kind"]>(interceptor),
+      );
     }
   };
+}
+
+type InterceptorFnByKind = {
+  [K in Interceptor["kind"]]: Extract<Interceptor, { kind: K }>["fn"];
+};
+
+type InterceptorOfKind<K extends Interceptor["kind"]> = {
+  [P in K]: { kind: P; fn: InterceptorFnByKind[P] };
+}[K];
+
+// Both fields come from the same discriminated-union member; the mapped type keeps them correlated.
+function copyInterceptor<K extends Interceptor["kind"]>(
+  interceptor: InterceptorOfKind<K>,
+): InterceptorOfKind<K> {
+  return { kind: interceptor.kind, fn: interceptor.fn };
 }
 
 /**

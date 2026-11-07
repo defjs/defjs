@@ -2,6 +2,7 @@ import { encodeValue } from "../encode";
 import { mapAliasedObjectFields } from "../fields";
 
 import { isObjectStruct, parseStructValue } from "../introspection";
+import { assertStruct } from "../shape";
 import { DEFINITION } from "../symbols";
 import type { AnyStructLike, Infer, RuntimeStruct } from "../types";
 
@@ -15,8 +16,18 @@ export function encodeObjectByAlias(
   label = "json",
   depth = 0,
 ): unknown {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original metadata reads, object-guard sequence and native invalid-input errors; do not add an early struct validator
-  const definition = (struct as RuntimeStruct)[DEFINITION];
+  assertStruct(struct, "struct");
+  return encodeAliasedStruct(struct, value, label, depth);
+}
+
+/** {@link encodeObjectByAlias} for a struct the caller already checked. */
+export function encodeAliasedStruct(
+  struct: RuntimeStruct,
+  value: unknown,
+  label: string,
+  depth: number,
+): unknown {
+  const definition = struct[DEFINITION];
   // `.nullable()` and `.optional()` keep kind `object`, so nullish has to win before the object assertion.
   if (value === null && definition.flags.nullable) {
     return null;
@@ -31,12 +42,8 @@ export function encodeObjectByAlias(
 
   assertPlainObject(value, `${label} encode expects object value`);
 
-  return mapAliasedObjectFields(
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original metadata reads, object-guard sequence and native invalid-input errors; do not add an early struct validator
-    struct as unknown as RuntimeStruct,
-    value,
-    (fieldStruct, fieldValue) =>
-      encodeAliasedField(fieldStruct, fieldValue, label, depth + 1),
+  return mapAliasedObjectFields(struct, value, (fieldStruct, fieldValue) =>
+    encodeAliasedField(fieldStruct, fieldValue, label, depth + 1),
   );
 }
 
@@ -57,20 +64,14 @@ export function assertPlainObject(
 }
 
 function encodeAliasedField(
-  struct: AnyStructLike,
+  struct: RuntimeStruct,
   value: unknown,
   label: string,
   depth: number,
 ): unknown {
   if (isObjectStruct(struct)) {
-    return encodeObjectByAlias(struct, value, label, depth);
+    return encodeAliasedStruct(struct, value, label, depth);
   }
 
-  return encodeValue(
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original metadata reads, object-guard sequence and native invalid-input errors; do not add an early struct validator
-    struct as unknown as RuntimeStruct,
-    value,
-    ALIAS_ENCODE_OPTIONS,
-    depth,
-  );
+  return encodeValue(struct, value, ALIAS_ENCODE_OPTIONS, depth);
 }

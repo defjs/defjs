@@ -36,7 +36,7 @@ function tagMembers(node: object): readonly RuntimeStruct[] {
   return guideMembers(tag);
 }
 
-test("split parents keep the other group only as a literal extra", async () => {
+test("split parents keep the other group only as a literal extra", () => {
   const schema = struct.intersection(
     struct.object({
       profile: struct
@@ -49,8 +49,7 @@ test("split parents keep the other group only as a literal extra", async () => {
         .alias("p2"),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, {
+  const parsed = parseEndpointInput(schema, {
     profile: { firstName: "Ada", lastName: "Lovelace" },
   });
   expect(plain(encodeJson(schema, parsed))).toEqual({
@@ -135,18 +134,16 @@ test("a record nested under a shared object descendant stays in the merged tag",
   await equivalent(schema, { rows: { one: { name: "N" } } });
 });
 
-test("a lone record container is tagged and null is not", async () => {
+test("a lone record container is tagged and null is not", () => {
   const record = struct.record(struct.string());
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(record, { name: "N" });
+  const parsed = parseEndpointInput(record, { name: "N" });
   expect(tagMembers(parsed)).toEqual([record]);
 
   const schema = struct.object({
     note: struct.string(),
     rows: record.nullable(),
   });
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const withNull = await parseEndpointInput(schema, { note: "ok", rows: null });
+  const withNull = parseEndpointInput(schema, { note: "ok", rows: null });
   expect(withNull.rows).toBeNull();
   expect(tagMembers(withNull)).toEqual([schema]);
 });
@@ -195,15 +192,13 @@ test("a nullable record null parses and encodes inside an intersection", async (
   await equivalent(schema, { note: "ok", rows: null });
 });
 
-test("a separately parsed replacement keeps its own wire name in every group", async () => {
+test("a separately parsed replacement keeps its own wire name in every group", () => {
   const schema = struct.intersection(
     struct.object({ row: A.optional().alias("p1") }),
     struct.object({ row: B.optional().alias("p2") }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const root = await parseEndpointInput(schema, {});
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const own = await parseEndpointInput(
+  const root = parseEndpointInput(schema, {});
+  const own = parseEndpointInput(
     struct.object({ name: struct.string().alias("own_name") }),
     value,
   );
@@ -407,7 +402,7 @@ test("an aliased any field passes the stored object through on its own wire", as
   await equivalent(schema, { item: { name: "N" } });
 });
 
-test("an anonymous record child keeps the sibling object tag", async () => {
+test("an anonymous record child keeps the sibling object tag", () => {
   const profile = struct.object({
     name: struct.string().alias("display_name"),
   });
@@ -415,8 +410,7 @@ test("an anonymous record child keeps the sibling object tag", async () => {
     struct.record(struct.any()),
     struct.object({ profile }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const parsed = await parseEndpointInput(schema, { profile: { name: "N" } });
+  const parsed = parseEndpointInput(schema, { profile: { name: "N" } });
   expect(tagMembers(parsed.profile)).toEqual([profile]);
 });
 

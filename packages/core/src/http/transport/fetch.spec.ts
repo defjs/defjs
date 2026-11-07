@@ -73,7 +73,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("cookie-token");
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
@@ -94,7 +93,6 @@ describe("Fetch handler XSRF injection", () => {
     const init = createFetchRequestInit(requestConfig);
 
     expect(init.credentials).toBe("include");
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("cookie-token");
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
@@ -115,7 +113,6 @@ describe("Fetch handler XSRF injection", () => {
 
       const init = createFetchRequestInit(requestConfig);
 
-      // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
       expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
       expect(cookieGetter).not.toHaveBeenCalled();
     },
@@ -135,7 +132,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("cookie-token");
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
@@ -155,7 +151,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).not.toHaveBeenCalled();
   });
@@ -174,7 +169,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
@@ -193,7 +187,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
@@ -211,7 +204,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).not.toHaveBeenCalled();
   });
@@ -231,7 +223,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
     expect(cookieGetter).not.toHaveBeenCalled();
@@ -252,7 +243,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
     expect(cookieGetter).not.toHaveBeenCalled();
@@ -272,7 +262,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
@@ -300,7 +289,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
     expect(cookieGetter).toHaveBeenCalledTimes(1);
   });
@@ -320,7 +308,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("provider-token");
     expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
     expect(cookieGetter).not.toHaveBeenCalled();
@@ -342,7 +329,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("existing-token");
     expect(tokenProvider).not.toHaveBeenCalled();
     expect(cookieGetter).not.toHaveBeenCalled();
@@ -361,7 +347,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).has("X-XSRF-TOKEN")).toBe(false);
   });
 
@@ -379,7 +364,6 @@ describe("Fetch handler XSRF injection", () => {
 
     const init = createFetchRequestInit(requestConfig);
 
-    // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
     expect(headersOf(init).get("X-XSRF-TOKEN")).toBe("provider-token");
     expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
   });
@@ -470,15 +454,12 @@ describe("Fetch handler request creation", () => {
     };
 
     expect(
-      // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
       headersOf(createFetchRequestInit(jsonRequest)).get("content-type"),
     ).toBe("text/plain");
     expect(
-      // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
       headersOf(createFetchRequestInit(builderRequest)).get("content-type"),
     ).toBe("text/plain");
     expect(
-      // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
       headersOf(createFetchRequestInit(binaryRequest)).get("content-type"),
     ).toBe("text/plain");
   });
@@ -503,11 +484,9 @@ describe("Fetch handler request creation", () => {
     };
 
     expect(
-      // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
       headersOf(createFetchRequestInit(formDataRequest)).has("content-type"),
     ).toBe(false);
     expect(
-      // eslint-disable-next-line local/no-type-assertion -- test fixture deliberately uses the assertion
       headersOf(createFetchRequestInit(suppressedRequest)).has("content-type"),
     ).toBe(false);
   });
@@ -612,10 +591,7 @@ describe("Fetch handler request creation", () => {
   test("should handle fetch network error", async () => {
     vi.stubGlobal(
       "fetch",
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      vi.fn(async () => {
-        throw new TypeError("Network request failed");
-      }),
+      vi.fn(() => Promise.reject(new TypeError("Network request failed"))),
     );
 
     const requestConfig: HttpRequest = {
@@ -684,5 +660,45 @@ describe("Fetch handler request creation", () => {
     const reader = wrappedStream.getReader();
 
     await expect(reader.read()).rejects.toThrow("source failed");
+  });
+});
+
+describe("upload progress without a serialized FormData stream", () => {
+  test("sends the FormData unchanged and reports no upload progress", async () => {
+    const PlatformResponse = Response;
+    class StreamlessResponse extends PlatformResponse {
+      constructor(body?: BodyInit | null, init?: ResponseInit) {
+        super(body instanceof FormData ? null : body, init);
+      }
+    }
+    const form = new FormData();
+    form.append("name", "miao");
+    const sent: (string | null)[] = [];
+    const handle = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const request = new Request(input, init);
+      sent.push(request.headers.get("content-type"));
+      await request.arrayBuffer();
+      return new PlatformResponse(null, { status: 204 });
+    };
+    const uploadProgress = vi.fn();
+    vi.stubGlobal("Response", StreamlessResponse);
+
+    const response = await fetchHandler(
+      {
+        baseEndpoint: "https://example.com",
+        body: form,
+        endpoint: "/v1/upload",
+        method: "POST",
+        uploadProgress,
+      },
+      handle,
+    );
+
+    expect(response.status).toBe(204);
+    expect(uploadProgress).not.toHaveBeenCalled();
+    expect(sent).toEqual([expect.stringContaining("multipart/form-data")]);
   });
 });

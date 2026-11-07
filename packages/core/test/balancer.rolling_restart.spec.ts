@@ -29,21 +29,22 @@ test("three rolling two-second outages recover at the next one-second probe with
     withEndpoint(...endpoints),
     withBalancer(roundRobinBalancer()),
     withRetry({ delayMs: 0 }),
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    withHTTPHandle(async (input) => {
+    withHTTPHandle((input) => {
       const req = new Request(input);
       const index = endpoints.findIndex((endpoint) =>
         req.url.startsWith(endpoint + "/"),
       );
       const window = windows[index];
       const endpoint = endpoints[index];
-      if (!window || !endpoint) throw new Error("unknown replica");
+      if (!window || !endpoint)
+        return Promise.reject(new Error("unknown replica"));
       attempts++;
       const [from = 0, until = 0] = window;
       const now = Date.now();
-      if (now >= from && now < until) throw new TypeError("replica stopped");
+      if (now >= from && now < until)
+        return Promise.reject(new TypeError("replica stopped"));
       if (now >= until && !resumed.has(endpoint)) resumed.set(endpoint, now);
-      return new Response("ok");
+      return Promise.resolve(new Response("ok"));
     }),
   );
   const read = defineRequest({ method: "GET", path: "/replica" });

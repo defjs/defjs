@@ -198,9 +198,8 @@ describe("outbound request builder", () => {
     ).toBeUndefined();
   });
 
-  test("encodes an anonymous path record literally", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("encodes an anonymous path record literally", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -211,9 +210,8 @@ describe("outbound request builder", () => {
     expect(request.endpoint).toBe("/users/7");
   });
 
-  test("rejects a tagged path object that contains a nested field", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("rejects a tagged path object that contains a nested field", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -223,9 +221,8 @@ describe("outbound request builder", () => {
     ).toThrow(/profile/);
   });
 
-  test("encodes a tagged body with alias, date, and bigint", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("encodes a tagged body with alias, date, and bigint", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -240,9 +237,8 @@ describe("outbound request builder", () => {
     expect(request.bodyContentType).toBe("application/json");
   });
 
-  test("encodes a tagged object nested under an anonymous parent", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("encodes a tagged object nested under an anonymous parent", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -255,9 +251,8 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("keeps the struct tag when a typed object is spread and adds a literal key", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Profile, {
+  test("keeps the struct tag when a typed object is spread and adds a literal key", () => {
+    const input = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
@@ -270,9 +265,8 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("overwrites a logical field and still applies its alias", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Profile, {
+  test("overwrites a logical field and still applies its alias", () => {
+    const input = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
@@ -285,9 +279,8 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("rejects a spread key that collides with a wire key", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Profile, {
+  test("rejects a spread key that collides with a wire key", () => {
+    const input = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
@@ -299,9 +292,8 @@ describe("outbound request builder", () => {
     ).toThrow(/display_name/);
   });
 
-  test("keeps a nested spread extra when the parent stays tagged", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("keeps a nested spread extra when the parent stays tagged", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -314,9 +306,8 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("rejects a nested spread that collides with a wire key", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("rejects a nested spread that collides with a wire key", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -331,9 +322,8 @@ describe("outbound request builder", () => {
     ).toThrow(/display_name/);
   });
 
-  test("encodes an untagged nested object with the field struct and keeps extras", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("encodes an untagged nested object with the field struct and keeps extras", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -349,10 +339,9 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("encodes nested array items and tuple items with the tagged-object rule", async () => {
+  test("encodes nested array items and tuple items with the tagged-object rule", () => {
     const People = struct.object({ people: struct.array(Profile) });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const people = await parseEndpointInput(People, {
+    const people = parseEndpointInput(People, {
       people: [{ birthday, displayName: "Ada" }],
     });
     const peopleRequest = materializeOutboundRequest(
@@ -370,8 +359,7 @@ describe("outbound request builder", () => {
     const Pair = struct.object({
       pair: struct.tuple([Profile, struct.string()]),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const pair = await parseEndpointInput(Pair, {
+    const pair = parseEndpointInput(Pair, {
       pair: [{ birthday, displayName: "Ada" }, "ok"],
     });
     const pairRequest = materializeOutboundRequest(
@@ -392,7 +380,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("encodes nested union, intersection, and record values from their own tags", async () => {
+  test("encodes nested union, intersection, and record values from their own tags", () => {
     const Alpha = struct.object({
       id: struct.number(),
       kind: struct.literal("a"),
@@ -403,8 +391,7 @@ describe("outbound request builder", () => {
       name: struct.string(),
     });
     const Choice = struct.object({ item: struct.or(Alpha, Beta) });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const choice = await parseEndpointInput(Choice, {
+    const choice = parseEndpointInput(Choice, {
       item: { id: 1, kind: "a", name: "Ada" },
     });
     const taggedChoice = materializeOutboundRequest(
@@ -421,8 +408,7 @@ describe("outbound request builder", () => {
       struct.object({ name: struct.string().alias("display_name") }),
     );
     const Wrapped = struct.object({ person: Person });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const wrapped = await parseEndpointInput(Wrapped, {
+    const wrapped = parseEndpointInput(Wrapped, {
       person: { id: 7, name: "Ada" },
     });
     const intersection = materializeOutboundRequest(
@@ -431,8 +417,7 @@ describe("outbound request builder", () => {
     );
 
     const Directory = struct.object({ directory: struct.record(Profile) });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const directory = await parseEndpointInput(Directory, {
+    const directory = parseEndpointInput(Directory, {
       directory: { ada: { birthday, displayName: "Ada" } },
     });
     const record = materializeOutboundRequest(
@@ -447,8 +432,7 @@ describe("outbound request builder", () => {
 
     const Payment = struct.object({ amount: struct.bigint().alias("amt") });
     const Invoice = struct.object({ payment: Payment });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const invoice = await parseEndpointInput(Invoice, {
+    const invoice = parseEndpointInput(Invoice, {
       payment: { amount: 10n },
     });
     const bigint = materializeOutboundRequest(
@@ -479,12 +463,11 @@ describe("outbound request builder", () => {
     ).toThrow(/display_name/);
   });
 
-  test("rejects an ambiguous untagged union before encoding one branch", async () => {
+  test("rejects an ambiguous untagged union before encoding one branch", () => {
     const Left = struct.object({ id: struct.string().alias("left_id") });
     const Right = struct.object({ id: struct.string().alias("right_id") });
     const Box = struct.object({ row: struct.or(Left, Right) });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, { row: { id: "42" } });
+    const input = parseEndpointInput(Box, { row: { id: "42" } });
 
     expect(() =>
       materializeOutboundRequest(
@@ -494,7 +477,7 @@ describe("outbound request builder", () => {
     ).toThrow(/ambiguous union encode/);
   });
 
-  test("encodes an untagged discriminated object with aliases and extras", async () => {
+  test("encodes an untagged discriminated object with aliases and extras", () => {
     const Cat = struct.object({
       kind: struct.literal("cat"),
       name: struct.string().alias("display_name"),
@@ -506,8 +489,7 @@ describe("outbound request builder", () => {
     const Box = struct.object({
       pet: struct.discriminatedUnion("kind", [Cat, Dog]),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, {
+    const input = parseEndpointInput(Box, {
       pet: { kind: "cat", name: "Ada" },
     });
     const request = materializeOutboundRequest(
@@ -520,14 +502,13 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("encodes an untagged all-object intersection with both aliases and extras", async () => {
+  test("encodes an untagged all-object intersection with both aliases and extras", () => {
     const Person = struct.intersection(
       struct.object({ id: struct.number().alias("user_id") }),
       struct.object({ name: struct.string().alias("display_name") }),
     );
     const Box = struct.object({ person: Person });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, {
+    const input = parseEndpointInput(Box, {
       person: { id: 7, name: "Ada" },
     });
     const request = materializeOutboundRequest(
@@ -540,15 +521,14 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("rejects a union when an object branch and a non-container branch both match", async () => {
+  test("rejects a union when an object branch and a non-container branch both match", () => {
     const Box = struct.object({
       row: struct.or(
         struct.object({ id: struct.string().alias("wire_id") }),
         struct.any(),
       ),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, { row: { id: "42" } });
+    const input = parseEndpointInput(Box, { row: { id: "42" } });
 
     expect(() =>
       materializeOutboundRequest(
@@ -558,15 +538,13 @@ describe("outbound request builder", () => {
     ).toThrow(/ambiguous union encode/);
   });
 
-  test("recurses through an unmatched union object so tagged children keep aliases", async () => {
+  test("recurses through an unmatched union object so tagged children keep aliases", () => {
     const Item = struct.object({ id: struct.string().alias("wire_id") });
     const Box = struct.object({
       payload: struct.or(struct.string(), struct.number()),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const item = await parseEndpointInput(Item, { id: "42" });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, { payload: "x" });
+    const item = parseEndpointInput(Item, { id: "42" });
+    const input = parseEndpointInput(Box, { payload: "x" });
     const request = materializeOutboundRequest(
       { body: { ...input, payload: { row: { ...item, extra: "kept" } } } },
       "http",
@@ -577,7 +555,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("tags a mixed intersection with the conjunction of the matched object sides", async () => {
+  test("tags a mixed intersection with the conjunction of the matched object sides", () => {
     const Schema = struct.intersection(
       struct.object({ firstName: struct.string().alias("first_name") }),
       struct.or(
@@ -585,13 +563,11 @@ describe("outbound request builder", () => {
         struct.number(),
       ),
     );
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const first = await parseEndpointInput(Schema, {
+    const first = parseEndpointInput(Schema, {
       firstName: "Ada",
       lastName: "Lovelace",
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const second = await parseEndpointInput(Schema, {
+    const second = parseEndpointInput(Schema, {
       firstName: "Grace",
       lastName: "Hopper",
     });
@@ -612,7 +588,7 @@ describe("outbound request builder", () => {
     expect(Object.getPrototypeOf(first)).toBeNull();
   });
 
-  test("encodes an untagged mixed intersection with literal keys", async () => {
+  test("encodes an untagged mixed intersection with literal keys", () => {
     const Person = struct.intersection(
       struct.object({ firstName: struct.string().alias("first_name") }),
       struct.or(
@@ -621,8 +597,7 @@ describe("outbound request builder", () => {
       ),
     );
     const Box = struct.object({ person: Person });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, {
+    const input = parseEndpointInput(Box, {
       person: { firstName: "Ada", lastName: "Lovelace" },
     });
     const request = materializeOutboundRequest(
@@ -640,7 +615,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("recurses through an unmatched discriminated object so tagged children keep aliases", async () => {
+  test("recurses through an unmatched discriminated object so tagged children keep aliases", () => {
     const Cat = struct.object({
       kind: struct.literal("cat"),
       name: struct.string(),
@@ -649,10 +624,8 @@ describe("outbound request builder", () => {
     const Box = struct.object({
       pet: struct.discriminatedUnion("kind", [Cat]),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const item = await parseEndpointInput(Item, { id: "42" });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, {
+    const item = parseEndpointInput(Item, { id: "42" });
+    const input = parseEndpointInput(Box, {
       pet: { kind: "cat", name: "Ada" },
     });
     const request = materializeOutboundRequest(
@@ -665,7 +638,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("keeps a logical __proto__ key on a mixed intersection", async () => {
+  test("keeps a logical __proto__ key on a mixed intersection", () => {
     const Schema = struct.intersection(
       struct.object({ ["__proto__"]: struct.string().alias("proto_wire") }),
       struct.or(
@@ -673,8 +646,7 @@ describe("outbound request builder", () => {
         struct.number(),
       ),
     );
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const value = await parseEndpointInput(Schema, {
+    const value = parseEndpointInput(Schema, {
       ["__proto__"]: "p",
       label: "L",
     });
@@ -686,23 +658,15 @@ describe("outbound request builder", () => {
       label_wire: "L",
       proto_wire: "p",
     });
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
-  test("tags a mixed intersection from the single object side", async () => {
+  test("tags a mixed intersection from the single object side", () => {
     const Schema = struct.intersection(
       struct.unknown(),
       struct.object({ name: struct.string().alias("display_name") }),
     );
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const value = await parseEndpointInput(
-      Schema,
-      // @ts-expect-error extra is not a field of this intersection input
-      { extra: "kept", name: "Ada" },
-    );
+    const value = parseEndpointInput(Schema, { extra: "kept", name: "Ada" });
     const request = materializeOutboundRequest({ body: value }, "http");
 
     expect(request.body).toBe('{"display_name":"Ada"}');
@@ -718,7 +682,7 @@ describe("outbound request builder", () => {
     expect(readTag(dictionary(value))).toBeUndefined();
   });
 
-  test("tags each mixed-intersection branch with the object structs that produced it", async () => {
+  test("tags each mixed-intersection branch with the object structs that produced it", () => {
     const Left = struct.object({
       firstName: struct.string().alias("first_name"),
     });
@@ -731,20 +695,17 @@ describe("outbound request builder", () => {
       name: struct.string().alias("dog_name"),
     });
     const Schema = struct.intersection(Left, struct.or(Cat, Dog));
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const cat = await parseEndpointInput(Schema, {
+    const cat = parseEndpointInput(Schema, {
       firstName: "A",
       kind: "cat",
       name: "N",
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const dog = await parseEndpointInput(Schema, {
+    const dog = parseEndpointInput(Schema, {
       firstName: "B",
       kind: "dog",
       name: "M",
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const catAgain = await parseEndpointInput(Schema, {
+    const catAgain = parseEndpointInput(Schema, {
       firstName: "C",
       kind: "cat",
       name: "O",
@@ -767,7 +728,7 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("recurses through an array stored on a discriminated field", async () => {
+  test("recurses through an array stored on a discriminated field", () => {
     const Cat = struct.object({
       kind: struct.literal("cat"),
       name: struct.string(),
@@ -776,10 +737,8 @@ describe("outbound request builder", () => {
     const Box = struct.object({
       pet: struct.discriminatedUnion("kind", [Cat]),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const item = await parseEndpointInput(Item, { id: "42" });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, {
+    const item = parseEndpointInput(Item, { id: "42" });
+    const input = parseEndpointInput(Box, {
       pet: { kind: "cat", name: "Ada" },
     });
     const request = materializeOutboundRequest(
@@ -790,9 +749,8 @@ describe("outbound request builder", () => {
     expect(request.body).toBe('{"pet":[{"wire_id":"42","extra":"kept"}]}');
   });
 
-  test("uses the field struct when a nested object tag is not an object struct", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("uses the field struct when a nested object tag is not an object struct", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -812,10 +770,9 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("does not apply the tagged-object rule to an any field array", async () => {
+  test("does not apply the tagged-object rule to an any field array", () => {
     const Box = struct.object({ payload: struct.any() });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Box, {
+    const input = parseEndpointInput(Box, {
       payload: [{ role: "admin" }],
     });
     const request = materializeOutboundRequest({ body: input }, "http");
@@ -823,9 +780,8 @@ describe("outbound request builder", () => {
     expect(request.body).toBe('{"payload":[{"role":"admin"}]}');
   });
 
-  test("leaves a scalar nested in an object field as a scalar", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(UserInput, {
+  test("leaves a scalar nested in an object field as a scalar", () => {
+    const input = parseEndpointInput(UserInput, {
       profile: { birthday, displayName: "Ada" },
       userId: 7,
     });
@@ -836,9 +792,8 @@ describe("outbound request builder", () => {
     expect(request.body).toBe('{"user_id":7,"profile":"Ada"}');
   });
 
-  test("leaves a copied leaf under an anonymous parent unaliased", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Profile, {
+  test("leaves a copied leaf under an anonymous parent unaliased", () => {
+    const input = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
@@ -952,9 +907,8 @@ describe("outbound request builder", () => {
   });
 
   const asyncIterable = () => ({
-    // eslint-disable-next-line @typescript-eslint/require-await -- an async generator yields asynchronously without awaiting
     async *[Symbol.asyncIterator]() {
-      yield new TextEncoder().encode("chunk");
+      yield await Promise.resolve(new TextEncoder().encode("chunk"));
     },
   });
   const syncIterable = () => ({
@@ -984,9 +938,8 @@ describe("outbound request builder", () => {
       () => ({
         body: dictionary(
           Object.assign(Object.create(null), {
-            // eslint-disable-next-line @typescript-eslint/require-await -- an async generator yields asynchronously without awaiting
             async *[Symbol.asyncIterator]() {
-              yield new TextEncoder().encode("chunk");
+              yield await Promise.resolve(new TextEncoder().encode("chunk"));
             },
           }),
         ),
@@ -1137,13 +1090,12 @@ describe("outbound request builder", () => {
     expect(request.headers?.get("content-type")).toBeNull();
   });
 
-  test("encodes a urlencoded codec object only at the body root", async () => {
+  test("encodes a urlencoded codec object only at the body root", () => {
     const Form = struct.urlencoded({
       q: struct.string().alias("query"),
       tags: struct.array(struct.string()),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(struct.object({ form: Form }), {
+    const input = parseEndpointInput(struct.object({ form: Form }), {
       form: { q: "ada", tags: ["a", "b"] },
     });
     const root = buildHttp("POST", "/search", input, (value) => ({
@@ -1231,24 +1183,22 @@ describe("outbound request builder", () => {
     expect(form.get("note")).toBe("null");
   });
 
-  test("rejects blobs in a urlencoded body", async () => {
+  test("rejects blobs in a urlencoded body", () => {
     const Form = struct.urlencoded({
       file: struct.blob(),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Form, { file: new Blob(["a"]) });
+    const input = parseEndpointInput(Form, { file: new Blob(["a"]) });
 
     expect(() =>
       buildHttp("POST", "/files", undefined, () => ({ body: input })),
     ).toThrow(/file/);
   });
 
-  test("rejects nested objects in a formData body", async () => {
+  test("rejects nested objects in a formData body", () => {
     const Form = struct.formData({
       profile: struct.object({ name: struct.string() }),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(struct.object({ form: Form }), {
+    const input = parseEndpointInput(struct.object({ form: Form }), {
       form: { profile: { name: "Ada" } },
     });
 
@@ -1386,13 +1336,12 @@ describe("outbound request builder", () => {
     );
   });
 
-  test("omits undefined fields and sends nullable null", async () => {
+  test("omits undefined fields and sends nullable null", () => {
     const Body = struct.object({
       nickname: struct.string().alias("nick").optional(),
       note: struct.string().nullable(),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Body, { note: null });
+    const input = parseEndpointInput(Body, { note: null });
     input.nickname = undefined;
     const request = buildHttp("POST", "/users", input, (value) => ({
       body: value,
@@ -1489,12 +1438,11 @@ describe("outbound request builder", () => {
     expect(request.queryParams).toBe(query);
   });
 
-  test("passes encoded query objects to the current serializer", async () => {
+  test("passes encoded query objects to the current serializer", () => {
     const Query = struct.object({
       pageSize: struct.number().alias("page_size"),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const input = await parseEndpointInput(Query, { pageSize: 10 });
+    const input = parseEndpointInput(Query, { pageSize: 10 });
     let seen: unknown;
     const request = buildHttp(
       "GET",
@@ -1652,27 +1600,22 @@ describe("outbound request builder", () => {
   });
 
   test("tags parsed endpoint objects and not public struct.parse", async () => {
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(Profile, {
+    const parsed = parseEndpointInput(Profile, {
       birthday,
       displayName: "Ada",
     });
     const [, value] = struct.parse(Profile, { birthday, displayName: "Ada" });
     const Item = struct.object({ id: struct.number() });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const items = await parseEndpointInput(struct.array(Item), [{ id: 1 }]);
+    const items = parseEndpointInput(struct.array(Item), [{ id: 1 }]);
     const Record = struct.record(Item);
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const record = await parseEndpointInput(Record, { a: { id: 1 } });
+    const record = parseEndpointInput(Record, { a: { id: 1 } });
     const raw = { id: 1 };
     const anyValue: unknown = await parseEndpointInput(struct.any(), raw);
     const Left = struct.object({ id: struct.number() });
     const Right = struct.object({ name: struct.string() });
     const Both = struct.intersection(Left, Right);
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const first = await parseEndpointInput(Both, { id: 1, name: "A" });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const second = await parseEndpointInput(Both, { id: 2, name: "B" });
+    const first = parseEndpointInput(Both, { id: 1, name: "A" });
+    const second = parseEndpointInput(Both, { id: 2, name: "B" });
     const Alpha = struct.object({
       id: struct.number(),
       kind: struct.literal("a"),
@@ -1681,8 +1624,7 @@ describe("outbound request builder", () => {
       kind: struct.literal("b"),
       name: struct.string(),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const union = await parseEndpointInput(struct.or(Alpha, Beta), {
+    const union = parseEndpointInput(struct.or(Alpha, Beta), {
       id: 1,
       kind: "a",
     });
@@ -1970,10 +1912,7 @@ describe("outbound request builder", () => {
     }));
 
     expect(request.endpoint).toBe("/files/safe");
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("serializes an own __proto__ query key and hands it to a serializer", () => {
@@ -1998,10 +1937,7 @@ describe("outbound request builder", () => {
     expect(Object.getPrototypeOf(seen)).toBeNull();
     expect(Object.hasOwn(dictionary(seen), "__proto__")).toBe(true);
     expect(seen?.["__proto__"]).toEqual({ polluted: true });
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("applies an own __proto__ header name", () => {
@@ -2010,10 +1946,7 @@ describe("outbound request builder", () => {
     }));
 
     expect(request.headers?.get("__proto__")).toBe("safe");
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
   test("preserves a nested anonymous __proto__ key in a json body", () => {
@@ -2026,14 +1959,9 @@ describe("outbound request builder", () => {
     expect(decoded["__proto__"]).toBe("safe");
   });
 
-  test("preserves a tagged field literally named __proto__", async () => {
+  test("preserves a tagged field literally named __proto__", () => {
     const Payload = struct.object(protoStringShape());
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(
-      Payload,
-      // @ts-expect-error __proto__ is not a declared input field
-      ownData("__proto__", "safe"),
-    );
+    const parsed = parseEndpointInput(Payload, ownData("__proto__", "safe"));
     const request = buildHttp("POST", "/body", parsed, () => ({
       body: parsed,
     }));
@@ -2043,18 +1971,14 @@ describe("outbound request builder", () => {
     expect(Object.hasOwn(dictionary(parsed), "__proto__")).toBe(true);
     expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
     expect(decoded["__proto__"]).toBe("safe");
-    expect(
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
-      (Object.prototype as { [key: string]: unknown })["polluted"],
-    ).toBeUndefined();
+    expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
-  test("preserves a tagged field aliased to __proto__", async () => {
+  test("preserves a tagged field aliased to __proto__", () => {
     const Payload = struct.object({
       label: struct.string().alias("__proto__"),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(Payload, { label: "safe" });
+    const parsed = parseEndpointInput(Payload, { label: "safe" });
     let seen: { [key: string]: unknown } | undefined;
     const body = buildHttp("POST", "/body", parsed, () => ({ body: parsed }));
     const query = buildHttp(
@@ -2080,15 +2004,12 @@ describe("outbound request builder", () => {
     expect(headers.headers?.get("__proto__")).toBe("safe");
   });
 
-  test("preserves a nested tagged field named __proto__", async () => {
+  test("preserves a nested tagged field named __proto__", () => {
     const Inner = struct.object(protoStringShape());
     const Outer = struct.object({ inner: Inner });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(
-      Outer,
-      // @ts-expect-error inner is a tagged object, not the declared field input
-      { inner: ownData("__proto__", "safe") },
-    );
+    const parsed = parseEndpointInput(Outer, {
+      inner: ownData("__proto__", "safe"),
+    });
     const request = buildHttp("POST", "/body", parsed, () => ({
       body: parsed,
     }));
@@ -2098,20 +2019,17 @@ describe("outbound request builder", () => {
     expect(decoded["__proto__"]).toBe("safe");
   });
 
-  test("appends form fields whose wire key is __proto__", async () => {
+  test("appends form fields whose wire key is __proto__", () => {
     const Urlencoded = struct.urlencoded(protoStringShape());
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const urlencodedInput = await parseEndpointInput(
+    const urlencodedInput = parseEndpointInput(
       Urlencoded,
-      // @ts-expect-error __proto__ is not a declared input field
       ownData("__proto__", "safe"),
     );
     const urlencoded = buildHttp("POST", "/form", undefined, () => ({
       body: urlencodedInput,
     }));
     const Form = struct.formData({ label: struct.string().alias("__proto__") });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const formInput = await parseEndpointInput(Form, { label: "safe" });
+    const formInput = parseEndpointInput(Form, { label: "safe" });
     const form = buildHttp("POST", "/form", undefined, () => ({
       body: formInput,
     }));
@@ -2120,5 +2038,26 @@ describe("outbound request builder", () => {
     expect(bodyParams(urlencoded.body).get("__proto__")).toBe("safe");
     expect(form.body).toBeInstanceOf(FormData);
     expect(bodyForm(form.body).get("__proto__")).toBe("safe");
+  });
+});
+
+describe("outbound passthrough groups", () => {
+  test("encode a fresh object under two any/unknown union guides field by field", () => {
+    const Left = struct.object({
+      x: struct.or(struct.unknown(), struct.string()),
+    });
+    const Right = struct.object({
+      x: struct.or(struct.unknown(), struct.string()),
+    });
+    const input = parseEndpointInput(struct.intersection(Left, Right), {
+      x: "seed",
+    });
+
+    expect(
+      materializeOutboundRequest(
+        { body: { ...input, x: { at: new Date(0) } } },
+        "http",
+      ).body,
+    ).toBe('{"x":{"at":"1970-01-01T00:00:00.000Z"}}');
   });
 });

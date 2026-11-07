@@ -2128,10 +2128,7 @@ describe("request event stream runtime", () => {
           ),
         ),
       ),
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      withSSEOnInvalidEvent(async () => {
-        throw new Error("observer failed");
-      }),
+      withSSEOnInvalidEvent(() => Promise.reject(new Error("observer failed"))),
     );
 
     const useStream = defineEventStream({

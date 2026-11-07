@@ -22,7 +22,23 @@ declare module "vitest" {
 let testServer: HonoTestServer | undefined;
 let truncatedServer: ReturnType<typeof startTruncatedServer> | undefined;
 let testServerAddr: string;
+const redirectStatuses = [300, 301, 302, 303, 304, 305, 306, 307, 308] as const;
 const providerEnvelopeAttempts = new Map<string, number>();
+
+function frameText(data: unknown): string {
+  if (typeof data !== "string") {
+    throw new TypeError("Expected a text WebSocket frame");
+  }
+  return data;
+}
+
+function parseFrameObject(data: unknown): Record<string, unknown> {
+  const decoded: unknown = JSON.parse(frameText(data));
+  if (typeof decoded !== "object" || decoded === null) {
+    throw new TypeError("Expected a JSON object frame");
+  }
+  return Object.fromEntries(Object.entries(decoded));
+}
 const sseDropStreams = new Map<
   string,
   ReadableStreamDefaultController<Uint8Array>
@@ -187,10 +203,14 @@ export async function setup({ provide }: Pick<TestProject, "provide">) {
 
   app.get("/sse/basic", basicSSEHandler);
   app.post("/sse/basic", basicSSEHandler);
-  app.post("/sse/redirect/:status", (c) =>
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve numeric redirect parsing and accepted statuses instead of a new allowlist error
-    c.redirect("/sse/basic", Number(c.req.param("status")) as 303 | 307),
-  );
+  app.post("/sse/redirect/:status", (c) => {
+    const status = redirectStatuses.find(
+      (candidate) => candidate === Number(c.req.param("status")),
+    );
+    return status === undefined
+      ? c.text("unsupported redirect status", 400)
+      : c.redirect("/sse/basic", status);
+  });
 
   app.get("/sse/retry", (c) => {
     const lastEventId = c.req.header("last-event-id");
@@ -508,11 +528,7 @@ export async function setup({ provide }: Pick<TestProject, "provide">) {
           providerEnvelopeAttempts.delete(key);
         },
         onMessage(event, ws) {
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original socket JSON values and JavaScript string conversion without a new object guard
-          const decoded = JSON.parse(
-            // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve original socket string coercion and JSON access without new validation or altered getter reads
-            typeof event.data === "string" ? event.data : String(event.data),
-          ) as Record<string, unknown>;
+          const decoded = parseFrameObject(event.data);
           ws.send(
             JSON.stringify({
               method: "wire",
@@ -568,12 +584,8 @@ export async function setup({ provide }: Pick<TestProject, "provide">) {
     upgradeWebSocket(() => ({
       onMessage(event, ws) {
         try {
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original socket JSON values and JavaScript string conversion without a new object guard
-          const decoded = JSON.parse(
-            // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve original socket string coercion and JSON access without new validation or altered getter reads
-            typeof event.data === "string" ? event.data : String(event.data),
-          ) as { type?: string };
-          if (decoded.type === "ping") {
+          const decoded = parseFrameObject(event.data);
+          if (decoded["type"] === "ping") {
             ws.send(createSocketMessage("pong", { ok: true }));
             ws.close(1000, "heartbeat-ok");
           }
@@ -688,8 +700,7 @@ export async function setup({ provide }: Pick<TestProject, "provide">) {
     "/ws/regression/capture",
     upgradeWebSocket(() => ({
       onMessage(event, socket) {
-        // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve original socket string coercion and JSON access without new validation or altered getter reads
-        socket.send(JSON.stringify({ received: String(event.data) }));
+        socket.send(JSON.stringify({ received: frameText(event.data) }));
       },
     })),
   );

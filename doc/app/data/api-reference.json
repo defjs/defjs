@@ -801,7 +801,7 @@
       {
         "name": "heartbeat",
         "description": "WebSocket heartbeat for this call. Replaces the client heartbeat as a whole value.",
-        "type": "{ intervalMs: number; isAck?: (message: unknown) => boolean; message?: <T = unknown>() => T | unknown; timeoutMs?: number; } | undefined",
+        "type": "{ intervalMs: number; isAck?: (message: unknown) => boolean; message?: () => unknown; timeoutMs?: number; } | undefined",
         "simplifiedType": "object",
         "required": false,
         "deprecated": false,
@@ -1212,7 +1212,7 @@
     "group": "client",
     "description": "Optional WebSocket settings applied when creating a client: constructor, `beforeConnect` hook, heartbeat, protocols, and reconnect policy.\n\n- **handle** — WebSocket constructor; defaults to `globalThis.WebSocket`.\n- **beforeConnect** — Runs before each connect and reconnect attempt.\n- **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement fails the session and reports `NET_UNREACHABLE` to the balancer. `intervalMs` and `timeoutMs` must be positive and at most 2147483647.\n- **protocols** — Subprotocols passed to the constructor.\n- **reconnect** — Opt-in. `attempts` defaults to **3**; `0` disables retry, and omitting `attempts` is not unlimited. Other defaults: `delayMs` 1000, `factor` 2, `jitter` 0 (a 0-1 multiplicative factor), `maxDelayMs` 30000. `shouldReconnect` receives the close `code`, `reason`, and `wasClean` and can veto a retry.\n\nThe retry budget applies per outage. Successful `open` resets the budget, callback attempt, and backoff exponent; the next outage starts at retry 1. `maxDelayMs` caps the final delay after jitter and rounding, also bounded by `2_147_483_647` ms. See {@link withWebSocketReconnect} for validation rules and overflow behavior.\n\nSet these with `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols`, and `withWebSocketReconnect`. `WebSocketExecuteOptions` can override `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` per call.",
     "signatures": [
-      "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: {\n    intervalMs: number;\n    isAck?: (message: unknown) => boolean;\n    // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- INTENT: preserve the original generic callback text and explicit message<T>() calls\n    message?: <T = unknown>() => T | unknown;\n    timeoutMs?: number;\n  };\n  protocols?: readonly string[];\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      code?: number;\n      reason?: string;\n      wasClean?: boolean;\n    }) => boolean;\n  };\n}"
+      "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: {\n    intervalMs: number;\n    isAck?: (message: unknown) => boolean;\n    message?: () => unknown;\n    timeoutMs?: number;\n  };\n  protocols?: readonly string[];\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      code?: number;\n      reason?: string;\n      wasClean?: boolean;\n    }) => boolean;\n  };\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -1241,7 +1241,7 @@
       {
         "name": "heartbeat",
         "description": "Periodic heartbeat ping and optional ACK matching.",
-        "type": "{ intervalMs: number; isAck?: (message: unknown) => boolean; message?: <T = unknown>() => T | unknown; timeoutMs?: number; } | undefined",
+        "type": "{ intervalMs: number; isAck?: (message: unknown) => boolean; message?: () => unknown; timeoutMs?: number; } | undefined",
         "simplifiedType": "object",
         "required": false,
         "deprecated": false,
@@ -1269,7 +1269,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: {\n    intervalMs: number;\n    isAck?: (message: unknown) => boolean;\n    // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- INTENT: preserve the original generic callback text and explicit message<T>() calls\n    message?: <T = unknown>() => T | unknown;\n    timeoutMs?: number;\n  };\n  protocols?: readonly string[];\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      code?: number;\n      reason?: string;\n      wasClean?: boolean;\n    }) => boolean;\n  };\n}",
+        "signature": "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: {\n    intervalMs: number;\n    isAck?: (message: unknown) => boolean;\n    message?: () => unknown;\n    timeoutMs?: number;\n  };\n  protocols?: readonly string[];\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      code?: number;\n      reason?: string;\n      wasClean?: boolean;\n    }) => boolean;\n  };\n}",
         "parameters": [],
         "returns": []
       }

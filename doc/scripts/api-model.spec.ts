@@ -13,8 +13,8 @@ import {
   overloadNodes,
   parameterRequired,
   parameterTypeText,
-  projectChecker,
   requireKind,
+  requireNode,
   referenceRecord,
   formatJsonDocument,
   preferredParameterType,
@@ -44,8 +44,6 @@ const row = (name: string, typeHref?: string): StoredEntry => ({
 test("model helpers keep stable names, kinds, and parameter rows", () => {
   expect(defined("ok", "value")).toBe("ok");
   expect(() => defined(undefined, "value")).toThrow("missing value");
-  expect(projectChecker({ project: { checker: 1 } })).toBe(1);
-  expect(() => projectChecker({})).toThrow("TypeScript program has no checker");
   expect(
     catalogKind({ typeOnlyExport: true, declarationKind: "function" }),
   ).toBe("type");
@@ -94,6 +92,11 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
   );
   expect(() => requireKind(1, 2, "bad kind")).toThrow("bad kind");
   requireKind(2, 2, "bad kind");
+  const isNamed = (node: { name?: string }): node is { name: string } =>
+    node.name !== undefined;
+  const named = { name: "x" };
+  expect(requireNode(named, isNamed, "not named")).toBe(named);
+  expect(() => requireNode({}, isNamed, "not named")).toThrow("not named");
   expect(parameterTypeText("  ")).toBe("unknown");
   expect(parameterTypeText(" ClientOption[] ")).toBe("ClientOption[]");
   expect(() => stableMemberName("__@CLIENT@1")).toThrow("unstable member name");

@@ -17,20 +17,17 @@ export async function checkLinks(directory: string): Promise<void> {
       .on("[id]", {
         element(element) {
           // The selector guarantees the attribute exists, so getAttribute never returns null here.
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve selector-provided attributes and native URL coercion without introducing extra conversion
-          page.ids.add(element.getAttribute("id") as string);
+          page.ids.add(String(element.getAttribute("id")));
         },
       })
       .on("[href]", {
         element(element) {
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve selector-provided attributes and native URL coercion without introducing extra conversion
-          page.links.push(element.getAttribute("href") as string);
+          page.links.push(String(element.getAttribute("href")));
         },
       })
       .on("[src]", {
         element(element) {
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve selector-provided attributes and native URL coercion without introducing extra conversion
-          page.links.push(element.getAttribute("src") as string);
+          page.links.push(String(element.getAttribute("src")));
         },
       })
       .transform(new Response(Bun.file(joinPath(root, filename))))

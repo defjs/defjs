@@ -112,11 +112,11 @@ export function makeResponse<R>(
  * The brand is the runtime half of the type's nominal guard, so a native `Response` or a lookalike object fails.
  */
 export function isHttpResponse(value: unknown): value is HttpResponse<unknown> {
+  // Functions can carry the brand too. Reflect.get is one [[Get]]; an `in` check would call a proxy's has trap.
   return (
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve direct symbol lookup on branded functions and proxies without an object-only guard or a new has trap
-    (value as Partial<HttpResponse<unknown>> | null | undefined)?.[
-      HTTP_RESPONSE
-    ] === true
+    ((typeof value === "object" && value !== null) ||
+      typeof value === "function") &&
+    Reflect.get(value, HTTP_RESPONSE) === true
   );
 }
 

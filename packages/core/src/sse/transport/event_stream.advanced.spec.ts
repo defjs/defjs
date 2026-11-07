@@ -18,7 +18,7 @@ const backoff = await import("../../internal/backoff");
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
-  "maxBufferSize" | "maxQueueSize"
+  "maxBufferSize" | "maxQueueSize" | "transformMessage"
 > & {
   maxBufferSize?: number;
   maxQueueSize?: number;
@@ -38,9 +38,24 @@ function thrownMessage(error: unknown): string {
   return error.message;
 }
 
-function fetchEventStream<T = EventStreamMessage>(
+/** Streams the raw parsed messages. */
+function fetchEventStream(
   request: HttpRequest,
-  options: TestOptions<T> = {},
+  options: TestOptions<EventStreamMessage> = {},
+) {
+  return fetchEventStreamInternal(request, {
+    maxBufferSize: 1024,
+    maxQueueSize: 16,
+    transformMessage: (message) => message,
+    ...options,
+  });
+}
+
+/** Streams what `transformMessage` returns for each parsed message. */
+function fetchTransformedEventStream<T>(
+  request: HttpRequest,
+  options: TestOptions<T> &
+    Pick<FetchEventStreamOptions<T>, "transformMessage">,
 ) {
   return fetchEventStreamInternal(request, {
     maxBufferSize: 1024,
@@ -71,7 +86,6 @@ function settleWithin<T>(promise: Promise<T>): Promise<T> {
       },
       (error: unknown) => {
         clearTimeout(timeout);
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
         reject(error);
       },
     );
@@ -88,11 +102,14 @@ describe("fetchEventStream advanced", () => {
   }
 
   test("should skip messages when transformMessage returns undefined", async () => {
-    const stream = await fetchEventStream(createRequest("/sse/basic"), {
-      transformMessage() {
-        return undefined;
+    const stream = await fetchTransformedEventStream(
+      createRequest("/sse/basic"),
+      {
+        transformMessage() {
+          return undefined;
+        },
       },
-    });
+    );
 
     const events: undefined[] = [];
     for await (const event of stream) {
@@ -104,10 +121,7 @@ describe("fetchEventStream advanced", () => {
 
   test("should stop retry when onerror returns null", async () => {
     const networkError = new Error("network failure");
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const fetch = vi.fn(async () => {
-      throw networkError;
-    });
+    const fetch = vi.fn(() => Promise.reject(networkError));
     const onerror = vi.fn().mockReturnValue(null);
     const shouldReconnect = vi.fn(() => true);
 
@@ -126,7 +140,7 @@ describe("fetchEventStream advanced", () => {
   test("should preserve an undefined network rejection", async () => {
     await expect(
       fetchEventStream(createRequest("/events"), {
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the fetch under test rejects with undefined, which the stream must surface unchanged
         fetch: () => Promise.reject(undefined),
         onerror: () => null,
       }),
@@ -206,10 +220,9 @@ describe("fetchEventStream advanced", () => {
       await expect(
         fetchEventStream(createRequest("/events"), {
           failure,
-          // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-          fetch: async () => {
-            // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
-            throw cause;
+          fetch: () => {
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the fetch under test rejects with a string, null or number, which must pass through unchanged
+            return Promise.reject(cause);
           },
         }),
       ).rejects.toBe(cause);
@@ -218,11 +231,14 @@ describe("fetchEventStream advanced", () => {
   });
 
   test("should throw when transformMessage throws", async () => {
-    const stream = await fetchEventStream(createRequest("/sse/basic"), {
-      transformMessage() {
-        throw new Error("transform failed");
+    const stream = await fetchTransformedEventStream(
+      createRequest("/sse/basic"),
+      {
+        transformMessage() {
+          throw new Error("transform failed");
+        },
       },
-    });
+    );
 
     const iter = stream[Symbol.asyncIterator]();
     await expect(iter.next()).rejects.toThrow(
@@ -543,7 +559,7 @@ describe("fetchEventStream advanced", () => {
           }),
         ),
       onopen() {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- onopen under test throws a string primitive to exercise handling of a non-Error failure
         throw "non-error failure";
       },
     }).catch((cause: unknown) => cause);
@@ -630,10 +646,7 @@ describe("fetchEventStream advanced", () => {
   test("should classify a parser limit thrown by the fetch boundary as fatal", async () => {
     const onerror = vi.fn(() => 0);
     const shouldReconnect = vi.fn(() => true);
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const fetch = vi.fn(async () => {
-      throw new SSEParserLimitError();
-    });
+    const fetch = vi.fn(() => Promise.reject(new SSEParserLimitError()));
 
     const error = await fetchEventStream(createRequest("/events"), {
       fetch,
@@ -695,7 +708,7 @@ describe("fetchEventStream advanced", () => {
       );
     });
 
-    const stream = await fetchEventStream(createRequest("/events"), {
+    const stream = await fetchTransformedEventStream(createRequest("/events"), {
       fetch,
       onerror,
       reconnect: { attempts: 2, delayMs: 0, shouldReconnect },
@@ -759,10 +772,7 @@ describe("fetchEventStream advanced", () => {
       ...createRequest("/events"),
       signal: controller.signal,
     };
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const fetch = vi.fn(async () => {
-      throw new Error("network error");
-    });
+    const fetch = vi.fn(() => Promise.reject(new Error("network error")));
 
     setTimeout(() => controller.abort(ERR_ABORTED), 50);
 
@@ -843,7 +853,7 @@ describe("fetchEventStream advanced", () => {
           ),
       });
       const close = vi.fn(() => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- close() under test throws closeError, which may be a non-Error value, to exercise handling of a throwing close
         throw closeError;
       });
       stream.close = close;
@@ -1032,7 +1042,7 @@ describe("fetchEventStream advanced", () => {
       markStarted = resolve;
     });
     let transformSignal: AbortSignal | undefined;
-    const stream = await fetchEventStream(
+    const stream = await fetchTransformedEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: () =>
@@ -1169,10 +1179,7 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        fetch: async () => {
-          throw new Error("network failure");
-        },
+        fetch: () => Promise.reject(new Error("network failure")),
         onerror() {
           markStarted?.();
           return new Promise<number>(() => undefined);
@@ -1195,10 +1202,7 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        fetch: async () => {
-          throw new Error("network failure");
-        },
+        fetch: () => Promise.reject(new Error("network failure")),
         reconnect: {
           shouldReconnect() {
             markStarted?.();
@@ -1219,10 +1223,7 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        fetch: async () => {
-          throw new Error("network failure");
-        },
+        fetch: () => Promise.reject(new Error("network failure")),
         reconnect: {
           shouldReconnect() {
             queueMicrotask(() => abortController.abort(ERR_ABORTED));
@@ -1489,10 +1490,9 @@ describe("fetchEventStream advanced", () => {
 
   test("should not retry when reconnect is omitted", async () => {
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      throw new Error("network error");
+      return Promise.reject(new Error("network error"));
     });
 
     const request = {
@@ -1531,11 +1531,10 @@ describe("fetchEventStream advanced", () => {
 
   test("should retry up to reconnect.attempts limit", async () => {
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       // Throw a network error (not EventStreamFatalError) to trigger retry path
-      throw new Error("network error");
+      return Promise.reject(new Error("network error"));
     });
 
     const request = {
@@ -1555,24 +1554,25 @@ describe("fetchEventStream advanced", () => {
 
   test("should succeed when retry eventually works", async () => {
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       if (fetchCount < 3) {
         // Throw network error to trigger retry path
-        throw new Error("network error");
+        return Promise.reject(new Error("network error"));
       }
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("data: ok\n\n"));
-            controller.close();
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("data: ok\n\n"));
+              controller.close();
+            },
+          }),
+          {
+            headers: { "content-type": "text/event-stream" },
+            status: 200,
           },
-        }),
-        {
-          headers: { "content-type": "text/event-stream" },
-          status: 200,
-        },
+        ),
       );
     });
 
@@ -1597,11 +1597,10 @@ describe("fetchEventStream advanced", () => {
 
   test("should stop retry when shouldReconnect returns false", async () => {
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       // Throw network error so we reach the shouldReconnect check
-      throw new Error("network error");
+      return Promise.reject(new Error("network error"));
     });
 
     const request = {
@@ -1624,10 +1623,7 @@ describe("fetchEventStream advanced", () => {
 
   test("should preserve a reconnect policy exception instead of retrying", async () => {
     const cause = new Error("reconnect policy failed");
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const fetch = vi.fn(async () => {
-      throw new Error("network error");
-    });
+    const fetch = vi.fn(() => Promise.reject(new Error("network error")));
 
     await expect(
       fetchEventStream(
@@ -1651,23 +1647,24 @@ describe("fetchEventStream advanced", () => {
 
   test("should continue retry when shouldReconnect returns true", async () => {
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       if (fetchCount < 2) {
-        throw new Error("network error");
+        return Promise.reject(new Error("network error"));
       }
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("data: ok\n\n"));
-            controller.close();
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("data: ok\n\n"));
+              controller.close();
+            },
+          }),
+          {
+            headers: { "content-type": "text/event-stream" },
+            status: 200,
           },
-        }),
-        {
-          headers: { "content-type": "text/event-stream" },
-          status: 200,
-        },
+        ),
       );
     });
 
@@ -1698,10 +1695,9 @@ describe("fetchEventStream advanced", () => {
       vi.useRealTimers();
     });
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      throw new Error("network error");
+      return Promise.reject(new Error("network error"));
     });
 
     const request = {
@@ -1721,10 +1717,7 @@ describe("fetchEventStream advanced", () => {
   });
 
   test("should reject a non-finite retry delay without hot reconnecting", async () => {
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
-      throw new Error("network error");
-    });
+    const mockFetch = vi.fn(() => Promise.reject(new Error("network error")));
 
     await expect(
       fetchEventStream(
@@ -1747,28 +1740,29 @@ describe("fetchEventStream advanced", () => {
     vi.useFakeTimers();
     const waitSpy = vi.spyOn(backoff, "wait");
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
       if (fetchCount === 1) {
         let pulled = false;
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            pull(controller) {
-              if (!pulled) {
-                pulled = true;
-                controller.enqueue(
-                  new TextEncoder().encode("retry: 1500000000\n\n"),
-                );
-                return;
-              }
-              controller.error(new Error("connection lost"));
-            },
-          }),
-          { headers: { "content-type": "text/event-stream" } },
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(controller) {
+                if (!pulled) {
+                  pulled = true;
+                  controller.enqueue(
+                    new TextEncoder().encode("retry: 1500000000\n\n"),
+                  );
+                  return;
+                }
+                controller.error(new Error("connection lost"));
+              },
+            }),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
         );
       }
-      throw new Error("network error");
+      return Promise.reject(new Error("network error"));
     });
 
     try {
@@ -1807,10 +1801,9 @@ describe("fetchEventStream advanced", () => {
       vi.useRealTimers();
     });
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      throw new Error("network error");
+      return Promise.reject(new Error("network error"));
     });
 
     const request = {
@@ -1839,10 +1832,9 @@ describe("fetchEventStream advanced", () => {
       vi.useRealTimers();
     });
     let fetchCount = 0;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
+    const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      throw new Error("network error");
+      return Promise.reject(new Error("network error"));
     });
 
     const request = {
@@ -1862,10 +1854,7 @@ describe("fetchEventStream advanced", () => {
   });
 
   test("should reject out-of-range SSE reconnect jitter", async () => {
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const mockFetch = vi.fn(async () => {
-      throw new Error("network error");
-    });
+    const mockFetch = vi.fn(() => Promise.reject(new Error("network error")));
 
     await expect(
       fetchEventStream(
@@ -1891,10 +1880,7 @@ describe("fetchEventStream advanced", () => {
       random.mockRestore();
       vi.useRealTimers();
     });
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const fetch = vi.fn(async () => {
-      throw new Error("network error");
-    });
+    const fetch = vi.fn(() => Promise.reject(new Error("network error")));
     const rejected = fetchEventStream(
       {
         baseEndpoint: "https://example.com",
@@ -1984,7 +1970,7 @@ describe("fetchEventStream message path", () => {
 
   test("should transform every message of a chunk in one synchronous pass", async () => {
     const order: string[] = [];
-    const stream = await fetchEventStream(request, {
+    const stream = await fetchTransformedEventStream(request, {
       fetch: respondWith("data: a\n\ndata: b\n\ndata: c\n\n"),
       transformMessage(message) {
         if (order.length === 0) {
@@ -2015,7 +2001,7 @@ describe("fetchEventStream message path", () => {
     async ({ expected, settled }) => {
       const gate = Promise.withResolvers<EventStreamMessage | undefined>();
       const transformed: string[] = [];
-      const stream = await fetchEventStream(request, {
+      const stream = await fetchTransformedEventStream(request, {
         fetch: respondWith("data: a\n\ndata: b\n\ndata: c\n\n"),
         transformMessage(message) {
           transformed.push(message.data);
@@ -2045,7 +2031,7 @@ describe("fetchEventStream message path", () => {
       const transformed: string[] = [];
       const fetch = respondWith("data: a\n\ndata: b\n\n");
       const onerror = vi.fn(() => 0);
-      const stream = await fetchEventStream(request, {
+      const stream = await fetchTransformedEventStream(request, {
         fetch,
         onerror,
         reconnect: { attempts: 2, delayMs: 0 },
@@ -2077,7 +2063,7 @@ describe("fetchEventStream message path", () => {
   );
 
   test("should keep CAP_QUEUE_OVERFLOW as the failure when the queue overflows after a pending transform", async () => {
-    const stream = await fetchEventStream(request, {
+    const stream = await fetchTransformedEventStream(request, {
       fetch: respondWith("data: a\n\ndata: b\n\n"),
       maxQueueSize: 1,
       transformMessage: (message) => Promise.resolve(message),
@@ -2096,7 +2082,7 @@ describe("fetchEventStream message path", () => {
     const controller = new AbortController();
     const fetch = respondWith("data: a\n\n");
     const onerror = vi.fn(() => 0);
-    const stream = await fetchEventStream(
+    const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
         fetch,
@@ -2124,7 +2110,7 @@ describe("fetchEventStream message path", () => {
     const controller = new AbortController();
     const lateFailure = new Error("late transform failure");
 
-    const stream = await fetchEventStream(
+    const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
         fetch: respondWith("data: a\n\n"),
@@ -2145,7 +2131,7 @@ describe("fetchEventStream message path", () => {
   test("should not transform the remaining messages of a chunk once the request is aborted", async () => {
     const controller = new AbortController();
     const transformed: string[] = [];
-    const stream = await fetchEventStream(
+    const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
         fetch: respondWith("data: a\n\ndata: b\n\ndata: c\n\n"),
@@ -2171,10 +2157,7 @@ describe("fetchEventStream message path", () => {
 
 describe("reconnect method policy", () => {
   function rejectingFetch(failure: TypeError): FetchHandle {
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    return vi.fn<FetchHandle>(async () => {
-      throw failure;
-    });
+    return vi.fn<FetchHandle>(() => Promise.reject(failure));
   }
 
   test("should not reconnect POST without shouldReconnect", async () => {
@@ -2435,7 +2418,7 @@ test("reads the current transformMessage option for each frame", async () => {
   await stream[Symbol.asyncDispose]();
 });
 
-test("reads a truthy mapper accessor twice and calls it with the options receiver", async () => {
+test("reads the mapper accessor once per message and calls it with the options receiver", async () => {
   let reads = 0;
   const receivers: unknown[] = [];
   const options: FetchEventStreamOptions<string> = {
@@ -2466,8 +2449,8 @@ test("reads a truthy mapper accessor twice and calls it with the options receive
     },
     options,
   );
-  expect(await Array.fromAsync(stream)).toEqual(["2:frame"]);
-  expect(reads).toBe(2);
+  expect(await Array.fromAsync(stream)).toEqual(["1:frame"]);
+  expect(reads).toBe(1);
   expect(receivers).toEqual([options]);
 });
 
@@ -2495,6 +2478,7 @@ test("reads attempt options as HEAD and invokes initial and reconnect callbacks 
   const options: FetchEventStreamOptions = {
     maxBufferSize: 1024,
     maxQueueSize: 16,
+    transformMessage: (message) => message,
     reconnect: { attempts: 1, delayMs: 0 },
     fetch: () =>
       ++requests === 1
@@ -2530,6 +2514,7 @@ test("passes missing attempt callbacks through as undefined", async () => {
   const options: FetchEventStreamOptions = {
     maxBufferSize: 1024,
     maxQueueSize: 16,
+    transformMessage: (message) => message,
     reconnect: { attempts: 1, delayMs: 0 },
     fetch: () =>
       ++requests === 1

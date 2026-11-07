@@ -91,8 +91,8 @@ export class StructError extends Error {
    */
   flatten(): FlattenedStructError {
     const formErrors: string[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: literal/setPrototypeOf empty-dictionary allocation ratios 5.016/5.267/5.242x, 3 independent runs x 13 alternating pairs x 100000 iterations
-    const fieldErrors: { [key: string]: string[] } = Object.create(null);
+    const fieldErrors: { [key: string]: string[] } = {};
+    Object.setPrototypeOf(fieldErrors, null);
     for (const item of this.issues) {
       if (item.path.length === 0) {
         formErrors.push(item.message);
@@ -125,9 +125,8 @@ export class StructError extends Error {
 }
 
 function createFormattedError(): FormattedStructError {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: literal/setPrototypeOf error-node allocation ratios 3.274/3.062/3.423x, 3 independent runs x 13 alternating pairs x 100000 iterations
-  const node: FormattedStructError = Object.create(null);
-  node._errors = [];
+  const node: FormattedStructError = { _errors: [] };
+  Object.setPrototypeOf(node, null);
   return node;
 }
 

@@ -184,10 +184,8 @@ function createMockWebSocketClass(
         return groups.flat();
       };
 
-      // Type boundary: capture the constructed mock instance so tests can trigger events on it.
-      // oxlint-disable-next-line typescript/no-this-alias
-      lastMockInstance = this;
       mockInstances.push(this);
+      lastMockInstance = mockInstances.at(-1);
 
       if (autoOpen) {
         setTimeout(() => this.triggerOpen(), 0);
@@ -226,27 +224,31 @@ function instrumentAbortListeners(signal: AbortSignal): {
   const removed = new Set<AbortListener>();
   const add = signal.addEventListener.bind(signal);
   const remove = signal.removeEventListener.bind(signal);
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the exact supplied listener argument tuple and arity while instrumenting the overloaded AbortSignal method
-  signal.addEventListener = ((
-    ...args: Parameters<AbortSignal["addEventListener"]>
-  ) => {
-    const [type, listener] = args;
-    if (type === "abort" && typeof listener === "function") {
-      live.add(listener);
-    }
-    add(...args);
-  }) as AbortSignal["addEventListener"];
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the exact supplied listener argument tuple and arity while instrumenting the overloaded AbortSignal method
-  signal.removeEventListener = ((
-    ...args: Parameters<AbortSignal["removeEventListener"]>
-  ) => {
-    const [type, listener] = args;
-    if (type === "abort" && typeof listener === "function") {
-      live.delete(listener);
-      removed.add(listener);
-    }
-    remove(...args);
-  }) as AbortSignal["removeEventListener"];
+  Object.defineProperty(signal, "addEventListener", {
+    configurable: true,
+    enumerable: true,
+    value: (...args: Parameters<AbortSignal["addEventListener"]>) => {
+      const [type, listener] = args;
+      if (type === "abort" && typeof listener === "function") {
+        live.add(listener);
+      }
+      add(...args);
+    },
+    writable: true,
+  });
+  Object.defineProperty(signal, "removeEventListener", {
+    configurable: true,
+    enumerable: true,
+    value: (...args: Parameters<AbortSignal["removeEventListener"]>) => {
+      const [type, listener] = args;
+      if (type === "abort" && typeof listener === "function") {
+        live.delete(listener);
+        removed.add(listener);
+      }
+      remove(...args);
+    },
+    writable: true,
+  });
   return {
     listeners: () => [...live],
     assertReleased(generation) {
@@ -2594,10 +2596,8 @@ describe("web socket runtime environment edge cases", () => {
     const stateFailure = new Error("async state observer failed");
     const runtimeErrors: unknown[] = [];
     socket.onRuntimeError((error) => runtimeErrors.push(error));
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/require-await -- async observers are under test; the session consumes their promise results
-    socket.onStateChange(async () => {
-      throw stateFailure;
-    });
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- the observer is typed to return void; the test returns a rejected promise to check that the session reports it
+    socket.onStateChange(() => Promise.reject(stateFailure));
 
     socket.close(1000, "done");
     await socket.closed;
@@ -2609,10 +2609,9 @@ describe("web socket runtime environment edge cases", () => {
 
   test("should report async runtime observer and reporter rejections without unhandled rejection", async () => {
     const reported: unknown[] = [];
-    // eslint-disable-next-line @typescript-eslint/require-await -- async reporter rejections are under test
-    vi.stubGlobal("reportError", async (error: unknown) => {
+    vi.stubGlobal("reportError", (error: unknown) => {
       reported.push(error);
-      throw new Error("async reporter failed");
+      return Promise.reject(new Error("async reporter failed"));
     });
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     const useSocket = defineWebSocket({
@@ -2628,10 +2627,8 @@ describe("web socket runtime environment edge cases", () => {
       throw new Error("Expected socket");
     }
     const runtimeFailure = new Error("async runtime observer failed");
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/require-await -- async observers are under test; the session consumes their promise results
-    socket.onRuntimeError(async () => {
-      throw runtimeFailure;
-    });
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- the observer is typed to return void; the test returns a rejected promise to check that the session reports it
+    socket.onRuntimeError(() => Promise.reject(runtimeFailure));
     socket.onStateChange(() => {
       throw new Error("state observer failed");
     });
@@ -4318,7 +4315,7 @@ describe("web socket runtime environment edge cases", () => {
           attempts: 1,
           delayMs: 0,
           shouldReconnect() {
-            // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
+            // eslint-disable-next-line @typescript-eslint/only-throw-error -- shouldReconnect under test throws undefined to exercise handling of a non-Error throw
             throw undefined;
           },
         },

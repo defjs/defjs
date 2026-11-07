@@ -281,10 +281,7 @@ describe("declaration routing", () => {
       // Both a dead server and a throwing interceptor arrive at the chain's catch as one bare
       // cause. Only the transport boundary knows which happened, so it tags its own rejections.
       const networkError = new TypeError("fetch failed");
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      const handle = async () => {
-        throw networkError;
-      };
+      const handle = () => Promise.reject(networkError);
 
       const useRequest = defineRequest({
         method: "GET",
@@ -306,10 +303,9 @@ describe("declaration routing", () => {
       // The transport-origin mark is kept beside the value, which a primitive cannot carry. A
       // transport that rejects with a string is broken in a way we cannot distinguish, and the
       // documented consequence is that it is attributed to the extension.
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      const handle = async () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
-        throw "offline";
+      const handle = () => {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a string primitive, which the client must attribute to the extension
+        return Promise.reject("offline");
       };
 
       const useRequest = defineRequest({

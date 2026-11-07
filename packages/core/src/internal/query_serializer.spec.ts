@@ -248,10 +248,9 @@ describe("query serializer contract", () => {
         seen.push(query);
         return "from=sse";
       }),
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      withSSEHandle(async (input) => {
+      withSSEHandle((input) => {
         url = input instanceof Request ? input.url : String(input);
-        throw new Error("stop");
+        return Promise.reject(new Error("stop"));
       }),
     );
     const events = defineEventStream({

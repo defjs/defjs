@@ -773,3 +773,41 @@ describe("struct coverage boundary cases", () => {
     }).toThrow();
   });
 });
+
+describe("struct guards for untyped definitions", () => {
+  test("a union needs at least one struct", () => {
+    // @ts-expect-error struct.or() requires at least one option
+    expect(() => struct.or()).toThrow("or requires at least one struct");
+  });
+
+  test("a union option whose field is not a struct only turns the identity encode shortcut off", () => {
+    const union = struct.or(
+      struct.object({ name: "not a struct" }),
+      struct.object({ name: struct.string() }),
+    );
+    const unionDefinition = definition(union);
+
+    expect(
+      unionDefinition.kind === "or"
+        ? unionDefinition.uniformIdentityEncode
+        : undefined,
+    ).toBe(false);
+  });
+
+  test("a hand-built discriminator map that points at a non-object struct throws when parsed", () => {
+    const handBuilt = makeStruct({
+      discriminator: "type",
+      expected: '"text"',
+      flags: DEFAULT_FLAGS,
+      kind: "discriminatedUnion",
+      map: new Map<unknown, RuntimeStruct>([
+        ["text", runtime(struct.string())],
+      ]),
+      options: [runtime(struct.string())],
+    });
+
+    expect(() => parse(handBuilt, { type: "text" })).toThrow(
+      "discriminatedUnion options must be object structs",
+    );
+  });
+});

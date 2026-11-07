@@ -13,6 +13,16 @@ test("processed Markdown keeps visible code and converts type tables into readab
   expect(result).toContain("| note | `string` | optional |");
   expect(result).not.toContain("type={{");
 });
+test("a type table whose data is not a record of typed fields is rejected", () => {
+  for (const data of [
+    '{"count":3}',
+    '{"count":{"required":true}}',
+    '{"count":{"type":"number","required":"yes"}}',
+  ])
+    expect(() =>
+      readableMarkdown(`<TypeTable type={${data}} />`, "en-US"),
+    ).toThrow("Invalid TypeTable data");
+});
 test("each Tab takes its heading from the enclosing items by position", () => {
   const input = [
     '<Tabs items={["One", "Two"]}>',

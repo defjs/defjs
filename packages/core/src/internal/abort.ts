@@ -106,9 +106,9 @@ export function mergeAbortSignals(
     }
   }
 
-  if (merged.length === 1) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: return the sole merged signal directly without extra per-append tracking state
-    return merged[0] as AbortSignal;
+  const sole = merged[0];
+  if (merged.length === 1 && sole !== undefined) {
+    return sole;
   }
 
   const combinedController = new AbortController();

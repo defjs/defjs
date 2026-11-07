@@ -97,8 +97,7 @@ export interface ClientWebSocketOptions {
     /** Returns whether an incoming message acknowledges the heartbeat. */
     isAck?: (message: unknown) => boolean;
     /** Builds the outbound heartbeat payload. */
-    // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents -- INTENT: preserve the original generic callback text and explicit message<T>() calls
-    message?: <T = unknown>() => T | unknown;
+    message?: () => unknown;
     /** Time to wait for an ACK before treating the connection as unhealthy. */
     timeoutMs?: number;
   };

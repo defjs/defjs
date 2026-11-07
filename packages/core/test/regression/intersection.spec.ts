@@ -476,13 +476,12 @@ test("tagged outbound encode deep-merges nested objects and reports wire conflic
   expect(fault.cause.message).toBe("invalid intersection encode at shared");
 });
 
-test("record intersections tag every record container and emit each wire key", async () => {
+test("record intersections tag every record container and emit each wire key", () => {
   const Rows = struct.intersection(
     struct.record(struct.string()),
     struct.record(struct.string()),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const rows = await parseEndpointInput(Rows, { name: "Ada" });
+  const rows = parseEndpointInput(Rows, { name: "Ada" });
   expect(Object.fromEntries(Object.entries(rows))).toEqual({ name: "Ada" });
   const rowsTag = structTag(rows);
   expect(rowsTag).toBeDefined();
@@ -495,8 +494,7 @@ test("record intersections tag every record container and emit each wire key", a
     struct.record(struct.string()),
     struct.object({ name: struct.string().alias("display_name") }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const mixed = await parseEndpointInput(Mixed, { extra: "kept", name: "Ada" });
+  const mixed = parseEndpointInput(Mixed, { extra: "kept", name: "Ada" });
   expect(Object.fromEntries(Object.entries(mixed))).toEqual({
     extra: "kept",
     name: "Ada",
@@ -509,13 +507,12 @@ test("record intersections tag every record container and emit each wire key", a
   );
 });
 
-test("tagged object intersections keep a guide set for equal shared fields and an absent optional", async () => {
+test("tagged object intersections keep a guide set for equal shared fields and an absent optional", () => {
   const SharedId = struct.intersection(
     struct.object({ id: struct.string() }),
     struct.object({ id: struct.string(), name: struct.string() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const shared = await parseEndpointInput(SharedId, { id: "1", name: "Ada" });
+  const shared = parseEndpointInput(SharedId, { id: "1", name: "Ada" });
   expect(Object.fromEntries(Object.entries(shared))).toEqual({
     id: "1",
     name: "Ada",
@@ -530,8 +527,7 @@ test("tagged object intersections keep a guide set for equal shared fields and a
     }),
     struct.object({ profile: struct.string().optional() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const mixed = await parseEndpointInput(MixedField, {});
+  const mixed = parseEndpointInput(MixedField, {});
   expect(Object.fromEntries(Object.entries(mixed))).toEqual({});
   const mixedTag = structTag(mixed);
   expect(mixedTag).toBeDefined();
@@ -556,10 +552,9 @@ test("object-side encode skips an explicit undefined alias and an omitted logica
   expect(Object.getPrototypeOf(encoded)).toBeNull();
 });
 
-test("tagged date intersections keep the equal date and do not attach an object tag", async () => {
+test("tagged date intersections keep the equal date and do not attach an object tag", () => {
   const Both = struct.intersection(struct.date(), struct.date());
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const value = await parseEndpointInput(Both, "2020-01-01T00:00:00.000Z");
+  const value = parseEndpointInput(Both, "2020-01-01T00:00:00.000Z");
   expect(value).toBeInstanceOf(Date);
   expect(value.toISOString()).toBe("2020-01-01T00:00:00.000Z");
   expect(symbolValue(value, STRUCT)).toBeUndefined();

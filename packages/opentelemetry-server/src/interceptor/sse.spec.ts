@@ -35,10 +35,7 @@ describe("SSE client diagnostic logs", () => {
         propagator: createMockPropagator(),
       });
       await expect(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        interceptor.fn(makeSSERequest(), async () => {
-          throw cause;
-        }),
+        interceptor.fn(makeSSERequest(), () => Promise.reject(cause)),
       ).rejects.toBe(cause);
       expect(records).toHaveLength(count);
       if (count)
@@ -173,24 +170,19 @@ describe("SSE client diagnostic logs", () => {
   );
 });
 
-function settleWithin<T>(promise: Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(
+async function settleWithin<T>(promise: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
       100,
     );
-    promise.then(
-      (value) => {
-        clearTimeout(timeout);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timeout);
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
-        reject(error);
-      },
-    );
   });
+  try {
+    return await Promise.race([promise, expired]);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 describe("createOpenTelemetrySSEInterceptor", () => {
@@ -278,10 +270,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       metrics,
     });
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeSSERequest(), async () => {
-        throw error;
-      }),
+      interceptor.fn(makeSSERequest(), () => Promise.reject(error)),
     ).rejects.toBe(error);
     expect(metrics.connectDuration.record).toHaveBeenCalledTimes(1);
     expect(metrics.connectDuration.record).toHaveBeenCalledWith(
@@ -615,10 +604,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     });
 
     await expect(
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      interceptor.fn(makeSSERequest(), async () => {
-        throw new TypeError("connect failed");
-      }),
+      interceptor.fn(makeSSERequest(), () =>
+        Promise.reject(new TypeError("connect failed")),
+      ),
     ).rejects.toThrow("connect failed");
 
     expect(activeSpans[0]?.ended).toBe(true);

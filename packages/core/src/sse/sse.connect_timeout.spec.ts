@@ -119,13 +119,14 @@ test("SSE clears handshake timeout before waiting for reconnect backoff", async 
   const client = createClient(
     withEndpoint(...endpoints),
     withSSEReconnect({ attempts: 1, delayMs: 1000, connectTimeoutMs: 100 }),
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    withSSEHandle(async () => {
+    withSSEHandle(() => {
       calls++;
-      if (calls === 1) throw new Error("connection refused");
-      return new Response("", {
-        headers: { "Content-Type": "text/event-stream" },
-      });
+      if (calls === 1) return Promise.reject(new Error("connection refused"));
+      return Promise.resolve(
+        new Response("", {
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      );
     }),
   );
   const pending = defineEventStream({

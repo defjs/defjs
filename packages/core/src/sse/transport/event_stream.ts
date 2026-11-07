@@ -165,7 +165,7 @@ export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
     error: unknown,
     context: FetchEventStreamErrorContext,
   ) => number | null | undefined | Promise<number | null | undefined>;
-  transformMessage?: (
+  transformMessage: (
     message: EventStreamMessage,
     signal: AbortSignal,
   ) => Promise<TEvent | undefined> | TEvent | undefined;
@@ -179,18 +179,18 @@ export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
    * `pickNext` runs after a reconnect wait, before the next `Request`.
    */
   endpointAttempt?: {
-    start?(): void;
-    end?(info: DoneInfo): void;
-    done(info: DoneInfo): void;
-    pickNext():
+    start?: () => void;
+    end?: (info: DoneInfo) => void;
+    done: (info: DoneInfo) => void;
+    pickNext: () =>
       | readonly [PreflightFault, undefined]
       | readonly [
           null,
           {
             endpoint: string;
-            start?(): void;
-            end?(info: DoneInfo): void;
-            done(info: DoneInfo): void;
+            start?: () => void;
+            end?: (info: DoneInfo) => void;
+            done: (info: DoneInfo) => void;
           },
         ];
   };
@@ -452,17 +452,13 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
 
   async function start(): Promise<void> {
     beginAttempt(
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve three separate endpointAttempt getter reads and pass callbacks through for bare invocation or undefined
       options.endpointAttempt?.done,
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve three separate endpointAttempt getter reads and pass callbacks through for bare invocation or undefined
       options.endpointAttempt?.start,
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve three separate endpointAttempt getter reads and pass callbacks through for bare invocation or undefined
       options.endpointAttempt?.end,
     );
     while (!closeController.signal.aborted) {
       if (reconnectPick) {
         reconnectPick = false;
-        // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: read endpointAttempt once and invoke the picker as a bare function; undefined skips picking
         const pickNext = options.endpointAttempt?.pickNext;
         if (pickNext) {
           const picked = pickNext();
@@ -481,7 +477,6 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
             finishError(createPreflightFault("REQ_BUILD_FAILED", error));
             return;
           }
-          // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: invoke reconnect callbacks as bare functions and pass optional callbacks through as undefined
           beginAttempt(next.done, next.start, next.end);
         }
       }
@@ -693,10 +688,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         let result: Promise<TEvent | undefined> | TEvent | undefined;
         try {
           signal.throwIfAborted();
-          result = options.transformMessage
-            ? options.transformMessage(message, signal)
-            : // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve HEAD's two truthy mapper reads and options receiver; without a mapper yield the raw caller-selected event value
-              (message as TEvent);
+          result = options.transformMessage(message, signal);
         } catch (error) {
           throw toTransformFailure(error, signal);
         }

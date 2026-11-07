@@ -110,7 +110,7 @@ describe("http request helpers", () => {
     );
   });
 
-  test("should encode aliases from parsed endpoint input", async () => {
+  test("should encode aliases from parsed endpoint input", () => {
     const profile = struct.object({
       displayName: struct.string().alias("display_name"),
       internalNote: struct.string(),
@@ -123,8 +123,7 @@ describe("http request helpers", () => {
         orgId: struct.string().alias("org_id"),
       }),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(input, {
+    const parsed = parseEndpointInput(input, {
       member: {
         profile: {
           displayName: "Miao",
@@ -155,7 +154,7 @@ describe("http request helpers", () => {
     expect(request.bodyContentType).toBe("application/json");
   });
 
-  test("should encode path query and json body aliases independently", async () => {
+  test("should encode path query and json body aliases independently", () => {
     const input = struct.object({
       filter: struct.object({
         queryName: struct.string().alias("name"),
@@ -168,8 +167,7 @@ describe("http request helpers", () => {
         bodyUid: struct.number().alias("uid"),
       }),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(input, {
+    const parsed = parseEndpointInput(input, {
       filter: {
         queryName: "Jack",
       },
@@ -203,7 +201,7 @@ describe("http request helpers", () => {
     });
   });
 
-  test("should support text xml form-url-encoded and raw bodies", async () => {
+  test("should support text xml form-url-encoded and raw bodies", () => {
     const textRequest = createHttpRequest(
       "POST",
       "/text",
@@ -235,8 +233,7 @@ describe("http request helpers", () => {
     const Form = struct.urlencoded({
       ids: struct.array(struct.number()),
     });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(Form, { ids: [1, 2] });
+    const parsed = parseEndpointInput(Form, { ids: [1, 2] });
     const encodedRequest = createHttpRequest(
       "POST",
       "/form",
@@ -268,7 +265,7 @@ describe("http request helpers", () => {
     expect(rawRequest.bodyContentType).toBe("application/octet-stream");
   });
 
-  test("should let a declared content-type win and classify each body once", async () => {
+  test("should let a declared content-type win and classify each body once", () => {
     const jsonRequest = createHttpRequest(
       "POST",
       "/json",
@@ -287,8 +284,7 @@ describe("http request helpers", () => {
       options,
     );
     const Form = struct.urlencoded({ id: struct.string() });
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const parsed = await parseEndpointInput(Form, { id: "1" });
+    const parsed = parseEndpointInput(Form, { id: "1" });
     const urlencodedRequest = createHttpRequest(
       "POST",
       "/urlencoded",

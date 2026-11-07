@@ -19,22 +19,35 @@ export function resolveObjectShape(
     definition.shape,
     definition.cache.declaredDescriptors,
   );
+  assertShapeFields(shape);
+
+  definition.cache.resolvedShape = shape;
+  return shape;
+}
+
+/** The resolved shape as `[key, struct]` pairs in key order, built once per object struct. */
+export function resolveObjectShapeEntries(
+  struct: RuntimeStruct,
+  definition: ObjectDefinition,
+): readonly (readonly [key: string, struct: RuntimeStruct])[] {
+  return (definition.cache.shapeEntries ??= Object.entries(
+    resolveObjectShape(struct, definition),
+  ));
+}
+
+function assertShapeFields(shape: {
+  [key: string]: unknown;
+}): asserts shape is RuntimeObjectShape {
   for (const [key, value] of Object.entries(shape)) {
     assertStruct(value, `object field "${key}"`);
   }
-
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: finish every shape getter before validating any field, then cache and return that same validated object
-  definition.cache.resolvedShape = shape as RuntimeObjectShape;
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: finish every shape getter before validating any field, then cache and return that same validated object
-  return shape as RuntimeObjectShape;
 }
 
 export function readObjectShape(
   shape: ObjectShape,
   descriptors: PropertyDescriptorMap,
 ): { [key: string]: unknown } {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: literal/setPrototypeOf record allocation was 2.058/2.122/2.052x slower at four keys, 3 independent runs x 13 alternating pairs x 100000 iterations
-  const output: { [key: string]: unknown } = Object.create(null);
+  const output: { [key: string]: unknown } = { __proto__: null };
 
   for (const [key, descriptor] of Object.entries(descriptors)) {
     const value: unknown =
@@ -53,5 +66,15 @@ export function assertStruct(
 ): asserts value is RuntimeStruct {
   if (!isStruct(value)) {
     throw new TypeError(`${label} must be a struct`);
+  }
+}
+
+/** Asserts every element in order, throwing for the first one that is not a struct. */
+export function assertStructs(
+  values: readonly unknown[],
+  label: string,
+): asserts values is readonly RuntimeStruct[] {
+  for (const value of values) {
+    assertStruct(value, label);
   }
 }

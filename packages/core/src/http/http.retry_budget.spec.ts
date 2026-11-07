@@ -25,10 +25,9 @@ function fixture(retryBudget: unknown, maxAttempts = 2) {
     withEndpoint("https://a.test", "https://b.test", "https://c.test"),
     // @ts-expect-error invalid retry budget is rejected at execution
     withRetry({ budget: retryBudget, maxAttempts, delayMs: 0 }),
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls++;
-      throw new TypeError("refused");
+      return Promise.reject(new TypeError("refused"));
     }),
   );
   return { client, calls: () => calls };

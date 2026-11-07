@@ -114,10 +114,7 @@ describe("withOpenTelemetryServer logger", () => {
       const config = makeConfig();
       withOpenTelemetryServer({ logger, requireParentSpan })(config);
       const cause = new TypeError("offline");
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      const reject = async () => {
-        throw cause;
-      };
+      const reject = () => Promise.reject(cause);
 
       await expect(
         httpInterceptor(config).fn(makeHttpRequest(), reject),
@@ -149,10 +146,7 @@ describe("withOpenTelemetryServer logger", () => {
       requireParentSpan: true,
     })(config);
     const cause = new Error("offline");
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const reject = async () => {
-      throw cause;
-    };
+    const reject = () => Promise.reject(cause);
     await expect(
       httpInterceptor(config).fn(makeHttpRequest(), reject),
     ).rejects.toBe(cause);

@@ -270,7 +270,7 @@ async function readWholeBody(
   response: Response,
   signal: AbortSignal | undefined,
   meta: HttpMeta,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   try {
     return new Uint8Array(
       await (signal
@@ -651,13 +651,13 @@ function convertBodyToUploadStream(body: HttpRequest["body"]):
 
   if (typeof FormData !== "undefined" && body instanceof FormData) {
     const serialized = new Response(body);
+    // Read the header first: in Bun, touching the body first leaves this Content-Type unset.
     const contentType = serialized.headers.get("Content-Type");
-    return {
-      contentType,
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: forward the original FormData response body unchanged, including a custom Response returning null
-      stream: serialized.body as ReadableStream<Uint8Array>,
-      total: 0,
-    };
+    // Fetch extracts FormData into a stream. A Response implementation without one leaves the body unconverted.
+    const stream = serialized.body;
+    if (stream) {
+      return { contentType, stream, total: 0 };
+    }
   }
 
   return undefined;

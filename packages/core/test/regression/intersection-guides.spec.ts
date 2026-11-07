@@ -43,7 +43,7 @@ test("nullable shared fields parse and encode null instead of walking aliases", 
   );
 });
 
-test("nested nullable and explicit undefined containers stay leaves", async () => {
+test("nested nullable and explicit undefined containers stay leaves", () => {
   const child = struct
     .object({ name: struct.string().alias("wire_name") })
     .nullish();
@@ -56,8 +56,7 @@ test("nested nullable and explicit undefined containers stay leaves", async () =
     { row: null },
   ]);
   expect(plain(encodeJson(schema, { row: undefined }))).toEqual({});
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const tagged = await parseEndpointInput(schema, {});
+  const tagged = parseEndpointInput(schema, {});
   expect(plain(encodeOutbound({ ...tagged, row: undefined }))).toEqual({});
 
   const optionalRow = struct.intersection(
@@ -137,15 +136,13 @@ test("wire parsing keeps the union branch that actually matched", async () => {
   expect(plain(parsed)).toEqual({ name: "N" });
 });
 
-test("a child tag replaces parent field guides for the whole subtree", async () => {
+test("a child tag replaces parent field guides for the whole subtree", () => {
   const schema = struct.intersection(
     struct.object({ row: A.optional() }),
     struct.object({ row: B.optional() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const tagged = await parseEndpointInput(schema, {});
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const own = await parseEndpointInput(
+  const tagged = parseEndpointInput(schema, {});
+  const own = parseEndpointInput(
     struct.object({ name: struct.string().alias("own_name") }),
     { name: "N" },
   );
@@ -157,28 +154,26 @@ test("a child tag replaces parent field guides for the whole subtree", async () 
     struct.object({ note: struct.string(), row: Left.optional() }),
     struct.object({ note: struct.string() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const singleRoot = await parseEndpointInput(single, { note: "hi" });
+  const singleRoot = parseEndpointInput(single, { note: "hi" });
   expect(plain(encodeOutbound({ ...singleRoot, row: own }))).toEqual({
     note: "hi",
     row: { own_name: "N" },
   });
 });
 
-test("a record beside an object guides every fresh key at that node", async () => {
+test("a record beside an object guides every fresh key at that node", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.record(Left) }),
     struct.object({ rows: struct.object({ one: Right }) }),
   );
   const rows = { extra: { firstName: "Grace" }, one: logical };
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const tagged = await parseEndpointInput(schema, { rows });
+  const tagged = parseEndpointInput(schema, { rows });
   const expected = { rows: { extra: { first_name: "Grace" }, one: wire } };
   expect(plain(encodeOutbound(tagged))).toEqual(expected);
   expect(plain(encodeOutbound({ ...tagged, rows }))).toEqual(expected);
 });
 
-test("guide-set edges encode null, agreeing unions, records, and non-object members", async () => {
+test("guide-set edges encode null, agreeing unions, records, and non-object members", () => {
   const nullWire = struct.intersection(
     struct.object({ name: struct.null() }),
     struct.object({ name: struct.string().nullable().alias("wire_name") }),
@@ -187,8 +182,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     name: null,
     wire_name: null,
   });
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const nullTagged = await parseEndpointInput(nullWire, { name: null });
+  const nullTagged = parseEndpointInput(nullWire, { name: null });
   expect(plain(encodeOutbound(nullTagged))).toEqual({
     name: null,
     wire_name: null,
@@ -198,8 +192,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ row: Left.optional() }),
     struct.object({ row: Right.optional() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const empty = await parseEndpointInput(containers, {});
+  const empty = parseEndpointInput(containers, {});
   expect(encodeOutbound({ ...empty, row: null })).toEqual({ row: null });
 
   const First = struct.object({ id: struct.string().alias("wire_id") });
@@ -212,8 +205,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const agreedRoot = await parseEndpointInput(agreed, {});
+  const agreedRoot = parseEndpointInput(agreed, {});
   expect(
     plain(encodeOutbound({ ...agreedRoot, row: { id: "1", title: "T" } })),
   ).toEqual({
@@ -230,8 +222,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const unmatchedRoot = await parseEndpointInput(unmatched, {});
+  const unmatchedRoot = parseEndpointInput(unmatched, {});
   expect(
     plain(encodeOutbound({ ...unmatchedRoot, row: { extra: 1, title: "T" } })),
   ).toEqual({
@@ -250,8 +241,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const missedRoot = await parseEndpointInput(missed, {});
+  const missedRoot = parseEndpointInput(missed, {});
   expect(
     plain(encodeOutbound({ ...missedRoot, pet: { kind: "bird", title: "T" } })),
   ).toEqual({
@@ -264,8 +254,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
       box: struct.object({ name: struct.string().alias("display_name") }),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const boxedRoot = await parseEndpointInput(boxed, {
+  const boxedRoot = parseEndpointInput(boxed, {
     box: { extra: "x", name: "Ada" },
   });
   expect(
@@ -283,8 +272,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
       }),
     }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const partialRoot = await parseEndpointInput(partial, {
+  const partialRoot = parseEndpointInput(partial, {
     box: { note: "hi" },
   });
   expect(
@@ -297,8 +285,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ rows: struct.array(Left).optional() }),
     struct.object({ rows: struct.array(Right).optional() }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const listsRoot = await parseEndpointInput(lists, {});
+  const listsRoot = parseEndpointInput(lists, {});
   expect(
     plain(encodeOutbound({ ...listsRoot, rows: { extra: logical } })),
   ).toEqual({ rows: { extra: logical } });
@@ -307,14 +294,13 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ rows: struct.array(struct.string().optional()) }),
     struct.object({ rows: struct.array(struct.number().optional()) }),
   );
-  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-  const holesRoot = await parseEndpointInput(holes, { rows: [] });
+  const holesRoot = parseEndpointInput(holes, { rows: [] });
   expect(encodeOutbound({ ...holesRoot, rows: [undefined] })).toEqual({
     rows: [undefined],
   });
 });
 
-test("outbound encoding of a parsed value matches encodeJson", async () => {
+test("outbound encoding of a parsed value matches encodeJson", () => {
   const shared = struct.intersection(
     struct.object({
       id: struct.string().alias("wire_id"),
@@ -386,9 +372,7 @@ test("outbound encoding of a parsed value matches encodeJson", async () => {
     },
   ];
   for (const { input, schema } of cases) {
-    // @ts-expect-error each case pairs a schema with its own input
-    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
-    const tagged = await parseEndpointInput(schema, input);
+    const tagged = parseEndpointInput(schema, input);
     const encoded = plain(encodeJson(schema, input));
     expectOutboundMatchesEncode(plain(encodeOutbound(tagged)), encoded);
   }

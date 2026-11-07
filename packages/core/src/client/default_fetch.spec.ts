@@ -223,6 +223,7 @@ describe("request-time default fetch", () => {
                 ),
               maxBufferSize: 1024,
               maxQueueSize: 4,
+              transformMessage: (message) => message,
             }),
           ),
         ),

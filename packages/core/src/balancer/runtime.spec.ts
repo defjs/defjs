@@ -132,10 +132,10 @@ describe("synchronous balancer callbacks", () => {
           null,
           {
             endpoint: "https://a",
-            // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-misused-promises -- INTENT: done must return a rejected promise to exercise asynchronous completion failure
-            async done() {
+            // eslint-disable-next-line @typescript-eslint/no-misused-promises -- done is typed to return void; returning a rejected promise exercises the balancer's handling of an asynchronous completion failure
+            done() {
               calls += 1;
-              throw new Error("async done rejection");
+              return Promise.reject(new Error("async done rejection"));
             },
           },
         ],

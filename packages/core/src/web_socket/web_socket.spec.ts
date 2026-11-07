@@ -619,10 +619,7 @@ describe("web socket runtime", () => {
     });
 
     const [error, socket, connection] = await run(useSocket, {
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-      beforeConnect: async () => {
-        throw new Error("beforeConnect failed");
-      },
+      beforeConnect: () => Promise.reject(new Error("beforeConnect failed")),
     });
 
     expect(socket).toBeUndefined();
@@ -793,10 +790,9 @@ describe("web socket runtime", () => {
     const clientWithInterceptor = createClient(
       withEndpoint(inject("testServerHost")),
       withInterceptors(
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        createWebSocketInterceptor(async () => {
-          throw new Error("blocked by interceptor");
-        }),
+        createWebSocketInterceptor(() =>
+          Promise.reject(new Error("blocked by interceptor")),
+        ),
       ),
     );
 

@@ -69,7 +69,6 @@ function settleWithin<T>(promise: Promise<T>, ms = 1000): Promise<T> {
       },
       (error: unknown) => {
         clearTimeout(timeout);
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
         reject(error);
       },
     );
@@ -388,10 +387,7 @@ export function defineNativeFetchSuite(): void {
     test("cancels the wrapped upload body with the failure when the platform fetch rejects", async () => {
       const networkError = new Error("network failed");
       const { DEFAULT_FETCH, fetchHandler, supportsStreamingRequestBody } =
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the platform fetch under test must reject asynchronously
-        await loadTransport(ORIGIN, async () => {
-          throw networkError;
-        });
+        await loadTransport(ORIGIN, () => Promise.reject(networkError));
       if (!supportsStreamingRequestBody()) {
         return;
       }

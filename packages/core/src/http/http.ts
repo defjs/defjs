@@ -33,6 +33,7 @@ import {
   awaitWithSignal,
   mergeAbortSignals,
   releaseAbortSignal,
+  resolveAbortedCause,
   resolveAbortedFault,
   resolveAbortCause,
   resolveAbortFault,
@@ -42,7 +43,7 @@ import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { createTransportOrigin } from "../internal/transport_origin";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
-import type { EndpointInput, ParsedInput } from "../internal/endpoint_input";
+import type { EndpointInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
 import type { HttpProgressFn } from "../internal/http_request";
 import type {
@@ -417,6 +418,13 @@ async function executeHttpCommand<
   }
 }
 
+// Typed as unknown so runtime entries from untyped callers can be tested for membership.
+const RETRY_CONDITIONS: readonly unknown[] = [
+  "connect-failure",
+  "gateway-error",
+  "attempt-timeout",
+] satisfies readonly RetryCondition[];
+
 function normalizeRetryOptions(
   policy: RetryOptions | undefined,
 ):
@@ -436,13 +444,7 @@ function normalizeRetryOptions(
     !Number.isSafeInteger(maxAttempts) ||
     maxAttempts < 1 ||
     !Array.isArray(on) ||
-    on.some(
-      (value) =>
-        !["connect-failure", "gateway-error", "attempt-timeout"].includes(
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- INTENT: preserve original includes dispatch and validation of arbitrary runtime failover entries
-          value,
-        ),
-    ) ||
+    on.some((value: unknown) => !RETRY_CONDITIONS.includes(value)) ||
     !Array.isArray(methods) ||
     methods.some((value) => typeof value !== "string" || value.length === 0) ||
     (attemptTimeoutMs !== undefined &&
@@ -496,10 +498,9 @@ async function executeHttpAttempt<
   const config = options;
 
   // Faults carry their own response metadata, so the tuple's third slot belongs to success only.
-  const fail = (fault: AnyFault): HttpExecuteAwaitResult<TOutput, TError> => {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original declared-error tuple without re-decoding or changing the fault identity
-    return [fault as Fault<TError>, undefined, undefined];
-  };
+  const fail = (
+    fault: Fault<TError>,
+  ): HttpExecuteAwaitResult<TOutput, TError> => [fault, undefined, undefined];
 
   const callerAbort = config?.signal;
 
@@ -527,13 +528,11 @@ async function executeHttpAttempt<
     ? resolveInboundRepresentation(definition.error)
     : undefined;
   const inputGuides = new WeakMap<object, Guide>();
-  let parsedInput: ParsedInput<TInput>;
+  let parsedInput: unknown;
   try {
-    parsedInput = parseEndpointInput<TInput>(
-      definition.input,
-      input,
-      inputGuides,
-    );
+    parsedInput = definition.input
+      ? parseEndpointInput(definition.input, input, inputGuides)
+      : input;
   } catch (error) {
     return stopBeforeTransport(
       resolveAbortFault(requestSignal) ??
@@ -646,7 +645,6 @@ async function executeHttpAttempt<
         }
       };
       const reject = (error: unknown): Promise<HttpResponse<unknown>> => {
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: preserve original interceptor and transport rejection values unchanged
         const rejected = Promise.reject<HttpResponse<unknown>>(error);
         void rejected.catch(() => undefined);
         return rejected;
@@ -670,8 +668,7 @@ async function executeHttpAttempt<
         // Already aborted: fetch never starts, so this next() did not reach the endpoint.
         note({ landed: false });
         const rejected = reject(
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original second aborted-state read before forwarding its cause unchanged
-          transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
+          transportOrigin.mark(resolveAbortedCause(transportAbort)),
         );
         releaseAbortSignal(transportAbort);
         return rejected;
@@ -867,15 +864,16 @@ async function executeHttpAttempt<
         finish(null);
         return [
           null,
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unnecessary-type-assertion -- INTENT: preserve the original undefined return while the compiler keeps its generic success conditional deferred
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unnecessary-type-assertion -- INTENT: the published RequestSuccessData<TOutput> is a conditional on the caller's generic TOutput that the runtime `!struct` check cannot narrow. Unasserted: TS2322, `undefined` is not assignable to `DeclaredBody<TOutput>`; bun lint reads the deferred conditional as undefined and calls the assertion unnecessary. Typing the internal result as unknown instead fails at defineRequest's published RequestEndpoint return (TS2322)
           undefined as RequestSuccessData<TOutput>,
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: undeclared output keeps metadata identity and the original conditional response contract
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: with no output struct the response is the HttpMeta itself, but the published DeclaredResponse<TOutput> is a conditional on the caller's generic TOutput. Unasserted: TS2322, `HttpMeta` is not assignable to `DeclaredResponse<TOutput>`
           meta as DeclaredResponse<TOutput>,
         ];
       }
       const fault = createUndecodedHttpStatusFault(meta);
       finish(fault);
-      return fail(fault);
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: with no `error` struct the published Fault<TError> data is ErrorBody<TError>, a conditional on the caller's generic TError that the runtime `!struct` check cannot narrow. Unasserted: TS2345, `undefined` is not assignable to `ErrorBody<TError>`. Typing this internal result as AnyFault instead fails at defineRequest's published RequestEndpoint return (TS2322, AnyFault is not FaultOf<DeclaredBody<TError>>)
+      return fail(fault as Fault<TError>);
     }
 
     let decoded: unknown;
@@ -913,16 +911,17 @@ async function executeHttpAttempt<
       finish(null);
       return [
         null,
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep the already-decoded success value without a second schema parse
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: decodeDeclaredBody parsed `decoded` with definition.output, but the published RequestSuccessData<TOutput> is a conditional on the caller's generic TOutput. Unasserted: TS2322, `unknown` is not assignable to `DeclaredBody<TOutput>`
         decoded as RequestSuccessData<TOutput>,
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original decoded response object while its generic declared-response conditional stays deferred
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: same decoded body inside the published DeclaredResponse<TOutput> conditional. Unasserted: TS2322, `DecodedResponse<unknown>` is not assignable to `DeclaredResponse<TOutput>`
         decodedResponse as DeclaredResponse<TOutput>,
       ];
     }
 
     const fault = createHttpStatusFault(decodedResponse);
     finish(fault);
-    return fail(fault);
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: `data` was decoded with definition.error, but the published Fault<TError> types it as ErrorBody<TError>, a conditional on the caller's generic TError. Unasserted: TS2345, `unknown` is not assignable to `ErrorBody<TError>`. Typing this internal result as AnyFault instead fails at defineRequest's published RequestEndpoint return (TS2322)
+    return fail(fault as Fault<TError>);
   } finally {
     for (const timer of sendTimers) clearTimeout(timer);
     state.info = httpAttemptDone(attempt, finalFault, abortedWhileSending);

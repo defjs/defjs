@@ -126,7 +126,7 @@ describe("trace helpers", () => {
   test("resolveStartSpanHook preserves throw undefined with an explicit failure discriminator", () => {
     expect(
       resolveStartSpanHook(() => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: preserve the deliberate non-Error hook rejection
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: the hook must throw undefined to prove the failure result keeps error undefined
         throw undefined;
       }, makeHttpRequest()),
     ).toEqual({ ok: false, error: undefined });
@@ -278,11 +278,8 @@ describe("trace helpers", () => {
     async ({ error, errorType }) => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the hook under test must reject asynchronously
-      runSpanHook(span, "requestHook", async () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: preserve the deliberate non-Error hook rejection
-        throw error;
-      });
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: the table rejects with a string to prove non-Error failures are recorded
+      runSpanHook(span, "requestHook", () => Promise.reject(error));
       await Promise.resolve();
       await Promise.resolve();
 
@@ -316,10 +313,9 @@ describe("trace helpers", () => {
     spans[0]?.recordException.mockImplementation(() => {
       throw new Error("recordException failed");
     });
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the hook under test must reject asynchronously
-    runSpanHook(span, "requestHook", async () => {
-      throw new Error("async hook failed");
-    });
+    runSpanHook(span, "requestHook", () =>
+      Promise.reject(new Error("async hook failed")),
+    );
     await Promise.resolve();
     await Promise.resolve();
 
@@ -330,9 +326,9 @@ describe("trace helpers", () => {
   test("runSpanHook records non-Error hook failures", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    const error: unknown = "boom";
     runSpanHook(span, "requestHook", () => {
-      throw error;
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- the hook failure under test is a non-Error string
+      throw "boom";
     });
 
     expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
@@ -363,7 +359,7 @@ describe("trace helpers", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
     runSpanHook(span, "requestHook", () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: preserve the deliberate non-Error hook rejection
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: the hook must throw a number to prove non-string, non-Error failures are typed "number"
       throw 42;
     });
 

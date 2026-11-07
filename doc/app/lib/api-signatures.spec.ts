@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { structure } from "fumadocs-core/mdx-plugins/remark-structure";
 import { createStringifier } from "fumadocs-core/mdx-plugins/stringifier";
 import {
   apiReferenceFile,
@@ -10,7 +11,10 @@ import {
   signatureFile,
   signatureText,
   type SignatureCatalog,
+  type SignatureContent,
   type SignatureEntry,
+  type SignatureRoot,
+  type SignatureSourceFile,
 } from "./api-signatures";
 
 const entries: SignatureEntry[] = [
@@ -29,12 +33,46 @@ const entries: SignatureEntry[] = [
 ];
 const catalog: SignatureCatalog = signatureCatalog(entries);
 
-function tag(name: string) {
+function tag(
+  name: string,
+): Extract<SignatureContent, { type: "mdxJsxFlowElement" }> {
   return {
     type: "mdxJsxFlowElement",
     name: "ApiSignature",
     attributes: [{ type: "mdxJsxAttribute", name: "name", value: name }],
     children: [],
+  };
+}
+
+function inlineTag(
+  name: string,
+): Extract<SignatureContent, { type: "mdxJsxTextElement" }> {
+  return {
+    type: "mdxJsxTextElement",
+    name: "ApiSignature",
+    attributes: [{ type: "mdxJsxAttribute", name: "name", value: name }],
+    children: [],
+  };
+}
+
+/** The VFile remark hands to a plugin, so fixtures are real files without a direct vfile dependency. */
+function sourceFile(path?: string, value = ""): SignatureSourceFile {
+  const files: SignatureSourceFile[] = [];
+  structure(value, [
+    () => (_root: SignatureRoot, file: SignatureSourceFile) => {
+      files.push(file);
+    },
+  ]);
+  const [file] = files;
+  if (!file) throw new Error("remark passed no file to the plugin");
+  if (path !== undefined) file.path = path;
+  return file;
+}
+
+function span(end: number) {
+  return {
+    start: { line: 1, column: 1, offset: 0 },
+    end: { line: 2, column: 1, offset: end },
   };
 }
 
@@ -70,21 +108,23 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     type: "root",
     children: [
       undefined,
-      { type: "paragraph", children: [tag("withEndpoint")] },
-      { type: "mdxJsxTextElement", name: "Other", children: [] },
+      {
+        type: "paragraph",
+        children: [inlineTag("withEndpoint")],
+      } satisfies SignatureContent,
       {
         type: "mdxJsxTextElement",
-        name: "ApiSignature",
-        attributes: [
-          { type: "mdxJsxAttribute", name: "name", value: "ERR_ABORTED" },
-        ],
-      },
+        name: "Other",
+        attributes: [],
+        children: [],
+      } satisfies SignatureContent,
+      inlineTag("ERR_ABORTED"),
     ],
   };
   replaceApiSignatures(
     // @ts-expect-error the sparse fixture deliberately tests a missing child node
     tree,
-    { path: "doc/content/en-US/api/http.mdx" },
+    sourceFile("doc/content/en-US/api/http.mdx"),
     catalog,
   );
   const paragraph = tree.children[1];
@@ -100,46 +140,33 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     value: "const ERR_ABORTED: Error;",
   });
   const source = '<ApiSignature name="withEndpoint" />\n';
-  const authored = {
-    path: "page.mdx",
-    toString() {
-      return source;
-    },
-  };
+  const authored = sourceFile("page.mdx", source);
   const signature = {
     ...tag("withEndpoint"),
-    position: { start: { offset: 0 }, end: { offset: source.length } },
+    position: span(source.length),
   };
-  const root = {
+  const root: SignatureRoot = {
     type: "root",
-    position: { start: { offset: 0 }, end: { offset: source.length } },
+    position: span(source.length),
     children: [signature],
   };
   replaceApiSignatures(root, authored, catalog);
-  const processed = createStringifier(
-    // @ts-expect-error the fixture implements only the VFile fields used by the stringifier
-    authored,
-  ).stringify(
-    // @ts-expect-error the fixture implements only the mdast fields used by the stringifier
-    root,
-  );
+  const processed = createStringifier(authored).stringify(root);
   expect(processed).toContain(
     "function withEndpoint(endpoint: string): ClientOption;",
   );
   expect(processed).not.toContain("ApiSignature");
-  const markdown = {
-    path: "interceptors.md",
-    toString() {
-      return '<ApiSignature name="withEndpoint" />\n';
-    },
-  };
-  const markdownRoot = {
+  const markdown = sourceFile(
+    "interceptors.md",
+    '<ApiSignature name="withEndpoint" />\n',
+  );
+  const markdownRoot: SignatureRoot = {
     type: "root",
     children: [
       {
         type: "html",
         value: '<ApiSignature name="withEndpoint" />',
-        position: { start: { offset: 0 }, end: { offset: 40 } },
+        position: span(40),
       },
       { type: "html", value: "<div>keep</div>" },
     ],
@@ -156,7 +183,7 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
         type: "root",
         children: [{ type: "html", value: "<ApiSignature />" }],
       },
-      { path: "interceptors.md" },
+      sourceFile("interceptors.md"),
       catalog,
     ),
   ).toThrow("API signature name in interceptors.md must be a string");
@@ -167,9 +194,16 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     replaceApiSignatures(
       {
         type: "root",
-        children: [{ type: "mdxJsxFlowElement", name: "ApiSignature" }],
+        children: [
+          {
+            type: "mdxJsxFlowElement",
+            name: "ApiSignature",
+            attributes: [],
+            children: [],
+          },
+        ],
       },
-      { history: ["only.mdx"] },
+      sourceFile("only.mdx"),
       catalog,
     ),
   ).toThrow("API signature name in only.mdx must be a string");
@@ -182,19 +216,21 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
             type: "mdxJsxFlowElement",
             name: "ApiSignature",
             attributes: [
+              { type: "mdxJsxExpressionAttribute", value: "...props" },
               { type: "mdxJsxAttribute", name: "name", value: null },
             ],
+            children: [],
           },
         ],
       },
-      {},
+      sourceFile(),
       catalog,
     ),
   ).toThrow("API signature name in unknown file must be a string");
 });
 
 test("a code fence keeps an unknown signature tag literal", () => {
-  const root = {
+  const root: SignatureRoot = {
     type: "root",
     children: [
       {
@@ -204,7 +240,7 @@ test("a code fence keeps an unknown signature tag literal", () => {
       },
     ],
   };
-  replaceApiSignatures(root, { path: "http.mdx" }, catalog);
+  replaceApiSignatures(root, sourceFile("http.mdx"), catalog);
   expect(root.children[0]).toEqual({
     type: "code",
     lang: "ts",
@@ -214,9 +250,9 @@ test("a code fence keeps an unknown signature tag literal", () => {
 
 test("the documentation catalog loads from disk and renders a real signature", () => {
   const transform = remarkApiSignatures();
-  transform({ type: "root" });
-  const tree = { type: "root", children: [tag("createClient")] };
-  transform(tree, { path: "overview.mdx" });
+  transform({ type: "root", children: [] }, sourceFile("overview.mdx"));
+  const tree: SignatureRoot = { type: "root", children: [tag("createClient")] };
+  transform(tree, sourceFile("overview.mdx"));
   const rendered = tree.children[0];
   if (!rendered || !("value" in rendered) || typeof rendered.value !== "string")
     throw new Error("expected a rendered signature");
@@ -224,7 +260,7 @@ test("the documentation catalog loads from disk and renders a real signature", (
   expect(() =>
     transform(
       { type: "root", children: [tag("NotAnExport")] },
-      { path: "overview.mdx" },
+      sourceFile("overview.mdx"),
     ),
   ).toThrow('Unknown API signature "NotAnExport" in overview.mdx');
 });
@@ -259,6 +295,13 @@ test("catalog lookup follows the documentation workspace or the repository root"
     await Bun.write(fromDoc, "{}");
     expect(() => readSignatureCatalog(fromDoc)).toThrow(
       "API reference is not a list",
+    );
+    await Bun.write(
+      fromDoc,
+      JSON.stringify([{ name: "Broken", signatures: [1] }]),
+    );
+    expect(() => readSignatureCatalog(fromDoc)).toThrow(
+      `API reference has a malformed entry: ${fromDoc}`,
     );
     await Bun.write(fromDoc, "not json");
     expect(() => readSignatureCatalog(fromDoc)).toThrow(

@@ -40,8 +40,8 @@ type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Expect<T extends true> = T;
 
 declare const heartbeatConfig: ClientWebSocketOptions;
-const heartbeatPayload = heartbeatConfig.heartbeat?.message?.<string>();
-type GenericHeartbeatCall = Expect<Equal<typeof heartbeatPayload, unknown>>;
+const heartbeatPayload = heartbeatConfig.heartbeat?.message?.();
+type HeartbeatPayload = Expect<Equal<typeof heartbeatPayload, unknown>>;
 
 const serializer: QuerySerializer = (query) => {
   void query["page"];
@@ -288,7 +288,7 @@ createClient(
 );
 
 export type Cases = [
-  GenericHeartbeatCall,
+  HeartbeatPayload,
   ClientAsyncDisposeCase,
   ClientCases,
   OptionalCallOptions,

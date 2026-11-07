@@ -28,8 +28,11 @@ export function serializeHttpBody(
     case typeof body === "string":
       return body;
     case ArrayBuffer.isView(body):
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- MEASURED: 1e6 Uint8Array serializations, baseline 3.802/3.698/3.741ms; buffer instanceof ArrayBuffer 10.040/9.690/9.652ms (+164/+162/+158%); SharedArrayBuffer guard 10.207/9.874/9.878ms
-      return body as ArrayBufferView<ArrayBuffer>;
+      // A fetch body view must be backed by an ArrayBuffer. A view over other storage, such as a
+      // SharedArrayBuffer, is sent as a copy of the same bytes.
+      return isArrayBufferBacked(body)
+        ? body
+        : new Uint8Array(body.buffer, body.byteOffset, body.byteLength).slice();
     case typeof body === "object":
     case typeof body === "boolean":
     case typeof body === "number":
@@ -38,6 +41,12 @@ export function serializeHttpBody(
     default:
       return null;
   }
+}
+
+function isArrayBufferBacked(
+  view: ArrayBufferView,
+): view is ArrayBufferView<ArrayBuffer> {
+  return view.buffer instanceof ArrayBuffer;
 }
 
 export function applyRequestContentType(

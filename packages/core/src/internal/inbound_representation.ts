@@ -1,6 +1,5 @@
 import type { AnyStruct } from "../struct";
 import { DEFINITION } from "../struct/symbols";
-import type { RuntimeStruct } from "../struct/types";
 import type { HttpResponseType } from "./http_request";
 
 /**
@@ -14,8 +13,12 @@ import type { HttpResponseType } from "./http_request";
 export function resolveInboundRepresentation(
   struct: AnyStruct,
 ): HttpResponseType {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve inherited DEFINITION lookup and the original native error for missing definitions instead of adding a new own-property guard and throw
-  const kind = (struct as RuntimeStruct)[DEFINITION].kind;
+  // Definitions are not validated when declared, so a non-struct output or error fails here. An inherited definition counts.
+  const definition: unknown = Reflect.get(struct, DEFINITION);
+  if (typeof definition !== "object" || definition === null) {
+    throw new TypeError("struct must be a struct");
+  }
+  const kind: unknown = Reflect.get(definition, "kind");
   if (kind === "string") {
     return "text";
   }

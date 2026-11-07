@@ -257,10 +257,7 @@ describe("Fetch handler streaming", () => {
     const networkError = new Error("network failed");
     const cancel = vi.fn(() => new Promise<void>(() => undefined));
     const stream = new ReadableStream<Uint8Array>({ cancel });
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const fetchMock = vi.fn(async () => {
-      throw networkError;
-    });
+    const fetchMock = vi.fn(() => Promise.reject(networkError));
     const failure = await settleWithin(
       fetchHandler(
         {
@@ -441,12 +438,12 @@ describe("Fetch handler streaming", () => {
     const cancel = vi.fn();
     const stream = new ReadableStream<Uint8Array>({ cancel });
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-    const fetchMock = vi.fn<FetchHandle>(async (input) => {
-      if (!(input instanceof Request)) throw new Error("expected Request");
+    const fetchMock = vi.fn<FetchHandle>((input) => {
+      if (!(input instanceof Request))
+        return Promise.reject(new Error("expected Request"));
       const request = input;
       reader = request.body?.getReader();
-      throw networkError;
+      return Promise.reject(networkError);
     });
     const failure = await fetchHandler(
       {
@@ -649,9 +646,8 @@ describe("Fetch handler streaming", () => {
             endpoint: "/upload",
             method: "POST",
             responseType: "text",
-            // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-            async uploadProgress() {
-              throw observerError;
+            uploadProgress() {
+              return Promise.reject(observerError);
             },
           },
           vi.fn(() => Promise.resolve(new Response("ok"))),
@@ -1139,7 +1135,6 @@ function settleWithin<T>(promise: Promise<T>): Promise<T> {
       },
       (error: unknown) => {
         clearTimeout(timeout);
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
         reject(error);
       },
     );

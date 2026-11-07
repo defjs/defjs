@@ -35,7 +35,8 @@ export async function loadExample(
     return { ...parsed, code: readExampleRegion(source, parsed.region) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    // eslint-disable-next-line preserve-caught-error -- INTENT: preserve the original error own-key set instead of attaching a new cause property
-    throw new Error(`failed to read @exampleFile ${spec}: ${message}`);
+    throw new Error(`failed to read @exampleFile ${spec}: ${message}`, {
+      cause: error,
+    });
   }
 }

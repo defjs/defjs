@@ -128,6 +128,9 @@ function NavigationItem({ item }: { item: Item }) {
   if (/\/(docs|recipes)$/.test(item.url)) return null;
   const active = pathname.replace(/\/$/, "") === item.url.replace(/\/$/, "");
   const parts = typeof item.name === "string" ? item.name.split(" / ") : [];
+  const style: CSSProperties & Record<`--${string}`, number> = {
+    "--navigation-depth": depth,
+  };
   return (
     <SidebarItem
       href={item.url}
@@ -135,8 +138,7 @@ function NavigationItem({ item }: { item: Item }) {
       active={active}
       aria-current={active ? "page" : undefined}
       icon={item.icon}
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep the local CSS custom property without globally augmenting accepted React style properties
-      style={{ "--navigation-depth": depth } as CSSProperties}
+      style={style}
       className="navigation-item relative flex flex-wrap items-center gap-x-1 rounded-lg p-2 text-start text-fd-muted-foreground hover:bg-fd-accent/50 hover:text-fd-accent-foreground data-[active=true]:bg-fd-primary/10 data-[active=true]:text-fd-primary"
     >
       {parts.length === 2 ? (

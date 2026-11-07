@@ -99,8 +99,18 @@ function encode(value: unknown): Encoded {
     return Object.fromEntries(
       Object.entries(value).map(([key, v]) => [key, encode(v)]),
     );
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: pass remaining encoded values through unchanged rather than rejecting symbols or bigints
-  return value as Encoded;
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "bigint" ||
+    typeof value === "boolean"
+  )
+    return value;
+  throw new TypeError(
+    `A ${typeof value} cannot be sent to the Playwright host`,
+  );
 }
 
 function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
@@ -139,7 +149,7 @@ function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
     },
   });
   origins.set(instance, { token, ref });
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the callable proxy identity and dynamic remote contract rather than validating or wrapping returned handles
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: `new Proxy` is typed as its target, but the members of Remote<T> exist only through the get/apply traps that forward to the Playwright host; typing the target would need a real Remote<T>, and a wider overload or always-true guard is the same assertion in disguise
   return instance as T;
 }
 

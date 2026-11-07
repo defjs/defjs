@@ -84,16 +84,16 @@ describe("F031 SSE first successful handshake snapshot", () => {
       let delivered: EventStreamHandle<unknown> | undefined;
       const client = createClient(
         withEndpoint("https://example.test"),
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
-        withSSEHandle(async (input) => {
+        withSSEHandle((input) => {
           const connection = Number(
             new Request(input).headers.get("x-connection"),
           );
           const attempt = attempts[connection] ?? 0;
           attempts[connection] = attempt + 1;
           const source = responses[connection]?.[attempt];
-          if (!source) throw new Error("Unexpected SSE attempt");
-          return source.response;
+          if (!source)
+            return Promise.reject(new Error("Unexpected SSE attempt"));
+          return Promise.resolve(source.response);
         }),
         withSSEReconnect({ attempts: 1, delayMs: 0 }),
         withInterceptors(

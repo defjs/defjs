@@ -62,15 +62,6 @@ export function defined<T>(value: T | undefined, label: string): T {
   return value;
 }
 
-export function projectChecker<T>(program: {
-  project?: { checker?: T } | undefined;
-}): T {
-  const checker = program.project?.checker;
-  if (checker === undefined)
-    throw new Error("TypeScript program has no checker");
-  return checker;
-}
-
 export function catalogKind(options: {
   typeOnlyExport: boolean;
   declarationKind: "function" | "class" | "variable" | "type";
@@ -154,19 +145,33 @@ export function memberDescription(
   return fromTarget.trim();
 }
 
+export interface WrappedNode {
+  kind: number;
+  expression?: WrappedNode | undefined;
+}
+
+/** Unwraps the listed wrapper kinds; wrapper nodes expose the node they wrap as `expression`. */
 export function nestedExpression(
-  node: { kind: number } | undefined,
+  node: WrappedNode | undefined,
   wrappers: readonly number[],
-): { kind: number } | undefined {
+): WrappedNode | undefined {
   let current = node;
   while (current && wrappers.includes(current.kind)) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve one expression getter read and pass nested values through without additional kind validation
-    const inner = (current as { expression?: { kind: number } | undefined })
-      .expression;
+    const inner = current.expression;
     if (!inner) return undefined;
     current = inner;
   }
   return current;
+}
+
+/** Narrows a node with a type guard, failing with `label` when the guard rejects it. */
+export function requireNode<N, T extends N>(
+  node: N,
+  guard: (node: N) => node is T,
+  label: string,
+): T {
+  if (!guard(node)) throw new Error(label);
+  return node;
 }
 
 export function objectPropertyName(

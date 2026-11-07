@@ -1,11 +1,7 @@
 import { issue } from "./errors";
-import {
-  castStruct,
-  createPrimitiveStruct,
-  DEFAULT_FLAGS,
-  makeStruct,
-} from "./runtime";
-import { assertStruct } from "./shape";
+import { isObjectRuntimeStruct, isStruct } from "./guards";
+import { createPrimitiveStruct, DEFAULT_FLAGS, makeStruct } from "./runtime";
+import { assertStruct, assertStructs } from "./shape";
 import { DEFINITION } from "./symbols";
 import type {
   ArrayStruct,
@@ -14,6 +10,7 @@ import type {
   LiteralValue,
   NumberStruct,
   ObjectDefinition,
+  ObjectRuntimeStruct,
   ObjectStruct,
   ObjectShape,
   PresentValue,
@@ -27,7 +24,14 @@ import type {
   UnionStruct,
   UnknownStruct,
 } from "./types";
-import { describeValue, expectedType, isPlainObject, success } from "./utils";
+import {
+  describeValue,
+  expectedType,
+  invokeMethod,
+  isPlainObject,
+  isPrimitive,
+  success,
+} from "./utils";
 
 /**
  * Struct that accepts string values.
@@ -39,13 +43,11 @@ import { describeValue, expectedType, isPlainObject, success } from "./utils";
  * @group struct
  */
 export function createStringStruct(): StringStruct {
-  return castStruct<StringStruct>(
-    createPrimitiveStruct({
-      expected: "string",
-      is: (value): value is string => typeof value === "string",
-      kind: "string",
-    }),
-  );
+  return createPrimitiveStruct({
+    expected: "string",
+    is: (value): value is string => typeof value === "string",
+    kind: "string",
+  });
 }
 
 /**
@@ -58,14 +60,12 @@ export function createStringStruct(): StringStruct {
  * @group struct
  */
 export function createNumberStruct(): NumberStruct {
-  return castStruct<NumberStruct>(
-    createPrimitiveStruct({
-      expected: "number",
-      is: (value): value is number =>
-        typeof value === "number" && !Number.isNaN(value),
-      kind: "number",
-    }),
-  );
+  return createPrimitiveStruct({
+    expected: "number",
+    is: (value): value is number =>
+      typeof value === "number" && !Number.isNaN(value),
+    kind: "number",
+  });
 }
 
 /**
@@ -93,13 +93,11 @@ export function createBooleanStruct(): Struct<boolean, boolean> {
  * @group struct
  */
 export function createNullStruct(): Struct<null, null> {
-  return castStruct<Struct<null, null>>(
-    createPrimitiveStruct({
-      expected: "null",
-      is: (value): value is null => value === null,
-      kind: "null",
-    }),
-  );
+  return createPrimitiveStruct({
+    expected: "null",
+    is: (value): value is null => value === null,
+    kind: "null",
+  });
 }
 
 /**
@@ -113,17 +111,12 @@ export function createNullStruct(): Struct<null, null> {
  *
  * @group struct
  */
-// oxlint-disable-next-line typescript/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- INTENT: `any` is the documented output type of struct.any() (TSDoc above; published as `Struct<PresentValue, any>`); struct.unknown() is the `unknown` variant
 export function createAnyStruct(): Struct<PresentValue, any> {
-  // Type boundary: struct.any() intentionally models an unconstrained decoded value; any is the correct
-  // representation of "no static type information" at the output boundary.
-  // oxlint-disable-next-line typescript/no-explicit-any
-  return castStruct<Struct<PresentValue, any>>(
-    makeStruct({
-      flags: DEFAULT_FLAGS,
-      kind: "any",
-    }),
-  );
+  return makeStruct({
+    flags: DEFAULT_FLAGS,
+    kind: "any",
+  });
 }
 
 /**
@@ -138,12 +131,10 @@ export function createAnyStruct(): Struct<PresentValue, any> {
  * @group struct
  */
 export function createUnknownStruct(): UnknownStruct {
-  return castStruct<UnknownStruct>(
-    makeStruct({
-      flags: DEFAULT_FLAGS,
-      kind: "unknown",
-    }),
-  );
+  return makeStruct<UnknownStruct>({
+    flags: DEFAULT_FLAGS,
+    kind: "unknown",
+  });
 }
 
 /**
@@ -160,28 +151,24 @@ export function createUnknownStruct(): UnknownStruct {
 export function createLiteralStruct<const T extends LiteralValue>(
   value: T,
 ): Struct<T, T> {
-  return castStruct<Struct<T, T>>(
-    makeStruct({
-      expected: describeValue(value),
-      flags: DEFAULT_FLAGS,
-      kind: "literal",
-      value,
-    }),
-  );
+  return makeStruct<Struct<T, T>>({
+    expected: describeValue(value),
+    flags: DEFAULT_FLAGS,
+    kind: "literal",
+    value,
+  });
 }
 
 export function createEnumStruct<
   const T extends readonly [string, ...string[]],
 >(values: T): Struct<T[number], T[number]> {
   const enumValues = [...values];
-  return castStruct<Struct<T[number], T[number]>>(
-    makeStruct({
-      expected: enumValues.map((item) => JSON.stringify(item)).join(" | "),
-      flags: DEFAULT_FLAGS,
-      kind: "enum",
-      values: enumValues,
-    }),
-  );
+  return makeStruct<Struct<T[number], T[number]>>({
+    expected: enumValues.map((item) => JSON.stringify(item)).join(" | "),
+    flags: DEFAULT_FLAGS,
+    kind: "enum",
+    values: enumValues,
+  });
 }
 
 export function createObjectEnumStruct<
@@ -198,14 +185,12 @@ export function createObjectEnumStruct<
     );
   }
 
-  return castStruct<Struct<T[keyof T], T[keyof T]>>(
-    makeStruct({
-      expected: values.map((item) => JSON.stringify(item)).join(" | "),
-      flags: DEFAULT_FLAGS,
-      kind: "enum",
-      values,
-    }),
-  );
+  return makeStruct<Struct<T[keyof T], T[keyof T]>>({
+    expected: values.map((item) => JSON.stringify(item)).join(" | "),
+    flags: DEFAULT_FLAGS,
+    kind: "enum",
+    values,
+  });
 }
 
 /**
@@ -226,13 +211,11 @@ export function createArrayStruct<
 >(item: S): ArrayStruct<S> {
   assertStruct(item, "array item");
 
-  return castStruct<ArrayStruct<S>>(
-    makeStruct({
-      flags: DEFAULT_FLAGS,
-      item,
-      kind: "array",
-    }),
-  );
+  return makeStruct<ArrayStruct<S>>({
+    flags: DEFAULT_FLAGS,
+    item,
+    kind: "array",
+  });
 }
 
 /**
@@ -263,20 +246,22 @@ export function createArrayStruct<
 export function createObjectStruct<T extends ObjectShape>(
   shape: T,
 ): ObjectStruct<T> {
+  return makeStruct<ObjectStruct<T>>(objectDefinition(shape));
+}
+
+function objectDefinition(shape: ObjectShape): ObjectDefinition {
   if (!isPlainObject(shape)) {
     throw new TypeError("object struct requires a plain object");
   }
 
-  return castStruct<ObjectStruct<T>>(
-    makeStruct({
-      cache: {
-        declaredDescriptors: Object.getOwnPropertyDescriptors(shape),
-      },
-      flags: DEFAULT_FLAGS,
-      kind: "object",
-      shape,
-    }),
-  );
+  return {
+    cache: {
+      declaredDescriptors: Object.getOwnPropertyDescriptors(shape),
+    },
+    flags: DEFAULT_FLAGS,
+    kind: "object",
+    shape,
+  };
 }
 
 /**
@@ -321,10 +306,9 @@ function createCodecObjectStruct<T extends ObjectShape>(
   shape: T,
   codec: "formData" | "urlencoded",
 ): ObjectStruct<T> {
-  const created = createObjectStruct(shape);
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: assign codec on the original created definition, preserving inherited setters instead of initialising a copied object
-  (created as unknown as RuntimeStruct<ObjectDefinition>)[DEFINITION].codec =
-    codec;
+  const definition = objectDefinition(shape);
+  const created = makeStruct<ObjectStruct<T>>(definition);
+  definition.codec = codec;
   return created;
 }
 
@@ -348,13 +332,11 @@ export function createRecordStruct<
 >(value: S): RecordStruct<S> {
   assertStruct(value, "record value");
 
-  return castStruct<RecordStruct<S>>(
-    makeStruct({
-      flags: DEFAULT_FLAGS,
-      kind: "record",
-      value,
-    }),
-  );
+  return makeStruct<RecordStruct<S>>({
+    flags: DEFAULT_FLAGS,
+    kind: "record",
+    value,
+  });
 }
 
 /**
@@ -382,22 +364,14 @@ export function createTupleStruct<
     ...StructLike<unknown, unknown, boolean>[],
   ],
 >(items: T): TupleStruct<T> {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: snapshot the complete iterable before validating members, so later iterator side effects still occur before an early invalid member throws
-  const tupleItems = [...items] as unknown as readonly [
-    RuntimeStruct,
-    ...RuntimeStruct[],
-  ];
-  for (const item of tupleItems) {
-    assertStruct(item, "tuple item");
-  }
+  const tupleItems: readonly unknown[] = [...items];
+  assertStructs(tupleItems, "tuple item");
 
-  return castStruct<TupleStruct<T>>(
-    makeStruct({
-      flags: DEFAULT_FLAGS,
-      items: tupleItems,
-      kind: "tuple",
-    }),
-  );
+  return makeStruct<TupleStruct<T>>({
+    flags: DEFAULT_FLAGS,
+    items: tupleItems,
+    kind: "tuple",
+  });
 }
 
 export function createUnionStruct<
@@ -406,43 +380,36 @@ export function createUnionStruct<
     ...StructLike<unknown, unknown, boolean>[],
   ],
 >(options: T): UnionStruct<T> {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: snapshot the complete iterable before validating members, so later iterator side effects still occur before an early invalid member throws
-  const unionOptions = [...options] as unknown as readonly [
-    RuntimeStruct,
-    ...RuntimeStruct[],
-  ];
-  for (const option of unionOptions) {
-    assertStruct(option, "or option");
+  const unionOptions: readonly unknown[] = [...options];
+  assertStructs(unionOptions, "or option");
+  const first = unionOptions[0];
+  if (first === undefined) {
+    throw new TypeError("or requires at least one struct");
   }
 
-  return castStruct<UnionStruct<T>>(
-    makeStruct({
-      expected: unionOptions
-        .map((option) => expectedType(option[DEFINITION]))
-        .join(" | "),
-      flags: DEFAULT_FLAGS,
-      kind: "or",
-      options: unionOptions,
-      uniformIdentityEncode: computeUniformIdentityEncode(unionOptions),
-    }),
-  );
+  return makeStruct<UnionStruct<T>>({
+    expected: unionOptions
+      .map((option) => expectedType(option[DEFINITION]))
+      .join(" | "),
+    flags: DEFAULT_FLAGS,
+    kind: "or",
+    options: unionOptions,
+    uniformIdentityEncode: computeUniformIdentityEncode(first, unionOptions),
+  });
 }
 
 function computeUniformIdentityEncode(
-  options: readonly [RuntimeStruct, ...RuntimeStruct[]],
+  first: RuntimeStruct,
+  options: readonly RuntimeStruct[],
 ): boolean {
-  const first = options[0];
   const firstDefinition = first[DEFINITION];
   if (firstDefinition.kind === "object") {
     const firstShape = identityEncodeShape(first);
     if (!firstShape) {
       return false;
     }
-    for (let index = 1; index < options.length; index += 1) {
-      const shape = identityEncodeShape(
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain lazy indexed option reads after previous metadata checks instead of eagerly materialising a rest array
-        options[index] as unknown as RuntimeStruct,
-      );
+    for (const option of options.slice(1)) {
+      const shape = identityEncodeShape(option);
       if (!shape || shape.size !== firstShape.size) {
         return false;
       }
@@ -475,10 +442,9 @@ function identityEncodeShape(
     if (typeof descriptor.get === "function") {
       return undefined;
     }
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the identity optimisation reads only field kind; isStruct would invoke flags getters and newly throw during union construction
-    const fieldDefinition = (descriptor.value as RuntimeStruct | undefined)?.[
-      DEFINITION
-    ];
+    // Shape fields are validated on first parse (resolveObjectShape). A field that is not a struct only turns this shortcut off.
+    const field: unknown = descriptor.value;
+    const fieldDefinition = isStruct(field) ? field[DEFINITION] : undefined;
     if (!fieldDefinition || !isIdentityEncodeKind(fieldDefinition.kind)) {
       return undefined;
     }
@@ -559,38 +525,35 @@ export function createDiscriminatedUnionStruct<
   discriminator: TDiscriminator,
   options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
 ): DiscriminatedUnionStruct<TOptions> {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: snapshot the complete iterable before validating members, so later iterator side effects still occur before an early invalid member throws
-  const unionOptions = [...options] as unknown as readonly [
-    RuntimeStruct,
-    ...RuntimeStruct[],
-  ];
+  const snapshot: readonly unknown[] = [...options];
+  const unionOptions: RuntimeStruct[] = [];
   const map = new Map<unknown, RuntimeStruct>();
   const wireKeyByValue = new Map<unknown, string>();
   const discriminatorWireKeys: string[] = [];
   const seenWireKeys = new Set<string>();
   const values: unknown[] = [];
 
-  for (const option of unionOptions) {
+  for (const option of snapshot) {
     assertStruct(option, "discriminatedUnion option");
+    unionOptions.push(option);
     const optionDef = option[DEFINITION];
     if (optionDef.kind !== "object") {
       throw new TypeError("discriminatedUnion options must be object structs");
     }
     const descriptor = optionDef.cache.declaredDescriptors[discriminator];
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original discriminator truthiness test and metadata reads; a new isStruct check rejects values earlier
-    const fieldStruct = (
+    const fieldStruct: unknown =
       descriptor && typeof descriptor.get === "function"
         ? descriptor.get.call(optionDef.shape)
-        : descriptor?.value
-    ) as RuntimeStruct | undefined;
+        : descriptor?.value;
     if (!fieldStruct) {
       throw new TypeError(
         `discriminatedUnion option missing discriminator field "${discriminator}"`,
       );
     }
-    const fieldDef = fieldStruct[DEFINITION];
-    /* istanbul ignore next -- type-safe: discriminator is checked at compile time */
-    if (fieldDef.kind !== "literal") {
+    const fieldDef = isStruct(fieldStruct)
+      ? fieldStruct[DEFINITION]
+      : undefined;
+    if (fieldDef?.kind !== "literal") {
       throw new TypeError(
         `discriminatedUnion option discriminator "${discriminator}" must be a literal struct`,
       );
@@ -618,18 +581,16 @@ export function createDiscriminatedUnionStruct<
     values.push(fieldDef.value);
   }
 
-  return castStruct<DiscriminatedUnionStruct<TOptions>>(
-    makeStruct({
-      discriminator,
-      discriminatorWireKeys,
-      expected: values.map((item) => JSON.stringify(item)).join(" | "),
-      flags: DEFAULT_FLAGS,
-      kind: "discriminatedUnion",
-      map,
-      options: unionOptions,
-      wireKeyByValue,
-    }),
-  );
+  return makeStruct<DiscriminatedUnionStruct<TOptions>>({
+    discriminator,
+    discriminatorWireKeys,
+    expected: values.map((item) => JSON.stringify(item)).join(" | "),
+    flags: DEFAULT_FLAGS,
+    kind: "discriminatedUnion",
+    map,
+    options: unionOptions,
+    wireKeyByValue,
+  });
 }
 
 /**
@@ -676,7 +637,7 @@ export function createBigIntStruct(): Struct<bigint | string, bigint> {
         return fail(issue(path, "invalid_type", "bigint", input));
       }
     },
-    encode: (value) => value.toString(),
+    encode: encodeBigInt,
     expected: "bigint",
     is: (value): value is bigint | string =>
       typeof value === "bigint" || typeof value === "string",
@@ -705,7 +666,7 @@ export function createDateStruct(): Struct<Date | number | string, Date> {
       }
       return success(date);
     },
-    encode: (value) => value.toISOString(),
+    encode: encodeDate,
     expected: "Date",
     is: (value): value is Date | number | string =>
       value instanceof Date ||
@@ -715,6 +676,19 @@ export function createDateStruct(): Struct<Date | number | string, Date> {
     runtimeIs: (value): value is Date =>
       value instanceof Date && !Number.isNaN(value.getTime()),
   });
+}
+
+// Encode hooks also see values their struct did not produce. Those go through the same method call.
+function encodeBigInt(value: unknown): unknown {
+  return isPrimitive(value)
+    ? value.toString()
+    : invokeMethod(value, "toString");
+}
+
+function encodeDate(value: unknown): unknown {
+  return value instanceof Date
+    ? value.toISOString()
+    : invokeMethod(value, "toISOString");
 }
 
 /**
@@ -760,62 +734,60 @@ export function createIntersectionStruct(
     throw new TypeError("intersection requires at least one struct");
   }
 
-  for (const struct of structs) {
-    assertStruct(struct, "intersection item");
-  }
+  assertStructs(structs, "intersection item");
 
   if (structs.length === 1) {
     return structs[0];
   }
 
-  const objectSides = structs.every(isObjectIntersectionSide);
-  const options = objectSides
-    ? flattenObjectIntersectionSides(structs)
-    : structs;
+  const members: readonly RuntimeStruct[] = structs;
+  const expected = members
+    .map((item) => expectedType(item[DEFINITION]))
+    .join(" & ");
+  const sides = objectIntersectionSides(members);
 
-  return makeStruct({
-    expected: structs
-      .map((item) =>
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original direct metadata reads and constructor ordering without new guards or copied member containers
-        expectedType((item as unknown as RuntimeStruct)[DEFINITION]),
-      )
-      .join(" & "),
-    flags: DEFAULT_FLAGS,
-    kind: "intersection",
-    objectSides,
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain original intersection member order and snapshot timing without additional validation or container copies
-    options: options as [RuntimeStruct, ...RuntimeStruct[]],
-  });
-}
-
-function isObjectIntersectionSide(
-  struct: StructLike<unknown, unknown, boolean>,
-): boolean {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original direct metadata reads and constructor ordering without new guards or copied member containers
-  const definition = (struct as unknown as RuntimeStruct)[DEFINITION];
-  // A nullable intersection stays one member: flattening its sides would drop the null it accepts itself.
-  return (
-    definition.kind === "object" ||
-    (definition.kind === "intersection" &&
-      definition.objectSides &&
-      !definition.flags.nullable)
+  return makeStruct(
+    sides
+      ? {
+          expected,
+          flags: DEFAULT_FLAGS,
+          kind: "intersection",
+          objectSides: true,
+          options: sides,
+        }
+      : {
+          expected,
+          flags: DEFAULT_FLAGS,
+          kind: "intersection",
+          objectSides: false,
+          options: members,
+        },
   );
 }
 
-function flattenObjectIntersectionSides(
-  structs: readonly StructLike<unknown, unknown, boolean>[],
-): StructLike<unknown, unknown, boolean>[] {
-  const options: StructLike<unknown, unknown, boolean>[] = [];
+/** The object structs every member flattens to, or undefined when a member is not an object side. */
+function objectIntersectionSides(
+  structs: readonly RuntimeStruct[],
+): ObjectRuntimeStruct[] | undefined {
+  const sides: ObjectRuntimeStruct[] = [];
   for (const struct of structs) {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original direct metadata reads and constructor ordering without new guards or copied member containers
-    const definition = (struct as unknown as RuntimeStruct)[DEFINITION];
-    if (definition.kind === "intersection") {
-      options.push(...definition.options);
-    } else {
-      options.push(struct);
+    if (isObjectRuntimeStruct(struct)) {
+      sides.push(struct);
+      continue;
     }
+    const definition = struct[DEFINITION];
+    // A nullable intersection stays one member: flattening its sides would drop the null it accepts itself.
+    if (
+      definition.kind === "intersection" &&
+      definition.objectSides &&
+      !definition.flags.nullable
+    ) {
+      sides.push(...definition.options);
+      continue;
+    }
+    return undefined;
   }
-  return options;
+  return sides;
 }
 
 /**
