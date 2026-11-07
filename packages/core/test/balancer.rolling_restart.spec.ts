@@ -13,7 +13,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 test("three rolling two-second outages recover at the next one-second probe without thirty-second slots", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
   const host = inject("testServerHost");
@@ -48,7 +48,7 @@ test("three rolling two-second outages recover at the next one-second probe with
   );
   const read = defineRequest({ method: "GET", path: "/replica" });
   for (let i = 0; i < 2880; i++) {
-    vi.setSystemTime(i * 10);
+    vi.advanceTimersByTime(i * 10 - performance.now());
     expect((await read(client))[0]).toBeNull();
   }
   expect(attempts - 2880).toBeLessThan(100);

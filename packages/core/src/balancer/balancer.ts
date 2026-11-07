@@ -1,3 +1,5 @@
+import { rememberEndpoint } from "./retention";
+import { monotonicNow } from "../internal/clock";
 import {
   withHealthFilter,
   type OutlierDetectionOptions,
@@ -9,7 +11,8 @@ import {
  * `pick` is synchronous and returns an error-first tuple. It does not throw
  * for an empty candidate list or for invalid factory options. Built-in
  * factories record invalid options at construction and return that error from
- * every later `pick`.
+ * every later `pick`. A selected endpoint must belong to the candidates supplied
+ * to that pick; foreign selections become `REQ_BUILD_FAILED`.
  *
  * @group client
  */
@@ -59,7 +62,7 @@ export interface PickInfo {
  * @group client
  */
 export interface PickResult {
-  /** Selected endpoint string. It is not validated as a URL here. */
+  /** One of this pick's candidate endpoints. Membership is checked, URL syntax is not. */
   readonly endpoint: string;
   /**
    * Called synchronously at most once immediately before the attempt begins.
@@ -206,12 +209,15 @@ interface PickFirstOptions {
  *
  * `shuffle: true` assigns each endpoint a random sort key on first sight and
  * sticks to that order. Keys survive a shorter candidate list. The default is
- * `false`.
+ * `false`. Shuffle history keeps at most 256 endpoints in least-recently-used
+ * order; a forgotten endpoint gets a new random key when it returns.
  *
  * `failbackMs`, when finite and positive, permits one concurrent probe of the
- * first candidate after that interval away from it. A successful probe restores
- * the first; an advance outcome restarts the interval. Unattributed probes only
- * release the probe slot. No background timer is created.
+ * first candidate only after that interval away from it and at least one alternate
+ * selection since leaving it. A successful probe restores the first; an advance
+ * outcome restarts the interval and requires a fresh alternate selection before
+ * another primary probe, even if reconnect backoff exceeds `failbackMs`.
+ * Unattributed probes only release the probe slot. No background timer is created.
  *
  * Every successful `pick` returns `done`. An empty candidate list returns
  * `[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and
@@ -231,6 +237,7 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   let sticky: string | undefined;
   let leftFirstAt: number | undefined;
   let probing = false;
+  let backupBeforeProbe: string | undefined;
   const failbackMs = options?.failbackMs;
 
   const child: Balancer = {
@@ -252,8 +259,10 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
         chosen !== first &&
         failbackMs !== undefined &&
         leftFirstAt !== undefined &&
-        Date.now() - leftFirstAt >= failbackMs &&
-        !probing;
+        monotonicNow() - leftFirstAt >= failbackMs &&
+        !probing &&
+        backupBeforeProbe === undefined;
+      if (!probe && chosen !== backupBeforeProbe) backupBeforeProbe = undefined;
       if (probe) {
         chosen = first;
         probing = true;
@@ -270,8 +279,10 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
             if (probe) {
               probing = false;
               if (!report.attempted) return;
-              if (advance) leftFirstAt = Date.now();
-              else {
+              if (advance) {
+                leftFirstAt = monotonicNow();
+                backupBeforeProbe = first;
+              } else {
                 sticky = first;
                 leftFirstAt = undefined;
               }
@@ -280,7 +291,10 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
             if (!advance || sticky !== chosen) return;
             const next = order[(order.indexOf(chosen) + 1) % order.length];
             if (next !== undefined) {
-              if (chosen === first && next !== first) leftFirstAt = Date.now();
+              if (chosen === first && next !== first) {
+                leftFirstAt = monotonicNow();
+                backupBeforeProbe = first;
+              }
               sticky = next;
             }
           },
@@ -344,8 +358,8 @@ function candidateOrder(
     let key = keys.get(endpoint);
     if (key === undefined) {
       key = Math.random();
-      keys.set(endpoint, key);
     }
+    rememberEndpoint(keys, endpoint, key, () => 0);
     ranked.push({ endpoint, index, key });
   }
   ranked.sort(
@@ -368,7 +382,9 @@ interface RoundRobinOptions {
  * value, selects the highest value (earlier candidate on a tie), and subtracts
  * the total weight of this candidate list. A missing weight is 1. Weights for
  * endpoints not in the list are ignored. Current values for endpoints that
- * left the list are dropped.
+ * left the list are dropped in O(candidate count) work per pick. Extreme weights
+ * are scaled to avoid overflow; ratios below floating-point precision may round
+ * to zero. Finite positive weights never produce a non-candidate selection.
  *
  * Health filtering is enabled by default: five consecutive attributed failures
  * eject an endpoint temporarily. Set `outlierDetection: false` to disable it;
@@ -390,7 +406,8 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
     invalid === undefined && weights === undefined
       ? Math.floor(Math.random() * 0x100000000) >>> 0
       : 0;
-  const current = new Map<string, number>();
+  let current = new Map<string, number>();
+  let previousScale = 1;
 
   const child: Balancer = {
     pick(info) {
@@ -409,24 +426,29 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
         }
         return [null, { endpoint }];
       }
-      for (const key of current.keys()) {
-        if (!endpoints.includes(key)) {
-          current.delete(key);
-        }
-      }
-      let best = "";
+      let scale = 0;
+      for (const endpoint of endpoints)
+        scale = Math.max(scale, weights.get(endpoint) ?? 1);
+      // Powers of two preserve the ordinary smooth-RR sequence without rounding its weights.
+      scale = 2 ** Math.min(1023, Math.floor(Math.log2(scale)));
+      const next = new Map<string, number>();
+      let best: string | undefined;
       let bestValue = Number.NEGATIVE_INFINITY;
       let total = 0;
       for (const endpoint of endpoints) {
-        const weight = weights.get(endpoint) ?? 1;
-        const value = (current.get(endpoint) ?? 0) + weight;
-        current.set(endpoint, value);
+        const weight = (weights.get(endpoint) ?? 1) / scale;
+        const carried = (current.get(endpoint) ?? 0) * (previousScale / scale);
+        const value = (Number.isFinite(carried) ? carried : 0) + weight;
+        next.set(endpoint, value);
         total += weight;
         if (value > bestValue) {
           best = endpoint;
           bestValue = value;
         }
       }
+      current = next;
+      previousScale = scale;
+      if (best === undefined) return [ERR_NO_CANDIDATE, undefined];
       current.set(best, bestValue - total);
       return [null, { endpoint: best }];
     },

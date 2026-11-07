@@ -131,7 +131,7 @@ interface WebSocketDefinitionBase<
  *
  * - `outgoing` is the struct `session.send` validates and encodes with. Without it, `send` throws.
  *
- * - `maxIncomingQueueSize` is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
+ * - `maxIncomingQueueSize` bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow is fatal with `CAP_QUEUE_OVERFLOW` on the error delivered through `receive`, `onRuntimeError`, and `closed.cause`. It is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
  *
  * - `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.
  *
@@ -183,7 +183,7 @@ export interface WebSocketConnectionInfo {
  *
  * - `aborted`: the session was cancelled; `cause` is the abort reason.
  *
- * - `error`: the session failed; `cause` is required.
+ * - `error`: the session failed; `cause` is required. Incoming raw-frame or decoded-message queue overflow supplies a `Fault` with `cause.code === "CAP_QUEUE_OVERFLOW"`. The same fault rejects `receive` and is passed to `onRuntimeError`. Other runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors.
  *
  * - `code`, `reason`, and `wasClean` come from the native close event when one was observed. A manual `session.close(code, reason)` fills `code` and `reason` when the close event does not.
  *
@@ -1258,7 +1258,11 @@ async function runWebSocketCommand<
                       heartbeat.markAck();
                       return;
                     }
-                    incomingQueue.push(transformed);
+                    try {
+                      incomingQueue.push(transformed);
+                    } catch (cause) {
+                      throw createPreflightFault("CAP_QUEUE_OVERFLOW", cause);
+                    }
                   } catch (cause) {
                     if (!finished) {
                       finish({ cause, kind: "error" });
@@ -1302,7 +1306,10 @@ async function runWebSocketCommand<
                   }
                   if (rawMessages.length >= endpoint.maxIncomingQueueSize) {
                     finish({
-                      cause: new Error("WebSocket raw message queue overflow"),
+                      cause: createPreflightFault(
+                        "CAP_QUEUE_OVERFLOW",
+                        new Error("WebSocket raw message queue overflow"),
+                      ),
                       kind: "error",
                     });
                     return;

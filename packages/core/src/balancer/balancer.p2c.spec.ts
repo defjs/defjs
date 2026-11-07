@@ -5,7 +5,7 @@ import { p2cBalancer } from "./p2c";
 import { pickEndpoint } from "./runtime";
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
 });
@@ -27,7 +27,7 @@ function complete(
   report: DoneInfo & { sampleMs?: number },
 ) {
   const result = pick(balancer, [endpoint]);
-  vi.setSystemTime(Date.now() + (report.sampleMs ?? 0));
+  vi.advanceTimersByTime(report.sampleMs ?? 0);
   result.end?.(report);
   result.done?.(report);
 }
@@ -40,10 +40,10 @@ test("serial peak EWMA eventually samples every host as unused estimates decay",
     vi.mocked(Math.random).mockReturnValue(i % 2 === 0 ? 0 : 0.9);
     const result = pick(b, ["a", "b", "c"]);
     seen.add(result.endpoint);
-    vi.setSystemTime(Date.now() + 100);
+    vi.advanceTimersByTime(100);
     result.end?.({ attempted: true, status: 200 });
     result.done?.({ attempted: true, status: 200 });
-    vi.setSystemTime((i + 1) * 1000);
+    vi.advanceTimersByTime((i + 1) * 1000 - performance.now());
   }
   expect(seen).toEqual(new Set(["a", "b", "c"]));
 });
@@ -66,15 +66,15 @@ test("peak updates take a larger sample immediately and blend smaller samples ov
     outlierDetection: false,
   });
   const a = pick(b, ["a"]);
-  vi.setSystemTime(50);
+  vi.advanceTimersByTime(50 - performance.now());
   const other = pick(b, ["b"]);
-  vi.setSystemTime(200);
+  vi.advanceTimersByTime(200 - performance.now());
   a.end?.({ attempted: true });
   other.end?.({ attempted: true });
   expect(pick(b).endpoint).toBe("b");
-  vi.setSystemTime(300);
+  vi.advanceTimersByTime(300 - performance.now());
   const smaller = pick(b, ["a"]);
-  vi.setSystemTime(301);
+  vi.advanceTimersByTime(301 - performance.now());
   smaller.end?.({ attempted: true });
   expect(pick(b, ["a", "fresh"]).endpoint).toBe("a");
 });
@@ -154,7 +154,7 @@ test("state pruning forgets idle absent hosts but retains outstanding picks", ()
   const b = p2cBalancer({ outlierDetection: false, choiceCount: 10 });
   complete(b, "old", { attempted: true, sampleMs: 2000 });
   const held = pick(b, ["held"]);
-  vi.setSystemTime(Date.now() + 3000);
+  vi.advanceTimersByTime(3000);
   held.end?.({ attempted: true });
   held.done?.({ attempted: true });
   const outstanding = pick(b, ["held"]);
@@ -193,7 +193,7 @@ test.each([8_000_000, 8_000_000_000_000])(
 );
 
 test("non-finite RTT samples fall back to the configured initial estimate", () => {
-  const clock = vi.spyOn(Date, "now").mockReturnValue(-Number.MAX_VALUE);
+  const clock = vi.spyOn(performance, "now").mockReturnValue(-Number.MAX_VALUE);
   const b = p2cBalancer({ outlierDetection: false });
   const a = pick(b, ["a"]);
   clock.mockReturnValue(Number.MAX_VALUE);
@@ -240,7 +240,7 @@ test("fast RTT samples recover after rollback without waiting for wall time to c
     complete(b, "a", { attempted: true, sampleMs: 1000 });
     if (rollback) vi.setSystemTime(Date.now() - 3_600_000);
     for (let i = 0; i < 60; i += 1) {
-      vi.setSystemTime(Date.now() + 1000);
+      vi.advanceTimersByTime(1000);
       complete(b, "a", { attempted: true, sampleMs: 1 });
     }
     return Array.from(

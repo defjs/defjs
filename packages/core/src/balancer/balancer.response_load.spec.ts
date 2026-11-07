@@ -3,7 +3,7 @@ import { p2cBalancer } from "./p2c";
 import { pickEndpoint } from "./runtime";
 import type { Balancer } from "./balancer";
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
 });
@@ -32,14 +32,14 @@ test.each(["http", "sse", "websocket"] as const)(
     const b = p2cBalancer({ defaultRttMs: 1, outlierDetection: false });
     const slow = pick(b, ["b"]);
     slow.start();
-    vi.setSystemTime(50);
+    vi.advanceTimersByTime(50 - performance.now());
     slow.end({ attempted: true });
     const fast = pick(b, ["a"]);
-    vi.setSystemTime(130);
+    vi.advanceTimersByTime(130 - performance.now());
     fast.start();
-    vi.setSystemTime(140);
+    vi.advanceTimersByTime(140 - performance.now());
     fast.end({ attempted: true });
-    vi.setSystemTime(220);
+    vi.advanceTimersByTime(220 - performance.now());
     expect(pick(b).endpoint).toBe("a");
     fast.done({ attempted: true });
   },
@@ -52,11 +52,11 @@ test("quick failures use real RTT rather than a default penalty", () => {
   });
   const a = pick(b, ["a"]);
   a.start();
-  vi.setSystemTime(50);
+  vi.advanceTimersByTime(50 - performance.now());
   a.end({ attempted: true });
   const failed = pick(b, ["b"]);
   failed.start();
-  vi.setSystemTime(51);
+  vi.advanceTimersByTime(51 - performance.now());
   failed.end({ attempted: true, code: "NET_UNREACHABLE" });
   expect(pick(b).endpoint).toBe("b");
 });
@@ -64,7 +64,7 @@ test("default RTT is Linkerd's thirty milliseconds", () => {
   const b = p2cBalancer({ outlierDetection: false });
   const a = pick(b, ["a"]);
   a.start();
-  vi.setSystemTime(50);
+  vi.advanceTimersByTime(50 - performance.now());
   a.end({ attempted: true });
   expect(pick(b).endpoint).toBe("b");
 });
@@ -72,7 +72,7 @@ test("done without end releases pending but cannot produce an RTT sample", () =>
   const b = p2cBalancer({ defaultRttMs: 1, outlierDetection: false });
   const a = pick(b, ["a"]);
   a.start();
-  vi.setSystemTime(2000);
+  vi.advanceTimersByTime(2000 - performance.now());
   a.done({ attempted: true });
   expect(pick(b).endpoint).toBe("a");
 });

@@ -5,7 +5,7 @@ import { outlierDetection } from "./outlier_detection";
 import { p2cBalancer } from "./p2c";
 import { pickEndpoint } from "./runtime";
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
 });
@@ -65,10 +65,10 @@ test("Linkerd penalties double with positive jitter, cap at sixty seconds and re
   h.pick().done(bad);
   let now = 0;
   for (const delay of [1250, 2500, 5000, 10000, 20000, 40000, 60000, 60000]) {
-    vi.setSystemTime(now + delay - 1);
+    vi.advanceTimersByTime(now + delay - 1 - performance.now());
     expect(h.pick().endpoint).toBe("b");
     now += delay;
-    vi.setSystemTime(now);
+    vi.advanceTimersByTime(now - performance.now());
     const probe = h.pick();
     expect(probe.endpoint).toBe("a");
     probe.start();
@@ -76,15 +76,15 @@ test("Linkerd penalties double with positive jitter, cap at sixty seconds and re
     probe.done(bad);
   }
   now += 60000;
-  vi.setSystemTime(now);
+  vi.advanceTimersByTime(now - performance.now());
   const success = h.pick();
   success.start();
   success.end(ok);
   expect(h.pick().endpoint).toBe("a");
   h.pick().done(bad);
-  vi.setSystemTime(now + 1249);
+  vi.advanceTimersByTime(now + 1249 - performance.now());
   expect(h.pick().endpoint).toBe("b");
-  vi.setSystemTime(now + 1250);
+  vi.advanceTimersByTime(now + 1250 - performance.now());
   expect(h.pick().endpoint).toBe("a");
 });
 test("all three hosts may break; fail-open uses the exact current original list", () => {
@@ -109,7 +109,7 @@ test("expiry admits only one of sixty picks and end restores traffic before done
     const [, p] = b.pick({ endpoints: list });
     p?.done?.(p.endpoint === "a" ? bad : ok);
   }
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   const wave = Array.from(
     { length: 60 },
     () => pickEndpoint(b, { endpoints: list })[1],
@@ -128,14 +128,14 @@ test("expiry admits only one of sixty picks and end restores traffic before done
 test("probe end failure immediately reopens the breaker without waiting for done", () => {
   const h = setup();
   h.pick().done(bad);
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   const probe = h.pick();
   probe.start();
   probe.end(bad);
   expect(h.pick().endpoint).toBe("b");
-  vi.setSystemTime(2999);
+  vi.advanceTimersByTime(2999 - performance.now());
   expect(h.pick().endpoint).toBe("b");
-  vi.setSystemTime(3000);
+  vi.advanceTimersByTime(3000 - performance.now());
   expect(h.pick().endpoint).toBe("a");
 });
 test.each(["sse", "websocket"] as const)(
@@ -143,10 +143,10 @@ test.each(["sse", "websocket"] as const)(
   () => {
     const h = setup();
     h.pick().done(bad);
-    vi.setSystemTime(1000);
+    vi.advanceTimersByTime(1000 - performance.now());
     const [, probe] = pickEndpoint(h.b, { endpoints: list });
     probe?.start();
-    vi.setSystemTime(100000);
+    vi.advanceTimersByTime(100000 - performance.now());
     expect(h.pick().endpoint).toBe("b");
     probe?.end(ok);
     expect(h.pick().endpoint).toBe("a");
@@ -155,7 +155,7 @@ test.each(["sse", "websocket"] as const)(
 test("done after a successful probe end is an ordinary failure sample", () => {
   const h = setup();
   h.pick().done(bad);
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   const probe = h.pick();
   probe.start();
   probe.end(ok);
@@ -166,7 +166,7 @@ test("done after a successful probe end is an ordinary failure sample", () => {
 test("unattributed end releases a probe and done without end uses its result", () => {
   const h = setup();
   h.pick().done(bad);
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   const probe = h.pick();
   probe.start();
   probe.end({ attempted: false });
@@ -180,7 +180,7 @@ test("unattributed end releases a probe and done without end uses its result", (
 test("health forwards end and start while classifying before child callbacks", () => {
   const h = setup();
   h.pick().done(bad);
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   const p = h.pick();
   p.start();
   p.end(ok);
@@ -239,7 +239,7 @@ test("uncoded open resets a streak and invalid probe end stays pending until ter
   let valid = true;
   const h = setup({ isFailure: () => (valid ? true : undefined) });
   h.pick().done(bad);
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   const probe = h.pick();
   probe.start();
   valid = false;

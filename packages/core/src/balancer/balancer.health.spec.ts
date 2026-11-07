@@ -12,7 +12,7 @@ import {
 import { pickEndpoint } from "./runtime";
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
 });

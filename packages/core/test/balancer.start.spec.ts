@@ -175,7 +175,7 @@ test.each(["builder", "short-circuit", "abort", "replacement"])(
   },
 );
 test("p2c excludes both 80ms interceptor phases while a slow physical request remains pending", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
   const b = p2cBalancer({ load: "pending", outlierDetection: false });
@@ -199,14 +199,14 @@ test("p2c excludes both 80ms interceptor phases while a slow physical request re
     withInterceptors({
       kind: "http",
       async fn(req, next) {
-        vi.setSystemTime(Date.now() + 80);
+        vi.advanceTimersByTime(80);
         selections.push(
           b.pick({
             endpoints: ["https://fast.test", "https://slow.test"],
           })[1]?.endpoint ?? "",
         );
         const response = await next(req);
-        vi.setSystemTime(Date.now() + 80);
+        vi.advanceTimersByTime(80);
         selections.push(
           b.pick({
             endpoints: ["https://fast.test", "https://slow.test"],

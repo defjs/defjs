@@ -1,3 +1,5 @@
+import { rememberEndpoint } from "./retention";
+import { monotonicNow } from "../internal/clock";
 import type { Balancer, DoneInfo } from "./balancer";
 import { balancerOptionError } from "./balancer";
 import { ignoreRejection } from "./runtime";
@@ -64,6 +66,10 @@ export function classifyEndpointFailure(
  * then fall back to the original current list (Finagle panic mode). Unlike Envoy
  * and gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer
  * is created. Configuration is captured at construction.
+ * History is capped at 256 endpoints, shared across candidate lists. LRU clean
+ * or expired states are evicted first, then partial failure sequences, then
+ * the oldest protected state only if every retained endpoint is penalised or has a probe in flight. Temporary
+ * candidate exclusion does not itself erase a penalty or an in-flight probe.
  * @param child - Selection strategy retaining its identity and state.
  * @param options - Captured thresholds and application callbacks.
  * @returns An independent wrapper; invalid options become REQ_OPTIONS_INVALID.
@@ -95,8 +101,15 @@ export function outlierDetection(
         consecutive: 0,
         probe: undefined,
       };
-      states.set(endpoint, state);
     }
+    rememberEndpoint(states, endpoint, state, (value) => {
+      if (
+        value.probe !== undefined ||
+        (value.phase === "broken" && monotonicNow() < value.until)
+      )
+        return 2;
+      return value.consecutive === 0 ? 0 : 1;
+    });
     return state;
   }
   function refresh(state: HealthState, now: number): void {
@@ -120,7 +133,7 @@ export function outlierDetection(
     probe: object | undefined,
     terminal: boolean,
   ): void {
-    const now = Date.now();
+    const now = monotonicNow();
     refresh(state, now);
     const isProbe = probe !== undefined && state.probe === probe;
     if (!report.attempted) {
@@ -154,9 +167,10 @@ export function outlierDetection(
   }
   return {
     pick(info) {
-      const now = Date.now();
-      const eligible = info.endpoints.filter((endpoint) => {
-        const state = stateFor(endpoint);
+      const now = monotonicNow();
+      let eligible = info.endpoints.filter((endpoint) => {
+        const state = states.get(endpoint);
+        if (state === undefined) return true;
         refresh(state, now);
         return (
           state.phase === "available" ||
@@ -182,6 +196,10 @@ export function outlierDetection(
             undefined,
           ];
         }
+        eligible = eligible.filter((endpoint) => {
+          const state = states.get(endpoint);
+          return state?.probe === undefined && state?.phase !== "broken";
+        });
         candidates = eligible.filter((endpoint) => active.has(endpoint));
       }
       if (candidates.length === 0) candidates = eligible;
@@ -194,7 +212,9 @@ export function outlierDetection(
       ignoreRejection(outcome);
       const [error, result] = outcome;
       if (error !== null) return [error, undefined];
-      const state = states.get(result.endpoint);
+      const state = candidates.includes(result.endpoint)
+        ? stateFor(result.endpoint)
+        : undefined;
       const probe =
         state?.phase === "probing" ? (state.probe ?? {}) : undefined;
       if (state && probe) state.probe = probe;

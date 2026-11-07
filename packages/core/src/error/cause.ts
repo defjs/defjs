@@ -105,5 +105,9 @@ export function isTimeoutCause(cause: unknown): boolean {
 
 /** Message carried by `cause`, or its string form when it is not an error. */
 export function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+  try {
+    return cause instanceof Error ? cause.message : String(cause);
+  } catch {
+    return "Unknown error";
+  }
 }

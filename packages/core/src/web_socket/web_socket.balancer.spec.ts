@@ -618,7 +618,11 @@ describe("web socket endpoint balancer", () => {
       { endpoint: "not a url" },
     ]);
     const [fault] = await room(
-      clientFor(record.balancer)({ reconnect: { attempts: 1, delayMs: 0 } }),
+      createClient(
+        withEndpoint(PRIMARY, SECONDARY, "not a url"),
+        withBalancer(record.balancer),
+        withWebSocketHandle(ControllableSocket),
+      )({ reconnect: { attempts: 1, delayMs: 0 } }),
     );
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(record.dones).toEqual([
@@ -626,6 +630,19 @@ describe("web socket endpoint balancer", () => {
       { attempted: false },
     ]);
     expect(record.pending()).toBe(0);
+    expect(sockets).toHaveLength(1);
+
+    const done = vi.fn();
+    const [foreignFault] = await room(
+      clientFor({
+        pick: () => [null, { endpoint: "not a candidate", done }],
+      }),
+    );
+    expect(foreignFault?.code).toBe("REQ_BUILD_FAILED");
+    expect(foreignFault?.cause).toEqual(
+      new Error("Balancer selected an endpoint outside the candidate set"),
+    );
+    expect(done).not.toHaveBeenCalled();
     expect(sockets).toHaveLength(1);
   });
 
@@ -895,10 +912,13 @@ describe("web socket endpoint balancer", () => {
     const closed = await session.closed;
     expect(closed).toMatchObject({
       kind: "error",
-      cause: new Error("AsyncQueue overflow"),
+      cause: {
+        code: "CAP_QUEUE_OVERFLOW",
+        cause: new Error("AsyncQueue overflow"),
+      },
     });
     expect(runtimeError).toHaveBeenCalledExactlyOnceWith(
-      new Error("AsyncQueue overflow"),
+      expect.objectContaining({ code: "CAP_QUEUE_OVERFLOW" }),
     );
     expect(record.dones).toEqual([
       { attempted: true, code: "NET_UNREACHABLE" },

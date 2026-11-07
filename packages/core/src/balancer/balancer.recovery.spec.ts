@@ -9,7 +9,7 @@ import { p2cBalancer } from "./p2c";
 import { pickEndpoint } from "./runtime";
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
 });
@@ -54,7 +54,7 @@ function setup(options: OutlierDetectionOptions = {}) {
   );
   pick(b).done?.(failed);
   pick(b).done?.(failed);
-  vi.setSystemTime(100);
+  vi.advanceTimersByTime(100 - performance.now());
   return {
     b,
     candidates: () => candidates,
@@ -73,7 +73,7 @@ test("default recovery admits only one probe among sixty concurrent round-robin 
     if (p.endpoint === "a") failures++;
     p.done?.(p.endpoint === "a" ? failed : ok);
   }
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   const wave = Array.from({ length: 60 }, () => pick(b));
   expect(wave.filter((p) => p.endpoint === "a")).toHaveLength(1);
   wave.forEach((p) => p.done?.(ok));
@@ -86,9 +86,9 @@ test("failed probe immediately re-ejects with the next multiplier", () => {
   const h = setup();
   pick(h.b).done?.(failed);
   expect(pick(h.b).endpoint).toBe("b");
-  vi.setSystemTime(299);
+  vi.advanceTimersByTime(299 - performance.now());
   expect(pick(h.b).endpoint).toBe("b");
-  vi.setSystemTime(300);
+  vi.advanceTimersByTime(300 - performance.now());
   expect(pick(h.b).endpoint).toBe("a");
 });
 
@@ -124,17 +124,17 @@ test("failback and half-open share the first endpoint without admitting a second
   first.done?.(failed);
   overlap.done?.(failed);
   pick(b).done?.(ok);
-  vi.setSystemTime(100);
+  vi.advanceTimersByTime(100 - performance.now());
   const probe = pick(b);
   expect(probe.endpoint).toBe("a");
   expect(pick(b).endpoint).toBe("b");
   probe.done?.(failed);
   expect(pick(b).endpoint).toBe("b");
-  vi.setSystemTime(150);
+  vi.advanceTimersByTime(150 - performance.now());
   expect(pick(b).endpoint).toBe("b");
-  vi.setSystemTime(299);
+  vi.advanceTimersByTime(299 - performance.now());
   expect(pick(b).endpoint).toBe("b");
-  vi.setSystemTime(300);
+  vi.advanceTimersByTime(300 - performance.now());
   const recovered = pick(b);
   expect(recovered.endpoint).toBe("a");
   expect(pick(b).endpoint).toBe("b");
@@ -204,7 +204,7 @@ test("successful half-open probe resets failures from older attempts completed a
   const older = pick(b);
   pick(b).done?.(failed);
   pick(b).done?.(failed);
-  vi.setSystemTime(100);
+  vi.advanceTimersByTime(100 - performance.now());
   const probe = pick(b);
   older.done?.(failed);
   probe.done?.(ok);
@@ -219,8 +219,8 @@ test("a fail-open fallback selecting an occupied half-open host still completes 
   fallback.done?.(failed);
   first.done?.({ attempted: false });
   expect(pick(h.b).endpoint).toBe("b");
-  vi.setSystemTime(299);
+  vi.advanceTimersByTime(299 - performance.now());
   expect(pick(h.b).endpoint).toBe("b");
-  vi.setSystemTime(300);
+  vi.advanceTimersByTime(300 - performance.now());
   expect(pick(h.b).endpoint).toBe("a");
 });

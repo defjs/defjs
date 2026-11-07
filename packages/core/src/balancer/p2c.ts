@@ -1,3 +1,5 @@
+import { rememberEndpoint } from "./retention";
+import { monotonicNow } from "../internal/clock";
 import type { Balancer } from "./balancer";
 import { ERR_NO_CANDIDATE, balancerOptionError } from "./balancer";
 import {
@@ -36,6 +38,9 @@ const MIN_ESTIMATE_MS = Number.MIN_VALUE;
  * pending without creating a sample. Health filtering, enabled by default, breaks
  * quickly failing endpoints; there is no synthetic failure penalty.
  * Unlike Envoy and gRPC A48, draws are without replacement.
+ * Load history keeps at most 256 endpoints in LRU order, evicting idle entries
+ * first; an in-flight entry is evicted only if all retained entries are busy.
+ * Evicted endpoints restart from the configured initial estimate.
  *
  * @param options - Captured load settings, optional health filtering.
  * @returns A new independent balancer; invalid options are returned by every pick.
@@ -58,8 +63,10 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
     let state = states.get(endpoint);
     if (state === undefined) {
       state = { pending: 0, rttMs: defaultRttMs, updatedAt: now };
-      states.set(endpoint, state);
     }
+    rememberEndpoint(states, endpoint, state, (value) =>
+      value.pending === 0 ? 0 : 1,
+    );
     return state;
   }
   function finiteEstimate(value: number): number {
@@ -78,15 +85,8 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
   const child: Balancer = {
     pick(info) {
       if (info.endpoints.length === 0) return [ERR_NO_CANDIDATE, undefined];
-      const now = Date.now();
+      const now = monotonicNow();
       for (const endpoint of info.endpoints) stateFor(endpoint, now);
-      if (states.size > 256) {
-        const present = new Set(info.endpoints);
-        for (const [endpoint, state] of states) {
-          if (!present.has(endpoint) && state.pending === 0)
-            states.delete(endpoint);
-        }
-      }
       const remaining = info.endpoints.slice();
       let chosen:
         { endpoint: string; state: LoadState; cost: number } | undefined;
@@ -115,7 +115,7 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
           endpoint,
           start() {
             if (startedAt === undefined && !finished) {
-              startedAt = Date.now();
+              startedAt = monotonicNow();
               state = stateFor(endpoint, startedAt);
               state.pending += 1;
             }
@@ -124,7 +124,7 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
             if (startedAt === undefined || ended || finished) return;
             ended = true;
             state.pending = Math.max(0, state.pending - 1);
-            const at = Date.now();
+            const at = monotonicNow();
             const sample = Math.max(0, at - startedAt);
             const d = Math.exp(-Math.max(0, at - state.updatedAt) / decayMs);
             state.rttMs = finiteEstimate(

@@ -11,7 +11,7 @@ import {
 import { outlierDetection } from "./outlier_detection";
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
 });
@@ -40,7 +40,7 @@ test("default round robin returns done and ejects a rolling-restart replica unti
   );
   expect(choices).not.toContain("a");
   expect(new Set(choices)).toEqual(new Set(["b", "c"]));
-  vi.setSystemTime(30000);
+  vi.advanceTimersByTime(30000 - performance.now());
   expect(
     Array.from(
       { length: 3 },

@@ -43,19 +43,19 @@ test("offline connect failures are unattributed; online and absent navigator sti
 });
 
 test("failback permits one probe, retries failed probes, ignores unattributed probes", () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   const balancer = pickFirstBalancer({ failbackMs: 100 });
   pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
-  vi.setSystemTime(100);
+  vi.advanceTimersByTime(100 - performance.now());
   const probe = pick(balancer);
   expect(probe.endpoint).toBe(endpoints[0]);
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
   probe.done?.({ attempted: true, code: "NET_UNAVAILABLE" });
-  vi.setSystemTime(199);
+  vi.advanceTimersByTime(199 - performance.now());
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
-  vi.setSystemTime(200);
+  vi.advanceTimersByTime(200 - performance.now());
   pick(balancer).done?.({ attempted: false });
   const success = pick(balancer);
   expect(success.endpoint).toBe(endpoints[0]);

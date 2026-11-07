@@ -80,6 +80,17 @@ export function pickEndpoint(
           isOptionalCallback<() => void>(start) &&
           isOptionalCallback<(info: DoneInfo) => void>(end)
         ) {
+          if (!info.endpoints.includes(endpoint)) {
+            return [
+              createPreflightFault(
+                "REQ_BUILD_FAILED",
+                new Error(
+                  "Balancer selected an endpoint outside the candidate set",
+                ),
+              ),
+              undefined,
+            ];
+          }
           // The callable check is the runtime boundary for custom balancers.
           return [null, resolve({ endpoint, done, start, end })];
         }

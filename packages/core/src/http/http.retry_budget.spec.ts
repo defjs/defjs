@@ -11,7 +11,7 @@ import {
 import { defineRequest } from "./http";
 import { pickFirstBalancer, type Balancer } from "../balancer/balancer";
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
 });
 afterEach(() => {
@@ -42,7 +42,7 @@ test("shared budget limits a broad outage and restores its reserve after TTL", a
   for (let i = 0; i < 20; i++)
     expect((await op(h.client))[0]?.code).toBe("NET_UNREACHABLE");
   expect(h.calls()).toBe(21);
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   await op(h.client);
   expect(h.calls()).toBe(23);
 });
@@ -55,7 +55,7 @@ test("each original call deposits, every failover withdraws, and debits expire t
   expect(h.calls()).toBe(1);
   await op(h.client);
   expect(h.calls()).toBe(3);
-  vi.setSystemTime(1000);
+  vi.advanceTimersByTime(1000 - performance.now());
   await op(h.client);
   expect(h.calls()).toBe(4);
 });
@@ -158,3 +158,42 @@ test("two clients sharing one balancer keep independent retry reserves", async (
   expect((await op(b))[0]?.code).toBe("NET_UNREACHABLE");
   expect(calls).toBe(4);
 });
+
+test("TTL slices expire staggered credits gradually rather than all at once", () => {
+  const config = createClientConfig();
+  config.http.retry = {
+    budget: { percentCanRetry: 0.5, minRetriesPerSecond: 0, ttlMs: 1000 },
+  };
+  const budget = retryBudgetFor(config);
+  if (budget instanceof Error) throw budget;
+  budget.deposit();
+  budget.deposit();
+  vi.advanceTimersByTime(500 - performance.now());
+  budget.deposit();
+  budget.deposit();
+  vi.advanceTimersByTime(1000 - performance.now());
+  expect(budget.tryWithdraw()).toBe(true);
+  expect(budget.tryWithdraw()).toBe(false);
+  vi.advanceTimersByTime(1500 - performance.now());
+  expect(budget.tryWithdraw()).toBe(false);
+});
+
+test.each([86_400_000, -3_600_000])(
+  "wall clock jump %i does not expire or strand retry debits",
+  (jump) => {
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(0);
+    const config = createClientConfig();
+    config.http.retry = {
+      budget: { percentCanRetry: 0, minRetriesPerSecond: 1, ttlMs: 1000 },
+    };
+    const budget = retryBudgetFor(config);
+    if (budget instanceof Error) throw budget;
+    expect(budget.tryWithdraw()).toBe(true);
+    vi.setSystemTime(jump);
+    expect(budget.tryWithdraw()).toBe(false);
+    vi.advanceTimersByTime(1000);
+    expect(budget.tryWithdraw()).toBe(true);
+  },
+);

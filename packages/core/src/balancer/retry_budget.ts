@@ -1,3 +1,4 @@
+import { monotonicNow } from "../internal/clock";
 import type { ClientConfig } from "../client/config";
 import { isBalancerOptionRecord } from "./outlier_detection";
 
@@ -45,7 +46,7 @@ function createBudget(option: unknown): RetryBudget | Error {
   const sliceMs = ttl / 10;
   const slices = new Map<number, number>();
   function update(amount: number, withdraw: boolean): boolean {
-    const slice = Math.floor(Date.now() / sliceMs);
+    const slice = Math.floor(monotonicNow() / sliceMs);
     let balance = reserve;
     for (const [at, value] of slices) {
       if (at <= slice - 10) slices.delete(at);

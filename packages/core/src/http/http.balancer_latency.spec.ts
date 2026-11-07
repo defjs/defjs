@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 test("80 ms of interceptor work on either side does not contaminate p2c HTTP latency", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
   const balancer = p2cBalancer({
@@ -27,22 +27,22 @@ test("80 ms of interceptor work on either side does not contaminate p2c HTTP lat
     endpoints: ["https://slower.test"],
   });
   slower?.start?.();
-  vi.setSystemTime(50);
+  vi.advanceTimersByTime(50 - performance.now());
   slower?.end?.({ attempted: true, status: 200 });
   slower?.done?.({ attempted: true, status: 200 });
   const client = createClient(
     withEndpoint("https://fast.test"),
     withBalancer(balancer),
     withHTTPHandle(() => {
-      vi.setSystemTime(Date.now() + 10);
+      vi.advanceTimersByTime(10);
       return Promise.resolve(new Response(null));
     }),
     withInterceptors({
       kind: "http",
       async fn(request, next) {
-        vi.setSystemTime(Date.now() + 80);
+        vi.advanceTimersByTime(80);
         const response = await next(request);
-        vi.setSystemTime(Date.now() + 80);
+        vi.advanceTimersByTime(80);
         return response;
       },
     }),
@@ -58,7 +58,7 @@ test("80 ms of interceptor work on either side does not contaminate p2c HTTP lat
 });
 
 test("p2c slow-host traffic stays close to baseline with 80ms before and after interceptors", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.spyOn(Math, "random").mockReturnValue(0);
   async function run(interceptorMs: number) {
     vi.setSystemTime(0);
@@ -70,15 +70,15 @@ test("p2c slow-host traffic stays close to baseline with 80ms before and after i
       withHTTPHandle((input) => {
         const isSlow = new Request(input).url.startsWith("https://slow.test");
         if (isSlow) slow++;
-        vi.setSystemTime(Date.now() + (isSlow ? 30 : 10));
+        vi.advanceTimersByTime(isSlow ? 30 : 10);
         return Promise.resolve(new Response(null));
       }),
       withInterceptors({
         kind: "http",
         async fn(req, next) {
-          vi.setSystemTime(Date.now() + interceptorMs);
+          vi.advanceTimersByTime(interceptorMs);
           const response = await next(req);
-          vi.setSystemTime(Date.now() + interceptorMs);
+          vi.advanceTimersByTime(interceptorMs);
           return response;
         },
       }),
