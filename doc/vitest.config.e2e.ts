@@ -15,6 +15,8 @@ export default defineConfig({
   },
   test: {
     name: "doc-e2e",
+    // Browser dependency scanning globs the project include; keep it off the Bun-only unit specs.
+    include: ["e2e/**/*.browser.spec.ts"],
     // Keep browser navigation on the same IP family as the static site server.
     api: { host: "127.0.0.1" },
     globalSetup: ["./e2e/support/global-setup.ts"],
