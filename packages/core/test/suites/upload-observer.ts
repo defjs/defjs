@@ -24,6 +24,7 @@ import {
 const observerModes = ["sync", "async", "rejected-promise"] as const;
 const startBodyKinds = ["Blob", "ArrayBuffer"] as const;
 const laterBodyKinds = ["ReadableStream", "Blob"] as const;
+const usedSourceStates = ["locked", "partly read", "already read"] as const;
 
 type ObserverMode = (typeof observerModes)[number];
 type UploadBodyKind = "ArrayBuffer" | "Blob" | "ReadableStream";
@@ -404,30 +405,29 @@ export function registerUploadObserverSuite(
       );
 
     if (transports.includes("custom"))
-      test.each(["locked", "already read"] as const)(
-        "should let the platform reject a %s source stream",
-        async (state) => {
+      test.each(
+        usedSourceStates.flatMap((state) => [
+          { label: "with", observed: true, state },
+          { label: "without", observed: false, state },
+        ]),
+      )(
+        "should let the platform reject a $state source stream $label an observer",
+        async ({ observed, state }) => {
           const outcome = observerFailureOutcome(
             cap,
             "ReadableStream",
             "custom",
           );
-          const source = new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(new Uint8Array([1]));
-              controller.close();
-            },
-          });
-          const reader = source.getReader();
-          if (state === "already read") {
-            while (!(await reader.read()).done);
-            reader.releaseLock();
-          }
+          const onUploadProgress = vi.fn();
           const handle = vi.fn<FetchHandle>(() =>
             Promise.resolve(new Response("ok", { status: 200 })),
           );
 
-          const tuple = await executeUpload(source, {}, handle);
+          const tuple = await executeUpload(
+            await usedSource(state),
+            observed ? { onUploadProgress } : {},
+            handle,
+          );
 
           if (outcome !== "observed") {
             expectUploadOutcome(outcome, toAttempt(tuple, 0));
@@ -436,8 +436,31 @@ export function registerUploadObserverSuite(
           expect(tuple[0]?.code).toBe("NET_UNREACHABLE");
           expect(tuple[0]?.cause).toBeInstanceOf(TypeError);
           expect(handle).not.toHaveBeenCalled();
+          expect(onUploadProgress).not.toHaveBeenCalled();
         },
       );
+
+    if (transports.includes("platform"))
+      test("should let the platform reject a partly read source stream of an observed platform send", async () => {
+        const outcome = observerFailureOutcome(
+          cap,
+          "ReadableStream",
+          "platform",
+        );
+        const onUploadProgress = vi.fn();
+
+        const tuple = await executeUpload(await usedSource("partly read"), {
+          onUploadProgress,
+        });
+
+        if (outcome === "unsupported") {
+          expectUploadOutcome(outcome, toAttempt(tuple, 0));
+          return;
+        }
+        expect(tuple[0]?.code).toBe("NET_UNREACHABLE");
+        expect(tuple[0]?.cause).toBeInstanceOf(TypeError);
+        expect(onUploadProgress).not.toHaveBeenCalled();
+      });
 
     if (transports.includes("custom"))
       test.each([
@@ -759,6 +782,27 @@ function readingHandle(swallow: boolean): FetchHandle {
       status: 200,
     });
   };
+}
+
+async function usedSource(state: (typeof usedSourceStates)[number]) {
+  const source = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1]));
+      controller.enqueue(new Uint8Array([2]));
+      controller.close();
+    },
+  });
+  const reader = source.getReader();
+  if (state === "partly read") {
+    await reader.read();
+  }
+  if (state === "already read") {
+    while (!(await reader.read()).done);
+  }
+  if (state !== "locked") {
+    reader.releaseLock();
+  }
+  return source;
 }
 
 function trackedSource() {

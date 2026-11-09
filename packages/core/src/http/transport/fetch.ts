@@ -34,6 +34,10 @@ export {
   supportsStreamingRequestBody,
 };
 
+/**
+ * Relays a caller's stream so its bytes can be counted and its failure seen: a stream `fetch` holds
+ * stays locked whether it errored or not.
+ */
 function wrapUploadStream(
   stream: ReadableStream<Uint8Array>,
   onProgress: HttpProgressFn | undefined,
@@ -41,6 +45,8 @@ function wrapUploadStream(
   signal: AbortSignal | undefined,
   onFailed: (() => void) | undefined,
 ): ReadableStream<Uint8Array> {
+  // `fetch` only sees the relay, so the platform's rejection of a locked or already read stream has to happen here.
+  void new Response(stream);
   const reader = stream.getReader();
   let cleanedUp = false;
   let loaded = 0;
@@ -113,20 +119,6 @@ function wrapUploadStream(
   return wrapped;
 }
 
-/**
- * Relays a caller's stream so its failure can be seen: a stream `fetch` holds stays locked whether
- * it errored or not.
- */
-function watchStreamBody(
-  stream: ReadableStream<Uint8Array>,
-  signal: AbortSignal | undefined,
-  onFailed: () => void,
-): ReadableStream<Uint8Array> {
-  // The relay would send an already read stream empty, so the platform rejects it here, along with a locked one.
-  void new Response(stream);
-  return wrapUploadStream(stream, undefined, 0, signal, onFailed);
-}
-
 function cancelWrappedUploadBody(
   request: HttpRequest,
   onBodyFailed: (() => void) | undefined,
@@ -164,17 +156,17 @@ export function createFetchRequestInit(
     defaultAccept: "application/json, text/plain, */*",
     headers,
     signal: request.signal,
-    wrapReadableStreamBody: uploadProgress
-      ? (body) =>
-          wrapUploadStream(
-            body,
-            uploadProgress,
-            getContentLength(headers),
-            request.signal,
-            onBodyFailed,
-          )
-      : onBodyFailed &&
-        ((body) => watchStreamBody(body, request.signal, onBodyFailed)),
+    wrapReadableStreamBody:
+      uploadProgress || onBodyFailed
+        ? (body) =>
+            wrapUploadStream(
+              body,
+              uploadProgress,
+              getContentLength(headers),
+              request.signal,
+              onBodyFailed,
+            )
+        : undefined,
   });
 }
 
