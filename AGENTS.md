@@ -133,7 +133,7 @@ git config core.hooksPath .githooks
 
 Playwright browsers are needed by the Core, React, and Vue browser projects and the documentation E2E suite. The unit gate runs the Node projects on Node.js, so local verification needs Node 24.2 or newer (native type stripping plus `import.meta.main`: the root `test/unit-node.ts` runs as TypeScript, and on older Node it would silently do nothing and exit 0). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core` and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core` and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook lints and formats the staged files and runs the type check. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun lint` (the hook and CI do).
 
-Run these in order from the repository root and stop at the first failure. CI runs the same checks as parallel jobs: `checks` (gates 1, 2, 3, 5, 6) and `unit-chrome`, `unit-firefox`, `unit-bun`, `unit-node` (gate 4 split by runtime).
+Run these in order from the repository root and stop at the first failure. CI runs `checks` (gates 1, 2, 3) first. Once it passes, `build-e2e` (gates 5, 6) and `unit-chrome`, `unit-firefox`, `unit-bun`, `unit-node` (gate 4 split by runtime) run in parallel.
 
 | #   | Command                | Covers                                                                                                  |
 | --- | ---------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -230,7 +230,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 - Each package builds with `tsdown`, publishes from `dist`, and uses `publishConfig.directory`. The build writes `dist/package.json`, copies `LICENSE` and the package `README.md`. The `build` scripts call `bun --bun tsdown`, so they run on Bun from any directory, not only the repository root.
 - `bun test/assert-pack.ts <publish-dir>` must pass before publishing: it checks that `npm pack --dry-run` includes `LICENSE`, `README.md`, `package.json`, and every file referenced by the entry fields.
 - Packages that depend on Core build Core first. A Core patch within the plugins' `^0.7.0` peer range does not require a plugin release.
-- CI runs the six gates on pull requests and `main`, with gate 4 split into the jobs `unit-chrome`, `unit-firefox`, `unit-bun` and `unit-node`; the required checks are those four plus `checks`. The release workflow does not wait for CI; verify the intended revision first.
+- CI runs the six gates on pull requests and `main`, with gate 4 split into the jobs `unit-chrome`, `unit-firefox`, `unit-bun` and `unit-node`; the required checks are those four plus `checks` and `build-e2e`. The release workflow does not wait for CI; verify the intended revision first.
 
 ## Do not
 

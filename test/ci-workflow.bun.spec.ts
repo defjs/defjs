@@ -10,6 +10,7 @@ const setupNode = "actions/setup-node@v7";
 
 const jobOrder = [
   "checks",
+  "build-e2e",
   "unit-chrome",
   "unit-firefox",
   "unit-bun",
@@ -19,7 +20,7 @@ const jobOrder = [
 interface JobCommands {
   uses: string[];
   runs: string[];
-  needs: boolean;
+  needs: unknown;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -37,7 +38,7 @@ function readJobs(text: string): Map<string, JobCommands> {
     const uses: string[] = [];
     const runs: string[] = [];
     collectSteps(job["steps"], uses, runs);
-    result.set(id, { uses, runs, needs: "needs" in job });
+    result.set(id, { uses, runs, needs: job["needs"] });
   }
   return result;
 }
@@ -86,12 +87,32 @@ function isVitestConfig(file: string): boolean {
   return name.startsWith("vitest.config") && name.endsWith(".ts");
 }
 
-test("defines the five parallel jobs", () => {
+test("checks runs first and every other job waits for it", () => {
   const jobs = workflowJobs();
   expect([...jobs.keys()]).toEqual([...jobOrder]);
-  for (const job of jobs.values()) {
-    expect(job.needs).toBe(false);
+  for (const [id, job] of jobs) {
+    expect(job.needs, id).toBe(id === "checks" ? undefined : "checks");
   }
+});
+
+test("checks runs only the install and the static checks", () => {
+  const checks = requireJob(workflowJobs(), "checks");
+  if (!checks) return;
+  expect(checks.runs).toEqual([
+    "bun ci",
+    "bun run --cwd doc typegen",
+    "bun lint",
+    "bun fmt --check",
+    "bun run typecheck",
+  ]);
+});
+
+test("build-e2e builds before it runs the E2E suite", () => {
+  const job = requireJob(workflowJobs(), "build-e2e");
+  if (!job) return;
+  const build = job.runs.indexOf("bun run build");
+  expect(build).toBeGreaterThanOrEqual(0);
+  expect(job.runs.indexOf("bun run test:e2e")).toBeGreaterThan(build);
 });
 
 test("bun jobs install canary bun, the node job does not", () => {
@@ -120,13 +141,6 @@ test("each unit job runs exactly its runtime script", () => {
     const job = requireJob(jobs, id);
     if (!job) continue;
     expect(job.runs.some((run) => run.includes(command))).toBe(true);
-  }
-  const checks = requireJob(jobs, "checks");
-  if (checks) {
-    for (const run of checks.runs) {
-      expect(run).not.toContain("unit:");
-      expect(run).not.toContain("test:unit");
-    }
   }
   const bun = requireJob(jobs, "unit-bun");
   if (!bun) return;
