@@ -240,7 +240,9 @@ export function registerUploadProgressBrowserSuite(
         "Failed to fetch",
       );
       expect(hits).toEqual([`OPTIONS ${path}`]);
-      expect(stream.locked).toBe(true);
+      // Defjs relays the stream, so the failed send releases it, but a cancelled stream cannot be sent again.
+      await vi.waitFor(() => expect(stream.locked).toBe(false));
+      expect(() => new Response(stream)).toThrow(TypeError);
     });
 
     test("should call onUploadProgress and hand a custom handle a counted Blob stream", async () => {

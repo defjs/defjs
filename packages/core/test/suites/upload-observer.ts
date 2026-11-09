@@ -367,6 +367,215 @@ export function registerUploadObserverSuite(
       });
 
     if (transports.includes("custom"))
+      test.each([
+        { label: "with", observed: true },
+        { label: "without", observed: false },
+      ])(
+        "should leave a send unaborted once its source stream errored $label an observer",
+        async ({ observed }) => {
+          const outcome = observerFailureOutcome(
+            cap,
+            "ReadableStream",
+            "custom",
+          );
+          const signals: AbortSignal[] = [];
+          const read = readingHandle(false);
+          const tuple = await executeUpload(
+            new ReadableStream<Uint8Array>({
+              pull(controller) {
+                controller.error(new Error("source stream failed"));
+              },
+            }),
+            observed ? { onUploadProgress: () => undefined } : {},
+            (input, init) => {
+              if (input instanceof Request) signals.push(input.signal);
+              return read(input, init);
+            },
+          );
+
+          if (outcome !== "observed") {
+            expectUploadOutcome(outcome, toAttempt(tuple, 0));
+            return;
+          }
+          // Firefox reports a read of the errored stream as an AbortError, so the code differs by engine.
+          expect(tuple[0]).not.toBeNull();
+          expect(signals.map((signal) => signal.aborted)).toEqual([false]);
+        },
+      );
+
+    if (transports.includes("custom"))
+      test.each(["locked", "already read"] as const)(
+        "should let the platform reject a %s source stream",
+        async (state) => {
+          const outcome = observerFailureOutcome(
+            cap,
+            "ReadableStream",
+            "custom",
+          );
+          const source = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1]));
+              controller.close();
+            },
+          });
+          const reader = source.getReader();
+          if (state === "already read") {
+            while (!(await reader.read()).done);
+            reader.releaseLock();
+          }
+          const handle = vi.fn<FetchHandle>(() =>
+            Promise.resolve(new Response("ok", { status: 200 })),
+          );
+
+          const tuple = await executeUpload(source, {}, handle);
+
+          if (outcome !== "observed") {
+            expectUploadOutcome(outcome, toAttempt(tuple, 0));
+            return;
+          }
+          expect(tuple[0]?.code).toBe("NET_UNREACHABLE");
+          expect(tuple[0]?.cause).toBeInstanceOf(TypeError);
+          expect(handle).not.toHaveBeenCalled();
+        },
+      );
+
+    if (transports.includes("custom"))
+      test.each([
+        {
+          handle: () => Promise.reject(new TypeError("network down")),
+          label: "fails",
+        },
+        {
+          handle: () => Promise.resolve(new Response("ok", { status: 200 })),
+          label: "answers",
+        },
+      ] satisfies { handle: FetchHandle; label: string }[])(
+        "should release an unread source stream when a custom handle $label without reading it",
+        async ({ handle }) => {
+          const outcome = observerFailureOutcome(
+            cap,
+            "ReadableStream",
+            "custom",
+          );
+          const source = trackedSource();
+
+          const tuple = await executeUpload(source.stream, {}, handle);
+
+          if (outcome !== "observed") {
+            expectUploadOutcome(outcome, toAttempt(tuple, 0));
+            return;
+          }
+          expect(source.stream.locked).toBe(false);
+          expect(source.cancelled).toHaveLength(1);
+          expect(source.pulls()).toBe(0);
+        },
+      );
+
+    if (transports.includes("custom"))
+      test("should release a partly read source stream when the send fails", async () => {
+        const outcome = observerFailureOutcome(cap, "ReadableStream", "custom");
+        const source = trackedSource();
+
+        const tuple = await executeUpload(source.stream, {}, async (input) => {
+          if (!(input instanceof Request)) {
+            throw new TypeError("expected Request");
+          }
+          await input.body?.getReader().read();
+          throw new TypeError("network down");
+        });
+
+        if (outcome !== "observed") {
+          expectUploadOutcome(outcome, toAttempt(tuple, 0));
+          return;
+        }
+        expect(tuple[0]?.code).toBe("NET_UNREACHABLE");
+        expect(source.stream.locked).toBe(false);
+        expect(source.cancelled).toHaveLength(1);
+        expect(source.pulls()).toBe(1);
+      });
+
+    if (transports.includes("custom"))
+      test.each([
+        {
+          handle: () => Promise.reject(new TypeError("network down")),
+          label: "failed without reading it",
+        },
+        {
+          handle: () => Promise.resolve(new Response("ok", { status: 200 })),
+          label: "answered without reading it",
+        },
+        {
+          handle: async (input) => {
+            if (!(input instanceof Request)) {
+              throw new TypeError("expected Request");
+            }
+            await input.body?.getReader().read();
+            return new Response("ok", { status: 200 });
+          },
+          label: "answered after reading part of it",
+        },
+      ] satisfies { handle: FetchHandle; label: string }[])(
+        "should release the source stream of a send that $label when an interceptor replaced its signal",
+        async ({ handle }) => {
+          const outcome = observerFailureOutcome(
+            cap,
+            "ReadableStream",
+            "custom",
+          );
+          const source = trackedSource();
+          const client = createClient(
+            withEndpoint("https://example.com"),
+            withHTTPHandle(handle),
+            withInterceptors(
+              createHttpInterceptor((request, next) =>
+                next({ ...request, signal: new AbortController().signal }),
+              ),
+            ),
+          );
+          const endpoint = defineRequest({
+            builder: () => ({ body: source.stream }),
+            method: "POST",
+            path: "/",
+          });
+
+          const tuple = await endpoint(client({}));
+
+          if (outcome !== "observed") {
+            expectUploadOutcome(outcome, toAttempt(tuple, 0));
+            return;
+          }
+          expect(source.stream.locked).toBe(false);
+          expect(source.cancelled).toHaveLength(1);
+        },
+      );
+
+    if (transports.includes("platform"))
+      test("should release the source stream when a platform send cannot connect", async () => {
+        const outcome = observerFailureOutcome(
+          cap,
+          "ReadableStream",
+          "platform",
+        );
+        const source = trackedSource();
+        const client = createClient(withEndpoint("http://127.0.0.1:1"));
+        const endpoint = defineRequest({
+          builder: () => ({ body: source.stream }),
+          method: "POST",
+          path: "/",
+        });
+
+        const tuple = await endpoint(client({}));
+
+        if (outcome === "unsupported") {
+          expectUploadOutcome(outcome, toAttempt(tuple, 0));
+          return;
+        }
+        expect(tuple[0]?.code).toBe("NET_UNREACHABLE");
+        expect(source.stream.locked).toBe(false);
+        expect(source.cancelled).toHaveLength(1);
+      });
+
+    if (transports.includes("custom"))
       test("should abort a send that failed for another reason when the chain settles", async () => {
         const signals: AbortSignal[] = [];
         const [error] = await executeUpload(
@@ -550,6 +759,24 @@ function readingHandle(swallow: boolean): FetchHandle {
       status: 200,
     });
   };
+}
+
+function trackedSource() {
+  const cancelled: unknown[] = [];
+  let pulls = 0;
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      cancel(reason) {
+        cancelled.push(reason);
+      },
+      pull(controller) {
+        pulls += 1;
+        controller.enqueue(new Uint8Array([pulls]));
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { cancelled, pulls: () => pulls, stream };
 }
 
 function createUploadBody(kind: UploadBodyKind): UploadBody {

@@ -384,6 +384,33 @@ export function defineNativeFetchSuite(): void {
       expect(init?.body).not.toBe(stream);
     });
 
+    test("passes an unobserved stream body through untouched when called directly", async () => {
+      const {
+        calls,
+        DEFAULT_FETCH,
+        fetchHandler,
+        supportsStreamingRequestBody,
+      } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response("ok")),
+      );
+      if (!supportsStreamingRequestBody()) {
+        return;
+      }
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      });
+
+      await fetchHandler(
+        request({ body: stream, method: "POST" }),
+        DEFAULT_FETCH,
+      );
+
+      expect(calls[0]?.[1]?.body).toBe(stream);
+      expect(stream.locked).toBe(false);
+    });
+
     test("cancels the wrapped upload body with the failure when the platform fetch rejects", async () => {
       const networkError = new Error("network failed");
       const { DEFAULT_FETCH, fetchHandler, supportsStreamingRequestBody } =

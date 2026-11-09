@@ -34,11 +34,12 @@ export {
   supportsStreamingRequestBody,
 };
 
-function wrapUploadProgressStream(
+function wrapUploadStream(
   stream: ReadableStream<Uint8Array>,
-  onProgress: HttpProgressFn,
+  onProgress: HttpProgressFn | undefined,
   total: number,
   signal: AbortSignal | undefined,
+  onFailed: (() => void) | undefined,
 ): ReadableStream<Uint8Array> {
   const reader = stream.getReader();
   let cleanedUp = false;
@@ -61,39 +62,46 @@ function wrapUploadProgressStream(
     }
   }
 
-  const wrapped = new ReadableStream<Uint8Array>({
-    cancel(reason) {
-      cleanup(true, reason);
+  const wrapped = new ReadableStream<Uint8Array>(
+    {
+      cancel(reason) {
+        cleanup(true, reason);
+      },
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+
+          if (cleanedUp) {
+            return;
+          }
+
+          if (done) {
+            cleanup(false);
+            controller.close();
+            return;
+          }
+
+          if (onProgress) {
+            loaded += value.byteLength;
+            const event = { lengthComputable: total > 0, loaded, total };
+            await (signal
+              ? awaitWithSignal(() => onProgress(event), signal)
+              : onProgress(event));
+            if (cleanedUp) {
+              return;
+            }
+          }
+          controller.enqueue(value);
+        } catch (error) {
+          onFailed?.();
+          cleanup(true, error);
+          controller.error(error);
+        }
+      },
     },
-    async pull(controller) {
-      try {
-        const { done, value } = await reader.read();
-
-        if (cleanedUp) {
-          return;
-        }
-
-        if (done) {
-          cleanup(false);
-          controller.close();
-          return;
-        }
-
-        loaded += value.byteLength;
-        const event = { lengthComputable: total > 0, loaded, total };
-        await (signal
-          ? awaitWithSignal(() => onProgress(event), signal)
-          : onProgress(event));
-        if (cleanedUp) {
-          return;
-        }
-        controller.enqueue(value);
-      } catch (error) {
-        cleanup(true, error);
-        controller.error(error);
-      }
-    },
-  });
+    // Without an observer there is no reason to read ahead of the consumer.
+    { highWaterMark: onProgress ? 1 : 0 },
+  );
 
   if (signal) {
     signal.addEventListener("abort", onAbort, { once: true });
@@ -105,13 +113,28 @@ function wrapUploadProgressStream(
   return wrapped;
 }
 
+/**
+ * Relays a caller's stream so its failure can be seen: a stream `fetch` holds stays locked whether
+ * it errored or not.
+ */
+function watchStreamBody(
+  stream: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+  onFailed: () => void,
+): ReadableStream<Uint8Array> {
+  // The relay would send an already read stream empty, so the platform rejects it here, along with a locked one.
+  void new Response(stream);
+  return wrapUploadStream(stream, undefined, 0, signal, onFailed);
+}
+
 function cancelWrappedUploadBody(
   request: HttpRequest,
+  onBodyFailed: (() => void) | undefined,
   body: unknown,
   reason: unknown,
 ): void {
   if (
-    request.uploadProgress &&
+    (request.uploadProgress || onBodyFailed) &&
     isReadableStreamBody(request.body) &&
     isReadableStreamBody(body)
   ) {
@@ -128,6 +151,7 @@ function cancelLateResponseBody(
 
 export function createFetchRequestInit(
   request: HttpRequest,
+  onBodyFailed?: () => void,
 ): RequestInit & { duplex?: "half" } {
   const headers = new Headers(request.headers);
   const uploadProgress = request.uploadProgress;
@@ -142,24 +166,29 @@ export function createFetchRequestInit(
     signal: request.signal,
     wrapReadableStreamBody: uploadProgress
       ? (body) =>
-          wrapUploadProgressStream(
+          wrapUploadStream(
             body,
             uploadProgress,
             getContentLength(headers),
             request.signal,
+            onBodyFailed,
           )
-      : undefined,
+      : onBodyFailed &&
+        ((body) => watchStreamBody(body, request.signal, onBodyFailed)),
   });
 }
 
-export function createFetchRequest(request: HttpRequest): Request {
+export function createFetchRequest(
+  request: HttpRequest,
+  onBodyFailed?: () => void,
+): Request {
   const url = resolveRequestUrl(request);
-  const init = createFetchRequestInit(request);
+  const init = createFetchRequestInit(request, onBodyFailed);
 
   try {
     return new Request(url, init);
   } catch (error) {
-    cancelWrappedUploadBody(request, init.body, error);
+    cancelWrappedUploadBody(request, onBodyFailed, init.body, error);
     throw error;
   }
 }
@@ -355,11 +384,18 @@ export async function fetchHandler(
   return fetchHandlerWithLifecycle(httpRequest, fetchImpl);
 }
 
+type FetchLifecycle = {
+  start: () => void;
+  response: (response: Response) => void;
+  /** The request body stopped for good: its source errored or its observer failed. */
+  bodyFailed: () => void;
+};
+
 /** Internal raw Fetch boundary used for per-attempt timing. */
 export async function fetchHandlerWithLifecycle(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
-  lifecycle?: { start(): void; response(response: Response): void },
+  lifecycle?: FetchLifecycle,
 ): Promise<HttpResponse<unknown>> {
   if (fetchImpl === DEFAULT_FETCH) {
     fetchImpl = resolveGlobalFetch();
@@ -405,7 +441,7 @@ export async function fetchHandlerWithLifecycle(
 async function sendFetchRequest(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
-  lifecycle?: { start(): void; response(response: Response): void },
+  lifecycle?: FetchLifecycle,
 ): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.signal;
   const platform = fetchImpl === PLATFORM_FETCH_HANDLE;
@@ -420,7 +456,7 @@ async function sendFetchRequest(
     if (platform) {
       // fetch(url, init) builds the Request itself, so building one here would only do that work twice.
       const url = resolveRequestUrl(prepared);
-      const init = createFetchRequestInit(prepared);
+      const init = createFetchRequestInit(prepared, lifecycle?.bodyFailed);
       platformBody = init.body;
       fallbackUrl = url.href;
       response = await fetchWithSignal(
@@ -432,7 +468,7 @@ async function sendFetchRequest(
         cancelLateResponseBody,
       );
     } else {
-      const built = createFetchRequest(prepared);
+      const built = createFetchRequest(prepared, lifecycle?.bodyFailed);
       request = built;
       fallbackUrl = built.url;
       response = await fetchWithSignal(
@@ -445,7 +481,12 @@ async function sendFetchRequest(
       );
     }
   } catch (error) {
-    cancelWrappedUploadBody(prepared, request?.body ?? platformBody, error);
+    cancelWrappedUploadBody(
+      prepared,
+      lifecycle?.bodyFailed,
+      request?.body ?? platformBody,
+      error,
+    );
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
   }
 

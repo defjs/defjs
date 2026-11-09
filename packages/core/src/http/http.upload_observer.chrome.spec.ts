@@ -66,23 +66,58 @@ test("should not leave an unhandled rejection after a later upload chunk observe
   expect(result[0]?.cause).toBe(cause);
 });
 
-test("should still cancel the source of an upload the platform rejects over HTTP/1.1", async () => {
-  const cancel = vi.fn();
-  const source = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new Uint8Array([1]));
-    },
-    cancel,
-  });
-  const client = createClient(withEndpoint(inject("testServerHost")));
-  const upload = defineRequest({
-    builder: () => ({ body: source }),
-    method: "POST",
-    path: "/body/upload",
-  });
+test.each([
+  { label: "with", options: { onUploadProgress: () => undefined } },
+  { label: "without", options: {} },
+])(
+  "should not leave an unhandled rejection when the source stream errors $label an upload observer",
+  async ({ options }) => {
+    const cause = new Error("source stream failed");
+    const client = createClient(withEndpoint(inject("testServerHost")));
+    const upload = defineRequest({
+      builder: () => ({
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.error(cause);
+          },
+        }),
+      }),
+      method: "POST",
+      path: "/body/upload",
+    });
 
-  const [error] = await upload(client({ onUploadProgress: () => undefined }));
+    const { reasons, result } = await collectUnhandledRejections(() =>
+      upload(client(options)),
+    );
 
-  expect(error?.code).toBe("NET_UNREACHABLE");
-  await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
-});
+    expect(reasons).toEqual([]);
+    expect(result[0]?.code).toBe("NET_UNREACHABLE");
+  },
+);
+
+test.each([
+  { label: "with", options: { onUploadProgress: () => undefined } },
+  { label: "without", options: {} },
+])(
+  "should still cancel the source of an upload the platform rejects over HTTP/1.1 $label an upload observer",
+  async ({ options }) => {
+    const cancel = vi.fn();
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+      },
+      cancel,
+    });
+    const client = createClient(withEndpoint(inject("testServerHost")));
+    const upload = defineRequest({
+      builder: () => ({ body: source }),
+      method: "POST",
+      path: "/body/upload",
+    });
+
+    const [error] = await upload(client(options));
+
+    expect(error?.code).toBe("NET_UNREACHABLE");
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+  },
+);

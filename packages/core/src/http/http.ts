@@ -681,6 +681,7 @@ async function executeHttpAttempt<
       liveTransports.add(transportController);
       if (isReadableStreamBody(nextRequest.body)) state.replayable = false;
       let started = false;
+      let bodyFailed = false;
       let sendTimer: ReturnType<typeof setTimeout> | undefined;
       // Runs once: the fulfilled and rejected handlers below are exclusive.
       const settleSend = () => {
@@ -720,6 +721,9 @@ async function executeHttpAttempt<
                 code: statusOutcome(response.status),
               });
           },
+          bodyFailed() {
+            bodyFailed = true;
+          },
         },
       )
         .then(
@@ -737,11 +741,6 @@ async function executeHttpAttempt<
           },
           (error: unknown) => {
             settleSend();
-            // Only a failed upload observer proves the body errored, leaving nothing to stop. Chromium reports an
-            // abort after that as an unhandled rejection. Any other failure still needs the abort to release its body.
-            if (isBodyFailure(error) && error.meta === undefined) {
-              liveTransports.delete(transportController);
-            }
             const classified = classifyHttpAttempt(error, started);
             if (matches)
               resolved.end(
@@ -763,7 +762,12 @@ async function executeHttpAttempt<
           },
         )
         .finally(() => {
-          releaseAbortSignal(transportAbort);
+          // A body that already failed leaves nothing to stop, and Chromium reports an abort after that as an
+          // unhandled rejection. Every other send still needs the abort to release its body, so it keeps its signal.
+          if (bodyFailed) {
+            liveTransports.delete(transportController);
+            releaseAbortSignal(transportAbort);
+          }
         });
       inflightTransport = pending;
       return pending;
