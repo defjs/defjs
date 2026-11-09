@@ -56,12 +56,6 @@ jobs:
         run: bunx --bun playwright install --with-deps chromium
       - name: Unit tests (Chrome)
         run: bun run unit:chrome
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
-        with:
-          name: coverage-chrome
-          path: packages/*/coverage/chrome/
-          if-no-files-found: warn
 
   unit-firefox:
     needs: checks
@@ -76,12 +70,6 @@ jobs:
         run: bunx --bun playwright install --with-deps firefox
       - name: Unit tests (Firefox)
         run: bun run unit:firefox
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
-        with:
-          name: coverage-firefox
-          path: packages/*/coverage/firefox/
-          if-no-files-found: warn
 
   unit-bun:
     needs: checks
@@ -98,14 +86,6 @@ jobs:
         run: bun run --cwd doc typegen
       - name: Unit tests (Bun)
         run: bun run unit:bun
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
-        with:
-          name: coverage-bun
-          path: |
-            packages/*/coverage/bun/
-            doc/coverage/bun/
-          if-no-files-found: warn
 
   unit-node:
     needs: checks
@@ -127,9 +107,3 @@ jobs:
           done
       - name: Unit tests (Node)
         run: node --run unit:node
-      - uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
-        with:
-          name: coverage-node
-          path: packages/*/coverage/node/
-          if-no-files-found: warn
