@@ -1898,6 +1898,8 @@ describe("fetchEventStream message path", () => {
           return message.data === "b" ? gate.promise : message;
         },
       });
+      // The body takes an unknown number of turns to arrive. The extra turn lets an out-of-order "c" show up.
+      await vi.waitFor(() => expect(transformed).toEqual(["a", "b"]));
       await nextTurn();
 
       // "b" is pending, so "c" is neither transformed nor delivered ahead of it.

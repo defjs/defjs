@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   createClient,
   withEndpoint,
@@ -161,6 +161,11 @@ describe("event stream invalid events", () => {
         received.push(String(event.data));
       }
     })();
+    // The body takes an unknown number of turns to arrive. The extra turn lets an out-of-order event show up.
+    await vi.waitFor(() => {
+      expect(received).toEqual(["one"]);
+      expect(observed).toEqual(["two"]);
+    });
     await nextTurn();
 
     // "one" comes before the invalid events and is out. While "two" is pending, nothing behind it is observed or delivered.
