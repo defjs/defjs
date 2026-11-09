@@ -57,7 +57,7 @@ Precedencia para una solicitud:
 1. Los valores por defecto son el conjunto inicial de cabeceras.
 2. Las `headers` que devuelve el builder de la solicitud sustituyen un valor por defecto del mismo nombre. El primer valor de ese nombre sustituye al valor por defecto; los valores posteriores del mismo array solo se añaden a esa sustitución. Un escalar o una instancia de `Headers` también sustituye. Los demás nombres por defecto se quedan.
 3. Los interceptores reciben las cabeceras fusionadas y pueden cambiarlas.
-4. Con el transporte HTTP por defecto, la cabecera XSRF se añade al final, solo cuando sigue ausente (consulta `withXSRF`).
+4. Con `@defjs/core/xsrf`, la cabecera XSRF se añade al final, solo cuando sigue ausente (consulta `withXSRF`).
 
 Usa un interceptor para valores que cambian por solicitud: un Bearer token renovado, o un HMAC sobre el cuerpo serializado.
 
@@ -85,9 +85,9 @@ Cuando es `true`, Fetch usa `credentials: 'include'` para HTTP y SSE. Por defect
 
 <ApiSignature name="withXSRF" />
 
-Añade una cabecera de token XSRF a las solicitudes HTTP. `options` es el ajuste `xsrf`, la misma forma que `xsrf` en [`ClientOptions`](/es-ES/api/core/clientoptions-type): `cookieName` (por defecto `XSRF-TOKEN`), `headerName` (por defecto `X-XSRF-TOKEN`) y `tokenProvider({ request })`. Llamar a `withXSRF()` sin argumento activa esos valores por defecto. Las solicitudes SSE y WebSocket no se ven afectadas.
+Añade una cabecera de token XSRF a las solicitudes HTTP del navegador. Impórtalo desde `@defjs/core/xsrf`. `options` es un valor `XSRFOptions`: `cookieName` (por defecto `XSRF-TOKEN`) y `headerName` (por defecto `X-XSRF-TOKEN`). Llamar a `withXSRF()` sin argumento activa esos valores por defecto, y lanza si faltan `location` o `document`, también en un Worker. El código isomórfico añade esta opción solo en el navegador. Un token de otra fuente se establece con un interceptor. Las solicitudes SSE y WebSocket no se ven afectadas.
 
-El transporte HTTP por defecto añade la cabecera cuando se cumple todo esto: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya esa cabecera; la solicitud es del mismo origen; y se encuentra un token no vacío. Siempre que exista `location`, incluso en un Worker, el origen resuelto de la solicitud debe coincidir con `location.origin`; sin él, una solicitud con `baseEndpoint` cuenta como mismo origen. Las solicitudes de origen cruzado no llaman a `tokenProvider`. El token sale de ese provider cuando se da, y si no de `document.cookie`, que solo se lee cuando existe `document`.
+La cabecera se establece cuando se cumple todo esto: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya esa cabecera; el origen resuelto de la solicitud es igual al origin de la página; y `document.cookie` contiene un token no vacío. Las solicitudes de origen cruzado no leen la cookie. Un fallo al leer la cookie cuenta como ausencia de token. Un token vacío no establece la cabecera.
 
 ### Opciones de SSE
 
@@ -191,7 +191,7 @@ Para WebSocket, `beforeConnect`, `heartbeat`, `protocols` y `reconnect` también
 
 <ApiSignature name="ClientOptions" />
 
-Los campos mostrados son `sse` y `webSocket`. Los otros siete — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` y `withCredentials` — se heredan de la base HTTP no exportada. `endpoints` es `readonly string[]`. El valor por defecto resuelto es `[]`. Un array vacío es un valor admitido y hace fallar la llamada con `REQ_BUILD_FAILED`. No hay un `timeout` a nivel de cliente. `createClient` no recibe este objeto; recibe helpers de opción.
+Los campos mostrados son `sse` y `webSocket`. Los otros seis — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer` y `withCredentials` — se heredan de la base HTTP no exportada. `endpoints` es `readonly string[]`. El valor por defecto resuelto es `[]`. Un array vacío es un valor admitido y hace fallar la llamada con `REQ_BUILD_FAILED`. No hay un `timeout` a nivel de cliente. `createClient` no recibe este objeto; recibe helpers de opción.
 
 ### ClientConfig
 

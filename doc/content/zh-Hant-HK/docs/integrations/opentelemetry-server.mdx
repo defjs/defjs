@@ -124,7 +124,7 @@ description: 喺伺服器應用程式嘅 client 上觀測 SDK 呼叫，tracer、
 | 普通正常 HTTP 回應（包括宣告 `error` body 解碼成功或未宣告 body 嘅 4xx/5xx，或 status 0）                            | 唔發送任何日誌                                                                                                 |
 | 宣告過嘅 `output` / `error` body 讀取失敗，或者宣告嘅 JSON 格式收到非 JSON media-type 或通唔過 `JSON.parse`          | 發出一條 `WARN`，事件名 `http.client.request.exception`，階段為 `request`，`exception.type: "BodyFailure"`     |
 | SSE 或 WebSocket 握手／連線失敗（包括 SSE 收到非 2xx 狀態碼）                                                        | 發出一條 `WARN`，事件名為 `defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，階段為 `connect` |
-| SSE 或 WebSocket 出現終止錯誤或 `closed` reject（包括 `1006` socket 錯誤、佇列溢出、心跳逾時）                       | 發出一條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                         |
+| SSE 或 WebSocket 出現終止錯誤或 `closed` reject（包括 Node.js 目前 LTS 嘅 `1006` socket 錯誤、佇列溢出、心跳逾時）   | 發出一條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                         |
 | 正常完成、普通訊息、EOF、伺服器 WebSocket 關閉 frame（包括 `1011`），或主動非逾時中斷                                | 唔發送任何日誌                                                                                                 |
 
 診斷記錄包含固定訊息、`exception.type`（平台／傳輸層 class 名稱，例如 `BodyFailure`、`EventStreamFatalError`（回應唔係 `text/event-stream` 嘅 SSE handshake）、`DefjsFault`（包括返回非 2xx 嘅 SSE handshake）、`TypeError` 或 `Error`）、phase 階段、靜態 `operation`、伺服器位址／埠號同協議欄位——絕唔會記錄原始 URL、query string、headers、body 或錯誤堆疊 trace。

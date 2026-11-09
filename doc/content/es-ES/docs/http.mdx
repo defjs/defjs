@@ -130,8 +130,8 @@ Cancelar una petición de escritura solo notifica que quien llama dejó de esper
 ## 6. Credenciales, XSRF y progreso de transferencia
 
 - **`withCredentials(true)`**: establece `credentials: "include"` en Fetch para peticiones HTTP y SSE.
-- **`withXSRF(options?)`**: lee la cookie de XSRF (`XSRF-TOKEN` por defecto) e inyecta la cabecera (`X-XSRF-TOKEN`) en métodos HTTP mutantes de mismo origen (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: pásalos en `client({ onDownloadProgress, onUploadProgress })`. El progreso de descarga reporta `lengthComputable: true` solo cuando `Content-Length` es positivo y `Content-Encoding` está ausente o es `identity`. El progreso de subida transmite cuerpos en entornos de servidor (Bun). Si la función de callback de progreso lanza una excepción, la llamada falla con `EXT_OBSERVER_FAILED`.
+- **`withXSRF(options?)`**: Desde `@defjs/core/xsrf`. En un navegador, lee la cookie de XSRF (`XSRF-TOKEN` por defecto) e inyecta la cabecera (`X-XSRF-TOKEN`) en métodos HTTP mutantes de mismo origen (`POST`, `PUT`, `PATCH`, `DELETE`). `withXSRF()` lanza si faltan `location` o `document`, también en un Worker. El código isomórfico añade esta opción solo en el navegador. Un token de otra fuente se establece con un interceptor.
+- **`onDownloadProgress` / `onUploadProgress`**: pásalos en `client({ onDownloadProgress, onUploadProgress })`. El progreso de descarga reporta `lengthComputable: true` solo cuando `Content-Length` es positivo y `Content-Encoding` está ausente o es `identity`. Donde `fetch` admite un cuerpo de petición en streaming, el progreso de subida convierte los cuerpos `Blob`, `File`, `ArrayBuffer` y `FormData` en un stream. Chromium informa de ese progreso solo en HTTP/2 o posterior; en HTTP/1.1, una subida con `onUploadProgress` falla. Firefox envía esos cuerpos sin cambios y no llama al callback. Si la función de callback de progreso lanza una excepción, la llamada falla con `EXT_OBSERVER_FAILED`.
 
 ## Lecturas relacionadas
 

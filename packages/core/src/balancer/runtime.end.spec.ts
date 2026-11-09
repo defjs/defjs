@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { pickEndpoint } from "./runtime";
 import type { PickResult } from "./balancer";
+import { yieldMacrotask } from "../../test/macrotask";
 const info = { endpoints: ["a"] };
 afterEach(() => vi.restoreAllMocks());
 test("end is snapshotted once and runs synchronously once only after start and before done", () => {
@@ -87,7 +88,7 @@ test.each(["throw", "reject", "then-getter", "then-call"])(
     p.start();
     p.end({ attempted: true });
     p.done({ attempted: true });
-    await Bun.sleep(0);
+    await yieldMacrotask();
     expect(done).toHaveBeenCalledOnce();
   },
 );

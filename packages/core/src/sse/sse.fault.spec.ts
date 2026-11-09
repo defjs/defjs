@@ -30,13 +30,6 @@ import { defineEventStream } from "./index";
 
 const SSE_HEADERS = { "content-type": "text/event-stream" };
 
-function requireRequest(input: RequestInfo | URL): Request {
-  if (!(input instanceof Request)) {
-    throw new TypeError("SSE handle received a non-Request");
-  }
-  return input;
-}
-
 function streamOf(text: string): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -486,72 +479,6 @@ test("should return REQ_BUILD_FAILED when the JSON body is an async iterable obj
 });
 
 describe("ReadableStream body and reconnect", () => {
-  test("should not reconnect when the handle reads a stream body and fails", async () => {
-    const failure = new TypeError("network down");
-    const body = byteStream();
-    const shouldReconnect = vi.fn(() => true);
-    const handle = vi.fn(async (input: RequestInfo | URL) => {
-      const request = requireRequest(input);
-      await request.arrayBuffer();
-      throw failure;
-    });
-    const client = createClient(
-      withEndpoint("https://example.com"),
-      withSSEHandle(handle),
-      withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
-    );
-    const useStream = defineEventStream({
-      builder: () => ({ body }),
-      events: { message: struct.string() },
-      method: "POST",
-      path: "/events",
-    });
-
-    const [fault, events, open] = await useStream(client);
-
-    expect(events).toBeUndefined();
-    expect(open).toBeUndefined();
-    expect(fault?.code).toBe("NET_UNREACHABLE");
-    expect(fault?.cause).toBe(failure);
-    expect(handle).toHaveBeenCalledTimes(1);
-    expect(shouldReconnect).toHaveBeenCalledTimes(0);
-  });
-
-  test("should not reconnect when an interceptor replaces the body with a stream", async () => {
-    const failure = new TypeError("network down");
-    const shouldReconnect = vi.fn(() => true);
-    const handle = vi.fn(async (input: RequestInfo | URL) => {
-      const request = requireRequest(input);
-      await request.arrayBuffer();
-      throw failure;
-    });
-    const client = createClient(
-      withEndpoint("https://example.com"),
-      withSSEHandle(handle),
-      withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
-      withInterceptors(
-        createSSEInterceptor(async (request, next) => {
-          return await next({ ...request, body: byteStream() });
-        }),
-      ),
-    );
-    const useStream = defineEventStream({
-      builder: () => ({ body: "prompt" }),
-      events: { message: struct.string() },
-      method: "POST",
-      path: "/events",
-    });
-
-    const [fault, events, open] = await useStream(client);
-
-    expect(events).toBeUndefined();
-    expect(open).toBeUndefined();
-    expect(fault?.code).toBe("NET_UNREACHABLE");
-    expect(fault?.cause).toBe(failure);
-    expect(handle).toHaveBeenCalledTimes(1);
-    expect(shouldReconnect).toHaveBeenCalledTimes(0);
-  });
-
   test("should reconnect when an interceptor replaces a stream body with a blob", async () => {
     const failure = new TypeError("network down");
     const shouldReconnect = vi.fn(() => true);

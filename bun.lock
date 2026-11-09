@@ -11,6 +11,7 @@
         "hono": "catalog:",
         "playwright": "catalog:",
         "typescript": "catalog:",
+        "vitest": "catalog:",
       },
     },
     "doc": {
@@ -53,14 +54,18 @@
       "name": "@defjs/core",
       "version": "0.7.0",
       "devDependencies": {
-        "@vitest/browser-playwright": "catalog:",
-        "@vitest/coverage-istanbul": "catalog:",
-        "hono": "catalog:",
-        "playwright": "catalog:",
-        "tsdown": "catalog:",
-        "typescript": "catalog:",
-        "vite": "catalog:",
-        "vitest": "catalog:",
+        "@hono/bun": "^1.0.1",
+        "@hono/node-server": "^2.1.6",
+        "@types/ws": "^8.18.2",
+        "@vitest/browser-playwright": "^5.1.0",
+        "@vitest/coverage-istanbul": "^5.1.0",
+        "hono": "^4.13.16",
+        "playwright": "^1.64.1",
+        "tsdown": "^0.23.5",
+        "typescript": "7.1.0-beta",
+        "vite": "^8.3.5",
+        "vitest": "^5.1.0",
+        "ws": "^8.22.1",
       },
     },
     "packages/opentelemetry-server": {
@@ -70,15 +75,14 @@
         "@opentelemetry/api-logs": "^0.223.0",
       },
       "devDependencies": {
-        "@defjs/core": "workspace:^",
         "@opentelemetry/api": "1.10.0",
         "@opentelemetry/core": "3.0.0",
-        "@vitest/coverage-istanbul": "catalog:",
-        "hono": "catalog:",
-        "tsdown": "catalog:",
-        "typescript": "catalog:",
-        "vite": "catalog:",
-        "vitest": "catalog:",
+        "@vitest/coverage-istanbul": "^5.1.0",
+        "hono": "^4.13.16",
+        "tsdown": "^0.23.5",
+        "typescript": "7.1.0-beta",
+        "vite": "^8.3.5",
+        "vitest": "^5.1.0",
       },
       "peerDependencies": {
         "@defjs/core": "^0.7.0",
@@ -131,12 +135,15 @@
     },
   },
   "catalog": {
+    "@hono/bun": "^1.0.1",
+    "@hono/node-server": "^2.1.6",
     "@react-router/dev": "8.5.1",
     "@tailwindcss/vite": "4.3.4",
     "@types/bun": "1.4.4",
     "@types/mdx": "2.0.14",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@types/ws": "^8.18.2",
     "@vitest/browser": "^5.1.0",
     "@vitest/browser-playwright": "^5.1.0",
     "@vitest/coverage-istanbul": "^5.1.0",
@@ -153,6 +160,7 @@
     "typescript": "7.1.0-beta",
     "vite": "^8.3.5",
     "vitest": "^5.1.0",
+    "ws": "^8.22.1",
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
@@ -264,6 +272,10 @@
     "@fumadocs/tailwind": ["@fumadocs/tailwind@0.1.5", "", { "peerDependencies": { "tailwindcss": "^4.0.0" }, "optionalPeers": ["tailwindcss"] }, "sha512-ohzmuLTfNNRvP6B/Xx31lWJ58xu40NcmI+6mc/jivYeOoofnmdxBKu5gCErTgOE/mUqyVv4GvYeqd9FhoLHphg=="],
 
     "@fumari/image-size": ["@fumari/image-size@0.1.1", "", {}, "sha512-iaiV2wyzJ4mW358NX4CX3yGit+WjKYzpaQ+rldK9BjL/5jFpeV6ruWnZVq7MEyMn3Gd0DLi8g/79NZAAQaGscw=="],
+
+    "@hono/bun": ["@hono/bun@1.0.1", "", { "peerDependencies": { "hono": ">=4.13.9 || ^5.0.0-0" } }, "sha512-74m9j/JY6sPhjOnZZSSPFDRWWRVqO8jI7cDTrcjXP+qnlCMOu0BCLnjq31LrKsWGWW7SsRWDzqrf9vDfnwtStA=="],
+
+    "@hono/node-server": ["@hono/node-server@2.1.6", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ=="],
 
     "@istanbuljs/schema": ["@istanbuljs/schema@0.1.6", "", {}, "sha512-+Sg6GCR/wy1oSmQDFq4LQDAhm3ETKnorxN+y5nbLULOR3P0c14f2Wurzj3/xqPXtasLFfHd5iRFQ7AJt4KH2cw=="],
 
@@ -490,6 +502,8 @@
     "@types/react-dom": ["@types/react-dom@19.3.0", "", { "peerDependencies": { "@types/react": "^19.3.0" } }, "sha512-ZI7bU42mZXXKHn/qNLEw2IrbiINU7X5+vfgdixBHkCNpYWXjKgfQ/P+uyGb5CjOLB9UcnTeg3rylQtV2hym44Q=="],
 
     "@types/unist": ["@types/unist@3.0.3", "", {}, "sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q=="],
+
+    "@types/ws": ["@types/ws@8.18.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w=="],
 
     "@typescript/typescript-aix-ppc64": ["@typescript/typescript-aix-ppc64@7.1.0-beta", "", { "os": "aix", "cpu": "ppc64" }, "sha512-DXDG+jIWxBHGdoO70tcHON33rCnSzsEZj9P13oyf/r/KEGIo6awsdSNVNjAw0uMwEpqRu75IrgCcW58YcVkZHg=="],
 

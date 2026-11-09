@@ -1,4 +1,3 @@
-import type { ServerWebSocket } from "bun";
 import { expect, inject, test } from "vitest";
 import {
   ERR_NO_CANDIDATE,
@@ -16,17 +15,7 @@ import {
   withSSEReconnect,
 } from "../src";
 import type { Balancer, DoneInfo, PickInfo } from "../src";
-
-async function refusedUrl(): Promise<string> {
-  const server = Bun.serve({
-    fetch: () => new Response(null),
-    hostname: "127.0.0.1",
-    port: 0,
-  });
-  const { port } = server;
-  await server.stop(true);
-  return `http://127.0.0.1:${port}`;
-}
+import { fixture } from "./fixture/client-auto";
 
 function recordingBalancer(): {
   balancer: Balancer;
@@ -57,7 +46,7 @@ function recordingBalancer(): {
 }
 
 test("opted-in GET fails over to the fixture within the same call", async () => {
-  const refused = await refusedUrl();
+  const refused = inject("refusedOrigin");
   const fixture = inject("testServerHost");
   const seen: string[] = [];
   const client = createClient(
@@ -159,6 +148,10 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
     }),
     input: struct.object({ key: struct.string() }),
     maxIncomingQueueSize: 16,
+    outgoing: struct.object({
+      text: struct.string(),
+      type: struct.literal("message"),
+    }),
     path: "/ws/reconnect",
   });
   const key = `balancer-${crypto.randomUUID()}`;
@@ -172,6 +165,7 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
     throw new Error("expected a socket");
   }
 
+  socket.send({ text: "seen-open", type: "message" });
   const iterator = socket.receive[Symbol.asyncIterator]();
   await expect(iterator.next()).resolves.toEqual({
     done: false,
@@ -187,76 +181,48 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
 });
 
 test("default pick-first recovers from a real socket disconnect after consuming a message", async () => {
-  const firstPeer = Promise.withResolvers<ServerWebSocket<unknown>>();
-  const hits: string[] = [];
-  const primary = Bun.serve({
-    fetch(request, server) {
-      server.upgrade(request);
-      return undefined;
-    },
-    hostname: "127.0.0.1",
-    port: 0,
-    websocket: {
-      open(socket) {
-        hits.push("primary");
-        firstPeer.resolve(socket);
-        socket.send(JSON.stringify("primary"));
-      },
-    },
+  const f = fixture(inject("testServerHost"), inject("fixtureToken"));
+  const primary = await f.endpoint("primary", "ws", {
+    send: [JSON.stringify("primary")],
   });
-  const secondary = Bun.serve({
-    fetch(request, server) {
-      server.upgrade(request);
-      return undefined;
-    },
-    hostname: "127.0.0.1",
-    port: 0,
-    websocket: {
-      open(socket) {
-        hits.push("secondary");
-        socket.send(JSON.stringify("secondary"));
-      },
-    },
+  const secondary = await f.endpoint("secondary", "ws", {
+    send: [JSON.stringify("secondary")],
   });
+  const client = createClient(withEndpoint(primary, secondary));
+  const useSocket = defineWebSocket({
+    incoming: struct.string(),
+    maxIncomingQueueSize: 4,
+    path: "/ws",
+  });
+  const [error, session] = await useSocket(
+    client({ reconnect: { attempts: 1, delayMs: 0 } }),
+  );
+  expect(error).toBeNull();
+  if (!session) throw new Error("expected a socket session");
   try {
-    const endpoints = [primary.port, secondary.port].map(
-      (port) => `http://127.0.0.1:${port}`,
-    );
-    const client = createClient(withEndpoint(...endpoints));
-    const useSocket = defineWebSocket({
-      incoming: struct.string(),
-      maxIncomingQueueSize: 4,
-      path: "/ws",
+    const iterator = session.receive[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: "primary",
     });
-    const [error, session] = await useSocket(
-      client({ reconnect: { attempts: 1, delayMs: 0 } }),
-    );
-    expect(error).toBeNull();
-    if (!session) throw new Error("expected a socket session");
-    try {
-      const iterator = session.receive[Symbol.asyncIterator]();
-      await expect(iterator.next()).resolves.toEqual({
-        done: false,
-        value: "primary",
-      });
-      (await firstPeer.promise).terminate();
-      await expect(iterator.next()).resolves.toEqual({
-        done: false,
-        value: "secondary",
-      });
-      expect(hits).toEqual(["primary", "secondary"]);
-      expect(session.connection?.generation).toBe(2);
-    } finally {
-      await session[Symbol.asyncDispose]();
-    }
+    await f.act("primary", "terminate");
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: "secondary",
+    });
+    expect((await f.log()).requests.map((r) => r.endpoint)).toEqual([
+      "primary",
+      "secondary",
+    ]);
+    expect(session.connection?.generation).toBe(2);
   } finally {
-    await Promise.all([primary.stop(true), secondary.stop(true)]);
+    await session[Symbol.asyncDispose]();
   }
 });
 
 test("health filtering attributes each same-call failover attempt to its own endpoint", async () => {
   const { outlierDetection } = await import("../src");
-  const refused = await refusedUrl();
+  const refused = inject("refusedOrigin");
   const fixture = inject("testServerHost");
   const samples: { endpoint: string; report: DoneInfo }[] = [];
   const choices: string[][] = [];

@@ -130,8 +130,8 @@ JSON으로 표현할 수 없는 값(`NaN`, `±Infinity`, `Map`, `Set`, 함수, `
 ## 6. 자격 증명, XSRF 및 전송 진행률
 
 - **`withCredentials(true)`**: HTTP 및 SSE 요청에 대해 Fetch의 `credentials: "include"`를 설정합니다.
-- **`withXSRF(options?)`**: XSRF 쿠키(기본값 `XSRF-TOKEN`)를 읽어 동일 출처의 변경 HTTP 메서드(`POST`, `PUT`, `PATCH`, `DELETE`)에 해당 헤더(`X-XSRF-TOKEN`)를 주입합니다.
-- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })`로 전달합니다. 다운로드 진행률은 `Content-Length`가 양수이고 `Content-Encoding`이 없거나 `identity`일 때만 `lengthComputable: true`를 보고합니다. 업로드 진행률은 서버 런타임(Bun)에서 본문을 스트리밍합니다. 진행률 콜백에서 예외가 발생하면 호출은 `EXT_OBSERVER_FAILED`로 실패합니다.
+- **`withXSRF(options?)`**: `@defjs/core/xsrf`에서 가져옵니다. 브라우저에서 XSRF 쿠키(기본값 `XSRF-TOKEN`)를 읽어 동일 출처의 변경 HTTP 메서드(`POST`, `PUT`, `PATCH`, `DELETE`)에 해당 헤더(`X-XSRF-TOKEN`)를 주입합니다. `location`이나 `document`가 없는 런타임(Worker 포함)에서는 `withXSRF()`가 예외를 던집니다. 서버와 브라우저가 공유하는 코드는 이 옵션을 브라우저에서만 추가합니다. 다른 출처의 토큰은 인터셉터로 설정합니다.
+- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })`로 전달합니다. 다운로드 진행률은 `Content-Length`가 양수이고 `Content-Encoding`이 없거나 `identity`일 때만 `lengthComputable: true`를 보고합니다. `fetch`가 스트리밍 요청 본문을 지원하는 런타임에서는 업로드 진행률이 `Blob`, `File`, `ArrayBuffer`, `FormData`를 스트림으로 변환합니다. Chromium은 HTTP/2 이상에서만 그 진행률을 보고합니다. HTTP/1.1에서 `onUploadProgress`가 있는 업로드는 실패합니다. Firefox는 그 본문을 그대로 보내고 콜백을 호출하지 않습니다. 진행률 콜백에서 예외가 발생하면 호출은 `EXT_OBSERVER_FAILED`로 실패합니다.
 
 ## 관련 문서
 

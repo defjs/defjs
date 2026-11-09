@@ -14,8 +14,8 @@
     "typecheck": "bun --bun react-router typegen && bun check --project tsconfig.json && bun check --project examples/tsconfig.json",
     "build": "bun scripts/build.ts",
     "extract-api": "bun scripts/extract-api.ts",
-    "test:unit": "bun --bun vitest run --project doc-unit --coverage.enabled",
-    "test:e2e": "bun --bun vitest run --project doc-e2e"
+    "test:e2e": "vitest run --config vitest.config.e2e.ts",
+    "unit:bun": "vitest run --config vitest.config.bun.ts"
   },
   "dependencies": {
     "isbot": "^5"

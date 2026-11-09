@@ -1,85 +1,30 @@
-import { Hono } from "hono";
-import { upgradeWebSocket } from "hono/bun";
-import { streamSSE } from "hono/streaming";
 import type { TestProject } from "vitest/node";
-import {
-  startHonoTestServer,
-  type HonoTestServer,
-} from "../../../test/hono-test-server";
+import { createFixtureApp } from "../../core/test/fixture/app.ts";
+import { createFixtureLifecycle } from "../../core/test/fixture/lifecycle.ts";
+import type {} from "../../core/test/fixture/provided.ts";
+import { selectStartup } from "../../core/test/fixture/startup.ts";
+import { assertRuntime, expectedRuntime } from "../../../test/runtime-guard.ts";
+import { createOtelFixtureApp } from "./fixture-app.ts";
 
-declare module "vitest" {
-  export interface ProvidedContext {
-    testServerHost: string;
-  }
+const lifecycle = createFixtureLifecycle({
+  selectStartup,
+  createApp: (deps) => {
+    const app = createOtelFixtureApp({
+      upgradeWebSocket: deps.upgradeWebSocket,
+    });
+    const fixtureApp = createFixtureApp(deps);
+    app.all("/__fixture/*", (c) => fixtureApp.fetch(c.req.raw, c.env));
+    return app;
+  },
+  createToken: () => crypto.randomUUID(),
+  closeTimeoutMs: 10_000,
+});
+
+export async function setup(project: Pick<TestProject, "provide" | "name">) {
+  assertRuntime(expectedRuntime(project.name));
+  return lifecycle.setup(project);
 }
 
-let testServer: HonoTestServer | undefined;
-
-export async function setup({ provide }: TestProject) {
-  const app = new Hono();
-
-  // HTTP: echo back received headers
-  app.post("/echo-headers", (c) => {
-    const headers: { [key: string]: string } = {};
-    c.req.raw.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
-    return c.json({ headers });
-  });
-
-  // HTTP: return 500 for error testing
-  app.get("/500", (c) =>
-    c.body(null, { status: 500, statusText: "Internal Server Error" }),
-  );
-
-  // SSE: echo back traceparent header, then close
-  app.get("/sse", (c) => {
-    const traceparent = c.req.header("traceparent") ?? "missing";
-    return streamSSE(c, async (stream) => {
-      await stream.writeSSE({
-        data: traceparent,
-        event: "traceparent",
-        id: "1",
-      });
-    });
-  });
-
-  // SSE: 500 error
-  app.get("/sse/500", (c) => c.body(null, 500));
-
-  // WebSocket: echo back traceparent query param, then close
-  app.get(
-    "/ws",
-    upgradeWebSocket((c) => {
-      const traceparent = c.req.query("traceparent") ?? "missing";
-      return {
-        onOpen(_event, ws) {
-          ws.send(JSON.stringify({ type: "traceparent", value: traceparent }));
-          setTimeout(() => {
-            if (ws.readyState === 1) {
-              ws.close(1000, "done");
-            }
-          }, 50);
-        },
-      };
-    }),
-  );
-
-  // WebSocket: server-initiated close with an internal-error code
-  app.get(
-    "/ws/1011",
-    upgradeWebSocket(() => ({
-      onOpen(_event, ws) {
-        setTimeout(() => ws.close(1011, "server error"), 50);
-      },
-    })),
-  );
-
-  testServer = await startHonoTestServer(app);
-  provide("testServerHost", testServer.host);
-}
-
-export async function teardown() {
-  await testServer?.close();
-  testServer = undefined;
+export async function teardown(): Promise<void> {
+  return lifecycle.teardown();
 }

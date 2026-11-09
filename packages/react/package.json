@@ -19,7 +19,8 @@
   },
   "scripts": {
     "build": "bun --bun tsdown --config-loader native --config tsdown.config.ts",
-    "test:unit": "vitest run --config vitest.config.ts --coverage"
+    "unit:chrome": "vitest run --config vitest.config.chrome.ts",
+    "unit:firefox": "vitest run --config vitest.config.firefox.ts"
   },
   "devDependencies": {
     "@defjs/core": "workspace:^",

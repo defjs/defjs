@@ -84,50 +84,58 @@ test("outlier detection ignores a raw 503 without a neutral outcome", () => {
 });
 
 test.each(["direct", "wrapped", "isHealthy", "isFailure"] as const)(
-  "%s contains rejected synchronous extension results without unhandledRejection",
+  "%s attaches a rejection handler to rejected synchronous extension results",
   async (entry) => {
-    const unhandled = vi.fn();
-    process.on("unhandledRejection", unhandled);
-    try {
-      const invalidPick: Balancer = {
-        // @ts-expect-error rejected promises violate the synchronous pick contract
-        pick: () => Promise.reject(new Error("invalid async pick")),
+    const observed: [unknown, string][] = [];
+    function rejectedThenable(msg: string): {
+      then(fulfilled: unknown, rejected: (reason: unknown) => void): void;
+    } {
+      return {
+        then(fulfilled, rejected) {
+          observed.push([fulfilled, typeof rejected]);
+          rejected(new Error(msg));
+        },
       };
-      const child: Balancer = {
-        pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }],
-      };
-      const balancers = {
-        direct: invalidPick,
-        wrapped: outlierDetection(invalidPick),
-        isHealthy: outlierDetection(child, {
-          // @ts-expect-error rejected promises violate the synchronous health contract
-          isHealthy: () => Promise.reject(new Error("invalid async health")),
-        }),
-        isFailure: outlierDetection(child, {
-          consecutiveFailures: 1,
-          // @ts-expect-error rejected promises violate the synchronous classifier contract
-          isFailure: () =>
-            Promise.reject(new Error("invalid async classifier")),
-        }),
-      };
-      const client = createClient(
-        withEndpoint("https://a.test", "https://b.test"),
-        withBalancer(balancers[entry]),
-        withHTTPHandle(() => Promise.resolve(new Response(null))),
-      );
-      const operation = defineRequest({ method: "GET", path: "/" });
-      const [fault] = await operation(client);
-      expect(fault?.code ?? null).toBe(
-        entry === "isFailure"
-          ? null
-          : entry === "isHealthy"
-            ? "REQ_OPTIONS_INVALID"
-            : "REQ_BUILD_FAILED",
-      );
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(unhandled).not.toHaveBeenCalled();
-    } finally {
-      process.removeListener("unhandledRejection", unhandled);
     }
+    const invalidPick: Balancer = {
+      // @ts-expect-error rejected promises violate the synchronous pick contract
+      pick: () => rejectedThenable("invalid async pick"),
+    };
+    const child: Balancer = {
+      pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }],
+    };
+    const balancers = {
+      direct: invalidPick,
+      wrapped: outlierDetection(invalidPick),
+      isHealthy: outlierDetection(child, {
+        // @ts-expect-error rejected promises violate the synchronous health contract
+        isHealthy: () => rejectedThenable("invalid async health"),
+      }),
+      isFailure: outlierDetection(child, {
+        consecutiveFailures: 1,
+        // @ts-expect-error rejected promises violate the synchronous classifier contract
+        isFailure: () => rejectedThenable("invalid async classifier"),
+      }),
+    };
+    const client = createClient(
+      withEndpoint("https://a.test", "https://b.test"),
+      withBalancer(balancers[entry]),
+      withHTTPHandle(() => Promise.resolve(new Response(null))),
+    );
+    const operation = defineRequest({ method: "GET", path: "/" });
+    const [fault] = await operation(client);
+    expect(fault?.code ?? null).toBe(
+      entry === "isFailure"
+        ? null
+        : entry === "isHealthy"
+          ? "REQ_OPTIONS_INVALID"
+          : "REQ_BUILD_FAILED",
+    );
+    expect(observed.length).toBeGreaterThanOrEqual(1);
+    expect(
+      observed.every(
+        ([fulfilled, kind]) => fulfilled === undefined && kind === "function",
+      ),
+    ).toBe(true);
   },
 );

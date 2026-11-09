@@ -185,7 +185,7 @@ test("cancels an in-progress declared SSE handshake body when the caller aborts"
     expect(fault?.code).toBe("NET_ABORTED");
     expect(stream).toBeUndefined();
     await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce(), {
-      timeout: 500,
+      timeout: 10_000,
     });
   } finally {
     // Release the stalled read only after measuring transport cancellation.

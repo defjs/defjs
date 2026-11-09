@@ -43,15 +43,18 @@ export interface HttpProgressEvent {
  * when the abort reason is a timeout.
  *
  * Upload progress for a `Blob`, `File`, `ArrayBuffer`, or `FormData` body is
- * reported only where the runtime can stream request bodies (Bun). In
- * browsers that body is sent unchanged and `onUploadProgress` is not called. A
- * caller-supplied `ReadableStream` still reports progress wherever the runtime
+ * reported only where `fetch` can stream request bodies. The body is converted
+ * to a stream and `onUploadProgress` counts those bytes. Chromium can do that
+ * only on HTTP/2 or later; on HTTP/1.1 the upload fails with `NET_UNREACHABLE`
+ * (`cause` is `TypeError: Failed to fetch`). Firefox cannot stream request
+ * bodies, so that body is sent unchanged and `onUploadProgress` is not called.
+ * A caller-supplied `ReadableStream` still reports progress wherever the runtime
  * accepts it. Download progress is unaffected.
  *
- * On server runtimes, FormData with `onUploadProgress` reads its serialized
+ * Where that conversion runs, FormData with `onUploadProgress` reads its serialized
  * stream directly, keeps its multipart boundary, and is sent without a
- * library-generated `Content-Length` (chunked over HTTP/1.1), so progress
- * and abort work without buffering the whole body. It reports an
+ * library-generated `Content-Length` (chunked on HTTP/1.1 where the runtime accepts
+ * the stream), so progress and abort work without buffering the whole body. It reports an
  * unknown total unless a valid explicit `Content-Length` supplies it. For an
  * endpoint that requires `Content-Length`, such as some presigned upload
  * targets, omit `onUploadProgress`; platform Fetch then sends FormData with its
@@ -126,11 +129,9 @@ export interface HttpRequest {
   readonly errorResponseType?: HttpResponseType;
   uploadProgress?: HttpProgressFn;
   withCredentials?: boolean;
-  xsrf?: {
-    cookieName: string;
-    headerName: string;
-    tokenProvider?: (context: {
-      request: HttpRequest;
-    }) => string | null | undefined;
-  };
+  /**
+   * Called once per HTTP attempt. The hook receives the outgoing headers after interceptors and before the default `Accept` is filled in, plus the resolved URL.
+   * A throw is not an endpoint attempt and is not retried.
+   */
+  finalizeHeaders?: (request: HttpRequest, headers: Headers, url: URL) => void;
 }

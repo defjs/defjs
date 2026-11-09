@@ -198,7 +198,7 @@ describe("sse parser", () => {
     ).rejects.toBe(error);
 
     expect(cancel).toHaveBeenCalledOnce();
-    expect(cancel).toHaveBeenCalledWith(error);
+    expect(cancel.mock.calls[0]?.[0]).toBe(error);
     expect(() => stream.getReader()).not.toThrow();
   });
 
@@ -224,7 +224,9 @@ describe("sse parser", () => {
 
   test("should not wait for upstream cancellation after a callback error", async () => {
     const error = new Error("parse failed");
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     const stream = new ReadableStream<Uint8Array>({
       cancel,
       start(controller) {
@@ -240,13 +242,16 @@ describe("sse parser", () => {
       ),
     ).rejects.toBe(error);
 
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(error);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(error);
     expect(() => stream.getReader()).not.toThrow();
   });
 
   test("should not wait for upstream cancellation after abort", async () => {
     const reason = new DOMException("owner stopped", "AbortError");
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     const stream = new ReadableStream<Uint8Array>({ cancel });
     const controller = new AbortController();
     const pending = readStreamBytes(stream, noop, controller.signal);
@@ -254,7 +259,8 @@ describe("sse parser", () => {
     controller.abort(reason);
 
     await expect(settleWithin(pending)).rejects.toBe(reason);
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(reason);
     expect(() => stream.getReader()).not.toThrow();
   });
 
@@ -269,7 +275,8 @@ describe("sse parser", () => {
       reason,
     );
 
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(reason);
     expect(() => stream.getReader()).not.toThrow();
   });
 

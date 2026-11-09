@@ -1,33 +1,28 @@
-import { defineConfig } from "vitest/config";
-import { coverageConfig, globalSetupPath } from "./test/shared.ts";
+import { defineConfig, type ViteUserConfig as UserConfig } from "vitest/config";
+import {
+  specExclude,
+  specInclude,
+  type Runtime,
+} from "../../test/spec-matrix.ts";
+import { coverageSettings, reporters } from "../../test/vitest-shared.ts";
+import { globalSetupPath, packageRoot } from "./test/shared.ts";
+import { readRound13Settings } from "./test/round13-settings.ts";
 
-/**
- * Package-level workspace aggregator.
- *
- * Runs all Vitest projects defined for @defjs/core:
- * - Server tests (Bun process, Vitest default environment)
- * - Browser runtime tests (Chromium + Firefox)
- *
- * Coverage configuration is centralized here so it applies across all projects
- * when running via the package test script.
- */
-export default defineConfig({
-  test: {
-    globalSetup: globalSetupPath,
-    coverage: {
-      enabled: coverageConfig.enabled,
-      provider: coverageConfig.provider,
-      reporter: [...coverageConfig.reporter],
-      reportsDirectory: coverageConfig.reportsDirectory,
-      include: [...coverageConfig.include],
-      exclude: [...coverageConfig.exclude],
-      thresholds: {
-        branches: coverageConfig.thresholds.branches,
-        functions: coverageConfig.thresholds.functions,
-        lines: coverageConfig.thresholds.lines,
-        statements: coverageConfig.thresholds.statements,
-      },
+export function baseConfig(runtime?: Runtime): UserConfig {
+  return {
+    root: packageRoot,
+    test: {
+      name: "core-plain",
+      include: specInclude(runtime),
+      exclude: specExclude(runtime),
+      globalSetup: globalSetupPath,
+      reporters,
+      provide: { round13: readRound13Settings(process.env) },
+      coverage: coverageSettings({
+        reportsDirectory: `${packageRoot}/coverage/${runtime ?? "plain"}`,
+      }),
     },
-    projects: ["./vitest.config.server.ts", "./vitest.config.browser.ts"],
-  },
-});
+  };
+}
+
+export default defineConfig(baseConfig());

@@ -32,7 +32,10 @@ function isClientUploadAbort(error: unknown): boolean {
 }
 
 /** Response bodies for the platform-fetch read paths: several chunks, empty, stalled mid-flight, cut short. */
-export function registerBodyRoutes(app: Hono, truncatedUrl: string): void {
+export function registerBodyRoutes(
+  app: Hono,
+  deps: { truncatedUrl: () => string },
+): void {
   const stalls = new Map<string, StallState>();
   const stallOf = (key: string): StallState => {
     const existing = stalls.get(key);
@@ -93,6 +96,5 @@ export function registerBodyRoutes(app: Hono, truncatedUrl: string): void {
     return c.body(null, 204);
   });
 
-  // The raw listener sends one chunk without its terminator; see truncated-server.ts.
-  app.get("/body/truncated", (c) => c.redirect(truncatedUrl, 307));
+  app.get("/body/truncated", (c) => c.redirect(deps.truncatedUrl(), 307));
 }

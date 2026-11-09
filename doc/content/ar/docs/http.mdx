@@ -130,8 +130,8 @@ description: صمّم عمليات HTTP لحزمة SDK الخاصة بك واس�
 ## 6. بيانات الاعتماد، حماية XSRF، وتتبع تقدم النقل
 
 - **`withCredentials(true)`**: يضبط خيار Fetch على `credentials: "include"` لطلبات HTTP وتدفقات أحداث SSE.
-- **`withXSRF(options?)`**: يقرأ ملف تعريف ارتباط XSRF (`XSRF-TOKEN` افتراضياً) ويحقن الترويسة (`X-XSRF-TOKEN`) مع طرق HTTP المعدِّلة من نفس المصدر (`POST` و`PUT` و`PATCH` و`DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: تُمرَّر عبر `client({ onDownloadProgress, onUploadProgress })`. يُبلغ تقدم التنزيل عن `lengthComputable: true` فقط عندما تكون ترويسة `Content-Length` موجبة وتكون `Content-Encoding` غائبة أو مضبوطة على `identity`. ويتيح تقدم الرفع دفق الأجسام على بيئات تشغيل الخادم (Bun). ويؤدي إلقاء استثناء داخل دالة رد نداء التقدم إلى فشل الاستدعاء بخطأ `EXT_OBSERVER_FAILED`.
+- **`withXSRF(options?)`**: من `@defjs/core/xsrf`. في المتصفح، يقرأ ملف تعريف ارتباط XSRF (`XSRF-TOKEN` افتراضياً) ويحقن الترويسة (`X-XSRF-TOKEN`) مع طرق HTTP المعدِّلة من نفس المصدر (`POST` و`PUT` و`PATCH` و`DELETE`). يرمي `withXSRF()` خطأ عند غياب `location` أو `document`، بما في ذلك داخل Worker. الشيفرة المشتركة بين الخادم والمتصفح تضيف هذا الخيار في المتصفح فقط. يُضبط الرمز الآتي من مصدر آخر عبر معترض.
+- **`onDownloadProgress` / `onUploadProgress`**: تُمرَّر عبر `client({ onDownloadProgress, onUploadProgress })`. يُبلغ تقدم التنزيل عن `lengthComputable: true` فقط عندما تكون ترويسة `Content-Length` موجبة وتكون `Content-Encoding` غائبة أو مضبوطة على `identity`. عندما يدعم `fetch` جسم طلب متدفقاً، يحوّل تقدم الرفع أجسام `Blob` و`File` و`ArrayBuffer` و`FormData` إلى دفق. يبلغ Chromium عن هذا التقدم فقط على HTTP/2 فما فوق؛ وعلى HTTP/1.1 يفشل الرفع الذي يضبط `onUploadProgress`. يرسل Firefox هذه الأجسام كما هي ولا يستدعي دالة الرد. ويؤدي إلقاء استثناء داخل دالة رد نداء التقدم إلى فشل الاستدعاء بخطأ `EXT_OBSERVER_FAILED`.
 
 ## قراءات ذات صلة
 

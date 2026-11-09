@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, inject, test } from "vitest";
-import {
-  createClient,
-  withEndpoint,
-  withInterceptors,
-  withXSRF,
-} from "../client";
+import { createClient, withEndpoint, withInterceptors } from "../client";
 import type { Client } from "../client";
 import { createHttpInterceptor } from "../interceptor";
 import { makeResponse } from "../internal/http_response";
@@ -243,52 +238,6 @@ describe("request http runtime", () => {
 
     expect(error).toBeNull();
     expect(endpoint).toBe("/users/a%2Fb%20%3F%23%25%E7%8C%AB");
-  });
-
-  test("should expose xsrf client config on the final HttpRequest", async () => {
-    const tokenProvider = () => "xsrf-token";
-    let capturedRequest: HttpRequest | undefined;
-
-    const client = createClient(
-      withEndpoint("https://example.com/api"),
-      withXSRF({
-        cookieName: "CUSTOM-XSRF-TOKEN",
-        headerName: "X-CUSTOM-XSRF-TOKEN",
-        tokenProvider,
-      }),
-      withInterceptors(
-        createHttpInterceptor((request) => {
-          capturedRequest = request;
-          return Promise.resolve(
-            makeResponse({
-              body: {
-                ok: true,
-              },
-              headers: new Headers({ "content-type": "application/json" }),
-              status: 200,
-            }),
-          );
-        }),
-      ),
-    );
-
-    const useInspectXsrf = defineRequest({
-      method: "GET",
-      output: struct.object({
-        ok: struct.boolean(),
-      }),
-      path: "/xsrf",
-    });
-
-    const [error, result] = await useInspectXsrf(client);
-
-    expect(error).toBeNull();
-    expect(result).toEqual({ ok: true });
-    expect(capturedRequest?.xsrf).toEqual({
-      cookieName: "CUSTOM-XSRF-TOKEN",
-      headerName: "X-CUSTOM-XSRF-TOKEN",
-      tokenProvider,
-    });
   });
 
   test("should return definition error when build is provided without input struct", async () => {

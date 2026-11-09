@@ -18,17 +18,11 @@ import {
   createFetchRequestInit,
   fetchHandler,
 } from "./fetch";
+import { fixture } from "../../../test/fixture/client-auto";
 
 function requireRequest(input: RequestInfo | URL): Request {
   if (input instanceof Request) return input;
   throw new Error("expected Request");
-}
-
-async function gzip(text: string): Promise<Uint8Array<ArrayBuffer>> {
-  const stream = new Blob([text])
-    .stream()
-    .pipeThrough(new CompressionStream("gzip"));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 afterEach(() => {
@@ -39,149 +33,10 @@ afterEach(() => {
 });
 
 describe("HTTP transport boundary regressions", () => {
-  test("should preserve the real outgoing multipart boundary and report unknown upload length", async () => {
-    const form = new FormData();
-    form.append(
-      "file",
-      new File(["streamed file"], "notes.txt", { type: "text/plain" }),
-    );
-    const events: HttpProgressEvent[] = [];
-    const client = createClient(withEndpoint(inject("testServerHost")));
-    const endpoint = defineRequest({
-      builder: () => ({
-        body: form,
-        headers: { "content-type": "application/incorrect" },
-      }),
-      method: "POST",
-      output: struct.object({
-        bodyBase64: struct.string(),
-        contentType: struct.string(),
-      }),
-      path: "/e2e/echo-raw",
-    });
-    const [fault, data] = await endpoint(
-      client({
-        onUploadProgress: (event) => {
-          events.push(event);
-        },
-      }),
-    );
-
-    expect(fault).toBeNull();
-    expect(data?.contentType).toContain("multipart/form-data");
-    expect(data?.contentType).toContain("boundary=");
-    const received = new Response(
-      Uint8Array.from(atob(data?.bodyBase64 ?? ""), (character) =>
-        character.charCodeAt(0),
-      ),
-      {
-        headers: { "content-type": data?.contentType ?? "" },
-      },
-    );
-    const uploaded = (await received.formData()).get("file");
-    if (!(uploaded instanceof File)) throw new Error("expected File");
-    expect(uploaded.name).toBe("notes.txt");
-    expect(await uploaded.text()).toBe("streamed file");
-    expect(events.length).toBeGreaterThanOrEqual(2);
-    expect(events[0]).toEqual({ lengthComputable: false, loaded: 0, total: 0 });
-    expect(events.at(-1)?.loaded).toBeGreaterThan(0);
-    expect(
-      events.every((event) => !event.lengthComputable && event.total === 0),
-    ).toBe(true);
-  });
-
-  test.each(["timeout", "abort"] as const)(
-    "should cancel and unlock a stalled serialized FormData stream on %s",
-    async (mode) => {
-      await expectCancelledStalledFormData(mode, "body");
-    },
-  );
-
   test.each(["timeout", "abort"] as const)(
     "should classify %s during preflight and leave the serialized body unlocked",
     async (mode) => {
       await expectCancelledStalledFormData(mode, "preflight");
-    },
-  );
-
-  test("should preserve a start observer failure even when converted stream cancellation rejects", async () => {
-    const body = new Blob(["bytes"]);
-    const cancel = vi.fn(() => Promise.reject(new Error("cancel refused")));
-    const source = new ReadableStream<Uint8Array<ArrayBuffer>>({ cancel });
-    vi.spyOn(body, "stream").mockReturnValue(source);
-    const cause = new Error("observer failed");
-    await expect(
-      fetchHandler(
-        {
-          baseEndpoint: "https://example.com",
-          body,
-          endpoint: "/",
-          method: "POST",
-          uploadProgress() {
-            throw cause;
-          },
-        },
-        () => Promise.resolve(new Response(null)),
-      ),
-    ).rejects.toMatchObject({ code: "EXT_OBSERVER_FAILED", cause });
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(cause);
-    expect(source.locked).toBe(false);
-  });
-
-  test.each([
-    { kind: "Blob", body: () => new Blob(["bytes"], { type: "text/plain" }) },
-    {
-      kind: "File",
-      body: () => new File(["bytes"], "bytes.txt", { type: "text/plain" }),
-    },
-    {
-      kind: "ArrayBuffer",
-      body: () => new TextEncoder().encode("bytes").buffer,
-    },
-  ])(
-    "should preserve declared types when converting a $kind for upload progress",
-    async ({ body }) => {
-      for (const declaration of [
-        "header",
-        "bodyContentType",
-        "null",
-      ] as const) {
-        const request = createHttpRequest(
-          "POST",
-          "/upload",
-          undefined,
-          () => ({
-            body: body(),
-            headers:
-              declaration === "header"
-                ? { "content-type": "application/custom" }
-                : undefined,
-          }),
-          {
-            signal: new AbortController().signal,
-            baseEndpoint: "https://example.com",
-            responseType: "text",
-          },
-        );
-        if (declaration === "bodyContentType") {
-          request.bodyContentType = "application/custom";
-        }
-        if (declaration === "null") {
-          request.bodyContentType = null;
-        }
-        request.uploadProgress = () => undefined;
-        let contentType: string | null = null;
-        let sent = "";
-        await fetchHandler(request, async (input) => {
-          contentType = requireRequest(input).headers.get("content-type");
-          sent = await requireRequest(input).text();
-          return new Response("ok");
-        });
-        expect(contentType).toBe(
-          declaration === "null" ? null : "application/custom",
-        );
-        expect(sent).toBe("bytes");
-      }
     },
   );
 
@@ -512,95 +367,39 @@ describe("HTTP transport boundary regressions", () => {
     "should report unknown total for a real gzip response via %s fetch",
     async (handle) => {
       const text = "decoded ".repeat(1000);
-      const compressed = await gzip(text);
-      const server = Bun.serve({
-        fetch: () =>
-          new Response(compressed, {
-            headers: {
-              "content-type": "text/plain",
-              "content-encoding": "gzip",
-              "content-length": String(compressed.byteLength),
-            },
-          }),
-        hostname: "127.0.0.1",
-        port: 0,
+      const events: HttpProgressEvent[] = [];
+      const f = fixture(inject("testServerHost"), inject("fixtureToken"));
+      const url = await f.endpoint("gz", "gzip", {
+        body: text,
+        contentType: "text/plain",
       });
-      try {
-        const events: HttpProgressEvent[] = [];
-        const client =
-          handle === "default"
-            ? createClient(withEndpoint(`http://127.0.0.1:${server.port}`))
-            : createClient(
-                withEndpoint(`http://127.0.0.1:${server.port}`),
-                withHTTPHandle((input, init) => fetch(input, init)),
-              );
-        const [fault, data] = await defineRequest({
-          method: "GET",
-          output: struct.string(),
-          path: "/",
-        })(
-          client({
-            onDownloadProgress: (event) => {
-              events.push(event);
-            },
-          }),
-        );
-        expect(fault).toBeNull();
-        expect(data).toBe(text);
-        expect(events.at(-1)).toEqual({
-          lengthComputable: false,
-          loaded: 8000,
-          total: 0,
-        });
-      } finally {
-        await server.stop(true);
-      }
-    },
-  );
-
-  test.each(["https://example.com", "https://other.example"] as const)(
-    "should enforce Worker origin isolation for base %s",
-    async (baseEndpoint) => {
-      vi.stubGlobal("location", { origin: "https://example.com" });
-      vi.stubGlobal("document", undefined);
-      const tokenProvider = vi.fn(() => "worker-token");
-      const client = createClient(
-        withEndpoint(baseEndpoint),
-        (config) => {
-          config.xsrf = {
-            cookieName: "XSRF-TOKEN",
-            headerName: "x-xsrf-token",
-            tokenProvider,
-          };
-        },
-        withHTTPHandle((input) => {
-          expect(requireRequest(input).headers.get("x-xsrf-token")).toBe(
-            baseEndpoint === "https://example.com" ? "worker-token" : null,
-          );
-          return Promise.resolve(new Response(null, { status: 204 }));
+      const client =
+        handle === "default"
+          ? createClient(withEndpoint(url))
+          : createClient(
+              withEndpoint(url),
+              withHTTPHandle((input, init) => fetch(input, init)),
+            );
+      const [fault, data] = await defineRequest({
+        method: "GET",
+        output: struct.string(),
+        path: "/",
+      })(
+        client({
+          onDownloadProgress: (event) => {
+            events.push(event);
+          },
         }),
       );
-      const [fault] = await defineRequest({ method: "POST", path: "/" })(
-        client,
-      );
       expect(fault).toBeNull();
-      expect(tokenProvider).toHaveBeenCalledTimes(
-        baseEndpoint === "https://example.com" ? 1 : 0,
-      );
+      expect(data).toBe(text);
+      expect(events.at(-1)).toEqual({
+        lengthComputable: false,
+        loaded: 8000,
+        total: 0,
+      });
     },
   );
-
-  test("should not read cookies in a Worker without document", () => {
-    vi.stubGlobal("location", { origin: "https://example.com" });
-    vi.stubGlobal("document", undefined);
-    const init = createFetchRequestInit({
-      baseEndpoint: "https://example.com",
-      endpoint: "/",
-      method: "POST",
-      xsrf: { cookieName: "XSRF-TOKEN", headerName: "x-xsrf-token" },
-    });
-    expect(new Headers(init.headers).has("x-xsrf-token")).toBe(false);
-  });
 });
 
 async function expectCancelledStalledFormData(

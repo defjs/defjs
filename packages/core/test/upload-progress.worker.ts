@@ -24,6 +24,7 @@ const RawEcho = struct.object({
 export type UploadCallReport = {
   bodyBase64: string | null;
   calls: number;
+  causeMessage: string | null;
   contentType: string | null;
   errorCode: string | null;
 };
@@ -80,6 +81,7 @@ async function sendBlob(client: DerivableClient): Promise<UploadCallReport> {
   return {
     bodyBase64: result?.bodyBase64 ?? null,
     calls,
+    causeMessage: error?.cause instanceof Error ? error.cause.message : null,
     contentType: result?.headers["content-type"] ?? null,
     errorCode: error?.code ?? null,
   };
@@ -100,6 +102,7 @@ async function sendForm(client: DerivableClient): Promise<UploadCallReport> {
   return {
     bodyBase64: result?.bodyBase64 ?? null,
     calls,
+    causeMessage: error?.cause instanceof Error ? error.cause.message : null,
     contentType: result?.contentType ?? null,
     errorCode: error?.code ?? null,
   };

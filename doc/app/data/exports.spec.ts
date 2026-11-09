@@ -105,6 +105,26 @@ test.each(packages)(
   },
 );
 
+test("@defjs/core/xsrf catalog matches its public exports, in both directions, with the right kind", async () => {
+  const file = `${import.meta.dirname}/../../../packages/core/src/xsrf/index.ts`;
+  const loaded: unknown = await import(file);
+  if (!isRecord(loaded))
+    throw new Error("missing exports for @defjs/core/xsrf");
+  const names = await sourceExports(file);
+  const catalog = new Map(
+    apiEntries
+      .filter((entry) => entry.package === "@defjs/core/xsrf")
+      .map((entry) => [entry.name, entry.kind]),
+  );
+  expect([...names].filter((name) => !catalog.has(name))).toEqual([]);
+  expect([...catalog.keys()].filter((name) => !names.has(name))).toEqual([]);
+  const wrongKinds = [...catalog].filter(
+    ([name, kind]) =>
+      kind !== (name in loaded ? runtimeKind(loaded[name]) : "type"),
+  );
+  expect(wrongKinds).toEqual([]);
+});
+
 test("struct.* catalog entries are exactly the struct facade members", async () => {
   const loadedCore: unknown = await import(entryOf("core"));
   if (!isRecord(loadedCore) || !isRecord(loadedCore["struct"]))

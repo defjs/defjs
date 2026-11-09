@@ -57,7 +57,7 @@ Préséance pour une requête :
 1. Les défauts sont l’ensemble d’en-têtes de départ.
 2. Les `headers` renvoyés par le builder de requête remplacent un défaut du même nom. La première valeur de ce nom remplace le défaut ; les valeurs suivantes du même tableau ne s’ajoutent qu’à ce remplacement. Un scalaire ou une instance `Headers` remplace aussi. Les autres noms par défaut restent.
 3. Les intercepteurs reçoivent les en-têtes fusionnés et peuvent les changer.
-4. Avec le transport HTTP par défaut, l’en-tête XSRF est ajouté en dernier, seulement s’il est encore absent (voir `withXSRF`).
+4. Avec `@defjs/core/xsrf`, l’en-tête XSRF est ajouté en dernier, seulement s’il est encore absent (voir `withXSRF`).
 
 Utilisez un intercepteur pour les valeurs qui changent par requête : un jeton Bearer renouvelé, ou un HMAC sur le corps sérialisé.
 
@@ -85,9 +85,9 @@ Quand `true`, Fetch utilise `credentials: 'include'` pour HTTP et SSE. Le défau
 
 <ApiSignature name="withXSRF" />
 
-Ajoute un en-tête de jeton XSRF aux requêtes HTTP. `options` est le réglage `xsrf`, de la même forme que `xsrf` sur [`ClientOptions`](/fr-FR/api/core/clientoptions-type) : `cookieName` (défaut `XSRF-TOKEN`), `headerName` (défaut `X-XSRF-TOKEN`) et `tokenProvider({ request })`. Appeler `withXSRF()` sans argument active ces défauts. Les requêtes SSE et WebSocket ne sont pas affectées.
+Ajoute un en-tête de jeton XSRF aux requêtes HTTP du navigateur. Importez-le depuis `@defjs/core/xsrf`. `options` est une valeur `XSRFOptions` : `cookieName` (défaut `XSRF-TOKEN`) et `headerName` (défaut `X-XSRF-TOKEN`). Appeler `withXSRF()` sans argument active ces défauts, et lève une erreur s'il manque `location` ou `document`, y compris dans un Worker. Le code isomorphe ajoute cette option seulement dans le navigateur. Un jeton venu d'une autre source se définit avec un intercepteur. Les requêtes SSE et WebSocket ne sont pas affectées.
 
-Le transport HTTP par défaut ajoute l’en-tête quand tout ceci est vrai : la méthode n’est pas `GET`, `HEAD`, `OPTIONS` ou `TRACE` ; la requête n’a pas déjà cet en-tête ; la requête est same-origin ; et un jeton non vide est trouvé. Dès que `location` existe, y compris dans un Worker, l’origine de la requête résolue doit correspondre à `location.origin` ; sans elle, une requête avec un `baseEndpoint` compte comme same-origin. Les requêtes cross-origin n’appellent pas `tokenProvider`. Le jeton vient de ce provider s’il est donné, sinon de `document.cookie`, lu seulement quand `document` existe.
+L’en-tête est défini quand tout ceci est vrai : la méthode n’est pas `GET`, `HEAD`, `OPTIONS` ou `TRACE` ; la requête n’a pas déjà cet en-tête ; l’origine de la requête résolue est égale à l’origin de la page ; et `document.cookie` contient un jeton non vide. Les requêtes cross-origin ne lisent pas le cookie. Une exception pendant la lecture du cookie compte comme l’absence de jeton. Un jeton vide ne définit pas l’en-tête.
 
 ### Réglages SSE
 
@@ -191,7 +191,7 @@ Pour WebSocket, `beforeConnect`, `heartbeat`, `protocols` et `reconnect` peuvent
 
 <ApiSignature name="ClientOptions" />
 
-Les champs affichés sont `sse` et `webSocket`. Les sept autres — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` et `withCredentials` — sont hérités de la base HTTP non exportée. `endpoints` est `readonly string[]`. Le défaut résolu est `[]`. Un tableau vide est une valeur admise et fait échouer l’appel avec `REQ_BUILD_FAILED`. Il n’y a pas de `timeout` au niveau du client. `createClient` ne prend pas cet objet ; il prend des helpers d’options.
+Les champs affichés sont `sse` et `webSocket`. Les six autres — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer` et `withCredentials` — sont hérités de la base HTTP non exportée. `endpoints` est `readonly string[]`. Le défaut résolu est `[]`. Un tableau vide est une valeur admise et fait échouer l’appel avec `REQ_BUILD_FAILED`. Il n’y a pas de `timeout` au niveau du client. `createClient` ne prend pas cet objet ; il prend des helpers d’options.
 
 ### ClientConfig
 

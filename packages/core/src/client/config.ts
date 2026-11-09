@@ -272,17 +272,6 @@ export interface HttpClientOptions {
   interceptors?: Interceptor[];
   /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
   querySerializer?: QuerySerializer;
-  /** XSRF cookie/header mapping and optional token provider. */
-  xsrf?: {
-    /** Cookie name that stores the XSRF token. */
-    cookieName?: string;
-    /** Request header name that receives the token. */
-    headerName?: string;
-    /** Supplies a token instead of reading the cookie. */
-    tokenProvider?: (context: {
-      request: HttpRequest;
-    }) => string | null | undefined;
-  };
   /** When `true`, credentials are included with requests. */
   withCredentials?: boolean;
 }
@@ -316,17 +305,11 @@ export interface HttpClientConfig {
   interceptors: Interceptor[];
   /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
   querySerializer?: QuerySerializer;
-  /** Resolved XSRF settings when enabled. */
-  xsrf?: {
-    /** Cookie name that stores the XSRF token. */
-    cookieName: string;
-    /** Request header name that receives the token. */
-    headerName: string;
-    /** Supplies a token instead of reading the cookie. */
-    tokenProvider?: (context: {
-      request: HttpRequest;
-    }) => string | null | undefined;
-  };
+  /**
+   * Called once per HTTP attempt. The hook receives the outgoing headers after interceptors and before the default `Accept` is filled in, plus the resolved URL.
+   * A throw is not an endpoint attempt and is not retried. Stays unset until an option assigns it.
+   */
+  finalizeHeaders?: HttpRequest["finalizeHeaders"];
   /** When `true`, credentials are included with requests. */
   withCredentials?: boolean;
 }
@@ -336,7 +319,7 @@ export interface HttpClientConfig {
  *
  * The snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.
  *
- * Before any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `http.retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `withXSRF` fills `xsrf.cookieName` with `XSRF-TOKEN` and `xsrf.headerName` with `X-XSRF-TOKEN` when they are omitted.
+ * Before any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `http.retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.
  *
  * @group client
  */
@@ -391,7 +374,7 @@ export function createHttpClientConfig(): HttpClientConfig {
     http: { handle: DEFAULT_HTTP_OPTIONS.handle, retry: undefined },
     interceptors: [],
     querySerializer: undefined,
-    xsrf: undefined,
+    finalizeHeaders: undefined,
     withCredentials: undefined,
   };
 }
@@ -405,7 +388,7 @@ export function createClientConfig(): ClientConfig {
     http: http.http,
     interceptors: http.interceptors,
     querySerializer: http.querySerializer,
-    xsrf: http.xsrf,
+    finalizeHeaders: http.finalizeHeaders,
     withCredentials: http.withCredentials,
     sse: {
       handle: DEFAULT_SSE_OPTIONS.handle,

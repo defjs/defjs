@@ -665,6 +665,7 @@ describe("web socket runtime", () => {
       throw new Error("Expected socket");
     }
 
+    socket.send({ type: "message", text: "seen-open" });
     const iterator = socket.receive[Symbol.asyncIterator]();
     await new Promise<void>((resolve) => {
       if (socket.state === "reconnecting") {
@@ -703,6 +704,10 @@ describe("web socket runtime", () => {
         type: struct.literal("reconnected"),
         attempt: struct.number(),
       }),
+      outgoing: struct.object({
+        type: struct.literal("message"),
+        text: struct.string(),
+      }),
       path: "/ws/reconnect",
     });
 
@@ -725,6 +730,7 @@ describe("web socket runtime", () => {
       throw new Error("Expected socket");
     }
 
+    socket.send({ type: "message", text: "seen-open" });
     await new Promise<void>((resolve) => {
       if (socket.state === "reconnecting") {
         resolve();
@@ -752,6 +758,10 @@ describe("web socket runtime", () => {
         type: struct.literal("reconnected"),
         attempt: struct.number(),
       }),
+      outgoing: struct.object({
+        type: struct.literal("message"),
+        text: struct.string(),
+      }),
       path: "/ws/reconnect",
     });
 
@@ -770,6 +780,7 @@ describe("web socket runtime", () => {
       throw new Error("Expected socket");
     }
 
+    socket.send({ type: "message", text: "seen-open" });
     const iterator = socket.receive[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
       done: false,

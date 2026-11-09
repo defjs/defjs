@@ -8,8 +8,8 @@
 // newest alpha (1.65.0-alpha-2026-10-08, still Firefox 157).
 // When it's fixed upstream, also remove:
 //   - the `provider: playwright({ launchOptions: { env: browserLaunchEnv() } })` override (and the
-//     now-unused `browserLaunchEnv` import) in packages/{core,react,vue}/vitest.config.browser.ts
-//   - packages/core/test/regression/firefox-app-data.spec.ts (tests this function directly)
+//     now-unused `browserLaunchEnv` import) in packages/{core,react,vue}/vitest.config.firefox.ts
+//   - packages/core/test/regression/firefox-app-data.bun.spec.ts (tests this function directly)
 
 /** `sw_vers` exists on macOS and is absent from the Linux CI image. */
 export function isMacOS(): boolean {

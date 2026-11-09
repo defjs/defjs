@@ -57,7 +57,7 @@ HTTP와 SSE 요청에 정적 기본 헤더를 설정해요. WebSocket 요청은 
 1. 기본 헤더가 시작 헤더 집합이에요.
 2. 요청 `builder`가 돌려준 `headers`는 같은 이름의 기본 헤더를 대체해요. 그 이름의 첫 값은 기본값을 대체하고, 같은 배열의 나중 값은 그 대체값에만 덧붙여요. 스칼라나 `Headers` 인스턴스도 대체해요. 다른 이름의 기본 헤더는 그대로 남아요.
 3. 인터셉터는 병합된 헤더를 받고 바꿀 수 있어요.
-4. 기본 HTTP 전송에서는 XSRF 헤더가 마지막에, 여전히 없을 때만 추가돼요 (`withXSRF`를 보세요).
+4. `@defjs/core/xsrf`에서는 XSRF 헤더가 마지막에, 여전히 없을 때만 추가돼요 (`withXSRF`를 보세요).
 
 요청마다 달라지는 값은 인터셉터를 쓰세요. 갱신된 Bearer 토큰이나 직렬화된 본문에 대한 HMAC 같은 값이 그래요.
 
@@ -85,9 +85,9 @@ Fetch(HTTP/SSE)나 WebSocket 생성자를 바꿔요.
 
 <ApiSignature name="withXSRF" />
 
-HTTP 요청에 XSRF 토큰 헤더를 추가해요. `options`는 `xsrf` 설정이고, [`ClientOptions`](/ko-KR/api/core/clientoptions-type)의 `xsrf`와 같은 모양이에요. `cookieName`(기본 `XSRF-TOKEN`), `headerName`(기본 `X-XSRF-TOKEN`), `tokenProvider({ request })`예요. 인자 없이 `withXSRF()`를 호출하면 이 기본값이 켜져요. SSE와 WebSocket 요청에는 영향이 없어요.
+브라우저 HTTP 요청에 XSRF 토큰 헤더를 추가해요. `@defjs/core/xsrf`에서 가져와요. `options`는 `XSRFOptions`예요. `cookieName`(기본 `XSRF-TOKEN`)과 `headerName`(기본 `X-XSRF-TOKEN`)이에요. 인자 없이 `withXSRF()`를 호출하면 이 기본값이 켜져요. `location`이나 `document`가 없으면(Worker 포함) 예외를 던져요. 서버와 브라우저가 공유하는 코드는 이 옵션을 브라우저에서만 추가해요. 다른 출처의 토큰은 인터셉터로 설정해요. SSE와 WebSocket 요청에는 영향이 없어요.
 
-기본 HTTP 전송은 다음이 모두 성립할 때 헤더를 추가해요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 요청이 같은 origin이고, 비어 있지 않은 토큰을 찾았을 때예요. `location`이 있으면 Worker를 포함해 해석된 요청 origin이 `location.origin`과 같아야 해요. 없으면 `baseEndpoint`가 있는 요청을 같은 origin으로 봐요. 교차 출처 요청은 `tokenProvider`를 호출하지 않아요. 토큰은 프로바이더가 있으면 거기서, 없으면 `document`가 있을 때만 읽는 `document.cookie`에서 가져와요.
+다음이 모두 성립할 때 헤더를 설정해요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 해석된 요청 origin이 페이지 origin과 같고, `document.cookie`에 비어 있지 않은 토큰이 있을 때예요. 교차 출처 요청은 쿠키를 읽지 않아요. 쿠키를 읽다가 예외가 나면 토큰이 없는 것으로 봐요. 빈 토큰은 헤더를 설정하지 않아요.
 
 ### SSE 설정
 
@@ -191,7 +191,7 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 파생 �
 
 <ApiSignature name="ClientOptions" />
 
-보이는 필드는 `sse`와 `webSocket`이에요. 나머지 일곱 개——`endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, `withCredentials`——는 내보내지 않는 HTTP 기반에서 상속돼요. `endpoints`는 `readonly string[]`예요. 해석된 기본값은 `[]`예요. 빈 배열은 유효한 값이고, 호출은 `REQ_BUILD_FAILED`로 실패해요. 클라이언트 수준의 `timeout`은 없어요. `createClient`는 이 객체를 받지 않고 옵션 헬퍼를 받아요.
+보이는 필드는 `sse`와 `webSocket`이에요. 나머지 여섯 개——`endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `withCredentials`——는 내보내지 않는 HTTP 기반에서 상속돼요. `endpoints`는 `readonly string[]`예요. 해석된 기본값은 `[]`예요. 빈 배열은 유효한 값이고, 호출은 `REQ_BUILD_FAILED`로 실패해요. 클라이언트 수준의 `timeout`은 없어요. `createClient`는 이 객체를 받지 않고 옵션 헬퍼를 받아요.
 
 ### ClientConfig
 

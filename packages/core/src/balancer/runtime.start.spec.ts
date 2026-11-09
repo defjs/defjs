@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { pickEndpoint } from "./runtime";
 import { p2cBalancer } from "./p2c";
 import type { Balancer } from "./balancer";
+import { yieldMacrotask } from "../../test/macrotask";
 
 const info = { endpoints: ["a", "b"] };
 afterEach(() => vi.restoreAllMocks());
@@ -108,7 +109,7 @@ test.each(["throw", "reject", "then-getter", "then-call"])(
     p?.start();
     p?.start();
     p?.done({ attempted: true });
-    await Bun.sleep(0);
+    await yieldMacrotask();
     expect(calls).toBe(1);
     expect(done).toHaveBeenCalledWith({ attempted: true });
   },

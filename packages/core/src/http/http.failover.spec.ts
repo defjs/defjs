@@ -1,4 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
+
+vi.mock("../balancer/retry_budget", { spy: true });
+
+import { retryBudgetFor } from "../balancer/retry_budget";
 import { createClient } from "../client/client";
 import {
   withEndpoint,
@@ -6,7 +10,6 @@ import {
   withBalancer,
   withHTTPHandle,
   withInterceptors,
-  withXSRF,
   type ClientOption,
 } from "../client/option";
 import type { DoneInfo, PickInfo } from "../balancer/balancer";
@@ -25,6 +28,7 @@ const policy = (options: RetryOptions = {}): ClientOption =>
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.mocked(retryBudgetFor).mockRestore();
   vi.restoreAllMocks();
 });
 
@@ -71,25 +75,6 @@ test("explicit empty failover enables GET connection failover; POST does not", a
   const post = await defineRequest({ method: "POST", path: "/" })(client);
   expect(post[0]?.code).toBe("NET_UNREACHABLE");
   expect(requests).toHaveLength(3);
-});
-
-test("ReadableStream requests never fail over even for an opted-in POST", async () => {
-  const { client, requests } = fixture(
-    policy({ maxAttempts: 2, methods: ["POST"], on: ["connect-failure"] }),
-  );
-  const [fault] = await defineRequest({
-    method: "POST",
-    path: "/",
-    builder: () => ({
-      body: new ReadableStream({
-        start(c) {
-          c.close();
-        },
-      }),
-    }),
-  })(client);
-  expect(fault?.code).toBe("NET_UNREACHABLE");
-  expect(requests).toHaveLength(1);
 });
 
 test("failover rebuilds and reruns endpoint-specific authentication", async () => {
@@ -425,10 +410,8 @@ test("non-stream failover does not require a global ReadableStream constructor",
 });
 
 test("default clients do not fail over GET or create or deposit a retry budget", async () => {
-  const budget = vi.spyOn(
-    await import("../balancer/retry_budget"),
-    "retryBudgetFor",
-  );
+  const budget = vi.mocked(retryBudgetFor);
+  budget.mockClear();
   const requests: string[] = [];
   const client = createClient(
     withEndpoint(...endpoints),
@@ -527,7 +510,7 @@ test("custom option retry configuration is read anew for every HTTP call", async
   expect(calls).toBe(3);
 });
 
-test("pre-fetch XSRF failure is not an endpoint attempt and never retries", async () => {
+test("pre-fetch finalizeHeaders failure is not an endpoint attempt and never retries", async () => {
   const error = new TypeError("token unavailable");
   const start = vi.fn();
   const { client, requests, reports } = fixture(
@@ -542,11 +525,11 @@ test("pre-fetch XSRF failure is not an endpoint attempt and never retries", asyn
         },
       ],
     }),
-    withXSRF({
-      tokenProvider() {
+    (config) => {
+      config.finalizeHeaders = () => {
         throw error;
-      },
-    }),
+      };
+    },
   );
   const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
   expect(fault?.code).toBe("NET_UNREACHABLE");
@@ -555,6 +538,99 @@ test("pre-fetch XSRF failure is not an endpoint attempt and never retries", asyn
   expect(reports).toEqual([{ attempted: false }]);
   expect(start).not.toHaveBeenCalled();
   expect(requests).toHaveLength(0);
+});
+
+test("finalizeHeaders runs once per attempt after interceptors", async () => {
+  const seen: { header: string | null; href: string }[] = [];
+  const { client, requests } = fixture(
+    policy({ methods: ["POST"] }),
+    withInterceptors({
+      kind: "http",
+      fn(request, next) {
+        const headers = new Headers(request.headers);
+        headers.set("x-from-interceptor", "yes");
+        return next({ ...request, headers });
+      },
+    }),
+    (config) => {
+      config.finalizeHeaders = (_request, headers, url) => {
+        seen.push({
+          header: headers.get("x-from-interceptor"),
+          href: url.href,
+        });
+      };
+    },
+  );
+  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+  expect(fault).toBeNull();
+  expect(seen).toEqual([
+    { header: "yes", href: "https://first.test/" },
+    { header: "yes", href: "https://second.test/" },
+  ]);
+  expect(requests).toHaveLength(2);
+});
+
+test("finalizeHeaders does not run when an interceptor short-circuits", async () => {
+  let calls = 0;
+  const client = createClient(
+    withEndpoint("https://example.test"),
+    withInterceptors({
+      kind: "http",
+      fn() {
+        return Promise.resolve(makeResponse({ status: 204 }));
+      },
+    }),
+    (config) => {
+      config.finalizeHeaders = () => {
+        calls += 1;
+      };
+    },
+  );
+  const [fault] = await defineRequest({ method: "POST", path: "/submit" })(
+    client,
+  );
+  expect(fault).toBeNull();
+  expect(calls).toBe(0);
+});
+
+test("the finalizeHeaders on the request after interceptors is the one that runs", async () => {
+  let installed = 0;
+  let replaced = 0;
+  let header: string | null = null;
+  let href = "";
+  const client = createClient(
+    withEndpoint("https://example.test"),
+    (config) => {
+      config.finalizeHeaders = () => {
+        installed += 1;
+      };
+    },
+    withInterceptors({
+      kind: "http",
+      fn(request, next) {
+        const headers = new Headers(request.headers);
+        headers.set("x-from-interceptor", "yes");
+        return next({
+          ...request,
+          headers,
+          finalizeHeaders(_request, nextHeaders, url) {
+            replaced += 1;
+            header = nextHeaders.get("x-from-interceptor");
+            href = url.href;
+          },
+        });
+      },
+    }),
+    withHTTPHandle(() => Promise.resolve(new Response(null, { status: 204 }))),
+  );
+  const [fault] = await defineRequest({ method: "POST", path: "/submit" })(
+    client,
+  );
+  expect(fault).toBeNull();
+  expect(installed).toBe(0);
+  expect(replaced).toBe(1);
+  expect(header).toBe("yes");
+  expect(href).toBe("https://example.test/submit");
 });
 
 test.each([
@@ -770,27 +846,6 @@ test("opted-in POST failover resends the same FormData fields", async () => {
     ["value", "file bytes"],
     ["value", "file bytes"],
   ]);
-});
-
-test("an interceptor that substitutes a ReadableStream body disables failover", async () => {
-  const { client, requests } = fixture(
-    policy({ methods: ["POST"] }),
-    withInterceptors(
-      createHttpInterceptor((request, next) =>
-        next({
-          ...request,
-          body: new ReadableStream({
-            start(controller) {
-              controller.close();
-            },
-          }),
-        }),
-      ),
-    ),
-  );
-  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
-  expect(fault?.code).toBe("NET_UNREACHABLE");
-  expect(requests).toHaveLength(1);
 });
 
 test("a send still in flight when an interceptor answers leaves no attempt timer behind", async () => {

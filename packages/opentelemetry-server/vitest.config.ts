@@ -1,22 +1,33 @@
-import { defineConfig } from "vitest/config";
-import { coverageConfig } from "./test/shared.ts";
+import { defineConfig, type ViteUserConfig as UserConfig } from "vitest/config";
+import {
+  specExclude,
+  specInclude,
+  type Runtime,
+} from "../../test/spec-matrix.ts";
+import { coverageSettings, reporters } from "../../test/vitest-shared.ts";
+import { globalSetupPath, packageRoot } from "./test/shared.ts";
 
-export default defineConfig({
-  test: {
-    coverage: {
-      enabled: coverageConfig.enabled,
-      provider: coverageConfig.provider,
-      reporter: [...coverageConfig.reporter],
-      reportsDirectory: coverageConfig.reportsDirectory,
-      include: [...coverageConfig.include],
-      exclude: [...coverageConfig.exclude],
-      thresholds: {
-        branches: coverageConfig.thresholds.branches,
-        functions: coverageConfig.thresholds.functions,
-        lines: coverageConfig.thresholds.lines,
-        statements: coverageConfig.thresholds.statements,
+export function baseConfig(runtime?: Runtime): UserConfig {
+  return {
+    root: packageRoot,
+    resolve: {
+      alias: {
+        "@defjs/core": `${packageRoot}/../core/src`,
       },
     },
-    projects: ["./vitest.config.server.ts"],
-  },
-});
+    test: {
+      name: "opentelemetry-server-plain",
+      include: specInclude(runtime),
+      exclude: specExclude(runtime),
+      globalSetup: globalSetupPath,
+      globals: true,
+      reporters,
+      coverage: coverageSettings({
+        reportsDirectory: `${packageRoot}/coverage/${runtime ?? "plain"}`,
+        extraExclude: ["src/test-utils.ts"],
+      }),
+    },
+  };
+}
+
+export default defineConfig(baseConfig());

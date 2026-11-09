@@ -57,7 +57,7 @@ Vorrang für einen Request:
 1. Die Defaults bilden den Ausgangs-Header-Satz.
 2. `headers`, die der Request-Builder zurückgibt, ersetzen einen Default gleichen Namens. Der erste Wert für diesen Namen ersetzt den Default; spätere Werte im selben Array werden nur an diese Ersetzung angehängt. Ein Skalar oder eine `Headers`-Instanz ersetzt ebenfalls. Andere Default-Namen bleiben.
 3. Interceptors bekommen die gemergten Header und dürfen sie ändern.
-4. Beim Default-HTTP-Transport kommt der XSRF-Header zuletzt dazu, nur wenn er noch fehlt (siehe `withXSRF`).
+4. Mit `@defjs/core/xsrf` kommt der XSRF-Header zuletzt dazu, nur wenn er noch fehlt (siehe `withXSRF`).
 
 Nutze einen Interceptor für Werte, die sich pro Request ändern: ein erneuertes Bearer-Token oder ein HMAC über den serialisierten Body.
 
@@ -85,9 +85,9 @@ Wenn `true`, nutzt Fetch `credentials: 'include'` für HTTP und SSE. Der Default
 
 <ApiSignature name="withXSRF" />
 
-Fügt HTTP-Requests einen XSRF-Token-Header hinzu. `options` ist die `xsrf`-Einstellung, dieselbe Form wie `xsrf` auf [`ClientOptions`](/de-DE/api/core/clientoptions-type): `cookieName` (Default `XSRF-TOKEN`), `headerName` (Default `X-XSRF-TOKEN`) und `tokenProvider({ request })`. `withXSRF()` ohne Argument schaltet diese Defaults ein. SSE- und WebSocket-Requests sind nicht betroffen.
+Fügt Browser-HTTP-Requests einen XSRF-Token-Header hinzu. Importiere es aus `@defjs/core/xsrf`. `options` ist ein `XSRFOptions`-Wert: `cookieName` (Default `XSRF-TOKEN`) und `headerName` (Default `X-XSRF-TOKEN`). `withXSRF()` ohne Argument schaltet diese Defaults ein und wirft, wenn `location` oder `document` fehlt, auch in einem Worker. Isomorpher Code fügt diese Option nur im Browser hinzu. Ein Token aus einer anderen Quelle wird mit einem Interceptor gesetzt. SSE- und WebSocket-Requests sind nicht betroffen.
 
-Der Default-HTTP-Transport setzt den Header, wenn alle Bedingungen zutreffen: Die Methode ist nicht `GET`, `HEAD`, `OPTIONS` oder `TRACE`; der Request hat diesen Header noch nicht; der Request ist same-origin; und ein nicht leeres Token wird gefunden. Existiert `location`, auch in einem Worker, muss der aufgelöste Request-Origin `location.origin` entsprechen; ohne es zählt ein Request mit `baseEndpoint` als same-origin. Cross-Origin-Requests rufen `tokenProvider` nicht auf. Das Token kommt von diesem Provider, falls angegeben, sonst aus `document.cookie`, das nur gelesen wird, wenn `document` existiert.
+Der Header wird gesetzt, wenn alle Bedingungen zutreffen: Die Methode ist nicht `GET`, `HEAD`, `OPTIONS` oder `TRACE`; der Request hat diesen Header noch nicht; der aufgelöste Request-Origin entspricht dem Origin der Seite; und `document.cookie` enthält ein nicht leeres Token. Cross-Origin-Requests lesen das Cookie nicht. Ein Fehler beim Lesen des Cookies gilt als kein Token. Ein leeres Token setzt den Header nicht.
 
 ### SSE-Optionen
 
@@ -191,7 +191,7 @@ Bei WebSocket lassen sich `beforeConnect`, `heartbeat`, `protocols` und `reconne
 
 <ApiSignature name="ClientOptions" />
 
-Die gezeigten Felder sind `sse` und `webSocket`. Die anderen sieben — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` und `withCredentials` — werden von der nicht exportierten HTTP-Basis geerbt. `endpoints` ist `readonly string[]`. Der aufgelöste Default ist `[]`. Ein leeres Array ist ein zulässiger Wert und lässt den Aufruf mit `REQ_BUILD_FAILED` scheitern. Es gibt kein `timeout` auf Client-Ebene. `createClient` nimmt dieses Objekt nicht entgegen, sondern Option-Helper.
+Die gezeigten Felder sind `sse` und `webSocket`. Die anderen sechs — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer` und `withCredentials` — werden von der nicht exportierten HTTP-Basis geerbt. `endpoints` ist `readonly string[]`. Der aufgelöste Default ist `[]`. Ein leeres Array ist ein zulässiger Wert und lässt den Aufruf mit `REQ_BUILD_FAILED` scheitern. Es gibt kein `timeout` auf Client-Ebene. `createClient` nimmt dieses Objekt nicht entgegen, sondern Option-Helper.
 
 ### ClientConfig
 

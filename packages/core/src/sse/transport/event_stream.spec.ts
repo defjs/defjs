@@ -1,4 +1,3 @@
-import type { Socket } from "bun";
 import {
   afterEach,
   describe,
@@ -8,6 +7,10 @@ import {
   test,
   vi,
 } from "vitest";
+
+vi.mock("../../internal/backoff", { spy: true });
+
+import { wait } from "../../internal/backoff";
 import { method } from "../../../test/method";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
 import { struct } from "../../struct";
@@ -23,32 +26,6 @@ import type {
 } from "./event_stream";
 import { fetchEventStream as fetchEventStreamInternal } from "./event_stream";
 import type { EventStreamMessage } from "./parser";
-
-const backoff = await import("../../internal/backoff");
-
-const SSE_RESPONSE_HEADERS =
-  "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
-
-function concatBytes(
-  left: Uint8Array,
-  right: Uint8Array,
-): Uint8Array<ArrayBuffer> {
-  const joined = new Uint8Array(left.byteLength + right.byteLength);
-  joined.set(left);
-  joined.set(right, left.byteLength);
-  return joined;
-}
-
-function chunkedBody(body: string, terminate: boolean): string {
-  const length = new TextEncoder().encode(body).byteLength.toString(16);
-  return `${length}\r\n${body}\r\n${terminate ? "0\r\n\r\n" : ""}`;
-}
-
-function latin1(bytes: Uint8Array): string {
-  let text = "";
-  for (const byte of bytes) text += String.fromCharCode(byte);
-  return text;
-}
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
@@ -109,11 +86,12 @@ function scriptedConnection(
 
 describe("fetchEventStream", () => {
   test("should reset the retry budget and first delay after each successful reconnect handshake", async () => {
-    vi.useFakeTimers();
-    const timer = vi.spyOn(backoff, "wait");
+    const timer = vi.mocked(wait);
     const shouldReconnect = vi.fn((_context: { attempt: number }) => true);
     let requests = 0;
     try {
+      vi.useFakeTimers();
+      timer.mockClear();
       const stream = await fetchEventStream(
         {
           baseEndpoint: "https://example.com",
@@ -181,199 +159,6 @@ describe("fetchEventStream", () => {
     expect(requests).toBe(5);
     expect(messages).toEqual(["recovered"]);
     await expect(stream.closed).resolves.toEqual({ kind: "eof" });
-  });
-
-  test.each([
-    ["猫", [0xe7, 0x8c, 0xab]],
-    ["été", [0xc3, 0xa9, 0x74, 0xc3, 0xa9]],
-  ])(
-    "should send UTF-8 Last-Event-ID bytes on the wire for %s",
-    async (id, expectedBytes) => {
-      const sockets = new Set<Socket>();
-      const incomingBySocket = new Map<Socket, Uint8Array>();
-      const headers: string[] = [];
-      const firstSeen = Promise.withResolvers<void>();
-      const listener = Bun.listen({
-        hostname: "127.0.0.1",
-        port: 0,
-        socket: {
-          open(socket) {
-            sockets.add(socket);
-          },
-          close(socket) {
-            sockets.delete(socket);
-            incomingBySocket.delete(socket);
-          },
-          data(socket, chunk) {
-            const incoming = concatBytes(
-              incomingBySocket.get(socket) ?? new Uint8Array(),
-              chunk,
-            );
-            if (!latin1(incoming).includes("\r\n\r\n")) {
-              incomingBySocket.set(socket, incoming);
-              return;
-            }
-            headers.push(latin1(incoming));
-            const body =
-              headers.length === 1
-                ? `id: ${id}\ndata: first\n\n`
-                : "data: second\n\n";
-            const reply =
-              SSE_RESPONSE_HEADERS + chunkedBody(body, headers.length > 1);
-            if (headers.length === 1) {
-              socket.write(reply);
-              void firstSeen.promise.then(() => socket.end());
-            } else {
-              socket.write(reply);
-              socket.end();
-            }
-          },
-        },
-      });
-      try {
-        const stream = await fetchTransformedEventStream(
-          {
-            baseEndpoint: `http://127.0.0.1:${listener.port}`,
-            endpoint: "/events",
-            method: "GET",
-          },
-          {
-            reconnect: { attempts: 1, delayMs: 0 },
-            transformMessage(message) {
-              firstSeen.resolve();
-              return message;
-            },
-          },
-        );
-        const messages: string[] = [];
-        for await (const message of stream) messages.push(message.data);
-
-        expect(messages).toEqual(["first", "second"]);
-        expect(headers).toHaveLength(2);
-        const header = /\r\nlast-event-id: ([^\r\n]*)\r\n/i.exec(
-          headers[1] ?? "",
-        )?.[1];
-        expect(header).toBeDefined();
-        if (header === undefined)
-          throw new Error("Expected Last-Event-ID on the wire");
-        expect([...header].map((character) => character.charCodeAt(0))).toEqual(
-          expectedBytes,
-        );
-        await expect(stream.closed).resolves.toEqual({ kind: "eof" });
-      } finally {
-        for (const socket of sockets) socket.terminate();
-        listener.stop(true);
-      }
-    },
-  );
-
-  test("should reconnect from the committed id after a partial id frame is cut", async () => {
-    const sockets = new Set<Socket>();
-    const incomingBySocket = new Map<Socket, string>();
-    const headers: string[] = [];
-    let firstSocket: Socket | undefined;
-    const partial = "id: 1\ndata: first\n\nid: 2\n";
-    const listener = Bun.listen({
-      hostname: "127.0.0.1",
-      port: 0,
-      socket: {
-        open(socket) {
-          sockets.add(socket);
-        },
-        close(socket) {
-          sockets.delete(socket);
-          incomingBySocket.delete(socket);
-        },
-        data(socket, chunk) {
-          const incoming = (incomingBySocket.get(socket) ?? "") + latin1(chunk);
-          if (!incoming.includes("\r\n\r\n")) {
-            incomingBySocket.set(socket, incoming);
-            return;
-          }
-          headers.push(incoming);
-          const first = headers.length === 1;
-          const cursor = /\r\nlast-event-id: ([^\r\n]*)\r\n/i.exec(
-            incoming,
-          )?.[1];
-          const body = first
-            ? partial
-            : cursor === "1"
-              ? "id: 2\ndata: second\n\n"
-              : "id: 3\ndata: skipped\n\n";
-          const reply = SSE_RESPONSE_HEADERS + chunkedBody(body, !first);
-          if (first) {
-            firstSocket = socket;
-            socket.write(reply);
-          } else {
-            socket.write(reply);
-            socket.end();
-          }
-        },
-      },
-    });
-    let calls = 0;
-    try {
-      const stream = await fetchEventStream(
-        {
-          baseEndpoint: `http://127.0.0.1:${listener.port}`,
-          endpoint: "/events",
-          method: "GET",
-        },
-        {
-          reconnect: { attempts: 1, delayMs: 0 },
-          async fetch(input, init) {
-            const response = await globalThis.fetch(input, init);
-            if (++calls !== 1) return response;
-            const reader = response.body?.getReader();
-            if (!reader) throw new Error("Expected response body");
-            const partialBytes = new TextEncoder().encode(partial);
-            let forwarded = false;
-            return new Response(
-              new ReadableStream<Uint8Array>(
-                {
-                  async pull(controller) {
-                    if (forwarded) {
-                      // Zero prefetch: this pull proves the parser consumed the partial id line.
-                      firstSocket?.terminate();
-                      await reader.read();
-                      return;
-                    }
-                    let bytes = new Uint8Array();
-                    while (bytes.byteLength < partialBytes.byteLength) {
-                      const result = await reader.read();
-                      if (result.done)
-                        throw new Error("Expected partial frame");
-                      bytes = concatBytes(bytes, result.value);
-                    }
-                    forwarded = true;
-                    controller.enqueue(bytes);
-                  },
-                  cancel(reason) {
-                    return reader.cancel(reason);
-                  },
-                },
-                { highWaterMark: 0 },
-              ),
-              { headers: response.headers },
-            );
-          },
-        },
-      );
-      const messages: EventStreamMessage[] = [];
-      for await (const message of stream) messages.push(message);
-
-      expect(headers).toHaveLength(2);
-      expect(headers[1]).toMatch(/\r\nlast-event-id: 1\r\n/i);
-      expect(messages.map((message) => message.id)).toEqual(["1", "2"]);
-      expect(messages.map((message) => message.data)).toEqual([
-        "first",
-        "second",
-      ]);
-      await expect(stream.closed).resolves.toEqual({ kind: "eof" });
-    } finally {
-      for (const socket of sockets) socket.terminate();
-      listener.stop(true);
-    }
   });
 
   test("should handle a platform Last-Event-ID header rejection through the per-attempt retry policy", async () => {

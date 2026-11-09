@@ -57,7 +57,7 @@ description: createClient、選項輔助函式，同 Client 型別。
 1. 預設值係起始嘅 header 集合。
 2. request builder 回傳嘅 `headers` 會取代同名嘅預設值。嗰個名嘅第一個值取代預設；同一個 array 入面之後嘅值只會追加落呢個取代結果。scalar 或者 `Headers` 實例亦會取代。其他預設名保留。
 3. 攔截器收到合併後嘅 headers，可以修改。
-4. 用預設 HTTP 傳輸層嘅話，XSRF header 最後先加，而且只喺仍然未有嘅時候先加（見 `withXSRF`）。
+4. 用 `@defjs/core/xsrf` 嘅話，XSRF header 最後先加，而且只喺仍然未有嘅時候先加（見 `withXSRF`）。
 
 每個 request 都會變嘅值，例如刷新後嘅 Bearer token，或者對序列化 body 計算嘅 HMAC，請用攔截器。
 
@@ -85,9 +85,9 @@ description: createClient、選項輔助函式，同 Client 型別。
 
 <ApiSignature name="withXSRF" />
 
-為 HTTP request 加上 XSRF token header。`options` 就係 `xsrf` 設定，形狀同 [`ClientOptions`](/zh-Hant-HK/api/core/clientoptions-type) 上嘅 `xsrf` 一樣：`cookieName`（預設 `XSRF-TOKEN`）、`headerName`（預設 `X-XSRF-TOKEN`）同 `tokenProvider({ request })`。唔傳參數呼叫 `withXSRF()` 會啟用呢啲預設值。SSE 同 WebSocket request 唔受影響。
+為瀏覽器入面嘅 HTTP request 加上 XSRF token header。由 `@defjs/core/xsrf` 匯入。`options` 係 `XSRFOptions`：`cookieName`（預設 `XSRF-TOKEN`）同 `headerName`（預設 `X-XSRF-TOKEN`）。唔傳參數呼叫 `withXSRF()` 會啟用呢啲預設值；缺少 `location` 或者 `document` 時（包括 Worker）會拋錯。同構程式只喺瀏覽器入面加呢個 option。令牌嚟自別處時，用攔截器設定。SSE 同 WebSocket request 唔受影響。
 
-預設 HTTP 傳輸層只會喺以下條件全部成立時加 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；request 係 same-origin；而且搵到非空嘅 token。只要有 `location`（包括 Worker），解析後嘅 request origin 就必須同 `location.origin` 一致；冇 `location` 時，有 `baseEndpoint` 嘅 request 就算 same-origin。跨 origin request 唔會呼叫 `tokenProvider`。有提供該 provider 就由佢取得 token，否則由 `document.cookie` 取得；只有 `document` 存在時先會讀取 cookie。
+只會喺以下條件全部成立時加 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；解析後嘅 request origin 等於頁面 origin；而且 `document.cookie` 入面有非空嘅 token。跨 origin request 唔會讀 cookie。讀 cookie 時拋錯當作冇 token。空 token 唔會設定呢個 header。
 
 ### SSE 調校選項
 
@@ -191,7 +191,7 @@ SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 even
 
 <ApiSignature name="ClientOptions" />
 
-簽名入面見到嘅欄位係 `sse` 同 `webSocket`。另外七個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 同 `withCredentials`——繼承自未匯出嘅 HTTP base。`endpoints` 係 `readonly string[]`。解析後嘅預設值係 `[]`。空 array 係合法值，該次呼叫會以 `REQ_BUILD_FAILED` 失敗。冇 client 層級嘅 `timeout`。`createClient` 唔接受呢個 object；佢接受選項輔助函式。
+簽名入面見到嘅欄位係 `sse` 同 `webSocket`。另外六個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer` 同 `withCredentials`——繼承自未匯出嘅 HTTP base。`endpoints` 係 `readonly string[]`。解析後嘅預設值係 `[]`。空 array 係合法值，該次呼叫會以 `REQ_BUILD_FAILED` 失敗。冇 client 層級嘅 `timeout`。`createClient` 唔接受呢個 object；佢接受選項輔助函式。
 
 ### ClientConfig
 

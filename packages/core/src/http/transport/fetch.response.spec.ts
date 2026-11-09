@@ -124,7 +124,9 @@ describe("Fetch handler responses", () => {
   });
 
   test("should not wait for unused response body cancellation to settle", async () => {
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     const body = new ReadableStream<Uint8Array>({ cancel });
 
     const response = await settleWithin(
@@ -144,7 +146,9 @@ describe("Fetch handler responses", () => {
 
   test("should cancel and unlock a progress response when the async observer rejects", async () => {
     const observerError = new Error("observer failed");
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     const body = new ReadableStream<Uint8Array>({
       cancel,
       start(controller) {
@@ -170,7 +174,8 @@ describe("Fetch handler responses", () => {
       cause: observerError,
       code: "EXT_OBSERVER_FAILED",
     });
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(observerError);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(observerError);
     expect(body.locked).toBe(false);
   });
 
@@ -229,7 +234,9 @@ describe("Fetch handler responses", () => {
 
   test("should settle an ignored fetch abort and cancel a late response body", async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => Promise.reject(new Error("cancel failed")));
+    const cancel = vi.fn((_reason?: unknown) =>
+      Promise.reject(new Error("cancel failed")),
+    );
     let resolveFetch!: (response: Response) => void;
     const fetchMock = vi.fn(
       () =>
@@ -253,14 +260,17 @@ describe("Fetch handler responses", () => {
 
     await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
     resolveFetch(new Response(new ReadableStream<Uint8Array>({ cancel })));
-    await vi.waitFor(() =>
-      expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason),
-    );
+    await vi.waitFor(() => {
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(cancel.mock.calls[0]?.[0]).toBe(controller.signal.reason);
+    });
   });
 
   test("should abort a stalled response body read without waiting for cancellation", async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     let startPull!: () => void;
     const pullStarted = new Promise<void>((resolve) => {
       startPull = resolve;
@@ -290,13 +300,16 @@ describe("Fetch handler responses", () => {
     controller.abort();
 
     await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(controller.signal.reason);
     expect(body.locked).toBe(false);
   });
 
   test("should abort a stalled response body read when cancellation rejects", async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => Promise.reject(new Error("cancel failed")));
+    const cancel = vi.fn((_reason?: unknown) =>
+      Promise.reject(new Error("cancel failed")),
+    );
     let startPull!: () => void;
     const pullStarted = new Promise<void>((resolve) => {
       startPull = resolve;
@@ -326,13 +339,16 @@ describe("Fetch handler responses", () => {
     controller.abort();
 
     await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(controller.signal.reason);
     expect(body.locked).toBe(false);
   });
 
   test("should abort a stalled progress response body read without waiting for cancellation", async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     let startPull!: () => void;
     const pullStarted = new Promise<void>((resolve) => {
       startPull = resolve;
@@ -363,7 +379,8 @@ describe("Fetch handler responses", () => {
     controller.abort();
 
     await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(controller.signal.reason);
     expect(body.locked).toBe(false);
   });
 

@@ -600,7 +600,7 @@ async function executeHttpAttempt<
           responseType,
           uploadProgress: config?.onUploadProgress,
           withCredentials: clientConfig.withCredentials,
-          xsrf: clientConfig.xsrf,
+          finalizeHeaders: clientConfig.finalizeHeaders,
         },
       );
     } catch (error) {

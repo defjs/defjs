@@ -63,7 +63,7 @@ En éxito, el tercer hueco lleva `body` solo cuando se declaró `output`. En fal
 
 ### HttpRequest
 
-Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` y `queryParams`. Cuando los interceptores la ven, `body` ya es el valor de red — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa instancia tal cual. `responseType` y `errorResponseType` son de solo lectura: se derivan de los tipos de struct `output` y `error` declarados y no deben cambiarse.
+Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` y `queryParams`. Cuando los interceptores la ven, `body` ya es el valor de red — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa instancia tal cual. `responseType` y `errorResponseType` son de solo lectura: se derivan de los tipos de struct `output` y `error` declarados y no deben cambiarse.
 
 ### HttpMeta
 
@@ -93,10 +93,9 @@ y los blobs son crudos y se analizan una vez. `DecodedResponse` es lo que llega 
 
 `loaded`, `total`, `lengthComputable`. Los callbacks pueden ser async. Un `onDownloadProgress` o `onUploadProgress` que lanza falla la llamada con
 `EXT_OBSERVER_FAILED`, con el valor lanzado como `cause`; la cancelación sigue informando `NET_ABORTED`, o `NET_TIMEOUT` cuando el motivo del abort es un timeout.
-El progreso de subida solo se informa donde el runtime puede hacer stream de cuerpos de solicitud (Bun); en los navegadores, los cuerpos `Blob` / `File`,
-`ArrayBuffer` y `FormData` se envían sin cambios y no se llama a `onUploadProgress`.
+El progreso de subida convierte los cuerpos `Blob` / `File`, `ArrayBuffer` y `FormData` donde `fetch` admite un cuerpo de petición en streaming. Chromium informa de ese progreso solo en HTTP/2 o posterior; en HTTP/1.1, una subida con `onUploadProgress` falla (`NET_UNREACHABLE`). Firefox envía esos cuerpos sin cambios y no llama a `onUploadProgress`.
 
-En los runtimes de servidor, FormData usa su stream serializado sin almacenar todo el cuerpo en un Blob y conserva el boundary multipart real. Su total es desconocido salvo que lo aporte un `Content-Length` explícito válido. Los content types explícitos sobreviven a la conversión de subida, salvo que FormData debe usar el boundary de su serialización. `loaded` cuenta bytes del stream, no acuses del servidor. Las descargas con un `Content-Encoding` distinto de identity informan `total: 0` y `lengthComputable: false`; sus bytes de stream pueden estar ya descomprimidos.
+Donde ocurre esa conversión, FormData usa su stream serializado sin almacenar todo el cuerpo en un Blob y conserva el boundary multipart real. Su total es desconocido salvo que lo aporte un `Content-Length` explícito válido. Los content types explícitos sobreviven a la conversión de subida, salvo que FormData debe usar el boundary de su serialización. `loaded` cuenta bytes del stream, no acuses del servidor. Las descargas con un `Content-Encoding` distinto de identity informan `total: 0` y `lengthComputable: false`; sus bytes de stream pueden estar ya descomprimidos.
 
 Consulta la [guía de HTTP](/es-ES/docs/http) y [Cliente](/es-ES/docs/client).
 

@@ -130,8 +130,8 @@ JSON で表現できない値（`NaN`、`±Infinity`、`Map`、`Set`、関数、
 ## 6. クレデンシャル、XSRF、転送進捗
 
 - **`withCredentials(true)`**: HTTP および SSE リクエストの Fetch 設定に `credentials: "include"` を適用します。
-- **`withXSRF(options?)`**: 同一オリジンに対するデータ変更 HTTP メソッド（`POST`、`PUT`、`PATCH`、`DELETE`）において、XSRF クッキー（デフォルトは `XSRF-TOKEN`）を読み取り、対応するヘッダー（`X-XSRF-TOKEN`）を自動注入します。
-- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })` に渡します。ダウンロード進捗は、正の `Content-Length` が存在し `Content-Encoding` が未指定または `identity` の場合にのみ `lengthComputable: true` を報告します。アップロード進捗は、サーバーランタイム（Bun）でボディをストリーミングします。進捗コールバック内で例外が throw された場合、呼び出しは `EXT_OBSERVER_FAILED` で失敗します。
+- **`withXSRF(options?)`**: `@defjs/core/xsrf` から読み込みます。ブラウザでは、同一オリジンに対するデータ変更 HTTP メソッド（`POST`、`PUT`、`PATCH`、`DELETE`）において、XSRF クッキー（デフォルトは `XSRF-TOKEN`）を読み取り、対応するヘッダー（`X-XSRF-TOKEN`）を自動注入します。`location` または `document` がない実行環境（Worker を含む）では、`withXSRF()` が例外を投げます。ブラウザとサーバーで共有するコードは、このオプションをブラウザだけで追加します。別の出所のトークンはインターセプターで設定します。
+- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })` に渡します。ダウンロード進捗は、正の `Content-Length` が存在し `Content-Encoding` が未指定または `identity` の場合にのみ `lengthComputable: true` を報告します。`fetch` がストリーミングリクエストボディに対応するランタイムでは、アップロード進捗は `Blob`、`File`、`ArrayBuffer`、`FormData` をストリームへ変換します。Chromium がその進捗を報告するのは HTTP/2 以降だけです。HTTP/1.1 では `onUploadProgress` 付きのアップロードは失敗します。Firefox はそれらのボディをそのまま送り、コールバックを呼び出しません。進捗コールバック内で例外が throw された場合、呼び出しは `EXT_OBSERVER_FAILED` で失敗します。
 
 ## 関連ドキュメント
 

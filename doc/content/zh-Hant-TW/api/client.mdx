@@ -57,7 +57,7 @@ description: createClient、選項輔助函式與 Client 型別。
 1. 起始的標頭集合就是預設值。
 2. 請求 builder 回傳的 `headers` 會取代同名的預設值。該名稱的第一個值取代預設；同一陣列中後面的值只會接在這次取代結果之後。純量或 `Headers` 實例同樣是取代。其他預設名稱維持不變。
 3. 攔截器收到的是合併後的標頭，可以加以修改。
-4. 使用預設 HTTP 傳輸時，XSRF 標頭最後才加入，而且只在它仍不存在時才加入（見 `withXSRF`）。
+4. 使用 `@defjs/core/xsrf` 時，XSRF 標頭最後才加入，而且只在它仍不存在時才加入（見 `withXSRF`）。
 
 每個請求都會變的值，請交給攔截器處理，例如重新整理後的 Bearer token，或對序列化本文計算的 HMAC。
 
@@ -85,9 +85,9 @@ Client 層級沒有預設期限。某次呼叫需要期限時，在衍生的 cli
 
 <ApiSignature name="withXSRF" />
 
-為 HTTP 請求加上 XSRF token 標頭。`options` 就是 `xsrf` 設定，形狀與 [`ClientOptions`](/zh-Hant-TW/api/core/clientoptions-type) 上的 `xsrf` 相同：`cookieName`（預設 `XSRF-TOKEN`）、`headerName`（預設 `X-XSRF-TOKEN`）與 `tokenProvider({ request })`。不帶參數呼叫 `withXSRF()` 會啟用這些預設值。SSE 與 WebSocket 請求不受影響。
+為瀏覽器中的 HTTP 請求加上 XSRF token 標頭。從 `@defjs/core/xsrf` 匯入。`options` 是 `XSRFOptions`：`cookieName`（預設 `XSRF-TOKEN`）與 `headerName`（預設 `X-XSRF-TOKEN`）。不帶參數呼叫 `withXSRF()` 會啟用這些預設值；缺少 `location` 或 `document` 時（包含 Worker）會丟出錯誤。同構程式只在瀏覽器裡加上這個選項。令牌來自別處時，用攔截器設定。SSE 與 WebSocket 請求不受影響。
 
-預設 HTTP 傳輸只在下列條件全部成立時加入該標頭：HTTP 方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；請求尚未帶有該標頭；請求是同源的；而且找得到非空 token。只要 `location` 存在（包含在 Worker 中），解析後的請求 origin 就必須與 `location.origin` 相符；沒有 `location` 時，帶有 `baseEndpoint` 的請求視為同源。跨來源請求不會呼叫 `tokenProvider`。有提供 provider 時，token 來自它，否則來自 `document.cookie`，而且只在 `document` 存在時讀取。
+只在下列條件全部成立時設定該標頭：HTTP 方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；請求尚未帶有該標頭；解析後的請求 origin 等於頁面 origin；而且 `document.cookie` 中有非空 token。跨來源請求不會讀取 cookie。讀取 cookie 時丟出錯誤視為沒有 token。空 token 不設定該標頭。
 
 ### SSE 設定項
 
@@ -191,7 +191,7 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事�
 
 <ApiSignature name="ClientOptions" />
 
-簽名中列出的是 `sse` 與 `webSocket`。另外七個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 與 `withCredentials`——繼承自未匯出的 HTTP 基底型別。`endpoints` 是 `readonly string[]`。解析後的預設值是 `[]`。空陣列是合法值，呼叫會以 `REQ_BUILD_FAILED` 失敗。沒有 client 層級的 `timeout`。`createClient` 不接收這個物件，而是接收選項輔助函式。
+簽名中列出的是 `sse` 與 `webSocket`。另外六個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer` 與 `withCredentials`——繼承自未匯出的 HTTP 基底型別。`endpoints` 是 `readonly string[]`。解析後的預設值是 `[]`。空陣列是合法值，呼叫會以 `REQ_BUILD_FAILED` 失敗。沒有 client 層級的 `timeout`。`createClient` 不接收這個物件，而是接收選項輔助函式。
 
 ### ClientConfig
 

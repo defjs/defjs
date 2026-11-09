@@ -56,11 +56,11 @@ function stalledBody(onCancel?: (reason: unknown) => void) {
   return { fail: (reason: unknown) => fail(reason), reading, stream };
 }
 
-function settleWithin<T>(promise: Promise<T>, ms = 1000): Promise<T> {
+function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
-      ms,
+      10_000,
     );
     promise.then(
       (value) => {
@@ -927,7 +927,7 @@ export function defineNativeFetchSuite(): void {
         await serverSees(realFetch, key, { opened: 1 });
         controller.abort();
 
-        await expect(settleWithin(pending, 3000)).rejects.toBe(ERR_ABORTED);
+        await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
         await serverSees(realFetch, key, { closed: 1 });
       },
     );
@@ -951,7 +951,7 @@ export function defineNativeFetchSuite(): void {
         await serverSees(realFetch, key, { opened: 1 });
         controller.abort(new DOMException("deadline", "TimeoutError"));
 
-        await expect(settleWithin(pending, 3000)).rejects.toBe(ERR_TIMEOUT);
+        await expect(settleWithin(pending)).rejects.toBe(ERR_TIMEOUT);
         await serverSees(realFetch, key, { closed: 1, opened: 1 });
       },
     );

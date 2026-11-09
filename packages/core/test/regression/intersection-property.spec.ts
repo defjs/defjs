@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, inject, test } from "vitest";
 import { isRecord, isUnknownArray } from "../narrow";
 import { struct, type AnyStruct } from "../../src/struct";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
@@ -285,23 +285,8 @@ function runAttempts(
   return { failed, passed, rejectedInput };
 }
 
-function readCount(name: string, fallback: number): number {
-  const raw = Bun.env[name];
-  if (raw === undefined || raw === "") {
-    return fallback;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`);
-  }
-  return parsed;
-}
-
 test("parsed outbound encoding matches encodeJson except literal extras", () => {
-  const seed = readCount("ROUND13_SEED", 0x13c0ffee);
-  const attempts = readCount("ROUND13_ATTEMPTS", 1_000);
-  const maxDepth = readCount("ROUND13_DEPTH", 4);
-  const exotic = Bun.env["ROUND13_EXOTIC"] === "1";
+  const { seed, attempts, depth: maxDepth, exotic } = inject("round13");
   const result = runAttempts(seed, attempts, maxDepth, exotic);
   const summary = {
     attempts,

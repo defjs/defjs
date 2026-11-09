@@ -13,6 +13,10 @@
       "@vitest/browser-playwright": "^5.1.0",
       "@vitest/coverage-istanbul": "^5.1.0",
       "hono": "^4.13.16",
+      "@hono/bun": "^1.0.1",
+      "@hono/node-server": "^2.1.6",
+      "ws": "^8.22.1",
+      "@types/ws": "^8.18.2",
       "playwright": "^1.64.1",
       "tsdown": "^0.23.5",
       "typescript": "7.1.0-beta",
@@ -35,7 +39,11 @@
   "type": "module",
   "scripts": {
     "build": "bun run --workspaces --if-present build",
-    "test:unit": "bun run --sequential --workspaces --if-present test:unit && bun test ./test",
+    "unit:chrome": "bun run --sequential --workspaces --if-present unit:chrome",
+    "unit:firefox": "bun run --sequential --workspaces --if-present unit:firefox",
+    "unit:bun": "bun run --sequential --workspaces --if-present unit:bun && vitest run --config vitest.config.bun.ts",
+    "unit:node": "node test/unit-node.ts",
+    "test:unit": "bun run unit:chrome && bun run unit:firefox && node --run unit:node && bun run unit:bun",
     "test:e2e": "bun run --sequential --workspaces --if-present test:e2e",
     "typecheck": "bun check --project tsconfig.json && bun run --cwd doc typecheck"
   },
@@ -45,7 +53,8 @@
     "@types/estree": "^1.0.10",
     "hono": "catalog:",
     "playwright": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "bun": ">=1.4.4"

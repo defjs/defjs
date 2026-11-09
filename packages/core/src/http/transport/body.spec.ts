@@ -163,21 +163,14 @@ describe("http utils", () => {
 
     expect(headers.has("content-type")).toBe(false);
   });
-});
 
-function makeRequest(
-  init: { body: HttpRequest["body"] } & Partial<HttpRequest>,
-): HttpRequest {
-  return {
-    endpoint: "/test",
-    method: "POST",
-    ...init,
-  };
-}
-
-describe("shared-memory views", () => {
   test("sends a view over a SharedArrayBuffer as a copy of its bytes", () => {
-    const shared = new SharedArrayBuffer(4);
+    // `new SharedArrayBuffer` is hidden without cross-origin isolation; a shared WebAssembly memory's buffer is one.
+    const shared = new WebAssembly.Memory({
+      initial: 1,
+      maximum: 1,
+      shared: true,
+    }).buffer;
     new Uint8Array(shared).set([9, 1, 2, 3]);
     const view = new Uint8Array(shared, 1, 3);
 
@@ -190,3 +183,13 @@ describe("shared-memory views", () => {
     expect(body).toEqual(new Uint8Array([1, 2, 3]));
   });
 });
+
+function makeRequest(
+  init: { body: HttpRequest["body"] } & Partial<HttpRequest>,
+): HttpRequest {
+  return {
+    endpoint: "/test",
+    method: "POST",
+    ...init,
+  };
+}

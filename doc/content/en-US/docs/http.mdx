@@ -130,8 +130,8 @@ Canceling a write request only reports that the caller stopped waiting—it does
 ## 6. Credentials, XSRF, and transfer progress
 
 - **`withCredentials(true)`**: Sets Fetch `credentials: "include"` for HTTP and SSE requests.
-- **`withXSRF(options?)`**: Reads the XSRF cookie (`XSRF-TOKEN` by default) and injects the header (`X-XSRF-TOKEN`) on same-origin mutating HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: Pass on `client({ onDownloadProgress, onUploadProgress })`. Download progress reports `lengthComputable: true` only when `Content-Length` is positive and `Content-Encoding` is absent or `identity`. Upload progress streams bodies on server runtimes (Bun). A throwing progress callback fails the call with `EXT_OBSERVER_FAILED`.
+- **`withXSRF(options?)`**: From `@defjs/core/xsrf`. In a browser, reads the XSRF cookie (`XSRF-TOKEN` by default) and injects the header (`X-XSRF-TOKEN`) on same-origin mutating HTTP methods (`POST`, `PUT`, `PATCH`, `DELETE`). Calling `withXSRF()` throws when `location` or `document` is missing, including in a Worker. Isomorphic code adds this option only in the browser. A token from another source is set with an interceptor.
+- **`onDownloadProgress` / `onUploadProgress`**: Pass on `client({ onDownloadProgress, onUploadProgress })`. Download progress reports `lengthComputable: true` only when `Content-Length` is positive and `Content-Encoding` is absent or `identity`. Where `fetch` supports a streaming request body, upload progress converts `Blob`, `File`, `ArrayBuffer`, and `FormData` into a stream. Chromium reports that progress only on HTTP/2 or later; on HTTP/1.1 an upload that sets `onUploadProgress` fails. Firefox sends those bodies unchanged and does not call the callback. A throwing progress callback fails the call with `EXT_OBSERVER_FAILED`.
 
 ## Related reading
 

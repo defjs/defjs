@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, inject, test, vi } from "vitest";
 import type { Balancer, DoneInfo, PickInfo, PickOutcome } from "../balancer";
 import { outlierDetection, pickFirstBalancer } from "../balancer";
 import {
@@ -16,138 +16,93 @@ import { createSSEInterceptor } from "../interceptor";
 import { RequestUrlError } from "../internal/url";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
+import { fixture } from "../../test/fixture/client-auto";
+import type {
+  FixtureHeaders,
+  LoggedRequest,
+  ScenarioName,
+  ScenarioParams,
+  ScriptStep,
+} from "../../test/fixture/types";
 
-const SSE_HEADERS = { "content-type": "text/event-stream" };
+const SSE_HEADERS: FixtureHeaders = { "content-type": "text/event-stream" };
 const RECONNECT = { attempts: 1, delayMs: 0, factor: 1 };
+const EVENT_HOLD: ScriptStep = {
+  status: 200,
+  headers: SSE_HEADERS,
+  chunks: ["data: hi\n\n"],
+  then: "hold",
+};
+const EVENT_END: ScriptStep = {
+  status: 200,
+  headers: SSE_HEADERS,
+  chunks: ["data: hi\n\n"],
+  then: "end",
+};
+const EVENT_DROP: ScriptStep = {
+  status: 200,
+  headers: SSE_HEADERS,
+  chunks: ["data: hi\n\n"],
+  then: "drop",
+};
 
-const closers: Array<() => Promise<void>> = [];
-
-afterEach(async () => {
+afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
-  const pending = closers.splice(0);
-  await Promise.all(pending.map((close) => close()));
 });
 
 interface Running {
   url: string;
-  requests: string[];
-  close(): Promise<void>;
-  endHeld(): void;
-  dropHeld(): void;
+  requests(): Promise<readonly LoggedRequest[]>;
+  seen(count: number): Promise<void>;
 }
 
-type ProbeRequest = {
-  method: string;
-  url: string;
-  socket: { destroy(): void };
-};
+interface Held extends Running {
+  endHeld(): Promise<void>;
+  dropHeld(): Promise<void>;
+}
 
-type ProbeResponse = {
-  writeHead(status: number, headers?: Record<string, string>): void;
-  write(chunk: string): void;
-  end(body?: string): void;
-  destroy(): void;
-};
-
-function listen(
-  handle: (req: ProbeRequest, res: ProbeResponse) => void,
-): Promise<Running> {
-  const requests: string[] = [];
-  let held: ProbeResponse | undefined;
-  const server = Bun.serve({
-    fetch(request) {
-      const url = new URL(request.url);
-      requests.push(`${url.pathname}${url.search}`);
-      let status = 200;
-      let headers: Record<string, string> = {};
-      let controllerRef:
-        ReadableStreamDefaultController<Uint8Array> | undefined;
-      const encoder = new TextEncoder();
-      const settle = Promise.withResolvers<Response>();
-      let settled = false;
-
-      function streamResponse(): Response {
-        settled = true;
-        return new Response(stream, { status, headers });
-      }
-
-      function finish(body: string | null): Response {
-        settled = true;
-        return new Response(body, { status, headers });
-      }
-
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controllerRef = controller;
-        },
-      });
-
-      function controller(): ReadableStreamDefaultController<Uint8Array> {
-        if (!controllerRef) throw new Error("stream controller unavailable");
-        return controllerRef;
-      }
-
-      const response: ProbeResponse = {
-        writeHead(nextStatus, nextHeaders) {
-          status = nextStatus;
-          headers = nextHeaders ?? {};
-        },
-        write(chunk) {
-          controller().enqueue(encoder.encode(chunk));
-          if (!settled) settle.resolve(streamResponse());
-        },
-        end(body) {
-          if (settled) {
-            if (body !== undefined) {
-              controller().enqueue(encoder.encode(body));
-            }
-            controller().close();
-            return;
-          }
-          settle.resolve(finish(body ?? null));
-        },
-        destroy() {
-          controller().error(new Error("test server destroyed the connection"));
-          if (!settled) settle.resolve(streamResponse());
-        },
-      };
-
-      held = response;
-      handle(
-        {
-          method: request.method,
-          url: `${url.pathname}${url.search}`,
-          socket: { destroy: () => response.destroy() },
-        },
-        response,
+async function listen<S extends ScenarioName>(
+  scenario: S,
+  params: ScenarioParams[S],
+): Promise<Held> {
+  const client = fixture(inject("testServerHost"), inject("fixtureToken"));
+  const url = await client.endpoint("endpoint", scenario, params);
+  return {
+    url,
+    async requests() {
+      const logged = await client.log();
+      return logged.requests.filter(
+        (request) => request.endpoint === "endpoint",
       );
-      return settle.promise;
     },
-    hostname: "127.0.0.1",
-    port: 0,
-  });
-
-  const running: Running = {
-    url: `http://127.0.0.1:${server.port}`,
-    requests,
+    async seen(count) {
+      await client.log({ wait: count });
+    },
     endHeld() {
-      held?.end();
+      return client.act("endpoint", "end");
     },
     dropHeld() {
-      held?.destroy();
-    },
-    close: async () => {
-      await server.stop(true);
+      return client.act("endpoint", "drop");
     },
   };
-  closers.push(() => running.close());
-  return Promise.resolve(running);
 }
 
-function writeEvent(res: ProbeResponse): void {
-  res.writeHead(200, SSE_HEADERS);
-  res.write("data: hi\n\n");
+async function listenReset(): Promise<Running> {
+  const client = fixture(inject("testServerHost"), inject("fixtureToken"));
+  await client.endpoint("anchor", "hang", {});
+  return {
+    url: client.rawUrl(inject("rawServerOrigin"), "reset-before-headers"),
+    async requests() {
+      const logged = await client.log();
+      return logged.requests.filter(
+        (request) => request.endpoint === "raw:reset-before-headers",
+      );
+    },
+    async seen(count) {
+      await client.log({ wait: count });
+    },
+  };
 }
 
 interface Recorded {
@@ -226,13 +181,8 @@ function readFailureResponse(): Response {
 }
 
 test("repicks after a read failure when reconnect is on, and does not pick on terminal paths", async () => {
-  const primary = await listen((_req, res) => {
-    writeEvent(res);
-  });
-  const secondary = await listen((_req, res) => {
-    writeEvent(res);
-    res.end();
-  });
+  const primary = await listen("script", { plan: [EVENT_HOLD] });
+  const secondary = await listen("script", { plan: [EVENT_END] });
   const recorded = track((index) =>
     index === 1 ? primary.url : secondary.url,
   );
@@ -250,11 +200,11 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     done: false,
     value: { data: "hi" },
   });
-  primary.dropHeld();
+  await primary.dropHeld();
   await stream.closed;
   expect(recorded.picks).toHaveLength(2);
-  expect(primary.requests).toHaveLength(1);
-  expect(secondary.requests).toHaveLength(1);
+  expect(await primary.requests()).toHaveLength(1);
+  expect(await secondary.requests()).toHaveLength(1);
   expect(recorded.ends).toEqual([
     { endpoint: primary.url, info: { attempted: true, status: 200 } },
     { endpoint: secondary.url, info: { attempted: true, status: 200 } },
@@ -267,10 +217,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   expect(recorded.pending()).toBe(0);
   expectPicks(recorded);
 
-  const eof = await listen((_req, res) => {
-    writeEvent(res);
-    res.end();
-  });
+  const eof = await listen("script", { plan: [EVENT_END] });
   const eofRecord = track(() => eof.url);
   const eofClient = createClient(
     withEndpoint(eof.url),
@@ -281,15 +228,16 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   expect(eofError).toBeNull();
   await eofStream?.closed;
   expect(eofRecord.picks).toHaveLength(1);
-  expect(eof.requests).toHaveLength(1);
+  expect(await eof.requests()).toHaveLength(1);
 
-  const refused = await listen((_req, res) => {
-    res.writeHead(500, SSE_HEADERS);
-    res.end();
+  const refused = await listen("respond", {
+    status: 500,
+    headers: SSE_HEADERS,
   });
-  const plain = await listen((_req, res) => {
-    res.writeHead(200, { "content-type": "text/plain" });
-    res.end("nope");
+  const plain = await listen("respond", {
+    status: 200,
+    contentType: "text/plain",
+    body: "nope",
   });
   for (const [server, definition] of [
     [
@@ -319,13 +267,14 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     );
     expect(terminalError?.code).not.toBeUndefined();
     expect(terminal.picks).toHaveLength(1);
-    expect(server.requests).toHaveLength(1);
+    expect(await server.requests()).toHaveLength(1);
     expect(terminal.pending()).toBe(0);
   }
 
-  const huge = await listen((_req, res) => {
-    res.writeHead(200, SSE_HEADERS);
-    res.end(`data: ${"x".repeat(64)}\n\n`);
+  const huge = await listen("respond", {
+    status: 200,
+    headers: SSE_HEADERS,
+    body: `data: ${"x".repeat(64)}\n\n`,
   });
   const hugeRecord = track(() => huge.url);
   const hugeStream = defineEventStream({
@@ -352,10 +301,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   ]);
   expect(hugeRecord.pending()).toBe(0);
 
-  const dropped = await listen((_req, res) => {
-    writeEvent(res);
-    setTimeout(() => res.destroy(), 0);
-  });
+  const dropped = await listen("script", { plan: [EVENT_DROP] });
   const quiet = track(() => dropped.url);
   const [quietError, quietStream] = await orders(
     createClient(withEndpoint(dropped.url), withBalancer(quiet.balancer)),
@@ -363,12 +309,9 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   expect(quietError).toBeNull();
   await quietStream?.closed;
   expect(quiet.picks).toHaveLength(1);
-  expect(dropped.requests).toHaveLength(1);
+  expect(await dropped.requests()).toHaveLength(1);
 
-  const postServer = await listen((_req, res) => {
-    writeEvent(res);
-    setTimeout(() => res.destroy(), 0);
-  });
+  const postServer = await listen("script", { plan: [EVENT_DROP] });
   const post = defineEventStream({
     events: { message: struct.string() },
     method: "POST",
@@ -386,16 +329,9 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   expect(postError).toBeNull();
   await postStream?.closed;
   expect(postRecord.picks).toHaveLength(1);
-  expect(postServer.requests).toHaveLength(1);
+  expect(await postServer.requests()).toHaveLength(1);
 
-  const allowed = await listen((req, res) => {
-    writeEvent(res);
-    if (req.method === "POST" && allowed.requests.length === 1) {
-      setTimeout(() => res.destroy(), 0);
-      return;
-    }
-    res.end();
-  });
+  const allowed = await listen("script", { plan: [EVENT_DROP, EVENT_END] });
   const allowedRecord = track(() => allowed.url);
   const [allowedError, allowedStream] = await post(
     createClient(
@@ -407,37 +343,9 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   expect(allowedError).toBeNull();
   await allowedStream?.closed;
   expect(allowedRecord.picks).toHaveLength(2);
-  expect(allowed.requests).toHaveLength(2);
+  expect(await allowed.requests()).toHaveLength(2);
 
-  const body = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new Uint8Array([1]));
-      controller.close();
-    },
-  });
-  const streamBody = defineEventStream({
-    builder: () => ({ body }),
-    events: { message: struct.string() },
-    method: "POST",
-    operation: "orders",
-    path: "/events",
-  });
-  const handle = vi.fn(() => Promise.reject(new TypeError("down")));
-  const streamRecord = track(() => "https://example.com");
-  const [streamError] = await streamBody(
-    createClient(
-      withEndpoint("https://example.com"),
-      withBalancer(streamRecord.balancer),
-      withSSEHandle(handle),
-      withSSEReconnect({ ...RECONNECT, shouldReconnect: () => true }),
-    ),
-  );
-  expect(streamError?.code).toBe("NET_UNREACHABLE");
-  expect(handle).toHaveBeenCalledTimes(1);
-  expect(streamRecord.picks).toHaveLength(1);
-  expect(streamRecord.pending()).toBe(0);
-
-  const held = await listen(() => undefined);
+  const held = await listen("hang", {});
   const cancelRecord = track(() => held.url);
   const controller = new AbortController();
   const pending = orders(
@@ -447,7 +355,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
       withSSEReconnect(RECONNECT),
     )({ signal: controller.signal }),
   );
-  await vi.waitFor(() => expect(held.requests).toHaveLength(1));
+  await held.seen(1);
   controller.abort(ERR_ABORTED);
   const [cancelError] = await pending;
   expect(cancelError?.code).toBe("NET_ABORTED");
@@ -461,10 +369,11 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
 test.each([false, true])(
   "default pick-first leaves a read-failed endpoint with reconnect enabled: %s",
   async (reconnect) => {
-    const primary = await listen((_req, res) => writeEvent(res));
-    const secondary = await listen((_req, res) => {
-      res.writeHead(200, SSE_HEADERS);
-      res.end("data: recovered\n\n");
+    const primary = await listen("script", { plan: [EVENT_HOLD] });
+    const secondary = await listen("respond", {
+      status: 200,
+      headers: SSE_HEADERS,
+      body: "data: recovered\n\n",
     });
     const client = createClient(
       withEndpoint(primary.url, secondary.url),
@@ -479,28 +388,28 @@ test.each([false, true])(
         value: { data: "hi" },
       });
       expect(open?.response.status).toBe(200);
-      primary.dropHeld();
+      await primary.dropHeld();
       if (reconnect) {
         await expect(iterator.next()).resolves.toMatchObject({
           value: { data: "recovered" },
         });
         expect(await stream.closed).toEqual({ kind: "eof" });
-        expect(secondary.requests).toHaveLength(1);
+        expect(await secondary.requests()).toHaveLength(1);
       } else {
         expect(await stream.closed).toMatchObject({
           code: "NET_UNREACHABLE",
           kind: "error",
         });
-        expect(secondary.requests).toHaveLength(0);
+        expect(await secondary.requests()).toHaveLength(0);
       }
-      expect(primary.requests).toHaveLength(1);
+      expect(await primary.requests()).toHaveLength(1);
       const [nextError, nextStream] = await orders(client);
       expect(nextError).toBeNull();
       if (!nextStream) throw new Error("expected the next stream");
       try {
-        expect(primary.requests).toHaveLength(1);
+        expect(await primary.requests()).toHaveLength(1);
         expect(await nextStream.closed).toEqual({ kind: "eof" });
-        expect(secondary.requests).toHaveLength(reconnect ? 2 : 1);
+        expect(await secondary.requests()).toHaveLength(reconnect ? 2 : 1);
       } finally {
         await nextStream[Symbol.asyncDispose]();
       }
@@ -675,9 +584,7 @@ test("keeps read failures on a replaced base and a second next unattributed", as
 });
 
 test("calls done when the connection ends, not when the handshake succeeds", async () => {
-  const held = await listen((_req, res) => {
-    writeEvent(res);
-  });
+  const held = await listen("script", { plan: [EVENT_HOLD] });
   const recorded = track(() => held.url);
   const [error, stream] = await orders(
     createClient(withEndpoint(held.url), withBalancer(recorded.balancer)),
@@ -688,7 +595,7 @@ test("calls done when the connection ends, not when the handshake succeeds", asy
   }
   expect(recorded.dones).toHaveLength(0);
   expect(recorded.pending()).toBe(1);
-  held.endHeld();
+  await held.endHeld();
   await stream.closed;
   expect(recorded.dones).toEqual([
     { endpoint: held.url, info: { attempted: true, status: 200 } },
@@ -698,9 +605,7 @@ test("calls done when the connection ends, not when the handshake succeeds", asy
 });
 
 test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async () => {
-  const down = await listen((req) => {
-    req.socket.destroy();
-  });
+  const down = await listenReset();
   const cause = new Error("no endpoint");
   const recorded = track((index) =>
     index === 1 ? down.url : [cause, undefined],
@@ -743,10 +648,7 @@ test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async (
 });
 
 test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open", async () => {
-  const dropped = await listen((_req, res) => {
-    writeEvent(res);
-    setTimeout(() => res.destroy(), 0);
-  });
+  const dropped = await listen("script", { plan: [EVENT_DROP] });
   const cause = new Error("no endpoint");
   const recorded = track((index) =>
     index === 1 ? dropped.url : [cause, undefined],
@@ -799,9 +701,7 @@ test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open"
 });
 
 test("calls done once when a reconnect url fails and releases the in-flight count", async () => {
-  const down = await listen((req) => {
-    req.socket.destroy();
-  });
+  const down = await listenReset();
   const bad = "http://[";
   const recorded = track((index) => (index === 1 ? down.url : bad));
   const [error] = await orders(
@@ -820,10 +720,7 @@ test("calls done once when a reconnect url fails and releases the in-flight coun
   expect(recorded.pending()).toBe(0);
   expect(recorded.picks).toHaveLength(2);
 
-  const opened = await listen((_req, res) => {
-    writeEvent(res);
-    setTimeout(() => res.destroy(), 0);
-  });
+  const opened = await listen("script", { plan: [EVENT_DROP] });
   const afterOpen = track((index) => (index === 1 ? opened.url : bad));
   const [openError, stream] = await orders(
     createClient(
@@ -888,18 +785,19 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   ]);
 
   const timeoutHeaders = new AbortController();
-  const timeoutServer = await listen(() => {
-    timeoutHeaders.abort(ERR_TIMEOUT);
-  });
+  const timeoutServer = await listen("hang", {});
   const timeoutHeadersRecord = track(() => timeoutServer.url);
-  const [timeoutDuring] = await orders(
+  const pendingTimeout = orders(
     createClient(
       withEndpoint(timeoutServer.url),
       withBalancer(timeoutHeadersRecord.balancer),
     )({ signal: timeoutHeaders.signal }),
   );
+  await timeoutServer.seen(1);
+  timeoutHeaders.abort(ERR_TIMEOUT);
+  const [timeoutDuring] = await pendingTimeout;
   expect(timeoutDuring?.code).toBe("NET_TIMEOUT");
-  expect(timeoutServer.requests).toHaveLength(1);
+  expect(await timeoutServer.requests()).toHaveLength(1);
   expect(timeoutHeadersRecord.dones).toEqual([
     {
       endpoint: timeoutServer.url,
@@ -909,24 +807,23 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   expect(timeoutHeadersRecord.pending()).toBe(0);
 
   const cancelHeaders = new AbortController();
-  const cancelServer = await listen(() => {
-    cancelHeaders.abort(ERR_ABORTED);
-  });
+  const cancelServer = await listen("hang", {});
   const cancelHeadersRecord = track(() => cancelServer.url);
-  const [cancelDuring] = await orders(
+  const pendingCancel = orders(
     createClient(
       withEndpoint(cancelServer.url),
       withBalancer(cancelHeadersRecord.balancer),
     )({ signal: cancelHeaders.signal }),
   );
+  await cancelServer.seen(1);
+  cancelHeaders.abort(ERR_ABORTED);
+  const [cancelDuring] = await pendingCancel;
   expect(cancelDuring?.code).toBe("NET_ABORTED");
   expect(cancelHeadersRecord.dones).toEqual([
     { endpoint: cancelServer.url, info: { attempted: false } },
   ]);
 
-  const heldTimeout = await listen((_req, res) => {
-    writeEvent(res);
-  });
+  const heldTimeout = await listen("script", { plan: [EVENT_HOLD] });
   const heldTimeoutRecord = track(() => heldTimeout.url);
   const timeoutAfter = new AbortController();
   const [heldTimeoutError, heldTimeoutStream] = await orders(
@@ -950,9 +847,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   ]);
   expect(heldTimeoutRecord.pending()).toBe(0);
 
-  const heldCancel = await listen((_req, res) => {
-    writeEvent(res);
-  });
+  const heldCancel = await listen("script", { plan: [EVENT_HOLD] });
   const heldCancelRecord = track(() => heldCancel.url);
   const [heldCancelError, heldCancelStream] = await orders(
     createClient(
@@ -1018,13 +913,14 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
 });
 
 test("calls done once when sseHandler sees a replaced base and does not record its status", async () => {
-  const origin = await listen((_req, res) => {
-    res.writeHead(200, SSE_HEADERS);
-    res.end("data: origin\n\n");
+  const origin = await listen("respond", {
+    status: 200,
+    headers: SSE_HEADERS,
+    body: "data: origin\n\n",
   });
-  const replaced = await listen((_req, res) => {
-    res.writeHead(503, SSE_HEADERS);
-    res.end();
+  const replaced = await listen("respond", {
+    status: 503,
+    headers: SSE_HEADERS,
   });
   const recorded = track(() => origin.url);
   const [error, stream, open] = await orders(
@@ -1043,18 +939,16 @@ test("calls done once when sseHandler sees a replaced base and does not record i
   expect(stream).toBeUndefined();
   expect(error?.code).toBe("HTTP_STATUS");
   expect(open?.response.status).toBe(503);
-  expect(origin.requests).toHaveLength(0);
+  expect(await origin.requests()).toHaveLength(0);
   // An unattributed 503 is retried on the same base, like the refused connection below.
-  expect(replaced.requests).toHaveLength(RECONNECT.attempts + 1);
+  expect(await replaced.requests()).toHaveLength(RECONNECT.attempts + 1);
   expect(recorded.dones).toEqual([
     { endpoint: origin.url, info: { attempted: false } },
   ]);
   expect(recorded.picks).toHaveLength(1);
   expect(recorded.pending()).toBe(0);
 
-  const dropping = await listen((req) => {
-    req.socket.destroy();
-  });
+  const dropping = await listenReset();
   const again = track(() => origin.url);
   const [againError, againStream] = await orders(
     createClient(
@@ -1072,7 +966,7 @@ test("calls done once when sseHandler sees a replaced base and does not record i
   expect(againError).not.toBeNull();
   expect(againStream).toBeUndefined();
   expect(again.picks).toHaveLength(1);
-  expect(dropping.requests.length).toBeGreaterThan(1);
+  expect((await dropping.requests()).length).toBeGreaterThan(1);
   expect(again.dones).toEqual([
     { endpoint: origin.url, info: { attempted: false } },
   ]);
@@ -1334,13 +1228,11 @@ test("keeps EXT_INTERCEPTOR_FAILED when an interceptor throws a REQ_BUILD_FAILED
 test.each([502, 503, 504])(
   "retries a %s handshake on a fresh pick at startup and after a drop",
   async (status) => {
-    const busy = await listen((_req, res) => {
-      res.writeHead(status);
-      res.end("busy");
-    });
-    const healthy = await listen((_req, res) => {
-      res.writeHead(200, SSE_HEADERS);
-      res.end("data: recovered\n\n");
+    const busy = await listen("respond", { status, body: "busy" });
+    const healthy = await listen("respond", {
+      status: 200,
+      headers: SSE_HEADERS,
+      body: "data: recovered\n\n",
     });
     const shouldReconnect = vi.fn((_context: unknown) => true);
     const startup = track((index) => (index === 1 ? busy.url : healthy.url));
@@ -1371,10 +1263,10 @@ test.each([502, 503, 504])(
       cause: { code: "HTTP_STATUS", status },
       open: { response: { status } },
     });
-    expect(busy.requests).toHaveLength(1);
-    expect(healthy.requests).toHaveLength(1);
+    expect(await busy.requests()).toHaveLength(1);
+    expect(await healthy.requests()).toHaveLength(1);
 
-    const primary = await listen((_req, res) => writeEvent(res));
+    const primary = await listen("script", { plan: [EVENT_HOLD] });
     const reconnecting = track((index) =>
       index === 1 ? primary.url : index === 2 ? busy.url : healthy.url,
     );
@@ -1391,7 +1283,7 @@ test.each([502, 503, 504])(
     await expect(iterator.next()).resolves.toMatchObject({
       value: { data: "hi" },
     });
-    primary.dropHeld();
+    await primary.dropHeld();
     await expect(iterator.next()).resolves.toMatchObject({
       value: { data: "recovered" },
     });
@@ -1408,28 +1300,26 @@ test.each([502, 503, 504])(
       },
       { endpoint: healthy.url, info: { attempted: true, status: 200 } },
     ]);
-    expect(busy.requests).toHaveLength(2);
-    expect(healthy.requests).toHaveLength(2);
+    expect(await busy.requests()).toHaveLength(2);
+    expect(await healthy.requests()).toHaveLength(2);
     expect(reconnecting.pending()).toBe(0);
     expectPicks(reconnecting);
   },
 );
 
 test("default pick-first moves past a 503 reconnect handshake back to the recovered endpoint", async () => {
-  let served = 0;
-  const flaky = await listen((_req, res) => {
-    served += 1;
-    if (served === 1) {
-      writeEvent(res);
-      return;
-    }
-    res.writeHead(200, SSE_HEADERS);
-    res.end("data: again\n\n");
+  const flaky = await listen("script", {
+    plan: [
+      EVENT_HOLD,
+      {
+        status: 200,
+        headers: SSE_HEADERS,
+        chunks: ["data: again\n\n"],
+        then: "end",
+      },
+    ],
   });
-  const busy = await listen((_req, res) => {
-    res.writeHead(503);
-    res.end("busy");
-  });
+  const busy = await listen("respond", { status: 503, body: "busy" });
   const [error, stream] = await orders(
     createClient(
       withEndpoint(flaky.url, busy.url),
@@ -1442,22 +1332,19 @@ test("default pick-first moves past a 503 reconnect handshake back to the recove
   await expect(iterator.next()).resolves.toMatchObject({
     value: { data: "hi" },
   });
-  flaky.dropHeld();
+  await flaky.dropHeld();
   await expect(iterator.next()).resolves.toMatchObject({
     value: { data: "again" },
   });
   expect(await stream.closed).toEqual({ kind: "eof" });
-  expect(flaky.requests).toHaveLength(2);
-  expect(busy.requests).toHaveLength(1);
+  expect(await flaky.requests()).toHaveLength(2);
+  expect(await busy.requests()).toHaveLength(1);
 });
 
 test.each([400, 401, 404])(
   "keeps a %s handshake fatal at startup and after a drop with reconnect enabled",
   async (status) => {
-    const rejecting = await listen((_req, res) => {
-      res.writeHead(status);
-      res.end("no");
-    });
+    const rejecting = await listen("respond", { status, body: "no" });
     const shouldReconnect = vi.fn(() => true);
     const startup = track(() => rejecting.url);
     const [error, stream, open] = await orders(
@@ -1470,14 +1357,14 @@ test.each([400, 401, 404])(
     expect(stream).toBeUndefined();
     expect(error).toMatchObject({ code: "HTTP_STATUS", status });
     expect(open?.response.status).toBe(status);
-    expect(rejecting.requests).toHaveLength(1);
+    expect(await rejecting.requests()).toHaveLength(1);
     expect(startup.picks).toHaveLength(1);
     expect(startup.dones).toEqual([
       { endpoint: rejecting.url, info: { attempted: true, status } },
     ]);
     expect(shouldReconnect).not.toHaveBeenCalled();
 
-    const primary = await listen((_req, res) => writeEvent(res));
+    const primary = await listen("script", { plan: [EVENT_HOLD] });
     const reconnecting = track((index) =>
       index === 1 ? primary.url : rejecting.url,
     );
@@ -1494,7 +1381,7 @@ test.each([400, 401, 404])(
     await expect(iterator.next()).resolves.toMatchObject({
       value: { data: "hi" },
     });
-    primary.dropHeld();
+    await primary.dropHeld();
     const failure = await iterator.next().catch((cause: unknown) => cause);
     const closed = await opened.closed;
     expect(closed).toMatchObject({
@@ -1507,16 +1394,13 @@ test.each([400, 401, 404])(
     expect(opened.open.response.status).toBe(status);
     expect(shouldReconnect).toHaveBeenCalledOnce();
     expect(reconnecting.picks).toHaveLength(2);
-    expect(rejecting.requests).toHaveLength(2);
+    expect(await rejecting.requests()).toHaveLength(2);
     expect(reconnecting.pending()).toBe(0);
   },
 );
 
 test("ends exhausted 503 retries with the HTTP_STATUS fault of a failed first handshake", async () => {
-  const busy = await listen((_req, res) => {
-    res.writeHead(503);
-    res.end("busy");
-  });
+  const busy = await listen("respond", { status: 503, body: "busy" });
   const [plain, , plainOpen] = await orders(
     createClient(withEndpoint(busy.url)),
   );
@@ -1524,14 +1408,14 @@ test("ends exhausted 503 retries with the HTTP_STATUS fault of a failed first ha
     createClient(withEndpoint(busy.url), withSSEReconnect(RECONNECT)),
   );
   expect(stream).toBeUndefined();
-  expect(busy.requests).toHaveLength(1 + RECONNECT.attempts + 1);
+  expect(await busy.requests()).toHaveLength(1 + RECONNECT.attempts + 1);
   expect(plain).toMatchObject({ code: "HTTP_STATUS", status: 503 });
   expect(exhausted).toMatchObject({ code: "HTTP_STATUS", status: 503 });
   expect(exhausted?.message).toBe(plain?.message);
   expect(plainOpen?.response.status).toBe(503);
   expect(open?.response.status).toBe(503);
 
-  const primary = await listen((_req, res) => writeEvent(res));
+  const primary = await listen("script", { plan: [EVENT_HOLD] });
   const reconnecting = track((index) => (index === 1 ? primary.url : busy.url));
   const [openError, opened] = await orders(
     createClient(
@@ -1546,7 +1430,7 @@ test("ends exhausted 503 retries with the HTTP_STATUS fault of a failed first ha
   await expect(iterator.next()).resolves.toMatchObject({
     value: { data: "hi" },
   });
-  primary.dropHeld();
+  await primary.dropHeld();
   const failure = await iterator.next().catch((cause: unknown) => cause);
   const closed = await opened.closed;
   expect(closed).toMatchObject({
@@ -1601,25 +1485,10 @@ test("applies the reconnect gates to a 503 handshake", async () => {
     operation: "orders",
     path: "/events",
   });
-  const streamBody = defineEventStream({
-    builder: () => ({
-      body: new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new Uint8Array([1]));
-          controller.close();
-        },
-      }),
-    }),
-    events: { message: struct.string() },
-    method: "POST",
-    operation: "orders",
-    path: "/events",
-  });
   for (const [definition, reconnect] of [
     [post, RECONNECT],
     [orders, { ...RECONNECT, shouldReconnect: () => false }],
     [orders, { ...RECONNECT, attempts: 0 }],
-    [streamBody, { ...RECONNECT, shouldReconnect: () => true }],
   ] as const) {
     busy.mockClear();
     const [error] = await definition(

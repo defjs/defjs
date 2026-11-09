@@ -19,21 +19,21 @@
   },
   "scripts": {
     "build": "bun --bun tsdown --config-loader native --config tsdown.config.ts",
-    "test:unit": "vitest run --coverage"
+    "unit:bun": "vitest run --config vitest.config.bun.ts",
+    "unit:node": "vitest run --config vitest.config.node.ts"
   },
   "dependencies": {
     "@opentelemetry/api-logs": "^0.223.0"
   },
   "devDependencies": {
-    "@defjs/core": "workspace:^",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/core": "3.0.0",
-    "@vitest/coverage-istanbul": "catalog:",
-    "hono": "catalog:",
-    "tsdown": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "@vitest/coverage-istanbul": "^5.1.0",
+    "hono": "^4.13.16",
+    "tsdown": "^0.23.5",
+    "typescript": "7.1.0-beta",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
   },
   "peerDependencies": {
     "@defjs/core": "^0.7.0",

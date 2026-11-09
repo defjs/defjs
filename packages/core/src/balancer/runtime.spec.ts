@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import type { Balancer, PickInfo, PickOutcome } from "./balancer";
 import { outlierDetection } from "./outlier_detection";
 import { pickEndpoint } from "./runtime";
+import { yieldMacrotask } from "../../test/macrotask";
 
 const info: PickInfo = { endpoints: ["https://a"] };
 
@@ -121,7 +122,7 @@ describe("synchronous balancer callbacks", () => {
     );
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(fault?.cause).toBe(returned);
-    await Bun.sleep(0);
+    await yieldMacrotask();
   });
 
   test("observes a rejected async done and finishes once", async () => {
@@ -147,7 +148,7 @@ describe("synchronous balancer callbacks", () => {
     selected?.done({ attempted: false });
     expect(selected?.finished()).toBe(true);
     expect(calls).toBe(1);
-    await Bun.sleep(0);
+    await yieldMacrotask();
   });
 
   test("observes custom thenables with their receiver and only a rejection handler", () => {

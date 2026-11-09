@@ -381,28 +381,26 @@
     ]
   },
   {
-    "package": "@defjs/core",
+    "package": "@defjs/core/xsrf",
     "name": "withXSRF",
     "kind": "function",
     "slug": "core/withxsrf",
-    "source": "packages/core/src/client/option.ts",
+    "source": "packages/core/src/xsrf/xsrf.ts",
     "group": "client",
-    "description": "Enables XSRF cookie-to-header token forwarding for HTTP requests.\n\nSSE and WebSocket requests do not get the header. `cookieName` defaults to `XSRF-TOKEN` and `headerName` to `X-XSRF-TOKEN` when names are omitted.\n\n- The header is set only when all of these hold: the method is not `GET`, `HEAD`, `OPTIONS`, or `TRACE`; the request does not already have that header; the client has an endpoint; and, whenever `location` exists (Window or Worker), the resolved request URL has the same origin as `location.origin`. A cross-origin request does not call the provider.\n- Without `tokenProvider`, the token is read from `document.cookie` and URL-decoded only when `document` exists. Workers and servers need a provider to supply a token.\n- With `tokenProvider`, the cookie is never read. The provider receives the request, and its result is the token. An empty string, `null`, or `undefined` means no header.",
-    "signatures": [
-      "function withXSRF(\n  options?: HttpClientOptions[\"xsrf\"],\n): ClientOption;"
-    ],
-    "related": [],
+    "description": "Enables XSRF cookie-to-header forwarding for browser HTTP requests.\n\nImport this from `@defjs/core/xsrf`. Calling it checks `globalThis` immediately and\nthrows when `location` or `document` is missing, including in a Worker. Isomorphic\ncode adds this option only in the browser. It sets `config.finalizeHeaders`, which the\nHTTP transport calls once per attempt. The hook receives the outgoing headers after\ninterceptors and before the default `Accept` is filled in, plus the resolved URL.\nSSE and WebSocket requests do not get the header.\n`cookieName` defaults to `XSRF-TOKEN` and `headerName` to `X-XSRF-TOKEN` when names\nare omitted.\n\n- The header is set only when all of these hold: the method is not `GET`, `HEAD`, `OPTIONS`, or `TRACE`; the request does not already have that header; `url.origin` equals the page origin; and `document.cookie` holds a non-empty token. A cross-origin request does not read the cookie.\n- A throw while reading the cookie counts as no token. An empty token does not set the header.\n- A token from another source is set with an interceptor.",
+    "signatures": ["function withXSRF(options?: XSRFOptions): ClientOption;"],
+    "related": ["@defjs/core/xsrf:XSRFOptions", "@defjs/core:ClientOption"],
     "exampleFiles": [],
-    "returns": ["An option that sets `config.xsrf`."],
+    "returns": ["An option that sets `config.finalizeHeaders`."],
     "throws": [],
     "tags": [],
     "typeTable": null,
     "parameters": [
       {
         "name": "options",
-        "description": "Cookie/header names and optional token provider.",
-        "type": "HttpClientOptions[\"xsrf\"]",
-        "simplifiedType": "HttpClientOptions[\"xsrf\"]",
+        "description": "Cookie name and header name.",
+        "type": "XSRFOptions",
+        "simplifiedType": "object",
         "required": false,
         "deprecated": false,
         "tags": []
@@ -410,19 +408,64 @@
     ],
     "overloads": [
       {
-        "signature": "function withXSRF(\n  options?: HttpClientOptions[\"xsrf\"],\n): ClientOption;",
+        "signature": "function withXSRF(options?: XSRFOptions): ClientOption;",
         "parameters": [
           {
             "name": "options",
-            "description": "Cookie/header names and optional token provider.",
-            "type": "HttpClientOptions[\"xsrf\"]",
-            "simplifiedType": "HttpClientOptions[\"xsrf\"]",
+            "description": "Cookie name and header name.",
+            "type": "XSRFOptions",
+            "simplifiedType": "object",
             "required": false,
             "deprecated": false,
             "tags": []
           }
         ],
-        "returns": ["An option that sets `config.xsrf`."]
+        "returns": ["An option that sets `config.finalizeHeaders`."]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core/xsrf",
+    "name": "XSRFOptions",
+    "kind": "type",
+    "slug": "core/xsrf/xsrfoptions-type",
+    "source": "packages/core/src/xsrf/xsrf.ts",
+    "group": "client",
+    "description": "Cookie and header names for {@link withXSRF}.\n\n`cookieName` defaults to `XSRF-TOKEN` and `headerName` to `X-XSRF-TOKEN` when omitted.\nThe token is read from `document.cookie`. An empty value means no header.\nA token from another source is set with an interceptor.",
+    "signatures": [
+      "interface XSRFOptions {\n  cookieName?: string;\n  headerName?: string;\n}"
+    ],
+    "related": ["@defjs/core/xsrf:withXSRF"],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "cookieName",
+        "description": "Cookie name that stores the XSRF token. Defaults to `XSRF-TOKEN`.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "headerName",
+        "description": "Request header name that receives the token. Defaults to `X-XSRF-TOKEN`.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface XSRFOptions {\n  cookieName?: string;\n  headerName?: string;\n}",
+        "parameters": [],
+        "returns": []
       }
     ]
   },
@@ -951,15 +994,6 @@
         "tags": []
       },
       {
-        "name": "xsrf",
-        "description": "XSRF cookie/header mapping and optional token provider.",
-        "type": "{ cookieName?: string; headerName?: string; tokenProvider?: (context: { request: HttpRequest; }) => string | null | undefined; } | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
         "name": "withCredentials",
         "description": "When `true`, credentials are included with requests.",
         "type": "boolean | undefined",
@@ -985,7 +1019,7 @@
     "slug": "core/clientconfig-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `http.retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `withXSRF` fills `xsrf.cookieName` with `XSRF-TOKEN` and `xsrf.headerName` with `X-XSRF-TOKEN` when they are omitted.",
+    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `http.retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.",
     "signatures": [
       "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}"
     ],
@@ -1068,10 +1102,10 @@
         "tags": []
       },
       {
-        "name": "xsrf",
-        "description": "Resolved XSRF settings when enabled.",
-        "type": "{ cookieName: string; headerName: string; tokenProvider?: (context: { request: HttpRequest; }) => string | null | undefined; } | undefined",
-        "simplifiedType": "object",
+        "name": "finalizeHeaders",
+        "description": "Called once per HTTP attempt. The hook receives the outgoing headers after interceptors and before the default `Accept` is filled in, plus the resolved URL.\nA throw is not an endpoint attempt and is not retried. Stays unset until an option assigns it.",
+        "type": "((request: HttpRequest, headers: Headers, url: URL) => void) | undefined",
+        "simplifiedType": "function",
         "required": false,
         "deprecated": false,
         "tags": []
@@ -1976,7 +2010,7 @@
     "group": "http",
     "description": "Normalized outgoing HTTP request seen by transports, handlers, interceptors, and `fetchHandler` after the builder runs.\n\n`body` is already the wire value. For JSON that is a **JSON text string**;\nsign HMAC or digests against that string (or other final bytes), not the\noriginal struct input.\n\n- `bodyContentType` holds the inferred type of the builder's body. `null` suppresses that header. FormData owns its multipart boundary. HTTP inference follows a direct write to `body` and is not copied by object spread; an explicit `bodyContentType` assignment is copied. A replacement body is detected again, so declare its type with a `content-type` header. For the unchanged body, `null` suppresses library inference when there is no explicit header, but native Fetch may add its own string type.\n- HTTP never writes inferred Content-Type into `headers`; interceptors see only declared headers. An explicit `content-type` header always wins over `bodyContentType` and detection, whether set by the builder, client defaults, an interceptor, or a raw `fetchHandler` request. `body: undefined` has no library-inferred Content-Type. Signers should read `headers.get('content-type') ?? request.bodyContentType`; do not configure internal fields.\n- `endpoint` is the path with path parameters filled in; `baseEndpoint` is the endpoint selected for this call.\n- Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through.\n- `operation` is a static, low-cardinality endpoint identity for telemetry and diagnostics.\n- `downloadProgress` and `uploadProgress` are the `onDownloadProgress` and `onUploadProgress` hooks of `HttpExecuteOptions`.\n- `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed. Each is set only when its struct is declared. An interceptor that short-circuits with `makeResponse` reads them to match the transport.",
     "signatures": [
-      "interface HttpRequest {\n  signal?: AbortSignal;\n  baseEndpoint?: string;\n  body?:\n    | Blob\n    | ArrayBuffer\n    | FormData\n    | URLSearchParams\n    | ReadableStream<Uint8Array>\n    | object\n    | string\n    | number\n    | boolean\n    | null;\n  bodyContentType?: string | null;\n  downloadProgress?: HttpProgressFn;\n  endpoint: string;\n  headers?: Headers;\n  method: string;\n  operation?: string;\n  queryParams?: URLSearchParams;\n  queryString?: string;\n  readonly responseType?: HttpResponseType;\n  readonly errorResponseType?: HttpResponseType;\n  uploadProgress?: HttpProgressFn;\n  withCredentials?: boolean;\n  xsrf?: {\n    cookieName: string;\n    headerName: string;\n    tokenProvider?: (context: {\n      request: HttpRequest;\n    }) => string | null | undefined;\n  };\n}"
+      "interface HttpRequest {\n  signal?: AbortSignal;\n  baseEndpoint?: string;\n  body?:\n    | Blob\n    | ArrayBuffer\n    | FormData\n    | URLSearchParams\n    | ReadableStream<Uint8Array>\n    | object\n    | string\n    | number\n    | boolean\n    | null;\n  bodyContentType?: string | null;\n  downloadProgress?: HttpProgressFn;\n  endpoint: string;\n  headers?: Headers;\n  method: string;\n  operation?: string;\n  queryParams?: URLSearchParams;\n  queryString?: string;\n  readonly responseType?: HttpResponseType;\n  readonly errorResponseType?: HttpResponseType;\n  uploadProgress?: HttpProgressFn;\n  withCredentials?: boolean;\n  finalizeHeaders?: (request: HttpRequest, headers: Headers, url: URL) => void;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -2120,10 +2154,10 @@
         "tags": []
       },
       {
-        "name": "xsrf",
-        "description": "",
-        "type": "{ cookieName: string; headerName: string; tokenProvider?: (context: { request: HttpRequest; }) => string | null | undefined; } | undefined",
-        "simplifiedType": "object",
+        "name": "finalizeHeaders",
+        "description": "Called once per HTTP attempt. The hook receives the outgoing headers after interceptors and before the default `Accept` is filled in, plus the resolved URL.\nA throw is not an endpoint attempt and is not retried.",
+        "type": "((request: HttpRequest, headers: Headers, url: URL) => void) | undefined",
+        "simplifiedType": "function",
         "required": false,
         "deprecated": false,
         "tags": []
@@ -2132,7 +2166,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface HttpRequest {\n  signal?: AbortSignal;\n  baseEndpoint?: string;\n  body?:\n    | Blob\n    | ArrayBuffer\n    | FormData\n    | URLSearchParams\n    | ReadableStream<Uint8Array>\n    | object\n    | string\n    | number\n    | boolean\n    | null;\n  bodyContentType?: string | null;\n  downloadProgress?: HttpProgressFn;\n  endpoint: string;\n  headers?: Headers;\n  method: string;\n  operation?: string;\n  queryParams?: URLSearchParams;\n  queryString?: string;\n  readonly responseType?: HttpResponseType;\n  readonly errorResponseType?: HttpResponseType;\n  uploadProgress?: HttpProgressFn;\n  withCredentials?: boolean;\n  xsrf?: {\n    cookieName: string;\n    headerName: string;\n    tokenProvider?: (context: {\n      request: HttpRequest;\n    }) => string | null | undefined;\n  };\n}",
+        "signature": "interface HttpRequest {\n  signal?: AbortSignal;\n  baseEndpoint?: string;\n  body?:\n    | Blob\n    | ArrayBuffer\n    | FormData\n    | URLSearchParams\n    | ReadableStream<Uint8Array>\n    | object\n    | string\n    | number\n    | boolean\n    | null;\n  bodyContentType?: string | null;\n  downloadProgress?: HttpProgressFn;\n  endpoint: string;\n  headers?: Headers;\n  method: string;\n  operation?: string;\n  queryParams?: URLSearchParams;\n  queryString?: string;\n  readonly responseType?: HttpResponseType;\n  readonly errorResponseType?: HttpResponseType;\n  uploadProgress?: HttpProgressFn;\n  withCredentials?: boolean;\n  finalizeHeaders?: (request: HttpRequest, headers: Headers, url: URL) => void;\n}",
         "parameters": [],
         "returns": []
       }
@@ -2459,7 +2493,7 @@
     "slug": "core/httpprogressfn-type",
     "source": "packages/core/src/internal/http_request.ts",
     "group": "http",
-    "description": "Callback invoked as request bytes are uploaded or response bytes are downloaded.\n\nPassed as `onDownloadProgress` or `onUploadProgress` in `HttpExecuteOptions`.\nCallbacks may be async and are awaited before the next chunk is processed. A\ncallback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`,\nwith the thrown value as `cause`, for downloads and uploads alike. Caller\ncancellation still takes precedence and reports `NET_ABORTED`, or `NET_TIMEOUT`\nwhen the abort reason is a timeout.\n\nUpload progress for a `Blob`, `File`, `ArrayBuffer`, or `FormData` body is\nreported only where the runtime can stream request bodies (Bun). In\nbrowsers that body is sent unchanged and `onUploadProgress` is not called. A\ncaller-supplied `ReadableStream` still reports progress wherever the runtime\naccepts it. Download progress is unaffected.\n\nOn server runtimes, FormData with `onUploadProgress` reads its serialized\nstream directly, keeps its multipart boundary, and is sent without a\nlibrary-generated `Content-Length` (chunked over HTTP/1.1), so progress\nand abort work without buffering the whole body. It reports an\nunknown total unless a valid explicit `Content-Length` supplies it. For an\nendpoint that requires `Content-Length`, such as some presigned upload\ntargets, omit `onUploadProgress`; platform Fetch then sends FormData with its\nlength. Non-identity encoded downloads also report `total: 0` and\n`lengthComputable: false`, since `loaded` counts decoded stream bytes.\nCancellation releases the wrapped upload stream.",
+    "description": "Callback invoked as request bytes are uploaded or response bytes are downloaded.\n\nPassed as `onDownloadProgress` or `onUploadProgress` in `HttpExecuteOptions`.\nCallbacks may be async and are awaited before the next chunk is processed. A\ncallback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`,\nwith the thrown value as `cause`, for downloads and uploads alike. Caller\ncancellation still takes precedence and reports `NET_ABORTED`, or `NET_TIMEOUT`\nwhen the abort reason is a timeout.\n\nUpload progress for a `Blob`, `File`, `ArrayBuffer`, or `FormData` body is\nreported only where `fetch` can stream request bodies. The body is converted\nto a stream and `onUploadProgress` counts those bytes. Chromium can do that\nonly on HTTP/2 or later; on HTTP/1.1 the upload fails with `NET_UNREACHABLE`\n(`cause` is `TypeError: Failed to fetch`). Firefox cannot stream request\nbodies, so that body is sent unchanged and `onUploadProgress` is not called.\nA caller-supplied `ReadableStream` still reports progress wherever the runtime\naccepts it. Download progress is unaffected.\n\nWhere that conversion runs, FormData with `onUploadProgress` reads its serialized\nstream directly, keeps its multipart boundary, and is sent without a\nlibrary-generated `Content-Length` (chunked on HTTP/1.1 where the runtime accepts\nthe stream), so progress and abort work without buffering the whole body. It reports an\nunknown total unless a valid explicit `Content-Length` supplies it. For an\nendpoint that requires `Content-Length`, such as some presigned upload\ntargets, omit `onUploadProgress`; platform Fetch then sends FormData with its\nlength. Non-identity encoded downloads also report `total: 0` and\n`lengthComputable: false`, since `loaded` counts decoded stream bytes.\nCancellation releases the wrapped upload stream.",
     "signatures": [
       "type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void;"
     ],

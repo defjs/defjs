@@ -1,4 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
+
+vi.mock("../balancer/retry_budget", { spy: true });
+
+import { retryBudgetFor } from "../balancer/retry_budget";
 import { createClient } from "../client/client";
 import {
   withBalancer,
@@ -18,6 +22,7 @@ function retry(options: unknown): ClientOption {
 const op = defineRequest({ method: "GET", path: "/" });
 afterEach(() => {
   vi.useRealTimers();
+  vi.mocked(retryBudgetFor).mockRestore();
   vi.restoreAllMocks();
 });
 function fixture(options: unknown, count = 8, signal?: AbortSignal) {
@@ -129,10 +134,9 @@ test.each([undefined, ERR_TIMEOUT])(
 test("retry withdraws its budget before entering backoff", async () => {
   clock();
   const budget = { deposit: vi.fn(), tryWithdraw: vi.fn(() => true) };
-  vi.spyOn(
-    await import("../balancer/retry_budget"),
-    "retryBudgetFor",
-  ).mockReturnValue(budget);
+  const spy = vi.mocked(retryBudgetFor);
+  spy.mockClear();
+  spy.mockReturnValue(budget);
   const h = fixture({ jitter: 0 }, 2);
   await waiting(h.handle, 1);
   expect(budget.deposit).toHaveBeenCalledTimes(1);

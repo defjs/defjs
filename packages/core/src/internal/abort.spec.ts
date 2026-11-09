@@ -4,6 +4,7 @@ import {
   mergeAbortSignals,
   releaseAbortSignal,
 } from "./abort";
+import { yieldMacrotask } from "../../test/macrotask";
 
 describe("abort helpers", () => {
   afterEach(() => {
@@ -145,6 +146,6 @@ describe("abort helpers", () => {
     await expect(result).rejects.toThrow("stop");
 
     rejectTask?.(new Error("late failure"));
-    await Bun.sleep(0);
+    await yieldMacrotask();
   });
 });

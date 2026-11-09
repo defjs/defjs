@@ -31,5 +31,4 @@ export {
   withWebSocketHeartbeat,
   withWebSocketProtocols,
   withWebSocketReconnect,
-  withXSRF,
 } from "./option";

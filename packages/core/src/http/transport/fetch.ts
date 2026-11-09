@@ -34,101 +34,6 @@ export {
   supportsStreamingRequestBody,
 };
 
-const XSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
-
-function isSafeMethod(method: string): boolean {
-  return XSRF_SAFE_METHODS.has(method.toUpperCase());
-}
-
-function readBrowserXSRFCookie(name: string): string | undefined {
-  try {
-    const cookie = document.cookie;
-    if (cookie === "") {
-      return undefined;
-    }
-
-    for (const part of cookie.split(";")) {
-      const [rawName, ...rawValue] = part.trim().split("=");
-      if (rawName === name) {
-        return decodeURIComponent(rawValue.join("="));
-      }
-    }
-  } catch {
-    return undefined;
-  }
-
-  return undefined;
-}
-
-function isSameOriginRequest(request: HttpRequest): boolean {
-  if (!request.baseEndpoint) {
-    return false;
-  }
-
-  if (typeof location === "undefined") {
-    return true;
-  }
-
-  return resolveRequestUrl(request).origin === location.origin;
-}
-
-function normalizeXSRFToken(
-  token: string | null | undefined,
-): string | undefined {
-  if (typeof token !== "string" || token === "") {
-    return undefined;
-  }
-
-  return token;
-}
-
-function resolveXSRFToken(
-  request: HttpRequest,
-  xsrf: {
-    cookieName: string;
-    headerName: string;
-    tokenProvider?: (context: {
-      request: HttpRequest;
-    }) => string | null | undefined;
-  },
-): string | undefined {
-  if (xsrf.tokenProvider) {
-    return normalizeXSRFToken(xsrf.tokenProvider({ request }));
-  }
-
-  if (typeof document === "undefined") {
-    return undefined;
-  }
-
-  return normalizeXSRFToken(readBrowserXSRFCookie(xsrf.cookieName));
-}
-
-function applyXSRFHeaderIfNeeded(request: HttpRequest, headers: Headers): void {
-  const xsrf = request.xsrf;
-  if (!xsrf) {
-    return;
-  }
-
-  if (isSafeMethod(request.method)) {
-    return;
-  }
-
-  if (headers.has(xsrf.headerName)) {
-    return;
-  }
-
-  if (!isSameOriginRequest(request)) {
-    return;
-  }
-
-  const token = resolveXSRFToken(request, xsrf);
-  if (token === undefined) {
-    return;
-  }
-
-  headers.set(xsrf.headerName, token);
-}
-
 function wrapUploadProgressStream(
   stream: ReadableStream<Uint8Array>,
   onProgress: HttpProgressFn,
@@ -227,7 +132,9 @@ export function createFetchRequestInit(
   const headers = new Headers(request.headers);
   const uploadProgress = request.uploadProgress;
   applyRequestContentType(request, headers);
-  applyXSRFHeaderIfNeeded(request, headers);
+  if (request.finalizeHeaders) {
+    request.finalizeHeaders(request, headers, resolveRequestUrl(request));
+  }
 
   return createFetchInitBase(request, {
     defaultAccept: "application/json, text/plain, */*",
@@ -555,21 +462,13 @@ async function sendFetchRequest(
   }
 }
 
-function isBrowserWindowOrWorker(): boolean {
-  return (
-    typeof location !== "undefined" ||
-    typeof document !== "undefined" ||
-    "importScripts" in globalThis
-  );
-}
-
 /**
- * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where the runtime streams
- * request bodies over any HTTP version (Bun). Browsers are excluded: Chromium rejects a streamed
- * body on HTTP/1.1 and the protocol is unknown beforehand, and Firefox cannot stream request bodies.
- * `location`, `document`, or `importScripts` mark browser windows/workers: there the body is sent unchanged
- * and `onUploadProgress` is not called. Download progress is unaffected.
- * FormData uses the serialized stream and boundary directly; its total length is unknown unless declared in a header.
+ * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where `fetch`
+ * accepts a streaming request body. Chromium accepts that body only on HTTP/2 or later, so on
+ * HTTP/1.1 `fetch` rejects and the call is `NET_UNREACHABLE`. Firefox cannot stream request
+ * bodies: the original body is sent and `onUploadProgress` is not called. Download progress is
+ * unaffected. FormData uses the serialized stream and boundary directly; its total length is
+ * unknown unless declared in a header.
  */
 async function prepareUploadProgressRequest(
   request: HttpRequest,
@@ -579,8 +478,7 @@ async function prepareUploadProgressRequest(
     !uploadProgress ||
     body == null ||
     isReadableStreamBody(body) ||
-    !supportsStreamingRequestBody() ||
-    isBrowserWindowOrWorker()
+    !supportsStreamingRequestBody()
   ) {
     return request;
   }

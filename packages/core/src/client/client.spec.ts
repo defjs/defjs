@@ -19,7 +19,6 @@ import {
   withWebSocketHeartbeat,
   withWebSocketProtocols,
   withWebSocketReconnect,
-  withXSRF,
 } from "./index";
 import type { Client } from "./client";
 import type { FetchHandle } from "./config";
@@ -29,16 +28,6 @@ describe("Client", () => {
 
   beforeEach(() => {
     baseClient = createClient(withEndpoint("https://example.com/v1"));
-  });
-
-  test("withXSRF keeps the default cookie and header names when omitted", () => {
-    const client = createClient(withXSRF());
-
-    expect(client[CLIENT].config.xsrf).toEqual({
-      cookieName: "XSRF-TOKEN",
-      headerName: "X-XSRF-TOKEN",
-      tokenProvider: undefined,
-    });
   });
 
   test("withHeaders apply to an HTTP operation", async () => {
@@ -145,10 +134,9 @@ describe("Client", () => {
     expect(seen).toEqual(["https://original.example/ping"]);
   });
 
-  test("HTTP handle, credentials, interceptors, serializer, and xsrf apply when an operation runs", async () => {
+  test("HTTP handle, credentials, interceptors, and serializer apply when an operation runs", async () => {
     const customFetch = vi.fn<FetchHandle>((input, init) => {
       const request = new Request(input, init);
-      expect(request.headers.get("x-custom-xsrf-token")).toBe("xsrf-token");
       expect(request.credentials).toBe("include");
       expect(new URL(request.url).search).toBe("?serialized=zen");
       return Promise.resolve(
@@ -163,7 +151,6 @@ describe("Client", () => {
     );
     const serializer = (query: { [key: string]: unknown }) =>
       `serialized=${String(query["q"])}`;
-    const tokenProvider = vi.fn(() => "xsrf-token");
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
@@ -172,11 +159,6 @@ describe("Client", () => {
       withSSEHandle(customFetch),
       withInterceptors(interceptor),
       withQuerySerializer(serializer),
-      withXSRF({
-        cookieName: "CUSTOM-XSRF-TOKEN",
-        headerName: "X-CUSTOM-XSRF-TOKEN",
-        tokenProvider,
-      }),
     );
 
     const request = defineRequest({
@@ -190,7 +172,6 @@ describe("Client", () => {
     expect(error).toBeNull();
     expect(data).toEqual({ ok: true });
     expect(customFetch).toHaveBeenCalledOnce();
-    expect(tokenProvider).toHaveBeenCalled();
   });
 
   test("per-field SSE and WebSocket helpers are accepted by createClient", () => {

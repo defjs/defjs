@@ -57,7 +57,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 1. القيم الافتراضية هي مجموعة الترويسات الابتدائية.
 2. `headers` التي تُرجعها دالة `builder` تستبدل افتراضيًا بالاسم نفسه. القيمة الأولى لذلك الاسم تستبدل الافتراضي؛ والقيم اللاحقة في المصفوفة نفسها تُلحَق بذلك الاستبدال فقط. قيمة مفردة أو نسخة `Headers` تستبدل أيضًا. تبقى أسماء الافتراضيات الأخرى.
 3. تتلقى المعترضات الترويسات المدمجة وقد تغيّرها.
-4. مع نقل HTTP الافتراضي، تُضاف ترويسة XSRF أخيرًا، فقط عندما يكون ما زال غائبًا (انظر `withXSRF`).
+4. مع `@defjs/core/xsrf`، تُضاف ترويسة XSRF أخيرًا، فقط عندما يكون ما زال غائبًا (انظر `withXSRF`).
 
 استخدم معترضًا للقيم التي تتغيّر لكل طلب: رمز Bearer محدَّث، أو HMAC على الجسم المسلسَل.
 
@@ -85,9 +85,9 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="withXSRF" />
 
-يضيف ترويسة رمز XSRF إلى طلبات HTTP. `options` هو إعداد `xsrf`، بالشكل نفسه لـ `xsrf` على [`ClientOptions`](/ar/api/core/clientoptions-type): `cookieName` (الافتراضي `XSRF-TOKEN`)، و`headerName` (الافتراضي `X-XSRF-TOKEN`)، و`tokenProvider({ request })`. استدعاء `withXSRF()` بلا وسيط يفعّل تلك الافتراضيات. طلبات SSE وWebSocket لا تتأثر.
+يضيف ترويسة رمز XSRF إلى طلبات HTTP في المتصفح. استورده من `@defjs/core/xsrf`. `options` قيمة `XSRFOptions`: `cookieName` (الافتراضي `XSRF-TOKEN`) و`headerName` (الافتراضي `X-XSRF-TOKEN`). استدعاء `withXSRF()` بلا وسيط يفعّل تلك الافتراضيات، ويرمي خطأ عند غياب `location` أو `document`، بما في ذلك داخل Worker. الشيفرة المشتركة بين الخادم والمتصفح تضيف هذا الخيار في المتصفح فقط. يُضبط الرمز الآتي من مصدر آخر عبر معترض. طلبات SSE وWebSocket لا تتأثر.
 
-يضيف نقل HTTP الافتراضي الرأس عندما تتحقق كل هذه الشروط: الطريقة ليست `GET` أو `HEAD` أو `OPTIONS` أو `TRACE`؛ والطلب لا يملك ذلك الرأس أصلًا؛ والطلب من الأصل نفسه؛ ويُعثر على رمز غير فارغ. حيثما وُجد `location`، بما في ذلك Worker، يجب أن يطابق أصل الطلب المحلول `location.origin`؛ ودونه يُعدّ الطلب الذي له `baseEndpoint` من الأصل نفسه. الطلبات العابرة للأصل لا تستدعي `tokenProvider`. يأتي الرمز من ذلك الموفّر عند إعطائه، وإلا من `document.cookie`، الذي يُقرأ فقط عندما يوجد `document`.
+تُضبط الترويسة عندما تتحقق كل هذه الشروط: الطريقة ليست `GET` أو `HEAD` أو `OPTIONS` أو `TRACE`؛ والطلب لا يملك ذلك الرأس أصلًا؛ وأصل الطلب المحلول يساوي origin الصفحة؛ ويحمل `document.cookie` رمزًا غير فارغ. الطلبات العابرة للأصل لا تقرأ ملف تعريف الارتباط. أي خطأ أثناء القراءة يُعدّ غياب الرمز. الرمز الفارغ لا يضبط الترويسة.
 
 ### مقابض SSE
 
@@ -191,7 +191,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="ClientOptions" />
 
-الحقلان الظاهران هما `sse` و`webSocket`. والحقول السبعة الأخرى — `endpoints` و`headers` و`http` و`interceptors` و`querySerializer` و`xsrf` و`withCredentials` — موروثة من قاعدة HTTP غير المصدَّرة. `endpoints` هو `readonly string[]`. الافتراضي المحلول هو `[]`. المصفوفة الفارغة قيمة قانونية وتُفشل الاستدعاء بـ `REQ_BUILD_FAILED`. لا يوجد `timeout` على مستوى العميل. لا يأخذ `createClient` هذا الكائن؛ فهو يأخذ مساعدات الخيارات.
+الحقلان الظاهران هما `sse` و`webSocket`. والحقول الستة الأخرى — `endpoints` و`headers` و`http` و`interceptors` و`querySerializer` و`withCredentials` — موروثة من قاعدة HTTP غير المصدَّرة. `endpoints` هو `readonly string[]`. الافتراضي المحلول هو `[]`. المصفوفة الفارغة قيمة قانونية وتُفشل الاستدعاء بـ `REQ_BUILD_FAILED`. لا يوجد `timeout` على مستوى العميل. لا يأخذ `createClient` هذا الكائن؛ فهو يأخذ مساعدات الخيارات.
 
 ### ClientConfig
 

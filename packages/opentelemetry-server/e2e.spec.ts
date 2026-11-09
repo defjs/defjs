@@ -14,7 +14,16 @@ import {
   W3CBaggagePropagator,
   W3CTraceContextPropagator,
 } from "@opentelemetry/core";
-import { afterEach, describe, expect, inject, test, vi } from "vitest";
+import {
+  afterEach,
+  describe,
+  expect,
+  inject,
+  onTestFinished,
+  test,
+  vi,
+} from "vitest";
+import { createFixtureClient } from "../core/test/fixture/client.ts";
 import { withOpenTelemetryServer } from "./src/option";
 import type { MockSpan } from "./src/test-utils";
 import { createMockLogger, createMockTracer } from "./src/test-utils";
@@ -51,18 +60,6 @@ function onlySpan(spans: readonly MockSpan[]): MockSpan {
   }
 
   return span;
-}
-
-async function closedPort(): Promise<number> {
-  const server = Bun.serve({
-    fetch: () => new Response(null),
-    hostname: "127.0.0.1",
-    port: 0,
-  });
-  const { port } = server;
-  if (port === undefined) throw new Error("expected a TCP port");
-  await server.stop(true);
-  return port;
 }
 
 const TRACE_PARENT_REGEX = /^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/;
@@ -340,7 +337,7 @@ describe("operation diagnostic boundary", () => {
     async ({ path, wrongPort }) => {
       const { logger, records } = createMockLogger();
       const host = wrongPort
-        ? `ws://127.0.0.1:${await closedPort()}`
+        ? inject("refusedOrigin").replace(/^http:/, "ws:")
         : inject("testServerHost").replace(/^http:/, "ws:");
       const client = createClient(
         withEndpoint(host),
@@ -407,59 +404,52 @@ describe("operation diagnostic boundary", () => {
   // An abrupt drop (1006) has no close frame. Whether the platform WebSocket fires `error` before `close` depends on the
   // runtime (Node/undici does, Bun does not), and the session ends in `error` and logs once only when it does.
   test("WebSocket abrupt drop 1006 logs once only when the runtime reports an error first", async () => {
-    const server = Bun.serve({
-      fetch(request, bunServer) {
-        bunServer.upgrade(request);
-        return undefined;
-      },
-      hostname: "127.0.0.1",
-      port: 0,
-      websocket: {
-        open(socket) {
-          setTimeout(() => socket.terminate(), 20);
-        },
-      },
+    const f = createFixtureClient(
+      inject("testServerHost"),
+      inject("fixtureToken"),
+    );
+    onTestFinished(() => f.delete());
+    const url = (await f.endpoint("abrupt", "ws", { send: [] })).replace(
+      /^http:/,
+      "ws:",
+    );
+    const reportsErrorFirst = await new Promise<boolean>((resolve, reject) => {
+      const events: string[] = [];
+      const probe = new WebSocket(url);
+      probe.addEventListener("error", () => events.push("error"));
+      probe.addEventListener("open", () => {
+        f.act("abrupt", "terminate", { request: 0 }).catch(reject);
+      });
+      probe.addEventListener("close", () => resolve(events.includes("error")));
     });
-    try {
-      const url = `ws://127.0.0.1:${server.port}`;
-      const reportsErrorFirst = await new Promise<boolean>((resolve) => {
-        const events: string[] = [];
-        const probe = new WebSocket(url);
-        probe.addEventListener("error", () => events.push("error"));
-        probe.addEventListener("close", () =>
-          resolve(events.includes("error")),
-        );
-      });
 
-      const { logger, records } = createMockLogger();
-      const client = createClient(
-        withEndpoint(url),
-        withOpenTelemetryServer({ logger }),
-      );
-      const [fault, socket] = await defineWebSocket({
-        maxIncomingQueueSize: 4,
-        incoming: struct.unknown(),
-        path: "/",
-      })(client);
-      expect(fault).toBeNull();
-      await expect(socket?.closed).resolves.toMatchObject({
-        kind: reportsErrorFirst ? "error" : "closed",
-        code: 1006,
-        wasClean: false,
-      });
-      expect(records.map((record) => record.attributes)).toEqual(
-        reportsErrorFirst
-          ? [
-              expect.objectContaining({
-                "defjs.phase": "connection",
-                "websocket.close.code": 1006,
-              }),
-            ]
-          : [],
-      );
-    } finally {
-      await server.stop(true);
-    }
+    const { logger, records } = createMockLogger();
+    const client = createClient(
+      withEndpoint(url),
+      withOpenTelemetryServer({ logger }),
+    );
+    const [fault, socket] = await defineWebSocket({
+      maxIncomingQueueSize: 4,
+      incoming: struct.unknown(),
+      path: "/",
+    })(client);
+    expect(fault).toBeNull();
+    await f.act("abrupt", "terminate", { request: 1 });
+    await expect(socket?.closed).resolves.toMatchObject({
+      kind: reportsErrorFirst ? "error" : "closed",
+      code: 1006,
+      wasClean: false,
+    });
+    expect(records.map((record) => record.attributes)).toEqual(
+      reportsErrorFirst
+        ? [
+            expect.objectContaining({
+              "defjs.phase": "connection",
+              "websocket.close.code": 1006,
+            }),
+          ]
+        : [],
+    );
   });
 });
 

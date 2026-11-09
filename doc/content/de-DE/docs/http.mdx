@@ -130,8 +130,8 @@ Das Abbrechen eines schreibenden Requests signalisiert lediglich, dass der Aufru
 ## 6. Zugangsdaten, XSRF und Übertragungsfortschritt
 
 - **`withCredentials(true)`**: Setzt Fetch `credentials: "include"` für HTTP- und SSE-Anfragen.
-- **`withXSRF(options?)`**: Liest das XSRF-Cookie (standardmäßig `XSRF-TOKEN`) aus und injiziert den Header (`X-XSRF-TOKEN`) bei Same-Origin-mutierenden HTTP-Methoden (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: Übergibst du an `client({ onDownloadProgress, onUploadProgress })`. Der Download-Fortschritt meldet `lengthComputable: true` nur dann, wenn `Content-Length` positiv ist und `Content-Encoding` fehlt oder `identity` lautet. Der Upload-Fortschritt streamt Bodys auf Server-Laufzeitumgebungen (Bun). Ein Fortschritts-Callback, der eine Exception wirft, lässt den Aufruf mit `EXT_OBSERVER_FAILED` fehlschlagen.
+- **`withXSRF(options?)`**: Aus `@defjs/core/xsrf`. Liest im Browser das XSRF-Cookie (standardmäßig `XSRF-TOKEN`) aus und injiziert den Header (`X-XSRF-TOKEN`) bei Same-Origin-mutierenden HTTP-Methoden (`POST`, `PUT`, `PATCH`, `DELETE`). `withXSRF()` wirft, wenn `location` oder `document` fehlt, auch in einem Worker. Isomorpher Code fügt diese Option nur im Browser hinzu. Ein Token aus einer anderen Quelle wird mit einem Interceptor gesetzt.
+- **`onDownloadProgress` / `onUploadProgress`**: Übergibst du an `client({ onDownloadProgress, onUploadProgress })`. Der Download-Fortschritt meldet `lengthComputable: true` nur dann, wenn `Content-Length` positiv ist und `Content-Encoding` fehlt oder `identity` lautet. Wo `fetch` einen Streaming-Request-Body unterstützt, wandelt der Upload-Fortschritt `Blob`-, `File`-, `ArrayBuffer`- und `FormData`-Bodys in einen Stream um. Chromium meldet diesen Fortschritt nur ab HTTP/2; unter HTTP/1.1 schlägt ein Upload mit `onUploadProgress` fehl. Firefox sendet diese Bodys unverändert und ruft den Callback nicht auf. Ein Fortschritts-Callback, der eine Exception wirft, lässt den Aufruf mit `EXT_OBSERVER_FAILED` fehlschlagen.
 
 ## Weiterführende Links
 

@@ -1,22 +1,34 @@
-import { defineConfig } from "vitest/config";
-import { coverageConfig } from "./test/shared.ts";
+import { defineConfig, type ViteUserConfig as UserConfig } from "vitest/config";
+import {
+  specExclude,
+  specInclude,
+  type Runtime,
+} from "../../test/spec-matrix.ts";
+import { coverageSettings, reporters } from "../../test/vitest-shared.ts";
+import { packageRoot } from "./test/shared.ts";
 
-export default defineConfig({
-  test: {
-    coverage: {
-      enabled: coverageConfig.enabled,
-      provider: coverageConfig.provider,
-      reporter: [...coverageConfig.reporter],
-      reportsDirectory: coverageConfig.reportsDirectory,
-      include: [...coverageConfig.include],
-      exclude: [...coverageConfig.exclude],
-      thresholds: {
-        branches: coverageConfig.thresholds.branches,
-        functions: coverageConfig.thresholds.functions,
-        lines: coverageConfig.thresholds.lines,
-        statements: coverageConfig.thresholds.statements,
+export function baseConfig(runtime?: Runtime): UserConfig {
+  return {
+    root: packageRoot,
+    resolve: {
+      alias: {
+        "@defjs/core": `${packageRoot}/../core/src`,
       },
+      dedupe: ["react", "react-dom", "react-dom/client"],
     },
-    projects: ["./vitest.config.browser.ts"],
-  },
-});
+    optimizeDeps: {
+      include: ["react", "react-dom/client", "@testing-library/react"],
+    },
+    test: {
+      include: specInclude(runtime),
+      exclude: specExclude(runtime),
+      globalSetup: `${packageRoot}/../../test/browser-api-server-setup.ts`,
+      reporters,
+      coverage: coverageSettings({
+        reportsDirectory: `${packageRoot}/coverage/${runtime ?? "plain"}`,
+      }),
+    },
+  };
+}
+
+export default defineConfig(baseConfig());

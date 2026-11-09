@@ -26,13 +26,7 @@ export function createHttpRequest(
     responseType?: HttpResponseType;
     uploadProgress?: HttpProgressFn;
     withCredentials?: boolean;
-    xsrf?: {
-      cookieName: string;
-      headerName: string;
-      tokenProvider?: (context: {
-        request: HttpRequest;
-      }) => string | null | undefined;
-    };
+    finalizeHeaders?: HttpRequest["finalizeHeaders"];
   },
 ): HttpRequest {
   const request = createBaseTransportRequest(method, path, input, builder, {
@@ -53,17 +47,6 @@ export function createHttpRequest(
     errorResponseType: options.errorResponseType,
     responseType: options.responseType,
     uploadProgress: options.uploadProgress,
-    xsrf: snapshotXsrf(options.xsrf),
-  };
-}
-
-function snapshotXsrf(value: HttpRequest["xsrf"]): HttpRequest["xsrf"] {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return value;
-  }
-  return {
-    cookieName: value.cookieName,
-    headerName: value.headerName,
-    tokenProvider: value.tokenProvider,
+    finalizeHeaders: options.finalizeHeaders,
   };
 }

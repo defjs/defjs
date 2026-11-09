@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { startHonoTestServer } from "./hono-test-server";
+import {
+  selectStartup,
+  type StartupLayer,
+} from "../packages/core/test/fixture/startup.ts";
+import { assertRuntime } from "./runtime-guard.ts";
 
-type TestProject = {
-  provide: (key: string, value: unknown) => void;
-};
-
-export async function setup({ provide }: TestProject) {
+function createUsersApp(): Hono {
   const app = new Hono();
 
   app.use(
@@ -41,9 +41,21 @@ export async function setup({ provide }: TestProject) {
     return c.json({ id: Number(id), name: "John" });
   });
 
-  const testServer = await startHonoTestServer(app);
-  provide("testServerHost", testServer.host);
-  console.log(`Test server is running on ${testServer.host}`);
-
-  return () => testServer.close();
+  return app;
 }
+
+export function createBrowserApiSetup(
+  selectStartup: () => Promise<StartupLayer>,
+): (project: {
+  provide(key: "testServerHost", value: string): void;
+}) => Promise<() => Promise<void>> {
+  return async function setup(project) {
+    assertRuntime("browser-main");
+    const layer = await selectStartup();
+    const server = await layer.startHttp(createUsersApp());
+    project.provide("testServerHost", server.origin);
+    return () => server.close();
+  };
+}
+
+export const setup = createBrowserApiSetup(selectStartup);

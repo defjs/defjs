@@ -9,10 +9,5 @@
     "types": []
   },
   "include": ["src/**/*.ts"],
-  "exclude": [
-    "test",
-    "src/**/*.spec.ts",
-    "src/**/*.type.test.ts",
-    "src/**/*.bench.ts"
-  ]
+  "exclude": ["test", "src/**/*.spec.ts", "src/**/*.bench.ts"]
 }

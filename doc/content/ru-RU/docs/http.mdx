@@ -130,8 +130,8 @@ SDK определяет каждую HTTP-операцию с помощью `d
 ## 6. Учётные данные, XSRF и отслеживание прогресса
 
 - **`withCredentials(true)`**: устанавливает `credentials: "include"` в Fetch для HTTP и SSE.
-- **`withXSRF(options?)`**: читает cookie XSRF (по умолчанию `XSRF-TOKEN`) и устанавливает заголовок (`X-XSRF-TOKEN`) для мутирующих HTTP-методов одного origin (`POST`, `PUT`, `PATCH`, `DELETE`).
-- **`onDownloadProgress` / `onUploadProgress`**: передавайте через `client({ onDownloadProgress, onUploadProgress })`. Прогресс скачивания возвращает `lengthComputable: true`, только если заголовок `Content-Length` положителен, а `Content-Encoding` отсутствует или равен `identity`. Прогресс загрузки потоково передаёт тело на серверных средах (Bun). Выброс ошибки в колбэке прогресса завершает вызов сбоем `EXT_OBSERVER_FAILED`.
+- **`withXSRF(options?)`**: Из `@defjs/core/xsrf`. В браузере читает cookie XSRF (по умолчанию `XSRF-TOKEN`) и устанавливает заголовок (`X-XSRF-TOKEN`) для мутирующих HTTP-методов одного origin (`POST`, `PUT`, `PATCH`, `DELETE`). `withXSRF()` бросает ошибку, если нет `location` или `document`, в том числе в Worker. Изоморфный код добавляет этот параметр только в браузере. Токен из другого источника задаётся интерцептором.
+- **`onDownloadProgress` / `onUploadProgress`**: передавайте через `client({ onDownloadProgress, onUploadProgress })`. Прогресс скачивания возвращает `lengthComputable: true`, только если заголовок `Content-Length` положителен, а `Content-Encoding` отсутствует или равен `identity`. Там, где `fetch` поддерживает потоковое тело запроса, прогресс загрузки превращает тела `Blob`, `File`, `ArrayBuffer` и `FormData` в поток. Chromium сообщает этот прогресс только на HTTP/2 и новее; на HTTP/1.1 загрузка с `onUploadProgress` завершается ошибкой. Firefox отправляет эти тела без изменений и не вызывает колбэк. Выброс ошибки в колбэке прогресса завершает вызов сбоем `EXT_OBSERVER_FAILED`.
 
 ## Связанные материалы
 

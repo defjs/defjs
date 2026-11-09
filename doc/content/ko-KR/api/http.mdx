@@ -54,7 +54,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ### HttpRequest
 
-정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, `queryParams`예요. 인터셉터가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. 인터셉터가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요. `builder`가 `URLSearchParams`를 돌려주면 그 인스턴스가 그대로 통과해요. `responseType`과 `errorResponseType`은 readonly예요. 선언된 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
+정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, `queryParams`예요. 인터셉터가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. 인터셉터가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요. `builder`가 `URLSearchParams`를 돌려주면 그 인스턴스가 그대로 통과해요. `responseType`과 `errorResponseType`은 readonly예요. 선언된 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
 
 ### HttpMeta
 
@@ -78,9 +78,9 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ### HttpProgressFn
 
-`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소는 여전히 `NET_ABORTED`를 보고하고, abort 이유가 타임아웃이면 `NET_TIMEOUT`을 보고해요. 업로드 진행률은 요청 본문 스트리밍을 지원하는 런타임에서만 보고돼요(Bun). 브라우저에서는 `Blob` / `File`, `ArrayBuffer`, `FormData` 본문이 그대로 보내지고 `onUploadProgress`는 호출되지 않아요.
+`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소는 여전히 `NET_ABORTED`를 보고하고, abort 이유가 타임아웃이면 `NET_TIMEOUT`을 보고해요. 변환은 `fetch`가 스트리밍 요청 본문을 지원하는 런타임에서 일어나요. `Blob` / `File`, `ArrayBuffer`, `FormData`는 스트림으로 바뀌고 업로드 진행률이 보고돼요. Chromium은 HTTP/2 이상에서만 쓸 수 있어요. HTTP/1.1에서 `onUploadProgress`가 있는 업로드는 실패해요(`NET_UNREACHABLE`). Firefox는 그 본문을 그대로 보내고 `onUploadProgress`를 호출하지 않아요.
 
-서버 런타임에서 FormData는 본문 전체를 Blob으로 버퍼링하지 않고 직렬화된 스트림을 쓰며, 실제 multipart boundary를 유지해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 명시 content type은 업로드 변환 뒤에도 남지만, FormData는 그 직렬화의 boundary를 써야 해요. `loaded`는 서버 확인이 아니라 스트림 바이트를 세요. identity가 아닌 `Content-Encoding`의 다운로드는 `total: 0`과 `lengthComputable: false`를 보고하고, 스트림 바이트는 이미 압축이 풀려 있을 수 있어요.
+그 변환이 실행되는 런타임에서 FormData는 본문 전체를 Blob으로 버퍼링하지 않고 직렬화된 스트림을 쓰며, 실제 multipart boundary를 유지해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 명시 content type은 업로드 변환 뒤에도 남지만, FormData는 그 직렬화의 boundary를 써야 해요. `loaded`는 서버 확인이 아니라 스트림 바이트를 세요. identity가 아닌 `Content-Encoding`의 다운로드는 `total: 0`과 `lengthComputable: false`를 보고하고, 스트림 바이트는 이미 압축이 풀려 있을 수 있어요.
 
 [HTTP 가이드](/ko-KR/docs/http)와 [Client](/ko-KR/docs/client)를 보세요.
 

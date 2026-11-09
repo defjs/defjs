@@ -2,6 +2,7 @@ import { defineConfig, type UserConfig } from "tsdown";
 
 const entries = {
   index: "src/index.ts",
+  xsrf: "src/xsrf/index.ts",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -25,6 +26,10 @@ async function writeDistPackageJson(): Promise<void> {
     ".": {
       types: "./index.d.ts",
       default: "./index.js",
+    },
+    "./xsrf": {
+      types: "./xsrf.d.ts",
+      default: "./xsrf.js",
     },
   };
   packageJson["unpkg"] = "./index.min.js";
@@ -51,6 +56,7 @@ export default defineConfig([
     dts: true,
     entry: {
       index: entries.index,
+      xsrf: entries.xsrf,
     },
     inputOptions: {
       resolve: {

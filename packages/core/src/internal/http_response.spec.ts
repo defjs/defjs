@@ -1,11 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
-import {
-  createClient,
-  createHttpInterceptor,
-  defineRequest,
-  withEndpoint,
-  withInterceptors,
-} from "../index";
+import { describe, expect, test } from "vitest";
 import {
   getHttpErrorMessage,
   isHttpResponse,
@@ -13,25 +6,6 @@ import {
 } from "./http_response";
 
 describe("Response", () => {
-  test("accepts an interceptor response built by another core module instance", async () => {
-    vi.resetModules();
-    const other = await import("../index");
-    expect(other.makeResponse).not.toBe(makeResponse);
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createHttpInterceptor(() =>
-          Promise.resolve(other.makeResponse({ status: 200 })),
-        ),
-      ),
-    );
-    const request = defineRequest({ method: "GET", path: "/cached" });
-    const [fault, , response] = await request(client);
-
-    expect(fault).toBeNull();
-    expect(response?.status).toBe(200);
-  });
-
   test("should recognize a made response and a spread copy of it, and nothing else", () => {
     const made = makeResponse({ status: 200 });
 

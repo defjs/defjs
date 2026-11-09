@@ -55,7 +55,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 ### HttpRequest
 
-规范化后的出站请求：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString` 和 `queryParams`。拦截器看到它时，`body` 已经是网络值——JSON 时是 JSON 文本字符串——因此 HMAC 和摘要要针对它来签，而不是针对 struct 输入。拦截器看到的 `queryParams` 是 `new URLSearchParams(queryString)`。`builder` 返回 `URLSearchParams` 时，该实例会原样传入。`responseType` 和 `errorResponseType` 是只读的：它们由声明的 `output` 与 `error` struct 类型推导而来，不能修改。
+规范化后的出站请求：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`finalizeHeaders`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString` 和 `queryParams`。拦截器看到它时，`body` 已经是网络值——JSON 时是 JSON 文本字符串——因此 HMAC 和摘要要针对它来签，而不是针对 struct 输入。拦截器看到的 `queryParams` 是 `new URLSearchParams(queryString)`。`builder` 返回 `URLSearchParams` 时，该实例会原样传入。`responseType` 和 `errorResponseType` 是只读的：它们由声明的 `output` 与 `error` struct 类型推导而来，不能修改。
 
 ### HttpMeta
 
@@ -79,9 +79,9 @@ body 已按声明的 struct 解码成功的响应。持有这个类型就证明�
 
 ### HttpProgressFn
 
-`loaded`、`total`、`lengthComputable`。回调可以异步执行。`onDownloadProgress` 或 `onUploadProgress` 抛出异常时，调用会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`；取消仍报告 `NET_ABORTED`，中止原因是超时时报告 `NET_TIMEOUT`。只有支持流式发送请求体的运行时（Bun）才会报告上传进度；在浏览器中，`Blob` / `File`、`ArrayBuffer` 和 `FormData` 请求体会原样发送，不会调用 `onUploadProgress`。
+`loaded`、`total`、`lengthComputable`。回调可以异步执行。`onDownloadProgress` 或 `onUploadProgress` 抛出异常时，调用会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`；取消仍报告 `NET_ABORTED`，中止原因是超时时报告 `NET_TIMEOUT`。转换发生在 `fetch` 支持流式请求体的运行时：`Blob` / `File`、`ArrayBuffer` 和 `FormData` 会转成流并报告上传进度。Chromium 只在 HTTP/2 及以上可用；HTTP/1.1 下带 `onUploadProgress` 的上传会失败（`NET_UNREACHABLE`）。Firefox 原样发送这些请求体，且不调用 `onUploadProgress`。
 
-在服务端运行时，FormData 使用其序列化后的流，不会把整个 body 缓冲成 Blob，并保留实际的 multipart 边界。除非提供了有效的显式 `Content-Length`，否则总长度未知。显式内容类型会在上传转换中保留，但 FormData 必须使用其序列化产生的边界。`loaded` 统计流中的字节，不代表服务端确认。带非 identity `Content-Encoding` 的下载报告 `total: 0` 和 `lengthComputable: false`；其流字节可能已经解压。
+发生该转换的运行时里，FormData 使用其序列化后的流，不会把整个 body 缓冲成 Blob，并保留实际的 multipart 边界。除非提供了有效的显式 `Content-Length`，否则总长度未知。显式内容类型会在上传转换中保留，但 FormData 必须使用其序列化产生的边界。`loaded` 统计流中的字节，不代表服务端确认。带非 identity `Content-Encoding` 的下载报告 `total: 0` 和 `lengthComputable: false`；其流字节可能已经解压。
 
 见 [HTTP 指南](/zh-Hans/docs/http) 和 [Client](/zh-Hans/docs/client)。
 

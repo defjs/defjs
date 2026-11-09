@@ -130,8 +130,8 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 ## 6. 凭证、XSRF 与传输进度
 
 - **`withCredentials(true)`**：为 HTTP 和 SSE 请求设置 Fetch `credentials: "include"`。
-- **`withXSRF(options?)`**：读取 XSRF cookie（默认 `XSRF-TOKEN`），并在同源的变更类 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上注入请求头（`X-XSRF-TOKEN`）。
-- **`onDownloadProgress` / `onUploadProgress`**：通过 `client({ onDownloadProgress, onUploadProgress })` 传入。仅当 `Content-Length` 为正且 `Content-Encoding` 缺失或为 `identity` 时，下载进度才报告 `lengthComputable: true`。在服务端运行时（Bun）上，上传进度会流式发送请求体。进度回调抛出异常会以 `EXT_OBSERVER_FAILED` 使调用失败。
+- **`withXSRF(options?)`**：来自 `@defjs/core/xsrf`。在浏览器中读取 XSRF cookie（默认 `XSRF-TOKEN`），并在同源的变更类 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上注入请求头（`X-XSRF-TOKEN`）。调用 `withXSRF()` 时，若缺少 `location` 或 `document`（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。
+- **`onDownloadProgress` / `onUploadProgress`**：通过 `client({ onDownloadProgress, onUploadProgress })` 传入。仅当 `Content-Length` 为正且 `Content-Encoding` 缺失或为 `identity` 时，下载进度才报告 `lengthComputable: true`。在 `fetch` 支持流式请求体的运行时，上传进度会把 `Blob`、`File`、`ArrayBuffer` 和 `FormData` 转成流。Chromium 只在 HTTP/2 及以上报告该进度；HTTP/1.1 下带 `onUploadProgress` 的上传会失败。Firefox 原样发送这些请求体，且不调用回调。进度回调抛出异常会以 `EXT_OBSERVER_FAILED` 使调用失败。
 
 ## 相关阅读
 

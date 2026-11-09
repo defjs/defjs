@@ -46,10 +46,10 @@ rules = { "no-unused-vars" = "off" }
 
 # Type tests bind values to assert on their inferred types.
 [[lint.overrides]]
-files = ["**/*.type.test.ts"]
+files = ["**/*.type.spec.ts"]
 rules = { "no-unused-vars" = "off" }
 
 # Specs declare a binding so an earlier callback can reference it, then assign it once.
 [[lint.overrides]]
-files = ["**/*.spec.ts"]
+files = ["**/*.spec.ts", "**/*.spec.tsx"]
 rules = { "prefer-const" = ["warn", { ignoreReadBeforeAssign = true }] }

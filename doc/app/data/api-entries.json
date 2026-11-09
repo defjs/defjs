@@ -61,11 +61,18 @@
     "related": []
   },
   {
-    "package": "@defjs/core",
+    "package": "@defjs/core/xsrf",
     "name": "withXSRF",
     "kind": "function",
     "slug": "core/withxsrf",
-    "related": []
+    "related": ["@defjs/core/xsrf:XSRFOptions", "@defjs/core:ClientOption"]
+  },
+  {
+    "package": "@defjs/core/xsrf",
+    "name": "XSRFOptions",
+    "kind": "type",
+    "slug": "core/xsrf/xsrfoptions-type",
+    "related": ["@defjs/core/xsrf:withXSRF"]
   },
   {
     "package": "@defjs/core",

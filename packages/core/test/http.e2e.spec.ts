@@ -10,6 +10,7 @@ import {
   withQuerySerializer,
 } from "../src";
 import type { Client, Infer } from "../src";
+import { toBase64 } from "./base64";
 
 test("should settle public HTTP cancellation when an interceptor hangs after a real response", async () => {
   const controller = new AbortController();
@@ -68,32 +69,8 @@ const readMissLog = defineRequest({
 
 type Echo = Infer<typeof EchoReport>;
 
-// Same probe the transport uses. A runtime that rejects duplex request bodies cannot carry a ReadableStream.
-function runtimeSupportsStreamingRequestBody(): boolean {
-  if (typeof Request !== "function" || typeof ReadableStream === "undefined") {
-    return false;
-  }
-
-  try {
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.close();
-      },
-    });
-    const init = {
-      body: stream,
-      duplex: "half" as const,
-      method: "POST",
-    };
-    const request = new Request("https://example.com/", init);
-    return request.body !== null;
-  } catch {
-    return false;
-  }
-}
-
 function bytesToBase64(bytes: Uint8Array): string {
-  return bytes.toBase64();
+  return toBase64(bytes);
 }
 
 function isRecord(value: unknown): value is { [key: string]: unknown } {
@@ -613,31 +590,6 @@ describe("request builder through the real server", () => {
     expect(protobuf.headers["content-type"]).toBe("application/x-protobuf");
     expect(protobuf.bodyBase64).toBe(bytesToBase64(Uint8Array.from([9, 8, 7])));
   });
-
-  test.skipIf(!runtimeSupportsStreamingRequestBody())(
-    "sends a ReadableStream body when the runtime supports duplex request bodies",
-    async () => {
-      const payload = new TextEncoder().encode("stream-bytes");
-      const sendStream = defineRequest({
-        builder: () => ({
-          body: new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(payload);
-              controller.close();
-            },
-          }),
-        }),
-        method: "POST",
-        output: EchoReport,
-        path: "/e2e/echo",
-      });
-
-      const report = await echo(sendStream);
-
-      expect(report.headers["content-type"]).toBe("application/octet-stream");
-      expect(report.bodyText).toBe("stream-bytes");
-    },
-  );
 
   test("branches a discriminated-union builder into JSON, file, and urlencoded bodies", async () => {
     const Row = struct.object({

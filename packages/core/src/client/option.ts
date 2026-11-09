@@ -11,7 +11,6 @@ import type {
   ClientSSEOptions,
   ClientWebSocketOptions,
   FetchHandle,
-  HttpClientOptions,
   QuerySerializer,
   RetryOptions,
   WebSocketHandleConstructor,
@@ -422,31 +421,6 @@ export function withSSEReconnect(
 ): ClientOption {
   return (config) => {
     config.sse.reconnect = snapshotReconnect(options);
-  };
-}
-
-/**
- * Enables XSRF cookie-to-header token forwarding for HTTP requests.
- *
- * SSE and WebSocket requests do not get the header. `cookieName` defaults to `XSRF-TOKEN` and `headerName` to `X-XSRF-TOKEN` when names are omitted.
- *
- * - The header is set only when all of these hold: the method is not `GET`, `HEAD`, `OPTIONS`, or `TRACE`; the request does not already have that header; the client has an endpoint; and, whenever `location` exists (Window or Worker), the resolved request URL has the same origin as `location.origin`. A cross-origin request does not call the provider.
- * - Without `tokenProvider`, the token is read from `document.cookie` and URL-decoded only when `document` exists. Workers and servers need a provider to supply a token.
- * - With `tokenProvider`, the cookie is never read. The provider receives the request, and its result is the token. An empty string, `null`, or `undefined` means no header.
- *
- * @param options - Cookie/header names and optional token provider.
- * @returns An option that sets `config.xsrf`.
- * @group client
- */
-export function withXSRF(
-  options: HttpClientOptions["xsrf"] = {},
-): ClientOption {
-  return (config) => {
-    config.xsrf = {
-      cookieName: options.cookieName ?? "XSRF-TOKEN",
-      headerName: options.headerName ?? "X-XSRF-TOKEN",
-      tokenProvider: options.tokenProvider,
-    };
   };
 }
 

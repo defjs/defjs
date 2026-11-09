@@ -57,7 +57,7 @@ HTTP と SSE のリクエストに使う静的なデフォルトヘッダーを�
 1. デフォルトが最初のヘッダー集合になります。
 2. `builder` が返す `headers` は、同名のデフォルトを置き換えます。その名前の最初の値がデフォルトを置き換え、同じ配列のあとの値はその置き換え先にだけ追加されます。スカラーや `Headers` インスタンスも置き換えます。それ以外のデフォルト名はそのまま残ります。
 3. インターセプターはマージ後のヘッダーを受け取り、変更できます。
-4. デフォルトの HTTP トランスポートでは、XSRF ヘッダーが最後に、まだ存在しない場合に限って追加されます（`withXSRF` を参照）。
+4. `@defjs/core/xsrf` では、XSRF ヘッダーが最後に、まだ存在しない場合に限って追加されます（`withXSRF` を参照）。
 
 リクエストごとに変わる値には、インターセプターを使ってください。たとえば更新した Bearer トークンや、シリアライズ済みボディに対する HMAC です。
 
@@ -85,9 +85,9 @@ Fetch（HTTP/SSE）または WebSocket コンストラクタを差し替えま�
 
 <ApiSignature name="withXSRF" />
 
-HTTP リクエストに XSRF トークンのヘッダーを追加します。`options` は `xsrf` 設定で、[`ClientOptions`](/ja-JP/api/core/clientoptions-type) の `xsrf` と同じ形です。`cookieName`（デフォルト `XSRF-TOKEN`）、`headerName`（デフォルト `X-XSRF-TOKEN`）、`tokenProvider({ request })` です。引数なしの `withXSRF()` はこれらのデフォルトを有効にします。SSE と WebSocket のリクエストには影響しません。
+ブラウザの HTTP リクエストに XSRF トークンのヘッダーを追加します。`@defjs/core/xsrf` からインポートします。`options` は `XSRFOptions` です。`cookieName`（デフォルト `XSRF-TOKEN`）と `headerName`（デフォルト `X-XSRF-TOKEN`）です。引数なしの `withXSRF()` はこれらのデフォルトを有効にします。`location` または `document` がないとき（Worker を含む）は例外を投げます。ブラウザとサーバーで共有するコードは、このオプションをブラウザだけで追加します。別の出所のトークンはインターセプターで設定します。SSE と WebSocket のリクエストには影響しません。
 
-デフォルトの HTTP トランスポートは、次のすべてが成り立つときにヘッダーを追加します。メソッドが `GET`、`HEAD`、`OPTIONS`、`TRACE` のいずれでもないこと、リクエストにそのヘッダーがまだないこと、リクエストが同一オリジンであること、空でないトークンが見つかることです。Worker 内も含め、`location` が存在するときは、解決済みリクエストのオリジンが `location.origin` と一致する必要があります。存在しなければ、`baseEndpoint` を持つリクエストを同一オリジンとみなします。クロスオリジンのリクエストでは `tokenProvider` は呼ばれません。トークンはプロバイダーが指定されていればそこから、なければ `document.cookie` から取得します。cookie を読むのは `document` が存在するときだけです。
+次のすべてが成り立つときにヘッダーを設定します。メソッドが `GET`、`HEAD`、`OPTIONS`、`TRACE` のいずれでもないこと、リクエストにそのヘッダーがまだないこと、解決済みリクエストのオリジンがページの origin と一致すること、`document.cookie` に空でないトークンがあることです。クロスオリジンのリクエストでは cookie を読みません。cookie の読み取りが失敗した場合は、トークンがないものとして扱います。空のトークンではヘッダーを設定しません。
 
 ### SSE の設定
 
@@ -191,7 +191,7 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を
 
 <ApiSignature name="ClientOptions" />
 
-表示されるフィールドは `sse` と `webSocket` です。残りの 7 つ——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf`、`withCredentials`——は export されない HTTP の基底から継承されます。`endpoints` は `readonly string[]` です。解決後のデフォルトは `[]` です。空の配列は正当な値で、呼び出しは `REQ_BUILD_FAILED` で失敗します。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、オプションヘルパーを受け取ります。
+表示されるフィールドは `sse` と `webSocket` です。残りの 6 つ——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`withCredentials`——は export されない HTTP の基底から継承されます。`endpoints` は `readonly string[]` です。解決後のデフォルトは `[]` です。空の配列は正当な値で、呼び出しは `REQ_BUILD_FAILED` で失敗します。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、オプションヘルパーを受け取ります。
 
 ### ClientConfig
 

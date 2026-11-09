@@ -79,6 +79,7 @@ describe("web socket runtime reconnect", () => {
         });
       }
     });
+    socket.send({ text: "seen-open", type: "message" });
 
     const iterator = socket.receive[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({

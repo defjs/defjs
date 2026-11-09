@@ -57,7 +57,7 @@ Precedence for one request:
 1. The defaults are the starting header set.
 2. `headers` returned by the request builder replace a default of the same name. The first value for that name replaces the default; later values in the same array append only to that replacement. A scalar or a `Headers` instance also replaces. Other default names stay.
 3. Interceptors receive the merged headers and may change them.
-4. With the default HTTP transport, the XSRF header is added last, only when still absent (see `withXSRF`).
+4. With `@defjs/core/xsrf`, the XSRF header is added last, only when still absent (see `withXSRF`).
 
 Use an interceptor for values that change per request: a refreshed Bearer token, or an HMAC over the serialized body.
 
@@ -85,9 +85,9 @@ When `true`, Fetch uses `credentials: 'include'` for HTTP and SSE. The default i
 
 <ApiSignature name="withXSRF" />
 
-Adds an XSRF token header to HTTP requests. `options` is the `xsrf` setting, the same shape as `xsrf` on [`ClientOptions`](/api/core/clientoptions-type): `cookieName` (default `XSRF-TOKEN`), `headerName` (default `X-XSRF-TOKEN`), and `tokenProvider({ request })`. Calling `withXSRF()` with no argument enables those defaults. SSE and WebSocket requests are not affected.
+Adds an XSRF token header to browser HTTP requests. Import it from `@defjs/core/xsrf`. `options` is an `XSRFOptions` value: `cookieName` (default `XSRF-TOKEN`) and `headerName` (default `X-XSRF-TOKEN`). Calling `withXSRF()` with no argument enables those defaults, and throws when `location` or `document` is missing, including in a Worker. Isomorphic code adds this option only in the browser. A token from another source is set with an interceptor. SSE and WebSocket requests are not affected.
 
-The default HTTP transport adds the header when all of these hold: the method is not `GET`, `HEAD`, `OPTIONS` or `TRACE`; the request does not already have that header; the request is same-origin; and a non-empty token is found. Whenever `location` exists, including in a Worker, the resolved request origin must match `location.origin`; without it, a request with a `baseEndpoint` counts as same-origin. Cross-origin requests do not call `tokenProvider`. The token comes from that provider when given, otherwise from `document.cookie`, which is read only when `document` exists.
+The header is set only when all of these hold: the method is not `GET`, `HEAD`, `OPTIONS` or `TRACE`; the request does not already have that header; the resolved request origin equals the page origin; and `document.cookie` holds a non-empty token. A cross-origin request does not read the cookie. A throw while reading the cookie counts as no token. An empty token does not set the header.
 
 ### SSE knobs
 
@@ -191,7 +191,7 @@ For WebSocket, `beforeConnect`, `heartbeat`, `protocols` and `reconnect` can als
 
 <ApiSignature name="ClientOptions" />
 
-The shown fields are `sse` and `webSocket`. The other seven — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, and `withCredentials` — are inherited from the non-exported HTTP base. `endpoints` is `readonly string[]`. The resolved default is `[]`. An empty array is a legal value and fails the call with `REQ_BUILD_FAILED`. There is no client-level `timeout`. `createClient` does not take this object; it takes option helpers.
+The shown fields are `sse` and `webSocket`. The other six — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, and `withCredentials` — are inherited from the non-exported HTTP base. `endpoints` is `readonly string[]`. The resolved default is `[]`. An empty array is a legal value and fails the call with `REQ_BUILD_FAILED`. There is no client-level `timeout`. `createClient` does not take this object; it takes option helpers.
 
 ### ClientConfig
 

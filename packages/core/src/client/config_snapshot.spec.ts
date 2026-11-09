@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { defineRequest } from "../http";
 import { createHttpRequest } from "../http/request";
+import type { HttpRequest } from "../internal/http_request";
 import { makeResponse } from "../internal/http_response";
 import {
   createHttpInterceptor,
@@ -26,7 +27,6 @@ import {
   withWebSocketHeartbeat,
   withWebSocketProtocols,
   withWebSocketReconnect,
-  withXSRF,
 } from "./option";
 
 function isEventDictionary(value: unknown): value is { tick?: AnyStruct } {
@@ -785,31 +785,22 @@ describe("definition and request snapshots", () => {
     await session?.closed;
   });
 
-  test("gives each HTTP request its own xsrf record", async () => {
-    const tokenProvider = () => "token";
-    const source = {
-      cookieName: "csrf",
-      headerName: "x-csrf",
-      tokenProvider,
-    };
-    const seen: string[] = [];
-    let first = true;
+  test("keeps finalizeHeaders identity on the client and each request", async () => {
+    const finalizeHeaders: NonNullable<HttpRequest["finalizeHeaders"]> = () =>
+      undefined;
+    const seen: (typeof finalizeHeaders | undefined)[] = [];
     const client = createClient(
       withEndpoint("https://example.test"),
-      withXSRF(source),
+      (config) => {
+        config.finalizeHeaders = finalizeHeaders;
+      },
       withInterceptors(
         createHttpInterceptor((request) => {
-          seen.push(request.xsrf?.headerName ?? "");
-          if (first && request.xsrf) {
-            first = false;
-            request.xsrf.headerName = "changed";
-            request.xsrf.tokenProvider = () => "other";
-          }
+          seen.push(request.finalizeHeaders);
           return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
-    source.headerName = "mutated";
     const post = defineRequest({ method: "POST", path: "/submit" });
 
     const [firstError] = await post(client);
@@ -817,43 +808,31 @@ describe("definition and request snapshots", () => {
 
     expect(firstError).toBeNull();
     expect(secondError).toBeNull();
-    expect(seen).toEqual(["x-csrf", "x-csrf"]);
-    expect(client[CLIENT].config.xsrf?.headerName).toBe("x-csrf");
-    expect(client[CLIENT].config.xsrf?.tokenProvider).toBe(tokenProvider);
+    expect(seen).toEqual([finalizeHeaders, finalizeHeaders]);
+    expect(client[CLIENT].config.finalizeHeaders).toBe(finalizeHeaders);
   });
 
-  test("copies xsrf fields onto the request and keeps the provider", () => {
-    const tokenProvider = () => "token";
-    const xsrf = {
-      cookieName: "csrf",
-      headerName: "x-csrf",
-      tokenProvider,
-    };
+  test("createHttpRequest keeps the finalizeHeaders function", () => {
+    const finalizeHeaders: NonNullable<HttpRequest["finalizeHeaders"]> = () =>
+      undefined;
     const request = createHttpRequest("POST", "/submit", undefined, undefined, {
       baseEndpoint: "https://example.test",
       signal: new AbortController().signal,
-      xsrf,
+      finalizeHeaders,
     });
-    xsrf.headerName = "changed";
 
-    expect(request.xsrf).not.toBe(xsrf);
-    expect(request.xsrf?.headerName).toBe("x-csrf");
-    expect(request.xsrf?.cookieName).toBe("csrf");
-    expect(request.xsrf?.tokenProvider).toBe(tokenProvider);
+    expect(request.finalizeHeaders).toBe(finalizeHeaders);
   });
 
-  test("throws an xsrf getter while building the request", () => {
-    const boom = new Error("xsrf getter failed");
+  test("a throwing finalizeHeaders getter escapes createHttpRequest", () => {
+    const boom = new Error("finalizeHeaders getter failed");
 
     expect(() =>
       createHttpRequest("POST", "/submit", undefined, undefined, {
         baseEndpoint: "https://example.test",
         signal: new AbortController().signal,
-        xsrf: {
-          cookieName: "csrf",
-          get headerName(): string {
-            throw boom;
-          },
+        get finalizeHeaders(): NonNullable<HttpRequest["finalizeHeaders"]> {
+          throw boom;
         },
       }),
     ).toThrow(boom);

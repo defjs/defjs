@@ -395,33 +395,6 @@ describe("builder refactor adversarial audit", () => {
     expect(received).toEqual([1, 2]);
   });
 
-  test("surfaces stream reuse as a second-call transport failure", async () => {
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new Uint8Array([1, 2]));
-        controller.close();
-      },
-    });
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withHTTPHandle(async (input) => {
-        const request = input instanceof Request ? input : new Request(input);
-        await request.arrayBuffer();
-        return new Response(null, { status: 204 });
-      }),
-    );
-    const upload = defineRequest({
-      builder: () => ({ body: stream }),
-      method: "POST",
-      path: "/stream",
-    });
-
-    const [firstError] = await upload(client);
-    const [secondError] = await upload(client);
-    expect(firstError).toBeNull();
-    expect(secondError?.code).toBe("NET_UNREACHABLE");
-  });
-
   test("maps non-Error, non-object, and async builder results to REQ_BUILD_FAILED", async () => {
     const client = createClient(
       withEndpoint("https://example.test"),

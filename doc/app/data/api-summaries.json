@@ -42,7 +42,12 @@
   {
     "slug": "core/withxsrf",
     "name": "withXSRF",
-    "description": "Enables XSRF cookie-to-header token forwarding for HTTP requests."
+    "description": "Enables XSRF cookie-to-header forwarding for browser HTTP requests."
+  },
+  {
+    "slug": "core/xsrf/xsrfoptions-type",
+    "name": "XSRFOptions",
+    "description": "Cookie and header names for withXSRF."
   },
   {
     "slug": "core/withssereconnect",

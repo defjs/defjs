@@ -54,7 +54,7 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 ### HttpRequest
 
-正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString`、`queryParams` です。インターセプターが見る時点で `body` はすでにワイヤ上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。`builder` が `URLSearchParams` を返すと、そのインスタンスがそのまま渡されます。`responseType` と `errorResponseType` は readonly です。宣言された `output` と `error` の struct の種類から導出され、変更してはいけません。
+正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`finalizeHeaders`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString`、`queryParams` です。インターセプターが見る時点で `body` はすでにワイヤ上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。`builder` が `URLSearchParams` を返すと、そのインスタンスがそのまま渡されます。`responseType` と `errorResponseType` は readonly です。宣言された `output` と `error` の struct の種類から導出され、変更してはいけません。
 
 ### HttpMeta
 
@@ -78,9 +78,9 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 ### HttpProgressFn
 
-`loaded`、`total`、`lengthComputable` です。コールバックは非同期でも構いません。`onDownloadProgress` または `onUploadProgress` が例外を投げると、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。キャンセルは引き続き `NET_ABORTED` を報告し、abort の理由がタイムアウトなら `NET_TIMEOUT` を報告します。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます（Bun）。ブラウザでは、`Blob` / `File`、`ArrayBuffer`、`FormData` のボディはそのまま送られ、`onUploadProgress` は呼び出されません。
+`loaded`、`total`、`lengthComputable` です。コールバックは非同期でも構いません。`onDownloadProgress` または `onUploadProgress` が例外を投げると、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。キャンセルは引き続き `NET_ABORTED` を報告し、abort の理由がタイムアウトなら `NET_TIMEOUT` を報告します。変換が起きるのは、`fetch` がリクエストボディのストリーミングに対応するランタイムです。`Blob` / `File`、`ArrayBuffer`、`FormData` はストリームへ変換され、アップロード進捗が報告されます。Chromium で使えるのは HTTP/2 以降だけです。HTTP/1.1 では `onUploadProgress` 付きのアップロードは失敗します（`NET_UNREACHABLE`）。Firefox はそれらのボディをそのまま送り、`onUploadProgress` を呼び出しません。
 
-サーバーランタイムでは、FormData はボディ全体を Blob にバッファリングせず、シリアライズされたストリームを使い、実際の multipart boundary を保持します。有効な明示的 `Content-Length` がなければ総量は不明です。アップロード変換後も明示的な Content-Type は保持されますが、FormData はシリアライズ時の boundary を使う必要があります。`loaded` が数えるのはストリームのバイト数であり、サーバーの受信確認ではありません。`Content-Encoding` が identity 以外のダウンロードは `total: 0`、`lengthComputable: false` を報告します。そのストリームのバイト列はすでに展開されている場合があります。
+その変換が走るランタイムでは、FormData はボディ全体を Blob にバッファリングせず、シリアライズされたストリームを使い、実際の multipart boundary を保持します。有効な明示的 `Content-Length` がなければ総量は不明です。アップロード変換後も明示的な Content-Type は保持されますが、FormData はシリアライズ時の boundary を使う必要があります。`loaded` が数えるのはストリームのバイト数であり、サーバーの受信確認ではありません。`Content-Encoding` が identity 以外のダウンロードは `total: 0`、`lengthComputable: false` を報告します。そのストリームのバイト列はすでに展開されている場合があります。
 
 [HTTP ガイド](/ja-JP/docs/http) と [Client](/ja-JP/docs/client) を見てください。
 

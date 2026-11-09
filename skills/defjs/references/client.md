@@ -12,8 +12,8 @@ import {
   withCredentials,
   withEndpoint,
   withHeaders,
-  withXSRF,
 } from "@defjs/core";
+import { withXSRF } from "@defjs/core/xsrf";
 
 export const client = createClient(
   withEndpoint("https://api.example.com/v1"),
@@ -69,25 +69,25 @@ await getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 2 });
 
 ## Client option helpers
 
-| Helper                           | Effect                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------ |
-| `withEndpoint(...urls)`          | Base URL candidates for HTTP, SSE, and WebSocket                         |
-| `withBalancer(strategy)`         | Shared endpoint selection strategy; defaults to sticky pick-first        |
-| `withRetry(options?)`            | Opt-in same-call HTTP failover; separate from SSE/WebSocket reconnect    |
-| `withHeaders(HeadersInit)`       | Static default headers for HTTP and SSE (builder headers override)       |
-| `withCredentials(boolean)`       | Sets Fetch `credentials: "include"` for HTTP and SSE when `true`         |
-| `withXSRF(options?)`             | Copies XSRF cookie into header on mutating/same-origin HTTP requests     |
-| `withQuerySerializer(fn)`        | Custom serializer `(query) => string` for encoded query objects          |
-| `withInterceptors(...items)`     | Appends HTTP, SSE, and WebSocket interceptors in onion order             |
-| `withSSEReconnect(policy)`       | Enables opt-in SSE reconnection                                          |
-| `withSSEOnInvalidEvent(fn)`      | Observes undeclared or invalid SSE events                                |
-| `withWebSocketReconnect(policy)` | Client-level default WebSocket reconnect policy                          |
-| `withWebSocketHeartbeat(policy)` | Client-level default WebSocket heartbeat policy                          |
-| `withWebSocketProtocols(list)`   | Client-level default WebSocket subprotocols                              |
-| `withWebSocketBeforeConnect(fn)` | Client-level hook before each WebSocket handshake                        |
-| `withHTTPHandle(fetch)`          | Replaces Fetch implementation for HTTP (ideal for tests or custom agent) |
-| `withSSEHandle(fetch)`           | Replaces Fetch implementation for SSE                                    |
-| `withWebSocketHandle(WebSocket)` | Replaces WebSocket constructor                                           |
+| Helper                           | Effect                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`          | Base URL candidates for HTTP, SSE, and WebSocket                                                                                                                                                                                                                                                                              |
+| `withBalancer(strategy)`         | Shared endpoint selection strategy; defaults to sticky pick-first                                                                                                                                                                                                                                                             |
+| `withRetry(options?)`            | Opt-in same-call HTTP failover; separate from SSE/WebSocket reconnect                                                                                                                                                                                                                                                         |
+| `withHeaders(HeadersInit)`       | Static default headers for HTTP and SSE (builder headers override)                                                                                                                                                                                                                                                            |
+| `withCredentials(boolean)`       | Sets Fetch `credentials: "include"` for HTTP and SSE when `true`                                                                                                                                                                                                                                                              |
+| `withXSRF(options?)`             | From `@defjs/core/xsrf`. In a browser, copies the XSRF cookie into a header on mutating same-origin HTTP requests. Calling `withXSRF()` throws when `location` or `document` is missing, including in a Worker. Isomorphic code adds this option only in the browser. A token from another source is set with an interceptor. |
+| `withQuerySerializer(fn)`        | Custom serializer `(query) => string` for encoded query objects                                                                                                                                                                                                                                                               |
+| `withInterceptors(...items)`     | Appends HTTP, SSE, and WebSocket interceptors in onion order                                                                                                                                                                                                                                                                  |
+| `withSSEReconnect(policy)`       | Enables opt-in SSE reconnection                                                                                                                                                                                                                                                                                               |
+| `withSSEOnInvalidEvent(fn)`      | Observes undeclared or invalid SSE events                                                                                                                                                                                                                                                                                     |
+| `withWebSocketReconnect(policy)` | Client-level default WebSocket reconnect policy                                                                                                                                                                                                                                                                               |
+| `withWebSocketHeartbeat(policy)` | Client-level default WebSocket heartbeat policy                                                                                                                                                                                                                                                                               |
+| `withWebSocketProtocols(list)`   | Client-level default WebSocket subprotocols                                                                                                                                                                                                                                                                                   |
+| `withWebSocketBeforeConnect(fn)` | Client-level hook before each WebSocket handshake                                                                                                                                                                                                                                                                             |
+| `withHTTPHandle(fetch)`          | Replaces Fetch implementation for HTTP (ideal for tests or custom agent)                                                                                                                                                                                                                                                      |
+| `withSSEHandle(fetch)`           | Replaces Fetch implementation for SSE                                                                                                                                                                                                                                                                                         |
+| `withWebSocketHandle(WebSocket)` | Replaces WebSocket constructor                                                                                                                                                                                                                                                                                                |
 
 ## Server (SSR) vs browser scope
 

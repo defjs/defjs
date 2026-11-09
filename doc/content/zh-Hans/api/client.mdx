@@ -57,7 +57,7 @@ description: createClient、选项辅助函数，以及 Client 类型。
 1. 默认请求头是起始集合。
 2. 请求 `builder` 返回的 `headers` 会替换同名默认值。该名称的第一个值替换默认值；同一数组中的后续值只追加到这次替换上。标量或 `Headers` 实例也会整体替换。其他默认名称保留。
 3. 拦截器收到合并后的请求头，并可以修改它们。
-4. 使用默认 HTTP 传输时，XSRF 请求头最后添加，且仅在仍然缺失时添加（见 `withXSRF`）。
+4. 使用 `@defjs/core/xsrf` 时，XSRF 请求头最后添加，且仅在仍然缺失时添加（见 `withXSRF`）。
 
 随请求变化的值（例如刷新后的 Bearer 令牌，或对序列化 body 计算的 HMAC）请用拦截器处理。
 
@@ -85,9 +85,9 @@ description: createClient、选项辅助函数，以及 Client 类型。
 
 <ApiSignature name="withXSRF" />
 
-为 HTTP 请求添加 XSRF 令牌请求头。`options` 就是 `xsrf` 设置，形状与 [`ClientOptions`](/zh-Hans/api/core/clientoptions-type) 上的 `xsrf` 相同：`cookieName`（默认 `XSRF-TOKEN`）、`headerName`（默认 `X-XSRF-TOKEN`）和 `tokenProvider({ request })`。不带参数调用 `withXSRF()` 会启用这些默认值。SSE 和 WebSocket 请求不受影响。
+为浏览器中的 HTTP 请求添加 XSRF 令牌请求头。从 `@defjs/core/xsrf` 导入。`options` 是 `XSRFOptions`：`cookieName`（默认 `XSRF-TOKEN`）和 `headerName`（默认 `X-XSRF-TOKEN`）。不带参数调用 `withXSRF()` 会启用这些默认值；缺少 `location` 或 `document` 时（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。SSE 和 WebSocket 请求不受影响。
 
-默认 HTTP 传输在以下条件全部成立时添加该请求头：方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；请求尚未带有该请求头；请求同源；并且找到了非空令牌。只要存在 `location`（包括 Worker 中），解析后的请求源就必须匹配 `location.origin`；不存在 `location` 时，带 `baseEndpoint` 的请求视为同源。跨源请求不会调用 `tokenProvider`。提供了 provider 时，令牌取自它，否则取自 `document.cookie`；只有存在 `document` 时才读取 cookie。
+只在以下条件全部成立时设置该请求头：方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；请求尚未带有该请求头；解析后的请求源等于页面 origin；并且 `document.cookie` 中有非空令牌。跨源请求不会读取 cookie。读取 cookie 时抛错视为没有令牌。空令牌不设置该请求头。
 
 ### SSE 选项
 
@@ -191,7 +191,7 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="ClientOptions" />
 
-显示的字段是 `sse` 和 `webSocket`。另外七个——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 和 `withCredentials`——继承自未导出的 HTTP 基础类型。`endpoints` 是 `readonly string[]`。解析后的默认值是 `[]`。空数组是合法值，调用会以 `REQ_BUILD_FAILED` 失败。没有 Client 级 `timeout`。`createClient` 不接收这个对象，它接收选项辅助函数。
+显示的字段是 `sse` 和 `webSocket`。另外六个——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer` 和 `withCredentials`——继承自未导出的 HTTP 基础类型。`endpoints` 是 `readonly string[]`。解析后的默认值是 `[]`。空数组是合法值，调用会以 `REQ_BUILD_FAILED` 失败。没有 Client 级 `timeout`。`createClient` 不接收这个对象，它接收选项辅助函数。
 
 ### ClientConfig
 

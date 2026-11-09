@@ -18,7 +18,7 @@ jobs:
           bun-version: canary
       - run: bun ci
       - name: Install Playwright browsers
-        run: bunx --bun playwright install --with-deps chromium firefox
+        run: bunx --bun playwright install --with-deps chromium
       # Type-aware lint reads the generated route types in doc/.react-router, which are not committed.
       - name: Generate route types
         run: bun run --cwd doc typegen
@@ -28,9 +28,94 @@ jobs:
         run: bun fmt --check
       - name: Typecheck
         run: bun run typecheck
-      - name: Unit tests
-        run: bun run test:unit
       - name: Build
         run: bun run build
       - name: E2E tests
         run: bun run test:e2e
+
+  unit-chrome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun ci
+      - name: Install Playwright browsers
+        run: bunx --bun playwright install --with-deps chromium
+      - name: Unit tests (Chrome)
+        run: bun run unit:chrome
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage-chrome
+          path: packages/*/coverage/chrome/
+          if-no-files-found: warn
+
+  unit-firefox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun ci
+      - name: Install Playwright browsers
+        run: bunx --bun playwright install --with-deps firefox
+      - name: Unit tests (Firefox)
+        run: bun run unit:firefox
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage-firefox
+          path: packages/*/coverage/firefox/
+          if-no-files-found: warn
+
+  unit-bun:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun ci
+      # Type-aware lint reads the generated route types in doc/.react-router, which are not committed.
+      # root-bun's lint-plugin.bun.spec.ts runs bun lint.
+      - name: Generate route types
+        run: bun run --cwd doc typegen
+      - name: Unit tests (Bun)
+        run: bun run unit:bun
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage-bun
+          path: |
+            packages/*/coverage/bun/
+            doc/coverage/bun/
+          if-no-files-found: warn
+
+  unit-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: |
+            packages/core/package-lock.json
+            packages/opentelemetry-server/package-lock.json
+      - name: Install packages that run on Node
+        shell: bash
+        run: |
+          for lock in packages/*/package-lock.json; do
+            (cd "$(dirname "$lock")" && npm ci --ignore-scripts --workspaces=false)
+          done
+      - name: Unit tests (Node)
+        run: node --run unit:node
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: coverage-node
+          path: packages/*/coverage/node/
+          if-no-files-found: warn

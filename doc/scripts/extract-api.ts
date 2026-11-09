@@ -89,6 +89,7 @@ const repoRoot = Bun.fileURLToPath(new URL("../..", import.meta.url));
 const docRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const packages = [
   { name: "@defjs/core", entry: "packages/core/src/index.ts" },
+  { name: "@defjs/core/xsrf", entry: "packages/core/src/xsrf/index.ts" },
   { name: "@defjs/react", entry: "packages/react/src/index.ts" },
   { name: "@defjs/vue", entry: "packages/vue/src/index.ts" },
   {
