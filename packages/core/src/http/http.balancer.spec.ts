@@ -680,30 +680,24 @@ describe("HTTP endpoint balancer", () => {
   });
 
   test("keeps the last matching next when an earlier one settles later", async () => {
-    const live = await serve("script", {
-      plan: [
-        { status: 500, chunks: [], then: "hold" },
-        { status: 200, chunks: ["ok"], then: "end" },
-      ],
-    });
+    // The order is held in the handle: two concurrent requests can reach a real server either way round.
+    const held = Promise.withResolvers<Response>();
+    let sends = 0;
     const watched = watch(pickFirstBalancer());
     const client = createClient(
-      withEndpoint(live.url),
+      withEndpoint("https://example.com"),
       withBalancer(watched.balancer),
-      withHTTPHandle((input) => {
-        if (!(input instanceof Request)) {
-          return Promise.reject(new Error("expected Request"));
-        }
-        // A held response and a second request to the same URL share one
-        // browser HTTP-cache entry, so the second request cannot start.
-        return fetch(new Request(input, { cache: "no-store" }));
+      withHTTPHandle(() => {
+        sends += 1;
+        return sends === 1
+          ? held.promise
+          : Promise.resolve(new Response("ok", { status: 200 }));
       }),
       withInterceptors(
         createHttpInterceptor(async (request, next) => {
           const first = next(request);
           const second = await next(request);
-          await live.client.log({ wait: 1 });
-          await live.client.act("probe", "end", { request: 0 });
+          held.resolve(new Response(null, { status: 500 }));
           await first;
           return second;
         }),
