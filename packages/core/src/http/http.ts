@@ -620,7 +620,8 @@ async function executeHttpAttempt<
     }
 
     const transportOrigin = createTransportOrigin();
-    const transportController = new AbortController();
+    // One controller per send, so stopping a live send never reaches one whose upload body already failed.
+    const liveTransports = new Set<AbortController>();
     let chainSettled = false;
     let inflightTransport: Promise<HttpResponse<unknown>> | undefined;
     let response: HttpResponse<unknown> | undefined;
@@ -657,6 +658,10 @@ async function executeHttpAttempt<
         return reject(error);
       }
 
+      const transportController = new AbortController();
+      if (requestSignal.aborted) {
+        transportController.abort(requestSignal.reason);
+      }
       // transportController already follows requestSignal through abortTransport. Only an interceptor that
       // swapped the signal needs a composite, which is expensive to build and to listen on.
       const transportAbort =
@@ -673,6 +678,7 @@ async function executeHttpAttempt<
         releaseAbortSignal(transportAbort);
         return rejected;
       }
+      liveTransports.add(transportController);
       if (isReadableStreamBody(nextRequest.body)) state.replayable = false;
       let started = false;
       let sendTimer: ReturnType<typeof setTimeout> | undefined;
@@ -731,6 +737,11 @@ async function executeHttpAttempt<
           },
           (error: unknown) => {
             settleSend();
+            // Only a failed upload observer proves the body errored, leaving nothing to stop. Chromium reports an
+            // abort after that as an unhandled rejection. Any other failure still needs the abort to release its body.
+            if (isBodyFailure(error) && error.meta === undefined) {
+              liveTransports.delete(transportController);
+            }
             const classified = classifyHttpAttempt(error, started);
             if (matches)
               resolved.end(
@@ -758,11 +769,14 @@ async function executeHttpAttempt<
       return pending;
     };
 
+    const abortLiveTransports = (reason: unknown) => {
+      for (const transport of liveTransports) {
+        transport.abort(reason);
+      }
+    };
     const abortTransport = () => {
       abortedWhileSending = sending > 0;
-      if (!transportController.signal.aborted) {
-        transportController.abort(requestSignal.reason);
-      }
+      abortLiveTransports(requestSignal.reason);
     };
     try {
       try {
@@ -770,13 +784,8 @@ async function executeHttpAttempt<
           clientConfig.interceptors,
         );
         const chain = makeChain(httpInterceptors);
-        if (requestSignal.aborted) {
-          abortTransport();
-        } else {
-          requestSignal.addEventListener("abort", abortTransport, {
-            once: true,
-          });
-        }
+        // A signal that is already aborted fires nothing here; each send checks it when it starts.
+        requestSignal.addEventListener("abort", abortTransport, { once: true });
 
         const chainPromise = chain(request, handler);
         void chainPromise.catch(() => undefined);
@@ -840,9 +849,7 @@ async function executeHttpAttempt<
     } finally {
       requestSignal.removeEventListener("abort", abortTransport);
       chainSettled = true;
-      if (!transportController.signal.aborted) {
-        transportController.abort(new Error("HTTP interceptor chain settled"));
-      }
+      abortLiveTransports(new Error("HTTP interceptor chain settled"));
       // Keep the caller signal armed while a declared body is still being converted.
       if (!response) {
         releaseAbortSignal(requestSignal);

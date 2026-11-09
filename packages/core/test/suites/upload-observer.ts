@@ -44,21 +44,12 @@ type LaterChunkCase = {
 };
 
 function laterChunkCasesFor(
-  cap: UploadCapability,
   transports: readonly UploadTransport[],
 ): readonly LaterChunkCase[] {
   const cases: LaterChunkCase[] = [];
   for (const kind of laterBodyKinds) {
     for (const mode of observerModes) {
       for (const transport of transports) {
-        // The chunk phase needs an upload that reaches the network.
-        if (
-          kind === "Blob" &&
-          transport === "platform" &&
-          uploadOutcome(cap, "Blob", "platform") === "unreachable"
-        ) {
-          continue;
-        }
         cases.push({ kind, mode, transport });
       }
     }
@@ -102,7 +93,7 @@ export function registerUploadObserverSuite(
   cap: UploadCapability,
   transports: readonly UploadTransport[] = ["custom", "platform"],
 ): void {
-  const laterChunkCases = laterChunkCasesFor(cap, transports);
+  const laterChunkCases = laterChunkCasesFor(transports);
   const abortCases = abortErrorCases.filter((entry) =>
     transports.includes(entry.transport),
   );
@@ -344,6 +335,120 @@ export function registerUploadObserverSuite(
           expectUploadOutcome(outcome, toAttempt(tuple, calls.n));
         },
       );
+
+    if (transports.includes("custom"))
+      test("should leave a send unaborted once its upload observer has failed", async () => {
+        const outcome = observerFailureOutcome(cap, "Blob", "custom");
+        const cause = new Error("observer failed");
+        const calls = { n: 0 };
+        const fail = observerThatFails("sync", cause, "after-first");
+        const signals: AbortSignal[] = [];
+        const read = readingHandle(false);
+        const tuple = await executeUpload(
+          createUploadBody("Blob"),
+          {
+            onUploadProgress: () => {
+              calls.n += 1;
+              return fail();
+            },
+          },
+          (input, init) => {
+            if (input instanceof Request) signals.push(input.signal);
+            return read(input, init);
+          },
+        );
+
+        if (outcome !== "observed") {
+          expectUploadOutcome(outcome, toAttempt(tuple, calls.n));
+          return;
+        }
+        expectObserverFault(tuple, cause);
+        expect(signals.map((signal) => signal.aborted)).toEqual([false]);
+      });
+
+    if (transports.includes("custom"))
+      test("should abort a send that failed for another reason when the chain settles", async () => {
+        const signals: AbortSignal[] = [];
+        const [error] = await executeUpload(
+          createUploadBody("Blob"),
+          { onUploadProgress: () => undefined },
+          (input) => {
+            if (input instanceof Request) signals.push(input.signal);
+            return Promise.reject(new TypeError("network down"));
+          },
+        );
+
+        expect(error?.code).toBe("NET_UNREACHABLE");
+        expect(signals.map((signal) => signal.aborted)).toEqual([true]);
+      });
+
+    if (transports.includes("custom"))
+      test("should stop only the live send when the caller aborts after an upload observer failed", async () => {
+        const outcome = observerFailureOutcome(cap, "Blob", "custom");
+        const controller = new AbortController();
+        const calls = { n: 0 };
+        const fail = observerThatFails(
+          "sync",
+          new Error("first send failed"),
+          "after-first",
+        );
+        const signals: AbortSignal[] = [];
+        const read = readingHandle(false);
+        const client = createClient(
+          withEndpoint("https://example.com"),
+          withHTTPHandle((input, init) => {
+            if (!(input instanceof Request)) {
+              throw new TypeError("expected Request");
+            }
+            signals.push(input.signal);
+            if (signals.length === 1) return read(input, init);
+            const stopped = new Promise<Response>((_resolve, reject) => {
+              input.signal.addEventListener(
+                "abort",
+                () => reject(new Error("second send stopped")),
+                { once: true },
+              );
+            });
+            controller.abort();
+            return stopped;
+          }),
+          withInterceptors(
+            createHttpInterceptor(async (request, next) => {
+              try {
+                return await next(request);
+              } catch {
+                return await next({
+                  ...request,
+                  body: new Blob(["second-upload"]),
+                  uploadProgress: undefined,
+                });
+              }
+            }),
+          ),
+        );
+        const endpoint = defineRequest({
+          builder: () => ({ body: new Blob(["first-upload"]) }),
+          method: "POST",
+          path: "/",
+        });
+
+        const tuple = await endpoint(
+          client({
+            signal: controller.signal,
+            onUploadProgress: () => {
+              calls.n += 1;
+              return fail();
+            },
+          }),
+        );
+
+        if (outcome !== "observed") {
+          expectUploadOutcome(outcome, toAttempt(tuple, calls.n));
+          return;
+        }
+        expect(tuple[0]?.code).toBe("NET_ABORTED");
+        expect(signals.map((signal) => signal.aborted)).toEqual([false, true]);
+      });
 
     if (transports.includes("custom"))
       test("should succeed on a second transport call when the upload observer no longer throws", async () => {
