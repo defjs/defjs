@@ -1,7 +1,4 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { createClient } from "../client/client";
-import { withEndpoint, withBalancer } from "../client/option";
-import { defineRequest } from "../http";
 import { ERR_NO_CANDIDATE, pickFirstBalancer, type Balancer } from "./balancer";
 import { pickEndpoint } from "./runtime";
 
@@ -89,18 +86,6 @@ test("an attempt still running on the backup does not move the first endpoint it
   onBackup.done?.({ attempted: true, code: "NET_UNREACHABLE" });
   expect(pick(balancer).endpoint).toBe(endpoints[0]);
 });
-
-test.each([0, -1, Infinity, NaN])(
-  "invalid failbackMs %s fails at execution",
-  async (failbackMs) => {
-    const client = createClient(
-      withEndpoint(...endpoints),
-      withBalancer(pickFirstBalancer({ failbackMs })),
-    );
-    const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
-    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-  },
-);
 
 test("throwing navigator access is treated as online", () => {
   vi.stubGlobal("navigator", {

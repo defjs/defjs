@@ -1,13 +1,7 @@
 import type { PreflightFault } from "../error/types";
 import { createPreflightFault } from "../error/factory";
 import { reportContainedError } from "../internal/report_error";
-import {
-  type Balancer,
-  type DoneInfo,
-  type PickInfo,
-  type PickResult,
-  isBalancerOptionError,
-} from "./balancer";
+import type { Balancer, DoneInfo, PickInfo, PickResult } from "./balancer";
 
 /**
  * Endpoint selected for the transport, plus one-shot `start` and `done` wrappers.
@@ -42,21 +36,15 @@ export interface ResolvedEndpoint {
 /**
  * Calls `balancer.pick` and normalizes the result. Never throws.
  *
- * - `[Error, undefined]` with the internal option-error brand becomes
- *   `REQ_OPTIONS_INVALID`. Any other error, including `ERR_NO_CANDIDATE`,
- *   becomes `REQ_BUILD_FAILED`. The original error is `cause`.
- * - A throw from `pick` or outcome normalization becomes
+ * - `[Error, undefined]`, including `ERR_NO_CANDIDATE`, becomes
+ *   `REQ_BUILD_FAILED`. The original error is `cause`.
+ * - A throw from `pick` or from reading the result becomes
  *   `createPreflightFault("REQ_BUILD_FAILED", thrown)`. Result fields are read once.
- * - Any other shape becomes `REQ_BUILD_FAILED` whose `cause` is the returned
- *   value itself.
  * - `start`, `end`, and `done` are called without a receiver, so `this` is
  *   `undefined`. A throw is contained and reported with `reportError` where the
  *   runtime defines it.
- * - `pick`, `start`, and `done` must be synchronous. A returned promise is not awaited
- *   and its rejection is ignored. A promise returned by `pick` is an invalid shape.
- * - A selection outside `endpoints` or with an invalid callback calls the
- *   result's `done` with `{ attempted: false }` when `done` is a function, so
- *   state reserved by that pick is released.
+ * - `start`, `end`, and `done` must be synchronous. A returned promise is not
+ *   awaited and its rejection is ignored.
  * - Success returns the selected endpoint and a `done` wrapper. Call that
  *   wrapper, not the function on the raw pick result.
  *
@@ -69,50 +57,10 @@ export function pickEndpoint(
   info: PickInfo,
 ): readonly [PreflightFault, undefined] | readonly [null, ResolvedEndpoint] {
   try {
-    const outcome: unknown = balancer.pick(info);
-    if (Array.isArray(outcome) && outcome.length === 2) {
-      const error: unknown = outcome[0];
-      const result: unknown = outcome[1];
-      if (isCrossRealmError(error) && result === undefined) {
-        // The tag check also accepts errors from another realm.
-        const code = isBalancerOptionError(error)
-          ? "REQ_OPTIONS_INVALID"
-          : "REQ_BUILD_FAILED";
-        return [createPreflightFault(code, error), undefined];
-      }
-      if (error === null && result !== null && typeof result === "object") {
-        const endpoint = "endpoint" in result ? result.endpoint : undefined;
-        const done = "done" in result ? result.done : undefined;
-        const start = "start" in result ? result.start : undefined;
-        const end = "end" in result ? result.end : undefined;
-        if (
-          typeof endpoint === "string" &&
-          isOptionalCallback<(info: DoneInfo) => void>(done) &&
-          isOptionalCallback<() => void>(start) &&
-          isOptionalCallback<(info: DoneInfo) => void>(end)
-        ) {
-          if (!info.endpoints.includes(endpoint)) {
-            releasePick(done);
-            return [
-              createPreflightFault(
-                "REQ_BUILD_FAILED",
-                new Error(
-                  "Balancer selected an endpoint outside the candidate set",
-                ),
-              ),
-              undefined,
-            ];
-          }
-          // The callable check is the runtime boundary for custom balancers.
-          return [null, resolve({ endpoint, done, start, end })];
-        }
-        // A rejected shape still owns whatever its pick reserved, such as an in-flight count.
-        if (isOptionalCallback<(info: DoneInfo) => void>(done))
-          releasePick(done);
-      }
-    }
-    ignoreRejection(outcome);
-    return [createPreflightFault("REQ_BUILD_FAILED", outcome), undefined];
+    const [error, result] = balancer.pick(info);
+    return error === null
+      ? [null, resolve(result)]
+      : [createPreflightFault("REQ_BUILD_FAILED", error), undefined];
   } catch (cause) {
     return [createPreflightFault("REQ_BUILD_FAILED", cause), undefined];
   }
@@ -166,29 +114,7 @@ function resolve(result: PickResult): ResolvedEndpoint {
   };
 }
 
-/** Ends a pick the runtime rejected, so state reserved by `pick` is released. */
-function releasePick(done: ((info: DoneInfo) => unknown) | undefined): void {
-  if (done === undefined) return;
-  try {
-    ignoreRejection(done({ attempted: false }));
-  } catch (thrown) {
-    // A throwing done must not replace the operation tuple.
-    reportContainedError(thrown);
-  }
-}
-
-/** `[object Error]` also matches errors constructed in another realm. */
-function isCrossRealmError(value: unknown): value is Error {
-  return Object.prototype.toString.call(value) === "[object Error]";
-}
-
-function isOptionalCallback<T extends (...args: never[]) => void>(
-  value: unknown,
-): value is T | undefined {
-  return value === undefined || typeof value === "function";
-}
-
-export function ignoreRejection(value: unknown): void {
+function ignoreRejection(value: unknown): void {
   try {
     if (
       (typeof value === "object" && value !== null) ||

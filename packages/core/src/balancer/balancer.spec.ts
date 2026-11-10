@@ -184,28 +184,6 @@ describe("pickFirstBalancer", () => {
     const balancer = pickFirstBalancer({ shuffle: true });
     expect(endpointOf(balancer, endpoints)).toBe("b");
   });
-
-  test("remembers an invalid option and does not throw", () => {
-    // @ts-expect-error null is not pick-first options
-    expect(() => pickFirstBalancer(null)).not.toThrow();
-    // @ts-expect-error shuffle must be a boolean
-    const balancer = pickFirstBalancer({ shuffle: "yes" });
-    const [first] = balancer.pick(info([]));
-    const [second] = balancer.pick(info(["a"]));
-    expect(first).toBeInstanceOf(TypeError);
-    expect(first).toBe(second);
-    expect(
-      // @ts-expect-error a number is not pick-first options
-      pickFirstBalancer(1).pick(info(["a"]))[0],
-    ).toBeInstanceOf(TypeError);
-  });
-
-  test("rejects an array as options", () => {
-    // @ts-expect-error an array is not pick-first options
-    const error = pickFirstBalancer([]).pick(info(["a"]))[0];
-    expect(error).toBeInstanceOf(TypeError);
-    expect(error?.message).toBe("pickFirstBalancer options must be an object");
-  });
 });
 
 describe("pickFirstBalancer with a member list", () => {
@@ -416,109 +394,9 @@ describe("roundRobinBalancer", () => {
     expect(["a", ...picks]).toEqual(expected);
   });
 
-  test("reads weights by iteration, so any iterable of entries works", () => {
-    const entries: [string, number][] = [
-      ["a", 3],
-      ["b", 1],
-    ];
-    const expected = roundRobinBalancer({ weights: new Map(entries) });
-    const sequence = (balancer: Balancer) =>
-      Array.from({ length: 8 }, () => endpointOf(balancer, ["a", "b"]));
-    const wanted = sequence(expected);
-    // @ts-expect-error the type is ReadonlyMap; the runtime reads any iterable of entries
-    expect(sequence(roundRobinBalancer({ weights: entries }))).toEqual(wanted);
-    const generated = roundRobinBalancer({
-      // @ts-expect-error the type is ReadonlyMap; the runtime reads any iterable of entries
-      weights: (function* () {
-        yield* entries;
-      })(),
-    });
-    expect(sequence(generated)).toEqual(wanted);
-  });
-
-  test("rejects values that are not iterable and contains read failures", () => {
-    const readFailure = new Error("iterator failed");
-    const withIterator = (iterator: () => Iterator<unknown>) =>
-      Object.assign(new Map<string, number>(), { [Symbol.iterator]: iterator });
-    const rejected: unknown[] = [
-      "a",
-      1,
-      null,
-      {},
-      { get: () => 1, has: () => true, size: 1 },
-      { [Symbol.iterator]: 1 },
-    ];
-    for (const weights of rejected) {
-      // @ts-expect-error weights must be a ReadonlyMap
-      const balancer = roundRobinBalancer({ weights });
-      expect(balancer.pick(info(["a"]))[0]).toBeInstanceOf(TypeError);
-    }
-
-    const failing = withIterator(() => {
-      throw readFailure;
-    });
-    const [iterationFailure] = roundRobinBalancer({ weights: failing }).pick(
-      info(["a"]),
-    );
-    expect(iterationFailure).toBeInstanceOf(TypeError);
-    expect(
-      iterationFailure instanceof Error ? iterationFailure.cause : undefined,
-    ).toBe(readFailure);
-
-    const [badEntry] = roundRobinBalancer({
-      weights: withIterator(() => [1].values()),
-    }).pick(info(["a"]));
-    expect(badEntry).toBeInstanceOf(TypeError);
-  });
-
   test("returns ERR_NO_CANDIDATE for an empty list", () => {
     expect(roundRobinBalancer().pick(info([]))[0]).toBe(ERR_NO_CANDIDATE);
     expect(roundRobinBalancer({}).pick(info([]))[0]).toBe(ERR_NO_CANDIDATE);
-  });
-
-  test("remembers invalid options and does not throw", () => {
-    const random = vi.spyOn(Math, "random");
-    // @ts-expect-error null is not round-robin options
-    expect(() => roundRobinBalancer(null)).not.toThrow();
-    const cases = [
-      // @ts-expect-error a number is not round-robin options
-      roundRobinBalancer(1),
-      // @ts-expect-error weights must be a map of finite numbers
-      roundRobinBalancer({ weights: {} }),
-      roundRobinBalancer({
-        // @ts-expect-error weight keys must be endpoint strings
-        weights: new Map([[1, 1]]),
-      }),
-      roundRobinBalancer({
-        // @ts-expect-error weight values must be finite numbers
-        weights: new Map([["a", "1"]]),
-      }),
-      roundRobinBalancer({ weights: new Map([["a", Number.NaN]]) }),
-      roundRobinBalancer({
-        weights: new Map([["a", Number.POSITIVE_INFINITY]]),
-      }),
-      roundRobinBalancer({ weights: new Map([["a", 0]]) }),
-      roundRobinBalancer({ weights: new Map([["a", -1]]) }),
-    ];
-    for (const balancer of cases) {
-      const [first] = balancer.pick(info(["a"]));
-      const [second] = balancer.pick(info([]));
-      expect(first).toBeInstanceOf(Error);
-      expect(first).toBe(second);
-    }
-    expect(cases[0]?.pick(info(["a"]))[0]).toBeInstanceOf(TypeError);
-    expect(cases[1]?.pick(info(["a"]))[0]).toBeInstanceOf(TypeError);
-    expect(cases[2]?.pick(info(["a"]))[0]).toBeInstanceOf(TypeError);
-    expect(cases[3]?.pick(info(["a"]))[0]).toBeInstanceOf(TypeError);
-    expect(cases[4]?.pick(info(["a"]))[0]).toBeInstanceOf(RangeError);
-    expect(random).not.toHaveBeenCalled();
-  });
-
-  test("rejects an array as options", () => {
-    // @ts-expect-error an array is not round-robin options
-    const error = roundRobinBalancer([]).pick(info(["a"]))[0];
-    expect(error).toBeInstanceOf(TypeError);
-    expect(error?.message).toBe("roundRobinBalancer options must be an object");
   });
 });
 
@@ -594,13 +472,7 @@ describe("transitional endpoint selection", () => {
 describe("pickEndpoint", () => {
   const base = info(["https://a", "https://b"]);
 
-  test("maps option errors, empty lists, and thrown or malformed picks", () => {
-    // @ts-expect-error shuffle must be a boolean
-    const invalid = pickFirstBalancer({ shuffle: 1 });
-    const [optionsFault] = pickEndpoint(invalid, base);
-    expect(optionsFault?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(optionsFault?.cause).toBe(invalid.pick(base)[0]);
-
+  test("maps an empty list, a returned error, and a thrown value to REQ_BUILD_FAILED", () => {
     const [emptyFault] = pickEndpoint(pickFirstBalancer(), info([]));
     expect(emptyFault?.code).toBe("REQ_BUILD_FAILED");
     expect(emptyFault?.cause).toBe(ERR_NO_CANDIDATE);
@@ -632,68 +504,6 @@ describe("pickEndpoint", () => {
         base,
       )[0]?.cause,
     ).toBe("boom");
-
-    let called = false;
-    const returned = [
-      new Error("shape"),
-      {
-        done() {
-          called = true;
-        },
-      },
-    ] as const;
-    const malformed = [
-      null,
-      { 0: null, length: 2 },
-      [],
-      [null],
-      [null, null, "extra"],
-      [1, undefined],
-      [new Error("extra"), 1],
-      [undefined, { endpoint: "a" }],
-      [null, null],
-      [null, 1],
-      [null, { endpoint: 1 }],
-      [null, { done: "no" }],
-      [null, { endpoint: "a", done: "no" }],
-      returned,
-    ];
-    for (const outcome of malformed) {
-      const [fault] = pickEndpoint(
-        {
-          // @ts-expect-error malformed pick results are rejected at runtime
-          pick: () => outcome,
-        },
-        base,
-      );
-      expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    }
-    const [shapeFault] = pickEndpoint(
-      {
-        // @ts-expect-error a non-tuple pick result is rejected at runtime
-        pick: () => returned,
-      },
-      base,
-    );
-    expect(shapeFault?.cause).toBe(returned);
-    expect(called).toBe(false);
-  });
-
-  test("keeps an Error-tagged throwable from another realm as the build-failure cause", () => {
-    const foreign: unknown = {
-      [Symbol.toStringTag]: "Error",
-      message: "x",
-    };
-    expect(foreign).not.toBeInstanceOf(Error);
-    const [fault] = pickEndpoint(
-      {
-        // @ts-expect-error a cross-realm error is not this realm's Error
-        pick: () => [foreign, undefined],
-      },
-      base,
-    );
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toBe(foreign);
   });
 
   test("calls done at most once and swallows a throw", () => {

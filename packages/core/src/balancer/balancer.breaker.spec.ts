@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { DoneInfo } from "./balancer";
-import { pickFirstBalancer, roundRobinBalancer } from "./balancer";
+import { roundRobinBalancer } from "./balancer";
 import { outlierDetection } from "./outlier_detection";
-import { p2cBalancer } from "./p2c";
 import { pickEndpoint } from "./runtime";
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -247,52 +246,6 @@ test("health forwards start and end unchanged", () => {
   expect(h.childEnd).toHaveBeenCalledWith(ok);
   expect(h.pick().endpoint).toBe("a");
 });
-test.each([
-  { minPenaltyMs: 0 },
-  { minPenaltyMs: -1 },
-  { minPenaltyMs: NaN },
-  { minPenaltyMs: Infinity },
-  { minPenaltyMs: "1" },
-  { maxPenaltyMs: 0 },
-  { maxPenaltyMs: NaN },
-  { maxPenaltyMs: Infinity },
-  { maxPenaltyMs: "1" },
-  { minPenaltyMs: 20, maxPenaltyMs: 10 },
-  { jitterRatio: -0.1 },
-  { jitterRatio: 1.1 },
-  { jitterRatio: NaN },
-  { jitterRatio: Infinity },
-  { jitterRatio: "0" },
-  ...[
-    "maxEjectionPercent",
-    "baseEjectionMs",
-    "maxEjectionMs",
-    "intervalMs",
-    "failurePercentage",
-    "halfOpen",
-    "probeTimeoutMs",
-    "slowStartWindowMs",
-    "slowStartMinWeightPercent",
-  ].map((key) => ({ [key]: 1 })),
-])(
-  "invalid or removed health option %j is rejected by every factory",
-  (options) => {
-    for (const b of [
-      // @ts-expect-error invalid health options are rejected at runtime
-      outlierDetection(pickFirstBalancer(), options),
-      // @ts-expect-error invalid health options are rejected at runtime
-      pickFirstBalancer({ outlierDetection: options }),
-      // @ts-expect-error invalid health options are rejected at runtime
-      roundRobinBalancer({ outlierDetection: options }),
-      // @ts-expect-error invalid health options are rejected at runtime
-      p2cBalancer({ outlierDetection: options }),
-    ])
-      expect(pickEndpoint(b, { endpoints: list })[0]?.code).toBe(
-        "REQ_OPTIONS_INVALID",
-      );
-  },
-);
-
 test("an attempted outcome without a code resets a streak", () => {
   const plain = setup({ consecutiveFailures: 2 });
   plain.pick().done(bad);

@@ -12,8 +12,6 @@ test.each([
   [504, "NET_UNAVAILABLE"],
   [505, "NET_SERVER_ERROR"],
   [599, "NET_SERVER_ERROR"],
-  [500.5, undefined],
-  [NaN, undefined],
 ] as const)("statusOutcome(%s) returns %s", (status, expected) => {
   expect(statusOutcome(status)).toBe(expected);
 });

@@ -10,7 +10,6 @@ import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
   __resetStreamingRequestBodySupportForTests,
 } from "../http/transport/fetch_init";
-import { MALFORMED_INTERCEPTOR_RESULTS } from "../../test/malformed_interceptor_results";
 import { simulateUnsupportedStreaming } from "../../test/streaming-support";
 import type { Client } from "../client";
 import { createSSEInterceptor } from "../interceptor";
@@ -278,32 +277,6 @@ describe("sse misuse", () => {
         ),
       ).rejects.toBeInstanceOf(TypeError);
       expect(handle).not.toHaveBeenCalled();
-    },
-  );
-});
-
-describe("sse interceptor results", () => {
-  test.each(MALFORMED_INTERCEPTOR_RESULTS)(
-    "should report %s as the interceptor result with EXT_INTERCEPTOR_FAILED",
-    async (_name, resolved) => {
-      const client = clientReturning(
-        () =>
-          Promise.resolve(
-            new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
-          ),
-        withInterceptors(
-          createSSEInterceptor(() =>
-            // @ts-expect-error malformed interceptor results are not stream handles
-            Promise.resolve(resolved()),
-          ),
-        ),
-      );
-
-      const [fault, stream] = await useStream(client);
-
-      expect(stream).toBeUndefined();
-      expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
-      expect(fault?.cause).toBeInstanceOf(TypeError);
     },
   );
 });

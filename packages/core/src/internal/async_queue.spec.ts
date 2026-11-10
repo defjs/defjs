@@ -140,26 +140,6 @@ describe("AsyncQueue", () => {
     await expect(iter.next()).resolves.toEqual({ done: false, value: 2 });
   });
 
-  test.each([
-    0,
-    -1,
-    1.5,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])("rejects invalid maxSize %s", (maxSize) => {
-    expect(() => new AsyncQueue({ maxSize })).toThrow(
-      new TypeError("AsyncQueue maxSize must be a positive safe integer"),
-    );
-  });
-
-  test("accepts positive safe-integer maxSize values", () => {
-    expect(() => new AsyncQueue({ maxSize: 1 })).not.toThrow();
-    expect(
-      () => new AsyncQueue({ maxSize: Number.MAX_SAFE_INTEGER }),
-    ).not.toThrow();
-  });
-
   test("is unbounded when maxSize is omitted", async () => {
     const queue = new AsyncQueue<number>();
     for (let value = 0; value < 1000; value += 1) queue.push(value);

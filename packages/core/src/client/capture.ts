@@ -19,20 +19,11 @@ export function snapshotHeartbeat(
   return { intervalMs, isAck, message, timeoutMs };
 }
 
-function isProtocolList(
-  value: readonly string[] | undefined,
-): value is readonly string[] {
-  return Array.isArray(value);
-}
-
-/** Copies a protocols array. Any other runtime value is left for execution. */
+/** Copies a protocols array. */
 export function snapshotProtocols(
   value: readonly string[] | undefined,
 ): readonly string[] | undefined {
-  if (isProtocolList(value)) {
-    return value.slice();
-  }
-  return value;
+  return value?.slice();
 }
 
 /** Captures the owned parts of a retry policy: the methods array and the budget record are copied. Callbacks keep their identity. */

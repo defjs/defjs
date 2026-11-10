@@ -7,7 +7,6 @@ import {
   withWebSocketBeforeConnect,
   withWebSocketHandle,
 } from "../client";
-import { MALFORMED_INTERCEPTOR_RESULTS } from "../../test/malformed_interceptor_results";
 import {
   createHttpStatusFault,
   createUndecodedHttpStatusFault,
@@ -170,26 +169,6 @@ describe("web socket startup faults", () => {
     expect(fault?.cause).toBe(cause);
   });
 
-  test.each(MALFORMED_INTERCEPTOR_RESULTS)(
-    "should report %s as the interceptor result with EXT_INTERCEPTOR_FAILED",
-    async (_name, resolved) => {
-      const client = unreachableClient(
-        withInterceptors(
-          createWebSocketInterceptor(() =>
-            // @ts-expect-error malformed interceptor results are not sessions
-            Promise.resolve(resolved()),
-          ),
-        ),
-      );
-
-      const [fault, session] = await useRoom(client);
-
-      expect(session).toBeUndefined();
-      expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
-      expect(fault?.cause).toBeInstanceOf(TypeError);
-    },
-  );
-
   test("should report a refused connection as a transport fault, not an interceptor fault", async () => {
     // The startup catch is the funnel for every failure, so it must not relabel this one.
     const [fault, session] = await useRoom(unreachableClient());
@@ -245,21 +224,6 @@ describe("web socket startup faults", () => {
     );
 
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
-  });
-
-  test("should report an invalid declared queue limit as REQ_OPTIONS_INVALID", async () => {
-    const useBadLimit = defineWebSocket({
-      incoming: struct.object({
-        type: struct.literal("message"),
-        text: struct.string(),
-      }),
-      maxOutgoingQueueSize: -1,
-      path: "/ws",
-    });
-
-    const [fault] = await useBadLimit(unreachableClient());
-
-    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
   });
 
   test("should close every socket when binaryType is read-only", async () => {

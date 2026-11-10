@@ -158,53 +158,32 @@ test.each([86_400_000, -3_600_000])(
   },
 );
 
-test("custom balancers cannot select outside their candidate set, and the rejected pick is released", () => {
-  const done = vi.fn();
-  const [fault, result] = pickEndpoint(
-    { pick: () => [null, { endpoint: "https://private.invalid", done }] },
-    { endpoints: ["a"] },
-  );
-  expect(fault?.code).toBe("REQ_BUILD_FAILED");
-  expect(fault?.cause).toEqual(
-    new Error("Balancer selected an endpoint outside the candidate set"),
-  );
-  expect(result).toBeUndefined();
-  expect(done).toHaveBeenCalledExactlyOnceWith({ attempted: false });
-});
-
 test.each(["HTTP", "SSE", "WS"])(
-  "%s contains unprintable thrown causes and foreign endpoints",
+  "%s contains an unprintable thrown cause",
   async (transport) => {
     const cause: unknown = Object.create(null);
-    for (const balancer of [
-      {
+    const client = createClient(
+      withEndpoint("https://a.test"),
+      withBalancer({
         pick() {
           throw cause;
         },
-      },
-      {
-        pick: () => [null, { endpoint: "https://private.invalid" }],
-      } satisfies Balancer,
-    ]) {
-      const client = createClient(
-        withEndpoint("https://a.test"),
-        withBalancer(balancer),
-      );
-      const call =
-        transport === "HTTP"
-          ? () => defineRequest({ method: "GET", path: "/" })(client)
-          : transport === "SSE"
-            ? () => defineEventStream({ path: "/", events: {} })(client)
-            : () =>
-                defineWebSocket({
-                  path: "/",
-                  incoming: struct.unknown(),
-                })(client);
-      const [fault] = await call();
-      expect(fault?.code).toBe("REQ_BUILD_FAILED");
-      if (fault && fault.cause === cause)
-        expect(fault.message).toBe("Unknown error");
-    }
+      }),
+    );
+    const call =
+      transport === "HTTP"
+        ? () => defineRequest({ method: "GET", path: "/" })(client)
+        : transport === "SSE"
+          ? () => defineEventStream({ path: "/", events: {} })(client)
+          : () =>
+              defineWebSocket({
+                path: "/",
+                incoming: struct.unknown(),
+              })(client);
+    const [fault] = await call();
+    expect(fault?.code).toBe("REQ_BUILD_FAILED");
+    expect(fault?.cause).toBe(cause);
+    expect(fault?.message).toBe("Unknown error");
   },
 );
 

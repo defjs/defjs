@@ -13,7 +13,6 @@ import type { HttpResponse } from "../internal/http_response";
 import { makeResponse } from "../internal/http_response";
 import { StructError, struct } from "../struct";
 import { createPrimitiveStruct } from "../struct/runtime";
-import { MALFORMED_INTERCEPTOR_RESULTS } from "../../test/malformed_interceptor_results";
 import { defineRequest } from "./index";
 
 describe("request http runtime errors", () => {
@@ -1207,51 +1206,12 @@ describe("request http runtime errors", () => {
     expect(error).toBeInstanceOf(Error);
   });
 
-  describe("when the interceptor chain does not resolve an HttpResponse", () => {
-    const notAnHttpResponse = [
-      ...MALFORMED_INTERCEPTOR_RESULTS,
-      [
-        "an unbranded lookalike",
-        () => ({
-          body: null,
-          headers: new Headers(),
-          ok: true,
-          status: 200,
-          statusText: "",
-          url: "",
-        }),
-      ],
-    ] as const;
-    const useUndeclared = defineRequest({ method: "GET", path: "/malformed" });
+  describe("when the interceptor chain resolves a derived response", () => {
     const useDeclared = defineRequest({
       method: "GET",
       output: struct.null(),
-      path: "/malformed",
+      path: "/derived",
     });
-
-    test.each(notAnHttpResponse)(
-      "should settle with EXT_INTERCEPTOR_FAILED for %s",
-      async (_name, resolved) => {
-        const guardedClient = createClient(
-          withEndpoint("https://example.com"),
-          withInterceptors(
-            createHttpInterceptor(() =>
-              // @ts-expect-error interceptor result is not an HttpResponse
-              Promise.resolve(resolved()),
-            ),
-          ),
-        );
-
-        for (const useRequest of [useUndeclared, useDeclared]) {
-          const [error, result, response] = await useRequest(guardedClient);
-
-          expect(error).toMatchObject({ code: "EXT_INTERCEPTOR_FAILED" });
-          expect(error?.cause).toBeInstanceOf(TypeError);
-          expect(result).toBeUndefined();
-          expect(response).toBeUndefined();
-        }
-      },
-    );
 
     test("should accept a response derived from next() by spreading", async () => {
       const guardedClient = createClient(

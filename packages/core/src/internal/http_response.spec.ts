@@ -1,29 +1,7 @@
 import { describe, expect, test } from "vitest";
-import {
-  getHttpErrorMessage,
-  isHttpResponse,
-  makeResponse,
-} from "./http_response";
+import { getHttpErrorMessage, makeResponse } from "./http_response";
 
 describe("Response", () => {
-  test("should recognize a made response and a spread copy of it, and nothing else", () => {
-    const made = makeResponse({ status: 200 });
-
-    expect(isHttpResponse(made)).toBe(true);
-    expect(isHttpResponse({ ...made, status: 201 })).toBe(true);
-    for (const value of [
-      undefined,
-      null,
-      "ok",
-      200,
-      {},
-      new Response(),
-      { [Symbol.for("defjs.http.response")]: false },
-    ]) {
-      expect(isHttpResponse(value)).toBe(false);
-    }
-  });
-
   test("should make response", () => {
     const res = makeResponse({
       status: 200,
@@ -125,24 +103,5 @@ describe("Response", () => {
 
     expect(res).not.toHaveProperty("error");
     expect(res.ok).toBe(false);
-  });
-
-  test("recognises symbol-branded functions without a proxy has lookup", () => {
-    const marker = Symbol.for("defjs.http.response");
-    const branded = Object.defineProperty(() => undefined, marker, {
-      value: true,
-    });
-    expect(isHttpResponse(branded)).toBe(true);
-    const has = () => {
-      throw new Error("response recognition must not call has");
-    };
-    const proxy = new Proxy(
-      {},
-      {
-        has,
-        get: (_target, key) => key === marker,
-      },
-    );
-    expect(isHttpResponse(proxy)).toBe(true);
   });
 });

@@ -15,7 +15,6 @@ import {
   withRetry,
 } from "../../src";
 import type { EventStreamHandle, WebSocketSessionLike } from "../../src";
-import { MALFORMED_INTERCEPTOR_RESULTS } from "../malformed_interceptor_results";
 
 function watch(signal: AbortSignal) {
   const add = vi.spyOn(signal, "addEventListener");
@@ -185,29 +184,6 @@ test.each(["fault", "abort", "timeout"] as const)(
   },
 );
 
-test.each(MALFORMED_INTERCEPTOR_RESULTS)(
-  "SSE releases caller listeners after an interceptor resolves %s",
-  async (_name, resolved) => {
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createSSEInterceptor(() =>
-          // @ts-expect-error interceptor result is intentionally not a stream result
-          Promise.resolve(resolved()),
-        ),
-      ),
-    );
-    const caller = new AbortController();
-    const signal = watch(caller.signal);
-    const [fault, stream] = await sseEndpoint(
-      client({ signal: caller.signal }),
-    );
-    expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
-    expect(stream).toBeUndefined();
-    signal.expectReleased();
-  },
-);
-
 test("SSE closes an opened stream and releases caller listeners when the interceptor drops the result", async () => {
   let opened: EventStreamHandle<unknown> | undefined;
   const client = createClient(
@@ -236,48 +212,6 @@ test("SSE closes an opened stream and releases caller listeners when the interce
   await expect(opened?.closed).resolves.toMatchObject({ kind: "aborted" });
   signal.expectReleased();
 });
-
-test.each([
-  "closed",
-  "close",
-  "open",
-  Symbol.asyncIterator,
-  Symbol.asyncDispose,
-])(
-  "SSE rejects a wrapper missing %s and releases the opened stream",
-  async (key) => {
-    let opened: EventStreamHandle<unknown> | undefined;
-    const caller = new AbortController();
-    const signal = watch(caller.signal);
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withSSEHandle(() =>
-        Promise.resolve(
-          new Response(new ReadableStream(), {
-            headers: { "content-type": "text/event-stream" },
-          }),
-        ),
-      ),
-      withInterceptors(
-        createSSEInterceptor(async (request, next) => {
-          opened = await next(request);
-          return { ...opened, [key]: undefined };
-        }),
-      ),
-    );
-    try {
-      const [fault, stream] = await sseEndpoint(
-        client({ signal: caller.signal }),
-      );
-      expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
-      expect(stream).toBeUndefined();
-      await expect(opened?.closed).resolves.toMatchObject({ kind: "aborted" });
-      signal.expectReleased();
-    } finally {
-      opened?.close();
-    }
-  },
-);
 
 class TestSocket extends EventTarget {
   static readonly OPEN = 1;
@@ -333,47 +267,6 @@ test("WebSocket closes an opened session and releases caller listeners when the 
   await expect(opened?.closed).resolves.toMatchObject({ kind: "aborted" });
   signal.expectReleased();
 });
-
-test.each([
-  "closed",
-  "close",
-  "send",
-  "receive",
-  "onRuntimeError",
-  "onStateChange",
-  "connection",
-  "bufferedAmount",
-  "state",
-  Symbol.asyncDispose,
-])(
-  "WebSocket rejects a wrapper missing %s and releases the opened session",
-  async (key) => {
-    let opened: WebSocketSessionLike | undefined;
-    const caller = new AbortController();
-    const signal = watch(caller.signal);
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withWebSocketHandle(TestSocket),
-      withInterceptors(
-        createWebSocketInterceptor(async (request, next) => {
-          opened = await next(request);
-          return { ...opened, [key]: undefined };
-        }),
-      ),
-    );
-    try {
-      const [fault, session] = await socketEndpoint(
-        client({ signal: caller.signal }),
-      );
-      expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
-      expect(session).toBeUndefined();
-      await expect(opened?.closed).resolves.toMatchObject({ kind: "aborted" });
-      signal.expectReleased();
-    } finally {
-      opened?.close();
-    }
-  },
-);
 
 class FailingSocket extends TestSocket {
   constructor(url: string | URL) {

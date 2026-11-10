@@ -124,33 +124,7 @@ test("p2c ejects a failing host only when outlierDetection is supplied", () => {
   expect(pick(plain).endpoint).toBe("a");
 });
 
-test("invalid p2c options are remembered, branded, and never throw", () => {
-  const cases: unknown[] = [
-    null,
-    [],
-    1,
-    { load: "rtt" },
-    { choiceCount: "2" },
-    { choiceCount: 1 },
-    { choiceCount: 2.5 },
-    { choiceCount: Infinity },
-    { defaultRttMs: "1" },
-    { defaultRttMs: 0 },
-    { defaultRttMs: NaN },
-    { decayMs: -1 },
-    { isFailure: true },
-    { outlierDetection: true },
-  ];
-  for (const options of cases) {
-    // @ts-expect-error invalid p2c options are rejected at runtime
-    const b = p2cBalancer(options);
-    const first = b.pick({ endpoints: ["a"] })[0];
-    expect(first).toBeInstanceOf(Error);
-    expect(b.pick({ endpoints: [] })[0]).toBe(first);
-    expect(pickEndpoint(b, { endpoints: ["a"] })[0]?.code).toBe(
-      "REQ_OPTIONS_INVALID",
-    );
-  }
+test("an empty candidate list returns ERR_NO_CANDIDATE", () => {
   expect(p2cBalancer().pick({ endpoints: [] })[0]).toBe(ERR_NO_CANDIDATE);
 });
 

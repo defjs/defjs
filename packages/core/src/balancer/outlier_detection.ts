@@ -1,8 +1,7 @@
 import { rememberEndpoint } from "./retention";
 import { monotonicNow } from "../internal/clock";
 import type { Balancer, DoneInfo } from "./balancer";
-import { balancerOptionError, memberList } from "./balancer";
-import { ignoreRejection } from "./runtime";
+import { memberList } from "./balancer";
 
 /**
  * Failure counting that ejects an endpoint for a while, and an optional
@@ -15,24 +14,26 @@ import { ignoreRejection } from "./runtime";
  * @see {@link outlierDetection}
  */
 export interface OutlierDetectionOptions {
-  /** Nonnegative safe integer; defaults to 5 (Finagle). Zero disables passive breaking. */
+  /** Consecutive failures that eject an endpoint; defaults to 5 (Finagle). Zero disables passive breaking. */
   readonly consecutiveFailures?: number;
-  /** Positive finite first penalty, also the step added per level; defaults to 1000 ms (Linkerd). */
+  /** First penalty in milliseconds, also the step added per level; defaults to 1000 ms (Linkerd). */
   readonly minPenaltyMs?: number;
-  /** Positive finite cap, at least minPenaltyMs; defaults to 60000 ms (Linkerd). */
+  /** Penalty cap in milliseconds, at least `minPenaltyMs`; defaults to 60000 ms (Linkerd). */
   readonly maxPenaltyMs?: number;
-  /** Finite positive-jitter ratio in [0, 1]; defaults to 0.5 (Linkerd). */
+  /** Jitter ratio from 0 to 1; defaults to 0.5 (Linkerd). */
   readonly jitterRatio?: number;
   /**
    * Synchronous rule that decides which outcomes count toward ejection. The
    * default counts every outcome with a `code`. It is a trigger for time-based
-   * ejection, not a judgement of health; replace it to count differently.
-   * Throws and non-booleans discard the sample.
+   * ejection, not a judgement of health; replace it to count differently. A
+   * throw is not caught here; it leaves `done` and is contained and reported
+   * like any other `done` failure.
    */
   readonly isFailure?: (info: DoneInfo) => boolean;
   /**
-   * The only health judgement. Synchronous, called once per endpoint on every
-   * pick, so it should read state that the application keeps up to date. An
+   * The only health judgement. Synchronous, called on every pick for each
+   * endpoint that is not currently ejected (an ejected endpoint is not asked),
+   * so it should read state that the application keeps up to date. An
    * endpoint for which it returns `false` is not selected. Returning `true`
    * does not end an ejection: the endpoint must also not be ejected. A throw is
    * not caught here; `pickEndpoint` reports it as `REQ_BUILD_FAILED` with the
@@ -56,19 +57,6 @@ interface HealthState {
 export function defaultEndpointFailure(info: DoneInfo): boolean {
   return info.code !== undefined;
 }
-/** Invalid application classifiers discard samples. */
-export function classifyEndpointFailure(
-  classifier: (info: DoneInfo) => boolean,
-  info: DoneInfo,
-): boolean | undefined {
-  try {
-    const result: unknown = classifier(info);
-    ignoreRejection(result);
-    return typeof result === "boolean" ? result : undefined;
-  } catch {
-    return undefined;
-  }
-}
 /**
  * Wraps a strategy with consecutive-failure ejection by time.
  * Five attributed failures eject an endpoint by default. The penalty is the
@@ -84,8 +72,8 @@ export function classifyEndpointFailure(
  * Every classified failure code fails by default, including NET_TIMEOUT and
  * NET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection
  * count timeouts and resets; `isFailure` replaces that rule. An attempted
- * outcome without a code resets the streak; unattributed attempts and discarded
- * samples leave it unchanged. The outcome of an attempt that began before an
+ * outcome without a code resets the streak; unattributed attempts leave it
+ * unchanged. The outcome of an attempt that began before an
  * ejection, or while the endpoint was ejected, is ignored even if it arrives
  * after the endpoint is selectable again, so late results do not eject it anew.
  * The child receives the filtered candidates as `endpoints` and the unfiltered
@@ -104,7 +92,7 @@ export function classifyEndpointFailure(
  * erase a penalty.
  * @param child - Selection strategy retaining its identity and state.
  * @param options - Captured thresholds and application callbacks.
- * @returns An independent wrapper; invalid options become REQ_OPTIONS_INVALID.
+ * @returns An independent wrapper.
  * @group client
  * @see {@link OutlierDetectionOptions}
  * @see {@link roundRobinBalancer}
@@ -114,8 +102,6 @@ export function outlierDetection(
   child: Balancer,
   options?: OutlierDetectionOptions,
 ): Balancer {
-  const invalid = invalidHealthOptions(options);
-  if (invalid !== undefined) return { pick: () => [invalid, undefined] };
   const minimum = options?.minPenaltyMs ?? 1000;
   const maximum = options?.maxPenaltyMs ?? 60000;
   const jitter = options?.jitterRatio ?? 0.5;
@@ -172,9 +158,7 @@ export function outlierDetection(
     const now = monotonicNow();
     refresh(state, now);
     if (!report.attempted || consecutive === 0) return;
-    const failed = classifyEndpointFailure(isFailure, report);
-    if (failed === undefined) return;
-    state.consecutive = failed ? state.consecutive + 1 : 0;
+    state.consecutive = isFailure(report) ? state.consecutive + 1 : 0;
     if (state.consecutive >= consecutive) ejectEndpoint(state, now);
   }
   return {
@@ -197,13 +181,11 @@ export function outlierDetection(
         candidates.length === info.endpoints.length
       )
         candidates = info.endpoints;
-      const outcome = child.pick(
+      const [error, result] = child.pick(
         candidates === info.endpoints
           ? info
           : { ...info, endpoints: candidates, members },
       );
-      ignoreRejection(outcome);
-      const [error, result] = outcome;
       if (error !== null) return [error, undefined];
       const state = candidates.includes(result.endpoint)
         ? stateFor(result.endpoint, members.length)
@@ -220,102 +202,17 @@ export function outlierDetection(
           start: result.start,
           end: result.end,
           done(report) {
+            // The child hears first, so an `isFailure` that throws cannot leave state it reserved unreleased.
+            const returned = childDone?.(report);
             if (state !== undefined && state.ejections === counted)
               sample(state, report);
-            return childDone?.(report);
+            return returned;
           },
         },
       ];
     },
   };
 }
-function invalidHealthOptions(options: unknown): Error | undefined {
-  if (options === undefined) return undefined;
-  if (!isBalancerOptionRecord(options))
-    return balancerOptionError(
-      new TypeError("outlierDetection options must be an object"),
-    );
-  if (
-    "maxEjectionPercent" in options ||
-    "baseEjectionMs" in options ||
-    "maxEjectionMs" in options ||
-    "intervalMs" in options ||
-    "failurePercentage" in options ||
-    "halfOpen" in options ||
-    "probeTimeoutMs" in options ||
-    "slowStartWindowMs" in options ||
-    "slowStartMinWeightPercent" in options
-  )
-    return balancerOptionError(
-      new TypeError("Removed outlierDetection option"),
-    );
-  const invalid =
-    positiveOption(options["minPenaltyMs"], "minPenaltyMs") ??
-    positiveOption(options["maxPenaltyMs"], "maxPenaltyMs") ??
-    integerOption(options["consecutiveFailures"], "consecutiveFailures") ??
-    callbackOption(options["isFailure"], "isFailure") ??
-    callbackOption(options["isHealthy"], "isHealthy");
-  if (invalid) return invalid;
-  const min = options["minPenaltyMs"] ?? 1000;
-  const max = options["maxPenaltyMs"] ?? 60000;
-  if (typeof min === "number" && typeof max === "number" && max < min)
-    return balancerOptionError(
-      new RangeError("maxPenaltyMs must not be less than minPenaltyMs"),
-    );
-  const ratio = options["jitterRatio"];
-  return ratio === undefined ||
-    (typeof ratio === "number" &&
-      Number.isFinite(ratio) &&
-      ratio >= 0 &&
-      ratio <= 1)
-    ? undefined
-    : balancerOptionError(
-        new RangeError("jitterRatio must be finite and between 0 and 1"),
-      );
-}
-/** Fixed-shape option validation shared by built-in factories. */
-export function isBalancerOptionRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-/** Validates optional finite positive numeric configuration. */
-export function positiveOption(
-  value: unknown,
-  name: string,
-): Error | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number")
-    return balancerOptionError(new TypeError(`${name} must be a number`));
-  return Number.isFinite(value) && value > 0
-    ? undefined
-    : balancerOptionError(
-        new RangeError(`${name} must be finite and positive`),
-      );
-}
-
-function integerOption(value: unknown, name: string): Error | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number")
-    return balancerOptionError(new TypeError(`${name} must be a number`));
-  return Number.isSafeInteger(value) && value >= 0
-    ? undefined
-    : balancerOptionError(
-        new RangeError(`${name} must be a nonnegative safe integer`),
-      );
-}
-
-/** Validates optional synchronous application callback types at construction. */
-export function callbackOption(
-  value: unknown,
-  name: string,
-): Error | undefined {
-  return value === undefined || typeof value === "function"
-    ? undefined
-    : balancerOptionError(new TypeError(`${name} must be a function`));
-}
-
 /** Applies the health filter option shared by built-in factories: off unless an object is given. */
 export function withHealthFilter(
   child: Balancer,

@@ -681,19 +681,6 @@ describe("web socket endpoint balancer", () => {
     ]);
     expect(record.pending()).toBe(0);
     expect(sockets).toHaveLength(1);
-
-    const done = vi.fn();
-    const [foreignFault] = await room(
-      clientFor({
-        pick: () => [null, { endpoint: "not a candidate", done }],
-      }),
-    );
-    expect(foreignFault?.code).toBe("REQ_BUILD_FAILED");
-    expect(foreignFault?.cause).toEqual(
-      new Error("Balancer selected an endpoint outside the candidate set"),
-    );
-    expect(done).toHaveBeenCalledExactlyOnceWith({ attempted: false });
-    expect(sockets).toHaveLength(1);
   });
 
   test("should surface a failed reconnect pick without calling done", async () => {
@@ -713,47 +700,6 @@ describe("web socket endpoint balancer", () => {
       { attempted: true, code: "NET_UNREACHABLE" },
     ]);
     expect(beforeOpen.pending()).toBe(0);
-
-    resetSockets();
-    // @ts-expect-error shuffle is a boolean, not a string
-    const invalid = pickFirstBalancer({ shuffle: "no" });
-    let picks = 0;
-    const afterOpen: Balancer = {
-      pick(info) {
-        picks += 1;
-        if (picks === 1) {
-          return [
-            null,
-            {
-              endpoint: PRIMARY,
-              done(report) {
-                afterOpenDones.push(report);
-              },
-            },
-          ];
-        }
-        return invalid.pick(info);
-      },
-    };
-    const afterOpenDones: DoneInfo[] = [];
-    const pending = room(
-      clientFor(afterOpen)({ retry: { maxRetries: 1, delayMs: 0 } }),
-    );
-    await flush();
-    socketAt(0).open();
-    const [, session] = await pending;
-    if (!session) {
-      throw new Error("expected session");
-    }
-    socketAt(0).close(1000, "drop");
-    const closed = await session.closed;
-    expect(closed.kind).toBe("error");
-    if (closed.kind !== "error") {
-      throw new Error("expected error close");
-    }
-    expect(closed.cause).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-    expect(afterOpenDones).toEqual([{ attempted: true }]);
-    expect(picks).toBe(2);
 
     resetSockets();
     const opened = scriptedBalancer([

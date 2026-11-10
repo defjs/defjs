@@ -50,7 +50,7 @@ export function createLineParser(
   onLine: (line: Uint8Array) => void | Promise<void>,
   options?: LineParserOptions,
 ): (chunk: Uint8Array) => Promise<void> {
-  const limit = validateMaxBufferSize(options?.maxBufferSize);
+  const limit = options?.maxBufferSize;
   let parts: Uint8Array[] = [];
   let byteLength = 0;
   let afterCR = false;
@@ -108,7 +108,7 @@ export function createMessageParser(
   onMessage?: (message: Omit<EventStreamMessage, "id">) => void | Promise<void>,
   options?: MessageParserOptions,
 ): (line: Uint8Array) => void | Promise<void> {
-  const limit = validateMaxBufferSize(options?.maxBufferSize);
+  const limit = options?.maxBufferSize;
   const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
   let firstLine = true;
   let id = "";
@@ -167,11 +167,4 @@ export function createMessageParser(
         break;
     }
   };
-}
-
-function validateMaxBufferSize(value: number | undefined): number | undefined {
-  if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
-    throw new TypeError("SSE maxBufferSize must be a positive safe integer");
-  }
-  return value;
 }

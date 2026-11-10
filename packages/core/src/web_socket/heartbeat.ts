@@ -3,8 +3,6 @@ import type { AnyStruct } from "../struct";
 import { serializeOutgoingWebSocketMessage } from "./codec";
 import type { WebSocketHeartbeatConfig } from "./web_socket";
 
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
-
 export type HeartbeatRuntime<TIncoming> = {
   isAck?: (message: TIncoming) => boolean;
   markAck(): void;
@@ -29,7 +27,6 @@ export function startHeartbeat<
   openState: number,
 ): void {
   stopHeartbeat(sessionController);
-  validateHeartbeatConfig(config);
   if (!config) {
     return;
   }
@@ -98,29 +95,9 @@ export function startHeartbeat<
   }
 }
 
-export function validateHeartbeatConfig(
-  config: { intervalMs: number; timeoutMs?: number } | undefined,
-): void {
-  if (!config) {
-    return;
-  }
-  assertTimerDelay("intervalMs", config.intervalMs);
-  if (typeof config.timeoutMs !== "undefined") {
-    assertTimerDelay("timeoutMs", config.timeoutMs);
-  }
-}
-
 export function stopHeartbeat<T>(sessionController: {
   heartbeat: HeartbeatRuntime<T> | undefined;
 }): void {
   sessionController.heartbeat?.stop();
   sessionController.heartbeat = undefined;
-}
-
-function assertTimerDelay(field: string, value: number): void {
-  if (!Number.isFinite(value) || value <= 0 || value > MAX_TIMER_DELAY_MS) {
-    throw new RangeError(
-      `WebSocket heartbeat ${field} must be between 0 and ${MAX_TIMER_DELAY_MS}`,
-    );
-  }
 }

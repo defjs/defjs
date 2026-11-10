@@ -110,7 +110,6 @@ function triage(fault: Fault<typeof ApiError>): string {
     case "NET_BODY_INCOMPLETE":
       return "retryable";
     case "REQ_INPUT_INVALID":
-    case "REQ_OPTIONS_INVALID":
     case "REQ_BUILD_FAILED":
       return "caller bug";
     case "EXT_INTERCEPTOR_FAILED":

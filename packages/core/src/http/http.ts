@@ -51,7 +51,6 @@ import type {
   HttpMeta,
   HttpResponse,
 } from "../internal/http_response";
-import { isHttpResponse } from "../internal/http_response";
 import type { BuilderField, HttpRequestShape } from "../internal/builder_types";
 import type { OutboundBuilder } from "../internal/outbound_request";
 import type { AnyStruct, Infer } from "../struct";
@@ -765,13 +764,6 @@ async function executeHttpAttempt<
           () => chainPromise,
           requestSignal,
         );
-        // Interceptors are user code, and only an HttpResponse carries the `ok` fork the pipeline reads next.
-        // `response` stays unset on failure so the finally block still releases the signal.
-        if (!isHttpResponse(settled)) {
-          throw new TypeError(
-            "HTTP interceptor must resolve an HttpResponse from next() or makeResponse()",
-          );
-        }
         response = settled;
       } catch (error) {
         const fromTransport = transportOrigin.has(error);

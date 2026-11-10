@@ -2,11 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { WebSocketHandle } from "../client/config";
 import { struct } from "../struct";
 import type { HeartbeatSession } from "./heartbeat";
-import {
-  startHeartbeat,
-  stopHeartbeat,
-  validateHeartbeatConfig,
-} from "./heartbeat";
+import { startHeartbeat, stopHeartbeat } from "./heartbeat";
 import { method } from "../../test/method";
 
 describe("heartbeat", () => {
@@ -77,33 +73,6 @@ describe("heartbeat", () => {
     sessions.push(session);
     return session;
   }
-
-  test.each([
-    ["intervalMs", { intervalMs: 0 }],
-    ["intervalMs", { intervalMs: -1 }],
-    ["intervalMs", { intervalMs: Number.NaN }],
-    ["intervalMs", { intervalMs: Number.POSITIVE_INFINITY }],
-    ["intervalMs", { intervalMs: 2_147_483_648 }],
-    ["timeoutMs", { intervalMs: 100, timeoutMs: 0 }],
-    ["timeoutMs", { intervalMs: 100, timeoutMs: Number.POSITIVE_INFINITY }],
-    ["timeoutMs", { intervalMs: 100, timeoutMs: 2_147_483_648 }],
-  ])(
-    "should reject invalid %s before creating a platform timer",
-    (field, config) => {
-      expect(() => validateHeartbeatConfig(config)).toThrow(
-        `WebSocket heartbeat ${field}`,
-      );
-    },
-  );
-
-  test("should accept the maximum platform timer delay", () => {
-    expect(() =>
-      validateHeartbeatConfig({
-        intervalMs: 2_147_483_647,
-        timeoutMs: 2_147_483_647,
-      }),
-    ).not.toThrow();
-  });
 
   test("should do nothing when config is undefined", () => {
     const session = createMockSession();

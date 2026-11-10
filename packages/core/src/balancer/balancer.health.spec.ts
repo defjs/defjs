@@ -66,25 +66,21 @@ test("isHealthy true never cancels passive ejection", () => {
   expect(h.candidates()).toEqual(["b", "c"]);
 });
 
-test("throwing and nonboolean failure callbacks neither count nor reset and always forward done", () => {
-  let mode = 0;
+test("a throwing isFailure comes out of done after the child has been told", () => {
+  let throws = false;
   const h = setup({
-    consecutiveFailures: 2,
-    // @ts-expect-error undefined is not a boolean failure result
+    consecutiveFailures: 1,
     isFailure: () => {
-      if (mode === 1) throw new Error("callback");
-      return mode === 2 ? undefined : true;
+      if (throws) throw new Error("callback");
+      return true;
     },
   });
-  h.report("a");
-  mode = 1;
-  h.report("a");
-  mode = 2;
-  h.report("a");
-  expect(h.childDone).toHaveBeenCalledTimes(3);
+  throws = true;
+  expect(() => h.report("a")).toThrow("callback");
+  expect(h.childDone).toHaveBeenCalledOnce();
   h.pick();
   expect(h.candidates()).toContain("a");
-  mode = 0;
+  throws = false;
   h.report("a");
   h.pick();
   expect(h.candidates()).not.toContain("a");
@@ -232,51 +228,6 @@ test("round robin filters health only when outlierDetection is supplied", () => 
     .pick({ endpoints: ["a", "b"] })[1]
     ?.done?.({ attempted: true, code: "NET_SERVER_ERROR" });
   expect(balancer.pick({ endpoints: ["a", "b"] })[1]?.endpoint).toBe("b");
-});
-
-test("invalid health option types and ranges become persistent REQ_OPTIONS_INVALID", () => {
-  const cases: unknown[] = [
-    null,
-    true,
-    [],
-    1,
-    { intervalMs: "1" },
-    { intervalMs: 0 },
-    { baseEjectionMs: -1 },
-    { maxEjectionMs: Infinity },
-    { maxEjectionPercent: "10" },
-    { maxEjectionPercent: -1 },
-    { maxEjectionPercent: 101 },
-    { maxEjectionPercent: NaN },
-    { consecutiveFailures: "5" },
-    { consecutiveFailures: -1 },
-    { consecutiveFailures: 1.5 },
-    { consecutiveFailures: Number.MAX_SAFE_INTEGER + 1 },
-    { failurePercentage: false },
-    { failurePercentage: { threshold: "85" } },
-    { failurePercentage: { threshold: 101 } },
-    { failurePercentage: { minimumHosts: -1 } },
-    { failurePercentage: { requestVolume: "50" } },
-    { isFailure: 1 },
-    { isHealthy: true },
-  ];
-  for (const options of cases) {
-    for (const balancer of [
-      // @ts-expect-error invalid health options are rejected at runtime
-      outlierDetection(pickFirstBalancer(), options),
-      // @ts-expect-error invalid health options are rejected at runtime
-      roundRobinBalancer({ outlierDetection: options }),
-      // @ts-expect-error invalid health options are rejected at runtime
-      pickFirstBalancer({ outlierDetection: options }),
-    ]) {
-      const [first] = balancer.pick({ endpoints: ["a"] });
-      expect(first).toBeInstanceOf(Error);
-      expect(balancer.pick({ endpoints: [] })[0]).toBe(first);
-      expect(pickEndpoint(balancer, { endpoints: ["a"] })[0]?.code).toBe(
-        "REQ_OPTIONS_INVALID",
-      );
-    }
-  }
 });
 
 test("success resets a failure streak but unattributed done does not", () => {

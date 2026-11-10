@@ -4375,7 +4375,7 @@
     "group": "errors",
     "description": "Every failure Defjs reports, as one closed set of codes.\n\nThe prefix before the first `_` is the class; there is no separate `kind` field.\nRead the prefix for coarse triage and the whole code for an exact case:\n\n| Class  | Meaning                                                        |\n| ------ | -------------------------------------------------------------- |\n| `HTTP` | The peer answered with a non-2xx status.                        |\n| `REQ`  | The request never left: input, request options, or build.       |\n| `NET`  | No usable response: cancel, timeout, connect, truncated body.   |\n| `RES`  | A response arrived but could not be read as declared.           |\n| `EXT`  | Code you attached to the pipeline threw.                        |\n| `CAP`  | A declared buffer limit was exceeded.                           |\n| `ENV`  | The host runtime lacks a required capability.                   |\n\nThe set is closed on purpose: it keeps `switch (fault.code)` exhaustive. Extensions\nreport their own detail through `cause`, not through a new code.",
     "signatures": [
-      "type FaultCode =\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"ENV_UNSUPPORTED\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_INTERCEPTOR_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_ABORTED\"\n  | \"NET_BODY_INCOMPLETE\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_INPUT_INVALID\"\n  | \"REQ_OPTIONS_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n  | \"RES_STRUCT_MISMATCH\";"
+      "type FaultCode =\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"ENV_UNSUPPORTED\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_INTERCEPTOR_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_ABORTED\"\n  | \"NET_BODY_INCOMPLETE\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_INPUT_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n  | \"RES_STRUCT_MISMATCH\";"
     ],
     "related": [],
     "exampleFiles": [],
@@ -4386,7 +4386,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type FaultCode =\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"ENV_UNSUPPORTED\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_INTERCEPTOR_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_ABORTED\"\n  | \"NET_BODY_INCOMPLETE\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_INPUT_INVALID\"\n  | \"REQ_OPTIONS_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n  | \"RES_STRUCT_MISMATCH\";",
+        "signature": "type FaultCode =\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"ENV_UNSUPPORTED\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_INTERCEPTOR_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_ABORTED\"\n  | \"NET_BODY_INCOMPLETE\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_INPUT_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n  | \"RES_STRUCT_MISMATCH\";",
         "parameters": [],
         "returns": []
       }
@@ -6080,7 +6080,7 @@
     "slug": "core/defineeventstream",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "Declare a typed Server-Sent Events endpoint.\n\nPass path and event structs. Call the returned operation\nwith a client and, when declared, the input.\n\n- **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024`, a positive safe integer when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; the library holds at most 1024 unread events, and a full queue pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\n`EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.\n\nKnown fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A missing or non-object dictionary is left as given. A getter on a fixed definition field runs during `defineEventStream`.",
+    "description": "Declare a typed Server-Sent Events endpoint.\n\nPass path and event structs. Call the returned operation\nwith a client and, when declared, the input.\n\n- **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; the library holds at most 1024 unread events, and a full queue pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\n`EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.\n\nKnown fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A getter on a fixed definition field runs during `defineEventStream`.",
     "signatures": [
       "function defineEventStream<\n  const P extends string,\n  const M extends string = \"GET\",\n  TInput extends AnyStruct | undefined = undefined,\n  TEvents extends EventStructs = EventStructs,\n  TError extends AnyStruct | undefined = undefined,\n>(\n  definition: Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >,\n): EventStreamEndpoint<EndpointArgs<TInput>, EventStreamData<TEvents>, TError>;"
     ],
@@ -6136,7 +6136,7 @@
     "slug": "core/eventstreamdefinition-type",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "Contract that describes an SSE endpoint for defineEventStream.\n\nThe composed members are:\n\n- `path` and `events`, plus optional `method` (default `'GET'`), `operation`, and `maxBufferSize` (default `64 * 1024` bytes, a positive safe integer when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. The library holds at most 1024 events waiting for the `for await` consumer; when they are full, reading the response pauses until the consumer takes one. No event is dropped for lack of room and the stream does not fail.\n\n- `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.\n\n- `input` and `builder`. The request shape matches HTTP, including `body`; `GET` and `HEAD` cannot return a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\n`EventStreamDefinitionBase` and `EventStreamErrorField` are internal helper types.",
+    "description": "Contract that describes an SSE endpoint for defineEventStream.\n\nThe composed members are:\n\n- `path` and `events`, plus optional `method` (default `'GET'`), `operation`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. The library holds at most 1024 events waiting for the `for await` consumer; when they are full, reading the response pauses until the consumer takes one. No event is dropped for lack of room and the stream does not fail.\n\n- `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.\n\n- `input` and `builder`. The request shape matches HTTP, including `body`; `GET` and `HEAD` cannot return a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\n`EventStreamDefinitionBase` and `EventStreamErrorField` are internal helper types.",
     "signatures": [
       "type EventStreamDefinition<\n  TInput extends AnyStruct | undefined = undefined,\n  TEvents extends EventStructs = EventStructs,\n  TError extends AnyStruct | undefined = undefined,\n> = EventStreamDefinitionBase<TEvents> &\n  EventStreamErrorField<TError> & {\n    builder?: OutboundBuilder;\n    input?: TInput;\n  };"
     ],
@@ -6504,7 +6504,7 @@
     "slug": "core/eventstreamcloseinfo-type",
     "source": "packages/core/src/sse/transport/event_stream.ts",
     "group": "sse",
-    "description": "How an SSE stream ended: clean EOF, abort, or an error carrying its fault `code`.\n\nThe discriminant is `kind` so that `code` can mean the same thing it means on a fault.\n\nThe value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()`, disposal and a caller signal abort all discard the events nobody has read yet, as `EventSource.close()` does, and the iterator ends at once. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open, or that gives a URL the request cannot use (invalid, or with credentials), uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one.",
+    "description": "How an SSE stream ended: clean EOF, abort, or an error carrying its fault `code`.\n\nThe discriminant is `kind` so that `code` can mean the same thing it means on a fault.\n\nThe value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()`, disposal and a caller signal abort all discard the events nobody has read yet, as `EventSource.close()` does, and the iterator ends at once. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open, or that gives a URL the request cannot use (invalid, or with credentials), uses `REQ_BUILD_FAILED`. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one.",
     "signatures": [
       "type EventStreamCloseInfo =\n  | (EventStreamCloseInfoBase & { kind: \"eof\" })\n  | (EventStreamCloseInfoBase & { kind: \"aborted\" })\n  | (EventStreamCloseInfoBase & { code: EventStreamFaultCode; kind: \"error\" });"
     ],
@@ -6580,7 +6580,7 @@
     "slug": "core/definewebsocket",
     "source": "packages/core/src/web_socket/web_socket.ts",
     "group": "web-socket",
-    "description": "Declare a typed WebSocket endpoint.\n\nPass path and incoming (and optional outgoing) message structs.\nCall the returned operation with a client and, when declared, the input.\n\n- **definition** — `path`, one `incoming` struct, and optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize` (a non-negative safe integer), and `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\nA WebSocket `builder` may return `path` and `query` only; `headers` and `body` are rejected. `WebSocketDefinitionBase` and `BuilderField` are internal helper types.\n\nKnown fields are copied when the definition is created. Structs and `builder` keep their identity. A `protocols` array is copied, so a later edit of the original array does not retarget the endpoint. A getter on a fixed field runs during `defineWebSocket`.",
+    "description": "Declare a typed WebSocket endpoint.\n\nPass path and incoming (and optional outgoing) message structs.\nCall the returned operation with a client and, when declared, the input.\n\n- **definition** — `path`, one `incoming` struct, and optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize`, and `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\nA WebSocket `builder` may return `path` and `query` only; `headers` and `body` are rejected. `WebSocketDefinitionBase` and `BuilderField` are internal helper types.\n\nKnown fields are copied when the definition is created. Structs and `builder` keep their identity. A `protocols` array is copied, so a later edit of the original array does not retarget the endpoint. A getter on a fixed field runs during `defineWebSocket`.",
     "signatures": [
       "function defineWebSocket<\n  const P extends string,\n  TInput extends AnyStruct | undefined = undefined,\n  TIncoming extends AnyStruct = AnyStruct,\n  TOutgoing extends AnyStruct | undefined = undefined,\n>(\n  definition: Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, \"path\"> & {\n    input?: TInput;\n    path: P;\n  } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>,\n): WebSocketEndpoint<\n  EndpointArgs<TInput>,\n  WebSocketIncomingData<TIncoming>,\n  WebSocketOutgoingData<TOutgoing>\n>;"
     ],
@@ -6636,7 +6636,7 @@
     "slug": "core/websocketdefinition-type",
     "source": "packages/core/src/web_socket/web_socket.ts",
     "group": "web-socket",
-    "description": "Contract object passed to defineWebSocket.\n\n- `incoming` is the struct every received frame is parsed with. Frames are JSON text.\n\n- `outgoing` is the struct `session.send` validates and encodes with. Without it, `send` throws.\n\n- `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`. Incoming messages are not bounded by a count: the library queues every message the platform delivers until `receive` reads it.\n\n- `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.\n\n- `operation` is a static, low-cardinality name for telemetry.\n\n- `input` is the struct for the operation input. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see {@link WebSocketRequestShape}.\n\nAn invalid `maxOutgoingQueueSize` is reported when the operation runs, as a `REQ_OPTIONS_INVALID` fault.",
+    "description": "Contract object passed to defineWebSocket.\n\n- `incoming` is the struct every received frame is parsed with. Frames are JSON text.\n\n- `outgoing` is the struct `session.send` validates and encodes with. Without it, `send` throws.\n\n- `maxOutgoingQueueSize` is how many messages are kept while the session is `reconnecting`; it defaults to `0`, which disables queueing of messages sent in that state. Incoming messages are not bounded by a count: the library queues every message the platform delivers until `receive` reads it.\n\n- `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.\n\n- `operation` is a static, low-cardinality name for telemetry.\n\n- `input` is the struct for the operation input. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see {@link WebSocketRequestShape}.",
     "signatures": [
       "type WebSocketDefinition<\n  TInput extends AnyStruct | undefined = undefined,\n  TIncoming extends AnyStruct = AnyStruct,\n  TOutgoing extends AnyStruct | undefined = undefined,\n> = WebSocketDefinitionBase<TIncoming, TOutgoing> & {\n  builder?: OutboundBuilder;\n  input?: TInput;\n};"
     ],
@@ -8209,7 +8209,7 @@
     "slug": "core/preflightfaultcode-type",
     "source": "packages/core/src/error/types.ts",
     "group": "errors",
-    "description": "Codes whose fault may never have reached a response.\n\nEvery `FaultCode` except `HTTP_STATUS` and the decode codes:\n`CAP_BUFFER_EXCEEDED`, `ENV_UNSUPPORTED`, `EXT_HOOK_FAILED`,\n`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`, `NET_ABORTED`, `NET_BODY_INCOMPLETE`, `NET_TIMEOUT`, `NET_UNREACHABLE`,\n`REQ_BUILD_FAILED`, `REQ_INPUT_INVALID`, and `REQ_OPTIONS_INVALID`. These\nare the `code` values of `PreflightFault`.",
+    "description": "Codes whose fault may never have reached a response.\n\nEvery `FaultCode` except `HTTP_STATUS` and the decode codes:\n`CAP_BUFFER_EXCEEDED`, `ENV_UNSUPPORTED`, `EXT_HOOK_FAILED`,\n`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`, `NET_ABORTED`, `NET_BODY_INCOMPLETE`, `NET_TIMEOUT`, `NET_UNREACHABLE`,\n`REQ_BUILD_FAILED`, and `REQ_INPUT_INVALID`. These\nare the `code` values of `PreflightFault`.",
     "signatures": [
       "type PreflightFaultCode = Exclude<\n  FaultCode,\n  DecodeFaultCode | \"HTTP_STATUS\"\n>;"
     ],
@@ -8317,9 +8317,9 @@
     "slug": "core/eventstreamfaultcode-type",
     "source": "packages/core/src/sse/transport/event_stream.ts",
     "group": "sse",
-    "description": "Fault codes an event stream can end with, drawn from the one shared `FaultCode` namespace.\n\nA subset of the shared `FaultCode` set. It is the `code` of an `EventStreamCloseInfo` with `kind: 'error'`.\n`REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened, or the picked endpoint gave an invalid URL or a URL with credentials. They stay those codes; they are not rewritten to `NET_UNREACHABLE`.\n`HTTP_STATUS` means a reconnect handshake answered with a non-2xx status; `cause` is then the same `HTTP_STATUS` fault a failed first handshake returns.",
+    "description": "Fault codes an event stream can end with, drawn from the one shared `FaultCode` namespace.\n\nA subset of the shared `FaultCode` set. It is the `code` of an `EventStreamCloseInfo` with `kind: 'error'`.\n`REQ_BUILD_FAILED` means a reconnect pick failed after the stream opened, or the picked endpoint gave an invalid URL or a URL with credentials. It stays that code; it is not rewritten to `NET_UNREACHABLE`.\n`HTTP_STATUS` means a reconnect handshake answered with a non-2xx status; `cause` is then the same `HTTP_STATUS` fault a failed first handshake returns.",
     "signatures": [
-      "type EventStreamFaultCode = Extract<\n  FaultCode,\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_OPTIONS_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n>;"
+      "type EventStreamFaultCode = Extract<\n  FaultCode,\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n>;"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8330,7 +8330,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type EventStreamFaultCode = Extract<\n  FaultCode,\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"REQ_OPTIONS_INVALID\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n>;",
+        "signature": "type EventStreamFaultCode = Extract<\n  FaultCode,\n  | \"CAP_BUFFER_EXCEEDED\"\n  | \"EXT_HOOK_FAILED\"\n  | \"EXT_OBSERVER_FAILED\"\n  | \"HTTP_STATUS\"\n  | \"NET_TIMEOUT\"\n  | \"NET_UNREACHABLE\"\n  | \"REQ_BUILD_FAILED\"\n  | \"RES_DECODE_FAILED\"\n  | \"RES_MEDIA_TYPE_INVALID\"\n>;",
         "parameters": [],
         "returns": []
       }
@@ -8412,7 +8412,7 @@
     "slug": "core/balancer-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Chooses one endpoint for a call.\n\n`pick` is synchronous and returns an error-first tuple. It does not throw\nfor an empty candidate list or for invalid factory options. Built-in\nfactories record invalid options at construction and return that error from\nevery later `pick`. A selected endpoint must belong to the candidates supplied\nto that pick; a foreign selection becomes `REQ_BUILD_FAILED`, and its `done`\nis called with `{ attempted: false }`.",
+    "description": "Chooses one endpoint for a call.\n\n`pick` is synchronous and returns an error-first tuple. It does not throw\nfor an empty candidate list. A selected endpoint is one of the candidates\nsupplied to that pick.",
     "signatures": [
       "interface Balancer {\n  pick(info: PickInfo): PickOutcome;\n}"
     ],
@@ -8424,7 +8424,7 @@
     "typeTable": [
       {
         "name": "pick",
-        "description": "Selects an endpoint synchronously, or returns an error when none can be selected.\nMust be synchronous: a returned promise is not awaited and its rejection is ignored.\nA promise is an invalid pick outcome and becomes `REQ_BUILD_FAILED`.",
+        "description": "Selects an endpoint synchronously, or returns an error when none can be selected.\nMust be synchronous.",
         "type": "(info: PickInfo) => PickOutcome",
         "simplifiedType": "function",
         "required": true,
@@ -8540,7 +8540,7 @@
     "typeTable": [
       {
         "name": "endpoint",
-        "description": "One of this pick's candidate endpoints. Membership is checked, URL syntax is not.",
+        "description": "One of this pick's candidate endpoints.",
         "type": "string",
         "simplifiedType": "string",
         "required": true,
@@ -8739,7 +8739,7 @@
     "slug": "core/pickfirstbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first endpoint until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following endpoint and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\nOrder and the sticky endpoint follow `members`. When the sticky endpoint is\nnot among this pick's `endpoints`, as when a wrapper filters candidates, the\npick takes the next candidate after it in member order without moving it, so\na narrowed pick never changes where later calls go. Only a sticky endpoint missing from `members`\nresets the order to the first.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter endpoint list. The default is\n`false`. Shuffle history keeps at least 256 endpoints, and at least the\ncurrent members, in least-recently-used order; a forgotten endpoint gets a new\nrandom key when it returns.\n\n`failbackMs`, when finite and positive, returns to the first endpoint by time\nalone: once the sticky endpoint has been away from the first for that long, the\nnext pick whose candidates include the first selects it and makes it sticky\nagain. Nothing judges whether the first endpoint has recovered. If it fails\nagain, the ordinary advance rule above moves on and the time starts anew.\nChoose an interval longer than the time between picks, such as a reconnect\ndelay, or every pick returns to the first endpoint. No background timer is\ncreated.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health function.",
+    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first endpoint until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following endpoint and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\nOrder and the sticky endpoint follow `members`. When the sticky endpoint is\nnot among this pick's `endpoints`, as when a wrapper filters candidates, the\npick takes the next candidate after it in member order without moving it, so\na narrowed pick never changes where later calls go. Only a sticky endpoint missing from `members`\nresets the order to the first.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter endpoint list. The default is\n`false`. Shuffle history keeps at least 256 endpoints, and at least the\ncurrent members, in least-recently-used order; a forgotten endpoint gets a new\nrandom key when it returns.\n\n`failbackMs`, when set, returns to the first endpoint by time\nalone: once the sticky endpoint has been away from the first for that long, the\nnext pick whose candidates include the first selects it and makes it sticky\nagain. Nothing judges whether the first endpoint has recovered. If it fails\nagain, the ordinary advance rule above moves on and the time starts anew.\nChoose an interval longer than the time between picks, such as a reconnect\ndelay, or every pick returns to the first endpoint. No background timer is\ncreated.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health function.",
     "signatures": [
       "function pickFirstBalancer(options?: PickFirstOptions): Balancer;"
     ],
@@ -8815,7 +8815,7 @@
       },
       {
         "name": "failbackMs",
-        "description": "Finite positive time away from the first endpoint after which the next pick returns to it; unset disables failback.",
+        "description": "Milliseconds away from the first endpoint after which the next pick returns to it; unset disables failback.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -8839,7 +8839,7 @@
     "slug": "core/roundrobinbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. Members left out of this pick's\ncandidates keep their current value, as nginx skips a peer that is down. A\nmissing weight is 1. Weights for endpoints not in the list are ignored.\nSelection and the cleanup of current values for endpoints that left the\nmembers take O(member count + candidate count) work per pick. Extreme weights\nare scaled to avoid overflow; ratios below floating-point precision may round\nto zero. Finite positive weights never produce a non-candidate selection.\n\nWithout `weights`, every pick advances the counter, including a pick made for\na retry or a stream reconnect. Without `outlierDetection`, and with calls\nthat run one after another, an endpoint that fails persistently therefore\nreceives more than 1/n of the first attempts. With exactly two endpoints and\nretries enabled it receives all of them, so every call needs one retry.\nConcurrent calls interleave their picks and break this pattern.\n\nHealth filtering is off by default, so successful picks omit `done`. Supply\n`outlierDetection: {}` to enable it: five consecutive attributed failures then\neject an endpoint temporarily. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
+    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. Members left out of this pick's\ncandidates keep their current value, as nginx skips a peer that is down. A\nmissing weight is 1. Weights for endpoints not in the list are ignored.\nSelection and the cleanup of current values for endpoints that left the\nmembers take O(member count + candidate count) work per pick. Extreme weights\nare scaled to avoid overflow; ratios below floating-point precision may round\nto zero. Finite positive weights never produce a non-candidate selection.\n\nWithout `weights`, every pick advances the counter, including a pick made for\na retry or a stream reconnect. Without `outlierDetection`, and with calls\nthat run one after another, an endpoint that fails persistently therefore\nreceives more than 1/n of the first attempts. With exactly two endpoints and\nretries enabled it receives all of them, so every call needs one retry.\nConcurrent calls interleave their picks and break this pattern.\n\nHealth filtering is off by default, so successful picks omit `done`. Supply\n`outlierDetection: {}` to enable it: five consecutive attributed failures then\neject an endpoint temporarily. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`.",
     "signatures": [
       "function roundRobinBalancer(options?: RoundRobinOptions): Balancer;"
     ],
@@ -8910,7 +8910,7 @@
       },
       {
         "name": "weights",
-        "description": "Finite positive weight per endpoint; a missing weight is 1. Read by\niteration, so a `Map` from another realm and any custom `ReadonlyMap` work.\nCopied at construction.",
+        "description": "Finite positive weight per endpoint; a missing weight is 1. Copied at construction.",
         "type": "ReadonlyMap<string, number> | undefined",
         "simplifiedType": "object",
         "required": false,
@@ -9459,7 +9459,7 @@
     "typeTable": [
       {
         "name": "consecutiveFailures",
-        "description": "Nonnegative safe integer; defaults to 5 (Finagle). Zero disables passive breaking.",
+        "description": "Consecutive failures that eject an endpoint; defaults to 5 (Finagle). Zero disables passive breaking.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9468,7 +9468,7 @@
       },
       {
         "name": "minPenaltyMs",
-        "description": "Positive finite first penalty, also the step added per level; defaults to 1000 ms (Linkerd).",
+        "description": "First penalty in milliseconds, also the step added per level; defaults to 1000 ms (Linkerd).",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9477,7 +9477,7 @@
       },
       {
         "name": "maxPenaltyMs",
-        "description": "Positive finite cap, at least minPenaltyMs; defaults to 60000 ms (Linkerd).",
+        "description": "Penalty cap in milliseconds, at least `minPenaltyMs`; defaults to 60000 ms (Linkerd).",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9486,7 +9486,7 @@
       },
       {
         "name": "jitterRatio",
-        "description": "Finite positive-jitter ratio in [0, 1]; defaults to 0.5 (Linkerd).",
+        "description": "Jitter ratio from 0 to 1; defaults to 0.5 (Linkerd).",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9495,7 +9495,7 @@
       },
       {
         "name": "isFailure",
-        "description": "Synchronous rule that decides which outcomes count toward ejection. The\ndefault counts every outcome with a `code`. It is a trigger for time-based\nejection, not a judgement of health; replace it to count differently.\nThrows and non-booleans discard the sample.",
+        "description": "Synchronous rule that decides which outcomes count toward ejection. The\ndefault counts every outcome with a `code`. It is a trigger for time-based\nejection, not a judgement of health; replace it to count differently. A\nthrow is not caught here; it leaves `done` and is contained and reported\nlike any other `done` failure.",
         "type": "((info: DoneInfo) => boolean) | undefined",
         "simplifiedType": "function",
         "required": false,
@@ -9504,7 +9504,7 @@
       },
       {
         "name": "isHealthy",
-        "description": "The only health judgement. Synchronous, called once per endpoint on every\npick, so it should read state that the application keeps up to date. An\nendpoint for which it returns `false` is not selected. Returning `true`\ndoes not end an ejection: the endpoint must also not be ejected. A throw is\nnot caught here; `pickEndpoint` reports it as `REQ_BUILD_FAILED` with the\nthrown value as `cause`.",
+        "description": "The only health judgement. Synchronous, called on every pick for each\nendpoint that is not currently ejected (an ejected endpoint is not asked),\nso it should read state that the application keeps up to date. An\nendpoint for which it returns `false` is not selected. Returning `true`\ndoes not end an ejection: the endpoint must also not be ejected. A throw is\nnot caught here; `pickEndpoint` reports it as `REQ_BUILD_FAILED` with the\nthrown value as `cause`.",
         "type": "((endpoint: string) => boolean) | undefined",
         "simplifiedType": "function",
         "required": false,
@@ -9528,7 +9528,7 @@
     "slug": "core/outlierdetection",
     "source": "packages/core/src/balancer/outlier_detection.ts",
     "group": "client",
-    "description": "Wraps a strategy with consecutive-failure ejection by time.\nFive attributed failures eject an endpoint by default. The penalty is the\nminimum penalty (1s by default) times the penalty level, so successive\nejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5\ntimes the base is added, and the total caps at 60s. When the time is up the\nendpoint is selectable again; nothing probes it or decides that it has\nrecovered. As in gRPC outlier detection (gRFC A50) a success never clears the\npenalty level: every ejection raises it by one and every ten seconds without\none lowers it by one, evaluated when the endpoint is next used. An endpoint\nthat accepts a connection and then drops it is therefore ejected for longer\neach time, as long as its failures return faster than one level decays.\nEvery classified failure code fails by default, including NET_TIMEOUT and\nNET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection\ncount timeouts and resets; `isFailure` replaces that rule. An attempted\noutcome without a code resets the streak; unattributed attempts and discarded\nsamples leave it unchanged. The outcome of an attempt that began before an\nejection, or while the endpoint was ejected, is ignored even if it arrives\nafter the endpoint is selectable again, so late results do not eject it anew.\nThe child receives the filtered candidates as `endpoints` and the unfiltered\n`members`, so ejection does not look like a membership change to it.\n`isHealthy`, when supplied, is the only health judgement and combines with\nejection by AND: it can keep an endpoint out, and `true` cannot let an ejected\nendpoint in. If it rejects every endpoint that is not ejected, it is ignored\nfor that pick. If every endpoint is ejected, the original current list is\nused (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection\nquota. All callbacks are synchronous; no timer is created. Configuration is\ncaptured at construction.\nHistory holds at least 256 endpoints, and at least the current list, shared\nacross endpoint lists. LRU clean or expired states are evicted first, then\npartial failure sequences, then the oldest protected state only if every\nretained endpoint is ejected. Temporary candidate exclusion does not itself\nerase a penalty.",
+    "description": "Wraps a strategy with consecutive-failure ejection by time.\nFive attributed failures eject an endpoint by default. The penalty is the\nminimum penalty (1s by default) times the penalty level, so successive\nejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5\ntimes the base is added, and the total caps at 60s. When the time is up the\nendpoint is selectable again; nothing probes it or decides that it has\nrecovered. As in gRPC outlier detection (gRFC A50) a success never clears the\npenalty level: every ejection raises it by one and every ten seconds without\none lowers it by one, evaluated when the endpoint is next used. An endpoint\nthat accepts a connection and then drops it is therefore ejected for longer\neach time, as long as its failures return faster than one level decays.\nEvery classified failure code fails by default, including NET_TIMEOUT and\nNET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection\ncount timeouts and resets; `isFailure` replaces that rule. An attempted\noutcome without a code resets the streak; unattributed attempts leave it\nunchanged. The outcome of an attempt that began before an\nejection, or while the endpoint was ejected, is ignored even if it arrives\nafter the endpoint is selectable again, so late results do not eject it anew.\nThe child receives the filtered candidates as `endpoints` and the unfiltered\n`members`, so ejection does not look like a membership change to it.\n`isHealthy`, when supplied, is the only health judgement and combines with\nejection by AND: it can keep an endpoint out, and `true` cannot let an ejected\nendpoint in. If it rejects every endpoint that is not ejected, it is ignored\nfor that pick. If every endpoint is ejected, the original current list is\nused (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection\nquota. All callbacks are synchronous; no timer is created. Configuration is\ncaptured at construction.\nHistory holds at least 256 endpoints, and at least the current list, shared\nacross endpoint lists. LRU clean or expired states are evicted first, then\npartial failure sequences, then the oldest protected state only if every\nretained endpoint is ejected. Temporary candidate exclusion does not itself\nerase a penalty.",
     "signatures": [
       "function outlierDetection(\n  child: Balancer,\n  options?: OutlierDetectionOptions,\n): Balancer;"
     ],
@@ -9538,9 +9538,7 @@
       "@defjs/core:p2cBalancer"
     ],
     "exampleFiles": [],
-    "returns": [
-      "An independent wrapper; invalid options become REQ_OPTIONS_INVALID."
-    ],
+    "returns": ["An independent wrapper."],
     "throws": [],
     "tags": [],
     "typeTable": null,
@@ -9587,9 +9585,7 @@
             "tags": []
           }
         ],
-        "returns": [
-          "An independent wrapper; invalid options become REQ_OPTIONS_INVALID."
-        ]
+        "returns": ["An independent wrapper."]
       }
     ]
   },
@@ -9600,7 +9596,7 @@
     "slug": "core/p2cbalancer",
     "source": "packages/core/src/balancer/p2c.ts",
     "group": "client",
-    "description": "Samples candidates without replacement and selects the least loaded draw.\n\nDefaults to two choices and PeakEwma load: decaying RTT times (pending + 1).\n`load: \"pending\"` selects the fewest in-flight attempts in the sample. Ties\nfavor the first draw. `choiceCount` is an integer at least 2, capped at 10.\n`defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be\npositive and finite. Pending is reserved when `pick` selects the endpoint, so\nconcurrent picks in one tick see each other, and releases at `end`, the\nbeginning of a peer response (tower CompleteOnResponse), or at `done` when no\nresponse began. RTT is the real start-to-end duration for every transport,\nincluding failures. Higher samples replace the estimate; lower samples blend\nexponentially, as in tower PeakEwma. Idle estimates decay toward zero. A done\nwithout end creates no sample. Health filtering is off by default; with\n`outlierDetection: {}` it ejects quickly failing endpoints. There is no\nsynthetic failure penalty.\nUnlike Envoy and gRPC A48, draws are without replacement.\nLoad history keeps at least 256 endpoints, and at least the current members, in\nLRU order, evicting idle entries first; an in-flight entry is evicted only if\nall retained entries are busy. Evicted endpoints restart from the configured\ninitial estimate.",
+    "description": "Samples candidates without replacement and selects the least loaded draw.\n\nDefaults to two choices and PeakEwma load: decaying RTT times (pending + 1).\n`load: \"pending\"` selects the fewest in-flight attempts in the sample. Ties\nfavor the first draw. `choiceCount` is at least 2, capped at 10.\n`defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd). Pending is reserved when `pick` selects the endpoint, so\nconcurrent picks in one tick see each other, and releases at `end`, the\nbeginning of a peer response (tower CompleteOnResponse), or at `done` when no\nresponse began. RTT is the real start-to-end duration for every transport,\nincluding failures. Higher samples replace the estimate; lower samples blend\nexponentially, as in tower PeakEwma. Idle estimates decay toward zero. A done\nwithout end creates no sample. Health filtering is off by default; with\n`outlierDetection: {}` it ejects quickly failing endpoints. There is no\nsynthetic failure penalty.\nUnlike Envoy and gRPC A48, draws are without replacement.\nLoad history keeps at least 256 endpoints, and at least the current members, in\nLRU order, evicting idle entries first; an in-flight entry is evicted only if\nall retained entries are busy. Evicted endpoints restart from the configured\ninitial estimate.",
     "signatures": ["function p2cBalancer(options?: P2cOptions): Balancer;"],
     "related": [
       "@defjs/core:P2cOptions",
@@ -9608,9 +9604,7 @@
       "@defjs/core:roundRobinBalancer"
     ],
     "exampleFiles": [],
-    "returns": [
-      "A new independent balancer; invalid options are returned by every pick."
-    ],
+    "returns": ["A new independent balancer."],
     "throws": [],
     "tags": [],
     "typeTable": null,
@@ -9639,9 +9633,7 @@
             "tags": []
           }
         ],
-        "returns": [
-          "A new independent balancer; invalid options are returned by every pick."
-        ]
+        "returns": ["A new independent balancer."]
       }
     ]
   },
@@ -9673,7 +9665,7 @@
       },
       {
         "name": "choiceCount",
-        "description": "Integer at least 2, capped at 10; defaults to 2.",
+        "description": "Number of candidates sampled, at least 2 and capped at 10; defaults to 2.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9682,7 +9674,7 @@
       },
       {
         "name": "defaultRttMs",
-        "description": "Positive finite initial RTT estimate in milliseconds; defaults to 30.",
+        "description": "Initial RTT estimate in milliseconds; defaults to 30.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9691,7 +9683,7 @@
       },
       {
         "name": "decayMs",
-        "description": "Positive finite RTT decay time in milliseconds; defaults to 10000.",
+        "description": "RTT decay time in milliseconds; defaults to 10000.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,

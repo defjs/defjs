@@ -82,7 +82,7 @@ export interface EventStreamOpenInfo {
  * Fault codes an event stream can end with, drawn from the one shared `FaultCode` namespace.
  *
  * A subset of the shared `FaultCode` set. It is the `code` of an `EventStreamCloseInfo` with `kind: 'error'`.
- * `REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened, or the picked endpoint gave an invalid URL or a URL with credentials. They stay those codes; they are not rewritten to `NET_UNREACHABLE`.
+ * `REQ_BUILD_FAILED` means a reconnect pick failed after the stream opened, or the picked endpoint gave an invalid URL or a URL with credentials. It stays that code; it is not rewritten to `NET_UNREACHABLE`.
  * `HTTP_STATUS` means a reconnect handshake answered with a non-2xx status; `cause` is then the same `HTTP_STATUS` fault a failed first handshake returns.
  *
  * @group sse
@@ -96,7 +96,6 @@ export type EventStreamFaultCode = Extract<
   | "NET_TIMEOUT"
   | "NET_UNREACHABLE"
   | "REQ_BUILD_FAILED"
-  | "REQ_OPTIONS_INVALID"
   | "RES_DECODE_FAILED"
   | "RES_MEDIA_TYPE_INVALID"
 >;
@@ -111,7 +110,7 @@ interface EventStreamCloseInfoBase {
  *
  * The discriminant is `kind` so that `code` can mean the same thing it means on a fault.
  *
- * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()`, disposal and a caller signal abort all discard the events nobody has read yet, as `EventSource.close()` does, and the iterator ends at once. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open, or that gives a URL the request cannot use (invalid, or with credentials), uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one.
+ * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()`, disposal and a caller signal abort all discard the events nobody has read yet, as `EventSource.close()` does, and the iterator ends at once. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open, or that gives a URL the request cannot use (invalid, or with credentials), uses `REQ_BUILD_FAILED`. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one.
  *
  * @group sse
  */
@@ -219,11 +218,7 @@ export interface FetchEventStreamErrorContext {
 
 type EventStreamFatalCode = Exclude<
   EventStreamFaultCode,
-  | "HTTP_STATUS"
-  | "NET_TIMEOUT"
-  | "NET_UNREACHABLE"
-  | "REQ_BUILD_FAILED"
-  | "REQ_OPTIONS_INVALID"
+  "HTTP_STATUS" | "NET_TIMEOUT" | "NET_UNREACHABLE" | "REQ_BUILD_FAILED"
 >;
 
 class EventStreamFatalError extends Error {
@@ -956,7 +951,7 @@ export function isEventStreamPickFault(
     return false;
   }
   const code = error.code;
-  return code === "REQ_BUILD_FAILED" || code === "REQ_OPTIONS_INVALID";
+  return code === "REQ_BUILD_FAILED";
 }
 
 function getEventStreamFaultCode(error: unknown): EventStreamFaultCode {
@@ -968,9 +963,7 @@ function getEventStreamFaultCode(error: unknown): EventStreamFaultCode {
     return fatal;
   }
   if (isEventStreamPickFault(error)) {
-    return error.code === "REQ_OPTIONS_INVALID"
-      ? "REQ_OPTIONS_INVALID"
-      : "REQ_BUILD_FAILED";
+    return "REQ_BUILD_FAILED";
   }
   return error === ERR_TIMEOUT ? "NET_TIMEOUT" : "NET_UNREACHABLE";
 }

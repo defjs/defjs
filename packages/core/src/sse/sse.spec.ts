@@ -2371,35 +2371,6 @@ describe("request event stream runtime", () => {
     expect(received).toEqual(["ok"]);
   });
 
-  test.each([
-    ["maxBufferSize", 0],
-    ["maxBufferSize", -1],
-    ["maxBufferSize", 1.5],
-    ["maxBufferSize", Number.POSITIVE_INFINITY],
-    ["maxBufferSize", Number.MAX_SAFE_INTEGER + 1],
-  ] as const)(
-    "should reject invalid endpoint %s value %s before fetching",
-    async (limitName, limit) => {
-      const handle = vi.fn<FetchHandle>();
-      const client = createClient(
-        withEndpoint("https://api.example.com"),
-        withSSEHandle(handle),
-      );
-      const useStream = defineEventStream({
-        events: { message: struct.string() },
-        path: "/stream",
-        [limitName]: limit,
-      });
-
-      const [error, stream, open] = await useStream(client);
-
-      expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-      expect(stream).toBeUndefined();
-      expect(open).toBeUndefined();
-      expect(handle).not.toHaveBeenCalled();
-    },
-  );
-
   test("should snapshot SSE signal before asynchronous work", async () => {
     let signalReads = 0;
     const options = {
@@ -2708,35 +2679,3 @@ test("preserves an event getter's own call dispatch", async () => {
   ]);
   expect(call).toHaveBeenCalledOnce();
 });
-
-test.each(["maxBufferSize"] as const)(
-  "explicit null %s is invalid rather than defaulted",
-  async (limitName) => {
-    const handle = vi.fn(() =>
-      Promise.resolve(
-        new Response("", {
-          headers: { "Content-Type": "text/event-stream" },
-        }),
-      ),
-    );
-    const client = createClient(
-      withEndpoint("https://a.test"),
-      withSSEHandle(handle),
-    );
-    const useStream = defineEventStream(
-      Object.defineProperty(
-        {
-          path: "/",
-          events: { message: struct.string() },
-        },
-        limitName,
-        { value: null },
-      ),
-    );
-    const [fault, stream] = await useStream(client);
-    stream?.close();
-    await stream?.closed;
-    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(handle).not.toHaveBeenCalled();
-  },
-);

@@ -1576,35 +1576,6 @@ describe("web socket runtime environment edge cases", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  test("should return REQ_OPTIONS_INVALID when an execution-time heartbeat getter throws", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const snapshotFailure = new Error("heartbeat getter failed");
-    const useSocket = defineWebSocket({
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-
-    const [error, socket, connection] = await run(
-      createClient(withEndpoint("http://localhost"), (config) => {
-        config.webSocket.heartbeat = {
-          intervalMs: 20,
-          get message(): () => never {
-            throw snapshotFailure;
-          },
-        };
-      }),
-      useSocket,
-    );
-
-    expect(error).toMatchObject({
-      cause: snapshotFailure,
-      code: "REQ_OPTIONS_INVALID",
-    });
-    expect(socket).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(lastMockInstance).toBeUndefined();
-  });
-
   test("should surface runtime cause on error event before close", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
 
@@ -2225,33 +2196,6 @@ describe("web socket runtime environment edge cases", () => {
     expect(failedSocket.close).toHaveBeenCalledTimes(1);
   });
 
-  test.each([
-    -1,
-    1.5,
-    Number.POSITIVE_INFINITY,
-    Number.MAX_SAFE_INTEGER + 1,
-  ] as const)(
-    "should reject unsafe outgoing queue limit %s before constructing a socket",
-    async (value) => {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
-      const definition = {
-        incoming: struct.unknown(),
-        maxOutgoingQueueSize: value,
-        path: "/ws/test",
-      };
-      const useSocket = defineWebSocket(definition);
-
-      const [error, socket] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket,
-      );
-
-      expect(socket).toBeUndefined();
-      expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-      expect(lastMockInstance).toBeUndefined();
-    },
-  );
-
   test("should expose generation and native bufferedAmount", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     const useSocket = defineWebSocket({
@@ -2322,38 +2266,6 @@ describe("web socket runtime environment edge cases", () => {
     expect(socket?.connection.generation).toBe(2);
     socket?.close(1000, "done");
     await socket?.closed;
-  });
-
-  test("should reject an execution-time reconnect predicate getter before constructing a physical socket", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const getterFailure = new Error("reconnect predicate getter failed");
-    const useSocket = defineWebSocket({
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-
-    const [error, socket, connection] = await run(
-      createClient(withEndpoint("http://localhost"), (config) => {
-        config.retry = {
-          get shouldRetry(): undefined {
-            throw getterFailure;
-          },
-        };
-      }),
-      useSocket,
-    );
-    if (socket) {
-      socket.close(1000, "cleanup");
-      await socket.closed;
-    }
-
-    expect(error).toMatchObject({
-      cause: getterFailure,
-      code: "REQ_OPTIONS_INVALID",
-    });
-    expect(socket).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
   });
 
   test("should snapshot the reconnect predicate before beforeConnect can mutate it", async () => {
@@ -4542,10 +4454,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test.each([
-    createPreflightFault(
-      "REQ_OPTIONS_INVALID",
-      new Error("invalid reconnect policy"),
-    ),
+    createPreflightFault("EXT_HOOK_FAILED", new Error("reconnect policy")),
     createUndecodedHttpStatusFault({
       headers: new Headers(),
       ok: false,
@@ -5569,69 +5478,6 @@ describe("web socket preflight precedence", () => {
     expect(error?.code).toBe("ENV_UNSUPPORTED");
     expect(listeners.added()).toBeGreaterThan(0);
     expect(listeners.removed()).toBe(listeners.added());
-  });
-
-  test("should reject an invalid queue limit before reading execution options or attaching abort listeners", async () => {
-    const controller = new AbortController();
-    const listeners = watchAbortListeners(controller.signal);
-    let heartbeatReads = 0;
-    let reconnectReads = 0;
-    const endpoint = defineWebSocket({
-      incoming: struct.unknown(),
-      maxOutgoingQueueSize: -1,
-      path: "/socket",
-    });
-
-    const [error, session, connection] = await endpoint(
-      createClient(withEndpoint("https://example.test"), (config) => {
-        config.webSocket.heartbeat = {
-          get intervalMs(): number {
-            heartbeatReads += 1;
-            throw new Error("heartbeat should not be read");
-          },
-          message: () => undefined,
-        };
-        config.retry = {
-          get maxRetries(): number {
-            reconnectReads += 1;
-            throw new Error("retry should not be read");
-          },
-        };
-      })({ signal: controller.signal }),
-    );
-
-    expect(session).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(error?.cause).toEqual(
-      expect.objectContaining({
-        message: "maxOutgoingQueueSize must be a non-negative safe integer",
-      }),
-    );
-    expect(heartbeatReads).toBe(0);
-    expect(reconnectReads).toBe(0);
-    expect(listeners.added()).toBe(0);
-  });
-
-  test("should reject an invalid heartbeat interval before attaching abort listeners", async () => {
-    const controller = new AbortController();
-    const listeners = watchAbortListeners(controller.signal);
-    const opened = countingSocket();
-    const endpoint = defineWebSocket({
-      incoming: struct.unknown(),
-      path: "/socket",
-    });
-
-    const [error, session] = await endpoint(
-      guardedClient(opened, controller.signal, {
-        heartbeat: { intervalMs: 0, message: () => undefined },
-      }),
-    );
-
-    expect(opened.constructed()).toBe(0);
-    expect(session).toBeUndefined();
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(listeners.added()).toBe(0);
   });
 
   test("should return an aborted call before reading an execution-time heartbeat getter", async () => {

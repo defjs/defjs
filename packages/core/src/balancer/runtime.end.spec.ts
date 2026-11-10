@@ -32,17 +32,6 @@ test("end is snapshotted once and runs synchronously once only after start and b
   expect(events).toEqual(["start", "end", "done"]);
   expect(reads).toBe(1);
 });
-test.each([1, null, "end"])("invalid end %j rejects a pick", (end) => {
-  expect(
-    pickEndpoint(
-      {
-        // @ts-expect-error end must be a function or absent
-        pick: () => [null, { endpoint: "a", end }],
-      },
-      info,
-    )[0]?.code,
-  ).toBe("REQ_BUILD_FAILED");
-});
 test("a throwing end getter preserves its cause", () => {
   const cause = new Error("end getter");
   expect(

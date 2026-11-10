@@ -73,14 +73,6 @@ test("done without end releases pending but cannot produce an RTT sample", () =>
   a.done({ attempted: true });
   expect(pick(b).endpoint).toBe("a");
 });
-test("removed p2c classifier is an option error even when it is a function", () => {
-  // @ts-expect-error isFailure was removed from p2c options
-  const b = p2cBalancer({ isFailure: () => true });
-  expect(pickEndpoint(b, { endpoints: ["a"] })[0]?.code).toBe(
-    "REQ_OPTIONS_INVALID",
-  );
-});
-
 // Direct callers bypass the runtime's lifecycle guards.
 test("raw p2c end ignores unstarted, ended and terminal attempts", () => {
   const b = p2cBalancer({ load: "pending", outlierDetection: false });

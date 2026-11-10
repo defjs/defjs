@@ -56,11 +56,7 @@ import {
 } from "./codec";
 import type { WebSocketCloseSnapshot } from "./codec";
 import type { HeartbeatRuntime, HeartbeatSession } from "./heartbeat";
-import {
-  startHeartbeat,
-  stopHeartbeat,
-  validateHeartbeatConfig,
-} from "./heartbeat";
+import { startHeartbeat, stopHeartbeat } from "./heartbeat";
 import { computeReconnectDelay, wait } from "../internal/backoff";
 import type { RetryPolicy } from "../internal/retry";
 import { decideRetry, resolveRetryPolicy } from "../internal/retry";
@@ -132,15 +128,13 @@ interface WebSocketDefinitionBase<
  *
  * - `outgoing` is the struct `session.send` validates and encodes with. Without it, `send` throws.
  *
- * - `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`. Incoming messages are not bounded by a count: the library queues every message the platform delivers until `receive` reads it.
+ * - `maxOutgoingQueueSize` is how many messages are kept while the session is `reconnecting`; it defaults to `0`, which disables queueing of messages sent in that state. Incoming messages are not bounded by a count: the library queues every message the platform delivers until `receive` reads it.
  *
  * - `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.
  *
  * - `operation` is a static, low-cardinality name for telemetry.
  *
  * - `input` is the struct for the operation input. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see {@link WebSocketRequestShape}.
- *
- * An invalid `maxOutgoingQueueSize` is reported when the operation runs, as a `REQ_OPTIONS_INVALID` fault.
  *
  * @group web-socket
  */
@@ -392,7 +386,7 @@ export type WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> =
  * Pass path and incoming (and optional outgoing) message structs.
  * Call the returned operation with a client and, when declared, the input.
  *
- * - **definition** — `path`, one `incoming` struct, and optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize` (a non-negative safe integer), and `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path`, one `incoming` struct, and optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize`, and `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * A WebSocket `builder` may return `path` and `query` only; `headers` and `body` are rejected. `WebSocketDefinitionBase` and `BuilderField` are internal helper types.
  *
@@ -471,36 +465,19 @@ type ResolvedCallOptions = {
   retry: RetryPolicy | undefined;
 };
 
-function readQueueLimits(
-  maxOutgoingQueueSize: number | undefined,
-): StageOutcome<true> {
-  try {
-    validateWebSocketQueueLimits(maxOutgoingQueueSize);
-    return [undefined, true];
-  } catch (error) {
-    return [createPreflightFault("REQ_OPTIONS_INVALID", error), undefined];
-  }
-}
-
 function readCallOptions(
   config: RequestOptions | undefined,
   clientConfig: ClientConfig,
-): StageOutcome<ResolvedCallOptions> {
-  try {
-    const beforeConnect = config?.beforeConnect;
-    const configuredProtocols = config?.protocols;
-    const protocols = configuredProtocols
-      ? [...configuredProtocols]
-      : undefined;
-    const heartbeat = snapshotHeartbeat(
+): ResolvedCallOptions {
+  const configuredProtocols = config?.protocols;
+  return {
+    beforeConnect: config?.beforeConnect,
+    heartbeat: snapshotHeartbeat(
       config?.heartbeat ?? clientConfig.webSocket.heartbeat,
-    );
-    validateHeartbeatConfig(heartbeat);
-    const retry = resolveRetryPolicy(config?.retry ?? clientConfig.retry);
-    return [undefined, { beforeConnect, heartbeat, protocols, retry }];
-  } catch (error) {
-    return [createPreflightFault("REQ_OPTIONS_INVALID", error), undefined];
-  }
+    ),
+    protocols: configuredProtocols ? [...configuredProtocols] : undefined,
+    retry: resolveRetryPolicy(config?.retry ?? clientConfig.retry),
+  };
 }
 
 function parseInput<TInput extends AnyStruct | undefined>(
@@ -609,27 +586,7 @@ async function runWebSocketCommand<
     return [aborted, undefined, undefined];
   }
 
-  // Queue limits and call options run before the abort signals exist.
-  const stopInvalidOptions = (
-    fault: PreflightFault,
-  ): SocketAwaitResult<
-    WebSocketIncomingData<TIncoming>,
-    WebSocketOutgoingData<TOutgoing>
-  > => {
-    state.error = fault;
-    setSocketState(state, "error");
-    return [fault, undefined, undefined];
-  };
-
-  const [queueFault] = readQueueLimits(endpoint.maxOutgoingQueueSize);
-  if (queueFault) {
-    return stopInvalidOptions(queueFault);
-  }
-
-  const [optionsFault, callOptions] = readCallOptions(config, clientConfig);
-  if (optionsFault) {
-    return stopInvalidOptions(optionsFault);
-  }
+  const callOptions = readCallOptions(config, clientConfig);
   const beforeConnectOption = callOptions.beforeConnect;
   const protocolsOption = callOptions.protocols;
   const retry = callOptions.retry;
@@ -1644,24 +1601,7 @@ async function runWebSocketCommand<
         () => wsChain(wsRequest, wsHandler),
         chainSignal,
       );
-      // Interceptors may return wrappers or synthetic sessions, but callers still need the complete session surface.
-      const publicConnection = session?.connection;
-      if (
-        typeof session?.closed?.then !== "function" ||
-        typeof session.close !== "function" ||
-        typeof session.send !== "function" ||
-        typeof session.receive?.[Symbol.asyncIterator] !== "function" ||
-        typeof session[Symbol.asyncDispose] !== "function" ||
-        typeof session.onRuntimeError !== "function" ||
-        typeof session.onStateChange !== "function" ||
-        typeof publicConnection?.generation !== "number" ||
-        typeof session.bufferedAmount !== "number" ||
-        typeof session.state !== "string"
-      ) {
-        throw new TypeError(
-          "WebSocket interceptor must resolve a WebSocket session",
-        );
-      }
+      const publicConnection = session.connection;
       chainSettled = true;
       releaseAbortSignal(chainSignal);
       let deliveredSession = [...undeliveredSessions].some(
@@ -1985,17 +1925,6 @@ function consumeObserverResult(
     return;
   }
   void Promise.resolve(result).catch(onRejected);
-}
-
-function validateWebSocketQueueLimits(
-  maxOutgoingQueueSize: number | undefined,
-): void {
-  const outgoingSize = maxOutgoingQueueSize ?? 0;
-  if (!Number.isSafeInteger(outgoingSize) || outgoingSize < 0) {
-    throw new TypeError(
-      "maxOutgoingQueueSize must be a non-negative safe integer",
-    );
-  }
 }
 
 function validateWebSocketClose(

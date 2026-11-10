@@ -15,7 +15,6 @@ function triage(fault: AnyFault): string {
     case "NET_BODY_INCOMPLETE":
       return "retryable";
     case "REQ_INPUT_INVALID":
-    case "REQ_OPTIONS_INVALID":
     case "REQ_BUILD_FAILED":
       return "fix the call";
     case "EXT_INTERCEPTOR_FAILED":

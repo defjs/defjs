@@ -5,8 +5,6 @@ import {
   outlierDetection,
   type OutlierDetectionOptions,
 } from "./outlier_detection";
-import { p2cBalancer } from "./p2c";
-import { pickEndpoint } from "./runtime";
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -121,44 +119,6 @@ test("health filtering forwards the child start callback unchanged", () => {
   const probe = pick(h.b);
   expect(probe.start).toBe(h.childStart);
 });
-
-test.each([
-  { halfOpen: 1 },
-  { halfOpen: null },
-  { probeTimeoutMs: "1" },
-  { probeTimeoutMs: 0 },
-  { probeTimeoutMs: -1 },
-  { probeTimeoutMs: Infinity },
-  { probeTimeoutMs: NaN },
-  { slowStartWindowMs: "1" },
-  { slowStartWindowMs: -1 },
-  { slowStartWindowMs: Infinity },
-  { slowStartWindowMs: NaN },
-  { slowStartMinWeightPercent: "1" },
-  { slowStartMinWeightPercent: 0 },
-  { slowStartMinWeightPercent: -1 },
-  { slowStartMinWeightPercent: 101 },
-  { slowStartMinWeightPercent: NaN },
-  { slowStartMinWeightPercent: Infinity },
-])(
-  "invalid recovery option %j yields REQ_OPTIONS_INVALID in every factory",
-  (options) => {
-    for (const b of [
-      // @ts-expect-error invalid recovery options are rejected at runtime
-      outlierDetection(pickFirstBalancer(), options),
-      // @ts-expect-error invalid recovery options are rejected at runtime
-      pickFirstBalancer({ outlierDetection: options }),
-      // @ts-expect-error invalid recovery options are rejected at runtime
-      roundRobinBalancer({ outlierDetection: options }),
-      // @ts-expect-error invalid recovery options are rejected at runtime
-      p2cBalancer({ outlierDetection: options }),
-    ]) {
-      expect(pickEndpoint(b, { endpoints: list })[0]?.code).toBe(
-        "REQ_OPTIONS_INVALID",
-      );
-    }
-  },
-);
 
 // Boundary combinations of the ejection and health transitions above.
 test("an expired endpoint is selectable again while isHealthy keeps deciding", () => {

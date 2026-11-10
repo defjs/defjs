@@ -177,10 +177,8 @@ void assertAsyncDisposableEventStream;
 
 const closeFaultCode: EventStreamFaultCode = "CAP_BUFFER_EXCEEDED";
 const reconnectBuildFault: EventStreamFaultCode = "REQ_BUILD_FAILED";
-const reconnectOptionsFault: EventStreamFaultCode = "REQ_OPTIONS_INVALID";
 void closeFaultCode;
 void reconnectBuildFault;
-void reconnectOptionsFault;
 
 type CatalogEvent = EventStreamData<typeof catalogEventStructs>;
 declare const catalogEvent: CatalogEvent;

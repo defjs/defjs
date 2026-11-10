@@ -1,13 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { Balancer } from "./balancer";
 import { roundRobinBalancer } from "./balancer";
-import {
-  createClient,
-  defineRequest,
-  withBalancer,
-  withEndpoint,
-  withHTTPHandle,
-} from "../index";
 import { outlierDetection } from "./outlier_detection";
 import { pickEndpoint } from "./runtime";
 
@@ -83,55 +75,6 @@ test("outlier detection ignores a raw 503 without a neutral outcome", () => {
     ),
   ).toEqual(["b", "a", "b", "a"]);
 });
-
-test.each(["direct", "wrapped", "isFailure"] as const)(
-  "%s attaches a rejection handler to rejected synchronous extension results",
-  async (entry) => {
-    const observed: [unknown, string][] = [];
-    function rejectedThenable(msg: string): {
-      then(fulfilled: unknown, rejected: (reason: unknown) => void): void;
-    } {
-      return {
-        then(fulfilled, rejected) {
-          observed.push([fulfilled, typeof rejected]);
-          rejected(new Error(msg));
-        },
-      };
-    }
-    const invalidPick: Balancer = {
-      // @ts-expect-error rejected promises violate the synchronous pick contract
-      pick: () => rejectedThenable("invalid async pick"),
-    };
-    const child: Balancer = {
-      pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }],
-    };
-    const balancers = {
-      direct: invalidPick,
-      wrapped: outlierDetection(invalidPick),
-      isFailure: outlierDetection(child, {
-        consecutiveFailures: 1,
-        // @ts-expect-error rejected promises violate the synchronous classifier contract
-        isFailure: () => rejectedThenable("invalid async classifier"),
-      }),
-    };
-    const client = createClient(
-      withEndpoint("https://a.test", "https://b.test"),
-      withBalancer(balancers[entry]),
-      withHTTPHandle(() => Promise.resolve(new Response(null))),
-    );
-    const operation = defineRequest({ method: "GET", path: "/" });
-    const [fault] = await operation(client);
-    expect(fault?.code ?? null).toBe(
-      entry === "isFailure" ? null : "REQ_BUILD_FAILED",
-    );
-    expect(observed.length).toBeGreaterThanOrEqual(1);
-    expect(
-      observed.every(
-        ([fulfilled, kind]) => fulfilled === undefined && kind === "function",
-      ),
-    ).toBe(true);
-  },
-);
 
 test("forwards start, end and done to the child result without a receiver", () => {
   const start = vi.fn();

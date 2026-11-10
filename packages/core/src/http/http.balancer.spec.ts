@@ -202,44 +202,6 @@ describe("HTTP endpoint balancer", () => {
     ]);
   });
 
-  test("returns REQ_BUILD_FAILED whose cause is the illegal pick result", async () => {
-    // Invalid on purpose: the runtime must keep this value as cause, not wrap it.
-    const illegal = { endpoint: 1 };
-    const client = createClient(
-      withEndpoint("https://example.com"),
-      withBalancer({
-        pick: () =>
-          // @ts-expect-error pick must return an error-first outcome
-          illegal,
-      }),
-    );
-
-    const [fault] = await get(client);
-
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toBe(illegal);
-  });
-
-  test("returns REQ_OPTIONS_INVALID when the balancer reports an option error", async () => {
-    const watched = watch(
-      pickFirstBalancer(
-        // @ts-expect-error shuffle must be a boolean
-        { shuffle: "yes" },
-      ),
-    );
-    const client = createClient(
-      withEndpoint("https://example.com"),
-      withBalancer(watched.balancer),
-    );
-
-    const [fault] = await get(client);
-
-    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(fault?.cause).toBeInstanceOf(TypeError);
-    expect(watched.dones).toEqual([]);
-    expect(watched.picks).toHaveLength(1);
-  });
-
   test("returns REQ_BUILD_FAILED with ERR_NO_CANDIDATE when no endpoint is configured", async () => {
     const watched = watch(pickFirstBalancer());
     const client = createClient(withBalancer(watched.balancer));

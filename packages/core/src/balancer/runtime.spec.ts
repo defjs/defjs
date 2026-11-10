@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { PickInfo, PickOutcome } from "./balancer";
+import type { PickInfo } from "./balancer";
 import { pickEndpoint } from "./runtime";
 import { yieldMacrotask } from "../../test/macrotask";
 
@@ -59,73 +59,9 @@ describe("pick outcome normalization", () => {
     expect(endpointReads).toBe(1);
     expect(doneReads).toBe(1);
   });
-
-  test.each(["length", "0", "1"])(
-    "contains a throwing outcome index/trap %s",
-    (key) => {
-      const cause = new Error(`outcome ${key}`);
-      const outcome = new Proxy([null, { endpoint: "https://a" }], {
-        get(target, property, receiver) {
-          if (property === key) {
-            throw cause;
-          }
-          const value: unknown = Reflect.get(target, property, receiver);
-          return value;
-        },
-      });
-
-      const [fault] = pickEndpoint(
-        {
-          // @ts-expect-error a trapping outcome is not a pick tuple
-          pick: () => outcome,
-        },
-        info,
-      );
-
-      expect(fault?.code).toBe("REQ_BUILD_FAILED");
-      expect(fault?.cause).toBe(cause);
-    },
-  );
-
-  test("contains a throwing result Proxy trap", () => {
-    const cause = new Error("result trap");
-    const done = vi.fn();
-    const result = new Proxy(
-      { endpoint: "https://a", done },
-      {
-        has() {
-          throw cause;
-        },
-        get() {
-          throw cause;
-        },
-      },
-    );
-
-    const [fault] = pickEndpoint({ pick: () => [null, result] }, info);
-
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toBe(cause);
-    expect(done).not.toHaveBeenCalled();
-  });
 });
 
 describe("synchronous balancer callbacks", () => {
-  test("observes a rejected async pick without awaiting it", async () => {
-    const cause = new Error("async pick rejection");
-    const returned = Promise.reject(cause);
-    const [fault] = pickEndpoint(
-      {
-        // @ts-expect-error a promise is not a pick tuple
-        pick: () => returned,
-      },
-      info,
-    );
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toBe(returned);
-    await yieldMacrotask();
-  });
-
   test("observes a rejected async done and finishes once", async () => {
     let calls = 0;
     const [fault, selected] = pickEndpoint(
@@ -164,14 +100,6 @@ describe("synchronous balancer callbacks", () => {
         rejected(new Error("custom rejection"));
       },
     };
-    const [fault] = pickEndpoint(
-      {
-        // @ts-expect-error a thenable is not a pick tuple
-        pick: () => thenable,
-      },
-      info,
-    );
-    expect(fault?.cause).toBe(thenable);
     const [, selected] = pickEndpoint(
       {
         pick: () => [
@@ -185,10 +113,7 @@ describe("synchronous balancer callbacks", () => {
       info,
     );
     selected?.done({ attempted: false });
-    expect(observations).toEqual([
-      [thenable, undefined, "function"],
-      [thenable, undefined, "function"],
-    ]);
+    expect(observations).toEqual([[thenable, undefined, "function"]]);
   });
 
   test("observes callable thenables and ignores non-callable then fields", () => {
@@ -199,16 +124,7 @@ describe("synchronous balancer callbacks", () => {
         rejected("ignored");
       },
     });
-    const [fault] = pickEndpoint(
-      {
-        // @ts-expect-error a callable thenable is not a pick tuple
-        pick: () => thenable,
-      },
-      info,
-    );
-    expect(fault?.cause).toBe(thenable);
-    expect(observations).toBe(1);
-    for (const returned of [null, 42, { then: 42 }]) {
+    for (const returned of [thenable, null, 42, {}, { then: 42 }]) {
       const [, selected] = pickEndpoint(
         {
           pick: () => [
@@ -223,6 +139,7 @@ describe("synchronous balancer callbacks", () => {
       );
       expect(() => selected?.done({ attempted: false })).not.toThrow();
     }
+    expect(observations).toBe(1);
   });
 
   test.each(["get", "call"])(
@@ -254,43 +171,6 @@ describe("synchronous balancer callbacks", () => {
       expect(selected?.finished()).toBe(true);
     },
   );
-});
-
-test("a rejected pick shape ends the pick that reserved state", () => {
-  const done = vi.fn();
-  const [fault, selected] = pickEndpoint(
-    {
-      pick: (): PickOutcome => [
-        null,
-        // @ts-expect-error -- a non-function start is the invalid runtime shape under test
-        { endpoint: "https://a", start: 1, done },
-      ],
-    },
-    info,
-  );
-  expect(fault?.code).toBe("REQ_BUILD_FAILED");
-  expect(selected).toBeUndefined();
-  expect(done).toHaveBeenCalledExactlyOnceWith({ attempted: false });
-});
-
-test("a throwing done on a rejected pick cannot replace the build fault", () => {
-  vi.stubGlobal("reportError", vi.fn());
-  const [fault, selected] = pickEndpoint(
-    {
-      pick: () => [
-        null,
-        {
-          endpoint: "https://elsewhere",
-          done() {
-            throw new Error("done failed");
-          },
-        },
-      ],
-    },
-    info,
-  );
-  expect(fault?.code).toBe("REQ_BUILD_FAILED");
-  expect(selected).toBeUndefined();
 });
 
 describe("callback receiver and failure reporting", () => {
@@ -335,22 +215,6 @@ describe("callback receiver and failure reporting", () => {
     expect(report.mock.calls[0]?.[0]).toBeInstanceOf(TypeError);
   });
 
-  test("releases a rejected pick without a receiver", () => {
-    const done = vi.fn();
-    const result = { endpoint: "https://elsewhere", done };
-    const [fault] = pickEndpoint({ pick: () => [null, result] }, info);
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(done).toHaveBeenCalledOnce();
-    expect(done.mock.contexts[0]).toBeUndefined();
-
-    const invalid = { endpoint: "https://a", done, start: 1 };
-    // @ts-expect-error a non-function start is the invalid runtime shape under test
-    const [shape] = pickEndpoint({ pick: () => [null, invalid] }, info);
-    expect(shape?.code).toBe("REQ_BUILD_FAILED");
-    expect(done).toHaveBeenCalledTimes(2);
-    expect(done.mock.contexts[1]).toBeUndefined();
-  });
-
   test("reports a thrown start, end and done without changing the attempt", () => {
     const report = vi.fn();
     vi.stubGlobal("reportError", report);
@@ -392,29 +256,6 @@ describe("callback receiver and failure reporting", () => {
     expect(report.mock.calls[0]?.[0]).toBe(startError);
     expect(report.mock.calls[1]?.[0]).toBe(endError);
     expect(report.mock.calls[2]?.[0]).toBe(doneError);
-  });
-
-  test("reports a thrown done on a rejected pick and keeps the build fault", () => {
-    const report = vi.fn();
-    vi.stubGlobal("reportError", report);
-    const cause = new Error("release failed");
-    const [fault, selected] = pickEndpoint(
-      {
-        pick: () => [
-          null,
-          {
-            endpoint: "https://elsewhere",
-            done() {
-              throw cause;
-            },
-          },
-        ],
-      },
-      info,
-    );
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(selected).toBeUndefined();
-    expect(report).toHaveBeenCalledExactlyOnceWith(cause);
   });
 
   test("does not report returned rejections or non-conforming thenables", async () => {

@@ -1,12 +1,8 @@
 import { rememberEndpoint } from "./retention";
 import { monotonicNow } from "../internal/clock";
 import type { Balancer } from "./balancer";
-import { ERR_NO_CANDIDATE, balancerOptionError } from "./balancer";
-import {
-  isBalancerOptionRecord,
-  positiveOption,
-  withHealthFilter,
-} from "./outlier_detection";
+import { ERR_NO_CANDIDATE } from "./balancer";
+import { withHealthFilter } from "./outlier_detection";
 import type { OutlierDetectionOptions } from "./outlier_detection";
 /**
  * Options for {@link p2cBalancer}.
@@ -17,11 +13,11 @@ import type { OutlierDetectionOptions } from "./outlier_detection";
 export interface P2cOptions {
   /** Load signal: `"peakEwma"` (default) or `"pending"` in-flight attempts. */
   readonly load?: "peakEwma" | "pending";
-  /** Integer at least 2, capped at 10; defaults to 2. */
+  /** Number of candidates sampled, at least 2 and capped at 10; defaults to 2. */
   readonly choiceCount?: number;
-  /** Positive finite initial RTT estimate in milliseconds; defaults to 30. */
+  /** Initial RTT estimate in milliseconds; defaults to 30. */
   readonly defaultRttMs?: number;
-  /** Positive finite RTT decay time in milliseconds; defaults to 10000. */
+  /** RTT decay time in milliseconds; defaults to 10000. */
   readonly decayMs?: number;
   /** Health filtering; off by default. `{}` enables the defaults. */
   readonly outlierDetection?: OutlierDetectionOptions | false;
@@ -39,9 +35,8 @@ const MIN_ESTIMATE_MS = Number.MIN_VALUE;
  *
  * Defaults to two choices and PeakEwma load: decaying RTT times (pending + 1).
  * `load: "pending"` selects the fewest in-flight attempts in the sample. Ties
- * favor the first draw. `choiceCount` is an integer at least 2, capped at 10.
- * `defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be
- * positive and finite. Pending is reserved when `pick` selects the endpoint, so
+ * favor the first draw. `choiceCount` is at least 2, capped at 10.
+ * `defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd). Pending is reserved when `pick` selects the endpoint, so
  * concurrent picks in one tick see each other, and releases at `end`, the
  * beginning of a peer response (tower CompleteOnResponse), or at `done` when no
  * response began. RTT is the real start-to-end duration for every transport,
@@ -57,18 +52,13 @@ const MIN_ESTIMATE_MS = Number.MIN_VALUE;
  * initial estimate.
  *
  * @param options - Captured load settings, optional health filtering.
- * @returns A new independent balancer; invalid options are returned by every pick.
+ * @returns A new independent balancer.
  * @group client
  * @see {@link P2cOptions}
  * @see {@link outlierDetection}
  * @see {@link roundRobinBalancer}
  */
 export function p2cBalancer(options?: P2cOptions): Balancer {
-  const invalid = invalidP2c(options);
-  if (invalid !== undefined)
-    return {
-      pick: () => [invalid, undefined],
-    };
   const load = options?.load ?? "peakEwma";
   const choiceCount = Math.min(options?.choiceCount ?? 2, 10);
   const defaultRttMs = options?.defaultRttMs ?? 30;
@@ -172,32 +162,4 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
     },
   };
   return withHealthFilter(child, options?.outlierDetection);
-}
-
-function invalidP2c(options: unknown): Error | undefined {
-  if (options === undefined) return undefined;
-  if (!isBalancerOptionRecord(options))
-    return balancerOptionError(
-      new TypeError("p2cBalancer options must be an object"),
-    );
-  if ("isFailure" in options)
-    return balancerOptionError(new TypeError("p2c isFailure was removed"));
-  const load = options["load"];
-  if (load !== undefined && load !== "pending" && load !== "peakEwma")
-    return balancerOptionError(
-      new TypeError("load must be peakEwma or pending"),
-    );
-  const count = options["choiceCount"];
-  if (count !== undefined) {
-    if (typeof count !== "number")
-      return balancerOptionError(new TypeError("choiceCount must be a number"));
-    if (!Number.isInteger(count) || count < 2)
-      return balancerOptionError(
-        new RangeError("choiceCount must be an integer at least 2"),
-      );
-  }
-  return (
-    positiveOption(options["defaultRttMs"], "defaultRttMs") ??
-    positiveOption(options["decayMs"], "decayMs")
-  );
 }

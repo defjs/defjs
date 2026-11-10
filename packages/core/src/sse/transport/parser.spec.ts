@@ -794,22 +794,6 @@ describe("sse parser", () => {
 
     expect(messages).toHaveLength(100);
   });
-
-  test.each([
-    0,
-    -1,
-    1.5,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])("should reject invalid maxBufferSize %s", (maxBufferSize) => {
-    expect(() => createLineParser(noop, { maxBufferSize })).toThrow(
-      "SSE maxBufferSize must be a positive safe integer",
-    );
-    expect(() =>
-      createMessageParser(noop, noop, noop, { maxBufferSize }),
-    ).toThrow("SSE maxBufferSize must be a positive safe integer");
-  });
 });
 
 function nextTurn(): Promise<void> {

@@ -22,14 +22,7 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
   private iteratorClaimed = false;
 
   constructor(options: AsyncQueueOptions = {}) {
-    const { maxSize } = options;
-    if (
-      maxSize !== undefined &&
-      (!Number.isSafeInteger(maxSize) || maxSize < 1)
-    ) {
-      throw new TypeError("AsyncQueue maxSize must be a positive safe integer");
-    }
-    this.maxSize = maxSize;
+    this.maxSize = options.maxSize;
   }
 
   push(value: T): void {

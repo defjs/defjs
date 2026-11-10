@@ -282,28 +282,6 @@ describe("request option snapshots", () => {
     expect(stored?.retry).toBeUndefined();
   });
 
-  test("passes a non-array protocols value through to execution validation", async () => {
-    const opened = recordingSocket();
-    const endpoint = defineWebSocket({
-      incoming: struct.unknown(),
-      path: "/room",
-    });
-    const derived = createClient(
-      withEndpoint("https://example.test"),
-      withWebSocketHandle(opened.Socket),
-    )({
-      // @ts-expect-error protocols must be an array; a record reaches execution
-      protocols: {},
-    });
-
-    expect(derived[CLIENT].options?.protocols).toEqual({});
-    const [error, session] = await endpoint(derived);
-
-    expect(session).toBeUndefined();
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(opened.protocols).toEqual([]);
-  });
-
   test("throws a nested getter from client(options) before transport or abort listeners", async () => {
     const handle = vi.fn(() => Promise.resolve(Response.json({ ok: true })));
     const signal = new AbortController().signal;
@@ -671,16 +649,6 @@ describe("definition and request snapshots", () => {
     expect(await Array.fromAsync(reservedStream ?? [])).toEqual([
       { data: "hidden", event: "tick", id: undefined },
     ]);
-  });
-
-  test("does not throw while declaring an event stream with a missing dictionary", () => {
-    expect(() =>
-      defineEventStream({
-        // @ts-expect-error events are required; absence is checked at execution
-        events: undefined,
-        path: "/events",
-      }),
-    ).not.toThrow();
   });
 
   test("keeps definition protocols after the input array changes", async () => {

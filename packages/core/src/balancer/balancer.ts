@@ -9,19 +9,15 @@ import {
  * Chooses one endpoint for a call.
  *
  * `pick` is synchronous and returns an error-first tuple. It does not throw
- * for an empty candidate list or for invalid factory options. Built-in
- * factories record invalid options at construction and return that error from
- * every later `pick`. A selected endpoint must belong to the candidates supplied
- * to that pick; a foreign selection becomes `REQ_BUILD_FAILED`, and its `done`
- * is called with `{ attempted: false }`.
+ * for an empty candidate list. A selected endpoint is one of the candidates
+ * supplied to that pick.
  *
  * @group client
  */
 export interface Balancer {
   /**
    * Selects an endpoint synchronously, or returns an error when none can be selected.
-   * Must be synchronous: a returned promise is not awaited and its rejection is ignored.
-   * A promise is an invalid pick outcome and becomes `REQ_BUILD_FAILED`.
+   * Must be synchronous.
    */
   pick(info: PickInfo): PickOutcome;
 }
@@ -80,7 +76,7 @@ export interface PickInfo {
  * @group client
  */
 export interface PickResult {
-  /** One of this pick's candidate endpoints. Membership is checked, URL syntax is not. */
+  /** One of this pick's candidate endpoints. */
   readonly endpoint: string;
   /**
    * Called synchronously at most once immediately before the attempt begins.
@@ -204,25 +200,6 @@ function brandSentinel(error: Error): Error {
   return error;
 }
 
-/** Not exported. Marks a factory option error so the runtime can report `REQ_OPTIONS_INVALID`. */
-const OPTION_ERROR = Symbol("defjs.balancer.option-error");
-
-/** Brands `error` as an invalid built-in balancer option. Not a package export. */
-export function balancerOptionError(error: Error): Error {
-  Object.defineProperty(error, OPTION_ERROR, {
-    configurable: false,
-    enumerable: false,
-    value: true,
-    writable: false,
-  });
-  return error;
-}
-
-/** Whether `error` was branded by {@link balancerOptionError}. */
-export function isBalancerOptionError(error: Error): boolean {
-  return OPTION_ERROR in error;
-}
-
 /**
  * Options for {@link pickFirstBalancer}.
  *
@@ -234,7 +211,7 @@ export interface PickFirstOptions {
   readonly outlierDetection?: OutlierDetectionOptions | false;
   /** Random but stable endpoint order instead of list order; defaults to `false`. */
   readonly shuffle?: boolean;
-  /** Finite positive time away from the first endpoint after which the next pick returns to it; unset disables failback. */
+  /** Milliseconds away from the first endpoint after which the next pick returns to it; unset disables failback. */
   readonly failbackMs?: number;
 }
 
@@ -260,7 +237,7 @@ export interface PickFirstOptions {
  * current members, in least-recently-used order; a forgotten endpoint gets a new
  * random key when it returns.
  *
- * `failbackMs`, when finite and positive, returns to the first endpoint by time
+ * `failbackMs`, when set, returns to the first endpoint by time
  * alone: once the sticky endpoint has been away from the first for that long, the
  * next pick whose candidates include the first selects it and makes it sticky
  * again. Nothing judges whether the first endpoint has recovered. If it fails
@@ -270,8 +247,7 @@ export interface PickFirstOptions {
  * created.
  *
  * Every successful `pick` returns `done`. An empty candidate list returns
- * `[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and
- * returned from every `pick` without throwing.
+ * `[ERR_NO_CANDIDATE, undefined]`.
  *
  * Health filtering is off by default. Supply `outlierDetection: {}` to enable
  * default ejection, or configure its thresholds and application health function.
@@ -282,8 +258,7 @@ export interface PickFirstOptions {
  * @see {@link PickFirstOptions}
  */
 export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
-  const invalid = invalidPickFirst(options);
-  const shuffle = options?.shuffle === true;
+  const shuffle = options?.shuffle ?? false;
   const keys = new Map<string, number>();
   let sticky: string | undefined;
   let leftFirstAt: number | undefined;
@@ -291,9 +266,6 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
 
   const child: Balancer = {
     pick(info) {
-      if (invalid !== undefined) {
-        return [invalid, undefined];
-      }
       const candidates = info.endpoints;
       if (candidates.length === 0) {
         return [ERR_NO_CANDIDATE, undefined];
@@ -340,7 +312,6 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
       ];
     },
   };
-  if (invalid !== undefined) return child;
   return withHealthFilter(child, options?.outlierDetection);
 }
 
@@ -374,41 +345,6 @@ export function memberList(
   const known = new Set(members);
   const missing = candidates.filter((endpoint) => !known.has(endpoint));
   return missing.length === 0 ? members : [...members, ...missing];
-}
-
-function invalidPickFirst(options: unknown): Error | undefined {
-  if (options === undefined) {
-    return undefined;
-  }
-  if (!isOptionRecord(options)) {
-    return balancerOptionError(
-      new TypeError("pickFirstBalancer options must be an object"),
-    );
-  }
-  const shuffle = options["shuffle"];
-  if (shuffle !== undefined && typeof shuffle !== "boolean") {
-    return balancerOptionError(
-      new TypeError("pickFirstBalancer shuffle must be a boolean"),
-    );
-  }
-  const failbackMs = options["failbackMs"];
-  if (
-    failbackMs !== undefined &&
-    (typeof failbackMs !== "number" ||
-      !Number.isFinite(failbackMs) ||
-      failbackMs <= 0)
-  ) {
-    return balancerOptionError(
-      new RangeError(
-        "pickFirstBalancer failbackMs must be finite and positive",
-      ),
-    );
-  }
-  return undefined;
-}
-
-function isOptionRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function candidateOrder(
@@ -447,11 +383,7 @@ function candidateOrder(
 export interface RoundRobinOptions {
   /** Health filtering; off by default. `{}` enables the defaults. */
   readonly outlierDetection?: OutlierDetectionOptions | false;
-  /**
-   * Finite positive weight per endpoint; a missing weight is 1. Read by
-   * iteration, so a `Map` from another realm and any custom `ReadonlyMap` work.
-   * Copied at construction.
-   */
+  /** Finite positive weight per endpoint; a missing weight is 1. Copied at construction. */
   readonly weights?: ReadonlyMap<string, number>;
 }
 
@@ -480,8 +412,7 @@ export interface RoundRobinOptions {
  * Health filtering is off by default, so successful picks omit `done`. Supply
  * `outlierDetection: {}` to enable it: five consecutive attributed failures then
  * eject an endpoint temporarily. An empty
- * candidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are
- * remembered here and returned from every `pick` without throwing.
+ * candidate list returns `[ERR_NO_CANDIDATE, undefined]`.
  *
  * @param options - Optional positive finite weights, health filtering.
  * @returns A new balancer. Each call has its own counter and weight state.
@@ -489,22 +420,15 @@ export interface RoundRobinOptions {
  * @see {@link RoundRobinOptions}
  */
 export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
-  const optionError = invalidRoundRobin(options);
-  const copied = optionError === undefined ? copyWeights(options) : undefined;
-  const invalid = copied instanceof Error ? copied : optionError;
-  const weights = copied instanceof Error ? undefined : copied;
+  const weights =
+    options?.weights === undefined ? undefined : new Map(options.weights);
   let counter =
-    invalid === undefined && weights === undefined
-      ? Math.floor(Math.random() * 0x100000000) >>> 0
-      : 0;
+    weights === undefined ? Math.floor(Math.random() * 0x100000000) >>> 0 : 0;
   let current = new Map<string, number>();
   let previousScale = 1;
 
   const child: Balancer = {
     pick(info) {
-      if (invalid !== undefined) {
-        return [invalid, undefined];
-      }
       const endpoints = info.endpoints;
       if (endpoints.length === 0) {
         return [ERR_NO_CANDIDATE, undefined];
@@ -551,79 +475,5 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
       return [null, { endpoint: best }];
     },
   };
-  if (invalid !== undefined) return child;
   return withHealthFilter(child, options?.outlierDetection);
-}
-
-function invalidRoundRobin(options: unknown): Error | undefined {
-  if (options === undefined) {
-    return undefined;
-  }
-  if (!isOptionRecord(options)) {
-    return balancerOptionError(
-      new TypeError("roundRobinBalancer options must be an object"),
-    );
-  }
-  return undefined;
-}
-
-/** Copies `weights` from validated options into a Map of this realm, or returns the option error. */
-function copyWeights(
-  options: unknown,
-): Map<string, number> | Error | undefined {
-  if (!isOptionRecord(options)) return undefined;
-  const copy = new Map<string, number>();
-  try {
-    const weights = options["weights"];
-    if (weights === undefined) return undefined;
-    if (!isIterableObject(weights)) {
-      return balancerOptionError(
-        new TypeError(
-          "roundRobinBalancer weights must be a ReadonlyMap or an iterable of [key, value] entries",
-        ),
-      );
-    }
-    for (const [key, value] of weights) {
-      if (typeof key !== "string") {
-        return balancerOptionError(
-          new TypeError("roundRobinBalancer weight keys must be strings"),
-        );
-      }
-      if (typeof value !== "number") {
-        return balancerOptionError(
-          new TypeError("roundRobinBalancer weights must be numbers"),
-        );
-      }
-      if (!Number.isFinite(value) || value <= 0) {
-        return balancerOptionError(
-          new RangeError(
-            "roundRobinBalancer weights must be finite and greater than 0",
-          ),
-        );
-      }
-      copy.set(key, value);
-    }
-  } catch (thrown) {
-    return balancerOptionError(
-      new TypeError("roundRobinBalancer weights could not be read", {
-        cause: thrown,
-      }),
-    );
-  }
-  return copy;
-}
-
-/**
- * Whether `value` can be read by iteration; `instanceof Map` rejects other
- * realms and custom implementations. Entries are checked while they are read.
- */
-function isIterableObject(
-  value: unknown,
-): value is Iterable<readonly [unknown, unknown]> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Symbol.iterator in value &&
-    typeof value[Symbol.iterator] === "function"
-  );
 }

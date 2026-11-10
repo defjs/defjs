@@ -56,43 +56,6 @@ describe("web socket runtime", () => {
     expect(error?.code.startsWith("NET_")).toBe(true);
   });
 
-  test.each([
-    {
-      options: {
-        heartbeat: {
-          intervalMs: Number.POSITIVE_INFINITY,
-          message: () => undefined,
-        },
-      },
-      source: "heartbeat",
-    },
-  ])(
-    "should reject invalid $source timer config before constructing a socket",
-    async ({ options }) => {
-      let constructorCalls = 0;
-      const isolated = createClient(
-        withEndpoint(inject("testServerHost")),
-        withWebSocketHandle(
-          testHandle(() => {
-            constructorCalls += 1;
-          }),
-        ),
-      );
-      const useSocket = defineWebSocket({
-        incoming: struct.unknown(),
-        path: "/ws/basic",
-      });
-
-      const [error, socket, connection] = await useSocket(isolated(options));
-
-      expect(error?.code.startsWith("REQ_")).toBe(true);
-      expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-      expect(socket).toBeUndefined();
-      expect(connection).toBeUndefined();
-      expect(constructorCalls).toBe(0);
-    },
-  );
-
   test("should resolve execute and receive typed messages", async () => {
     const useChatSocket = defineWebSocket({
       builder: (input) => ({ query: input }),

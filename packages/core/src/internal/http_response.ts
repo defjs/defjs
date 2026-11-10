@@ -107,19 +107,6 @@ export function makeResponse<R>(
   };
 }
 
-/**
- * Whether `value` is an `HttpResponse`: built by `makeResponse` or the transport, or derived from one by spreading.
- * The brand is the runtime half of the type's nominal guard, so a native `Response` or a lookalike object fails.
- */
-export function isHttpResponse(value: unknown): value is HttpResponse<unknown> {
-  // Functions can carry the brand too. Reflect.get is one [[Get]]; an `in` check would call a proxy's has trap.
-  return (
-    ((typeof value === "object" && value !== null) ||
-      typeof value === "function") &&
-    Reflect.get(value, HTTP_RESPONSE) === true
-  );
-}
-
 export function getHttpErrorMessage(response: {
   readonly status: number;
   readonly statusText: string;

@@ -183,11 +183,11 @@ describe("fault factories", () => {
 
     test("should stringify a non-error cause", () => {
       const fault = createPreflightFault(
-        "REQ_OPTIONS_INVALID",
-        "abort and timeout are exclusive",
+        "REQ_BUILD_FAILED",
+        "the builder returned a bad value",
       );
 
-      expect(fault.message).toBe("abort and timeout are exclusive");
+      expect(fault.message).toBe("the builder returned a bad value");
     });
   });
 

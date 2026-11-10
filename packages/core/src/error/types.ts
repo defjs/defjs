@@ -35,7 +35,6 @@ export type FaultCode =
   | "NET_UNREACHABLE"
   | "REQ_BUILD_FAILED"
   | "REQ_INPUT_INVALID"
-  | "REQ_OPTIONS_INVALID"
   | "RES_DECODE_FAILED"
   | "RES_MEDIA_TYPE_INVALID"
   | "RES_STRUCT_MISMATCH";
@@ -70,7 +69,7 @@ export type DecodeFaultCode =
  * Every `FaultCode` except `HTTP_STATUS` and the decode codes:
  * `CAP_BUFFER_EXCEEDED`, `ENV_UNSUPPORTED`, `EXT_HOOK_FAILED`,
  * `EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`, `NET_ABORTED`, `NET_BODY_INCOMPLETE`, `NET_TIMEOUT`, `NET_UNREACHABLE`,
- * `REQ_BUILD_FAILED`, `REQ_INPUT_INVALID`, and `REQ_OPTIONS_INVALID`. These
+ * `REQ_BUILD_FAILED`, and `REQ_INPUT_INVALID`. These
  * are the `code` values of `PreflightFault`.
  *
  * @group errors

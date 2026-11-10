@@ -1,7 +1,7 @@
 import { afterEach, expect, inject, test, vi } from "vitest";
 import type { Balancer, DoneInfo, PickInfo, PickOutcome } from "../balancer";
 import type { RetryContext } from "../client/config";
-import { outlierDetection, pickFirstBalancer } from "../balancer";
+import { outlierDetection } from "../balancer";
 import {
   createClient,
   withEndpoint,
@@ -672,23 +672,6 @@ test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async (
   ]);
   expect(recorded.pending()).toBe(0);
 
-  const broken = pickFirstBalancer({
-    // @ts-expect-error shuffle rejects every non-boolean at runtime
-    shuffle: 1,
-  });
-  const options = track((index, info) =>
-    index === 1 ? down.url : broken.pick(info),
-  );
-  const [optionError] = await orders(
-    createClient(
-      withEndpoint(down.url),
-      withBalancer(options.balancer),
-      withRetry(RECONNECT),
-    ),
-  );
-  expect(optionError?.code).toBe("REQ_OPTIONS_INVALID");
-  expect(optionError?.code).not.toBe("NET_UNREACHABLE");
-  expect(options.pending()).toBe(0);
   expectPicks(recorded);
 });
 
@@ -722,26 +705,6 @@ test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open"
   );
   expect(recorded.pending()).toBe(0);
 
-  const broken = pickFirstBalancer({
-    // @ts-expect-error shuffle rejects every non-boolean at runtime
-    shuffle: 1,
-  });
-  const options = track((index, info) =>
-    index === 1 ? dropped.url : broken.pick(info),
-  );
-  const [optionError, optionStream] = await orders(
-    createClient(
-      withEndpoint(dropped.url),
-      withBalancer(options.balancer),
-      withRetry(RECONNECT),
-    ),
-  );
-  expect(optionError).toBeNull();
-  expect(await optionStream?.closed).toMatchObject({
-    code: "REQ_OPTIONS_INVALID",
-    kind: "error",
-  });
-  expect(options.pending()).toBe(0);
   expectPicks(recorded);
 });
 

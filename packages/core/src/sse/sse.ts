@@ -132,7 +132,7 @@ type EventStreamErrorField<TError extends AnyStruct | undefined> = [
  *
  * The composed members are:
  *
- * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, and `maxBufferSize` (default `64 * 1024` bytes, a positive safe integer when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. The library holds at most 1024 events waiting for the `for await` consumer; when they are full, reading the response pauses until the consumer takes one. No event is dropped for lack of room and the stream does not fail.
+ * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. The library holds at most 1024 events waiting for the `for await` consumer; when they are full, reading the response pauses until the consumer takes one. No event is dropped for lack of room and the stream does not fail.
  *
  * - `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.
  *
@@ -229,9 +229,6 @@ type SnapshotDescriptor = Omit<PropertyDescriptor, "get"> & {
 };
 
 function snapshotEventDictionary(events: EventStructs): EventStructs {
-  if (typeof events !== "object" || events === null) {
-    return events;
-  }
   const descriptors: { [key: string]: SnapshotDescriptor } =
     Object.getOwnPropertyDescriptors(events);
   for (const descriptor of Object.values(descriptors)) {
@@ -252,11 +249,11 @@ function snapshotEventDictionary(events: EventStructs): EventStructs {
  * Pass path and event structs. Call the returned operation
  * with a client and, when declared, the input.
  *
- * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024`, a positive safe integer when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; the library holds at most 1024 unread events, and a full queue pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; the library holds at most 1024 unread events, and a full queue pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * `EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.
  *
- * Known fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A missing or non-object dictionary is left as given. A getter on a fixed definition field runs during `defineEventStream`.
+ * Known fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A getter on a fixed definition field runs during `defineEventStream`.
  *
  * @param definition - SSE contract (path, events, optional input and limits).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
@@ -331,15 +328,6 @@ async function runEventStreamCommand<
 
   // Resolve the retry policy at preflight so an interceptor cannot change it.
   const retry = resolveRetryPolicy(config?.retry ?? clientConfig.retry);
-  try {
-    validateEventStreamLimits(endpoint);
-  } catch (error) {
-    return [
-      createPreflightFault("REQ_OPTIONS_INVALID", error),
-      undefined,
-      undefined,
-    ];
-  }
 
   // `signal` stays in force after open. Listeners stay off the caller's signal.
   const requestSignal = mergeAbortSignals(controller.signal, [callerAbort]);
@@ -573,18 +561,7 @@ async function runEventStreamCommand<
         () => sseChain(request, sseHandler),
         requestSignal,
       );
-      const publicOpen = stream?.open;
-      if (
-        typeof stream?.closed?.then !== "function" ||
-        typeof stream.close !== "function" ||
-        typeof stream[Symbol.asyncIterator] !== "function" ||
-        typeof stream[Symbol.asyncDispose] !== "function" ||
-        typeof publicOpen?.url !== "string"
-      ) {
-        throw new TypeError(
-          "SSE interceptor must resolve an event stream handle",
-        );
-      }
+      const publicOpen = stream.open;
       chainSettled = true;
       const release = () => releaseAbortSignal(requestSignal);
       void stream.closed.then(release, release);
@@ -738,15 +715,6 @@ async function notifyInvalidEvent(
     // onInvalidEvent is an observer; observer failures must not tear down the stream.
   }
   return undefined;
-}
-
-function validateEventStreamLimits(endpoint: { maxBufferSize: number }): void {
-  if (
-    !Number.isSafeInteger(endpoint.maxBufferSize) ||
-    endpoint.maxBufferSize < 1
-  ) {
-    throw new TypeError("SSE maxBufferSize must be a positive safe integer");
-  }
 }
 
 function resolveEventStruct<TEvents extends EventStructs>(

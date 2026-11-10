@@ -39,21 +39,6 @@ test("start is snapshotted once, invoked synchronously at most once, and never a
   other?.start();
   expect(start).toHaveBeenCalledTimes(1);
 });
-test.each([1, null, "start"])(
-  "invalid start %j rejects the pick outcome",
-  (start) => {
-    const result = { endpoint: "a", start };
-    const [fault] = pickEndpoint(
-      {
-        // @ts-expect-error start must be a function or absent
-        pick: () => [null, result],
-      },
-      info,
-    );
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toEqual([null, result]);
-  },
-);
 test("a throwing start getter becomes REQ_BUILD_FAILED without calling done", () => {
   const cause = new Error("getter");
   const done = vi.fn();

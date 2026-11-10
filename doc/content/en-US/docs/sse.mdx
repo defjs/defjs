@@ -95,7 +95,7 @@ Idle behavior differs on other runtimes and is not covered here.
 
 ## 5. Buffer and queue limits
 
-The one definition option is `maxBufferSize`, default `64 * 1024` bytes, a positive safe integer. The event queue is not configurable: the library holds at most 1024 validated events waiting for the `for await` consumer. There is no default handshake deadline: a pending Fetch waits for the platform, caller cancellation, or an explicitly configured `attemptTimeoutMs`.
+The one definition option is `maxBufferSize`, default `64 * 1024` bytes. The event queue is not configurable: the library holds at most 1024 validated events waiting for the `for await` consumer. There is no default handshake deadline: a pending Fetch waits for the platform, caller cancellation, or an explicitly configured `attemptTimeoutMs`.
 
 | Limit                    | What it bounds                                              | At the limit                                                                                             |
 | ------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
