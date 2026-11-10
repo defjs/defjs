@@ -23,9 +23,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 function recording(events: string[]): Balancer {
+  let picks = 0;
   return {
     pick({ endpoints }) {
-      const endpoint = endpoints[0] ?? "";
+      const endpoint = endpoints[picks++ % endpoints.length] ?? "";
       return [
         null,
         {

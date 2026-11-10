@@ -20,11 +20,15 @@ const client = createClient(
   withEndpoint("https://api-us.example.com", "https://api-eu.example.com"),
   withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),
   withRetry({
-    maxAttempts: 3,
-    on: ["connect-failure", "gateway-error", "attempt-timeout"],
+    maxRetries: 2,
     attemptTimeoutMs: 2_000,
-    delayMs: 25,
-    maxDelayMs: 250,
+    delayMs: 500,
+    maxDelayMs: 5_000,
+    // The default retries a connection failure, a 502, 503, or 504, and a timeout.
+    // This policy also retries a 429 and leaves every other decision to the default.
+    shouldRetry: (context) =>
+      context.retryable ||
+      (context.transport === "http" && context.status === 429),
     budget: {
       percentCanRetry: 0.2,
       minRetriesPerSecond: 10,

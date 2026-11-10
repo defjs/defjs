@@ -99,7 +99,7 @@ export function registerHttpFailoverUploadSuite(cap: UploadCapability): void {
   test("ReadableStream requests never fail over even for an opted-in POST", async () => {
     const body = closedStream();
     const { client, requests } = fixture(
-      policy({ maxAttempts: 2, methods: ["POST"], on: ["connect-failure"] }),
+      policy({ maxRetries: 1, methods: ["POST"] }),
     );
     const [fault, result, response] = await defineRequest({
       method: "POST",

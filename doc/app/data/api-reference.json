@@ -788,7 +788,7 @@
     "group": "client",
     "description": "Flat per-call options. Each protocol reads the fields it understands and ignores the rest.\n\nSSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.\n\n`signal` cancels HTTP, SSE, and WebSocket calls. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, `heartbeat`, and `reconnect` apply to WebSocket and replace the client setting for that call as a whole value. `client(options)` copies `heartbeat`, `reconnect`, and a `protocols` array at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. There is no `timeout` or `abort` field. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline.",
     "signatures": [
-      "type RequestOptions = {\n  signal?: AbortSignal;\n  onUploadProgress?: HttpProgressFn;\n  onDownloadProgress?: HttpProgressFn;\n  beforeConnect?: ClientWebSocketOptions[\"beforeConnect\"];\n  protocols?: readonly string[];\n  heartbeat?: ClientWebSocketOptions[\"heartbeat\"];\n  reconnect?: ClientWebSocketOptions[\"reconnect\"];\n};"
+      "type RequestOptions = {\n  signal?: AbortSignal;\n  onUploadProgress?: HttpProgressFn;\n  onDownloadProgress?: HttpProgressFn;\n  beforeConnect?: ClientWebSocketOptions[\"beforeConnect\"];\n  protocols?: readonly string[];\n  heartbeat?: ClientWebSocketOptions[\"heartbeat\"];\n  reconnect?: ClientWebSocketOptions[\"reconnect\"];\n  retry?: Omit<RetryOptions, \"budget\">;\n};"
     ],
     "related": [],
     "exampleFiles": [],
@@ -858,12 +858,21 @@
         "required": false,
         "deprecated": false,
         "tags": []
+      },
+      {
+        "name": "retry",
+        "description": "Retry policy for this call. Replaces the client policy as a whole value; the `budget` stays with the client.",
+        "type": "Omit<RetryOptions, \"budget\"> | undefined",
+        "simplifiedType": "Omit<object, \"budget\">",
+        "required": false,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "parameters": [],
     "overloads": [
       {
-        "signature": "type RequestOptions = {\n  signal?: AbortSignal;\n  onUploadProgress?: HttpProgressFn;\n  onDownloadProgress?: HttpProgressFn;\n  beforeConnect?: ClientWebSocketOptions[\"beforeConnect\"];\n  protocols?: readonly string[];\n  heartbeat?: ClientWebSocketOptions[\"heartbeat\"];\n  reconnect?: ClientWebSocketOptions[\"reconnect\"];\n};",
+        "signature": "type RequestOptions = {\n  signal?: AbortSignal;\n  onUploadProgress?: HttpProgressFn;\n  onDownloadProgress?: HttpProgressFn;\n  beforeConnect?: ClientWebSocketOptions[\"beforeConnect\"];\n  protocols?: readonly string[];\n  heartbeat?: ClientWebSocketOptions[\"heartbeat\"];\n  reconnect?: ClientWebSocketOptions[\"reconnect\"];\n  retry?: Omit<RetryOptions, \"budget\">;\n};",
         "parameters": [],
         "returns": []
       }
@@ -922,7 +931,7 @@
     "group": "client",
     "description": "Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure.\n\nThe user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint`. {@link ClientConfig} is the resolved counterpart. The HTTP members come from the non-exported `HttpClientOptions` base and are shown inline.",
     "signatures": [
-      "interface ClientOptions extends HttpClientOptions {\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}"
+      "interface ClientOptions extends HttpClientOptions {\n  retry?: RetryOptions;\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -930,6 +939,15 @@
     "throws": [],
     "tags": [],
     "typeTable": [
+      {
+        "name": "retry",
+        "description": "Opt-in retry policy shared by HTTP, SSE, and WebSocket.",
+        "type": "RetryOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
       {
         "name": "sse",
         "description": "SSE transport and reconnect options.",
@@ -969,7 +987,7 @@
       {
         "name": "http",
         "description": "HTTP transport overrides; the default resolves global `fetch` on each call.",
-        "type": "{ handle?: FetchHandle; retry?: RetryOptions; } | undefined",
+        "type": "{ handle?: FetchHandle; } | undefined",
         "simplifiedType": "object",
         "required": false,
         "deprecated": false,
@@ -1006,7 +1024,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientOptions extends HttpClientOptions {\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}",
+        "signature": "interface ClientOptions extends HttpClientOptions {\n  retry?: RetryOptions;\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}",
         "parameters": [],
         "returns": []
       }
@@ -1019,9 +1037,9 @@
     "slug": "core/clientconfig-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `http.retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.",
+    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.",
     "signatures": [
-      "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}"
+      "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  retry?: RetryOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -1035,6 +1053,15 @@
         "type": "Balancer",
         "simplifiedType": "object",
         "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retry",
+        "description": "Retry policy shared by HTTP, SSE, and WebSocket. Unset means every call makes one attempt.",
+        "type": "RetryOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
         "deprecated": false,
         "tags": []
       },
@@ -1077,7 +1104,7 @@
       {
         "name": "http",
         "description": "HTTP transport with a required fetch handle.",
-        "type": "{ handle: FetchHandle; retry?: RetryOptions; }",
+        "type": "{ handle: FetchHandle; }",
         "simplifiedType": "object",
         "required": true,
         "deprecated": false,
@@ -1123,7 +1150,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}",
+        "signature": "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  retry?: RetryOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}",
         "parameters": [],
         "returns": []
       }
@@ -1852,7 +1879,7 @@
     "slug": "core/httpexecuteoptions-type",
     "source": "packages/core/src/http/http.ts",
     "group": "http",
-    "description": "HTTP fields read from {@link RequestOptions} for one call.\n\nProgress callbacks and `signal`. There is no `timeout` or `abort`.",
+    "description": "HTTP fields read from {@link RequestOptions} for one call.\n\nProgress callbacks, `retry`, and `signal`. There is no `timeout` or `abort`.",
     "signatures": ["type HttpExecuteOptions = UseRequestConfig;"],
     "related": [],
     "exampleFiles": [],
@@ -1876,9 +1903,9 @@
     "slug": "core/userequestconfig-type",
     "source": "packages/core/src/http/http.ts",
     "group": "http",
-    "description": "HTTP fields of {@link RequestOptions}: progress callbacks and `signal`.\n\n`onDownloadProgress` and `onUploadProgress` are {@link HttpProgressFn}\ncallbacks. They receive an {@link HttpProgressEvent} with `loaded`, `total`,\nand `lengthComputable`. Other request fields are ignored by HTTP.",
+    "description": "HTTP fields of {@link RequestOptions}: progress callbacks, `retry`, and `signal`.\n\n`onDownloadProgress` and `onUploadProgress` are {@link HttpProgressFn}\ncallbacks. They receive an {@link HttpProgressEvent} with `loaded`, `total`,\nand `lengthComputable`. `retry` replaces the client's retry policy for this\ncall. Other request fields are ignored by HTTP.",
     "signatures": [
-      "type UseRequestConfig = {\n  signal?: AbortSignal;\n  onDownloadProgress?: HttpProgressFn;\n  onUploadProgress?: HttpProgressFn;\n};"
+      "type UseRequestConfig = {\n  signal?: AbortSignal;\n  onDownloadProgress?: HttpProgressFn;\n  onUploadProgress?: HttpProgressFn;\n  retry?: Omit<RetryOptions, \"budget\">;\n};"
     ],
     "related": [],
     "exampleFiles": [],
@@ -1912,12 +1939,21 @@
         "required": false,
         "deprecated": false,
         "tags": []
+      },
+      {
+        "name": "retry",
+        "description": "Retry policy for this call. Replaces the client policy as a whole value; the `budget` stays with the client.",
+        "type": "Omit<RetryOptions, \"budget\"> | undefined",
+        "simplifiedType": "Omit<object, \"budget\">",
+        "required": false,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "parameters": [],
     "overloads": [
       {
-        "signature": "type UseRequestConfig = {\n  signal?: AbortSignal;\n  onDownloadProgress?: HttpProgressFn;\n  onUploadProgress?: HttpProgressFn;\n};",
+        "signature": "type UseRequestConfig = {\n  signal?: AbortSignal;\n  onDownloadProgress?: HttpProgressFn;\n  onUploadProgress?: HttpProgressFn;\n  retry?: Omit<RetryOptions, \"budget\">;\n};",
         "parameters": [],
         "returns": []
       }
@@ -8594,7 +8630,7 @@
     "slug": "core/pickinfo-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "What the runtime tells `pick` about this call.\n\n`endpoints` is the candidate list in first-seen order. It may be empty and\nmust not be modified. An empty list returns `[ERR_NO_CANDIDATE, undefined]`.\nA retried HTTP call leaves out the endpoints it already tried, and a wrapping\nbalancer can leave out endpoints it filtered, so the list can shrink between\nattempts of one call.\n\n`members` is the client's whole endpoint list, the same for every attempt.\nA narrower `endpoints` is a per-pick filter, not a membership change, so\nbalancers that keep order or per-endpoint state key it on `members`.",
+    "description": "What the runtime tells `pick` about this call.\n\n`endpoints` is the candidate list in first-seen order. It may be empty and\nmust not be modified. An empty list returns `[ERR_NO_CANDIDATE, undefined]`.\nA retry picks again from every endpoint. Only a wrapping balancer that\nfilters candidates can make the list shorter than the client's endpoint list.\n\n`members` is the client's whole endpoint list, the same for every attempt.\nA narrower `endpoints` is a per-pick filter, not a membership change, so\nbalancers that keep order or per-endpoint state key it on `members`.",
     "signatures": [
       "interface PickInfo {\n  readonly endpoints: readonly string[];\n  readonly members?: readonly string[];\n  readonly operation?: string;\n}"
     ],
@@ -9098,21 +9134,17 @@
     "slug": "core/withretry",
     "source": "packages/core/src/client/option.ts",
     "group": "client",
-    "description": "Configures opt-in same-call HTTP retries independently of endpoint balancing.\n\nWithout this option HTTP tries once and creates no retry budget. Calling it\nwith no argument, `undefined`, or `{}` enables two total attempts for GET,\nHEAD, OPTIONS, and TRACE connection failures.\nEach retry rebuilds the request and reruns the complete interceptor chain,\nselecting an untried endpoint. Streaming request bodies and offline failures\nnever retry. Local failures before Fetch starts are not connection failures.\nRetry eligibility checks every method actually sent by the attempt, after\ninterceptor rewrites; with no transport invocation it uses the defined method.\nA single configured endpoint is never replayed, because retries exclude every\nendpoint already tried by this call.\nSSE and WebSocket use their separate reconnect policies instead.\n\nDefaults are 25 ms delay, factor 2, 250 ms cap, and jitter 0.2. The caller's\nsignal covers all attempts and waits; `attemptTimeoutMs` covers each transport\nattempt and must be finite, positive, and at most `2_147_483_647` ms.\nInvalid policy values return `REQ_OPTIONS_INVALID` at HTTP execution.\nOwned fields, arrays, and the budget record are captured when the option is\napplied. A later option replaces the policy. `undefined` does not clear it;\npass `{ maxAttempts: 1 }` to turn retries off after enabling them.",
+    "description": "Enables retries for HTTP, SSE, and WebSocket, with backoff and an optional policy function.\n\nRetries are opt-in: without this option every call makes one attempt, and an HTTP call creates no retry budget. Calling it with no argument or `{}` enables the defaults: 3 retries after the first attempt, a 1000 ms delay that doubles per retry up to 30000 ms, and jitter of 0.2. The same options apply to every transport; see {@link RetryOptions} for the decision order after a failure and for what counts as a retryable failure on each one.\n\n- HTTP retries a method in `methods` when the attempt got no response, got a 502, 503, or 504, or ran out of `attemptTimeoutMs`. Each retry rebuilds the request, reruns the complete interceptor chain, and lets the balancer pick again from every endpoint, so a single endpoint is tried again after the delay. Local failures before Fetch starts are not retried. Retry eligibility checks every method actually sent by the attempt, after interceptor rewrites; with no transport invocation it uses the defined method. A `budget` limits how many retries the client can make.\n- SSE retries a method in `methods` after a handshake network failure, a 502, 503, or 504 handshake, an attempt timeout, or a network error after the stream opened. Normal EOF ends the stream. The `retry:` field of the server replaces `delayMs`, and the next attempt sends `Last-Event-ID`. A successful handshake resets the count.\n- WebSocket retries every close that `session.close()` did not request, including a connection that never opened and a heartbeat timeout. A successful `open` resets the count.\n- A `ReadableStream` request body, a caller abort, a manual close, and fatal errors end the call without a retry and without calling `shouldRetry`.\n\nCallers that need a time limit without retries use `withRetry({ maxRetries: 0, attemptTimeoutMs })`. The signal of the caller covers all attempts and waits. A later `withRetry` replaces the policy as a whole, and passing `undefined` is the same as passing `{}`; pass `{ maxRetries: 0 }` to turn retries off after enabling them. The `methods` array and the `budget` record are copied when the option is applied. A request option `retry` replaces this policy for one call, except `budget`, which stays with the client.",
     "signatures": ["function withRetry(options?: RetryOptions): ClientOption;"],
-    "related": [
-      "@defjs/core:RetryOptions",
-      "@defjs/core:withSSEReconnect",
-      "@defjs/core:withWebSocketReconnect"
-    ],
+    "related": ["@defjs/core:RetryOptions"],
     "exampleFiles": [
       {
         "path": "examples/client/http-retry.ts",
         "region": "example",
-        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxAttempts: 3,\n    on: [\"connect-failure\", \"gateway-error\", \"attempt-timeout\"],\n    attemptTimeoutMs: 2_000,\n    delayMs: 25,\n    maxDelayMs: 250,\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [error, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (error) {\n    console.error(error.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
+        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxRetries: 2,\n    attemptTimeoutMs: 2_000,\n    delayMs: 500,\n    maxDelayMs: 5_000,\n    // The default retries a connection failure, a 502, 503, or 504, and a timeout.\n    // This policy also retries a 429 and leaves every other decision to the default.\n    shouldRetry: (context) =>\n      context.retryable ||\n      (context.transport === \"http\" && context.status === 429),\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [error, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (error) {\n    console.error(error.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
       }
     ],
-    "returns": ["An option that writes `config.http.retry`."],
+    "returns": ["An option that writes `config.retry`."],
     "throws": [],
     "tags": [],
     "typeTable": null,
@@ -9141,33 +9173,7 @@
             "tags": []
           }
         ],
-        "returns": ["An option that writes `config.http.retry`."]
-      }
-    ]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "RetryCondition",
-    "kind": "type",
-    "slug": "core/retrycondition-type",
-    "source": "packages/core/src/client/config.ts",
-    "group": "client",
-    "description": "Conditions that allow HTTP to try a different endpoint within one call.",
-    "signatures": [
-      "type RetryCondition =\n  \"connect-failure\" | \"gateway-error\" | \"attempt-timeout\";"
-    ],
-    "related": [],
-    "exampleFiles": [],
-    "returns": [],
-    "throws": [],
-    "tags": [],
-    "typeTable": null,
-    "parameters": [],
-    "overloads": [
-      {
-        "signature": "type RetryCondition =\n  \"connect-failure\" | \"gateway-error\" | \"attempt-timeout\";",
-        "parameters": [],
-        "returns": []
+        "returns": ["An option that writes `config.retry`."]
       }
     ]
   },
@@ -9178,16 +9184,16 @@
     "slug": "core/retryoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Opt-in same-call HTTP retry policy. Omitted fields use defaults.\n\nCall {@link withRetry}() or pass `{}` to enable retries. Omission disables retries\nand creates no retry budget. Streaming request bodies are\nnever replayed. Invalid options return `REQ_OPTIONS_INVALID` at HTTP execution.\nWhen a retry cannot use any endpoint — the balancer's pick fails or the next\nendpoint's URL does not resolve — the call returns the previous attempt's fault.",
+    "description": "Opt-in retry policy for HTTP, SSE, and WebSocket.\n\nCall {@link withRetry}() or pass `{}` to enable retries with the defaults. Without a policy every call makes one attempt. Per call, `client({ retry })` replaces the client's policy as a whole value.\n\nAfter each failed attempt the policy decides in this order:\n\n1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, and a `ReadableStream` request body end the call. `shouldRetry` is not called.\n2. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.\n3. `shouldRetry(context)` decides. Without it, `context.retryable` does.\n4. HTTP only: a retry that the `budget` cannot pay for ends the call.\n5. The call waits for the backoff delay, then the balancer picks an endpoint again. Every endpoint is a candidate, including the one that just failed, so a single endpoint is tried again after the delay.",
     "signatures": [
-      "interface RetryOptions {\n  readonly maxAttempts?: number;\n  readonly on?: readonly RetryCondition[];\n  readonly methods?: readonly string[];\n  readonly attemptTimeoutMs?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly jitter?: number;\n  readonly maxDelayMs?: number;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}"
+      "interface RetryOptions {\n  readonly maxRetries?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly maxDelayMs?: number;\n  readonly jitter?: number;\n  readonly attemptTimeoutMs?: number;\n  readonly methods?: readonly string[];\n  readonly shouldRetry?: (context: RetryContext) => boolean | Promise<boolean>;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}"
     ],
-    "related": [],
+    "related": ["@defjs/core:withRetry"],
     "exampleFiles": [
       {
         "path": "examples/client/http-retry.ts",
         "region": "example",
-        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxAttempts: 3,\n    on: [\"connect-failure\", \"gateway-error\", \"attempt-timeout\"],\n    attemptTimeoutMs: 2_000,\n    delayMs: 25,\n    maxDelayMs: 250,\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [error, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (error) {\n    console.error(error.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
+        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxRetries: 2,\n    attemptTimeoutMs: 2_000,\n    delayMs: 500,\n    maxDelayMs: 5_000,\n    // The default retries a connection failure, a 502, 503, or 504, and a timeout.\n    // This policy also retries a 429 and leaves every other decision to the default.\n    shouldRetry: (context) =>\n      context.retryable ||\n      (context.transport === \"http\" && context.status === 429),\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [error, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (error) {\n    console.error(error.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
       }
     ],
     "returns": [],
@@ -9195,35 +9201,8 @@
     "tags": [],
     "typeTable": [
       {
-        "name": "maxAttempts",
-        "description": "Total attempts including the original (gRPC retryPolicy.maxAttempts / go-kit lb.Retry max). Safe integer at least 1; defaults to 2. One disables retries; there is no configured upper bound, but each endpoint is tried at most once.",
-        "type": "number | undefined",
-        "simplifiedType": "number",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "on",
-        "description": "Retryable outcomes. Defaults to connection failures only; local failures\nbefore Fetch starts do not qualify. Gateway errors\ninclude NET_UNAVAILABLE responses, including those whose declared error body fails with\na response-side RES_* fault. Successful or extension-failed interceptor\nresults never trigger gateway retry.",
-        "type": "readonly RetryCondition[] | undefined",
-        "simplifiedType": "array",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "methods",
-        "description": "Allowed methods, case-insensitive. Every method sent by an attempt after interceptor rewrites must qualify; without a transport invocation, the defined method is used. Defaults to GET, HEAD, OPTIONS, TRACE.",
-        "type": "readonly string[] | undefined",
-        "simplifiedType": "array",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "attemptTimeoutMs",
-        "description": "Positive finite timeout for each Fetch sent to the selected endpoint, from\ninvocation until its response body has been read; at most `2_147_483_647` ms.\nInterceptor work around the send and struct decoding are not timed, so local\ndelays never count against the endpoint.",
+        "name": "maxRetries",
+        "description": "Retries after the first attempt. Defaults to 3; `0` never retries. For SSE and WebSocket the count restarts when a connection is established again.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9232,7 +9211,7 @@
       },
       {
         "name": "delayMs",
-        "description": "Initial finite non-negative backoff delay in milliseconds; defaults to 25. Zero skips waiting.",
+        "description": "Initial backoff delay in milliseconds. Defaults to 1000. Zero skips waiting.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9241,16 +9220,7 @@
       },
       {
         "name": "factor",
-        "description": "Finite positive multiplier per retry; defaults to 2. The first retry uses exponent zero.",
-        "type": "number | undefined",
-        "simplifiedType": "number",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "jitter",
-        "description": "Finite multiplicative jitter in [0, 1]; defaults to 0.2 (plus or minus twenty percent).",
+        "description": "Multiplier applied to the delay for each further retry. Defaults to 2. The first retry waits `delayMs`.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9259,7 +9229,7 @@
       },
       {
         "name": "maxDelayMs",
-        "description": "Non-negative finite cap on the final delay, or positive Infinity; defaults to 250. The platform timer cap still applies.",
+        "description": "Cap on the final delay in milliseconds, jitter included. Defaults to 30000; `Infinity` removes the cap. The platform timer limit of `2_147_483_647` still applies.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9267,8 +9237,44 @@
         "tags": []
       },
       {
+        "name": "jitter",
+        "description": "Multiplicative jitter in [0, 1]. Defaults to 0.2, plus or minus twenty percent.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "attemptTimeoutMs",
+        "description": "Time limit for one attempt in milliseconds. Unset by default. HTTP counts from the call to the end of the response body, SSE to the response headers, WebSocket to `open`. An attempt that runs out is a failure that the policy handles like a connection failure.\nUse `withRetry({ maxRetries: 0, attemptTimeoutMs })` for a time limit without retries.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "methods",
+        "description": "Methods the default policy retries, case-insensitive. Defaults to GET, HEAD, OPTIONS, TRACE, PUT, and DELETE. HTTP checks every method an attempt sent, after interceptor rewrites. WebSocket ignores it.",
+        "type": "readonly string[] | undefined",
+        "simplifiedType": "array",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "shouldRetry",
+        "description": "Decides whether a failed attempt is retried. It is called after the `maxRetries` check and replaces `context.retryable`; return it to keep the default. It may return a promise, which the caller's signal can cancel. A throw ends the call with that value as the cause.",
+        "type": "((context: RetryContext) => boolean | Promise<boolean>) | undefined",
+        "simplifiedType": "function",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
         "name": "budget",
-        "description": "Client-owned Finagle retry budget; false removes the cap.\nDerived clients sharing one configuration share its budget. Separate clients\nkeep independent budgets, even when they share a balancer. Credits and debits\nexpire lazily in ten TTL/10 slices (at most one slice early).\nDefaults: 20% plus 10 retries/second of reserve over a 10000 ms TTL.",
+        "description": "HTTP only. Client-owned Finagle retry budget; `false` removes the cap.\nDerived clients sharing one configuration share its budget. Separate clients\nkeep independent budgets, even when they share a balancer. Credits and debits\nexpire lazily in ten TTL/10 slices (at most one slice early).\nDefaults: 20% plus 10 retries/second of reserve over a 10000 ms TTL.",
         "type": "false | { readonly percentCanRetry?: number; readonly minRetriesPerSecond?: number; readonly ttlMs?: number; } | undefined",
         "simplifiedType": "union",
         "required": false,
@@ -9279,7 +9285,312 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface RetryOptions {\n  readonly maxAttempts?: number;\n  readonly on?: readonly RetryCondition[];\n  readonly methods?: readonly string[];\n  readonly attemptTimeoutMs?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly jitter?: number;\n  readonly maxDelayMs?: number;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}",
+        "signature": "interface RetryOptions {\n  readonly maxRetries?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly maxDelayMs?: number;\n  readonly jitter?: number;\n  readonly attemptTimeoutMs?: number;\n  readonly methods?: readonly string[];\n  readonly shouldRetry?: (context: RetryContext) => boolean | Promise<boolean>;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryContext",
+    "kind": "type",
+    "slug": "core/retrycontext-type",
+    "source": "packages/core/src/client/config.ts",
+    "group": "client",
+    "description": "Failure description passed to `shouldRetry`. Narrow it with `transport`.",
+    "signatures": [
+      "type RetryContext =\n  HttpRetryContext | SSERetryContext | WebSocketRetryContext;"
+    ],
+    "related": ["@defjs/core:RetryOptions"],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "type RetryContext =\n  HttpRetryContext | SSERetryContext | WebSocketRetryContext;",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpRetryContext",
+    "kind": "type",
+    "slug": "core/httpretrycontext-type",
+    "source": "packages/core/src/client/config.ts",
+    "group": "client",
+    "description": "What `shouldRetry` receives after a failed HTTP attempt.\n\n`cause` is the fault the attempt returned. `status` is the response status when the attempt got a response. `retryable` is `true` for a method in `methods` and a failure without a response, a 502, 503, or 504 response, or an attempt timeout.",
+    "signatures": [
+      "interface HttpRetryContext extends RetryContextBase {\n  readonly transport: \"http\";\n  readonly method: string;\n  readonly endpoint: string;\n  readonly status?: number;\n}"
+    ],
+    "related": ["@defjs/core:RetryOptions"],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "transport",
+        "description": "",
+        "type": "\"http\"",
+        "simplifiedType": "\"http\"",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "method",
+        "description": "Method the attempt sent. It is the last one when an interceptor sent more than one request.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "endpoint",
+        "description": "Endpoint the failed attempt used.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "status",
+        "description": "Status of the response, when the attempt got one.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "attempt",
+        "description": "Number of the retry about to start. The first retry is `1`. For SSE and WebSocket the count restarts at `1` after a connection is established again.",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "cause",
+        "description": "The failure that ended the attempt: a fault, an error, or the cause a WebSocket close carries. It is `undefined` when a WebSocket closed without one.",
+        "type": "unknown",
+        "simplifiedType": "unknown",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retryable",
+        "description": "What the default policy decides for this failure: the method is in `methods` and the failure is one the transport retries by default. `shouldRetry` can return it as is or override it.",
+        "type": "boolean",
+        "simplifiedType": "union",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface HttpRetryContext extends RetryContextBase {\n  readonly transport: \"http\";\n  readonly method: string;\n  readonly endpoint: string;\n  readonly status?: number;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSERetryContext",
+    "kind": "type",
+    "slug": "core/sseretrycontext-type",
+    "source": "packages/core/src/client/config.ts",
+    "group": "client",
+    "description": "What `shouldRetry` receives after an SSE handshake or stream failed.\n\n`cause` is the failure: an `HTTP_STATUS` fault for a non-2xx handshake, otherwise the error that ended the attempt. `retryable` is `true` for a method in `methods` and a handshake network failure, a 502, 503, or 504 handshake, an attempt timeout, or a network error after the stream opened. A normal end of the stream never retries.",
+    "signatures": [
+      "interface SSERetryContext extends RetryContextBase {\n  readonly transport: \"sse\";\n  readonly method: string;\n  readonly lastEventId: string;\n  readonly open?: {\n    readonly response: {\n      readonly status: number;\n      readonly statusText: string;\n      readonly url: string;\n    };\n    readonly url: string;\n  };\n  readonly status?: number;\n}"
+    ],
+    "related": ["@defjs/core:RetryOptions"],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "transport",
+        "description": "",
+        "type": "\"sse\"",
+        "simplifiedType": "\"sse\"",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "method",
+        "description": "Method of the stream request.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "lastEventId",
+        "description": "The last event ID the stream committed, or an empty string. The next attempt sends it as `Last-Event-ID`.",
+        "type": "string",
+        "simplifiedType": "string",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "open",
+        "description": "The latest handshake response, when one arrived.",
+        "type": "{ readonly response: { readonly status: number; readonly statusText: string; readonly url: string; }; readonly url: string; } | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "status",
+        "description": "Status of the handshake response, when one arrived.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "attempt",
+        "description": "Number of the retry about to start. The first retry is `1`. For SSE and WebSocket the count restarts at `1` after a connection is established again.",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "cause",
+        "description": "The failure that ended the attempt: a fault, an error, or the cause a WebSocket close carries. It is `undefined` when a WebSocket closed without one.",
+        "type": "unknown",
+        "simplifiedType": "unknown",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retryable",
+        "description": "What the default policy decides for this failure: the method is in `methods` and the failure is one the transport retries by default. `shouldRetry` can return it as is or override it.",
+        "type": "boolean",
+        "simplifiedType": "union",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface SSERetryContext extends RetryContextBase {\n  readonly transport: \"sse\";\n  readonly method: string;\n  readonly lastEventId: string;\n  readonly open?: {\n    readonly response: {\n      readonly status: number;\n      readonly statusText: string;\n      readonly url: string;\n    };\n    readonly url: string;\n  };\n  readonly status?: number;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketRetryContext",
+    "kind": "type",
+    "slug": "core/websocketretrycontext-type",
+    "source": "packages/core/src/client/config.ts",
+    "group": "client",
+    "description": "What `shouldRetry` receives after a WebSocket closed without `session.close()`.\n\n`cause` is the connection error, or `undefined` for a clean close. `code`, `reason`, and `wasClean` come from the close event and are `undefined` when none was observed, for example after a heartbeat timeout or an attempt timeout. `retryable` is always `true`: a close the caller did not request is retried by default, including a connection that never opened.",
+    "signatures": [
+      "interface WebSocketRetryContext extends RetryContextBase {\n  readonly transport: \"websocket\";\n  readonly code?: number;\n  readonly reason?: string;\n  readonly wasClean?: boolean;\n}"
+    ],
+    "related": ["@defjs/core:RetryOptions"],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "transport",
+        "description": "",
+        "type": "\"websocket\"",
+        "simplifiedType": "\"websocket\"",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "code",
+        "description": "Close code, when a close event was observed.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "reason",
+        "description": "Close reason, when a close event was observed.",
+        "type": "string | undefined",
+        "simplifiedType": "string",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "wasClean",
+        "description": "Whether the close was clean, when a close event was observed.",
+        "type": "boolean | undefined",
+        "simplifiedType": "union",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "attempt",
+        "description": "Number of the retry about to start. The first retry is `1`. For SSE and WebSocket the count restarts at `1` after a connection is established again.",
+        "type": "number",
+        "simplifiedType": "number",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "cause",
+        "description": "The failure that ended the attempt: a fault, an error, or the cause a WebSocket close carries. It is `undefined` when a WebSocket closed without one.",
+        "type": "unknown",
+        "simplifiedType": "unknown",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retryable",
+        "description": "What the default policy decides for this failure: the method is in `methods` and the failure is one the transport retries by default. `shouldRetry` can return it as is or override it.",
+        "type": "boolean",
+        "simplifiedType": "union",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface WebSocketRetryContext extends RetryContextBase {\n  readonly transport: \"websocket\";\n  readonly code?: number;\n  readonly reason?: string;\n  readonly wasClean?: boolean;\n}",
         "parameters": [],
         "returns": []
       }

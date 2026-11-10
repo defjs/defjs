@@ -44,6 +44,7 @@ export type OptionKeys = Expect<
     | "protocols"
     | "heartbeat"
     | "reconnect"
+    | "retry"
   >
 >;
 

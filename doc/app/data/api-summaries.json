@@ -177,7 +177,7 @@
   {
     "slug": "core/userequestconfig-type",
     "name": "UseRequestConfig",
-    "description": "HTTP fields of RequestOptions: progress callbacks and signal."
+    "description": "HTTP fields of RequestOptions: progress callbacks, retry, and signal."
   },
   {
     "slug": "core/httpawaitresult-type",
@@ -897,17 +897,32 @@
   {
     "slug": "core/withretry",
     "name": "withRetry",
-    "description": "Configures opt-in same-call HTTP retries independently of endpoint balancing."
-  },
-  {
-    "slug": "core/retrycondition-type",
-    "name": "RetryCondition",
-    "description": "Conditions that allow HTTP to try a different endpoint within one call."
+    "description": "Enables retries for HTTP, SSE, and WebSocket, with backoff and an optional policy function."
   },
   {
     "slug": "core/retryoptions-type",
     "name": "RetryOptions",
-    "description": "Opt-in same-call HTTP retry policy. Omitted fields use defaults."
+    "description": "Opt-in retry policy for HTTP, SSE, and WebSocket."
+  },
+  {
+    "slug": "core/retrycontext-type",
+    "name": "RetryContext",
+    "description": "Failure description passed to shouldRetry. Narrow it with transport."
+  },
+  {
+    "slug": "core/httpretrycontext-type",
+    "name": "HttpRetryContext",
+    "description": "What shouldRetry receives after a failed HTTP attempt."
+  },
+  {
+    "slug": "core/sseretrycontext-type",
+    "name": "SSERetryContext",
+    "description": "What shouldRetry receives after an SSE handshake or stream failed."
+  },
+  {
+    "slug": "core/websocketretrycontext-type",
+    "name": "WebSocketRetryContext",
+    "description": "What shouldRetry receives after a WebSocket closed without session.close()."
   },
   {
     "slug": "core/outlierdetectionoptions-type",

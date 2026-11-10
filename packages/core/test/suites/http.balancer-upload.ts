@@ -264,7 +264,7 @@ export function registerHttpBalancerUploadSuite(
     });
     const client = createClient(
       withEndpoint("https://first.test", "https://second.test"),
-      withRetry({ delayMs: 0, methods: ["POST"] }),
+      withRetry({ delayMs: 0, maxRetries: 1, methods: ["POST"] }),
       withHTTPHandle(() => {
         calls += 1;
         return Promise.reject(new TypeError("network down"));

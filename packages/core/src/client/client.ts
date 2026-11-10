@@ -3,8 +3,13 @@ import {
   snapshotHeartbeat,
   snapshotProtocols,
   snapshotReconnect,
+  snapshotRetry,
 } from "./capture";
-import type { ClientConfig, ClientWebSocketOptions } from "./config";
+import type {
+  ClientConfig,
+  ClientWebSocketOptions,
+  RetryOptions,
+} from "./config";
 import { createClientConfig } from "./config";
 import type { ClientOption } from "./option";
 
@@ -41,6 +46,8 @@ export type RequestOptions = {
   heartbeat?: ClientWebSocketOptions["heartbeat"];
   /** WebSocket reconnect policy for this call. Replaces the client policy as a whole value. */
   reconnect?: ClientWebSocketOptions["reconnect"];
+  /** Retry policy for this call. Replaces the client policy as a whole value; the `budget` stays with the client. */
+  retry?: Omit<RetryOptions, "budget">;
 };
 
 // Slot value for [CLIENT]. Not exported from the package.
@@ -94,6 +101,7 @@ function snapshot(options?: RequestOptions): RequestOptions | undefined {
     protocols: snapshotProtocols(options.protocols),
     heartbeat: snapshotHeartbeat(options.heartbeat),
     reconnect: snapshotReconnect(options.reconnect),
+    retry: snapshotRetry(options.retry),
   };
 }
 

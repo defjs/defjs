@@ -76,39 +76,26 @@ export function withBalancer(balancer: Balancer): ClientOption {
 }
 
 /**
- * Configures opt-in same-call HTTP retries independently of endpoint balancing.
+ * Enables retries for HTTP, SSE, and WebSocket, with backoff and an optional policy function.
  *
- * Without this option HTTP tries once and creates no retry budget. Calling it
- * with no argument, `undefined`, or `{}` enables two total attempts for GET,
- * HEAD, OPTIONS, and TRACE connection failures.
- * Each retry rebuilds the request and reruns the complete interceptor chain,
- * selecting an untried endpoint. Streaming request bodies and offline failures
- * never retry. Local failures before Fetch starts are not connection failures.
- * Retry eligibility checks every method actually sent by the attempt, after
- * interceptor rewrites; with no transport invocation it uses the defined method.
- * A single configured endpoint is never replayed, because retries exclude every
- * endpoint already tried by this call.
- * SSE and WebSocket use their separate reconnect policies instead.
+ * Retries are opt-in: without this option every call makes one attempt, and an HTTP call creates no retry budget. Calling it with no argument or `{}` enables the defaults: 3 retries after the first attempt, a 1000 ms delay that doubles per retry up to 30000 ms, and jitter of 0.2. The same options apply to every transport; see {@link RetryOptions} for the decision order after a failure and for what counts as a retryable failure on each one.
  *
- * Defaults are 25 ms delay, factor 2, 250 ms cap, and jitter 0.2. The caller's
- * signal covers all attempts and waits; `attemptTimeoutMs` covers each transport
- * attempt and must be finite, positive, and at most `2_147_483_647` ms.
- * Invalid policy values return `REQ_OPTIONS_INVALID` at HTTP execution.
- * Owned fields, arrays, and the budget record are captured when the option is
- * applied. A later option replaces the policy. `undefined` does not clear it;
- * pass `{ maxAttempts: 1 }` to turn retries off after enabling them.
+ * - HTTP retries a method in `methods` when the attempt got no response, got a 502, 503, or 504, or ran out of `attemptTimeoutMs`. Each retry rebuilds the request, reruns the complete interceptor chain, and lets the balancer pick again from every endpoint, so a single endpoint is tried again after the delay. Local failures before Fetch starts are not retried. Retry eligibility checks every method actually sent by the attempt, after interceptor rewrites; with no transport invocation it uses the defined method. A `budget` limits how many retries the client can make.
+ * - SSE retries a method in `methods` after a handshake network failure, a 502, 503, or 504 handshake, an attempt timeout, or a network error after the stream opened. Normal EOF ends the stream. The `retry:` field of the server replaces `delayMs`, and the next attempt sends `Last-Event-ID`. A successful handshake resets the count.
+ * - WebSocket retries every close that `session.close()` did not request, including a connection that never opened and a heartbeat timeout. A successful `open` resets the count.
+ * - A `ReadableStream` request body, a caller abort, a manual close, and fatal errors end the call without a retry and without calling `shouldRetry`.
+ *
+ * Callers that need a time limit without retries use `withRetry({ maxRetries: 0, attemptTimeoutMs })`. The signal of the caller covers all attempts and waits. A later `withRetry` replaces the policy as a whole, and passing `undefined` is the same as passing `{}`; pass `{ maxRetries: 0 }` to turn retries off after enabling them. The `methods` array and the `budget` record are copied when the option is applied. A request option `retry` replaces this policy for one call, except `budget`, which stays with the client.
  *
  * @param options - Retry policy; omitted or `undefined` behaves like `{}`.
- * @returns An option that writes `config.http.retry`.
+ * @returns An option that writes `config.retry`.
  * @exampleFile examples/client/http-retry.ts#example
  * @group client
  * @see {@link RetryOptions}
- * @see {@link withSSEReconnect}
- * @see {@link withWebSocketReconnect}
  */
 export function withRetry(options?: RetryOptions): ClientOption {
   return (config) => {
-    config.http.retry = snapshotRetry(options === undefined ? {} : options);
+    config.retry = snapshotRetry(options === undefined ? {} : options);
   };
 }
 

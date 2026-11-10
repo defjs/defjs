@@ -64,53 +64,38 @@ export function snapshotProtocols(
   return value;
 }
 
-/** Captures owned HTTP retry records and array containers without enabling an absent policy. */
+/** Captures the owned parts of a retry policy: the methods array and the budget record are copied. Callbacks keep their identity. */
 export function snapshotRetry(
   value: RetryOptions | undefined,
 ): RetryOptions | undefined {
-  if (
-    value === undefined ||
-    value === null ||
-    typeof value !== "object" ||
-    Array.isArray(value)
-  )
-    return value;
+  if (value === undefined) return value;
   const {
-    maxAttempts,
-    on,
-    methods,
-    attemptTimeoutMs,
+    maxRetries,
     delayMs,
     factor,
-    jitter,
     maxDelayMs,
+    jitter,
+    attemptTimeoutMs,
+    methods,
+    shouldRetry,
     budget,
   } = value;
   return {
-    maxAttempts,
-    on: isRetryList(on) ? [...on] : on,
-    methods: isRetryList(methods) ? [...methods] : methods,
-    attemptTimeoutMs,
+    maxRetries,
     delayMs,
     factor,
-    jitter,
     maxDelayMs,
+    jitter,
+    attemptTimeoutMs,
+    methods: methods?.slice(),
+    shouldRetry,
     budget:
-      budget !== undefined &&
-      budget !== false &&
-      budget !== null &&
-      typeof budget === "object" &&
-      !Array.isArray(budget)
-        ? {
+      budget === undefined || budget === false
+        ? budget
+        : {
             percentCanRetry: budget.percentCanRetry,
             minRetriesPerSecond: budget.minRetriesPerSecond,
             ttlMs: budget.ttlMs,
-          }
-        : budget,
+          },
   };
-}
-function isRetryList<T>(
-  value: readonly T[] | undefined,
-): value is readonly T[] {
-  return Array.isArray(value);
 }

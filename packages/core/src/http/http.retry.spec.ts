@@ -10,22 +10,17 @@ import {
   withHTTPHandle,
   withRetry,
 } from "../client/option";
-import type { ClientOption } from "../client/option";
-import type { ClientConfig } from "../client/config";
+import type { ClientConfig, RetryOptions } from "../client/config";
 import { defineRequest } from "./http";
 import { ERR_TIMEOUT } from "../error";
 
-function retry(options: unknown): ClientOption {
-  // @ts-expect-error invalid runtime options are checked during HTTP execution
-  return withRetry(options);
-}
 const op = defineRequest({ method: "GET", path: "/" });
 afterEach(() => {
   vi.useRealTimers();
   vi.mocked(retryBudgetFor).mockRestore();
   vi.restoreAllMocks();
 });
-function fixture(options: unknown, count = 8, signal?: AbortSignal) {
+function fixture(options: RetryOptions, count = 8, signal?: AbortSignal) {
   const pick = vi.fn(
     (info: { endpoints: readonly string[] }) =>
       [null, { endpoint: info.endpoints[0] ?? "" }] as const,
@@ -40,7 +35,7 @@ function fixture(options: unknown, count = 8, signal?: AbortSignal) {
       ...Array.from({ length: count }, (_, i) => `https://a${i}.test`),
     ),
     withBalancer({ pick }),
-    retry(options),
+    withRetry(options),
     withHTTPHandle(handle),
   );
   return {
@@ -63,13 +58,15 @@ async function waiting(handle: ReturnType<typeof vi.fn>, count: number) {
   );
 }
 
-test("retry waits 25, 50, 100, 200, 250 milliseconds before successive attempts", async () => {
+test("retry waits 1, 2, 4, 8, 16, 30 seconds, then 30 seconds, before successive attempts", async () => {
   clock();
-  const h = fixture({ maxAttempts: 7, jitter: 0, budget: false });
+  const h = fixture({ maxRetries: 7, jitter: 0, budget: false });
   await h.first;
   expect(h.handle).toHaveBeenCalledTimes(1);
   expect(vi.getTimerCount()).toBe(0);
-  for (const [index, delay] of [25, 50, 100, 200, 250, 250].entries()) {
+  for (const [index, delay] of [
+    1000, 2000, 4000, 8000, 16_000, 30_000, 30_000,
+  ].entries()) {
     await vi.advanceTimersByTimeAsync(0);
     expect(h.handle).toHaveBeenCalledTimes(index + 1);
     expect(vi.getTimerCount()).toBe(1);
@@ -88,31 +85,36 @@ test.each([0, 1])(
     clock();
     vi.spyOn(Math, "random").mockReturnValue(random);
     const timer = vi.spyOn(globalThis, "setTimeout");
-    const h = fixture({}, 2);
+    const h = fixture({ maxRetries: 1 }, 2);
     await waiting(h.handle, 1);
     const delay = timer.mock.calls.find((call) => call[1] !== 1)?.[1];
-    expect(delay).toBeGreaterThanOrEqual(20);
-    expect(delay).toBeLessThanOrEqual(30);
-    expect(delay).toBe(random === 0 ? 20 : 30);
-    await vi.advanceTimersByTimeAsync(30);
+    expect(delay).toBe(random === 0 ? 800 : 1200);
+    await vi.advanceTimersByTimeAsync(1200);
     await h.pending;
   },
 );
 
 test.each([
-  { delayMs: 0 },
-  { maxAttempts: 1 },
-  { methods: [] },
-  { on: [] },
-  { budget: { percentCanRetry: 0, minRetriesPerSecond: 0 } },
-])("retry creates no timer when no wait is needed: %j", async (options) => {
-  clock();
-  const timer = vi.spyOn(globalThis, "setTimeout");
-  const h = fixture(options, 2);
-  await h.pending;
-  expect(h.handle).toHaveBeenCalledTimes("delayMs" in options ? 2 : 1);
-  expect(timer).not.toHaveBeenCalled();
-});
+  ["a zero delay", { delayMs: 0, maxRetries: 1 }, 2],
+  ["no retries", { maxRetries: 0 }, 1],
+  ["no allowed method", { methods: [] }, 1],
+  ["a policy that declines", { shouldRetry: () => false }, 1],
+  [
+    "an empty budget",
+    { budget: { percentCanRetry: 0, minRetriesPerSecond: 0 } },
+    1,
+  ],
+] as const)(
+  "retry creates no timer when no wait is needed: %s",
+  async (_label, options, calls) => {
+    clock();
+    const timer = vi.spyOn(globalThis, "setTimeout");
+    const h = fixture(options, 2);
+    await h.pending;
+    expect(h.handle).toHaveBeenCalledTimes(calls);
+    expect(timer).not.toHaveBeenCalled();
+  },
+);
 
 test.each([undefined, ERR_TIMEOUT])(
   "caller cancellation while waiting returns its fault without another pick: %s",
@@ -136,35 +138,13 @@ test("retry withdraws its budget before entering backoff", async () => {
   const spy = vi.mocked(retryBudgetFor);
   spy.mockClear();
   spy.mockReturnValue(budget);
-  const h = fixture({ jitter: 0 }, 2);
+  const h = fixture({ jitter: 0, maxRetries: 1 }, 2);
   await waiting(h.handle, 1);
   expect(budget.deposit).toHaveBeenCalledTimes(1);
   expect(budget.tryWithdraw).toHaveBeenCalledTimes(1);
   expect(h.pick).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(25);
+  await vi.advanceTimersByTimeAsync(1000);
   await h.pending;
-});
-
-test.each([
-  { delayMs: -1 },
-  { delayMs: Infinity },
-  { delayMs: NaN },
-  { delayMs: "25" },
-  { factor: 0 },
-  { factor: -1 },
-  { factor: Infinity },
-  { factor: NaN },
-  { jitter: -0.1 },
-  { jitter: 1.1 },
-  { jitter: Infinity },
-  { jitter: NaN },
-  { maxDelayMs: -1 },
-  { maxDelayMs: -Infinity },
-  { maxDelayMs: NaN },
-])("invalid retry backoff %j fails before picking", async (options) => {
-  const h = fixture(options);
-  expect((await h.pending)[0]?.code).toBe("REQ_OPTIONS_INVALID");
-  expect(h.pick).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -172,7 +152,7 @@ test.each([
   ["undefined", () => withRetry(undefined)],
   ["an empty object", () => withRetry({})],
 ])(
-  "withRetry with %s enables default GET connection failover",
+  "withRetry with %s enables the default GET connection retry",
   async (_label, option) => {
     clock();
     const seen: string[] = [];
@@ -196,52 +176,38 @@ test.each([
       },
       { interval: 1 },
     );
-    await vi.advanceTimersByTimeAsync(30);
+    await vi.advanceTimersByTimeAsync(1200);
     expect((await pending)[0]).toBeNull();
     expect(seen).toEqual(["https://a.test/", "https://b.test/"]);
   },
 );
 
-test("withRetry maxAttempts 1 replaces an enabled policy with one attempt", async () => {
+test("withRetry maxRetries 0 replaces an enabled policy with one attempt", async () => {
   const handle = vi.fn(() => Promise.reject(new TypeError("refused")));
   const client = createClient(
     withEndpoint("https://a.test", "https://b.test"),
     withRetry(),
-    withRetry({ maxAttempts: 1 }),
+    withRetry({ maxRetries: 0 }),
     withHTTPHandle(handle),
   );
   expect((await op(client))[0]?.code).toBe("NET_UNREACHABLE");
   expect(handle).toHaveBeenCalledTimes(1);
 });
 
-test("withRetry null stays invalid when HTTP runs", async () => {
-  const handle = vi.fn(() => Promise.resolve(new Response("ok")));
-  const client = createClient(
-    withEndpoint("https://a.test"),
-    // @ts-expect-error null is not a retry policy
-    withRetry(null),
-    withHTTPHandle(handle),
-  );
-  const [fault] = await op(client);
-  expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-  expect(fault?.cause).toEqual(new RangeError("Invalid retry options"));
-  expect(handle).not.toHaveBeenCalled();
-});
-
 test("retry snapshots owned fields, arrays and budget only when applied", () => {
-  const on = ["connect-failure"];
   const methods = ["get"];
   const budget = { percentCanRetry: 0, minRetriesPerSecond: 1, ttlMs: 1000 };
+  const shouldRetry = () => true;
   const reads: string[] = [];
   const original = {
-    maxAttempts: 3,
-    on,
-    methods,
-    attemptTimeoutMs: 100,
+    maxRetries: 3,
     delayMs: 0,
     factor: 3,
-    jitter: 0.1,
     maxDelayMs: Infinity,
+    jitter: 0.1,
+    attemptTimeoutMs: 100,
+    methods,
+    shouldRetry,
     budget,
   };
   const captured = Object.fromEntries(
@@ -256,83 +222,39 @@ test("retry snapshots owned fields, arrays and budget only when applied", () => 
       },
     ]),
   );
-  const option = retry(Object.defineProperties({}, captured));
+  const option = withRetry(Object.defineProperties({}, captured));
   expect(reads).toEqual([]);
   let config: ClientConfig | undefined;
   createClient(option, (value) => {
     config = value;
   });
   expect(reads).toEqual(Object.keys(original));
-  on.length = 0;
   methods.length = 0;
   budget.minRetriesPerSecond = 999;
-  expect(config?.http.retry).toEqual({
+  expect(config?.retry).toEqual({
     ...original,
-    on: ["connect-failure"],
     methods: ["get"],
     budget: { percentCanRetry: 0, minRetriesPerSecond: 1, ttlMs: 1000 },
   });
+  expect(config?.retry?.shouldRetry).toBe(shouldRetry);
 });
 
 test("retry getter errors escape createClient while applying the option", () => {
   const error = new Error("getter");
-  const option = retry({
-    get delayMs() {
+  const option = withRetry({
+    get delayMs(): number {
       throw error;
     },
   });
   expect(() => createClient(option)).toThrow(error);
 });
 
-test.each([2_147_483_648, Infinity, Number.MAX_VALUE])(
-  "attemptTimeoutMs %s outside platform timer range fails before picking",
-  async (attemptTimeoutMs) => {
-    const h = fixture({ attemptTimeoutMs, maxAttempts: 1 });
-    expect((await h.pending)[0]?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(h.pick).not.toHaveBeenCalled();
-    expect(h.handle).not.toHaveBeenCalled();
-  },
-);
-
 test("attemptTimeoutMs accepts the platform timer upper bound", async () => {
   clock();
   const timer = vi.spyOn(globalThis, "setTimeout");
-  const h = fixture({ attemptTimeoutMs: 2_147_483_647, maxAttempts: 1 });
+  const h = fixture({ attemptTimeoutMs: 2_147_483_647, maxRetries: 0 });
   expect((await h.pending)[0]?.code).toBe("NET_UNREACHABLE");
   expect(h.handle).toHaveBeenCalledTimes(1);
   expect(timer.mock.calls.some((call) => call[1] === 2_147_483_647)).toBe(true);
   expect(vi.getTimerCount()).toBe(0);
 });
-
-test.each(["retry", "maxAttempts", "budget", "percentCanRetry"] as const)(
-  "handwritten client option throwing %s getter returns an invalid-options tuple",
-  async (field) => {
-    const error = new Error("runtime getter");
-    const policy = {};
-    const budget = {};
-    const throwing = {
-      get() {
-        throw error;
-      },
-    };
-    if (field === "percentCanRetry") {
-      Object.defineProperty(budget, field, throwing);
-      Object.defineProperty(policy, "budget", { value: budget });
-    } else if (field !== "retry") {
-      Object.defineProperty(policy, field, throwing);
-    }
-    const handle = vi.fn(() => Promise.resolve(new Response("ok")));
-    const client = createClient(
-      withEndpoint("https://a.test"),
-      withHTTPHandle(handle),
-      (config) => {
-        if (field === "retry")
-          Object.defineProperty(config.http, "retry", throwing);
-        else config.http.retry = policy;
-      },
-    );
-    const [fault] = await op(client);
-    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(handle).not.toHaveBeenCalled();
-  },
-);

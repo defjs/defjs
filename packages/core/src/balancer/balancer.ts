@@ -43,9 +43,8 @@ export type PickOutcome =
  *
  * `endpoints` is the candidate list in first-seen order. It may be empty and
  * must not be modified. An empty list returns `[ERR_NO_CANDIDATE, undefined]`.
- * A retried HTTP call leaves out the endpoints it already tried, and a wrapping
- * balancer can leave out endpoints it filtered, so the list can shrink between
- * attempts of one call.
+ * A retry picks again from every endpoint. Only a wrapping balancer that
+ * filters candidates can make the list shorter than the client's endpoint list.
  *
  * `members` is the client's whole endpoint list, the same for every attempt.
  * A narrower `endpoints` is a per-pick filter, not a membership change, so

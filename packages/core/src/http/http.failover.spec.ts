@@ -13,13 +13,13 @@ import {
   type ClientOption,
 } from "../client/option";
 import type { DoneInfo, PickInfo } from "../balancer/balancer";
-import type { RetryCondition, RetryOptions } from "../client/config";
+import type { RetryOptions } from "../client/config";
 import { defineRequest } from "./http";
 import { struct } from "../struct";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { makeResponse } from "../internal/http_response";
 import { createHttpInterceptor } from "../interceptor";
-import { pickFirstBalancer } from "../balancer/balancer";
+import { pickFirstBalancer, type Balancer } from "../balancer/balancer";
 import type { BodyValue } from "../internal/builder_types";
 import type { HttpRequest } from "../internal/http_request";
 
@@ -33,24 +33,30 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// Picks the endpoints in turn: a retry may use any endpoint, so the balancer decides which one comes next.
+function rotating(picks: PickInfo[], reports: DoneInfo[]): Balancer {
+  return {
+    pick(info) {
+      const index = picks.length % info.endpoints.length;
+      picks.push(info);
+      return [
+        null,
+        {
+          endpoint: info.endpoints[index] ?? "",
+          done: (report) => reports.push(report),
+        },
+      ];
+    },
+  };
+}
+
 function fixture(...options: ClientOption[]) {
   const requests: Request[] = [];
   const picks: PickInfo[] = [];
   const reports: DoneInfo[] = [];
   const client = createClient(
     withEndpoint(...endpoints),
-    withBalancer({
-      pick(info) {
-        picks.push(info);
-        return [
-          null,
-          {
-            endpoint: info.endpoints[0] ?? "",
-            done: (report) => reports.push(report),
-          },
-        ];
-      },
-    }),
+    withBalancer(rotating(picks, reports)),
     withHTTPHandle((input) => {
       const request = new Request(input);
       requests.push(request);
@@ -108,25 +114,22 @@ test("failover rebuilds and reruns endpoint-specific authentication", async () =
   ).toEqual(endpoints.map((endpoint) => `Bearer ${endpoint}`));
 });
 
-test("each attempt picks and reports exactly once with tried endpoints excluded", async () => {
+test("each attempt picks and reports exactly once from every endpoint", async () => {
   const { client, picks, reports } = fixture();
   await defineRequest({ method: "GET", path: "/" })(client);
-  expect(picks.map((pick) => pick.endpoints)).toEqual([
-    endpoints,
-    [endpoints[1]],
-  ]);
+  expect(picks.map((pick) => pick.endpoints)).toEqual([endpoints, endpoints]);
   expect(reports).toHaveLength(2);
   expect(reports[0]).toEqual({ attempted: true, code: "NET_UNREACHABLE" });
   expect(reports[1]).toMatchObject({ attempted: true, status: 200 });
 });
 
-test("gateway-error retries a released 503 response but 500 does not retry", async () => {
+test("a released 503 response is retried but a 500 is not", async () => {
   for (const status of [503, 500]) {
     let calls = 0;
     let cancelled = false;
     const client = createClient(
       withEndpoint(...endpoints),
-      policy({ maxAttempts: 2, methods: ["GET"], on: ["gateway-error"] }),
+      policy({ maxRetries: 1, methods: ["GET"] }),
       withHTTPHandle(() => {
         calls++;
         return Promise.resolve(
@@ -150,7 +153,7 @@ test("gateway-error retries a released 503 response but 500 does not retry", asy
   }
 });
 
-test("without gateway-error the next call, not this call, advances after 503", async () => {
+test("without withRetry the next call, not this call, advances after 503", async () => {
   const urls: string[] = [];
   const client = createClient(
     withEndpoint(...endpoints),
@@ -186,9 +189,8 @@ test("attempt timeout fails over while caller deadline covers the whole call", a
     const controller = new AbortController();
     const { client, reports } = fixture(
       policy({
-        maxAttempts: 2,
+        maxRetries: 1,
         methods: ["GET"],
-        on: ["attempt-timeout"],
         attemptTimeoutMs: 100,
       }),
       withHTTPHandle(async () => {
@@ -213,43 +215,11 @@ test("attempt timeout fails over while caller deadline covers the whole call", a
   }
 });
 
-test.each([
-  { maxAttempts: -1 },
-  { maxAttempts: 1.5 },
-  { maxAttempts: Infinity },
-  { methods: [""] },
-  { attemptTimeoutMs: 0 },
-  { attemptTimeoutMs: -1 },
-  { attemptTimeoutMs: Infinity },
-])("invalid failover option %j fails at execution", async (options) => {
-  const { client } = fixture(policy(options));
-  expect(
-    (await defineRequest({ method: "GET", path: "/" })(client))[0]?.code,
-  ).toBe("REQ_OPTIONS_INVALID");
-});
-
-test.each([{ on: ["bad"] }, { methods: [1] }])(
-  "invalid typed failover option %j fails at execution",
-  async (options) => {
-    const { client } = fixture(
-      // @ts-expect-error invalid failover fields are rejected at execution
-      policy(options),
-    );
-    expect(
-      (await defineRequest({ method: "GET", path: "/" })(client))[0]?.code,
-    ).toBe("REQ_OPTIONS_INVALID");
-  },
-);
-
 test("attempt timeout covers headers followed by a stalled declared body", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   let calls = 0;
   const { client, reports } = fixture(
-    policy({
-      maxAttempts: 2,
-      on: ["attempt-timeout"],
-      attemptTimeoutMs: 100,
-    }),
+    policy({ maxRetries: 1, attemptTimeoutMs: 100 }),
     withHTTPHandle(() => {
       calls++;
       return Promise.resolve(
@@ -291,18 +261,15 @@ test("an interceptor-recovered transport failure does not discard a successful t
 
 test("failover option snapshots arrays and reads each owned field once", async () => {
   let reads = 0;
-  const conditions: RetryCondition[] = ["connect-failure"];
   const methods = ["get"];
   const { client } = fixture(
     policy({
-      get on() {
+      get methods() {
         reads++;
-        return conditions;
+        return methods;
       },
-      methods,
     }),
   );
-  conditions.length = 0;
   methods.length = 0;
   expect(reads).toBe(1);
   expect(
@@ -317,15 +284,15 @@ test("later failover policy replaces earlier settings and empty methods disables
       ?.code,
   ).toBe("NET_UNREACHABLE");
   expect(disabled.requests).toHaveLength(1);
-  const reset = fixture(policy({ maxAttempts: 1, methods: [] }), policy());
+  const reset = fixture(policy({ maxRetries: 0, methods: [] }), policy());
   expect(
     (await defineRequest({ method: "GET", path: "/" })(reset.client))[0],
   ).toBeNull();
 });
 
-test("custom option with omitted failover fields retains safe connection-failure defaults", async () => {
+test("custom option with omitted retry fields retains the defaults", async () => {
   const { client } = fixture((config) => {
-    config.http.retry = { delayMs: 0 };
+    config.retry = { delayMs: 0 };
   });
   expect(
     (await defineRequest({ method: "GET", path: "/" })(client))[0],
@@ -336,7 +303,7 @@ test("gateway failover accepts a 503 HTML response rejected by its JSON error st
   let calls = 0;
   let released = false;
   const { client } = fixture(
-    policy({ on: ["gateway-error"] }),
+    policy(),
     withHTTPHandle(() => {
       calls++;
       if (calls === 1)
@@ -374,7 +341,7 @@ test.each(["recover", "throw"])(
   "gateway failover preserves an interceptor %s result",
   async (mode) => {
     const { client, picks } = fixture(
-      policy({ on: ["gateway-error"] }),
+      policy(),
       withHTTPHandle(() =>
         Promise.resolve(new Response(null, { status: 503 })),
       ),
@@ -428,14 +395,16 @@ test("default clients do not fail over GET or create or deposit a retry budget",
   expect(budget).not.toHaveBeenCalled();
 });
 
-test.each([1, 2, 3, Number.MAX_SAFE_INTEGER])(
-  "maxAttempts %i counts the original and never repeats endpoints",
-  async (maxAttempts) => {
+test.each([0, 1, 2, 3])(
+  "maxRetries %i counts the retries after the original and every endpoint is a candidate again",
+  async (maxRetries) => {
     const seen: string[] = [];
     const candidates = [...endpoints, "https://third.test"];
+    const picks: PickInfo[] = [];
     const client = createClient(
       withEndpoint(...candidates),
-      policy({ maxAttempts, budget: false }),
+      withBalancer(rotating(picks, [])),
+      policy({ maxRetries, budget: false }),
       withHTTPHandle((input) => {
         seen.push(new Request(input).url);
         return Promise.reject(new TypeError("connection refused"));
@@ -444,47 +413,25 @@ test.each([1, 2, 3, Number.MAX_SAFE_INTEGER])(
     expect(
       (await defineRequest({ method: "GET", path: "/" })(client))[0]?.code,
     ).toBe("NET_UNREACHABLE");
-    expect(seen).toEqual(
-      candidates
-        .slice(0, Math.min(maxAttempts, 3))
-        .map((endpoint) => `${endpoint}/`),
+    expect(seen).toHaveLength(maxRetries + 1);
+    expect(picks.map((pick) => pick.endpoints)).toEqual(
+      Array.from({ length: maxRetries + 1 }, () => candidates),
     );
   },
 );
 
-test.each([0, -1, 1.5, NaN, "2", Number.MAX_SAFE_INTEGER + 1, null, true])(
-  "invalid maxAttempts %j fails before transport",
-  async (maxAttempts) => {
-    const handle = vi.fn(() => Promise.resolve(new Response("ok")));
-    const client = createClient(
-      withEndpoint(...endpoints),
-      // @ts-expect-error invalid runtime attempt limits must be validated
-      withRetry({ maxAttempts }),
-      withHTTPHandle(handle),
-    );
-    const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
-    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(fault?.cause).toEqual(new RangeError("Invalid retry options"));
-    expect(handle).not.toHaveBeenCalled();
-  },
-);
-
-test.each([[], "enabled", null, true, 1, () => ({})])(
-  "invalid custom failover block %j fails before transport",
-  async (failover) => {
-    const handle = vi.fn(() => Promise.resolve(new Response("ok")));
-    const client = createClient(
-      withEndpoint(...endpoints),
-      // @ts-expect-error invalid runtime retry containers must be validated
-      withRetry(failover),
-      withHTTPHandle(handle),
-    );
-    const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
-    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(fault?.cause).toEqual(new RangeError("Invalid retry options"));
-    expect(handle).not.toHaveBeenCalled();
-  },
-);
+test("a single endpoint is tried again after the delay", async () => {
+  const handle = vi.fn(() => Promise.reject(new TypeError("refused")));
+  const client = createClient(
+    withEndpoint("https://only.test"),
+    policy({ maxRetries: 2, budget: false }),
+    withHTTPHandle(handle),
+  );
+  expect(
+    (await defineRequest({ method: "GET", path: "/" })(client))[0]?.code,
+  ).toBe("NET_UNREACHABLE");
+  expect(handle).toHaveBeenCalledTimes(3);
+});
 
 test("custom option retry configuration is read anew for every HTTP call", async () => {
   let calls = 0;
@@ -493,7 +440,7 @@ test("custom option retry configuration is read anew for every HTTP call", async
     withEndpoint(...endpoints),
     (config) => {
       setRetry = () => {
-        config.http.retry = { delayMs: 0 };
+        config.retry = { delayMs: 0 };
       };
     },
     withHTTPHandle(() => {
@@ -516,15 +463,7 @@ test("a handle that rejects with a primitive fails over like any connection fail
   const reports: DoneInfo[] = [];
   const client = createClient(
     withEndpoint(...endpoints),
-    withBalancer({
-      pick: (info) => [
-        null,
-        {
-          endpoint: info.endpoints[0] ?? "",
-          done: (report) => reports.push(report),
-        },
-      ],
-    }),
+    withBalancer(rotating([], reports)),
     withHTTPHandle((input) => {
       hits.push(new URL(new Request(input).url).origin);
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the handle under test rejects with a string primitive
@@ -843,21 +782,6 @@ test("an interceptor that omits the method on a request with a body fails as a b
   expect(requests).toHaveLength(0);
 });
 
-test("an undefined interceptor method returns a fault tuple without retrying", async () => {
-  const { client, requests } = fixture(
-    withInterceptors({
-      kind: "http",
-      fn(request, next) {
-        // @ts-expect-error JavaScript interceptors may omit the required method
-        return next({ ...request, method: undefined });
-      },
-    }),
-  );
-  const result = await defineRequest({ method: "GET", path: "/" })(client);
-  expect(result[0]?.code).toBe("NET_UNREACHABLE");
-  expect(requests.map((request) => request.method)).toEqual(["GET"]);
-});
-
 test("a lowercase transported method remains eligible for retry", async () => {
   const { client, requests } = fixture(
     withInterceptors({
@@ -899,12 +823,12 @@ test("a retry onto an endpoint whose URL does not resolve returns the attempt th
   expect(fault?.code).toBe("NET_UNREACHABLE");
 });
 
-test("a retried pick sees the client members while candidates shrink", async () => {
+test("a retried pick sees the same candidates as the first pick", async () => {
   const { client, picks } = fixture();
   await defineRequest({ method: "GET", path: "/" })(client);
   expect(picks).toEqual([
     { endpoints, operation: undefined },
-    { endpoints: [endpoints[1]], members: endpoints, operation: undefined },
+    { endpoints, operation: undefined },
   ]);
 });
 
@@ -915,7 +839,7 @@ test("attempt timeout covers the send but not interceptor work after it", async 
     let refreshed = false;
     const controller = new AbortController();
     const { client, reports } = fixture(
-      policy({ on: ["attempt-timeout"], attemptTimeoutMs: 100 }),
+      policy({ attemptTimeoutMs: 100 }),
       withHTTPHandle(() => {
         sends++;
         return Promise.resolve(new Response("ok"));
@@ -947,13 +871,13 @@ test("attempt timeout covers the send but not interceptor work after it", async 
   }
 });
 
-test("a retried attempt timeout keeps later pick-first calls on the first endpoint", async () => {
+test("a retried attempt timeout leaves pick-first on the first endpoint, which the retry tries again", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const hosts: string[] = [];
   const client = createClient(
     withEndpoint(...endpoints),
     withBalancer(pickFirstBalancer({ failbackMs: 1000 })),
-    policy({ on: ["attempt-timeout"], attemptTimeoutMs: 100 }),
+    policy({ attemptTimeoutMs: 100 }),
     withHTTPHandle((input) => {
       hosts.push(new URL(new Request(input).url).origin);
       return hosts.length === 1
@@ -967,7 +891,7 @@ test("a retried attempt timeout keeps later pick-first calls on the first endpoi
   await vi.advanceTimersByTimeAsync(100);
   expect((await first)[0]).toBeNull();
   expect((await read(client))[0]).toBeNull();
-  expect(hosts).toEqual([endpoints[0], endpoints[1], endpoints[0]]);
+  expect(hosts).toEqual([endpoints[0], endpoints[0], endpoints[0]]);
 });
 
 test.each([
@@ -1030,7 +954,7 @@ test("opted-in POST failover resends the same FormData fields", async () => {
 test("a send still in flight when an interceptor answers leaves no attempt timer behind", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const { client, reports } = fixture(
-    policy({ on: ["attempt-timeout"], attemptTimeoutMs: 100 }),
+    policy({ attemptTimeoutMs: 100 }),
     withHTTPHandle(() => new Promise<Response>(() => {})),
     withInterceptors(
       createHttpInterceptor((request, next) => {

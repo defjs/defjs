@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createClient } from "../client/client";
-import { createClientConfig } from "../client/config";
+import { createClientConfig, type RetryOptions } from "../client/config";
 import { retryBudgetFor } from "../balancer/retry_budget";
 import {
   withEndpoint,
@@ -19,12 +19,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 const op = defineRequest({ method: "GET", path: "/" });
-function fixture(retryBudget: unknown, maxAttempts = 2) {
+function fixture(retryBudget: RetryOptions["budget"], maxRetries = 1) {
   let calls = 0;
   const client = createClient(
     withEndpoint("https://a.test", "https://b.test", "https://c.test"),
-    // @ts-expect-error invalid retry budget is rejected at execution
-    withRetry({ budget: retryBudget, maxAttempts, delayMs: 0 }),
+    withRetry({ budget: retryBudget, maxRetries, delayMs: 0 }),
     withHTTPHandle(() => {
       calls++;
       return Promise.reject(new TypeError("refused"));
@@ -45,10 +44,10 @@ test("shared budget limits a broad outage and restores its reserve after TTL", a
   await op(h.client);
   expect(h.calls()).toBe(23);
 });
-test("each original call deposits, every failover withdraws, and debits expire too", async () => {
+test("each original call deposits, every retry withdraws, and debits expire too", async () => {
   const h = fixture(
     { percentCanRetry: 0.5, minRetriesPerSecond: 0, ttlMs: 1000 },
-    3,
+    2,
   );
   await op(h.client);
   expect(h.calls()).toBe(1);
@@ -84,34 +83,6 @@ test("retry configuration is captured field by field", async () => {
   await op(h.client);
   expect(h.calls()).toBe(3);
 });
-test.each([
-  null,
-  true,
-  [],
-  1,
-  { percentCanRetry: null },
-  { minRetriesPerSecond: null },
-  { ttlMs: null },
-  { percentCanRetry: -1 },
-  { percentCanRetry: 1001 },
-  { percentCanRetry: Infinity },
-  { percentCanRetry: NaN },
-  { percentCanRetry: "0.2" },
-  { minRetriesPerSecond: -1 },
-  { minRetriesPerSecond: 0.5 },
-  { minRetriesPerSecond: Infinity },
-  { minRetriesPerSecond: "1" },
-  { ttlMs: 999 },
-  { ttlMs: 60001 },
-  { ttlMs: NaN },
-  { ttlMs: Infinity },
-  { ttlMs: "1000" },
-])("invalid retry budget %j fails before transport", async (options) => {
-  const h = fixture(options);
-  expect((await op(h.client))[0]?.code).toBe("REQ_OPTIONS_INVALID");
-  expect(h.calls()).toBe(0);
-});
-
 test("tiny positive retry ratios saturate Finagle's integer retry cost instead of granting infinite credit", async () => {
   const h = fixture({
     percentCanRetry: Number.MIN_VALUE,
@@ -124,11 +95,10 @@ test("tiny positive retry ratios saturate Finagle's integer retry cost instead o
 
 test("fractional-second TTL reserves only Finagle whole seconds without deposits", () => {
   const config = createClientConfig();
-  config.http.retry = {
+  config.retry = {
     budget: { ttlMs: 1500, minRetriesPerSecond: 10, percentCanRetry: 0.2 },
   };
   const budget = retryBudgetFor(config);
-  if (budget instanceof Error) throw budget;
   for (let i = 0; i < 10; i++) expect(budget.tryWithdraw()).toBe(true);
   expect(budget.tryWithdraw()).toBe(false);
 });
@@ -160,11 +130,10 @@ test("two clients sharing one balancer keep independent retry reserves", async (
 
 test("TTL slices expire staggered credits gradually rather than all at once", () => {
   const config = createClientConfig();
-  config.http.retry = {
+  config.retry = {
     budget: { percentCanRetry: 0.5, minRetriesPerSecond: 0, ttlMs: 1000 },
   };
   const budget = retryBudgetFor(config);
-  if (budget instanceof Error) throw budget;
   budget.deposit();
   budget.deposit();
   vi.advanceTimersByTime(500 - performance.now());
@@ -184,11 +153,10 @@ test.each([86_400_000, -3_600_000])(
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
     vi.setSystemTime(0);
     const config = createClientConfig();
-    config.http.retry = {
+    config.retry = {
       budget: { percentCanRetry: 0, minRetriesPerSecond: 1, ttlMs: 1000 },
     };
     const budget = retryBudgetFor(config);
-    if (budget instanceof Error) throw budget;
     expect(budget.tryWithdraw()).toBe(true);
     vi.setSystemTime(jump);
     expect(budget.tryWithdraw()).toBe(false);

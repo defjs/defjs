@@ -1287,25 +1287,42 @@
     "name": "withRetry",
     "kind": "function",
     "slug": "core/withretry",
-    "related": [
-      "@defjs/core:RetryOptions",
-      "@defjs/core:withSSEReconnect",
-      "@defjs/core:withWebSocketReconnect"
-    ]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "RetryCondition",
-    "kind": "type",
-    "slug": "core/retrycondition-type",
-    "related": []
+    "related": ["@defjs/core:RetryOptions"]
   },
   {
     "package": "@defjs/core",
     "name": "RetryOptions",
     "kind": "type",
     "slug": "core/retryoptions-type",
-    "related": []
+    "related": ["@defjs/core:withRetry"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryContext",
+    "kind": "type",
+    "slug": "core/retrycontext-type",
+    "related": ["@defjs/core:RetryOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpRetryContext",
+    "kind": "type",
+    "slug": "core/httpretrycontext-type",
+    "related": ["@defjs/core:RetryOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSERetryContext",
+    "kind": "type",
+    "slug": "core/sseretrycontext-type",
+    "related": ["@defjs/core:RetryOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketRetryContext",
+    "kind": "type",
+    "slug": "core/websocketretrycontext-type",
+    "related": ["@defjs/core:RetryOptions"]
   },
   {
     "package": "@defjs/core",

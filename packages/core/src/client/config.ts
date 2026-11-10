@@ -196,52 +196,129 @@ export interface ClientSSEConfig extends ClientSSEOptions {
   handle: FetchHandle;
 }
 
-/** Conditions that allow HTTP to try a different endpoint within one call.
- * @group client
- */
-export type RetryCondition =
-  "connect-failure" | "gateway-error" | "attempt-timeout";
+/** Fields shared by every {@link RetryContext}: the retry about to happen, its cause, and the default policy's verdict. */
+interface RetryContextBase {
+  /** Number of the retry about to start. The first retry is `1`. For SSE and WebSocket the count restarts at `1` after a connection is established again. */
+  readonly attempt: number;
+  /** The failure that ended the attempt: a fault, an error, or the cause a WebSocket close carries. It is `undefined` when a WebSocket closed without one. */
+  readonly cause: unknown;
+  /** What the default policy decides for this failure: the method is in `methods` and the failure is one the transport retries by default. `shouldRetry` can return it as is or override it. */
+  readonly retryable: boolean;
+}
 
-/** Opt-in same-call HTTP retry policy. Omitted fields use defaults.
+/**
+ * What `shouldRetry` receives after a failed HTTP attempt.
  *
- * Call {@link withRetry}() or pass `{}` to enable retries. Omission disables retries
- * and creates no retry budget. Streaming request bodies are
- * never replayed. Invalid options return `REQ_OPTIONS_INVALID` at HTTP execution.
- * When a retry cannot use any endpoint — the balancer's pick fails or the next
- * endpoint's URL does not resolve — the call returns the previous attempt's fault.
+ * `cause` is the fault the attempt returned. `status` is the response status when the attempt got a response. `retryable` is `true` for a method in `methods` and a failure without a response, a 502, 503, or 504 response, or an attempt timeout.
+ *
+ * @group client
+ * @see {@link RetryOptions}
+ */
+export interface HttpRetryContext extends RetryContextBase {
+  readonly transport: "http";
+  /** Method the attempt sent. It is the last one when an interceptor sent more than one request. */
+  readonly method: string;
+  /** Endpoint the failed attempt used. */
+  readonly endpoint: string;
+  /** Status of the response, when the attempt got one. */
+  readonly status?: number;
+}
+
+/**
+ * What `shouldRetry` receives after an SSE handshake or stream failed.
+ *
+ * `cause` is the failure: an `HTTP_STATUS` fault for a non-2xx handshake, otherwise the error that ended the attempt. `retryable` is `true` for a method in `methods` and a handshake network failure, a 502, 503, or 504 handshake, an attempt timeout, or a network error after the stream opened. A normal end of the stream never retries.
+ *
+ * @group client
+ * @see {@link RetryOptions}
+ */
+export interface SSERetryContext extends RetryContextBase {
+  readonly transport: "sse";
+  /** Method of the stream request. */
+  readonly method: string;
+  /** The last event ID the stream committed, or an empty string. The next attempt sends it as `Last-Event-ID`. */
+  readonly lastEventId: string;
+  /** The latest handshake response, when one arrived. */
+  readonly open?: {
+    readonly response: {
+      readonly status: number;
+      readonly statusText: string;
+      readonly url: string;
+    };
+    readonly url: string;
+  };
+  /** Status of the handshake response, when one arrived. */
+  readonly status?: number;
+}
+
+/**
+ * What `shouldRetry` receives after a WebSocket closed without `session.close()`.
+ *
+ * `cause` is the connection error, or `undefined` for a clean close. `code`, `reason`, and `wasClean` come from the close event and are `undefined` when none was observed, for example after a heartbeat timeout or an attempt timeout. `retryable` is always `true`: a close the caller did not request is retried by default, including a connection that never opened.
+ *
+ * @group client
+ * @see {@link RetryOptions}
+ */
+export interface WebSocketRetryContext extends RetryContextBase {
+  readonly transport: "websocket";
+  /** Close code, when a close event was observed. */
+  readonly code?: number;
+  /** Close reason, when a close event was observed. */
+  readonly reason?: string;
+  /** Whether the close was clean, when a close event was observed. */
+  readonly wasClean?: boolean;
+}
+
+/**
+ * Failure description passed to `shouldRetry`. Narrow it with `transport`.
+ *
+ * @group client
+ * @see {@link RetryOptions}
+ */
+export type RetryContext =
+  HttpRetryContext | SSERetryContext | WebSocketRetryContext;
+
+/**
+ * Opt-in retry policy for HTTP, SSE, and WebSocket.
+ *
+ * Call {@link withRetry}() or pass `{}` to enable retries with the defaults. Without a policy every call makes one attempt. Per call, `client({ retry })` replaces the client's policy as a whole value.
+ *
+ * After each failed attempt the policy decides in this order:
+ *
+ * 1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, and a `ReadableStream` request body end the call. `shouldRetry` is not called.
+ * 2. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.
+ * 3. `shouldRetry(context)` decides. Without it, `context.retryable` does.
+ * 4. HTTP only: a retry that the `budget` cannot pay for ends the call.
+ * 5. The call waits for the backoff delay, then the balancer picks an endpoint again. Every endpoint is a candidate, including the one that just failed, so a single endpoint is tried again after the delay.
+ *
  * @exampleFile examples/client/http-retry.ts#example
  * @group client
+ * @see {@link withRetry}
  */
 export interface RetryOptions {
-  /** Total attempts including the original (gRPC retryPolicy.maxAttempts / go-kit lb.Retry max). Safe integer at least 1; defaults to 2. One disables retries; there is no configured upper bound, but each endpoint is tried at most once. */
-  readonly maxAttempts?: number;
+  /** Retries after the first attempt. Defaults to 3; `0` never retries. For SSE and WebSocket the count restarts when a connection is established again. */
+  readonly maxRetries?: number;
+  /** Initial backoff delay in milliseconds. Defaults to 1000. Zero skips waiting. */
+  readonly delayMs?: number;
+  /** Multiplier applied to the delay for each further retry. Defaults to 2. The first retry waits `delayMs`. */
+  readonly factor?: number;
+  /** Cap on the final delay in milliseconds, jitter included. Defaults to 30000; `Infinity` removes the cap. The platform timer limit of `2_147_483_647` still applies. */
+  readonly maxDelayMs?: number;
+  /** Multiplicative jitter in [0, 1]. Defaults to 0.2, plus or minus twenty percent. */
+  readonly jitter?: number;
   /**
-   * Retryable outcomes. Defaults to connection failures only; local failures
-   * before Fetch starts do not qualify. Gateway errors
-   * include NET_UNAVAILABLE responses, including those whose declared error body fails with
-   * a response-side RES_* fault. Successful or extension-failed interceptor
-   * results never trigger gateway retry.
-   */
-  readonly on?: readonly RetryCondition[];
-  /** Allowed methods, case-insensitive. Every method sent by an attempt after interceptor rewrites must qualify; without a transport invocation, the defined method is used. Defaults to GET, HEAD, OPTIONS, TRACE. */
-  readonly methods?: readonly string[];
-  /**
-   * Positive finite timeout for each Fetch sent to the selected endpoint, from
-   * invocation until its response body has been read; at most `2_147_483_647` ms.
-   * Interceptor work around the send and struct decoding are not timed, so local
-   * delays never count against the endpoint.
+   * Time limit for one attempt in milliseconds. Unset by default. HTTP counts from the call to the end of the response body, SSE to the response headers, WebSocket to `open`. An attempt that runs out is a failure that the policy handles like a connection failure.
+   * Use `withRetry({ maxRetries: 0, attemptTimeoutMs })` for a time limit without retries.
    */
   readonly attemptTimeoutMs?: number;
-  /** Initial finite non-negative backoff delay in milliseconds; defaults to 25. Zero skips waiting. */
-  readonly delayMs?: number;
-  /** Finite positive multiplier per retry; defaults to 2. The first retry uses exponent zero. */
-  readonly factor?: number;
-  /** Finite multiplicative jitter in [0, 1]; defaults to 0.2 (plus or minus twenty percent). */
-  readonly jitter?: number;
-  /** Non-negative finite cap on the final delay, or positive Infinity; defaults to 250. The platform timer cap still applies. */
-  readonly maxDelayMs?: number;
+  /** Methods the default policy retries, case-insensitive. Defaults to GET, HEAD, OPTIONS, TRACE, PUT, and DELETE. HTTP checks every method an attempt sent, after interceptor rewrites. WebSocket ignores it. */
+  readonly methods?: readonly string[];
   /**
-   * Client-owned Finagle retry budget; false removes the cap.
+   * Decides whether a failed attempt is retried. It is called after the `maxRetries` check and replaces `context.retryable`; return it to keep the default. It may return a promise, which the caller's signal can cancel. A throw ends the call with that value as the cause.
+   */
+  readonly shouldRetry?: (context: RetryContext) => boolean | Promise<boolean>;
+  /**
+   * HTTP only. Client-owned Finagle retry budget; `false` removes the cap.
    * Derived clients sharing one configuration share its budget. Separate clients
    * keep independent budgets, even when they share a balancer. Credits and debits
    * expire lazily in ten TTL/10 slices (at most one slice early).
@@ -250,11 +327,11 @@ export interface RetryOptions {
   readonly budget?:
     | false
     | {
-        /** Finite ratio in [0, 1000]; defaults to 0.2. Finagle integer token scaling (including Int cost saturation) applies. */
+        /** Ratio of retries to calls, in [0, 1000]. Defaults to 0.2. Finagle integer token scaling (including Int cost saturation) applies. */
         readonly percentCanRetry?: number;
-        /** Nonnegative safe integer; defaults to 10. */
+        /** Retries per second always allowed. Defaults to 10. */
         readonly minRetriesPerSecond?: number;
-        /** Finite TTL in [1000, 60000] ms; defaults to 10000. */
+        /** Window in milliseconds over which credits and debits count. Defaults to 10000. */
         readonly ttlMs?: number;
       };
 }
@@ -269,7 +346,7 @@ export interface HttpClientOptions {
   /** Static default headers merged under headers returned by the builder for HTTP/SSE. */
   headers?: Headers;
   /** HTTP transport overrides; the default resolves global `fetch` on each call. */
-  http?: { handle?: FetchHandle; retry?: RetryOptions };
+  http?: { handle?: FetchHandle };
   /** Interceptors applied in registration order. */
   interceptors?: Interceptor[];
   /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
@@ -286,6 +363,8 @@ export interface HttpClientOptions {
  * @group client
  */
 export interface ClientOptions extends HttpClientOptions {
+  /** Opt-in retry policy shared by HTTP, SSE, and WebSocket. */
+  retry?: RetryOptions;
   /** SSE transport and reconnect options. */
   sse?: ClientSSEOptions;
   /** WebSocket transport, heartbeat, and reconnect options. */
@@ -302,7 +381,7 @@ export interface HttpClientConfig {
   /** Static default headers merged under headers returned by the builder for HTTP/SSE. */
   headers?: Headers;
   /** HTTP transport with a required fetch handle. */
-  http: { handle: FetchHandle; retry?: RetryOptions };
+  http: { handle: FetchHandle };
   /** Interceptors applied in registration order. */
   interceptors: Interceptor[];
   /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
@@ -321,13 +400,15 @@ export interface HttpClientConfig {
  *
  * The snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.
  *
- * Before any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `http.retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.
+ * Before any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.
  *
  * @group client
  */
 export interface ClientConfig extends HttpClientConfig {
   /** Selects one candidate per call. Defaults to a fresh {@link pickFirstBalancer}. */
   balancer: Balancer;
+  /** Retry policy shared by HTTP, SSE, and WebSocket. Unset means every call makes one attempt. */
+  retry?: RetryOptions;
   /** Resolved SSE configuration. */
   sse: ClientSSEConfig;
   /** Resolved WebSocket configuration. */
@@ -373,7 +454,7 @@ export function createHttpClientConfig(): HttpClientConfig {
   return {
     endpoints: [],
     headers: undefined,
-    http: { handle: DEFAULT_HTTP_OPTIONS.handle, retry: undefined },
+    http: { handle: DEFAULT_HTTP_OPTIONS.handle },
     interceptors: [],
     querySerializer: undefined,
     finalizeHeaders: undefined,
@@ -386,6 +467,7 @@ export function createClientConfig(): ClientConfig {
   return {
     endpoints: http.endpoints,
     balancer: pickFirstBalancer(),
+    retry: undefined,
     headers: http.headers,
     http: http.http,
     interceptors: http.interceptors,

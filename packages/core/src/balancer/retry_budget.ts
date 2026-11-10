@@ -1,44 +1,27 @@
 import { monotonicNow } from "../internal/clock";
-import type { ClientConfig } from "../client/config";
-import { isBalancerOptionRecord } from "./outlier_detection";
+import type { ClientConfig, RetryOptions } from "../client/config";
 
 interface RetryBudget {
   deposit(): void;
   tryWithdraw(): boolean;
 }
-const budgets = new WeakMap<ClientConfig, RetryBudget | Error>();
+const budgets = new WeakMap<ClientConfig, RetryBudget>();
 
 /** A client-owned Finagle token budget. Both credits and debits expire lazily. */
-export function retryBudgetFor(config: ClientConfig): RetryBudget | Error {
+export function retryBudgetFor(config: ClientConfig): RetryBudget {
   const existing = budgets.get(config);
   if (existing !== undefined) return existing;
-  const budget = createBudget(config.http.retry?.budget);
+  const budget = createBudget(config.retry?.budget);
   budgets.set(config, budget);
   return budget;
 }
-function createBudget(option: unknown): RetryBudget | Error {
+function createBudget(option: RetryOptions["budget"]): RetryBudget {
   if (option === false) return { deposit() {}, tryWithdraw: () => true };
-  if (option !== undefined && !isBalancerOptionRecord(option))
-    return new TypeError("retryBudget must be an object or false");
   const {
     percentCanRetry: percent = 0.2,
     minRetriesPerSecond: minimum = 10,
     ttlMs: ttl = 10000,
   } = option ?? {};
-  if (
-    typeof percent !== "number" ||
-    !Number.isFinite(percent) ||
-    percent < 0 ||
-    percent > 1000 ||
-    typeof minimum !== "number" ||
-    !Number.isSafeInteger(minimum) ||
-    minimum < 0 ||
-    typeof ttl !== "number" ||
-    !Number.isFinite(ttl) ||
-    ttl < 1000 ||
-    ttl > 60000
-  )
-    return new RangeError("Invalid retryBudget options");
   const deposit = percent === 0 ? 0 : 1000;
   const withdrawal =
     percent === 0 ? 1 : Math.min(0x7fffffff, Math.floor(1000 / percent));

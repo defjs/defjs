@@ -7,11 +7,14 @@ export type {
   ClientSSEOptions,
   ClientWebSocketOptions,
   FetchHandle,
+  HttpRetryContext,
   QuerySerializer,
-  RetryCondition,
+  RetryContext,
   RetryOptions,
+  SSERetryContext,
   WebSocketHandle,
   WebSocketHandleConstructor,
+  WebSocketRetryContext,
 } from "./config";
 export type { ClientOption } from "./option";
 export {
