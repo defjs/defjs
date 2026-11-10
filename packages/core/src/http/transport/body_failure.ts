@@ -28,6 +28,10 @@ type BodyFailureMeta<C extends BodyFailureCode> = C extends
  *
  * Caller cancellation is deliberately never tagged: it stays the raw abort reason so the
  * cancellation path keeps priority over body classification.
+ *
+ * The two codes found before the request is sent, `REQ_BUILD_FAILED` and `EXT_HOOK_FAILED`, never
+ * reach an interceptor as this class: `next()` rejects with their `cause`, and operation execution
+ * keeps the tag on the side to build the fault. The other codes are not hidden.
  */
 export class BodyFailure<
   C extends BodyFailureCode = BodyFailureCode,

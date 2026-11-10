@@ -61,7 +61,7 @@ import { parseStructValue } from "../struct/introspection";
 import type { Guide } from "../struct/guide";
 import { createHttpRequest } from "./request";
 import type { AnyBodyFailure } from "./transport/body_failure";
-import { isBodyFailure } from "./transport/body_failure";
+import { BodyFailure, isBodyFailure } from "./transport/body_failure";
 import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
   fetchHandlerWithLifecycle,
@@ -622,6 +622,11 @@ async function executeHttpAttempt<
     }
 
     const transportOrigin = createTransportOrigin();
+    // A failure found before the request is sent is shown to interceptors as the error that caused it, so they and
+    // any tracing around them never see a library class. This remembers which fault such an error stands for.
+    // An object matches by identity. A primitive a hook threw matches by value, so an interceptor that throws an
+    // equal primitive after next() rejected with it is given the hook's code, the same trade-off createTransportOrigin makes.
+    const localFailures = new Map<unknown, AnyBodyFailure>();
     // One controller per send, so stopping a live send never reaches one whose upload body already failed.
     const liveTransports = new Set<AbortController>();
     let chainSettled = false;
@@ -660,9 +665,17 @@ async function executeHttpAttempt<
       let transportAbort: AbortSignal;
       try {
         resolveRequestUrl(nextRequest);
-        // Headers rejects an invalid name or value with a TypeError. Checking here makes that an interceptor error
-        // at next(), not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
-        void new Headers(nextRequest.headers);
+        // Headers rejects an invalid name or value with a TypeError. Checking here makes that a request that cannot be
+        // built, not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
+        try {
+          void new Headers(nextRequest.headers);
+        } catch (error) {
+          localFailures.set(
+            error,
+            new BodyFailure("REQ_BUILD_FAILED", error, undefined),
+          );
+          throw error;
+        }
         // transportController already follows requestSignal through abortTransport. Only an interceptor that
         // swapped the signal needs a composite, which is expensive to build and to listen on.
         transportAbort =
@@ -770,9 +783,12 @@ async function executeHttpAttempt<
             // Cancellation outranks whatever the transport was doing when it noticed. Tagging here is
             // the only way to tell a dead server from an interceptor that threw the same value: both
             // reach the chain's catch as one bare cause.
-            throw transportOrigin.mark(
-              resolveAbortCause(transportAbort) ?? error,
-            );
+            const surfaced = resolveAbortCause(transportAbort) ?? error;
+            if (isLocalFailure(surfaced)) {
+              localFailures.set(surfaced.cause, surfaced);
+              throw transportOrigin.mark(surfaced.cause);
+            }
+            throw transportOrigin.mark(surfaced);
           },
         )
         .finally(() => {
@@ -837,8 +853,9 @@ async function executeHttpAttempt<
         }
         // The transport only reads a side that declared a struct, so a tagged body failure belongs to that side.
         // Failures before the request is sent (upload observer, finalizeHeaders, a used body stream) are also tagged, without response metadata.
-        if (isBodyFailure(error)) {
-          const fault = fromBodyFailure(error);
+        const failure = isBodyFailure(error) ? error : localFailures.get(error);
+        if (failure) {
+          const fault = fromBodyFailure(failure);
           finish(fault);
           return fail(fault);
         }
@@ -1101,6 +1118,16 @@ async function decodeDeclaredBody<S extends AnyStruct>(
   }
   signal.throwIfAborted();
   return await parseStructResponse(struct, response.body);
+}
+
+/** A request refused before it was sent: the hook or platform error behind it is what interceptors are shown. */
+function isLocalFailure(
+  value: unknown,
+): value is BodyFailure<"EXT_HOOK_FAILED" | "REQ_BUILD_FAILED"> {
+  return (
+    isBodyFailure(value) &&
+    (value.code === "EXT_HOOK_FAILED" || value.code === "REQ_BUILD_FAILED")
+  );
 }
 
 /** Map a transport-tagged body failure onto the fault it was classified as. */

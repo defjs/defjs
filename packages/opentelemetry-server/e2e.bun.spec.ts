@@ -28,5 +28,8 @@ describe("e2e: opentelemetry-server bun transport", () => {
     }
     expect(exceptions).toHaveLength(1);
     expect(Object.getOwnPropertyNames(exceptions[0])).toEqual(["name"]);
+    // The interceptor sees the platform's TypeError, not a library class.
+    expect(exceptions[0]).toEqual({ name: "TypeError" });
+    expect(spans[0]?.attributes["error.type"]).toBe("TypeError");
   });
 });

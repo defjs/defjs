@@ -399,10 +399,11 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should return transport error when WebSocket constructor throws", async () => {
+    const refusal = new SyntaxError("Wrong protocol for WebSocket");
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({
-        throwOnConstruct: new Error("connection refused"),
+        throwOnConstruct: refusal,
       }),
     );
 
@@ -417,7 +418,10 @@ describe("web socket runtime environment edge cases", () => {
 
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
-    expect(error?.code.startsWith("NET_")).toBe(true);
+    // A constructor refusal (invalid subprotocol, unsupported scheme) is not checked by the library: it is
+    // reported as an unreachable endpoint with the constructor's error as the cause, as the errors guide states.
+    expect(error?.code).toBe("NET_UNREACHABLE");
+    expect(error?.cause).toBe(refusal);
   });
 
   test("should report invalid incoming frames without tearing down the session", async () => {

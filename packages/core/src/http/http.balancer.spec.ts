@@ -763,7 +763,7 @@ describe("HTTP endpoint balancer", () => {
     expect(watched.dones).toEqual([{ attempted: false }]);
   });
 
-  test("reports EXT_INTERCEPTOR_FAILED when an interceptor passes a header value Headers rejects", async () => {
+  test("reports REQ_BUILD_FAILED when an interceptor passes a header value Headers rejects", async () => {
     const live = await serve("respond", { status: 204 });
     const watched = watch(pickFirstBalancer());
     let thrownSynchronously = false;
@@ -787,7 +787,7 @@ describe("HTTP endpoint balancer", () => {
     const [fault] = await get(client);
 
     expect(thrownSynchronously).toBe(false);
-    expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
+    expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(fault?.cause).toBeInstanceOf(TypeError);
     expect(await live.hits()).toEqual([]);
     expect(watched.dones).toEqual([{ attempted: false }]);

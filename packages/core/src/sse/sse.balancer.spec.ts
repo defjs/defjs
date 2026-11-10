@@ -1203,7 +1203,7 @@ test("does not call done when the initial pick fails, and calls it once when bui
   expectPicks(recorded);
 });
 
-test("reports EXT_INTERCEPTOR_FAILED and calls done once when an interceptor passes a header value Headers rejects", async () => {
+test("reports REQ_BUILD_FAILED and calls done once when an interceptor passes a header value Headers rejects", async () => {
   const handle = vi.fn(() => Promise.resolve(sseResponse("data: hi\n\n")));
   const recorded = track(() => "https://example.com");
   let thrownSynchronously = false;
@@ -1228,7 +1228,7 @@ test("reports EXT_INTERCEPTOR_FAILED and calls done once when an interceptor pas
   );
   expect(thrownSynchronously).toBe(false);
   expect(stream).toBeUndefined();
-  expect(error?.code).toBe("EXT_INTERCEPTOR_FAILED");
+  expect(error?.code).toBe("REQ_BUILD_FAILED");
   expect(error?.cause).toBeInstanceOf(TypeError);
   expect(handle).not.toHaveBeenCalled();
   expect(recorded.dones).toEqual([

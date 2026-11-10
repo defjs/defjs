@@ -436,6 +436,8 @@ async function runEventStreamCommand<
     let streamDelivered = false;
     const ownedStreams = new Set<OwnedStream>();
     const transportOrigin = createTransportOrigin();
+    // Headers an interceptor handed to next() and the platform refused; the interceptor is shown that error itself.
+    const refusedHeaders = new Set<unknown>();
     const errorFailure = new Map<
       unknown,
       EventStreamFailureInfo<HandshakeBody<TError>>
@@ -470,9 +472,14 @@ async function runEventStreamCommand<
         let transportAbort: AbortSignal;
         try {
           resolveRequestUrl(req);
-          // Headers rejects an invalid name or value with a TypeError. Checking here makes that an interceptor error
-          // at next(), not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
-          void new Headers(req.headers);
+          // Headers rejects an invalid name or value with a TypeError. Checking here makes that a request that cannot be
+          // built, not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
+          try {
+            void new Headers(req.headers);
+          } catch (error) {
+            refusedHeaders.add(error);
+            throw error;
+          }
           transportAbort = mergeAbortSignals(requestSignal, [req.signal]);
         } catch (error) {
           settleUnattempted();
@@ -628,7 +635,7 @@ async function runEventStreamCommand<
       const { open: openInfo, decoded } = errorFailure.get(cause) ?? {};
       const fault = requestSignal.aborted
         ? resolveAbortedFault(requestSignal)
-        : error instanceof RequestUrlError
+        : error instanceof RequestUrlError || refusedHeaders.has(error)
           ? createPreflightFault("REQ_BUILD_FAILED", error)
           : createEventStreamFault(
               cause,
