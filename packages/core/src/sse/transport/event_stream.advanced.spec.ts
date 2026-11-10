@@ -613,20 +613,32 @@ describe("fetchEventStream advanced", () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  test("should classify a missing response body as an invalid response", async () => {
-    const error = await fetchEventStream(createRequest("/events"), {
-      fetch: () =>
-        Promise.resolve(
-          new Response(null, {
-            headers: { "content-type": "text/event-stream" },
-          }),
-        ),
-    }).catch((cause: unknown) => cause);
+  test.each([200, 204, 205])(
+    "should end a %i response without a body as an empty stream",
+    async (status) => {
+      const onopen = vi.fn();
+      const onclose = vi.fn();
+      const stream = await fetchEventStream(createRequest("/events"), {
+        fetch: () =>
+          Promise.resolve(
+            new Response(null, {
+              status,
+              headers: { "content-type": "text/event-stream" },
+            }),
+          ),
+        onclose,
+        onopen,
+      });
 
-    expect(error).toBeInstanceOf(Error);
-    expect(thrownMessage(error)).toBe("Missing response body for event stream");
-    expect(getEventStreamFatalCode(error)).toBe("RES_DECODE_FAILED");
-  });
+      const events: EventStreamMessage[] = [];
+      for await (const event of stream) events.push(event);
+
+      expect(events).toEqual([]);
+      await expect(stream.closed).resolves.toEqual({ kind: "eof" });
+      expect(onopen).toHaveBeenCalledOnce();
+      expect(onclose).toHaveBeenCalledOnce();
+    },
+  );
 
   test("should cancel upstream and terminate on a parser limit even when callbacks request retry", async () => {
     const cancel = vi.fn();

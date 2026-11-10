@@ -1,12 +1,14 @@
 import { statusOutcome } from "../../internal/attempt_outcome";
 import type { ClientSSEOptions, FetchHandle } from "../../client/config";
 import type {
+  DecodeFault,
   FaultCode,
   HttpStatusFault,
   HttpStatusFaultOf,
   PreflightFault,
 } from "../../error";
 import {
+  createDecodeFault,
   createHttpStatusFault,
   createNetworkFault,
   createPreflightFault,
@@ -47,6 +49,7 @@ import { resolveInboundRepresentation } from "../../internal/inbound_representat
 import { resolveRequestUrl } from "../../internal/url";
 import type { AnyStruct } from "../../struct";
 import { decodeJson } from "../../struct/codec/json";
+import { StructError } from "../../struct/errors";
 import { parseStructValue } from "../../struct/introspection";
 import type { EventStreamMessage } from "./parser";
 import {
@@ -165,6 +168,11 @@ export interface EventStreamFailureInfo<TBody = unknown> {
   open?: EventStreamOpenInfo;
   /** The failed handshake with its decoded error body. Absent when the body was not decoded. */
   decoded?: DecodedResponse<TBody>;
+  /**
+   * Why a declared error body was not decoded. A failed first handshake reports it, as `defineRequest`
+   * does, because only a decoded body can fill the typed `data` of the status fault.
+   */
+  bodyFault?: DecodeFault;
 }
 
 export interface FetchEventStreamOptions<
@@ -264,23 +272,21 @@ export function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
   };
 }
 
-// Why a declared error body could not be decoded, by the unread response the handshake left behind.
-const handshakeBodyFailures = new WeakMap<object, unknown>();
-
 /**
  * The `HTTP_STATUS` fault for a non-2xx handshake, with `data` when the declared error body decoded.
- * A body that could not be decoded leaves `data` undefined and its failure on `cause`.
+ * A body that could not be decoded leaves `data` undefined and its failure on `cause`. Interceptors,
+ * reconnect policies and a reconnect's `closed` all see this fault.
  */
 export function createHandshakeStatusFault<TBody>(
   response: HttpResponse<unknown>,
   decoded?: DecodedResponse<TBody>,
+  bodyFault?: DecodeFault,
 ): HttpStatusFaultOf<TBody> | HttpStatusFaultOf<undefined> {
   const fault = decoded
     ? createHttpStatusFault(decoded)
     : createUndecodedHttpStatusFault(toEventStreamMeta(response));
-  const bodyFailure = handshakeBodyFailures.get(response);
-  if (bodyFailure !== undefined) {
-    fault.cause = bodyFailure;
+  if (bodyFault) {
+    fault.cause = bodyFault.cause;
   }
   handshakeStatusFaults.add(fault);
   return fault;
@@ -338,6 +344,7 @@ export async function fetchEventStream<
   let lastEventIdDirty = false;
   let latestOpen: EventStreamOpenInfo | undefined;
   let latestDecoded: DecodedResponse<HandshakeBody<TError>> | undefined;
+  let latestBodyFault: DecodeFault | undefined;
   let disposeTask: Promise<void> | undefined;
 
   const handle: EventStreamHandle<TEvent> = {
@@ -520,6 +527,7 @@ export async function fetchEventStream<
       if (!settledOpen) {
         latestOpen = undefined;
         latestDecoded = undefined;
+        latestBodyFault = undefined;
       }
 
       try {
@@ -559,41 +567,22 @@ export async function fetchEventStream<
           code: statusOutcome(response.status),
         };
         endAttempt?.(handshake);
-        // The JSON media-type precheck throws before an open info exists. Attach the response
-        // first so the startup fault can still report that status.
+        // Reading a declared error body can be cut short by an abort before an open info exists.
+        // Attach the response first so the startup fault can still report that status.
         const handshakeResponse = response;
-        const { open, decoded } = await createOpenInfo(
+        const { open, decoded, bodyFault } = await createOpenInfo(
           handshakeResponse,
           options.handshakeError,
           attemptAbort,
         ).catch((error: unknown) => {
-          const unread = toOpenInfo(handshakeResponse, null, false);
-          latestOpen = unread;
-          // Only a non-2xx handshake whose declared error body failed to decode throws this class. Its
-          // status decides the fault, so whoever sees it (interceptor, reconnect policy, startup, a
-          // reconnect's `closed`) gets the public `HTTP_STATUS` fault, with the decode failure as `cause`.
-          if (error instanceof EventStreamFatalError) {
-            // A decode failure keeps its own error; a media-type mismatch has none, so it gets a plain
-            // `Error` and the internal class stays internal.
-            handshakeBodyFailures.set(
-              unread.response,
-              error.cause ?? new Error(error.message),
-            );
-            throw createHandshakeStatusFault(unread.response);
-          }
+          latestOpen = toOpenInfo(handshakeResponse, null, false);
           throw error;
         });
         latestOpen = open;
         latestDecoded = decoded;
+        latestBodyFault = bodyFault;
 
-        validateOpenResponse(open, decoded);
-
-        if (!response.body) {
-          throw new EventStreamFatalError(
-            "RES_DECODE_FAILED",
-            "Missing response body for event stream",
-          );
-        }
+        validateOpenResponse(open, decoded, bodyFault);
 
         await runFatalHook(
           () => options.onopen?.(open),
@@ -607,8 +596,11 @@ export async function fetchEventStream<
           openDeferred.resolve(handle);
         }
 
-        readerStarted = true;
-        await consumeEventStream(response.body, attemptAbort);
+        // A 2xx event stream without a body (204, 205 on Node.js and Bun) is an empty stream that ends with eof.
+        if (response.body) {
+          readerStarted = true;
+          await consumeEventStream(response.body, attemptAbort);
+        }
         await runFatalHook(
           () => options.onclose?.(open),
           attemptAbort,
@@ -900,6 +892,7 @@ export async function fetchEventStream<
     const closeCause: unknown = signal.reason;
     failure.open = latestOpen;
     failure.decoded = latestDecoded;
+    failure.bodyFault = latestBodyFault;
 
     if (settledOpen) {
       queue.close();
@@ -919,6 +912,7 @@ export async function fetchEventStream<
     finishAttempt();
     failure.open = latestOpen;
     failure.decoded = latestDecoded;
+    failure.bodyFault = latestBodyFault;
     if (settledOpen) {
       queue.fail(error);
     } else {
@@ -1002,50 +996,43 @@ async function createOpenInfo<TError extends AnyStruct | undefined>(
 ): Promise<{
   open: EventStreamOpenInfo;
   decoded?: DecodedResponse<HandshakeBody<TError>>;
+  bodyFault?: DecodeFault;
 }> {
   if (!response.ok && handshakeError) {
     const representation = resolveInboundRepresentation(handshakeError);
+    const contentType = getContentType(response.headers);
+    const unread = toOpenInfo(response, null, false);
+    const meta = toEventStreamMeta(unread.response);
     // A null body status has no body, though Chromium and Firefox expose an empty stream for some.
     let stream = response.body;
     if (stream && NULL_BODY_STATUSES.has(response.status)) {
       discardStreamBody(stream);
       stream = null;
     }
-    // No bytes arrived. Every representation but JSON reads them as zero bytes, like Fetch.
-    // A decoded JSON null still requires a body, so null stays reserved for that value.
-    if (!stream && representation === "json") {
-      throw new EventStreamFatalError(
-        "RES_DECODE_FAILED",
-        "Failed to decode event stream handshake body",
-      );
-    }
 
-    // Philosophy 3, same as HTTP: a JSON declaration is an assertion about the media type.
-    // A mismatch is a decode fault, not an undecoded status, and the body stays unread.
-    if (stream && representation === "json") {
-      const contentType = getContentType(response.headers);
-      if (!isJsonMediaType(contentType)) {
+    // Same as HTTP: a JSON declaration asserts the media type, and it is checked before anything
+    // else, an absent body included. A mismatch leaves the body unread.
+    if (representation === "json" && !isJsonMediaType(contentType)) {
+      if (stream) {
         discardStreamBody(stream);
-        throw new EventStreamFatalError(
-          "RES_MEDIA_TYPE_INVALID",
-          `Expected a JSON media type, received ${contentType || "<none>"}`,
-        );
       }
+      return {
+        open: unread,
+        bodyFault: createDecodeFault(
+          "RES_MEDIA_TYPE_INVALID",
+          new TypeError(
+            `Expected a JSON media type, received ${contentType || "<none>"}`,
+          ),
+          meta,
+        ),
+      };
     }
 
     try {
+      // No bytes arrived: every representation reads them as zero bytes, like Fetch. JSON cannot parse them.
       const raw = stream
-        ? await readHandshakeBody(
-            stream,
-            representation,
-            signal,
-            getContentType(response.headers),
-          )
-        : parseBytesBody(
-            representation,
-            new Uint8Array(0),
-            getContentType(response.headers),
-          );
+        ? await readHandshakeBody(stream, representation, signal, contentType)
+        : parseBytesBody(representation, new Uint8Array(0), contentType);
       // JSON uses the same alias-aware decoder as HTTP. Other kinds stay raw values.
       const body =
         representation === "json"
@@ -1057,12 +1044,16 @@ async function createOpenInfo<TError extends AnyStruct | undefined>(
       if (signal.aborted) {
         throw error;
       }
-      // The published contract: a declared handshake body that cannot be read is RES_DECODE_FAILED.
-      throw new EventStreamFatalError(
-        "RES_DECODE_FAILED",
-        "Failed to decode event stream handshake body",
-        { cause: error },
-      );
+      return {
+        open: unread,
+        bodyFault: createDecodeFault(
+          error instanceof StructError
+            ? "RES_STRUCT_MISMATCH"
+            : "RES_DECODE_FAILED",
+          error,
+          meta,
+        ),
+      };
     }
   }
 
@@ -1127,10 +1118,11 @@ function createEventStreamRequestInit(
 function validateOpenResponse<TBody>(
   open: EventStreamOpenInfo,
   decoded?: DecodedResponse<TBody>,
+  bodyFault?: DecodeFault,
 ): void {
   const { response } = open;
   if (!response.ok) {
-    throw createHandshakeStatusFault(response, decoded);
+    throw createHandshakeStatusFault(response, decoded, bodyFault);
   }
 
   const contentType = response.headers.get("content-type") || "";

@@ -14,6 +14,7 @@ import type { Client } from "../client";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createSSEInterceptor } from "../interceptor";
 import { struct } from "../struct";
+import { StructError } from "../struct/errors";
 import { defineEventStream } from "./index";
 import type { FetchHandle } from "../client/config";
 import { makeResponse } from "../internal/http_response";
@@ -1220,7 +1221,7 @@ describe("request event stream runtime", () => {
     expect(cancelled).toBe(true);
   });
 
-  test("should report an unreadable declared handshake body as HTTP_STATUS without data", async () => {
+  test("should report an unreadable declared handshake body as RES_DECODE_FAILED with the status in its metadata", async () => {
     const useStream = defineEventStream({
       events: { message: struct.string() },
       error: struct.object({ code: struct.string() }),
@@ -1239,18 +1240,16 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await useStream(client);
+    const [error, stream, open] = await useStream(client);
 
-    expect(error?.code).toBe("HTTP_STATUS");
-    if (error?.code !== "HTTP_STATUS") {
-      throw new Error("Expected a status fault");
-    }
-    expect(error.status).toBe(401);
-    expect(error.data).toBeUndefined();
-    expect(error.cause).toBeInstanceOf(SyntaxError);
+    expect(error?.code).toBe("RES_DECODE_FAILED");
+    expect(error?.response?.status).toBe(401);
+    expect(error?.cause).toBeInstanceOf(SyntaxError);
+    expect(stream).toBeUndefined();
+    expect(open?.response.status).toBe(401);
   });
 
-  test("should report a declared handshake body that fails its struct as HTTP_STATUS without data", async () => {
+  test("should report a declared handshake body that fails its struct as RES_STRUCT_MISMATCH with the status in its metadata", async () => {
     const useStream = defineEventStream({
       events: { message: struct.string() },
       error: struct.object({ code: struct.string() }),
@@ -1271,13 +1270,9 @@ describe("request event stream runtime", () => {
     );
     const [error] = await useStream(client);
 
-    expect(error?.code).toBe("HTTP_STATUS");
-    if (error?.code !== "HTTP_STATUS") {
-      throw new Error("Expected a status fault");
-    }
-    expect(error.status).toBe(401);
-    expect(error.data).toBeUndefined();
-    expect(error.cause).toBeInstanceOf(Error);
+    expect(error?.code).toBe("RES_STRUCT_MISMATCH");
+    expect(error?.response?.status).toBe(401);
+    expect(error?.cause).toBeInstanceOf(StructError);
   });
 
   test("should read a string handshake error as raw text", async () => {
@@ -1416,37 +1411,43 @@ describe("request event stream runtime", () => {
       );
       const [error] = await useStream(client);
 
-      expect(error?.code).toBe("HTTP_STATUS");
+      expect(error?.code).toBe("RES_MEDIA_TYPE_INVALID");
       expect(error?.response?.status).toBe(403);
       expect(cancelled).toBe(true);
     },
   );
 
-  test("should report a bodiless declared JSON handshake as HTTP_STATUS without data", async () => {
-    const useStream = defineEventStream({
-      events: { message: struct.string() },
-      error: struct.object({ reason: struct.string() }),
-      path: "/sse/handshake-401",
-    });
+  test.each([
+    ["text/plain", "RES_MEDIA_TYPE_INVALID"],
+    ["application/json", "RES_DECODE_FAILED"],
+  ] as const)(
+    "should check the media type before the absent body of a declared JSON handshake error: %s is %s",
+    async (contentType, code) => {
+      const useStream = defineEventStream({
+        events: { message: struct.string() },
+        error: struct.object({ reason: struct.string() }),
+        path: "/sse/handshake-401",
+      });
 
-    const handle = () =>
-      Promise.resolve(
-        new Response(null, {
-          status: 401,
-          headers: { "content-type": "text/plain" },
-        }),
+      const handle = () =>
+        Promise.resolve(
+          new Response(null, {
+            status: 401,
+            headers: { "content-type": contentType },
+          }),
+        );
+
+      const client = createClient(
+        withEndpoint("https://example.com"),
+        withSSEHandle(handle),
       );
+      const [error, stream] = await useStream(client);
 
-    const client = createClient(
-      withEndpoint("https://example.com"),
-      withSSEHandle(handle),
-    );
-    const [error, stream] = await useStream(client);
-
-    expect(error?.code).toBe("HTTP_STATUS");
-    expect(error?.response?.status).toBe(401);
-    expect(stream).toBeUndefined();
-  });
+      expect(error?.code).toBe(code);
+      expect(error?.response?.status).toBe(401);
+      expect(stream).toBeUndefined();
+    },
+  );
 
   test.each([
     [
@@ -1456,9 +1457,15 @@ describe("request event stream runtime", () => {
           status: 400,
           headers: { "content-type": "application/json" },
         }),
+      "RES_DECODE_FAILED",
       SyntaxError.prototype,
     ],
-    ["no content", () => new Response(null, { status: 304 }), Error.prototype],
+    [
+      "no content",
+      () => new Response(null, { status: 304 }),
+      "RES_MEDIA_TYPE_INVALID",
+      TypeError.prototype,
+    ],
     [
       "a media type that is not JSON",
       () =>
@@ -1466,11 +1473,12 @@ describe("request event stream runtime", () => {
           status: 400,
           headers: { "content-type": "text/html" },
         }),
-      Error.prototype,
+      "RES_MEDIA_TYPE_INVALID",
+      TypeError.prototype,
     ],
-  ])(
-    "should keep a public error as the cause when a declared JSON handshake error has %s",
-    async (_label, respond, prototype) => {
+  ] as const)(
+    "should report a declared JSON handshake error that has %s as its decode fault, with the public HTTP_STATUS fault for interceptors",
+    async (_label, respond, code, prototype) => {
       const useStream = defineEventStream({
         events: { message: struct.string() },
         error: struct.object({ reason: struct.string() }),
@@ -1494,11 +1502,12 @@ describe("request event stream runtime", () => {
 
       const [error] = await useStream(client);
 
-      expect(error?.code).toBe("HTTP_STATUS");
+      expect(error?.code).toBe(code);
       // The exact prototype, not `instanceof`: a library class that extends Error would pass that.
       expect(Object.getPrototypeOf(error?.cause)).toBe(prototype);
-      // The interceptor sees the public fault with the same cause.
+      // The interceptor sees the status fault with the same cause.
       expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({ code: "HTTP_STATUS" });
       expect(seen[0] instanceof Error && seen[0].cause).toBe(error?.cause);
     },
   );
@@ -1573,7 +1582,7 @@ describe("request event stream runtime", () => {
       return { response, wasCanceled: () => canceled };
     };
 
-    test("should keep a declared JSON error undecoded on HTTP_STATUS, with the decode failure as the cause", async () => {
+    test("should report a declared JSON error without a media type as RES_MEDIA_TYPE_INVALID", async () => {
       const { response, wasCanceled } = exposedStream();
       const useStream = defineEventStream({
         events: { message: struct.string() },
@@ -1587,12 +1596,8 @@ describe("request event stream runtime", () => {
 
       const [error, stream] = await useStream(client);
 
-      expect(error?.code).toBe("HTTP_STATUS");
+      expect(error?.code).toBe("RES_MEDIA_TYPE_INVALID");
       expect(error?.response?.status).toBe(304);
-      expect(error).toMatchObject({
-        data: undefined,
-        cause: { message: "Failed to decode event stream handshake body" },
-      });
       expect(stream).toBeUndefined();
       expect(wasCanceled()).toBe(true);
     });

@@ -138,9 +138,9 @@ test("reports an unreadable declared SSE handshake body as a decode fault", asyn
 
   const [fault, stream] = await endpoint(client);
 
-  // A non-2xx handshake is HTTP_STATUS whether or not its declared error body decoded; the
-  // type admits `undefined` data for the undecoded case.
-  expect(fault?.code).toBe("HTTP_STATUS");
+  // Typed `data` exists only when the declared error body decoded, so startup reports the decode
+  // fault, as `defineRequest` does, with the status in its metadata.
+  expect(fault?.code).toBe("RES_DECODE_FAILED");
   expect(fault?.response?.status).toBe(403);
   expect(fault?.cause).toBeInstanceOf(Error);
   expect(stream).toBeUndefined();

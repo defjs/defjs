@@ -178,11 +178,11 @@ test("SSE rejects empty JSON but accepts encoded null and empty raw text", async
       error: mode.endsWith("json") ? struct.null() : struct.string(),
     });
     const [fault] = await endpoint(client);
-    expect(fault?.code).toBe("HTTP_STATUS");
+    expect(fault?.code).toBe(
+      mode === "empty-json" ? "RES_DECODE_FAILED" : "HTTP_STATUS",
+    );
     if (fault?.code === "HTTP_STATUS")
-      expect(fault.data).toBe(
-        mode === "empty-json" ? undefined : mode === "null-json" ? null : "",
-      );
+      expect(fault.data).toBe(mode === "null-json" ? null : "");
   }
 });
 

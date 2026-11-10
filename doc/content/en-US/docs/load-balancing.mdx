@@ -120,7 +120,7 @@ Custom balancers implement synchronous `pick(info)` and optional `start()`, `end
 | HTTP/SSE response status 2xx, 3xx, or 4xx (including 429)                   | `{ attempted: true, status }`                              |
 | HTTP response body truncates mid-stream                                     | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
 | SSE handshake succeeds, then stream `reader.read()` rejects                 | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| SSE normal EOF, successful-handshake decode failure, or queue limit         | `{ attempted: true, status }`                              |
+| SSE normal EOF, a 2xx handshake that is not an event stream, or queue limit | `{ attempted: true, status }`                              |
 | Opened WebSocket closes with code `1006` or `1015` (no close frame arrived) | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
 | Opened WebSocket closes with code `1012` or `1013`                          | `{ attempted: true, code: "NET_UNAVAILABLE" }`             |
 | WebSocket heartbeat acknowledgement times out                               | `{ attempted: true, code: "NET_UNREACHABLE" }`             |

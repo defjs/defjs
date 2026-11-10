@@ -163,7 +163,9 @@ export type { EventStreamRequestShape } from "../internal/builder_types";
  *
  * - `TError` is the declared `error` struct. It types the decoded error body on the fault.
  *
- * - A non-2xx handshake is always an `HTTP_STATUS` fault. When the declared `error` body could not be decoded (wrong media type, unreadable, or not matching the struct), `data` is `undefined`, `response` carries metadata only, and `cause` holds the decode failure.
+ * - A non-2xx handshake is an `HTTP_STATUS` fault whose `data` is the decoded `error` body. When the declared `error` body could not be decoded, startup returns the decode fault instead, as `defineRequest` does: `RES_MEDIA_TYPE_INVALID` for a JSON declaration that meets another media type, `RES_DECODE_FAILED` for an unreadable or unparsable body, `RES_STRUCT_MISMATCH` for a body that does not match the struct. Its `status` and `response` carry the handshake status as metadata and `cause` holds the reason. Interceptors, `shouldReconnect` and a reconnect's `closed` still receive `HTTP_STATUS`, with the same `cause`, so a gateway `503` is retried however its body looks.
+ *
+ * - A 2xx handshake whose media type is not `text/event-stream` is `RES_MEDIA_TYPE_INVALID`. One with that media type and no body (a `204` or `205` on Node.js and Bun) is an empty stream: the call succeeds and `closed` settles `{ kind: 'eof' }` at once.
  *
  * @group sse
  */
@@ -575,6 +577,7 @@ async function runEventStreamCommand<
             errorFailure.set(cause, {
               open: failure.open,
               decoded: failure.decoded,
+              bodyFault: failure.bodyFault,
             });
             throw transportOrigin.mark(cause);
           },
@@ -632,7 +635,11 @@ async function runEventStreamCommand<
 
       const fromTransport = transportOrigin.has(error);
       const cause = error;
-      const { open: openInfo, decoded } = errorFailure.get(cause) ?? {};
+      const {
+        open: openInfo,
+        decoded,
+        bodyFault,
+      } = errorFailure.get(cause) ?? {};
       const fault = requestSignal.aborted
         ? resolveAbortedFault(requestSignal)
         : error instanceof RequestUrlError || refusedHeaders.has(error)
@@ -642,6 +649,7 @@ async function runEventStreamCommand<
               fromTransport,
               openInfo?.response,
               decoded,
+              bodyFault,
             );
       return [fault, undefined, openInfo];
     } finally {
@@ -790,6 +798,7 @@ function createEventStreamFault<TBody>(
   fromTransport: boolean,
   response?: HttpResponse<unknown>,
   decoded?: DecodedResponse<TBody>,
+  bodyFault?: DecodeFault,
 ):
   | DecodeFault
   | HttpStatusFaultOf<TBody>
@@ -805,14 +814,11 @@ function createEventStreamFault<TBody>(
     return createDecodeFault(fatal, cause, toEventStreamMeta(response));
   }
 
-  // The status decides the code of a non-2xx handshake, whether or not its declared error body decoded.
+  // A non-2xx handshake is `HTTP_STATUS` for everything past the transport. Typed `data` exists only
+  // when the declared error body decoded, so one that did not is reported as its decode fault, as
+  // `defineRequest` does, with the status in its metadata.
   if (response && !response.ok) {
-    return createHandshakeStatusFault(response, decoded);
-  }
-
-  // `CAP_*` and `EXT_*` happen after the stream opens, so they settle `closed` rather than startup.
-  if (response && fatal === "RES_DECODE_FAILED") {
-    return createDecodeFault(fatal, cause, toEventStreamMeta(response));
+    return bodyFault ?? createHandshakeStatusFault(response, decoded);
   }
 
   if (

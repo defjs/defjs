@@ -211,14 +211,31 @@ describe("sse startup faults", () => {
     expect(fault?.code).toBe("RES_MEDIA_TYPE_INVALID");
   });
 
-  test("should report a missing handshake body as RES_DECODE_FAILED", async () => {
+  test.each([200, 204, 205])(
+    "should end a %i event-stream handshake without a body as an empty stream",
+    async (status) => {
+      const client = clientReturning(() =>
+        Promise.resolve(new Response(null, { status, headers: SSE_HEADERS })),
+      );
+
+      const [fault, stream] = await useStream(client);
+
+      expect(fault).toBeNull();
+      const events: unknown[] = [];
+      for await (const event of stream ?? []) events.push(event);
+      expect(events).toEqual([]);
+      await expect(stream?.closed).resolves.toEqual({ kind: "eof" });
+    },
+  );
+
+  test("should still reject a 204 handshake without a body that is not an event stream", async () => {
     const client = clientReturning(() =>
-      Promise.resolve(new Response(null, { headers: SSE_HEADERS })),
+      Promise.resolve(new Response(null, { status: 204 })),
     );
 
     const [fault] = await useStream(client);
 
-    expect(fault?.code).toBe("RES_DECODE_FAILED");
+    expect(fault?.code).toBe("RES_MEDIA_TYPE_INVALID");
   });
 
   test("should report an unreachable transport as NET_UNREACHABLE", async () => {

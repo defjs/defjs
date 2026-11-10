@@ -320,10 +320,21 @@ describe("handshake status faults reach the caller's hooks", () => {
     path: "/events",
   });
 
+  // The startup code of a declared error body that cannot be decoded, as `defineRequest` reports it.
   const undecodable = [
-    ["a wrong media type", "text/html", "<html>unavailable</html>"],
-    ["an unparsable body", "application/json", "{broken"],
-    ["a body that fails the struct", "application/json", '{"code":1}'],
+    [
+      "a wrong media type",
+      "text/html",
+      "<html>unavailable</html>",
+      "RES_MEDIA_TYPE_INVALID",
+    ],
+    ["an unparsable body", "application/json", "{broken", "RES_DECODE_FAILED"],
+    [
+      "a body that fails the struct",
+      "application/json",
+      '{"code":1}',
+      "RES_STRUCT_MISMATCH",
+    ],
   ] as const;
 
   function answering(status: number, contentType: string, body: string) {
@@ -367,16 +378,17 @@ describe("handshake status faults reach the caller's hooks", () => {
 
   test.each(
     [502, 503, 504].flatMap((status) =>
-      undecodable.map(([label, contentType, body]) => ({
+      undecodable.map(([label, contentType, body, code]) => ({
         status,
         label,
         contentType,
         body,
+        code,
       })),
     ),
   )(
-    "reports a $status handshake with $label as HTTP_STATUS at startup, to the interceptor and to the reconnect policy",
-    async ({ status, contentType, body }) => {
+    "reports a $status handshake with $label as $code at startup and as HTTP_STATUS to the interceptor and to the reconnect policy",
+    async ({ status, contentType, body, code }) => {
       const handle = answering(status, contentType, body);
       const { client, interceptorSaw, policySaw } = observed(handle, 1);
 
@@ -384,15 +396,11 @@ describe("handshake status faults reach the caller's hooks", () => {
 
       expect(stream).toBeUndefined();
       expect(handle).toHaveBeenCalledTimes(2);
-      expect(fault).toMatchObject({
-        name: "DefjsFault",
-        code: "HTTP_STATUS",
-        status,
-        data: undefined,
-      });
-      // The decode failure is kept as the cause.
-      expect(fault).toHaveProperty("cause", expect.any(Error));
+      // Startup reports the decode fault, with the status in its metadata.
+      expect(fault).toMatchObject({ name: "DefjsFault", code, status });
+      expect(fault?.cause).toBeInstanceOf(Error);
       expect(open?.response.status).toBe(status);
+      // Everything past the transport sees the public status fault, so 503 still retries.
       expect(interceptorSaw).toHaveLength(1);
       expect(interceptorSaw[0]).toMatchObject({ code: "HTTP_STATUS", status });
       expect(policySaw).toHaveLength(2);
@@ -404,43 +412,45 @@ describe("handshake status faults reach the caller's hooks", () => {
 
   test.each(
     [401, 500].flatMap((status) =>
-      undecodable.map(([label, contentType, body]) => ({
+      undecodable.map(([label, contentType, body, code]) => ({
         status,
         label,
         contentType,
         body,
+        code,
       })),
     ),
   )(
-    "reports a fatal $status handshake with $label as HTTP_STATUS without calling the reconnect policy",
-    async ({ status, contentType, body }) => {
+    "reports a fatal $status handshake with $label as $code at startup without calling the reconnect policy",
+    async ({ status, contentType, body, code }) => {
       const handle = answering(status, contentType, body);
       const { client, interceptorSaw, policySaw } = observed(handle, 1);
 
       const [fault] = await useDeclared(client);
 
       expect(handle).toHaveBeenCalledOnce();
-      expect(fault).toMatchObject({
-        code: "HTTP_STATUS",
-        status,
-        data: undefined,
-      });
+      expect(fault).toMatchObject({ code, status });
       expect(interceptorSaw).toHaveLength(1);
       expect(interceptorSaw[0]).toMatchObject({ code: "HTTP_STATUS", status });
       expect(policySaw).toEqual([]);
     },
   );
 
-  test("keeps a plain Error as the cause of a wrong media type", async () => {
-    const { client } = observed(answering(401, "text/html", "<html/>"), 0);
+  test("keeps a TypeError naming the received type as the cause of a wrong media type", async () => {
+    const { client, interceptorSaw } = observed(
+      answering(401, "text/html", "<html/>"),
+      0,
+    );
 
     const [fault] = await useDeclared(client);
 
+    expect(fault?.code).toBe("RES_MEDIA_TYPE_INVALID");
     expect(fault).toHaveProperty(
       "cause.message",
       expect.stringContaining("text/html"),
     );
-    expect(Object.getPrototypeOf(fault?.cause)).toBe(Error.prototype);
+    expect(Object.getPrototypeOf(fault?.cause)).toBe(TypeError.prototype);
+    expect(interceptorSaw[0]).toHaveProperty("cause", fault?.cause);
   });
 
   test("keeps the decoded error body of a gateway response", async () => {
