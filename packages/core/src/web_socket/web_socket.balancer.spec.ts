@@ -1092,6 +1092,49 @@ describe("web socket endpoint balancer", () => {
     ]);
   });
 
+  test("an endpoint that opens and then drops escalates its penalty", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(0);
+    const picked: string[] = [];
+    const client = clientFor(
+      outlierDetection(
+        {
+          pick(info) {
+            const endpoint = info.endpoints[0] ?? "";
+            picked.push(endpoint);
+            return [null, { endpoint }];
+          },
+        },
+        { jitterRatio: 0 },
+      ),
+    );
+    let index = 0;
+    async function connect(drop: boolean): Promise<void> {
+      const pending = room(client);
+      await flush();
+      socketAt(index).open();
+      const [error, session] = await pending;
+      expect(error).toBeNull();
+      if (!session) throw new Error("expected session");
+      socketAt(index).disconnect(drop ? 1006 : 1000, !drop);
+      index += 1;
+      await session.closed;
+    }
+    for (let attempt = 0; attempt < 5; attempt += 1) await connect(true);
+    let now = 0;
+    for (const penalty of [1000, 2000, 3000]) {
+      now += penalty;
+      vi.advanceTimersByTime(now - 1 - performance.now());
+      picked.length = 0;
+      await connect(false);
+      expect(picked).toEqual([SECONDARY]);
+      vi.advanceTimersByTime(now - performance.now());
+      picked.length = 0;
+      for (let attempt = 0; attempt < 5; attempt += 1) await connect(true);
+      expect(picked).toEqual(Array.from({ length: 5 }, () => PRIMARY));
+    }
+  });
+
   test.each(["offline", "replaced"])(
     "does not attribute a close-only failure when %s",
     async (mode) => {

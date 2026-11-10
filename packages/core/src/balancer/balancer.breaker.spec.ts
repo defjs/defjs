@@ -11,6 +11,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 const list = ["a", "b", "c"];
@@ -59,33 +60,22 @@ function setup(options = {}) {
     childStart,
   };
 }
-test("Linkerd penalties double with positive jitter, cap at sixty seconds and reset after a successful end", () => {
+test("penalties grow linearly with positive jitter and cap at sixty seconds", () => {
   vi.mocked(Math.random).mockReturnValue(0.5);
   const h = setup();
   h.pick().done(bad);
   let now = 0;
-  for (const delay of [1250, 2500, 5000, 10000, 20000, 40000, 60000, 60000]) {
+  // Level n lasts n times the 1000ms minimum plus 25% jitter, capped at 60000ms.
+  for (let level = 1; level <= 52; level++) {
+    const delay = Math.min(1250 * level, 60000);
     vi.advanceTimersByTime(now + delay - 1 - performance.now());
     expect(h.pick().endpoint).toBe("b");
     now += delay;
     vi.advanceTimersByTime(now - performance.now());
-    const probe = h.pick();
-    expect(probe.endpoint).toBe("a");
-    probe.start();
-    probe.end(bad);
-    probe.done(bad);
+    const again = h.pick();
+    expect(again.endpoint).toBe("a");
+    again.done(bad);
   }
-  now += 60000;
-  vi.advanceTimersByTime(now - performance.now());
-  const success = h.pick();
-  success.start();
-  success.end(ok);
-  expect(h.pick().endpoint).toBe("a");
-  h.pick().done(bad);
-  vi.advanceTimersByTime(now + 1249 - performance.now());
-  expect(h.pick().endpoint).toBe("b");
-  vi.advanceTimersByTime(now + 1250 - performance.now());
-  expect(h.pick().endpoint).toBe("a");
 });
 test("all three hosts may break; fail-open uses the exact current original list", () => {
   const h = setup();
@@ -103,8 +93,8 @@ test("a lone broken host is excluded when a healthy candidate is later discovere
   h.pick(["a"]).done(bad);
   expect(h.pick(["a", "b"]).endpoint).toBe("b");
 });
-test("expiry admits only one of sixty picks and end restores traffic before done", () => {
-  const b = roundRobinBalancer();
+test("expiry puts the endpoint back for every pick without a trial request", () => {
+  const b = roundRobinBalancer({ outlierDetection: {} });
   for (let i = 0; i < 15; i++) {
     const [, p] = b.pick({ endpoints: list });
     p?.done?.(p.endpoint === "a" ? bad : ok);
@@ -114,70 +104,142 @@ test("expiry admits only one of sixty picks and end restores traffic before done
     { length: 60 },
     () => pickEndpoint(b, { endpoints: list })[1],
   );
-  const probes = wave.filter((p) => p?.endpoint === "a");
-  expect(probes).toHaveLength(1);
-  probes[0]?.start();
-  probes[0]?.end(ok);
-  expect(
-    Array.from(
-      { length: 60 },
-      () => b.pick({ endpoints: list })[1]?.endpoint,
-    ).filter((e) => e === "a"),
-  ).toHaveLength(20);
+  expect(wave.filter((p) => p?.endpoint === "a")).toHaveLength(20);
 });
-test("probe end failure immediately reopens the breaker without waiting for done", () => {
+test("a failure right after expiry ejects again with the next level", () => {
   const h = setup();
   h.pick().done(bad);
   vi.advanceTimersByTime(1000 - performance.now());
-  const probe = h.pick();
-  probe.start();
-  probe.end(bad);
+  h.pick().done(bad);
   expect(h.pick().endpoint).toBe("b");
   vi.advanceTimersByTime(2999 - performance.now());
   expect(h.pick().endpoint).toBe("b");
   vi.advanceTimersByTime(3000 - performance.now());
   expect(h.pick().endpoint).toBe("a");
 });
-test("a probe is decided by handshake end rather than session lifetime", () => {
+test("end is forwarded and never counted; only done carries a sample", () => {
   const h = setup();
-  h.pick().done(bad);
-  vi.advanceTimersByTime(1000 - performance.now());
-  const [, probe] = pickEndpoint(h.b, { endpoints: list });
-  probe?.start();
-  vi.advanceTimersByTime(100000 - performance.now());
-  expect(h.pick().endpoint).toBe("b");
-  probe?.end(ok);
+  const attempt = h.pick();
+  attempt.start();
+  attempt.end(bad);
+  expect(h.childEnd).toHaveBeenCalledWith(bad);
   expect(h.pick().endpoint).toBe("a");
-});
-test("done after a successful probe end is an ordinary failure sample", () => {
-  const h = setup();
-  h.pick().done(bad);
-  vi.advanceTimersByTime(1000 - performance.now());
-  const probe = h.pick();
-  probe.start();
-  probe.end(ok);
-  expect(h.pick().endpoint).toBe("a");
-  probe.done(bad);
+  attempt.done(bad);
   expect(h.pick().endpoint).toBe("b");
 });
-test("unattributed end releases a probe and done without end uses its result", () => {
-  const h = setup();
+test("an endpoint that accepts and then drops escalates its penalty", () => {
+  const h = setup({ consecutiveFailures: 5 });
+  for (let i = 0; i < 5; i++) h.pick().done(bad);
+  let now = 0;
+  for (const delay of [1000, 2000, 3000, 4000]) {
+    now += delay;
+    vi.advanceTimersByTime(now - 1 - performance.now());
+    expect(h.pick().endpoint).toBe("b");
+    vi.advanceTimersByTime(now - performance.now());
+    for (let i = 0; i < 5; i++) {
+      const attempt = h.pick();
+      expect(attempt.endpoint).toBe("a");
+      attempt.start();
+      attempt.end(ok);
+      attempt.done(bad);
+    }
+  }
+});
+// Three ejections (1s, 2s and 3s) leave level three, and the third ends at 6s.
+function expireAtLevelThree(h: ReturnType<typeof setup>): void {
   h.pick().done(bad);
-  vi.advanceTimersByTime(1000 - performance.now());
-  const probe = h.pick();
-  probe.start();
-  probe.end({ attempted: false });
+  for (const wait of [1000, 2000]) {
+    vi.advanceTimersByTime(wait);
+    h.pick().done(bad);
+  }
+  vi.advanceTimersByTime(3000);
+}
+test.each([
+  { healthyMs: 0, penaltyMs: 4000 },
+  { healthyMs: 9999, penaltyMs: 4000 },
+  { healthyMs: 10000, penaltyMs: 3000 },
+  { healthyMs: 29999, penaltyMs: 2000 },
+  { healthyMs: 30000, penaltyMs: 1000 },
+  { healthyMs: 3600000, penaltyMs: 1000 },
+])(
+  "an expired ejection keeps the level, which decays one step per ten seconds without one ($healthyMs ms)",
+  ({ healthyMs, penaltyMs }) => {
+    const h = setup();
+    expireAtLevelThree(h);
+    vi.advanceTimersByTime(healthyMs);
+    h.pick().done(bad);
+    vi.advanceTimersByTime(penaltyMs - 1);
+    expect(h.pick().endpoint).toBe("b");
+    vi.advanceTimersByTime(1);
+    expect(h.pick().endpoint).toBe("a");
+  },
+);
+test("time that has not yet earned a step is kept across picks", () => {
+  const h = setup();
+  expireAtLevelThree(h);
+  vi.advanceTimersByTime(15000);
   expect(h.pick().endpoint).toBe("a");
-  // That pick now owns the slot, and an unattributed completion frees it.
-  const fallback = h.pick(["a"]);
-  fallback.done({ attempted: false });
-  h.pick().done(ok);
+  vi.advanceTimersByTime(15000);
+  h.pick().done(bad);
+  vi.advanceTimersByTime(999);
+  expect(h.pick().endpoint).toBe("b");
+  vi.advanceTimersByTime(1);
   expect(h.pick().endpoint).toBe("a");
 });
-test("health forwards end and start while classifying before child callbacks", () => {
+test("the level does not decay while the endpoint is ejected", () => {
+  const h = setup({ minPenaltyMs: 20000, maxPenaltyMs: 100000 });
+  h.pick().done(bad);
+  vi.advanceTimersByTime(19999);
+  expect(h.pick().endpoint).toBe("b");
+  vi.advanceTimersByTime(1);
+  h.pick().done(bad);
+  vi.advanceTimersByTime(39999);
+  expect(h.pick().endpoint).toBe("b");
+  vi.advanceTimersByTime(1);
+  expect(h.pick().endpoint).toBe("a");
+});
+test("a session closed by the caller does not carry its level into a later independent outage", () => {
   const h = setup();
   h.pick().done(bad);
-  vi.advanceTimersByTime(1000 - performance.now());
+  vi.advanceTimersByTime(1000);
+  const session = h.pick();
+  session.start();
+  vi.advanceTimersByTime(5000);
+  session.done({ attempted: false });
+  vi.advanceTimersByTime(3600000);
+  h.pick().done(bad);
+  vi.advanceTimersByTime(999);
+  expect(h.pick().endpoint).toBe("b");
+  vi.advanceTimersByTime(1);
+  expect(h.pick().endpoint).toBe("a");
+});
+test("a session that ends after the level has decayed is counted at the decayed level", () => {
+  const h = setup();
+  expireAtLevelThree(h);
+  const session = h.pick();
+  vi.advanceTimersByTime(30000);
+  session.done(bad);
+  vi.advanceTimersByTime(999);
+  expect(h.pick().endpoint).toBe("b");
+  vi.advanceTimersByTime(1);
+  expect(h.pick().endpoint).toBe("a");
+});
+test("a backward wall-clock step without Performance does not inflate the level", () => {
+  vi.stubGlobal("performance", undefined);
+  vi.setSystemTime(3600000);
+  const h = setup();
+  h.pick().done(bad);
+  vi.advanceTimersByTime(1000);
+  const session = h.pick();
+  vi.setSystemTime(0);
+  session.done(bad);
+  vi.advanceTimersByTime(1999);
+  expect(h.pick().endpoint).toBe("b");
+  vi.advanceTimersByTime(1);
+  expect(h.pick().endpoint).toBe("a");
+});
+test("health forwards start and end unchanged", () => {
+  const h = setup();
   const p = h.pick();
   p.start();
   p.end(ok);
@@ -231,19 +293,7 @@ test.each([
   },
 );
 
-// Uncoded socket results and discarded terminal probe samples.
-test("uncoded open resets a streak and invalid probe end stays pending until terminal release", () => {
-  let valid = true;
-  const h = setup({ isFailure: () => (valid ? true : undefined) });
-  h.pick().done(bad);
-  vi.advanceTimersByTime(1000 - performance.now());
-  const probe = h.pick();
-  probe.start();
-  valid = false;
-  probe.end(ok);
-  expect(h.pick().endpoint).toBe("b");
-  probe.done(ok);
-  expect(h.pick().endpoint).toBe("a");
+test("an attempted outcome without a code resets a streak", () => {
   const plain = setup({ consecutiveFailures: 2 });
   plain.pick().done(bad);
   plain.pick().done({ attempted: true });

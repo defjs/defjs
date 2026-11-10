@@ -23,7 +23,7 @@ export interface P2cOptions {
   readonly defaultRttMs?: number;
   /** Positive finite RTT decay time in milliseconds; defaults to 10000. */
   readonly decayMs?: number;
-  /** Health filtering; enabled with defaults when omitted. `false` disables it. */
+  /** Health filtering; off by default. `{}` enables the defaults. */
   readonly outlierDetection?: OutlierDetectionOptions | false;
 }
 interface LoadState {
@@ -47,8 +47,9 @@ const MIN_ESTIMATE_MS = Number.MIN_VALUE;
  * response began. RTT is the real start-to-end duration for every transport,
  * including failures. Higher samples replace the estimate; lower samples blend
  * exponentially, as in tower PeakEwma. Idle estimates decay toward zero. A done
- * without end creates no sample. Health filtering, enabled by default, breaks
- * quickly failing endpoints; there is no synthetic failure penalty.
+ * without end creates no sample. Health filtering is off by default; with
+ * `outlierDetection: {}` it ejects quickly failing endpoints. There is no
+ * synthetic failure penalty.
  * Unlike Envoy and gRPC A48, draws are without replacement.
  * Load history keeps at least 256 endpoints, and at least the current members, in
  * LRU order, evicting idle entries first; an in-flight entry is evicted only if
@@ -170,7 +171,7 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
       ];
     },
   };
-  return withHealthFilter(child, options?.outlierDetection, true);
+  return withHealthFilter(child, options?.outlierDetection);
 }
 
 function invalidP2c(options: unknown): Error | undefined {

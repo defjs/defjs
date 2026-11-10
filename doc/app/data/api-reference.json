@@ -8859,7 +8859,7 @@
     "slug": "core/pickfirstbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first endpoint until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following endpoint and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\nOrder and the sticky endpoint follow `members`. When the sticky endpoint is\nnot among this pick's `endpoints`, as on an HTTP retry, the pick takes the\nnext candidate after it in member order without moving it, so a retry never\nchanges where later calls go. Only a sticky endpoint missing from `members`\nresets the order to the first.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter endpoint list. The default is\n`false`. Shuffle history keeps at least 256 endpoints, and at least the\ncurrent members, in least-recently-used order; a forgotten endpoint gets a new\nrandom key when it returns.\n\n`failbackMs`, when finite and positive, permits one concurrent probe of the\nfirst endpoint only after that interval away from it and at least one alternate\nselection since leaving it. The probe is decided when the peer response begins\n(`end`), so a long-lived stream releases it at its handshake; `done` decides a\nprobe that never reached `end`. A successful probe restores the first; an advance\noutcome restarts the interval and requires a fresh alternate selection before\nanother primary probe, even if reconnect backoff exceeds `failbackMs`.\nUnattributed probes only release the probe slot. No background timer is created.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health callback.",
+    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first endpoint until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following endpoint and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\nOrder and the sticky endpoint follow `members`. When the sticky endpoint is\nnot among this pick's `endpoints`, as on an HTTP retry, the pick takes the\nnext candidate after it in member order without moving it, so a retry never\nchanges where later calls go. Only a sticky endpoint missing from `members`\nresets the order to the first.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter endpoint list. The default is\n`false`. Shuffle history keeps at least 256 endpoints, and at least the\ncurrent members, in least-recently-used order; a forgotten endpoint gets a new\nrandom key when it returns.\n\n`failbackMs`, when finite and positive, returns to the first endpoint by time\nalone: once the sticky endpoint has been away from the first for that long, the\nnext pick whose candidates include the first selects it and makes it sticky\nagain. Nothing judges whether the first endpoint has recovered. If it fails\nagain, the ordinary advance rule above moves on and the time starts anew.\nChoose an interval longer than the time between picks, such as a reconnect\ndelay, or every pick returns to the first endpoint. No background timer is\ncreated.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health function.",
     "signatures": [
       "function pickFirstBalancer(options?: PickFirstOptions): Balancer;"
     ],
@@ -8935,7 +8935,7 @@
       },
       {
         "name": "failbackMs",
-        "description": "Finite positive interval before one probe of the first endpoint after leaving it; unset disables failback.",
+        "description": "Finite positive time away from the first endpoint after which the next pick returns to it; unset disables failback.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -8959,7 +8959,7 @@
     "slug": "core/roundrobinbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. Members left out of this pick's\ncandidates keep their current value, as nginx skips a peer that is down. A\nmissing weight is 1. Weights for endpoints not in the list are ignored.\nSelection and the cleanup of current values for endpoints that left the\nmembers take O(member count + candidate count) work per pick. Extreme weights\nare scaled to avoid overflow; ratios below floating-point precision may round\nto zero. Finite positive weights never produce a non-candidate selection.\n\nWithout `weights`, every pick advances the counter, including a pick made for\nan HTTP retry or a stream reconnect. With `outlierDetection: false` and calls\nthat run one after another, an endpoint that fails persistently therefore\nreceives more than 1/n of the first attempts. With exactly two endpoints and\nretries enabled it receives all of them, so every call needs one retry.\nConcurrent calls interleave their picks and break this pattern.\n\nHealth filtering is enabled by default: five consecutive attributed failures\neject an endpoint temporarily. Set `outlierDetection: false` to disable it;\nonly those unfiltered successful picks omit `done`. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
+    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. Members left out of this pick's\ncandidates keep their current value, as nginx skips a peer that is down. A\nmissing weight is 1. Weights for endpoints not in the list are ignored.\nSelection and the cleanup of current values for endpoints that left the\nmembers take O(member count + candidate count) work per pick. Extreme weights\nare scaled to avoid overflow; ratios below floating-point precision may round\nto zero. Finite positive weights never produce a non-candidate selection.\n\nWithout `weights`, every pick advances the counter, including a pick made for\nan HTTP retry or a stream reconnect. Without `outlierDetection`, and with calls\nthat run one after another, an endpoint that fails persistently therefore\nreceives more than 1/n of the first attempts. With exactly two endpoints and\nretries enabled it receives all of them, so every call needs one retry.\nConcurrent calls interleave their picks and break this pattern.\n\nHealth filtering is off by default, so successful picks omit `done`. Supply\n`outlierDetection: {}` to enable it: five consecutive attributed failures then\neject an endpoint temporarily. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
     "signatures": [
       "function roundRobinBalancer(options?: RoundRobinOptions): Balancer;"
     ],
@@ -9021,7 +9021,7 @@
     "typeTable": [
       {
         "name": "outlierDetection",
-        "description": "Health filtering; enabled with defaults when omitted. `false` disables it.",
+        "description": "Health filtering; off by default. `{}` enables the defaults.",
         "type": "false | OutlierDetectionOptions | undefined",
         "simplifiedType": "union",
         "required": false,
@@ -9292,7 +9292,7 @@
     "slug": "core/outlierdetectionoptions-type",
     "source": "packages/core/src/balancer/outlier_detection.ts",
     "group": "client",
-    "description": "Linkerd-style consecutive-failure circuit breaking and optional cached health checks.\nAll endpoints may break; Finagle-style fail-open falls back to the current list.\nNo timers, ejection quotas, settlement grid, or slow start are used.",
+    "description": "Failure counting that ejects an endpoint for a while, and an optional\napplication-defined health check.\nThe library does not know what healthy means. It counts classified failures,\nejects an endpoint by time, and puts it back when the time is up; only\n`isHealthy` can say that an endpoint is unfit, and only the application\nsupplies it. No timers, ejection quotas, settlement grid, or slow start are used.",
     "signatures": [
       "interface OutlierDetectionOptions {\n  readonly consecutiveFailures?: number;\n  readonly minPenaltyMs?: number;\n  readonly maxPenaltyMs?: number;\n  readonly jitterRatio?: number;\n  readonly isFailure?: (info: DoneInfo) => boolean;\n  readonly isHealthy?: (endpoint: string) => boolean;\n}"
     ],
@@ -9313,7 +9313,7 @@
       },
       {
         "name": "minPenaltyMs",
-        "description": "Positive finite first penalty; defaults to 1000 ms (Linkerd).",
+        "description": "Positive finite first penalty, also the step added per level; defaults to 1000 ms (Linkerd).",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9340,7 +9340,7 @@
       },
       {
         "name": "isFailure",
-        "description": "Synchronous classifier. Throws and non-booleans discard the sample.",
+        "description": "Synchronous rule that decides which outcomes count toward ejection. The\ndefault counts every outcome with a `code`. It is a trigger for time-based\nejection, not a judgement of health; replace it to count differently.\nThrows and non-booleans discard the sample.",
         "type": "((info: DoneInfo) => boolean) | undefined",
         "simplifiedType": "function",
         "required": false,
@@ -9349,7 +9349,7 @@
       },
       {
         "name": "isHealthy",
-        "description": "Synchronous cached check. A throw or a non-boolean result rejects only that\npick with REQ_OPTIONS_INVALID; a thrown value is kept as the `cause` of the\n`TypeError`.",
+        "description": "The only health judgement. Synchronous, called once per endpoint on every\npick, so it should read state that the application keeps up to date. An\nendpoint for which it returns `false` is not selected. Returning `true`\ndoes not end an ejection: the endpoint must also not be ejected. A throw is\nnot caught here; `pickEndpoint` reports it as `REQ_BUILD_FAILED` with the\nthrown value as `cause`.",
         "type": "((endpoint: string) => boolean) | undefined",
         "simplifiedType": "function",
         "required": false,
@@ -9373,7 +9373,7 @@
     "slug": "core/outlierdetection",
     "source": "packages/core/src/balancer/outlier_detection.ts",
     "group": "client",
-    "description": "Wraps a strategy with Linkerd-style consecutive-failure circuit breaking.\nFive attributed failures break an endpoint by default. Penalties start at 1s,\ndouble after failed probes, add uniform positive jitter of up to 0.5 times the\nbase, and cap at 60s. A successful probe resets the backoff. Expiry admits one\nprobe, decided at `end` (the peer response begins), as in Finagle.\n`done` without `end` decides the probe instead; later done is an ordinary sample.\nEvery classified failure code fails by default, including NET_TIMEOUT and\nNET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection\ncount timeouts and resets. An attempted outcome without a code resets the\nstreak; unattributed attempts and discarded samples leave it unchanged.\nThe child receives the filtered candidates as `endpoints` and the unfiltered\n`members`, so ejection does not look like a membership change to it. Active\ntrue cannot cancel a penalty. Empty candidates first ignore active checks,\nthen fall back to the original current list (Finagle panic mode). Unlike Envoy\nand gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer\nis created. Configuration is captured at construction.\nHistory holds at least 256 endpoints, and at least the current list, shared\nacross endpoint lists. LRU clean\nor expired states are evicted first, then partial failure sequences, then\nthe oldest protected state only if every retained endpoint is penalised or has a probe in flight. Temporary\ncandidate exclusion does not itself erase a penalty or an in-flight probe.",
+    "description": "Wraps a strategy with consecutive-failure ejection by time.\nFive attributed failures eject an endpoint by default. The penalty is the\nminimum penalty (1s by default) times the penalty level, so successive\nejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5\ntimes the base is added, and the total caps at 60s. When the time is up the\nendpoint is selectable again; nothing probes it or decides that it has\nrecovered. As in gRPC outlier detection (gRFC A50) a success never clears the\npenalty level: every ejection raises it by one and every ten seconds without\none lowers it by one, evaluated when the endpoint is next used. An endpoint\nthat accepts a connection and then drops it is therefore ejected for longer\neach time, as long as its failures return faster than one level decays.\nEvery classified failure code fails by default, including NET_TIMEOUT and\nNET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection\ncount timeouts and resets; `isFailure` replaces that rule. An attempted\noutcome without a code resets the streak; unattributed attempts and discarded\nsamples leave it unchanged. The outcome of an attempt that began before an\nejection, or while the endpoint was ejected, is ignored even if it arrives\nafter the endpoint is selectable again, so late results do not eject it anew.\nThe child receives the filtered candidates as `endpoints` and the unfiltered\n`members`, so ejection does not look like a membership change to it.\n`isHealthy`, when supplied, is the only health judgement and combines with\nejection by AND: it can keep an endpoint out, and `true` cannot let an ejected\nendpoint in. If it rejects every endpoint that is not ejected, it is ignored\nfor that pick. If every endpoint is ejected, the original current list is\nused (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection\nquota. All callbacks are synchronous; no timer is created. Configuration is\ncaptured at construction.\nHistory holds at least 256 endpoints, and at least the current list, shared\nacross endpoint lists. LRU clean or expired states are evicted first, then\npartial failure sequences, then the oldest protected state only if every\nretained endpoint is ejected. Temporary candidate exclusion does not itself\nerase a penalty.",
     "signatures": [
       "function outlierDetection(\n  child: Balancer,\n  options?: OutlierDetectionOptions,\n): Balancer;"
     ],
@@ -9445,7 +9445,7 @@
     "slug": "core/p2cbalancer",
     "source": "packages/core/src/balancer/p2c.ts",
     "group": "client",
-    "description": "Samples candidates without replacement and selects the least loaded draw.\n\nDefaults to two choices and PeakEwma load: decaying RTT times (pending + 1).\n`load: \"pending\"` selects the fewest in-flight attempts in the sample. Ties\nfavor the first draw. `choiceCount` is an integer at least 2, capped at 10.\n`defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be\npositive and finite. Pending is reserved when `pick` selects the endpoint, so\nconcurrent picks in one tick see each other, and releases at `end`, the\nbeginning of a peer response (tower CompleteOnResponse), or at `done` when no\nresponse began. RTT is the real start-to-end duration for every transport,\nincluding failures. Higher samples replace the estimate; lower samples blend\nexponentially, as in tower PeakEwma. Idle estimates decay toward zero. A done\nwithout end creates no sample. Health filtering, enabled by default, breaks\nquickly failing endpoints; there is no synthetic failure penalty.\nUnlike Envoy and gRPC A48, draws are without replacement.\nLoad history keeps at least 256 endpoints, and at least the current members, in\nLRU order, evicting idle entries first; an in-flight entry is evicted only if\nall retained entries are busy. Evicted endpoints restart from the configured\ninitial estimate.",
+    "description": "Samples candidates without replacement and selects the least loaded draw.\n\nDefaults to two choices and PeakEwma load: decaying RTT times (pending + 1).\n`load: \"pending\"` selects the fewest in-flight attempts in the sample. Ties\nfavor the first draw. `choiceCount` is an integer at least 2, capped at 10.\n`defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be\npositive and finite. Pending is reserved when `pick` selects the endpoint, so\nconcurrent picks in one tick see each other, and releases at `end`, the\nbeginning of a peer response (tower CompleteOnResponse), or at `done` when no\nresponse began. RTT is the real start-to-end duration for every transport,\nincluding failures. Higher samples replace the estimate; lower samples blend\nexponentially, as in tower PeakEwma. Idle estimates decay toward zero. A done\nwithout end creates no sample. Health filtering is off by default; with\n`outlierDetection: {}` it ejects quickly failing endpoints. There is no\nsynthetic failure penalty.\nUnlike Envoy and gRPC A48, draws are without replacement.\nLoad history keeps at least 256 endpoints, and at least the current members, in\nLRU order, evicting idle entries first; an in-flight entry is evicted only if\nall retained entries are busy. Evicted endpoints restart from the configured\ninitial estimate.",
     "signatures": ["function p2cBalancer(options?: P2cOptions): Balancer;"],
     "related": [
       "@defjs/core:P2cOptions",
@@ -9545,7 +9545,7 @@
       },
       {
         "name": "outlierDetection",
-        "description": "Health filtering; enabled with defaults when omitted. `false` disables it.",
+        "description": "Health filtering; off by default. `{}` enables the defaults.",
         "type": "false | OutlierDetectionOptions | undefined",
         "simplifiedType": "union",
         "required": false,

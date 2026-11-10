@@ -81,26 +81,33 @@ test("weighted round robin selects from the candidate set when the list is large
 });
 
 test.each([false, true])(
-  "failed failback probes give backup a turn before reprobe (lifecycle %s)",
+  "a failed return to the first endpoint moves away again and restarts the time (lifecycle %s)",
   (lifecycle) => {
     const balancer = pickFirstBalancer({ failbackMs: 35 });
-    pick(balancer).done?.(failed);
-    expect(pick(balancer).endpoint).toBe("b");
-    const selected: string[] = [];
-    for (let i = 0; i < 4; i++) {
-      vi.advanceTimersByTime(45);
-      const attempt = lifecycle
+    function attempt(report: typeof failed | { attempted: true }) {
+      const selected = lifecycle
         ? pickEndpoint(balancer, { endpoints: ["a", "b"] })[1]
         : pick(balancer);
-      if (attempt === undefined) throw new Error("missing lifecycle selection");
-      selected.push(attempt.endpoint);
+      if (selected === undefined)
+        throw new Error("missing lifecycle selection");
       if (lifecycle) {
-        attempt.start?.();
-        attempt.end?.(failed);
+        selected.start?.();
+        selected.end?.(report);
       }
-      attempt.done?.(attempt.endpoint === "a" ? failed : { attempted: true });
+      selected.done?.(report);
+      return selected.endpoint;
     }
-    expect(selected).toEqual(["a", "b", "a", "b"]);
+    expect(attempt(failed)).toBe("a");
+    vi.advanceTimersByTime(34);
+    expect(attempt({ attempted: true })).toBe("b");
+    vi.advanceTimersByTime(1);
+    expect(attempt(failed)).toBe("a");
+    vi.advanceTimersByTime(34);
+    expect(attempt({ attempted: true })).toBe("b");
+    vi.advanceTimersByTime(1);
+    expect(attempt({ attempted: true })).toBe("a");
+    vi.advanceTimersByTime(1000);
+    expect(attempt({ attempted: true })).toBe("a");
   },
 );
 
@@ -201,33 +208,6 @@ test.each(["HTTP", "SSE", "WS"])(
   },
 );
 
-test("health callbacks cannot claim the same half-open probe reentrantly", () => {
-  let nested: PickResult | undefined;
-  let reenter = false;
-  const balancer: Balancer = outlierDetection(
-    { pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }] },
-    {
-      consecutiveFailures: 1,
-      minPenaltyMs: 100,
-      jitterRatio: 0,
-      isHealthy() {
-        if (reenter) {
-          reenter = false;
-          nested = pick(balancer);
-        }
-        return true;
-      },
-    },
-  );
-  pick(balancer).done?.(failed);
-  vi.advanceTimersByTime(100);
-  reenter = true;
-  const outer = pick(balancer);
-  expect(nested?.endpoint).toBe("a");
-  expect(outer.endpoint).toBe("b");
-  expect(pick(balancer).endpoint).toBe("b");
-});
-
 test("unattributed samples neither reset consecutive failures nor add failures", () => {
   const balancer = outlierDetection(
     { pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }] },
@@ -253,7 +233,7 @@ test("shuffle keeps a key for 256 recent endpoints and re-draws a forgotten one"
   expect(pick(balancer, ["a", "b"]).endpoint).toBe("a");
 });
 
-test("churn and per-call exclusions preserve penalised endpoints and in-flight probes", () => {
+test("churn and per-call exclusions preserve penalised endpoints", () => {
   const balancer = outlierDetection(
     { pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }] },
     {
@@ -267,13 +247,7 @@ test("churn and per-call exclusions preserve penalised endpoints and in-flight p
     pick(balancer, [`clean-${i}`]).done?.({ attempted: true });
   expect(pick(balancer).endpoint).toBe("b");
   vi.advanceTimersByTime(100);
-  const probe = pick(balancer);
-  expect(probe.endpoint).toBe("a");
-  for (let i = 0; i < 1000; i++)
-    pick(balancer, [`clean-after-${i}`]).done?.({ attempted: true });
-  expect(pick(balancer).endpoint).toBe("b");
-  probe.done?.(failed);
-  expect(pick(balancer).endpoint).toBe("b");
+  expect(pick(balancer).endpoint).toBe("a");
 });
 
 test("weighted candidate changes rescale safely and sparse candidates select nothing", () => {
@@ -327,34 +301,3 @@ test("health evicts clean history before a more recent partial failure sequence"
   pick(balancer, ["partial"]).done?.(failed);
   expect(pick(balancer, ["partial", "fresh"]).endpoint).toBe("fresh");
 });
-
-test.each([
-  { lifecycle: false, picks: 2 },
-  { lifecycle: false, picks: 3 },
-  { lifecycle: true, picks: 2 },
-  { lifecycle: true, picks: 3 },
-])(
-  "first primary failure gives backup a turn within $picks picks (lifecycle $lifecycle)",
-  ({ lifecycle, picks }) => {
-    const balancer = pickFirstBalancer({
-      failbackMs: 35,
-      outlierDetection: false,
-    });
-    const selected: string[] = [];
-    for (let i = 0; i < picks; i++) {
-      const attempt = lifecycle
-        ? pickEndpoint(balancer, { endpoints: ["a", "b"] })[1]
-        : pick(balancer);
-      if (attempt === undefined) throw new Error("missing lifecycle selection");
-      selected.push(attempt.endpoint);
-      const report = attempt.endpoint === "a" ? failed : { attempted: true };
-      if (lifecycle) {
-        attempt.start?.();
-        attempt.end?.(report);
-      }
-      attempt.done?.(report);
-      vi.advanceTimersByTime(45);
-    }
-    expect(selected).toEqual(picks === 2 ? ["a", "b"] : ["a", "b", "a"]);
-  },
-);

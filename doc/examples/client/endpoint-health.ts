@@ -26,14 +26,14 @@ const client = createClient(
   ),
 );
 
-const unfiltered = roundRobinBalancer({ outlierDetection: false });
+const plain = roundRobinBalancer();
 const latencyAware = p2cBalancer({ choiceCount: 2, decayMs: 10000 });
-// A custom strategy can use exactly the same filter; disable any inner filter.
-const wrapped = outlierDetection(unfiltered, { consecutiveFailures: 3 });
+// A custom strategy can use exactly the same filter.
+const wrapped = outlierDetection(plain, { consecutiveFailures: 3 });
 // #endregion
 
-// #region recovery
-const singleProbeRecovery = roundRobinBalancer({
+// #region ejection
+const timedEjection = roundRobinBalancer({
   outlierDetection: {
     minPenaltyMs: 1000,
     maxPenaltyMs: 60000,
@@ -46,10 +46,10 @@ const singleProbeRecovery = roundRobinBalancer({
 async function withHealthChecks() {
   const healthy = new Map<string, boolean>();
   const controller = new AbortController();
-  let probing = false;
-  async function probe() {
-    if (probing) return;
-    probing = true;
+  let checking = false;
+  async function check() {
+    if (checking) return;
+    checking = true;
     try {
       for (const endpoint of endpoints) {
         try {
@@ -66,7 +66,7 @@ async function withHealthChecks() {
         }
       }
     } finally {
-      probing = false;
+      checking = false;
     }
   }
   const activeClient = createClient(
@@ -80,14 +80,14 @@ async function withHealthChecks() {
       }),
     ),
   );
-  // The application owns the probe lifecycle, not the client or balancer.
+  // The application owns the check lifecycle, not the client or balancer.
   const timer = setInterval(() => {
-    void probe().catch((cause: unknown) => {
-      console.error("Health probe failed", cause);
+    void check().catch((cause: unknown) => {
+      console.error("Health check failed", cause);
     });
   }, 5000);
   try {
-    await probe();
+    await check();
     const [error] = await getStatus(activeClient);
     if (error) {
       console.error(error.code);

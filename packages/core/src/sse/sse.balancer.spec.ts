@@ -464,6 +464,50 @@ test("default health filtering receives read failures and breaks only after five
   expect(recorded.pending()).toBe(0);
 });
 
+test("an endpoint whose stream opens and then fails escalates its penalty", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(0);
+  const primary = "https://primary.example";
+  const secondary = "https://secondary.example";
+  const seen: string[] = [];
+  const client = createClient(
+    withEndpoint(primary, secondary),
+    withBalancer(
+      outlierDetection(
+        { pick: (info) => [null, { endpoint: info.endpoints[0] ?? "" }] },
+        { jitterRatio: 0 },
+      ),
+    ),
+    withSSEHandle((input) => {
+      const origin = new URL(new Request(input).url).origin;
+      seen.push(origin);
+      return Promise.resolve(
+        origin === primary
+          ? readFailureResponse()
+          : sseResponse("data: healthy\n\n"),
+      );
+    }),
+  );
+  async function connect(): Promise<void> {
+    const [error, stream] = await orders(client);
+    expect(error).toBeNull();
+    await stream?.closed;
+  }
+  for (let attempt = 0; attempt < 5; attempt += 1) await connect();
+  let now = 0;
+  for (const penalty of [1000, 2000, 3000]) {
+    now += penalty;
+    vi.advanceTimersByTime(now - 1 - performance.now());
+    seen.length = 0;
+    await connect();
+    expect(seen).toEqual([secondary]);
+    vi.advanceTimersByTime(now - performance.now());
+    seen.length = 0;
+    for (let attempt = 0; attempt < 5; attempt += 1) await connect();
+    expect(seen).toEqual(Array.from({ length: 5 }, () => primary));
+  }
+});
+
 test("invalid event validation and a throwing observer do not become endpoint failures", async () => {
   const recorded = track(() => "https://example.com");
   const observer = vi.fn(() => {

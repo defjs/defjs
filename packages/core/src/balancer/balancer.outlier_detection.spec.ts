@@ -21,8 +21,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("default round robin returns done and ejects a rolling-restart replica until expiry", () => {
-  const balancer = roundRobinBalancer();
+test("round robin with outlierDetection returns done and ejects a rolling-restart replica until expiry", () => {
+  const balancer = roundRobinBalancer({ outlierDetection: {} });
   for (let failure = 0; failure < 5; failure += 1) {
     const [, picked] = balancer.pick({
       endpoints: ["a", "b", "c"],
@@ -84,7 +84,7 @@ test("outlier detection ignores a raw 503 without a neutral outcome", () => {
   ).toEqual(["b", "a", "b", "a"]);
 });
 
-test.each(["direct", "wrapped", "isHealthy", "isFailure"] as const)(
+test.each(["direct", "wrapped", "isFailure"] as const)(
   "%s attaches a rejection handler to rejected synchronous extension results",
   async (entry) => {
     const observed: [unknown, string][] = [];
@@ -108,10 +108,6 @@ test.each(["direct", "wrapped", "isHealthy", "isFailure"] as const)(
     const balancers = {
       direct: invalidPick,
       wrapped: outlierDetection(invalidPick),
-      isHealthy: outlierDetection(child, {
-        // @ts-expect-error rejected promises violate the synchronous health contract
-        isHealthy: () => rejectedThenable("invalid async health"),
-      }),
       isFailure: outlierDetection(child, {
         consecutiveFailures: 1,
         // @ts-expect-error rejected promises violate the synchronous classifier contract
@@ -126,11 +122,7 @@ test.each(["direct", "wrapped", "isHealthy", "isFailure"] as const)(
     const operation = defineRequest({ method: "GET", path: "/" });
     const [fault] = await operation(client);
     expect(fault?.code ?? null).toBe(
-      entry === "isFailure"
-        ? null
-        : entry === "isHealthy"
-          ? "REQ_OPTIONS_INVALID"
-          : "REQ_BUILD_FAILED",
+      entry === "isFailure" ? null : "REQ_BUILD_FAILED",
     );
     expect(observed.length).toBeGreaterThanOrEqual(1);
     expect(

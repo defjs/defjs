@@ -106,7 +106,7 @@ export function pickEndpoint(
           // The callable check is the runtime boundary for custom balancers.
           return [null, resolve({ endpoint, done, start, end })];
         }
-        // A rejected shape still owns whatever its pick reserved, such as a probe slot.
+        // A rejected shape still owns whatever its pick reserved, such as an in-flight count.
         if (isOptionalCallback<(info: DoneInfo) => void>(done))
           releasePick(done);
       }

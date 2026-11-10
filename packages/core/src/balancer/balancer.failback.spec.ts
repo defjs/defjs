@@ -42,25 +42,51 @@ test("offline connect failures are unattributed; online and absent navigator sti
   }
 });
 
-test("failback permits one probe, retries failed probes, ignores unattributed probes", () => {
+test("failback returns to the first endpoint by time and restarts the time when it fails again", () => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   const balancer = pickFirstBalancer({ failbackMs: 100 });
   pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
-  vi.advanceTimersByTime(100 - performance.now());
-  const probe = pick(balancer);
-  expect(probe.endpoint).toBe(endpoints[0]);
+  vi.advanceTimersByTime(99 - performance.now());
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
-  probe.done?.({ attempted: true, code: "NET_UNAVAILABLE" });
+  vi.advanceTimersByTime(100 - performance.now());
+  const back = pick(balancer);
+  expect(back.endpoint).toBe(endpoints[0]);
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+  back.done?.({ attempted: true, code: "NET_UNAVAILABLE" });
+  expect(pick(balancer).endpoint).toBe(endpoints[1]);
   vi.advanceTimersByTime(199 - performance.now());
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
   vi.advanceTimersByTime(200 - performance.now());
-  pick(balancer).done?.({ attempted: false });
-  const success = pick(balancer);
-  expect(success.endpoint).toBe(endpoints[0]);
-  expect(pick(balancer).endpoint).toBe(endpoints[1]);
-  success.done?.({ attempted: true, status: 200 });
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+});
+
+test("failback stays on the first endpoint after an unattributed or ordinary outcome", () => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(0);
+  const balancer = pickFirstBalancer({ failbackMs: 100 });
+  pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  vi.advanceTimersByTime(100);
+  const back = pick(balancer);
+  expect(back.endpoint).toBe(endpoints[0]);
+  back.done?.({ attempted: false });
+  pick(balancer).done?.({ attempted: true, code: "NET_TIMEOUT" });
+  pick(balancer).done?.({ attempted: true, status: 200 });
+  vi.advanceTimersByTime(1000);
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+});
+
+test("an attempt still running on the backup does not move the first endpoint it left", () => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(0);
+  const balancer = pickFirstBalancer({ failbackMs: 100 });
+  pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  const onBackup = pick(balancer);
+  expect(onBackup.endpoint).toBe(endpoints[1]);
+  vi.advanceTimersByTime(100);
+  expect(pick(balancer).endpoint).toBe(endpoints[0]);
+  onBackup.done?.({ attempted: true, code: "NET_UNREACHABLE" });
   expect(pick(balancer).endpoint).toBe(endpoints[0]);
 });
 
@@ -118,6 +144,24 @@ test("a narrowed retry pick keeps the sticky endpoint and leaves failback armed"
   );
 });
 
+test("failback does not return to a first endpoint the pick leaves out, so a failing backup still advances", () => {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(0);
+  const members = ["https://a.test", "https://b.test", "https://c.test"];
+  const withoutFirst = members.slice(1);
+  const balancer = pickFirstBalancer({ failbackMs: 100 });
+  balancer
+    .pick({ endpoints: members })[1]
+    ?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  vi.advanceTimersByTime(100);
+  const onBackup = balancer.pick({ endpoints: withoutFirst, members })[1];
+  expect(onBackup?.endpoint).toBe("https://b.test");
+  onBackup?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
+  expect(balancer.pick({ endpoints: withoutFirst, members })[1]?.endpoint).toBe(
+    "https://c.test",
+  );
+});
+
 test("a sticky endpoint outside the pick wraps through member order", () => {
   const members = ["https://a.test", "https://b.test", "https://c.test"];
   const balancer = pickFirstBalancer();
@@ -139,38 +183,6 @@ test("a sticky endpoint outside the pick wraps through member order", () => {
   expect(
     balancer.pick({ endpoints: ["https://z.test"], members })[1]?.endpoint,
   ).toBe("https://z.test");
-});
-
-test("a failback probe is decided when the response begins, before a long-lived done", () => {
-  vi.useFakeTimers({ toFake: ["Date", "performance"] });
-  vi.setSystemTime(0);
-  const balancer = pickFirstBalancer({ failbackMs: 100 });
-  pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
-  pick(balancer).done?.({ attempted: true, status: 200 });
-  vi.advanceTimersByTime(100);
-  const stream = pick(balancer);
-  expect(stream?.endpoint).toBe(endpoints[0]);
-  stream?.end?.({ attempted: true, status: 200 });
-  expect(pick(balancer).endpoint).toBe(endpoints[0]);
-  expect(pick(balancer).endpoint).toBe(endpoints[0]);
-  stream?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
-  expect(pick(balancer).endpoint).toBe(endpoints[1]);
-});
-
-test("a failback probe that fails at end restarts the interval without a second advance at done", () => {
-  vi.useFakeTimers({ toFake: ["Date", "performance"] });
-  vi.setSystemTime(0);
-  const balancer = pickFirstBalancer({ failbackMs: 100 });
-  pick(balancer).done?.({ attempted: true, code: "NET_UNREACHABLE" });
-  pick(balancer).done?.({ attempted: true, status: 200 });
-  vi.advanceTimersByTime(100);
-  const probe = pick(balancer);
-  expect(probe?.endpoint).toBe(endpoints[0]);
-  probe?.end?.({ attempted: true, code: "NET_UNREACHABLE" });
-  probe?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
-  expect(pick(balancer).endpoint).toBe(endpoints[1]);
-  vi.advanceTimersByTime(100);
-  expect(pick(balancer).endpoint).toBe(endpoints[0]);
 });
 
 test("sparse runtime member and candidate arrays cannot produce an undefined endpoint", () => {

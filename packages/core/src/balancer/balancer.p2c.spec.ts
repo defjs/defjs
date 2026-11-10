@@ -112,12 +112,16 @@ test("choiceCount is capped at ten and captured at construction", () => {
   expect(pick(b, list).endpoint).toBe("h9");
 });
 
-test("default p2c health filtering ejects a failing host and preserves another", () => {
-  const b = p2cBalancer();
+test("p2c ejects a failing host only when outlierDetection is supplied", () => {
+  const b = p2cBalancer({ outlierDetection: {} });
   for (let i = 0; i < 5; i += 1)
     complete(b, "a", { attempted: true, code: "NET_UNAVAILABLE" });
   // A lone host can break too; fallback is local to each pick list.
   expect(pick(b).endpoint).toBe("b");
+  const plain = p2cBalancer();
+  for (let i = 0; i < 5; i += 1)
+    complete(plain, "a", { attempted: true, code: "NET_UNAVAILABLE" });
+  expect(pick(plain).endpoint).toBe("a");
 });
 
 test("invalid p2c options are remembered, branded, and never throw", () => {

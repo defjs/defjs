@@ -89,9 +89,9 @@ With only one configured endpoint, `withRetry` does not replay the request becau
 
 ### Health filtering and p2c [#health-filtering-and-p2c]
 
-For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) enable Linkerd-style consecutive-failure circuit breaking (`outlierDetection`) by default. Outlier detection counts every coded outcome as a failure (including `NET_TIMEOUT` and `NET_BODY_INCOMPLETE`); raw response `status` is only for custom balancers.
+For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) can take an `outlierDetection` option; it is off unless you pass an object (`{}` for the defaults). It counts failures and ejects an endpoint for a while, and it skips an endpoint that your own `isHealthy` function rejects; Defjs does not decide what healthy means. By default every coded outcome counts as a failure (including `NET_TIMEOUT` and `NET_BODY_INCOMPLETE`), and you can replace that rule with `isFailure`; raw response `status` is only for custom balancers.
 
-See the dedicated [Load balancing & failover](/docs/load-balancing) guide for full details on retry budgets, active/passive health checks, P2C load estimation, and custom balancers.
+See the dedicated [Load balancing & failover](/docs/load-balancing) guide for full details on retry budgets, failure ejection and your own health function, P2C load estimation, and custom balancers.
 
 ## 5. Inject a test transport
 

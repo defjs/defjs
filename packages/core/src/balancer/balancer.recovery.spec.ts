@@ -27,7 +27,6 @@ function pick(b: Balancer, endpoints = list) {
   return result;
 }
 function setup(options: OutlierDetectionOptions = {}) {
-  let desired = "a";
   let candidates: readonly string[] = [];
   const childStart = vi.fn();
   const b = outlierDetection(
@@ -37,9 +36,7 @@ function setup(options: OutlierDetectionOptions = {}) {
         return [
           null,
           {
-            endpoint: info.endpoints.includes(desired)
-              ? desired
-              : (info.endpoints[0] ?? ""),
+            endpoint: info.endpoints[0] ?? "",
             start: childStart,
           },
         ];
@@ -58,15 +55,12 @@ function setup(options: OutlierDetectionOptions = {}) {
   return {
     b,
     candidates: () => candidates,
-    desire: (value: string) => {
-      desired = value;
-    },
     childStart,
   };
 }
 
-test("default recovery admits only one probe among sixty concurrent round-robin picks", () => {
-  const b = roundRobinBalancer();
+test("expiry puts the endpoint back for every concurrent round-robin pick", () => {
+  const b = roundRobinBalancer({ outlierDetection: {} });
   let failures = 0;
   while (failures < 5) {
     const p = pick(b);
@@ -75,15 +69,13 @@ test("default recovery admits only one probe among sixty concurrent round-robin 
   }
   vi.advanceTimersByTime(1000 - performance.now());
   const wave = Array.from({ length: 60 }, () => pick(b));
-  expect(wave.filter((p) => p.endpoint === "a")).toHaveLength(1);
-  wave.forEach((p) => p.done?.(ok));
-  expect(
-    Array.from({ length: 60 }, () => pick(b)).filter((p) => p.endpoint === "a"),
-  ).toHaveLength(20);
+  expect(wave.filter((p) => p.endpoint === "a")).toHaveLength(20);
 });
 
-test("failed probe immediately re-ejects with the next multiplier", () => {
+test("failures after expiry count again and eject with the next multiplier", () => {
   const h = setup();
+  pick(h.b).done?.(failed);
+  expect(pick(h.b).endpoint).toBe("a");
   pick(h.b).done?.(failed);
   expect(pick(h.b).endpoint).toBe("b");
   vi.advanceTimersByTime(299 - performance.now());
@@ -92,25 +84,16 @@ test("failed probe immediately re-ejects with the next multiplier", () => {
   expect(pick(h.b).endpoint).toBe("a");
 });
 
-test("unattempted probe releases only its slot and permits another single probe", () => {
+test("an unattributed sample after expiry neither counts nor resets", () => {
   const h = setup();
-  const probe = pick(h.b);
-  expect(pick(h.b).endpoint).toBe("b");
-  probe.done?.({ attempted: false });
+  pick(h.b).done?.(failed);
+  pick(h.b).done?.({ attempted: false });
   expect(pick(h.b).endpoint).toBe("a");
+  pick(h.b).done?.(failed);
   expect(pick(h.b).endpoint).toBe("b");
 });
 
-test("a child that skips a recovering candidate leaves its probe slot available", () => {
-  const h = setup();
-  h.desire("b");
-  pick(h.b);
-  h.desire("a");
-  expect(pick(h.b).endpoint).toBe("a");
-  expect(pick(h.b).endpoint).toBe("b");
-});
-
-test("failback and half-open share the first endpoint without admitting a second probe", () => {
+test("failback waits for both its interval and the end of an ejection", () => {
   const b = pickFirstBalancer({
     failbackMs: 50,
     outlierDetection: {
@@ -124,21 +107,12 @@ test("failback and half-open share the first endpoint without admitting a second
   first.done?.(failed);
   overlap.done?.(failed);
   pick(b).done?.(ok);
+  vi.advanceTimersByTime(50 - performance.now());
+  expect(pick(b).endpoint).toBe("b");
+  vi.advanceTimersByTime(99 - performance.now());
+  expect(pick(b).endpoint).toBe("b");
   vi.advanceTimersByTime(100 - performance.now());
-  const probe = pick(b);
-  expect(probe.endpoint).toBe("a");
-  expect(pick(b).endpoint).toBe("b");
-  probe.done?.(failed);
-  expect(pick(b).endpoint).toBe("b");
-  vi.advanceTimersByTime(150 - performance.now());
-  expect(pick(b).endpoint).toBe("b");
-  vi.advanceTimersByTime(299 - performance.now());
-  expect(pick(b).endpoint).toBe("b");
-  vi.advanceTimersByTime(300 - performance.now());
-  const recovered = pick(b);
-  expect(recovered.endpoint).toBe("a");
-  expect(pick(b).endpoint).toBe("b");
-  recovered.done?.(ok);
+  expect(pick(b).endpoint).toBe("a");
   expect(pick(b).endpoint).toBe("a");
 });
 
@@ -186,17 +160,18 @@ test.each([
   },
 );
 
-// Boundary combinations of the recovery transitions exercised above.
-test("a fallback pick can occupy the probe when every active check excludes recovery", () => {
-  let active = false;
-  const h = setup({ isHealthy: () => active });
-  expect(pick(h.b, ["a"]).endpoint).toBe("a");
-  active = true;
+// Boundary combinations of the ejection and health transitions above.
+test("an expired endpoint is selectable again while isHealthy keeps deciding", () => {
+  let healthy = (endpoint: string) => endpoint !== "a";
+  const h = setup({ isHealthy: (endpoint) => healthy(endpoint) });
   pick(h.b);
   expect(h.candidates()).toEqual(["b", "c"]);
+  healthy = () => true;
+  pick(h.b);
+  expect(h.candidates()).toBe(list);
 });
 
-test("successful half-open probe resets failures from older attempts completed after expiry", () => {
+test("an attempt that began before an ejection is ignored after the endpoint returns", () => {
   const b = outlierDetection(
     { pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }] },
     { consecutiveFailures: 2, minPenaltyMs: 100, jitterRatio: 0 },
@@ -205,22 +180,25 @@ test("successful half-open probe resets failures from older attempts completed a
   pick(b).done?.(failed);
   pick(b).done?.(failed);
   vi.advanceTimersByTime(100 - performance.now());
-  const probe = pick(b);
   older.done?.(failed);
-  probe.done?.(ok);
   pick(b).done?.(failed);
   expect(pick(b).endpoint).toBe("a");
+  pick(b).done?.(failed);
+  expect(pick(b).endpoint).toBe("b");
 });
 
-test("a fail-open fallback selecting an occupied half-open host still completes the probe", () => {
-  const h = setup();
-  const first = pick(h.b);
-  const fallback = pick(h.b, ["a"]);
-  fallback.done?.(failed);
-  first.done?.({ attempted: false });
-  expect(pick(h.b).endpoint).toBe("b");
-  vi.advanceTimersByTime(299 - performance.now());
-  expect(pick(h.b).endpoint).toBe("b");
-  vi.advanceTimersByTime(300 - performance.now());
-  expect(pick(h.b).endpoint).toBe("a");
+test("an attempt that began while its endpoint was ejected is ignored after the endpoint returns", () => {
+  const b = outlierDetection(
+    { pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }] },
+    { consecutiveFailures: 2, minPenaltyMs: 100, jitterRatio: 0 },
+  );
+  pick(b, ["a"]).done?.(failed);
+  pick(b, ["a"]).done?.(failed);
+  const failOpen = pick(b, ["a"]);
+  vi.advanceTimersByTime(100 - performance.now());
+  failOpen.done?.(failed);
+  pick(b, list).done?.(failed);
+  expect(pick(b, list).endpoint).toBe("a");
+  pick(b, list).done?.(failed);
+  expect(pick(b, list).endpoint).toBe("b");
 });

@@ -12,7 +12,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-test("three rolling two-second outages recover at the next one-second probe without thirty-second slots", async () => {
+test("three rolling two-second outages recover at the next one-second expiry without thirty-second slots", async () => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(0);
   vi.spyOn(Math, "random").mockReturnValue(0);
@@ -27,7 +27,7 @@ test("three rolling two-second outages recover at the next one-second probe with
   let attempts = 0;
   const client = createClient(
     withEndpoint(...endpoints),
-    withBalancer(roundRobinBalancer()),
+    withBalancer(roundRobinBalancer({ outlierDetection: {} })),
     withRetry({ delayMs: 0 }),
     withHTTPHandle((input) => {
       const req = new Request(input);

@@ -41,7 +41,6 @@ function setup(options?: OutlierDetectionOptions) {
   function pick(endpoints: readonly string[] = ["a", "b", "c"]) {
     const result = balancer.pick({
       endpoints,
-
       operation: "read",
     });
     expect(result[0]).toBeNull();
@@ -60,21 +59,9 @@ function setup(options?: OutlierDetectionOptions) {
   return { balancer, childDone, pick, report, candidates: () => candidates };
 }
 
-test("active true never cancels passive ejection and invalid active results only fail one pick", () => {
-  let active: unknown = true;
-  const h = setup({
-    consecutiveFailures: 1,
-    // @ts-expect-error active results are not always booleans
-    isHealthy: () => active,
-  });
+test("isHealthy true never cancels passive ejection", () => {
+  const h = setup({ consecutiveFailures: 1, isHealthy: () => true });
   h.report("a");
-  h.pick();
-  expect(h.candidates()).toEqual(["b", "c"]);
-  active = "true";
-  expect(pickEndpoint(h.balancer, { endpoints: ["a", "b"] })[0]?.code).toBe(
-    "REQ_OPTIONS_INVALID",
-  );
-  active = true;
   h.pick();
   expect(h.candidates()).toEqual(["b", "c"]);
 });
@@ -110,7 +97,7 @@ test("disabled consecutive failures never break an endpoint", () => {
   expect(h.candidates()).toEqual(["a", "b"]);
 });
 
-test("last-available and done never consult isHealthy; a thrown active check only rejects that pick", () => {
+test("done never consults isHealthy and a throw from it comes out of pick", () => {
   let throws = false;
   const active = vi.fn(() => {
     if (throws) throw new Error("active");
@@ -122,48 +109,47 @@ test("last-available and done never consult isHealthy; a thrown active check onl
   throws = true;
   result?.done?.(failure);
   expect(active).toHaveBeenCalledTimes(calls);
-  expect(pickEndpoint(h.balancer, { endpoints: ["a", "b"] })[0]?.code).toBe(
-    "REQ_OPTIONS_INVALID",
-  );
+  expect(() => h.balancer.pick({ endpoints: ["a", "b"] })).toThrow("active");
   throws = false;
   h.pick();
   expect(h.candidates()).not.toContain("a");
 });
 
-test.each<[string, unknown, string]>([
-  ["an Error", new Error("boom"), "boom"],
-  ["a RangeError", new RangeError("range"), "range"],
-  ["a string", "plain", "plain"],
-])("keeps %s thrown by isHealthy as the cause", (_name, thrown, text) => {
-  const child: Balancer = { pick: () => [null, { endpoint: "a" }] };
-  const [fault, selected] = pickEndpoint(
-    outlierDetection(child, {
-      isHealthy: () => {
-        throw thrown;
-      },
-    }),
-    { endpoints: ["a", "b"] },
-  );
-  expect(selected).toBeUndefined();
-  expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-  expect(fault?.message).toContain(text);
-  const cause = fault?.cause;
-  expect(cause).toBeInstanceOf(TypeError);
-  expect(cause instanceof Error ? cause.cause : undefined).toBe(thrown);
-});
+test.each<[string, unknown]>([
+  ["an Error", new Error("boom")],
+  ["a RangeError", new RangeError("range")],
+  ["a string", "plain"],
+])(
+  "reports %s thrown by isHealthy as the cause of REQ_BUILD_FAILED",
+  (_name, thrown) => {
+    const child: Balancer = { pick: () => [null, { endpoint: "a" }] };
+    const [fault, selected] = pickEndpoint(
+      outlierDetection(child, {
+        isHealthy: () => {
+          throw thrown;
+        },
+      }),
+      { endpoints: ["a", "b"] },
+    );
+    expect(selected).toBeUndefined();
+    expect(fault?.code).toBe("REQ_BUILD_FAILED");
+    expect(fault?.cause).toBe(thrown);
+  },
+);
 
-test("a non-boolean isHealthy result keeps the fixed message and has no cause", () => {
-  const child: Balancer = { pick: () => [null, { endpoint: "a" }] };
-  const [fault] = pickEndpoint(
-    // @ts-expect-error a non-boolean result is the invalid input under test
-    outlierDetection(child, { isHealthy: () => 1 }),
-    { endpoints: ["a", "b"] },
-  );
-  expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-  expect(fault?.message).toBe("isHealthy must synchronously return a boolean");
-  const cause = fault?.cause;
-  expect(cause).toBeInstanceOf(TypeError);
-  expect(cause instanceof Error ? cause.cause : "missing").toBeUndefined();
+test("isHealthy is consulted only for endpoints that are not ejected", () => {
+  const asked: string[] = [];
+  const h = setup({
+    consecutiveFailures: 1,
+    isHealthy: (endpoint) => {
+      asked.push(endpoint);
+      return true;
+    },
+  });
+  h.report("a");
+  asked.length = 0;
+  h.pick();
+  expect(asked).toEqual(["b", "c"]);
 });
 
 test("active filtering calls once, preserves full-list identity and forwards metadata", () => {
@@ -225,12 +211,20 @@ test("a timeout between failures extends the streak instead of resetting it", ()
   expect(h.candidates()).not.toContain("a");
 });
 
-test("built-in configuration matches the exported wrapper and false restores no-done round robin", () => {
+test("round robin filters health only when outlierDetection is supplied", () => {
+  expect(
+    roundRobinBalancer().pick({ endpoints: ["a"] })[1]?.done,
+  ).toBeUndefined();
   expect(
     roundRobinBalancer({ outlierDetection: false }).pick({
       endpoints: ["a"],
     })[1]?.done,
   ).toBeUndefined();
+  expect(
+    roundRobinBalancer({ outlierDetection: {} }).pick({
+      endpoints: ["a"],
+    })[1]?.done,
+  ).toBeTypeOf("function");
   const balancer = pickFirstBalancer({
     outlierDetection: { consecutiveFailures: 1 },
   });

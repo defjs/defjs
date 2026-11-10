@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { Balancer, PickInfo, PickOutcome } from "./balancer";
-import { outlierDetection } from "./outlier_detection";
+import type { PickInfo, PickOutcome } from "./balancer";
 import { pickEndpoint } from "./runtime";
 import { yieldMacrotask } from "../../test/macrotask";
 
@@ -257,43 +256,21 @@ describe("synchronous balancer callbacks", () => {
   );
 });
 
-test("a rejected pick shape releases the probe slot that pick reserved", () => {
-  vi.useFakeTimers({ toFake: ["Date", "performance"] });
-  vi.setSystemTime(0);
-  try {
-    let invalid = false;
-    const child: Balancer = {
-      pick(info): PickOutcome {
-        const endpoint = info.endpoints[0] ?? "";
+test("a rejected pick shape ends the pick that reserved state", () => {
+  const done = vi.fn();
+  const [fault, selected] = pickEndpoint(
+    {
+      pick: (): PickOutcome => [
+        null,
         // @ts-expect-error -- a non-function start is the invalid runtime shape under test
-        if (invalid) return [null, { endpoint, start: 1 }];
-        return [null, { endpoint }];
-      },
-    };
-    const balancer = outlierDetection(child, {
-      consecutiveFailures: 1,
-      jitterRatio: 0,
-    });
-    const endpoints = ["https://a", "https://b"];
-    pickEndpoint(balancer, { endpoints })[1]?.done({
-      attempted: true,
-      code: "NET_UNREACHABLE",
-    });
-    expect(pickEndpoint(balancer, { endpoints })[1]?.endpoint).toBe(
-      "https://b",
-    );
-    vi.advanceTimersByTime(1000);
-    invalid = true;
-    expect(pickEndpoint(balancer, { endpoints })[0]?.code).toBe(
-      "REQ_BUILD_FAILED",
-    );
-    invalid = false;
-    expect(pickEndpoint(balancer, { endpoints })[1]?.endpoint).toBe(
-      "https://a",
-    );
-  } finally {
-    vi.useRealTimers();
-  }
+        { endpoint: "https://a", start: 1, done },
+      ],
+    },
+    info,
+  );
+  expect(fault?.code).toBe("REQ_BUILD_FAILED");
+  expect(selected).toBeUndefined();
+  expect(done).toHaveBeenCalledExactlyOnceWith({ attempted: false });
 });
 
 test("a throwing done on a rejected pick cannot replace the build fault", () => {

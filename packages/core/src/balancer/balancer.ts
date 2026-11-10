@@ -235,7 +235,7 @@ export interface PickFirstOptions {
   readonly outlierDetection?: OutlierDetectionOptions | false;
   /** Random but stable endpoint order instead of list order; defaults to `false`. */
   readonly shuffle?: boolean;
-  /** Finite positive interval before one probe of the first endpoint after leaving it; unset disables failback. */
+  /** Finite positive time away from the first endpoint after which the next pick returns to it; unset disables failback. */
   readonly failbackMs?: number;
 }
 
@@ -261,21 +261,21 @@ export interface PickFirstOptions {
  * current members, in least-recently-used order; a forgotten endpoint gets a new
  * random key when it returns.
  *
- * `failbackMs`, when finite and positive, permits one concurrent probe of the
- * first endpoint only after that interval away from it and at least one alternate
- * selection since leaving it. The probe is decided when the peer response begins
- * (`end`), so a long-lived stream releases it at its handshake; `done` decides a
- * probe that never reached `end`. A successful probe restores the first; an advance
- * outcome restarts the interval and requires a fresh alternate selection before
- * another primary probe, even if reconnect backoff exceeds `failbackMs`.
- * Unattributed probes only release the probe slot. No background timer is created.
+ * `failbackMs`, when finite and positive, returns to the first endpoint by time
+ * alone: once the sticky endpoint has been away from the first for that long, the
+ * next pick whose candidates include the first selects it and makes it sticky
+ * again. Nothing judges whether the first endpoint has recovered. If it fails
+ * again, the ordinary advance rule above moves on and the time starts anew.
+ * Choose an interval longer than the time between picks, such as a reconnect
+ * delay, or every pick returns to the first endpoint. No background timer is
+ * created.
  *
  * Every successful `pick` returns `done`. An empty candidate list returns
  * `[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and
  * returned from every `pick` without throwing.
  *
  * Health filtering is off by default. Supply `outlierDetection: {}` to enable
- * default ejection, or configure its thresholds and application health callback.
+ * default ejection, or configure its thresholds and application health function.
  *
  * @param options - Optional shuffled order, failback interval, health filtering.
  * @returns A new balancer. Each call has its own sticky endpoint.
@@ -288,8 +288,6 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   const keys = new Map<string, number>();
   let sticky: string | undefined;
   let leftFirstAt: number | undefined;
-  let probing = false;
-  let backupBeforeProbe: string | undefined;
   const failbackMs = options?.failbackMs;
 
   const child: Balancer = {
@@ -313,58 +311,29 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
       if (sticky === undefined || !order.includes(sticky)) {
         sticky = first;
       }
-      const probe =
+      if (
         sticky !== first &&
         candidates.includes(first) &&
         failbackMs !== undefined &&
         leftFirstAt !== undefined &&
-        monotonicNow() - leftFirstAt >= failbackMs &&
-        !probing &&
-        backupBeforeProbe === undefined;
-      const chosen = probe
-        ? first
-        : nextCandidate(order, order.indexOf(sticky), candidates);
+        monotonicNow() - leftFirstAt >= failbackMs
+      ) {
+        sticky = first;
+      }
+      const chosen = nextCandidate(order, order.indexOf(sticky), candidates);
       if (chosen === undefined) {
         return [ERR_NO_CANDIDATE, undefined];
       }
-      if (!probe && chosen !== backupBeforeProbe) backupBeforeProbe = undefined;
-      if (probe) probing = true;
-      let decided = !probe;
-      const advances = (report: DoneInfo) =>
-        report.attempted &&
-        (report.code === "NET_UNREACHABLE" ||
-          report.code === "NET_UNAVAILABLE");
-      const decideProbe = (report: DoneInfo) => {
-        decided = true;
-        probing = false;
-        if (!report.attempted) return;
-        if (advances(report)) {
-          leftFirstAt = monotonicNow();
-          backupBeforeProbe = first;
-        } else {
-          sticky = first;
-          leftFirstAt = undefined;
-        }
-      };
       return [
         null,
         {
           endpoint: chosen,
-          end(report) {
-            if (!decided) decideProbe(report);
-          },
           done(report) {
-            if (!decided) {
-              decideProbe(report);
-              return;
-            }
-            if (!advances(report) || sticky !== chosen) return;
+            if (!advancesSticky(report) || sticky !== chosen) return;
             const next = order[(order.indexOf(chosen) + 1) % order.length];
             if (next !== undefined) {
-              if (chosen === first && next !== first) {
+              if (chosen === first && next !== first)
                 leftFirstAt = monotonicNow();
-                backupBeforeProbe = first;
-              }
               sticky = next;
             }
           },
@@ -373,7 +342,14 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
     },
   };
   if (invalid !== undefined) return child;
-  return withHealthFilter(child, options?.outlierDetection, false);
+  return withHealthFilter(child, options?.outlierDetection);
+}
+
+function advancesSticky(report: DoneInfo): boolean {
+  return (
+    report.attempted &&
+    (report.code === "NET_UNREACHABLE" || report.code === "NET_UNAVAILABLE")
+  );
 }
 
 /** First member at or after `offset`, wrapping, that is a candidate of this pick. */
@@ -470,7 +446,7 @@ function candidateOrder(
  * @see {@link roundRobinBalancer}
  */
 export interface RoundRobinOptions {
-  /** Health filtering; enabled with defaults when omitted. `false` disables it. */
+  /** Health filtering; off by default. `{}` enables the defaults. */
   readonly outlierDetection?: OutlierDetectionOptions | false;
   /**
    * Finite positive weight per endpoint; a missing weight is 1. Read by
@@ -496,15 +472,15 @@ export interface RoundRobinOptions {
  * to zero. Finite positive weights never produce a non-candidate selection.
  *
  * Without `weights`, every pick advances the counter, including a pick made for
- * an HTTP retry or a stream reconnect. With `outlierDetection: false` and calls
+ * an HTTP retry or a stream reconnect. Without `outlierDetection`, and with calls
  * that run one after another, an endpoint that fails persistently therefore
  * receives more than 1/n of the first attempts. With exactly two endpoints and
  * retries enabled it receives all of them, so every call needs one retry.
  * Concurrent calls interleave their picks and break this pattern.
  *
- * Health filtering is enabled by default: five consecutive attributed failures
- * eject an endpoint temporarily. Set `outlierDetection: false` to disable it;
- * only those unfiltered successful picks omit `done`. An empty
+ * Health filtering is off by default, so successful picks omit `done`. Supply
+ * `outlierDetection: {}` to enable it: five consecutive attributed failures then
+ * eject an endpoint temporarily. An empty
  * candidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are
  * remembered here and returned from every `pick` without throwing.
  *
@@ -577,7 +553,7 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
     },
   };
   if (invalid !== undefined) return child;
-  return withHealthFilter(child, options?.outlierDetection, true);
+  return withHealthFilter(child, options?.outlierDetection);
 }
 
 function invalidRoundRobin(options: unknown): Error | undefined {
