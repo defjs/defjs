@@ -1,6 +1,6 @@
 # Client configuration and derivation (`createClient`)
 
-Contents: [Create and compose](#create-and-compose) · [`DerivableClient` vs `Client` value](#derivableclient-vs-client-value) · [`RequestOptions`](#requestoptions) · [Client option helpers](#client-option-helpers) · [Server (SSR) vs browser scope](#server-ssr-vs-browser-scope)
+Contents: [Create and compose](#create-and-compose) · [`DerivableClient` vs `Client` value](#derivableclient-vs-client-value) · [`RequestOptions`](#requestoptions) · [Client option helpers](#client-option-helpers) · [XSRF and cross-origin redirects](#xsrf-and-cross-origin-redirects) · [Server (SSR) vs browser scope](#server-ssr-vs-browser-scope)
 
 ## Create and compose
 
@@ -88,6 +88,31 @@ await getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 2 });
 | `withHTTPHandle(fetch)`          | Replaces Fetch implementation for HTTP (ideal for tests or custom agent)                                                                                                                                                                                                                                                      |
 | `withSSEHandle(fetch)`           | Replaces Fetch implementation for SSE                                                                                                                                                                                                                                                                                         |
 | `withWebSocketHandle(WebSocket)` | Replaces WebSocket constructor                                                                                                                                                                                                                                                                                                |
+
+## XSRF and cross-origin redirects
+
+`withXSRF` checks the origin of the URL the library builds. Fetch follows redirects itself, and after a redirect to another origin it removes only `Authorization`, so the XSRF header goes along. The target receives the token when it allows the header in its CORS preflight. To refuse that, set `mode: "same-origin"` on requests to the page origin that carry the header:
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { withXSRF } from "@defjs/core/xsrf";
+
+export const client = createClient(
+  withEndpoint("https://app.example.com/api"),
+  withHTTPHandle((input, init) => {
+    const request = new Request(input, init);
+    const sameOrigin = new URL(request.url).origin === location.origin;
+    return fetch(
+      sameOrigin && request.headers.has("X-XSRF-TOKEN")
+        ? new Request(request, { mode: "same-origin" })
+        : request,
+    );
+  }),
+  withXSRF(),
+);
+```
+
+Such a request fails with `NET_UNREACHABLE` when a redirect leaves the origin, and still follows a same-origin redirect. The origin check keeps the mode off a cross-origin API whose header comes from an interceptor, because Fetch rejects any request to another origin in that mode. With `Referrer-Policy: no-referrer`, Fetch sends `Origin: null` for a same-origin POST in that mode, where the default mode sends the serialized origin, so a server that checks `Origin` can reject it. Some engines implement this differently. Do not use `redirect: "error"` instead: it also fails same-origin redirects.
 
 ## Server (SSR) vs browser scope
 
