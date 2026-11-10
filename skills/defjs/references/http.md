@@ -52,6 +52,7 @@ void main();
 ```
 
 - `output` decodes `2xx` responses; `error` decodes non-`2xx` responses. Only one side is ever read. If `output` or `error` is omitted, that side's body is not read at all.
+- A response without content (`HEAD`, `204`, `205`, `304`) reads as zero bytes: `struct.string()` gets `''`, `struct.arrayBuffer()` an empty `ArrayBuffer`, `struct.blob()` an empty `Blob`. A JSON struct is still held to its media type first (`RES_MEDIA_TYPE_INVALID` without a JSON `Content-Type`); when that passes, the empty bytes fail to parse with `RES_DECODE_FAILED`.
 - `operation` is a low-cardinality identifier (such as `"orders.update"`) used by interceptors and OpenTelemetry. Never put dynamic IDs or URLs in `operation`.
 
 ## Input placement (`builder`)

@@ -62,7 +62,7 @@ describe("request http runtime errors", () => {
     },
   );
 
-  test("should decode an absent synthetic text body but reject absent JSON", async () => {
+  test("should decode an absent synthetic body as empty content but reject a declared JSON media type that is missing", async () => {
     const syntheticClient = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
@@ -81,16 +81,35 @@ describe("request http runtime errors", () => {
       output: struct.object({ id: struct.number() }),
       path: "/empty-json",
     });
+    const bytes = defineRequest({
+      method: "GET",
+      output: struct.arrayBuffer(),
+      path: "/empty-bytes",
+    });
+    const blob = defineRequest({
+      method: "GET",
+      output: struct.blob(),
+      path: "/empty-blob",
+    });
 
     const [textFault, textData, textResponse] = await text(syntheticClient);
     const [jsonFault, jsonData, jsonResponse] = await json(syntheticClient);
+    const [bytesFault, bytesData] = await bytes(syntheticClient);
+    const [blobFault, blobData] = await blob(syntheticClient);
+
+    expect(bytesFault).toBeNull();
+    expect(bytesData).toBeInstanceOf(ArrayBuffer);
+    expect(bytesData?.byteLength).toBe(0);
+    expect(blobFault).toBeNull();
+    expect(blobData).toBeInstanceOf(Blob);
+    expect(blobData?.size).toBe(0);
 
     expect(textFault).toBeNull();
     expect(textData).toBe("");
     expect(textResponse?.body).toBe("");
-    expect(jsonFault?.code).toBe("RES_DECODE_FAILED");
+    // The synthetic response has no JSON media type, which is checked before the absent body.
+    expect(jsonFault?.code).toBe("RES_MEDIA_TYPE_INVALID");
     expect(jsonFault?.cause).toBeInstanceOf(TypeError);
-    expect(jsonFault?.message).toBe("Response body is absent");
     expect(jsonFault?.response).not.toHaveProperty("body");
     expect(jsonData).toBeUndefined();
     expect(jsonResponse).toBeUndefined();

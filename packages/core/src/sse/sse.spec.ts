@@ -1445,6 +1445,121 @@ describe("request event stream runtime", () => {
     expect(stream).toBeUndefined();
   });
 
+  test.each([403, 304])(
+    "should read a bodiless %i handshake declared as arrayBuffer as empty bytes",
+    async (status) => {
+      const useStream = defineEventStream({
+        events: { message: struct.string() },
+        error: struct.arrayBuffer(),
+        path: "/sse/handshake-no-content",
+      });
+      const client = createClient(
+        withEndpoint("https://example.com"),
+        withSSEHandle(() => Promise.resolve(new Response(null, { status }))),
+      );
+
+      const [error, stream] = await useStream(client);
+
+      expect(error?.code).toBe("HTTP_STATUS");
+      if (error?.code !== "HTTP_STATUS") {
+        throw new Error("Expected an http status fault");
+      }
+      expect(error.response.status).toBe(status);
+      expect(error.data).toBeInstanceOf(ArrayBuffer);
+      expect(error.data.byteLength).toBe(0);
+      expect(stream).toBeUndefined();
+    },
+  );
+
+  test.each([403, 304])(
+    "should read a bodiless %i handshake declared as blob as an empty Blob",
+    async (status) => {
+      const useStream = defineEventStream({
+        events: { message: struct.string() },
+        error: struct.blob(),
+        path: "/sse/handshake-no-content",
+      });
+      const client = createClient(
+        withEndpoint("https://example.com"),
+        withSSEHandle(() => Promise.resolve(new Response(null, { status }))),
+      );
+
+      const [error, stream] = await useStream(client);
+
+      expect(error?.code).toBe("HTTP_STATUS");
+      if (error?.code !== "HTTP_STATUS") {
+        throw new Error("Expected an http status fault");
+      }
+      expect(error.response.status).toBe(status);
+      expect(error.data).toBeInstanceOf(Blob);
+      expect(error.data.size).toBe(0);
+      expect(stream).toBeUndefined();
+    },
+  );
+
+  describe("a 304 handshake whose engine exposes an empty stream", () => {
+    // Chromium and Firefox hand out an empty stream for a null body status. Fetch defines the
+    // response as having no body, so it reads like the null Node and Bun give.
+    const exposedStream = () => {
+      let canceled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        cancel() {
+          canceled = true;
+        },
+      });
+      const response = Object.defineProperty(
+        new Response(null, { status: 304 }),
+        "body",
+        { value: stream },
+      );
+      return { response, wasCanceled: () => canceled };
+    };
+
+    test("should fail a declared JSON error as a decode failure, not a media type fault", async () => {
+      const { response, wasCanceled } = exposedStream();
+      const useStream = defineEventStream({
+        events: { message: struct.string() },
+        error: struct.object({ reason: struct.string() }),
+        path: "/sse/handshake-304",
+      });
+      const client = createClient(
+        withEndpoint("https://example.com"),
+        withSSEHandle(() => Promise.resolve(response)),
+      );
+
+      const [error, stream] = await useStream(client);
+
+      expect(error?.code).toBe("RES_DECODE_FAILED");
+      expect(error?.response?.status).toBe(304);
+      expect(stream).toBeUndefined();
+      expect(wasCanceled()).toBe(true);
+    });
+
+    test("should read a declared arrayBuffer error as empty bytes", async () => {
+      const { response, wasCanceled } = exposedStream();
+      const useStream = defineEventStream({
+        events: { message: struct.string() },
+        error: struct.arrayBuffer(),
+        path: "/sse/handshake-304",
+      });
+      const client = createClient(
+        withEndpoint("https://example.com"),
+        withSSEHandle(() => Promise.resolve(response)),
+      );
+
+      const [error, stream] = await useStream(client);
+
+      expect(error?.code).toBe("HTTP_STATUS");
+      if (error?.code !== "HTTP_STATUS") {
+        throw new Error("Expected an http status fault");
+      }
+      expect(error.data).toBeInstanceOf(ArrayBuffer);
+      expect(error.data.byteLength).toBe(0);
+      expect(stream).toBeUndefined();
+      expect(wasCanceled()).toBe(true);
+    });
+  });
+
   test("should skip unknown event types without default struct", async () => {
     const useStream = defineEventStream({
       events: {

@@ -1502,7 +1502,7 @@
     "related": [],
     "exampleFiles": [],
     "returns": [
-      "Parsed `HttpResponse`. Rejects when no response reached the client, when reading the body\nfailed, when an upload observer threw (`EXT_OBSERVER_FAILED`), or when `finalizeHeaders` threw (`EXT_HOOK_FAILED`).\nA request that is invalid before it is sent rejects with `REQ_BUILD_FAILED`: a method that is not a token or is\nforbidden, a GET or HEAD body, a URL with credentials, a `bodyContentType` the platform refuses as a header value,\nor, when `uploadProgress` is set, a stream body that is already locked or read. Cancellation still wins."
+      "Parsed `HttpResponse`. Rejects when no response reached the client, when reading the body\nfailed, when an upload observer threw (`EXT_OBSERVER_FAILED`), or when `finalizeHeaders` threw (`EXT_HOOK_FAILED`).\nA request that is invalid before it is sent rejects with `REQ_BUILD_FAILED`: a method that is not a token or is\nforbidden, a GET or HEAD body, a URL with credentials, a `bodyContentType` the platform refuses as a header value,\nor, when `uploadProgress` is set, a stream body that is already locked or read. Cancellation still wins.\nThe `body` of a `HEAD` response, or of a `204`, `205`, or `304` response, is absent whether or not the engine exposes a body stream."
     ],
     "throws": [],
     "tags": [],
@@ -1551,7 +1551,7 @@
           }
         ],
         "returns": [
-          "Parsed `HttpResponse`. Rejects when no response reached the client, when reading the body\nfailed, when an upload observer threw (`EXT_OBSERVER_FAILED`), or when `finalizeHeaders` threw (`EXT_HOOK_FAILED`).\nA request that is invalid before it is sent rejects with `REQ_BUILD_FAILED`: a method that is not a token or is\nforbidden, a GET or HEAD body, a URL with credentials, a `bodyContentType` the platform refuses as a header value,\nor, when `uploadProgress` is set, a stream body that is already locked or read. Cancellation still wins."
+          "Parsed `HttpResponse`. Rejects when no response reached the client, when reading the body\nfailed, when an upload observer threw (`EXT_OBSERVER_FAILED`), or when `finalizeHeaders` threw (`EXT_HOOK_FAILED`).\nA request that is invalid before it is sent rejects with `REQ_BUILD_FAILED`: a method that is not a token or is\nforbidden, a GET or HEAD body, a URL with credentials, a `bodyContentType` the platform refuses as a header value,\nor, when `uploadProgress` is set, a stream body that is already locked or read. Cancellation still wins.\nThe `body` of a `HEAD` response, or of a `204`, `205`, or `304` response, is absent whether or not the engine exposes a body stream."
         ]
       }
     ]

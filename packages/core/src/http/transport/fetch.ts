@@ -6,7 +6,7 @@ import {
 } from "../../client/config";
 import { isAbortCause, isTimeoutCause } from "../../error/cause";
 import { awaitWithSignal, resolveAbortCause } from "../../internal/abort";
-import { fetchWithSignal } from "../../internal/fetch";
+import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
 import type { HttpProgressFn, HttpRequest } from "../../internal/http_request";
 import type { HttpMeta, HttpResponse } from "../../internal/http_response";
 import { makeResponse } from "../../internal/http_response";
@@ -298,6 +298,19 @@ async function parseFetchResponse(
     return makeResponse({ status, statusText, headers, url });
   }
 
+  // The platform defines these responses as having no body, so they are never read, whether the
+  // runtime exposes null or an empty stream. The decoder still checks the declared media type
+  // against the absent body. Names are not normalized on `HttpRequest`, and fetch normalizes
+  // `head`. A JavaScript caller may omit the method, which the platform treats as GET, so it is
+  // stringified before it is compared.
+  const noContent =
+    String(httpRequest.method).toUpperCase() === "HEAD" ||
+    NULL_BODY_STATUSES.has(status);
+  const stream = noContent ? null : response.body;
+  if (noContent && response.body) {
+    discardBody(response.body);
+  }
+
   const contentEncoding = headers.get("Content-Encoding")?.trim().toLowerCase();
   let contentLength =
     contentEncoding !== undefined && contentEncoding !== "identity"
@@ -311,18 +324,15 @@ async function parseFetchResponse(
     statusText,
     url,
   };
-  // No stream is an absent body. A parsed JSON null stays null.
+  // No stream, or a response the platform defines as having no body, is an absent body.
+  // A parsed JSON null stays null.
   let body: unknown = undefined;
 
   // Philosophy 3: the declared representation is part of the assertion. Checking it before the
   // body is read turns "I asked for JSON and got HTML" into one precise fault, and skips the
   // read, the parse, and the struct entirely.
-  if (
-    response.body &&
-    responseType === "json" &&
-    !isJsonMediaType(contentType)
-  ) {
-    discardBody(response.body);
+  if (stream && responseType === "json" && !isJsonMediaType(contentType)) {
+    discardBody(stream);
     const cause = new TypeError(
       `Expected a JSON media type, received ${contentType || "<none>"}`,
     );
@@ -330,16 +340,16 @@ async function parseFetchResponse(
   }
 
   // Progress needs the chunks, so only an unobserved read takes the bulk path.
-  if (response.body && platform && !downloadProgress) {
+  if (stream && platform && !downloadProgress) {
     const bytes = await readWholeBody(response, httpRequest.signal, meta);
     try {
       body = parseBytesBody(responseType, bytes, contentType);
     } catch (error) {
       throw new BodyFailure("RES_DECODE_FAILED", error, meta);
     }
-  } else if (response.body) {
+  } else if (stream) {
     const chunks: Uint8Array[] = [];
-    const reader = response.body.getReader();
+    const reader = stream.getReader();
     const signal = httpRequest.signal;
     // One listener covers every read: cancelling settles a pending read as done, and the loop then
     // reports the abort. Racing each read would add a listener and three promises per chunk.
@@ -432,6 +442,7 @@ async function parseFetchResponse(
  *   A request that is invalid before it is sent rejects with `REQ_BUILD_FAILED`: a method that is not a token or is
  *   forbidden, a GET or HEAD body, a URL with credentials, a `bodyContentType` the platform refuses as a header value,
  *   or, when `uploadProgress` is set, a stream body that is already locked or read. Cancellation still wins.
+ *   The `body` of a `HEAD` response, or of a `204`, `205`, or `304` response, is absent whether or not the engine exposes a body stream.
  * @group http
  */
 export async function fetchHandler(

@@ -455,3 +455,138 @@ describe("inbound representation by struct kind", () => {
     expect(data).toBeUndefined();
   });
 });
+
+describe("a response without content", () => {
+  const noContent = [
+    { method: "GET", status: 204 },
+    { method: "GET", status: 205 },
+    { method: "HEAD", status: 200 },
+  ] as const;
+
+  test.each(noContent)(
+    "should read an empty ArrayBuffer for $method $status",
+    async ({ method, status }) => {
+      const client = clientReturning(null, status, {});
+      const useRequest = defineRequest({
+        method,
+        output: struct.arrayBuffer(),
+        path: "/no-content",
+      });
+
+      const [error, data, response] = await useRequest(client);
+
+      expect(error).toBeNull();
+      expect(data).toBeInstanceOf(ArrayBuffer);
+      expect(data?.byteLength).toBe(0);
+      expect(response?.body).toBeInstanceOf(ArrayBuffer);
+    },
+  );
+
+  test.each(noContent)(
+    "should read an empty Blob for $method $status",
+    async ({ method, status }) => {
+      const client = clientReturning(null, status, {});
+      const useRequest = defineRequest({
+        method,
+        output: struct.blob(),
+        path: "/no-content",
+      });
+
+      const [error, data] = await useRequest(client);
+
+      expect(error).toBeNull();
+      expect(data).toBeInstanceOf(Blob);
+      expect(data?.size).toBe(0);
+    },
+  );
+
+  test.each(noContent)(
+    "should read an empty string for $method $status",
+    async ({ method, status }) => {
+      const client = clientReturning(null, status, {});
+      const useRequest = defineRequest({
+        method,
+        output: struct.string(),
+        path: "/no-content",
+      });
+
+      const [error, data] = await useRequest(client);
+
+      expect(error).toBeNull();
+      expect(data).toBe("");
+    },
+  );
+
+  test.each(noContent)(
+    "should fail a declared JSON object that lacks a JSON media type with RES_MEDIA_TYPE_INVALID for $method $status",
+    async ({ method, status }) => {
+      const client = clientReturning(null, status, {});
+      const useRequest = defineRequest({
+        method,
+        output: struct.object({ id: struct.number() }),
+        path: "/no-content",
+      });
+
+      const [error, data] = await useRequest(client);
+
+      expect(error?.code).toBe("RES_MEDIA_TYPE_INVALID");
+      expect(error?.cause).toBeInstanceOf(TypeError);
+      expect(error?.response?.status).toBe(status);
+      expect(data).toBeUndefined();
+    },
+  );
+
+  test.each(noContent)(
+    "should parse the empty bytes of a declared JSON object that has a JSON media type and fail with RES_DECODE_FAILED for $method $status",
+    async ({ method, status }) => {
+      const client = clientReturning(null, status, JSON_HEADERS);
+      const useRequest = defineRequest({
+        method,
+        output: struct.object({ id: struct.number() }),
+        path: "/no-content",
+      });
+
+      const [error, data] = await useRequest(client);
+
+      expect(error?.code).toBe("RES_DECODE_FAILED");
+      expect(error?.cause).toBeInstanceOf(SyntaxError);
+      expect(data).toBeUndefined();
+    },
+  );
+
+  test("should check the media type of a declared JSON error before its absent body", async () => {
+    const useRequest = defineRequest({
+      error: struct.object({ reason: struct.string() }),
+      method: "GET",
+      output: struct.string(),
+      path: "/not-modified",
+    });
+
+    const [wrongType] = await useRequest(clientReturning(null, 304, {}));
+    const [jsonType] = await useRequest(
+      clientReturning(null, 304, JSON_HEADERS),
+    );
+
+    expect(wrongType?.code).toBe("RES_MEDIA_TYPE_INVALID");
+    expect(jsonType?.code).toBe("RES_DECODE_FAILED");
+  });
+
+  test("should read an empty ArrayBuffer error from a 304", async () => {
+    const client = clientReturning(null, 304, {});
+    const useRequest = defineRequest({
+      error: struct.arrayBuffer(),
+      method: "GET",
+      output: struct.string(),
+      path: "/not-modified",
+    });
+
+    const [error] = await useRequest(client);
+
+    expect(error?.code).toBe("HTTP_STATUS");
+    if (error?.code !== "HTTP_STATUS") {
+      throw new Error("Expected an http status fault");
+    }
+    expect(error.data).toBeInstanceOf(ArrayBuffer);
+    expect(error.data.byteLength).toBe(0);
+  });
+});

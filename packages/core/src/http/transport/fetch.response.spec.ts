@@ -523,6 +523,138 @@ describe("Fetch handler responses", () => {
     expect(res.body).toBeUndefined();
   });
 
+  describe("a response the platform defines as having no body", () => {
+    // Chromium and Firefox expose an empty stream for some of these; Bun and Node expose null.
+    // The handler treats both as an absent body. The stream stays open so that only a cancel,
+    // not a read, can release it.
+    const exposedStream = (status: number) => {
+      let canceled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        cancel() {
+          canceled = true;
+        },
+      });
+      const response = Object.defineProperty(
+        new Response(null, { status }),
+        "body",
+        { value: stream },
+      );
+      return { response, wasCanceled: () => canceled };
+    };
+
+    test.each([
+      [204, "arraybuffer"],
+      [204, "blob"],
+      [204, "text"],
+      [204, "json"],
+      [205, "arraybuffer"],
+      [205, "json"],
+    ] as const)(
+      "should report an exposed empty stream on %i as absent for %s",
+      async (status, responseType) => {
+        const { response, wasCanceled } = exposedStream(status);
+
+        const result = await fetchHandler(
+          {
+            baseEndpoint: "https://example.com",
+            endpoint: "/no-content",
+            method: "GET",
+            responseType,
+          },
+          () => Promise.resolve(response),
+        );
+
+        expect(result.status).toBe(status);
+        expect(result.body).toBeUndefined();
+        expect(wasCanceled()).toBe(true);
+      },
+    );
+
+    test("should apply the error representation to an exposed empty 304 stream", async () => {
+      const { response, wasCanceled } = exposedStream(304);
+
+      const result = await fetchHandler(
+        {
+          baseEndpoint: "https://example.com",
+          endpoint: "/not-modified",
+          errorResponseType: "arraybuffer",
+          method: "GET",
+        },
+        () => Promise.resolve(response),
+      );
+
+      expect(result.status).toBe(304);
+      expect(result.body).toBeUndefined();
+      expect(wasCanceled()).toBe(true);
+    });
+
+    test.each(["arraybuffer", "json"] as const)(
+      "should report a HEAD response that exposes a body stream as absent for %s",
+      async (responseType) => {
+        let canceled = false;
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("{}"));
+          },
+          cancel() {
+            canceled = true;
+          },
+        });
+        const response = Object.defineProperty(
+          new Response(null, {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+          "body",
+          { value: stream },
+        );
+
+        const result = await fetchHandler(
+          {
+            baseEndpoint: "https://example.com",
+            endpoint: "/head",
+            method: "head",
+            responseType,
+          },
+          () => Promise.resolve(response),
+        );
+
+        expect(result.body).toBeUndefined();
+        expect(canceled).toBe(true);
+      },
+    );
+
+    test("should treat a request without a method as GET when the response has no body", async () => {
+      const result = await fetchHandler(
+        {
+          baseEndpoint: "https://example.com",
+          endpoint: "/no-content",
+          // @ts-expect-error JavaScript callers and interceptors may omit the required method
+          method: undefined,
+          responseType: "text",
+        },
+        () => Promise.resolve(new Response(null, { status: 204 })),
+      );
+
+      expect(result.status).toBe(204);
+      expect(result.body).toBeUndefined();
+    });
+
+    test("should keep a body stream on a status that is not a null body status", async () => {
+      const result = await fetchHandler(
+        {
+          baseEndpoint: "https://example.com",
+          endpoint: "/ok",
+          method: "GET",
+          responseType: "text",
+        },
+        () => Promise.resolve(new Response("kept", { status: 200 })),
+      );
+
+      expect(result.body).toBe("kept");
+    });
+  });
+
   test("should fill an empty native Response url from the resolved request URL", async () => {
     const response = await fetchHandler(
       {

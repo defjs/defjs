@@ -886,4 +886,41 @@ describe("inbound representation through the real server", () => {
     expect(error.status).toBe(422);
     expect(error.data).toEqual({ code: "BAD", message: "nope" });
   });
+
+  // The media type is checked first: the 204 has none, the HEAD answer declares JSON and then has no bytes to parse.
+  test.each([
+    {
+      method: "GET",
+      path: "/body/no-content",
+      code: "RES_MEDIA_TYPE_INVALID",
+    },
+    { method: "HEAD", path: "/json", code: "RES_DECODE_FAILED" },
+  ] as const)(
+    "reads $method $path as empty content, and fails only a declared JSON object with $code",
+    async ({ method, path, code }) => {
+      const readBytes = defineRequest({
+        method,
+        output: struct.arrayBuffer(),
+        path,
+      });
+      const readBlob = defineRequest({ method, output: struct.blob(), path });
+      const readText = defineRequest({ method, output: struct.string(), path });
+      const readObject = defineRequest({
+        method,
+        output: struct.object({ id: struct.number() }),
+        path,
+      });
+
+      const bytes = await ok(client, readBytes);
+      const blob = await ok(client, readBlob);
+      const text = await ok(client, readText);
+      const [error] = await readObject(client);
+
+      expect(bytes).toBeInstanceOf(ArrayBuffer);
+      expect(bytes.byteLength).toBe(0);
+      expect(blob.size).toBe(0);
+      expect(text).toBe("");
+      expect(error?.code).toBe(code);
+    },
+  );
 });

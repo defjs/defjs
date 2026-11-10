@@ -27,7 +27,7 @@ import {
 import { AsyncQueue } from "../../internal/async_queue";
 import { computeReconnectDelay, wait } from "../../internal/backoff";
 import { normalizeReconnectOptions } from "../../internal/reconnect_options";
-import { fetchWithSignal } from "../../internal/fetch";
+import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
 import type {
   HttpRequest,
   HttpResponseType,
@@ -955,9 +955,15 @@ async function createOpenInfo(
 ): Promise<EventStreamOpenInfo> {
   if (!response.ok && handshakeError) {
     const representation = resolveInboundRepresentation(handshakeError);
-    // No bytes arrived. Text is the empty string; every other representation failed to decode.
+    // A null body status has no body, though Chromium and Firefox expose an empty stream for some.
+    let stream = response.body;
+    if (stream && NULL_BODY_STATUSES.has(response.status)) {
+      discardStreamBody(stream);
+      stream = null;
+    }
+    // No bytes arrived. Every representation but JSON reads them as zero bytes, like Fetch.
     // A decoded JSON null still requires a body, so null stays reserved for that value.
-    if (!response.body && representation !== "text") {
+    if (!stream && representation === "json") {
       throw new EventStreamFatalError(
         "RES_DECODE_FAILED",
         "Failed to decode event stream handshake body",
@@ -966,10 +972,10 @@ async function createOpenInfo(
 
     // Philosophy 3, same as HTTP: a JSON declaration is an assertion about the media type.
     // A mismatch is a decode fault, not an undecoded status, and the body stays unread.
-    if (response.body && representation === "json") {
+    if (stream && representation === "json") {
       const contentType = getContentType(response.headers);
       if (!isJsonMediaType(contentType)) {
-        discardStreamBody(response.body);
+        discardStreamBody(stream);
         throw new EventStreamFatalError(
           "RES_MEDIA_TYPE_INVALID",
           `Expected a JSON media type, received ${contentType || "<none>"}`,
@@ -978,14 +984,18 @@ async function createOpenInfo(
     }
 
     try {
-      const raw = response.body
+      const raw = stream
         ? await readHandshakeBody(
-            response.body,
+            stream,
             representation,
             signal,
             getContentType(response.headers),
           )
-        : "";
+        : parseBytesBody(
+            representation,
+            new Uint8Array(0),
+            getContentType(response.headers),
+          );
       // JSON uses the same alias-aware decoder as HTTP. Other kinds stay raw values.
       const body: unknown =
         representation === "json"

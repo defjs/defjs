@@ -54,7 +54,7 @@ void main();
 - `maxBufferSize` (default `64 * 1024` bytes) and `maxQueueSize` (default `1024` events) are optional positive safe-integer limits. Exceeding them terminates the stream with `CAP_BUFFER_EXCEEDED` or `CAP_QUEUE_OVERFLOW`.
 - Each key in `events` matches the SSE `event:` field; an event whose frame omits `event:` is named `message`.
 - Decoding follows the event struct kind: `struct.string()` delivers the raw text payload; any other struct runs `JSON.parse` first and then validates against the struct.
-- Handshake errors (non-2xx responses) decode against `error` if declared. If a declared handshake error body fails reading, JSON parsing, or struct validation, SSE reports `RES_DECODE_FAILED`; a struct mismatch keeps the `StructError` as `cause`.
+- Handshake errors (non-2xx responses) decode against `error` if declared. If a declared handshake error body fails reading, JSON parsing, or struct validation, SSE reports `RES_DECODE_FAILED`; a struct mismatch keeps the `StructError` as `cause`. A handshake error response without content (for example `304`) reads as zero bytes, like HTTP: string, `ArrayBuffer`, and `Blob` declarations get an empty value and still resolve `HTTP_STATUS`, while a JSON declaration reports `RES_DECODE_FAILED`.
 - `startupOpen` (3rd tuple element) is the initial handshake snapshot; `stream.open` updates live across reconnections.
 
 ## Stream ownership and disposal

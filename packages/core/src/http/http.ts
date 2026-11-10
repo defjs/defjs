@@ -38,7 +38,7 @@ import {
   resolveAbortCause,
   resolveAbortFault,
 } from "../internal/abort";
-import { readBytesText } from "../internal/bytes";
+import { parseBytesBody, readBytesText } from "../internal/bytes";
 import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { createTransportOrigin } from "../internal/transport_origin";
@@ -1070,17 +1070,18 @@ async function decodeDeclaredBody<S extends AnyStruct>(
   signal: AbortSignal,
 ): Promise<Infer<S>> {
   const representation = resolveInboundRepresentation(struct);
-  const absent = isAbsentDeclaredBody(response);
   const contentType = getContentType(response.headers);
-  // The media type is checked before any read. An absent body has nothing to classify.
-  if (!absent && representation === "json" && !isJsonMediaType(contentType)) {
+  // The media type is checked first, before the body is looked at or read, so a response without
+  // content (HEAD, 204, 205, 304) is held to the declaration like any other.
+  if (representation === "json" && !isJsonMediaType(contentType)) {
     throw new JsonMediaTypeError(contentType);
   }
-  if (absent) {
-    if (representation === "text") {
-      return parseStructValue(struct, "");
-    }
-    throw new TypeError("Response body is absent");
+  if (isAbsentDeclaredBody(response)) {
+    // Fetch reads an absent body as zero bytes. JSON parses them like any other bytes and fails.
+    return parseStructValue(
+      struct,
+      parseBytesBody(representation, new Uint8Array(0), contentType),
+    );
   }
   // Only a Blob read is asynchronous and not itself cancellable, so only it races the request signal.
   // Every other body converts synchronously, and the caller checks cancellation right after.

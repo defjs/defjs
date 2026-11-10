@@ -834,17 +834,51 @@ export function defineNativeFetchSuite(): void {
         name: "no content, undeclared",
         overrides: { endpoint: "/body/no-content" },
       },
-      // Whether a 204 or a HEAD response has a body stream is the platform's call (browsers give one, Bun and Node do not);
-      // the two handles only have to agree.
+      // A 204 or a HEAD response has no body in every runtime, even where the platform exposes an empty stream.
       {
-        expected: {},
-        name: "no content, declared",
+        expected: { body: undefined, status: 204 },
+        name: "no content, declared json",
         overrides: { endpoint: "/body/no-content", responseType: "json" },
       },
       {
-        expected: {},
-        name: "head, declared",
-        overrides: { endpoint: "/json", method: "HEAD", responseType: "json" },
+        expected: { body: undefined, status: 204 },
+        name: "no content, declared arraybuffer",
+        overrides: {
+          endpoint: "/body/no-content",
+          responseType: "arraybuffer",
+        },
+      },
+      {
+        expected: { body: undefined, status: 204 },
+        name: "no content, declared text",
+        overrides: { endpoint: "/body/no-content", responseType: "text" },
+      },
+      {
+        expected: { body: undefined, status: 200 },
+        name: "head, declared json",
+        overrides: {
+          endpoint: "/json",
+          method: "HEAD",
+          responseType: "json",
+        },
+      },
+      {
+        expected: { body: undefined, status: 200 },
+        name: "head, declared arraybuffer",
+        overrides: {
+          endpoint: "/json",
+          method: "HEAD",
+          responseType: "arraybuffer",
+        },
+      },
+      {
+        expected: { body: undefined, status: 200 },
+        name: "head, declared text",
+        overrides: {
+          endpoint: "/json",
+          method: "HEAD",
+          responseType: "text",
+        },
       },
       {
         expected: {},

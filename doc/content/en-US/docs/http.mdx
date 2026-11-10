@@ -100,8 +100,9 @@ Values that cannot be represented in JSON (`NaN`, `±Infinity`, `Map`, `Set`, fu
 
 1. **Select side by `ok` (`200..299`)**: `output` for `2xx`, `error` for non-`2xx`.
 2. **Opt-out when omitted**: If no struct is declared for that side, the response body is never read (`2xx` resolves `data: undefined` + `HttpMeta`; non-`2xx` resolves `HTTP_STATUS` with `data: undefined`).
-3. **Verify JSON media type first**: For JSON structs, a non-JSON `Content-Type` fails with `RES_MEDIA_TYPE_INVALID` before reading the body stream.
+3. **Verify JSON media type first**: For JSON structs, a non-JSON `Content-Type` fails with `RES_MEDIA_TYPE_INVALID` before the body is read or looked for. A response without content (`HEAD`, `204`, `205`, `304`) is held to the declaration like any other.
 4. **Read and parse**: Unreadable streams or invalid JSON fail with `RES_DECODE_FAILED` (or `NET_BODY_INCOMPLETE` if truncated mid-stream).
+   A response without content (`HEAD`, `204`, `205`, `304`) has no body to read: `struct.string()` gets `''`, `struct.arrayBuffer()` an empty `ArrayBuffer`, and `struct.blob()` an empty `Blob`. A JSON struct that passed step 3 parses the empty bytes, which fails with `RES_DECODE_FAILED`.
 5. **Validate with `struct`**: Schema mismatches fail with `RES_STRUCT_MISMATCH`.
 
 ## 5. Cancel the work and set deadlines [#cancel-the-work]
