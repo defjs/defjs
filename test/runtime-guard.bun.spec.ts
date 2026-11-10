@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, test, vi } from "vitest";
+import { createBrowserApiSetup } from "./browser-api-server-setup.ts";
 import { setup as setupCore } from "../packages/core/test/setup.ts";
 import { setup as setupOtel } from "../packages/opentelemetry-server/test/setup.ts";
 import { assertRuntime, expectedRuntime } from "./runtime-guard.ts";
@@ -74,71 +74,6 @@ describe("setup", () => {
   });
 });
 
-function firstBrowserApiSetupStatement(source: string): string {
-  const factory = "function createBrowserApiSetup";
-  const factoryAt = source.indexOf(factory);
-  if (factoryAt < 0) {
-    throw new Error(`missing ${factory}`);
-  }
-  const returned = source.indexOf("return async function", factoryAt);
-  if (returned < 0) {
-    throw new Error("missing function returned by createBrowserApiSetup");
-  }
-  return firstFunctionStatement(source, returned);
-}
-
-function firstFunctionStatement(source: string, headerAt: number): string {
-  const openParen = source.indexOf("(", headerAt);
-  if (openParen < 0) {
-    throw new Error("missing setup parameter list");
-  }
-  let depth = 0;
-  let closeParen = -1;
-  for (let index = openParen; index < source.length; index += 1) {
-    const char = source[index];
-    if (char === "(") {
-      depth += 1;
-    } else if (char === ")") {
-      depth -= 1;
-      if (depth === 0) {
-        closeParen = index;
-        break;
-      }
-    }
-  }
-  if (closeParen < 0) {
-    throw new Error("missing setup parameter list");
-  }
-  const openBrace = source.indexOf("{", closeParen);
-  if (openBrace < 0) {
-    throw new Error("missing setup body");
-  }
-  let cursor = openBrace + 1;
-  while (cursor < source.length) {
-    const char = source[cursor];
-    if (char !== undefined && /\s/.test(char)) {
-      cursor += 1;
-      continue;
-    }
-    if (source.startsWith("//", cursor)) {
-      const newline = source.indexOf("\n", cursor);
-      cursor = newline < 0 ? source.length : newline + 1;
-      continue;
-    }
-    if (source.startsWith("/*", cursor)) {
-      const close = source.indexOf("*/", cursor + 2);
-      cursor = close < 0 ? source.length : close + 2;
-      continue;
-    }
-    break;
-  }
-  const semicolon = source.indexOf(";", cursor);
-  if (semicolon < 0) {
-    throw new Error("missing first setup statement");
-  }
-  return source.slice(cursor, semicolon).trim();
-}
-
 describe("globalSetup wiring", () => {
   test("core setup rejects a node project under Bun before providing", async () => {
     const provide = vi.fn();
@@ -166,13 +101,20 @@ describe("globalSetup wiring", () => {
     expect(provide).not.toHaveBeenCalled();
   });
 
-  test("browser api setup guards the runtime first", () => {
-    const source = readFileSync(
-      `${import.meta.dirname}/browser-api-server-setup.ts`,
-      "utf8",
+  test("browser api setup refuses a non-Bun main process before selecting a startup layer", async () => {
+    const selectStartup = vi.fn(() =>
+      Promise.reject(new Error("startup selected")),
     );
-    expect(firstBrowserApiSetupStatement(source)).toMatch(
-      /assertRuntime\("browser-main"\)/,
-    );
+    const provide = vi.fn();
+    const setup = createBrowserApiSetup(selectStartup, {});
+    await expect(
+      setup({
+        provide(key, value) {
+          provide(key, value);
+        },
+      }),
+    ).rejects.toThrow(bunMessage);
+    expect(selectStartup).not.toHaveBeenCalled();
+    expect(provide).not.toHaveBeenCalled();
   });
 });

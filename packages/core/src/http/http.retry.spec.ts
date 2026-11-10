@@ -65,18 +65,17 @@ async function waiting(handle: ReturnType<typeof vi.fn>, count: number) {
 
 test("retry waits 25, 50, 100, 200, 250 milliseconds before successive attempts", async () => {
   clock();
-  const timer = vi.spyOn(globalThis, "setTimeout");
   const h = fixture({ maxAttempts: 7, jitter: 0, budget: false });
   await h.first;
   expect(h.handle).toHaveBeenCalledTimes(1);
   expect(vi.getTimerCount()).toBe(0);
   for (const [index, delay] of [25, 50, 100, 200, 250, 250].entries()) {
-    await waiting(h.handle, index + 1);
-    expect(timer.mock.calls.filter((call) => call[1] !== 1).at(-1)?.[1]).toBe(
-      delay,
-    );
+    await vi.advanceTimersByTimeAsync(0);
     expect(h.handle).toHaveBeenCalledTimes(index + 1);
-    await vi.advanceTimersToNextTimerAsync();
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(delay - 1);
+    expect(h.handle).toHaveBeenCalledTimes(index + 1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(h.handle).toHaveBeenCalledTimes(index + 2);
   }
   expect((await h.pending)[0]?.code).toBe("NET_UNREACHABLE");

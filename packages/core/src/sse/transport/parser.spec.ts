@@ -684,11 +684,18 @@ describe("sse parser", () => {
   });
 
   test("should not enforce maxBufferSize when not set", async () => {
-    const parseLine = createLineParser(noop);
+    const lines: string[] = [];
+    const parseLine = createLineParser((line) => {
+      lines.push(decoder.decode(line));
+    });
 
-    // Large unterminated line without limit should not throw
+    // Large unterminated line without limit is buffered, not rejected
     await parseLine(encoder.encode("data: "));
     await parseLine(encoder.encode("a".repeat(10000)));
+    expect(lines).toEqual([]);
+
+    await parseLine(encoder.encode("\n"));
+    expect(lines).toEqual(["data: " + "a".repeat(10000)]);
   });
 
   test("should not throw maxBufferSize for short messages", async () => {

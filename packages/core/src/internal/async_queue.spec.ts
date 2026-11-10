@@ -63,18 +63,34 @@ describe("AsyncQueue", () => {
     await expect(iter.next()).rejects.toThrow("boom");
   });
 
-  test("push after close is ignored", () => {
+  test("push after close is ignored", async () => {
     const queue = new AsyncQueue<number>({ maxSize: 1 });
+    const iter = queue[Symbol.asyncIterator]();
     queue.close();
     queue.push(1);
-    // Should not throw
+    await expect(iter.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
   });
 
-  test("close after close is ignored", () => {
+  test("push after fail is ignored", async () => {
     const queue = new AsyncQueue<number>({ maxSize: 1 });
+    const iter = queue[Symbol.asyncIterator]();
+    queue.fail(new Error("boom"));
+    queue.push(1);
+    await expect(iter.next()).rejects.toThrow("boom");
+  });
+
+  test("close after close is ignored", async () => {
+    const queue = new AsyncQueue<number>({ maxSize: 1 });
+    const iter = queue[Symbol.asyncIterator]();
     queue.close();
     queue.close();
-    // Should not throw
+    await expect(iter.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
   });
 
   test("fail after close is ignored", () => {

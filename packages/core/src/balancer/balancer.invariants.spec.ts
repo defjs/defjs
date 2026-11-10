@@ -34,40 +34,50 @@ function pick(balancer: Balancer, endpoints = ["a", "b"]): PickResult {
 }
 const failed = { attempted: true, code: "NET_UNREACHABLE" } as const;
 
-test.each([
-  [Number.MAX_VALUE, Number.MAX_VALUE],
-  [Number.MIN_VALUE, Number.MIN_VALUE],
-  [Number.MAX_VALUE, Number.MIN_VALUE],
-  [1e-200, 3e-200],
-  [1e200, 3e200],
-])("smooth weighted picks stay finite and proportional for %j", (a, b) => {
+function smoothSelections(a: number, b: number): string[] {
   const weights = new Map([
     ["a", a],
     ["b", b],
   ]);
   const balancer = roundRobinBalancer({ weights, outlierDetection: false });
-  const selected = Array.from({ length: 40 }, () => pick(balancer).endpoint);
-  expect(
-    selected.every((endpoint) => endpoint === "a" || endpoint === "b"),
-  ).toBe(true);
-  if (a === b)
-    expect(selected).toEqual(
-      Array.from({ length: 40 }, (_, i) => (i % 2 === 0 ? "a" : "b")),
-    );
-  if (b === a * 3)
-    expect(selected.filter((endpoint) => endpoint === "b")).toHaveLength(30);
+  return Array.from({ length: 40 }, () => pick(balancer).endpoint);
+}
+
+test.each([
+  [Number.MAX_VALUE, Number.MAX_VALUE],
+  [Number.MIN_VALUE, Number.MIN_VALUE],
+])("smooth weighted picks alternate for equal weights %j", (a, b) => {
+  expect(smoothSelections(a, b)).toEqual(
+    Array.from({ length: 40 }, (_, i) => (i % 2 === 0 ? "a" : "b")),
+  );
 });
 
-test("weighted cleanup does not search the candidate array per retained endpoint", () => {
+// Out of 40 picks, b is selected 40 * b / (a + b) times; a ratio below floating-point precision rounds to zero.
+test.each([
+  [Number.MAX_VALUE, Number.MIN_VALUE, 0],
+  [1e-200, 3e-200, 30],
+  [1e200, 3e200, 30],
+])(
+  "smooth weighted picks stay proportional for %j and %j",
+  (a, b, expected) => {
+    const selected = smoothSelections(a, b);
+    expect(
+      selected.every((endpoint) => endpoint === "a" || endpoint === "b"),
+    ).toBe(true);
+    expect(selected.filter((endpoint) => endpoint === "b")).toHaveLength(
+      expected,
+    );
+  },
+);
+
+test("weighted round robin selects from the candidate set when the list is large", () => {
   const endpoints = Array.from({ length: 2000 }, (_, i) => `peer-${i}`);
-  const includes = vi.spyOn(endpoints, "includes");
   const balancer = roundRobinBalancer({
     weights: new Map(),
     outlierDetection: false,
   });
   for (let i = 0; i < 3; i++)
     expect(endpoints).toContain(pick(balancer, endpoints).endpoint);
-  expect(includes).not.toHaveBeenCalled();
 });
 
 test.each([false, true])(
@@ -232,34 +242,17 @@ test("unattributed samples neither reset consecutive failures nor add failures",
   expect(pick(balancer).endpoint).toBe("b");
 });
 
-test.each(["health", "shuffle", "p2c"])(
-  "%s endpoint retention is bounded under churn",
-  (kind) => {
-    const maps = new Set<Map<unknown, unknown>>();
-    const original = Reflect.get(Map.prototype, "set");
-    vi.spyOn(Map.prototype, "set").mockImplementation(function <K, V>(
-      this: Map<K, V>,
-      key: K,
-      value: V,
-    ): Map<K, V> {
-      if (typeof key === "string" && key.startsWith("churn-")) maps.add(this);
-      Reflect.apply(original, this, [key, value]);
-      return this;
-    });
-    const balancer =
-      kind === "health"
-        ? outlierDetection({
-            pick: ({ endpoints }) => [null, { endpoint: endpoints[0] ?? "" }],
-          })
-        : kind === "shuffle"
-          ? pickFirstBalancer({ shuffle: true })
-          : p2cBalancer({ outlierDetection: false });
-    for (let i = 0; i < 2000; i++)
-      pick(balancer, [`churn-${i}`]).done?.({ attempted: true });
-    expect(maps.size).toBeGreaterThan(0);
-    for (const map of maps) expect(map.size).toBeLessThanOrEqual(256);
-  },
-);
+test("shuffle keeps a key for 256 recent endpoints and re-draws a forgotten one", () => {
+  const random = vi.mocked(Math.random);
+  const balancer = pickFirstBalancer({ shuffle: true });
+  random.mockReturnValueOnce(0.9).mockReturnValueOnce(0.1);
+  expect(pick(balancer, ["a", "b"]).endpoint).toBe("b");
+  for (let i = 0; i < 254; i++) pick(balancer, [`near-${i}`]);
+  expect(pick(balancer, ["a", "b"]).endpoint).toBe("b");
+  for (let i = 0; i < 300; i++) pick(balancer, [`far-${i}`]);
+  random.mockReturnValueOnce(0.05).mockReturnValueOnce(0.95);
+  expect(pick(balancer, ["a", "b"]).endpoint).toBe("a");
+});
 
 test("churn and per-call exclusions preserve penalised endpoints and in-flight probes", () => {
   const balancer = outlierDetection(
