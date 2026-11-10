@@ -56,7 +56,7 @@ SDK는 `defineEventStream`을 사용하여 Server-Sent Events(SSE) 작업을 선
 </Tab>
 </Tabs>
 
-- **비`2xx` 핸드셰이크**: `HTTP_STATUS`를 반환합니다(정의에 `error` struct가 선언되어 있다면 디코딩된 `error.data` 포함). 현재 작업에 치명적이며 `shouldReconnect`를 호출하지 않습니다. 다음 작업은 엔드포인트를 새로 선택하므로 밸런서가 다른 엔드포인트를 선택할 수 있습니다.
+- **비`2xx` 핸드셰이크**: `HTTP_STATUS`를 반환합니다(정의에 `error` struct가 선언되어 있다면 디코딩된 `error.data` 포함). 현재 작업에 치명적이며 `shouldReconnect`를 호출하지 않습니다. 다만 `withSSEReconnect`를 설정한 경우의 `502`, `503`, `504` 핸드셰이크는 예외로, 연결 거부와 같이 4절의 재연결 규칙에 따라 재시도되며 `shouldReconnect`가 설정되어 있으면 호출됩니다. 재시도를 모두 소진하면 `HTTP_STATUS`로 끝납니다. 다음 작업은 엔드포인트를 새로 선택하므로 밸런서가 다른 엔드포인트를 선택할 수 있습니다.
 - **잘못된 Content-Type 또는 읽을 수 없는 본문**: `RES_MEDIA_TYPE_INVALID` 또는 `RES_DECODE_FAILED`를 반환합니다.
 - **`startupOpen` vs. `stream.open`**: 튜플의 세 번째 항목(`startupOpen`)은 첫 번째 핸드셰이크 응답의 스냅샷입니다. 반면 `stream.open`은 스트림이 나중에 재연결될 때 실시간으로 갱신됩니다. 재연결 핸드셰이크가 2xx가 아닌 상태로 스트림을 끝내면 이터레이터가 reject되고 `stream.closed`는 `HTTP_STATUS`를 보고하지만, `stream.open.response.status`는 그 상태를 유지합니다. 해당 실시간 응답 상태는 `stream.open`에서 확인하세요.
 

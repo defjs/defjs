@@ -56,7 +56,7 @@ SDK は、`defineEventStream` を使用して Server-Sent Events（SSE）操作�
 </Tab>
 </Tabs>
 
-- **非 `2xx` のハンドシェイク**: `HTTP_STATUS` を返します（定義で `error` struct が宣言されている場合は、デコードされた `error.data` が格納されます）。これは現在の操作に対する致命的な失敗であり、`shouldReconnect` は呼ばれません。次の操作ではエンドポイントを新たに選択するため、バランサーが別のエンドポイントを選ぶ場合があります。
+- **非 `2xx` のハンドシェイク**: `HTTP_STATUS` を返します（定義で `error` struct が宣言されている場合は、デコードされた `error.data` が格納されます）。これは現在の操作に対する致命的な失敗であり、`shouldReconnect` は呼ばれません。ただし、`withSSEReconnect` を設定している場合の `502`、`503`、`504` のハンドシェイクは例外で、接続拒否と同様に第 4 節の再接続ルールでリトライされ、`shouldReconnect` が設定されていればそれが参照されます。リトライを使い切ると `HTTP_STATUS` で終了します。次の操作ではエンドポイントを新たに選択するため、バランサーが別のエンドポイントを選ぶ場合があります。
 - **不正なメディアタイプまたはボディ読み取り不可**: `RES_MEDIA_TYPE_INVALID` または `RES_DECODE_FAILED` を返します。
 - **`startupOpen` と `stream.open` の違い**: タプルの 3 番目の要素（`startupOpen`）は初回ハンドシェイクのレスポンスのスナップショットです。ストリームが後に再接続した場合、`stream.open` は動的に更新されます。再接続のハンドシェイクが 2xx 以外のステータスでストリームを終了させると、イテレーターは reject され、`stream.closed` は `HTTP_STATUS` を報告しますが、`stream.open.response.status` はそのステータスのままです。その最新のレスポンスステータスは `stream.open` で確認してください。
 

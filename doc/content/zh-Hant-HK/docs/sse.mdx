@@ -56,7 +56,7 @@ SDK 作者用 `defineEventStream` 嚟宣告 Server-Sent Events（SSE）操作，
 </Tab>
 </Tabs>
 
-- **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`（若定義中有宣告 `error` struct，則包含解碼後嘅 `error.data`）。呢個係目前操作嘅致命錯誤，唔會呼叫 `shouldReconnect`。下一次操作會重新揀選端點，所以 balancer 可能會揀另一個端點。
+- **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`（若定義中有宣告 `error` struct，則包含解碼後嘅 `error.data`）。呢個係目前操作嘅致命錯誤，唔會呼叫 `shouldReconnect`；例外係設定咗 `withSSEReconnect` 時嘅 `502`、`503` 或 `504` 握手：佢會當作連線被拒絕咁，跟第 4 節嘅重連規則重試，並會喺設定咗 `shouldReconnect` 時諮詢佢。重試用盡就以 `HTTP_STATUS` 結束。下一次操作會重新揀選端點，所以 balancer 可能會揀另一個端點。
 - **Content-Type 唔啱或 body 無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
 - **`startupOpen` vs. `stream.open`**：tuple 嘅第三個欄位（`startupOpen`）記錄首次握手回應嘅 snapshot；後續重連時，`stream.open` 會即時更新。如果重連握手以非 2xx 狀態結束串流，iterator 會 reject，`stream.closed` 會回報 `HTTP_STATUS`，而 `stream.open.response.status` 會保留嗰個狀態；請檢查 `stream.open` 取得嗰個即時回應狀態。
 

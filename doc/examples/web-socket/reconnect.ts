@@ -38,8 +38,8 @@ async function main() {
     console.error(error.code);
     return;
   }
-  console.log(session.state);
-  session.close(1000, "done");
+  await using ownedSession = session;
+  console.log(ownedSession.state);
 }
 
 void main();

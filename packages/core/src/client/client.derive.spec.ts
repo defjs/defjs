@@ -73,7 +73,7 @@ describe("client factory and client values", () => {
     const beforeConnect = () => undefined;
     const protocols = ["chat.v1"];
     const heartbeat = { intervalMs: 1_000, message: () => "ping" };
-    const reconnect = { attempts: 1, delayMs: 10 };
+    const reconnect = { attempts: 1, connectTimeoutMs: 123, delayMs: 10 };
     const options = {
       signal,
       onUploadProgress,
@@ -105,6 +105,7 @@ describe("client factory and client values", () => {
     expect(stored.heartbeat?.message).toBe(heartbeat.message);
     expect(stored.reconnect).toEqual({
       attempts: 1,
+      connectTimeoutMs: 123,
       delayMs: 10,
       factor: undefined,
       jitter: undefined,

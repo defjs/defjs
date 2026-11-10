@@ -56,7 +56,7 @@ Der Aufruf der Operation liefert `[error, stream, startupOpen]` erst zurück, na
 </Tab>
 </Tabs>
 
-- **Nicht-`2xx`-Handshake**: Gibt `HTTP_STATUS` zurück (mit dekodiertem `error.data`, falls ein `error`-Struct an der Definition deklariert ist). Das ist für die aktuelle Operation fatal; `shouldReconnect` wird nicht aufgerufen. Die nächste Operation wählt einen Endpunkt neu, sodass ein Balancer einen anderen Endpunkt wählen kann.
+- **Nicht-`2xx`-Handshake**: Gibt `HTTP_STATUS` zurück (mit dekodiertem `error.data`, falls ein `error`-Struct an der Definition deklariert ist). Das ist für die aktuelle Operation fatal und `shouldReconnect` wird nicht aufgerufen, außer bei einem Handshake mit `502`, `503` oder `504`, wenn `withSSEReconnect` konfiguriert ist: Er wird wie eine verweigerte Verbindung unter den Reconnect-Regeln aus Abschnitt 4 wiederholt, und `shouldReconnect` wird, sofern gesetzt, befragt. Erschöpfte Retries enden mit `HTTP_STATUS`. Die nächste Operation wählt einen Endpunkt neu, sodass ein Balancer einen anderen Endpunkt wählen kann.
 - **Falscher Content-Type oder unlesbarer Body**: Gibt `RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED` zurück.
 - **`startupOpen` vs. `stream.open`**: Das dritte Element des Tupels (`startupOpen`) hält die erste Handshake-Antwort als Snapshot fest; `stream.open` aktualisiert sich dynamisch, falls sich der Stream später neu verbindet. Beendet ein Reconnect-Handshake den Stream mit einem Nicht-2xx-Status, schlägt der Iterator fehl und `stream.closed` meldet `HTTP_STATUS`, während `stream.open.response.status` diesen Status behält; prüfe `stream.open` auf den aktuellen Antwortstatus.
 

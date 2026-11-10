@@ -56,7 +56,7 @@ Calling the operation resolves `[error, stream, startupOpen]` only after the ini
 </Tab>
 </Tabs>
 
-- **Non-`2xx` handshake**: Returns `HTTP_STATUS` (with decoded `error.data` when an `error` struct is declared on the definition). This is fatal for the current operation; `shouldReconnect` is not called. The next operation performs a fresh endpoint pick, so a balancer may choose another endpoint.
+- **Non-`2xx` handshake**: Returns `HTTP_STATUS` (with decoded `error.data` when an `error` struct is declared on the definition). This is fatal for the current operation and `shouldReconnect` is not called, except for a `502`, `503`, or `504` handshake when `withSSEReconnect` is configured: it is retried like a refused connection under the reconnect rules in section 4, and `shouldReconnect`, when set, is consulted. Exhausted retries end with `HTTP_STATUS`. The next operation performs a fresh endpoint pick, so a balancer may choose another endpoint.
 - **Wrong content type or unreadable body**: Returns `RES_MEDIA_TYPE_INVALID` or `RES_DECODE_FAILED`.
 - **`startupOpen` vs. `stream.open`**: The tuple's third item (`startupOpen`) snapshots the first handshake response; `stream.open` updates live if the stream reconnects later. If a reconnect handshake ends the stream with a non-2xx status, the iterator rejects and `stream.closed` reports `HTTP_STATUS`, while `stream.open.response.status` keeps that status; inspect `stream.open` for the live response status.
 

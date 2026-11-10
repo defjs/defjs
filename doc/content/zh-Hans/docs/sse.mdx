@@ -56,7 +56,7 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 </Tab>
 </Tabs>
 
-- **非 `2xx` 握手**：返回 `HTTP_STATUS`（定义声明了 `error` struct 时，`error.data` 是解码后的错误体）。这对当前操作是致命的；不会调用 `shouldReconnect`。下一次操作会重新选择端点，因此均衡器可能选中另一个端点。
+- **非 `2xx` 握手**：返回 `HTTP_STATUS`（定义声明了 `error` struct 时，`error.data` 是解码后的错误体）。这对当前操作是致命的，不会调用 `shouldReconnect`；例外是配置了 `withSSEReconnect` 时的 `502`、`503` 或 `504` 握手：它会像连接被拒绝一样，按第 4 节的重连规则重试，并在设置了 `shouldReconnect` 时咨询它。重试耗尽以 `HTTP_STATUS` 结束。下一次操作会重新选择端点，因此均衡器可能选中另一个端点。
 - **媒体类型错误或 body 不可读**：返回 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
 - **`startupOpen` 与 `stream.open`**：元组第三项（`startupOpen`）是首次握手响应的快照；`stream.open` 会在之后重连时实时更新。如果重连握手以非 2xx 状态结束流，迭代器会 reject，`stream.closed` 报告 `HTTP_STATUS`，而 `stream.open.response.status` 保持该状态；请检查 `stream.open` 获取实时响应状态。
 

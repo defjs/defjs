@@ -56,7 +56,7 @@ L'appel de l'opération ne résout `[error, stream, startupOpen]` qu'une fois qu
 </Tab>
 </Tabs>
 
-- **Handshake hors `2xx`** : Renvoie `HTTP_STATUS` (avec `error.data` décodé lorsqu'un struct `error` est déclaré sur la définition). C’est fatal pour l’opération courante ; `shouldReconnect` n’est pas appelé. L’opération suivante effectue une nouvelle sélection d’endpoint, donc un répartiteur peut choisir un autre endpoint.
+- **Handshake hors `2xx`** : Renvoie `HTTP_STATUS` (avec `error.data` décodé lorsqu'un struct `error` est déclaré sur la définition). C’est fatal pour l’opération courante et `shouldReconnect` n’est pas appelé, sauf pour un handshake répondu par `502`, `503` ou `504` lorsque `withSSEReconnect` est configuré : il est retenté comme une connexion refusée selon les règles de reconnexion de la section 4, et `shouldReconnect`, s’il est défini, est consulté. Les retries épuisés se terminent avec `HTTP_STATUS`. L’opération suivante effectue une nouvelle sélection d’endpoint, donc un répartiteur peut choisir un autre endpoint.
 - **Media type invalide ou corps illisible** : Renvoie `RES_MEDIA_TYPE_INVALID` ou `RES_DECODE_FAILED`.
 - **`startupOpen` vs `stream.open`** : Le troisième élément du tuple (`startupOpen`) capture l'instantané de la première réponse du handshake ; `stream.open` est mis à jour dynamiquement si le flux se reconnecte ultérieurement. Si un handshake de reconnexion met fin au flux avec un statut non 2xx, l’itérateur rejette et `stream.closed` signale `HTTP_STATUS`, tandis que `stream.open.response.status` conserve ce statut ; consultez `stream.open` pour le statut de réponse dynamique.
 

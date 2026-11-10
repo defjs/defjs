@@ -56,7 +56,7 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 </Tab>
 </Tabs>
 
-- **非 `2xx` 交握**：回傳 `HTTP_STATUS`（若定義上宣告了 `error` struct，則帶有解碼後的 `error.data`）。這對目前的操作是致命錯誤，不會呼叫 `shouldReconnect`。下一次操作會重新選取端點，因此平衡器可能選到另一個端點。
+- **非 `2xx` 交握**：回傳 `HTTP_STATUS`（若定義上宣告了 `error` struct，則帶有解碼後的 `error.data`）。這對目前的操作是致命錯誤，不會呼叫 `shouldReconnect`；例外是設定了 `withSSEReconnect` 時的 `502`、`503` 或 `504` 交握：它會像連線被拒絕一樣，依第 4 節的重連規則重試，並在設定了 `shouldReconnect` 時諮詢它。重試用盡則以 `HTTP_STATUS` 結束。下一次操作會重新選取端點，因此平衡器可能選到另一個端點。
 - **Content-Type 不符或本文無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
 - **`startupOpen` 與 `stream.open`**：tuple 的第三項（`startupOpen`）是首次交握回應的快照；`stream.open` 會在串流之後重連時即時更新。若重連交握以非 2xx 狀態結束串流，迭代器會拒絕，`stream.closed` 回報 `HTTP_STATUS`，而 `stream.open.response.status` 保持該狀態；即時的回應狀態請看 `stream.open`。
 
