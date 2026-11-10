@@ -1510,23 +1510,23 @@ describe("fetchEventStream advanced", () => {
     const cause = new Error("reconnect policy failed");
     const fetch = vi.fn(() => Promise.reject(new Error("network error")));
 
-    await expect(
-      fetchEventStream(
-        {
-          baseEndpoint: "https://example.com",
-          endpoint: "/events",
-          method: "GET",
-        },
-        {
-          fetch,
-          retry: resolveRetryPolicy({
-            shouldRetry() {
-              throw cause;
-            },
-          }),
-        },
-      ),
-    ).rejects.toBe(cause);
+    const error = await fetchEventStream(
+      {
+        baseEndpoint: "https://example.com",
+        endpoint: "/events",
+        method: "GET",
+      },
+      {
+        fetch,
+        retry: resolveRetryPolicy({
+          shouldRetry() {
+            throw cause;
+          },
+        }),
+      },
+    ).catch((rejection: unknown) => rejection);
+    expect(getEventStreamFatalCode(error)).toBe("EXT_HOOK_FAILED");
+    expect(error).toHaveProperty("cause", cause);
     expect(fetch).toHaveBeenCalledOnce();
   });
 

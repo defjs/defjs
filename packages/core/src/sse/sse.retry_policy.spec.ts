@@ -252,7 +252,7 @@ test("the policy function is not asked once maxRetries retries are made", async 
   ]);
 });
 
-test("a policy function that throws ends the stream with that error", async () => {
+test("a policy function that throws after the stream opened ends it with EXT_HOOK_FAILED and the thrown value", async () => {
   const handle = handleOf(drop());
   const failure = new Error("policy failed");
   const { operation, client } = setup(handle, {
@@ -263,9 +263,32 @@ test("a policy function that throws ends the stream with that error", async () =
   const [fault, stream] = await operation(client);
   expect(fault).toBeNull();
   await drain(stream);
-  expect(await stream?.closed).toMatchObject({ kind: "error", cause: failure });
+  const closed = await stream?.closed;
+  expect(closed).toMatchObject({ kind: "error", code: "EXT_HOOK_FAILED" });
+  expect(closed?.kind === "error" ? closed.cause : undefined).toMatchObject({
+    cause: failure,
+  });
   expect(handle).toHaveBeenCalledOnce();
 });
+
+test.each(["throw", "reject"] as const)(
+  "a policy function that does %s during the handshake fails the call with EXT_HOOK_FAILED, not the handshake status",
+  async (mode) => {
+    const handle = handleOf(status(503));
+    const failure = new Error("policy failed");
+    const { operation, client } = setup(handle, {
+      shouldRetry() {
+        if (mode === "reject") return Promise.reject(failure);
+        throw failure;
+      },
+    });
+    const [fault, stream] = await operation(client);
+    expect(stream).toBeUndefined();
+    expect(fault).toMatchObject({ code: "EXT_HOOK_FAILED" });
+    expect(fault?.cause).toBe(failure);
+    expect(handle).toHaveBeenCalledOnce();
+  },
+);
 
 test("an asynchronous policy function is awaited and the caller signal cancels it", async () => {
   const handle = handleOf(drop(), ok());

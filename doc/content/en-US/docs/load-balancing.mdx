@@ -84,8 +84,11 @@ A later `withRetry` replaces the policy. `withRetry()` and `withRetry(undefined)
 `withSSEReconnect` and `withWebSocketReconnect` are gone, with no alias. `withRetry` covers SSE and WebSocket, and the request option `reconnect` is now `retry`.
 
 - `attempts: N` becomes `maxRetries: N`.
-- `shouldReconnect` becomes `shouldRetry`. Its context gains `transport` and `retryable`, and it is called only while retries remain.
+- `shouldReconnect` becomes `shouldRetry`. Its context gains `transport` and `retryable`, and it is called only while retries remain. Like `shouldReconnect`, it replaces the default rule, the method rule included, so a function that returns `true` still retries a `POST` stream.
 - Defaults changed: SSE `factor` goes from `1` to `2` and SSE `maxDelayMs` from unlimited to `30000`; `jitter` goes from `0` to `0.2` on both transports.
+- SSE handshakes: in 0.6 every non-2xx handshake ended the stream without asking `shouldReconnect`. Now a `502`, `503`, or `504` handshake is retried like a refused connection, and any other non-2xx handshake reaches `shouldRetry` with `retryable: false`.
+- Fault codes: a reconnect handshake that ends an SSE stream with a non-2xx status now reports `HTTP_STATUS` in `closed.code`; 0.6 reported `RES_DECODE_FAILED`, which `EventStreamFaultCode` no longer has. A `shouldRetry` that throws ends the call with `EXT_HOOK_FAILED` and the thrown value as `cause` on every transport; a throwing `shouldReconnect` ended an SSE stream with `NET_UNREACHABLE`.
+- WebSocket heartbeat: in 0.6 an unanswered heartbeat ended the session with an error and never reached `shouldReconnect`. It is now an interruption like any other: `shouldRetry` receives it with `retryable: true`, a `cause`, and no close `code`, and can return `false` to end the session with that error as before.
 - `withRetry` also retries HTTP. To keep HTTP calls to one attempt, return `false` for `context.transport === "http"`.
 
 ```ts

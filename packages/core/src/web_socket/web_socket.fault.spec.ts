@@ -226,7 +226,7 @@ describe("web socket startup faults", () => {
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
   });
 
-  test("should close every socket when binaryType is read-only", async () => {
+  test("should close the socket and not retry when binaryType is read-only", async () => {
     const sockets: Array<{
       closeCalls: number;
       errorListenersAtClose: number;
@@ -278,7 +278,8 @@ describe("web socket startup faults", () => {
     expect(session).toBeUndefined();
     expect(fault?.code).toBe("NET_UNREACHABLE");
     expect(fault?.cause).toBeInstanceOf(TypeError);
-    expect(sockets).toHaveLength(3);
+    // The platform refused the socket: a local failure that a retry would only repeat.
+    expect(sockets).toHaveLength(1);
     expect(
       sockets.filter(
         (socket) => socket.readyState === ReadOnlyBinaryTypeSocket.OPEN,

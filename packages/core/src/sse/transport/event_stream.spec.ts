@@ -605,9 +605,13 @@ describe("SSE final endpoint attribution", () => {
     expect(done).toHaveBeenCalledExactlyOnceWith(want);
   });
 
-  test.each(["false", "throw", "reject"])(
-    "keeps one physical read failure when shouldRetry returns %s",
-    async (policy) => {
+  test.each([
+    { policy: "false", code: "NET_UNREACHABLE" },
+    { policy: "throw", code: "EXT_HOOK_FAILED" },
+    { policy: "reject", code: "EXT_HOOK_FAILED" },
+  ])(
+    "keeps one physical read failure when shouldRetry returns $policy",
+    async ({ policy, code }) => {
       const done = vi.fn();
       const pickNext = vi.fn(() => {
         throw new Error("unexpected reconnect");
@@ -630,10 +634,7 @@ describe("SSE final endpoint attribution", () => {
           retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0, shouldRetry }),
         },
       );
-      expect(await stream.closed).toMatchObject({
-        kind: "error",
-        code: "NET_UNREACHABLE",
-      });
+      expect(await stream.closed).toMatchObject({ kind: "error", code });
       expect(shouldRetry).toHaveBeenCalledOnce();
       expect(pickNext).not.toHaveBeenCalled();
       expect(done).toHaveBeenCalledExactlyOnceWith({
@@ -666,7 +667,7 @@ describe("SSE final endpoint attribution", () => {
       startup: false,
       status: 200,
     },
-    { mode: "policy", code: "NET_UNREACHABLE", startup: false, status: 200 },
+    { mode: "policy", code: "EXT_HOOK_FAILED", startup: false, status: 200 },
     {
       mode: "media",
       code: "RES_MEDIA_TYPE_INVALID",

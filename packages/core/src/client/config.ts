@@ -219,7 +219,7 @@ export type RetryContext =
  *
  * After each failed attempt the policy decides in this order:
  *
- * 1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, and a `ReadableStream` request body end the call. `shouldRetry` is not called.
+ * 1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, a WebSocket whose constructor throws, and a `ReadableStream` request body end the call. `shouldRetry` is not called.
  * 2. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.
  * 3. `shouldRetry(context)` decides. Without it, `context.retryable` does.
  * 4. HTTP only: a retry that the `budget` cannot pay for ends the call.
@@ -248,7 +248,7 @@ export interface RetryOptions {
   /** Methods the default policy retries, case-insensitive. Defaults to GET, HEAD, OPTIONS, TRACE, PUT, and DELETE. HTTP checks every method an attempt sent, after interceptor rewrites. WebSocket ignores it. */
   readonly methods?: readonly string[];
   /**
-   * Decides whether a failed attempt is retried. It is called after the `maxRetries` check and replaces `context.retryable`; return it to keep the default. It may return a promise, which the caller's signal can cancel. A throw ends the call with that value as the cause.
+   * Decides whether a failed attempt is retried. It is called after the `maxRetries` check and replaces `context.retryable`; return it to keep the default. It may return a promise, which the caller's signal can cancel. A throw ends the call with `EXT_HOOK_FAILED` and the thrown value as `cause`; an open SSE stream reports that code in `closed.code`, and an open WebSocket session ends with `closed.kind: "error"` and the thrown value as `closed.cause`.
    */
   readonly shouldRetry?: (context: RetryContext) => boolean | Promise<boolean>;
   /**

@@ -599,10 +599,9 @@ describe("web socket endpoint balancer", () => {
     expect(binary.pending()).toBe(0);
   });
 
-  test("should done once per attempt before the next pick when construct always throws", async () => {
+  test("should done once and not retry when the constructor throws", async () => {
+    const shouldRetry = vi.fn(() => true);
     const record = scriptedBalancer([
-      { endpoint: PRIMARY },
-      { endpoint: SECONDARY },
       { endpoint: PRIMARY },
       { endpoint: SECONDARY },
     ]);
@@ -611,21 +610,18 @@ describe("web socket endpoint balancer", () => {
         record.balancer,
         ThrowingSocket,
       )({
-        retry: { delayMs: 0 },
+        retry: { delayMs: 0, shouldRetry },
       }),
     );
 
     expect(fault?.code).toBe("NET_UNREACHABLE");
-    expect(constructCalls).toBe(4);
-    expect(record.picks).toHaveLength(4);
-    expect(record.pendingAtPick).toEqual([0, 0, 0, 0]);
+    expect(constructCalls).toBe(1);
+    expect(record.picks).toHaveLength(1);
     expect(record.dones).toEqual([
-      { attempted: true, code: "NET_UNREACHABLE" },
-      { attempted: true, code: "NET_UNREACHABLE" },
-      { attempted: true, code: "NET_UNREACHABLE" },
       { attempted: true, code: "NET_UNREACHABLE" },
     ]);
     expect(record.pending()).toBe(0);
+    expect(shouldRetry).not.toHaveBeenCalled();
   });
 
   test("should classify a constructor failure with createNetworkFault and release pending", async () => {

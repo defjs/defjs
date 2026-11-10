@@ -763,6 +763,12 @@ function createEventStreamFault<TBody>(
     return createDecodeFault(fatal, cause, toEventStreamMeta(response));
   }
 
+  // A hook the caller supplied threw, as in `defineRequest`: the code names the failing hook and the thrown value is the
+  // cause, even when the handshake it ran for answered with a status.
+  if (fatal === "EXT_HOOK_FAILED" && cause instanceof Error) {
+    return createPreflightFault("EXT_HOOK_FAILED", cause.cause);
+  }
+
   // A non-2xx handshake is `HTTP_STATUS` for everything past the transport. Typed `data` exists only
   // when the declared error body decoded, so one that did not is reported as its decode fault, as
   // `defineRequest` does, with the status in its metadata.

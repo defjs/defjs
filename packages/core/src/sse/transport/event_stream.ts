@@ -808,22 +808,22 @@ export async function fetchEventStream<
     const unavailable =
       response !== undefined &&
       statusOutcome(response.status) === "NET_UNAVAILABLE";
-    const retry = await decideRetry(
-      policy,
-      retryCount - 1,
+    const retry = await runFatalHook(
+      () =>
+        decideRetry(policy, retryCount - 1, signal, (attempt) => ({
+          transport: "sse",
+          attempt,
+          cause: error,
+          retryable:
+            isRetryMethod(policy, request.method) &&
+            (!isHandshakeStatusFault(error) || unavailable),
+          method: request.method,
+          lastEventId,
+          open: latestOpen,
+          status: response?.status,
+        })),
       signal,
-      (attempt) => ({
-        transport: "sse",
-        attempt,
-        cause: error,
-        retryable:
-          isRetryMethod(policy, request.method) &&
-          (!isHandshakeStatusFault(error) || unavailable),
-        method: request.method,
-        lastEventId,
-        open: latestOpen,
-        status: response?.status,
-      }),
+      "Retry policy failed",
     );
     if (!retry) {
       return null;
@@ -857,13 +857,13 @@ export async function fetchEventStream<
     }
   }
 
-  async function runFatalHook(
-    run: () => void | Promise<void> | undefined,
+  async function runFatalHook<T>(
+    run: () => T | PromiseLike<T>,
     signal: AbortSignal,
     fallback: string,
-  ): Promise<void> {
+  ): Promise<T> {
     try {
-      await awaitWithSignal(run, signal);
+      return await awaitWithSignal(run, signal);
     } catch (error) {
       if (signal.aborted) {
         throw error;

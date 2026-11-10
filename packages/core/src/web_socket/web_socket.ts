@@ -879,7 +879,9 @@ async function runWebSocketCommand<
               // Every close the caller did not ask for is retryable by default, a connection that never opened included.
               const nextAttempt = attempt + 1;
               let retryRequested = false;
-              if (retry) {
+              // A constructor that threw is a local build failure, deterministic like a refused request in HTTP and
+              // SSE: retrying it would only wait out the backoff, and the retry function is not asked.
+              if (retry && outcome.connection !== undefined) {
                 try {
                   retryRequested = await decideRetry(
                     retry,
@@ -904,7 +906,13 @@ async function runWebSocketCommand<
                   if (signal.aborted) {
                     finishFromSignal(outcome.closeInfo);
                   } else {
-                    finish(toErrorInfo(outcome.closeInfo, cause));
+                    // As `defineRequest` does for a throwing retry function: the fault names the hook, `cause` is what it threw.
+                    finish(toErrorInfo(outcome.closeInfo, cause), {
+                      startupError: createPreflightFault(
+                        "EXT_HOOK_FAILED",
+                        cause,
+                      ),
+                    });
                   }
                   return;
                 }
@@ -2044,9 +2052,6 @@ function doneInfoForNetworkCause(cause: unknown): DoneInfo {
 }
 
 function faultFromCloseInfo(closeInfo: WebSocketCloseInfo): AnyFault {
-  if (closeInfo.kind !== "closed" && isFault(closeInfo.cause)) {
-    return closeInfo.cause;
-  }
   /* istanbul ignore if -- @preserve invariant: internal abort terminal paths always supply startupError directly */
   if (closeInfo.kind === "aborted") {
     return createNetworkFault(ERR_ABORTED);

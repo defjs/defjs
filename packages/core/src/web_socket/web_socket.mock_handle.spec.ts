@@ -4401,7 +4401,7 @@ describe("web socket runtime environment edge cases", () => {
     const [error, socket, connection] = await executePromise;
     expect(error).toMatchObject({
       cause: policyFailure,
-      code: "NET_UNREACHABLE",
+      code: "EXT_HOOK_FAILED",
     });
     expect(socket).toBeUndefined();
     expect(connection).toMatchObject({ generation: 0 });
