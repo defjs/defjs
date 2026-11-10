@@ -2,7 +2,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterAll, expect, test, vi } from "vitest";
-import { listUnitNodePackages, runUnitNode } from "./unit-node.ts";
+import {
+  isEntryPoint,
+  listUnitNodePackages,
+  runUnitNode,
+} from "./unit-node.ts";
 
 const packagesDir = mkdtempSync(join(tmpdir(), "unit-node-"));
 
@@ -86,3 +90,15 @@ test("runUnitNode fails when no package defines unit:node", () => {
     rmSync(none, { recursive: true, force: true });
   }
 });
+
+test("isEntryPoint returns the boolean it is given", () => {
+  expect(isEntryPoint(true)).toBe(true);
+  expect(isEntryPoint(false)).toBe(false);
+});
+
+test.each([undefined, null, "true", 1])(
+  "isEntryPoint rejects %s instead of skipping the run",
+  (main) => {
+    expect(() => isEntryPoint(main)).toThrow(/import\.meta\.main/);
+  },
+);

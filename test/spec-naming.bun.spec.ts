@@ -1,7 +1,14 @@
 import { execFile, execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { beforeAll, describe, expect, onTestFinished, test } from "vitest";
 import {
@@ -14,6 +21,7 @@ import {
   type ListEntry,
   type Owner,
 } from "./spec-naming.ts";
+import { listUnitNodePackages } from "./unit-node.ts";
 
 const mismatch =
   "name does not match <stem>[.chrome|.firefox|.node|.bun|.type].spec.ts(x)";
@@ -358,5 +366,89 @@ describe("vitest selection", () => {
     expect([...new Set(entries.map((entry) => entry.file))].sort()).toEqual(
       tracked,
     );
+  });
+});
+
+// `--if-present` makes a missing script a silent no-op, so the package scripts
+// are pinned to the `lists` table in both directions.
+const scriptName = /^(unit:(chrome|firefox|node|bun)|test:(e2e|unit))$/;
+
+function runtimeScript(project: string): string {
+  const runtime = project.slice(project.lastIndexOf("-") + 1);
+  return runtime === "e2e" ? "test:e2e" : `unit:${runtime}`;
+}
+
+function expectedScripts(cwd: string): Record<string, string> {
+  return Object.fromEntries(
+    lists
+      .filter((entry) => entry.cwd === cwd)
+      .map(({ config, project }) => [
+        runtimeScript(project),
+        `vitest run --config ${config}`,
+      ]),
+  );
+}
+
+function actualScripts(dir: string): Record<string, string> {
+  const manifest: unknown = JSON.parse(
+    readFileSync(resolve(root, dir, "package.json"), "utf8"),
+  );
+  const scripts =
+    typeof manifest === "object" && manifest !== null && "scripts" in manifest
+      ? manifest.scripts
+      : undefined;
+  const found: Record<string, string> = {};
+  if (typeof scripts !== "object" || scripts === null) return found;
+  for (const [name, command] of Object.entries(scripts)) {
+    if (scriptName.test(name) && typeof command === "string") {
+      found[name] = command;
+    }
+  }
+  return found;
+}
+
+function workspaceDirs(): string[] {
+  const packages = readdirSync(resolve(root, "packages"), {
+    withFileTypes: true,
+  })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        existsSync(resolve(root, "packages", entry.name, "package.json")),
+    )
+    .map((entry) => `packages/${entry.name}`)
+    .sort();
+  return ["doc", ...packages];
+}
+
+describe("package scripts", () => {
+  test.each(workspaceDirs())("%s scripts equal the expected table", (dir) => {
+    expect(actualScripts(dir)).toEqual(expectedScripts(dir));
+  });
+
+  test("root scripts fan out to every workspace", () => {
+    const fanOut = (script: string): string =>
+      `bun run --sequential --workspaces --if-present ${script}`;
+    const rootConfig = expectedScripts(".")["unit:bun"];
+    expect(actualScripts(".")).toEqual({
+      "unit:chrome": fanOut("unit:chrome"),
+      "unit:firefox": fanOut("unit:firefox"),
+      "unit:bun": `${fanOut("unit:bun")} && ${rootConfig}`,
+      "unit:node": "node test/unit-node.ts",
+      "test:unit":
+        "bun run unit:chrome && bun run unit:firefox && node --run unit:node && bun run unit:bun",
+      "test:e2e": fanOut("test:e2e"),
+    });
+  });
+
+  test("unit-node discovers exactly the packages that list a node project", () => {
+    const expected = lists
+      .filter(({ project }) => project.endsWith("-node"))
+      .map(({ cwd }) => basename(cwd))
+      .sort((left, right) => left.localeCompare(right));
+    const discovered = listUnitNodePackages(resolve(root, "packages")).map(
+      (dir) => basename(dir),
+    );
+    expect(discovered).toEqual(expected);
   });
 });

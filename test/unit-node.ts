@@ -53,6 +53,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-if (import.meta.main) {
+// `import.meta.main` exists from Node.js 22.18 and 24.2. Where it is missing
+// the value is `undefined`, and a plain `if` would skip the run and exit 0.
+export function isEntryPoint(main: unknown): boolean {
+  if (typeof main === "boolean") return main;
+  throw new Error(
+    "import.meta.main is not a boolean; run test/unit-node.ts with Node.js 22.18 or 24.2 and newer.",
+  );
+}
+
+if (isEntryPoint(import.meta.main)) {
   process.exit(runUnitNode(join(import.meta.dirname, "..", "packages")));
 }

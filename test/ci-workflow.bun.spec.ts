@@ -20,42 +20,126 @@ const jobOrder = [
 interface JobCommands {
   uses: string[];
   runs: string[];
+  nodeVersions: unknown[];
   needs: unknown;
 }
+
+// Every command of the E2E job and the four unit jobs, in order. A suffix such
+// as `|| true` changes the string and fails the comparison.
+const jobRuns: Record<string, string[]> = {
+  "build-e2e": [
+    "bun ci",
+    "bunx --bun playwright install --with-deps chromium",
+    "bun run build",
+    "bun run test:e2e",
+  ],
+  "unit-chrome": [
+    "bun ci",
+    "bunx --bun playwright install --with-deps chromium",
+    "bun run unit:chrome",
+  ],
+  "unit-firefox": [
+    "bun ci",
+    "bunx --bun playwright install --with-deps firefox",
+    "bun run unit:firefox",
+  ],
+  "unit-bun": ["bun ci", "bun run --cwd doc typegen", "bun run unit:bun"],
+  "unit-node": [
+    `for lock in packages/*/package-lock.json; do\n  (cd "$(dirname "$lock")" && ${npmCi})\ndone`,
+    "node --run unit:node",
+  ],
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readJobs(text: string): Map<string, JobCommands> {
-  const parsed: unknown = Bun.YAML.parse(text);
+function workflowDocument(): Record<string, unknown> {
+  const parsed: unknown = Bun.YAML.parse(readFileSync(ciPath, "utf8"));
   if (!isRecord(parsed)) throw new Error("workflow is not a mapping");
-  const jobs = parsed["jobs"];
+  return parsed;
+}
+
+// Only `bash` and `sh` are documented to stop a multi-command `run` at the
+// first failing command (`set -e`). `pwsh` and `powershell` report the last exit
+// code and `cmd` has no fail-fast, so they are not allowed.
+const failFastShells = new Set(["bash", "sh"]);
+
+// GitHub Actions keeps a job green when `continue-on-error` is true, treats a
+// skipped job (`if` false) as a passed required check, and a custom `shell`
+// template (`command [options] {0}`) replaces the built-in wrapper that fails
+// fast. None of them may appear anywhere in the workflow. A skipped step does
+// not fail its job either, so `if` is also rejected on every step that has a
+// `run` command: each of those is a gate command. A step that only `uses` an
+// action may carry an `if` (for example `if: failure()` on an artifact upload).
+function isUsesStep(path: string, value: Record<string, unknown>): boolean {
+  return (
+    /\.steps\[\d+\]$/.test(path) &&
+    typeof value["uses"] === "string" &&
+    !("run" in value)
+  );
+}
+
+function bypassFindings(value: unknown, path = "workflow"): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      bypassFindings(item, `${path}[${index}]`),
+    );
+  }
+  if (!isRecord(value)) return [];
+  const found: string[] = [];
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = `${path}.${key}`;
+    if (key === "continue-on-error") found.push(childPath);
+    else if (key === "if" && !isUsesStep(path, value)) found.push(childPath);
+    else if (
+      key === "shell" &&
+      !(typeof child === "string" && failFastShells.has(child))
+    ) {
+      found.push(childPath);
+    }
+    found.push(...bypassFindings(child, childPath));
+  }
+  return found;
+}
+
+function readJobs(workflow: Record<string, unknown>): Map<string, JobCommands> {
+  const jobs = workflow["jobs"];
   if (!isRecord(jobs)) throw new Error("workflow has no jobs");
   const result = new Map<string, JobCommands>();
   for (const [id, job] of Object.entries(jobs)) {
     if (!isRecord(job)) throw new Error(`job ${id} is not a mapping`);
     const uses: string[] = [];
     const runs: string[] = [];
-    collectSteps(job["steps"], uses, runs);
-    result.set(id, { uses, runs, needs: job["needs"] });
+    const nodeVersions: unknown[] = [];
+    collectSteps(job["steps"], uses, runs, nodeVersions);
+    result.set(id, { uses, runs, nodeVersions, needs: job["needs"] });
   }
   return result;
 }
 
-function collectSteps(steps: unknown, uses: string[], runs: string[]): void {
+function collectSteps(
+  steps: unknown,
+  uses: string[],
+  runs: string[],
+  nodeVersions: unknown[],
+): void {
   if (!Array.isArray(steps)) return;
   for (const step of steps) {
     if (!isRecord(step)) continue;
     const use = step["uses"];
     const run = step["run"];
+    const inputs = step["with"];
     if (typeof use === "string") uses.push(use);
     if (typeof run === "string") runs.push(run);
+    if (typeof use === "string" && use.includes(setupNode)) {
+      nodeVersions.push(isRecord(inputs) ? inputs["node-version"] : undefined);
+    }
   }
 }
 
 function workflowJobs(): Map<string, JobCommands> {
-  return readJobs(readFileSync(ciPath, "utf8"));
+  return readJobs(workflowDocument());
 }
 
 function requireJob(
@@ -107,14 +191,6 @@ test("checks runs only the install and the static checks", () => {
   ]);
 });
 
-test("build-e2e builds before it runs the E2E suite", () => {
-  const job = requireJob(workflowJobs(), "build-e2e");
-  if (!job) return;
-  const build = job.runs.indexOf("bun run build");
-  expect(build).toBeGreaterThanOrEqual(0);
-  expect(job.runs.indexOf("bun run test:e2e")).toBeGreaterThan(build);
-});
-
 test("bun jobs install canary bun, the node job does not", () => {
   const jobs = workflowJobs();
   const node = requireJob(jobs, "unit-node");
@@ -129,27 +205,63 @@ test("bun jobs install canary bun, the node job does not", () => {
   }
 });
 
-test("each unit job runs exactly its runtime script", () => {
-  const jobs = workflowJobs();
-  const expected = [
-    ["unit-chrome", "bun run unit:chrome"],
-    ["unit-firefox", "bun run unit:firefox"],
-    ["unit-bun", "bun run unit:bun"],
-    ["unit-node", "node --run unit:node"],
-  ] as const;
-  for (const [id, command] of expected) {
-    const job = requireJob(jobs, id);
-    if (!job) continue;
-    expect(job.runs.some((run) => run.includes(command))).toBe(true);
-  }
-  const bun = requireJob(jobs, "unit-bun");
-  if (!bun) return;
-  const typegen = bun.runs.findIndex((run) =>
-    run.includes("bun run --cwd doc typegen"),
-  );
-  const unit = bun.runs.findIndex((run) => run.includes("bun run unit:bun"));
-  expect(typegen).toBeGreaterThanOrEqual(0);
-  expect(unit).toBeGreaterThan(typegen);
+test.each(Object.entries(jobRuns))(
+  "%s runs exactly its commands",
+  (id, commands) => {
+    const job = requireJob(workflowJobs(), id);
+    if (!job) return;
+    expect(job.runs.map((run) => run.trim())).toEqual(commands);
+  },
+);
+
+test("no job, step or default can ignore a failure or skip itself", () => {
+  expect(bypassFindings(workflowDocument())).toEqual([]);
+});
+
+test("bypassFindings reports every ignored-failure key with its path", () => {
+  const workflow = {
+    defaults: { run: { shell: "bash {0}" } },
+    jobs: {
+      a: {
+        "continue-on-error": true,
+        if: false,
+        steps: [
+          { run: "x", shell: "bash" },
+          { run: "x", shell: "sh" },
+          { run: "y", shell: "true {0}", if: "always()" },
+          { run: "z", "continue-on-error": true },
+          { run: "p", shell: "pwsh" },
+          { run: "c", shell: "cmd" },
+          { run: "q", shell: "python" },
+          { uses: "u", with: { shell: "bash" } },
+          { uses: "d", if: "failure()" },
+          { uses: "e", if: "false", "continue-on-error": true },
+        ],
+      },
+      b: { steps: [{ run: "w" }] },
+      c: { uses: "./.github/workflows/w.yml", if: "false" },
+    },
+  };
+  expect(bypassFindings(workflow)).toEqual([
+    "workflow.defaults.run.shell",
+    "workflow.jobs.a.continue-on-error",
+    "workflow.jobs.a.if",
+    "workflow.jobs.a.steps[2].shell",
+    "workflow.jobs.a.steps[2].if",
+    "workflow.jobs.a.steps[3].continue-on-error",
+    "workflow.jobs.a.steps[4].shell",
+    "workflow.jobs.a.steps[5].shell",
+    "workflow.jobs.a.steps[6].shell",
+    "workflow.jobs.a.steps[9].continue-on-error",
+    "workflow.jobs.c.if",
+  ]);
+  expect(bypassFindings({ jobs: { c: { steps: [] } } })).toEqual([]);
+});
+
+test("unit-node tests on the LTS line", () => {
+  const node = requireJob(workflowJobs(), "unit-node");
+  if (!node) return;
+  expect(node.nodeVersions).toEqual(["lts/*"]);
 });
 
 test("npm ci runs once, only in unit-node", () => {
