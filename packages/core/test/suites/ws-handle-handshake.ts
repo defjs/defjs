@@ -14,7 +14,6 @@ import { defineWebSocket } from "../../src/web_socket/web_socket";
 const echo = defineWebSocket({
   path: "/ws",
   incoming: struct.unknown(),
-  maxIncomingQueueSize: 1,
 });
 
 async function silentServer(): Promise<{

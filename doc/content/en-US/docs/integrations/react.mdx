@@ -65,7 +65,7 @@ SSE and WebSocket handles outlive the initial `openStream(...)` or `connectChat(
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Aborting the `signal` passed into a WebSocket operation ends the session as `aborted` and rejects `session.receive` with `AbortError`. Guard the `catch` block when disposed so only genuine runtime errors (such as queue overflow or heartbeat timeout) surface.
+- Aborting the `signal` passed into a WebSocket operation ends the session as `aborted` and rejects `session.receive` with `AbortError`. Guard the `catch` block when disposed so only genuine runtime errors (such as a heartbeat timeout) surface.
 - Aborting an SSE stream ends `for await (const msg of stream)` cleanly without throwing.
 
 ---

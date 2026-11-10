@@ -50,7 +50,6 @@ function socketHarness() {
 const socketEndpoint = defineWebSocket({
   path: "/socket",
   incoming: struct.unknown(),
-  maxIncomingQueueSize: 4,
 });
 
 test.each([

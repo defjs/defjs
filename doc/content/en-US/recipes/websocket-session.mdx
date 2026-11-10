@@ -5,7 +5,7 @@ description: Connect, send one typed envelope, receive once, then close and awai
 
 # Open a WebSocket session
 
-Declare `incoming` and `outgoing` Structs on `defineWebSocket`, together with a `maxIncomingQueueSize` that bounds the incoming queue. In your application, subscribe to `session.onRuntimeError(...)`, consume `session.receive`, and always unsubscribe, call `session.close(...)`, and `await session.closed` in `finally`:
+Declare `incoming` and `outgoing` Structs on `defineWebSocket`. In your application, subscribe to `session.onRuntimeError(...)`, consume `session.receive`, and always unsubscribe, call `session.close(...)`, and `await session.closed` in `finally`:
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>

@@ -130,7 +130,6 @@ test("WebSocket starts before constructing the native socket", async () => {
   );
   const [err, session] = await defineWebSocket({
     path: "/ws/basic",
-    maxIncomingQueueSize: 4,
     incoming: struct.unknown(),
   })(client);
   expect(err).toBeNull();

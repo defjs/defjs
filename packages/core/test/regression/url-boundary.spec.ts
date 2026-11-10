@@ -76,7 +76,6 @@ function commands(path: string) {
     ws: defineWebSocket({
       path,
       incoming: struct.string(),
-      maxIncomingQueueSize: 4,
     }),
   };
 }

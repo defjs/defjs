@@ -11,7 +11,7 @@ Declare an event stream, call the operation with a client, iterate events, then 
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` and `events` map; optional `method` (default `'GET'`), `operation`, `input`, `error`, `maxBufferSize` (default `64 * 1024`), and `maxQueueSize` (default `1024`). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`EventStreamDefinition`](/api/core/eventstreamdefinition-type). `error` is required only when an error struct type is given, and `builder` is required exactly when `input` is declared.
+- **definition** — `path` and `events` map; optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024`). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`EventStreamDefinition`](/api/core/eventstreamdefinition-type). `error` is required only when an error struct type is given, and `builder` is required exactly when `input` is declared.
 - **Returns** an operation. The first argument is a [`Client`](/api/core/client-type). Further arguments are the input only. Calling it starts the stream.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -44,7 +44,7 @@ Structural implementations of `EventStreamHandle` must implement `[Symbol.asyncD
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` is `eof`, `aborted`, or `error`. Every variant may carry `reason` and `cause`. Only `error` has `code`, one of [`EventStreamFaultCode`](/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened. `HTTP_STATUS` means a reconnect handshake ended with a non-2xx status. A full `maxQueueSize` is not an error: reading the response pauses until the consumer takes an event. After an `error` end, the events already queued are still delivered before the iterator rejects.
+`kind` is `eof`, `aborted`, or `error`. Every variant may carry `reason` and `cause`. Only `error` has `code`, one of [`EventStreamFaultCode`](/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened. `HTTP_STATUS` means a reconnect handshake ended with a non-2xx status. A full queue is not an error: the library holds at most 1024 unread events and reading the response pauses until the consumer takes one. `close()`, disposal, and a caller `signal` abort discard the events nobody has read yet and end the iterator at once. After an `error` end, the events already queued are still delivered before the iterator rejects.
 
 ## EventStructs
 
@@ -62,7 +62,7 @@ See [SSE guide](/docs/sse) and [Consume an SSE stream](/recipes/consume-sse).
 
 ## EventStreamDefinition
 
-`path`, `events`, optional `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize`. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot carry a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+`path`, `events`, optional `method` / `operation` / `input` / `error` / `maxBufferSize`. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot carry a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
 
 ## EventStreamEndpoint
 

@@ -273,7 +273,6 @@ test.each(["caller", "replacement"])(
     const endpoint = defineWebSocket({
       path: "/socket",
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 4,
     });
     const [fault, session] = await endpoint(client({ signal: caller.signal }));
     try {
@@ -437,7 +436,6 @@ test("a WebSocket endpoint retains its definition when the configuration object 
   const definition = {
     path: "/first",
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 4,
   };
   const first = defineWebSocket(definition);
   definition.path = "/second";

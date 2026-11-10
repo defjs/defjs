@@ -582,7 +582,6 @@ describe("transitional endpoint selection", () => {
     })(client);
     const [wsError] = await defineWebSocket({
       incoming: struct.object({}),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     })(client);
 

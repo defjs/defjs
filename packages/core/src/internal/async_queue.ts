@@ -32,11 +32,6 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
     this.maxSize = maxSize;
   }
 
-  /** Values queued for a consumer that has not asked for them yet. */
-  get size(): number {
-    return this.values.length;
-  }
-
   push(value: T): void {
     if (this.done) {
       return;

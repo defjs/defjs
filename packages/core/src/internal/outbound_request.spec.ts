@@ -1832,7 +1832,6 @@ describe("outbound request builder", () => {
         text: struct.string(),
       }),
       input: struct.object({ room: struct.string().alias("room") }),
-      maxIncomingQueueSize: 4,
       path: "/ws/rooms/:room",
       protocols: ["chat.v1"],
     });
@@ -1842,7 +1841,6 @@ describe("outbound request builder", () => {
         headers: { token: "secret" },
       }),
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/ws/basic",
     });
     const rejectedBody = defineWebSocket({
@@ -1851,7 +1849,6 @@ describe("outbound request builder", () => {
         body: "nope",
       }),
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/ws/basic",
     });
 
@@ -1888,13 +1885,11 @@ describe("outbound request builder", () => {
     const objectQuery = defineWebSocket({
       builder: () => ({ query: { room: "blue" } }),
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     });
     const nativeQuery = defineWebSocket({
       builder: () => ({ query: new URLSearchParams({ room: "blue" }) }),
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     });
 

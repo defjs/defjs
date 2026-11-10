@@ -2336,7 +2336,7 @@ describe("request event stream runtime", () => {
     await expect(stream.closed).resolves.toMatchObject({ kind: "eof" });
   });
 
-  test("should use default maxBufferSize and maxQueueSize when omitted", async () => {
+  test("should use the default maxBufferSize when omitted", async () => {
     const encoder = new TextEncoder();
     const client = createClient(
       withEndpoint("https://api.example.com"),
@@ -2379,11 +2379,6 @@ describe("request event stream runtime", () => {
     ["maxBufferSize", 1.5],
     ["maxBufferSize", Number.POSITIVE_INFINITY],
     ["maxBufferSize", Number.MAX_SAFE_INTEGER + 1],
-    ["maxQueueSize", 0],
-    ["maxQueueSize", -1],
-    ["maxQueueSize", 1.5],
-    ["maxQueueSize", Number.POSITIVE_INFINITY],
-    ["maxQueueSize", Number.MAX_SAFE_INTEGER + 1],
   ] as const)(
     "should reject invalid endpoint %s value %s before fetching",
     async (limitName, limit) => {
@@ -2714,7 +2709,7 @@ test("preserves an event getter's own call dispatch", async () => {
   expect(call).toHaveBeenCalledOnce();
 });
 
-test.each(["maxBufferSize", "maxQueueSize"] as const)(
+test.each(["maxBufferSize"] as const)(
   "explicit null %s is invalid rather than defaulted",
   async (limitName) => {
     const handle = vi.fn(() =>

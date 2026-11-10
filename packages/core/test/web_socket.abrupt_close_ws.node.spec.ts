@@ -17,7 +17,6 @@ test("an injected npm ws handle is classified like the native WebSocket on an ab
   });
   const useSocket = defineWebSocket({
     incoming: struct.object({ n: struct.number() }),
-    maxIncomingQueueSize: 8,
     path: "/ws",
   });
   const [error, session] = await useSocket(

@@ -29,10 +29,9 @@ import type { EventStreamMessage } from "./parser";
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
-  "maxBufferSize" | "maxQueueSize" | "transformMessage"
+  "maxBufferSize" | "transformMessage"
 > & {
   maxBufferSize?: number;
-  maxQueueSize?: number;
 };
 
 /** Streams the raw parsed messages. */
@@ -42,7 +41,6 @@ function fetchEventStream(
 ) {
   return fetchEventStreamInternal(request, {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     transformMessage: (message) => message,
     ...options,
   });
@@ -56,7 +54,6 @@ function fetchTransformedEventStream<T>(
 ) {
   return fetchEventStreamInternal(request, {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     ...options,
   });
 }
@@ -724,7 +721,6 @@ describe("SSE final endpoint attribution", () => {
             handshakeError:
               mode === "handshake-body" ? struct.string() : undefined,
             maxBufferSize: mode === "parser" ? 8 : 1024,
-            maxQueueSize: 16,
             onopen() {
               if (mode === "onopen") throw cause;
             },

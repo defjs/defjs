@@ -25,7 +25,6 @@ const client = createClient(
   }),
 );
 const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
   path: "/quotes",
   incoming: struct.object({
     type: struct.literal("ready"),

@@ -36,7 +36,6 @@ describe("web socket runtime", () => {
 
   test("should return transport error with invalid client", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/basic",
     });
@@ -81,7 +80,6 @@ describe("web socket runtime", () => {
         ),
       );
       const useSocket = defineWebSocket({
-        maxIncomingQueueSize: 1,
         incoming: struct.unknown(),
         path: "/ws/basic",
       });
@@ -99,7 +97,6 @@ describe("web socket runtime", () => {
   test("should resolve execute and receive typed messages", async () => {
     const useChatSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       incoming: struct.discriminatedUnion("type", [
         struct.object({
           type: struct.literal("joined"),
@@ -149,7 +146,6 @@ describe("web socket runtime", () => {
 
   test("should validate outgoing messages and echo typed responses", async () => {
     const useEchoSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.discriminatedUnion("type", [
         struct.object({
           type: struct.literal("message"),
@@ -196,7 +192,6 @@ describe("web socket runtime", () => {
 
   test("should use await using for a real local websocket handshake, message, and close", async () => {
     const useEchoSocket = defineWebSocket({
-      maxIncomingQueueSize: 2,
       incoming: struct.discriminatedUnion("type", [
         struct.object({
           type: struct.literal("message"),
@@ -241,7 +236,6 @@ describe("web socket runtime", () => {
     const { Socket, latest } = createControllableSocketClass();
     try {
       const useHeartbeatSocket = defineWebSocket({
-        maxIncomingQueueSize: 16,
         incoming: struct.object({
           type: struct.literal("pong"),
           ok: struct.boolean(),
@@ -302,7 +296,6 @@ describe("web socket runtime", () => {
     const { Socket, latest } = createControllableSocketClass();
     try {
       const useHeartbeatSocket = defineWebSocket({
-        maxIncomingQueueSize: 16,
         incoming: struct.object({
           type: struct.literal("pong"),
           ok: struct.boolean(),
@@ -372,7 +365,6 @@ describe("web socket runtime", () => {
 
   test("should report malformed JSON, drop the frame, and keep the session alive", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("message"),
         text: struct.string(),
@@ -406,7 +398,6 @@ describe("web socket runtime", () => {
 
   test("should emit runtime error when incoming message struct validation fails", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("message"),
         text: struct.string(),
@@ -435,7 +426,6 @@ describe("web socket runtime", () => {
 
   test("should skip undeclared incoming message types", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("message"),
         text: struct.string(),
@@ -464,7 +454,6 @@ describe("web socket runtime", () => {
 
   test("should expose session state transitions and allow unsubscribing listeners", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("ready"),
         ok: struct.boolean(),
@@ -505,7 +494,6 @@ describe("web socket runtime", () => {
 
   test("should support abort after startup and ignore socket.close after cleanup", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("ready"),
         ok: struct.boolean(),
@@ -532,7 +520,6 @@ describe("web socket runtime", () => {
 
   test("should abort before startup and surface aborted transport error", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/basic",
     });
@@ -551,7 +538,6 @@ describe("web socket runtime", () => {
 
   test("should return definition error when input validation fails", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       builder: () => ({}),
       input: struct.object({
@@ -576,7 +562,6 @@ describe("web socket runtime", () => {
 
   test("should return definition error when build throws", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       builder: () => {
         throw new Error("build failed");
       },
@@ -597,7 +582,6 @@ describe("web socket runtime", () => {
 
   test("should return definition error when websocket url creation fails", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/basic",
     });
@@ -613,7 +597,6 @@ describe("web socket runtime", () => {
 
   test("should report a throwing beforeConnect as an extension hook fault", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/basic",
     });
@@ -630,7 +613,6 @@ describe("web socket runtime", () => {
   test("should support reconnect, queued sends, and abort during reconnect delay", async () => {
     const useSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       maxOutgoingQueueSize: 1,
       input: struct.object({ key: struct.string() }),
       incoming: struct.discriminatedUnion("type", [
@@ -698,7 +680,6 @@ describe("web socket runtime", () => {
   test("should abort during reconnect delay with aborted state", async () => {
     const useSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       input: struct.object({ key: struct.string() }),
       incoming: struct.object({
         type: struct.literal("reconnected"),
@@ -752,7 +733,6 @@ describe("web socket runtime", () => {
   test("should reconnect immediately when delay is zero", async () => {
     const useSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       input: struct.object({ key: struct.string() }),
       incoming: struct.object({
         type: struct.literal("reconnected"),
@@ -793,7 +773,6 @@ describe("web socket runtime", () => {
 
   test("should allow websocket interceptors to short-circuit startup", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/basic",
     });
@@ -816,7 +795,6 @@ describe("web socket runtime", () => {
 
   test("should settle every session created before an interceptor chain fails", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/echo",
     });
@@ -851,7 +829,6 @@ describe("web socket runtime", () => {
 
   test("should reject a second websocket interceptor next call and settle the first session", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/echo",
     });
@@ -883,7 +860,6 @@ describe("web socket runtime", () => {
 
   test("should close a created session discarded by a successful interceptor", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/echo",
     });
@@ -925,7 +901,6 @@ describe("web socket runtime", () => {
 
   test("should preserve a wrapper that delegates the created session closed promise", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/echo",
     });
@@ -952,7 +927,6 @@ describe("web socket runtime", () => {
 
   test("should connect with request changes made by websocket interceptors", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("joined"),
         roomId: struct.string(),
@@ -1024,7 +998,6 @@ describe("web socket runtime", () => {
         key: struct.string(),
         mode: struct.literal("queue"),
       }),
-      maxIncomingQueueSize: 3,
       maxOutgoingQueueSize: 1,
       outgoing: struct.object({
         method: struct.literal("subscribe"),
@@ -1139,7 +1112,6 @@ describe("web socket runtime", () => {
         key: struct.string(),
         mode: struct.literal("throw"),
       }),
-      maxIncomingQueueSize: 1,
       outgoing: struct.object({ method: struct.literal("command") }),
       path: "/ws/provider-envelopes",
     });
@@ -1197,7 +1169,6 @@ describe("web socket runtime", () => {
           key: struct.string(),
           mode: struct.literal("heartbeat"),
         }),
-        maxIncomingQueueSize: 64,
         outgoing: struct.object({
           method: struct.literal("ping"),
           reqId: struct.number().alias("req_id"),
@@ -1322,7 +1293,6 @@ describe("web socket runtime", () => {
         return {};
       },
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/socket",
     });
 

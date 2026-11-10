@@ -26,7 +26,6 @@ test("WebSocket handshake timeout picks next endpoint after nonzero backoff and 
   const pending = defineWebSocket({
     path: "/",
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 1,
   })(client);
   await vi.waitFor(() => expect(latest()?.url).toBe("wss://first.test/"), {
     interval: 1,
@@ -62,7 +61,6 @@ test("WebSocket handshake timeout exhausted ends as NET_TIMEOUT", async () => {
   const pending = defineWebSocket({
     path: "/",
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 1,
   })(client);
   await vi.waitFor(() => expect(latest()).toBeDefined());
   await vi.advanceTimersByTimeAsync(100);
@@ -82,7 +80,6 @@ test.each([0, -1, Infinity, NaN])(
         await defineWebSocket({
           path: "/",
           incoming: struct.unknown(),
-          maxIncomingQueueSize: 1,
         })(client)
       )[0]?.code,
     ).toBe("REQ_OPTIONS_INVALID");
@@ -121,7 +118,6 @@ test("caller cancellation during timed-out socket teardown remains unattributed"
   const pending = defineWebSocket({
     path: "/",
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 1,
   })(client({ signal: controller.signal }));
   await vi.waitFor(() => expect(latest()).toBeDefined());
   await vi.advanceTimersByTimeAsync(100);

@@ -160,24 +160,11 @@ describe("AsyncQueue", () => {
     ).not.toThrow();
   });
 
-  test("is unbounded when maxSize is omitted", () => {
+  test("is unbounded when maxSize is omitted", async () => {
     const queue = new AsyncQueue<number>();
     for (let value = 0; value < 1000; value += 1) queue.push(value);
-    expect(queue.size).toBe(1000);
-  });
-
-  test("size counts queued values but not values handed to a waiting consumer", async () => {
-    const queue = new AsyncQueue<number>({ maxSize: 2 });
-    const iterator = queue[Symbol.asyncIterator]();
-    const waiting = iterator.next();
-    queue.push(1);
-    await expect(waiting).resolves.toEqual({ done: false, value: 1 });
-    expect(queue.size).toBe(0);
-    queue.push(2);
-    queue.push(3);
-    expect(queue.size).toBe(2);
-    await iterator.next();
-    expect(queue.size).toBe(1);
+    queue.close();
+    expect(await Array.fromAsync(queue)).toHaveLength(1000);
   });
 
   test("close drains buffered values in FIFO order", async () => {

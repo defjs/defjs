@@ -147,7 +147,6 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
       type: struct.literal("reconnected"),
     }),
     input: struct.object({ key: struct.string() }),
-    maxIncomingQueueSize: 16,
     outgoing: struct.object({
       text: struct.string(),
       type: struct.literal("message"),
@@ -191,7 +190,6 @@ test("default pick-first recovers from a real socket disconnect after consuming 
   const client = createClient(withEndpoint(primary, secondary));
   const useSocket = defineWebSocket({
     incoming: struct.string(),
-    maxIncomingQueueSize: 4,
     path: "/ws",
   });
   const [error, session] = await useSocket(

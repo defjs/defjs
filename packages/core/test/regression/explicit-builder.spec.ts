@@ -28,7 +28,6 @@ const socket = defineWebSocket({
   path: "/socket",
   input: Input,
   incoming: struct.string(),
-  maxIncomingQueueSize: 4,
 });
 
 test.each([true, false])(

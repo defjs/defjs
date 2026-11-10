@@ -344,7 +344,6 @@ describe("operation diagnostic boundary", () => {
         withOpenTelemetryServer({ logger }),
       );
       const [fault] = await defineWebSocket({
-        maxIncomingQueueSize: 4,
         incoming: struct.unknown(),
         path,
       })(client);
@@ -369,7 +368,6 @@ describe("operation diagnostic boundary", () => {
     );
     const abort = new AbortController();
     const [fault, socket] = await defineWebSocket({
-      maxIncomingQueueSize: 4,
       incoming: struct.unknown(),
       path: "/ws",
     })(client({ signal: abort.signal }));
@@ -389,7 +387,6 @@ describe("operation diagnostic boundary", () => {
       withOpenTelemetryServer({ logger }),
     );
     const [fault, socket] = await defineWebSocket({
-      maxIncomingQueueSize: 4,
       incoming: struct.unknown(),
       path,
     })(client);
@@ -420,7 +417,6 @@ describe("operation diagnostic boundary", () => {
       withOpenTelemetryServer({ logger }),
     );
     const [fault, socket] = await defineWebSocket({
-      maxIncomingQueueSize: 4,
       incoming: struct.unknown(),
       path: "/",
     })(client);
@@ -686,7 +682,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
     );
 
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("traceparent"),
         value: struct.string(),
@@ -736,7 +731,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
     );
     const useSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("traceparent"),
         value: struct.string(),
@@ -783,7 +777,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
     );
 
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("traceparent"),
         value: struct.string(),

@@ -62,6 +62,8 @@ import {
 export const EVENT_STREAM_CONTENT_TYPE = "text/event-stream";
 export const LAST_EVENT_ID_HEADER = "last-event-id";
 const DEFAULT_RETRY_INTERVAL = 1000;
+// Events waiting for the consumer. A full queue pauses reading the response; nothing is dropped.
+const MAX_QUEUE_SIZE = 1024;
 export const SSE_RECONNECT_DEFAULTS = {
   delayMs: DEFAULT_RETRY_INTERVAL,
   factor: 1,
@@ -122,7 +124,7 @@ interface EventStreamCloseInfoBase {
  *
  * The discriminant is `kind` so that `code` can mean the same thing it means on a fault.
  *
- * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()` and disposal discard the events nobody has read yet, as `EventSource.close()` does; a caller signal abort does not, so the events already queued are still delivered before the iterator ends. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one.
+ * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()`, disposal and a caller signal abort all discard the events nobody has read yet, as `EventSource.close()` does, and the iterator ends at once. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one.
  *
  * @group sse
  */
@@ -197,7 +199,6 @@ export interface FetchEventStreamOptions<
   retryInterval?: number;
   reconnect?: ClientSSEOptions["reconnect"];
   maxBufferSize: number;
-  maxQueueSize: number;
   /**
    * @internal First-`next()` attribution. Absent when this stream must not
    * pick or call `done`. `done` runs once when the current attempt ends.
@@ -323,7 +324,7 @@ export async function fetchEventStream<
   let url = resolveRequestUrl(request);
   const failure: EventStreamFailureInfo<HandshakeBody<TError>> =
     options.failure ?? {};
-  const queue = new AsyncQueue<TEvent>({ maxSize: options.maxQueueSize });
+  const queue = new AsyncQueue<TEvent>({ maxSize: MAX_QUEUE_SIZE });
   const closedDeferred = Promise.withResolvers<EventStreamCloseInfo>();
   const openDeferred = Promise.withResolvers<EventStreamHandle<TEvent>>();
   const closeController = new AbortController();
@@ -895,6 +896,8 @@ export async function fetchEventStream<
     failure.bodyFault = latestBodyFault;
 
     if (settledOpen) {
+      // A stop by the caller drops the events nobody has read, the same as close().
+      queue.discard();
       queue.close();
     } else {
       settledOpen = true;

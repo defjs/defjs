@@ -76,7 +76,6 @@ defineWebSocket({
   // @ts-expect-error WebSocket builders do not accept headers.
   builder: () => ({ headers: { authorization: "x" } }),
   incoming: struct.unknown(),
-  maxIncomingQueueSize: 1,
   path: "/ws",
 });
 
@@ -84,7 +83,6 @@ defineWebSocket({
   // @ts-expect-error WebSocket builders do not accept bodies.
   builder: () => ({ body: "x" }),
   incoming: struct.unknown(),
-  maxIncomingQueueSize: 1,
   path: "/ws",
 });
 
@@ -129,7 +127,6 @@ const socket = defineWebSocket({
   builder: (input) => ({ path: { room: input.room } }),
   incoming: struct.unknown(),
   input: struct.object({ room: struct.string() }),
-  maxIncomingQueueSize: 1,
   path: "/ws/:room",
 });
 void socket;
@@ -215,7 +212,6 @@ defineRequest({
 defineWebSocket({
   input: Tuple,
   incoming: struct.string(),
-  maxIncomingQueueSize: 1,
   path: "/ws",
   // @ts-expect-error Contextual builder returns still prohibit WebSocket headers.
   builder: () => ({ headers: {} }),

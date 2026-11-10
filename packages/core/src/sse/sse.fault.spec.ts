@@ -372,33 +372,7 @@ describe("sse runtime faults", () => {
     });
   });
 
-  test("should deliver every event past maxQueueSize", async () => {
-    const useTinyQueue = defineEventStream({
-      events: { message: struct.string() },
-      maxQueueSize: 1,
-      path: "/events",
-    });
-    const client = clientReturning(() =>
-      Promise.resolve(
-        new Response(streamOf("data: a\n\ndata: b\n\ndata: c\n\n"), {
-          headers: SSE_HEADERS,
-        }),
-      ),
-    );
-
-    const [fault, stream] = await useTinyQueue(client);
-
-    expect(fault).toBeNull();
-    if (fault) throw new Error("Expected the stream to open");
-    const received: string[] = [];
-    for await (const event of stream) {
-      received.push(event.data);
-    }
-    expect(received).toEqual(["a", "b", "c"]);
-    await expect(stream.closed).resolves.toEqual({ kind: "eof" });
-  });
-
-  test("should deliver a burst larger than the default maxQueueSize", async () => {
+  test("should deliver a burst larger than the queue size", async () => {
     const burst = 3000;
     const client = clientReturning(() =>
       Promise.resolve(

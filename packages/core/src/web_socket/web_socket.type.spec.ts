@@ -25,13 +25,9 @@ const Outgoing = struct.object({
 
 const useChat = defineWebSocket({
   path: "/ws",
-  maxIncomingQueueSize: 16,
   incoming: Incoming,
   outgoing: Outgoing,
 });
-
-// @ts-expect-error maxIncomingQueueSize is required for every endpoint owner
-defineWebSocket({ path: "/ws", incoming: struct.string() });
 
 function takesWebSocketEndpoint<Args extends unknown[], Incoming, Outgoing>(
   endpoint: WebSocketEndpoint<Args, Incoming, Outgoing>,
@@ -88,7 +84,6 @@ defineWebSocket({
     ok: struct.boolean(),
     type: struct.literal("event"),
   }),
-  maxIncomingQueueSize: 1,
   path: "/ws",
   // @ts-expect-error incoming normalizers were removed
   normalizeIncoming: () => undefined,
@@ -99,7 +94,6 @@ defineWebSocket({
     ok: struct.boolean(),
     type: struct.literal("event"),
   }),
-  maxIncomingQueueSize: 1,
   outgoing: struct.object({ method: struct.literal("ping") }),
   path: "/ws",
   // @ts-expect-error outgoing normalizers were removed

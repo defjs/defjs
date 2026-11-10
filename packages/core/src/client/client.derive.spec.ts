@@ -419,7 +419,6 @@ describe("request options ignored by other protocols", () => {
     const socket = defineWebSocket({
       path: "/room",
       incoming: struct.object({ ok: struct.boolean() }),
-      maxIncomingQueueSize: 4,
     });
 
     const [error, session] = await socket(
@@ -525,7 +524,6 @@ describe("AbortSignal.timeout classification", () => {
     const socket = defineWebSocket({
       path: "/room",
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 4,
     });
     const manual = new AbortController();
     const timed = socket(client({ signal: AbortSignal.timeout(20) }));

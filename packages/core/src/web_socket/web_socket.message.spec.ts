@@ -84,7 +84,6 @@ describe("web socket single struct messages", () => {
   test("delivers discriminated incoming frames from the socket as decoded values", async () => {
     const useChat = defineWebSocket({
       incoming: BasicIncoming,
-      maxIncomingQueueSize: 4,
       path: "/ws/basic",
     });
 
@@ -111,7 +110,6 @@ describe("web socket single struct messages", () => {
         text: struct.string(),
         type: struct.literal("message"),
       }),
-      maxIncomingQueueSize: 4,
       path: "/ws/error-before-close",
     });
     const [error, socket] = await run(useSocket);
@@ -163,7 +161,6 @@ describe("web socket single struct messages", () => {
           type: struct.literal("message"),
         }),
       ]),
-      maxIncomingQueueSize: 4,
       outgoing: ChatOutgoing,
       path: "/ws/echo",
     });
@@ -194,7 +191,6 @@ describe("web socket single struct messages", () => {
     try {
       const useHeartbeat = defineWebSocket({
         incoming: HeartbeatIncoming,
-        maxIncomingQueueSize: 4,
         outgoing: HeartbeatOutgoing,
         path: "/ws/heartbeat",
       });
@@ -278,7 +274,6 @@ describe("web socket single struct messages", () => {
     });
     const endpoint = defineWebSocket({
       incoming: struct.string(),
-      maxIncomingQueueSize: 1,
       outgoing: struct.object({ profile: profile.nullable() }),
       path: "/socket",
     });
@@ -308,7 +303,6 @@ describe("web socket single struct messages", () => {
     const { Socket, latest } = createControllableSocketClass();
     const endpoint = defineWebSocket({
       incoming: struct.string(),
-      maxIncomingQueueSize: 1,
       outgoing: struct.object({ n: struct.number() }),
       path: "/socket",
     });

@@ -18,12 +18,11 @@ function fetchEventStream(
   request: HttpRequest,
   options: Omit<
     FetchEventStreamOptions<EventStreamMessage>,
-    "maxBufferSize" | "maxQueueSize" | "transformMessage"
+    "maxBufferSize" | "transformMessage"
   > = {},
 ) {
   return fetchEventStreamInternal(request, {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     transformMessage: (message) => message,
     ...options,
   });

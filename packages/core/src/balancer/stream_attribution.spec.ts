@@ -33,7 +33,6 @@ test("a WebSocket closed with 1012 after open reports NET_UNAVAILABLE in a real 
       type: struct.literal("reconnected"),
     }),
     input: struct.object({ key: struct.string() }),
-    maxIncomingQueueSize: 16,
     outgoing: struct.object({
       text: struct.string(),
       type: struct.literal("message"),
@@ -68,7 +67,6 @@ test("an unanswered WebSocket heartbeat reports NET_UNREACHABLE in a real engine
   );
   const useSocket = defineWebSocket({
     incoming: struct.object({ type: struct.literal("pong") }),
-    maxIncomingQueueSize: 16,
     outgoing: struct.object({ type: struct.literal("ping") }),
     path: "/ws/heartbeat-silent",
   });

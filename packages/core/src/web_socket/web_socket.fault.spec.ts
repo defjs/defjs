@@ -30,7 +30,6 @@ const useRoom = defineWebSocket({
     type: struct.literal("message"),
     text: struct.string(),
   }),
-  maxIncomingQueueSize: 8,
   path: "/ws",
 });
 
@@ -236,7 +235,6 @@ describe("web socket startup faults", () => {
         text: struct.string(),
       }),
       input: struct.object({ room: struct.number() }),
-      maxIncomingQueueSize: 8,
       path: "/ws/:room",
     });
 
@@ -255,7 +253,7 @@ describe("web socket startup faults", () => {
         type: struct.literal("message"),
         text: struct.string(),
       }),
-      maxIncomingQueueSize: 0,
+      maxOutgoingQueueSize: -1,
       path: "/ws",
     });
 

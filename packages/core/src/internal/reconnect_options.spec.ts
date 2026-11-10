@@ -65,7 +65,6 @@ test.each([2_147_483_647, 2_147_483_648])(
     const pending = defineWebSocket({
       path: "/",
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
     })(client);
     const [fault, session] = await pending;
     expect(fault?.code ?? null).toBe(

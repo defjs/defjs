@@ -29,7 +29,6 @@ describe("web socket runtime lifecycle", () => {
 
   test("should allow closing websocket before startup", async () => {
     const useEchoSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("ready"),
         ok: struct.boolean(),
@@ -56,7 +55,6 @@ describe("web socket runtime lifecycle", () => {
 
   test("should skip unexpected websocket messages after startup", async () => {
     const useInvalidSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("message"),
         count: struct.number(),
@@ -90,7 +88,6 @@ describe("web socket runtime lifecycle", () => {
 
     const useBeforeConnectSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       input: struct.object({ token: struct.string() }),
       incoming: struct.object({
         type: struct.literal("connected"),

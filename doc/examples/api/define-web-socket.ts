@@ -2,7 +2,6 @@
 import { defineWebSocket, struct } from "@defjs/core";
 
 const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
   path: "/quotes",
   protocols: ["quotes.v1"],
   incoming: struct.object({

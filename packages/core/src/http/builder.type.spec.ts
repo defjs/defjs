@@ -116,7 +116,6 @@ defineWebSocket({
   builder: (input) => ({ headers: {}, path: { room: input.room } }),
   incoming: struct.unknown(),
   input: struct.object({ room: struct.string() }),
-  maxIncomingQueueSize: 1,
   path: "/ws/:room",
 });
 
@@ -125,7 +124,6 @@ defineWebSocket({
   builder: (input) => ({ body: input.room, path: { room: input.room } }),
   incoming: struct.unknown(),
   input: struct.object({ room: struct.string() }),
-  maxIncomingQueueSize: 1,
   path: "/ws/:room",
 });
 

@@ -4,7 +4,7 @@ Contents: [Define and run a session](#define-and-run-a-session) · [Messages (`i
 
 ## Define and run a session
 
-`defineWebSocket` takes one `incoming` struct and an optional `outgoing` struct, plus a required positive `maxIncomingQueueSize`.
+`defineWebSocket` takes one `incoming` struct and an optional `outgoing` struct, with no incoming queue limit: every message waits until `session.receive` reads it.
 
 ```ts
 import {
@@ -40,7 +40,6 @@ const OutgoingFrame = struct.discriminatedUnion("type", [
 export const quoteFeed = defineWebSocket({
   operation: "quotes.stream",
   path: "/quotes/:market",
-  maxIncomingQueueSize: 100,
   protocols: ["quotes.v1"],
   input: struct.object({ market: struct.string() }),
   builder: (input) => ({ path: input }),
@@ -121,7 +120,6 @@ const client = createClient(
 );
 
 const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
   path: "/quotes",
   incoming: struct.object({
     type: struct.literal("pong"),
@@ -161,5 +159,5 @@ The input, builder output, and selected protocols are captured once for the logi
 
 - Use `await using ownedSession = session;` or call `session.close(1000, "done")` and `await session.closed` in `finally`.
 - `session.receive` is single-consumer; requesting a second iterator throws `TypeError`.
-- When a session ends as `error`, messages already queued are still delivered and `session.receive` rejects with `closed.cause` after the last one; a close from the peer or `session.close()` also delivers them before `receive` ends, while a caller abort discards unread messages.
+- When a session ends as `error`, messages already queued are still delivered and `session.receive` rejects with `closed.cause` after the last one; a close from the peer also delivers them before `receive` ends, while a caller stopping the session (`signal` abort, `session.close()`, disposal) discards unread messages and `receive` ends at once.
 - An open connection dropped without a close frame (code `1006`) always settles `closed` as `kind: "error"` with `cause` `Error("WebSocket connection error")`, on every runtime.

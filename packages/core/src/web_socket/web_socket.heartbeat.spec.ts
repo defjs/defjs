@@ -13,7 +13,6 @@ describe("web socket runtime heartbeat", () => {
     const { Socket, latest } = createControllableSocketClass();
     try {
       const useHeartbeatSocket = defineWebSocket({
-        maxIncomingQueueSize: 16,
         incoming: struct.object({
           type: struct.literal("pong"),
           ok: struct.boolean(),

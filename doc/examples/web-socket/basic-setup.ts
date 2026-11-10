@@ -8,7 +8,6 @@ import {
 
 const client = createClient(withEndpoint("https://quotes.example.com"));
 const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
   path: "/quotes",
   incoming: struct.object({
     type: struct.literal("tick"),

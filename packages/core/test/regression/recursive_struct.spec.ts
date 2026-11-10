@@ -50,7 +50,6 @@ describe("recursive structs at transport boundaries", () => {
       builder,
       input,
       incoming: Chain,
-      maxIncomingQueueSize: 4,
       path: "/deep",
     });
     const { Socket, latest } = createControllableSocketClass();
@@ -159,7 +158,6 @@ describe("recursive structs at transport boundaries", () => {
     const useSocket = defineWebSocket({
       incoming: Chain,
       outgoing: Chain,
-      maxIncomingQueueSize: 4,
       path: "/deep",
     });
     const [error, session] = await openControllableSocket(

@@ -19,14 +19,12 @@ const Outgoing = struct.object({
 
 const chat = defineWebSocket({
   incoming: Incoming,
-  maxIncomingQueueSize: 1,
   outgoing: Outgoing,
   path: "/ws",
 });
 
 const listen = defineWebSocket({
   incoming: Incoming,
-  maxIncomingQueueSize: 1,
   path: "/ws",
 });
 

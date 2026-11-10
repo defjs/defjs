@@ -11,7 +11,7 @@ Declare a socket, call the operation with a client, send and receive typed messa
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`, one `incoming` struct, and the required `maxIncomingQueueSize` (a positive safe integer); optional `outgoing` and `input` structs, `operation`, static `protocols`, and `maxOutgoingQueueSize` (a non-negative safe integer). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`WebSocketDefinition`](/api/core/websocketdefinition-type). `builder` is required exactly when `input` is declared.
+- **definition** — `path`, and one `incoming` struct; optional `outgoing` and `input` structs, `operation`, static `protocols`, and `maxOutgoingQueueSize` (a non-negative safe integer). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`WebSocketDefinition`](/api/core/websocketdefinition-type). `builder` is required exactly when `input` is declared.
 - **Returns** an operation. The first argument is a [`Client`](/api/core/client-type). Further arguments are the input only. Calling it opens the session.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
@@ -44,7 +44,7 @@ Prefer `await using ownedSession = session` for owned scope cleanup. Manual `ses
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` is `closed`, `aborted`, or `error`. `cause` is absent on `closed`, optional on `aborted`, and required on `error`. An incoming raw-frame or decoded-message queue overflow has `cause.code === "CAP_QUEUE_OVERFLOW"`; the same cause rejects `receive` after the messages already queued, and reaches `onRuntimeError`. Unread messages are discarded when the session ends as `aborted`. Heartbeat timeout and exhausted reconnects keep ordinary runtime `Error` causes without a separate stable code. A connection that was open and then dropped without a close frame (code `1006`) is `error` on every runtime. `code`, `reason`, and `wasClean` may appear on every variant. A manual `session.close()` fills `code` and `reason` on `{ kind: "closed" }` when the close event carries none.
+`kind` is `closed`, `aborted`, or `error`. `cause` is absent on `closed`, optional on `aborted`, and required on `error`. On `error`, the same cause rejects `receive` after the messages already queued, and reaches `onRuntimeError`. Unread messages are discarded when the session ends as `aborted`, and when the caller ends it with `session.close()` or disposal. Heartbeat timeout and exhausted reconnects keep ordinary runtime `Error` causes without a separate stable code. A connection that was open and then dropped without a close frame (code `1006`) is `error` on every runtime. `code`, `reason`, and `wasClean` may appear on every variant. A manual `session.close()` fills `code` and `reason` on `{ kind: "closed" }` when the close event carries none.
 
 ## WebSocketExecuteOptions
 
@@ -72,7 +72,7 @@ See [WebSocket guide](/docs/web-socket) and [Open a WebSocket session](/recipes/
 
 ## WebSocketDefinition
 
-`path`, `incoming`, required `maxIncomingQueueSize`, optional `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. The builder may return `path` and `query` only. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+`path`, `incoming`, optional `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. The builder may return `path` and `query` only. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
 
 ## WebSocketEndpoint
 

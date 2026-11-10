@@ -1,6 +1,7 @@
 import { expect, inject, test } from "vitest";
 import { createClient, defineWebSocket, struct, withEndpoint } from "../src";
 import { fixture } from "./fixture/client-auto";
+import { yieldMacrotask } from "./macrotask";
 
 test("sends builder path and query, decodes discriminated incoming frames, and the server observes aliased outgoing JSON", async () => {
   const client = createClient(withEndpoint(inject("testServerHost")));
@@ -28,7 +29,6 @@ test("sends builder path and query, decodes discriminated incoming frames, and t
         roomId: struct.string().alias("room"),
       }),
     }),
-    maxIncomingQueueSize: 4,
     outgoing: struct.discriminatedUnion("type", [
       struct.object({
         type: struct.literal("say"),
@@ -80,7 +80,7 @@ test("sends builder path and query, decodes discriminated incoming frames, and t
   }
 });
 
-test("delivers a server burst larger than maxIncomingQueueSize to a consumer that keeps up", async () => {
+test("delivers every frame of a 100-frame server burst to a slow consumer", async () => {
   const f = fixture(inject("testServerHost"), inject("fixtureToken"));
   const frames = Array.from({ length: 100 }, (_, index) =>
     JSON.stringify(index + 1),
@@ -88,7 +88,6 @@ test("delivers a server burst larger than maxIncomingQueueSize to a consumer tha
   const url = await f.endpoint("burst", "ws", { send: frames });
   const useBurst = defineWebSocket({
     incoming: struct.number(),
-    maxIncomingQueueSize: 4,
     path: "/ws",
   });
   const [error, session] = await useBurst(createClient(withEndpoint(url)));
@@ -100,6 +99,7 @@ test("delivers a server burst larger than maxIncomingQueueSize to a consumer tha
     for await (const value of session.receive) {
       received.push(value);
       if (received.length === frames.length) break;
+      await yieldMacrotask();
     }
     expect(received).toEqual(Array.from({ length: 100 }, (_, i) => i + 1));
   } finally {

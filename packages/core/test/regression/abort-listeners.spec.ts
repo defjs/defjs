@@ -46,7 +46,6 @@ const sseEndpoint = defineEventStream({
 });
 const socketEndpoint = defineWebSocket({
   incoming: struct.unknown(),
-  maxIncomingQueueSize: 4,
   path: "/",
 });
 

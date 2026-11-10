@@ -38,7 +38,6 @@ export function registerSseWireSuite(): void {
         },
         {
           maxBufferSize: 1024,
-          maxQueueSize: 16,
           reconnect: { attempts: 1, delayMs: 0 },
           transformMessage(message) {
             firstSeen.resolve();
@@ -84,7 +83,6 @@ export function registerSseWireSuite(): void {
       },
       {
         maxBufferSize: 1024,
-        maxQueueSize: 16,
         transformMessage: (message) => message,
         reconnect: { attempts: 1, delayMs: 0 },
         async fetch(input, init) {

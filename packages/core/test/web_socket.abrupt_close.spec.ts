@@ -11,7 +11,6 @@ test("an abrupt drop without a close frame is an error and keeps the messages al
   });
   const useSocket = defineWebSocket({
     incoming: struct.object({ n: struct.number() }),
-    maxIncomingQueueSize: 8,
     path: "/ws",
   });
   const [error, session] = await useSocket(createClient(withEndpoint(base)));

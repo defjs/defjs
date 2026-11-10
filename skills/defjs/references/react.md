@@ -83,7 +83,6 @@ import { useClient } from "@defjs/react";
 import { useEffect } from "react";
 
 const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
   path: "/quotes",
   incoming: struct.object({
     symbol: struct.string(),

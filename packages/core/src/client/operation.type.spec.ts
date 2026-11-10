@@ -96,7 +96,6 @@ export const room = defineWebSocket({
   path: "/room",
   incoming: Incoming,
   outgoing: Outgoing,
-  maxIncomingQueueSize: 10,
 });
 const shared = client({ signal });
 void getUser(shared, { id: 1 });

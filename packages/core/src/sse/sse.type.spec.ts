@@ -43,7 +43,6 @@ defineEventStream({
 });
 
 defineEventStream({
-  maxQueueSize: 16,
   path: "/custom-queue-limit-only",
   events: { message: struct.string() },
 });
@@ -177,9 +176,6 @@ async function assertAsyncDisposableEventStream(
 void assertAsyncDisposableEventStream;
 
 const closeFaultCode: EventStreamFaultCode = "CAP_BUFFER_EXCEEDED";
-// @ts-expect-error Only a WebSocket consumer queue can overflow; SSE pauses reading instead.
-const removedQueueFault: EventStreamFaultCode = "CAP_QUEUE_OVERFLOW";
-void removedQueueFault;
 const reconnectBuildFault: EventStreamFaultCode = "REQ_BUILD_FAILED";
 const reconnectOptionsFault: EventStreamFaultCode = "REQ_OPTIONS_INVALID";
 void closeFaultCode;

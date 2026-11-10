@@ -30,7 +30,6 @@ defineWebSocket({
   path: "/socket",
   input: Input,
   incoming: struct.string(),
-  maxIncomingQueueSize: 4,
 });
 
 defineRequest({
@@ -52,5 +51,4 @@ defineEventStream({
 defineWebSocket({
   path: "/socket",
   incoming: struct.string(),
-  maxIncomingQueueSize: 4,
 });

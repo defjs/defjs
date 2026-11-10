@@ -118,7 +118,6 @@ function triage(fault: Fault<typeof ApiError>): string {
     case "EXT_OBSERVER_FAILED":
       return "extension bug";
     case "CAP_BUFFER_EXCEEDED":
-    case "CAP_QUEUE_OVERFLOW":
       return "capacity";
     case "ENV_UNSUPPORTED":
       return "environment";

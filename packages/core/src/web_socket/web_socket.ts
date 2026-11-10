@@ -116,7 +116,6 @@ interface WebSocketDefinitionBase<
   TOutgoing extends AnyStruct | undefined = undefined,
 > {
   incoming: TIncoming;
-  maxIncomingQueueSize: number;
   maxOutgoingQueueSize?: number;
   operation?: string;
   outgoing?: TOutgoing;
@@ -131,7 +130,7 @@ interface WebSocketDefinitionBase<
  *
  * - `outgoing` is the struct `session.send` validates and encodes with. Without it, `send` throws.
  *
- * - `maxIncomingQueueSize` bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow is judged after the current task finishes, so frames a platform delivers in one read do not count while the consumer keeps draining; the transient excess is bounded by what arrives before that check runs. Overflow is fatal with `CAP_QUEUE_OVERFLOW` on the error delivered through `receive`, `onRuntimeError`, and `closed.cause`; messages already queued are still delivered through `receive` before it rejects. It is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
+ * - `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`. Incoming messages are not bounded by a count: the library queues every message the platform delivers until `receive` reads it.
  *
  * - `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.
  *
@@ -139,7 +138,7 @@ interface WebSocketDefinitionBase<
  *
  * - `input` is the struct for the operation input. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see {@link WebSocketRequestShape}.
  *
- * Invalid queue limits are reported when the operation runs, as a `REQ_OPTIONS_INVALID` fault.
+ * An invalid `maxOutgoingQueueSize` is reported when the operation runs, as a `REQ_OPTIONS_INVALID` fault.
  *
  * @group web-socket
  */
@@ -179,11 +178,11 @@ export interface WebSocketConnectionInfo {
  *
  * What `session.closed` resolves with, once the session has ended for good.
  *
- * - `closed`: the session ended normally, including a manual `session.close()`. The messages already queued are still delivered through `receive` before it ends.
+ * - `closed`: the session ended normally. When the peer or the server closed it, the messages already queued are still delivered through `receive` before it ends. A manual `session.close()` or disposal is a stop by the caller: the messages nobody has read yet are discarded and `receive` ends at once.
  *
  * - `aborted`: the session was cancelled; `cause` is the abort reason. Messages nobody has read yet are discarded.
  *
- * - `error`: the session failed; `cause` is required. Incoming raw-frame or decoded-message queue overflow supplies a `Fault` with `cause.code === "CAP_QUEUE_OVERFLOW"`. The same fault rejects `receive` and is passed to `onRuntimeError`. Other runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors. A connection that was open and then dropped without a close frame (`code` 1006) is an `error` on every runtime, with `cause` `Error("WebSocket connection error")`; the runtime need not fire a native `error` event for it. Messages already queued are still delivered through `receive`; it rejects with `cause` after the last one.
+ * - `error`: the session failed; `cause` is required. The error is passed to `onRuntimeError`. Runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors. A connection that was open and then dropped without a close frame (`code` 1006) is an `error` on every runtime, with `cause` `Error("WebSocket connection error")`; the runtime need not fire a native `error` event for it. Messages already queued are still delivered through `receive`; it rejects with `cause` after the last one.
  *
  * - `code`, `reason`, and `wasClean` come from the native close event when one was observed. A manual `session.close(code, reason)` fills `code` and `reason` when the close event does not.
  *
@@ -211,7 +210,7 @@ export type WebSocketCloseInfo =
  *
  * - `state` is the logical {@link WebSocketState}; `connection` is the latest {@link WebSocketConnectionInfo}. `bufferedAmount` is the native unsent byte count, or `0` with no physical socket.
  *
- * - `receive` yields incoming messages already parsed with the `incoming` struct. It is one-consumer: asking for a second iterator throws a `TypeError`. A frame that cannot be parsed is reported to `onRuntimeError` listeners and skipped. When the transport fails (for example a drop without a close frame), messages already received are delivered first, then `receive` rejects with `closed.cause`. Queue overflow, heartbeat timeout and cancellation discard unread messages.
+ * - `receive` yields incoming messages already parsed with the `incoming` struct. It is one-consumer: asking for a second iterator throws a `TypeError`. A frame that cannot be parsed is reported to `onRuntimeError` listeners and skipped. When the transport fails (for example a drop without a close frame), messages already received are delivered first, then `receive` rejects with `closed.cause`. Cancellation by the caller (`signal` abort), `close()` and disposal discard the messages nobody has read yet; a heartbeat timeout or a transport failure ends with an error after the queued messages are delivered.
  *
  * - `send(message)` validates and encodes the message with the `outgoing` struct, then sends JSON text. It sends immediately while `open`, queues while `reconnecting` when `maxOutgoingQueueSize` allows, and throws a `DOMException` named `InvalidStateError` when the session is not writable. It also throws when no `outgoing` struct is declared, the message fails the struct, or the queue is disabled or full.
  *
@@ -384,10 +383,10 @@ export interface WebSocketHeartbeatConfig<
 /**
  * Declare a typed WebSocket endpoint.
  *
- * Pass path, incoming (and optional outgoing) message structs, and queue limits.
+ * Pass path and incoming (and optional outgoing) message structs.
  * Call the returned operation with a client and, when declared, the input.
  *
- * - **definition** — `path`, one `incoming` struct, and the required `maxIncomingQueueSize` (a positive safe integer). Optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize` (a non-negative safe integer), and `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path`, one `incoming` struct, and optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize` (a non-negative safe integer), and `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * A WebSocket `builder` may return `path` and `query` only; `headers` and `body` are rejected. `WebSocketDefinitionBase` and `BuilderField` are internal helper types.
  *
@@ -418,7 +417,6 @@ export function defineWebSocket<
   const builder = definition.builder;
   const incoming = definition.incoming;
   const input = definition.input;
-  const maxIncomingQueueSize = definition.maxIncomingQueueSize;
   const maxOutgoingQueueSize = definition.maxOutgoingQueueSize;
   const operation = definition.operation;
   const outgoing = definition.outgoing;
@@ -428,7 +426,6 @@ export function defineWebSocket<
     builder,
     incoming,
     input,
-    maxIncomingQueueSize,
     maxOutgoingQueueSize,
     operation,
     outgoing,
@@ -469,11 +466,10 @@ type ResolvedCallOptions = {
 };
 
 function readQueueLimits(
-  maxIncomingQueueSize: number,
   maxOutgoingQueueSize: number | undefined,
 ): StageOutcome<true> {
   try {
-    validateWebSocketQueueLimits(maxIncomingQueueSize, maxOutgoingQueueSize);
+    validateWebSocketQueueLimits(maxOutgoingQueueSize);
     return [undefined, true];
   } catch (error) {
     return [createPreflightFault("REQ_OPTIONS_INVALID", error), undefined];
@@ -626,10 +622,7 @@ async function runWebSocketCommand<
     return [fault, undefined, undefined];
   };
 
-  const [queueFault] = readQueueLimits(
-    endpoint.maxIncomingQueueSize,
-    endpoint.maxOutgoingQueueSize,
-  );
+  const [queueFault] = readQueueLimits(endpoint.maxOutgoingQueueSize);
   if (queueFault) {
     return stopInvalidOptions(queueFault);
   }
@@ -1108,7 +1101,6 @@ async function runWebSocketCommand<
                 let closeObserved = false;
                 let errorCloseTimer: ReturnType<typeof setTimeout> | undefined;
                 let messagePumpRunning = false;
-                let backlogTimer: ReturnType<typeof setTimeout> | undefined;
                 const messageController = new AbortController();
                 const messageSignal = mergeAbortSignals(signal, [
                   messageController.signal,
@@ -1135,8 +1127,6 @@ async function runWebSocketCommand<
 
                 const cleanup = (keepCurrentSocket: boolean) => {
                   clearErrorCloseTimer();
-                  clearTimeout(backlogTimer);
-                  backlogTimer = undefined;
                   clearTimeout(connectTimer);
                   socket.removeEventListener("open", handleOpen);
                   socket.removeEventListener("message", onMessage);
@@ -1249,33 +1239,6 @@ async function runWebSocketCommand<
                   }
                 };
 
-                // A native handle may deliver a whole read in one task, which leaves the pump no chance to run
-                // between messages. Only a backlog that survives the current task counts as overflow.
-                const armBacklogCheck = () => {
-                  backlogTimer ??= setTimeout(() => {
-                    backlogTimer = undefined;
-                    const rawOverflow =
-                      rawMessages.length > endpoint.maxIncomingQueueSize;
-                    if (
-                      !rawOverflow &&
-                      incomingQueue.size <= endpoint.maxIncomingQueueSize
-                    ) {
-                      return;
-                    }
-                    finish({
-                      cause: createPreflightFault(
-                        "CAP_QUEUE_OVERFLOW",
-                        new Error(
-                          rawOverflow
-                            ? "WebSocket raw message queue overflow"
-                            : "AsyncQueue overflow",
-                        ),
-                      ),
-                      kind: "error",
-                    });
-                  }, 0);
-                };
-
                 const handleMessage = async (event: MessageEvent) => {
                   /* istanbul ignore if -- @preserve defensive: stale physical listeners are removed before logical settlement */
                   if (finished || sessionController.currentSocket !== socket) {
@@ -1322,9 +1285,6 @@ async function runWebSocketCommand<
                       return;
                     }
                     incomingQueue.push(transformed);
-                    if (incomingQueue.size > endpoint.maxIncomingQueueSize) {
-                      armBacklogCheck();
-                    }
                   } catch (cause) {
                     if (!finished) {
                       finish({ cause, kind: "error" });
@@ -1371,9 +1331,6 @@ async function runWebSocketCommand<
                     return;
                   }
                   rawMessages.push(event);
-                  if (rawMessages.length > endpoint.maxIncomingQueueSize) {
-                    armBacklogCheck();
-                  }
                   const messagePumpTask = pumpMessages();
                   messagePumpTasks.add(messagePumpTask);
                   void messagePumpTask.finally(() => {
@@ -1523,6 +1480,10 @@ async function runWebSocketCommand<
 
             sendQueue.length = 0;
             if (final.kind === "closed") {
+              // close() and disposal are the caller stopping the session: unread messages are dropped.
+              if (manualClose) {
+                incomingQueue.discard();
+              }
               incomingQueue.close();
               state.error = undefined;
             } else {
@@ -2025,13 +1986,8 @@ function consumeObserverResult(
 }
 
 function validateWebSocketQueueLimits(
-  maxIncomingQueueSize: number,
   maxOutgoingQueueSize: number | undefined,
 ): void {
-  if (!Number.isSafeInteger(maxIncomingQueueSize) || maxIncomingQueueSize < 1) {
-    throw new TypeError("maxIncomingQueueSize must be a positive safe integer");
-  }
-
   const outgoingSize = maxOutgoingQueueSize ?? 0;
   if (!Number.isSafeInteger(outgoingSize) || outgoingSize < 0) {
     throw new TypeError(

@@ -122,7 +122,6 @@ describe("optional request options", () => {
     });
     const socket = defineWebSocket({
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/room",
     });
     const clients = [base, base(), base(undefined), base({})];
@@ -212,7 +211,6 @@ describe("request option snapshots", () => {
 
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       outgoing: struct.object({ type: struct.literal("ping") }),
       path: "/room",
     });
@@ -252,7 +250,6 @@ describe("request option snapshots", () => {
     reconnect.attempts = 0;
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/room",
     });
 
@@ -304,7 +301,6 @@ describe("request option snapshots", () => {
     const opened = recordingSocket();
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/room",
     });
     const derived = createClient(
@@ -360,7 +356,6 @@ describe("request option snapshots", () => {
     const opened = recordingSocket();
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/room",
     });
     const derived = createClient(
@@ -436,7 +431,6 @@ describe("client option snapshots", () => {
     wsReconnect.attempts = 0;
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/room",
     });
     const [error, session] = await openControllableSocket(
@@ -758,7 +752,6 @@ describe("definition and request snapshots", () => {
     const protocols = ["v1"];
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/room",
       protocols,
     });

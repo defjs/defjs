@@ -2,7 +2,6 @@
 import { defineWebSocket, struct } from "@defjs/core";
 
 export const quotes = defineWebSocket({
-  maxIncomingQueueSize: 100,
   path: "/quotes",
   incoming: struct.object({
     type: struct.literal("tick"),

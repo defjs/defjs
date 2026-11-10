@@ -221,7 +221,6 @@ test("WebSocket end occurs on open while the real session remains open", async (
   const [error, session] = await defineWebSocket({
     path: "/ws/basic",
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 4,
   })(client);
   expect(error).toBeNull();
   if (!session) throw new Error("session");
@@ -250,7 +249,6 @@ test("WebSocket constructor failure ends before done", async () => {
   await defineWebSocket({
     path: "/ws/basic",
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 4,
   })(client);
   expect(h.events).toEqual(["start", "end", "done"]);
   expect(h.ends).toEqual([{ attempted: true, code: "NET_UNREACHABLE" }]);
@@ -291,7 +289,6 @@ test.each(["failure", "cancel", "caller-timeout", "handshake-timeout"])(
     const pending = defineWebSocket({
       path: "/",
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
     })(
       client({
         signal: controller.signal,

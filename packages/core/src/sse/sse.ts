@@ -107,14 +107,12 @@ export type EventStreamData<TEvents extends EventStructs> =
     : never;
 
 const DEFAULT_MAX_BUFFER_SIZE = 64 * 1024;
-const DEFAULT_MAX_QUEUE_SIZE = 1024;
 
 interface EventStreamDefinitionBase<
   TEvents extends EventStructs = EventStructs,
 > {
   events: TEvents;
   maxBufferSize?: number;
-  maxQueueSize?: number;
   method?: string;
   operation?: string;
   path: string;
@@ -132,7 +130,7 @@ type EventStreamErrorField<TError extends AnyStruct | undefined> = [
  *
  * The composed members are:
  *
- * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, `maxBufferSize` (default `64 * 1024` bytes), and `maxQueueSize` (default `1024` events; both limits must be positive safe integers when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. When `maxQueueSize` events are waiting for the `for await` consumer, reading the response pauses until the consumer takes one; no event is dropped for lack of room and the stream does not fail.
+ * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, and `maxBufferSize` (default `64 * 1024` bytes, a positive safe integer when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. The library holds at most 1024 events waiting for the `for await` consumer; when they are full, reading the response pauses until the consumer takes one. No event is dropped for lack of room and the stream does not fail.
  *
  * - `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.
  *
@@ -211,17 +209,13 @@ export type EventStreamEndpoint<
 type ResolvedEventStreamDefinition<
   TInput extends AnyStruct | undefined = undefined,
   TError extends AnyStruct | undefined = undefined,
-> = Omit<
-  EventStreamDefinitionBase,
-  "events" | "maxBufferSize" | "maxQueueSize"
-> & {
+> = Omit<EventStreamDefinitionBase, "events" | "maxBufferSize"> & {
   builder?: OutboundBuilder;
   /** The copied dictionary. Its event types live in the operation's own type, not in this copy. */
   events: EventStructs;
   input?: TInput;
   error?: TError;
   readonly maxBufferSize: number;
-  readonly maxQueueSize: number;
   readonly method: string;
 };
 
@@ -254,7 +248,7 @@ function snapshotEventDictionary(events: EventStructs): EventStructs {
  * Pass path and event structs. Call the returned operation
  * with a client and, when declared, the input.
  *
- * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, `maxBufferSize` (default `64 * 1024`), and `maxQueueSize` (default `1024`; both limits must be positive safe integers when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; a full `maxQueueSize` pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024`, a positive safe integer when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; the library holds at most 1024 unread events, and a full queue pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * `EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.
  *
@@ -288,10 +282,7 @@ export function defineEventStream<
   const error = definition.error;
   const events = snapshotEventDictionary(definition.events);
   const input = definition.input;
-  const {
-    maxBufferSize = DEFAULT_MAX_BUFFER_SIZE,
-    maxQueueSize = DEFAULT_MAX_QUEUE_SIZE,
-  } = definition;
+  const { maxBufferSize = DEFAULT_MAX_BUFFER_SIZE } = definition;
   const declaredMethod = definition.method;
   const operation = definition.operation;
   const path = definition.path;
@@ -301,7 +292,6 @@ export function defineEventStream<
     events,
     input,
     maxBufferSize,
-    maxQueueSize,
     method: declaredMethod ?? "GET",
     operation,
     path,
@@ -562,7 +552,6 @@ async function runEventStreamCommand<
             },
             reconnect,
             maxBufferSize: endpoint.maxBufferSize,
-            maxQueueSize: endpoint.maxQueueSize,
           },
         ).then(
           (stream) => {
@@ -757,14 +746,12 @@ async function notifyInvalidEvent(
   return undefined;
 }
 
-function validateEventStreamLimits(endpoint: {
-  maxBufferSize: number;
-  maxQueueSize: number;
-}): void {
-  for (const name of ["maxBufferSize", "maxQueueSize"] as const) {
-    if (!Number.isSafeInteger(endpoint[name]) || endpoint[name] < 1) {
-      throw new TypeError(`SSE ${name} must be a positive safe integer`);
-    }
+function validateEventStreamLimits(endpoint: { maxBufferSize: number }): void {
+  if (
+    !Number.isSafeInteger(endpoint.maxBufferSize) ||
+    endpoint.maxBufferSize < 1
+  ) {
+    throw new TypeError("SSE maxBufferSize must be a positive safe integer");
   }
 }
 

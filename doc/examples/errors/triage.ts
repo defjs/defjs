@@ -23,8 +23,7 @@ function triage(fault: AnyFault): string {
     case "EXT_OBSERVER_FAILED":
       return "fix the code you attached";
     case "CAP_BUFFER_EXCEEDED":
-    case "CAP_QUEUE_OVERFLOW":
-      return "raise a declared limit or read faster";
+      return "raise the declared limit";
     case "ENV_UNSUPPORTED":
       return "the host runtime is missing something";
   }

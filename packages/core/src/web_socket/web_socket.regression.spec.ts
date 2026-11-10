@@ -40,7 +40,6 @@ test("immediate clean close settles according to observed native events", async 
       );
       const connect = defineWebSocket({
         incoming: struct.unknown(),
-        maxIncomingQueueSize: 4,
         path: "/ws/close-immediately",
       });
       const [fault, session] = await connect(
@@ -152,7 +151,6 @@ test("original 10ms closes agree with native-only controls", async () => {
                   type: struct.literal("message"),
                   text: struct.string(),
                 }),
-                maxIncomingQueueSize: 4,
                 path,
                 protocols,
               });
@@ -225,7 +223,6 @@ test("rejects an optional outgoing root that has no JSON representation", async 
   const connect = defineWebSocket({
     incoming: struct.object({ received: struct.string() }),
     outgoing: struct.string().optional(),
-    maxIncomingQueueSize: 4,
     path: "/ws/regression/capture",
   });
   const [error, session] = await connect(client);

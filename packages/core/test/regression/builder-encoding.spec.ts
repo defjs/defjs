@@ -604,7 +604,6 @@ describe("builder refactor adversarial audit", () => {
         }),
       ]),
       input: Room,
-      maxIncomingQueueSize: 4,
       outgoing: struct.object({
         text: struct.string(),
         type: struct.literal("say"),
@@ -673,7 +672,6 @@ describe("builder refactor adversarial audit", () => {
               // @ts-expect-error path id is intentionally not a scalar
               builder,
               incoming: struct.unknown(),
-              maxIncomingQueueSize: 1,
               path: "/items/:id",
             })(client),
         }[transport];
@@ -845,7 +843,6 @@ describe("builder fixes re-audit", () => {
         }),
       ]),
       input: Proto,
-      maxIncomingQueueSize: 4,
       outgoing: Proto,
       path: "/e2e/ws/:room",
     });
@@ -1059,7 +1056,6 @@ describe("builder fixes re-audit", () => {
         throw new Error("builder must not run after cancellation");
       },
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/socket",
     });
 
@@ -1084,7 +1080,6 @@ describe("builder fixes re-audit", () => {
       },
       incoming: struct.unknown(),
       input: struct.object({ id: struct.string() }),
-      maxIncomingQueueSize: 1,
       path: "/socket",
     });
 
@@ -1113,7 +1108,6 @@ describe("builder fixes re-audit", () => {
         throw new Error("build failed after abort");
       },
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/socket",
     });
 
@@ -1131,7 +1125,6 @@ describe("builder fixes re-audit", () => {
     controller.abort("caller stopped");
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 0,
       path: "/socket",
     });
 
@@ -1498,7 +1491,6 @@ describe("builder fixes re-audit", () => {
     );
     const endpoint = defineWebSocket({
       incoming: struct.object({ code: struct.string().alias("error_code") }),
-      maxIncomingQueueSize: 4,
       path: "/socket",
     });
     const [openError, session] = await endpoint(client);
@@ -1531,7 +1523,6 @@ describe("builder fixes re-audit", () => {
           kind: struct.string().alias("type"),
           ok: struct.boolean(),
         }),
-        maxIncomingQueueSize: 4,
         outgoing: struct.object({
           at: struct.number(),
           type: struct.literal("ping"),

@@ -86,7 +86,6 @@ describe("web socket browser runtime", () => {
 
   test("should connect and exchange typed messages in real browsers", async () => {
     const useEchoSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.discriminatedUnion("type", [
         struct.object({
           type: struct.literal("message"),
@@ -132,7 +131,6 @@ describe("web socket browser runtime", () => {
 
   test("should receive binary websocket frames as typed messages", async () => {
     const useBinarySocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("message"),
         text: struct.string(),
@@ -163,7 +161,6 @@ describe("web socket browser runtime", () => {
 
   test("should report incoming Struct failures in real browsers", async () => {
     const useInvalidSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("message"),
         text: struct.string(),
@@ -203,7 +200,6 @@ describe("web socket browser runtime", () => {
       (client) =>
         defineWebSocket({
           builder: (input) => ({ query: input }),
-          maxIncomingQueueSize: 16,
           incoming: struct.object({
             type: struct.literal("reconnected"),
             attempt: struct.number(),
@@ -243,7 +239,6 @@ describe("web socket browser runtime", () => {
     const controller = new AbortController();
     const [error, socket] = await run(
       defineWebSocket({
-        maxIncomingQueueSize: 16,
         incoming: struct.object({
           type: struct.literal("ready"),
           ok: struct.boolean(),

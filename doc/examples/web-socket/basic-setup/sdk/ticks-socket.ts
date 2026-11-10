@@ -23,6 +23,5 @@ export const openTicker = defineWebSocket({
   operation: "market.ticker",
   incoming: TickFrame,
   outgoing: SubscribeCommand,
-  maxIncomingQueueSize: 64,
 });
 // #endregion

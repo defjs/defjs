@@ -192,7 +192,6 @@ test.each(["HTTP", "SSE", "WS"])(
                 defineWebSocket({
                   path: "/",
                   incoming: struct.unknown(),
-                  maxIncomingQueueSize: 1,
                 })(client);
       const [fault] = await call();
       expect(fault?.code).toBe("REQ_BUILD_FAILED");

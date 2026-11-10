@@ -56,7 +56,6 @@ export const orderEvents = defineEventStream({
 });
 
 export const orderSocket = defineWebSocket({
-  maxIncomingQueueSize: 100,
   operation: "orders.connect",
   path: "/orders/socket",
   incoming: struct.object({ id: struct.number() }),

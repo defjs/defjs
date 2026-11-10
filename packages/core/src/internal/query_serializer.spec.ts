@@ -301,13 +301,11 @@ describe("query serializer contract", () => {
         roomId: struct.string().alias("room_id"),
         since: struct.date(),
       }),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     });
     const native = defineWebSocket({
       builder: () => ({ query: new URLSearchParams({ room_id: "blue" }) }),
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     });
 
@@ -331,7 +329,6 @@ describe("query serializer contract", () => {
     const socket = defineWebSocket({
       builder: () => ({ query: { filter: { state: "open" } } }),
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     });
 

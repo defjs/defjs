@@ -68,7 +68,6 @@ describe("operation dispatch", () => {
 
   test("a web-socket operation runs against the client", async () => {
     const useChatSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("joined"),
         roomId: struct.string(),

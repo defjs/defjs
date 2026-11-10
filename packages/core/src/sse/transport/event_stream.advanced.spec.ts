@@ -29,11 +29,13 @@ import { yieldMacrotask } from "../../../test/macrotask";
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
-  "maxBufferSize" | "maxQueueSize" | "transformMessage"
+  "maxBufferSize" | "transformMessage"
 > & {
   maxBufferSize?: number;
-  maxQueueSize?: number;
 };
+
+// The number of unread events the transport holds before it pauses reading the response.
+const QUEUE_SIZE = 1024;
 
 function requireRequest(input: RequestInfo | URL): Request {
   if (!(input instanceof Request)) {
@@ -56,7 +58,6 @@ function fetchEventStream(
 ) {
   return fetchEventStreamInternal(request, {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     transformMessage: (message) => message,
     ...options,
   });
@@ -70,7 +71,6 @@ function fetchTransformedEventStream<T>(
 ) {
   return fetchEventStreamInternal(request, {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     ...options,
   });
 }
@@ -1954,15 +1954,17 @@ describe("fetchEventStream message path", () => {
   );
 
   test("should wait for room after a pending transform", async () => {
-    // One event per chunk, read on demand: the second read starts only after
-    // the first event is queued, and its event then waits for room after the
-    // pending transform.
-    const chunks = ["data: a\n\n", "data: b\n\n", "data: c\n\n"];
-    let reads = 0;
+    // One event per chunk, read on demand. The queue holds 1024 events, so the 1025th event
+    // has to wait for room after its pending transform.
+    const total = QUEUE_SIZE + 1;
+    const chunks = Array.from(
+      { length: total },
+      (_, i) => `data: ${i + 1}\n\n`,
+    );
+    let transforms = 0;
     const body = new ReadableStream<Uint8Array>(
       {
         pull(controller) {
-          reads += 1;
           const chunk = chunks.shift();
           if (chunk === undefined) {
             controller.close();
@@ -1981,17 +1983,22 @@ describe("fetchEventStream message path", () => {
           }),
         ),
       ),
-      maxQueueSize: 1,
-      transformMessage: (message) => Promise.resolve(message.data),
+      transformMessage: (message) => {
+        transforms += 1;
+        return Promise.resolve(message.data);
+      },
     });
-    await vi.waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
+    await vi.waitFor(() => expect(transforms).toBe(total));
+    await yieldMacrotask();
 
     const received: string[] = [];
     for await (const event of stream) {
       received.push(event);
     }
 
-    expect(received).toEqual(["a", "b", "c"]);
+    expect(received).toEqual(
+      Array.from({ length: total }, (_, i) => String(i + 1)),
+    );
     await expect(stream.closed).resolves.toEqual({ kind: "eof" });
   });
 
@@ -2297,7 +2304,6 @@ test("reads the current transformMessage option for each frame", async () => {
     Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
   const options: FetchEventStreamOptions<string> = {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     fetch: () =>
       Promise.resolve(
         new Response(
@@ -2341,7 +2347,6 @@ test("reads the mapper accessor once per message and calls it with the options r
   const receivers: unknown[] = [];
   const options: FetchEventStreamOptions<string> = {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     fetch: () =>
       Promise.resolve(
         new Response("data: frame\n\n", {
@@ -2395,7 +2400,6 @@ test("reads attempt options as HEAD and invokes initial and reconnect callbacks 
   };
   const options: FetchEventStreamOptions = {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     transformMessage: (message) => message,
     reconnect: { attempts: 1, delayMs: 0 },
     fetch: () =>
@@ -2431,7 +2435,6 @@ test("passes missing attempt callbacks through as undefined", async () => {
   let requests = 0;
   const options: FetchEventStreamOptions = {
     maxBufferSize: 1024,
-    maxQueueSize: 16,
     transformMessage: (message) => message,
     reconnect: { attempts: 1, delayMs: 0 },
     fetch: () =>
@@ -2505,17 +2508,17 @@ describe("fetchEventStream queue bound", () => {
     );
   }
 
-  test("should deliver every event of one chunk that exceeds maxQueueSize", async () => {
+  test("should deliver every event of one chunk that exceeds the queue size", async () => {
+    const total = QUEUE_SIZE + 6;
     const fetch = vi.fn(() =>
       Promise.resolve(
-        new Response(events(6), {
+        new Response(events(total), {
           headers: { "content-type": "text/event-stream" },
         }),
       ),
     );
     const stream = await fetchTransformedEventStream(request, {
       fetch,
-      maxQueueSize: 2,
       transformMessage: (message) => message.data,
     });
 
@@ -2524,41 +2527,45 @@ describe("fetchEventStream queue bound", () => {
       received.push(event);
     }
 
-    expect(received).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(received).toEqual(
+      Array.from({ length: total }, (_, i) => String(i + 1)),
+    );
     await expect(stream.closed).resolves.toEqual({ kind: "eof" });
     expect(fetch).toHaveBeenCalledOnce();
   });
 
   test("should stop parsing while the queue is full", async () => {
+    const total = QUEUE_SIZE + 4;
     const parsed: string[] = [];
     const stream = await fetchTransformedEventStream(request, {
-      fetch: respondWithBody(openBody(events(5), () => undefined)),
-      maxQueueSize: 2,
+      fetch: respondWithBody(openBody(events(total), () => undefined)),
       transformMessage(message) {
         parsed.push(message.data);
         return message.data;
       },
     });
 
-    // Two events fill the queue and a third waits for room.
-    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+    // The queue fills up and one more event waits for room.
+    await vi.waitFor(() => expect(parsed).toHaveLength(QUEUE_SIZE + 1));
     await yieldMacrotask();
-    expect(parsed).toHaveLength(3);
+    expect(parsed).toHaveLength(QUEUE_SIZE + 1);
 
     const iterator = stream[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({ done: false, value: "1" });
-    await vi.waitFor(() => expect(parsed).toHaveLength(4));
+    await vi.waitFor(() => expect(parsed).toHaveLength(QUEUE_SIZE + 2));
 
     const rest: string[] = [];
-    for (let i = 0; i < 4; i += 1) {
+    for (let i = 0; i < total - 1; i += 1) {
       const result = await iterator.next();
       if (result.done) {
         throw new Error("the stream ended early");
       }
       rest.push(result.value);
     }
-    expect(rest).toEqual(["2", "3", "4", "5"]);
-    expect(parsed).toEqual(["1", "2", "3", "4", "5"]);
+    expect(rest).toEqual(
+      Array.from({ length: total - 1 }, (_, i) => String(i + 2)),
+    );
+    expect(parsed).toHaveLength(total);
     stream.close();
     await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
   });
@@ -2567,14 +2574,13 @@ describe("fetchEventStream queue bound", () => {
     const parsed: string[] = [];
     const cancel = vi.fn();
     const stream = await fetchTransformedEventStream(request, {
-      fetch: respondWithBody(openBody(events(5), cancel)),
-      maxQueueSize: 2,
+      fetch: respondWithBody(openBody(events(QUEUE_SIZE + 4), cancel)),
       transformMessage(message) {
         parsed.push(message.data);
         return message.data;
       },
     });
-    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+    await vi.waitFor(() => expect(parsed).toHaveLength(QUEUE_SIZE + 1));
 
     stream.close();
 
@@ -2585,25 +2591,24 @@ describe("fetchEventStream queue bound", () => {
       received.push(event);
     }
     expect(received).toEqual([]);
-    expect(parsed).toHaveLength(3);
+    expect(parsed).toHaveLength(QUEUE_SIZE + 1);
   });
 
-  test("should release a producer waiting for room and end after the queued events when the request signal aborts", async () => {
+  test("should release a producer waiting for room and discard unread events when the request signal aborts", async () => {
     const controller = new AbortController();
     const parsed: string[] = [];
     const cancel = vi.fn();
     const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
-        fetch: respondWithBody(openBody(events(5), cancel)),
-        maxQueueSize: 2,
+        fetch: respondWithBody(openBody(events(QUEUE_SIZE + 4), cancel)),
         transformMessage(message) {
           parsed.push(message.data);
           return message.data;
         },
       },
     );
-    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+    await vi.waitFor(() => expect(parsed).toHaveLength(QUEUE_SIZE + 1));
 
     controller.abort(ERR_ABORTED);
 
@@ -2613,9 +2618,8 @@ describe("fetchEventStream queue bound", () => {
     for await (const event of stream) {
       received.push(event);
     }
-    // The two queued events are delivered; the third was still waiting for room and is dropped.
-    expect(received).toEqual(["1", "2"]);
-    expect(parsed).toHaveLength(3);
+    expect(received).toEqual([]);
+    expect(parsed).toHaveLength(QUEUE_SIZE + 1);
   });
 });
 
@@ -2777,7 +2781,7 @@ describe("fetchEventStream failure delivery", () => {
     expect(rejection).toBeUndefined();
   });
 
-  test("should still deliver queued events and end after a manual abort", async () => {
+  test("should discard queued events and end at once after a manual abort", async () => {
     const controller = new AbortController();
     const parsed: string[] = [];
     const stream = await fetchTransformedEventStream(
@@ -2797,7 +2801,7 @@ describe("fetchEventStream failure delivery", () => {
     await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
     const { received, rejection } = await drain(stream);
 
-    expect(received).toEqual(["1", "2", "3"]);
+    expect(received).toEqual([]);
     expect(rejection).toBeUndefined();
   });
 });

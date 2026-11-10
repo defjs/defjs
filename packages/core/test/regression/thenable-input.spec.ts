@@ -39,7 +39,6 @@ function executeInput(
   return defineWebSocket({
     ...definition,
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 1,
   })(client(options), input);
 }
 
