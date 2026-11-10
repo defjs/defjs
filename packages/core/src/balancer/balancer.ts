@@ -377,7 +377,8 @@ export function memberList(
   candidates: readonly string[],
 ): readonly string[] {
   if (members === undefined || members === candidates) return candidates;
-  const missing = candidates.filter((endpoint) => !members.includes(endpoint));
+  const known = new Set(members);
+  const missing = candidates.filter((endpoint) => !known.has(endpoint));
   return missing.length === 0 ? members : [...members, ...missing];
 }
 
@@ -466,10 +467,17 @@ export interface RoundRobinOptions {
  * the total weight of this candidate list. Members left out of this pick's
  * candidates keep their current value, as nginx skips a peer that is down. A
  * missing weight is 1. Weights for endpoints not in the list are ignored.
- * Current values for endpoints that left the members are dropped in
- * O(member count) work per pick. Extreme weights
+ * Selection and the cleanup of current values for endpoints that left the
+ * members take O(member count + candidate count) work per pick. Extreme weights
  * are scaled to avoid overflow; ratios below floating-point precision may round
  * to zero. Finite positive weights never produce a non-candidate selection.
+ *
+ * Without `weights`, every pick advances the counter, including a pick made for
+ * an HTTP retry or a stream reconnect. With `outlierDetection: false` and calls
+ * that run one after another, an endpoint that fails persistently therefore
+ * receives more than 1/n of the first attempts. With exactly two endpoints and
+ * retries enabled it receives all of them, so every call needs one retry.
+ * Concurrent calls interleave their picks and break this pattern.
  *
  * Health filtering is enabled by default: five consecutive attributed failures
  * eject an endpoint temporarily. Set `outlierDetection: false` to disable it;

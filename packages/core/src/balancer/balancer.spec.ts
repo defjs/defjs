@@ -207,7 +207,70 @@ describe("pickFirstBalancer", () => {
   });
 });
 
+describe("pickFirstBalancer with a member list", () => {
+  function counted(values: readonly string[]) {
+    let reads = 0;
+    const proxy = new Proxy(values, {
+      get(target, key, receiver) {
+        if (typeof key === "string" && /^\d+$/.test(key)) reads += 1;
+        const value: unknown = Reflect.get(target, key, receiver);
+        return value;
+      },
+    });
+    return { proxy, reads: () => reads };
+  }
+
+  test("checks candidates against the members in linear time", () => {
+    const all = Array.from({ length: 200 }, (_, index) => `e${index}`);
+    const candidates = all.slice(1);
+
+    const covered = counted(all);
+    const [, first] = pickFirstBalancer().pick({
+      endpoints: candidates,
+      members: covered.proxy,
+      operation: "op",
+    });
+    expect(first?.endpoint).toBe("e1");
+    expect(covered.reads()).toBeLessThanOrEqual(4 * all.length);
+
+    const extended = counted(all);
+    const [, second] = pickFirstBalancer().pick({
+      endpoints: [...candidates, "extra"],
+      members: extended.proxy,
+      operation: "op",
+    });
+    expect(second?.endpoint).toBe("e1");
+    expect(extended.reads()).toBeLessThanOrEqual(4 * all.length);
+  });
+});
+
 describe("roundRobinBalancer", () => {
+  test("advances the counter on a retry pick like any other pick", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const balancer = roundRobinBalancer({ outlierDetection: false });
+    const members = ["a", "b"];
+    const firstAttempts: string[] = [];
+    for (let call = 0; call < 4; call += 1) {
+      const [, first] = balancer.pick({ endpoints: members, operation: "op" });
+      const tried = first?.endpoint ?? "";
+      firstAttempts.push(tried);
+      balancer.pick({
+        endpoints: members.filter((endpoint) => endpoint !== tried),
+        members,
+        operation: "op",
+      });
+    }
+    expect(firstAttempts).toEqual(["a", "a", "a", "a"]);
+
+    const fresh = roundRobinBalancer({ outlierDetection: false });
+    expect([0, 1, 2, 3].map(() => endpointOf(fresh, members))).toEqual([
+      "a",
+      "b",
+      "a",
+      "b",
+    ]);
+  });
+
   test("starts at a random counter and wraps at 2^32", () => {
     const random = vi.spyOn(Math, "random").mockReturnValue(0);
     const balancer = roundRobinBalancer({ outlierDetection: false });
