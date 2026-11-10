@@ -1,5 +1,6 @@
 import { ROOT_CONTEXT, SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { describe, expect, test, vi } from "vitest";
+import type { MockSpan } from "../test-utils";
 import { createMockTracer, makeHttpRequest } from "../test-utils";
 import {
   addSpanEvent,
@@ -139,6 +140,40 @@ describe("trace helpers", () => {
     ]);
   });
 
+  test("span creators redact a url.full set by startSpanHook", () => {
+    const { tracer } = createMockTracer();
+    const hookUrl = "https://hook-user:HOOKSECRET@tenant.example/x?sig=HOOKSIG";
+    const redacted = "https://REDACTED:REDACTED@tenant.example/x?sig=REDACTED";
+
+    createHttpSpan(tracer, "GET", "/a", ROOT_CONTEXT, undefined, {
+      "url.full": hookUrl,
+    });
+    createSSESpan(tracer, "/b", ROOT_CONTEXT, undefined, {
+      "url.full": hookUrl,
+    });
+    createWebSocketSpan(tracer, "/c", ROOT_CONTEXT, undefined, {
+      "url.full": hookUrl,
+    });
+
+    expect(
+      vi
+        .mocked(method(tracer, "startSpan"))
+        .mock.calls.map((call) => call[1]?.attributes?.["url.full"]),
+    ).toEqual([redacted, redacted, redacted]);
+  });
+
+  test("span creators leave a non-string url.full from startSpanHook alone", () => {
+    const { tracer } = createMockTracer();
+
+    createHttpSpan(tracer, "GET", "/a", ROOT_CONTEXT, undefined, {
+      "url.full": 5,
+    });
+
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({ "http.request.method": "GET", "url.full": 5 });
+  });
+
   test("resolveStartSpanHook returns synchronous application attributes", () => {
     const request = makeHttpRequest();
     const hook = vi.fn(() => ({ "app.tenant": "acme" }));
@@ -242,6 +277,7 @@ describe("trace helpers", () => {
     const span = tracer.startSpan("test");
     setSpanError(span, new Error("boom"));
 
+    expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "Error" });
     expect(spans[0]?.attributes["error.type"]).toBe("Error");
     expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
     expect(spans[0]?.ended).toBe(true);
@@ -252,6 +288,7 @@ describe("trace helpers", () => {
     const span = tracer.startSpan("test");
     setSpanError(span, "string error");
 
+    expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "string" });
     expect(spans[0]?.attributes["error.type"]).toBe("string");
     expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
     expect(spans[0]?.ended).toBe(true);
@@ -262,6 +299,7 @@ describe("trace helpers", () => {
     const span = tracer.startSpan("test");
     setSpanError(span, undefined);
 
+    expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "_OTHER" });
     expect(spans[0]?.attributes["error.type"]).toBe("_OTHER");
     expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
     expect(spans[0]?.ended).toBe(true);
@@ -275,6 +313,54 @@ describe("trace helpers", () => {
     expect(spans[0]?.attributes["error.type"]).toBe("_OTHER");
     expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
     expect(spans[0]?.ended).toBe(true);
+  });
+
+  describe("exception events carry no free-form error text", () => {
+    function leakyError(): TypeError {
+      return new TypeError(
+        "Request cannot be constructed from a URL that includes credentials: http://svc-user:S3cretPassw0rd@host/ok?token=SECRET",
+      );
+    }
+
+    function expectOnlyType(span: MockSpan | undefined, name: string): void {
+      const calls = span?.recordException.mock.calls ?? [];
+      expect(calls).toHaveLength(1);
+      const argument: unknown = calls[0]?.[0];
+      expect(argument).toEqual({ name });
+      expect(JSON.stringify(argument)).not.toMatch(
+        /S3cretPassw0rd|SECRET|credentials/,
+      );
+    }
+
+    test("setSpanError records only the error type", () => {
+      const { tracer, spans } = createMockTracer();
+      const span = tracer.startSpan("test");
+      setSpanError(span, leakyError());
+
+      expectOnlyType(spans[0], "TypeError");
+    });
+
+    test("a failing span hook records only the error type", () => {
+      const { tracer, spans } = createMockTracer();
+      const span = tracer.startSpan("test");
+      runSpanHook(span, "requestHook", () => {
+        throw leakyError();
+      });
+
+      expectOnlyType(spans[0], "TypeError");
+    });
+
+    test.each([
+      { thrown: "token=SECRET", name: "string" },
+      { thrown: undefined, name: "_OTHER" },
+      { thrown: 42, name: "number" },
+    ])("records $name for a non-Error value", ({ thrown, name }) => {
+      const { tracer, spans } = createMockTracer();
+      const span = tracer.startSpan("test");
+      setSpanError(span, thrown);
+
+      expectOnlyType(spans[0], name);
+    });
   });
 
   test("endSpan", () => {
@@ -321,9 +407,9 @@ describe("trace helpers", () => {
         "error.type": errorType,
         "hook.name": "requestHook",
       });
-      expect(spans[0]?.recordException).toHaveBeenCalledWith(
-        error instanceof Error ? error : new Error(error),
-      );
+      expect(spans[0]?.recordException).toHaveBeenCalledWith({
+        name: errorType,
+      });
     },
   );
 
@@ -369,7 +455,7 @@ describe("trace helpers", () => {
       "error.type": "string",
       "hook.name": "requestHook",
     });
-    expect(spans[0]?.recordException).toHaveBeenCalledWith(new Error("boom"));
+    expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "string" });
   });
 
   test("runSpanHook uses Error default name when Error name is empty", () => {
@@ -386,7 +472,7 @@ describe("trace helpers", () => {
       "error.type": "Error",
       "hook.name": "requestHook",
     });
-    expect(spans[0]?.recordException).toHaveBeenCalledWith(error);
+    expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "Error" });
   });
 
   test("runSpanHook records non-string non-Error hook failures", () => {
@@ -401,7 +487,7 @@ describe("trace helpers", () => {
       "error.type": "number",
       "hook.name": "requestHook",
     });
-    expect(spans[0]?.recordException).toHaveBeenCalledWith(new Error("42"));
+    expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "number" });
   });
 
   test("endSpan does not overwrite already set status", () => {

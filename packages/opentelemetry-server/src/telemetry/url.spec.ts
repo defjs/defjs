@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { resolveHttpUrl, resolveWebSocketUrl, serverAttributes } from "./url";
 
+const resolveUrlText = (endpoint: string, baseEndpoint?: string): string =>
+  resolveHttpUrl(endpoint, baseEndpoint).url;
+
 describe("resolveHttpUrl", () => {
   test("returns endpoint when no baseEndpoint", () => {
     const result = resolveHttpUrl("/test");
@@ -103,5 +106,149 @@ describe("serverAttributes", () => {
       ...(address ? { "server.address": "api.example.com" } : {}),
       ...(port ? { "server.port": 443 } : {}),
     });
+  });
+});
+
+describe("userinfo redaction", () => {
+  const redactedBase = "http://REDACTED:REDACTED@api.example.com:8080/v1/test";
+
+  test.each([
+    "http://user:pw@api.example.com:8080/v1",
+    "http://user@api.example.com:8080/v1",
+    "http://:pw@api.example.com:8080/v1",
+    "http://us%40er:p%40ss@api.example.com:8080/v1",
+  ])("resolveUrl replaces the userinfo of %s", (base) => {
+    const url = resolveUrlText("/test", base);
+    expect(url).toBe(redactedBase);
+    expect(url).not.toMatch(/user|pw|pass|us%40er|p%40ss/);
+  });
+
+  test("resolveHttpUrl replaces the userinfo and keeps server attributes", () => {
+    const result = resolveHttpUrl(
+      "/test",
+      "http://user:pw@api.example.com:8080/v1",
+    );
+    expect(result.url).toBe(redactedBase);
+    expect(result.serverAddress).toBe("api.example.com");
+    expect(result.serverPort).toBe(8080);
+  });
+
+  test("replaces userinfo carried by an absolute endpoint", () => {
+    expect(
+      resolveUrlText("https://u:p@h.example/x", "https://api.example.com"),
+    ).toBe("https://REDACTED:REDACTED@h.example/x");
+  });
+
+  test.each([
+    { name: "no base", base: undefined },
+    { name: "an invalid base", base: "not-a-url" },
+  ])("replaces userinfo in an absolute endpoint with $name", ({ base }) => {
+    expect(resolveUrlText("https://u:p@h.example/x", base)).toBe(
+      "https://REDACTED:REDACTED@h.example/x",
+    );
+    expect(resolveHttpUrl("https://u:p@h.example/x", base).url).toBe(
+      "https://REDACTED:REDACTED@h.example/x",
+    );
+  });
+
+  test.each([
+    "/test",
+    "https://H.Example",
+    "not a url",
+    "https://h.example/a b",
+  ])("returns a credential-free fallback endpoint %s untouched", (endpoint) => {
+    expect(resolveUrlText(endpoint)).toBe(endpoint);
+    expect(resolveHttpUrl(endpoint).url).toBe(endpoint);
+  });
+});
+
+describe("userinfo redaction of an endpoint that cannot be parsed", () => {
+  test.each([
+    {
+      endpoint: "http://u:SECRETPW@h.example:99999/x",
+      expected: "http://REDACTED:REDACTED@h.example:99999/x",
+    },
+    {
+      endpoint: "//u:SECRETPW@h.example/x?sig=abc#f",
+      expected: "//REDACTED:REDACTED@h.example/x?sig=REDACTED#f",
+    },
+    {
+      endpoint: "http:\\\\u:SECRETPW@h.example:99999/x",
+      expected: "http:\\\\REDACTED:REDACTED@h.example:99999/x",
+    },
+  ])("rewrites $endpoint", ({ endpoint, expected }) => {
+    for (const base of [undefined, "https://api.example.com"]) {
+      expect(resolveUrlText(endpoint, base)).toBe(expected);
+      expect(resolveHttpUrl(endpoint, base).url).toBe(expected);
+    }
+  });
+
+  test.each(["//@h.example/x", "//h.example/a@b", "/a@b", "x//u:p@h"])(
+    "leaves %s untouched",
+    (endpoint) => {
+      expect(resolveUrlText(endpoint)).toBe(endpoint);
+    },
+  );
+});
+
+describe("sensitive query redaction", () => {
+  test.each([
+    "X-Amz-Signature",
+    "X-Amz-Credential",
+    "X-Amz-Security-Token",
+    "AWSAccessKeyId",
+    "Signature",
+    "sig",
+    "X-Goog-Signature",
+  ])("replaces the value of %s and keeps the key", (key) => {
+    expect(resolveUrlText(`https://h.example/x?color=blue&${key}=secret`)).toBe(
+      `https://h.example/x?color=blue&${key}=REDACTED`,
+    );
+    expect(resolveUrlText(`/x?${key}=secret&color=blue`)).toBe(
+      `/x?${key}=REDACTED&color=blue`,
+    );
+  });
+
+  test("matches keys case-sensitively on the decoded name", () => {
+    expect(
+      resolveUrlText("https://h.example/x?SIG=a&Sig=b&%73ig=c&sig=d&sigx=e"),
+    ).toBe(
+      "https://h.example/x?SIG=a&Sig=b&%73ig=REDACTED&sig=REDACTED&sigx=e",
+    );
+  });
+
+  test("redacts a valueless key and skips empty or unrelated parameters", () => {
+    expect(resolveUrlText("https://h.example/x?flag&&sig&a=1")).toBe(
+      "https://h.example/x?flag&&sig=REDACTED&a=1",
+    );
+  });
+
+  test("redacts a query on the same URL as userinfo", () => {
+    expect(resolveUrlText("https://u:p@h.example/x?sig=abc&a=1")).toBe(
+      "https://REDACTED:REDACTED@h.example/x?sig=REDACTED&a=1",
+    );
+    expect(resolveHttpUrl("https://u:p@h.example/x?sig=abc").url).toBe(
+      "https://REDACTED:REDACTED@h.example/x?sig=REDACTED",
+    );
+  });
+
+  test("redacts text before the fragment and ignores a '?' inside it", () => {
+    expect(resolveUrlText("/x?sig=abc#frag?sig=keep")).toBe(
+      "/x?sig=REDACTED#frag?sig=keep",
+    );
+    expect(resolveUrlText("/x#frag?sig=keep")).toBe("/x#frag?sig=keep");
+    expect(resolveUrlText("/x?")).toBe("/x?");
+  });
+
+  test("keeps the spelling of a parsed endpoint with a harmless query", () => {
+    expect(resolveUrlText("https://H.Example/x?a=1")).toBe(
+      "https://H.Example/x?a=1",
+    );
+  });
+
+  test("a rooted path resolved against a base never carries a query", () => {
+    expect(resolveUrlText("/x", "https://api.example.com/v1?sig=abc")).toBe(
+      "https://api.example.com/v1/x",
+    );
   });
 });

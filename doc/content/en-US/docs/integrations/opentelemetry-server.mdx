@@ -68,7 +68,7 @@ Configure per-transport switches (`{ enabled: false }`) and span hooks (`startSp
 
 - `startSpanHook(request): Attributes` runs synchronously before span creation; its returned attributes are applied last and can override built-in attributes (such as redacting `url.full`).
 - `requestHook(span, request)` and `responseHook(span, responseOrHandle, request)` receive the created span and may be synchronous or async. They are **not** awaited by the transport pipeline, and the HTTP span ends immediately when the synchronous portion of `responseHook` returns.
-- Hook failures never abort the client call. While `span.isRecording()` is true, hook errors record `defjs.otel.hook.error` and `exception` events on the span; for non-recording spans, failures are reported via `@opentelemetry/api`'s `diag.error` (`hook.name`, `error.type`, `traceId`, `spanId`).
+- Hook failures never abort the client call. While `span.isRecording()` is true, hook errors record `defjs.otel.hook.error` and `exception` events on the span (the `exception` event, like the one recorded for a failed transport, carries only `exception.type`, never `exception.message` or `exception.stacktrace`); for non-recording spans, failures are reported via `@opentelemetry/api`'s `diag.error` (`hook.name`, `error.type`, `traceId`, `spanId`).
 - `withOpenTelemetryServer` snapshots `http`, `sse`, and `webSocket` option blocks at creation time. Passing `{ enabled: false }` disables that transport without reading its hooks.
 
 ---
@@ -129,7 +129,7 @@ Each request or logical connection emits at most one terminal `WARN` (`13`) `Log
 | SSE or WebSocket terminal error or rejected `closed` (including a `1006` drop without a close frame, queue overflow, heartbeat timeout)                          | One `WARN` with the transport event name, phase `connection`                                    |
 | Normal completion, messages, EOF, server WebSocket close frames (including `1011`), or active non-timeout cancellation                                           | None                                                                                            |
 
-Diagnostics record a fixed message, `exception.type` (platform/transport class name such as `BodyFailure`, `EventStreamFatalError` (a non-`text/event-stream` SSE handshake), `DefjsFault` (including an SSE non-2xx handshake), `TypeError`, or `Error`), phase, static `operation`, server address/port, and protocol fields—never raw URLs, query strings, headers, bodies, or error stacks.
+Diagnostics record a fixed message, `exception.type` (platform/transport class name such as `BodyFailure`, `EventStreamFatalError` (a non-`text/event-stream` SSE handshake), `DefjsFault` (including an SSE non-2xx handshake), `TypeError`, or `Error`), phase, static `operation`, server address/port, and protocol fields—never raw URLs, query strings, headers, bodies, or error stacks. A span's `exception` event follows the same rule and carries only `exception.type`; `url.full` replaces any userinfo in the endpoint with `REDACTED:REDACTED` and the values of the semantic-convention default sensitive query keys (such as `sig` and `X-Amz-Signature`) with `REDACTED`.
 
 ---
 

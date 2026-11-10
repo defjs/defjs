@@ -569,6 +569,26 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
   });
 
+  test("should replace endpoint userinfo in url.full", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetryWebSocketInterceptor({
+      tracer,
+      propagator: mockPropagator,
+    });
+
+    await interceptor.fn(
+      {
+        ...makeWsRequest(),
+        baseEndpoint: "wss://svc-user:S3cretPassw0rd@api.example.com",
+      },
+      () => Promise.resolve(makeWsSession()),
+    );
+
+    expect(activeSpans[0]?.attributes["url.full"]).toBe(
+      "wss://REDACTED:REDACTED@api.example.com/ws",
+    );
+  });
+
   test("should merge startSpanHook attributes last into initial WebSocket span options", async () => {
     const { tracer } = createMockTracer();
     const req = makeWsRequest();
@@ -786,7 +806,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
       "error.type": "TypeError",
     });
-    expect(activeSpans[0]?.recordException).toHaveBeenCalledWith(closeCause);
+    expect(activeSpans[0]?.recordException).toHaveBeenCalledWith({
+      name: "TypeError",
+    });
     expect(activeSpans[0]?.status?.code).toBe(2);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
@@ -878,7 +900,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
       "error.type": "Error",
     });
-    expect(activeSpans[0]?.recordException).toHaveBeenCalledWith(ERR_ABORTED);
+    expect(activeSpans[0]?.recordException).toHaveBeenCalledWith({
+      name: "Error",
+    });
     expect(activeSpans[0]?.status?.code).toBe(2);
     expect(activeSpans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(

@@ -529,6 +529,79 @@ describe("e2e: opentelemetry-server with real test server", () => {
     expect(span.ended).toBe(true);
   });
 
+  test("a real fetch to an endpoint with userinfo leaves no credentials or query values in the span", async () => {
+    const { tracer, spans } = createMockTracer();
+    const host = inject("testServerHost");
+    const client = createClient(
+      withEndpoint(host.replace("http://", "http://svc-user:S3cretPassw0rd@")),
+      withOpenTelemetryServer({ tracer, propagator: createPropagator() }),
+    );
+    const useEcho = defineRequest({
+      method: "GET",
+      path: "/echo-headers",
+      input: struct.object({ token: struct.string() }),
+      builder: (input) => ({ query: { token: input.token } }),
+    });
+
+    // The transport rejects a URL with credentials before it is sent, so the exception count is
+    // asserted in `e2e.node.spec.ts` and `e2e.bun.spec.ts`; the assertions below hold in both.
+    await useEcho(client, { token: "SECRET-QUERY-TOKEN" });
+
+    const span = onlySpan(spans);
+    expect(span.attributes["url.full"]).toBe(
+      `${host.replace("http://", "http://REDACTED:REDACTED@")}/echo-headers`,
+    );
+    // An Error keeps `message` and `stack` non-enumerable, so serialising it would hide a leak:
+    // each recorded exception must be a plain `{ name }` object instead.
+    const exceptions: unknown[] = [];
+    for (const [exception] of span.recordException.mock.calls) {
+      exceptions.push(exception);
+    }
+    for (const exception of exceptions) {
+      expect(exception).not.toBeInstanceOf(Error);
+      expect(Object.getOwnPropertyNames(exception)).toEqual(["name"]);
+    }
+    const recorded = JSON.stringify({
+      attributes: span.attributes,
+      events: span.addEvent.mock.calls,
+      exceptions,
+    });
+    expect(recorded).not.toContain("S3cretPassw0rd");
+    expect(recorded).not.toContain("svc-user");
+    expect(recorded).not.toContain("SECRET-QUERY-TOKEN");
+  });
+
+  test("a response body that fails JSON decoding is not copied into the span exception", async () => {
+    const { tracer, spans } = createMockTracer();
+    const client = createClient(
+      withEndpoint("https://example.invalid"),
+      withHTTPHandle(() =>
+        Promise.resolve(
+          new Response("secret-api-key-ABCDEF123456 is the value", {
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      ),
+      withOpenTelemetryServer({ tracer, propagator: createPropagator() }),
+    );
+    const useJson = defineRequest({
+      method: "GET",
+      path: "/json",
+      output: struct.object({ ok: struct.boolean() }),
+    });
+
+    const [error] = await useJson(client);
+
+    expect(error).toMatchObject({ code: "RES_DECODE_FAILED" });
+    const span = onlySpan(spans);
+    expect(span.recordException.mock.calls).toEqual([
+      [{ name: "BodyFailure" }],
+    ]);
+    expect(JSON.stringify(span.recordException.mock.calls)).not.toContain(
+      "secret",
+    );
+  });
+
   test("SSE request carries traceparent header", async () => {
     const { tracer, spans } = createMockTracer();
     const propagator = createPropagator();

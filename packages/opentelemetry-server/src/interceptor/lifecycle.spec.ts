@@ -99,8 +99,11 @@ function createLifecycleTracer() {
             attributes: {
               "exception.type":
                 typeof error === "string" ? "Error" : (error.name ?? "Error"),
-              "exception.message":
-                typeof error === "string" ? error : (error.message ?? ""),
+              ...(typeof error === "string"
+                ? { "exception.message": error }
+                : error.message === undefined
+                  ? {}
+                  : { "exception.message": error.message }),
             },
           });
         }
@@ -423,7 +426,6 @@ describe("span hook recording lifecycle", () => {
         name: "exception",
         attributes: {
           "exception.type": "TypeError",
-          "exception.message": "sync failure",
         },
       },
     ]);
@@ -608,7 +610,6 @@ describe("span hook recording lifecycle", () => {
           name: "exception",
           attributes: {
             "exception.type": "TypeError",
-            "exception.message": "async hook failed",
           },
         },
       ]);

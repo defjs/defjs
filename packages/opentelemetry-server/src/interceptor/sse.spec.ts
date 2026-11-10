@@ -450,6 +450,26 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     });
   });
 
+  test("should replace endpoint userinfo in url.full", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetrySSEInterceptor({
+      tracer,
+      propagator: mockPropagator,
+    });
+
+    await interceptor.fn(
+      {
+        ...makeSSERequest(),
+        baseEndpoint: "https://svc-user:S3cretPassw0rd@api.example.com",
+      },
+      () => Promise.resolve(makeSSEStream()),
+    );
+
+    expect(activeSpans[0]?.attributes["url.full"]).toBe(
+      "https://REDACTED:REDACTED@api.example.com/events",
+    );
+  });
+
   test("should merge startSpanHook attributes last into initial SSE span options", async () => {
     const { tracer } = createMockTracer();
     const req = makeSSERequest();

@@ -2,11 +2,21 @@ import type { HttpRequest } from "@defjs/core";
 import type { Attributes, Context } from "@opentelemetry/api";
 import type { Span, Tracer } from "@opentelemetry/api";
 import { diag, SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { redactEndpoint } from "./url";
 
 const spanStatusSet = new WeakMap<Span, boolean>();
 
 function markSpanStatusSet(span: Span): void {
   spanStatusSet.set(span, true);
+}
+
+// `startSpanHook` attributes are merged over the built-in ones, so a hook that sets `url.full` would
+// otherwise bypass the redaction `resolveUrl` applies; the merged value goes through it again.
+function withRedactedUrl(attributes: Attributes): Attributes {
+  const url = attributes["url.full"];
+  return typeof url === "string"
+    ? { ...attributes, "url.full": redactEndpoint(url) }
+    : attributes;
 }
 
 type StartSpanHookResult =
@@ -68,12 +78,12 @@ export function createHttpSpan(
     operation ? `${method} ${operation}` : method,
     {
       kind: SpanKind.CLIENT,
-      attributes: {
+      attributes: withRedactedUrl({
         ...(operation ? { "defjs.operation": operation } : {}),
         "http.request.method": method,
         "url.full": url,
         ...startAttributes,
-      },
+      }),
     },
     parentCtx,
   );
@@ -90,11 +100,11 @@ export function createSSESpan(
     operation ? `SSE ${operation}` : "SSE",
     {
       kind: SpanKind.CLIENT,
-      attributes: {
+      attributes: withRedactedUrl({
         ...(operation ? { "defjs.operation": operation } : {}),
         "url.full": url,
         ...startAttributes,
-      },
+      }),
     },
     parentCtx,
   );
@@ -111,11 +121,11 @@ export function createWebSocketSpan(
     operation ? `WebSocket ${operation}` : "WebSocket",
     {
       kind: SpanKind.CLIENT,
-      attributes: {
+      attributes: withRedactedUrl({
         ...(operation ? { "defjs.operation": operation } : {}),
         "url.full": url,
         ...startAttributes,
-      },
+      }),
     },
     parentCtx,
   );
@@ -136,8 +146,15 @@ export function setSpanHttpResponse(span: Span, status: number): void {
   span.end();
 }
 
+// The runtime's error text (Node's fetch message with the full URL, a JSON parse error with a body
+// fragment) and its stack can carry credentials, query values or body content, so the exception
+// event keeps only `exception.type`, the same field the diagnostic logs emit.
+function recordSpanException(span: Span, error: unknown): void {
+  span.recordException({ name: getErrorType(error) });
+}
+
 export function setSpanError(span: Span, error: unknown): void {
-  span.recordException(toError(error));
+  recordSpanException(span, error);
   span.setAttribute("error.type", getErrorType(error));
   span.setStatus({ code: SpanStatusCode.ERROR });
   markSpanStatusSet(span);
@@ -200,7 +217,7 @@ function recordSpanHookError(
     // Telemetry hooks must not affect transport execution.
   }
   try {
-    span.recordException(toError(error));
+    recordSpanException(span, error);
   } catch {
     // Telemetry hooks must not affect transport execution.
   }
@@ -212,10 +229,6 @@ export function addSpanEvent(
   attributes?: Attributes,
 ): void {
   span.addEvent(eventName, attributes);
-}
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
 }
 
 export function getHttpResponseErrorType(status: number): string | undefined {

@@ -319,6 +319,30 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     );
   });
 
+  test("should replace endpoint userinfo in url.full and keep server attributes", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetryHttpInterceptor({
+      tracer,
+      propagator: mockPropagator,
+    });
+
+    await interceptor.fn(
+      {
+        ...makeHttpRequest(),
+        baseEndpoint: "https://svc-user:S3cretPassw0rd@api.example.com:8443",
+      },
+      () => Promise.resolve(makeHttpResponse()),
+    );
+
+    expect(activeSpans[0]?.attributes["url.full"]).toBe(
+      "https://REDACTED:REDACTED@api.example.com:8443/test",
+    );
+    expect(activeSpans[0]?.attributes["server.address"]).toBe(
+      "api.example.com",
+    );
+    expect(activeSpans[0]?.attributes["server.port"]).toBe(8443);
+  });
+
   test("should merge startSpanHook attributes last into initial HTTP span options", async () => {
     const { tracer } = createMockTracer();
     const req = {

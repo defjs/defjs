@@ -92,8 +92,8 @@ Span hooks run only with a `tracer`. `startSpanHook(request)` is synchronous and
 ## Privacy defaults
 
 - `webSocket.queryPropagation` defaults to `false`: trace context and baggage do not ride on the WebSocket URL. Enable it only after reviewing how your proxies, browsers, and access logs record query strings.
-- No bodies, full headers, baggage values, or message payloads are added as telemetry fields, and no built-in redactor exists. Prefer allowlists and low-cardinality attributes in hooks.
-- Diagnostics carry a fixed message, phase, operation, server address/port, and exception type — not raw URLs, headers, bodies, or stacks.
+- No bodies, full headers, baggage values, or message payloads are added as telemetry fields, and no built-in redactor exists beyond `url.full`, whose endpoint userinfo is replaced with `REDACTED:REDACTED` and whose default sensitive query values (`sig`, `X-Amz-Signature`, and the other keys in the semantic conventions) are replaced with `REDACTED`. Prefer allowlists and low-cardinality attributes in hooks.
+- Diagnostics carry a fixed message, phase, operation, server address/port, and exception type — not raw URLs, headers, bodies, or stacks. Span `exception` events carry only `exception.type` for the same reason.
 - SSE and WebSocket are traced per logical connection, not per event or message.
 
 ## Documentation
