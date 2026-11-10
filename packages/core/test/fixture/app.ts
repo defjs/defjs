@@ -252,7 +252,8 @@ export function createFixtureApp(deps: FixtureAppDeps): Hono {
   });
 
   app.get("/sse/slow", async (c) => {
-    await delay(500, c.req.raw.signal);
+    // Outlasts any test budget: the handler ends early when the request signal aborts.
+    await delay(10_000, c.req.raw.signal);
     return c.body(null, 500);
   });
 

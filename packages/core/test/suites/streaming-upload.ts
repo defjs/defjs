@@ -1135,12 +1135,14 @@ function expectUploadObserverFailure(failure: unknown, cause: unknown): void {
   expect(failure.meta).toBeUndefined();
 }
 
+// Liveness guard, not a timing assertion: the budget does not depend on machine speed.
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
       10_000,
     );
+    timeout.unref?.();
     promise.then(
       (value) => {
         clearTimeout(timeout);

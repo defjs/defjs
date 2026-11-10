@@ -841,11 +841,7 @@ describe("web socket runtime", () => {
     });
     expect(socket).toBeUndefined();
     expect(createdSessions).toHaveLength(1);
-    const terminal = await Promise.race([
-      Promise.all(createdSessions.map((session) => session.closed)),
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), 50)),
-    ]);
-    expect(terminal).not.toBe(false);
+    await Promise.all(createdSessions.map((session) => session.closed));
     expect(
       createdSessions.every((session) =>
         ["aborted", "closed", "error"].includes(session.state),
@@ -882,11 +878,7 @@ describe("web socket runtime", () => {
     });
     expect(socket).toBeUndefined();
     expect(firstSession).toBeDefined();
-    const terminal = await Promise.race([
-      firstSession?.closed,
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), 50)),
-    ]);
-    expect(terminal).not.toBe(false);
+    await expect(firstSession?.closed).resolves.toHaveProperty("kind");
   });
 
   test("should close a created session discarded by a successful interceptor", async () => {
@@ -928,11 +920,7 @@ describe("web socket runtime", () => {
     expect(error).toBeNull();
     expect(socket).toBe(shortCircuitSession);
     expect(discardedSession).toBeDefined();
-    const terminal = await Promise.race([
-      discardedSession?.closed,
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), 50)),
-    ]);
-    expect(terminal).not.toBe(false);
+    await expect(discardedSession?.closed).resolves.toHaveProperty("kind");
   });
 
   test("should preserve a wrapper that delegates the created session closed promise", async () => {

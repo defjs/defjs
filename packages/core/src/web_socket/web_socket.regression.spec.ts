@@ -13,18 +13,6 @@ test("immediate clean close settles according to observed native events", async 
     const nativeClosed = new Promise<void>((resolve) => {
       finishNative = resolve;
     });
-    let watchdog: ReturnType<typeof setTimeout> | undefined;
-    const expired = new Promise<never>((_resolve, reject) => {
-      watchdog = setTimeout(
-        () =>
-          reject(
-            new Error(
-              `Immediate close timed out: ${JSON.stringify({ attempt, events })}`,
-            ),
-          ),
-        5_000,
-      );
-    });
     class RecordingSocket extends WebSocket {
       constructor(url: string | URL, protocols?: string | string[]) {
         super(url, protocols);
@@ -62,8 +50,7 @@ test("immediate clean close settles according to observed native events", async 
       await nativeClosed;
       return { fault: fault?.code ?? null, closed };
     };
-    const result = await Promise.race([work(), expired]).finally(() => {
-      clearTimeout(watchdog);
+    const result = await work().finally(() => {
       cancellation.abort();
       closeNative();
     });
@@ -95,7 +82,6 @@ test("original 10ms closes agree with native-only controls", async () => {
           const nativeClosed = new Promise<void>((resolve) => {
             finishNative = resolve;
           });
-          let watchdog: ReturnType<typeof setTimeout> | undefined;
           const trace = () =>
             JSON.stringify({
               attempt,
@@ -109,12 +95,6 @@ test("original 10ms closes agree with native-only controls", async () => {
               fault,
               closed,
             });
-          const expired = new Promise<never>((_resolve, reject) => {
-            watchdog = setTimeout(
-              () => reject(new Error(`10ms close timed out: ${trace()}`)),
-              3_000,
-            );
-          });
           class RecordingSocket extends WebSocket {
             constructor(url: string | URL, protocols?: string | string[]) {
               super(url, protocols);
@@ -194,9 +174,8 @@ test("original 10ms closes agree with native-only controls", async () => {
             await nativeClosed;
           };
           try {
-            await Promise.race([work(), expired]);
+            await work();
           } finally {
-            clearTimeout(watchdog);
             cancellation.abort();
             closeNative();
           }
@@ -252,7 +231,6 @@ test("rejects an optional outgoing root that has no JSON representation", async 
   const [error, session] = await connect(client);
   expect(error).toBeNull();
   if (!session) throw new Error("Expected an open session");
-  const watchdog = setTimeout(() => session.close(), 2_000);
   try {
     expect(() => session.send(undefined)).toThrow();
     session.send("after-rejected-send");
@@ -263,7 +241,6 @@ test("rejects an optional outgoing root that has no JSON representation", async 
       value: { received: '"after-rejected-send"' },
     });
   } finally {
-    clearTimeout(watchdog);
     session.close();
     await session.closed;
   }

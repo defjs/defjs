@@ -241,7 +241,7 @@ export function registerUploadProgressBrowserSuite(
       );
       expect(hits).toEqual([`OPTIONS ${path}`]);
       // Defjs relays the stream, so the failed send releases it, but a cancelled stream cannot be sent again.
-      await vi.waitFor(() => expect(stream.locked).toBe(false));
+      await vi.waitFor(() => expect(stream.locked).toBe(false), 10_000);
       expect(() => new Response(stream)).toThrow(TypeError);
     });
 

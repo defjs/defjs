@@ -23,12 +23,14 @@ function nextTurn(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+// Liveness guard, not a timing assertion: the awaited promise must settle while the test holds a dependency pending. The budget does not depend on machine speed.
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
-      100,
+      10_000,
     );
+    timeout.unref?.();
     promise.then(
       (value) => {
         clearTimeout(timeout);

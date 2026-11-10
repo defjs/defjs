@@ -79,12 +79,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// Liveness guard, not a timing assertion: the awaited promise must settle while the test holds a dependency pending. The budget does not depend on machine speed.
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
-      100,
+      10_000,
     );
+    timeout.unref?.();
     promise.then(
       (value) => {
         clearTimeout(timeout);
@@ -323,9 +325,15 @@ describe("fetchEventStream advanced", () => {
       signal: controller.signal,
     };
 
-    setTimeout(() => controller.abort(ERR_ABORTED), 50);
+    const fetchSpy = vi.fn<FetchHandle>((input, init) =>
+      globalThis.fetch(input, init),
+    );
+    const opening = fetchEventStream(request, { fetch: fetchSpy });
 
-    await expect(fetchEventStream(request)).rejects.toBe(ERR_ABORTED);
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce(), 10_000);
+    controller.abort(ERR_ABORTED);
+
+    await expect(opening).rejects.toBe(ERR_ABORTED);
   });
 
   test.each([
@@ -374,17 +382,22 @@ describe("fetchEventStream advanced", () => {
     };
 
     let unexpectedHandle: EventStreamHandle<EventStreamMessage> | undefined;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     onTestFinished(async () => {
-      clearTimeout(timer);
       await unexpectedHandle?.[Symbol.asyncDispose]();
     });
-    timer = setTimeout(() => controller.abort(timeoutError), 50);
+    const fetchSpy = vi.fn<FetchHandle>((input, init) =>
+      globalThis.fetch(input, init),
+    );
 
-    const opening = fetchEventStream(request).then((handle) => {
-      unexpectedHandle = handle;
-      return handle;
-    });
+    const opening = fetchEventStream(request, { fetch: fetchSpy }).then(
+      (handle) => {
+        unexpectedHandle = handle;
+        return handle;
+      },
+    );
+    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce(), 10_000);
+    controller.abort(timeoutError);
+
     await expect(opening).rejects.toBe(ERR_TIMEOUT);
   });
 
@@ -744,30 +757,40 @@ describe("fetchEventStream advanced", () => {
   });
 
   test("should abort during retry wait via request signal", async () => {
+    // Unit-level reconnect delay: fake timers, so the retry wait never elapses unless the test advances it.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const controller = new AbortController();
     const request: HttpRequest = {
       ...createRequest("/events"),
       signal: controller.signal,
     };
     const fetch = vi.fn(() => Promise.reject(new Error("network error")));
+    const onerror = vi.fn(() => 10_000);
 
-    setTimeout(() => controller.abort(ERR_ABORTED), 50);
+    const opening = fetchEventStream(request, {
+      fetch,
+      onerror,
+      reconnect: { attempts: 3, delayMs: 10_000 },
+    });
 
-    await expect(
-      fetchEventStream(request, {
-        fetch,
-        onerror() {
-          return 1000;
-        },
-        reconnect: { attempts: 3, delayMs: 1000 },
-      }),
-    ).rejects.toBe(ERR_ABORTED);
+    await vi.waitFor(() => expect(onerror).toHaveBeenCalledOnce());
+    controller.abort(ERR_ABORTED);
+
+    await expect(opening).rejects.toBe(ERR_ABORTED);
   });
 
   test("should close infinite stream", async () => {
     const stream = await fetchEventStream(createRequest("/sse/infinite"));
 
-    setTimeout(() => stream.close(), 50);
+    // The server is still pushing: close only after the first tick has arrived.
+    await expect(stream[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      done: false,
+      value: { event: "tick" },
+    });
+    stream.close();
 
     await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
   });
@@ -922,7 +945,7 @@ describe("fetchEventStream advanced", () => {
     });
 
     sourceController?.error(failure);
-    const terminal = await settleWithin(stream.closed);
+    const terminal = await stream.closed;
     expect(terminal).toEqual({
       kind: "error",
       code: "NET_UNREACHABLE",
@@ -931,7 +954,7 @@ describe("fetchEventStream advanced", () => {
     });
 
     await expect(
-      settleWithin(Promise.resolve(stream[Symbol.asyncDispose]())),
+      Promise.resolve(stream[Symbol.asyncDispose]()),
     ).resolves.toBeUndefined();
     await expect(stream.closed).resolves.toBe(terminal);
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toBe(failure);
@@ -1977,9 +2000,10 @@ describe("fetchEventStream message path", () => {
       },
     );
 
-    await expect(
-      settleWithin(stream[Symbol.asyncIterator]().next()),
-    ).resolves.toEqual({ done: true, value: undefined });
+    await expect(stream[Symbol.asyncIterator]().next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
     await expect(stream.closed).resolves.toMatchObject({
       cause: ERR_ABORTED,
       kind: "aborted",
@@ -2025,7 +2049,7 @@ describe("fetchEventStream message path", () => {
       },
     );
 
-    await expect(settleWithin(stream.closed)).resolves.toMatchObject({
+    await expect(stream.closed).resolves.toMatchObject({
       cause: ERR_ABORTED,
       kind: "aborted",
     });

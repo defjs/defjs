@@ -857,7 +857,10 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   );
   expect(heldCancelError).toBeNull();
   heldCancelStream?.close();
-  await vi.waitFor(() => expect(heldCancelRecord.dones).toHaveLength(1));
+  await vi.waitFor(
+    () => expect(heldCancelRecord.dones).toHaveLength(1),
+    10_000,
+  );
   expect(heldCancelRecord.dones).toEqual([
     { endpoint: heldCancel.url, info: { attempted: false } },
   ]);

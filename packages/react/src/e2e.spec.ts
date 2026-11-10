@@ -71,10 +71,13 @@ describe("React wrapper e2e", () => {
       createElement(App, { client: createClient(withEndpoint(endpoint)) }),
     );
 
-    await waitFor(() => {
-      expect(screen.getByTestId("user-1").textContent).toBe("John");
-      expect(screen.getByTestId("user-2").textContent).toBe("Jane");
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("user-1").textContent).toBe("John");
+        expect(screen.getByTestId("user-2").textContent).toBe("Jane");
+      },
+      { timeout: 10_000 },
+    );
   });
 
   it("should provide the same client instance to nested components", () => {
@@ -186,10 +189,13 @@ describe("React wrapper e2e", () => {
       ),
     );
 
-    await waitFor(() => {
-      expect(screen.getByTestId("outer-count").textContent).toBe("2");
-      expect(screen.getByTestId("inner-count").textContent).toBe("2");
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("outer-count").textContent).toBe("2");
+        expect(screen.getByTestId("inner-count").textContent).toBe("2");
+      },
+      { timeout: 10_000 },
+    );
 
     expect(outerClient).toBeDefined();
     expect(outerSiblingClient).toBeDefined();

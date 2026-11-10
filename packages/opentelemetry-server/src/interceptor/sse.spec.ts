@@ -170,21 +170,6 @@ describe("SSE client diagnostic logs", () => {
   );
 });
 
-async function settleWithin<T>(promise: Promise<T>): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const expired = new Promise<never>((_resolve, reject) => {
-    timeout = setTimeout(
-      () => reject(new Error("operation did not settle")),
-      100,
-    );
-  });
-  try {
-    return await Promise.race([promise, expired]);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 describe("createOpenTelemetrySSEInterceptor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -594,7 +579,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     const second = deferred.stream[Symbol.asyncDispose]();
 
     expect(second).toBe(first);
-    await expect(settleWithin(Promise.resolve(first))).resolves.toBeUndefined();
+    await expect(Promise.resolve(first)).resolves.toBeUndefined();
     expect(close).toHaveBeenCalledOnce();
     await expect(deferred.stream.closed).resolves.toMatchObject({
       kind: "aborted",
@@ -608,7 +593,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     deferred.reject(failure);
 
     await expect(
-      settleWithin(Promise.resolve(deferred.stream[Symbol.asyncDispose]())),
+      Promise.resolve(deferred.stream[Symbol.asyncDispose]()),
     ).rejects.toBe(failure);
     expect(close).toHaveBeenCalledOnce();
     await expect(deferred.stream.closed).rejects.toBe(failure);

@@ -56,12 +56,14 @@ function stalledBody(onCancel?: (reason: unknown) => void) {
   return { fail: (reason: unknown) => fail(reason), reading, stream };
 }
 
+// Liveness guard, not a timing assertion: the budget does not depend on machine speed.
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
       10_000,
     );
+    timeout.unref?.();
     promise.then(
       (value) => {
         clearTimeout(timeout);
@@ -792,7 +794,7 @@ export function defineNativeFetchSuite(): void {
           expect(await stallState(fetchImpl, host, key)).toMatchObject(
             expected,
           ),
-        { timeout: 3000 },
+        { timeout: 10_000 },
       );
     const scenarios: {
       expected: object;

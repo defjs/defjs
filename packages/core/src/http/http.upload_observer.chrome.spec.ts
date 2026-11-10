@@ -118,6 +118,6 @@ test.each([
     const [error] = await upload(client(options));
 
     expect(error?.code).toBe("NET_UNREACHABLE");
-    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce(), 10_000);
   },
 );

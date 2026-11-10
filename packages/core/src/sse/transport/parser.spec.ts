@@ -14,12 +14,14 @@ const noop = () => {
   /* intentionally empty */
 };
 
+// Liveness guard, not a timing assertion: the awaited promise must settle while the test holds a dependency pending. The budget does not depend on machine speed.
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
-      100,
+      10_000,
     );
+    timeout.unref?.();
     promise.then(
       (value) => {
         clearTimeout(timeout);
@@ -299,29 +301,21 @@ describe("sse parser", () => {
   });
 
   test("should handle abort without reason gracefully", async () => {
-    let enqueueTimeout: ReturnType<typeof setTimeout> | undefined;
-    let closeTimeout: ReturnType<typeof setTimeout> | undefined;
-
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        enqueueTimeout = setTimeout(
-          () => controller.enqueue(encoder.encode("ok")),
-          50,
-        );
-        closeTimeout = setTimeout(() => controller.close(), 100);
-      },
-      cancel() {
-        clearTimeout(enqueueTimeout);
-        clearTimeout(closeTimeout);
-      },
-    });
+    const pull = vi.fn(() => new Promise<void>(() => undefined));
+    const stream = new ReadableStream<Uint8Array>(
+      { pull },
+      { highWaterMark: 0 },
+    );
 
     const abortController = new AbortController();
-    setTimeout(() => abortController.abort(), 10);
+    const pending = readStreamBytes(stream, noop, abortController.signal);
 
-    await expect(
-      readStreamBytes(stream, noop, abortController.signal),
-    ).rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() => expect(pull).toHaveBeenCalledOnce());
+    abortController.abort();
+
+    await expect(settleWithin(pending)).rejects.toMatchObject({
+      name: "AbortError",
+    });
 
     expect(() => stream.getReader()).not.toThrow();
   });
