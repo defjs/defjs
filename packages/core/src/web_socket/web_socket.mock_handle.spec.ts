@@ -1313,6 +1313,91 @@ describe("web socket runtime environment edge cases", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  test("should fail the session with the cause when an isAck classifier throws", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "WebSocket",
+      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
+    );
+    const failure = new Error("classifier failure");
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.object({
+        type: struct.literal("pong"),
+        ok: struct.boolean(),
+      }),
+      path: "/ws/test",
+    });
+    const executePromise = run(
+      createClient(withEndpoint("http://localhost")),
+      useSocket,
+      {
+        heartbeat: {
+          intervalMs: 1_000,
+          isAck() {
+            throw failure;
+          },
+        },
+      },
+    );
+
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [, socket] = await executePromise;
+    if (!socket || !lastMockInstance) {
+      throw new Error("Expected socket");
+    }
+    const pendingReceive = socket.receive[Symbol.asyncIterator]()
+      .next()
+      .catch((error: unknown) => error);
+
+    lastMockInstance.triggerMessage(JSON.stringify({ ok: true, type: "pong" }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(socket.closed).resolves.toMatchObject({
+      cause: failure,
+      kind: "error",
+    });
+    await expect(pendingReceive).resolves.toBe(failure);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("should clear a pending backlog check when the session ends first", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "WebSocket",
+      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
+    );
+    const controller = new AbortController();
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.unknown(),
+      path: "/ws/test",
+    });
+    const executePromise = run(
+      createClient(withEndpoint("http://localhost")),
+      useSocket,
+      { signal: controller.signal },
+    );
+
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [, socket] = await executePromise;
+    if (!socket || !lastMockInstance) {
+      throw new Error("Expected socket");
+    }
+    const timersBefore = vi.getTimerCount();
+
+    for (let value = 0; value < 3; value += 1) {
+      lastMockInstance.triggerMessage(JSON.stringify(value));
+    }
+    expect(vi.getTimerCount()).toBe(timersBefore + 1);
+    controller.abort(ERR_ABORTED);
+
+    await expect(socket.closed).resolves.toMatchObject({ kind: "aborted" });
+    expect(vi.getTimerCount()).toBe(timersBefore);
+  });
+
   test("should snapshot heartbeat config before beforeConnect can mutate it", async () => {
     vi.useFakeTimers();
     vi.stubGlobal(

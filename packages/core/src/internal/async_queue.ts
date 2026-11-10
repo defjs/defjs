@@ -6,23 +6,33 @@ type PendingNext<T> = {
 const NO_ERROR = Symbol("NO_ERROR");
 
 export interface AsyncQueueOptions {
-  maxSize: number;
+  /** Maximum number of queued values. Omit it to leave the queue unbounded. */
+  maxSize?: number;
 }
 
 export class AsyncQueue<T> implements AsyncIterable<T> {
   // Queued values are stored as the results `next()` hands out, so an `undefined` value is still a queued result.
   private readonly values: IteratorYieldResult<T>[] = [];
   private readonly waiting: PendingNext<T>[] = [];
-  private readonly maxSize: number;
+  private readonly maxSize: number | undefined;
   private done = false;
   private error: unknown = NO_ERROR;
   private iteratorClaimed = false;
 
-  constructor(options: AsyncQueueOptions) {
-    if (!Number.isSafeInteger(options.maxSize) || options.maxSize < 1) {
+  constructor(options: AsyncQueueOptions = {}) {
+    const { maxSize } = options;
+    if (
+      maxSize !== undefined &&
+      (!Number.isSafeInteger(maxSize) || maxSize < 1)
+    ) {
       throw new TypeError("AsyncQueue maxSize must be a positive safe integer");
     }
-    this.maxSize = options.maxSize;
+    this.maxSize = maxSize;
+  }
+
+  /** Values queued for a consumer that has not asked for them yet. */
+  get size(): number {
+    return this.values.length;
   }
 
   push(value: T): void {
@@ -36,7 +46,7 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
       return;
     }
 
-    if (this.values.length >= this.maxSize) {
+    if (this.maxSize !== undefined && this.values.length >= this.maxSize) {
       throw new Error("AsyncQueue overflow");
     }
 

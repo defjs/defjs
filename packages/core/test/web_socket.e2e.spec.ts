@@ -1,5 +1,6 @@
 import { expect, inject, test } from "vitest";
 import { createClient, defineWebSocket, struct, withEndpoint } from "../src";
+import { fixture } from "./fixture/client-auto";
 
 test("sends builder path and query, decodes discriminated incoming frames, and the server observes aliased outgoing JSON", async () => {
   const client = createClient(withEndpoint(inject("testServerHost")));
@@ -76,5 +77,33 @@ test("sends builder path and query, decodes discriminated incoming frames, and t
   } finally {
     socket.close();
     await socket.closed;
+  }
+});
+
+test("delivers a server burst larger than maxIncomingQueueSize to a consumer that keeps up", async () => {
+  const f = fixture(inject("testServerHost"), inject("fixtureToken"));
+  const frames = Array.from({ length: 100 }, (_, index) =>
+    JSON.stringify(index + 1),
+  );
+  const url = await f.endpoint("burst", "ws", { send: frames });
+  const useBurst = defineWebSocket({
+    incoming: struct.number(),
+    maxIncomingQueueSize: 4,
+    path: "/ws",
+  });
+  const [error, session] = await useBurst(createClient(withEndpoint(url)));
+  expect(error).toBeNull();
+  if (!session) throw new Error("Expected a WebSocket session");
+
+  try {
+    const received: number[] = [];
+    for await (const value of session.receive) {
+      received.push(value);
+      if (received.length === frames.length) break;
+    }
+    expect(received).toEqual(Array.from({ length: 100 }, (_, i) => i + 1));
+  } finally {
+    session.close();
+    await session.closed;
   }
 });

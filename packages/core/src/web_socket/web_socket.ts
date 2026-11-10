@@ -131,7 +131,7 @@ interface WebSocketDefinitionBase<
  *
  * - `outgoing` is the struct `session.send` validates and encodes with. Without it, `send` throws.
  *
- * - `maxIncomingQueueSize` bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow is fatal with `CAP_QUEUE_OVERFLOW` on the error delivered through `receive`, `onRuntimeError`, and `closed.cause`. It is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
+ * - `maxIncomingQueueSize` bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow is judged after the current task finishes, so frames a platform delivers in one read do not count while the consumer keeps draining; the transient excess is bounded by what arrives before that check runs. Overflow is fatal with `CAP_QUEUE_OVERFLOW` on the error delivered through `receive`, `onRuntimeError`, and `closed.cause`. It is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
  *
  * - `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.
  *
@@ -771,9 +771,7 @@ async function runWebSocketCommand<
           }
           const incomingQueue = new AsyncQueue<
             WebSocketIncomingData<TIncoming>
-          >({
-            maxSize: endpoint.maxIncomingQueueSize,
-          });
+          >();
           const closedDeferred = Promise.withResolvers<WebSocketCloseInfo>();
           const sessionController: HeartbeatSession<
             WebSocketIncomingData<TIncoming>
@@ -1110,6 +1108,7 @@ async function runWebSocketCommand<
                 let closeObserved = false;
                 let errorCloseTimer: ReturnType<typeof setTimeout> | undefined;
                 let messagePumpRunning = false;
+                let backlogTimer: ReturnType<typeof setTimeout> | undefined;
                 const messageController = new AbortController();
                 const messageSignal = mergeAbortSignals(signal, [
                   messageController.signal,
@@ -1136,6 +1135,8 @@ async function runWebSocketCommand<
 
                 const cleanup = (keepCurrentSocket: boolean) => {
                   clearErrorCloseTimer();
+                  clearTimeout(backlogTimer);
+                  backlogTimer = undefined;
                   clearTimeout(connectTimer);
                   socket.removeEventListener("open", handleOpen);
                   socket.removeEventListener("message", onMessage);
@@ -1248,6 +1249,33 @@ async function runWebSocketCommand<
                   }
                 };
 
+                // A native handle may deliver a whole read in one task, which leaves the pump no chance to run
+                // between messages. Only a backlog that survives the current task counts as overflow.
+                const armBacklogCheck = () => {
+                  backlogTimer ??= setTimeout(() => {
+                    backlogTimer = undefined;
+                    const rawOverflow =
+                      rawMessages.length > endpoint.maxIncomingQueueSize;
+                    if (
+                      !rawOverflow &&
+                      incomingQueue.size <= endpoint.maxIncomingQueueSize
+                    ) {
+                      return;
+                    }
+                    finish({
+                      cause: createPreflightFault(
+                        "CAP_QUEUE_OVERFLOW",
+                        new Error(
+                          rawOverflow
+                            ? "WebSocket raw message queue overflow"
+                            : "AsyncQueue overflow",
+                        ),
+                      ),
+                      kind: "error",
+                    });
+                  }, 0);
+                };
+
                 const handleMessage = async (event: MessageEvent) => {
                   /* istanbul ignore if -- @preserve defensive: stale physical listeners are removed before logical settlement */
                   if (finished || sessionController.currentSocket !== socket) {
@@ -1293,10 +1321,9 @@ async function runWebSocketCommand<
                       heartbeat.markAck();
                       return;
                     }
-                    try {
-                      incomingQueue.push(transformed);
-                    } catch (cause) {
-                      throw createPreflightFault("CAP_QUEUE_OVERFLOW", cause);
+                    incomingQueue.push(transformed);
+                    if (incomingQueue.size > endpoint.maxIncomingQueueSize) {
+                      armBacklogCheck();
                     }
                   } catch (cause) {
                     if (!finished) {
@@ -1343,17 +1370,10 @@ async function runWebSocketCommand<
                   ) {
                     return;
                   }
-                  if (rawMessages.length >= endpoint.maxIncomingQueueSize) {
-                    finish({
-                      cause: createPreflightFault(
-                        "CAP_QUEUE_OVERFLOW",
-                        new Error("WebSocket raw message queue overflow"),
-                      ),
-                      kind: "error",
-                    });
-                    return;
-                  }
                   rawMessages.push(event);
+                  if (rawMessages.length > endpoint.maxIncomingQueueSize) {
+                    armBacklogCheck();
+                  }
                   const messagePumpTask = pumpMessages();
                   messagePumpTasks.add(messagePumpTask);
                   void messagePumpTask.finally(() => {

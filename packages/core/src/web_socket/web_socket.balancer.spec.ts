@@ -973,7 +973,13 @@ describe("web socket endpoint balancer", () => {
     socketAt(0).open();
     const [, session] = await pending;
     if (!session) throw new Error("expected session");
-    for (let index = 0; index < 6; index += 1) socketAt(0).message("null");
+    class PendingBlob extends Blob {
+      override arrayBuffer(): Promise<ArrayBuffer> {
+        return new Promise(() => undefined);
+      }
+    }
+    socketAt(0).message(new PendingBlob());
+    for (let index = 0; index < 5; index += 1) socketAt(0).message("null");
     expect(await session.closed).toMatchObject({ kind: "error" });
     expect(record.dones).toEqual([{ attempted: true }]);
     expect(record.ends).toEqual([{ attempted: true }]);
@@ -1052,16 +1058,16 @@ describe("web socket endpoint balancer", () => {
     session.onRuntimeError(runtimeError);
     socketAt(0).message(new PendingBlob());
     expect(read).toHaveBeenCalledOnce();
-    for (let index = 0; index < 4; index += 1) socketAt(0).message("{}");
+    for (let index = 0; index < 5; index += 1) socketAt(0).message("{}");
     socketAt(0).disconnect(1006, false);
     expect(record.dones).toEqual([]);
-    bytes.resolve(new TextEncoder().encode("{}").buffer);
     const closed = await session.closed;
+    bytes.resolve(new TextEncoder().encode("{}").buffer);
     expect(closed).toMatchObject({
       kind: "error",
       cause: {
         code: "CAP_QUEUE_OVERFLOW",
-        cause: new Error("AsyncQueue overflow"),
+        cause: new Error("WebSocket raw message queue overflow"),
       },
     });
     expect(runtimeError).toHaveBeenCalledExactlyOnceWith(
