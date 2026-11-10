@@ -43,6 +43,33 @@ describe("constructors.ts bigint and date primitives", () => {
     expect(e6?.message).toContain("Expected bigint");
   });
 
+  test("bigint decodes a string exactly when BigInt() accepts it", () => {
+    const accepted: [string, bigint][] = [
+      ["", 0n],
+      [" \t\n\u00a0\ufeff", 0n],
+      [" 12 ", 12n],
+      ["+12", 12n],
+      ["007", 7n],
+      ["0x1f", 31n],
+      ["0b101", 5n],
+    ];
+    for (const [input, expected] of accepted) {
+      const [error, value] = parse(struct.bigint(), input);
+      if (error) {
+        throw error;
+      }
+      expect(value).toBe(expected);
+    }
+
+    for (const input of ["1.0", "1e3", "1_0", "12n", "-0x1f", "0x", "1 2"]) {
+      expect(() => BigInt(input)).toThrow(SyntaxError);
+      const [error, value] = parse(struct.bigint(), input);
+      expect(error).toBeInstanceOf(StructError);
+      expect(error?.message).toContain("Expected bigint");
+      expect(value).toBeUndefined();
+    }
+  });
+
   test("bigint encodes back to string wire form", () => {
     expect(encode(struct.bigint(), 42n)).toBe("42");
     const [err, parsed] = parse(struct.bigint(), "9007199254740993");
