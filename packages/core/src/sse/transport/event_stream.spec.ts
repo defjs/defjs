@@ -667,7 +667,7 @@ describe("SSE final endpoint attribution", () => {
     },
     {
       mode: "handshake-body",
-      code: "RES_DECODE_FAILED",
+      code: "HTTP_STATUS",
       startup: true,
       status: 503,
     },

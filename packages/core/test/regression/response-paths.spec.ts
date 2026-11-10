@@ -138,10 +138,11 @@ test("reports an unreadable declared SSE handshake body as a decode fault", asyn
 
   const [fault, stream] = await endpoint(client);
 
-  // The published handshake contract requires RES_DECODE_FAILED. HTTP_STATUS with
-  // undefined data also violates the public contract for the declared error struct.
-  expect(fault?.code).toBe("RES_DECODE_FAILED");
+  // A non-2xx handshake is HTTP_STATUS whether or not its declared error body decoded; the
+  // type admits `undefined` data for the undecoded case.
+  expect(fault?.code).toBe("HTTP_STATUS");
   expect(fault?.response?.status).toBe(403);
+  expect(fault?.cause).toBeInstanceOf(Error);
   expect(stream).toBeUndefined();
 });
 

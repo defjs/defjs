@@ -312,3 +312,206 @@ describe("F031 SSE first successful handshake snapshot", () => {
     },
   );
 });
+
+describe("handshake status faults reach the caller's hooks", () => {
+  const useDeclared = defineEventStream({
+    events: { message: struct.string() },
+    error: struct.object({ code: struct.string() }),
+    path: "/events",
+  });
+
+  const undecodable = [
+    ["a wrong media type", "text/html", "<html>unavailable</html>"],
+    ["an unparsable body", "application/json", "{broken"],
+    ["a body that fails the struct", "application/json", '{"code":1}'],
+  ] as const;
+
+  function answering(status: number, contentType: string, body: string) {
+    return vi.fn(() =>
+      Promise.resolve(
+        new Response(body, {
+          status,
+          headers: { "content-type": contentType },
+        }),
+      ),
+    );
+  }
+
+  function observed(handle: ReturnType<typeof answering>, attempts: number) {
+    const interceptorSaw: unknown[] = [];
+    const policySaw: unknown[] = [];
+    const client = createClient(
+      withEndpoint("https://example.test"),
+      withSSEHandle(handle),
+      withSSEReconnect({
+        attempts,
+        delayMs: 0,
+        shouldReconnect: (context) => {
+          policySaw.push(context.cause);
+          return true;
+        },
+      }),
+      withInterceptors(
+        createSSEInterceptor(async (request, next) => {
+          try {
+            return await next(request);
+          } catch (error) {
+            interceptorSaw.push(error);
+            throw error;
+          }
+        }),
+      ),
+    );
+    return { client, interceptorSaw, policySaw };
+  }
+
+  test.each(
+    [502, 503, 504].flatMap((status) =>
+      undecodable.map(([label, contentType, body]) => ({
+        status,
+        label,
+        contentType,
+        body,
+      })),
+    ),
+  )(
+    "reports a $status handshake with $label as HTTP_STATUS at startup, to the interceptor and to the reconnect policy",
+    async ({ status, contentType, body }) => {
+      const handle = answering(status, contentType, body);
+      const { client, interceptorSaw, policySaw } = observed(handle, 1);
+
+      const [fault, stream, open] = await useDeclared(client);
+
+      expect(stream).toBeUndefined();
+      expect(handle).toHaveBeenCalledTimes(2);
+      expect(fault).toMatchObject({
+        name: "DefjsFault",
+        code: "HTTP_STATUS",
+        status,
+        data: undefined,
+      });
+      // The decode failure is kept as the cause.
+      expect(fault).toHaveProperty("cause", expect.any(Error));
+      expect(open?.response.status).toBe(status);
+      expect(interceptorSaw).toHaveLength(1);
+      expect(interceptorSaw[0]).toMatchObject({ code: "HTTP_STATUS", status });
+      expect(policySaw).toHaveLength(2);
+      for (const cause of policySaw) {
+        expect(cause).toMatchObject({ code: "HTTP_STATUS", status });
+      }
+    },
+  );
+
+  test.each(
+    [401, 500].flatMap((status) =>
+      undecodable.map(([label, contentType, body]) => ({
+        status,
+        label,
+        contentType,
+        body,
+      })),
+    ),
+  )(
+    "reports a fatal $status handshake with $label as HTTP_STATUS without calling the reconnect policy",
+    async ({ status, contentType, body }) => {
+      const handle = answering(status, contentType, body);
+      const { client, interceptorSaw, policySaw } = observed(handle, 1);
+
+      const [fault] = await useDeclared(client);
+
+      expect(handle).toHaveBeenCalledOnce();
+      expect(fault).toMatchObject({
+        code: "HTTP_STATUS",
+        status,
+        data: undefined,
+      });
+      expect(interceptorSaw).toHaveLength(1);
+      expect(interceptorSaw[0]).toMatchObject({ code: "HTTP_STATUS", status });
+      expect(policySaw).toEqual([]);
+    },
+  );
+
+  test("keeps a plain Error as the cause of a wrong media type", async () => {
+    const { client } = observed(answering(401, "text/html", "<html/>"), 0);
+
+    const [fault] = await useDeclared(client);
+
+    expect(fault).toHaveProperty(
+      "cause.message",
+      expect.stringContaining("text/html"),
+    );
+    expect(Object.getPrototypeOf(fault?.cause)).toBe(Error.prototype);
+  });
+
+  test("keeps the decoded error body of a gateway response", async () => {
+    const { client, interceptorSaw } = observed(
+      answering(503, "application/json", '{"code":"busy"}'),
+      0,
+    );
+
+    const [fault] = await useDeclared(client);
+
+    expect(fault).toMatchObject({
+      code: "HTTP_STATUS",
+      status: 503,
+      data: { code: "busy" },
+    });
+    expect(interceptorSaw[0]).toMatchObject({
+      code: "HTTP_STATUS",
+      status: 503,
+    });
+  });
+
+  test("ends a reconnect that meets an HTML 503 with HTTP_STATUS on the iterator and on closed", async () => {
+    const encoder = new TextEncoder();
+    let calls = 0;
+    let sent = false;
+    const handle = vi.fn(() => {
+      calls += 1;
+      return Promise.resolve(
+        calls === 1
+          ? new Response(
+              new ReadableStream<Uint8Array>({
+                pull(controller) {
+                  if (sent) {
+                    controller.error(new TypeError("connection reset"));
+                    return;
+                  }
+                  sent = true;
+                  controller.enqueue(encoder.encode("id: 1\ndata: a\n\n"));
+                },
+              }),
+              { headers: { "content-type": "text/event-stream" } },
+            )
+          : new Response("<html>503</html>", {
+              status: 503,
+              headers: { "content-type": "text/html" },
+            }),
+      );
+    });
+    const client = createClient(
+      withEndpoint("https://example.test"),
+      withSSEHandle(handle),
+      withSSEReconnect({ attempts: 1, delayMs: 0 }),
+    );
+
+    const [error, stream] = await useDeclared(client);
+    expect(error).toBeNull();
+    if (!stream) throw new Error("expected a stream");
+    const received: unknown[] = [];
+    const failure = await (async () => {
+      try {
+        for await (const event of stream) received.push(event.data);
+      } catch (cause) {
+        return cause;
+      }
+      return undefined;
+    })();
+    const closed = await stream.closed;
+
+    expect(received).toEqual(["a"]);
+    expect(failure).toMatchObject({ code: "HTTP_STATUS", status: 503 });
+    expect(closed).toMatchObject({ kind: "error", code: "HTTP_STATUS" });
+    expect(stream.open.response.status).toBe(503);
+  });
+});

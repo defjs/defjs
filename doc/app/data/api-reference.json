@@ -6462,9 +6462,9 @@
     "slug": "core/streamawaitresult-type",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "Await-result tuple from opening an SSE stream.\n\n- On success: `[null, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live.\n\n- On failure: `[fault, undefined, open]`. `open` carries the response snapshot when the failure happened after a response arrived, for example a non-2xx handshake, and is `undefined` otherwise.\n\n- `TError` is the declared `error` struct. It types the decoded error body on the fault.",
+    "description": "Await-result tuple from opening an SSE stream.\n\n- On success: `[null, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live.\n\n- On failure: `[fault, undefined, open]`. `open` carries the response snapshot when the failure happened after a response arrived, for example a non-2xx handshake, and is `undefined` otherwise.\n\n- `TError` is the declared `error` struct. It types the decoded error body on the fault.\n\n- A non-2xx handshake is always an `HTTP_STATUS` fault. When the declared `error` body could not be decoded (wrong media type, unreadable, or not matching the struct), `data` is `undefined`, `response` carries metadata only, and `cause` holds the decode failure.",
     "signatures": [
-      "type StreamAwaitResult<\n  TEvent,\n  TError extends AnyStruct | undefined = undefined,\n> =\n  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]\n  | [\n      error: Fault<TError>,\n      stream: undefined,\n      open: EventStreamOpenInfo | undefined,\n    ];"
+      "type StreamAwaitResult<\n  TEvent,\n  TError extends AnyStruct | undefined = undefined,\n> =\n  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]\n  | [\n      error: Fault<TError> | HttpStatusFaultOf<undefined>,\n      stream: undefined,\n      open: EventStreamOpenInfo | undefined,\n    ];"
     ],
     "related": [],
     "exampleFiles": [],
@@ -6475,7 +6475,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type StreamAwaitResult<\n  TEvent,\n  TError extends AnyStruct | undefined = undefined,\n> =\n  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]\n  | [\n      error: Fault<TError>,\n      stream: undefined,\n      open: EventStreamOpenInfo | undefined,\n    ];",
+        "signature": "type StreamAwaitResult<\n  TEvent,\n  TError extends AnyStruct | undefined = undefined,\n> =\n  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]\n  | [\n      error: Fault<TError> | HttpStatusFaultOf<undefined>,\n      stream: undefined,\n      open: EventStreamOpenInfo | undefined,\n    ];",
         "parameters": [],
         "returns": []
       }

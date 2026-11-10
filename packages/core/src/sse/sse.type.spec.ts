@@ -24,6 +24,7 @@ import {
   type EventStreamFaultCode,
   type EventStructs,
   type Fault,
+  type HttpStatusFaultOf,
 } from "../index";
 import type {
   EventStreamHandle,
@@ -267,9 +268,15 @@ async function assertDeclaredSseStartupFault(): Promise<void> {
     return;
   }
 
-  expectTypeOf(error).toEqualTypeOf<Fault<typeof SseError>>();
+  // A non-2xx handshake whose declared error body cannot be decoded is an HTTP_STATUS fault without `data`.
+  expectTypeOf(error).toEqualTypeOf<
+    Fault<typeof SseError> | HttpStatusFaultOf<undefined>
+  >();
   if (error.code === "HTTP_STATUS") {
-    expectTypeOf(error.data.code).toEqualTypeOf<string>();
+    expectTypeOf(error.data).toEqualTypeOf<{ code: string } | undefined>();
+    if (error.data !== undefined) {
+      expectTypeOf(error.data.code).toEqualTypeOf<string>();
+    }
   }
 }
 void assertDeclaredSseStartupFault;

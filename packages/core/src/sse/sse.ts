@@ -2,7 +2,12 @@ import type { Client } from "../client/client";
 import { CLIENT } from "../client/client";
 import type { ClientConfig, ClientSSEOptions } from "../client/config";
 import { DEFAULT_FETCH, ERR_FETCH_UNSUPPORTED } from "../client/config";
-import type { AnyFault, Fault, PreflightFault } from "../error";
+import type {
+  DecodeFault,
+  Fault,
+  HttpStatusFaultOf,
+  PreflightFault,
+} from "../error";
 import {
   createDecodeFault,
   createNetworkFault,
@@ -25,7 +30,7 @@ import { parseEndpointInput } from "../internal/endpoint_input";
 import { createTransportOrigin } from "../internal/transport_origin";
 import { normalizeReconnectOptions } from "../internal/reconnect_options";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
-import type { HttpResponse } from "../internal/http_response";
+import type { DecodedResponse, HttpResponse } from "../internal/http_response";
 import type {
   BuilderField,
   EventStreamRequestShape,
@@ -43,13 +48,13 @@ import type {
   EventStreamHandle,
   EventStreamOpenInfo,
   FetchEventStreamOptions,
+  HandshakeBody,
 } from "./transport/event_stream";
 import { SSE_RECONNECT_DEFAULTS } from "./transport/event_stream";
 import {
   createHandshakeStatusFault,
   fetchEventStream,
   getEventStreamFatalCode,
-  handshakeDecodeCause,
   isEventStreamPickFault,
   toEventStreamMeta,
 } from "./transport/event_stream";
@@ -158,6 +163,8 @@ export type { EventStreamRequestShape } from "../internal/builder_types";
  *
  * - `TError` is the declared `error` struct. It types the decoded error body on the fault.
  *
+ * - A non-2xx handshake is always an `HTTP_STATUS` fault. When the declared `error` body could not be decoded (wrong media type, unreadable, or not matching the struct), `data` is `undefined`, `response` carries metadata only, and `cause` holds the decode failure.
+ *
  * @group sse
  */
 export type StreamAwaitResult<
@@ -166,7 +173,7 @@ export type StreamAwaitResult<
 > =
   | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
   | [
-      error: Fault<TError>,
+      error: Fault<TError> | HttpStatusFaultOf<undefined>,
       stream: undefined,
       open: EventStreamOpenInfo | undefined,
     ];
@@ -429,7 +436,10 @@ async function runEventStreamCommand<
     let streamDelivered = false;
     const ownedStreams = new Set<OwnedStream>();
     const transportOrigin = createTransportOrigin();
-    const errorOpenInfo = new Map<unknown, EventStreamOpenInfo | undefined>();
+    const errorFailure = new Map<
+      unknown,
+      EventStreamFailureInfo<HandshakeBody<TError>>
+    >();
     try {
       const sseInterceptors = resolveSSEInterceptors(clientConfig.interceptors);
       const sseHandler: SSEHandler = (req) => {
@@ -506,7 +516,7 @@ async function runEventStreamCommand<
           releaseAbortSignal(streamAbort);
           releaseAbortSignal(transportAbort);
         };
-        const failure: EventStreamFailureInfo = {};
+        const failure: EventStreamFailureInfo<HandshakeBody<TError>> = {};
         const endpointAttempt =
           attributed && !settled
             ? {
@@ -555,7 +565,10 @@ async function runEventStreamCommand<
             // A no-op once the transport has reported; it only takes effect when fetchEventStream fails before its first attempt starts.
             endpointAttempt?.done({ attempted: false });
             owned.release?.();
-            errorOpenInfo.set(cause, failure.open);
+            errorFailure.set(cause, {
+              open: failure.open,
+              decoded: failure.decoded,
+            });
             throw transportOrigin.mark(cause);
           },
         );
@@ -612,14 +625,18 @@ async function runEventStreamCommand<
 
       const fromTransport = transportOrigin.has(error);
       const cause = error;
-      const openInfo = errorOpenInfo.get(cause);
+      const { open: openInfo, decoded } = errorFailure.get(cause) ?? {};
       const fault = requestSignal.aborted
         ? resolveAbortedFault(requestSignal)
         : error instanceof RequestUrlError
           ? createPreflightFault("REQ_BUILD_FAILED", error)
-          : createEventStreamFault(cause, fromTransport, openInfo?.response);
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the transport decoded a handshake error body with this definition's `error` struct, but the published StreamAwaitResult error slot is Fault<TError>, a conditional on the caller's generic TError. Unasserted: TS2322, `AnyFault` is not assignable to `Fault<TError> | null`
-      return [fault as Fault<TError>, undefined, openInfo];
+          : createEventStreamFault(
+              cause,
+              fromTransport,
+              openInfo?.response,
+              decoded,
+            );
+      return [fault, undefined, openInfo];
     } finally {
       if (!streamDelivered) {
         releaseAbortSignal(requestSignal);
@@ -761,43 +778,34 @@ function decodeSSEEventData(struct: AnyStruct, data: string): unknown {
   return decodeJson(struct, JSON.parse(data));
 }
 
-function createEventStreamFault(
+function createEventStreamFault<TBody>(
   cause: unknown,
   fromTransport: boolean,
   response?: HttpResponse<unknown>,
-): AnyFault {
+  decoded?: DecodedResponse<TBody>,
+):
+  | DecodeFault
+  | HttpStatusFaultOf<TBody>
+  | HttpStatusFaultOf<undefined>
+  | PreflightFault {
   // Only a reconnect pick inside the transport produces these; an interceptor-thrown fault keeps its old mapping.
   if (fromTransport && isEventStreamPickFault(cause)) {
     return cause;
   }
 
   const fatal = getEventStreamFatalCode(cause);
-  // The JSON media-type precheck is a decode fault on every status.
   if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
-    return createDecodeFault(
-      fatal,
-      handshakeDecodeCause(cause),
-      toEventStreamMeta(response),
-    );
+    return createDecodeFault(fatal, cause, toEventStreamMeta(response));
   }
 
+  // The status decides the code of a non-2xx handshake, whether or not its declared error body decoded.
   if (response && !response.ok) {
-    return fatal === "RES_DECODE_FAILED"
-      ? createDecodeFault(
-          fatal,
-          handshakeDecodeCause(cause),
-          toEventStreamMeta(response),
-        )
-      : createHandshakeStatusFault(response);
+    return createHandshakeStatusFault(response, decoded);
   }
 
   // `CAP_*` and `EXT_*` happen after the stream opens, so they settle `closed` rather than startup.
   if (response && fatal === "RES_DECODE_FAILED") {
-    return createDecodeFault(
-      fatal,
-      handshakeDecodeCause(cause),
-      toEventStreamMeta(response),
-    );
+    return createDecodeFault(fatal, cause, toEventStreamMeta(response));
   }
 
   if (

@@ -82,9 +82,10 @@ test("SSE handshake errors use the same JSON media-type validation", async () =>
       ),
     );
     const [fault, stream] = await endpoint(client);
-    expect(fault?.code).toBe(valid ? "HTTP_STATUS" : "RES_MEDIA_TYPE_INVALID");
+    expect(fault?.code).toBe("HTTP_STATUS");
     expect(stream).toBeUndefined();
-    if (fault?.code === "HTTP_STATUS") expect(fault.data).toBeNull();
+    if (fault?.code === "HTTP_STATUS")
+      expect(fault.data).toBe(valid ? null : undefined);
   }
 });
 

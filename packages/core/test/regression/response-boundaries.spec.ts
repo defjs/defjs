@@ -369,7 +369,7 @@ test("a bodiless declared string SSE error decodes to an empty string", async ()
   }
 });
 
-test("a bodiless SSE response cannot return typed HTTP_STATUS with missing data", async () => {
+test("a bodiless SSE response returns HTTP_STATUS typed to admit missing data", async () => {
   const client = createClient(
     withEndpoint("https://example.test"),
     withSSEHandle(() =>
@@ -380,10 +380,11 @@ test("a bodiless SSE response cannot return typed HTTP_STATUS with missing data"
   );
   const endpoint = defineEventStream({ ...eventOptions, error: JsonError });
   const [fault, stream] = await endpoint(client);
-  const unsafeRead = () =>
-    fault?.code === "HTTP_STATUS" ? fault.data.reason : undefined;
-  expect(unsafeRead).not.toThrow();
-  expect(fault?.code).toBe("RES_DECODE_FAILED");
+  const read = () =>
+    fault?.code === "HTTP_STATUS" ? fault.data?.reason : undefined;
+  expect(read).not.toThrow();
+  expect(read()).toBeUndefined();
+  expect(fault?.code).toBe("HTTP_STATUS");
   expect(fault?.response?.status).toBe(403);
   expect(stream).toBeUndefined();
 });
