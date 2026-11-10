@@ -265,11 +265,17 @@ describe("web socket startup faults", () => {
   });
 
   test("should close every socket when binaryType is read-only", async () => {
-    const sockets: Array<{ closeCalls: number; readyState: number }> = [];
+    const sockets: Array<{
+      closeCalls: number;
+      errorListenersAtClose: number;
+      readyState: number;
+    }> = [];
     class ReadOnlyBinaryTypeSocket {
       static readonly OPEN = 1;
       bufferedAmount = 0;
       closeCalls = 0;
+      errorListeners = 0;
+      errorListenersAtClose = 0;
       extensions = "";
       protocol = "";
       readyState = 1;
@@ -286,12 +292,15 @@ describe("web socket startup faults", () => {
 
       close(): void {
         this.closeCalls += 1;
+        this.errorListenersAtClose = this.errorListeners;
         this.readyState = 3;
       }
 
       send(_data: string): void {}
 
-      addEventListener(): void {}
+      addEventListener(type: string): void {
+        if (type === "error") this.errorListeners += 1;
+      }
 
       removeEventListener(): void {}
     }
@@ -314,5 +323,10 @@ describe("web socket startup faults", () => {
       ),
     ).toHaveLength(0);
     expect(sockets.every((socket) => socket.closeCalls === 1)).toBe(true);
+    // An EventEmitter-based handle (ws) throws a late `error` that has no listener, so the
+    // transport must already have an error listener installed when it closes the socket.
+    expect(sockets.every((socket) => socket.errorListenersAtClose >= 1)).toBe(
+      true,
+    );
   });
 });

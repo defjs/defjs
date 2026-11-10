@@ -37,7 +37,7 @@ export type FetchHandle = (
  *
  * It is the DOM `WebSocket` without its event-handler properties, `binaryType`, `dispatchEvent`, and the state constants. A custom implementation therefore needs `url`, `protocol`, `extensions`, `bufferedAmount`, `send`, `close`, `addEventListener`, `removeEventListener`, and a numeric `readyState`.
  *
- * The transport sets `binaryType = 'arraybuffer'` when the property exists and ignores its absence. If the setter throws, it requests best-effort closure of the constructed handle before failing that attempt with `NET_UNREACHABLE`; the socket is not left outside cleanup. This property is an optimization, and the decoder also accepts Blob frames. This is the instance type produced by a {@link WebSocketHandleConstructor}.
+ * The transport sets `binaryType = 'arraybuffer'` when the property exists and ignores its absence. If the setter throws, it requests best-effort closure of the constructed handle before failing that attempt with `NET_UNREACHABLE`; the socket is not left outside cleanup. When the transport stops listening to a handle's `error` event, it leaves a no-op `error` listener that it never removes, so an implementation that throws for an `error` event without listeners (an `EventEmitter`-based one such as `ws` does when it is closed while connecting) cannot crash the process after the transport has detached its own listeners. This property is an optimization, and the decoder also accepts Blob frames. This is the instance type produced by a {@link WebSocketHandleConstructor}.
  *
  * @group client
  */

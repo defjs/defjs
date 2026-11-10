@@ -141,7 +141,8 @@ function createMockWebSocketClass(
       });
       this.addEventListener = (type: string, fn: (event: unknown) => void) => {
         this.listeners[type] = this.listeners[type] || [];
-        this.listeners[type].push(fn);
+        // DOM: registering a callback that is already registered for the type is a no-op.
+        if (!this.listeners[type].includes(fn)) this.listeners[type].push(fn);
         onListenerRegistered?.(type);
       };
       this.removeEventListener = (
@@ -275,6 +276,24 @@ function soleListener(
     throw new Error(`Expected one ${type} listener`);
   }
   return listener;
+}
+
+// Whenever the transport detaches its own `error` handler, one no-op `error` listener must remain so a
+// late `error` from an EventEmitter-based handle has a receiver. The survivor must be that sink and not a
+// transport handler left behind: a leftover `handleError` would close the socket again when it runs.
+function expectInertErrorListener(socket: MockWebSocketInstance): void {
+  const errorListeners = socket.listenerRefs("error");
+  expect(errorListeners).toHaveLength(1);
+  const closeCalls = vi.mocked(socket.close).mock.calls.length;
+  errorListeners[0]?.(new Event("error"));
+  expect(socket.close).toHaveBeenCalledTimes(closeCalls);
+}
+
+function expectOnlyErrorSink(socket: MockWebSocketInstance): void {
+  expect(socket.listenerCount("open")).toBe(0);
+  expect(socket.listenerCount("message")).toBe(0);
+  expect(socket.listenerCount("close")).toBe(0);
+  expectInertErrorListener(socket);
 }
 
 function expectListenerReleased(
@@ -1404,7 +1423,7 @@ describe("web socket runtime environment edge cases", () => {
           const nativeSocket = lastMockInstance;
           if (!nativeSocket) throw new Error("Expected physical socket");
           expect(nativeSocket.close).toHaveBeenCalledTimes(1);
-          expect(nativeSocket.listenerCount()).toBe(0);
+          expectOnlyErrorSink(nativeSocket);
 
           nativeSocket.triggerOpen();
           nativeSocket.triggerMessage("null");
@@ -1416,7 +1435,7 @@ describe("web socket runtime environment edge cases", () => {
           });
           await vi.runAllTimersAsync();
 
-          expect(nativeSocket.listenerCount()).toBe(0);
+          expectOnlyErrorSink(nativeSocket);
           expect(nativeSocket.close).toHaveBeenCalledTimes(1);
           expect(mockInstances).toHaveLength(1);
           expect(vi.getTimerCount()).toBe(0);
@@ -1452,8 +1471,86 @@ describe("web socket runtime environment edge cases", () => {
     expect(error?.code).toBe("NET_ABORTED");
     expect(session).toBeUndefined();
     expect(nativeSocket.close).toHaveBeenCalledOnce();
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
     await vi.runAllTimersAsync();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("ignores a late error after a connecting attempt was cancelled", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const controller = new AbortController();
+    const endpoint = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.unknown(),
+      path: "/ws/test",
+    });
+
+    const pending = run(
+      createClient(withEndpoint("http://localhost")),
+      endpoint,
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    const nativeSocket = lastMockInstance;
+    if (!nativeSocket) throw new Error("Expected physical socket");
+    controller.abort(ERR_ABORTED);
+    const [error, session] = await pending;
+
+    expect(error?.code).toBe("NET_ABORTED");
+    expect(session).toBeUndefined();
+    expect(nativeSocket.close).toHaveBeenCalledOnce();
+    // Closing a CONNECTING socket makes `ws` emit this error afterwards, and it throws when
+    // the error has no listener.
+    expect(() => nativeSocket.triggerError()).not.toThrow();
+    expectOnlyErrorSink(nativeSocket);
+    await vi.runAllTimersAsync();
+    expect(mockInstances).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("reports a manual close, not the late error, when session.close() runs during a reconnect handshake", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const endpoint = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.unknown(),
+      path: "/ws/test",
+    });
+    const pending = run(
+      createClient(
+        withEndpoint("http://localhost"),
+        withWebSocketReconnect({ attempts: 1, delayMs: 0 }),
+      ),
+      endpoint,
+    );
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    const first = lastMockInstance;
+    first?.triggerOpen();
+    const [, socket] = await pending;
+    if (!socket || !first) throw new Error("Expected socket");
+    let runtimeError: unknown;
+    socket.onRuntimeError((error: unknown) => {
+      runtimeError = error;
+    });
+
+    first.triggerClose({ code: 1006, reason: "", wasClean: false });
+    await vi.waitFor(() => expect(mockInstances).toHaveLength(2));
+    const replacement = mockInstances[1];
+    if (!replacement) throw new Error("Expected replacement socket");
+    expect(replacement.readyState).toBe(0);
+
+    // `close()` on a CONNECTING socket fails the connection; `ws` then emits a late `error`.
+    socket.close();
+    expect(replacement.close).toHaveBeenCalledOnce();
+    expect(() => replacement.triggerError()).not.toThrow();
+    await vi.runAllTimersAsync();
+
+    await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
+    expect(socket.state).toBe("closed");
+    expect(runtimeError).toBeUndefined();
+    expect(mockInstances).toHaveLength(2);
+    expectOnlyErrorSink(replacement);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -1511,6 +1608,9 @@ describe("web socket runtime environment edge cases", () => {
     }
 
     nativeSocket.triggerError();
+    // `handleError` detaches itself before the close event arrives and leaves the no-op sink.
+    expect(nativeSocket.close).toHaveBeenCalledOnce();
+    expectInertErrorListener(nativeSocket);
 
     const closed = await socket.closed;
     expect(closed.kind).toBe("error");
@@ -1892,7 +1992,7 @@ describe("web socket runtime environment edge cases", () => {
     expect(socket.connection.generation).toBe(2);
     abortListeners.assertReleased(generation);
     for (const nativeSocket of mockInstances) {
-      expect(nativeSocket.listenerCount()).toBe(0);
+      expectOnlyErrorSink(nativeSocket);
     }
   });
 
@@ -3612,7 +3712,7 @@ describe("web socket runtime environment edge cases", () => {
       removeEventListener.mock.calls.length;
     expect(socket.bufferedAmount).toBe(0);
     expect(nativeSocket.close).toHaveBeenCalledTimes(2);
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
 
     await expect(
       Promise.resolve(socket[Symbol.asyncDispose]()),
@@ -3622,7 +3722,7 @@ describe("web socket runtime environment edge cases", () => {
     expect(removeEventListener).toHaveBeenCalledTimes(
       removeEventListenerCallsAfterClose,
     );
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
   });
 
   test.each([1000, 3000, 4999])("should accept close code %s", async (code) => {
@@ -4546,7 +4646,7 @@ describe("web socket runtime environment edge cases", () => {
       value: undefined,
     });
     expect(nativeSocket.close).toHaveBeenCalledTimes(1);
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -4585,7 +4685,7 @@ describe("web socket runtime environment edge cases", () => {
       Promise.resolve(socket[Symbol.asyncDispose]()),
     ).resolves.toBeUndefined();
     expect(socket.state).toBe("closed");
-    expect(firstSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(firstSocket);
     expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(mockInstances).toHaveLength(1);
@@ -4627,7 +4727,7 @@ describe("web socket runtime environment edge cases", () => {
       done: true,
       value: undefined,
     });
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
   });
 
   test("should preserve an observed remote close when disposal starts after a blocked message pump", async () => {
@@ -4665,6 +4765,8 @@ describe("web socket runtime environment edge cases", () => {
       reason: "remote-finished",
       wasClean: true,
     });
+    // The blocked pump keeps the attempt unsettled, so only `handleClose` has detached `error` so far.
+    expectInertErrorListener(nativeSocket);
 
     const disposal = Promise.resolve(socket[Symbol.asyncDispose]()).then(
       () => ({ status: "resolved" as const }),
@@ -4683,7 +4785,7 @@ describe("web socket runtime environment edge cases", () => {
       done: true,
       value: undefined,
     });
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -4743,7 +4845,7 @@ describe("web socket runtime environment edge cases", () => {
         value: undefined,
       });
       expect(socket.state).toBe("closed");
-      expect(nativeSocket.listenerCount()).toBe(0);
+      expectOnlyErrorSink(nativeSocket);
       expect(vi.getTimerCount()).toBe(0);
     },
   );
@@ -4791,7 +4893,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     await expect(pendingReceive).resolves.toBe(firstFailure);
     expect(nativeSocket.close).toHaveBeenCalledTimes(2);
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
     expect(socket.bufferedAmount).toBe(0);
   });
 
@@ -4829,7 +4931,7 @@ describe("web socket runtime environment edge cases", () => {
     expect(terminal).toMatchObject({ cause: abortCause, kind: "aborted" });
     expect(socket.state).toBe("aborted");
     expect(nativeSocket.close).toHaveBeenCalledTimes(closeCalls);
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
   });
 
   test("should only await teardown when disposing an already errored session", async () => {
@@ -4869,7 +4971,7 @@ describe("web socket runtime environment edge cases", () => {
     expect(terminal.cause).toBeInstanceOf(Error);
     expect(socket.state).toBe("error");
     expect(nativeSocket.close).toHaveBeenCalledTimes(closeCalls);
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
   });
 });
 
@@ -5113,7 +5215,7 @@ describe("web socket incoming frame path", () => {
       Promise.resolve(socket[Symbol.asyncDispose]()),
     ).resolves.toBeUndefined();
     await expect(pendingReceive).resolves.toBe(abortCause);
-    expect(native.listenerCount()).toBe(0);
+    expectOnlyErrorSink(native);
   });
 
   test("should drop the frames queued behind a Blob read when the session is disposed", async () => {
@@ -5185,7 +5287,7 @@ describe("web socket incoming frame path", () => {
       value: undefined,
     });
     expect(socket.state).toBe("closed");
-    expect(nativeSocket.listenerCount()).toBe(0);
+    expectOnlyErrorSink(nativeSocket);
     expect(vi.getTimerCount()).toBe(0);
   });
 });

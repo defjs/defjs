@@ -1092,6 +1092,8 @@ async function runWebSocketCommand<
             } catch (error) {
               // A missing property is only an ArrayBuffer hint. A setter that throws has already
               // constructed a socket no later cleanup can see, so close it before reporting the failure.
+              // Closing a CONNECTING socket still emits a late `error`: keep a listener for it.
+              socket.addEventListener("error", ignoreSocketError);
               requestNativeCloseBestEffort(socket);
               return connectFailure(error);
             }
@@ -1124,13 +1126,21 @@ async function runWebSocketCommand<
                   errorCloseTimer = undefined;
                 };
 
+                // Closing a CONNECTING socket still emits a late `error`. An EventEmitter-based handle such
+                // as `ws` throws it when nothing listens, so a no-op listener replaces `handleError` and is
+                // never removed. Adding the same listener again is a no-op for an EventTarget.
+                const detachErrorListener = () => {
+                  socket.addEventListener("error", ignoreSocketError);
+                  socket.removeEventListener("error", handleError);
+                };
+
                 const cleanup = (keepCurrentSocket: boolean) => {
                   clearErrorCloseTimer();
                   clearTimeout(connectTimer);
                   socket.removeEventListener("open", handleOpen);
                   socket.removeEventListener("message", onMessage);
                   socket.removeEventListener("close", handleClose);
-                  socket.removeEventListener("error", handleError);
+                  detachErrorListener();
                   signal.removeEventListener("abort", handleAbort);
                   // Registration may synchronously settle this attempt and then attach more listeners.
                   // Re-detach those listeners without touching a replacement runtime's owned state.
@@ -1355,7 +1365,7 @@ async function runWebSocketCommand<
                   runtimeCause =
                     runtimeCause ?? new Error("WebSocket connection error");
                   stopHeartbeat(sessionController);
-                  socket.removeEventListener("error", handleError);
+                  detachErrorListener();
                   errorCloseTimer = setTimeout(() => {
                     errorCloseTimer = undefined;
                     finish(
@@ -1383,7 +1393,7 @@ async function runWebSocketCommand<
                   sessionController.heartbeat?.stop();
                   socket.removeEventListener("open", handleOpen);
                   socket.removeEventListener("message", onMessage);
-                  socket.removeEventListener("error", handleError);
+                  detachErrorListener();
                   closeOutcome = {
                     closeInfo: extractCloseInfo(event, runtimeCause),
                     connection: connectionInfo(),
@@ -2033,6 +2043,8 @@ function connectFailure(error: unknown): SocketLifecycleOutcome {
     opened: false,
   };
 }
+
+function ignoreSocketError(): void {}
 
 function requestNativeCloseBestEffort(socket: WebSocketHandle): void {
   try {
