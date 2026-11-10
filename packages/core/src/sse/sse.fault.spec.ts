@@ -280,6 +280,29 @@ describe("sse startup faults", () => {
   });
 });
 
+describe("sse misuse", () => {
+  test.each([{}, 123])(
+    "should reject with TypeError for a signal that is not an AbortSignal: %j",
+    async (signal) => {
+      const handle = vi.fn(() =>
+        Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
+      );
+      const client = createClient(
+        withEndpoint("https://api.example.test"),
+        withSSEHandle(handle),
+      );
+
+      await expect(
+        useStream(
+          // @ts-expect-error signal must be an AbortSignal
+          client({ signal }),
+        ),
+      ).rejects.toBeInstanceOf(TypeError);
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe("sse interceptor results", () => {
   test.each(MALFORMED_INTERCEPTOR_RESULTS)(
     "should report %s as the interceptor result with EXT_INTERCEPTOR_FAILED",

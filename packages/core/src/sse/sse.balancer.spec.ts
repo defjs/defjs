@@ -1200,6 +1200,143 @@ test("does not call done when the initial pick fails, and calls it once when bui
   expectPicks(recorded);
 });
 
+test("reports EXT_INTERCEPTOR_FAILED and calls done once when an interceptor passes a header value Headers rejects", async () => {
+  const handle = vi.fn(() => Promise.resolve(sseResponse("data: hi\n\n")));
+  const recorded = track(() => "https://example.com");
+  let thrownSynchronously = false;
+  const [error, stream] = await orders(
+    createClient(
+      withEndpoint("https://example.com"),
+      withBalancer(recorded.balancer),
+      withSSEHandle(handle),
+      withInterceptors(
+        createSSEInterceptor((req, next) => {
+          // @ts-expect-error -- A plain record is not a Headers; only an untyped interceptor can hand it over.
+          req.headers = { "x-name": "\u4e2d" };
+          try {
+            return next(req);
+          } catch (cause) {
+            thrownSynchronously = true;
+            throw cause;
+          }
+        }),
+      ),
+    ),
+  );
+  expect(thrownSynchronously).toBe(false);
+  expect(stream).toBeUndefined();
+  expect(error?.code).toBe("EXT_INTERCEPTOR_FAILED");
+  expect(error?.cause).toBeInstanceOf(TypeError);
+  expect(handle).not.toHaveBeenCalled();
+  expect(recorded.dones).toEqual([
+    { endpoint: "https://example.com", info: { attempted: false } },
+  ]);
+  expect(recorded.ends).toHaveLength(0);
+  expect(recorded.pending()).toBe(0);
+  expectPicks(recorded);
+});
+
+test("calls done once when fetchEventStream fails before its first attempt starts", async () => {
+  const handle = vi.fn(() => Promise.resolve(sseResponse("data: hi\n\n")));
+  const recorded = track(() => "https://example.com");
+  const [error, stream] = await orders(
+    createClient(
+      withEndpoint("https://example.com"),
+      withBalancer(recorded.balancer),
+      withSSEHandle(handle),
+      withInterceptors(
+        createSSEInterceptor((req, next) => {
+          // The first read is the one next() validates; the transport reads it again after the hand-off.
+          const valid = req.headers;
+          let reads = 0;
+          Object.defineProperty(req, "headers", {
+            enumerable: true,
+            get() {
+              reads += 1;
+              return reads === 1 ? valid : { "x-name": "\u4e2d" };
+            },
+          });
+          return next(req);
+        }),
+      ),
+    ),
+  );
+  expect(stream).toBeUndefined();
+  expect(error).not.toBeNull();
+  expect(handle).not.toHaveBeenCalled();
+  expect(recorded.dones).toEqual([
+    { endpoint: "https://example.com", info: { attempted: false } },
+  ]);
+  expect(recorded.ends).toHaveLength(0);
+  expect(recorded.pending()).toBe(0);
+  expectPicks(recorded);
+
+  const replaced = track(() => "https://example.com");
+  const [replacedError] = await orders(
+    createClient(
+      withEndpoint("https://example.com"),
+      withBalancer(replaced.balancer),
+      withSSEHandle(handle),
+      withInterceptors(
+        createSSEInterceptor((req, next) => {
+          req.baseEndpoint = "https://replaced.example";
+          const valid = req.headers;
+          let reads = 0;
+          Object.defineProperty(req, "headers", {
+            enumerable: true,
+            get() {
+              reads += 1;
+              return reads === 1 ? valid : { "x-name": "\u4e2d" };
+            },
+          });
+          return next(req);
+        }),
+      ),
+    ),
+  );
+  expect(replacedError).not.toBeNull();
+  expect(handle).not.toHaveBeenCalled();
+  expect(replaced.dones).toEqual([
+    { endpoint: "https://example.com", info: { attempted: false } },
+  ]);
+  expect(replaced.pending()).toBe(0);
+  expectPicks(replaced);
+});
+
+test("rejects next() instead of throwing and calls done once when an interceptor passes a signal that is not an AbortSignal", async () => {
+  const handle = vi.fn(() => Promise.resolve(sseResponse("data: hi\n\n")));
+  const recorded = track(() => "https://example.com");
+  let thrownSynchronously = false;
+  const [error] = await orders(
+    createClient(
+      withEndpoint("https://example.com"),
+      withBalancer(recorded.balancer),
+      withSSEHandle(handle),
+      withInterceptors(
+        createSSEInterceptor((req, next) => {
+          // @ts-expect-error -- A plain object is not an AbortSignal; only an untyped interceptor can hand it over.
+          req.signal = { aborted: false };
+          try {
+            return next(req);
+          } catch (cause) {
+            thrownSynchronously = true;
+            throw cause;
+          }
+        }),
+      ),
+    ),
+  );
+  expect(thrownSynchronously).toBe(false);
+  expect(error?.code).toBe("EXT_INTERCEPTOR_FAILED");
+  expect(error?.cause).toBeInstanceOf(TypeError);
+  expect(handle).not.toHaveBeenCalled();
+  expect(recorded.dones).toEqual([
+    { endpoint: "https://example.com", info: { attempted: false } },
+  ]);
+  expect(recorded.pending()).toBe(0);
+  expectPicks(recorded);
+});
+
 test("keeps EXT_INTERCEPTOR_FAILED when an interceptor throws a REQ_BUILD_FAILED fault", async () => {
   const thrown = createPreflightFault(
     "REQ_BUILD_FAILED",

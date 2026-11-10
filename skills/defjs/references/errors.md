@@ -14,6 +14,8 @@ Operations never throw for request, response, validation, or transport failures.
 
 Always check `if (error)` and return from the surrounding function before reading the second or third element.
 
+Programming misuse typically rejects with `TypeError` instead: a `signal` option that is not an `AbortSignal`, an HTTP `output` or `error` that is not a `struct`, or an operation called without a client.
+
 ## Fault variants and codes
 
 `Fault<TError>` (and `AnyFault`) is a discriminated union keyed by `error.code`. Every fault carries `code`, `message`, and optional `cause`; `FaultClass<FaultCode>` extracts the code prefix for coarse classification. Variant-specific fields (`status`, `data`, `response`) become available when you narrow `error.code`:

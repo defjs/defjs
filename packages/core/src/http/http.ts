@@ -509,6 +509,16 @@ async function executeHttpAttempt<
     return fail(resolveAbortedFault(callerAbort));
   }
 
+  // A declaration that is not a struct throws here, before the caller's signal gets a listener.
+  // Read a status class only when that side declared a struct, using that side's kind.
+  // The other side is cancelled unread. A transport fault while reading a declared side still surfaces.
+  const responseType = definition.output
+    ? resolveInboundRepresentation(definition.output)
+    : undefined;
+  const errorResponseType = definition.error
+    ? resolveInboundRepresentation(definition.error)
+    : undefined;
+
   const controller = new AbortController();
   // A caller signal still goes through a composite: listeners must never be left on a signal the caller keeps.
   const requestSignal = mergeAbortSignals(controller.signal, [callerAbort]);
@@ -519,14 +529,6 @@ async function executeHttpAttempt<
     return fail(fault);
   };
 
-  // Read a status class only when that side declared a struct, using that side's kind.
-  // The other side is cancelled unread. A transport fault while reading a declared side still surfaces.
-  const responseType = definition.output
-    ? resolveInboundRepresentation(definition.output)
-    : undefined;
-  const errorResponseType = definition.error
-    ? resolveInboundRepresentation(definition.error)
-    : undefined;
   const inputGuides = new WeakMap<object, Guide>();
   let parsedInput: unknown;
   try {
@@ -651,23 +653,29 @@ async function executeHttpAttempt<
         return rejected;
       };
 
-      try {
-        resolveRequestUrl(nextRequest);
-      } catch (error) {
-        note({ landed: false });
-        return reject(error);
-      }
-
       const transportController = new AbortController();
       if (requestSignal.aborted) {
         transportController.abort(requestSignal.reason);
       }
-      // transportController already follows requestSignal through abortTransport. Only an interceptor that
-      // swapped the signal needs a composite, which is expensive to build and to listen on.
-      const transportAbort =
-        nextRequest.signal === undefined || nextRequest.signal === requestSignal
-          ? transportController.signal
-          : mergeAbortSignals(transportController.signal, [nextRequest.signal]);
+      let transportAbort: AbortSignal;
+      try {
+        resolveRequestUrl(nextRequest);
+        // Headers rejects an invalid name or value with a TypeError. Checking here makes that an interceptor error
+        // at next(), not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
+        void new Headers(nextRequest.headers);
+        // transportController already follows requestSignal through abortTransport. Only an interceptor that
+        // swapped the signal needs a composite, which is expensive to build and to listen on.
+        transportAbort =
+          nextRequest.signal === undefined ||
+          nextRequest.signal === requestSignal
+            ? transportController.signal
+            : mergeAbortSignals(transportController.signal, [
+                nextRequest.signal,
+              ]);
+      } catch (error) {
+        note({ landed: false });
+        return reject(error);
+      }
       const due = resolveAbortFault(transportAbort);
       if (due) {
         // Already aborted: fetch never starts, so this next() did not reach the endpoint.

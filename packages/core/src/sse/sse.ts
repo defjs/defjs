@@ -457,15 +457,19 @@ async function runEventStreamCommand<
         if (attributed && req.baseEndpoint !== resolved.endpoint) {
           settleUnattempted();
         }
+        let transportAbort: AbortSignal;
         try {
           resolveRequestUrl(req);
+          // Headers rejects an invalid name or value with a TypeError. Checking here makes that an interceptor error
+          // at next(), not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
+          void new Headers(req.headers);
+          transportAbort = mergeAbortSignals(requestSignal, [req.signal]);
         } catch (error) {
           settleUnattempted();
           const rejected = Promise.reject<EventStreamHandle<unknown>>(error);
           void rejected.catch(() => undefined);
           return rejected;
         }
-        const transportAbort = mergeAbortSignals(requestSignal, [req.signal]);
         const due = resolveAbortFault(transportAbort);
         if (due) {
           settleUnattempted();
@@ -548,6 +552,8 @@ async function runEventStreamCommand<
             return stream;
           },
           (cause: unknown) => {
+            // A no-op once the transport has reported; it only takes effect when fetchEventStream fails before its first attempt starts.
+            endpointAttempt?.done({ attempted: false });
             owned.release?.();
             errorOpenInfo.set(cause, failure.open);
             throw transportOrigin.mark(cause);

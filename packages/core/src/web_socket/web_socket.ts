@@ -762,7 +762,13 @@ async function runWebSocketCommand<
       const executionSignal = signal;
       const pendingSession = new Promise<WebSocketSessionLike>(
         (resolveSession, rejectSession) => {
-          const signal = mergeAbortSignals(executionSignal, [req.signal]);
+          let signal: AbortSignal;
+          try {
+            signal = mergeAbortSignals(executionSignal, [req.signal]);
+          } catch (error) {
+            initialPick.done({ attempted: false });
+            throw error;
+          }
           const incomingQueue = new AsyncQueue<
             WebSocketIncomingData<TIncoming>
           >({

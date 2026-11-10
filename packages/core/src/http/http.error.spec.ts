@@ -1332,3 +1332,135 @@ describe("request http runtime errors", () => {
     expect(response).toBeUndefined();
   });
 });
+
+describe("request http misuse", () => {
+  const jsonResponse = (status: number) =>
+    new Response("{}", {
+      headers: { "content-type": "application/json" },
+      status,
+    });
+  const clientWith = (handle: FetchHandle) =>
+    createClient(withEndpoint("https://example.test"), withHTTPHandle(handle));
+
+  test.each([
+    ["output", { output: {} }],
+    ["error", { error: {} }],
+  ])(
+    "should leave no listener on the caller signal when %s is not a struct",
+    async (_side, declaration) => {
+      const controller = new AbortController();
+      const add = vi.spyOn(controller.signal, "addEventListener");
+      const remove = vi.spyOn(controller.signal, "removeEventListener");
+      const handle = vi.fn<FetchHandle>();
+      // @ts-expect-error a declaration must be a struct
+      const useBroken = defineRequest({
+        method: "GET",
+        path: "/misuse",
+        ...declaration,
+      });
+
+      await expect(
+        useBroken(clientWith(handle)({ signal: controller.signal })),
+      ).rejects.toBeInstanceOf(TypeError);
+
+      expect(add).toHaveBeenCalledTimes(remove.mock.calls.length);
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test("should balance listeners on the caller signal for a valid definition", async () => {
+    const controller = new AbortController();
+    const add = vi.spyOn(controller.signal, "addEventListener");
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const handle = vi.fn<FetchHandle>(() => Promise.resolve(jsonResponse(200)));
+    const useRequest = defineRequest({
+      method: "GET",
+      output: struct.object({}),
+      path: "/misuse",
+    });
+
+    const [fault] = await useRequest(
+      clientWith(handle)({ signal: controller.signal }),
+    );
+
+    expect(fault).toBeNull();
+    expect(add.mock.calls.length).toBeGreaterThan(0);
+    expect(remove).toHaveBeenCalledTimes(add.mock.calls.length);
+  });
+
+  test.each([
+    ["output", { output: {} }],
+    ["output", { output: 123 }],
+    ["error", { error: {} }],
+  ])(
+    "should reject with TypeError when %s is not a struct, without sending the request",
+    async (_side, declaration) => {
+      const handle = vi.fn<FetchHandle>(() =>
+        Promise.resolve(jsonResponse(503)),
+      );
+      // @ts-expect-error a declaration must be a struct
+      const useBroken = defineRequest({
+        method: "GET",
+        path: "/misuse",
+        ...declaration,
+      });
+
+      await expect(useBroken(clientWith(handle))).rejects.toBeInstanceOf(
+        TypeError,
+      );
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([{}, 123])(
+    "should reject with TypeError for a signal that is not an AbortSignal: %j",
+    async (signal) => {
+      const handle = vi.fn<FetchHandle>(() =>
+        Promise.resolve(jsonResponse(200)),
+      );
+      const useRequest = defineRequest({
+        method: "GET",
+        output: struct.object({}),
+        path: "/misuse",
+      });
+
+      await expect(
+        useRequest(
+          // @ts-expect-error signal must be an AbortSignal
+          clientWith(handle)({ signal }),
+        ),
+      ).rejects.toBeInstanceOf(TypeError);
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test("should keep the tuple for input, a null signal, and reject a missing client", async () => {
+    const handle = vi.fn<FetchHandle>(() => Promise.resolve(jsonResponse(200)));
+    const useInput = defineRequest({
+      // @ts-expect-error input must be a struct
+      input: {},
+      builder: () => ({}),
+      method: "GET",
+      path: "/misuse",
+    });
+    const useRequest = defineRequest({
+      method: "GET",
+      output: struct.object({}),
+      path: "/misuse",
+    });
+
+    const [inputFault] = await useInput(clientWith(handle), {});
+    const [nullSignalFault, data] = await useRequest(
+      // @ts-expect-error signal must be an AbortSignal
+      clientWith(handle)({ signal: null }),
+    );
+
+    expect(inputFault?.code).toBe("REQ_INPUT_INVALID");
+    expect(inputFault?.cause).toBeInstanceOf(TypeError);
+    expect(nullSignalFault).toBeNull();
+    expect(data).toEqual({});
+    // @ts-expect-error the first argument must be a client
+    await expect(useRequest(undefined)).rejects.toBeInstanceOf(TypeError);
+    expect(handle).toHaveBeenCalledTimes(1);
+  });
+});

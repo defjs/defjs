@@ -7,6 +7,8 @@ description: Declare service error contracts in your SDK and handle typed execut
 
 In Defjs, request, transport, and decoding failures do not throw exceptions at the call site. Every operation returns an error-first tuple (`[error, ...]`) where `error` is either `null` or a typed `Fault` (a native `Error` instance discriminated by `error.code`).
 
+Programming misuse is the exception. It typically rejects with `TypeError` instead of returning a `Fault`: a `signal` option that is not an `AbortSignal`, an HTTP operation whose `output` or `error` is not a `struct`, and calling an operation without a client.
+
 ## 1. Declare service errors in the SDK, triage in the application
 
 <Tabs items={["Exhaustive code switch", "Basic status check", "Tuple shapes by transport"]}>

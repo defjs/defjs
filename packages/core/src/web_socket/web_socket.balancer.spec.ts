@@ -534,6 +534,51 @@ describe("web socket endpoint balancer", () => {
     expect(clean.pending()).toBe(0);
   });
 
+  test("should done attempted false once when an interceptor passes a signal that is not an AbortSignal", async () => {
+    const invalid = scriptedBalancer([{ endpoint: PRIMARY }]);
+    const [fault, session] = await room(
+      createClient(
+        withEndpoint(PRIMARY),
+        withBalancer(invalid.balancer),
+        withWebSocketHandle(ControllableSocket),
+        withInterceptors(
+          createWebSocketInterceptor((request, next) => {
+            // @ts-expect-error -- A plain object is not an AbortSignal; only an untyped interceptor can hand it over.
+            request.signal = { aborted: false };
+            return next(request);
+          }),
+        ),
+      ),
+    );
+    expect(session).toBeUndefined();
+    expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
+    expect(fault?.cause).toBeInstanceOf(TypeError);
+    expect(invalid.dones).toEqual([{ attempted: false }]);
+    expect(invalid.ends).toHaveLength(0);
+    expect(invalid.pending()).toBe(0);
+    expect(sockets).toHaveLength(0);
+
+    const replaced = scriptedBalancer([{ endpoint: PRIMARY }]);
+    const [replacedFault] = await room(
+      createClient(
+        withEndpoint(PRIMARY),
+        withBalancer(replaced.balancer),
+        withWebSocketHandle(ControllableSocket),
+        withInterceptors(
+          createWebSocketInterceptor((request, next) => {
+            // @ts-expect-error -- A plain object is not an AbortSignal; only an untyped interceptor can hand it over.
+            request.signal = { aborted: false };
+            return next({ ...request, baseEndpoint: REPLACED });
+          }),
+        ),
+      ),
+    );
+    expect(replacedFault?.code).toBe("EXT_INTERCEPTOR_FAILED");
+    expect(replaced.dones).toEqual([{ attempted: false }]);
+    expect(replaced.pending()).toBe(0);
+    expect(sockets).toHaveLength(0);
+  });
+
   test("should done once with NET_UNREACHABLE when construct or binaryType throws without reconnect", async () => {
     const constructed = scriptedBalancer([{ endpoint: PRIMARY }]);
     const [constructFault] = await room(
