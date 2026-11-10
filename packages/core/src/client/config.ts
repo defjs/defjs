@@ -21,6 +21,8 @@ export type QuerySerializer = (query: { [key: string]: unknown }) => string;
  *
  * This is the `(input, init?) => Promise<Response>` call signature Defjs invokes, deliberately not `typeof fetch`, so a mock does not need host extras such as `preconnect`. HTTP calls the untouched platform Fetch as `(url, init)`; a replaced global Fetch or custom handle receives a `Request`. The default resolves the global on each call. SSE always passes a `Request`, including to its default handle.
  *
+ * When an HTTP or SSE call through the client rejects with a value that is not a cancellation or timeout shape, the client reports `NET_UNREACHABLE`, whether the value is an `Error` or not. An HTTP call with a retry policy can then move to another endpoint. `fetchHandler` rejects with the value as is.
+ *
  * Accepted by `withHTTPHandle`, `withSSEHandle`, and `fetchHandler`.
  *
  * @group client
@@ -307,7 +309,7 @@ export interface HttpClientConfig {
   querySerializer?: QuerySerializer;
   /**
    * Called once per HTTP attempt. The hook receives the outgoing headers after interceptors and before the default `Accept` is filled in, plus the resolved URL.
-   * A throw is not an endpoint attempt and is not retried. Stays unset until an option assigns it.
+   * A throw fails the call with `EXT_HOOK_FAILED`, with the thrown value as `cause`. It is not an endpoint attempt and is not retried. Stays unset until an option assigns it.
    */
   finalizeHeaders?: HttpRequest["finalizeHeaders"];
   /** When `true`, credentials are included with requests. */

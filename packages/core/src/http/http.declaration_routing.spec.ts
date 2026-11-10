@@ -4,7 +4,9 @@ import {
   type DerivableClient,
   withEndpoint,
   withHTTPHandle,
+  withInterceptors,
 } from "../client";
+import { createHttpInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineRequest } from "./http";
 
@@ -299,29 +301,84 @@ describe("declaration routing", () => {
       expect(fault?.cause).toBe(networkError);
     });
 
-    test("should attribute a transport that throws a primitive to the extension", async () => {
-      // The transport-origin mark is kept beside the value, which a primitive cannot carry. A
-      // transport that rejects with a string is broken in a way we cannot distinguish, and the
-      // documented consequence is that it is attributed to the extension.
+    test.each(["offline", null, undefined, 0])(
+      "should attribute a transport that rejects with %s to the transport",
+      async (rejection) => {
+        // A rejection that is not an object cannot carry a mark, so the origin is recorded by value.
+        const handle = () => {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a non-Error value, which must still count as a transport failure
+          return Promise.reject(rejection);
+        };
+
+        const useRequest = defineRequest({
+          method: "GET",
+          output: User,
+          path: "/x",
+        });
+        const [fault] = await useRequest(
+          createClient(
+            withEndpoint("https://api.example.test"),
+            withHTTPHandle(handle),
+          ),
+        );
+
+        expect(fault?.code).toBe("NET_UNREACHABLE");
+        expect(Object.is(fault?.cause, rejection)).toBe(true);
+      },
+    );
+
+    test("should keep transport attribution and the original value when an interceptor rethrows a primitive rejection", async () => {
       const handle = () => {
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a string primitive, which the client must attribute to the extension
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a string primitive
         return Promise.reject("offline");
       };
-
-      const useRequest = defineRequest({
-        method: "GET",
-        output: User,
-        path: "/x",
+      const seen: unknown[] = [];
+      const rethrow = createHttpInterceptor(async (request, next) => {
+        try {
+          return await next(request);
+        } catch (error) {
+          seen.push(error);
+          throw error;
+        }
       });
-      const [fault] = await useRequest(
+
+      const [fault] = await defineRequest({ method: "GET", path: "/x" })(
         createClient(
           withEndpoint("https://api.example.test"),
           withHTTPHandle(handle),
+          withInterceptors(rethrow),
+        ),
+      );
+
+      expect(seen).toEqual(["offline"]);
+      expect(fault?.code).toBe("NET_UNREACHABLE");
+      expect(fault?.cause).toBe("offline");
+    });
+
+    test("should attribute an interceptor that swallows a primitive rejection and throws another to the extension", async () => {
+      const handle = () => {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a string primitive
+        return Promise.reject("offline");
+      };
+      const replace = createHttpInterceptor(async (request, next) => {
+        try {
+          return await next(request);
+        } catch {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the interceptor under test throws a different primitive
+          throw "interceptor says no";
+        }
+      });
+
+      const [fault] = await defineRequest({ method: "GET", path: "/x" })(
+        createClient(
+          withEndpoint("https://api.example.test"),
+          withHTTPHandle(handle),
+          withInterceptors(replace),
         ),
       );
 
       expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
-      expect(fault?.cause).toBe("offline");
+      expect(fault?.cause).toBe("interceptor says no");
     });
 
     test("should still report a truncated body with nothing declared", async () => {

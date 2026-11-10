@@ -7,6 +7,9 @@ import {
   fetchHandler,
   supportsStreamingRequestBody,
 } from "./fetch";
+import { isBodyFailure } from "./body_failure";
+import { PLATFORM_FETCH_HANDLE } from "../../client/config";
+import type { FetchHandle } from "../../client/config";
 
 function headersOf(init: RequestInit): Headers {
   if (init.headers instanceof Headers) return init.headers;
@@ -181,6 +184,179 @@ describe("Fetch handler request creation", () => {
     };
 
     await expect(fetchHandler(requestConfig)).rejects.toBeInstanceOf(TypeError);
+  });
+});
+
+describe("finalizeHeaders failure", () => {
+  const cause = new TypeError("token unavailable");
+  const request: HttpRequest = {
+    baseEndpoint: "https://example.com",
+    endpoint: "/v1/user",
+    finalizeHeaders: () => {
+      throw cause;
+    },
+    method: "POST",
+  };
+
+  function expectHookFailure(rejection: unknown): void {
+    expect(isBodyFailure(rejection)).toBe(true);
+    expect(isBodyFailure(rejection) && rejection.code).toBe("EXT_HOOK_FAILED");
+    expect(rejection instanceof Error && rejection.cause).toBe(cause);
+  }
+
+  test("rejects with a tagged hook failure before the platform fetch runs", async () => {
+    // The platform fast path is the untouched global, so it cannot be spied on; a rejection from the hook means fetch never started.
+    expectHookFailure(
+      await fetchHandler(request, PLATFORM_FETCH_HANDLE).catch(
+        (error: unknown) => error,
+      ),
+    );
+  });
+
+  test("rejects with a tagged hook failure before a custom handle is called", async () => {
+    const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+    expectHookFailure(
+      await fetchHandler(request, handle).catch((error: unknown) => error),
+    );
+    expect(handle).not.toHaveBeenCalled();
+  });
+});
+
+describe("request construction failure", () => {
+  const base: HttpRequest = {
+    baseEndpoint: "https://example.com",
+    endpoint: "/v1/user",
+    method: "POST",
+  };
+
+  async function rejection(
+    request: HttpRequest,
+    handle: FetchHandle | undefined,
+  ): Promise<unknown> {
+    return await fetchHandler(request, handle).catch((error: unknown) => error);
+  }
+
+  function expectBuildFailure(rejected: unknown): void {
+    expect(isBodyFailure(rejected)).toBe(true);
+    expect(isBodyFailure(rejected) && rejected.code).toBe("REQ_BUILD_FAILED");
+    expect(rejected instanceof Error && rejected.cause).toBeInstanceOf(
+      TypeError,
+    );
+  }
+
+  test.each([
+    ["GET", "payload"],
+    ["head", "payload"],
+    ["TRACE", undefined],
+    ["connect", undefined],
+    ["Track", undefined],
+  ])(
+    "%s with body %j is rejected before a custom handle is called",
+    async (method, body) => {
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+      expectBuildFailure(await rejection({ ...base, method, body }, handle));
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test("an omitted method is read as GET, so a body is rejected before a custom handle is called", async () => {
+    const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+    expectBuildFailure(
+      await rejection(
+        // @ts-expect-error JavaScript callers may omit the required method
+        { ...base, method: undefined, body: "payload" },
+        handle,
+      ),
+    );
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  test("an omitted method without a body is still sent as GET", async () => {
+    const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+    const response = await fetchHandler(
+      // @ts-expect-error JavaScript callers may omit the required method
+      { ...base, method: undefined },
+      handle,
+    );
+
+    expect(response.status).toBe(200);
+    expect(handle.mock.calls[0]?.[0]).toMatchObject({ method: "GET" });
+  });
+
+  test.each(["BAD METHOD", ""])(
+    "the method %j is rejected before a custom handle is called",
+    async (method) => {
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+      expectBuildFailure(await rejection({ ...base, method }, handle));
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([
+    ["a user name", "https://user@example.com"],
+    ["a password", "https://:pw@example.com"],
+  ])(
+    "a URL with %s is rejected before a custom handle is called",
+    async (_label, baseEndpoint) => {
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+      expectBuildFailure(await rejection({ ...base, baseEndpoint }, handle));
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test("the platform fast path rejects a URL with credentials the same way", async () => {
+    expectBuildFailure(
+      await rejection(
+        { ...base, baseEndpoint: "https://user:pw@example.com" },
+        PLATFORM_FETCH_HANDLE,
+      ),
+    );
+  });
+
+  test("the platform fast path rejects a GET body the same way", async () => {
+    expectBuildFailure(
+      await rejection(
+        { ...base, method: "GET", body: "payload" },
+        PLATFORM_FETCH_HANDLE,
+      ),
+    );
+  });
+
+  test.each(["a\r\nX-Evil: 1", "a\u0000b", "\u20ac"])(
+    "bodyContentType %j is rejected before a custom handle is called",
+    async (bodyContentType) => {
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+      expectBuildFailure(
+        await rejection({ ...base, body: "payload", bodyContentType }, handle),
+      );
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test("bodyContentType is rejected while an observed upload converts its body", async () => {
+    const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+    const uploadProgress = vi.fn();
+
+    expectBuildFailure(
+      await rejection(
+        {
+          ...base,
+          body: new Blob(["payload"]),
+          bodyContentType: "a\r\nb",
+          uploadProgress,
+        },
+        handle,
+      ),
+    );
+    expect(handle).not.toHaveBeenCalled();
+    expect(uploadProgress).not.toHaveBeenCalled();
   });
 });
 

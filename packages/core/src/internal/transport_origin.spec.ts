@@ -13,10 +13,33 @@ test("transport origin is isolated between execution trackers without changing c
   expect(first.has(new Error("unmarked"))).toBe(false);
 });
 
-test("primitive and null causes keep extension attribution", () => {
-  const origin = createTransportOrigin();
-  for (const cause of [null, undefined, "failure", 42]) {
-    expect(origin.mark(cause)).toBe(cause);
+test("causes a WeakSet cannot hold are recorded by value", () => {
+  const other = createTransportOrigin();
+  const registered = Symbol.for("registered");
+  const causes = [
+    [null, undefined],
+    [undefined, null],
+    ["failure", "other"],
+    [42, 43],
+    [0n, 1n],
+    [true, false],
+    [Symbol("s"), Symbol("s")],
+    [registered, Symbol.for("unmarked")],
+  ] as const;
+  for (const [cause, unmarked] of causes) {
+    const origin = createTransportOrigin();
     expect(origin.has(cause)).toBe(false);
+    expect(origin.mark(cause)).toBe(cause);
+    expect(origin.has(cause)).toBe(true);
+    expect(origin.has(unmarked)).toBe(false);
+    expect(other.has(cause)).toBe(false);
   }
+});
+
+test("functions are tracked by identity", () => {
+  const origin = createTransportOrigin();
+  const cause = () => 1;
+  expect(origin.mark(cause)).toBe(cause);
+  expect(origin.has(cause)).toBe(true);
+  expect(origin.has(() => 1)).toBe(false);
 });

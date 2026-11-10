@@ -4,6 +4,7 @@ import {
   PLATFORM_FETCH_HANDLE,
   resolveGlobalFetch,
 } from "../../client/config";
+import { isAbortCause, isTimeoutCause } from "../../error/cause";
 import { awaitWithSignal, resolveAbortCause } from "../../internal/abort";
 import { fetchWithSignal } from "../../internal/fetch";
 import type { HttpProgressFn, HttpRequest } from "../../internal/http_request";
@@ -46,7 +47,12 @@ function wrapUploadStream(
   onFailed: (() => void) | undefined,
 ): ReadableStream<Uint8Array> {
   // `fetch` only sees the relay, so the platform's rejection of a locked or already read stream has to happen here.
-  void new Response(stream);
+  // It is a request construction failure, not a network one.
+  try {
+    void new Response(stream);
+  } catch (error) {
+    throw new BodyFailure("REQ_BUILD_FAILED", error, undefined);
+  }
   const reader = stream.getReader();
   let cleanedUp = false;
   let loaded = 0;
@@ -141,15 +147,70 @@ function cancelLateResponseBody(
   void body.cancel(signal.reason).catch(() => undefined);
 }
 
+const FORBIDDEN_METHODS: ReadonlySet<string> = new Set([
+  "CONNECT",
+  "TRACE",
+  "TRACK",
+]);
+
+const METHOD_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+/**
+ * The Request constructor throws a TypeError, before any network activity, for a method that is not a token or is forbidden,
+ * a GET/HEAD body, and a URL with credentials (Fetch, "new Request"); `fetch()` rejects with that exception as is. Checking
+ * here keeps these apart from a network failure. Bun's Request accepts all of them, so the answer does not depend on the runtime.
+ */
+function assertRequestShape(request: HttpRequest, url: URL): void {
+  // A JavaScript interceptor can omit the method, which the platform then reads as GET.
+  const rawMethod =
+    request.method === undefined ? "GET" : String(request.method);
+  const method = rawMethod.toUpperCase();
+  let reason: string | undefined;
+  if (!METHOD_TOKEN.test(rawMethod)) {
+    reason = `${JSON.stringify(rawMethod)} is not a valid method`;
+  } else if (FORBIDDEN_METHODS.has(method)) {
+    reason = `${rawMethod} is a forbidden method`;
+  } else if (
+    (method === "GET" || method === "HEAD") &&
+    request.body !== undefined
+  ) {
+    reason = "GET/HEAD requests cannot have a body";
+  } else if (url.username !== "" || url.password !== "") {
+    reason = "The URL must not include credentials";
+  }
+  if (reason !== undefined) {
+    throw new BodyFailure("REQ_BUILD_FAILED", new TypeError(reason), undefined);
+  }
+}
+
+/**
+ * `bodyContentType` is a public field an interceptor can assign, and the platform rejects an invalid header value
+ * (CR, LF, NUL, or a code point above U+00FF) when it is written. That is an invalid request, found before it is sent,
+ * like an interceptor that rewrites `endpoint` to an invalid URL.
+ */
+function applyBodyContentType(request: HttpRequest, headers: Headers): void {
+  try {
+    applyRequestContentType(request, headers);
+  } catch (error) {
+    throw new BodyFailure("REQ_BUILD_FAILED", error, undefined);
+  }
+}
+
 export function createFetchRequestInit(
   request: HttpRequest,
   onBodyFailed?: () => void,
 ): RequestInit & { duplex?: "half" } {
   const headers = new Headers(request.headers);
   const uploadProgress = request.uploadProgress;
-  applyRequestContentType(request, headers);
+  applyBodyContentType(request, headers);
   if (request.finalizeHeaders) {
-    request.finalizeHeaders(request, headers, resolveRequestUrl(request));
+    try {
+      request.finalizeHeaders(request, headers, resolveRequestUrl(request));
+    } catch (error) {
+      throw isAbortCause(error) || isTimeoutCause(error)
+        ? error
+        : new BodyFailure("EXT_HOOK_FAILED", error, undefined);
+    }
   }
 
   return createFetchInitBase(request, {
@@ -175,6 +236,7 @@ export function createFetchRequest(
   onBodyFailed?: () => void,
 ): Request {
   const url = resolveRequestUrl(request);
+  assertRequestShape(request, url);
   const init = createFetchRequestInit(request, onBodyFailed);
 
   try {
@@ -366,7 +428,10 @@ async function parseFetchResponse(
  *   `(url, init)` while the global is untouched, and its body is read in one piece unless download progress is observed. Any other handle receives a
  *   `Request` and its body is read chunk by chunk.
  * @returns Parsed `HttpResponse`. Rejects when no response reached the client, when reading the body
- *   failed, or when an upload observer threw (`EXT_OBSERVER_FAILED`). Cancellation still wins.
+ *   failed, when an upload observer threw (`EXT_OBSERVER_FAILED`), or when `finalizeHeaders` threw (`EXT_HOOK_FAILED`).
+ *   A request that is invalid before it is sent rejects with `REQ_BUILD_FAILED`: a method that is not a token or is
+ *   forbidden, a GET or HEAD body, a URL with credentials, a `bodyContentType` the platform refuses as a header value,
+ *   or, when `uploadProgress` is set, a stream body that is already locked or read. Cancellation still wins.
  * @group http
  */
 export async function fetchHandler(
@@ -450,6 +515,7 @@ async function sendFetchRequest(
     if (platform) {
       // fetch(url, init) builds the Request itself, so building one here would only do that work twice.
       const url = resolveRequestUrl(prepared);
+      assertRequestShape(prepared, url);
       const init = createFetchRequestInit(prepared, lifecycle?.bodyFailed);
       platformBody = init.body;
       fallbackUrl = url.href;
@@ -525,7 +591,7 @@ async function prepareUploadProgressRequest(
   }
 
   const headers = new Headers(request.headers);
-  applyRequestContentType(request, headers);
+  applyBodyContentType(request, headers);
   if (
     converted.contentType &&
     (body instanceof FormData ||

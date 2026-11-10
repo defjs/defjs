@@ -16,11 +16,12 @@ import type { DoneInfo, PickInfo } from "../balancer/balancer";
 import type { RetryCondition, RetryOptions } from "../client/config";
 import { defineRequest } from "./http";
 import { struct } from "../struct";
-import { ERR_TIMEOUT } from "../error";
+import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { makeResponse } from "../internal/http_response";
 import { createHttpInterceptor } from "../interceptor";
 import { pickFirstBalancer } from "../balancer/balancer";
 import type { BodyValue } from "../internal/builder_types";
+import type { HttpRequest } from "../internal/http_request";
 
 const endpoints = ["https://first.test", "https://second.test"];
 const policy = (options: RetryOptions = {}): ClientOption =>
@@ -510,8 +511,43 @@ test("custom option retry configuration is read anew for every HTTP call", async
   expect(calls).toBe(3);
 });
 
-test("pre-fetch finalizeHeaders failure is not an endpoint attempt and never retries", async () => {
-  const error = new TypeError("token unavailable");
+test("a handle that rejects with a primitive fails over like any connection failure", async () => {
+  const hits: string[] = [];
+  const reports: DoneInfo[] = [];
+  const client = createClient(
+    withEndpoint(...endpoints),
+    withBalancer({
+      pick: (info) => [
+        null,
+        {
+          endpoint: info.endpoints[0] ?? "",
+          done: (report) => reports.push(report),
+        },
+      ],
+    }),
+    withHTTPHandle((input) => {
+      hits.push(new URL(new Request(input).url).origin);
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the handle under test rejects with a string primitive
+      if (hits.length === 1) return Promise.reject("offline");
+      return Promise.resolve(new Response("ok"));
+    }),
+    policy(),
+  );
+  const [fault, value] = await defineRequest({
+    method: "GET",
+    path: "/",
+    output: struct.string(),
+  })(client);
+  expect(fault).toBeNull();
+  expect(value).toBe("ok");
+  expect(hits).toEqual(endpoints);
+  expect(reports[0]).toMatchObject({
+    attempted: true,
+    code: "NET_UNREACHABLE",
+  });
+});
+
+function localFailureFixture(...options: ClientOption[]) {
   const start = vi.fn();
   const { client, requests, reports } = fixture(
     policy({ methods: ["POST"] }),
@@ -525,16 +561,141 @@ test("pre-fetch finalizeHeaders failure is not an endpoint attempt and never ret
         },
       ],
     }),
-    (config) => {
-      config.finalizeHeaders = () => {
-        throw error;
-      };
-    },
+    ...options,
   );
+  return { client, requests, reports, start };
+}
+
+function finalizeFixture(
+  finalizeHeaders: NonNullable<HttpRequest["finalizeHeaders"]>,
+) {
+  return localFailureFixture((config) => {
+    config.finalizeHeaders = finalizeHeaders;
+  });
+}
+
+test("pre-fetch finalizeHeaders failure is a hook failure, not an endpoint attempt, and never retries", async () => {
+  const error = new TypeError("token unavailable");
+  const { client, requests, reports, start } = finalizeFixture(() => {
+    throw error;
+  });
   const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
-  expect(fault?.code).toBe("NET_UNREACHABLE");
+  expect(fault?.code).toBe("EXT_HOOK_FAILED");
   expect(fault?.cause).toBe(error);
   expect(fault?.message).toBe("token unavailable");
+  expect(reports).toEqual([{ attempted: false }]);
+  expect(start).not.toHaveBeenCalled();
+  expect(requests).toHaveLength(0);
+});
+
+test.each([
+  ["bad header", "x"],
+  ["X-XSRF-TOKEN", "a\r\nb"],
+  ["X-XSRF-TOKEN", "\u20ac"],
+])(
+  "a header the platform rejects (%j: %j) fails as a hook failure before any request",
+  async (name, value) => {
+    const { client, requests, reports, start } = finalizeFixture(
+      (_request, headers) => headers.set(name, value),
+    );
+    const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+    expect(fault?.code).toBe("EXT_HOOK_FAILED");
+    expect(fault?.cause).toBeInstanceOf(TypeError);
+    expect(reports).toEqual([{ attempted: false }]);
+    expect(start).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
+  },
+);
+
+test.each([
+  ["a timeout", ERR_TIMEOUT, "NET_TIMEOUT"],
+  ["an abort", ERR_ABORTED, "NET_ABORTED"],
+])(
+  "finalizeHeaders throwing %s keeps its cancellation code",
+  async (_label, cause, code) => {
+    const { client, requests } = finalizeFixture(() => {
+      throw cause;
+    });
+    const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+    expect(fault?.code).toBe(code);
+    expect(requests).toHaveLength(0);
+  },
+);
+
+test("finalizeHeaders throwing a string carries it as the cause", async () => {
+  const { client } = finalizeFixture(() => {
+    // eslint-disable-next-line @typescript-eslint/only-throw-error -- the hook under test throws a string primitive
+    throw "token unavailable";
+  });
+  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+  expect(fault?.code).toBe("EXT_HOOK_FAILED");
+  expect(fault?.cause).toBe("token unavailable");
+});
+
+test.each([
+  ["a CR/LF", "a\r\nX-Evil: 1"],
+  ["a code point above U+00FF", "\u20ac"],
+])(
+  "an interceptor that assigns bodyContentType with %s fails as a build failure before any request",
+  async (_label, bodyContentType) => {
+    const { client, requests, reports, start } = localFailureFixture(
+      withInterceptors(
+        createHttpInterceptor((request, next) =>
+          next({ ...request, bodyContentType }),
+        ),
+      ),
+    );
+    const [fault] = await defineRequest({
+      method: "POST",
+      path: "/",
+      builder: () => ({ body: "payload" }),
+    })(client);
+    expect(fault?.code).toBe("REQ_BUILD_FAILED");
+    expect(fault?.cause).toBeInstanceOf(TypeError);
+    expect(reports).toEqual([{ attempted: false }]);
+    expect(start).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
+  },
+);
+
+test.each([
+  ["a GET with a body", "GET"],
+  ["a HEAD with a body", "head"],
+  ["a forbidden TRACE", "TRACE"],
+  ["a forbidden CONNECT", "connect"],
+  ["a forbidden TRACK", "Track"],
+  ["a method that is not a token", "BAD METHOD"],
+  ["an empty method", ""],
+])(
+  "an interceptor that rewrites the request into %s fails as a build failure before any request",
+  async (_label, method) => {
+    const { client, requests, reports, start } = localFailureFixture(
+      withInterceptors(
+        createHttpInterceptor((request, next) =>
+          next({ ...request, method, body: "payload" }),
+        ),
+      ),
+    );
+    const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+    expect(fault?.code).toBe("REQ_BUILD_FAILED");
+    expect(fault?.cause).toBeInstanceOf(TypeError);
+    expect(reports).toEqual([{ attempted: false }]);
+    expect(start).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(0);
+  },
+);
+
+test("an interceptor that rewrites the request URL to include credentials fails as a build failure before any request", async () => {
+  const { client, requests, reports, start } = localFailureFixture(
+    withInterceptors(
+      createHttpInterceptor((request, next) =>
+        next({ ...request, baseEndpoint: "https://user:pw@first.test" }),
+      ),
+    ),
+  );
+  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+  expect(fault?.code).toBe("REQ_BUILD_FAILED");
+  expect(fault?.cause).toBeInstanceOf(TypeError);
   expect(reports).toEqual([{ attempted: false }]);
   expect(start).not.toHaveBeenCalled();
   expect(requests).toHaveLength(0);
@@ -663,6 +824,24 @@ test.each([
     );
   },
 );
+
+test("an interceptor that omits the method on a request with a body fails as a build failure before any request", async () => {
+  // The platform reads a missing method as GET, and a GET cannot carry a body.
+  const { client, requests, reports, start } = localFailureFixture(
+    withInterceptors(
+      createHttpInterceptor((request, next) =>
+        // @ts-expect-error JavaScript interceptors may omit the required method
+        next({ ...request, method: undefined, body: "payload" }),
+      ),
+    ),
+  );
+  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
+  expect(fault?.code).toBe("REQ_BUILD_FAILED");
+  expect(fault?.cause).toBeInstanceOf(TypeError);
+  expect(reports).toEqual([{ attempted: false }]);
+  expect(start).not.toHaveBeenCalled();
+  expect(requests).toHaveLength(0);
+});
 
 test("an undefined interceptor method returns a fault tuple without retrying", async () => {
   const { client, requests } = fixture(

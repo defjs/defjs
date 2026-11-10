@@ -239,4 +239,54 @@ export function registerXsrfSuite(): void {
     });
     expect(header).toBe("xsrf-token");
   });
+
+  async function send(options: { method?: string; xsrf: XSRFOptions }) {
+    const handle = vi.fn<FetchHandle>(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
+    const [fault] = await defineRequest({
+      method: options.method ?? "POST",
+      path: "/submit",
+    })(
+      createClient(
+        withEndpoint(location.origin),
+        withHTTPHandle(handle),
+        withXSRF(options.xsrf),
+      ),
+    );
+    return { fault, handle };
+  }
+
+  test("should fail a mutating request with EXT_HOOK_FAILED for an invalid header name, and leave safe methods alone", async () => {
+    setCookie(UNIT_COOKIE, "cookie-token");
+    const xsrf = { cookieName: UNIT_COOKIE, headerName: "bad header" };
+
+    const post = await send({ xsrf });
+    expect(post.fault?.code).toBe("EXT_HOOK_FAILED");
+    expect(post.fault?.cause).toBeInstanceOf(TypeError);
+    expect(post.handle).not.toHaveBeenCalled();
+
+    const get = await send({ method: "GET", xsrf });
+    expect(get.fault).toBeNull();
+    expect(get.handle).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ["CR and LF", encodeURIComponent("a\r\nX-Evil: 1")],
+    ["NUL", encodeURIComponent("a\u0000b")],
+    ["a code point above U+00FF", encodeURIComponent("\u20ac")],
+  ])(
+    "should fail with EXT_HOOK_FAILED when the decoded token holds %s",
+    async (_label, cookie) => {
+      setCookie(UNIT_COOKIE, cookie);
+
+      const { fault, handle } = await send({
+        xsrf: { cookieName: UNIT_COOKIE, headerName: UNIT_HEADER },
+      });
+
+      expect(fault?.code).toBe("EXT_HOOK_FAILED");
+      expect(fault?.cause).toBeInstanceOf(TypeError);
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
 }

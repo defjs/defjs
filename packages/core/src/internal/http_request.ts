@@ -158,7 +158,7 @@ export interface HttpRequest {
   withCredentials?: boolean;
   /**
    * Called once per HTTP attempt. The hook receives the outgoing headers after interceptors and before the default `Accept` is filled in, plus the resolved URL.
-   * A throw is not an endpoint attempt and is not retried.
+   * A throw fails the call with `EXT_HOOK_FAILED`, with the thrown value as `cause`. It is not an endpoint attempt and is not retried.
    */
   finalizeHeaders?: (request: HttpRequest, headers: Headers, url: URL) => void;
 }

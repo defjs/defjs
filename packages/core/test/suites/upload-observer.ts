@@ -411,7 +411,7 @@ export function registerUploadObserverSuite(
           { label: "without", observed: false, state },
         ]),
       )(
-        "should let the platform reject a $state source stream $label an observer",
+        "should fail a $state source stream $label an observer as a build failure",
         async ({ observed, state }) => {
           const outcome = observerFailureOutcome(
             cap,
@@ -433,7 +433,7 @@ export function registerUploadObserverSuite(
             expectUploadOutcome(outcome, toAttempt(tuple, 0));
             return;
           }
-          expect(tuple[0]?.code).toBe("NET_UNREACHABLE");
+          expect(tuple[0]?.code).toBe("REQ_BUILD_FAILED");
           expect(tuple[0]?.cause).toBeInstanceOf(TypeError);
           expect(handle).not.toHaveBeenCalled();
           expect(onUploadProgress).not.toHaveBeenCalled();
@@ -441,7 +441,7 @@ export function registerUploadObserverSuite(
       );
 
     if (transports.includes("platform"))
-      test("should let the platform reject a partly read source stream of an observed platform send", async () => {
+      test("should fail a partly read source stream of an observed platform send as a build failure", async () => {
         const outcome = observerFailureOutcome(
           cap,
           "ReadableStream",
@@ -457,7 +457,7 @@ export function registerUploadObserverSuite(
           expectUploadOutcome(outcome, toAttempt(tuple, 0));
           return;
         }
-        expect(tuple[0]?.code).toBe("NET_UNREACHABLE");
+        expect(tuple[0]?.code).toBe("REQ_BUILD_FAILED");
         expect(tuple[0]?.cause).toBeInstanceOf(TypeError);
         expect(onUploadProgress).not.toHaveBeenCalled();
       });

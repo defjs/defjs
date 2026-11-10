@@ -433,7 +433,7 @@ export function defineNativeFetchSuite(): void {
       expect(stream.locked).toBe(false);
     });
 
-    test("surfaces the platform rejection of a request it cannot send and releases the upload body", async () => {
+    test("rejects a request Fetch cannot construct as a build failure and leaves the upload body untouched", async () => {
       const host = inject("testServerHost");
       const { DEFAULT_FETCH, fetchHandler, supportsStreamingRequestBody } =
         await loadTransport(host);
@@ -456,8 +456,9 @@ export function defineNativeFetchSuite(): void {
         ).catch((cause: unknown) => cause),
       );
 
-      expect(failure).toBeInstanceOf(TypeError);
-      expect(onCancel).toHaveBeenCalledExactlyOnceWith(failure);
+      expect(failure).toHaveProperty("code", "REQ_BUILD_FAILED");
+      expect(failure).toHaveProperty("cause", expect.any(TypeError));
+      expect(onCancel).not.toHaveBeenCalled();
       expect(stream.locked).toBe(false);
     });
 

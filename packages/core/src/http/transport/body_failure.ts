@@ -3,22 +3,28 @@ import type { HttpMeta } from "../../internal/http_response";
 
 /** Which fault a body-stage failure becomes once it reaches operation execution. */
 export type BodyFailureCode =
+  | "EXT_HOOK_FAILED"
   | "EXT_OBSERVER_FAILED"
   | "NET_BODY_INCOMPLETE"
   | "RES_DECODE_FAILED"
+  | "REQ_BUILD_FAILED"
   | "RES_MEDIA_TYPE_INVALID";
 
-type BodyFailureMeta<C extends BodyFailureCode> =
-  C extends "EXT_OBSERVER_FAILED" ? HttpMeta | undefined : HttpMeta;
+type BodyFailureMeta<C extends BodyFailureCode> = C extends
+  "EXT_HOOK_FAILED" | "EXT_OBSERVER_FAILED" | "REQ_BUILD_FAILED"
+  ? HttpMeta | undefined
+  : HttpMeta;
 
 /**
  * A failure raised while reading a body or running a progress observer, tagged at the point
  * where the transport still knows which step failed.
  *
- * An upload observer can fail before any response exists, so `meta` is absent then. Download
- * observers, truncated reads, and representation checks already have a response. Those steps
- * are indistinguishable once they collapse into a bare cause, so operation execution maps
- * `code` straight through.
+ * An upload observer can fail before any response exists, so `meta` is absent then. So can the
+ * request itself: a `finalizeHeaders` throw, an already locked or read body stream, or a request
+ * Fetch refuses to construct (an invalid or forbidden method, a GET or HEAD body, a URL with credentials, an invalid `Content-Type`)
+ * fails before the request is sent. Download observers, truncated reads, and representation checks
+ * already have a response. Those steps are indistinguishable once they collapse into a bare
+ * cause, so operation execution maps `code` straight through.
  *
  * Caller cancellation is deliberately never tagged: it stays the raw abort reason so the
  * cancellation path keeps priority over body classification.

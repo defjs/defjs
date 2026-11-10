@@ -59,6 +59,6 @@ export function registerBuilderEncodingUploadSuite(
     }
 
     expect(firstError).toBeNull();
-    expect(secondError?.code).toBe("NET_UNREACHABLE");
+    expect(secondError?.code).toBe("REQ_BUILD_FAILED");
   });
 }

@@ -828,7 +828,7 @@ async function executeHttpAttempt<
           return fail(fault);
         }
         // The transport only reads a side that declared a struct, so a tagged body failure belongs to that side.
-        // An upload observer failure is also tagged, without response metadata.
+        // Failures before the request is sent (upload observer, finalizeHeaders, a used body stream) are also tagged, without response metadata.
         if (isBodyFailure(error)) {
           const fault = fromBodyFailure(error);
           finish(fault);

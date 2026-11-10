@@ -231,6 +231,38 @@ describe("sse startup faults", () => {
     expect(fault?.cause).toBe(cause);
   });
 
+  test("should report a transport that rejects with a string as NET_UNREACHABLE", async () => {
+    const client = clientReturning(() =>
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a string primitive
+      Promise.reject("offline"),
+    );
+
+    const [fault] = await useStream(client);
+
+    expect(fault?.code).toBe("NET_UNREACHABLE");
+    expect(fault?.cause).toBe("offline");
+  });
+
+  test("should report an interceptor that throws a string as EXT_INTERCEPTOR_FAILED", async () => {
+    const client = clientReturning(
+      () =>
+        Promise.resolve(
+          new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
+        ),
+      withInterceptors(
+        createSSEInterceptor(() => {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the interceptor under test throws a string primitive
+          throw "interceptor exploded";
+        }),
+      ),
+    );
+
+    const [fault] = await useStream(client);
+
+    expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
+    expect(fault?.cause).toBe("interceptor exploded");
+  });
+
   test("should report an interceptor throw as EXT_INTERCEPTOR_FAILED", async () => {
     const cause = new Error("interceptor exploded");
     const client = clientReturning(
