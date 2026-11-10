@@ -183,7 +183,7 @@ export interface WebSocketConnectionInfo {
  *
  * - `aborted`: the session was cancelled; `cause` is the abort reason.
  *
- * - `error`: the session failed; `cause` is required. Incoming raw-frame or decoded-message queue overflow supplies a `Fault` with `cause.code === "CAP_QUEUE_OVERFLOW"`. The same fault rejects `receive` and is passed to `onRuntimeError`. Other runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors.
+ * - `error`: the session failed; `cause` is required. Incoming raw-frame or decoded-message queue overflow supplies a `Fault` with `cause.code === "CAP_QUEUE_OVERFLOW"`. The same fault rejects `receive` and is passed to `onRuntimeError`. Other runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors. A connection that was open and then dropped without a close frame (`code` 1006) is an `error` on every runtime, with `cause` `Error("WebSocket connection error")`; the runtime need not fire a native `error` event for it.
  *
  * - `code`, `reason`, and `wasClean` come from the native close event when one was observed. A manual `session.close(code, reason)` fills `code` and `reason` when the close event does not.
  *
@@ -211,7 +211,7 @@ export type WebSocketCloseInfo =
  *
  * - `state` is the logical {@link WebSocketState}; `connection` is the latest {@link WebSocketConnectionInfo}. `bufferedAmount` is the native unsent byte count, or `0` with no physical socket.
  *
- * - `receive` yields incoming messages already parsed with the `incoming` struct. It is one-consumer: asking for a second iterator throws a `TypeError`. A frame that cannot be parsed is reported to `onRuntimeError` listeners and skipped.
+ * - `receive` yields incoming messages already parsed with the `incoming` struct. It is one-consumer: asking for a second iterator throws a `TypeError`. A frame that cannot be parsed is reported to `onRuntimeError` listeners and skipped. When the transport fails (for example a drop without a close frame), messages already received are delivered first, then `receive` rejects with `closed.cause`. Queue overflow, heartbeat timeout and cancellation discard unread messages.
  *
  * - `send(message)` validates and encodes the message with the `outgoing` struct, then sends JSON text. It sends immediately while `open`, queues while `reconnecting` when `maxOutgoingQueueSize` allows, and throws a `DOMException` named `InvalidStateError` when the session is not writable. It also throws when no `outgoing` struct is declared, the message fails the struct, or the queue is disabled or full.
  *
@@ -1003,7 +1003,9 @@ async function runWebSocketCommand<
               if (typeof outcome.cause === "undefined") {
                 finish(toClosedInfo(outcome.closeInfo));
               } else {
-                finish(toErrorInfo(outcome.closeInfo, outcome.cause));
+                finish(toErrorInfo(outcome.closeInfo, outcome.cause), {
+                  keepQueued: true,
+                });
               }
               return;
             }
@@ -1383,7 +1385,7 @@ async function runWebSocketCommand<
 
                 const handleError = () => {
                   runtimeCause =
-                    runtimeCause ?? new Error("WebSocket connection error");
+                    runtimeCause ?? new Error(CONNECTION_ERROR_MESSAGE);
                   stopHeartbeat(sessionController);
                   detachErrorListener();
                   errorCloseTimer = setTimeout(() => {
@@ -1410,20 +1412,28 @@ async function runWebSocketCommand<
                   }
                   closeObserved = true;
                   clearErrorCloseTimer();
+                  // No close frame arrived: RFC 6455 7.2.1 makes that a failed connection. Runtimes that
+                  // skip the `error` event still report code 1006, so the failure is inferred from it.
+                  const nativeErrorSeen = typeof runtimeCause !== "undefined";
+                  const closeCause =
+                    runtimeCause ??
+                    (opened && event.code === 1006
+                      ? new Error(CONNECTION_ERROR_MESSAGE)
+                      : undefined);
                   sessionController.heartbeat?.stop();
                   socket.removeEventListener("open", handleOpen);
                   socket.removeEventListener("message", onMessage);
                   detachErrorListener();
                   closeOutcome = {
-                    closeInfo: extractCloseInfo(event, runtimeCause),
+                    closeInfo: extractCloseInfo(event, closeCause),
                     connection: connectionInfo(),
-                    cause: runtimeCause,
+                    cause: closeCause,
                     opened,
                   };
                   if (disposeTask) {
                     activeAttempt?.abortMessagePumpForDisposal();
                   }
-                  if (typeof runtimeCause !== "undefined") {
+                  if (nativeErrorSeen) {
                     rawMessages.length = 0;
                     settleAttempt(closeOutcome);
                     return;
@@ -1520,7 +1530,11 @@ async function runWebSocketCommand<
             } else {
               const terminalCause =
                 final.cause ?? new DOMException("Aborted", "AbortError");
-              incomingQueue.fail(terminalCause);
+              if (options.keepQueued) {
+                incomingQueue.failAfterDrain(terminalCause);
+              } else {
+                incomingQueue.fail(terminalCause);
+              }
               state.error = options.startupError ?? faultFromCloseInfo(final);
               if (final.kind === "error") {
                 emitRuntimeError(state, final.cause);
@@ -1809,11 +1823,13 @@ type ActiveSocketAttempt = {
 
 type FinishOptions = {
   keepPhysicalCleanup?: boolean;
+  keepQueued?: boolean;
   skipNativeClose?: boolean;
   startupError?: AnyFault;
 };
 
 const SOCKET_CLOSE_GRACE_MS = 1_000;
+const CONNECTION_ERROR_MESSAGE = "WebSocket connection error";
 const noop = () => undefined;
 
 function createWebSocketSession<

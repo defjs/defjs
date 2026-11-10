@@ -401,9 +401,9 @@ describe("operation diagnostic boundary", () => {
     expect(records).toEqual([]);
   });
 
-  // An abrupt drop (1006) has no close frame. Whether the platform WebSocket fires `error` before `close` depends on the
-  // runtime (Node/undici does, Bun does not), and the session ends in `error` and logs once only when it does.
-  test("WebSocket abrupt drop 1006 logs once only when the runtime reports an error first", async () => {
+  // An abrupt drop (1006) has no close frame. The session ends in `error` and logs once, whether or not the platform
+  // WebSocket fires `error` before `close`.
+  test("WebSocket abrupt drop 1006 ends in error and logs once on every runtime", async () => {
     const f = createFixtureClient(
       inject("testServerHost"),
       inject("fixtureToken"),
@@ -413,15 +413,6 @@ describe("operation diagnostic boundary", () => {
       /^http:/,
       "ws:",
     );
-    const reportsErrorFirst = await new Promise<boolean>((resolve, reject) => {
-      const events: string[] = [];
-      const probe = new WebSocket(url);
-      probe.addEventListener("error", () => events.push("error"));
-      probe.addEventListener("open", () => {
-        f.act("abrupt", "terminate", { request: 0 }).catch(reject);
-      });
-      probe.addEventListener("close", () => resolve(events.includes("error")));
-    });
 
     const { logger, records } = createMockLogger();
     const client = createClient(
@@ -434,22 +425,18 @@ describe("operation diagnostic boundary", () => {
       path: "/",
     })(client);
     expect(fault).toBeNull();
-    await f.act("abrupt", "terminate", { request: 1 });
+    await f.act("abrupt", "terminate", { request: 0 });
     await expect(socket?.closed).resolves.toMatchObject({
-      kind: reportsErrorFirst ? "error" : "closed",
+      kind: "error",
       code: 1006,
       wasClean: false,
     });
-    expect(records.map((record) => record.attributes)).toEqual(
-      reportsErrorFirst
-        ? [
-            expect.objectContaining({
-              "defjs.phase": "connection",
-              "websocket.close.code": 1006,
-            }),
-          ]
-        : [],
-    );
+    expect(records.map((record) => record.attributes)).toEqual([
+      expect.objectContaining({
+        "defjs.phase": "connection",
+        "websocket.close.code": 1006,
+      }),
+    ]);
   });
 });
 

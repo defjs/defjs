@@ -77,6 +77,19 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
     }
   }
 
+  // Ends the queue with an error but keeps the values already queued: they are pulled first, then every pull rejects.
+  failAfterDrain(error: unknown): void {
+    if (this.done) {
+      return;
+    }
+
+    this.done = true;
+    this.error = error;
+    while (this.waiting.length > 0) {
+      this.waiting.shift()?.reject(error);
+    }
+  }
+
   [Symbol.asyncIterator](): AsyncIterator<T> {
     if (this.iteratorClaimed) {
       throw new TypeError("AsyncQueue supports one consumer");

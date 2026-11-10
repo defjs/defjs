@@ -212,4 +212,39 @@ describe("AsyncQueue", () => {
     waitingQueue.fail(error);
     await expect(pending).rejects.toBe(error);
   });
+
+  test("failAfterDrain keeps buffered values, then rejects current and future pulls", async () => {
+    const error = new Error("boom");
+    const queue = new AsyncQueue<number>({ maxSize: 2 });
+    queue.push(1);
+    queue.push(2);
+    queue.failAfterDrain(error);
+    queue.push(3);
+    const iterator = queue[Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: 1 });
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: 2 });
+    await expect(iterator.next()).rejects.toBe(error);
+    await expect(iterator.next()).rejects.toBe(error);
+
+    const waitingQueue = new AsyncQueue<number>({ maxSize: 1 });
+    const waitingIterator = waitingQueue[Symbol.asyncIterator]();
+    const pending = waitingIterator.next();
+    waitingQueue.failAfterDrain(error);
+    await expect(pending).rejects.toBe(error);
+  });
+
+  test("failAfterDrain after the queue ended is ignored", async () => {
+    const queue = new AsyncQueue<number>({ maxSize: 1 });
+    queue.push(1);
+    queue.close();
+    queue.failAfterDrain(new Error("ignored"));
+    const iterator = queue[Symbol.asyncIterator]();
+
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: 1 });
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
 });

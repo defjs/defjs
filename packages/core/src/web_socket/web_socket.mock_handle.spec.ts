@@ -3123,6 +3123,58 @@ describe("web socket runtime environment edge cases", () => {
     expect(socket.state).toBe("error");
   });
 
+  test.each([
+    ["error then close", true],
+    ["close only", false],
+  ] as const)(
+    "should deliver queued messages then reject receive after an abrupt drop (%s)",
+    async (_name, withErrorEvent) => {
+      vi.stubGlobal("WebSocket", createMockWebSocketClass());
+      const useSocket = defineWebSocket({
+        maxIncomingQueueSize: 8,
+        incoming: struct.object({ n: struct.number() }),
+        path: "/ws/test",
+      });
+      const [, socket] = await run(
+        createClient(withEndpoint("http://localhost")),
+        useSocket,
+      );
+      if (!socket || !lastMockInstance) {
+        throw new Error("Expected socket");
+      }
+      for (const n of [1, 2, 3]) {
+        lastMockInstance.triggerMessage(JSON.stringify({ n }));
+      }
+      // The consumer is slow: the frames are decoded and queued before the peer vanishes.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (withErrorEvent) {
+        lastMockInstance.triggerError();
+      }
+      lastMockInstance.triggerClose({
+        code: 1006,
+        reason: "",
+        wasClean: false,
+      });
+
+      await expect(socket.closed).resolves.toMatchObject({
+        cause: new Error("WebSocket connection error"),
+        code: 1006,
+        kind: "error",
+        wasClean: false,
+      });
+      const iterator = socket.receive[Symbol.asyncIterator]();
+      for (const n of [1, 2, 3]) {
+        await expect(iterator.next()).resolves.toEqual({
+          done: false,
+          value: { n },
+        });
+      }
+      await expect(iterator.next()).rejects.toThrow(
+        "WebSocket connection error",
+      );
+    },
+  );
+
   test.each(["error", "close"] as const)(
     "should settle a native %s as closed when the reconnect predicate explicitly declines",
     async (eventKind) => {

@@ -161,3 +161,5 @@ The input, builder output, and selected protocols are captured once for the logi
 
 - Use `await using ownedSession = session;` or call `session.close(1000, "done")` and `await session.closed` in `finally`.
 - `session.receive` is single-consumer; requesting a second iterator throws `TypeError`.
+- When the transport fails, messages already received are delivered first, then `receive` rejects with `closed.cause`; queue overflow, heartbeat timeout and cancellation discard unread messages.
+- An open connection dropped without a close frame (code `1006`) always settles `closed` as `kind: "error"` with `cause` `Error("WebSocket connection error")`, on every runtime.

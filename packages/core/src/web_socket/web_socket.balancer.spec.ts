@@ -1155,7 +1155,7 @@ describe("web socket endpoint balancer", () => {
       if (!session) throw new Error("expected session");
       socketAt(0).disconnect(1006, false);
       expect(await session.closed).toMatchObject({
-        kind: "closed",
+        kind: "error",
         code: 1006,
         wasClean: false,
       });
