@@ -44,7 +44,7 @@ Prefer `await using ownedSession = session` for owned scope cleanup. Manual `ses
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` is `closed`, `aborted`, or `error`. `cause` is absent on `closed`, optional on `aborted`, and required on `error`. An incoming raw-frame or decoded-message queue overflow has `cause.code === "CAP_QUEUE_OVERFLOW"`; the same cause rejects `receive` and reaches `onRuntimeError`. Heartbeat timeout and exhausted reconnects keep ordinary runtime `Error` causes without a separate stable code. A connection that was open and then dropped without a close frame (code `1006`) is `error` on every runtime. `code`, `reason`, and `wasClean` may appear on every variant. A manual `session.close()` fills `code` and `reason` on `{ kind: "closed" }` when the close event carries none.
+`kind` is `closed`, `aborted`, or `error`. `cause` is absent on `closed`, optional on `aborted`, and required on `error`. An incoming raw-frame or decoded-message queue overflow has `cause.code === "CAP_QUEUE_OVERFLOW"`; the same cause rejects `receive` after the messages already queued, and reaches `onRuntimeError`. Unread messages are discarded when the session ends as `aborted`. Heartbeat timeout and exhausted reconnects keep ordinary runtime `Error` causes without a separate stable code. A connection that was open and then dropped without a close frame (code `1006`) is `error` on every runtime. `code`, `reason`, and `wasClean` may appear on every variant. A manual `session.close()` fills `code` and `reason` on `{ kind: "closed" }` when the close event carries none.
 
 ## WebSocketExecuteOptions
 

@@ -743,42 +743,6 @@ describe("fetchEventStream advanced", () => {
     expect(shouldReconnect).not.toHaveBeenCalled();
   });
 
-  test("should discard buffered events and terminate on queue overflow", async () => {
-    const cancel = vi.fn();
-    const fetch = vi.fn(() => {
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(
-            new TextEncoder().encode("data: one\n\ndata: two\n\n"),
-          );
-        },
-        cancel,
-      });
-      return Promise.resolve(
-        new Response(body, {
-          headers: { "content-type": "text/event-stream" },
-        }),
-      );
-    });
-
-    const stream = await fetchEventStream(createRequest("/events"), {
-      fetch,
-      maxQueueSize: 1,
-      onerror: () => 0,
-      reconnect: { attempts: 2, delayMs: 0 },
-    });
-
-    await expect(stream.closed).resolves.toMatchObject({
-      kind: "error",
-      code: "CAP_QUEUE_OVERFLOW",
-    });
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
-      "Event stream queue exceeded maxQueueSize",
-    );
-    expect(fetch).toHaveBeenCalledOnce();
-    expect(cancel).toHaveBeenCalledOnce();
-  });
-
   test("should abort during retry wait via request signal", async () => {
     const controller = new AbortController();
     const request: HttpRequest = {
@@ -1954,20 +1918,46 @@ describe("fetchEventStream message path", () => {
     },
   );
 
-  test("should keep CAP_QUEUE_OVERFLOW as the failure when the queue overflows after a pending transform", async () => {
-    const stream = await fetchTransformedEventStream(request, {
-      fetch: respondWith("data: a\n\ndata: b\n\n"),
-      maxQueueSize: 1,
-      transformMessage: (message) => Promise.resolve(message),
-    });
-
-    await expect(stream.closed).resolves.toMatchObject({
-      code: "CAP_QUEUE_OVERFLOW",
-      kind: "error",
-    });
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
-      "Event stream queue exceeded maxQueueSize",
+  test("should wait for room after a pending transform", async () => {
+    // One event per chunk, read on demand: the second read starts only after
+    // the first event is queued, and its event then waits for room after the
+    // pending transform.
+    const chunks = ["data: a\n\n", "data: b\n\n", "data: c\n\n"];
+    let reads = 0;
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          reads += 1;
+          const chunk = chunks.shift();
+          if (chunk === undefined) {
+            controller.close();
+            return;
+          }
+          controller.enqueue(new TextEncoder().encode(chunk));
+        },
+      },
+      { highWaterMark: 0 },
     );
+    const stream = await fetchTransformedEventStream(request, {
+      fetch: vi.fn(() =>
+        Promise.resolve(
+          new Response(body, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        ),
+      ),
+      maxQueueSize: 1,
+      transformMessage: (message) => Promise.resolve(message.data),
+    });
+    await vi.waitFor(() => expect(reads).toBeGreaterThanOrEqual(2));
+
+    const received: string[] = [];
+    for await (const event of stream) {
+      received.push(event);
+    }
+
+    expect(received).toEqual(["a", "b", "c"]);
+    await expect(stream.closed).resolves.toEqual({ kind: "eof" });
   });
 
   test("should keep an abort as the outcome when a transform throws after aborting", async () => {
@@ -2435,4 +2425,343 @@ test("passes missing attempt callbacks through as undefined", async () => {
     (await Array.fromAsync(stream)).map((message) => message.data),
   ).toEqual(["ok"]);
   expect(requests).toBe(2);
+});
+
+describe("fetchEventStream queue bound", () => {
+  const request: HttpRequest = {
+    baseEndpoint: "https://example.com",
+    endpoint: "/events",
+    method: "GET",
+  };
+
+  function events(count: number): string {
+    return Array.from({ length: count }, (_, i) => `data: ${i + 1}\n\n`).join(
+      "",
+    );
+  }
+
+  /** One chunk, then a body that stays open, so the only way out is a close or an abort. */
+  function openBody(text: string, cancel: () => void) {
+    let sent = false;
+    return new ReadableStream<Uint8Array>(
+      {
+        cancel,
+        pull(controller) {
+          if (sent) {
+            return new Promise<void>(() => undefined);
+          }
+          sent = true;
+          controller.enqueue(new TextEncoder().encode(text));
+          return undefined;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+  }
+
+  function respondWithBody(body: ReadableStream<Uint8Array>) {
+    return vi.fn(() =>
+      Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    );
+  }
+
+  test("should deliver every event of one chunk that exceeds maxQueueSize", async () => {
+    const fetch = vi.fn(() =>
+      Promise.resolve(
+        new Response(events(6), {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    );
+    const stream = await fetchTransformedEventStream(request, {
+      fetch,
+      maxQueueSize: 2,
+      transformMessage: (message) => message.data,
+    });
+
+    const received: string[] = [];
+    for await (const event of stream) {
+      received.push(event);
+    }
+
+    expect(received).toEqual(["1", "2", "3", "4", "5", "6"]);
+    await expect(stream.closed).resolves.toEqual({ kind: "eof" });
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  test("should stop parsing while the queue is full", async () => {
+    const parsed: string[] = [];
+    const stream = await fetchTransformedEventStream(request, {
+      fetch: respondWithBody(openBody(events(5), () => undefined)),
+      maxQueueSize: 2,
+      transformMessage(message) {
+        parsed.push(message.data);
+        return message.data;
+      },
+    });
+
+    // Two events fill the queue and a third waits for room.
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+    await yieldMacrotask();
+    expect(parsed).toHaveLength(3);
+
+    const iterator = stream[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: "1" });
+    await vi.waitFor(() => expect(parsed).toHaveLength(4));
+
+    const rest: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const result = await iterator.next();
+      if (result.done) {
+        throw new Error("the stream ended early");
+      }
+      rest.push(result.value);
+    }
+    expect(rest).toEqual(["2", "3", "4", "5"]);
+    expect(parsed).toEqual(["1", "2", "3", "4", "5"]);
+    stream.close();
+    await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
+  });
+
+  test("should release a producer waiting for room and discard unread events when the stream is closed", async () => {
+    const parsed: string[] = [];
+    const cancel = vi.fn();
+    const stream = await fetchTransformedEventStream(request, {
+      fetch: respondWithBody(openBody(events(5), cancel)),
+      maxQueueSize: 2,
+      transformMessage(message) {
+        parsed.push(message.data);
+        return message.data;
+      },
+    });
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    stream.close();
+
+    await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    const received: string[] = [];
+    for await (const event of stream) {
+      received.push(event);
+    }
+    expect(received).toEqual([]);
+    expect(parsed).toHaveLength(3);
+  });
+
+  test("should release a producer waiting for room and end after the queued events when the request signal aborts", async () => {
+    const controller = new AbortController();
+    const parsed: string[] = [];
+    const cancel = vi.fn();
+    const stream = await fetchTransformedEventStream(
+      { ...request, signal: controller.signal },
+      {
+        fetch: respondWithBody(openBody(events(5), cancel)),
+        maxQueueSize: 2,
+        transformMessage(message) {
+          parsed.push(message.data);
+          return message.data;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    controller.abort(ERR_ABORTED);
+
+    await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
+    expect(cancel).toHaveBeenCalledOnce();
+    const received: string[] = [];
+    for await (const event of stream) {
+      received.push(event);
+    }
+    // The two queued events are delivered; the third was still waiting for room and is dropped.
+    expect(received).toEqual(["1", "2"]);
+    expect(parsed).toHaveLength(3);
+  });
+});
+
+describe("fetchEventStream failure delivery", () => {
+  const request: HttpRequest = {
+    baseEndpoint: "https://example.com",
+    endpoint: "/events",
+    method: "GET",
+  };
+
+  const THREE = "data: 1\n\ndata: 2\n\ndata: 3\n\n";
+
+  /** Sends the text, then either errors the body or stays open until the request is aborted. */
+  function bodyThen(text: string, ending: "error" | "open") {
+    let sent = false;
+    return new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          if (!sent) {
+            sent = true;
+            controller.enqueue(new TextEncoder().encode(text));
+            return undefined;
+          }
+          if (ending === "error") {
+            controller.error(new TypeError("connection reset"));
+            return undefined;
+          }
+          return new Promise<void>(() => undefined);
+        },
+      },
+      { highWaterMark: 0 },
+    );
+  }
+
+  function respondOnce(body: ReadableStream<Uint8Array>) {
+    return vi.fn(() =>
+      Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    );
+  }
+
+  async function drain(stream: EventStreamHandle<string>) {
+    const received: string[] = [];
+    const rejection = await (async () => {
+      try {
+        for await (const event of stream) {
+          received.push(event);
+        }
+        return undefined;
+      } catch (error) {
+        return error;
+      }
+    })();
+    return { received, rejection };
+  }
+
+  test("should deliver queued events before rejecting after a network error", async () => {
+    const parsed: string[] = [];
+    const stream = await fetchTransformedEventStream(request, {
+      fetch: respondOnce(bodyThen(THREE, "error")),
+      transformMessage(message) {
+        parsed.push(message.data);
+        return message.data;
+      },
+    });
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    const closed = await stream.closed;
+    if (closed.kind !== "error") {
+      throw new Error("expected the stream to end with an error");
+    }
+    expect(closed.code).toBe("NET_UNREACHABLE");
+    const { received, rejection } = await drain(stream);
+
+    expect(received).toEqual(["1", "2", "3"]);
+    expect(rejection).toBe(closed.cause);
+  });
+
+  test("should deliver queued events before rejecting after reconnects run out", async () => {
+    const parsed: string[] = [];
+    let calls = 0;
+    const fetch = vi.fn(() => {
+      calls += 1;
+      if (calls > 1) {
+        return Promise.reject(new TypeError("still down"));
+      }
+      return Promise.resolve(
+        new Response(bodyThen(THREE, "error"), {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
+    });
+    const stream = await fetchTransformedEventStream(request, {
+      fetch,
+      reconnect: { attempts: 1, delayMs: 0 },
+      transformMessage(message) {
+        parsed.push(message.data);
+        return message.data;
+      },
+    });
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    const closed = await stream.closed;
+    expect(closed).toMatchObject({ kind: "error" });
+    const { received, rejection } = await drain(stream);
+
+    expect(received).toEqual(["1", "2", "3"]);
+    expect(rejection).toBeInstanceOf(Error);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("should deliver queued events before rejecting after a timeout", async () => {
+    const controller = new AbortController();
+    const parsed: string[] = [];
+    const stream = await fetchTransformedEventStream(
+      { ...request, signal: controller.signal },
+      {
+        fetch: respondOnce(bodyThen(THREE, "open")),
+        transformMessage(message) {
+          parsed.push(message.data);
+          return message.data;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    controller.abort(new DOMException("deadline expired", "TimeoutError"));
+
+    await expect(stream.closed).resolves.toMatchObject({
+      code: "NET_TIMEOUT",
+      kind: "error",
+    });
+    const { received, rejection } = await drain(stream);
+
+    expect(received).toEqual(["1", "2", "3"]);
+    expect(rejection).toBe(ERR_TIMEOUT);
+  });
+
+  test("should discard unread events and end after close()", async () => {
+    const parsed: string[] = [];
+    const stream = await fetchTransformedEventStream(request, {
+      fetch: respondOnce(bodyThen(THREE, "open")),
+      transformMessage(message) {
+        parsed.push(message.data);
+        return message.data;
+      },
+    });
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    stream.close();
+
+    await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
+    const { received, rejection } = await drain(stream);
+
+    expect(received).toEqual([]);
+    expect(rejection).toBeUndefined();
+  });
+
+  test("should still deliver queued events and end after a manual abort", async () => {
+    const controller = new AbortController();
+    const parsed: string[] = [];
+    const stream = await fetchTransformedEventStream(
+      { ...request, signal: controller.signal },
+      {
+        fetch: respondOnce(bodyThen(THREE, "open")),
+        transformMessage(message) {
+          parsed.push(message.data);
+          return message.data;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    controller.abort(ERR_ABORTED);
+
+    await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
+    const { received, rejection } = await drain(stream);
+
+    expect(received).toEqual(["1", "2", "3"]);
+    expect(rejection).toBeUndefined();
+  });
 });

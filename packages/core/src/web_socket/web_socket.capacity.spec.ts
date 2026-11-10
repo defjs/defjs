@@ -54,6 +54,17 @@ describe("WebSocket incoming capacity faults", () => {
       if (closed.kind !== "error") throw new Error("Expected capacity failure");
       expect(closed.cause).toBeInstanceOf(Error);
       expect(observed).toEqual([closed.cause]);
+      if (queue === "decoded") {
+        // Both decoded messages were queued before the deferred check ran, and both still reach the consumer.
+        await expect(iterator.next()).resolves.toEqual({
+          done: false,
+          value: 1,
+        });
+        await expect(iterator.next()).resolves.toEqual({
+          done: false,
+          value: 2,
+        });
+      }
       await expect(iterator.next()).rejects.toBe(closed.cause);
       expect(session.state).toBe("error");
     },

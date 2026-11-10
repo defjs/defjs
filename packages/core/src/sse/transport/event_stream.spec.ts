@@ -598,7 +598,6 @@ describe("SSE final endpoint attribution", () => {
       startup: false,
       status: 200,
     },
-    { mode: "queue", code: "CAP_QUEUE_OVERFLOW", startup: false, status: 200 },
     { mode: "getReader", code: "NET_UNREACHABLE", startup: false, status: 200 },
     {
       mode: "error-observer",
@@ -672,7 +671,7 @@ describe("SSE final endpoint attribution", () => {
             handshakeError:
               mode === "handshake-body" ? struct.string() : undefined,
             maxBufferSize: mode === "parser" ? 8 : 1024,
-            maxQueueSize: mode === "queue" ? 1 : 16,
+            maxQueueSize: 16,
             onopen() {
               if (mode === "onopen") throw cause;
             },

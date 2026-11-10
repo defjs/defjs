@@ -127,7 +127,7 @@ type EventStreamErrorField<TError extends AnyStruct | undefined> = [
  *
  * The composed members are:
  *
- * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, `maxBufferSize` (default `64 * 1024` bytes), and `maxQueueSize` (default `1024` events; both limits must be positive safe integers when provided).
+ * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, `maxBufferSize` (default `64 * 1024` bytes), and `maxQueueSize` (default `1024` events; both limits must be positive safe integers when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. When `maxQueueSize` events are waiting for the `for await` consumer, reading the response pauses until the consumer takes one; no event is dropped for lack of room and the stream does not fail.
  *
  * - `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.
  *
@@ -245,7 +245,7 @@ function snapshotEventDictionary(events: EventStructs): EventStructs {
  * Pass path and event structs. Call the returned operation
  * with a client and, when declared, the input.
  *
- * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, `maxBufferSize` (default `64 * 1024`), and `maxQueueSize` (default `1024`; both limits must be positive safe integers when provided). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, `maxBufferSize` (default `64 * 1024`), and `maxQueueSize` (default `1024`; both limits must be positive safe integers when provided). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; a full `maxQueueSize` pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * `EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.
  *

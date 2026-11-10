@@ -203,7 +203,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       result: "error",
       extras: {
         "sse.close.kind": "error",
-        "defjs.sse.fault.code": "CAP_QUEUE_OVERFLOW",
+        "defjs.sse.fault.code": "CAP_BUFFER_EXCEEDED",
         "error.type": "TypeError",
       },
     },
@@ -242,7 +242,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
         stream.close(
           close,
           close === "error" ? new TypeError("stream lost") : undefined,
-          "CAP_QUEUE_OVERFLOW",
+          "CAP_BUFFER_EXCEEDED",
         );
       await waitForSettledPromises();
 
@@ -542,11 +542,11 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     await interceptor.fn(makeSSERequest(), () =>
       Promise.resolve(stream.stream),
     );
-    stream.close("error", new Error("stream broken"), "CAP_QUEUE_OVERFLOW");
+    stream.close("error", new Error("stream broken"), "CAP_BUFFER_EXCEEDED");
     await waitForSettledPromises();
 
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("sse.error", {
-      "defjs.sse.fault.code": "CAP_QUEUE_OVERFLOW",
+      "defjs.sse.fault.code": "CAP_BUFFER_EXCEEDED",
       "sse.close.kind": "error",
     });
     expect(activeSpans[0]?.recordException).toHaveBeenCalled();
@@ -556,7 +556,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       expect.any(Number),
       expect.objectContaining({
         "defjs.result": "error",
-        "defjs.sse.fault.code": "CAP_QUEUE_OVERFLOW",
+        "defjs.sse.fault.code": "CAP_BUFFER_EXCEEDED",
         "error.type": "Error",
         "sse.close.kind": "error",
       }),

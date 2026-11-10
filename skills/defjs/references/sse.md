@@ -51,7 +51,7 @@ void main();
 
 ## Buffer, queue, and event decoding
 
-- `maxBufferSize` (default `64 * 1024` bytes) and `maxQueueSize` (default `1024` events) are optional positive safe-integer limits. Exceeding them terminates the stream with `CAP_BUFFER_EXCEEDED` or `CAP_QUEUE_OVERFLOW`.
+- `maxBufferSize` (default `64 * 1024` bytes) and `maxQueueSize` (default `1024` events) are optional positive safe-integer limits. Exceeding `maxBufferSize` terminates the stream with `CAP_BUFFER_EXCEEDED`; a full `maxQueueSize` pauses reading the response until the consumer takes an event, and no event is dropped for lack of room. A stream that ends with an error or timeout still delivers the events already queued before the iterator rejects.
 - Each key in `events` matches the SSE `event:` field; an event whose frame omits `event:` is named `message`.
 - Decoding follows the event struct kind: `struct.string()` delivers the raw text payload; any other struct runs `JSON.parse` first and then validates against the struct.
 - Handshake errors (non-2xx responses) decode against `error` if declared. If a declared handshake error body fails reading, JSON parsing, or struct validation, SSE reports `RES_DECODE_FAILED`; a struct mismatch keeps the `StructError` as `cause`. A handshake error response without content (for example `304`) reads as zero bytes, like HTTP: string, `ArrayBuffer`, and `Blob` declarations get an empty value and still resolve `HTTP_STATUS`, while a JSON declaration reports `RES_DECODE_FAILED`.
@@ -64,6 +64,7 @@ After the success tuple resolves, the caller owns the stream:
 1. Prefer `await using ownedStream = stream;`, which closes the stream and awaits teardown when leaving the block.
 2. Or use `try { ... } finally { stream.close("consumer-finished"); await stream.closed; }`.
 3. Only one async iterator may consume `stream`. Breaking out of `for await (const event of stream)` also triggers iterator return and closes the stream.
+4. `stream.close()` and disposal discard events nobody has read yet, as `EventSource.close()` does; read what you need before closing.
 
 ## Startup deadline vs stream lifetime
 

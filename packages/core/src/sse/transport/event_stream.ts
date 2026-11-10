@@ -89,7 +89,6 @@ export interface EventStreamOpenInfo {
 export type EventStreamFaultCode = Extract<
   FaultCode,
   | "CAP_BUFFER_EXCEEDED"
-  | "CAP_QUEUE_OVERFLOW"
   | "EXT_HOOK_FAILED"
   | "EXT_OBSERVER_FAILED"
   | "HTTP_STATUS"
@@ -111,7 +110,7 @@ interface EventStreamCloseInfoBase {
  *
  * The discriminant is `kind` so that `code` can mean the same thing it means on a fault.
  *
- * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake.
+ * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()` and disposal discard the events nobody has read yet, as `EventSource.close()` does; a caller signal abort does not, so the events already queued are still delivered before the iterator ends. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one.
  *
  * @group sse
  */
@@ -442,6 +441,8 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     }
 
     closeController.abort(reason);
+    // EventSource.close() sets CLOSED, after which queued dispatch tasks are skipped, so unread events are discarded.
+    queue.discard();
     queue.close();
     settleClosed({
       kind: "aborted",
@@ -707,27 +708,26 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
           );
         }
         signal.throwIfAborted();
-        enqueue(result);
-        return undefined;
+        return enqueue(result);
       },
       { maxBufferSize: options.maxBufferSize },
     );
 
-    function enqueue(transformed: TEvent | undefined): void {
-      if (typeof transformed !== "undefined") {
-        try {
-          queue.push(transformed);
-        } catch (error) {
-          // AsyncQueue.push has one failure mode: exceeding its configured bound.
-          throw new EventStreamFatalError(
-            "CAP_QUEUE_OVERFLOW",
-            "Event stream queue exceeded maxQueueSize",
-            {
-              cause: error,
-            },
-          );
-        }
+    // A full queue pauses parsing, and with it the response reads, until the consumer takes an event.
+    function enqueue(
+      transformed: TEvent | undefined,
+    ): Promise<void> | undefined {
+      if (typeof transformed === "undefined") {
+        return undefined;
       }
+      const room = queue.waitForRoom();
+      if (!room) {
+        queue.push(transformed);
+        return undefined;
+      }
+      return awaitWithSignal(() => room, signal).then(() => {
+        queue.push(transformed);
+      });
     }
     const parseLine = createLineParser(parseMessage, {
       maxBufferSize: options.maxBufferSize,

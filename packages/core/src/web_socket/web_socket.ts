@@ -131,7 +131,7 @@ interface WebSocketDefinitionBase<
  *
  * - `outgoing` is the struct `session.send` validates and encodes with. Without it, `send` throws.
  *
- * - `maxIncomingQueueSize` bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow is judged after the current task finishes, so frames a platform delivers in one read do not count while the consumer keeps draining; the transient excess is bounded by what arrives before that check runs. Overflow is fatal with `CAP_QUEUE_OVERFLOW` on the error delivered through `receive`, `onRuntimeError`, and `closed.cause`. It is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
+ * - `maxIncomingQueueSize` bounds both raw frames waiting to decode and decoded messages waiting for the consumer. Overflow is judged after the current task finishes, so frames a platform delivers in one read do not count while the consumer keeps draining; the transient excess is bounded by what arrives before that check runs. Overflow is fatal with `CAP_QUEUE_OVERFLOW` on the error delivered through `receive`, `onRuntimeError`, and `closed.cause`; messages already queued are still delivered through `receive` before it rejects. It is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
  *
  * - `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.
  *
@@ -179,11 +179,11 @@ export interface WebSocketConnectionInfo {
  *
  * What `session.closed` resolves with, once the session has ended for good.
  *
- * - `closed`: the session ended normally, including a manual `session.close()`.
+ * - `closed`: the session ended normally, including a manual `session.close()`. The messages already queued are still delivered through `receive` before it ends.
  *
- * - `aborted`: the session was cancelled; `cause` is the abort reason.
+ * - `aborted`: the session was cancelled; `cause` is the abort reason. Messages nobody has read yet are discarded.
  *
- * - `error`: the session failed; `cause` is required. Incoming raw-frame or decoded-message queue overflow supplies a `Fault` with `cause.code === "CAP_QUEUE_OVERFLOW"`. The same fault rejects `receive` and is passed to `onRuntimeError`. Other runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors. A connection that was open and then dropped without a close frame (`code` 1006) is an `error` on every runtime, with `cause` `Error("WebSocket connection error")`; the runtime need not fire a native `error` event for it.
+ * - `error`: the session failed; `cause` is required. Incoming raw-frame or decoded-message queue overflow supplies a `Fault` with `cause.code === "CAP_QUEUE_OVERFLOW"`. The same fault rejects `receive` and is passed to `onRuntimeError`. Other runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors. A connection that was open and then dropped without a close frame (`code` 1006) is an `error` on every runtime, with `cause` `Error("WebSocket connection error")`; the runtime need not fire a native `error` event for it. Messages already queued are still delivered through `receive`; it rejects with `cause` after the last one.
  *
  * - `code`, `reason`, and `wasClean` come from the native close event when one was observed. A manual `session.close(code, reason)` fills `code` and `reason` when the close event does not.
  *
@@ -1003,9 +1003,7 @@ async function runWebSocketCommand<
               if (typeof outcome.cause === "undefined") {
                 finish(toClosedInfo(outcome.closeInfo));
               } else {
-                finish(toErrorInfo(outcome.closeInfo, outcome.cause), {
-                  keepQueued: true,
-                });
+                finish(toErrorInfo(outcome.closeInfo, outcome.cause));
               }
               return;
             }
@@ -1530,11 +1528,11 @@ async function runWebSocketCommand<
             } else {
               const terminalCause =
                 final.cause ?? new DOMException("Aborted", "AbortError");
-              if (options.keepQueued) {
-                incomingQueue.failAfterDrain(terminalCause);
-              } else {
-                incomingQueue.fail(terminalCause);
+              // A cancelled session drops its unread messages; `fail` itself keeps them for the error ending.
+              if (final.kind === "aborted") {
+                incomingQueue.discard();
               }
+              incomingQueue.fail(terminalCause);
               state.error = options.startupError ?? faultFromCloseInfo(final);
               if (final.kind === "error") {
                 emitRuntimeError(state, final.cause);
@@ -1823,7 +1821,6 @@ type ActiveSocketAttempt = {
 
 type FinishOptions = {
   keepPhysicalCleanup?: boolean;
-  keepQueued?: boolean;
   skipNativeClose?: boolean;
   startupError?: AnyFault;
 };

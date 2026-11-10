@@ -355,7 +355,7 @@ describe("sse runtime faults", () => {
     });
   });
 
-  test("should report a queue overflow as CAP_QUEUE_OVERFLOW", async () => {
+  test("should deliver every event past maxQueueSize", async () => {
     const useTinyQueue = defineEventStream({
       events: { message: struct.string() },
       maxQueueSize: 1,
@@ -373,10 +373,89 @@ describe("sse runtime faults", () => {
 
     expect(fault).toBeNull();
     if (fault) throw new Error("Expected the stream to open");
+    const received: string[] = [];
+    for await (const event of stream) {
+      received.push(event.data);
+    }
+    expect(received).toEqual(["a", "b", "c"]);
+    await expect(stream.closed).resolves.toEqual({ kind: "eof" });
+  });
+
+  test("should deliver a burst larger than the default maxQueueSize", async () => {
+    const burst = 3000;
+    const client = clientReturning(() =>
+      Promise.resolve(
+        new Response(
+          streamOf(
+            Array.from({ length: burst }, (_, i) => `data: ${i}\n\n`).join(""),
+          ),
+          { headers: SSE_HEADERS },
+        ),
+      ),
+    );
+
+    const [fault, stream] = await useStream(client);
+
+    expect(fault).toBeNull();
+    if (fault) throw new Error("Expected the stream to open");
+    let received = 0;
+    for await (const event of stream) {
+      expect(event.data).toBe(String(received));
+      received += 1;
+    }
+    expect(received).toBe(burst);
+    await expect(stream.closed).resolves.toEqual({ kind: "eof" });
+  });
+
+  test("should deliver the events received before a network error", async () => {
+    let sent = false;
+    const reset = new TypeError("connection reset");
+    const client = clientReturning(() =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>(
+            {
+              pull(controller) {
+                if (sent) {
+                  controller.error(reset);
+                  return;
+                }
+                sent = true;
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    "id: 1\ndata: a\n\nid: 2\ndata: b\n\nid: 3\ndata: c\n\n",
+                  ),
+                );
+              },
+            },
+            { highWaterMark: 0 },
+          ),
+          { headers: SSE_HEADERS },
+        ),
+      ),
+    );
+
+    const [fault, stream] = await useStream(client);
+
+    expect(fault).toBeNull();
+    if (fault) throw new Error("Expected the stream to open");
     await expect(stream.closed).resolves.toMatchObject({
-      code: "CAP_QUEUE_OVERFLOW",
+      code: "NET_UNREACHABLE",
       kind: "error",
     });
+    const received: string[] = [];
+    const rejection = await (async () => {
+      try {
+        for await (const event of stream) {
+          received.push(event.data);
+        }
+        return undefined;
+      } catch (error) {
+        return error;
+      }
+    })();
+    expect(received).toEqual(["a", "b", "c"]);
+    expect(rejection).toBeDefined();
   });
 
   test("should report a clean end of stream with kind eof and no code", async () => {

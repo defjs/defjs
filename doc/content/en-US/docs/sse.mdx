@@ -84,12 +84,16 @@ SSE reconnection is **opt-in**. Without `withSSEReconnect(...)`, any network dro
 
 ## 5. Buffer and queue limits
 
-The defaults are `maxBufferSize: 64 * 1024` bytes and `maxQueueSize: 1024` events. Both limits must be positive safe integers. There is no default handshake deadline: a pending Fetch waits for the platform, caller cancellation, or an explicitly configured `connectTimeoutMs`. Exceeding either capacity limit is fatal (`stream.closed` resolves with `kind: "error"` and the iterator rejects—events are never silently dropped):
+The defaults are `maxBufferSize: 64 * 1024` bytes and `maxQueueSize: 1024` events. Both limits must be positive safe integers. There is no default handshake deadline: a pending Fetch waits for the platform, caller cancellation, or an explicitly configured `connectTimeoutMs`.
 
-| Definition option | What it bounds                                              | Terminal fault code   |
-| ----------------- | ----------------------------------------------------------- | --------------------- |
-| `maxBufferSize`   | Incomplete or oversized SSE frame bytes before a blank line | `CAP_BUFFER_EXCEEDED` |
-| `maxQueueSize`    | Validated events waiting for the `for await` consumer       | `CAP_QUEUE_OVERFLOW`  |
+| Definition option | What it bounds                                              | At the limit                                                                                             |
+| ----------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `maxBufferSize`   | Incomplete or oversized SSE frame bytes before a blank line | Fatal: `stream.closed` resolves with `kind: "error"` and `CAP_BUFFER_EXCEEDED`; the iterator rejects     |
+| `maxQueueSize`    | Validated events waiting for the `for await` consumer       | Reading from the response pauses until the consumer takes an event; no event is dropped for lack of room |
+
+- **A slow consumer slows the server, not the stream.** A burst larger than `maxQueueSize`, such as a `Last-Event-ID` replay, is delivered in full; the library stops reading the response while the queue is full, so the backlog stays in the connection instead of being dropped or failing the stream. The queue holds at most `maxQueueSize` events, plus one parsed event waiting for room.
+- **An unattended stream stops reading.** A stream nobody iterates stops reading once its queue is full, and `stream.closed` does not resolve on its own until reading reaches the end of the response; `stream.close()`, an abort, or a timeout still resolves it. Call `stream.close()` or use `await using` when you no longer need the stream.
+- **Failures keep what was already received.** When the stream ends with an error or a timeout, the events that were already queued are still delivered, and the iterator rejects after the last one. `stream.closed` resolves when the connection ends, which can be before the iterator has read every event. Bytes still unread in the response body when the connection fails are not delivered and never advance `Last-Event-ID`, so with reconnect enabled the server must replay from the committed cursor.
 
 ## 6. Close and dispose [#close-and-dispose]
 
@@ -109,6 +113,8 @@ The caller that opens a stream owns its teardown. Exiting a `for await` loop via
 
 </Tab>
 </Tabs>
+
+`stream.close()` and disposal stop the stream at once and discard the events nobody has read yet, as `EventSource.close()` does. A response that ends normally, a caller abort, and a stream that fails with an error or a timeout still deliver the events already queued first (see section 5).
 
 The `signal` passed via `client({ signal })` governs the entire lifetime of the stream. To bound only the initial connection handshake without killing an open stream later, clear your timer once `await watchOrders(...)` returns (as shown in the second tab above) or set `connectTimeoutMs` together with `attempts: 0` in `withSSEReconnect` (`connectTimeoutMs` alone also enables automatic reconnect with 3 attempts).
 

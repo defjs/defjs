@@ -22,6 +22,7 @@ import {
   type WebSocketSessionLike,
 } from "../interceptor";
 import { StructError, struct } from "../struct";
+import { yieldMacrotask } from "../../test/macrotask";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 
 let lastMockInstance: MockWebSocketInstance | undefined;
@@ -3618,7 +3619,7 @@ describe("web socket runtime environment edge cases", () => {
     expect(mockInstances).toHaveLength(2);
   });
 
-  test("should fail the logical session and discard buffered messages on incoming overflow", async () => {
+  test("should deliver buffered messages and then fail on incoming overflow", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
@@ -3645,8 +3646,154 @@ describe("web socket runtime environment edge cases", () => {
     );
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "error" });
-    await expect(iterator.next()).rejects.toThrow("AsyncQueue overflow");
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: { type: "message", text: "first" },
+    });
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: { type: "message", text: "second" },
+    });
+    await expect(iterator.next()).rejects.toMatchObject({
+      code: "CAP_QUEUE_OVERFLOW",
+    });
     expect(socket.state).toBe("error");
+  });
+
+  test("should deliver queued messages before rejecting after a runtime error", async () => {
+    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 10,
+      incoming: struct.number(),
+      path: "/ws/test",
+    });
+    const [, socket] = await run(
+      createClient(withEndpoint("http://localhost")),
+      useSocket,
+    );
+    const nativeSocket = lastMockInstance;
+    if (!socket || !nativeSocket) {
+      throw new Error("Expected socket");
+    }
+    for (const value of [1, 2, 3]) {
+      nativeSocket.triggerMessage(JSON.stringify(value));
+    }
+    await yieldMacrotask();
+
+    nativeSocket.triggerError();
+    nativeSocket.triggerClose({ code: 1006, reason: "", wasClean: false });
+
+    const closed = await socket.closed;
+    if (closed.kind !== "error") {
+      throw new Error("expected an error close");
+    }
+    const received: unknown[] = [];
+    const rejection = await (async () => {
+      try {
+        for await (const value of socket.receive) {
+          received.push(value);
+        }
+        return undefined;
+      } catch (error) {
+        return error;
+      }
+    })();
+    expect(received).toEqual([1, 2, 3]);
+    expect(rejection).toBe(closed.cause);
+  });
+
+  test("should discard queued messages when the caller aborts the session", async () => {
+    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const controller = new AbortController();
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 10,
+      incoming: struct.number(),
+      path: "/ws/test",
+    });
+    const [, socket] = await run(
+      createClient(withEndpoint("http://localhost")),
+      useSocket,
+      { signal: controller.signal },
+    );
+    const nativeSocket = lastMockInstance;
+    if (!socket || !nativeSocket) {
+      throw new Error("Expected socket");
+    }
+    for (const value of [1, 2, 3]) {
+      nativeSocket.triggerMessage(JSON.stringify(value));
+    }
+    await yieldMacrotask();
+
+    controller.abort();
+
+    await expect(socket.closed).resolves.toMatchObject({ kind: "aborted" });
+    const received: unknown[] = [];
+    const rejection = await (async () => {
+      try {
+        for await (const value of socket.receive) {
+          received.push(value);
+        }
+        return undefined;
+      } catch (error) {
+        return error;
+      }
+    })();
+    expect(received).toEqual([]);
+    expect(rejection).toMatchObject({ name: "AbortError" });
+  });
+
+  describe("incoming messages around a close", () => {
+    async function openNumberSession() {
+      vi.stubGlobal("WebSocket", createMockWebSocketClass());
+      const useSocket = defineWebSocket({
+        maxIncomingQueueSize: 10,
+        incoming: struct.number(),
+        path: "/ws/test",
+      });
+      const [, socket] = await run(
+        createClient(withEndpoint("http://localhost")),
+        useSocket,
+      );
+      const nativeSocket = lastMockInstance;
+      if (!socket || !nativeSocket) {
+        throw new Error("Expected socket");
+      }
+      return { nativeSocket, socket };
+    }
+
+    async function drainReceive(socket: { receive: AsyncIterable<unknown> }) {
+      const received: unknown[] = [];
+      for await (const value of socket.receive) {
+        received.push(value);
+      }
+      return received;
+    }
+
+    test("should deliver queued messages and then end after a close from the peer", async () => {
+      const { nativeSocket, socket } = await openNumberSession();
+      for (const value of [1, 2, 3]) {
+        nativeSocket.triggerMessage(JSON.stringify(value));
+      }
+      await yieldMacrotask();
+
+      nativeSocket.triggerClose({ code: 1000, reason: "", wasClean: true });
+
+      await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
+      await expect(drainReceive(socket)).resolves.toEqual([1, 2, 3]);
+    });
+
+    test("should deliver queued messages and then end after the caller closes the session", async () => {
+      const { nativeSocket, socket } = await openNumberSession();
+      for (const value of [1, 2, 3]) {
+        nativeSocket.triggerMessage(JSON.stringify(value));
+      }
+      await yieldMacrotask();
+
+      socket.close();
+
+      await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
+      await expect(drainReceive(socket)).resolves.toEqual([1, 2, 3]);
+    });
   });
 
   test("should abort-race beforeConnect and consume its late rejection", async () => {

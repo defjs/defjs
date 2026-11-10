@@ -44,7 +44,7 @@ Structural implementations of `EventStreamHandle` must implement `[Symbol.asyncD
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` is `eof`, `aborted`, or `error`. Every variant may carry `reason` and `cause`. Only `error` has `code`, one of [`EventStreamFaultCode`](/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened. `HTTP_STATUS` means a reconnect handshake ended with a non-2xx status.
+`kind` is `eof`, `aborted`, or `error`. Every variant may carry `reason` and `cause`. Only `error` has `code`, one of [`EventStreamFaultCode`](/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened. `HTTP_STATUS` means a reconnect handshake ended with a non-2xx status. A full `maxQueueSize` is not an error: reading the response pauses until the consumer takes an event. After an `error` end, the events already queued are still delivered before the iterator rejects.
 
 ## EventStructs
 
