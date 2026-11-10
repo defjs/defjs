@@ -406,6 +406,59 @@ describe("fetchEventStream", () => {
     await expect(stream.closed).resolves.toEqual({ kind: "eof" });
   });
 
+  test("should keep the committed event id on messages after a reconnect", async () => {
+    const request: HttpRequest = {
+      baseEndpoint: "https://example.com",
+      endpoint: "/events",
+      method: "GET",
+    };
+    const connections: [chunks: string[], end: "drop" | "eof"][] = [
+      // An id carries on to later events of the same connection.
+      [["id: 1\ndata: one\n\n", "data: one-b\n\n"], "drop"],
+      // A new connection starts from the id the stream last committed.
+      [["data: two\n\n"], "drop"],
+      // A block cut off before its blank line does not commit its id.
+      [["id: 2\ndata: three\n\n", "id: 3\ndata: part"], "drop"],
+      [["data: four\n\n"], "drop"],
+      // An id that contains NUL is ignored.
+      [["id: x\0\ndata: five\n\n"], "drop"],
+      // An empty id clears the stored one.
+      [["id:\ndata: six\n\n"], "drop"],
+      [["data: seven\n\n"], "eof"],
+    ];
+    const seen: (string | null)[] = [];
+    const fetch = (input: RequestInfo | URL) => {
+      seen.push(new Request(input).headers.get("last-event-id"));
+      const [chunks, end] = connections[seen.length - 1] ?? [[], "eof"];
+      return Promise.resolve(scriptedConnection(chunks, end));
+    };
+
+    const stream = await fetchEventStream(request, {
+      fetch: fetch,
+      onerror() {
+        return 0;
+      },
+      reconnect: { attempts: 10, delayMs: 0 },
+    });
+    const messages: [data: string, id: string][] = [];
+    for await (const event of stream) {
+      messages.push([event.data, event.id]);
+    }
+
+    expect(messages).toEqual([
+      ["one", "1"],
+      ["one-b", "1"],
+      ["two", "1"],
+      ["three", "2"],
+      ["four", "2"],
+      ["five", "2"],
+      ["six", ""],
+      ["seven", ""],
+    ]);
+    expect(seen).toEqual([null, "1", "1", "2", "2", "2", null]);
+    await expect(stream.closed).resolves.toEqual({ kind: "eof" });
+  });
+
   test("should close stream manually", async () => {
     const request: HttpRequest = {
       baseEndpoint: inject("testServerHost"),

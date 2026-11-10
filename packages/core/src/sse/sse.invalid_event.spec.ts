@@ -4,6 +4,7 @@ import {
   withEndpoint,
   withSSEHandle,
   withSSEOnInvalidEvent,
+  withSSEReconnect,
 } from "../client";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
@@ -112,6 +113,50 @@ describe("event stream invalid events", () => {
 
     stream.close();
     await stream.closed;
+  });
+
+  test("should report the last committed event id for an invalid event after a reconnect", async () => {
+    let connections = 0;
+    const ids: string[] = [];
+    const client = createClient(
+      withEndpoint("https://api.example.com"),
+      withSSEHandle(() => {
+        connections += 1;
+        return Promise.resolve(
+          new Response(
+            connections === 1
+              ? new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(encoder.encode("id: 7\ndata: one\n\n"));
+                  },
+                  pull(controller) {
+                    controller.error(new TypeError("network down"));
+                  },
+                })
+              : "event: unknown\ndata: two\n\n",
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+        );
+      }),
+      withSSEReconnect({ attempts: 2, delayMs: 0 }),
+      withSSEOnInvalidEvent(({ message }) => {
+        ids.push(message.id);
+      }),
+    );
+    const [error, stream] = await useStream(client());
+    expect(error).toBeNull();
+    if (!stream) {
+      throw new Error("Expected stream");
+    }
+
+    const received: Array<string | undefined> = [];
+    for await (const event of stream) {
+      received.push(event.id);
+    }
+
+    expect(connections).toBe(2);
+    expect(received).toEqual(["7"]);
+    expect(ids).toEqual(["7"]);
   });
 
   test("should finish an invalid event before the next event of the same chunk is delivered", async () => {

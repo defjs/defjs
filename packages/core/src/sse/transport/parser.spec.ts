@@ -6,6 +6,8 @@ import {
   readStreamBytes,
 } from "./parser";
 
+type ParsedMessage = Omit<EventStreamMessage, "id">;
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const noop = () => {
@@ -36,12 +38,12 @@ async function parseEvents(
   options: { lineLimit?: number; messageLimit?: number } = {},
 ): Promise<{
   ids: string[];
-  messages: EventStreamMessage[];
+  messages: ParsedMessage[];
   retries: number[];
 }> {
   const ids: string[] = [];
   const retries: number[] = [];
-  const messages: EventStreamMessage[] = [];
+  const messages: ParsedMessage[] = [];
   const maxBufferSize = options.messageLimit ?? 1024;
   const parseMessage = createMessageParser(
     ids.push.bind(ids),
@@ -341,7 +343,7 @@ describe("sse parser", () => {
   test("should parse message fields, ids and retry values", async () => {
     const ids: string[] = [];
     const retries: number[] = [];
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(
       (id) => {
         ids.push(id);
@@ -366,7 +368,6 @@ describe("sse parser", () => {
     expect(retries).toEqual([500]);
     expect(messages).toEqual([
       {
-        id: "1",
         event: "update",
         data: "line 1\nline 2",
       },
@@ -387,7 +388,6 @@ describe("sse parser", () => {
     await parseLine(encoder.encode("\n"));
     expect(onId).toHaveBeenCalledExactlyOnceWith("2");
     expect(onMessage).toHaveBeenCalledExactlyOnceWith({
-      id: "2",
       event: "",
       data: "pending",
     });
@@ -415,7 +415,7 @@ describe("sse parser", () => {
   });
 
   test("should keep json-looking data as raw string at parser boundary", async () => {
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
       return Promise.resolve();
@@ -428,7 +428,6 @@ describe("sse parser", () => {
 
     expect(messages).toEqual([
       {
-        id: "",
         event: "profile",
         data: '{"display_name":"Miao"}',
       },
@@ -438,7 +437,7 @@ describe("sse parser", () => {
   test("should ignore comments malformed retry and lines without field", async () => {
     const ids: string[] = [];
     const retries: number[] = [];
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(
       (id) => {
         ids.push(id);
@@ -461,7 +460,6 @@ describe("sse parser", () => {
     expect(retries).toEqual([]);
     expect(messages).toEqual([
       {
-        id: "",
         event: "",
         data: "ok",
       },
@@ -475,7 +473,7 @@ describe("sse parser", () => {
 
     expect(ids).toEqual([]);
     expect(retries).toEqual([]);
-    expect(messages).toEqual([{ id: "", event: "", data: "bom" }]);
+    expect(messages).toEqual([{ event: "", data: "bom" }]);
   });
 
   test("should preserve a BOM at the start of every field value", async () => {
@@ -486,7 +484,7 @@ describe("sse parser", () => {
     expect(ids).toEqual(["\uFEFF1"]);
     expect(retries).toEqual([]);
     expect(messages).toEqual([
-      { id: "\uFEFF1", event: "\uFEFFupdate", data: "\uFEFFpayload" },
+      { event: "\uFEFFupdate", data: "\uFEFFpayload" },
     ]);
   });
 
@@ -495,11 +493,11 @@ describe("sse parser", () => {
       "data: first\n\n\uFEFFdata: injected\n\n",
     );
 
-    expect(messages).toEqual([{ id: "", event: "", data: "first" }]);
+    expect(messages).toEqual([{ event: "", data: "first" }]);
   });
 
   test("should strip only one initial BOM even when it is split into individual bytes", async () => {
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parse = createLineParser(
       createMessageParser(noop, noop, (message) => {
         messages.push(message);
@@ -511,7 +509,7 @@ describe("sse parser", () => {
       await parse(Uint8Array.of(byte));
     }
 
-    expect(messages).toEqual([{ id: "", event: "", data: "猫" }]);
+    expect(messages).toEqual([{ event: "", data: "猫" }]);
   });
 
   test("should treat a BOM-only first line as blank and ignore unfinished events at EOF", async () => {
@@ -519,13 +517,13 @@ describe("sse parser", () => {
       "\uFEFF\n\ndata: delivered\n\ndata: unfinished",
     );
 
-    expect(messages).toEqual([{ id: "", event: "", data: "delivered" }]);
+    expect(messages).toEqual([{ event: "", data: "delivered" }]);
   });
 
   test("should remove only one space after the first colon and preserve colons in data", async () => {
     const { messages } = await parseEvents("data:  a:b\n\n");
 
-    expect(messages).toEqual([{ id: "", event: "", data: " a:b" }]);
+    expect(messages).toEqual([{ event: "", data: " a:b" }]);
   });
 
   test("should accept data without a message consumer or an explicit buffer bound", async () => {
@@ -539,7 +537,7 @@ describe("sse parser", () => {
   test("should not dispatch messages for frames without data fields", async () => {
     const ids: string[] = [];
     const retries: number[] = [];
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(
       (id) => {
         ids.push(id);
@@ -565,7 +563,7 @@ describe("sse parser", () => {
   });
 
   test("should handle partial line across chunks with non-zero line start", async () => {
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
       return Promise.resolve();
@@ -579,7 +577,6 @@ describe("sse parser", () => {
 
     expect(messages).toEqual([
       {
-        id: "",
         event: "",
         data: "hello\nincomplete",
       },
@@ -587,7 +584,7 @@ describe("sse parser", () => {
   });
 
   test("should handle crlf line endings and discard trailing newlines", async () => {
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
       return Promise.resolve();
@@ -599,7 +596,6 @@ describe("sse parser", () => {
 
     expect(messages).toEqual([
       {
-        id: "",
         event: "",
         data: "hello",
       },
@@ -607,7 +603,7 @@ describe("sse parser", () => {
   });
 
   test("should handle field with space after colon", async () => {
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
       return Promise.resolve();
@@ -619,7 +615,6 @@ describe("sse parser", () => {
 
     expect(messages).toEqual([
       {
-        id: "",
         event: "",
         data: "hello world",
       },
@@ -627,7 +622,7 @@ describe("sse parser", () => {
   });
 
   test("should handle field without space after colon", async () => {
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
       return Promise.resolve();
@@ -639,7 +634,6 @@ describe("sse parser", () => {
 
     expect(messages).toEqual([
       {
-        id: "",
         event: "",
         data: "hello",
       },
@@ -699,7 +693,7 @@ describe("sse parser", () => {
   });
 
   test("should not throw maxBufferSize for short messages", async () => {
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
       return Promise.resolve();
@@ -710,7 +704,6 @@ describe("sse parser", () => {
 
     expect(messages).toEqual([
       {
-        id: "",
         event: "",
         data: "hello",
       },
@@ -718,7 +711,7 @@ describe("sse parser", () => {
   });
 
   test("should allow one chunk with multiple short messages over maxBufferSize", async () => {
-    const messages: EventStreamMessage[] = [];
+    const messages: ParsedMessage[] = [];
     const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
       return Promise.resolve();
@@ -732,10 +725,10 @@ describe("sse parser", () => {
 
   test("should dispatch colonless data fields and preserve empty data lines", async () => {
     await expect(parseEvents("data\n\n")).resolves.toMatchObject({
-      messages: [{ data: "", event: "", id: "" }],
+      messages: [{ data: "", event: "" }],
     });
     await expect(parseEvents("data\ndata\n\n")).resolves.toMatchObject({
-      messages: [{ data: "\n", event: "", id: "" }],
+      messages: [{ data: "\n", event: "" }],
     });
   });
 
@@ -745,7 +738,7 @@ describe("sse parser", () => {
     );
 
     expect(retries).toEqual([2_147_483_647]);
-    expect(messages).toEqual([{ data: "ok", event: "", id: "" }]);
+    expect(messages).toEqual([{ data: "ok", event: "" }]);
   });
 
   test("should persist valid ids across events and ignore ids containing NUL", async () => {
@@ -755,9 +748,9 @@ describe("sse parser", () => {
 
     expect(ids).toEqual(["good"]);
     expect(messages).toEqual([
-      { data: "one", event: "", id: "good" },
-      { data: "two", event: "", id: "good" },
-      { data: "three", event: "", id: "good" },
+      { data: "one", event: "" },
+      { data: "two", event: "" },
+      { data: "three", event: "" },
     ]);
   });
 
@@ -784,7 +777,7 @@ describe("sse parser", () => {
         messageLimit: 10,
       }),
     ).resolves.toMatchObject({
-      messages: [{ data: "1234\n5678", event: "", id: "" }],
+      messages: [{ data: "1234\n5678", event: "" }],
     });
 
     await expect(

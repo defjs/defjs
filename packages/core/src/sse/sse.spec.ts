@@ -2497,6 +2497,55 @@ describe("sse reconnect method policy", () => {
     expect(lastEventIds).toEqual([null, "1"]);
   });
 
+  test("should keep the last event id on events after a reconnect until an empty id clears it", async () => {
+    const failure = new TypeError("network down");
+    const lastEventIds: Array<string | null> = [];
+    const handle = vi.fn<FetchHandle>((input) => {
+      lastEventIds.push(requireRequest(input).headers.get("last-event-id"));
+      const text = [
+        "id: 1\ndata: a\n\n",
+        "data: b\n\n",
+        "id:\ndata: c\n\ndata: d\n\n",
+      ][lastEventIds.length - 1];
+      return Promise.resolve(
+        new Response(
+          eventBytes(text ?? "", lastEventIds.length < 3 ? failure : undefined),
+          {
+            headers: { "content-type": "text/event-stream" },
+            status: 200,
+          },
+        ),
+      );
+    });
+    const client = createClient(
+      withEndpoint("https://example.com"),
+      withSSEHandle(handle),
+      withSSEReconnect({
+        attempts: 2,
+        delayMs: 0,
+        shouldReconnect: ({ attempt }) => attempt < 3,
+      }),
+    );
+
+    const [fault, stream] = await usePost(client);
+
+    expect(fault).toBeNull();
+    if (!stream) {
+      throw new Error("Expected stream");
+    }
+    const events: Array<[string, string | undefined]> = [];
+    for await (const event of stream) {
+      events.push([event.data, event.id]);
+    }
+    expect(events).toEqual([
+      ["a", "1"],
+      ["b", "1"],
+      ["c", undefined],
+      ["d", undefined],
+    ]);
+    expect(lastEventIds).toEqual([null, "1", "1"]);
+  });
+
   test("should let the SSE handle stamp each reconnect attempt", async () => {
     const failure = new TypeError("network down");
     const recorded: string[] = [];

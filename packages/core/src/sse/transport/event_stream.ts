@@ -686,10 +686,14 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         retryInterval = retry;
       },
       (message) => {
+        // The parser reports a block's id before its message, so the stream's last event id
+        // is the id this event carries, whether or not the block had its own id field.
+        const { event, data } = message;
+        const id = lastEventId;
         let result: Promise<TEvent | undefined> | TEvent | undefined;
         try {
           signal.throwIfAborted();
-          result = options.transformMessage(message, signal);
+          result = options.transformMessage({ id, event, data }, signal);
         } catch (error) {
           throw toTransformFailure(error, signal);
         }

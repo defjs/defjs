@@ -105,7 +105,7 @@ export interface MessageParserOptions {
 export function createMessageParser(
   onId: (id: string) => void,
   onRetry: (retry: number) => void,
-  onMessage?: (message: EventStreamMessage) => void | Promise<void>,
+  onMessage?: (message: Omit<EventStreamMessage, "id">) => void | Promise<void>,
   options?: MessageParserOptions,
 ): (line: Uint8Array) => void | Promise<void> {
   const limit = validateMaxBufferSize(options?.maxBufferSize);
@@ -130,7 +130,7 @@ export function createMessageParser(
         idPending = false;
       }
       const message =
-        data === "" ? undefined : { id, event, data: data.slice(0, -1) };
+        data === "" ? undefined : { event, data: data.slice(0, -1) };
       event = "";
       data = "";
       dataBytes = 0;
