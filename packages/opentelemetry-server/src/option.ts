@@ -32,7 +32,7 @@ import {
  *
  * `TResponse` is what `responseHook` receives: `HttpResponse<unknown>` for HTTP, `EventStreamHandle<unknown>` for SSE, `WebSocketSessionLike` for WebSocket. See {@link OpenTelemetryServerHttpOptions}, {@link OpenTelemetryServerSSEOptions} and {@link OpenTelemetryServerWebSocketOptions}.
  *
- * `enabled` defaults to `true`; only `enabled: false` turns the transport off. The old boolean switch (`http: false`) and top-level hooks are rejected by the TypeScript types only. There is no runtime check, so at runtime `http: false` leaves the transport enabled and a top-level hook is silently ignored.
+ * `enabled` defaults to `true`; only `enabled: false` turns the transport off.
  *
  * Span hooks run only when a `tracer` is supplied. `startSpanHook` runs synchronously before span creation for its own transport. Its attributes are applied after built-in attributes, so the application may override `url.full` or another initial value. If it throws, Defjs creates the span with built-in attributes and continues the request. `requestHook` runs after span creation and before the request is sent; `responseHook` runs after the transport result is returned. Both may return a promise, but neither is awaited: a throw or rejection never blocks or fails the operation. `responseHook` receives the original request as its third argument.
  *
@@ -86,7 +86,7 @@ export type OpenTelemetryServerHttpOptions =
  *
  * - `responseHook(span, stream, req)` runs once the stream has opened, before the span records `sse.connected`. `stream` is the `EventStreamHandle` the transport returned; `req` is the original `HttpRequest`.
  *
- * - SSE is traced at connection level. After startup the span stays open until `stream.closed` settles, and records `sse.connected`, then one of `sse.closed` (server EOF), `sse.aborted` (`stream.close()` or a caller abort of the open stream whose reason is not `TimeoutError`; the span still ends without error), or `sse.error` (including an abort whose reason is `TimeoutError`, which ends the span `ERROR`). No per-event spans are created. Reconnects happen inside the transport without rerunning interceptors, so `url.full`, `server.address` and `server.port` describe the first connection even when a reconnect picks another endpoint.
+ * - SSE is traced at connection level. After startup the span stays open until `stream.closed` settles, and records `sse.connected`, then one of `sse.closed` (server EOF), `sse.aborted` (`stream.close()` or a caller abort of the open stream whose reason is not `TimeoutError`; the span still ends without error), or `sse.error` (including an abort whose reason is `TimeoutError`, which ends the span `ERROR`). No per-event spans are created. The span carries `http.request.method`, which is `_OTHER` for a method outside RFC 9110, `PATCH` and `QUERY`, with the method as given in `http.request.method_original`. Reconnects happen inside the transport without rerunning interceptors, so `url.full`, `server.address` and `server.port` describe the first connection even when a reconnect picks another endpoint.
  *
  * - A non-2xx handshake is observed as a connection failure: the span ends `ERROR` and, with a `logger`, one `WARN` is emitted whatever the response body.
  *
@@ -105,7 +105,7 @@ export type OpenTelemetryServerSSEOptions = OpenTelemetryServerTransportOptions<
  *
  * `queryPropagation` defaults to `false`: the WebSocket query string is left unchanged and no trace context or baggage is written into the URL. Browser WebSocket clients usually cannot set headers, so enabling it writes the propagated context to the end of the query string, replacing any parameter of the same name. Query strings can be recorded by proxies, access logs and APM tools, and baggage values can be sensitive. Turn it on only after you accept that exposure.
  *
- * WebSocket is traced at connection level. The span stays open until `session.closed` settles. It records `websocket.connected`, then `websocket.closed` for a normal close or `websocket.error`. A close frame from the server counts as normal with any code, including 1011. An abrupt drop without a close frame (1006) ends the session in error and logs once, on every runtime. A caller abort of an open session is also `websocket.error`: the span ends `ERROR` and no log is emitted, except when the abort reason is `TimeoutError`, which is treated as a connection failure and logs once. `error.type` follows the abort reason: `AbortError` for a default `abort()`, the `Error.name` of an `Error` reason, `string` for a string reason. An abort while the WebSocket is still connecting ends the span `ERROR` with `error.type` `DefjsFault`. No per-message spans are created. As with SSE, connection attributes describe the first connection; a reconnect to another endpoint does not change them.
+ * WebSocket is traced at connection level. The span stays open until `session.closed` settles. It records `websocket.connected`, then `websocket.closed` for a normal close or `websocket.error`. A close frame from the server counts as normal with any code, including 1011. An abrupt drop without a close frame (1006) ends the session in error and logs once, on every runtime. A caller abort of an open session is also `websocket.error`: the span ends `ERROR` and no log is emitted, except when the abort reason is `TimeoutError`, which is treated as a connection failure and logs once. `error.type` follows the abort reason: `AbortError` for a default `abort()`, the `Error.name` of an `Error` reason, `string` for a string reason. An abort while the WebSocket is still connecting ends the span `ERROR` with `error.type` `DefjsFault`. No per-message spans are created. The span carries `http.request.method` `GET`, the method of the opening handshake. `url.full` uses the `ws:` or `wss:` form of the connection URL. As with SSE, connection attributes describe the first connection; a reconnect to another endpoint does not change them.
  *
  * Pass `{ enabled: false }` to skip WebSocket instrumentation. Span hooks run only when a `tracer` is supplied.
  *
@@ -176,7 +176,7 @@ interface TransportSwitch {
  *
  * Each of `tracer`, `meter` and `logger` is optional and works without the others. Without `tracer`, the plugin creates no local spans, never calls `trace.getTracer(...)`, and skips `startSpanHook`, `requestHook` and `responseHook`. Propagation still forwards the extracted parent context.
  *
- * HTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a transport to skip it. An out-of-type runtime value such as `http: false` is not that switch: the transport stays enabled.
+ * HTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a transport to skip it.
  *
  * `http`, `sse`, and `webSocket` are read once, in that order, during this call. A missing block stays missing. `tracer`, `meter`, `logger`, `propagator`, and hook functions keep their identity. Replacing a block, or changing its fields, after this call does not affect the returned option.
  *

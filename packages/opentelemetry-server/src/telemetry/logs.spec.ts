@@ -230,6 +230,7 @@ describe("client exception logs", () => {
         "defjs.phase": "connect",
         "exception.type": "Error",
         "server.address": "api.example.com",
+        "server.port": 443,
       });
     }
   });

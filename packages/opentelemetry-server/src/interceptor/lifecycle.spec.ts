@@ -384,6 +384,7 @@ describe("span hook recording lifecycle", () => {
           "http.request.method": "GET",
           "http.response.status_code": 200,
           "server.address": "api.example.com",
+          "server.port": 443,
         },
       );
     },

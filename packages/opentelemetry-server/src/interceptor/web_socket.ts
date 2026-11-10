@@ -25,7 +25,7 @@ import {
   runSpanHook,
   setSpanError,
 } from "../telemetry/trace";
-import { resolveUrl } from "../telemetry/url";
+import { resolveWebSocketUrl, serverAttributes } from "../telemetry/url";
 
 export interface WebSocketInterceptorOptions {
   tracer?: Tracer;
@@ -71,7 +71,7 @@ export function createOpenTelemetryWebSocketInterceptor(
       return next(req);
     }
 
-    const url = resolveUrl(req.endpoint, req.baseEndpoint);
+    const resolved = resolveWebSocketUrl(req.endpoint, req.baseEndpoint);
 
     const parentCtx = propagator.extract(
       context.active(),
@@ -83,10 +83,15 @@ export function createOpenTelemetryWebSocketInterceptor(
       const startSpanHookResult = resolveStartSpanHook(startSpanHook, req);
       span = createWebSocketSpan(
         tracer,
-        url,
+        resolved.url,
         parentCtx,
         req.operation,
-        startSpanHookResult.ok ? startSpanHookResult.attributes : undefined,
+        {
+          // The opening handshake is always a GET (RFC 6455 section 4.1).
+          "http.request.method": "GET",
+          ...serverAttributes(resolved),
+          ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
+        },
       );
       if (!startSpanHookResult.ok) {
         runSpanHook(span, "startSpanHook", () => {

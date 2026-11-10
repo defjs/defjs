@@ -7,6 +7,7 @@ import {
   createSSESpan,
   createWebSocketSpan,
   endSpan,
+  httpMethodAttributes,
   resolveStartSpanHook,
   runSpanHook,
   setSpanError,
@@ -15,6 +16,39 @@ import {
 import { method } from "../../test/method";
 
 describe("trace helpers", () => {
+  test.each([
+    ["GET", { "http.request.method": "GET" }],
+    ["PATCH", { "http.request.method": "PATCH" }],
+    ["QUERY", { "http.request.method": "QUERY" }],
+    [
+      "get",
+      { "http.request.method": "GET", "http.request.method_original": "get" },
+    ],
+    [
+      "Delete",
+      {
+        "http.request.method": "DELETE",
+        "http.request.method_original": "Delete",
+      },
+    ],
+    [
+      "patch",
+      {
+        "http.request.method": "_OTHER",
+        "http.request.method_original": "patch",
+      },
+    ],
+    [
+      "PROPFIND",
+      {
+        "http.request.method": "_OTHER",
+        "http.request.method_original": "PROPFIND",
+      },
+    ],
+  ])("httpMethodAttributes(%s)", (input, expected) => {
+    expect(httpMethodAttributes(input)).toEqual(expected);
+  });
+
   test("createHttpSpan", () => {
     const { tracer, spans } = createMockTracer();
     createHttpSpan(

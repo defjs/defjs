@@ -200,12 +200,13 @@ describe("withOpenTelemetryServer without a tracer", () => {
         "http.request.method": "GET",
         "http.response.status_code": 200,
         "server.address": "api.example.com",
+        "server.port": 443,
       });
       expect(add.mock.calls).toEqual([
-        [1, { "server.address": "api.example.com" }],
-        [-1, { "server.address": "api.example.com" }],
-        [1, { "server.address": "api.example.com" }],
-        [-1, { "server.address": "api.example.com" }],
+        [1, { "server.address": "api.example.com", "server.port": 443 }],
+        [-1, { "server.address": "api.example.com", "server.port": 443 }],
+        [1, { "server.address": "api.example.com", "server.port": 443 }],
+        [-1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
     },
   );
@@ -1101,25 +1102,6 @@ describe("withOpenTelemetryServer transport capture", () => {
     expect(queryReads).toBe(0);
     expect(httpEnabledReads).toBe(1);
     expect(webSocketEnabledReads).toBe(1);
-  });
-
-  test("keeps out-of-type boolean transport switches enabled at runtime", () => {
-    const config = makeConfig();
-    withOpenTelemetryServer({
-      tracer: createMockTracer().tracer,
-      // @ts-expect-error false is not an HTTP transport option
-      http: false,
-      // @ts-expect-error false is not an SSE transport option
-      sse: false,
-      // @ts-expect-error false is not a WebSocket transport option
-      webSocket: false,
-    })(config);
-
-    expect(config.interceptors.map((item) => item.kind)).toEqual([
-      "http",
-      "sse",
-      "web-socket",
-    ]);
   });
 
   test("creates metrics at application and isolates bucket arrays across clients", async () => {

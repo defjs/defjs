@@ -23,6 +23,39 @@ export function resolveStartSpanHook(
   }
 }
 
+// Fetch writes only these six methods in upper case; every other method goes on the wire as given.
+const FETCH_NORMALIZED_METHODS: ReadonlySet<string> = new Set([
+  "DELETE",
+  "GET",
+  "HEAD",
+  "OPTIONS",
+  "POST",
+  "PUT",
+]);
+
+// The known methods of the HTTP semantic conventions: RFC 9110, PATCH and QUERY.
+const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set([
+  ...FETCH_NORMALIZED_METHODS,
+  "CONNECT",
+  "PATCH",
+  "QUERY",
+  "TRACE",
+]);
+
+/**
+ * `http.request.method` for a span of a request sent through Fetch: the method as it goes on the wire,
+ * or `_OTHER` when it is not a known method, with the method as given in `http.request.method_original`
+ * whenever the two differ.
+ */
+export function httpMethodAttributes(method: string): Attributes {
+  const upper = method.toUpperCase();
+  const sent = FETCH_NORMALIZED_METHODS.has(upper) ? upper : method;
+  const value = KNOWN_HTTP_METHODS.has(sent) ? sent : "_OTHER";
+  return value === method
+    ? { "http.request.method": value }
+    : { "http.request.method": value, "http.request.method_original": method };
+}
+
 export function createHttpSpan(
   tracer: Tracer,
   method: string,

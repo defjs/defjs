@@ -229,11 +229,12 @@ describe("createOpenTelemetrySSEInterceptor", () => {
         expect.any(Number),
         {
           "server.address": "api.example.com",
+          "server.port": 443,
           "defjs.result": "success",
         },
       );
       expect(metrics.activeStreams.add.mock.calls).toEqual([
-        [1, { "server.address": "api.example.com" }],
+        [1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
       expect(metrics.connectionDuration.record).not.toHaveBeenCalled();
 
@@ -247,14 +248,15 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       await waitForSettledPromises();
 
       expect(metrics.activeStreams.add.mock.calls).toEqual([
-        [1, { "server.address": "api.example.com" }],
-        [-1, { "server.address": "api.example.com" }],
+        [1, { "server.address": "api.example.com", "server.port": 443 }],
+        [-1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
       expect(metrics.connectionDuration.record).toHaveBeenCalledTimes(1);
       expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
         expect.any(Number),
         {
           "server.address": "api.example.com",
+          "server.port": 443,
           "defjs.result": result,
           ...extras,
         },
@@ -277,6 +279,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       expect.any(Number),
       {
         "server.address": "api.example.com",
+        "server.port": 443,
         "defjs.result": "error",
         "error.type": "TypeError",
       },
@@ -333,6 +336,120 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     );
   });
 
+  test.each([
+    ["https://api.example.com", "api.example.com", 443],
+    ["https://api.example.com:8443", "api.example.com", 8443],
+    ["http://localhost:8080", "localhost", 8080],
+    ["http://localhost", "localhost", 80],
+  ])(
+    "should put server.address and server.port on the SSE span when it is created, base %s",
+    async (baseEndpoint, address, port) => {
+      const { tracer } = createMockTracer();
+      const interceptor = createOpenTelemetrySSEInterceptor({
+        tracer,
+        propagator: mockPropagator,
+      });
+
+      await interceptor.fn({ ...makeSSERequest(), baseEndpoint }, () =>
+        Promise.resolve(makeSSEStream()),
+      );
+
+      expect(
+        vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+      ).toMatchObject({ "server.address": address, "server.port": port });
+    },
+  );
+
+  test.each([
+    ["GET", { "http.request.method": "GET" }],
+    ["POST", { "http.request.method": "POST" }],
+    [
+      "post",
+      { "http.request.method": "POST", "http.request.method_original": "post" },
+    ],
+    [
+      "FOO",
+      {
+        "http.request.method": "_OTHER",
+        "http.request.method_original": "FOO",
+      },
+    ],
+  ])(
+    "should put http.request.method on the SSE span when it is created, method %s",
+    async (requestMethod, expected) => {
+      const { tracer } = createMockTracer();
+      const interceptor = createOpenTelemetrySSEInterceptor({
+        tracer,
+        propagator: mockPropagator,
+      });
+
+      await interceptor.fn({ ...makeSSERequest(), method: requestMethod }, () =>
+        Promise.resolve(makeSSEStream()),
+      );
+
+      expect(
+        vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+      ).toMatchObject(expected);
+    },
+  );
+
+  test("should let startSpanHook override http.request.method on the SSE span", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetrySSEInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      startSpanHook: () => ({ "http.request.method": "POST" }),
+    });
+
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(makeSSEStream()),
+    );
+
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toMatchObject({ "http.request.method": "POST" });
+  });
+
+  test("should not write server attributes on the SSE span without a base endpoint", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetrySSEInterceptor({
+      tracer,
+      propagator: mockPropagator,
+    });
+
+    await interceptor.fn({ ...makeSSERequest(), baseEndpoint: undefined }, () =>
+      Promise.resolve(makeSSEStream()),
+    );
+
+    const attributes = vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]
+      ?.attributes;
+    expect(attributes).not.toHaveProperty("server.address");
+    expect(attributes).not.toHaveProperty("server.port");
+  });
+
+  test("should let startSpanHook override the built-in SSE server attributes", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetrySSEInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      startSpanHook: () => ({
+        "server.address": "tenant.example.com",
+        "server.port": 9443,
+      }),
+    });
+
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(makeSSEStream()),
+    );
+
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toMatchObject({
+      "server.address": "tenant.example.com",
+      "server.port": 9443,
+    });
+  });
+
   test("should merge startSpanHook attributes last into initial SSE span options", async () => {
     const { tracer } = createMockTracer();
     const req = makeSSERequest();
@@ -353,6 +470,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
     ).toEqual({
       "app.tenant": "acme",
+      "http.request.method": "GET",
+      "server.address": "api.example.com",
+      "server.port": 443,
       "url.full": "https://tenant.example.com/events",
     });
   });
@@ -371,6 +491,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     expect(
       vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
     ).toEqual({
+      "http.request.method": "GET",
+      "server.address": "api.example.com",
+      "server.port": 443,
       "url.full": "https://api.example.com/events",
     });
   });
@@ -392,6 +515,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     expect(
       vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
     ).toEqual({
+      "http.request.method": "GET",
+      "server.address": "api.example.com",
+      "server.port": 443,
       "url.full": "https://api.example.com/events",
     });
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
@@ -494,6 +620,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       expect.objectContaining({
         "defjs.result": "success",
         "server.address": "api.example.com",
+        "server.port": 443,
         "sse.close.kind": "eof",
       }),
     );
@@ -749,6 +876,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       expect.objectContaining({
         "defjs.result": "success",
         "server.address": "api.example.com",
+        "server.port": 443,
       }),
     );
     expect(metrics.activeStreams.add).toHaveBeenCalledWith(

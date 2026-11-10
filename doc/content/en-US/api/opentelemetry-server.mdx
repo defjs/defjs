@@ -48,7 +48,7 @@ HTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a trans
 
 <ApiSignature name="OpenTelemetryServerTransportOptions, OpenTelemetryServerHttpOptions, OpenTelemetryServerSSEOptions, OpenTelemetryServerWebSocketOptions" />
 
-`enabled` defaults to `true`; only `enabled: false` turns a transport off. The old boolean switch (`http: false`) and top-level hooks are rejected by the TypeScript types only. There is no runtime check, so at runtime `http: false` leaves the transport enabled and a top-level hook is silently ignored.
+`enabled` defaults to `true`; only `enabled: false` turns a transport off.
 
 Span hooks run only when a `tracer` is supplied. `startSpanHook` runs synchronously before span creation for its own HTTP, SSE, or WebSocket transport. Its attributes are applied after built-in attributes, so the application may override `url.full` or another initial value. If it throws, Defjs creates the span with built-in attributes and continues the request; `requestHook` and `responseHook` run after span creation. Neither is awaited: a throw or rejection never blocks or fails the operation.
 

@@ -25,11 +25,12 @@ import {
   addSpanEvent,
   createSSESpan,
   endSpan,
+  httpMethodAttributes,
   resolveStartSpanHook,
   runSpanHook,
   setSpanError,
 } from "../telemetry/trace";
-import { resolveUrl } from "../telemetry/url";
+import { resolveHttpUrl, serverAttributes } from "../telemetry/url";
 
 export interface SSEInterceptorOptions {
   tracer?: Tracer;
@@ -70,17 +71,15 @@ export function createOpenTelemetrySSEInterceptor(
       req.headers ?? new Headers(),
       headersGetter,
     );
-    const url = resolveUrl(req.endpoint, req.baseEndpoint);
+    const resolved = resolveHttpUrl(req.endpoint, req.baseEndpoint);
     let span: Span | undefined;
     if (tracer) {
       const startSpanHookResult = resolveStartSpanHook(startSpanHook, req);
-      span = createSSESpan(
-        tracer,
-        url,
-        parentCtx,
-        req.operation,
-        startSpanHookResult.ok ? startSpanHookResult.attributes : undefined,
-      );
+      span = createSSESpan(tracer, resolved.url, parentCtx, req.operation, {
+        ...httpMethodAttributes(req.method),
+        ...serverAttributes(resolved),
+        ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
+      });
       if (!startSpanHookResult.ok) {
         runSpanHook(span, "startSpanHook", () => {
           throw startSpanHookResult.error;

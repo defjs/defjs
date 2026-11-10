@@ -255,6 +255,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
         {
           "http.request.method": "GET",
           "server.address": "api.example.com",
+          "server.port": 443,
           ...(status === 0 ? {} : { "http.response.status_code": status }),
           ...(status >= 400 ? { "error.type": String(status) } : {}),
         },
@@ -280,6 +281,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       {
         "http.request.method": "GET",
         "server.address": "api.example.com",
+        "server.port": 443,
         "error.type": "TypeError",
       },
     );
@@ -364,6 +366,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     ).toEqual({
       "http.request.method": "GET",
       "server.address": "api.example.com",
+      "server.port": 443,
       "url.full": "https://api.example.com/test",
     });
   });
@@ -426,6 +429,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     ).toEqual({
       "http.request.method": "GET",
       "server.address": "api.example.com",
+      "server.port": 443,
       "url.full": "https://api.example.com/test",
     });
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
@@ -541,6 +545,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       {
         "http.request.method": "GET",
         "server.address": "api.example.com",
+        "server.port": 443,
       },
     );
   });
@@ -713,6 +718,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
         "http.request.method": "GET",
         "http.response.status_code": 200,
         "server.address": "api.example.com",
+        "server.port": 443,
       }),
     );
   });
@@ -780,6 +786,20 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     expect(activeSpans[0]?.attributes["server.address"]).toBe(
       "api.example.com",
     );
+  });
+
+  test("should set the scheme default server.port when URL has no explicit port", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetryHttpInterceptor({
+      tracer,
+      propagator: mockPropagator,
+    });
+
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
+    );
+
+    expect(activeSpans[0]?.attributes["server.port"]).toBe(443);
   });
 
   test("should set server.port when URL has explicit port", async () => {

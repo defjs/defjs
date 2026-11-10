@@ -22,7 +22,7 @@ import {
   setSpanError,
   setSpanHttpResponse,
 } from "../telemetry/trace";
-import { resolveHttpUrl } from "../telemetry/url";
+import { resolveHttpUrl, serverAttributes } from "../telemetry/url";
 
 export interface HttpInterceptorOptions {
   tracer?: Tracer;
@@ -63,18 +63,21 @@ export function createOpenTelemetryHttpInterceptor(
       req.headers ?? new Headers(),
       headersGetter,
     );
-    const { url, serverAddress, serverPort } = resolveHttpUrl(
-      req.endpoint,
-      req.baseEndpoint,
-    );
+    const resolved = resolveHttpUrl(req.endpoint, req.baseEndpoint);
     let span: Span | undefined;
     if (tracer) {
       const startSpanHookResult = resolveStartSpanHook(startSpanHook, req);
-      span = createHttpSpan(tracer, req.method, url, parentCtx, req.operation, {
-        ...(serverAddress ? { "server.address": serverAddress } : {}),
-        ...(serverPort ? { "server.port": serverPort } : {}),
-        ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
-      });
+      span = createHttpSpan(
+        tracer,
+        req.method,
+        resolved.url,
+        parentCtx,
+        req.operation,
+        {
+          ...serverAttributes(resolved),
+          ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
+        },
+      );
 
       if (!startSpanHookResult.ok) {
         runSpanHook(span, "startSpanHook", () => {

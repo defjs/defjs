@@ -284,11 +284,12 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
         expect.any(Number),
         {
           "server.address": "api.example.com",
+          "server.port": 443,
           "defjs.result": "success",
         },
       );
       expect(metrics.activeConnections.add.mock.calls).toEqual([
-        [1, { "server.address": "api.example.com" }],
+        [1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
       expect(metrics.connectionDuration.record).not.toHaveBeenCalled();
 
@@ -299,14 +300,15 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       await waitForSettledPromises();
 
       expect(metrics.activeConnections.add.mock.calls).toEqual([
-        [1, { "server.address": "api.example.com" }],
-        [-1, { "server.address": "api.example.com" }],
+        [1, { "server.address": "api.example.com", "server.port": 443 }],
+        [-1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
       expect(metrics.connectionDuration.record).toHaveBeenCalledTimes(1);
       expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
         expect.any(Number),
         {
           "server.address": "api.example.com",
+          "server.port": 443,
           "defjs.result": result,
           ...extras,
         },
@@ -329,6 +331,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       expect.any(Number),
       {
         "server.address": "api.example.com",
+        "server.port": 443,
         "defjs.result": "error",
         "error.type": "TypeError",
       },
@@ -455,6 +458,117 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     );
   });
 
+  test.each([
+    [
+      "https://api.example.com",
+      "wss://api.example.com/ws",
+      "api.example.com",
+      443,
+    ],
+    ["http://localhost:8080", "ws://localhost:8080/ws", "localhost", 8080],
+    ["http://localhost", "ws://localhost/ws", "localhost", 80],
+    [
+      "wss://api.example.com:8443",
+      "wss://api.example.com:8443/ws",
+      "api.example.com",
+      8443,
+    ],
+  ])(
+    "should use the ws scheme and server attributes on the WebSocket span when it is created, base %s",
+    async (baseEndpoint, url, address, port) => {
+      const { tracer } = createMockTracer();
+      const interceptor = createOpenTelemetryWebSocketInterceptor({
+        tracer,
+        propagator: mockPropagator,
+      });
+
+      await interceptor.fn({ ...makeWsRequest(), baseEndpoint }, () =>
+        Promise.resolve(makeWsSession()),
+      );
+
+      expect(
+        vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+      ).toMatchObject({
+        "url.full": url,
+        "server.address": address,
+        "server.port": port,
+      });
+    },
+  );
+
+  test("should put http.request.method GET on the WebSocket span when it is created", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetryWebSocketInterceptor({
+      tracer,
+      propagator: mockPropagator,
+    });
+
+    await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
+    );
+
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toMatchObject({ "http.request.method": "GET" });
+  });
+
+  test("should let startSpanHook override http.request.method on the WebSocket span", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetryWebSocketInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      startSpanHook: () => ({ "http.request.method": "POST" }),
+    });
+
+    await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
+    );
+
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toMatchObject({ "http.request.method": "POST" });
+  });
+
+  test("should not write server attributes on the WebSocket span without a base endpoint", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetryWebSocketInterceptor({
+      tracer,
+      propagator: mockPropagator,
+    });
+
+    await interceptor.fn({ ...makeWsRequest(), baseEndpoint: undefined }, () =>
+      Promise.resolve(makeWsSession()),
+    );
+
+    const attributes = vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]
+      ?.attributes;
+    expect(attributes).not.toHaveProperty("server.address");
+    expect(attributes).not.toHaveProperty("server.port");
+  });
+
+  test("should let startSpanHook override the built-in WebSocket server attributes", async () => {
+    const { tracer } = createMockTracer();
+    const interceptor = createOpenTelemetryWebSocketInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      startSpanHook: () => ({
+        "server.address": "tenant.example.com",
+        "server.port": 9443,
+      }),
+    });
+
+    await interceptor.fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
+    );
+
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toMatchObject({
+      "server.address": "tenant.example.com",
+      "server.port": 9443,
+    });
+  });
+
   test("should merge startSpanHook attributes last into initial WebSocket span options", async () => {
     const { tracer } = createMockTracer();
     const req = makeWsRequest();
@@ -475,6 +589,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
     ).toEqual({
       "app.tenant": "acme",
+      "http.request.method": "GET",
+      "server.address": "api.example.com",
+      "server.port": 443,
       "url.full": "wss://tenant.example.com/socket",
     });
   });
@@ -493,6 +610,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     expect(
       vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
     ).toEqual({
+      "http.request.method": "GET",
+      "server.address": "api.example.com",
+      "server.port": 443,
       "url.full": "wss://api.example.com/ws",
     });
   });
@@ -514,6 +634,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     expect(
       vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
     ).toEqual({
+      "http.request.method": "GET",
+      "server.address": "api.example.com",
+      "server.port": 443,
       "url.full": "wss://api.example.com/ws",
     });
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
@@ -585,6 +708,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       expect.objectContaining({
         "defjs.result": "success",
         "server.address": "api.example.com",
+        "server.port": 443,
       }),
     );
   });
@@ -986,6 +1110,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       expect.objectContaining({
         "defjs.result": "success",
         "server.address": "api.example.com",
+        "server.port": 443,
       }),
     );
     expect(metrics.activeConnections.add).toHaveBeenCalledWith(

@@ -90,6 +90,7 @@ describe("metrics helpers", () => {
       "http.request.method": "GET",
       "http.response.status_code": 200,
       "server.address": "api.example.com",
+      "server.port": 443,
     });
   });
 
@@ -106,6 +107,7 @@ describe("metrics helpers", () => {
         "http.request.method": "GET",
         "http.response.status_code": status,
         "server.address": "api.example.com",
+        "server.port": 443,
       });
     },
   );
@@ -120,6 +122,7 @@ describe("metrics helpers", () => {
     ).toEqual({
       "http.request.method": "GET",
       "server.address": "api.example.com",
+      "server.port": 443,
     });
   });
 
@@ -134,6 +137,7 @@ describe("metrics helpers", () => {
       "error.type": "TypeError",
       "http.request.method": "GET",
       "server.address": "api.example.com",
+      "server.port": 443,
     });
   });
 
@@ -146,6 +150,14 @@ describe("metrics helpers", () => {
       "defjs.result": "error",
       "error.type": "string",
       "server.address": "api.example.com",
+      "server.port": 443,
+    });
+  });
+
+  test("createServerMetricAttributes includes the scheme default port", () => {
+    expect(createServerMetricAttributes(makeHttpRequest())).toEqual({
+      "server.address": "api.example.com",
+      "server.port": 443,
     });
   });
 
@@ -171,6 +183,7 @@ describe("metrics helpers", () => {
     ).toEqual({
       "defjs.operation": "users.read",
       "server.address": "api.example.com",
+      "server.port": 443,
     });
   });
 
