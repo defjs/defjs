@@ -27,9 +27,11 @@ import { isMediaTypeParametersWellFormed } from "../../internal/media_type_param
 import { getContentType, isJsonMediaType } from "../../http/transport/utils";
 import {
   awaitWithSignal,
+  hasAborted,
   mergeAbortSignals,
   releaseAbortSignal,
   resolveAbortedCause,
+  stopsUnreadItems,
 } from "../../internal/abort";
 import { AsyncQueue } from "../../internal/async_queue";
 import { computeReconnectDelay, wait } from "../../internal/backoff";
@@ -109,7 +111,7 @@ interface EventStreamCloseInfoBase {
  *
  * The discriminant is `kind` so that `code` can mean the same thing it means on a fault.
  *
- * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()`, disposal and a caller signal abort all discard the events nobody has read yet, as `EventSource.close()` does, and the iterator ends at once. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open, or that gives a URL the request cannot use (invalid, or with credentials), uses `REQ_BUILD_FAILED`. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one.
+ * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()`, disposal and a caller signal abort all discard the events nobody has read yet, as `EventSource.close()` does, whether or not the stream had already ended (the response ended, or it failed), and the iterator ends at once. A stop after the stream ended discards the unread events and changes nothing else: `closed` keeps its value, and an iterator that rejects with the `cause` of an `error` end still rejects with it once no unread event is left. If the caller signal aborts after open and before the stream has ended with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`; a deadline that expires after the stream has ended is a stop and discards the unread events. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open, or that gives a URL the request cannot use (invalid, or with credentials), uses `REQ_BUILD_FAILED`. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one, unless the caller stops the stream first.
  *
  * @group sse
  */
@@ -327,6 +329,8 @@ export async function fetchEventStream<
   }
 
   let settledClosed = false;
+  // Whether the stream ended before the caller's signal aborted. Set once, when `closed` settles.
+  let endedBeforeAbort = false;
   let settledOpen = false;
   let retryInterval =
     options.retryInterval ?? policy?.delayMs ?? DEFAULT_RETRY_INTERVAL;
@@ -357,9 +361,15 @@ export async function fetchEventStream<
       let returned = false;
       return {
         next() {
-          return returned
-            ? Promise.resolve({ done: true, value: undefined })
-            : iterator.next();
+          if (returned) {
+            return Promise.resolve({ done: true, value: undefined });
+          }
+          // The stop reaches the transport only once its read fails, which can be after a reader comes back, and
+          // not at all once the stream has ended, so check the caller's signal here.
+          if (stopsUnreadItems(request.signal, endedBeforeAbort)) {
+            queue.discard();
+          }
+          return iterator.next();
         },
         return() {
           if (!returned) {
@@ -929,6 +939,7 @@ export async function fetchEventStream<
     }
 
     settledClosed = true;
+    endedBeforeAbort = !hasAborted(request.signal);
     closedDeferred.resolve(info);
   }
 }

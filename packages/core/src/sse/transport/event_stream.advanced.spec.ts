@@ -2621,8 +2621,8 @@ describe("fetchEventStream failure delivery", () => {
 
   const THREE = "data: 1\n\ndata: 2\n\ndata: 3\n\n";
 
-  /** Sends the text, then either errors the body or stays open until the request is aborted. */
-  function bodyThen(text: string, ending: "error" | "open") {
+  /** Sends the text, then ends the body, errors it, or stays open until the request is aborted. */
+  function bodyThen(text: string, ending: "eof" | "error" | "open") {
     let sent = false;
     return new ReadableStream<Uint8Array>(
       {
@@ -2630,6 +2630,10 @@ describe("fetchEventStream failure delivery", () => {
           if (!sent) {
             sent = true;
             controller.enqueue(new TextEncoder().encode(text));
+            return undefined;
+          }
+          if (ending === "eof") {
+            controller.close();
             return undefined;
           }
           if (ending === "error") {
@@ -2750,6 +2754,133 @@ describe("fetchEventStream failure delivery", () => {
     expect(rejection).toBe(ERR_TIMEOUT);
   });
 
+  test("should discard queued events for a read made right after a manual abort", async () => {
+    const controller = new AbortController();
+    const parsed: string[] = [];
+    const stream = await fetchTransformedEventStream(
+      { ...request, signal: controller.signal },
+      {
+        fetch: respondOnce(bodyThen(THREE, "open")),
+        transformMessage(message) {
+          parsed.push(message.data);
+          return message.data;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    // The transport learns of the abort only when its read fails; the read below comes first.
+    controller.abort(ERR_ABORTED);
+    const { received, rejection } = await drain(stream);
+
+    expect(received).toEqual([]);
+    expect(rejection).toBeUndefined();
+    await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
+  });
+
+  test("should deliver queued events for a read made right after a timeout abort", async () => {
+    const controller = new AbortController();
+    const parsed: string[] = [];
+    const stream = await fetchTransformedEventStream(
+      { ...request, signal: controller.signal },
+      {
+        fetch: respondOnce(bodyThen(THREE, "open")),
+        transformMessage(message) {
+          parsed.push(message.data);
+          return message.data;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(parsed).toHaveLength(3));
+
+    controller.abort(new DOMException("deadline expired", "TimeoutError"));
+    const { received, rejection } = await drain(stream);
+
+    expect(received).toEqual(["1", "2", "3"]);
+    expect(rejection).toBe(ERR_TIMEOUT);
+  });
+
+  describe("a stop after the stream ended", () => {
+    const stops: [
+      string,
+      (stream: EventStreamHandle<string>, controller: AbortController) => void,
+    ][] = [
+      ["close()", (stream) => stream.close()],
+      ["an abort", (_stream, controller) => controller.abort(ERR_ABORTED)],
+      [
+        "a timeout abort",
+        (_stream, controller) =>
+          controller.abort(new DOMException("deadline", "TimeoutError")),
+      ],
+    ];
+
+    async function endedStream(ending: "eof" | "error") {
+      const controller = new AbortController();
+      const parsed: string[] = [];
+      const stream = await fetchTransformedEventStream(
+        { ...request, signal: controller.signal },
+        {
+          fetch: respondOnce(bodyThen(THREE, ending)),
+          transformMessage(message) {
+            parsed.push(message.data);
+            return message.data;
+          },
+        },
+      );
+      await vi.waitFor(() => expect(parsed).toHaveLength(3));
+      const closed = await stream.closed;
+      expect(closed.kind).toBe(ending);
+      return { closed, controller, stream };
+    }
+
+    test.each(stops)(
+      "should discard unread events and end after %s on a stream that reached eof",
+      async (_name, stop) => {
+        const { closed, controller, stream } = await endedStream("eof");
+
+        stop(stream, controller);
+        const { received, rejection } = await drain(stream);
+
+        expect(received).toEqual([]);
+        expect(rejection).toBeUndefined();
+        await expect(stream.closed).resolves.toBe(closed);
+      },
+    );
+
+    test.each(stops)(
+      "should discard unread events and still reject with the cause after %s on a stream that failed",
+      async (_name, stop) => {
+        const { closed, controller, stream } = await endedStream("error");
+        if (closed.kind !== "error") {
+          throw new Error("expected an error ending");
+        }
+
+        stop(stream, controller);
+        const { received, rejection } = await drain(stream);
+
+        expect(received).toEqual([]);
+        expect(rejection).toBe(closed.cause);
+        await expect(stream.closed).resolves.toBe(closed);
+      },
+    );
+
+    test.each(["eof", "error"] as const)(
+      "should discard unread events after disposal on a stream that ended with %s",
+      async (ending) => {
+        const { closed, stream } = await endedStream(ending);
+
+        await stream[Symbol.asyncDispose]();
+        const { received, rejection } = await drain(stream);
+
+        expect(received).toEqual([]);
+        expect(rejection).toBe(
+          closed.kind === "error" ? closed.cause : undefined,
+        );
+        await expect(stream.closed).resolves.toBe(closed);
+      },
+    );
+  });
+
   test("should discard unread events and end after close()", async () => {
     const parsed: string[] = [];
     const stream = await fetchTransformedEventStream(request, {
@@ -2762,12 +2893,12 @@ describe("fetchEventStream failure delivery", () => {
     await vi.waitFor(() => expect(parsed).toHaveLength(3));
 
     stream.close();
-
-    await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
+    // Read before anything asynchronous runs, so only close() itself can have discarded the events.
     const { received, rejection } = await drain(stream);
 
     expect(received).toEqual([]);
     expect(rejection).toBeUndefined();
+    await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
   });
 
   test("should discard queued events and end at once after a manual abort", async () => {

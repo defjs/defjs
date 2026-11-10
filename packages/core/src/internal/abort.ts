@@ -73,6 +73,44 @@ export function releaseAbortSignal(signal: AbortSignal): void {
   forwardingSignals.get(signal)?.release();
 }
 
+/** `signal`, or a signal merged into it, once it has aborted. A released merge forwards nothing, but still names its sources. */
+function findAbortedSignal(signal: AbortSignal): AbortSignal | undefined {
+  if (signal.aborted) {
+    return signal;
+  }
+  const state = forwardingSignals.get(signal);
+  if (state) {
+    for (const source of state.sources) {
+      const aborted = findAbortedSignal(source);
+      if (aborted) {
+        return aborted;
+      }
+    }
+  }
+  return undefined;
+}
+
+/** Whether the caller's `signal`, or a signal merged into it, has aborted, even when it aborted after its merge was released. */
+export function hasAborted(signal: AbortSignal | undefined): boolean {
+  return signal !== undefined && findAbortedSignal(signal) !== undefined;
+}
+
+/**
+ * Whether the caller's signal has stopped a session, so that its unread items are gone. A deadline is a failure, not a
+ * stop: it delivers what was queued, unless the session had already ended when it expired. A session reads the signal
+ * at each read instead of listening to it, so nothing stays attached to the signal once the session has ended.
+ */
+export function stopsUnreadItems(
+  signal: AbortSignal | undefined,
+  endedBeforeAbort: boolean,
+): boolean {
+  const aborted = signal && findAbortedSignal(signal);
+  return (
+    aborted !== undefined &&
+    (endedBeforeAbort || !isTimeoutCause(aborted.reason))
+  );
+}
+
 /**
  * WebIDL accepts a value as an `AbortSignal` only when it is a platform object of that interface, in any realm.
  * The `aborted` getter performs exactly that brand check on its receiver, so it also rejects lookalikes that have

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   awaitWithSignal,
+  hasAborted,
   mergeAbortSignals,
   releaseAbortSignal,
+  stopsUnreadItems,
 } from "./abort";
 import { yieldMacrotask } from "../../test/macrotask";
 
@@ -104,6 +106,36 @@ describe("abort helpers", () => {
       expect(holderAdd).not.toHaveBeenCalled();
     },
   );
+
+  test("should still see a source that aborts after its merge was released", () => {
+    const controller = new AbortController();
+    const caller = new AbortController();
+    const merged = mergeAbortSignals(controller.signal, [caller.signal]);
+    expect(hasAborted(merged)).toBe(false);
+    expect(hasAborted(undefined)).toBe(false);
+    releaseAbortSignal(merged);
+
+    caller.abort("stop");
+
+    expect(merged.aborted).toBe(false);
+    expect(hasAborted(merged)).toBe(true);
+    expect(hasAborted(mergeAbortSignals(merged, []))).toBe(true);
+  });
+
+  test("should drop unread items for any abort except a deadline that expired before the end", () => {
+    const timeout = new DOMException("deadline", "TimeoutError");
+    const stopped = new AbortController();
+    stopped.abort("stop");
+    const expired = new AbortController();
+    expired.abort(timeout);
+
+    expect(stopsUnreadItems(undefined, true)).toBe(false);
+    expect(stopsUnreadItems(new AbortController().signal, true)).toBe(false);
+    expect(stopsUnreadItems(stopped.signal, false)).toBe(true);
+    expect(stopsUnreadItems(stopped.signal, true)).toBe(true);
+    expect(stopsUnreadItems(expired.signal, false)).toBe(false);
+    expect(stopsUnreadItems(expired.signal, true)).toBe(true);
+  });
 
   test("should resolve an asynchronous callback result", async () => {
     const signal = new AbortController().signal;

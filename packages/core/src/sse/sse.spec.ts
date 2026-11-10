@@ -1086,6 +1086,108 @@ describe("request event stream runtime", () => {
     expect(handle).toHaveBeenCalledOnce();
   });
 
+  describe("unread events after the stream ended", () => {
+    const useEndedStream = defineEventStream({
+      events: { message: struct.string() },
+      path: "/events",
+    });
+
+    /** Two events, then the body ends or fails. Nothing reads them until the caller stops. */
+    async function openEndedStream(ending: "eof" | "error") {
+      const controller = new AbortController();
+      let sent = false;
+      const handle = vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>(
+              {
+                pull(body) {
+                  if (!sent) {
+                    sent = true;
+                    body.enqueue(
+                      new TextEncoder().encode("data: a\n\ndata: b\n\n"),
+                    );
+                  } else if (ending === "eof") {
+                    body.close();
+                  } else {
+                    body.error(new TypeError("connection reset"));
+                  }
+                },
+              },
+              { highWaterMark: 0 },
+            ),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+        ),
+      );
+      const client = createClient(
+        withEndpoint("https://api.example.com"),
+        withSSEHandle(handle),
+      );
+      const [error, stream] = await useEndedStream(
+        client({ signal: controller.signal }),
+      );
+      expect(error).toBeNull();
+      if (!stream) {
+        throw new Error("Expected stream");
+      }
+      const closed = await stream.closed;
+      expect(closed.kind).toBe(ending);
+      return { closed, controller, stream };
+    }
+
+    async function drain(stream: AsyncIterable<unknown>) {
+      const received: unknown[] = [];
+      const rejection = await (async () => {
+        try {
+          for await (const event of stream) {
+            received.push(event);
+          }
+          return undefined;
+        } catch (error) {
+          return error;
+        }
+      })();
+      return { received, rejection };
+    }
+
+    const reasons = [
+      ["an abort", ERR_ABORTED],
+      ["a timeout abort", new DOMException("deadline", "TimeoutError")],
+    ] as const;
+
+    test.each(reasons)(
+      "should discard unread events when the caller signal aborts with %s after eof",
+      async (_name, reason) => {
+        const { closed, controller, stream } = await openEndedStream("eof");
+
+        controller.abort(reason);
+        const { received, rejection } = await drain(stream);
+
+        expect(received).toEqual([]);
+        expect(rejection).toBeUndefined();
+        await expect(stream.closed).resolves.toBe(closed);
+      },
+    );
+
+    test.each(reasons)(
+      "should discard unread events and still reject with the cause when the caller signal aborts with %s after an error",
+      async (_name, reason) => {
+        const { closed, controller, stream } = await openEndedStream("error");
+        if (closed.kind !== "error") {
+          throw new Error("expected an error ending");
+        }
+
+        controller.abort(reason);
+        const { received, rejection } = await drain(stream);
+
+        expect(received).toEqual([]);
+        expect(rejection).toBe(closed.cause);
+        await expect(stream.closed).resolves.toBe(closed);
+      },
+    );
+  });
+
   test("should ignore non-aborted signal during startup", async () => {
     const controller = new AbortController();
 

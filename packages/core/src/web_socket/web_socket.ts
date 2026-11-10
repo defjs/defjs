@@ -24,10 +24,12 @@ import {
 } from "../interceptor/interceptor";
 import {
   awaitWithSignal,
+  hasAborted,
   mergeAbortSignals,
   releaseAbortSignal,
   resolveAbortedFault,
   resolveAbortFault,
+  stopsUnreadItems,
 } from "../internal/abort";
 import { AsyncQueue } from "../internal/async_queue";
 import type { EndpointArgs } from "../internal/endpoint_command";
@@ -174,13 +176,15 @@ export interface WebSocketConnectionInfo {
  *
  * What `session.closed` resolves with, once the session has ended for good.
  *
- * - `closed`: the session ended normally. When the peer or the server closed it, the messages already queued are still delivered through `receive` before it ends. A manual `session.close()` or disposal is a stop by the caller: the messages nobody has read yet are discarded and `receive` ends at once.
+ * - `closed`: the session ended normally. When the peer or the server closed it, the messages already queued are still delivered through `receive` before it ends, unless the caller stops the session first. A manual `session.close()` or disposal is a stop by the caller: the messages nobody has read yet are discarded and `receive` ends at once.
  *
  * - `aborted`: the session was cancelled; `cause` is the abort reason. Messages nobody has read yet are discarded.
  *
- * - `error`: the session failed; `cause` is required. The error is passed to `onRuntimeError`. Runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors. A connection that was open and then dropped without a close frame (`code` 1006) is an `error` on every runtime, with `cause` `Error("WebSocket connection error")`; the runtime need not fire a native `error` event for it. Messages already queued are still delivered through `receive`; it rejects with `cause` after the last one.
+ * - `error`: the session failed; `cause` is required. The error is passed to `onRuntimeError`. Runtime causes need not carry a Defjs fault code; heartbeat timeout and exhausted reconnects can retain plain errors. A connection that was open and then dropped without a close frame (`code` 1006) is an `error` on every runtime, with `cause` `Error("WebSocket connection error")`; the runtime need not fire a native `error` event for it. Messages already queued are still delivered through `receive`, unless the caller stops the session first; it rejects with `cause` after the last one.
  *
  * - `code`, `reason`, and `wasClean` come from the native close event when one was observed. A manual `session.close(code, reason)` fills `code` and `reason` when the close event does not.
+ *
+ * A stop by the caller (`session.close()`, disposal, or an abort of the caller's `signal`) discards the messages nobody has read yet, whether or not the session had already ended (the peer closed it, or it failed). A stop after the session ended discards the unread messages and changes nothing else: `closed` keeps its value, and `receive` still rejects with the `cause` of an `error` end once no unread message is left. A `signal` that expires with a `TimeoutError` while the session is still running is a timeout, not a stop: the session ends as an `error` and delivers the queued messages first. A deadline that expires after the session has ended is a stop.
  *
  * @group web-socket
  */
@@ -206,7 +210,7 @@ export type WebSocketCloseInfo =
  *
  * - `state` is the logical {@link WebSocketState}; `connection` is the latest {@link WebSocketConnectionInfo}. `bufferedAmount` is the native unsent byte count, or `0` with no physical socket.
  *
- * - `receive` yields incoming messages already parsed with the `incoming` struct. It is one-consumer: asking for a second iterator throws a `TypeError`. A frame that cannot be parsed is reported to `onRuntimeError` listeners and skipped. When the transport fails (for example a drop without a close frame), messages already received are delivered first, then `receive` rejects with `closed.cause`. Cancellation by the caller (`signal` abort), `close()` and disposal discard the messages nobody has read yet; a heartbeat timeout or a transport failure ends with an error after the queued messages are delivered.
+ * - `receive` yields incoming messages already parsed with the `incoming` struct. It is one-consumer: asking for a second iterator throws a `TypeError`. A frame that cannot be parsed is reported to `onRuntimeError` listeners and skipped. When the transport fails (for example a drop without a close frame), messages already received are delivered first, then `receive` rejects with `closed.cause`. Cancellation by the caller (`signal` abort), `close()` and disposal discard the messages nobody has read yet, whether or not the session had already ended; a heartbeat timeout or a transport failure ends with an error after the queued messages are delivered, and a stop after that error discards the unread messages while `receive` still rejects with `closed.cause`. A `signal` that expires with a timeout while the session is open is not a stop, but one that expires after the session ended is.
  *
  * - `send(message)` validates and encodes the message with the `outgoing` struct, then sends JSON text. It sends immediately while `open`, queues while `reconnecting` when `maxOutgoingQueueSize` allows, and throws a `DOMException` named `InvalidStateError` when the session is not writable. It also throws when no `outgoing` struct is declared, the message fails the struct, or the queue is disabled or full.
  *
@@ -728,6 +732,8 @@ async function runWebSocketCommand<
           const sendQueue: string[] = [];
           let startupSettled = false;
           let finished = false;
+          // Whether the session ended before the caller's signal aborted. Set once, in `finish`.
+          let endedBeforeAbort = false;
           let latestConnection: WebSocketConnectionInfo | undefined;
           let attempt = 0;
           let generation = 0;
@@ -749,9 +755,23 @@ async function runWebSocketCommand<
               endpoint.protocols ??
               []),
           ];
+          const receive: AsyncIterable<WebSocketIncomingData<TIncoming>> = {
+            [Symbol.asyncIterator]() {
+              const iterator = incomingQueue[Symbol.asyncIterator]();
+              return {
+                next() {
+                  // The session stops listening to the caller's signal once it has ended, so check it here.
+                  if (stopsUnreadItems(callerAbort, endedBeforeAbort)) {
+                    incomingQueue.discard();
+                  }
+                  return iterator.next();
+                },
+              };
+            },
+          };
           const session = createWebSocketSession(
             endpoint.outgoing,
-            incomingQueue,
+            receive,
             closedDeferred.promise,
             state,
             sessionController,
@@ -1229,8 +1249,10 @@ async function runWebSocketCommand<
                     emitRuntimeError(state, error);
                     return;
                   }
+                  // After close() the caller reads nothing more, so a frame that arrives during the closing handshake is dropped.
                   if (
                     finished ||
+                    manualClose !== undefined ||
                     sessionController.currentSocket !== socket ||
                     typeof transformed === "undefined"
                   ) {
@@ -1423,6 +1445,7 @@ async function runWebSocketCommand<
             }
 
             finished = true;
+            endedBeforeAbort = !hasAborted(callerAbort);
             stopHeartbeat(sessionController);
 
             const activeSocket = sessionController.currentSocket;
@@ -1447,10 +1470,6 @@ async function runWebSocketCommand<
 
             sendQueue.length = 0;
             if (final.kind === "closed") {
-              // close() and disposal are the caller stopping the session: unread messages are dropped.
-              if (manualClose) {
-                incomingQueue.discard();
-              }
               incomingQueue.close();
               state.error = undefined;
             } else {
@@ -1508,6 +1527,8 @@ async function runWebSocketCommand<
 
           function requestClose(code?: number, reason?: string): void {
             validateWebSocketClose(code, reason);
+            // The caller stopped the session, ended or not: what it has not read is gone from this call on, as a closed WebSocket dispatches no more messages.
+            incomingQueue.discard();
             if (finished || manualClose) {
               return;
             }
@@ -1745,7 +1766,7 @@ function createWebSocketSession<
   TOutgoing extends AnyStruct | undefined,
 >(
   outgoing: TOutgoing,
-  queue: AsyncQueue<TIncoming>,
+  receive: AsyncIterable<TIncoming>,
   closed: Promise<WebSocketCloseInfo>,
   state: SocketRefState,
   sessionController: {
@@ -1799,7 +1820,7 @@ function createWebSocketSession<
         state.listeners.stateChange.delete(listener);
       };
     },
-    receive: queue,
+    receive,
     send(message: WebSocketOutgoingData<TOutgoing>) {
       if (isUnavailable()) {
         throw new DOMException(

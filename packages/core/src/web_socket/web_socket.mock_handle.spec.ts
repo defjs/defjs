@@ -3477,7 +3477,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   describe("incoming messages around a close", () => {
-    async function openNumberSession() {
+    async function openNumberSession(signal?: AbortSignal) {
       vi.stubGlobal("WebSocket", createMockWebSocketClass());
       const useSocket = defineWebSocket({
         incoming: struct.number(),
@@ -3486,6 +3486,7 @@ describe("web socket runtime environment edge cases", () => {
       const [, socket] = await run(
         createClient(withEndpoint("http://localhost")),
         useSocket,
+        signal ? { signal } : undefined,
       );
       const nativeSocket = lastMockInstance;
       if (!socket || !nativeSocket) {
@@ -3501,6 +3502,145 @@ describe("web socket runtime environment edge cases", () => {
       }
       return received;
     }
+
+    /** Three unread messages, then the peer closes the session or the connection drops. */
+    async function openEndedSession(ending: "closed" | "error") {
+      const controller = new AbortController();
+      const { nativeSocket, socket } = await openNumberSession(
+        controller.signal,
+      );
+      for (const value of [1, 2, 3]) {
+        nativeSocket.triggerMessage(JSON.stringify(value));
+      }
+      await yieldMacrotask();
+      if (ending === "closed") {
+        nativeSocket.triggerClose({ code: 1000, reason: "", wasClean: true });
+      } else {
+        nativeSocket.triggerError();
+        nativeSocket.triggerClose({ code: 1006, reason: "", wasClean: false });
+      }
+      const closed = await socket.closed;
+      expect(closed.kind).toBe(ending);
+      return { closed, controller, socket };
+    }
+
+    async function rejectionOf(socket: { receive: AsyncIterable<unknown> }) {
+      const received: unknown[] = [];
+      const rejection = await (async () => {
+        try {
+          for await (const value of socket.receive) {
+            received.push(value);
+          }
+          return undefined;
+        } catch (error) {
+          return error;
+        }
+      })();
+      return { received, rejection };
+    }
+
+    const stopsAfterTheEnd: [
+      string,
+      (
+        socket: { close(): void },
+        controller: AbortController,
+      ) => void | Promise<void>,
+    ][] = [
+      ["close()", (socket) => socket.close()],
+      ["an abort", (_socket, controller) => controller.abort()],
+      [
+        "a timeout abort",
+        (_socket, controller) =>
+          controller.abort(new DOMException("deadline", "TimeoutError")),
+      ],
+    ];
+
+    test.each(stopsAfterTheEnd)(
+      "should discard unread messages and end after %s on a session the peer closed",
+      async (_name, stop) => {
+        const { closed, controller, socket } = await openEndedSession("closed");
+
+        await stop(socket, controller);
+        const { received, rejection } = await rejectionOf(socket);
+
+        expect(received).toEqual([]);
+        expect(rejection).toBeUndefined();
+        await expect(socket.closed).resolves.toBe(closed);
+      },
+    );
+
+    test.each(stopsAfterTheEnd)(
+      "should discard unread messages and still reject with the cause after %s on a session that failed",
+      async (_name, stop) => {
+        const { closed, controller, socket } = await openEndedSession("error");
+        if (closed.kind !== "error") {
+          throw new Error("expected an error ending");
+        }
+
+        await stop(socket, controller);
+        const { received, rejection } = await rejectionOf(socket);
+
+        expect(received).toEqual([]);
+        expect(rejection).toBe(closed.cause);
+        await expect(socket.closed).resolves.toBe(closed);
+      },
+    );
+
+    test.each(["closed", "error"] as const)(
+      "should discard unread messages after disposal on a session that ended as %s",
+      async (ending) => {
+        const { closed, socket } = await openEndedSession(ending);
+
+        await socket[Symbol.asyncDispose]();
+        const { received, rejection } = await rejectionOf(socket);
+
+        expect(received).toEqual([]);
+        expect(rejection).toBe(
+          closed.kind === "error" ? closed.cause : undefined,
+        );
+        await expect(socket.closed).resolves.toBe(closed);
+      },
+    );
+
+    test("should deliver unread messages before rejecting when the caller's signal expires with a timeout while the session is open", async () => {
+      const controller = new AbortController();
+      const { nativeSocket, socket } = await openNumberSession(
+        controller.signal,
+      );
+      for (const value of [1, 2, 3]) {
+        nativeSocket.triggerMessage(JSON.stringify(value));
+      }
+      await yieldMacrotask();
+
+      controller.abort(new DOMException("deadline", "TimeoutError"));
+
+      const closed = await socket.closed;
+      if (closed.kind !== "error") {
+        throw new Error("expected an error ending");
+      }
+      const { received, rejection } = await rejectionOf(socket);
+      expect(received).toEqual([1, 2, 3]);
+      expect(rejection).toBe(closed.cause);
+    });
+
+    test("should not listen to the caller's signal after the session ended and still discard when it aborts", async () => {
+      const controller = new AbortController();
+      const listeners = watchAbortListeners(controller.signal);
+      const { nativeSocket, socket } = await openNumberSession(
+        controller.signal,
+      );
+      nativeSocket.triggerMessage(JSON.stringify(1));
+      await yieldMacrotask();
+      nativeSocket.triggerClose({ code: 1000, reason: "", wasClean: true });
+      await socket.closed;
+      expect(listeners.removed()).toBe(listeners.added());
+      const added = listeners.added();
+
+      controller.abort();
+
+      await expect(drainReceive(socket)).resolves.toEqual([]);
+      expect(listeners.added()).toBe(added);
+    });
 
     test("should deliver queued messages and then end after a close from the peer", async () => {
       const { nativeSocket, socket } = await openNumberSession();
@@ -3526,6 +3666,22 @@ describe("web socket runtime environment edge cases", () => {
 
       await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
       await expect(drainReceive(socket)).resolves.toEqual([]);
+    });
+
+    test("should discard unread messages for a read made right after close() and drop frames that arrive during the closing handshake", async () => {
+      const { nativeSocket, socket } = await openNumberSession();
+      for (const value of [1, 2, 3]) {
+        nativeSocket.triggerMessage(JSON.stringify(value));
+      }
+      await yieldMacrotask();
+
+      socket.close();
+      nativeSocket.triggerMessage(JSON.stringify(4));
+      const read = drainReceive(socket);
+      nativeSocket.triggerMessage(JSON.stringify(5));
+
+      await expect(read).resolves.toEqual([]);
+      await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
     });
 
     test("should discard unread messages and end at once after the caller disposes the session", async () => {
