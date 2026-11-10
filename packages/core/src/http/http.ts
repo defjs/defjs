@@ -681,6 +681,7 @@ async function executeHttpAttempt<
       liveTransports.add(transportController);
       if (isReadableStreamBody(nextRequest.body)) state.replayable = false;
       let started = false;
+      let streamedBody = false;
       let bodyFailed = false;
       let sendTimer: ReturnType<typeof setTimeout> | undefined;
       // Runs once: the fulfilled and rejected handlers below are exclusive.
@@ -699,8 +700,9 @@ async function executeHttpAttempt<
         },
         clientConfig.http.handle,
         {
-          start() {
+          start(streamed) {
             started = true;
+            streamedBody = streamed;
             (state.methods ??= []).push(nextRequest.method);
             if (!matches) return;
             resolved.start();
@@ -741,7 +743,11 @@ async function executeHttpAttempt<
           },
           (error: unknown) => {
             settleSend();
-            const classified = classifyHttpAttempt(error, started);
+            const classified = classifyHttpAttempt(
+              error,
+              started,
+              streamedBody,
+            );
             if (matches)
               resolved.end(
                 httpAttemptDone(
@@ -946,7 +952,11 @@ type HttpAttempt = {
 };
 
 /** Map a fetchHandler rejection onto the attempt that reached the selected endpoint. */
-function classifyHttpAttempt(error: unknown, started: boolean): HttpAttempt {
+function classifyHttpAttempt(
+  error: unknown,
+  started: boolean,
+  streamedBody: boolean,
+): HttpAttempt {
   if (
     !started ||
     error === ERR_FETCH_UNSUPPORTED ||
@@ -991,6 +1001,12 @@ function classifyHttpAttempt(error: unknown, started: boolean): HttpAttempt {
     };
   }
   if (createNetworkFault(error).code === "NET_UNREACHABLE") {
+    // With a streamed request body, fetch rejects with the same network error whether the endpoint is
+    // down, the connection is HTTP/1.x, a redirect cannot replay the stream, a CORS preflight failed,
+    // or the body source itself threw. None of these shows the endpoint is down, so none is attributed.
+    if (streamedBody) {
+      return { landed: false };
+    }
     return {
       landed: true,
       info: { attempted: true, code: "NET_UNREACHABLE" },

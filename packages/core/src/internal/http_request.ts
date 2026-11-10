@@ -44,20 +44,47 @@ export interface HttpProgressEvent {
  *
  * Upload progress for a `Blob`, `File`, `ArrayBuffer`, or `FormData` body is
  * reported only where `fetch` can stream request bodies. The body is converted
- * to a stream and `onUploadProgress` counts those bytes. Chromium can do that
- * only on HTTP/2 or later; on HTTP/1.1 the upload fails with `NET_UNREACHABLE`
- * (`cause` is `TypeError: Failed to fetch`). Firefox cannot stream request
- * bodies, so that body is sent unchanged and `onUploadProgress` is not called.
- * A caller-supplied `ReadableStream` still reports progress wherever the runtime
- * accepts it. Download progress is unaffected.
+ * to a stream and `onUploadProgress` counts those bytes. Firefox cannot stream
+ * request bodies, so that body is sent unchanged and `onUploadProgress` is not
+ * called. A caller-supplied `ReadableStream` still reports progress wherever the
+ * runtime accepts it. Download progress is unaffected.
  *
- * Where that conversion runs, FormData with `onUploadProgress` reads its serialized
- * stream directly, keeps its multipart boundary, and is sent without a
- * library-generated `Content-Length` (chunked on HTTP/1.1 where the runtime accepts
- * the stream), so progress and abort work without buffering the whole body. It reports an
- * unknown total unless a valid explicit `Content-Length` supplies it. For an
- * endpoint that requires `Content-Length`, such as some presigned upload
- * targets, omit `onUploadProgress`; platform Fetch then sends FormData with its
+ * A converted body is an ordinary streaming request, so the Fetch rules for
+ * streaming request bodies apply, as they do to a caller-supplied
+ * `ReadableStream` with or without `onUploadProgress`. These calls fail with
+ * `NET_UNREACHABLE`, with a runtime-specific `TypeError` as `cause`:
+ *
+ * - Chromium and WebKit accept a streaming request body only over HTTP/2 or
+ *   later, so the call fails on HTTP/1.1. WebKit was checked manually at 27.2
+ *   only; this repository does not test it. Node.js and Bun accept HTTP/1.1,
+ *   which departs from the Fetch standard.
+ * - In browsers, a cross-origin request needs a CORS preflight, unless the
+ *   browser holds a cached preflight result, and fails unless the server
+ *   answers `OPTIONS`. A same-origin request is not preflighted.
+ * - A 301, 302, 307, or 308 redirect fails after the body was sent once. A 303
+ *   redirect becomes a GET and succeeds. Without `onUploadProgress`, a Blob or
+ *   FormData body follows the redirect.
+ *
+ * `fetch` gives the same network error for each of these as for an unreachable
+ * endpoint, and for a source `ReadableStream` that throws while `fetch` reads
+ * it, so the error does not reliably show the endpoint is down. The load
+ * balancer therefore receives `{ attempted: false }` for it, as it does for a
+ * throwing progress callback (`EXT_OBSERVER_FAILED`). A healthy endpoint is not
+ * ejected for these failures, but a down endpoint is not detected by streamed
+ * uploads alone, and a rejected streamed upload is not retried as a
+ * `connect-failure`.
+ *
+ * A streamed body also has no known length. Browsers send no `Content-Length`.
+ * Node.js and Bun send the known length of a Blob, File, or ArrayBuffer and use
+ * chunked encoding for FormData. FormData with `onUploadProgress` reads its
+ * serialized stream directly and keeps its multipart boundary, so progress and
+ * abort work without buffering the whole body. It reports an unknown total
+ * unless a valid explicit `Content-Length` header sets it; that header only sets
+ * the reported total, since browsers do not send it.
+ *
+ * For an endpoint that cannot accept any of this, such as one that requires
+ * `Content-Length` (some presigned upload targets), omit `onUploadProgress`;
+ * the body is then sent as built, and platform Fetch sends FormData with its
  * length. Non-identity encoded downloads also report `total: 0` and
  * `lengthComputable: false`, since `loaded` counts decoded stream bytes.
  * Cancellation releases the wrapped upload stream.

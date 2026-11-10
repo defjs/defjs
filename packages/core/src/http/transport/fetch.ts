@@ -377,7 +377,8 @@ export async function fetchHandler(
 }
 
 type FetchLifecycle = {
-  start: () => void;
+  /** `streamedBody` is true when `fetch` is handed a `ReadableStream`, including the one built for upload progress. */
+  start: (streamedBody: boolean) => void;
   response: (response: Response) => void;
   /** The request body stopped for good: its source errored or its observer failed. */
   bodyFailed: () => void;
@@ -445,6 +446,7 @@ async function sendFetchRequest(
 
   try {
     prepared = await prepareUploadProgressRequest(httpRequest);
+    const streamedBody = isReadableStreamBody(prepared.body);
     if (platform) {
       // fetch(url, init) builds the Request itself, so building one here would only do that work twice.
       const url = resolveRequestUrl(prepared);
@@ -453,7 +455,7 @@ async function sendFetchRequest(
       fallbackUrl = url.href;
       response = await fetchWithSignal(
         () => {
-          lifecycle?.start();
+          lifecycle?.start(streamedBody);
           return fetchImpl(url, init);
         },
         abortSignal,
@@ -465,7 +467,7 @@ async function sendFetchRequest(
       fallbackUrl = built.url;
       response = await fetchWithSignal(
         () => {
-          lifecycle?.start();
+          lifecycle?.start(streamedBody);
           return fetchImpl(built);
         },
         abortSignal,
@@ -497,8 +499,8 @@ async function sendFetchRequest(
 
 /**
  * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where `fetch`
- * accepts a streaming request body. Chromium accepts that body only on HTTP/2 or later, so on
- * HTTP/1.1 `fetch` rejects and the call is `NET_UNREACHABLE`. Firefox cannot stream request
+ * accepts a streaming request body. Chromium and WebKit accept that body only on HTTP/2 or later,
+ * so on HTTP/1.1 `fetch` rejects and the call is `NET_UNREACHABLE`. Firefox cannot stream request
  * bodies: the original body is sent and `onUploadProgress` is not called. Download progress is
  * unaffected. FormData uses the serialized stream and boundary directly; its total length is
  * unknown unless declared in a header.
@@ -532,6 +534,7 @@ async function prepareUploadProgressRequest(
     headers.set("Content-Type", converted.contentType);
   }
   if (converted.total > 0) {
+    // Read back below as the progress total. Browsers drop this forbidden header; undici and Bun send it.
     headers.set("Content-Length", String(converted.total));
   }
 

@@ -91,7 +91,8 @@ export interface PickResult {
   readonly start?: () => void;
   /**
    * Called synchronously at most once after start, when the peer response begins,
-   * or when transport fails before that response. Caller cancellation is unattributed.
+   * or when transport fails before that response. Caller cancellation is unattributed,
+   * and so is a network error on a streamed HTTP request body.
    * A throw or returned thenable is contained exactly like `done`.
    */
   readonly end?: (info: DoneInfo) => void;
@@ -135,10 +136,20 @@ export type PickFaultCode =
  * Outcome of the attempt that used the selected endpoint.
  *
  * `attempted: false` means no attempt is attributed to that endpoint: nothing
- * was sent, or the attempt ended by caller cancellation or `close()`. Both
- * `code` and `status` are then absent. `attempted: true` with no `code` means the peer
- * answered without a classified failure. Built-in balancers read only the neutral
- * `code`, never `status`.
+ * was sent, the attempt ended by caller cancellation or `close()`, or `fetch`
+ * rejected a streamed HTTP request body with a network error before any
+ * response. Both `code` and `status` are then absent. `attempted: true` with no
+ * `code` means the peer answered without a classified failure. Built-in balancers
+ * read only the neutral `code`, never `status`.
+ *
+ * A streamed HTTP request body is a caller-supplied `ReadableStream` or the
+ * stream built for `onUploadProgress`. `fetch` rejects it with the same network
+ * error for a refused connection, an HTTP/1.1 connection, a redirect that cannot
+ * replay the stream, a failed CORS preflight, and a source stream that throws,
+ * so that error does not reliably show the endpoint is down and is reported as
+ * `{ attempted: false }`. The cost is that a genuinely down endpoint is not
+ * detected by streamed uploads alone: they do not switch `pickFirst` away from
+ * it and do not count toward `outlierDetection`.
  *
  * @group client
  */
