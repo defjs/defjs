@@ -47,16 +47,9 @@ export function uploadOutcome(
   kind: UploadBodyKind,
   transport: UploadTransport,
 ): UploadOutcome {
-  if (!cap.streamBody) {
-    switch (kind) {
-      case "ReadableStream":
-        return "unsupported";
-      case "Blob":
-      case "ArrayBuffer":
-      case "FormData":
-        return "bypassed";
-    }
-  }
+  // Only a caller-supplied ReadableStream reports upload progress. Any other body is sent as built.
+  if (kind !== "ReadableStream") return "bypassed";
+  if (!cap.streamBody) return "unsupported";
   if (transport === "platform" && !cap.streamOverHttp1) return "unreachable";
   return "observed";
 }

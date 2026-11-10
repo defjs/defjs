@@ -12,7 +12,7 @@ const transports = [
   "platform",
   "custom",
 ] as const satisfies readonly UploadTransport[];
-const convertedKinds = [
+const unobservedKinds = [
   "Blob",
   "ArrayBuffer",
   "FormData",
@@ -41,31 +41,17 @@ test("maps firefox ReadableStream to unsupported on both transports", () => {
   }
 });
 
-test("maps Blob, ArrayBuffer and FormData by runtime and transport", () => {
-  for (const kind of convertedKinds) {
-    for (const transport of transports) {
-      expect(uploadOutcome(uploadCapabilities.firefox, kind, transport)).toBe(
-        "bypassed",
-      );
-      expect(uploadOutcome(uploadCapabilities.node, kind, transport)).toBe(
-        "observed",
-      );
-      expect(uploadOutcome(uploadCapabilities.bun, kind, transport)).toBe(
-        "observed",
-      );
+test("maps Blob, ArrayBuffer and FormData to bypassed on every runtime and transport", () => {
+  const capabilities = [
+    ...runtimes.map((runtime) => uploadCapabilities[runtime]),
+    simulatedFirefoxStreaming,
+  ];
+  for (const kind of unobservedKinds) {
+    for (const capability of capabilities) {
+      for (const transport of transports) {
+        expect(uploadOutcome(capability, kind, transport)).toBe("bypassed");
+      }
     }
-    expect(uploadOutcome(uploadCapabilities.chrome, kind, "custom")).toBe(
-      "observed",
-    );
-    expect(uploadOutcome(uploadCapabilities.chrome, kind, "platform")).toBe(
-      "unreachable",
-    );
-    expect(uploadOutcome(simulatedFirefoxStreaming, kind, "custom")).toBe(
-      "observed",
-    );
-    expect(uploadOutcome(simulatedFirefoxStreaming, kind, "platform")).toBe(
-      "unreachable",
-    );
   }
 });
 

@@ -40,12 +40,18 @@ async function collectUnhandledRejections<T>(
   }
 }
 
-test("should not leave an unhandled rejection after a later upload chunk observer fails", async () => {
+test("should not leave an unhandled rejection after an upload chunk observer fails", async () => {
   const cause = new Error("chunk observer failed");
-  let calls = 0;
   const client = createClient(withEndpoint(inject("testServerHost")));
   const upload = defineRequest({
-    builder: () => ({ body: new Blob(["hello-upload"]) }),
+    builder: () => ({
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1]));
+          controller.close();
+        },
+      }),
+    }),
     method: "POST",
     path: "/body/upload",
   });
@@ -54,8 +60,7 @@ test("should not leave an unhandled rejection after a later upload chunk observe
     upload(
       client({
         onUploadProgress() {
-          calls += 1;
-          if (calls > 1) throw cause;
+          throw cause;
         },
       }),
     ),

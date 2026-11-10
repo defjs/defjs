@@ -142,9 +142,8 @@ export type PickFaultCode =
  * `code` means the peer answered without a classified failure. Built-in balancers
  * read only the neutral `code`, never `status`.
  *
- * A streamed HTTP request body is a caller-supplied `ReadableStream` or the
- * stream built for `onUploadProgress`. `fetch` rejects it with the same network
- * error for a refused connection, an HTTP/1.1 connection, a redirect that cannot
+ * A streamed HTTP request body is a caller-supplied `ReadableStream`. `fetch`
+ * rejects it with the same network error for a refused connection, an HTTP/1.1 connection, a redirect that cannot
  * replay the stream, a failed CORS preflight, and a source stream that throws,
  * so that error does not reliably show the endpoint is down and is reported as
  * `{ attempted: false }`. The cost is that a genuinely down endpoint is not

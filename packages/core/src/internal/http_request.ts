@@ -20,9 +20,8 @@ export type HttpResponseType = "arraybuffer" | "blob" | "json" | "text";
  * is computable only with a positive `Content-Length` and an absent or
  * `identity` `Content-Encoding`; compressed downloads, other encoded responses,
  * and bytes exceeding `Content-Length` have an unknown decoded length. A
- * streamed FormData upload also has an unknown total unless a valid explicit
- * `Content-Length` supplies it. Other unknown-length streams use the same
- * `0` / `false` fields.
+ * streamed upload also has an unknown total unless a valid explicit
+ * `Content-Length` supplies it.
  *
  * @group http
  */
@@ -42,28 +41,27 @@ export interface HttpProgressEvent {
  * cancellation still takes precedence and reports `NET_ABORTED`, or `NET_TIMEOUT`
  * when the abort reason is a timeout.
  *
- * Upload progress for a `Blob`, `File`, `ArrayBuffer`, or `FormData` body is
- * reported only where `fetch` can stream request bodies. The body is converted
- * to a stream and `onUploadProgress` counts those bytes. Firefox cannot stream
- * request bodies, so that body is sent unchanged and `onUploadProgress` is not
- * called. A caller-supplied `ReadableStream` still reports progress wherever the
- * runtime accepts it. Download progress is unaffected.
+ * `onUploadProgress` reports progress only when the request body is a
+ * `ReadableStream` that the caller passes. Any other body (`Blob`, `File`,
+ * `ArrayBuffer`, `FormData`, a string, or `URLSearchParams`) is sent as built and
+ * `onUploadProgress` is not called, on every runtime. The library never converts
+ * a body into a stream. Download progress is unaffected.
  *
- * A converted body is an ordinary streaming request, so the Fetch rules for
- * streaming request bodies apply, as they do to a caller-supplied
- * `ReadableStream` with or without `onUploadProgress`. These calls fail with
- * `NET_UNREACHABLE`, with a runtime-specific `TypeError` as `cause`:
+ * A `ReadableStream` request body follows the Fetch rules for streaming request
+ * bodies, with or without `onUploadProgress`:
  *
  * - Chromium and WebKit accept a streaming request body only over HTTP/2 or
- *   later, so the call fails on HTTP/1.1. WebKit was checked manually at 27.2
+ *   later, so the call fails with `NET_UNREACHABLE` on HTTP/1.1, with a
+ *   runtime-specific `TypeError` as `cause`. WebKit was checked manually at 27.2
  *   only; this repository does not test it. Node.js and Bun accept HTTP/1.1,
  *   which departs from the Fetch standard.
+ * - Firefox cannot stream request bodies, so the call fails with
+ *   `ENV_UNSUPPORTED`.
  * - In browsers, a cross-origin request needs a CORS preflight, unless the
  *   browser holds a cached preflight result, and fails unless the server
  *   answers `OPTIONS`. A same-origin request is not preflighted.
  * - A 301, 302, 307, or 308 redirect fails after the body was sent once. A 303
- *   redirect becomes a GET and succeeds. Without `onUploadProgress`, a Blob or
- *   FormData body follows the redirect.
+ *   redirect becomes a GET and succeeds.
  *
  * `fetch` gives the same network error for each of these as for an unreachable
  * endpoint, and for a source `ReadableStream` that throws while `fetch` reads
@@ -74,20 +72,12 @@ export interface HttpProgressEvent {
  * uploads alone, and a rejected streamed upload is not retried as a
  * `connect-failure`.
  *
- * A streamed body also has no known length. Browsers send no `Content-Length`.
- * Node.js and Bun send the known length of a Blob, File, or ArrayBuffer and use
- * chunked encoding for FormData. FormData with `onUploadProgress` reads its
- * serialized stream directly and keeps its multipart boundary, so progress and
- * abort work without buffering the whole body. It reports an unknown total
- * unless a valid explicit `Content-Length` header sets it; that header only sets
- * the reported total, since browsers do not send it.
- *
- * For an endpoint that cannot accept any of this, such as one that requires
- * `Content-Length` (some presigned upload targets), omit `onUploadProgress`;
- * the body is then sent as built, and platform Fetch sends FormData with its
- * length. Non-identity encoded downloads also report `total: 0` and
- * `lengthComputable: false`, since `loaded` counts decoded stream bytes.
- * Cancellation releases the wrapped upload stream.
+ * A streamed body has no known length, so the reported `total` is `0` and
+ * `lengthComputable` is `false` unless the request carries a valid
+ * `Content-Length` header. That header only sets the reported total, since
+ * browsers do not send it. Non-identity encoded downloads also report
+ * `total: 0` and `lengthComputable: false`, since `loaded` counts decoded
+ * stream bytes. Cancellation releases the wrapped upload stream.
  *
  * @group http
  */

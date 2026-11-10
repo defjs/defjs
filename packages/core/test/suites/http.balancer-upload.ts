@@ -52,6 +52,15 @@ function failingStream(): ReadableStream<Uint8Array<ArrayBuffer>> {
   });
 }
 
+function chunkStream(): ReadableStream<Uint8Array<ArrayBuffer>> {
+  return new ReadableStream<Uint8Array<ArrayBuffer>>({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1, 2, 3]));
+      controller.close();
+    },
+  });
+}
+
 // Reads the first chunk the way fetch does, so the source's error reaches whoever called fetch.
 // Reading the body stream directly works on a Request built by the Firefox streaming shim too.
 async function readBody(input: Request | URL | string): Promise<void> {
@@ -64,13 +73,10 @@ export function registerHttpBalancerUploadSuite(
   transports: readonly UploadTransport[] = ["custom", "platform"],
 ): void {
   test("reports attempted false when an upload observer fails before the response", async () => {
-    let fetched = false;
-    let received = "";
-    let observerCalls = 0;
     const watched = watch(pickFirstBalancer());
-    const payload = new Blob(["hello"]);
+    let observerCalls = 0;
     const send = defineRequest({
-      builder: () => ({ body: payload }),
+      builder: () => ({ body: chunkStream() }),
       method: "POST",
       path: "/up",
     });
@@ -78,9 +84,7 @@ export function registerHttpBalancerUploadSuite(
       withEndpoint("https://example.com"),
       withBalancer(watched.balancer),
       withHTTPHandle(async (input) => {
-        fetched = true;
-        const request = input instanceof Request ? input : new Request(input);
-        received = await request.text();
+        await readBody(input);
         return new Response(null, { status: 204 });
       }),
     );
@@ -93,28 +97,24 @@ export function registerHttpBalancerUploadSuite(
         },
       }),
     );
-    const outcome = uploadOutcome(cap, "Blob", "custom");
+    const outcome = uploadOutcome(cap, "ReadableStream", "custom");
     switch (outcome) {
       case "observed":
         expect(fault?.code).toBe("EXT_OBSERVER_FAILED");
-        expect(fetched).toBe(false);
         expect(watched.dones).toEqual([{ attempted: false }]);
         expect(observerCalls).toBe(1);
         return;
-      case "bypassed":
+      case "unsupported":
         expectUploadOutcome(outcome, {
           error: fault,
           result,
           response,
           observerCalls,
         });
-        expect(fetched).toBe(true);
-        expect(received).toBe("hello");
-        expect(watched.dones).toEqual([{ attempted: true, status: 204 }]);
         return;
-      case "unsupported":
+      case "bypassed":
       case "unreachable":
-        throw new Error(`a custom Blob upload is not ${outcome}`);
+        throw new Error(`a custom ReadableStream upload is not ${outcome}`);
     }
   });
 
@@ -155,7 +155,7 @@ export function registerHttpBalancerUploadSuite(
     expect(watched.dones).toEqual([{ attempted: false }]);
   });
 
-  test("reports attempted false when fetch rejects the stream built for onUploadProgress", async () => {
+  test("counts a network error on a Blob upload against the endpoint when onUploadProgress is set", async () => {
     const watched = watch(pickFirstBalancer());
     const send = defineRequest({
       builder: () => ({ body: new Blob(["hello"]) }),
@@ -169,22 +169,12 @@ export function registerHttpBalancerUploadSuite(
     );
 
     const [fault] = await send(client({ onUploadProgress() {} }));
+
     expect(fault?.code).toBe("NET_UNREACHABLE");
-    const outcome = uploadOutcome(cap, "Blob", "custom");
-    switch (outcome) {
-      case "observed":
-        expect(watched.dones).toEqual([{ attempted: false }]);
-        return;
-      case "bypassed":
-        // Not converted: a plain Blob rejected by fetch still counts against the endpoint.
-        expect(watched.dones).toEqual([
-          { attempted: true, code: "NET_UNREACHABLE" },
-        ]);
-        return;
-      case "unsupported":
-      case "unreachable":
-        throw new Error(`a custom Blob upload is not ${outcome}`);
-    }
+    // Only a caller's ReadableStream is neutral. A Blob is sent as built, so the error is an ordinary attempt.
+    expect(watched.dones).toEqual([
+      { attempted: true, code: "NET_UNREACHABLE" },
+    ]);
   });
 
   test("keeps a healthy endpoint in rotation after failed upload streams", async () => {
@@ -225,7 +215,7 @@ export function registerHttpBalancerUploadSuite(
   test("still reports a timeout that interrupts a streamed upload as an attempt", async () => {
     const watched = watch(pickFirstBalancer());
     const send = defineRequest({
-      builder: () => ({ body: new Blob(["hello"]) }),
+      builder: () => ({ body: chunkStream() }),
       method: "POST",
       path: "/up",
     });
@@ -246,6 +236,17 @@ export function registerHttpBalancerUploadSuite(
     const pending = send(
       client({ onUploadProgress() {}, signal: controller.signal }),
     );
+    const outcome = uploadOutcome(cap, "ReadableStream", "custom");
+    if (outcome === "unsupported") {
+      const [fault, result, response] = await pending;
+      expectUploadOutcome(outcome, {
+        error: fault,
+        result,
+        response,
+        observerCalls: 0,
+      });
+      return;
+    }
     await reachedFetch;
     controller.abort(new DOMException("timed out", "TimeoutError"));
     const [fault] = await pending;
@@ -254,8 +255,7 @@ export function registerHttpBalancerUploadSuite(
     expect(watched.dones).toEqual([{ attempted: true, code: "NET_TIMEOUT" }]);
   });
 
-  test("does not retry a connect failure for a Blob upload converted to a stream", async () => {
-    // Pins the retry cost of reporting a rejected stream as neutral: the retry decision reads the same report.
+  test("retries a connect failure for a Blob upload when onUploadProgress is set", async () => {
     let calls = 0;
     const send = defineRequest({
       builder: () => ({ body: new Blob(["abc"]) }),
@@ -274,14 +274,61 @@ export function registerHttpBalancerUploadSuite(
     const [fault] = await send(client({ onUploadProgress() {} }));
 
     expect(fault?.code).toBe("NET_UNREACHABLE");
-    // A runtime that cannot stream sends the Blob unchanged, so the retry still happens there.
-    expect(calls).toBe(
-      uploadOutcome(cap, "Blob", "custom") === "observed" ? 1 : 2,
-    );
+    // The Blob is sent as built, so the endpoint's connect failure is retried on the next endpoint.
+    expect(calls).toBe(2);
   });
 
   if (transports.includes("platform"))
     test("reports attempted false when a redirect cannot replay the upload stream", async () => {
+      const f = fixture(inject("testServerHost"), inject("fixtureToken"));
+      const target = await f.endpoint("landed", "respond", { status: 204 });
+      const source = await f.endpoint("moved", "respond", {
+        status: 307,
+        headers: { location: target },
+      });
+      const watched = watch(pickFirstBalancer());
+      const send = defineRequest({
+        builder: () => ({ body: chunkStream() }),
+        method: "POST",
+        path: "/",
+      });
+      const client = createClient(
+        withEndpoint(source),
+        withBalancer(watched.balancer),
+      );
+
+      const [fault, result, response] = await send(
+        client({ onUploadProgress() {} }),
+      );
+      const outcome = uploadOutcome(cap, "ReadableStream", "platform");
+      switch (outcome) {
+        case "observed": {
+          expect(fault?.code).toBe("NET_UNREACHABLE");
+          // The healthy endpoint answered the redirect and received the body once.
+          const methods = (await f.log()).requests.map((r) => r.method);
+          expect(methods).toEqual(["POST"]);
+          expect(watched.dones).toEqual([{ attempted: false }]);
+          return;
+        }
+        case "unreachable":
+          expect(fault?.code).toBe("NET_UNREACHABLE");
+          expect(watched.dones).toEqual([{ attempted: false }]);
+          return;
+        case "unsupported":
+          expectUploadOutcome(outcome, {
+            error: fault,
+            result,
+            response,
+            observerCalls: 0,
+          });
+          return;
+        case "bypassed":
+          throw new Error(`a platform ReadableStream upload is not ${outcome}`);
+      }
+    });
+
+  if (transports.includes("platform"))
+    test("follows a redirect for a Blob upload when onUploadProgress is set", async () => {
       const f = fixture(inject("testServerHost"), inject("fixtureToken"));
       const target = await f.endpoint("landed", "respond", { status: 204 });
       const source = await f.endpoint("moved", "respond", {
@@ -300,27 +347,9 @@ export function registerHttpBalancerUploadSuite(
       );
 
       const [fault] = await send(client({ onUploadProgress() {} }));
-      const outcome = uploadOutcome(cap, "Blob", "platform");
-      switch (outcome) {
-        case "observed": {
-          expect(fault?.code).toBe("NET_UNREACHABLE");
-          // The healthy endpoint answered the redirect and received the body once.
-          const methods = (await f.log()).requests.map((r) => r.method);
-          expect(methods).toEqual(["POST"]);
-          expect(watched.dones).toEqual([{ attempted: false }]);
-          return;
-        }
-        case "unreachable":
-          expect(fault?.code).toBe("NET_UNREACHABLE");
-          expect(watched.dones).toEqual([{ attempted: false }]);
-          return;
-        case "bypassed":
-          // Not converted: the Blob is replayable, so fetch follows the redirect.
-          expect(fault).toBeNull();
-          expect(watched.dones).toEqual([{ attempted: true, status: 204 }]);
-          return;
-        case "unsupported":
-          throw new Error(`a platform Blob upload is not ${outcome}`);
-      }
+
+      // The Blob is sent as built and is replayable, so fetch follows the redirect.
+      expect(fault).toBeNull();
+      expect(watched.dones).toEqual([{ attempted: true, status: 204 }]);
     });
 }

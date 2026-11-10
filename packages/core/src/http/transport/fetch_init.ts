@@ -20,9 +20,7 @@ let streamingRequestBodySupport: boolean | undefined;
  * A runtime without stream bodies stringifies the stream and adds a text/plain Content-Type (Firefox).
  * The `duplex` getter is not used: Bun streams request bodies without reading it.
  * This does not predict whether the connection takes the stream (Chromium and WebKit stream only over HTTP/2+).
- * Upload-progress conversion follows this check (`prepareUploadProgressRequest`). On HTTP/1.1 Chromium
- * and WebKit reject the converted body and the upload fails. Firefox fails this probe, so the body is sent
- * unchanged and the callback is not called. Download progress is unaffected.
+ * A caller-supplied ReadableStream is the only request body that reports upload progress; every other body is sent as built.
  */
 export function supportsStreamingRequestBody(): boolean {
   if (streamingRequestBodySupport !== undefined) {

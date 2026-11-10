@@ -11,11 +11,7 @@ import {
   supportsStreamingRequestBody,
 } from "../../src/http/transport/fetch.ts";
 import { createNotesForm, notesFormBody } from "../multipart-fixture.ts";
-import {
-  uploadOutcome,
-  type UploadBodyKind,
-  type UploadCapability,
-} from "../upload-capability.ts";
+import { uploadOutcome, type UploadCapability } from "../upload-capability.ts";
 
 function streamBody(body: unknown): ReadableStream<Uint8Array> {
   if (isReadableStreamBody(body)) return body;
@@ -47,7 +43,6 @@ async function expectUnsupportedStream(
 
 async function expectBypassedUpload(
   body: ArrayBuffer | Blob | FormData,
-  options?: { readonly bodyContentType?: string },
 ): Promise<void> {
   const uploadProgress = vi.fn();
   let received: Request | undefined;
@@ -65,7 +60,6 @@ async function expectBypassedUpload(
     {
       baseEndpoint: "https://example.com",
       body,
-      bodyContentType: options?.bodyContentType,
       endpoint: "/upload",
       method: "POST",
       responseType: "text",
@@ -93,18 +87,6 @@ async function expectBypassedUpload(
   }
   expect(header).toBe("application/octet-stream");
   expect(sent).toEqual(new Uint8Array(body));
-}
-
-function countedBodyKind(name: string): UploadBodyKind {
-  switch (name) {
-    case "ArrayBuffer":
-    case "Blob":
-    case "FormData":
-    case "ReadableStream":
-      return name;
-    default:
-      throw new Error(`unexpected upload body ${name}`);
-  }
 }
 
 afterEach(() => {
@@ -527,186 +509,6 @@ export function registerStreamingUploadSuite(cap: UploadCapability): void {
       expect(stream.locked).toBe(false);
     });
 
-    test.each([
-      {
-        body: () => createNotesForm(),
-        name: "FormData",
-      },
-      {
-        body: () => new Blob(["hello-upload"], { type: "text/plain" }),
-        name: "Blob",
-      },
-      {
-        body: () => new TextEncoder().encode("bytes-upload").buffer,
-        name: "ArrayBuffer",
-      },
-    ])(
-      "should call uploadProgress for a $name body",
-      async ({ body, name }) => {
-        const payload = body();
-        if (
-          uploadOutcome(cap, countedBodyKind(name), "custom") === "bypassed"
-        ) {
-          await expectBypassedUpload(payload);
-          return;
-        }
-
-        const progressEvents: Array<{
-          lengthComputable: boolean;
-          loaded: number;
-          total: number;
-        }> = [];
-        const fetchMock = vi.fn<FetchHandle>(async (input) => {
-          if (!(input instanceof Request)) throw new Error("expected Request");
-          const request = input;
-          const reader = request.body?.getReader();
-          if (reader) {
-            while (true) {
-              const { done } = await reader.read();
-              if (done) {
-                break;
-              }
-            }
-          }
-          return new Response("ok", {
-            headers: { "content-type": "text/plain" },
-            status: 200,
-          });
-        });
-
-        const response = await fetchHandler(
-          {
-            signal: new AbortController().signal,
-            baseEndpoint: "https://example.com",
-            body: payload,
-            endpoint: "/upload",
-            method: "POST",
-            responseType: "text",
-            uploadProgress(event) {
-              progressEvents.push({
-                lengthComputable: event.lengthComputable,
-                loaded: event.loaded,
-                total: event.total,
-              });
-            },
-          },
-          fetchMock,
-        );
-
-        expect(response.body).toBe("ok");
-        expect(progressEvents.length).toBeGreaterThanOrEqual(2);
-        expect(progressEvents[0]).toMatchObject({
-          lengthComputable: name !== "FormData",
-          loaded: 0,
-        });
-        const complete = progressEvents.at(-1);
-        expect(complete?.lengthComputable).toBe(name !== "FormData");
-        expect(complete?.loaded).toBeGreaterThan(0);
-        if (name === "FormData") {
-          expect(progressEvents.every((event) => event.total === 0)).toBe(true);
-        } else {
-          expect(complete?.loaded).toBe(complete?.total);
-          expect(complete?.total).toBeGreaterThan(0);
-        }
-      },
-    );
-
-    test("should report upload progress for an empty Blob without a content type", async () => {
-      const blob = new Blob([]);
-      if (uploadOutcome(cap, "Blob", "custom") === "bypassed") {
-        await expectBypassedUpload(blob, {
-          bodyContentType: "application/octet-stream",
-        });
-        return;
-      }
-
-      const progressEvents: Array<{
-        lengthComputable: boolean;
-        loaded: number;
-        total: number;
-      }> = [];
-      const fetchMock = vi.fn<FetchHandle>(async (input) => {
-        if (!(input instanceof Request)) throw new Error("expected Request");
-        const request = input;
-        const reader = request.body?.getReader();
-        if (reader) {
-          while (true) {
-            const { done } = await reader.read();
-            if (done) {
-              break;
-            }
-          }
-        }
-        return new Response("ok", {
-          headers: { "content-type": "text/plain" },
-          status: 200,
-        });
-      });
-
-      const response = await fetchHandler(
-        {
-          baseEndpoint: "https://example.com",
-          body: blob,
-          bodyContentType: "application/octet-stream",
-          endpoint: "/upload",
-          method: "POST",
-          responseType: "text",
-          uploadProgress(event) {
-            progressEvents.push({
-              lengthComputable: event.lengthComputable,
-              loaded: event.loaded,
-              total: event.total,
-            });
-          },
-        },
-        fetchMock,
-      );
-
-      expect(response.body).toBe("ok");
-      expect(progressEvents[0]).toEqual({
-        lengthComputable: false,
-        loaded: 0,
-        total: 0,
-      });
-    });
-
-    test("should cancel a converted upload stream when the start observer throws", async () => {
-      const blob = new Blob(["hello"]);
-      if (uploadOutcome(cap, "Blob", "custom") === "bypassed") {
-        await expectBypassedUpload(blob);
-        return;
-      }
-
-      const observerError = new Error("start failed");
-      const converted = blob.stream();
-      const cancel = vi.spyOn(converted, "cancel");
-      const streamSpy = vi.spyOn(blob, "stream").mockReturnValue(converted);
-
-      try {
-        const failure = await settleWithin(
-          fetchHandler(
-            {
-              baseEndpoint: "https://example.com",
-              body: blob,
-              endpoint: "/upload",
-              method: "POST",
-              responseType: "text",
-              uploadProgress() {
-                return Promise.reject(observerError);
-              },
-            },
-            vi.fn(() => Promise.resolve(new Response("ok"))),
-          ),
-        ).catch((cause: unknown) => cause);
-
-        expect(cancel).toHaveBeenCalledOnce();
-        expect(cancel.mock.calls[0]?.[0]).toBe(observerError);
-        expectUploadObserverFailure(failure, observerError);
-      } finally {
-        streamSpy.mockRestore();
-      }
-    });
-
     test("should reject a later upload chunk observer failure as EXT_OBSERVER_FAILED", async () => {
       const stream = twoChunkUpload();
       if (uploadOutcome(cap, "ReadableStream", "custom") === "unsupported") {
@@ -887,112 +689,65 @@ export function registerStreamingUploadSuite(cap: UploadCapability): void {
       expect(loaded).toEqual([2, 5]);
     });
 
-    test("should leave a string body uncounted when upload progress is set", async () => {
-      const uploadProgress = vi.fn();
-      let sent = "";
-      const response = await fetchHandler(
-        {
-          baseEndpoint: "https://example.com",
-          body: "plain-text",
-          endpoint: "/upload",
-          method: "POST",
-          responseType: "text",
-          uploadProgress,
-        },
-        async (input) => {
-          if (!(input instanceof Request)) throw new Error("expected Request");
-          sent = await input.text();
-          return new Response("ok", {
-            headers: { "content-type": "text/plain" },
-            status: 200,
-          });
-        },
-      );
+    test.each([
+      { body: () => "plain-text", name: "string", sent: "plain-text" },
+      {
+        body: () => new URLSearchParams({ a: "1", b: "2" }),
+        name: "URLSearchParams",
+        sent: "a=1&b=2",
+      },
+    ])(
+      "should send a $name body as built and not call uploadProgress",
+      async ({ body, sent: expected }) => {
+        const uploadProgress = vi.fn();
+        let sent = "";
+        const response = await fetchHandler(
+          {
+            baseEndpoint: "https://example.com",
+            body: body(),
+            endpoint: "/upload",
+            method: "POST",
+            responseType: "text",
+            uploadProgress,
+          },
+          async (input) => {
+            if (!(input instanceof Request))
+              throw new Error("expected Request");
+            sent = await input.text();
+            return new Response("ok", {
+              headers: { "content-type": "text/plain" },
+              status: 200,
+            });
+          },
+        );
 
-      expect(response.body).toBe("ok");
-      expect(sent).toBe("plain-text");
-      expect(uploadProgress).not.toHaveBeenCalled();
-    });
-
-    test("should leave FormData unchanged when its serialized body has no stream", async () => {
-      const PlatformResponse = globalThis.Response;
-
-      class StreamlessResponse extends PlatformResponse {
-        constructor(body?: BodyInit | null, init?: ResponseInit) {
-          super(body instanceof FormData ? null : body, init);
-        }
-      }
-
-      vi.stubGlobal("Response", StreamlessResponse);
-      const form = new FormData();
-      form.append("name", "miao");
-      const uploadProgress = vi.fn();
-      let header: string | null = null;
-      let sent = "";
-      const response = await fetchHandler(
-        {
-          baseEndpoint: "https://example.com",
-          body: form,
-          endpoint: "/upload",
-          method: "POST",
-          responseType: "text",
-          uploadProgress,
-        },
-        async (input) => {
-          if (!(input instanceof Request)) throw new Error("expected Request");
-          header = input.headers.get("content-type");
-          sent = await input.text();
-          return new PlatformResponse("ok", {
-            headers: { "content-type": "text/plain" },
-            status: 200,
-          });
-        },
-      );
-
-      expect(response.body).toBe("ok");
-      expect(uploadProgress).not.toHaveBeenCalled();
-      expect(header).toMatch(/^multipart\/form-data/i);
-      expect(sent).toContain("miao");
-    });
-
-    test("should not copy a converted blob type when bodyContentType is null", async () => {
-      const blob = new Blob(["bytes"], { type: "text/plain" });
-      const outcome = uploadOutcome(cap, "Blob", "custom");
-      const uploadProgress = vi.fn();
-      let header: string | null = null;
-      let sent = "";
-      const response = await fetchHandler(
-        {
-          baseEndpoint: "https://example.com",
-          body: blob,
-          bodyContentType: null,
-          bodyContentTypeSource: blob,
-          endpoint: "/upload",
-          method: "POST",
-          responseType: "text",
-          uploadProgress,
-        },
-        async (input) => {
-          if (!(input instanceof Request)) throw new Error("expected Request");
-          header = input.headers.get("content-type");
-          sent = new TextDecoder().decode(await input.arrayBuffer());
-          return new Response("ok", {
-            headers: { "content-type": "text/plain" },
-            status: 200,
-          });
-        },
-      );
-
-      expect(response.body).toBe("ok");
-      expect(sent).toBe("bytes");
-      if (outcome === "bypassed") {
+        expect(response.body).toBe("ok");
+        expect(sent).toBe(expected);
         expect(uploadProgress).not.toHaveBeenCalled();
-        expect(header).toBe(blob.type);
-        return;
-      }
-      expect(header).toBeNull();
-      expect(uploadProgress).toHaveBeenCalled();
-    });
+      },
+    );
+
+    test.each([
+      {
+        body: () => new Blob(["hello-upload"], { type: "text/plain" }),
+        name: "Blob",
+      },
+      {
+        body: () =>
+          new File(["hello-upload"], "hello.txt", { type: "text/plain" }),
+        name: "File",
+      },
+      {
+        body: () => new TextEncoder().encode("bytes-upload").buffer,
+        name: "ArrayBuffer",
+      },
+      { body: () => createNotesForm(), name: "FormData" },
+    ])(
+      "should send a $name body as built and not call uploadProgress",
+      async ({ body }) => {
+        await expectBypassedUpload(body());
+      },
+    );
 
     test("should ignore rejection from cancelling a wrapped upload stream", async () => {
       const cancel = vi.fn((_reason?: unknown) =>
@@ -1020,44 +775,6 @@ export function registerStreamingUploadSuite(cap: UploadCapability): void {
       expect(cancel).toHaveBeenCalledOnce();
       expect(cancel.mock.calls[0]?.[0]).toBe(networkError);
       await Promise.resolve();
-    });
-
-    test("should ignore rejection from cancelling a converted upload after the start observer throws", async () => {
-      const blob = new Blob(["hello"]);
-      if (uploadOutcome(cap, "Blob", "custom") === "bypassed") {
-        await expectBypassedUpload(blob);
-        return;
-      }
-
-      const source = blob.stream();
-      const cancel = vi
-        .spyOn(source, "cancel")
-        .mockImplementation(() => Promise.reject(new Error("cancel failed")));
-      const streamSpy = vi.spyOn(blob, "stream").mockReturnValue(source);
-      const observerError = new Error("start failed");
-
-      try {
-        const failure = await fetchHandler(
-          {
-            baseEndpoint: "https://example.com",
-            body: blob,
-            endpoint: "/upload",
-            method: "POST",
-            responseType: "text",
-            uploadProgress() {
-              throw observerError;
-            },
-          },
-          () => Promise.resolve(new Response("ok")),
-        ).catch((cause: unknown) => cause);
-
-        expect(cancel).toHaveBeenCalledOnce();
-        expect(cancel.mock.calls[0]?.[0]).toBe(observerError);
-        expectUploadObserverFailure(failure, observerError);
-        await Promise.resolve();
-      } finally {
-        streamSpy.mockRestore();
-      }
     });
 
     test("should send a ReadableStream when upload progress is absent", async () => {

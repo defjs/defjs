@@ -13,7 +13,6 @@ import { struct } from "../../src/struct/index.ts";
 import {
   uploadOutcome,
   type UploadCapability,
-  type UploadOutcome,
   type UploadTransport,
 } from "../upload-capability.ts";
 import {
@@ -22,24 +21,15 @@ import {
 } from "../upload-outcome-assert.ts";
 
 const observerModes = ["sync", "async", "rejected-promise"] as const;
-const startBodyKinds = ["Blob", "ArrayBuffer"] as const;
-const laterBodyKinds = ["ReadableStream", "Blob"] as const;
 const usedSourceStates = ["locked", "partly read", "already read"] as const;
 
 type ObserverMode = (typeof observerModes)[number];
-type UploadBodyKind = "ArrayBuffer" | "Blob" | "ReadableStream";
-type UploadBody = ArrayBuffer | Blob | ReadableStream<Uint8Array>;
+type UploadBody = ReadableStream<Uint8Array>;
 type UploadTuple = Awaited<ReturnType<typeof executeUpload>>;
 
-const startCases = startBodyKinds.flatMap((kind) =>
-  observerModes.map((mode) => ({ kind, mode })),
-);
-const swallowCases = laterBodyKinds.flatMap((kind) =>
-  observerModes.map((mode) => ({ kind, mode })),
-);
+const swallowCases = observerModes.map((mode) => ({ mode }));
 
 type LaterChunkCase = {
-  kind: (typeof laterBodyKinds)[number];
   mode: ObserverMode;
   transport: "custom" | "platform";
 };
@@ -48,42 +38,21 @@ function laterChunkCasesFor(
   transports: readonly UploadTransport[],
 ): readonly LaterChunkCase[] {
   const cases: LaterChunkCase[] = [];
-  for (const kind of laterBodyKinds) {
-    for (const mode of observerModes) {
-      for (const transport of transports) {
-        cases.push({ kind, mode, transport });
-      }
+  for (const mode of observerModes) {
+    for (const transport of transports) {
+      cases.push({ mode, transport });
     }
   }
   return cases;
 }
 
-function observerFailureOutcome(
-  cap: UploadCapability,
-  kind: UploadBodyKind,
-  transport: "custom" | "platform",
-): UploadOutcome {
-  const outcome = uploadOutcome(cap, kind, transport);
-  // A converted body emits its start event before fetch, so an observer fault matches the observed path.
-  if (outcome === "unreachable" && kind !== "ReadableStream") return "observed";
-  return outcome;
-}
-
 const abortErrorCases = [
   {
-    kind: "Blob",
-    phase: "start event",
-    transport: "platform",
-    when: "immediately",
-  },
-  {
-    kind: "ReadableStream",
     phase: "later chunk",
     transport: "platform",
     when: "after-first",
   },
   {
-    kind: "ReadableStream",
     phase: "later chunk read by a custom handle",
     transport: "custom",
     when: "after-first",
@@ -100,39 +69,16 @@ export function registerUploadObserverSuite(
   );
 
   describe("upload progress observer failures", () => {
-    if (transports.includes("platform"))
-      test.each(startCases)(
-        "should report $mode failure of the $kind upload start observer as EXT_OBSERVER_FAILED",
-        async ({ kind, mode }) => {
-          const outcome = observerFailureOutcome(cap, kind, "platform");
-          const cause = new Error(`${kind} start ${mode}`);
-          const calls = { n: 0 };
-          const fail = observerThatFails(mode, cause, "immediately");
-          const tuple = await executeUpload(createUploadBody(kind), {
-            onUploadProgress: () => {
-              calls.n += 1;
-              return fail();
-            },
-          });
-
-          if (outcome === "observed") {
-            expectObserverFault(tuple, cause);
-            return;
-          }
-          expectUploadOutcome(outcome, toAttempt(tuple, calls.n));
-        },
-      );
-
     if (laterChunkCases.length > 0)
       test.each(laterChunkCases)(
-        "should report $mode failure of a later $kind upload chunk via $transport fetch as EXT_OBSERVER_FAILED",
-        async ({ kind, mode, transport }) => {
-          const outcome = observerFailureOutcome(cap, kind, transport);
-          const cause = new Error(`${kind} chunk ${mode} ${transport}`);
+        "should report $mode failure of a later upload chunk via $transport fetch as EXT_OBSERVER_FAILED",
+        async ({ mode, transport }) => {
+          const outcome = uploadOutcome(cap, "ReadableStream", transport);
+          const cause = new Error(`chunk ${mode} ${transport}`);
           const calls = { n: 0 };
           const fail = observerThatFails(mode, cause, "after-first");
           const tuple = await executeUpload(
-            createUploadBody(kind),
+            createUploadBody(),
             {
               onUploadProgress: () => {
                 calls.n += 1;
@@ -153,13 +99,13 @@ export function registerUploadObserverSuite(
     if (abortCases.length > 0)
       test.each(abortCases)(
         "should report an AbortError thrown on an upload $phase as EXT_OBSERVER_FAILED",
-        async ({ kind, transport, when }) => {
-          const outcome = observerFailureOutcome(cap, kind, transport);
+        async ({ transport, when }) => {
+          const outcome = uploadOutcome(cap, "ReadableStream", transport);
           const cause = new DOMException("stop", "AbortError");
           const calls = { n: 0 };
           const fail = observerThatFails("sync", cause, when);
           const tuple = await executeUpload(
-            createUploadBody(kind),
+            createUploadBody(),
             {
               onUploadProgress: () => {
                 calls.n += 1;
@@ -179,14 +125,14 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("platform"))
       test("should report NET_ABORTED when the caller aborts while the upload observer is pending", async () => {
-        const outcome = observerFailureOutcome(cap, "Blob", "platform");
+        const outcome = uploadOutcome(cap, "ReadableStream", "platform");
         const controller = new AbortController();
         const calls = { n: 0 };
         let markStarted: () => void = () => undefined;
         const started = new Promise<void>((resolve) => {
           markStarted = resolve;
         });
-        const pending = executeUpload(createUploadBody("Blob"), {
+        const pending = executeUpload(createUploadBody(), {
           signal: controller.signal,
           onUploadProgress() {
             calls.n += 1;
@@ -196,20 +142,7 @@ export function registerUploadObserverSuite(
         });
 
         if (outcome !== "observed") {
-          const winner = await Promise.race([
-            pending.then((tuple) => ({ kind: "settled" as const, tuple })),
-            started.then(() => ({ kind: "started" as const })),
-          ]);
-          // prepareUploadProgressRequest emits the start event before fetch. A pending
-          // observer never reaches the HTTP/1.1 rejection, so abort only to unblock.
-          if (winner.kind === "started") {
-            controller.abort();
-            await pending;
-            expect.fail(
-              `${outcome}: the upload start observer ran before fetch and blocked the attempt`,
-            );
-          }
-          expectUploadOutcome(outcome, toAttempt(winner.tuple, calls.n));
+          expectUploadOutcome(outcome, toAttempt(await pending, calls.n));
           return;
         }
 
@@ -224,15 +157,11 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("platform"))
       test("should report NET_ABORTED when the upload observer aborts the caller signal and then throws", async () => {
-        const outcome = observerFailureOutcome(
-          cap,
-          "ReadableStream",
-          "platform",
-        );
+        const outcome = uploadOutcome(cap, "ReadableStream", "platform");
         const controller = new AbortController();
         const cause = new Error("observer failed after abort");
         const calls = { n: 0 };
-        const tuple = await executeUpload(createUploadBody("ReadableStream"), {
+        const tuple = await executeUpload(createUploadBody(), {
           signal: controller.signal,
           onUploadProgress() {
             calls.n += 1;
@@ -257,13 +186,13 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("custom"))
       test("should report NET_TIMEOUT when the upload observer never settles", async () => {
-        const outcome = observerFailureOutcome(cap, "Blob", "custom");
+        const outcome = uploadOutcome(cap, "ReadableStream", "custom");
         if (outcome !== "observed") {
           vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
           const calls = { n: 0 };
           try {
             const tuple = await executeUpload(
-              createUploadBody("Blob"),
+              createUploadBody(),
               {
                 onUploadProgress() {
                   calls.n += 1;
@@ -288,7 +217,7 @@ export function registerUploadObserverSuite(
 
         try {
           const pending = executeUpload(
-            createUploadBody("Blob"),
+            createUploadBody(),
             {
               onUploadProgress() {
                 markObserved();
@@ -312,14 +241,14 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("custom"))
       test.each(swallowCases)(
-        "should report $mode failure of a later $kind upload chunk when the handle swallows the body error",
-        async ({ kind, mode }) => {
-          const outcome = observerFailureOutcome(cap, kind, "custom");
-          const cause = new Error(`${kind} swallowed ${mode}`);
+        "should report $mode failure of a later upload chunk when the handle swallows the body error",
+        async ({ mode }) => {
+          const outcome = uploadOutcome(cap, "ReadableStream", "custom");
+          const cause = new Error(`swallowed ${mode}`);
           const calls = { n: 0 };
           const fail = observerThatFails(mode, cause, "after-first");
           const tuple = await executeUpload(
-            createUploadBody(kind),
+            createUploadBody(),
             {
               onUploadProgress: () => {
                 calls.n += 1;
@@ -339,14 +268,14 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("custom"))
       test("should leave a send unaborted once its upload observer has failed", async () => {
-        const outcome = observerFailureOutcome(cap, "Blob", "custom");
+        const outcome = uploadOutcome(cap, "ReadableStream", "custom");
         const cause = new Error("observer failed");
         const calls = { n: 0 };
         const fail = observerThatFails("sync", cause, "after-first");
         const signals: AbortSignal[] = [];
         const read = readingHandle(false);
         const tuple = await executeUpload(
-          createUploadBody("Blob"),
+          createUploadBody(),
           {
             onUploadProgress: () => {
               calls.n += 1;
@@ -374,11 +303,7 @@ export function registerUploadObserverSuite(
       ])(
         "should leave a send unaborted once its source stream errored $label an observer",
         async ({ observed }) => {
-          const outcome = observerFailureOutcome(
-            cap,
-            "ReadableStream",
-            "custom",
-          );
+          const outcome = uploadOutcome(cap, "ReadableStream", "custom");
           const signals: AbortSignal[] = [];
           const read = readingHandle(false);
           const tuple = await executeUpload(
@@ -413,11 +338,7 @@ export function registerUploadObserverSuite(
       )(
         "should fail a $state source stream $label an observer as a build failure",
         async ({ observed, state }) => {
-          const outcome = observerFailureOutcome(
-            cap,
-            "ReadableStream",
-            "custom",
-          );
+          const outcome = uploadOutcome(cap, "ReadableStream", "custom");
           const onUploadProgress = vi.fn();
           const handle = vi.fn<FetchHandle>(() =>
             Promise.resolve(new Response("ok", { status: 200 })),
@@ -442,11 +363,7 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("platform"))
       test("should fail a partly read source stream of an observed platform send as a build failure", async () => {
-        const outcome = observerFailureOutcome(
-          cap,
-          "ReadableStream",
-          "platform",
-        );
+        const outcome = uploadOutcome(cap, "ReadableStream", "platform");
         const onUploadProgress = vi.fn();
 
         const tuple = await executeUpload(await usedSource("partly read"), {
@@ -475,11 +392,7 @@ export function registerUploadObserverSuite(
       ] satisfies { handle: FetchHandle; label: string }[])(
         "should release an unread source stream when a custom handle $label without reading it",
         async ({ handle }) => {
-          const outcome = observerFailureOutcome(
-            cap,
-            "ReadableStream",
-            "custom",
-          );
+          const outcome = uploadOutcome(cap, "ReadableStream", "custom");
           const source = trackedSource();
 
           const tuple = await executeUpload(source.stream, {}, handle);
@@ -496,7 +409,7 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("custom"))
       test("should release a partly read source stream when the send fails", async () => {
-        const outcome = observerFailureOutcome(cap, "ReadableStream", "custom");
+        const outcome = uploadOutcome(cap, "ReadableStream", "custom");
         const source = trackedSource();
 
         const tuple = await executeUpload(source.stream, {}, async (input) => {
@@ -540,11 +453,7 @@ export function registerUploadObserverSuite(
       ] satisfies { handle: FetchHandle; label: string }[])(
         "should release the source stream of a send that $label when an interceptor replaced its signal",
         async ({ handle }) => {
-          const outcome = observerFailureOutcome(
-            cap,
-            "ReadableStream",
-            "custom",
-          );
+          const outcome = uploadOutcome(cap, "ReadableStream", "custom");
           const source = trackedSource();
           const client = createClient(
             withEndpoint("https://example.com"),
@@ -574,11 +483,7 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("platform"))
       test("should release the source stream when a platform send cannot connect", async () => {
-        const outcome = observerFailureOutcome(
-          cap,
-          "ReadableStream",
-          "platform",
-        );
+        const outcome = uploadOutcome(cap, "ReadableStream", "platform");
         const source = trackedSource();
         const client = createClient(withEndpoint("http://127.0.0.1:1"));
         const endpoint = defineRequest({
@@ -600,23 +505,33 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("custom"))
       test("should abort a send that failed for another reason when the chain settles", async () => {
+        const outcome = uploadOutcome(cap, "ReadableStream", "custom");
         const signals: AbortSignal[] = [];
-        const [error] = await executeUpload(
-          createUploadBody("Blob"),
-          { onUploadProgress: () => undefined },
+        const calls = { n: 0 };
+        const tuple = await executeUpload(
+          createUploadBody(),
+          {
+            onUploadProgress: () => {
+              calls.n += 1;
+            },
+          },
           (input) => {
             if (input instanceof Request) signals.push(input.signal);
             return Promise.reject(new TypeError("network down"));
           },
         );
 
-        expect(error?.code).toBe("NET_UNREACHABLE");
+        if (outcome !== "observed") {
+          expectUploadOutcome(outcome, toAttempt(tuple, calls.n));
+          return;
+        }
+        expect(tuple[0]?.code).toBe("NET_UNREACHABLE");
         expect(signals.map((signal) => signal.aborted)).toEqual([true]);
       });
 
     if (transports.includes("custom"))
       test("should stop only the live send when the caller aborts after an upload observer failed", async () => {
-        const outcome = observerFailureOutcome(cap, "Blob", "custom");
+        const outcome = uploadOutcome(cap, "ReadableStream", "custom");
         const controller = new AbortController();
         const calls = { n: 0 };
         const fail = observerThatFails(
@@ -651,7 +566,7 @@ export function registerUploadObserverSuite(
               } catch {
                 return await next({
                   ...request,
-                  body: new Blob(["second-upload"]),
+                  body: createUploadBody(),
                   uploadProgress: undefined,
                 });
               }
@@ -659,7 +574,7 @@ export function registerUploadObserverSuite(
           ),
         );
         const endpoint = defineRequest({
-          builder: () => ({ body: new Blob(["first-upload"]) }),
+          builder: () => ({ body: createUploadBody() }),
           method: "POST",
           path: "/",
         });
@@ -684,7 +599,7 @@ export function registerUploadObserverSuite(
 
     if (transports.includes("custom"))
       test("should succeed on a second transport call when the upload observer no longer throws", async () => {
-        const outcome = observerFailureOutcome(cap, "Blob", "custom");
+        const outcome = uploadOutcome(cap, "ReadableStream", "custom");
         let progressCalls = 0;
         let nextCalls = 0;
         const client = createClient(
@@ -699,14 +614,14 @@ export function registerUploadObserverSuite(
                 nextCalls += 1;
                 return await next({
                   ...request,
-                  body: new Blob(["second-upload"]),
+                  body: createUploadBody(),
                 });
               }
             }),
           ),
         );
         const endpoint = defineRequest({
-          builder: () => ({ body: new Blob(["first-upload"]) }),
+          builder: () => ({ body: createUploadBody() }),
           method: "POST",
           output: struct.string(),
           path: "/",
@@ -823,13 +738,7 @@ function trackedSource() {
   return { cancelled, pulls: () => pulls, stream };
 }
 
-function createUploadBody(kind: UploadBodyKind): UploadBody {
-  if (kind === "ArrayBuffer") {
-    return new TextEncoder().encode("hello-upload").buffer;
-  }
-  if (kind === "Blob") {
-    return new Blob(["hello-upload"]);
-  }
+function createUploadBody(): UploadBody {
   return new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new Uint8Array([1, 2]));
@@ -842,7 +751,7 @@ function createUploadBody(kind: UploadBodyKind): UploadBody {
 function observerThatFails(
   mode: ObserverMode,
   cause: Error,
-  when: "after-first" | "immediately",
+  when: "after-first",
 ) {
   let seen = 0;
   return () => {

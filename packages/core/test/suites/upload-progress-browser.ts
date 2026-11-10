@@ -2,9 +2,7 @@ import { beforeEach, describe, expect, inject, test, vi } from "vitest";
 import {
   createClient,
   type DerivableClient,
-  type FetchHandle,
   withEndpoint,
-  withHTTPHandle,
 } from "../../src/client/index.ts";
 import { defineRequest, type HttpProgressFn } from "../../src/http/index.ts";
 import { struct } from "../../src/struct/index.ts";
@@ -83,39 +81,18 @@ export function registerUploadProgressBrowserSuite(
     }
 
     test.each(binaryUploads)(
-      "should reject a $kind upload with onUploadProgress on Chromium HTTP/1.1 and send it unchanged in Firefox",
-      async ({ contentType, createBody, kind }) => {
+      "should send a $kind upload as built and not call onUploadProgress",
+      async ({ contentType, createBody }) => {
         const onUploadProgress = vi.fn();
         const [error, result] = await echoUpload(
           createBody(),
           onUploadProgress,
         );
-        const outcome = uploadOutcome(cap, kind, "platform");
 
-        switch (outcome) {
-          case "bypassed":
-            expect(error?.code ?? null).toBeNull();
-            expect(result?.bodyBase64).toBe(bytesToBase64(uploadBytes));
-            expect(result?.headers["content-type"]).toBe(contentType);
-            expect(onUploadProgress).toHaveBeenCalledTimes(0);
-            return;
-          case "unreachable":
-            expect(result).toBeUndefined();
-            expect(error?.code).toBe("NET_UNREACHABLE");
-            expect(error?.cause).toBeInstanceOf(TypeError);
-            expect(
-              error?.cause instanceof Error ? error.cause.message : "",
-            ).toBe("Failed to fetch");
-            expect(onUploadProgress).toHaveBeenNthCalledWith(1, {
-              lengthComputable: true,
-              loaded: 0,
-              total: uploadBytes.byteLength,
-            });
-            return;
-          case "observed":
-          case "unsupported":
-            throw new Error(`unexpected ${kind} platform outcome ${outcome}`);
-        }
+        expect(error).toBeNull();
+        expect(result?.bodyBase64).toBe(bytesToBase64(uploadBytes));
+        expect(result?.headers["content-type"]).toBe(contentType);
+        expect(onUploadProgress).not.toHaveBeenCalled();
       },
     );
 
@@ -129,71 +106,18 @@ export function registerUploadProgressBrowserSuite(
       return endpoint(baseClient({ onUploadProgress }));
     }
 
-    test("should reject a FormData upload with onUploadProgress on Chromium HTTP/1.1 and send it unchanged in Firefox", async () => {
+    test("should send a FormData upload as built and not call onUploadProgress", async () => {
       const onUploadProgress = vi.fn();
       const [error, result] = await echoRaw(
         createNotesForm(),
         onUploadProgress,
       );
 
-      switch (uploadOutcome(cap, "FormData", "platform")) {
-        case "bypassed":
-          expect(error?.code ?? null).toBeNull();
-          expect(decodeBase64(result?.bodyBase64 ?? "")).toBe(
-            notesFormBody(result?.contentType ?? ""),
-          );
-          expect(onUploadProgress).toHaveBeenCalledTimes(0);
-          return;
-        case "unreachable":
-          expect(result).toBeUndefined();
-          expect(error?.code).toBe("NET_UNREACHABLE");
-          expect(error?.cause).toBeInstanceOf(TypeError);
-          expect(error?.cause instanceof Error ? error.cause.message : "").toBe(
-            "Failed to fetch",
-          );
-          expect(onUploadProgress).toHaveBeenNthCalledWith(1, {
-            lengthComputable: false,
-            loaded: 0,
-            total: 0,
-          });
-          return;
-        case "observed":
-        case "unsupported":
-          throw new Error("unexpected FormData platform outcome");
-      }
-    });
-
-    test("should fail a Chromium Blob upload when onUploadProgress throws and still send the Blob in Firefox", async () => {
-      const onUploadProgress = vi.fn(() => {
-        throw new Error("upload observer failed");
-      });
-      const [error, result] = await echoUpload(
-        new Blob([uploadBytes], { type: "application/x-defjs-upload" }),
-        onUploadProgress,
+      expect(error).toBeNull();
+      expect(decodeBase64(result?.bodyBase64 ?? "")).toBe(
+        notesFormBody(result?.contentType ?? ""),
       );
-      const outcome = uploadOutcome(cap, "Blob", "platform");
-
-      if (outcome === "bypassed") {
-        expect(error?.code ?? null).toBeNull();
-        expect(result?.bodyBase64).toBe(bytesToBase64(uploadBytes));
-        expect(result?.headers["content-type"]).toBe(
-          "application/x-defjs-upload",
-        );
-        expect(onUploadProgress).toHaveBeenCalledTimes(0);
-        return;
-      }
-
-      // A converted body emits its start event before fetch, so a throwing
-      // observer fails like the observed path instead of NET_UNREACHABLE.
-      if (outcome !== "observed" && outcome !== "unreachable") {
-        throw new Error(`unexpected throwing-observer outcome ${outcome}`);
-      }
-      expect(result).toBeUndefined();
-      expect(error?.code).toBe("EXT_OBSERVER_FAILED");
-      expect(error?.cause instanceof Error ? error.cause.message : "").toBe(
-        "upload observer failed",
-      );
-      expect(onUploadProgress).toHaveBeenCalledTimes(1);
+      expect(onUploadProgress).not.toHaveBeenCalled();
     });
 
     test("should report the declared streaming capability", () => {
@@ -243,76 +167,6 @@ export function registerUploadProgressBrowserSuite(
       // Defjs relays the stream, so the failed send releases it, but a cancelled stream cannot be sent again.
       await vi.waitFor(() => expect(stream.locked).toBe(false), 10_000);
       expect(() => new Response(stream)).toThrow(TypeError);
-    });
-
-    test("should call onUploadProgress and hand a custom handle a counted Blob stream", async () => {
-      const blob = new Blob([uploadBytes], {
-        type: "application/x-defjs-upload",
-      });
-      const events: Array<{
-        lengthComputable: boolean;
-        loaded: number;
-        total: number;
-      }> = [];
-      let sawStream = false;
-      let received = new Uint8Array();
-      const handle: FetchHandle = async (input) => {
-        if (!(input instanceof Request)) {
-          throw new TypeError("expected Request");
-        }
-        sawStream = input.body instanceof ReadableStream;
-        received = new Uint8Array(await input.arrayBuffer());
-        return new Response(null, { status: 204 });
-      };
-      const client = createClient(
-        withEndpoint("https://upload.example"),
-        withHTTPHandle(handle),
-      );
-      const endpoint = defineRequest({
-        builder: () => ({ body: blob }),
-        method: "POST",
-        path: "/upload",
-      });
-      const [error, result, response] = await endpoint(
-        client({
-          onUploadProgress(event) {
-            events.push({
-              lengthComputable: event.lengthComputable,
-              loaded: event.loaded,
-              total: event.total,
-            });
-          },
-        }),
-      );
-
-      expect(Array.from(received)).toEqual(Array.from(uploadBytes));
-      switch (uploadOutcome(cap, "Blob", "custom")) {
-        case "bypassed":
-          expect(error).toBeNull();
-          expect(result).toBeUndefined();
-          expect(response?.status).toBe(204);
-          expect(events).toEqual([]);
-          return;
-        case "observed":
-          expect(error).toBeNull();
-          expect(result).toBeUndefined();
-          expect(response?.status).toBe(204);
-          expect(sawStream).toBe(true);
-          expect(events[0]).toEqual({
-            lengthComputable: true,
-            loaded: 0,
-            total: uploadBytes.byteLength,
-          });
-          expect(events.at(-1)).toEqual({
-            lengthComputable: true,
-            loaded: uploadBytes.byteLength,
-            total: uploadBytes.byteLength,
-          });
-          return;
-        case "unsupported":
-        case "unreachable":
-          throw new Error("unexpected Blob custom outcome");
-      }
     });
   });
 }

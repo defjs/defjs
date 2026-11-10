@@ -453,7 +453,7 @@ export async function fetchHandler(
 }
 
 type FetchLifecycle = {
-  /** `streamedBody` is true when `fetch` is handed a `ReadableStream`, including the one built for upload progress. */
+  /** `streamedBody` is true when `fetch` is handed a caller-supplied `ReadableStream`. */
   start: (streamedBody: boolean) => void;
   response: (response: Response) => void;
   /** The request body stopped for good: its source errored or its observer failed. */
@@ -514,20 +514,18 @@ async function sendFetchRequest(
 ): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.signal;
   const platform = fetchImpl === PLATFORM_FETCH_HANDLE;
-  let prepared = httpRequest;
   let request: Request | undefined;
   let platformBody: RequestInit["body"];
   let fallbackUrl: string;
   let response: Response;
 
   try {
-    prepared = await prepareUploadProgressRequest(httpRequest);
-    const streamedBody = isReadableStreamBody(prepared.body);
+    const streamedBody = isReadableStreamBody(httpRequest.body);
     if (platform) {
       // fetch(url, init) builds the Request itself, so building one here would only do that work twice.
-      const url = resolveRequestUrl(prepared);
-      assertRequestShape(prepared, url);
-      const init = createFetchRequestInit(prepared, lifecycle?.bodyFailed);
+      const url = resolveRequestUrl(httpRequest);
+      assertRequestShape(httpRequest, url);
+      const init = createFetchRequestInit(httpRequest, lifecycle?.bodyFailed);
       platformBody = init.body;
       fallbackUrl = url.href;
       response = await fetchWithSignal(
@@ -539,7 +537,7 @@ async function sendFetchRequest(
         cancelLateResponseBody,
       );
     } else {
-      const built = createFetchRequest(prepared, lifecycle?.bodyFailed);
+      const built = createFetchRequest(httpRequest, lifecycle?.bodyFailed);
       request = built;
       fallbackUrl = built.url;
       response = await fetchWithSignal(
@@ -553,7 +551,7 @@ async function sendFetchRequest(
     }
   } catch (error) {
     cancelWrappedUploadBody(
-      prepared,
+      httpRequest,
       lifecycle?.bodyFailed,
       request?.body ?? platformBody,
       error,
@@ -572,104 +570,4 @@ async function sendFetchRequest(
   } catch (error) {
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
   }
-}
-
-/**
- * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where `fetch`
- * accepts a streaming request body. Chromium and WebKit accept that body only on HTTP/2 or later,
- * so on HTTP/1.1 `fetch` rejects and the call is `NET_UNREACHABLE`. Firefox cannot stream request
- * bodies: the original body is sent and `onUploadProgress` is not called. Download progress is
- * unaffected. FormData uses the serialized stream and boundary directly; its total length is
- * unknown unless declared in a header.
- */
-async function prepareUploadProgressRequest(
-  request: HttpRequest,
-): Promise<HttpRequest> {
-  const { uploadProgress, body } = request;
-  if (
-    !uploadProgress ||
-    body == null ||
-    isReadableStreamBody(body) ||
-    !supportsStreamingRequestBody()
-  ) {
-    return request;
-  }
-
-  request.signal?.throwIfAborted();
-  const converted = convertBodyToUploadStream(body);
-  if (!converted) {
-    return request;
-  }
-
-  const headers = new Headers(request.headers);
-  applyBodyContentType(request, headers);
-  if (
-    converted.contentType &&
-    (body instanceof FormData ||
-      (!headers.has("Content-Type") && request.bodyContentType !== null))
-  ) {
-    headers.set("Content-Type", converted.contentType);
-  }
-  if (converted.total > 0) {
-    // Read back below as the progress total. Browsers drop this forbidden header; undici and Bun send it.
-    headers.set("Content-Length", String(converted.total));
-  }
-
-  const total = getContentLength(headers);
-  const startEvent = { lengthComputable: total > 0, loaded: 0, total };
-  try {
-    if (request.signal) {
-      await awaitWithSignal(() => uploadProgress(startEvent), request.signal);
-    } else {
-      await uploadProgress(startEvent);
-    }
-  } catch (error) {
-    void converted.stream.cancel(error).catch(() => undefined);
-    throw error;
-  }
-
-  return {
-    ...request,
-    body: converted.stream,
-    bodyContentType: headers.get("Content-Type"),
-    bodyContentTypeSource: converted.stream,
-    headers,
-  };
-}
-
-function convertBodyToUploadStream(body: HttpRequest["body"]):
-  | {
-      contentType?: string | null;
-      stream: ReadableStream<Uint8Array>;
-      total: number;
-    }
-  | undefined {
-  if (typeof Blob !== "undefined" && body instanceof Blob) {
-    return {
-      contentType: body.type || undefined,
-      stream: body.stream(),
-      total: body.size,
-    };
-  }
-
-  if (body instanceof ArrayBuffer) {
-    return {
-      contentType: "application/octet-stream",
-      stream: new Blob([body]).stream(),
-      total: body.byteLength,
-    };
-  }
-
-  if (typeof FormData !== "undefined" && body instanceof FormData) {
-    const serialized = new Response(body);
-    // Read the header first: in Bun, touching the body first leaves this Content-Type unset.
-    const contentType = serialized.headers.get("Content-Type");
-    // Fetch extracts FormData into a stream. A Response implementation without one leaves the body unconverted.
-    const stream = serialized.body;
-    if (stream) {
-      return { contentType, stream, total: 0 };
-    }
-  }
-
-  return undefined;
 }
