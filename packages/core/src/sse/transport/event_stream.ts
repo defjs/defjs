@@ -96,7 +96,6 @@ export type EventStreamFaultCode = Extract<
   | "NET_TIMEOUT"
   | "NET_UNREACHABLE"
   | "REQ_BUILD_FAILED"
-  | "RES_DECODE_FAILED"
   | "RES_MEDIA_TYPE_INVALID"
 >;
 
