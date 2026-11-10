@@ -70,7 +70,7 @@ Everything that may have failed before a response existed: `REQ_*`, `NET_*`, `EX
 `ENV_UNSUPPORTED`. `response` is `undefined` until the transport has metadata to report,
 such as a body that truncated mid-download.
 
-Retry options are not validated at runtime. Omitting `withRetry` disables retries. `withRetry()` and `withRetry(undefined)` behave like `withRetry({})`. `withRetry({ maxRetries: 0 })` turns retries off after they were enabled. A `shouldRetry` function that throws ends an HTTP call with `EXT_HOOK_FAILED` and the thrown value as `cause`.
+Retry options are not validated at runtime. Omitting `withRetry` disables retries. `withRetry()` and `withRetry(undefined)` behave like `withRetry({})`. `withRetry({ maxRetries: 0 })` turns retries off after they were enabled. A `shouldRetry` function that throws ends the call with `EXT_HOOK_FAILED` and the thrown value as `cause`, on HTTP, SSE, and WebSocket alike; for a stream or session that was already open, see [Client](/api/client#withretry).
 
 ### AnyFault
 

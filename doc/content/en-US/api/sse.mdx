@@ -16,13 +16,13 @@ Declare an event stream, call the operation with a client, iterate events, then 
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-The call returns `[null, stream, open]` or `[error, undefined, open?]`. When `error` is declared, the fault is `Fault` of that struct; otherwise it is `Fault<undefined>`. Pass `signal` by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). SSE reads only `signal` and ignores progress and WebSocket fields.
+The call returns `[null, stream, open]` or `[error, undefined, open?]`. When `error` is declared, the fault is `Fault` of that struct; otherwise it is `Fault<undefined>`. Pass `signal` by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). SSE reads only `signal` and `retry` and ignores progress and WebSocket fields.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` is `{ signal? }`. There is no `timeout` or `abort` field and no progress callback. `signal` covers the whole stream, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no startup-only deadline and no client-level default deadline. An application that wants a startup-only deadline creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns.
+`EventStreamExecuteOptions` is `{ signal?, retry? }`. There is no `timeout` or `abort` field and no progress callback. `signal` covers the whole stream, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no client-level default deadline. A deadline on the handshake alone is `withRetry({ maxRetries: 0, attemptTimeoutMs })`, or `retry: { maxRetries: 0, attemptTimeoutMs }` for one call; it ends at the response headers.
 
 ## EventStreamHandle
 
@@ -44,7 +44,7 @@ Structural implementations of `EventStreamHandle` must implement `[Symbol.asyncD
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` is `eof`, `aborted`, or `error`. Every variant may carry `reason` and `cause`. Only `error` has `code`, one of [`EventStreamFaultCode`](/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` means a reconnect pick failed after the stream opened. `HTTP_STATUS` means a reconnect handshake ended with a non-2xx status that was not retried, or retries ran out. A full queue is not an error: the library holds at most 1024 unread events and reading the response pauses until the consumer takes one. `close()`, disposal, and a caller `signal` abort discard the events nobody has read yet and end the iterator at once. After an `error` end, the events already queued are still delivered before the iterator rejects.
+`kind` is `eof`, `aborted`, or `error`. Every variant may carry `reason` and `cause`. Only `error` has `code`, one of [`EventStreamFaultCode`](/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` means a reconnect pick failed after the stream opened. `EXT_HOOK_FAILED` means a `shouldRetry` function threw, and `cause` wraps the thrown value. `HTTP_STATUS` means a reconnect handshake ended with a non-2xx status that was not retried, or retries ran out. A full queue is not an error: the library holds at most 1024 unread events and reading the response pauses until the consumer takes one. `close()`, disposal, and a caller `signal` abort discard the events nobody has read yet and end the iterator at once. After an `error` end, the events already queued are still delivered before the iterator rejects.
 
 ## EventStructs
 

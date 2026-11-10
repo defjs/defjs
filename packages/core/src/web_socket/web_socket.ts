@@ -282,7 +282,7 @@ interface UseWebSocketBaseConfig<TIncoming = unknown, TOutgoing = unknown> {
 /**
  * WebSocket fields of {@link RequestOptions}, plus `signal`.
  *
- * `beforeConnect`, `heartbeat`, `protocols`, and `retry` override the client-level options for one call. `signal` covers the whole session, including after it opens. There is no startup-only deadline and no `abort` field.
+ * `beforeConnect`, `heartbeat`, `protocols`, and `retry` override the client-level options for one call. `signal` covers the whole session, including after it opens. For a deadline on connecting alone, pass `retry: { maxRetries: 0, attemptTimeoutMs }`. There is no `abort` field.
  *
  * @group web-socket
  */

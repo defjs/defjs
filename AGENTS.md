@@ -49,17 +49,17 @@ Examples, READMEs, and guides follow the minimal example in `doc/examples/http/b
 
 ### `@defjs/core`
 
-| Module         | Contents                                           |
-| -------------- | -------------------------------------------------- |
-| `client/`      | client creation, derivation, request options       |
-| `error/`       | fault types and factory                            |
-| `http/`        | request definitions, request building, transports  |
-| `xsrf/`        | browser-only `withXSRF` for `@defjs/core/xsrf`     |
-| `sse/`         | event-stream definitions and transports            |
-| `web_socket/`  | WebSocket definitions, codec, heartbeat, reconnect |
-| `struct/`      | schema constructors, codecs, parsing               |
-| `interceptor/` | interceptor types and built-ins                    |
-| `internal/`    | shared internals; never exported from the package  |
+| Module         | Contents                                          |
+| -------------- | ------------------------------------------------- |
+| `client/`      | client creation, derivation, request options      |
+| `error/`       | fault types and factory                           |
+| `http/`        | request definitions, request building, transports |
+| `xsrf/`        | browser-only `withXSRF` for `@defjs/core/xsrf`    |
+| `sse/`         | event-stream definitions and transports           |
+| `web_socket/`  | WebSocket definitions, codec, heartbeat           |
+| `struct/`      | schema constructors, codecs, parsing              |
+| `interceptor/` | interceptor types and built-ins                   |
+| `internal/`    | shared internals; never exported from the package |
 
 Specs live beside the source. `packages/core/test/` holds end-to-end specs and the shared fixture server (`packages/core/test/fixture/`); the naming table below decides which `core-<runtime>` projects run them.
 

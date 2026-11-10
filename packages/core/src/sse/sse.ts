@@ -183,7 +183,7 @@ export type StreamAwaitResult<
 /**
  * SSE fields of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.
  *
- * `signal` covers the whole stream, including after it opens. There is no startup-only deadline. `retry` replaces the client's retry policy for this call.
+ * `signal` covers the whole stream, including after it opens. For a deadline on the connection handshake alone, pass `retry: { maxRetries: 0, attemptTimeoutMs }`. `retry` replaces the client's retry policy for this call.
  *
  * @group sse
  */

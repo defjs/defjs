@@ -5,7 +5,7 @@ description: Export typed event-stream definitions from your SDK and let consumi
 
 # SSE event streams
 
-An SDK declares a Server-Sent Events (SSE) operation with `defineEventStream`, specifying the path, optional input and builder, an `events` dictionary of structs, and buffer/queue limits. The consuming application configures authentication and opt-in retries (`withRetry`) on its client, opens the stream, iterates typed events, and owns closing the stream.
+An SDK declares a Server-Sent Events (SSE) operation with `defineEventStream`, specifying the path, optional input and builder, an `events` dictionary of structs, and a buffer limit. The consuming application configures authentication and opt-in retries (`withRetry`) on its client, opens the stream, iterates typed events, and owns closing the stream.
 
 ## 1. Define the event stream and consume it
 
@@ -125,7 +125,7 @@ The caller that opens a stream owns its teardown. Exiting a `for await` loop via
 </Tab>
 </Tabs>
 
-`stream.close()`, disposal, and a caller `signal` abort are the caller stopping the stream: they end it at once and discard the events nobody has read yet, as `EventSource.close()` does. A response that ends normally, and a stream that fails with an error or a timeout, still deliver the events already queued first (see section 5).
+`stream.close()`, disposal, and a caller `signal` abort are the caller stopping the stream: they end it at once and discard the events nobody has read yet, as `EventSource.close()` does. A response that ends normally, and a stream that fails with an error or a timeout, still deliver the events already queued first (see section 5). A `signal` that expires, as `AbortSignal.timeout(ms)` does, is a timeout and belongs to that second group, not to a stop by the caller.
 
 The `signal` passed via `client({ signal })` governs the entire lifetime of the stream. To bound only the initial connection handshake without killing an open stream later, clear your timer once `await watchOrders(...)` returns (as shown in the second tab above) or write `withRetry({ maxRetries: 0, attemptTimeoutMs })`; without `maxRetries: 0`, `withRetry` keeps its default of 3 retries.
 

@@ -6325,7 +6325,7 @@
     "slug": "core/eventstreamexecuteoptions-type",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "SSE fields of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.\n\n`signal` covers the whole stream, including after it opens. There is no startup-only deadline. `retry` replaces the client's retry policy for this call.",
+    "description": "SSE fields of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.\n\n`signal` covers the whole stream, including after it opens. For a deadline on the connection handshake alone, pass `retry: { maxRetries: 0, attemptTimeoutMs }`. `retry` replaces the client's retry policy for this call.",
     "signatures": [
       "type EventStreamExecuteOptions = {\n  signal?: AbortSignal;\n  retry?: Omit<RetryOptions, \"budget\">;\n};"
     ],
@@ -6888,7 +6888,7 @@
     "slug": "core/usewebsocketconfig-type",
     "source": "packages/core/src/web_socket/web_socket.ts",
     "group": "web-socket",
-    "description": "WebSocket fields of {@link RequestOptions}, plus `signal`.\n\n`beforeConnect`, `heartbeat`, `protocols`, and `retry` override the client-level options for one call. `signal` covers the whole session, including after it opens. There is no startup-only deadline and no `abort` field.",
+    "description": "WebSocket fields of {@link RequestOptions}, plus `signal`.\n\n`beforeConnect`, `heartbeat`, `protocols`, and `retry` override the client-level options for one call. `signal` covers the whole session, including after it opens. For a deadline on connecting alone, pass `retry: { maxRetries: 0, attemptTimeoutMs }`. There is no `abort` field.",
     "signatures": [
       "type UseWebSocketConfig<\n  TIncoming = unknown,\n  TOutgoing = unknown,\n> = UseWebSocketBaseConfig<TIncoming, TOutgoing> & {\n  signal?: AbortSignal;\n};"
     ],

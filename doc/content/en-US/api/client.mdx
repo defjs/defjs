@@ -229,9 +229,9 @@ The defaults are `maxRetries: 3` (retries after the first attempt; `0` never ret
 
 After each failed attempt the same flow runs on every transport, in this order:
 
-1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, and a `ReadableStream` request body end the call. `shouldRetry` is not called.
+1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, a WebSocket whose constructor throws, and a `ReadableStream` request body end the call. `shouldRetry` is not called.
 2. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.
-3. `shouldRetry(context)` decides; without it, `context.retryable` does. It may return a promise, and the caller's signal cancels it. If it throws, the call ends with that error as the cause: HTTP returns `EXT_HOOK_FAILED` with it as `cause`, and SSE and WebSocket end the stream or session with it as the `error` cause.
+3. `shouldRetry(context)` decides; without it, `context.retryable` does. It may return a promise, and the caller's signal cancels it. If it throws, the call ends with `EXT_HOOK_FAILED` and the thrown value as `cause`. An SSE stream that was already open reports `EXT_HOOK_FAILED` in `closed.code`, with an error whose `cause` is the thrown value in `closed.cause`. A WebSocket session that was already open ends with `closed.kind: "error"` and the thrown value as `closed.cause`.
 4. HTTP only: the budget must pay for the retry, or the call ends.
 5. The call waits for the backoff delay, then the balancer picks again from every endpoint, including the one that just failed. A single endpoint is tried again after the delay. For HTTP each retry rebuilds the request and reruns the complete interceptor chain; SSE and WebSocket reuse their request and re-resolve only the URL.
 
