@@ -476,6 +476,46 @@ describe("sse runtime faults", () => {
     expect(closed.kind).toBe("eof");
     expect(closed).not.toHaveProperty("code");
   });
+
+  test("should keep the runtime idle-timeout error chain on a NET_UNREACHABLE fault", async () => {
+    // Mirrors what Node's built-in fetch (undici) does to a body that stays silent past its
+    // `bodyTimeout`; the guides document this exact `cause` chain.
+    const bodyTimeout = Object.assign(new Error("Body Timeout Error"), {
+      code: "UND_ERR_BODY_TIMEOUT",
+      name: "BodyTimeoutError",
+    });
+    const terminated = new TypeError("terminated", { cause: bodyTimeout });
+    const client = clientReturning(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("data: first\n\n"));
+            },
+            pull(controller) {
+              controller.error(terminated);
+            },
+          }),
+          { headers: SSE_HEADERS },
+        ),
+    );
+
+    const [fault, stream] = await useStream(client);
+
+    expect(fault).toBeNull();
+    if (fault) throw new Error("Expected the stream to open");
+    // The iterator rejects with the runtime's own error; `closed` carries the fault code.
+    await expect(
+      (async () => {
+        for await (const event of stream) void event;
+      })(),
+    ).rejects.toBe(terminated);
+    await expect(stream.closed).resolves.toMatchObject({
+      cause: terminated,
+      code: "NET_UNREACHABLE",
+      kind: "error",
+    });
+  });
 });
 
 describe("unsupported streaming request body", () => {

@@ -82,6 +82,16 @@ SSE reconnection is **opt-in**. Without `withSSEReconnect(...)`, any network dro
 - **Gateway handshakes**: A `502`, `503`, or `504` handshake, whether the initial open or a reconnect, is retried like a refused connection under the same reconnect rules (method, `shouldReconnect`, `attempts`, `ReadableStream` body). Other non-2xx handshakes stay fatal. Exhausted retries and fatal reconnect handshakes end with `HTTP_STATUS`.
 - **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds each handshake from Fetch invocation to response headers without limiting how long an established stream stays open. The option exists only inside the `withSSEReconnect({...})` options object. Passing that object enables automatic reconnect with the default `attempts: 3`, so `connectTimeoutMs` alone also reconnects; add `attempts: 0` for a handshake-only deadline.
 
+### Idle streams on Node.js [#idle-streams]
+
+Node.js's built-in `fetch` (undici) applies a `bodyTimeout` to every response body, 300 seconds by default, measured between two chunks of data. An SSE stream that stays silent for that long is cut by the runtime even though the server is healthy.
+
+- **What you see**: The iterator rejects with the runtime's own error, a `TypeError` with message `terminated` whose `cause.code` is `UND_ERR_BODY_TIMEOUT`. `stream.closed` resolves with `kind: "error"`, `code: "NET_UNREACHABLE"`, and that `TypeError` as `cause`. Without `withSSEReconnect(...)` the stream ends there. With it, the stream resumes under the [reconnect rules](#reconnect) using `Last-Event-ID`, and each cut reports one `NET_UNREACHABLE` outcome to the endpoint balancer (see [load balancing](/docs/load-balancing)).
+- **Fix on the server**: Send a comment line such as `: keepalive` at an interval well below 300 seconds. The HTML Standard's authoring notes suggest about every 15 seconds so that legacy proxies do not drop an idle connection. Parsers ignore comment lines, but their bytes still reset the timer.
+- **No client-side setting**: Defjs has no idle-timeout option of its own. If the server cannot send comment lines, a stream that stays silent is cut when the runtime's limit is reached.
+
+Idle behavior differs on other runtimes and is not covered here.
+
 ## 5. Buffer and queue limits
 
 The defaults are `maxBufferSize: 64 * 1024` bytes and `maxQueueSize: 1024` events. Both limits must be positive safe integers. There is no default handshake deadline: a pending Fetch waits for the platform, caller cancellation, or an explicitly configured `connectTimeoutMs`.
