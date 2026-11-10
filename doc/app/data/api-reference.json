@@ -8666,7 +8666,7 @@
     "slug": "core/pickresult-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Endpoint selected for one call.\n\n`done` is optional. When present, the runtime calls it once, synchronously,\nwith the outcome of this pick, or `{ attempted: false }` when no attempt can\nbe attributed to the endpoint.",
+    "description": "Endpoint selected for one call.\n\n`done` is optional. When present, the runtime calls it once, synchronously,\nwith the outcome of this pick, or `{ attempted: false }` when no attempt can\nbe attributed to the endpoint.\n\nThe runtime reads `start`, `end`, and `done` once, when the pick returns, and\ncalls each without a receiver, so `this` is `undefined`. Use arrow functions,\nclosures, or bound functions for state. A synchronous throw does not change\nthe attempt or the operation tuple. It is reported with `reportError` where\nthe runtime defines it, and that can end a Bun or Deno process that has no\nerror handler. Where the runtime has no `reportError`, as in Node.js, the\nthrow stays contained. A returned promise is not awaited and its rejection is\nignored.",
     "signatures": [
       "interface PickResult {\n  readonly endpoint: string;\n  readonly start?: () => void;\n  readonly end?: (info: DoneInfo) => void;\n  readonly done?: (info: DoneInfo) => void;\n}"
     ],
@@ -8705,7 +8705,7 @@
       },
       {
         "name": "done",
-        "description": "Called once with the attempt outcome. Omit when the balancer keeps no per-pick state.\nMust be synchronous: a returned promise is not awaited and its rejection is ignored.\nA throw does not replace the operation tuple.",
+        "description": "Called once with the attempt outcome. Omit when the balancer keeps no per-pick state.\nMust be synchronous: a returned promise is not awaited and its rejection is ignored.\nA throw does not replace the operation tuple; it is reported as described above.",
         "type": "((info: DoneInfo) => void) | undefined",
         "simplifiedType": "function",
         "required": false,
@@ -9048,7 +9048,7 @@
       },
       {
         "name": "weights",
-        "description": "Finite positive weight per endpoint; a missing weight is 1. Copied at construction.",
+        "description": "Finite positive weight per endpoint; a missing weight is 1. Read by\niteration, so a `Map` from another realm and any custom `ReadonlyMap` work.\nCopied at construction.",
         "type": "ReadonlyMap<string, number> | undefined",
         "simplifiedType": "object",
         "required": false,
@@ -9367,7 +9367,7 @@
       },
       {
         "name": "isHealthy",
-        "description": "Synchronous cached check. Invalid results reject only that pick with REQ_OPTIONS_INVALID.",
+        "description": "Synchronous cached check. A throw or a non-boolean result rejects only that\npick with REQ_OPTIONS_INVALID; a thrown value is kept as the `cause` of the\n`TypeError`.",
         "type": "((endpoint: string) => boolean) | undefined",
         "simplifiedType": "function",
         "required": false,

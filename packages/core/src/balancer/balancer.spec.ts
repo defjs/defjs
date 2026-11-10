@@ -19,6 +19,7 @@ import { pickEndpoint, type ResolvedEndpoint } from "./runtime";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function info(endpoints: readonly string[]): PickInfo {
@@ -361,6 +362,115 @@ describe("roundRobinBalancer", () => {
     expect(endpoints).toEqual(["a", "b"]);
   });
 
+  test("accepts a custom ReadonlyMap implementation", () => {
+    class PrivateWeights implements ReadonlyMap<string, number> {
+      readonly #entries: Map<string, number>;
+      constructor(entries: Iterable<readonly [string, number]>) {
+        this.#entries = new Map(entries);
+      }
+      get size(): number {
+        return this.#entries.size;
+      }
+      get(key: string): number | undefined {
+        return this.#entries.get(key);
+      }
+      has(key: string): boolean {
+        return this.#entries.has(key);
+      }
+      forEach(
+        callback: (
+          value: number,
+          key: string,
+          map: ReadonlyMap<string, number>,
+        ) => void,
+      ): void {
+        this.#entries.forEach((value, key) => callback(value, key, this));
+      }
+      entries(): MapIterator<[string, number]> {
+        return this.#entries.entries();
+      }
+      keys(): MapIterator<string> {
+        return this.#entries.keys();
+      }
+      values(): MapIterator<number> {
+        return this.#entries.values();
+      }
+      [Symbol.iterator](): MapIterator<[string, number]> {
+        return this.#entries[Symbol.iterator]();
+      }
+    }
+    const entries: [string, number][] = [
+      ["a", 3],
+      ["b", 1],
+    ];
+    const custom = roundRobinBalancer({ weights: new PrivateWeights(entries) });
+    const builtIn = roundRobinBalancer({ weights: new Map(entries) });
+    const expected = Array.from({ length: 8 }, () =>
+      endpointOf(builtIn, ["a", "b"]),
+    );
+    const [first] = custom.pick(info(["a", "b"]));
+    expect(first).toBeNull();
+    const picks = Array.from({ length: 7 }, () =>
+      endpointOf(custom, ["a", "b"]),
+    );
+    expect(["a", ...picks]).toEqual(expected);
+  });
+
+  test("reads weights by iteration, so any iterable of entries works", () => {
+    const entries: [string, number][] = [
+      ["a", 3],
+      ["b", 1],
+    ];
+    const expected = roundRobinBalancer({ weights: new Map(entries) });
+    const sequence = (balancer: Balancer) =>
+      Array.from({ length: 8 }, () => endpointOf(balancer, ["a", "b"]));
+    const wanted = sequence(expected);
+    // @ts-expect-error the type is ReadonlyMap; the runtime reads any iterable of entries
+    expect(sequence(roundRobinBalancer({ weights: entries }))).toEqual(wanted);
+    const generated = roundRobinBalancer({
+      // @ts-expect-error the type is ReadonlyMap; the runtime reads any iterable of entries
+      weights: (function* () {
+        yield* entries;
+      })(),
+    });
+    expect(sequence(generated)).toEqual(wanted);
+  });
+
+  test("rejects values that are not iterable and contains read failures", () => {
+    const readFailure = new Error("iterator failed");
+    const withIterator = (iterator: () => Iterator<unknown>) =>
+      Object.assign(new Map<string, number>(), { [Symbol.iterator]: iterator });
+    const rejected: unknown[] = [
+      "a",
+      1,
+      null,
+      {},
+      { get: () => 1, has: () => true, size: 1 },
+      { [Symbol.iterator]: 1 },
+    ];
+    for (const weights of rejected) {
+      // @ts-expect-error weights must be a ReadonlyMap
+      const balancer = roundRobinBalancer({ weights });
+      expect(balancer.pick(info(["a"]))[0]).toBeInstanceOf(TypeError);
+    }
+
+    const failing = withIterator(() => {
+      throw readFailure;
+    });
+    const [iterationFailure] = roundRobinBalancer({ weights: failing }).pick(
+      info(["a"]),
+    );
+    expect(iterationFailure).toBeInstanceOf(TypeError);
+    expect(
+      iterationFailure instanceof Error ? iterationFailure.cause : undefined,
+    ).toBe(readFailure);
+
+    const [badEntry] = roundRobinBalancer({
+      weights: withIterator(() => [1].values()),
+    }).pick(info(["a"]));
+    expect(badEntry).toBeInstanceOf(TypeError);
+  });
+
   test("returns ERR_NO_CANDIDATE for an empty list", () => {
     expect(roundRobinBalancer().pick(info([]))[0]).toBe(ERR_NO_CANDIDATE);
     expect(roundRobinBalancer({}).pick(info([]))[0]).toBe(ERR_NO_CANDIDATE);
@@ -588,6 +698,8 @@ describe("pickEndpoint", () => {
   });
 
   test("calls done at most once and swallows a throw", () => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
     let calls = 0;
     let nested = 0;
     let picked: ResolvedEndpoint | undefined;
@@ -650,6 +762,7 @@ describe("pickEndpoint", () => {
     expect(throwing?.finished()).toBe(true);
     throwing?.done({ attempted: false });
     expect(exploded).toBe(1);
+    expect(report).toHaveBeenCalledOnce();
   });
 });
 

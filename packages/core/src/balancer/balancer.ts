@@ -69,6 +69,15 @@ export interface PickInfo {
  * with the outcome of this pick, or `{ attempted: false }` when no attempt can
  * be attributed to the endpoint.
  *
+ * The runtime reads `start`, `end`, and `done` once, when the pick returns, and
+ * calls each without a receiver, so `this` is `undefined`. Use arrow functions,
+ * closures, or bound functions for state. A synchronous throw does not change
+ * the attempt or the operation tuple. It is reported with `reportError` where
+ * the runtime defines it, and that can end a Bun or Deno process that has no
+ * error handler. Where the runtime has no `reportError`, as in Node.js, the
+ * throw stays contained. A returned promise is not awaited and its rejection is
+ * ignored.
+ *
  * @group client
  */
 export interface PickResult {
@@ -89,7 +98,7 @@ export interface PickResult {
   /**
    * Called once with the attempt outcome. Omit when the balancer keeps no per-pick state.
    * Must be synchronous: a returned promise is not awaited and its rejection is ignored.
-   * A throw does not replace the operation tuple.
+   * A throw does not replace the operation tuple; it is reported as described above.
    */
   readonly done?: (info: DoneInfo) => void;
 }
@@ -453,7 +462,11 @@ function candidateOrder(
 export interface RoundRobinOptions {
   /** Health filtering; enabled with defaults when omitted. `false` disables it. */
   readonly outlierDetection?: OutlierDetectionOptions | false;
-  /** Finite positive weight per endpoint; a missing weight is 1. Copied at construction. */
+  /**
+   * Finite positive weight per endpoint; a missing weight is 1. Read by
+   * iteration, so a `Map` from another realm and any custom `ReadonlyMap` work.
+   * Copied at construction.
+   */
   readonly weights?: ReadonlyMap<string, number>;
 }
 
@@ -491,11 +504,10 @@ export interface RoundRobinOptions {
  * @see {@link RoundRobinOptions}
  */
 export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
-  const invalid = invalidRoundRobin(options);
-  const weights =
-    invalid === undefined && options?.weights !== undefined
-      ? new Map(options.weights)
-      : undefined;
+  const optionError = invalidRoundRobin(options);
+  const copied = optionError === undefined ? copyWeights(options) : undefined;
+  const invalid = copied instanceof Error ? copied : optionError;
+  const weights = copied instanceof Error ? undefined : copied;
   let counter =
     invalid === undefined && weights === undefined
       ? Math.floor(Math.random() * 0x100000000) >>> 0
@@ -567,33 +579,66 @@ function invalidRoundRobin(options: unknown): Error | undefined {
       new TypeError("roundRobinBalancer options must be an object"),
     );
   }
-  const weights = options["weights"];
-  if (weights === undefined) {
-    return undefined;
-  }
-  if (!(weights instanceof Map)) {
-    return balancerOptionError(
-      new TypeError("roundRobinBalancer weights must be a Map"),
-    );
-  }
-  for (const [key, value] of weights) {
-    if (typeof key !== "string") {
+  return undefined;
+}
+
+/** Copies `weights` from validated options into a Map of this realm, or returns the option error. */
+function copyWeights(
+  options: unknown,
+): Map<string, number> | Error | undefined {
+  if (!isOptionRecord(options)) return undefined;
+  const copy = new Map<string, number>();
+  try {
+    const weights = options["weights"];
+    if (weights === undefined) return undefined;
+    if (!isIterableObject(weights)) {
       return balancerOptionError(
-        new TypeError("roundRobinBalancer weight keys must be strings"),
-      );
-    }
-    if (typeof value !== "number") {
-      return balancerOptionError(
-        new TypeError("roundRobinBalancer weights must be numbers"),
-      );
-    }
-    if (!Number.isFinite(value) || value <= 0) {
-      return balancerOptionError(
-        new RangeError(
-          "roundRobinBalancer weights must be finite and greater than 0",
+        new TypeError(
+          "roundRobinBalancer weights must be a ReadonlyMap or an iterable of [key, value] entries",
         ),
       );
     }
+    for (const [key, value] of weights) {
+      if (typeof key !== "string") {
+        return balancerOptionError(
+          new TypeError("roundRobinBalancer weight keys must be strings"),
+        );
+      }
+      if (typeof value !== "number") {
+        return balancerOptionError(
+          new TypeError("roundRobinBalancer weights must be numbers"),
+        );
+      }
+      if (!Number.isFinite(value) || value <= 0) {
+        return balancerOptionError(
+          new RangeError(
+            "roundRobinBalancer weights must be finite and greater than 0",
+          ),
+        );
+      }
+      copy.set(key, value);
+    }
+  } catch (thrown) {
+    return balancerOptionError(
+      new TypeError("roundRobinBalancer weights could not be read", {
+        cause: thrown,
+      }),
+    );
   }
-  return undefined;
+  return copy;
+}
+
+/**
+ * Whether `value` can be read by iteration; `instanceof Map` rejects other
+ * realms and custom implementations. Entries are checked while they are read.
+ */
+function isIterableObject(
+  value: unknown,
+): value is Iterable<readonly [unknown, unknown]> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Symbol.iterator in value &&
+    typeof value[Symbol.iterator] === "function"
+  );
 }

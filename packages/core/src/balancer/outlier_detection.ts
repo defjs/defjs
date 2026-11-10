@@ -1,4 +1,5 @@
 import { rememberEndpoint } from "./retention";
+import { describeCause } from "../error/cause";
 import { monotonicNow } from "../internal/clock";
 import type { Balancer, DoneInfo } from "./balancer";
 import { balancerOptionError, memberList } from "./balancer";
@@ -22,7 +23,11 @@ export interface OutlierDetectionOptions {
   readonly jitterRatio?: number;
   /** Synchronous classifier. Throws and non-booleans discard the sample. */
   readonly isFailure?: (info: DoneInfo) => boolean;
-  /** Synchronous cached check. Invalid results reject only that pick with REQ_OPTIONS_INVALID. */
+  /**
+   * Synchronous cached check. A throw or a non-boolean result rejects only that
+   * pick with REQ_OPTIONS_INVALID; a thrown value is kept as the `cause` of the
+   * `TypeError`.
+   */
   readonly isHealthy?: (endpoint: string) => boolean;
 }
 interface HealthState {
@@ -188,21 +193,29 @@ export function outlierDetection(
       let candidates: readonly string[] = eligible;
       if (isHealthy !== undefined) {
         const active = new Set<string>();
-        try {
-          for (const endpoint of info.endpoints) {
-            const healthy: unknown = isHealthy(endpoint);
-            ignoreRejection(healthy);
-            if (typeof healthy !== "boolean")
-              throw new TypeError("isHealthy must return a boolean");
-            if (healthy) active.add(endpoint);
+        for (const endpoint of info.endpoints) {
+          let healthy: unknown;
+          try {
+            healthy = isHealthy(endpoint);
+          } catch (thrown) {
+            return [
+              balancerOptionError(
+                new TypeError(`isHealthy threw: ${describeCause(thrown)}`, {
+                  cause: thrown,
+                }),
+              ),
+              undefined,
+            ];
           }
-        } catch {
-          return [
-            balancerOptionError(
-              new TypeError("isHealthy must synchronously return a boolean"),
-            ),
-            undefined,
-          ];
+          ignoreRejection(healthy);
+          if (typeof healthy !== "boolean")
+            return [
+              balancerOptionError(
+                new TypeError("isHealthy must synchronously return a boolean"),
+              ),
+              undefined,
+            ];
+          if (healthy) active.add(endpoint);
         }
         eligible = eligible.filter((endpoint) => {
           const state = states.get(endpoint);
@@ -238,11 +251,13 @@ export function outlierDetection(
           end(report) {
             if (state && probe !== undefined && state.probe === probe)
               sample(state, report, probe, false);
-            return result.end?.(report);
+            const end = result.end;
+            return end?.(report);
           },
           done(report) {
             if (state) sample(state, report, probe, true);
-            return result.done?.(report);
+            const done = result.done;
+            return done?.(report);
           },
         },
       ];

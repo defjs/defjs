@@ -5,7 +5,10 @@ import type { Balancer } from "./balancer";
 import { yieldMacrotask } from "../../test/macrotask";
 
 const info = { endpoints: ["a", "b"] };
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 test("start is snapshotted once, invoked synchronously at most once, and never after done", () => {
   let reads = 0;
   const start = vi.fn();
@@ -75,6 +78,8 @@ test("a throwing start getter becomes REQ_BUILD_FAILED without calling done", ()
 test.each(["throw", "reject", "then-getter", "then-call"])(
   "start contains %s without changing completion",
   async (mode) => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
     const cause = new Error(mode);
     const done = vi.fn();
     let calls = 0;
@@ -112,6 +117,9 @@ test.each(["throw", "reject", "then-getter", "then-call"])(
     await yieldMacrotask();
     expect(calls).toBe(1);
     expect(done).toHaveBeenCalledWith({ attempted: true });
+    // Only a synchronous throw is reported; a returned rejection stays ignored.
+    if (mode === "throw") expect(report).toHaveBeenCalledExactlyOnceWith(cause);
+    else expect(report).not.toHaveBeenCalled();
   },
 );
 function pick(b: Balancer, endpoints = ["a", "b"]) {

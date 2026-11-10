@@ -9,6 +9,7 @@ import {
   withHTTPHandle,
 } from "../index";
 import { outlierDetection } from "./outlier_detection";
+import { pickEndpoint } from "./runtime";
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -139,3 +140,23 @@ test.each(["direct", "wrapped", "isHealthy", "isFailure"] as const)(
     ).toBe(true);
   },
 );
+
+test("forwards start, end and done to the child result without a receiver", () => {
+  const start = vi.fn();
+  const end = vi.fn();
+  const done = vi.fn();
+  const [error, selected] = pickEndpoint(
+    outlierDetection({
+      pick: () => [null, { endpoint: "a", start, end, done }],
+    }),
+    { endpoints: ["a", "b"] },
+  );
+  expect(error).toBeNull();
+  selected?.start();
+  selected?.end({ attempted: true, status: 200 });
+  selected?.done({ attempted: true, status: 200 });
+  for (const callback of [start, end, done]) {
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback.mock.contexts[0]).toBeUndefined();
+  }
+});

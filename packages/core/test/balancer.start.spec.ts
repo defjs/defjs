@@ -20,6 +20,7 @@ import { p2cBalancer } from "../src/balancer/p2c";
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 function recording(events: string[]): Balancer {
   return {
@@ -61,6 +62,8 @@ test("HTTP failover starts and finishes each physical attempt separately", async
 test.each(["throw", "reject"])(
   "throwing or rejected HTTP start (%s) cannot replace the result",
   async (mode) => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
     let calls = 0;
     const b: Balancer = {
       pick: () => [
@@ -84,6 +87,7 @@ test.each(["throw", "reject"])(
       (await defineRequest({ method: "GET", path: "/json" })(client))[0],
     ).toBeNull();
     expect(calls).toBe(1);
+    expect(report).toHaveBeenCalledTimes(mode === "throw" ? 1 : 0);
   },
 );
 test("SSE starts immediately before Fetch and closes its one attributed attempt", async () => {

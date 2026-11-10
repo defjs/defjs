@@ -1,10 +1,12 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Balancer, PickInfo, PickOutcome } from "./balancer";
 import { outlierDetection } from "./outlier_detection";
 import { pickEndpoint } from "./runtime";
 import { yieldMacrotask } from "../../test/macrotask";
 
 const info: PickInfo = { endpoints: ["https://a"] };
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("pick outcome normalization", () => {
   test.each(["endpoint", "done"])("contains a throwing %s getter", (field) => {
@@ -295,6 +297,7 @@ test("a rejected pick shape releases the probe slot that pick reserved", () => {
 });
 
 test("a throwing done on a rejected pick cannot replace the build fault", () => {
+  vi.stubGlobal("reportError", vi.fn());
   const [fault, selected] = pickEndpoint(
     {
       pick: () => [
@@ -311,4 +314,169 @@ test("a throwing done on a rejected pick cannot replace the build fault", () => 
   );
   expect(fault?.code).toBe("REQ_BUILD_FAILED");
   expect(selected).toBeUndefined();
+});
+
+describe("callback receiver and failure reporting", () => {
+  test("calls start, end and done without a receiver", () => {
+    const start = vi.fn();
+    const end = vi.fn();
+    const done = vi.fn();
+    const [fault, selected] = pickEndpoint(
+      { pick: () => [null, { endpoint: "https://a", start, end, done }] },
+      info,
+    );
+    expect(fault).toBeNull();
+    selected?.start();
+    selected?.end({ attempted: true });
+    selected?.done({ attempted: true });
+    for (const callback of [start, end, done]) {
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback.mock.contexts[0]).toBeUndefined();
+    }
+  });
+
+  test("reports the TypeError of a method that relies on this", () => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
+    class Pick {
+      readonly endpoint = "https://a";
+      count = 0;
+      done() {
+        this.count++;
+      }
+    }
+    const result = new Pick();
+    const [fault, selected] = pickEndpoint(
+      { pick: () => [null, result] },
+      info,
+    );
+    expect(fault).toBeNull();
+    expect(() => selected?.done({ attempted: true })).not.toThrow();
+    expect(selected?.finished()).toBe(true);
+    expect(result.count).toBe(0);
+    expect(report).toHaveBeenCalledOnce();
+    expect(report.mock.calls[0]?.[0]).toBeInstanceOf(TypeError);
+  });
+
+  test("releases a rejected pick without a receiver", () => {
+    const done = vi.fn();
+    const result = { endpoint: "https://elsewhere", done };
+    const [fault] = pickEndpoint({ pick: () => [null, result] }, info);
+    expect(fault?.code).toBe("REQ_BUILD_FAILED");
+    expect(done).toHaveBeenCalledOnce();
+    expect(done.mock.contexts[0]).toBeUndefined();
+
+    const invalid = { endpoint: "https://a", done, start: 1 };
+    // @ts-expect-error a non-function start is the invalid runtime shape under test
+    const [shape] = pickEndpoint({ pick: () => [null, invalid] }, info);
+    expect(shape?.code).toBe("REQ_BUILD_FAILED");
+    expect(done).toHaveBeenCalledTimes(2);
+    expect(done.mock.contexts[1]).toBeUndefined();
+  });
+
+  test("reports a thrown start, end and done without changing the attempt", () => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
+    const startError = new Error("start failed");
+    const endError = new Error("end failed");
+    const doneError = new Error("done failed");
+    let doneCalls = 0;
+    const [fault, selected] = pickEndpoint(
+      {
+        pick: () => [
+          null,
+          {
+            endpoint: "https://a",
+            start() {
+              throw startError;
+            },
+            end() {
+              throw endError;
+            },
+            done() {
+              doneCalls++;
+              throw doneError;
+            },
+          },
+        ],
+      },
+      info,
+    );
+    expect(fault).toBeNull();
+    expect(() => {
+      selected?.start();
+      selected?.end({ attempted: true });
+      selected?.done({ attempted: true });
+      selected?.done({ attempted: true });
+    }).not.toThrow();
+    expect(selected?.finished()).toBe(true);
+    expect(doneCalls).toBe(1);
+    expect(report).toHaveBeenCalledTimes(3);
+    expect(report.mock.calls[0]?.[0]).toBe(startError);
+    expect(report.mock.calls[1]?.[0]).toBe(endError);
+    expect(report.mock.calls[2]?.[0]).toBe(doneError);
+  });
+
+  test("reports a thrown done on a rejected pick and keeps the build fault", () => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
+    const cause = new Error("release failed");
+    const [fault, selected] = pickEndpoint(
+      {
+        pick: () => [
+          null,
+          {
+            endpoint: "https://elsewhere",
+            done() {
+              throw cause;
+            },
+          },
+        ],
+      },
+      info,
+    );
+    expect(fault?.code).toBe("REQ_BUILD_FAILED");
+    expect(selected).toBeUndefined();
+    expect(report).toHaveBeenCalledExactlyOnceWith(cause);
+  });
+
+  test("does not report returned rejections or non-conforming thenables", async () => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
+    const thenables = [
+      () => Promise.reject(new Error("rejected")),
+      () =>
+        Object.defineProperty({}, "then", {
+          get() {
+            throw new Error("then getter");
+          },
+        }),
+      () => ({
+        then() {
+          throw new Error("then call");
+        },
+      }),
+    ];
+    for (const returned of thenables) {
+      const [, selected] = pickEndpoint(
+        {
+          pick: () => [
+            null,
+            {
+              endpoint: "https://a",
+              start: returned,
+              end: returned,
+              done: returned,
+            },
+          ],
+        },
+        info,
+      );
+      selected?.start();
+      selected?.end({ attempted: true });
+      selected?.done({ attempted: true });
+    }
+    await yieldMacrotask();
+    expect(report).not.toHaveBeenCalled();
+  });
 });

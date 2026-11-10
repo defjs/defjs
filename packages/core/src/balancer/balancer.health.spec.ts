@@ -130,6 +130,42 @@ test("last-available and done never consult isHealthy; a thrown active check onl
   expect(h.candidates()).not.toContain("a");
 });
 
+test.each<[string, unknown, string]>([
+  ["an Error", new Error("boom"), "boom"],
+  ["a RangeError", new RangeError("range"), "range"],
+  ["a string", "plain", "plain"],
+])("keeps %s thrown by isHealthy as the cause", (_name, thrown, text) => {
+  const child: Balancer = { pick: () => [null, { endpoint: "a" }] };
+  const [fault, selected] = pickEndpoint(
+    outlierDetection(child, {
+      isHealthy: () => {
+        throw thrown;
+      },
+    }),
+    { endpoints: ["a", "b"] },
+  );
+  expect(selected).toBeUndefined();
+  expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
+  expect(fault?.message).toContain(text);
+  const cause = fault?.cause;
+  expect(cause).toBeInstanceOf(TypeError);
+  expect(cause instanceof Error ? cause.cause : undefined).toBe(thrown);
+});
+
+test("a non-boolean isHealthy result keeps the fixed message and has no cause", () => {
+  const child: Balancer = { pick: () => [null, { endpoint: "a" }] };
+  const [fault] = pickEndpoint(
+    // @ts-expect-error a non-boolean result is the invalid input under test
+    outlierDetection(child, { isHealthy: () => 1 }),
+    { endpoints: ["a", "b"] },
+  );
+  expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
+  expect(fault?.message).toBe("isHealthy must synchronously return a boolean");
+  const cause = fault?.cause;
+  expect(cause).toBeInstanceOf(TypeError);
+  expect(cause instanceof Error ? cause.cause : "missing").toBeUndefined();
+});
+
 test("active filtering calls once, preserves full-list identity and forwards metadata", () => {
   const list = Object.freeze(["a", "b"]);
   const active = vi.fn(() => true);

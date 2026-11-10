@@ -3,7 +3,10 @@ import { pickEndpoint } from "./runtime";
 import type { PickResult } from "./balancer";
 import { yieldMacrotask } from "../../test/macrotask";
 const info = { endpoints: ["a"] };
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 test("end is snapshotted once and runs synchronously once only after start and before done", () => {
   let reads = 0;
   const events: string[] = [];
@@ -62,6 +65,8 @@ test("a throwing end getter preserves its cause", () => {
 test.each(["throw", "reject", "then-getter", "then-call"])(
   "end contains %s and still completes",
   async (mode) => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
     const done = vi.fn();
     const raw: PickResult & { end(): unknown } = {
       endpoint: "a",
@@ -90,6 +95,8 @@ test.each(["throw", "reject", "then-getter", "then-call"])(
     p.done({ attempted: true });
     await yieldMacrotask();
     expect(done).toHaveBeenCalledOnce();
+    // Only a synchronous throw is reported; a returned rejection stays ignored.
+    expect(report).toHaveBeenCalledTimes(mode === "throw" ? 1 : 0);
   },
 );
 test("offline failures are unattributed at end as well as done", () => {

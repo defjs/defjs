@@ -1,5 +1,6 @@
 import type { PreflightFault } from "../error/types";
 import { createPreflightFault } from "../error/factory";
+import { reportContainedError } from "../internal/report_error";
 import {
   type Balancer,
   type DoneInfo,
@@ -18,14 +19,19 @@ import {
 export interface ResolvedEndpoint {
   /** Endpoint string returned by `pick`. Not checked as a URL. */
   readonly endpoint: string;
-  /** Starts the selected transport at most once; ignored after completion. Callback failures are contained. */
+  /**
+   * Starts the selected transport at most once; ignored after completion.
+   * A throw from the balancer's `start` is contained and reported with
+   * `reportError` where the runtime defines it.
+   */
   start: () => void;
   /** Reports the transport response once, only after start and before done. */
   end: (info: DoneInfo) => void;
   /**
    * Reports the attempt outcome. The first call invokes the balancer's `done`
-   * synchronously and swallows a throw. `done` must be synchronous; a returned
-   * promise is not awaited and its rejection is ignored. Later calls do nothing.
+   * synchronously. A throw is contained and reported with `reportError` where
+   * the runtime defines it. `done` must be synchronous; a returned promise is
+   * not awaited and its rejection is ignored. Later calls do nothing.
    * When `pick` omitted `done`, the first call only marks this attempt finished.
    */
   done: (info: DoneInfo) => void;
@@ -43,6 +49,9 @@ export interface ResolvedEndpoint {
  *   `createPreflightFault("REQ_BUILD_FAILED", thrown)`. Result fields are read once.
  * - Any other shape becomes `REQ_BUILD_FAILED` whose `cause` is the returned
  *   value itself.
+ * - `start`, `end`, and `done` are called without a receiver, so `this` is
+ *   `undefined`. A throw is contained and reported with `reportError` where the
+ *   runtime defines it.
  * - `pick`, `start`, and `done` must be synchronous. A returned promise is not awaited
  *   and its rejection is ignored. A promise returned by `pick` is an invalid shape.
  * - A selection outside `endpoints` or with an invalid callback calls the
@@ -124,8 +133,9 @@ function resolve(result: PickResult): ResolvedEndpoint {
       started = true;
       try {
         ignoreRejection(start?.());
-      } catch {
+      } catch (thrown) {
         // Callback failures must not change the transport attempt.
+        reportContainedError(thrown);
       }
     },
     end(info) {
@@ -133,8 +143,9 @@ function resolve(result: PickResult): ResolvedEndpoint {
       ended = true;
       try {
         ignoreRejection(end?.(attributed(info)));
-      } catch {
+      } catch (thrown) {
         // Callback failures must not change the transport attempt.
+        reportContainedError(thrown);
       }
     },
     done(info) {
@@ -147,8 +158,9 @@ function resolve(result: PickResult): ResolvedEndpoint {
       }
       try {
         ignoreRejection(done(attributed(info)));
-      } catch {
+      } catch (thrown) {
         // A throwing done must not replace the operation tuple.
+        reportContainedError(thrown);
       }
     },
   };
@@ -159,8 +171,9 @@ function releasePick(done: ((info: DoneInfo) => unknown) | undefined): void {
   if (done === undefined) return;
   try {
     ignoreRejection(done({ attempted: false }));
-  } catch {
+  } catch (thrown) {
     // A throwing done must not replace the operation tuple.
+    reportContainedError(thrown);
   }
 }
 

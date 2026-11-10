@@ -1,4 +1,4 @@
-import { describe, expect, inject, test } from "vitest";
+import { afterEach, describe, expect, inject, test, vi } from "vitest";
 import type { Balancer, DoneInfo, PickInfo } from "../balancer";
 import { ERR_NO_CANDIDATE, pickFirstBalancer } from "../balancer";
 import {
@@ -75,6 +75,8 @@ function watch(inner: Balancer) {
 const get = defineRequest({ method: "GET", path: "/" });
 
 describe("HTTP endpoint balancer", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   test("advances pickFirstBalancer on the next call after a refused connection", async () => {
     const live = await serve("respond", { status: 204 });
     const dead = refused("a");
@@ -781,6 +783,8 @@ describe("HTTP endpoint balancer", () => {
   });
 
   test("still returns the tuple when done throws", async () => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
     const client = createClient(
       withEndpoint("https://example.com"),
       withBalancer({
@@ -802,5 +806,6 @@ describe("HTTP endpoint balancer", () => {
     const [fault] = await get(client);
 
     expect(fault).toBeNull();
+    expect(report).toHaveBeenCalledOnce();
   });
 });
