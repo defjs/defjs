@@ -1,6 +1,6 @@
 import { expect, inject, test } from "vitest";
 import { createClient, withBalancer, withEndpoint } from "../client";
-import { withSSEReconnect } from "../client/option";
+import { withRetry } from "../client/option";
 import { defineEventStream } from "../sse";
 import { struct } from "../struct";
 import { defineWebSocket } from "../web_socket";
@@ -40,7 +40,7 @@ test("a WebSocket closed with 1012 after open reports NET_UNAVAILABLE in a real 
     path: "/ws/reconnect",
   });
   const [error, socket] = await useSocket(
-    client({ reconnect: { attempts: 1, delayMs: 0 } }),
+    client({ retry: { maxRetries: 1, delayMs: 0 } }),
     { key: `attribution-${crypto.randomUUID()}` },
   );
   expect(error).toBeNull();
@@ -75,6 +75,7 @@ test("an unanswered WebSocket heartbeat reports NET_UNREACHABLE in a real engine
       heartbeat: {
         intervalMs: 50,
         message: () => ({ type: "ping" as const }),
+        isAck: () => false,
         timeoutMs: 100,
       },
     }),
@@ -94,7 +95,7 @@ test("an event stream whose body read fails reports NET_UNREACHABLE in a real en
   const client = createClient(
     withEndpoint(fixture),
     withBalancer(recorded.balancer),
-    withSSEReconnect({ attempts: 1, delayMs: 0 }),
+    withRetry({ maxRetries: 1, delayMs: 0 }),
   );
   const useDrop = defineEventStream({
     builder: (input) => ({ query: input }),

@@ -10,7 +10,7 @@ import {
   withBalancer,
   withEndpoint,
   withSSEHandle,
-  withSSEReconnect,
+  withRetry,
 } from "../../src/client/index.ts";
 import { struct } from "../../src/struct/index.ts";
 import { defineEventStream } from "../../src/sse/index.ts";
@@ -21,7 +21,7 @@ import {
 } from "../upload-capability.ts";
 import { expectUploadOutcome } from "../upload-outcome-assert.ts";
 
-const RECONNECT = { attempts: 1, delayMs: 0, factor: 1 };
+const RECONNECT = { maxRetries: 1, delayMs: 0, factor: 1 };
 
 interface Recorded {
   balancer: Balancer;
@@ -122,7 +122,7 @@ export function registerSseBalancerUploadSuite(cap: UploadCapability): void {
         withEndpoint("https://example.com"),
         withBalancer(streamRecord.balancer),
         withSSEHandle(handle),
-        withSSEReconnect({ ...RECONNECT, shouldReconnect: () => true }),
+        withRetry({ ...RECONNECT, shouldRetry: () => true }),
       ),
     );
     const outcome = uploadOutcome(cap, "ReadableStream", "custom");
@@ -157,7 +157,7 @@ export function registerSseBalancerUploadSuite(cap: UploadCapability): void {
       createClient(
         withEndpoint("https://example.com"),
         withSSEHandle(busy),
-        withSSEReconnect({ ...RECONNECT, shouldReconnect: () => true }),
+        withRetry({ ...RECONNECT, shouldRetry: () => true }),
       ),
     );
     const outcome = uploadOutcome(cap, "ReadableStream", "custom");

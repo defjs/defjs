@@ -308,7 +308,7 @@ describe("web socket startup faults", () => {
       withWebSocketHandle(ReadOnlyBinaryTypeSocket),
     );
     const [fault, session] = await useRoom(
-      client({ reconnect: { attempts: 2, delayMs: 0 } }),
+      client({ retry: { maxRetries: 2, delayMs: 0 } }),
     );
 
     expect(session).toBeUndefined();

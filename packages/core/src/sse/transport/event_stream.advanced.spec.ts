@@ -11,6 +11,7 @@ import {
 vi.mock("../../internal/backoff", { spy: true });
 
 import { wait } from "../../internal/backoff";
+import { resolveRetryPolicy } from "../../internal/retry";
 import type { FetchHandle } from "../../client/config";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
 import type { HttpRequest } from "../../http";
@@ -131,18 +132,18 @@ describe("fetchEventStream advanced", () => {
     const networkError = new Error("network failure");
     const fetch = vi.fn(() => Promise.reject(networkError));
     const onerror = vi.fn().mockReturnValue(null);
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
 
     await expect(
       fetchEventStream(createRequest("/events"), {
         fetch,
         onerror,
-        reconnect: { shouldReconnect },
+        retry: resolveRetryPolicy({ shouldRetry }),
       }),
     ).rejects.toBe(networkError);
     expect(fetch).toHaveBeenCalledOnce();
     expect(onerror).toHaveBeenCalledTimes(1);
-    expect(shouldReconnect).not.toHaveBeenCalled();
+    expect(shouldRetry).not.toHaveBeenCalled();
   });
 
   test("should preserve an undefined network rejection", async () => {
@@ -179,7 +180,7 @@ describe("fetchEventStream advanced", () => {
     const stream = await fetchEventStream(createRequest("/events"), {
       fetch,
       onerror,
-      reconnect: { attempts: 3, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
       retryInterval: 1,
     });
 
@@ -483,7 +484,7 @@ describe("fetchEventStream advanced", () => {
   test("should observe but never retry a fatal open-validation error", async () => {
     const cancel = vi.fn();
     const onerror = vi.fn(() => 0);
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
     const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({ cancel });
       return Promise.resolve(
@@ -494,7 +495,7 @@ describe("fetchEventStream advanced", () => {
     const error = await fetchEventStream(createRequest("/events"), {
       fetch,
       onerror,
-      reconnect: { attempts: 2, delayMs: 0, shouldReconnect },
+      retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
@@ -503,7 +504,7 @@ describe("fetchEventStream advanced", () => {
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
     expect(onerror).toHaveBeenCalledOnce();
-    expect(shouldReconnect).not.toHaveBeenCalled();
+    expect(shouldRetry).not.toHaveBeenCalled();
   });
 
   test("should not wait for response cancellation after fatal open validation", async () => {
@@ -545,7 +546,7 @@ describe("fetchEventStream advanced", () => {
         onopen() {
           throw new Error("onopen failed");
         },
-        reconnect: { attempts: 2, delayMs: 0 },
+        retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }),
       }),
     ).rejects.toThrow("onopen failed");
 
@@ -643,7 +644,7 @@ describe("fetchEventStream advanced", () => {
   test("should cancel upstream and terminate on a parser limit even when callbacks request retry", async () => {
     const cancel = vi.fn();
     const onerror = vi.fn(() => 0);
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
     const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -664,7 +665,7 @@ describe("fetchEventStream advanced", () => {
       fetch,
       maxBufferSize: 16,
       onerror,
-      reconnect: { attempts: 2, delayMs: 0, shouldReconnect },
+      retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
     });
     const iterator = stream[Symbol.asyncIterator]();
 
@@ -678,24 +679,24 @@ describe("fetchEventStream advanced", () => {
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
     expect(onerror).toHaveBeenCalledOnce();
-    expect(shouldReconnect).not.toHaveBeenCalled();
+    expect(shouldRetry).not.toHaveBeenCalled();
   });
 
   test("should classify a parser limit thrown by the fetch boundary as fatal", async () => {
     const onerror = vi.fn(() => 0);
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
     const fetch = vi.fn(() => Promise.reject(new SSEParserLimitError()));
 
     const error = await fetchEventStream(createRequest("/events"), {
       fetch,
       onerror,
-      reconnect: { shouldReconnect },
+      retry: resolveRetryPolicy({ shouldRetry }),
     }).catch((cause: unknown) => cause);
 
     expect(getEventStreamFatalCode(error)).toBe("CAP_BUFFER_EXCEEDED");
     expect(fetch).toHaveBeenCalledOnce();
     expect(onerror).toHaveBeenCalledOnce();
-    expect(shouldReconnect).not.toHaveBeenCalled();
+    expect(shouldRetry).not.toHaveBeenCalled();
   });
 
   test("should abort while observing a fatal open error", async () => {
@@ -731,7 +732,7 @@ describe("fetchEventStream advanced", () => {
   test("should cancel upstream and terminate when message transformation fails", async () => {
     const cancel = vi.fn();
     const onerror = vi.fn(() => 0);
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
     const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -749,7 +750,7 @@ describe("fetchEventStream advanced", () => {
     const stream = await fetchTransformedEventStream(createRequest("/events"), {
       fetch,
       onerror,
-      reconnect: { attempts: 2, delayMs: 0, shouldReconnect },
+      retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
       transformMessage() {
         throw new Error("transform failed");
       },
@@ -765,7 +766,7 @@ describe("fetchEventStream advanced", () => {
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
     expect(onerror).toHaveBeenCalledOnce();
-    expect(shouldReconnect).not.toHaveBeenCalled();
+    expect(shouldRetry).not.toHaveBeenCalled();
   });
 
   test("should abort during retry wait via request signal", async () => {
@@ -785,7 +786,7 @@ describe("fetchEventStream advanced", () => {
     const opening = fetchEventStream(request, {
       fetch,
       onerror,
-      reconnect: { attempts: 3, delayMs: 10_000 },
+      retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 10_000 }),
     });
 
     await vi.waitFor(() => expect(onerror).toHaveBeenCalledOnce());
@@ -907,7 +908,7 @@ describe("fetchEventStream advanced", () => {
     );
     const stream = await fetchEventStream(createRequest("/events"), {
       fetch,
-      reconnect: { attempts: 3, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
     });
     const close = vi.fn(stream.close.bind(stream));
     stream.close = close;
@@ -1206,7 +1207,7 @@ describe("fetchEventStream advanced", () => {
     await expect(opening).rejects.toBe(ERR_ABORTED);
   });
 
-  test("should abort while shouldReconnect never settles", async () => {
+  test("should abort while shouldRetry never settles", async () => {
     const abortController = new AbortController();
     let markStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
@@ -1216,12 +1217,12 @@ describe("fetchEventStream advanced", () => {
       { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: () => Promise.reject(new Error("network failure")),
-        reconnect: {
-          shouldReconnect() {
+        retry: resolveRetryPolicy({
+          shouldRetry() {
             markStarted?.();
             return new Promise<boolean>(() => undefined);
           },
-        },
+        }),
       },
     );
 
@@ -1231,18 +1232,18 @@ describe("fetchEventStream advanced", () => {
     await expect(opening).rejects.toBe(ERR_ABORTED);
   });
 
-  test("should prefer a queued abort over a synchronous shouldReconnect result", async () => {
+  test("should prefer a queued abort over a synchronous shouldRetry result", async () => {
     const abortController = new AbortController();
     const opening = fetchEventStream(
       { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: () => Promise.reject(new Error("network failure")),
-        reconnect: {
-          shouldReconnect() {
+        retry: resolveRetryPolicy({
+          shouldRetry() {
             queueMicrotask(() => abortController.abort(ERR_ABORTED));
             return false;
           },
-        },
+        }),
       },
     );
 
@@ -1282,7 +1283,7 @@ describe("fetchEventStream advanced", () => {
 
     const stream = await fetchEventStream(createRequest("/sse/basic"), {
       fetch: mockFetch,
-      reconnect: { attempts: 3, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
       retryInterval: 1,
     });
 
@@ -1359,7 +1360,7 @@ describe("fetchEventStream advanced", () => {
           method: "PUT",
           body,
         },
-        { fetch, reconnect: { attempts: 1, delayMs: 0 } },
+        { fetch, retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }) },
       );
       const events: EventStreamMessage[] = [];
       for await (const event of stream) {
@@ -1407,7 +1408,7 @@ describe("fetchEventStream advanced", () => {
     await expect(
       fetchEventStream(request, {
         fetch: mockFetch,
-        reconnect: { attempts: 0 },
+        retry: resolveRetryPolicy({ maxRetries: 0 }),
       }),
     ).rejects.toThrow();
     expect(fetchCount).toBe(1);
@@ -1430,7 +1431,7 @@ describe("fetchEventStream advanced", () => {
     await expect(
       fetchEventStream(request, {
         fetch: mockFetch,
-        reconnect: { attempts: 2, delayMs: 0 },
+        retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }),
       }),
     ).rejects.toThrow();
     expect(fetchCount).toBe(3); // initial + 2 retries
@@ -1468,7 +1469,7 @@ describe("fetchEventStream advanced", () => {
 
     const stream = await fetchEventStream(request, {
       fetch: mockFetch,
-      reconnect: { attempts: 5, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 5, delayMs: 0 }),
     });
 
     expect(fetchCount).toBe(3);
@@ -1479,11 +1480,11 @@ describe("fetchEventStream advanced", () => {
     expect(events.length).toBe(1);
   });
 
-  test("should stop retry when shouldReconnect returns false", async () => {
+  test("should stop retry when shouldRetry returns false", async () => {
     let fetchCount = 0;
     const mockFetch = vi.fn(() => {
       fetchCount += 1;
-      // Throw network error so we reach the shouldReconnect check
+      // Throw network error so we reach the shouldRetry check
       return Promise.reject(new Error("network error"));
     });
 
@@ -1496,10 +1497,10 @@ describe("fetchEventStream advanced", () => {
     await expect(
       fetchEventStream(request, {
         fetch: mockFetch,
-        reconnect: {
-          shouldReconnect: () => Promise.resolve(false),
+        retry: resolveRetryPolicy({
+          shouldRetry: () => Promise.resolve(false),
           delayMs: 0,
-        },
+        }),
       }),
     ).rejects.toThrow();
     expect(fetchCount).toBe(1);
@@ -1518,18 +1519,18 @@ describe("fetchEventStream advanced", () => {
         },
         {
           fetch,
-          reconnect: {
-            shouldReconnect() {
+          retry: resolveRetryPolicy({
+            shouldRetry() {
               throw cause;
             },
-          },
+          }),
         },
       ),
     ).rejects.toBe(cause);
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  test("should continue retry when shouldReconnect returns true", async () => {
+  test("should continue retry when shouldRetry returns true", async () => {
     let fetchCount = 0;
     const mockFetch = vi.fn(() => {
       fetchCount += 1;
@@ -1560,7 +1561,10 @@ describe("fetchEventStream advanced", () => {
 
     const stream = await fetchEventStream(request, {
       fetch: mockFetch,
-      reconnect: { shouldReconnect: () => Promise.resolve(true), delayMs: 0 },
+      retry: resolveRetryPolicy({
+        shouldRetry: () => Promise.resolve(true),
+        delayMs: 0,
+      }),
     });
 
     const events: unknown[] = [];
@@ -1593,32 +1597,12 @@ describe("fetchEventStream advanced", () => {
 
     const rejected = fetchEventStream(request, {
       fetch: mockFetch,
-      reconnect: { attempts: 2, delayMs: 1, factor: 2 },
+      retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 1, factor: 2 }),
     }).catch((error: unknown) => error);
     await vi.runAllTimersAsync();
     expect(await rejected).toBeInstanceOf(Error);
     expect(timer.mock.calls.map((call) => call[0])).toEqual([1, 2]);
     expect(fetchCount).toBe(3);
-  });
-
-  test("should reject a non-finite retry delay without hot reconnecting", async () => {
-    const mockFetch = vi.fn(() => Promise.reject(new Error("network error")));
-
-    await expect(
-      fetchEventStream(
-        {
-          baseEndpoint: "https://example.com",
-          endpoint: "/fail",
-          method: "GET",
-        },
-        {
-          fetch: mockFetch,
-          reconnect: { attempts: 1, delayMs: Infinity },
-        },
-      ),
-    ).rejects.toThrow("SSE reconnect delayMs is out of range");
-
-    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   test("should clamp the final retry delay after applying a factor to a wire retry value", async () => {
@@ -1660,7 +1644,12 @@ describe("fetchEventStream advanced", () => {
         },
         {
           fetch: mockFetch,
-          reconnect: { attempts: 2, factor: 2 },
+          retry: resolveRetryPolicy({
+            maxRetries: 2,
+            factor: 2,
+            jitter: 0,
+            maxDelayMs: Infinity,
+          }),
         },
       );
 
@@ -1701,7 +1690,13 @@ describe("fetchEventStream advanced", () => {
 
     const rejected = fetchEventStream(request, {
       fetch: mockFetch,
-      reconnect: { attempts: 2, delayMs: 1, factor: 10, maxDelayMs: 5 },
+      retry: resolveRetryPolicy({
+        maxRetries: 2,
+        delayMs: 1,
+        factor: 10,
+        jitter: 0,
+        maxDelayMs: 5,
+      }),
     }).catch((error: unknown) => error);
     await vi.runAllTimersAsync();
     expect(await rejected).toBeInstanceOf(Error);
@@ -1733,30 +1728,12 @@ describe("fetchEventStream advanced", () => {
 
     const rejected = fetchEventStream(request, {
       fetch: mockFetch,
-      reconnect: { attempts: 1, delayMs: 10, jitter: 0.5 },
+      retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 10, jitter: 0.5 }),
     }).catch((error: unknown) => error);
     await vi.runAllTimersAsync();
     expect(await rejected).toBeInstanceOf(Error);
     expect(timer.mock.calls.map((call) => call[0])).toEqual([15]);
     expect(fetchCount).toBe(2);
-  });
-
-  test("should reject out-of-range SSE reconnect jitter", async () => {
-    const mockFetch = vi.fn(() => Promise.reject(new Error("network error")));
-
-    await expect(
-      fetchEventStream(
-        {
-          baseEndpoint: "https://example.com",
-          endpoint: "/fail",
-          method: "GET",
-        },
-        {
-          fetch: mockFetch,
-          reconnect: { attempts: 1, delayMs: 1, jitter: 1.1 },
-        },
-      ),
-    ).rejects.toThrow("SSE reconnect jitter is out of range");
   });
 
   test("should cap the scheduled retry delay after jitter", async () => {
@@ -1778,7 +1755,12 @@ describe("fetchEventStream advanced", () => {
       },
       {
         fetch,
-        reconnect: { attempts: 1, delayMs: 10, jitter: 0.5, maxDelayMs: 12 },
+        retry: resolveRetryPolicy({
+          maxRetries: 1,
+          delayMs: 10,
+          jitter: 0.5,
+          maxDelayMs: 12,
+        }),
       },
     ).catch((error: unknown) => error);
 
@@ -1925,7 +1907,7 @@ describe("fetchEventStream message path", () => {
       const stream = await fetchTransformedEventStream(request, {
         fetch,
         onerror,
-        reconnect: { attempts: 2, delayMs: 0 },
+        retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }),
         transformMessage(message) {
           transformed.push(message.data);
           if (mode === "throws") {
@@ -2011,7 +1993,7 @@ describe("fetchEventStream message path", () => {
       {
         fetch,
         onerror,
-        reconnect: { attempts: 2, delayMs: 0 },
+        retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }),
         transformMessage() {
           controller.abort(ERR_ABORTED);
           throw new Error("transform failed after the abort");
@@ -2085,7 +2067,7 @@ describe("reconnect method policy", () => {
     return vi.fn<FetchHandle>(() => Promise.reject(failure));
   }
 
-  test("should not reconnect POST without shouldReconnect", async () => {
+  test("should not reconnect POST without shouldRetry", async () => {
     const failure = new TypeError("network down");
     const fetch = rejectingFetch(failure);
 
@@ -2096,14 +2078,14 @@ describe("reconnect method policy", () => {
           endpoint: "/events",
           method: "POST",
         },
-        { fetch, reconnect: { attempts: 2, delayMs: 0 } },
+        { fetch, retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }) },
       ),
     ).rejects.toBe(failure);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   test.each(["PATCH", "post"])(
-    "should not reconnect %s without shouldReconnect",
+    "should not reconnect %s without shouldRetry",
     async (method) => {
       const failure = new TypeError("network down");
       const fetch = rejectingFetch(failure);
@@ -2111,7 +2093,7 @@ describe("reconnect method policy", () => {
       await expect(
         fetchEventStream(
           { baseEndpoint: "https://example.com", endpoint: "/events", method },
-          { fetch, reconnect: { attempts: 2, delayMs: 0 } },
+          { fetch, retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }) },
         ),
       ).rejects.toBe(failure);
       expect(fetch).toHaveBeenCalledTimes(1);
@@ -2119,7 +2101,7 @@ describe("reconnect method policy", () => {
   );
 
   test.each(["GET", "HEAD", "OPTIONS", "PUT", "DELETE", "delete"])(
-    "should reconnect idempotent %s without shouldReconnect",
+    "should reconnect idempotent %s without shouldRetry",
     async (method) => {
       const failure = new TypeError("network down");
       const fetch = rejectingFetch(failure);
@@ -2127,17 +2109,17 @@ describe("reconnect method policy", () => {
       await expect(
         fetchEventStream(
           { baseEndpoint: "https://example.com", endpoint: "/events", method },
-          { fetch, reconnect: { attempts: 2, delayMs: 0 } },
+          { fetch, retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }) },
         ),
       ).rejects.toBe(failure);
       expect(fetch).toHaveBeenCalledTimes(3);
     },
   );
 
-  test("should reconnect POST when shouldReconnect returns true and report the method", async () => {
+  test("should reconnect POST when shouldRetry returns true and report the method", async () => {
     const failure = new TypeError("network down");
     const fetch = rejectingFetch(failure);
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
 
     await expect(
       fetchEventStream(
@@ -2146,17 +2128,20 @@ describe("reconnect method policy", () => {
           endpoint: "/events",
           method: "POST",
         },
-        { fetch, reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+        {
+          fetch,
+          retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
+        },
       ),
     ).rejects.toBe(failure);
     expect(fetch).toHaveBeenCalledTimes(3);
-    expect(shouldReconnect).toHaveBeenNthCalledWith(
+    expect(shouldRetry).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ attempt: 1, lastEventId: "", method: "POST" }),
     );
   });
 
-  test("should stop POST when shouldReconnect returns false", async () => {
+  test("should stop POST when shouldRetry returns false", async () => {
     const failure = new TypeError("network down");
     const fetch = rejectingFetch(failure);
 
@@ -2169,14 +2154,18 @@ describe("reconnect method policy", () => {
         },
         {
           fetch,
-          reconnect: { attempts: 2, delayMs: 0, shouldReconnect: () => false },
+          retry: resolveRetryPolicy({
+            maxRetries: 2,
+            delayMs: 0,
+            shouldRetry: () => false,
+          }),
         },
       ),
     ).rejects.toBe(failure);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  test("should end an opened POST stream with the original read error when shouldReconnect is absent", async () => {
+  test("should end an opened POST stream with the original read error when shouldRetry is absent", async () => {
     const failure = new TypeError("network down");
     const fetch = vi.fn(() => {
       return Promise.resolve(
@@ -2203,7 +2192,7 @@ describe("reconnect method policy", () => {
         endpoint: "/events",
         method: "POST",
       },
-      { fetch, reconnect: { attempts: 2, delayMs: 0 } },
+      { fetch, retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }) },
     );
     const closed = await stream.closed;
 
@@ -2401,7 +2390,7 @@ test("reads attempt options as HEAD and invokes initial and reconnect callbacks 
   const options: FetchEventStreamOptions = {
     maxBufferSize: 1024,
     transformMessage: (message) => message,
-    reconnect: { attempts: 1, delayMs: 0 },
+    retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
     fetch: () =>
       ++requests === 1
         ? Promise.reject(new TypeError("connection lost"))
@@ -2436,7 +2425,7 @@ test("passes missing attempt callbacks through as undefined", async () => {
   const options: FetchEventStreamOptions = {
     maxBufferSize: 1024,
     transformMessage: (message) => message,
-    reconnect: { attempts: 1, delayMs: 0 },
+    retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
     fetch: () =>
       ++requests === 1
         ? Promise.reject(new TypeError("connection lost"))
@@ -2717,7 +2706,7 @@ describe("fetchEventStream failure delivery", () => {
     });
     const stream = await fetchTransformedEventStream(request, {
       fetch,
-      reconnect: { attempts: 1, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
       transformMessage(message) {
         parsed.push(message.data);
         return message.data;

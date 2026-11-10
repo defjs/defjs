@@ -34,5 +34,5 @@ Con un servidor cuyo primer evento sea `line` con datos `{ "text": "build starte
 build started
 ```
 
-- SSE no se reconecta automáticamente ante fallos de red o de lectura a menos que configures [`withSSEReconnect(...)`](/es-ES/api/core/withssereconnect) en el cliente.
+- SSE no se reconecta automáticamente ante fallos de red o de lectura a menos que configures [`withRetry(...)`](/es-ES/api/core/withretry) en el cliente.
 - Cuando se configura `withSSEReconnect(...)`, `attempts` vale `3` por interrupción de forma predeterminada y se reinicia tras un handshake correcto (`attempts: 0` desactiva la reconexión). Sin un callback `shouldReconnect` personalizado, solo se reconectan las peticiones `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`. Una petición con cuerpo `ReadableStream` nunca se reconecta. Consulta [Flujos de eventos SSE](/es-ES/docs/sse).

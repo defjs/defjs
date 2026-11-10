@@ -91,11 +91,9 @@ L’en-tête est défini quand tout ceci est vrai : la méthode n’est pas `GET
 
 ### Réglages SSE
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### Réglages WebSocket
 
@@ -105,9 +103,7 @@ L’en-tête est défini quand tout ceci est vrai : la méthode n’est pas `GET
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
-
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
 ## Types
 
@@ -237,7 +233,7 @@ Enveloppe une stratégie enfant avec un circuit breaking d’échecs consécutif
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
 Active le retry HTTP au sein du même appel, indépendamment de la sélection d’endpoint. L’omission signifie une tentative et aucun budget. `withRetry()` équivaut à `withRetry({})` et a pour défauts `maxAttempts: 2` (tentative d’origine comprise), `on: ["connect-failure"]` et les méthodes sûres `GET`, `HEAD`, `OPTIONS`, `TRACE`. Les méthodes ignorent la casse ; `[]` désactive les retries. `maxAttempts` est un entier sûr d’au moins 1, et chaque endpoint est tenté au plus une fois. `"gateway-error"` inclut `NET_UNAVAILABLE` (HTTP 502/503/504) et les corps de passerelle rejetés par le décodage `RES_*` ; `"attempt-timeout"` utilise `attemptTimeoutMs`. Les corps de requête en flux ne font jamais l’objet d’un retry.
 

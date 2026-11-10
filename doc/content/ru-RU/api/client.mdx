@@ -91,11 +91,9 @@ description: createClient, хелперы опций и тип Client.
 
 ### Настройки SSE
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### Настройки WebSocket
 
@@ -105,9 +103,7 @@ description: createClient, хелперы опций и тип Client.
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
-
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
 ## Типы
 
@@ -237,7 +233,7 @@ SSE `onInvalidEvent` обрабатывает событие, для котор�
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
 Включает повтор HTTP в рамках одного вызова независимо от выбора эндпоинта. Если опустить `withRetry`, это означает одну попытку и отсутствие бюджета. `withRetry()` эквивалентен `withRetry({})` и по умолчанию задаёт `maxAttempts: 2` (включая исходную), `on: ["connect-failure"]` и безопасные методы `GET`, `HEAD`, `OPTIONS`, `TRACE`. Методы без учёта регистра; `[]` отключает повторы. `maxAttempts` — безопасное целое число не меньше 1, и каждый эндпоинт пробуется не больше одного раза. `"gateway-error"` включает `NET_UNAVAILABLE` (HTTP 502/503/504) и тела шлюза, отклонённые декодированием `RES_*`; `"attempt-timeout"` использует `attemptTimeoutMs`. Потоковые тела запроса никогда не повторяются.
 

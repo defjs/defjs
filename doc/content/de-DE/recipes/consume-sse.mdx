@@ -34,5 +34,5 @@ Sendet der Server als erstes Ereignis `line` mit den Daten `{ "text": "build sta
 build started
 ```
 
-- SSE verbindet sich bei Netzwerk- oder Lesefehlern nicht automatisch wieder, es sei denn, du konfigurierst [`withSSEReconnect(...)`](/de-DE/api/core/withssereconnect) am Client.
+- SSE verbindet sich bei Netzwerk- oder Lesefehlern nicht automatisch wieder, es sei denn, du konfigurierst [`withRetry(...)`](/de-DE/api/core/withretry) am Client.
 - Ist `withSSEReconnect` mit einem Optionen-Objekt aktiviert, beträgt `attempts` standardmäßig `3` pro Ausfall und setzt sich bei einem erfolgreichen Handshake zurück (`attempts: 0` deaktiviert Reconnects). Ohne ein eigenes `shouldReconnect` verbinden sich nur `GET`-, `HEAD`-, `OPTIONS`-, `PUT`- und `DELETE`-Anfragen erneut. Eine Anfrage mit einem `ReadableStream`-Body wird nie erneut verbunden. Siehe [SSE-Event-Streams](/de-DE/docs/sse).

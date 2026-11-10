@@ -4,7 +4,7 @@ import {
   withEndpoint,
   withSSEHandle,
   withSSEOnInvalidEvent,
-  withSSEReconnect,
+  withRetry,
 } from "../client";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
@@ -140,7 +140,7 @@ describe("event stream invalid events", () => {
           ),
         );
       }),
-      withSSEReconnect({ attempts: 2, delayMs: 0 }),
+      withRetry({ maxRetries: 2, delayMs: 0 }),
       withSSEOnInvalidEvent(({ message }) => {
         ids.push(message.id);
       }),

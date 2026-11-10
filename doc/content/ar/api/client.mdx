@@ -91,11 +91,9 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 ### مقابض SSE
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### مقابض WebSocket
 
@@ -105,9 +103,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
-
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
 ## الأنواع
 
@@ -237,7 +233,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
 يفعّل إعادة محاولة HTTP في نفس الاستدعاء بمعزل عن اختيار نقطة النهاية. حذف `withRetry` يعني محاولة واحدة وبلا ميزانية. `withRetry()` يعادل `withRetry({})` وافتراضه `maxAttempts: 2` (بما فيها الأصلية) و`on: ["connect-failure"]` والطرق الآمنة `GET` و`HEAD` و`OPTIONS` و`TRACE`. الطرق غير حساسة لحالة الأحرف؛ ويعطّل `[]` إعادات المحاولة. `maxAttempts` عدد صحيح آمن لا يقل عن 1، وكل نقطة نهاية تُجرَّب مرة واحدة على الأكثر. يشمل `"gateway-error"` القيمة `NET_UNAVAILABLE` (HTTP 502/503/504) وأجسام البوابة التي رفضها فك `RES_*`؛ ويستخدم `"attempt-timeout"` الخيار `attemptTimeoutMs`. لا تُعاد أجسام الطلب المتدفقة أبدًا.
 

@@ -1,3 +1,4 @@
+import { resolveRetryPolicy } from "../../src/internal/retry.ts";
 import { describe, expect, inject, test, vi } from "vitest";
 import type { FetchHandle } from "../../src/client/config.ts";
 import type { HttpRequest } from "../../src/http/index.ts";
@@ -114,7 +115,7 @@ export function registerEventStreamAdvancedUploadSuite(
 
     test("should end an opened ReadableStream-body stream with the original read error", async () => {
       const failure = new TypeError("network down");
-      const shouldReconnect = vi.fn(() => true);
+      const shouldRetry = vi.fn(() => true);
       const body = byteStream();
       const fetch = vi.fn<FetchHandle>(async (input) => {
         const request = requireRequest(input);
@@ -140,13 +141,16 @@ export function registerEventStreamAdvancedUploadSuite(
           method: "POST",
           body,
         },
-        { fetch, reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+        {
+          fetch,
+          retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
+        },
       );
       const outcome = uploadOutcome(cap, "ReadableStream", "custom");
       if (outcome !== "observed") {
         await expectRejectedOpen(outcome, opening);
         expect(fetch).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
         expect(body.locked).toBe(false);
         return;
       }
@@ -162,11 +166,11 @@ export function registerEventStreamAdvancedUploadSuite(
       expect(closed).toMatchObject({ kind: "error", code: "NET_UNREACHABLE" });
       expect(closed.cause).toBe(failure);
       expect(fetch).toHaveBeenCalledTimes(1);
-      expect(shouldReconnect).toHaveBeenCalledTimes(0);
+      expect(shouldRetry).toHaveBeenCalledTimes(0);
     });
 
     test("should not reconnect a ReadableStream body after a 307 redirect", async () => {
-      const shouldReconnect = vi.fn(() => true);
+      const shouldRetry = vi.fn(() => true);
       const body = byteStream();
       const opening = fetchEventStream(
         {
@@ -174,12 +178,14 @@ export function registerEventStreamAdvancedUploadSuite(
           body,
           method: "POST",
         },
-        { reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+        {
+          retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
+        },
       );
       const outcome = uploadOutcome(cap, "ReadableStream", "platform");
       if (outcome !== "observed") {
         await expectRejectedOpen(outcome, opening);
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
         if (outcome === "unsupported") expect(body.locked).toBe(false);
         return;
       }
@@ -192,11 +198,11 @@ export function registerEventStreamAdvancedUploadSuite(
       expect(error instanceof Error ? error.message : "").not.toMatch(
         /disturbed|locked/,
       );
-      expect(shouldReconnect).toHaveBeenCalledTimes(0);
+      expect(shouldRetry).toHaveBeenCalledTimes(0);
     });
 
     test("should open a ReadableStream body after a 303 redirect", async () => {
-      const shouldReconnect = vi.fn(() => true);
+      const shouldRetry = vi.fn(() => true);
       const body = byteStream();
       const opening = fetchEventStream(
         {
@@ -204,12 +210,14 @@ export function registerEventStreamAdvancedUploadSuite(
           body,
           method: "POST",
         },
-        { reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+        {
+          retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
+        },
       );
       const outcome = uploadOutcome(cap, "ReadableStream", "platform");
       if (outcome !== "observed") {
         await expectRejectedOpen(outcome, opening);
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
         if (outcome === "unsupported") expect(body.locked).toBe(false);
         return;
       }
@@ -223,7 +231,7 @@ export function registerEventStreamAdvancedUploadSuite(
         { id: "1", event: "message", data: "first" },
         { id: "2", event: "message", data: "second line 1\nsecond line 2" },
       ]);
-      expect(shouldReconnect).toHaveBeenCalledTimes(0);
+      expect(shouldRetry).toHaveBeenCalledTimes(0);
     });
   });
 
@@ -232,7 +240,7 @@ export function registerEventStreamAdvancedUploadSuite(
     transport: UploadTransport,
   ): Promise<void> {
     const failure = new TypeError("network down");
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
     const body = byteStream();
     const fetch = vi.fn<FetchHandle>(async (input) => {
       const request = requireRequest(input);
@@ -246,19 +254,22 @@ export function registerEventStreamAdvancedUploadSuite(
         method: "POST",
         body,
       },
-      { fetch, reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+      {
+        fetch,
+        retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
+      },
     );
     const outcome = uploadOutcome(capability, "ReadableStream", transport);
     if (outcome !== "observed") {
       await expectRejectedOpen(outcome, opening);
       expect(fetch).not.toHaveBeenCalled();
-      expect(shouldReconnect).not.toHaveBeenCalled();
+      expect(shouldRetry).not.toHaveBeenCalled();
       expect(body.locked).toBe(false);
       return;
     }
 
     await expect(opening).rejects.toBe(failure);
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(shouldReconnect).toHaveBeenCalledTimes(0);
+    expect(shouldRetry).toHaveBeenCalledTimes(0);
   }
 }

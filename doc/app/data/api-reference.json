@@ -471,52 +471,6 @@
   },
   {
     "package": "@defjs/core",
-    "name": "withSSEReconnect",
-    "kind": "function",
-    "slug": "core/withssereconnect",
-    "source": "packages/core/src/client/option.ts",
-    "group": "client",
-    "description": "Configures automatic reconnection after an SSE stream fails.\n\nReconnection is opt-in: without this option a failed stream is not retried. Passing `undefined` clears an earlier setting.\n\n```ts\ntype SSEReconnect = {\n  attempts?: number;\n  delayMs?: number;\n  factor?: number;\n  jitter?: number;\n  maxDelayMs?: number;\n  shouldReconnect?: (context: {\n    attempt: number;\n    cause?: unknown;\n    lastEventId: string;\n    method: string;\n    open?: {\n      response: { status: number; statusText: string; url: string };\n      url: string;\n    };\n  }) => boolean | Promise<boolean>;\n};\n```\n\n- `attempts` is the retry budget for each outage. It defaults to `3` when `reconnect` is set, and `0` disables retries. A successful handshake resets the budget, callback `attempt`, and backoff exponent. Omitting it does not give unlimited retries within one outage. Repeated successful opens followed immediately by retryable stream failures can keep reconnecting at the current base delay (subject to jitter and caps), because each open resets the budget; use `shouldReconnect` to stop them. Normal EOF remains terminal.\n- Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect. With it, its result decides for every method, `POST` included; `method` in the context tells endpoints apart. Return `false` to stop for this failure. It runs before the attempts limit is checked.\n- A request with a `ReadableStream` body never reconnects, and `shouldReconnect` is not called for it.\n- A handshake answered with 502, 503, or 504 is retried like a refused connection, under the same rules; other non-2xx handshakes are fatal. Exhausted retries end with `HTTP_STATUS`.\n- `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.\n- `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.\n- An `id:` field updates a buffer. The reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message; a stream ending before that blank line leaves it unchanged. The committed ID is sent as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it at that blank line; an ID containing NUL is ignored.\n- `connectTimeoutMs` optionally bounds each handshake, is finite and positive, must not exceed `2_147_483_647` ms, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.\n- Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs. The seven fields are copied when this option is applied, and `shouldReconnect` keeps its identity. `undefined` clears an earlier policy. A getter runs then, once, and its exception escapes `createClient`.",
-    "signatures": [
-      "function withSSEReconnect(\n  options: ClientSSEOptions[\"reconnect\"],\n): ClientOption;"
-    ],
-    "related": [],
-    "exampleFiles": [],
-    "returns": ["An option that sets `config.sse.reconnect`."],
-    "throws": [],
-    "tags": [],
-    "typeTable": null,
-    "parameters": [
-      {
-        "name": "options",
-        "description": "Retry budget, backoff, and `shouldReconnect` gate.",
-        "type": "ClientSSEOptions[\"reconnect\"]",
-        "simplifiedType": "ClientSSEOptions[\"reconnect\"]",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      }
-    ],
-    "overloads": [
-      {
-        "signature": "function withSSEReconnect(\n  options: ClientSSEOptions[\"reconnect\"],\n): ClientOption;",
-        "parameters": [
-          {
-            "name": "options",
-            "description": "Retry budget, backoff, and `shouldReconnect` gate.",
-            "type": "ClientSSEOptions[\"reconnect\"]",
-            "simplifiedType": "ClientSSEOptions[\"reconnect\"]",
-            "required": true,
-            "deprecated": false,
-            "tags": []
-          }
-        ],
-        "returns": ["An option that sets `config.sse.reconnect`."]
-      }
-    ]
-  },
-  {
-    "package": "@defjs/core",
     "name": "withSSEOnInvalidEvent",
     "kind": "function",
     "slug": "core/withsseoninvalidevent",
@@ -660,7 +614,7 @@
     "slug": "core/withwebsocketheartbeat",
     "source": "packages/core/src/client/option.ts",
     "group": "client",
-    "description": "Enables WebSocket heartbeat messages with optional acknowledgement detection.\n\nPassing `undefined` clears an earlier setting. The option type is:\n\n```ts\n{\n  intervalMs: number\n  isAck?: (message: unknown) => boolean\n  message?: <T = unknown>() => T | unknown\n  timeoutMs?: number\n}\n```\n\n- Every `intervalMs`, `message()` is called and its result is sent through the endpoint's `outgoing` struct. No message is sent when `message` is omitted or returns `undefined`.\n- With `timeoutMs`, an acknowledgement is expected after each heartbeat. `isAck` receives the decoded incoming message; when it returns `true`, the timer is cleared and that message is **not** delivered to `receive`.\n- If no ack arrives within `timeoutMs`, or a heartbeat cannot be sent, the session fails. This does not trigger a reconnect. A missing ack is reported to the balancer as `NET_UNREACHABLE`; a heartbeat that cannot be sent is a local failure and is not attributed to the endpoint.\n- Heartbeat uses the same JSON guard as `session.send`: a value JSON cannot represent after struct encoding causes `TypeError` and ends the logical session.\n- `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`; otherwise the operation fails with `REQ_OPTIONS_INVALID`.\n- A `heartbeat` in the request options replaces this one for that call.\n- `intervalMs`, `isAck`, `message`, and `timeoutMs` are copied when this option is applied. `message` and `isAck` keep their identity. A missing value stays missing; `undefined` clears an earlier heartbeat. A getter runs at that moment and its exception escapes `createClient`. Numeric checks still run when the operation starts.",
+    "description": "Enables WebSocket heartbeat messages with optional acknowledgement detection.\n\nPassing `undefined` clears an earlier setting. Defjs defines no heartbeat format: `message` and `isAck` are yours. The option type is {@link WebSocketHeartbeatConfig}:\n\n```ts\n{\n  intervalMs: number\n  message: () => unknown\n  isAck?: (message: unknown) => boolean\n  timeoutMs?: number // only together with isAck\n}\n```\n\n- Every `intervalMs`, `message()` is called and its result is sent through the endpoint's `outgoing` struct as JSON text. No message is sent when it returns `undefined`.\n- With `timeoutMs`, an acknowledgement is expected after each heartbeat; the type requires `isAck` then. `isAck` receives the decoded incoming message; when it returns `true`, the timer is cleared and that message is **not** delivered to `receive`.\n- If no acknowledgement arrives within `timeoutMs`, the connection counts as failed: it is closed and the attempt enters the `withRetry` flow as a close that `session.close()` did not request. Without a retry policy the session ends with an `error` whose `cause` is the heartbeat timeout. A missing acknowledgement is reported to the balancer as `NET_UNREACHABLE`. A heartbeat that cannot be sent because `message()` throws or the value is not JSON is a local failure: it ends the session, is not retried, and is not attributed to the endpoint.\n- A `heartbeat` in the request options replaces this one for that call.\n- `intervalMs`, `isAck`, `message`, and `timeoutMs` are copied when this option is applied. `message` and `isAck` keep their identity. A getter runs at that moment and its exception escapes `createClient`.",
     "signatures": [
       "function withWebSocketHeartbeat(\n  options: ClientWebSocketOptions[\"heartbeat\"],\n): ClientOption;"
     ],
@@ -674,8 +628,8 @@
       {
         "name": "options",
         "description": "Heartbeat interval, payload, timeout, and ACK predicate.",
-        "type": "ClientWebSocketOptions[\"heartbeat\"]",
-        "simplifiedType": "ClientWebSocketOptions[\"heartbeat\"]",
+        "type": "WebSocketHeartbeatConfig | undefined",
+        "simplifiedType": "union",
         "required": true,
         "deprecated": false,
         "tags": []
@@ -688,60 +642,14 @@
           {
             "name": "options",
             "description": "Heartbeat interval, payload, timeout, and ACK predicate.",
-            "type": "ClientWebSocketOptions[\"heartbeat\"]",
-            "simplifiedType": "ClientWebSocketOptions[\"heartbeat\"]",
+            "type": "WebSocketHeartbeatConfig | undefined",
+            "simplifiedType": "union",
             "required": true,
             "deprecated": false,
             "tags": []
           }
         ],
         "returns": ["An option that sets `config.webSocket.heartbeat`."]
-      }
-    ]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withWebSocketReconnect",
-    "kind": "function",
-    "slug": "core/withwebsocketreconnect",
-    "source": "packages/core/src/client/option.ts",
-    "group": "client",
-    "description": "Configures automatic reconnection when the socket closes for any reason other than a manual `session.close()`.\n\nReconnection is opt-in: without this option a close ends the session. Passing `undefined` clears an earlier setting. The option type is:\n\n```ts\n{\n  attempts?: number\n  connectTimeoutMs?: number\n  delayMs?: number\n  factor?: number\n  jitter?: number\n  maxDelayMs?: number\n  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean\n}\n```\n\n- `attempts` is the retry budget for each outage. It defaults to `3`, and `0` disables reconnection. Successful `open` resets the budget and backoff exponent; the next outage starts at retry 1. Omitting it does not give unlimited retries within one outage. A socket that successfully opens and is immediately closed again by the server can keep reconnecting at the base delay (subject to jitter and caps), because every open resets the budget; use `shouldReconnect` to stop it.\n- `delayMs` defaults to `1000`, `factor` to `2`, `maxDelayMs` to `30000`, and `jitter` (0 to 1) to `0`. Retry _n_ starts with `delayMs * factor^(n-1)`, capped at `maxDelayMs`; jitter and rounding follow, then the final delay is capped again at `maxDelayMs` and `2_147_483_647` ms. A zero base stays zero; valid-number overflow saturates at those caps.\n- `shouldReconnect` can return `false` to end the session instead. Without it every close is retried while the budget lasts. It is not called for a manual `session.close()`.\n- `connectTimeoutMs` optionally bounds each handshake, is finite and positive, must not exceed `2_147_483_647` ms, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.\n- Reconnect options are validated before connecting: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values make the operation fail with `REQ_OPTIONS_INVALID` before connecting. `attempts: 0` disables subsequent retries, but all explicitly supplied reconnect fields are still validated before the initial connection.\n- A `reconnect` in the request options replaces this one for that call.\n- `attempts`, `connectTimeoutMs`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect` are copied when this option is applied. `shouldReconnect` keeps its identity and is not called. `undefined` clears an earlier policy. A getter runs at that moment and its exception escapes `createClient`. Invalid numbers still fail the operation with `REQ_OPTIONS_INVALID`.",
-    "signatures": [
-      "function withWebSocketReconnect(\n  options: ClientWebSocketOptions[\"reconnect\"],\n): ClientOption;"
-    ],
-    "related": [],
-    "exampleFiles": [],
-    "returns": ["An option that sets `config.webSocket.reconnect`."],
-    "throws": [],
-    "tags": [],
-    "typeTable": null,
-    "parameters": [
-      {
-        "name": "options",
-        "description": "Retry budget, backoff, and `shouldReconnect` gate.",
-        "type": "ClientWebSocketOptions[\"reconnect\"]",
-        "simplifiedType": "ClientWebSocketOptions[\"reconnect\"]",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      }
-    ],
-    "overloads": [
-      {
-        "signature": "function withWebSocketReconnect(\n  options: ClientWebSocketOptions[\"reconnect\"],\n): ClientOption;",
-        "parameters": [
-          {
-            "name": "options",
-            "description": "Retry budget, backoff, and `shouldReconnect` gate.",
-            "type": "ClientWebSocketOptions[\"reconnect\"]",
-            "simplifiedType": "ClientWebSocketOptions[\"reconnect\"]",
-            "required": true,
-            "deprecated": false,
-            "tags": []
-          }
-        ],
-        "returns": ["An option that sets `config.webSocket.reconnect`."]
       }
     ]
   },
@@ -786,9 +694,9 @@
     "slug": "core/requestoptions-type",
     "source": "packages/core/src/client/client.ts",
     "group": "client",
-    "description": "Flat per-call options. Each protocol reads the fields it understands and ignores the rest.\n\nSSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.\n\n`signal` cancels HTTP, SSE, and WebSocket calls. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, `heartbeat`, and `reconnect` apply to WebSocket and replace the client setting for that call as a whole value. `client(options)` copies `heartbeat`, `reconnect`, and a `protocols` array at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. There is no `timeout` or `abort` field. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline.",
+    "description": "Flat per-call options. Each protocol reads the fields it understands and ignores the rest.\n\n`signal` cancels HTTP, SSE, and WebSocket calls. `retry` applies to all three and replaces the client's retry policy for that call as a whole value, except its `budget`, which is HTTP only and stays with the client. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, and `heartbeat` apply to WebSocket and replace the client setting for that call as a whole value. `client(options)` copies `heartbeat`, `retry`, and a `protocols` array at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. There is no `timeout` or `abort` field. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline.",
     "signatures": [
-      "type RequestOptions = {\n  signal?: AbortSignal;\n  onUploadProgress?: HttpProgressFn;\n  onDownloadProgress?: HttpProgressFn;\n  beforeConnect?: ClientWebSocketOptions[\"beforeConnect\"];\n  protocols?: readonly string[];\n  heartbeat?: ClientWebSocketOptions[\"heartbeat\"];\n  reconnect?: ClientWebSocketOptions[\"reconnect\"];\n  retry?: Omit<RetryOptions, \"budget\">;\n};"
+      "type RequestOptions = {\n  signal?: AbortSignal;\n  onUploadProgress?: HttpProgressFn;\n  onDownloadProgress?: HttpProgressFn;\n  beforeConnect?: ClientWebSocketOptions[\"beforeConnect\"];\n  protocols?: readonly string[];\n  heartbeat?: ClientWebSocketOptions[\"heartbeat\"];\n  retry?: Omit<RetryOptions, \"budget\">;\n};"
     ],
     "related": [],
     "exampleFiles": [],
@@ -844,24 +752,15 @@
       {
         "name": "heartbeat",
         "description": "WebSocket heartbeat for this call. Replaces the client heartbeat as a whole value.",
-        "type": "{ intervalMs: number; isAck?: (message: unknown) => boolean; message?: () => unknown; timeoutMs?: number; } | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "reconnect",
-        "description": "WebSocket reconnect policy for this call. Replaces the client policy as a whole value.",
-        "type": "{ connectTimeoutMs?: number; attempts?: number; delayMs?: number; factor?: number; jitter?: number; maxDelayMs?: number; shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean; }) => boolean; } | undefined",
-        "simplifiedType": "object",
+        "type": "WebSocketHeartbeatConfig | undefined",
+        "simplifiedType": "union",
         "required": false,
         "deprecated": false,
         "tags": []
       },
       {
         "name": "retry",
-        "description": "Retry policy for this call. Replaces the client policy as a whole value; the `budget` stays with the client.",
+        "description": "Retry policy for this call, for HTTP, SSE, and WebSocket. Replaces the client policy as a whole value; the `budget` stays with the client.",
         "type": "Omit<RetryOptions, \"budget\"> | undefined",
         "simplifiedType": "Omit<object, \"budget\">",
         "required": false,
@@ -872,7 +771,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type RequestOptions = {\n  signal?: AbortSignal;\n  onUploadProgress?: HttpProgressFn;\n  onDownloadProgress?: HttpProgressFn;\n  beforeConnect?: ClientWebSocketOptions[\"beforeConnect\"];\n  protocols?: readonly string[];\n  heartbeat?: ClientWebSocketOptions[\"heartbeat\"];\n  reconnect?: ClientWebSocketOptions[\"reconnect\"];\n  retry?: Omit<RetryOptions, \"budget\">;\n};",
+        "signature": "type RequestOptions = {\n  signal?: AbortSignal;\n  onUploadProgress?: HttpProgressFn;\n  onDownloadProgress?: HttpProgressFn;\n  beforeConnect?: ClientWebSocketOptions[\"beforeConnect\"];\n  protocols?: readonly string[];\n  heartbeat?: ClientWebSocketOptions[\"heartbeat\"];\n  retry?: Omit<RetryOptions, \"budget\">;\n};",
         "parameters": [],
         "returns": []
       }
@@ -950,7 +849,7 @@
       },
       {
         "name": "sse",
-        "description": "SSE transport and reconnect options.",
+        "description": "SSE transport options.",
         "type": "ClientSSEOptions | undefined",
         "simplifiedType": "object",
         "required": false,
@@ -959,7 +858,7 @@
       },
       {
         "name": "webSocket",
-        "description": "WebSocket transport, heartbeat, and reconnect options.",
+        "description": "WebSocket transport and heartbeat options.",
         "type": "ClientWebSocketOptions | undefined",
         "simplifiedType": "object",
         "required": false,
@@ -1163,9 +1062,9 @@
     "slug": "core/clientsseoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Optional SSE settings applied when creating a client: fetch handle, invalid-event hook, and reconnect policy.\n\n- **handle** — Fetch implementation that opens the stream. The default resolves `globalThis.fetch` on each attempt, including replacements installed after import. Every SSE handle receives a `Request`. Missing global Fetch fails default execution with `ENV_UNSUPPORTED`; a custom handle remains usable.\n- **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.\n- **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. A 502, 503, or 504 handshake is retried like a refused connection; other non-2xx handshakes are fatal. An `id:` field updates a buffer; the reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message. A stream ending before that blank line leaves the cursor unchanged. Reconnect sends the committed ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it at that blank line and an ID containing NUL is ignored.\n\nReconnect options are validated before interceptors or Fetch: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs.\n\nSet these with `withSSEHandle`, `withSSEOnInvalidEvent`, and `withSSEReconnect`. Omitting `withSSEReconnect` disables retry.",
+    "description": "Optional SSE settings applied when creating a client: fetch handle and invalid-event hook.\n\n- **handle** — Fetch implementation that opens the stream. The default resolves `globalThis.fetch` on each attempt, including replacements installed after import. Every SSE handle receives a `Request`. Missing global Fetch fails default execution with `ENV_UNSUPPORTED`; a custom handle remains usable.\n- **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.\n\nSet these with `withSSEHandle` and `withSSEOnInvalidEvent`. Retries come from the client's `retry` policy, set with `withRetry`; without one a failed stream is not retried.",
     "signatures": [
-      "interface ClientSSEOptions {\n  handle?: FetchHandle;\n  onInvalidEvent?: (context: {\n    reason: \"missing-struct\" | \"validation-failed\";\n    message: { id: string; event: string; data: string };\n    cause?: unknown;\n    signal: AbortSignal;\n  }) => unknown;\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      lastEventId: string;\n      method: string;\n      open?: {\n        response: { status: number; statusText: string; url: string };\n        url: string;\n      };\n    }) => boolean | Promise<boolean>;\n  };\n}"
+      "interface ClientSSEOptions {\n  handle?: FetchHandle;\n  onInvalidEvent?: (context: {\n    reason: \"missing-struct\" | \"validation-failed\";\n    message: { id: string; event: string; data: string };\n    cause?: unknown;\n    signal: AbortSignal;\n  }) => unknown;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -1190,21 +1089,12 @@
         "required": false,
         "deprecated": false,
         "tags": []
-      },
-      {
-        "name": "reconnect",
-        "description": "Automatic reconnect policy after stream failures.",
-        "type": "{ connectTimeoutMs?: number; attempts?: number; delayMs?: number; factor?: number; jitter?: number; maxDelayMs?: number; shouldReconnect?: (context: { attempt: number; cause?: unknown; lastEventId: string; method: string; open?: { response: { status: number; statusText: string; url: string; }; url: string; }; }) => boolean | Promise<boolean>; } | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
       }
     ],
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientSSEOptions {\n  handle?: FetchHandle;\n  onInvalidEvent?: (context: {\n    reason: \"missing-struct\" | \"validation-failed\";\n    message: { id: string; event: string; data: string };\n    cause?: unknown;\n    signal: AbortSignal;\n  }) => unknown;\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      lastEventId: string;\n      method: string;\n      open?: {\n        response: { status: number; statusText: string; url: string };\n        url: string;\n      };\n    }) => boolean | Promise<boolean>;\n  };\n}",
+        "signature": "interface ClientSSEOptions {\n  handle?: FetchHandle;\n  onInvalidEvent?: (context: {\n    reason: \"missing-struct\" | \"validation-failed\";\n    message: { id: string; event: string; data: string };\n    cause?: unknown;\n    signal: AbortSignal;\n  }) => unknown;\n}",
         "parameters": [],
         "returns": []
       }
@@ -1244,15 +1134,6 @@
         "required": false,
         "deprecated": false,
         "tags": []
-      },
-      {
-        "name": "reconnect",
-        "description": "Automatic reconnect policy after stream failures.",
-        "type": "{ connectTimeoutMs?: number; attempts?: number; delayMs?: number; factor?: number; jitter?: number; maxDelayMs?: number; shouldReconnect?: (context: { attempt: number; cause?: unknown; lastEventId: string; method: string; open?: { response: { status: number; statusText: string; url: string; }; url: string; }; }) => boolean | Promise<boolean>; } | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
       }
     ],
     "parameters": [],
@@ -1271,9 +1152,9 @@
     "slug": "core/clientwebsocketoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Optional WebSocket settings applied when creating a client: constructor, `beforeConnect` hook, heartbeat, protocols, and reconnect policy.\n\n- **handle** — WebSocket constructor; defaults to `globalThis.WebSocket`.\n- **beforeConnect** — Runs before each connect and reconnect attempt.\n- **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement fails the session and reports `NET_UNREACHABLE` to the balancer. `intervalMs` and `timeoutMs` must be positive and at most 2147483647.\n- **protocols** — Subprotocols passed to the constructor.\n- **reconnect** — Opt-in. `attempts` defaults to **3**; `0` disables retry, and omitting `attempts` is not unlimited. Other defaults: `delayMs` 1000, `factor` 2, `jitter` 0 (a 0-1 multiplicative factor), `maxDelayMs` 30000. `shouldReconnect` receives the close `code`, `reason`, and `wasClean` and can veto a retry.\n\nThe retry budget applies per outage. Successful `open` resets the budget, callback attempt, and backoff exponent; the next outage starts at retry 1. `maxDelayMs` caps the final delay after jitter and rounding, also bounded by `2_147_483_647` ms. See {@link withWebSocketReconnect} for validation rules and overflow behavior.\n\nSet these with `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols`, and `withWebSocketReconnect`. `WebSocketExecuteOptions` can override `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` per call.",
+    "description": "Optional WebSocket settings applied when creating a client: constructor, `beforeConnect` hook, heartbeat, and protocols.\n\n- **handle** — WebSocket constructor; defaults to `globalThis.WebSocket`.\n- **beforeConnect** — Runs before each connect and reconnect attempt.\n- **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement counts as a connection failure and reports `NET_UNREACHABLE` to the balancer. See {@link WebSocketHeartbeatConfig}.\n- **protocols** — Subprotocols passed to the constructor.\n\nSet these with `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, and `withWebSocketProtocols`. `WebSocketExecuteOptions` can override `beforeConnect`, `heartbeat`, and `protocols` per call. Reconnection comes from the client's `retry` policy, set with `withRetry`; without one a close ends the session.",
     "signatures": [
-      "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: {\n    intervalMs: number;\n    isAck?: (message: unknown) => boolean;\n    message?: () => unknown;\n    timeoutMs?: number;\n  };\n  protocols?: readonly string[];\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      code?: number;\n      reason?: string;\n      wasClean?: boolean;\n    }) => boolean;\n  };\n}"
+      "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: WebSocketHeartbeatConfig;\n  protocols?: readonly string[];\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -1301,9 +1182,9 @@
       },
       {
         "name": "heartbeat",
-        "description": "Periodic heartbeat ping and optional ACK matching.",
-        "type": "{ intervalMs: number; isAck?: (message: unknown) => boolean; message?: () => unknown; timeoutMs?: number; } | undefined",
-        "simplifiedType": "object",
+        "description": "Periodic heartbeat message and optional acknowledgement matching.",
+        "type": "WebSocketHeartbeatConfig | undefined",
+        "simplifiedType": "union",
         "required": false,
         "deprecated": false,
         "tags": []
@@ -1316,21 +1197,12 @@
         "required": false,
         "deprecated": false,
         "tags": []
-      },
-      {
-        "name": "reconnect",
-        "description": "Automatic reconnect policy after unexpected closes.",
-        "type": "{ connectTimeoutMs?: number; attempts?: number; delayMs?: number; factor?: number; jitter?: number; maxDelayMs?: number; shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean; }) => boolean; } | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
       }
     ],
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: {\n    intervalMs: number;\n    isAck?: (message: unknown) => boolean;\n    message?: () => unknown;\n    timeoutMs?: number;\n  };\n  protocols?: readonly string[];\n  reconnect?: {\n    connectTimeoutMs?: number;\n    attempts?: number;\n    delayMs?: number;\n    factor?: number;\n    jitter?: number;\n    maxDelayMs?: number;\n    shouldReconnect?: (context: {\n      attempt: number;\n      cause?: unknown;\n      code?: number;\n      reason?: string;\n      wasClean?: boolean;\n    }) => boolean;\n  };\n}",
+        "signature": "interface ClientWebSocketOptions {\n  handle?: WebSocketHandleConstructor;\n  beforeConnect?: (context: {\n    attempt: number;\n    signal: AbortSignal;\n  }) => void | Promise<void>;\n  heartbeat?: WebSocketHeartbeatConfig;\n  protocols?: readonly string[];\n}",
         "parameters": [],
         "returns": []
       }
@@ -2529,7 +2401,7 @@
     "slug": "core/httpprogressfn-type",
     "source": "packages/core/src/internal/http_request.ts",
     "group": "http",
-    "description": "Callback invoked as request bytes are uploaded or response bytes are downloaded.\n\nPassed as `onDownloadProgress` or `onUploadProgress` in `HttpExecuteOptions`.\nCallbacks may be async and are awaited before the next chunk is processed. A\ncallback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`,\nwith the thrown value as `cause`, for downloads and uploads alike. Caller\ncancellation still takes precedence and reports `NET_ABORTED`, or `NET_TIMEOUT`\nwhen the abort reason is a timeout.\n\n`onUploadProgress` reports progress only when the request body is a\n`ReadableStream` that the caller passes. Any other body (`Blob`, `File`,\n`ArrayBuffer`, `FormData`, a string, or `URLSearchParams`) is sent as built and\n`onUploadProgress` is not called, on every runtime. The library never converts\na body into a stream. Download progress is unaffected.\n\nA `ReadableStream` request body follows the Fetch rules for streaming request\nbodies, with or without `onUploadProgress`:\n\n- Chromium and WebKit accept a streaming request body only over HTTP/2 or\n  later, so the call fails with `NET_UNREACHABLE` on HTTP/1.1, with a\n  runtime-specific `TypeError` as `cause`. WebKit was checked manually at 27.2\n  only; this repository does not test it. Node.js and Bun accept HTTP/1.1,\n  which departs from the Fetch standard.\n- Firefox cannot stream request bodies, so the call fails with\n  `ENV_UNSUPPORTED`.\n- In browsers, a cross-origin request needs a CORS preflight, unless the\n  browser holds a cached preflight result, and fails unless the server\n  answers `OPTIONS`. A same-origin request is not preflighted.\n- A 301, 302, 307, or 308 redirect fails after the body was sent once. A 303\n  redirect becomes a GET and succeeds.\n\n`fetch` gives the same network error for each of these as for an unreachable\nendpoint, and for a source `ReadableStream` that throws while `fetch` reads\nit, so the error does not reliably show the endpoint is down. The load\nbalancer therefore receives `{ attempted: false }` for it, as it does for a\nthrowing progress callback (`EXT_OBSERVER_FAILED`). A healthy endpoint is not\nejected for these failures, but a down endpoint is not detected by streamed\nuploads alone, and a rejected streamed upload is not retried as a\n`connect-failure`.\n\nA streamed body has no known length, so the reported `total` is `0` and\n`lengthComputable` is `false` unless the request carries a valid\n`Content-Length` header. That header only sets the reported total, since\nbrowsers do not send it. Non-identity encoded downloads also report\n`total: 0` and `lengthComputable: false`, since `loaded` counts decoded\nstream bytes. Cancellation releases the wrapped upload stream.",
+    "description": "Callback invoked as request bytes are uploaded or response bytes are downloaded.\n\nPassed as `onDownloadProgress` or `onUploadProgress` in `HttpExecuteOptions`.\nCallbacks may be async and are awaited before the next chunk is processed. A\ncallback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`,\nwith the thrown value as `cause`, for downloads and uploads alike. Caller\ncancellation still takes precedence and reports `NET_ABORTED`, or `NET_TIMEOUT`\nwhen the abort reason is a timeout.\n\n`onUploadProgress` reports progress only when the request body is a\n`ReadableStream` that the caller passes. Any other body (`Blob`, `File`,\n`ArrayBuffer`, `FormData`, a string, or `URLSearchParams`) is sent as built and\n`onUploadProgress` is not called, on every runtime. The library never converts\na body into a stream. Download progress is unaffected.\n\nA `ReadableStream` request body follows the Fetch rules for streaming request\nbodies, with or without `onUploadProgress`:\n\n- Chromium and WebKit accept a streaming request body only over HTTP/2 or\n  later, so the call fails with `NET_UNREACHABLE` on HTTP/1.1, with a\n  runtime-specific `TypeError` as `cause`. WebKit was checked manually at 27.2\n  only; this repository does not test it. Node.js and Bun accept HTTP/1.1,\n  which departs from the Fetch standard.\n- Firefox cannot stream request bodies, so the call fails with\n  `ENV_UNSUPPORTED`.\n- In browsers, a cross-origin request needs a CORS preflight, unless the\n  browser holds a cached preflight result, and fails unless the server\n  answers `OPTIONS`. A same-origin request is not preflighted.\n- A 301, 302, 307, or 308 redirect fails after the body was sent once. A 303\n  redirect becomes a GET and succeeds.\n\n`fetch` gives the same network error for each of these as for an unreachable\nendpoint, and for a source `ReadableStream` that throws while `fetch` reads\nit, so the error does not reliably show the endpoint is down. The load\nbalancer therefore receives `{ attempted: false }` for it, as it does for a\nthrowing progress callback (`EXT_OBSERVER_FAILED`). A healthy endpoint is not\nejected for these failures, but a down endpoint is not detected by streamed\nuploads alone, and a rejected streamed upload is never retried: a\n`ReadableStream` body ends the retry flow before `shouldRetry` is asked.\n\nA streamed body has no known length, so the reported `total` is `0` and\n`lengthComputable` is `false` unless the request carries a valid\n`Content-Length` header. That header only sets the reported total, since\nbrowsers do not send it. Non-identity encoded downloads also report\n`total: 0` and `lengthComputable: false`, since `loaded` counts decoded\nstream bytes. Cancellation releases the wrapped upload stream.",
     "signatures": [
       "type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void;"
     ],
@@ -6453,9 +6325,9 @@
     "slug": "core/eventstreamexecuteoptions-type",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "SSE field of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.\n\n`signal` covers the whole stream, including after it opens. There is no startup-only deadline.",
+    "description": "SSE fields of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.\n\n`signal` covers the whole stream, including after it opens. There is no startup-only deadline. `retry` replaces the client's retry policy for this call.",
     "signatures": [
-      "type EventStreamExecuteOptions = {\n  signal?: AbortSignal;\n};"
+      "type EventStreamExecuteOptions = {\n  signal?: AbortSignal;\n  retry?: Omit<RetryOptions, \"budget\">;\n};"
     ],
     "related": [],
     "exampleFiles": [],
@@ -6471,12 +6343,21 @@
         "required": false,
         "deprecated": false,
         "tags": []
+      },
+      {
+        "name": "retry",
+        "description": "Retry policy for this call. Replaces the client policy as a whole value; the `budget` is HTTP only.",
+        "type": "Omit<RetryOptions, \"budget\"> | undefined",
+        "simplifiedType": "Omit<object, \"budget\">",
+        "required": false,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "parameters": [],
     "overloads": [
       {
-        "signature": "type EventStreamExecuteOptions = {\n  signal?: AbortSignal;\n};",
+        "signature": "type EventStreamExecuteOptions = {\n  signal?: AbortSignal;\n  retry?: Omit<RetryOptions, \"budget\">;\n};",
         "parameters": [],
         "returns": []
       }
@@ -6489,7 +6370,7 @@
     "slug": "core/streamawaitresult-type",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "Await-result tuple from opening an SSE stream.\n\n- On success: `[null, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live.\n\n- On failure: `[fault, undefined, open]`. `open` carries the response snapshot when the failure happened after a response arrived, for example a non-2xx handshake, and is `undefined` otherwise.\n\n- `TError` is the declared `error` struct. It types the decoded error body on the fault.\n\n- A non-2xx handshake is an `HTTP_STATUS` fault whose `data` is the decoded `error` body. When the declared `error` body could not be decoded, startup returns the decode fault instead, as `defineRequest` does: `RES_MEDIA_TYPE_INVALID` for a JSON declaration that meets another media type, `RES_DECODE_FAILED` for an unreadable or unparsable body, `RES_STRUCT_MISMATCH` for a body that does not match the struct. Its `status` and `response` carry the handshake status as metadata and `cause` holds the reason. Interceptors, `shouldReconnect` and a reconnect's `closed` still receive `HTTP_STATUS`, with the same `cause`, so a gateway `503` is retried however its body looks.\n\n- A 2xx handshake whose media type is not `text/event-stream` is `RES_MEDIA_TYPE_INVALID`. One with that media type and no body (a `204` or `205` on Node.js and Bun) is an empty stream: the call succeeds and `closed` settles `{ kind: 'eof' }` at once.",
+    "description": "Await-result tuple from opening an SSE stream.\n\n- On success: `[null, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live.\n\n- On failure: `[fault, undefined, open]`. `open` carries the response snapshot when the failure happened after a response arrived, for example a non-2xx handshake, and is `undefined` otherwise.\n\n- `TError` is the declared `error` struct. It types the decoded error body on the fault.\n\n- A non-2xx handshake is an `HTTP_STATUS` fault whose `data` is the decoded `error` body. When the declared `error` body could not be decoded, startup returns the decode fault instead, as `defineRequest` does: `RES_MEDIA_TYPE_INVALID` for a JSON declaration that meets another media type, `RES_DECODE_FAILED` for an unreadable or unparsable body, `RES_STRUCT_MISMATCH` for a body that does not match the struct. Its `status` and `response` carry the handshake status as metadata and `cause` holds the reason. Interceptors, `shouldRetry` and a reconnect's `closed` still receive `HTTP_STATUS`, with the same `cause`, so a gateway `503` is retried however its body looks.\n\n- A 2xx handshake whose media type is not `text/event-stream` is `RES_MEDIA_TYPE_INVALID`. One with that media type and no body (a `204` or `205` on Node.js and Bun) is an empty stream: the call succeeds and `closed` settles `{ kind: 'eof' }` at once.",
     "signatures": [
       "type StreamAwaitResult<\n  TEvent,\n  TError extends AnyStruct | undefined = undefined,\n> =\n  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]\n  | [\n      error: Fault<TError> | HttpStatusFaultOf<undefined>,\n      stream: undefined,\n      open: EventStreamOpenInfo | undefined,\n    ];"
     ],
@@ -6649,7 +6530,7 @@
     "slug": "core/eventstructs-type",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "Map from SSE event names to the structs that decode their data.\n\nAn event with no `event:` field is named `message`. An event whose name has no own entry uses the `default` struct; with neither, the event is skipped and `onInvalidEvent` is called. Declare the event name `__proto__` with a computed own key.\n\nA `string` event struct keeps the raw `data` text. Every other kind is JSON text: `JSON.parse`, then the struct. A bare `struct.literal` therefore needs JSON text, not an unquoted token.\n\nReconnect lives on the client (`withSSEReconnect`). SSE `jitter` is a **0-1 multiplicative factor**, same as WebSocket.",
+    "description": "Map from SSE event names to the structs that decode their data.\n\nAn event with no `event:` field is named `message`. An event whose name has no own entry uses the `default` struct; with neither, the event is skipped and `onInvalidEvent` is called. Declare the event name `__proto__` with a computed own key.\n\nA `string` event struct keeps the raw `data` text. Every other kind is JSON text: `JSON.parse`, then the struct. A bare `struct.literal` therefore needs JSON text, not an unquoted token.\n\nRetries live on the client (`withRetry`).",
     "signatures": ["type EventStructs = { [key: string]: AnyStruct };"],
     "related": [],
     "exampleFiles": [],
@@ -7007,7 +6888,7 @@
     "slug": "core/usewebsocketconfig-type",
     "source": "packages/core/src/web_socket/web_socket.ts",
     "group": "web-socket",
-    "description": "WebSocket fields of {@link RequestOptions}, plus `signal`.\n\n`beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for one call. `signal` covers the whole session, including after it opens. There is no startup-only deadline and no `abort` field.",
+    "description": "WebSocket fields of {@link RequestOptions}, plus `signal`.\n\n`beforeConnect`, `heartbeat`, `protocols`, and `retry` override the client-level options for one call. `signal` covers the whole session, including after it opens. There is no startup-only deadline and no `abort` field.",
     "signatures": [
       "type UseWebSocketConfig<\n  TIncoming = unknown,\n  TOutgoing = unknown,\n> = UseWebSocketBaseConfig<TIncoming, TOutgoing> & {\n  signal?: AbortSignal;\n};"
     ],
@@ -7030,7 +6911,7 @@
         "name": "heartbeat",
         "description": "",
         "type": "WebSocketHeartbeatConfig<TIncoming, TOutgoing> | undefined",
-        "simplifiedType": "object",
+        "simplifiedType": "union",
         "required": false,
         "deprecated": false,
         "tags": []
@@ -7045,10 +6926,10 @@
         "tags": []
       },
       {
-        "name": "reconnect",
+        "name": "retry",
         "description": "",
-        "type": "{ connectTimeoutMs?: number; attempts?: number; delayMs?: number; factor?: number; jitter?: number; maxDelayMs?: number; shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean; }) => boolean; } | undefined",
-        "simplifiedType": "object",
+        "type": "Omit<RetryOptions, \"budget\"> | undefined",
+        "simplifiedType": "Omit<object, \"budget\">",
         "required": false,
         "deprecated": false,
         "tags": []
@@ -7391,57 +7272,20 @@
     "slug": "core/websocketheartbeatconfig-type",
     "source": "packages/core/src/web_socket/web_socket.ts",
     "group": "web-socket",
-    "description": "Heartbeat ping and acknowledgement settings for a live WebSocket session.\n\n- `intervalMs` is the delay between heartbeat messages.\n\n- `message()` builds the payload. It is sent through the `outgoing` struct. Nothing is sent when it is omitted or returns `undefined`.\n\n- After struct encoding, non-JSON values fail with `TypeError` through the same serializer as `session.send`; that heartbeat failure ends the logical session without reconnecting.\n\n- `isAck(message)` receives each decoded incoming message. When it returns `true`, the message is treated as the acknowledgement and is not delivered to `receive`.\n\n- `timeoutMs` is how long to wait for an acknowledgement after a heartbeat. Missing it fails the session and reports `NET_UNREACHABLE` for the endpoint to the balancer. A throwing `message()` or a serialization failure also fails the session, but is not attributed to the endpoint.\n\n- `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`.\n\nSet it with {@link withWebSocketHeartbeat} or the `heartbeat` request option.",
+    "description": "Heartbeat settings for a live WebSocket session: what to send, how often, and how to recognize the answer.\n\nDefjs defines no heartbeat format. `message` and `isAck` are yours.\n\n- `intervalMs` is the delay between heartbeat messages.\n\n- `message()` builds the payload. It is sent through the `outgoing` struct as JSON text, so the endpoint needs an `outgoing` struct. Nothing is sent when it returns `undefined`.\n\n- After struct encoding, non-JSON values fail with `TypeError` through the same serializer as `session.send`; that heartbeat failure ends the session without a retry.\n\n- `isAck(message)` receives each decoded incoming message. When it returns `true`, the message is the acknowledgement and is not delivered to `receive`. A frame that fails the `incoming` struct never reaches it.\n\n- `timeoutMs` is how long to wait for an acknowledgement after a heartbeat, and it needs `isAck`: the type allows `timeoutMs` only together with `isAck`. A missing acknowledgement counts as a connection failure, reported to the balancer as `NET_UNREACHABLE`. The socket is closed and the attempt enters the retry flow of `withRetry`; without a retry policy the session ends with an `error`. A throwing `message()` or a serialization failure also ends the session, but is not attributed to the endpoint and is not retried.\n\nSet it with {@link withWebSocketHeartbeat} or the `heartbeat` request option.",
     "signatures": [
-      "interface WebSocketHeartbeatConfig<\n  TIncoming = unknown,\n  TOutgoing = unknown,\n> {\n  intervalMs: number;\n  isAck?: (message: TIncoming) => boolean;\n  message?: () => TOutgoing;\n  timeoutMs?: number;\n}"
+      "type WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> =\n  | {\n      intervalMs: number;\n      isAck?: (message: TIncoming) => boolean;\n      message: () => TOutgoing;\n      timeoutMs?: undefined;\n    }\n  | {\n      intervalMs: number;\n      isAck: (message: TIncoming) => boolean;\n      message: () => TOutgoing;\n      timeoutMs: number;\n    };"
     ],
     "related": [],
     "exampleFiles": [],
     "returns": [],
     "throws": [],
     "tags": [],
-    "typeTable": [
-      {
-        "name": "intervalMs",
-        "description": "",
-        "type": "number",
-        "simplifiedType": "number",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "isAck",
-        "description": "",
-        "type": "((message: TIncoming) => boolean) | undefined",
-        "simplifiedType": "function",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "message",
-        "description": "",
-        "type": "(() => TOutgoing) | undefined",
-        "simplifiedType": "function",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "timeoutMs",
-        "description": "",
-        "type": "number | undefined",
-        "simplifiedType": "number",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      }
-    ],
+    "typeTable": null,
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface WebSocketHeartbeatConfig<\n  TIncoming = unknown,\n  TOutgoing = unknown,\n> {\n  intervalMs: number;\n  isAck?: (message: TIncoming) => boolean;\n  message?: () => TOutgoing;\n  timeoutMs?: number;\n}",
+        "signature": "type WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> =\n  | {\n      intervalMs: number;\n      isAck?: (message: TIncoming) => boolean;\n      message: () => TOutgoing;\n      timeoutMs?: undefined;\n    }\n  | {\n      intervalMs: number;\n      isAck: (message: TIncoming) => boolean;\n      message: () => TOutgoing;\n      timeoutMs: number;\n    };",
         "parameters": [],
         "returns": []
       }
@@ -7506,7 +7350,7 @@
     "slug": "core/socketlifecycleoutcome-type",
     "source": "packages/core/src/web_socket/web_socket.ts",
     "group": "web-socket",
-    "description": "The outcome of a **single connect attempt**, not the final result of the session.\n\nThe reconnect logic uses it to decide whether to try again.\n\n- `closeInfo` holds the close details of that attempt: `{ cause?, code?, reason?, wasClean? }`.\n\n- `connection` is the connection snapshot, when the attempt got one.\n\n- `cause` is the error that ended the attempt, if any.\n\n- `opened` tells whether the socket reached `open` before it ended.\n\nThe `shouldReconnect` option does not receive this object. It gets `attempt`, `cause`, `code`, `reason`, and `wasClean`, taken from it. The final result of the session is {@link WebSocketCloseInfo}.",
+    "description": "The outcome of a **single connect attempt**, not the final result of the session.\n\nThe retry logic uses it to decide whether to try again.\n\n- `closeInfo` holds the close details of that attempt: `{ cause?, code?, reason?, wasClean? }`.\n\n- `connection` is the connection snapshot, when the attempt got one.\n\n- `cause` is the error that ended the attempt, if any.\n\n- `opened` tells whether the socket reached `open` before it ended.\n\n`shouldRetry` does not receive this object. Its context carries `attempt`, `cause`, `code`, `reason`, and `wasClean`, taken from it. The final result of the session is {@link WebSocketCloseInfo}.",
     "signatures": [
       "type SocketLifecycleOutcome = {\n  closeInfo: WebSocketCloseSnapshot;\n  connection?: WebSocketConnectionInfo;\n  cause?: unknown;\n  opened: boolean;\n};"
     ],
@@ -8231,7 +8075,7 @@
     "slug": "core/fetchhandle-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Fetch-compatible function used as an HTTP or SSE handle.\n\nThis is the `(input, init?) => Promise<Response>` call signature Defjs invokes, deliberately not `typeof fetch`, so a mock does not need host extras such as `preconnect`. HTTP calls the untouched platform Fetch as `(url, init)`; a replaced global Fetch or custom handle receives a `Request`. The default resolves the global on each call. SSE always passes a `Request`, including to its default handle.\n\nWhen an HTTP or SSE call through the client rejects with a value that is not a cancellation or timeout shape, the client reports `NET_UNREACHABLE`, whether the value is an `Error` or not. An HTTP call with a retry policy can then move to another endpoint. `fetchHandler` rejects with the value as is.\n\nAccepted by `withHTTPHandle`, `withSSEHandle`, and `fetchHandler`.",
+    "description": "Fetch-compatible function used as an HTTP or SSE handle.\n\nThis is the `(input, init?) => Promise<Response>` call signature Defjs invokes, deliberately not `typeof fetch`, so a mock does not need host extras such as `preconnect`. HTTP calls the untouched platform Fetch as `(url, init)`; a replaced global Fetch or custom handle receives a `Request`. The default resolves the global on each call. SSE always passes a `Request`, including to its default handle.\n\nWhen an HTTP or SSE call through the client rejects with a value that is not a cancellation or timeout shape, the client reports `NET_UNREACHABLE`, whether the value is an `Error` or not. A call with a retry policy can then retry it. `fetchHandler` rejects with the value as is.\n\nAccepted by `withHTTPHandle`, `withSSEHandle`, and `fetchHandler`.",
     "signatures": [
       "type FetchHandle = (\n  input: RequestInfo | URL,\n  init?: RequestInit,\n) => Promise<Response>;"
     ],
@@ -8528,7 +8372,7 @@
     "slug": "core/derivableclient-type",
     "source": "packages/core/src/client/client.ts",
     "group": "client",
-    "description": "Callable root client returned by `createClient`.\n\nA factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. `client()` and `client(undefined)` store no request options. `client({})` keeps the empty snapshot produced by reading each top-level field; it is not dropped by inspecting keys.\n\nEach provided field is read once, in declaration order, onto a new options object. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `reconnect` copies `attempts`, `connectTimeoutMs`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect`. Missing nested blocks stay `undefined` and do not enable heartbeat or retry. `signal`, `beforeConnect`, and every callback keep their identity. A getter on these fixed fields runs during the call. If it throws, the exception escapes and is not converted into a fault; the factory stays usable. Out-of-range numbers are still checked when the operation runs.",
+    "description": "Callable root client returned by `createClient`.\n\nA factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. `client()` and `client(undefined)` store no request options. `client({})` keeps the empty snapshot produced by reading each top-level field; it is not dropped by inspecting keys.\n\nEach provided field is read once, in declaration order, onto a new options object. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `retry` copies `maxRetries`, `delayMs`, `factor`, `maxDelayMs`, `jitter`, `attemptTimeoutMs`, a `methods` array, `shouldRetry`, and `budget`. Missing nested blocks stay `undefined` and do not enable heartbeat or retry. `signal`, `beforeConnect`, and every callback keep their identity. A getter on these fixed fields runs during the call. If it throws, the exception escapes and is not converted into a fault; the factory stays usable.",
     "signatures": [
       "interface DerivableClient extends Client {\n  (options?: RequestOptions): Client;\n}"
     ],
@@ -8895,7 +8739,7 @@
     "slug": "core/pickfirstbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first endpoint until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following endpoint and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\nOrder and the sticky endpoint follow `members`. When the sticky endpoint is\nnot among this pick's `endpoints`, as on an HTTP retry, the pick takes the\nnext candidate after it in member order without moving it, so a retry never\nchanges where later calls go. Only a sticky endpoint missing from `members`\nresets the order to the first.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter endpoint list. The default is\n`false`. Shuffle history keeps at least 256 endpoints, and at least the\ncurrent members, in least-recently-used order; a forgotten endpoint gets a new\nrandom key when it returns.\n\n`failbackMs`, when finite and positive, returns to the first endpoint by time\nalone: once the sticky endpoint has been away from the first for that long, the\nnext pick whose candidates include the first selects it and makes it sticky\nagain. Nothing judges whether the first endpoint has recovered. If it fails\nagain, the ordinary advance rule above moves on and the time starts anew.\nChoose an interval longer than the time between picks, such as a reconnect\ndelay, or every pick returns to the first endpoint. No background timer is\ncreated.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health function.",
+    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first endpoint until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following endpoint and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\nOrder and the sticky endpoint follow `members`. When the sticky endpoint is\nnot among this pick's `endpoints`, as when a wrapper filters candidates, the\npick takes the next candidate after it in member order without moving it, so\na narrowed pick never changes where later calls go. Only a sticky endpoint missing from `members`\nresets the order to the first.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter endpoint list. The default is\n`false`. Shuffle history keeps at least 256 endpoints, and at least the\ncurrent members, in least-recently-used order; a forgotten endpoint gets a new\nrandom key when it returns.\n\n`failbackMs`, when finite and positive, returns to the first endpoint by time\nalone: once the sticky endpoint has been away from the first for that long, the\nnext pick whose candidates include the first selects it and makes it sticky\nagain. Nothing judges whether the first endpoint has recovered. If it fails\nagain, the ordinary advance rule above moves on and the time starts anew.\nChoose an interval longer than the time between picks, such as a reconnect\ndelay, or every pick returns to the first endpoint. No background timer is\ncreated.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health function.",
     "signatures": [
       "function pickFirstBalancer(options?: PickFirstOptions): Balancer;"
     ],
@@ -8995,7 +8839,7 @@
     "slug": "core/roundrobinbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. Members left out of this pick's\ncandidates keep their current value, as nginx skips a peer that is down. A\nmissing weight is 1. Weights for endpoints not in the list are ignored.\nSelection and the cleanup of current values for endpoints that left the\nmembers take O(member count + candidate count) work per pick. Extreme weights\nare scaled to avoid overflow; ratios below floating-point precision may round\nto zero. Finite positive weights never produce a non-candidate selection.\n\nWithout `weights`, every pick advances the counter, including a pick made for\nan HTTP retry or a stream reconnect. Without `outlierDetection`, and with calls\nthat run one after another, an endpoint that fails persistently therefore\nreceives more than 1/n of the first attempts. With exactly two endpoints and\nretries enabled it receives all of them, so every call needs one retry.\nConcurrent calls interleave their picks and break this pattern.\n\nHealth filtering is off by default, so successful picks omit `done`. Supply\n`outlierDetection: {}` to enable it: five consecutive attributed failures then\neject an endpoint temporarily. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
+    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. Members left out of this pick's\ncandidates keep their current value, as nginx skips a peer that is down. A\nmissing weight is 1. Weights for endpoints not in the list are ignored.\nSelection and the cleanup of current values for endpoints that left the\nmembers take O(member count + candidate count) work per pick. Extreme weights\nare scaled to avoid overflow; ratios below floating-point precision may round\nto zero. Finite positive weights never produce a non-candidate selection.\n\nWithout `weights`, every pick advances the counter, including a pick made for\na retry or a stream reconnect. Without `outlierDetection`, and with calls\nthat run one after another, an endpoint that fails persistently therefore\nreceives more than 1/n of the first attempts. With exactly two endpoints and\nretries enabled it receives all of them, so every call needs one retry.\nConcurrent calls interleave their picks and break this pattern.\n\nHealth filtering is off by default, so successful picks omit `done`. Supply\n`outlierDetection: {}` to enable it: five consecutive attributed failures then\neject an endpoint temporarily. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
     "signatures": [
       "function roundRobinBalancer(options?: RoundRobinOptions): Balancer;"
     ],

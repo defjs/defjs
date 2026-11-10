@@ -34,5 +34,5 @@ With a server whose first event is `line` with data `{ "text": "build started" }
 build started
 ```
 
-- SSE does not automatically reconnect on network or read failures unless you configure [`withSSEReconnect(...)`](/api/core/withssereconnect) on the client.
-- When `withSSEReconnect(...)` is set, `attempts` defaults to `3` per outage and resets on a successful handshake (`attempts: 0` disables reconnect). Without a custom `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests reconnect. A request with a `ReadableStream` body never reconnects. See [SSE event streams](/docs/sse).
+- SSE does not automatically reconnect on network or read failures unless you configure [`withRetry(...)`](/api/core/withretry) on the client.
+- When `withRetry(...)` is set, `maxRetries` defaults to `3` per outage and resets on a successful handshake (`maxRetries: 0` disables retries). Without a custom `shouldRetry`, only `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, and `DELETE` requests are retried. A request with a `ReadableStream` body never is. See [SSE event streams](/docs/sse).

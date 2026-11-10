@@ -1,11 +1,6 @@
 import type { Balancer } from "../balancer/balancer";
 import type { Interceptor } from "../interceptor/interceptor";
-import {
-  snapshotHeartbeat,
-  snapshotProtocols,
-  snapshotReconnect,
-  snapshotRetry,
-} from "./capture";
+import { snapshotHeartbeat, snapshotProtocols, snapshotRetry } from "./capture";
 import type {
   ClientConfig,
   ClientSSEOptions,
@@ -266,24 +261,22 @@ export function withWebSocketProtocols(
 /**
  * Enables WebSocket heartbeat messages with optional acknowledgement detection.
  *
- * Passing `undefined` clears an earlier setting. The option type is:
+ * Passing `undefined` clears an earlier setting. Defjs defines no heartbeat format: `message` and `isAck` are yours. The option type is {@link WebSocketHeartbeatConfig}:
  *
  * ```ts
  * {
  *   intervalMs: number
+ *   message: () => unknown
  *   isAck?: (message: unknown) => boolean
- *   message?: <T = unknown>() => T | unknown
- *   timeoutMs?: number
+ *   timeoutMs?: number // only together with isAck
  * }
  * ```
  *
- * - Every `intervalMs`, `message()` is called and its result is sent through the endpoint's `outgoing` struct. No message is sent when `message` is omitted or returns `undefined`.
- * - With `timeoutMs`, an acknowledgement is expected after each heartbeat. `isAck` receives the decoded incoming message; when it returns `true`, the timer is cleared and that message is **not** delivered to `receive`.
- * - If no ack arrives within `timeoutMs`, or a heartbeat cannot be sent, the session fails. This does not trigger a reconnect. A missing ack is reported to the balancer as `NET_UNREACHABLE`; a heartbeat that cannot be sent is a local failure and is not attributed to the endpoint.
- * - Heartbeat uses the same JSON guard as `session.send`: a value JSON cannot represent after struct encoding causes `TypeError` and ends the logical session.
- * - `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`; otherwise the operation fails with `REQ_OPTIONS_INVALID`.
+ * - Every `intervalMs`, `message()` is called and its result is sent through the endpoint's `outgoing` struct as JSON text. No message is sent when it returns `undefined`.
+ * - With `timeoutMs`, an acknowledgement is expected after each heartbeat; the type requires `isAck` then. `isAck` receives the decoded incoming message; when it returns `true`, the timer is cleared and that message is **not** delivered to `receive`.
+ * - If no acknowledgement arrives within `timeoutMs`, the connection counts as failed: it is closed and the attempt enters the `withRetry` flow as a close that `session.close()` did not request. Without a retry policy the session ends with an `error` whose `cause` is the heartbeat timeout. A missing acknowledgement is reported to the balancer as `NET_UNREACHABLE`. A heartbeat that cannot be sent because `message()` throws or the value is not JSON is a local failure: it ends the session, is not retried, and is not attributed to the endpoint.
  * - A `heartbeat` in the request options replaces this one for that call.
- * - `intervalMs`, `isAck`, `message`, and `timeoutMs` are copied when this option is applied. `message` and `isAck` keep their identity. A missing value stays missing; `undefined` clears an earlier heartbeat. A getter runs at that moment and its exception escapes `createClient`. Numeric checks still run when the operation starts.
+ * - `intervalMs`, `isAck`, `message`, and `timeoutMs` are copied when this option is applied. `message` and `isAck` keep their identity. A getter runs at that moment and its exception escapes `createClient`.
  *
  * @param options - Heartbeat interval, payload, timeout, and ACK predicate.
  * @returns An option that sets `config.webSocket.heartbeat`.
@@ -294,43 +287,6 @@ export function withWebSocketHeartbeat(
 ): ClientOption {
   return (config) => {
     config.webSocket.heartbeat = snapshotHeartbeat(options);
-  };
-}
-
-/**
- * Configures automatic reconnection when the socket closes for any reason other than a manual `session.close()`.
- *
- * Reconnection is opt-in: without this option a close ends the session. Passing `undefined` clears an earlier setting. The option type is:
- *
- * ```ts
- * {
- *   attempts?: number
- *   connectTimeoutMs?: number
- *   delayMs?: number
- *   factor?: number
- *   jitter?: number
- *   maxDelayMs?: number
- *   shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
- * }
- * ```
- *
- * - `attempts` is the retry budget for each outage. It defaults to `3`, and `0` disables reconnection. Successful `open` resets the budget and backoff exponent; the next outage starts at retry 1. Omitting it does not give unlimited retries within one outage. A socket that successfully opens and is immediately closed again by the server can keep reconnecting at the base delay (subject to jitter and caps), because every open resets the budget; use `shouldReconnect` to stop it.
- * - `delayMs` defaults to `1000`, `factor` to `2`, `maxDelayMs` to `30000`, and `jitter` (0 to 1) to `0`. Retry _n_ starts with `delayMs * factor^(n-1)`, capped at `maxDelayMs`; jitter and rounding follow, then the final delay is capped again at `maxDelayMs` and `2_147_483_647` ms. A zero base stays zero; valid-number overflow saturates at those caps.
- * - `shouldReconnect` can return `false` to end the session instead. Without it every close is retried while the budget lasts. It is not called for a manual `session.close()`.
- * - `connectTimeoutMs` optionally bounds each handshake, is finite and positive, must not exceed `2_147_483_647` ms, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.
- * - Reconnect options are validated before connecting: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values make the operation fail with `REQ_OPTIONS_INVALID` before connecting. `attempts: 0` disables subsequent retries, but all explicitly supplied reconnect fields are still validated before the initial connection.
- * - A `reconnect` in the request options replaces this one for that call.
- * - `attempts`, `connectTimeoutMs`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect` are copied when this option is applied. `shouldReconnect` keeps its identity and is not called. `undefined` clears an earlier policy. A getter runs at that moment and its exception escapes `createClient`. Invalid numbers still fail the operation with `REQ_OPTIONS_INVALID`.
- *
- * @param options - Retry budget, backoff, and `shouldReconnect` gate.
- * @returns An option that sets `config.webSocket.reconnect`.
- * @group client
- */
-export function withWebSocketReconnect(
-  options: ClientWebSocketOptions["reconnect"],
-): ClientOption {
-  return (config) => {
-    config.webSocket.reconnect = snapshotReconnect(options);
   };
 }
 
@@ -361,53 +317,6 @@ export function withSSEOnInvalidEvent(
 ): ClientOption {
   return (config) => {
     config.sse.onInvalidEvent = handler;
-  };
-}
-
-/**
- * Configures automatic reconnection after an SSE stream fails.
- *
- * Reconnection is opt-in: without this option a failed stream is not retried. Passing `undefined` clears an earlier setting.
- *
- * ```ts
- * type SSEReconnect = {
- *   attempts?: number;
- *   delayMs?: number;
- *   factor?: number;
- *   jitter?: number;
- *   maxDelayMs?: number;
- *   shouldReconnect?: (context: {
- *     attempt: number;
- *     cause?: unknown;
- *     lastEventId: string;
- *     method: string;
- *     open?: {
- *       response: { status: number; statusText: string; url: string };
- *       url: string;
- *     };
- *   }) => boolean | Promise<boolean>;
- * };
- * ```
- *
- * - `attempts` is the retry budget for each outage. It defaults to `3` when `reconnect` is set, and `0` disables retries. A successful handshake resets the budget, callback `attempt`, and backoff exponent. Omitting it does not give unlimited retries within one outage. Repeated successful opens followed immediately by retryable stream failures can keep reconnecting at the current base delay (subject to jitter and caps), because each open resets the budget; use `shouldReconnect` to stop them. Normal EOF remains terminal.
- * - Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect. With it, its result decides for every method, `POST` included; `method` in the context tells endpoints apart. Return `false` to stop for this failure. It runs before the attempts limit is checked.
- * - A request with a `ReadableStream` body never reconnects, and `shouldReconnect` is not called for it.
- * - A handshake answered with 502, 503, or 504 is retried like a refused connection, under the same rules; other non-2xx handshakes are fatal. Exhausted retries end with `HTTP_STATUS`.
- * - `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.
- * - `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.
- * - An `id:` field updates a buffer. The reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message; a stream ending before that blank line leaves it unchanged. The committed ID is sent as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it at that blank line; an ID containing NUL is ignored.
- * - `connectTimeoutMs` optionally bounds each handshake, is finite and positive, must not exceed `2_147_483_647` ms, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.
- * - Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs. The seven fields are copied when this option is applied, and `shouldReconnect` keeps its identity. `undefined` clears an earlier policy. A getter runs then, once, and its exception escapes `createClient`.
- *
- * @param options - Retry budget, backoff, and `shouldReconnect` gate.
- * @returns An option that sets `config.sse.reconnect`.
- * @group client
- */
-export function withSSEReconnect(
-  options: ClientSSEOptions["reconnect"],
-): ClientOption {
-  return (config) => {
-    config.sse.reconnect = snapshotReconnect(options);
   };
 }
 

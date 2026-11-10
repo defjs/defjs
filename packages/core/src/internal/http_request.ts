@@ -69,8 +69,8 @@ export interface HttpProgressEvent {
  * balancer therefore receives `{ attempted: false }` for it, as it does for a
  * throwing progress callback (`EXT_OBSERVER_FAILED`). A healthy endpoint is not
  * ejected for these failures, but a down endpoint is not detected by streamed
- * uploads alone, and a rejected streamed upload is not retried as a
- * `connect-failure`.
+ * uploads alone, and a rejected streamed upload is never retried: a
+ * `ReadableStream` body ends the retry flow before `shouldRetry` is asked.
  *
  * A streamed body has no known length, so the reported `total` is `0` and
  * `lengthComputable` is `false` unless the request carries a valid

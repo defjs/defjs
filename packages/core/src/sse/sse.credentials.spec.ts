@@ -6,7 +6,7 @@ import {
   withEndpoint,
   withInterceptors,
   withSSEHandle,
-  withSSEReconnect,
+  withRetry,
 } from "../client";
 import { createSSEInterceptor } from "../interceptor";
 import { struct } from "../struct";
@@ -170,7 +170,7 @@ test.each(CREDENTIAL_URLS)(
         withEndpoint("https://example.com", url),
         withBalancer(balancer),
         withSSEHandle(handle),
-        withSSEReconnect({ attempts: 1, delayMs: 0, factor: 1 }),
+        withRetry({ maxRetries: 1, delayMs: 0, factor: 1 }),
       ),
     );
     expect(stream).toBeUndefined();
@@ -204,7 +204,7 @@ test("closes with a build failure when a reconnect after open re-picks a URL wit
       withEndpoint("https://example.com", "https://user:secret@example.com"),
       withBalancer(balancer),
       withSSEHandle(handle),
-      withSSEReconnect({ attempts: 1, delayMs: 0, factor: 1 }),
+      withRetry({ maxRetries: 1, delayMs: 0, factor: 1 }),
     ),
   );
   expect(error).toBeNull();

@@ -1,6 +1,6 @@
 # WebSocket sessions (`defineWebSocket`)
 
-Contents: [Define and run a session](#define-and-run-a-session) · [Messages (`incoming` and `outgoing`)](#messages-incoming-and-outgoing) · [Subprotocols and builder rules](#subprotocols-and-builder-rules) · [Heartbeat and reconnect](#heartbeat-and-reconnect) · [Session ownership and disposal](#session-ownership-and-disposal)
+Contents: [Define and run a session](#define-and-run-a-session) · [Messages (`incoming` and `outgoing`)](#messages-incoming-and-outgoing) · [Subprotocols and builder rules](#subprotocols-and-builder-rules) · [Heartbeat and retries](#heartbeat-and-retries) · [Session ownership and disposal](#session-ownership-and-disposal)
 
 ## Define and run a session
 
@@ -89,9 +89,9 @@ void main();
 - Subprotocol precedence: `client({ protocols })` overrides `withWebSocketProtocols(...)`, which overrides `protocols` on `defineWebSocket`.
 - The chosen `protocols` array is snapshotted when the session starts and reused across automatic reconnections. To pass a short-lived auth token in a subprotocol, obtain the token before calling the operation and pass ``client({ protocols: [`auth.${token}`, "quotes.v1"] })``.
 
-## Heartbeat and reconnect
+## Heartbeat and retries
 
-Both are opt-in via client helpers (`withWebSocketHeartbeat`, `withWebSocketReconnect`) or per-call `RequestOptions` (`client({ heartbeat, reconnect })`):
+Both are opt-in via client helpers (`withWebSocketHeartbeat`, `withRetry`) or per-call `RequestOptions` (`client({ heartbeat, retry })`). The retry policy is the one `withRetry` shared with HTTP and SSE:
 
 ```ts
 import {
@@ -99,22 +99,21 @@ import {
   defineWebSocket,
   struct,
   withEndpoint,
-  withWebSocketReconnect,
+  withRetry,
 } from "@defjs/core";
 
 const client = createClient(
   withEndpoint("https://quotes.example.com"),
-  withWebSocketReconnect({
-    attempts: 3,
+  withRetry({
+    maxRetries: 3,
     delayMs: 500,
     factor: 2,
     maxDelayMs: 10_000,
     jitter: 0.2,
-    shouldReconnect({ attempt, code }) {
-      return (
-        attempt <= 3 &&
-        (code === 1006 || code === 1011 || code === 1012 || code === 1013)
-      );
+    shouldRetry(context) {
+      if (context.transport !== "websocket") return context.retryable;
+      // Every close that session.close() did not request is retryable by default; refuse a policy violation.
+      return context.code !== 1008;
     },
   }),
 );
@@ -151,9 +150,11 @@ async function runWithHeartbeat() {
 void runWithHeartbeat();
 ```
 
-A server can complete a clean close handshake with application-error code `1011`, so `wasClean: true` does not mean the application succeeded. Successful opens reset the reconnect budget (default 3 per outage). `connectTimeoutMs` (a field of the reconnect options) bounds construction to `open`; because that object applies `attempts: 3`, setting it alone also enables reconnect, so add `attempts: 0` for a handshake-only deadline. With multiple endpoints, reconnect can re-pick; it does not restore application subscriptions or delivery acknowledgments.
+Defjs defines no heartbeat format: `message` and `isAck` are yours, `message` is required, and `timeoutMs` is allowed only together with `isAck` (types only, no runtime check). The payload is sent through the `outgoing` struct as JSON text, and an acknowledgement must decode through `incoming` before `isAck` sees it. An unanswered heartbeat closes the socket and enters the retry flow like any close that `session.close()` did not request; without a retry policy the session ends with an `error` (`Error("WebSocket heartbeat timeout")`). A heartbeat that cannot be sent ends the session and is not retried.
 
-The input, builder output, and selected protocols are captured once for the logical session. Each attempt resolves its URL before `beforeConnect`; reconnect can replace the base endpoint, not the captured path/query. `beforeConnect` runs per attempt but does not rebuild a query ticket or subprotocol token after a closure variable changes. Start a new operation with refreshed values when those credentials expire. See [load balancing](load-balancing.md) for endpoint and retry boundaries.
+A server can complete a clean close handshake with application-error code `1011`, so `wasClean: true` does not mean the application succeeded; decide on `context.code`. Every close that `session.close()` did not request is retried by default, a connection that never opened included, and `shouldRetry` can overrule that. Successful opens reset the retry count (default 3 per outage). `attemptTimeoutMs` (a field of the retry options) bounds construction to `open`; setting it alone also enables retries, so write `withRetry({ maxRetries: 0, attemptTimeoutMs })` for a handshake-only deadline. With multiple endpoints, a retry can re-pick; it does not restore application subscriptions or delivery acknowledgments.
+
+The input, builder output, and selected protocols are captured once for the logical session. Each attempt resolves its URL before `beforeConnect`; a retry can replace the base endpoint, not the captured path/query. `beforeConnect` runs per attempt but does not rebuild a query ticket or subprotocol token after a closure variable changes. Start a new operation with refreshed values when those credentials expire. See [load balancing](load-balancing.md) for endpoint and retry boundaries.
 
 ## Session ownership and disposal
 

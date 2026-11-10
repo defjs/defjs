@@ -316,6 +316,17 @@ test("request options replace the client policy and enable retries without one",
   expect(stopped).toHaveBeenCalledTimes(1);
 });
 
+test("a request retry replaces the client policy as a whole, shouldRetry included", async () => {
+  const handle = respond("refused", 200);
+  const shouldRetry = vi.fn((_context: RetryContext) => false);
+  const client = setup(handle, { shouldRetry, maxRetries: 5 });
+  expect(
+    (await get(client({ retry: { delayMs: 0, maxRetries: 1 } })))[0],
+  ).toBeNull();
+  expect(handle).toHaveBeenCalledTimes(2);
+  expect(shouldRetry).not.toHaveBeenCalled();
+});
+
 test("request options keep the budget of the client", async () => {
   const handle = respond("refused");
   const client = setup(handle, {

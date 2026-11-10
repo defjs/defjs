@@ -2,6 +2,7 @@ import type { Balancer } from "../balancer/balancer";
 import { pickFirstBalancer } from "../balancer/balancer";
 import type { Interceptor } from "../interceptor/interceptor";
 import type { HttpRequest } from "../internal/http_request";
+import type { WebSocketHeartbeatConfig } from "../web_socket/web_socket";
 
 /**
  * Serializes an encoded query object into a query string.
@@ -21,7 +22,7 @@ export type QuerySerializer = (query: { [key: string]: unknown }) => string;
  *
  * This is the `(input, init?) => Promise<Response>` call signature Defjs invokes, deliberately not `typeof fetch`, so a mock does not need host extras such as `preconnect`. HTTP calls the untouched platform Fetch as `(url, init)`; a replaced global Fetch or custom handle receives a `Request`. The default resolves the global on each call. SSE always passes a `Request`, including to its default handle.
  *
- * When an HTTP or SSE call through the client rejects with a value that is not a cancellation or timeout shape, the client reports `NET_UNREACHABLE`, whether the value is an `Error` or not. An HTTP call with a retry policy can then move to another endpoint. `fetchHandler` rejects with the value as is.
+ * When an HTTP or SSE call through the client rejects with a value that is not a cancellation or timeout shape, the client reports `NET_UNREACHABLE`, whether the value is an `Error` or not. A call with a retry policy can then retry it. `fetchHandler` rejects with the value as is.
  *
  * Accepted by `withHTTPHandle`, `withSSEHandle`, and `fetchHandler`.
  *
@@ -70,17 +71,14 @@ export type WebSocketHandleConstructor = {
 } & (new (...args: never[]) => WebSocketHandle);
 
 /**
- * Optional WebSocket settings applied when creating a client: constructor, `beforeConnect` hook, heartbeat, protocols, and reconnect policy.
+ * Optional WebSocket settings applied when creating a client: constructor, `beforeConnect` hook, heartbeat, and protocols.
  *
  * - **handle** — WebSocket constructor; defaults to `globalThis.WebSocket`.
  * - **beforeConnect** — Runs before each connect and reconnect attempt.
- * - **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement fails the session and reports `NET_UNREACHABLE` to the balancer. `intervalMs` and `timeoutMs` must be positive and at most 2147483647.
+ * - **heartbeat** — Sends `message()` every `intervalMs`. With `timeoutMs` and `isAck`, a missing acknowledgement counts as a connection failure and reports `NET_UNREACHABLE` to the balancer. See {@link WebSocketHeartbeatConfig}.
  * - **protocols** — Subprotocols passed to the constructor.
- * - **reconnect** — Opt-in. `attempts` defaults to **3**; `0` disables retry, and omitting `attempts` is not unlimited. Other defaults: `delayMs` 1000, `factor` 2, `jitter` 0 (a 0-1 multiplicative factor), `maxDelayMs` 30000. `shouldReconnect` receives the close `code`, `reason`, and `wasClean` and can veto a retry.
  *
- * The retry budget applies per outage. Successful `open` resets the budget, callback attempt, and backoff exponent; the next outage starts at retry 1. `maxDelayMs` caps the final delay after jitter and rounding, also bounded by `2_147_483_647` ms. See {@link withWebSocketReconnect} for validation rules and overflow behavior.
- *
- * Set these with `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols`, and `withWebSocketReconnect`. `WebSocketExecuteOptions` can override `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` per call.
+ * Set these with `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, and `withWebSocketProtocols`. `WebSocketExecuteOptions` can override `beforeConnect`, `heartbeat`, and `protocols` per call. Reconnection comes from the client's `retry` policy, set with `withRetry`; without one a close ends the session.
  *
  * @group client
  */
@@ -92,54 +90,19 @@ export interface ClientWebSocketOptions {
     attempt: number;
     signal: AbortSignal;
   }) => void | Promise<void>;
-  /** Periodic heartbeat ping and optional ACK matching. */
-  heartbeat?: {
-    /** Delay between heartbeat messages. */
-    intervalMs: number;
-    /** Returns whether an incoming message acknowledges the heartbeat. */
-    isAck?: (message: unknown) => boolean;
-    /** Builds the outbound heartbeat payload. */
-    message?: () => unknown;
-    /** Time to wait for an ACK before treating the connection as unhealthy. */
-    timeoutMs?: number;
-  };
+  /** Periodic heartbeat message and optional acknowledgement matching. */
+  heartbeat?: WebSocketHeartbeatConfig;
   /** Subprotocols passed to the WebSocket constructor. */
   protocols?: readonly string[];
-  /** Automatic reconnect policy after unexpected closes. */
-  reconnect?: {
-    /** Positive finite handshake timeout in milliseconds, at most `2_147_483_647`; unset by default. Stops at response headers (SSE) or open (WebSocket). */
-    connectTimeoutMs?: number;
-    /** Retries per outage; a successful open resets the budget. Non-negative safe integer; defaults to 3. `0` disables. */
-    attempts?: number;
-    /** Initial backoff delay in milliseconds. */
-    delayMs?: number;
-    /** Multiplier applied after each failed attempt of the current outage. A successful `open` resets the exponent. */
-    factor?: number;
-    /** Random jitter factor applied to the delay (0–1). */
-    jitter?: number;
-    /** Non-negative cap on the final backoff delay, including jitter; `Infinity` removes the configured cap. */
-    maxDelayMs?: number;
-    /** Return `false` to skip reconnecting for this close. */
-    shouldReconnect?: (context: {
-      attempt: number;
-      cause?: unknown;
-      code?: number;
-      reason?: string;
-      wasClean?: boolean;
-    }) => boolean;
-  };
 }
 
 /**
- * Optional SSE settings applied when creating a client: fetch handle, invalid-event hook, and reconnect policy.
+ * Optional SSE settings applied when creating a client: fetch handle and invalid-event hook.
  *
  * - **handle** — Fetch implementation that opens the stream. The default resolves `globalThis.fetch` on each attempt, including replacements installed after import. Every SSE handle receives a `Request`. Missing global Fetch fails default execution with `ENV_UNSUPPORTED`; a custom handle remains usable.
  * - **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.
- * - **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. A 502, 503, or 504 handshake is retried like a refused connection; other non-2xx handshakes are fatal. An `id:` field updates a buffer; the reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message. A stream ending before that blank line leaves the cursor unchanged. Reconnect sends the committed ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it at that blank line and an ID containing NUL is ignored.
  *
- * Reconnect options are validated before interceptors or Fetch: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs.
- *
- * Set these with `withSSEHandle`, `withSSEOnInvalidEvent`, and `withSSEReconnect`. Omitting `withSSEReconnect` disables retry.
+ * Set these with `withSSEHandle` and `withSSEOnInvalidEvent`. Retries come from the client's `retry` policy, set with `withRetry`; without one a failed stream is not retried.
  *
  * @group client
  */
@@ -153,35 +116,6 @@ export interface ClientSSEOptions {
     cause?: unknown;
     signal: AbortSignal;
   }) => unknown;
-  /** Automatic reconnect policy after stream failures. */
-  reconnect?: {
-    /** Positive finite handshake timeout in milliseconds, at most `2_147_483_647`; unset by default. Stops at response headers (SSE) or open (WebSocket). */
-    connectTimeoutMs?: number;
-    /** Retries per outage; a successful handshake resets the budget. Non-negative safe integer; defaults to 3. `0` disables. */
-    attempts?: number;
-    /** Initial backoff delay in milliseconds, finite and non-negative. Defaults to 1000. */
-    delayMs?: number;
-    /** Finite positive multiplier per failed retry, reset after a successful handshake. Defaults to 1. */
-    factor?: number;
-    /** Finite random jitter factor applied to the delay (0–1). Defaults to 0. */
-    jitter?: number;
-    /** Non-negative cap on the final delay, including jitter; no configured cap when omitted or `Infinity`. */
-    maxDelayMs?: number;
-    /**
-     * Without this callback only `GET`, `HEAD`, `OPTIONS`, `PUT` and `DELETE` reconnect. With it, the result decides
-     * for every method. It is never called for a `ReadableStream` body.
-     */
-    shouldReconnect?: (context: {
-      attempt: number;
-      cause?: unknown;
-      lastEventId: string;
-      method: string;
-      open?: {
-        response: { status: number; statusText: string; url: string };
-        url: string;
-      };
-    }) => boolean | Promise<boolean>;
-  };
 }
 
 /**
@@ -365,9 +299,9 @@ export interface HttpClientOptions {
 export interface ClientOptions extends HttpClientOptions {
   /** Opt-in retry policy shared by HTTP, SSE, and WebSocket. */
   retry?: RetryOptions;
-  /** SSE transport and reconnect options. */
+  /** SSE transport options. */
   sse?: ClientSSEOptions;
-  /** WebSocket transport, heartbeat, and reconnect options. */
+  /** WebSocket transport and heartbeat options. */
   webSocket?: ClientWebSocketOptions;
 }
 
@@ -447,7 +381,6 @@ export const DEFAULT_HTTP_OPTIONS: { handle: FetchHandle } = {
 export const DEFAULT_SSE_OPTIONS: ClientSSEConfig = {
   handle: DEFAULT_FETCH,
   onInvalidEvent: undefined,
-  reconnect: undefined,
 };
 
 export function createHttpClientConfig(): HttpClientConfig {
@@ -477,14 +410,12 @@ export function createClientConfig(): ClientConfig {
     sse: {
       handle: DEFAULT_SSE_OPTIONS.handle,
       onInvalidEvent: DEFAULT_SSE_OPTIONS.onInvalidEvent,
-      reconnect: DEFAULT_SSE_OPTIONS.reconnect,
     },
     webSocket: {
       handle: globalThis.WebSocket,
       beforeConnect: undefined,
       heartbeat: undefined,
       protocols: undefined,
-      reconnect: undefined,
     },
   };
 }

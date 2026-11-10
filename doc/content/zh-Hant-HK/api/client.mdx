@@ -91,11 +91,9 @@ description: createClient、選項輔助函式，同 Client 型別。
 
 ### SSE 調校選項
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### WebSocket 調校選項
 
@@ -105,9 +103,7 @@ description: createClient、選項輔助函式，同 Client 型別。
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
-
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
 ## 型別
 
@@ -237,7 +233,7 @@ SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 even
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
 獨立於端點選擇，啟用同一次呼叫入面嘅 HTTP 重試。省略 `withRetry` 代表一次 attempt，亦冇預算。`withRetry()` 等同 `withRetry({})`，預設係 `maxAttempts: 2`（包括最初嗰次）、`on: ["connect-failure"]`，以及安全 method `GET`、`HEAD`、`OPTIONS`、`TRACE`。method 名唔分大小寫；`[]` 停用重試。`maxAttempts` 係至少為 1 嘅安全整數，而且每個端點最多試一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` 解碼拒絕嘅 gateway body；`"attempt-timeout"` 用 `attemptTimeoutMs`。streaming request body 永遠唔會重試。
 

@@ -6,7 +6,7 @@ import {
   struct,
   withBalancer,
   withEndpoint,
-  withSSEReconnect,
+  withRetry,
 } from "../src";
 import type { Balancer, DoneInfo, PickFaultCode } from "../src";
 import { fixture } from "./fixture/client-auto";
@@ -90,7 +90,7 @@ test("real SSE 503 handshake reports NET_UNAVAILABLE to end and done", async () 
   const client = createClient(
     withEndpoint(url),
     withBalancer(h.balancer),
-    withSSEReconnect({ attempts: 0 }),
+    withRetry({ maxRetries: 0 }),
   );
   const [fault] = await defineEventStream({ path: "/", events: {} })(client);
   expect(fault?.code).toBe("HTTP_STATUS");

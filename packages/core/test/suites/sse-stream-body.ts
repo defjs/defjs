@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, inject, test, vi } from "vitest";
 import {
   createClient,
   withEndpoint,
-  withSSEReconnect,
+  withRetry,
 } from "../../src/client/index.ts";
 import type { Client } from "../../src/client/index.ts";
 import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "../../src/http/transport/fetch_init.ts";
@@ -65,10 +65,10 @@ export function registerSseStreamBodySuite(
           controller.close();
         },
       });
-      const shouldReconnect = vi.fn(() => true);
+      const shouldRetry = vi.fn(() => true);
       const client = createClient(
         withEndpoint(inject("testServerHost")),
-        withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+        withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
       );
       const useStream = defineEventStream({
         builder: () => ({ body: stream }),
@@ -81,7 +81,7 @@ export function registerSseStreamBodySuite(
       const hits = await missHits(client, path);
 
       expect(events).toBeUndefined();
-      expect(shouldReconnect).toHaveBeenCalledTimes(0);
+      expect(shouldRetry).toHaveBeenCalledTimes(0);
       if (uploadOutcome(cap, "ReadableStream", "platform") === "unsupported") {
         expect(error?.code).toBe("ENV_UNSUPPORTED");
         expect(error?.cause).toBe(ERR_STREAMING_REQUEST_UNSUPPORTED);

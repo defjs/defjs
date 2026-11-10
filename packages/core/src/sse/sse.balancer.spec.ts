@@ -1,5 +1,6 @@
 import { afterEach, expect, inject, test, vi } from "vitest";
 import type { Balancer, DoneInfo, PickInfo, PickOutcome } from "../balancer";
+import type { RetryContext } from "../client/config";
 import { outlierDetection, pickFirstBalancer } from "../balancer";
 import {
   createClient,
@@ -8,7 +9,7 @@ import {
   withInterceptors,
   withSSEHandle,
   withSSEOnInvalidEvent,
-  withSSEReconnect,
+  withRetry,
 } from "../client";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createPreflightFault } from "../error/factory";
@@ -26,7 +27,7 @@ import type {
 } from "../../test/fixture/types";
 
 const SSE_HEADERS: FixtureHeaders = { "content-type": "text/event-stream" };
-const RECONNECT = { attempts: 1, delayMs: 0, factor: 1 };
+const RECONNECT = { maxRetries: 1, delayMs: 0, factor: 1 };
 const EVENT_HOLD: ScriptStep = {
   status: 200,
   headers: SSE_HEADERS,
@@ -189,7 +190,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const client = createClient(
     withEndpoint(primary.url, secondary.url),
     withBalancer(recorded.balancer),
-    withSSEReconnect(RECONNECT),
+    withRetry(RECONNECT),
   );
   const [error, stream] = await orders(client);
   expect(error).toBeNull();
@@ -222,7 +223,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const eofClient = createClient(
     withEndpoint(eof.url),
     withBalancer(eofRecord.balancer),
-    withSSEReconnect(RECONNECT),
+    withRetry(RECONNECT),
   );
   const [eofError, eofStream] = await orders(eofClient);
   expect(eofError).toBeNull();
@@ -262,7 +263,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
       createClient(
         withEndpoint(server.url),
         withBalancer(terminal.balancer),
-        withSSEReconnect(RECONNECT),
+        withRetry(RECONNECT),
       ),
     );
     expect(terminalError?.code).not.toBeUndefined();
@@ -287,7 +288,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     createClient(
       withEndpoint(huge.url),
       withBalancer(hugeRecord.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(hugeError).toBeNull();
@@ -323,7 +324,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     createClient(
       withEndpoint(postServer.url),
       withBalancer(postRecord.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(postError).toBeNull();
@@ -337,7 +338,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     createClient(
       withEndpoint(allowed.url),
       withBalancer(allowedRecord.balancer),
-      withSSEReconnect({ ...RECONNECT, shouldReconnect: () => true }),
+      withRetry({ ...RECONNECT, shouldRetry: () => true }),
     ),
   );
   expect(allowedError).toBeNull();
@@ -352,7 +353,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     createClient(
       withEndpoint(held.url),
       withBalancer(cancelRecord.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     )({ signal: controller.signal }),
   );
   await held.seen(1);
@@ -377,7 +378,7 @@ test.each([false, true])(
     });
     const client = createClient(
       withEndpoint(primary.url, secondary.url),
-      ...(reconnect ? [withSSEReconnect(RECONNECT)] : []),
+      ...(reconnect ? [withRetry(RECONNECT)] : []),
     );
     const [error, stream, open] = await orders(client);
     expect(error).toBeNull();
@@ -566,7 +567,7 @@ test("keeps read failures on a replaced base and a second next unattributed", as
     createClient(
       withEndpoint(primary),
       withBalancer(replaced.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
       withSSEHandle((input) => {
         seen.push(new Request(input).url);
         return Promise.resolve(
@@ -658,7 +659,7 @@ test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async (
     createClient(
       withEndpoint(down.url),
       withBalancer(recorded.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(error?.code).toBe("REQ_BUILD_FAILED");
@@ -682,7 +683,7 @@ test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async (
     createClient(
       withEndpoint(down.url),
       withBalancer(options.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(optionError?.code).toBe("REQ_OPTIONS_INVALID");
@@ -701,7 +702,7 @@ test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open"
     createClient(
       withEndpoint(dropped.url),
       withBalancer(recorded.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(error).toBeNull();
@@ -732,7 +733,7 @@ test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open"
     createClient(
       withEndpoint(dropped.url),
       withBalancer(options.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(optionError).toBeNull();
@@ -752,7 +753,7 @@ test("calls done once when a reconnect url fails and releases the in-flight coun
     createClient(
       withEndpoint(down.url, bad),
       withBalancer(recorded.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(error?.code).toBe("REQ_BUILD_FAILED");
@@ -770,7 +771,7 @@ test("calls done once when a reconnect url fails and releases the in-flight coun
     createClient(
       withEndpoint(opened.url, bad),
       withBalancer(afterOpen.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(openError).toBeNull();
@@ -974,7 +975,7 @@ test("calls done once when sseHandler sees a replaced base and does not record i
     createClient(
       withEndpoint(origin.url),
       withBalancer(recorded.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
       withInterceptors(
         createSSEInterceptor((req, next) => {
           req.baseEndpoint = replaced.url;
@@ -988,7 +989,7 @@ test("calls done once when sseHandler sees a replaced base and does not record i
   expect(open?.response.status).toBe(503);
   expect(await origin.requests()).toHaveLength(0);
   // An unattributed 503 is retried on the same base, like the refused connection below.
-  expect(await replaced.requests()).toHaveLength(RECONNECT.attempts + 1);
+  expect(await replaced.requests()).toHaveLength(RECONNECT.maxRetries + 1);
   expect(recorded.dones).toEqual([
     { endpoint: origin.url, info: { attempted: false } },
   ]);
@@ -1001,7 +1002,7 @@ test("calls done once when sseHandler sees a replaced base and does not record i
     createClient(
       withEndpoint(origin.url),
       withBalancer(again.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
       withInterceptors(
         createSSEInterceptor((req, next) => {
           req.baseEndpoint = dropping.url;
@@ -1037,7 +1038,7 @@ test("does not pick or call done for a second next, and repicks the first stream
       withEndpoint("https://example.com"),
       withBalancer(recorded.balancer),
       withSSEHandle(handle),
-      withSSEReconnect({ attempts: 1, delayMs: 1000, factor: 1 }),
+      withRetry({ maxRetries: 1, delayMs: 1000, factor: 1, jitter: 0 }),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
           const first = next(req);
@@ -1418,13 +1419,13 @@ test.each([502, 503, 504])(
       headers: SSE_HEADERS,
       body: "data: recovered\n\n",
     });
-    const shouldReconnect = vi.fn((_context: unknown) => true);
+    const shouldRetry = vi.fn((_context: unknown) => true);
     const startup = track((index) => (index === 1 ? busy.url : healthy.url));
     const [error, stream, open] = await orders(
       createClient(
         withEndpoint(busy.url, healthy.url),
         withBalancer(startup.balancer),
-        withSSEReconnect({ ...RECONNECT, shouldReconnect }),
+        withRetry({ ...RECONNECT, shouldRetry }),
       ),
     );
     expect(error).toBeNull();
@@ -1441,8 +1442,8 @@ test.each([502, 503, 504])(
       },
       { endpoint: healthy.url, info: { attempted: true, status: 200 } },
     ]);
-    expect(shouldReconnect).toHaveBeenCalledOnce();
-    expect(shouldReconnect.mock.calls[0]?.[0]).toMatchObject({
+    expect(shouldRetry).toHaveBeenCalledOnce();
+    expect(shouldRetry.mock.calls[0]?.[0]).toMatchObject({
       attempt: 1,
       cause: { code: "HTTP_STATUS", status },
       open: { response: { status } },
@@ -1458,7 +1459,7 @@ test.each([502, 503, 504])(
       createClient(
         withEndpoint(primary.url, busy.url, healthy.url),
         withBalancer(reconnecting.balancer),
-        withSSEReconnect({ ...RECONNECT, attempts: 2 }),
+        withRetry({ ...RECONNECT, maxRetries: 2 }),
       ),
     );
     expect(openError).toBeNull();
@@ -1507,7 +1508,7 @@ test("default pick-first moves past a 503 reconnect handshake back to the recove
   const [error, stream] = await orders(
     createClient(
       withEndpoint(flaky.url, busy.url),
-      withSSEReconnect({ ...RECONNECT, attempts: 3 }),
+      withRetry({ ...RECONNECT, maxRetries: 3 }),
     ),
   );
   expect(error).toBeNull();
@@ -1526,16 +1527,17 @@ test("default pick-first moves past a 503 reconnect handshake back to the recove
 });
 
 test.each([400, 401, 404])(
-  "keeps a %s handshake fatal at startup and after a drop with reconnect enabled",
+  "does not retry a %s handshake by default, at startup or after a drop",
   async (status) => {
     const rejecting = await listen("respond", { status, body: "no" });
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn((context: RetryContext) => context.retryable);
+    const retry = { ...RECONNECT, maxRetries: 2, shouldRetry };
     const startup = track(() => rejecting.url);
     const [error, stream, open] = await orders(
       createClient(
         withEndpoint(rejecting.url),
         withBalancer(startup.balancer),
-        withSSEReconnect({ ...RECONNECT, shouldReconnect }),
+        withRetry(retry),
       ),
     );
     expect(stream).toBeUndefined();
@@ -1546,7 +1548,15 @@ test.each([400, 401, 404])(
     expect(startup.dones).toEqual([
       { endpoint: rejecting.url, info: { attempted: true, status } },
     ]);
-    expect(shouldReconnect).not.toHaveBeenCalled();
+    // The policy is asked, and the default verdict for this status is no retry.
+    expect(shouldRetry).toHaveBeenCalledOnce();
+    expect(shouldRetry.mock.calls[0]?.[0]).toMatchObject({
+      transport: "sse",
+      attempt: 1,
+      retryable: false,
+      status,
+    });
+    shouldRetry.mockClear();
 
     const primary = await listen("script", { plan: [EVENT_HOLD] });
     const reconnecting = track((index) =>
@@ -1556,7 +1566,7 @@ test.each([400, 401, 404])(
       createClient(
         withEndpoint(primary.url, rejecting.url),
         withBalancer(reconnecting.balancer),
-        withSSEReconnect({ ...RECONNECT, shouldReconnect }),
+        withRetry(retry),
       ),
     );
     expect(openError).toBeNull();
@@ -1576,7 +1586,9 @@ test.each([400, 401, 404])(
     if (closed.kind !== "error") throw new Error("expected an error close");
     expect(failure).toBe(closed.cause);
     expect(opened.open.response.status).toBe(status);
-    expect(shouldReconnect).toHaveBeenCalledOnce();
+    expect(
+      shouldRetry.mock.calls.map(([context]) => context.retryable),
+    ).toEqual([true, false]);
     expect(reconnecting.picks).toHaveLength(2);
     expect(await rejecting.requests()).toHaveLength(2);
     expect(reconnecting.pending()).toBe(0);
@@ -1589,10 +1601,10 @@ test("ends exhausted 503 retries with the HTTP_STATUS fault of a failed first ha
     createClient(withEndpoint(busy.url)),
   );
   const [exhausted, stream, open] = await orders(
-    createClient(withEndpoint(busy.url), withSSEReconnect(RECONNECT)),
+    createClient(withEndpoint(busy.url), withRetry(RECONNECT)),
   );
   expect(stream).toBeUndefined();
-  expect(await busy.requests()).toHaveLength(1 + RECONNECT.attempts + 1);
+  expect(await busy.requests()).toHaveLength(1 + RECONNECT.maxRetries + 1);
   expect(plain).toMatchObject({ code: "HTTP_STATUS", status: 503 });
   expect(exhausted).toMatchObject({ code: "HTTP_STATUS", status: 503 });
   expect(exhausted?.message).toBe(plain?.message);
@@ -1605,7 +1617,7 @@ test("ends exhausted 503 retries with the HTTP_STATUS fault of a failed first ha
     createClient(
       withEndpoint(primary.url, busy.url),
       withBalancer(reconnecting.balancer),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(openError).toBeNull();
@@ -1650,7 +1662,7 @@ test("reports only the last startup attempt after a retried 503", async () => {
           ? Promise.resolve(new Response("busy", { status: 503 }))
           : Promise.reject(new TypeError("connection refused"));
       }),
-      withSSEReconnect(RECONNECT),
+      withRetry(RECONNECT),
     ),
   );
   expect(stream).toBeUndefined();
@@ -1671,15 +1683,15 @@ test("applies the reconnect gates to a 503 handshake", async () => {
   });
   for (const [definition, reconnect] of [
     [post, RECONNECT],
-    [orders, { ...RECONNECT, shouldReconnect: () => false }],
-    [orders, { ...RECONNECT, attempts: 0 }],
+    [orders, { ...RECONNECT, shouldRetry: () => false }],
+    [orders, { ...RECONNECT, maxRetries: 0 }],
   ] as const) {
     busy.mockClear();
     const [error] = await definition(
       createClient(
         withEndpoint("https://example.com"),
         withSSEHandle(busy),
-        withSSEReconnect(reconnect),
+        withRetry(reconnect),
       ),
     );
     expect(error).toMatchObject({ code: "HTTP_STATUS", status: 503 });

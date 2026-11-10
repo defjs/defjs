@@ -178,7 +178,7 @@ const retrySafeReads = createHttpInterceptor(async (request, next) => {
 });
 ```
 
-This `next()` loop stays on the selected endpoint without rerunning the builder or outer auth. For gateway failover, prefer `withRetry({ on: ["gateway-error"] })`; stacking the layers can send three primary requests plus one backup request with `maxAttempts: 2`. See [load balancing](load-balancing.md) before composing policies.
+This `next()` loop stays on the selected endpoint without rerunning the builder or outer auth. For failover to another endpoint, prefer `withRetry()`; stacking the layers can send three primary requests plus one backup request with `maxRetries: 1`. See [load balancing](load-balancing.md) before composing policies.
 
 ## Short-circuiting and ETag caching
 
@@ -186,7 +186,7 @@ An HTTP interceptor can return a synthetic response with `makeResponse({ status,
 
 ## SSE and WebSocket interceptors
 
-- Calling an SSE interceptor's `next()` repeatedly disables endpoint attribution and re-picking for replacement streams; prefer `withSSEReconnect`. The `next()` here is the interceptor's, not the event iterator's.
+- Calling an SSE interceptor's `next()` repeatedly disables endpoint attribution and re-picking for replacement streams; prefer `withRetry`. The `next()` here is the interceptor's, not the event iterator's.
 - `createSSEInterceptor((request, next) => ...)`: wraps SSE connection startup and returns an `EventStreamHandle`.
 - `createWebSocketInterceptor((request, next) => ...)`: wraps WebSocket session startup and returns a `WebSocketSessionLike`.
 - Any wrapper or short-circuit handle/session must implement `[Symbol.asyncDispose]()` and forward to the same `close` / `closed` teardown lifecycle.

@@ -1,51 +1,22 @@
-import type { BackoffConfig } from "../internal/backoff";
-import type { ClientWebSocketOptions, RetryOptions } from "./config";
-
-/** Plain fixed-configuration record. Falsy values and non-objects pass through. */
-function isShapeRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-type ReconnectSnapshot<TCallback> = Partial<BackoffConfig> & {
-  attempts?: number;
-  connectTimeoutMs?: number;
-  shouldReconnect?: TCallback;
-};
-
-/** Copies the known WebSocket heartbeat fields. Callbacks keep their identity. */
-export function snapshotHeartbeat(
-  value: ClientWebSocketOptions["heartbeat"],
-): ClientWebSocketOptions["heartbeat"] {
-  if (!isShapeRecord(value)) {
-    return value;
-  }
-  return {
-    intervalMs: value.intervalMs,
-    isAck: value.isAck,
-    message: value.message,
-    timeoutMs: value.timeoutMs,
-  };
-}
+import type { WebSocketHeartbeatConfig } from "../web_socket/web_socket";
+import type { RetryOptions } from "./config";
 
 /**
- * Copies the known reconnect fields shared by WebSocket and SSE policies.
- * `shouldReconnect` keeps its identity and is not called.
+ * Copies the known WebSocket heartbeat fields. Callbacks keep their identity.
+ * Each field is read once, so a getter runs when the option is applied.
  */
-export function snapshotReconnect<TCallback>(
-  value: ReconnectSnapshot<TCallback> | undefined,
-): ReconnectSnapshot<TCallback> | undefined {
-  if (!isShapeRecord(value)) {
+export function snapshotHeartbeat(
+  value: WebSocketHeartbeatConfig | undefined,
+): WebSocketHeartbeatConfig | undefined {
+  if (value === undefined) {
     return value;
   }
-  return {
-    attempts: value.attempts,
-    connectTimeoutMs: value.connectTimeoutMs,
-    delayMs: value.delayMs,
-    factor: value.factor,
-    jitter: value.jitter,
-    maxDelayMs: value.maxDelayMs,
-    shouldReconnect: value.shouldReconnect,
-  };
+  const { intervalMs, isAck, message, timeoutMs } = value;
+  // The union ties `isAck` to `timeoutMs`, so each return is built from the member that the check narrowed.
+  if (timeoutMs === undefined) {
+    return { intervalMs, isAck, message, timeoutMs };
+  }
+  return { intervalMs, isAck, message, timeoutMs };
 }
 
 function isProtocolList(

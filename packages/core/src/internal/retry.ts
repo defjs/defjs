@@ -49,7 +49,7 @@ export function isRetryMethod(policy: RetryPolicy, method: string): boolean {
 }
 
 /** Whether `retried` retries since the last established connection still leave room for one more. */
-export function hasRetriesLeft(policy: RetryPolicy, retried: number): boolean {
+function hasRetriesLeft(policy: RetryPolicy, retried: number): boolean {
   return retried < policy.maxRetries;
 }
 

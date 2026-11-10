@@ -8,7 +8,7 @@ import {
   withInterceptors,
   withSSEHandle,
   withSSEOnInvalidEvent,
-  withSSEReconnect,
+  withRetry,
 } from "../client";
 import type { Client } from "../client";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
@@ -31,7 +31,6 @@ function createSSEClientFromText(
   text: string,
   options?: {
     onInvalidEvent?: Parameters<typeof withSSEOnInvalidEvent>[0];
-    reconnect?: Parameters<typeof withSSEReconnect>[0];
   },
 ): Client {
   const handle = withSSEHandle(() =>
@@ -55,7 +54,6 @@ function createSSEClientFromText(
     withEndpoint("https://api.example.com"),
     handle,
     withSSEOnInvalidEvent(options?.onInvalidEvent),
-    withSSEReconnect(options?.reconnect),
   );
 }
 
@@ -2489,7 +2487,7 @@ describe("sse reconnect method policy", () => {
     path: "/events",
   });
 
-  test("should not reconnect a POST body without shouldReconnect", async () => {
+  test("should not reconnect a POST body without shouldRetry", async () => {
     const failure = new TypeError("network down");
     const handle = vi.fn(() => {
       return Promise.resolve(
@@ -2502,7 +2500,7 @@ describe("sse reconnect method policy", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
-      withSSEReconnect({ attempts: 2, delayMs: 0 }),
+      withRetry({ maxRetries: 2, delayMs: 0 }),
     );
 
     const [fault, stream] = await usePost(client);
@@ -2517,7 +2515,7 @@ describe("sse reconnect method policy", () => {
     expect(handle).toHaveBeenCalledTimes(1);
   });
 
-  test("should reconnect POST when shouldReconnect allows the method", async () => {
+  test("should reconnect POST when shouldRetry allows the method", async () => {
     const failure = new TypeError("network down");
     const bodies: string[] = [];
     const lastEventIds: Array<string | null> = [];
@@ -2539,11 +2537,13 @@ describe("sse reconnect method policy", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
-      withSSEReconnect({
-        attempts: 2,
+      withRetry({
+        maxRetries: 2,
         delayMs: 0,
-        shouldReconnect: ({ attempt, method }) =>
-          method === "POST" && attempt < 2,
+        shouldRetry: (context) =>
+          context.transport === "sse" &&
+          context.method === "POST" &&
+          context.attempt < 2,
       }),
     );
 
@@ -2582,10 +2582,10 @@ describe("sse reconnect method policy", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
-      withSSEReconnect({
-        attempts: 2,
+      withRetry({
+        maxRetries: 2,
         delayMs: 0,
-        shouldReconnect: ({ attempt }) => attempt < 3,
+        shouldRetry: ({ attempt }) => attempt < 3,
       }),
     );
 
@@ -2634,7 +2634,7 @@ describe("sse reconnect method policy", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
-      withSSEReconnect({ attempts: 1, delayMs: 0 }),
+      withRetry({ maxRetries: 1, delayMs: 0 }),
     );
     const useGet = defineEventStream({
       events: { message: struct.string() },

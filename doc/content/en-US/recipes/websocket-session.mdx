@@ -34,5 +34,5 @@ With a server that replies to `{ "type": "subscribe", "symbol": "ACME" }` with `
 ACME 142.5
 ```
 
-- Both reconnect (`withWebSocketReconnect`) and heartbeat (`withWebSocketHeartbeat`) are opt-in on the client.
+- Both reconnection (`withRetry`) and heartbeat (`withWebSocketHeartbeat`) are opt-in on the client.
 - Browser WebSockets cannot send arbitrary HTTP headers during the upgrade handshake; use cookies, subprotocols, or short-lived tickets instead. See [WebSocket sessions](/docs/web-socket).

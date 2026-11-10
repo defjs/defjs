@@ -11,6 +11,7 @@ import {
 vi.mock("../../internal/backoff", { spy: true });
 
 import { wait } from "../../internal/backoff";
+import { resolveRetryPolicy } from "../../internal/retry";
 import { method } from "../../../test/method";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
 import { struct } from "../../struct";
@@ -84,7 +85,7 @@ function scriptedConnection(
 describe("fetchEventStream", () => {
   test("should reset the retry budget and first delay after each successful reconnect handshake", async () => {
     const timer = vi.mocked(wait);
-    const shouldReconnect = vi.fn((_context: { attempt: number }) => true);
+    const shouldRetry = vi.fn((_context: { attempt: number }) => true);
     let requests = 0;
     try {
       vi.useFakeTimers();
@@ -105,7 +106,13 @@ describe("fetchEventStream", () => {
               ),
             );
           },
-          reconnect: { attempts: 1, delayMs: 10, factor: 2, shouldReconnect },
+          retry: resolveRetryPolicy({
+            maxRetries: 1,
+            delayMs: 10,
+            factor: 2,
+            jitter: 0,
+            shouldRetry,
+          }),
         },
       );
       const consumed = (async () => {
@@ -120,7 +127,7 @@ describe("fetchEventStream", () => {
       await expect(consumed).resolves.toEqual(["1", "2", "3", "4", "5"]);
       expect(requests).toBe(5);
       expect(
-        shouldReconnect.mock.calls.map(([context]) => context.attempt),
+        shouldRetry.mock.calls.map(([context]) => context.attempt),
       ).toEqual([1, 1, 1, 1]);
       expect(timer.mock.calls.map((call) => call[0])).toEqual([10, 10, 10, 10]);
       await expect(stream.closed).resolves.toEqual({ kind: "eof" });
@@ -147,7 +154,7 @@ describe("fetchEventStream", () => {
               : scriptedConnection(["data: recovered\n\n"], "eof"),
           );
         },
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
       },
     );
     const messages: string[] = [];
@@ -180,7 +187,11 @@ describe("fetchEventStream", () => {
       },
       {
         fetch,
-        reconnect: { attempts: 1, delayMs: 0, shouldReconnect: policy },
+        retry: resolveRetryPolicy({
+          maxRetries: 2,
+          delayMs: 0,
+          shouldRetry: policy,
+        }),
       },
     );
     const iterator = stream[Symbol.asyncIterator]();
@@ -278,7 +289,7 @@ describe("fetchEventStream", () => {
       onerror() {
         return 0;
       },
-      reconnect: { attempts: 3, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
     });
 
     const messages: EventStreamMessage[] = [];
@@ -334,7 +345,7 @@ describe("fetchEventStream", () => {
       onerror() {
         return 0;
       },
-      reconnect: { attempts: 3, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
     });
     const messages: string[] = [];
     for await (const event of stream) {
@@ -379,7 +390,7 @@ describe("fetchEventStream", () => {
       onerror() {
         return 0;
       },
-      reconnect: { attempts: 10, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 10, delayMs: 0 }),
     });
     const messages: string[] = [];
     for await (const event of stream) {
@@ -435,7 +446,7 @@ describe("fetchEventStream", () => {
       onerror() {
         return 0;
       },
-      reconnect: { attempts: 10, delayMs: 0 },
+      retry: resolveRetryPolicy({ maxRetries: 10, delayMs: 0 }),
     });
     const messages: [data: string, id: string][] = [];
     for await (const event of stream) {
@@ -595,14 +606,14 @@ describe("SSE final endpoint attribution", () => {
   });
 
   test.each(["false", "throw", "reject"])(
-    "keeps one physical read failure when shouldReconnect returns %s",
+    "keeps one physical read failure when shouldRetry returns %s",
     async (policy) => {
       const done = vi.fn();
       const pickNext = vi.fn(() => {
         throw new Error("unexpected reconnect");
       });
       const policyError = new TypeError("application policy");
-      const shouldReconnect = vi.fn(() => {
+      const shouldRetry = vi.fn(() => {
         if (policy === "throw") throw policyError;
         if (policy === "reject") return Promise.reject(policyError);
         return false;
@@ -616,14 +627,14 @@ describe("SSE final endpoint attribution", () => {
         {
           fetch: () => Promise.resolve(scriptedConnection([], "drop")),
           endpointAttempt: { done, pickNext },
-          reconnect: { attempts: 1, delayMs: 0, shouldReconnect },
+          retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0, shouldRetry }),
         },
       );
       expect(await stream.closed).toMatchObject({
         kind: "error",
         code: "NET_UNREACHABLE",
       });
-      expect(shouldReconnect).toHaveBeenCalledOnce();
+      expect(shouldRetry).toHaveBeenCalledOnce();
       expect(pickNext).not.toHaveBeenCalled();
       expect(done).toHaveBeenCalledExactlyOnceWith({
         attempted: true,
@@ -717,7 +728,11 @@ describe("SSE final endpoint attribution", () => {
           {
             fetch: () => Promise.resolve(response),
             endpointAttempt: { done, pickNext },
-            reconnect: { attempts: 1, delayMs: 0, shouldReconnect: policy },
+            retry: resolveRetryPolicy({
+              maxRetries: 1,
+              delayMs: 0,
+              shouldRetry: policy,
+            }),
             handshakeError:
               mode === "handshake-body" ? struct.string() : undefined,
             maxBufferSize: mode === "parser" ? 8 : 1024,
@@ -784,7 +799,7 @@ describe("unsupported streaming request body", () => {
       },
     });
     const onerror = vi.fn(() => undefined);
-    const shouldReconnect = vi.fn(() => false);
+    const shouldRetry = vi.fn(() => false);
     const fetch = vi.fn(() =>
       Promise.resolve(new Response(null, { status: 204 })),
     );
@@ -798,13 +813,13 @@ describe("unsupported streaming request body", () => {
       {
         fetch: fetch,
         onerror,
-        reconnect: { delayMs: 60_000, shouldReconnect },
+        retry: resolveRetryPolicy({ delayMs: 60_000, shouldRetry }),
       },
     );
 
     await expect(pending).rejects.toBe(ERR_STREAMING_REQUEST_UNSUPPORTED);
     expect(onerror).toHaveBeenCalledTimes(0);
-    expect(shouldReconnect).toHaveBeenCalledTimes(0);
+    expect(shouldRetry).toHaveBeenCalledTimes(0);
     expect(fetch).toHaveBeenCalledTimes(0);
     expect(body.locked).toBe(false);
   });

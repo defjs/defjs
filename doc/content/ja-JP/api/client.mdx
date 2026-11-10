@@ -91,11 +91,9 @@ Fetch（HTTP/SSE）または WebSocket コンストラクタを差し替えま�
 
 ### SSE の設定
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### WebSocket の設定
 
@@ -105,9 +103,7 @@ Fetch（HTTP/SSE）または WebSocket コンストラクタを差し替えま�
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
-
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
 ## 型
 
@@ -237,7 +233,7 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
 エンドポイント選択とは独立に、同一呼び出し内の HTTP リトライを有効にします。`withRetry` を省くと試行は 1 回で、リトライバジェットもありません。`withRetry()` は `withRetry({})` と同等で、デフォルトは、最初の試行を含む `maxAttempts: 2`、`on: ["connect-failure"]`、安全なメソッド `GET`、`HEAD`、`OPTIONS`、`TRACE` です。メソッド名は大文字小文字を区別しません。`[]` はリトライを無効にします。`maxAttempts` は 1 以上の安全な整数で、各エンドポイントは多くて 1 回だけ試されます。`"gateway-error"` は `NET_UNAVAILABLE`（HTTP 502/503/504）と、`RES_*` のデコードで拒否されたゲートウェイボディを含みます。`"attempt-timeout"` は `attemptTimeoutMs` を使います。ストリーミングのリクエストボディはリトライされません。
 

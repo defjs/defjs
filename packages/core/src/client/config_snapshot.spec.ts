@@ -21,12 +21,11 @@ import {
   withEndpoint,
   withHTTPHandle,
   withInterceptors,
+  withRetry,
   withSSEHandle,
-  withSSEReconnect,
   withWebSocketHandle,
   withWebSocketHeartbeat,
   withWebSocketProtocols,
-  withWebSocketReconnect,
 } from "./option";
 
 function isEventDictionary(value: unknown): value is { tick?: AnyStruct } {
@@ -95,7 +94,7 @@ describe("optional request options", () => {
       onDownloadProgress: undefined,
       onUploadProgress: undefined,
       protocols: undefined,
-      reconnect: undefined,
+      retry: undefined,
       signal: undefined,
     });
     expect(base(empty)[CLIENT].options).not.toBe(empty);
@@ -156,12 +155,12 @@ describe("optional request options", () => {
 });
 
 describe("request option snapshots", () => {
-  test("keeps captured heartbeat, reconnect, and protocols after the source changes", async () => {
+  test("keeps captured heartbeat, retry, and protocols after the source changes", async () => {
     vi.useFakeTimers();
     const opened = recordingSocket();
     const message = () => ({ type: "ping" as const });
     const isAck = () => false;
-    const shouldReconnect = () => false;
+    const shouldRetry = () => false;
     const signal = new AbortController().signal;
     const beforeConnect = () => undefined;
     const heartbeat: {
@@ -176,7 +175,7 @@ describe("request option snapshots", () => {
       timeoutMs: 30,
     };
     const protocols = ["v1"];
-    const reconnect = { attempts: 1, delayMs: 0, shouldReconnect };
+    const retry = { maxRetries: 1, delayMs: 0, shouldRetry };
     const base = createClient(
       withEndpoint("https://example.test"),
       withWebSocketHandle(opened.Socket),
@@ -185,11 +184,11 @@ describe("request option snapshots", () => {
       beforeConnect,
       heartbeat,
       protocols,
-      reconnect,
+      retry,
       signal,
     });
     const stored = derived[CLIENT].options;
-    if (!stored?.heartbeat || !stored.reconnect || !stored.protocols) {
+    if (!stored?.heartbeat || !stored.retry || !stored.protocols) {
       throw new Error("Expected captured nested options");
     }
 
@@ -197,17 +196,17 @@ describe("request option snapshots", () => {
     expect(stored.beforeConnect).toBe(beforeConnect);
     expect(stored.heartbeat.message).toBe(message);
     expect(stored.heartbeat.isAck).toBe(isAck);
-    expect(stored.reconnect.shouldReconnect).toBe(shouldReconnect);
+    expect(stored.retry.shouldRetry).toBe(shouldRetry);
     expect(stored.heartbeat).not.toBe(heartbeat);
-    expect(stored.reconnect).not.toBe(reconnect);
+    expect(stored.retry).not.toBe(retry);
     expect(stored.protocols).not.toBe(protocols);
 
     heartbeat.intervalMs = 100_000;
     delete heartbeat.timeoutMs;
     protocols[0] = "changed";
     protocols.push("v2");
-    reconnect.attempts = 0;
-    reconnect.shouldReconnect = () => true;
+    retry.maxRetries = 0;
+    retry.shouldRetry = () => true;
 
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
@@ -240,14 +239,14 @@ describe("request option snapshots", () => {
     }
   });
 
-  test("uses captured reconnect attempts after the source policy changes", async () => {
+  test("uses the captured retry count after the source policy changes", async () => {
     const opened = recordingSocket();
-    const reconnect = { attempts: 1, delayMs: 0 };
+    const retry = { maxRetries: 1, delayMs: 0 };
     const derived = createClient(
       withEndpoint("https://example.test"),
       withWebSocketHandle(opened.Socket),
-    )({ reconnect });
-    reconnect.attempts = 0;
+    )({ retry });
+    retry.maxRetries = 0;
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
       path: "/room",
@@ -280,21 +279,7 @@ describe("request option snapshots", () => {
     expect(stored?.signal).toBe(signal);
     expect(stored?.heartbeat).toBeUndefined();
     expect(stored?.protocols).toBeUndefined();
-    expect(stored?.reconnect).toBeUndefined();
-  });
-
-  test("keeps falsy heartbeat and reconnect values", () => {
-    const base = createClient(withEndpoint("https://example.test"));
-    for (const value of [false, 0, Number.NaN, "", null]) {
-      const stored = base({
-        // @ts-expect-error heartbeat must be an object; falsy values are kept
-        heartbeat: value,
-        // @ts-expect-error reconnect must be an object; falsy values are kept
-        reconnect: value,
-      })[CLIENT].options;
-      expect(stored?.heartbeat).toBe(value);
-      expect(stored?.reconnect).toBe(value);
-    }
+    expect(stored?.retry).toBeUndefined();
   });
 
   test("passes a non-array protocols value through to execution validation", async () => {
@@ -340,6 +325,7 @@ describe("request option snapshots", () => {
           get intervalMs(): number {
             throw boom;
           },
+          message: () => "ping",
         },
         signal,
       }),
@@ -351,60 +337,38 @@ describe("request option snapshots", () => {
     expect(handle).toHaveBeenCalledOnce();
     expect(add).not.toHaveBeenCalled();
   });
-
-  test("keeps an invalid numeric reconnect policy until the operation runs", async () => {
-    const opened = recordingSocket();
-    const endpoint = defineWebSocket({
-      incoming: struct.unknown(),
-      path: "/room",
-    });
-    const derived = createClient(
-      withEndpoint("https://example.test"),
-      withWebSocketHandle(opened.Socket),
-    )({ reconnect: { attempts: -1 } });
-
-    expect(derived[CLIENT].options?.reconnect).toEqual({ attempts: -1 });
-    const [error, session] = await endpoint(derived);
-
-    expect(session).toBeUndefined();
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(opened.protocols).toEqual([]);
-  });
 });
 
 describe("client option snapshots", () => {
-  test("captures protocols, heartbeat, and reconnect when the option is applied", async () => {
+  test("captures protocols, heartbeat, and retry when the option is applied", async () => {
     const heartbeat = {
       intervalMs: 10,
       message: () => ({ type: "ping" }),
     };
     const protocols = ["one"];
-    const wsReconnect = { attempts: 1, delayMs: 0 };
-    const sseReconnect = {
-      attempts: 2,
-      delayMs: 25,
-      shouldReconnect: () => true,
+    const retry = {
+      maxRetries: 1,
+      delayMs: 0,
+      shouldRetry: () => true,
     };
     const wsHeartbeat = withWebSocketHeartbeat(heartbeat);
     const wsProtocols = withWebSocketProtocols(protocols);
-    const wsRetry = withWebSocketReconnect(wsReconnect);
-    const sseRetry = withSSEReconnect(sseReconnect);
+    const retryOption = withRetry(retry);
     const opened = recordingSocket();
-    const first = createClient(wsHeartbeat, wsProtocols, wsRetry, sseRetry);
-    const second = createClient(wsHeartbeat, wsProtocols, wsRetry, sseRetry);
+    const first = createClient(wsHeartbeat, wsProtocols, retryOption);
+    const second = createClient(wsHeartbeat, wsProtocols, retryOption);
     const live = createClient(
       withEndpoint("https://example.test"),
       withWebSocketHandle(opened.Socket),
       wsProtocols,
-      wsRetry,
+      retryOption,
     );
 
     heartbeat.intervalMs = 99;
     protocols.push("two");
     protocols[0] = "changed";
-    wsReconnect.attempts = 8;
-    sseReconnect.attempts = 9;
-    sseReconnect.delayMs = 1;
+    retry.maxRetries = 9;
+    retry.delayMs = 1;
 
     expect(first[CLIENT].config.webSocket.heartbeat?.intervalMs).toBe(10);
     expect(second[CLIENT].config.webSocket.heartbeat?.intervalMs).toBe(10);
@@ -419,16 +383,12 @@ describe("client option snapshots", () => {
     expect(first[CLIENT].config.webSocket.protocols).not.toBe(
       second[CLIENT].config.webSocket.protocols,
     );
-    expect(first[CLIENT].config.webSocket.reconnect?.attempts).toBe(1);
-    expect(second[CLIENT].config.sse.reconnect?.attempts).toBe(2);
-    expect(second[CLIENT].config.sse.reconnect?.delayMs).toBe(25);
-    expect(first[CLIENT].config.sse.reconnect?.shouldReconnect).toBe(
-      sseReconnect.shouldReconnect,
-    );
+    expect(first[CLIENT].config.retry?.maxRetries).toBe(1);
+    expect(second[CLIENT].config.retry?.delayMs).toBe(0);
+    expect(first[CLIENT].config.retry?.shouldRetry).toBe(retry.shouldRetry);
     expect(first[CLIENT].config).not.toBe(second[CLIENT].config);
 
     protocols.splice(0, protocols.length, "later");
-    wsReconnect.attempts = 0;
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
       path: "/room",
@@ -457,45 +417,21 @@ describe("client option snapshots", () => {
 
   test("clears optional nested settings with undefined and lets a later option replace an earlier one", () => {
     const client = createClient(
-      withWebSocketHeartbeat({ intervalMs: 5 }),
-      withWebSocketReconnect({ attempts: 1 }),
-      withSSEReconnect({ attempts: 1 }),
+      withWebSocketHeartbeat({ intervalMs: 5, message: () => "ping" }),
+      withRetry({ maxRetries: 1 }),
       withWebSocketHeartbeat(undefined),
-      withWebSocketReconnect({ attempts: 4 }),
-      withSSEReconnect(undefined),
+      withRetry({ maxRetries: 4 }),
     );
 
     expect(client[CLIENT].config.webSocket.heartbeat).toBeUndefined();
-    expect(client[CLIENT].config.webSocket.reconnect?.attempts).toBe(4);
-    expect(client[CLIENT].config.sse.reconnect).toBeUndefined();
+    expect(client[CLIENT].config.retry?.maxRetries).toBe(4);
   });
 
-  test.each([false, 0, Number.NaN, "", null])(
-    "keeps falsy reconnect setting %s",
-    (value) => {
-      const client = createClient(
-        withWebSocketReconnect({ attempts: 7 }),
-        // @ts-expect-error falsy reconnect values are stored unchanged
-        withWebSocketReconnect(value),
-        withSSEReconnect({ attempts: 7 }),
-        // @ts-expect-error falsy reconnect values are stored unchanged
-        withSSEReconnect(value),
-        withWebSocketHeartbeat({ intervalMs: 5 }),
-        // @ts-expect-error falsy heartbeat values are stored unchanged
-        withWebSocketHeartbeat(value),
-      );
-
-      expect(client[CLIENT].config.webSocket.reconnect).toBe(value);
-      expect(client[CLIENT].config.sse.reconnect).toBe(value);
-      expect(client[CLIENT].config.webSocket.heartbeat).toBe(value);
-    },
-  );
-
-  test("reads a reconnect getter once when the option is applied", () => {
+  test("reads a retry getter once when the option is applied", () => {
     let reads = 0;
-    const boom = new Error("reconnect getter failed");
-    const option = withSSEReconnect({
-      get attempts(): number {
+    const boom = new Error("retry getter failed");
+    const option = withRetry({
+      get maxRetries(): number {
         reads += 1;
         if (reads > 1) throw boom;
         return 1;
@@ -504,7 +440,7 @@ describe("client option snapshots", () => {
 
     const client = createClient(option);
     expect(reads).toBe(1);
-    expect(client[CLIENT].config.sse.reconnect?.attempts).toBe(1);
+    expect(client[CLIENT].config.retry?.maxRetries).toBe(1);
     expect(() => createClient(option)).toThrow(boom);
     expect(reads).toBe(2);
   });

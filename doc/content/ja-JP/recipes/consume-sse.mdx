@@ -34,5 +34,5 @@ description: 型付けされたイベントストリームを開いて反復処�
 build started
 ```
 
-- クライアント側で [`withSSEReconnect(...)`](/ja-JP/api/core/withssereconnect) を設定しない限り、ネットワークエラーや読み取り障害時に SSE が自動再接続されることはありません。
+- クライアント側で [`withRetry(...)`](/ja-JP/api/core/withretry) を設定しない限り、ネットワークエラーや読み取り障害時に SSE が自動再接続されることはありません。
 - `withSSEReconnect` にオプションオブジェクトを指定して有効化した場合、障害ごとの試行回数 `attempts` はデフォルトで `3` 回となり、ハンドシェイクが成功するたびにリセットされます（`attempts: 0` で再接続を無効化できます）。カスタムの `shouldReconnect` を指定しない限り、再接続されるのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` リクエストだけです。`ReadableStream` ボディを持つリクエストは再接続されません。詳細は [SSE イベントストリーム](/ja-JP/docs/sse) を参照してください。

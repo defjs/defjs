@@ -5,7 +5,7 @@ description: Define your SDK's WebSocket message contract while applications own
 
 # WebSocket sessions
 
-`defineWebSocket` declares a bidirectional WebSocket contract in your SDK: the path template, optional `input` and `builder` (`path` and `query` only), `incoming` and `outgoing` message structs, queue bounds, and static subprotocols. The consuming application configures heartbeat, reconnect, and lifecycle cleanup on its client.
+`defineWebSocket` declares a bidirectional WebSocket contract in your SDK: the path template, optional `input` and `builder` (`path` and `query` only), `incoming` and `outgoing` message structs, queue bounds, and static subprotocols. The consuming application configures heartbeat, retries (`withRetry`), and lifecycle cleanup on its client.
 
 ## 1. Define the contract and run a session
 
@@ -56,11 +56,11 @@ Model multiple frame types on `incoming` or `outgoing` using `struct.discriminat
   examples/web-socket/state-snapshots.ts#example
 </include>
 
-## 4. Reconnect, heartbeat, and queues
+## 4. Retries, heartbeat, and queues
 
-Both reconnection and heartbeat are opt-in via client options (`withWebSocketReconnect`, `withWebSocketHeartbeat`) or per-call derived client options (`client({ reconnect, heartbeat })`):
+Both reconnection and heartbeat are opt-in via client options (`withRetry`, `withWebSocketHeartbeat`) or per-call derived client options (`client({ retry, heartbeat })`). Reconnection uses the same `withRetry` policy as HTTP and SSE:
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tabs items={["Retry policy", "Application heartbeat"]}>
 <Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
@@ -73,14 +73,14 @@ Both reconnection and heartbeat are opt-in via client options (`withWebSocketRec
 </Tab>
 </Tabs>
 
-- **Reconnect**: When enabled, the defaults are `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. Each physical `open` resets the outage budget. `beforeConnect({ attempt, signal })` runs before the initial connect and every reconnect attempt. The balancer attribution of an opened socket depends on the close code only, whatever `wasClean` reports: `1006` or `1015` (no close frame arrived) is `NET_UNREACHABLE`, `1012` or `1013` is `NET_UNAVAILABLE`, and every other code is not a failure.
-- **Handshake timeout (`connectTimeoutMs`)**: When provided, it must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds construction to `open` and is cleared after the handshake. The option exists only inside the `withWebSocketReconnect({...})` options object (or the `reconnect` request option). Passing that object enables automatic reconnect with the default `attempts: 3`, so `connectTimeoutMs` alone also reconnects; add `attempts: 0` for a handshake-only deadline.
-- **Heartbeat**: Periodically sends `message()` through the `outgoing` struct and waits up to `timeoutMs` for a frame matching `isAck(msg)`. Matching ack frames are consumed by the heartbeat monitor and not forwarded to `session.receive`. A missed ack is fatal to the logical session: `closed.kind` is `"error"` and `closed.cause` is the ordinary `Error("WebSocket heartbeat timeout")`; it does not start reconnect. The missed ack is also reported to the balancer as `NET_UNREACHABLE` for the endpoint. Heartbeat serialization failures, or a throwing `message()`, follow the same fatal path with their original cause but are local and not attributed to the endpoint.
+- **Retries**: When a retry policy is set, the defaults are `maxRetries: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0.2`. Every close that `session.close()` did not request is retried by default, including a connection that never opened. Each physical `open` resets the outage count. `shouldRetry` can overrule the default and may be async; it is not called for a manual close, a caller abort, or once `maxRetries` retries have been made. A declined or spent retry ends the session as it would end without a policy: a connection error is `closed.kind: "error"`, a close frame from the peer is `"closed"`. `beforeConnect({ attempt, signal })` runs before the initial connect and every retry. The balancer attribution of an opened socket depends on the close code only, whatever `wasClean` reports: `1006` or `1015` (no close frame arrived) is `NET_UNREACHABLE`, `1012` or `1013` is `NET_UNAVAILABLE`, and every other code is not a failure.
+- **Attempt timeout (`attemptTimeoutMs`)**: When provided, it bounds construction to `open` and is cleared after the handshake. It is an option of `withRetry` (or the `retry` request option), so `withRetry({ attemptTimeoutMs })` also retries, with the default `maxRetries: 3`. For a handshake-only deadline write `withRetry({ maxRetries: 0, attemptTimeoutMs })`. Expiry reports `NET_UNREACHABLE` to the balancer, and exhausted retries end with `NET_TIMEOUT`.
+- **Heartbeat**: Defjs defines no heartbeat format, interval, or timeout: `message` and `isAck` are your functions, and the type requires `message` and allows `timeoutMs` only together with `isAck`. The browser `WebSocket` interface has no way to send a protocol-level ping, so an application-level message is the only portable heartbeat. Every `intervalMs` it sends `message()` through the `outgoing` struct as JSON text, so the endpoint declares an `outgoing` struct and a bare text or binary ping is not possible. It waits up to `timeoutMs` for a decoded frame matching `isAck(msg)`; a frame that fails the `incoming` struct is reported to `onRuntimeError` and never reaches `isAck`. Matching ack frames are consumed by the heartbeat monitor and not forwarded to `session.receive`. A missed ack counts as a connection failure: the socket is closed, the missed ack is reported to the balancer as `NET_UNREACHABLE` for the endpoint, and the attempt enters the retry flow like any other close. Without a retry policy, or once the retries are used up, `closed.kind` is `"error"` and `closed.cause` is the ordinary `Error("WebSocket heartbeat timeout")`. Heartbeat serialization failures, or a throwing `message()`, are local: they end the session with their original cause, are not retried, and are not attributed to the endpoint.
 - **Queue bounds**:
   - Incoming messages: There is no option and no count limit. The library queues every message the platform delivers until `session.receive` reads it, so a consumer that never reads lets the queue grow without bound; consume `session.receive` while the session is open, or close the session.
   - `maxOutgoingQueueSize` (optional non-negative safe integer, default `0`): Buffers `session.send()` calls only while `state === 'reconnecting'` and flushes them before publishing the next `open`.
 
-`shouldReconnect` receives the native close code and `wasClean`. A server can complete a clean close handshake with application-error code `1011`, so `wasClean === true` does not mean the application succeeded. The example explicitly permits `1011`; choose application codes according to your protocol rather than relying on `!wasClean` alone.
+`shouldRetry` receives the native close `code`, `reason`, and `wasClean` in its WebSocket context, and `retryable` is always `true` there. A server can complete a clean close handshake with application-error code `1011`, so `wasClean === true` does not mean the application succeeded. The example decides on `code`; choose application codes according to your protocol rather than relying on `!wasClean` alone.
 
 ## 5. Subprotocols and authentication [#protocols-and-authentication]
 
@@ -101,7 +101,7 @@ Call `session.close(code?, reason?)` (where `code` is `1000` or `3000..4999` and
 
 A connection that was open and then dropped without a close frame (code `1006`, `wasClean: false`) always ends with `closed.kind: "error"` and `closed.cause` `Error("WebSocket connection error")`, whether or not the runtime fires a native `error` event.
 
-When a reconnect outage exhausts its attempts, the session ends with `closed.kind: "error"` and the ordinary transport error as `closed.cause`, alongside the native close snapshot (often code `1006` for a failed upgrade); it does not expose a separate stable exhaustion code. When a session ends with `closed.kind: "error"`, the messages already queued are still delivered and `session.receive` rejects with `closed.cause` after the last one; a close from the peer also delivers the queued messages before `session.receive` ends. When the caller stops the session, the unread messages are discarded and `session.receive` ends at once: a caller abort (`closed.kind: "aborted"`), a manual `session.close()`, and disposal with `await using` all do this. Always unsubscribe `onStateChange` and `onRuntimeError` listeners when your component or worker finishes.
+When a retry outage exhausts its `maxRetries`, the session ends with `closed.kind: "error"` and the ordinary transport error as `closed.cause`, alongside the native close snapshot (often code `1006` for a failed upgrade); it does not expose a separate stable exhaustion code. When a session ends with `closed.kind: "error"`, the messages already queued are still delivered and `session.receive` rejects with `closed.cause` after the last one; a close from the peer also delivers the queued messages before `session.receive` ends. When the caller stops the session, the unread messages are discarded and `session.receive` ends at once: a caller abort (`closed.kind: "aborted"`), a manual `session.close()`, and disposal with `await using` all do this. Always unsubscribe `onStateChange` and `onRuntimeError` listeners when your component or worker finishes.
 
 ## Related reading
 

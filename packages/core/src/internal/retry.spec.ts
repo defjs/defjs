@@ -1,11 +1,6 @@
 import { expect, test, vi } from "vitest";
 import type { RetryContext } from "../client/config";
-import {
-  decideRetry,
-  hasRetriesLeft,
-  isRetryMethod,
-  resolveRetryPolicy,
-} from "./retry";
+import { decideRetry, isRetryMethod, resolveRetryPolicy } from "./retry";
 
 const context = (retryable: boolean): RetryContext => ({
   transport: "websocket",
@@ -55,15 +50,6 @@ test("given fields replace their defaults and methods compare case-insensitively
   });
   expect(policy && isRetryMethod(policy, "Post")).toBe(true);
   expect(policy && isRetryMethod(policy, "GET")).toBe(false);
-});
-
-test("retries left is a count of retries made, not of attempts", () => {
-  const policy = resolveRetryPolicy({ maxRetries: 2 });
-  expect(policy && [0, 1, 2].map((n) => hasRetriesLeft(policy, n))).toEqual([
-    true,
-    true,
-    false,
-  ]);
 });
 
 test("decideRetry uses the default verdict without a policy function and asks for retry n + 1", async () => {

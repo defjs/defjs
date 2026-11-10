@@ -1,6 +1,10 @@
 import type { Client } from "../client/client";
 import { CLIENT } from "../client/client";
-import type { ClientConfig, ClientSSEOptions } from "../client/config";
+import type {
+  ClientConfig,
+  ClientSSEOptions,
+  RetryOptions,
+} from "../client/config";
 import { DEFAULT_FETCH, ERR_FETCH_UNSUPPORTED } from "../client/config";
 import type {
   DecodeFault,
@@ -28,7 +32,7 @@ import { resolveInboundRepresentation } from "../internal/inbound_representation
 import type { EndpointInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
 import { createTransportOrigin } from "../internal/transport_origin";
-import { normalizeReconnectOptions } from "../internal/reconnect_options";
+import { resolveRetryPolicy } from "../internal/retry";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
 import type { DecodedResponse, HttpResponse } from "../internal/http_response";
 import type {
@@ -47,10 +51,8 @@ import type {
   EventStreamFailureInfo,
   EventStreamHandle,
   EventStreamOpenInfo,
-  FetchEventStreamOptions,
   HandshakeBody,
 } from "./transport/event_stream";
-import { SSE_RECONNECT_DEFAULTS } from "./transport/event_stream";
 import {
   createHandshakeStatusFault,
   fetchEventStream,
@@ -67,7 +69,7 @@ import type { EventStreamMessage } from "./transport/parser";
  *
  * A `string` event struct keeps the raw `data` text. Every other kind is JSON text: `JSON.parse`, then the struct. A bare `struct.literal` therefore needs JSON text, not an unquoted token.
  *
- * Reconnect lives on the client (`withSSEReconnect`). SSE `jitter` is a **0-1 multiplicative factor**, same as WebSocket.
+ * Retries live on the client (`withRetry`).
  *
  * @group sse
  */
@@ -161,7 +163,7 @@ export type { EventStreamRequestShape } from "../internal/builder_types";
  *
  * - `TError` is the declared `error` struct. It types the decoded error body on the fault.
  *
- * - A non-2xx handshake is an `HTTP_STATUS` fault whose `data` is the decoded `error` body. When the declared `error` body could not be decoded, startup returns the decode fault instead, as `defineRequest` does: `RES_MEDIA_TYPE_INVALID` for a JSON declaration that meets another media type, `RES_DECODE_FAILED` for an unreadable or unparsable body, `RES_STRUCT_MISMATCH` for a body that does not match the struct. Its `status` and `response` carry the handshake status as metadata and `cause` holds the reason. Interceptors, `shouldReconnect` and a reconnect's `closed` still receive `HTTP_STATUS`, with the same `cause`, so a gateway `503` is retried however its body looks.
+ * - A non-2xx handshake is an `HTTP_STATUS` fault whose `data` is the decoded `error` body. When the declared `error` body could not be decoded, startup returns the decode fault instead, as `defineRequest` does: `RES_MEDIA_TYPE_INVALID` for a JSON declaration that meets another media type, `RES_DECODE_FAILED` for an unreadable or unparsable body, `RES_STRUCT_MISMATCH` for a body that does not match the struct. Its `status` and `response` carry the handshake status as metadata and `cause` holds the reason. Interceptors, `shouldRetry` and a reconnect's `closed` still receive `HTTP_STATUS`, with the same `cause`, so a gateway `503` is retried however its body looks.
  *
  * - A 2xx handshake whose media type is not `text/event-stream` is `RES_MEDIA_TYPE_INVALID`. One with that media type and no body (a `204` or `205` on Node.js and Bun) is an empty stream: the call succeeds and `closed` settles `{ kind: 'eof' }` at once.
  *
@@ -179,15 +181,17 @@ export type StreamAwaitResult<
     ];
 
 /**
- * SSE field of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.
+ * SSE fields of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.
  *
- * `signal` covers the whole stream, including after it opens. There is no startup-only deadline.
+ * `signal` covers the whole stream, including after it opens. There is no startup-only deadline. `retry` replaces the client's retry policy for this call.
  *
  * @group sse
  */
 export type EventStreamExecuteOptions = {
   /** Aborts the stream, including after it is open. */
   signal?: AbortSignal;
+  /** Retry policy for this call. Replaces the client policy as a whole value; the `budget` is HTTP only. */
+  retry?: Omit<RetryOptions, "budget">;
 };
 
 /**
@@ -325,20 +329,10 @@ async function runEventStreamCommand<
     return [resolveAbortedFault(callerAbort), undefined, undefined];
   }
 
-  // Snapshot the validated reconnect policy at preflight so an interceptor cannot change it.
-  let reconnect: FetchEventStreamOptions<unknown>["reconnect"];
+  // Resolve the retry policy at preflight so an interceptor cannot change it.
+  const retry = resolveRetryPolicy(config?.retry ?? clientConfig.retry);
   try {
     validateEventStreamLimits(endpoint);
-    const configured = clientConfig.sse.reconnect;
-    const normalized = normalizeReconnectOptions(
-      configured,
-      SSE_RECONNECT_DEFAULTS,
-      "SSE",
-    );
-    reconnect = normalized && {
-      ...normalized,
-      shouldReconnect: configured?.shouldReconnect,
-    };
   } catch (error) {
     return [
       createPreflightFault("REQ_OPTIONS_INVALID", error),
@@ -550,7 +544,7 @@ async function runEventStreamCommand<
                 signal,
               );
             },
-            reconnect,
+            retry,
             maxBufferSize: endpoint.maxBufferSize,
           },
         ).then(

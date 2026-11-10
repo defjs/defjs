@@ -6,9 +6,9 @@ import {
   withInterceptors,
   withQuerySerializer,
   withWebSocketHandle,
-  withWebSocketReconnect,
   type Client,
   type RequestOptions,
+  withRetry,
 } from "../client";
 import {
   createNetworkFault,
@@ -828,7 +828,7 @@ describe("web socket runtime environment edge cases", () => {
     const client = createClient(
       withEndpoint("http://localhost"),
       withWebSocketHandle(globalThis.WebSocket),
-      withWebSocketReconnect({ attempts: 1, delayMs: 0 }),
+      withRetry({ maxRetries: 1, delayMs: 0 }),
     );
     const executePromise = run(client, useSocket);
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -1542,7 +1542,7 @@ describe("web socket runtime environment edge cases", () => {
     const pending = run(
       createClient(
         withEndpoint("http://localhost"),
-        withWebSocketReconnect({ attempts: 1, delayMs: 0 }),
+        withRetry({ maxRetries: 1, delayMs: 0 }),
       ),
       endpoint,
     );
@@ -1656,7 +1656,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -1710,7 +1710,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -1761,7 +1761,7 @@ describe("web socket runtime environment edge cases", () => {
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
-      { reconnect: { attempts: 2, delayMs: 0 } },
+      { retry: { maxRetries: 2, delayMs: 0 } },
     );
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     lastMockInstance?.triggerOpen();
@@ -1866,7 +1866,7 @@ describe("web socket runtime environment edge cases", () => {
       path: "/ws/test",
     });
     const executePromise = run(client, useSocket, {
-      reconnect: { attempts: 3, delayMs: 0 },
+      retry: { maxRetries: 3, delayMs: 0 },
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     lastMockInstance?.triggerOpen();
@@ -1939,7 +1939,7 @@ describe("web socket runtime environment edge cases", () => {
       path: "/ws/test",
     });
     const executePromise = run(client, useSocket, {
-      reconnect: { attempts: 1, delayMs: 0 },
+      retry: { maxRetries: 1, delayMs: 0 },
       signal: controller.signal,
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -1977,7 +1977,7 @@ describe("web socket runtime environment edge cases", () => {
       path: "/ws/test",
     });
     const executePromise = run(client, useSocket, {
-      reconnect: { attempts: 1, delayMs: 0 },
+      retry: { maxRetries: 1, delayMs: 0 },
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     lastMockInstance?.triggerOpen();
@@ -2022,12 +2022,12 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: {
-          attempts: 2,
+        retry: {
+          maxRetries: 2,
           delayMs: 100,
           factor: 2,
           jitter: 0,
-          shouldReconnect(context: { attempt: number }) {
+          shouldRetry(context: { attempt: number }) {
             policyAttempts.push(context.attempt);
             return true;
           },
@@ -2079,7 +2079,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 2, delayMs: 100, factor: 2, jitter: 0 },
+        retry: { maxRetries: 2, delayMs: 100, factor: 2, jitter: 0 },
       },
     );
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -2127,7 +2127,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
 
@@ -2205,7 +2205,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -2299,7 +2299,7 @@ describe("web socket runtime environment edge cases", () => {
       ),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
 
@@ -2334,8 +2334,8 @@ describe("web socket runtime environment edge cases", () => {
 
     const [error, socket, connection] = await run(
       createClient(withEndpoint("http://localhost"), (config) => {
-        config.webSocket.reconnect = {
-          get shouldReconnect(): undefined {
+        config.retry = {
+          get shouldRetry(): undefined {
             throw getterFailure;
           },
         };
@@ -2360,10 +2360,10 @@ describe("web socket runtime environment edge cases", () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     let predicate = () => false;
     let predicateReads = 0;
-    const reconnect = {
-      attempts: 1,
+    const retry = {
+      maxRetries: 1,
       delayMs: 0,
-      get shouldReconnect() {
+      get shouldRetry() {
         predicateReads += 1;
         return predicate;
       },
@@ -2373,7 +2373,7 @@ describe("web socket runtime environment edge cases", () => {
       path: "/ws/test",
     });
     const client = createClient(withEndpoint("http://localhost"), (config) => {
-      config.webSocket.reconnect = reconnect;
+      config.retry = retry;
     });
     expect(predicateReads).toBe(0);
     const [, socket] = await run(client, useSocket, {
@@ -3040,7 +3040,7 @@ describe("web socket runtime environment edge cases", () => {
   );
 
   test.each(["error", "close"] as const)(
-    "should settle a native %s as closed when the reconnect predicate explicitly declines",
+    "should end a native %s as the failure it is when the retry policy declines",
     async (eventKind) => {
       vi.stubGlobal("WebSocket", createMockWebSocketClass());
       const predicate = vi.fn(() => false);
@@ -3052,13 +3052,15 @@ describe("web socket runtime environment edge cases", () => {
         createClient(withEndpoint("http://localhost")),
         useSocket,
         {
-          reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
+          retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
         },
       );
       if (!socket || !lastMockInstance) {
         throw new Error("Expected socket");
       }
-      const pendingReceive = socket.receive[Symbol.asyncIterator]().next();
+      const pendingReceive = socket.receive[Symbol.asyncIterator]()
+        .next()
+        .catch((error: unknown) => error);
 
       if (eventKind === "error") {
         lastMockInstance.triggerError();
@@ -3070,12 +3072,22 @@ describe("web socket runtime environment edge cases", () => {
         });
       }
 
-      await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
-      await expect(pendingReceive).resolves.toEqual({
-        done: true,
-        value: undefined,
-      });
-      expect(socket.state).toBe("closed");
+      // A declined retry ends the session as it would end without a policy: a connection error is an
+      // error, a close frame is a normal end.
+      if (eventKind === "error") {
+        await expect(socket.closed).resolves.toMatchObject({ kind: "error" });
+        await expect(pendingReceive).resolves.toEqual(
+          new Error("WebSocket connection error"),
+        );
+        expect(socket.state).toBe("error");
+      } else {
+        await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
+        await expect(pendingReceive).resolves.toEqual({
+          done: true,
+          value: undefined,
+        });
+        expect(socket.state).toBe("closed");
+      }
       expect(predicate).toHaveBeenCalledTimes(1);
     },
   );
@@ -3100,7 +3112,7 @@ describe("web socket runtime environment edge cases", () => {
         createClient(withEndpoint("http://localhost")),
         useSocket,
         {
-          reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
+          retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
           signal: controller.signal,
         },
       );
@@ -3143,7 +3155,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
+        retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3180,7 +3192,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
+        retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3215,7 +3227,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
         signal: controller.signal,
       },
     );
@@ -3250,8 +3262,8 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: {
-          attempts: 1,
+        retry: {
+          maxRetries: 1,
           delayMs: Number.MAX_VALUE,
           jitter: 1,
           maxDelayMs: Number.MAX_VALUE,
@@ -3297,8 +3309,8 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: {
-          attempts: 1,
+        retry: {
+          maxRetries: 1,
           delayMs: Number.MAX_VALUE,
           jitter: 1,
           maxDelayMs: Number.MAX_VALUE,
@@ -3340,7 +3352,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 1_000 },
+        retry: { maxRetries: 1, delayMs: 1_000 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3384,8 +3396,8 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: {
-          attempts: 1,
+        retry: {
+          maxRetries: 1,
           delayMs: Number.MAX_VALUE,
           jitter: 1,
           maxDelayMs: Number.MAX_VALUE,
@@ -3445,7 +3457,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3663,7 +3675,7 @@ describe("web socket runtime environment edge cases", () => {
       createMockWebSocketClass({ closeErrors: [closeFailure] }),
     );
     const controller = new AbortController();
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
@@ -3672,7 +3684,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0, shouldReconnect },
+        retry: { maxRetries: 1, delayMs: 0, shouldRetry },
         signal: controller.signal,
       },
     );
@@ -3685,7 +3697,7 @@ describe("web socket runtime environment edge cases", () => {
     await expect(socket.closed).resolves.toMatchObject({ kind: "aborted" });
     await Promise.resolve();
     expect(lastMockInstance.close).toHaveBeenCalledTimes(1);
-    expect(shouldReconnect).not.toHaveBeenCalled();
+    expect(shouldRetry).not.toHaveBeenCalled();
   });
 
   test("should preserve the last opened connection snapshot when aborting a connecting replacement", async () => {
@@ -3699,7 +3711,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
         signal: controller.signal,
       },
     );
@@ -3983,7 +3995,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0, shouldReconnect: () => false },
+        retry: { maxRetries: 1, delayMs: 0, shouldRetry: () => false },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4016,7 +4028,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 30 },
+        retry: { maxRetries: 1, delayMs: 30 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4077,7 +4089,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 30 },
+        retry: { maxRetries: 1, delayMs: 30 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4170,7 +4182,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 30 },
+        retry: { maxRetries: 1, delayMs: 30 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4244,7 +4256,7 @@ describe("web socket runtime environment edge cases", () => {
         createClient(withEndpoint("http://localhost")),
         useSocket,
         {
-          reconnect: { attempts: 1, delayMs: 0 },
+          retry: { maxRetries: 1, delayMs: 0 },
           signal: controller.signal,
         },
       );
@@ -4297,7 +4309,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 1_000 },
+        retry: { maxRetries: 1, delayMs: 1_000 },
         signal: controller.signal,
       },
     );
@@ -4347,7 +4359,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 30 },
+        retry: { maxRetries: 1, delayMs: 30 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4389,7 +4401,7 @@ describe("web socket runtime environment edge cases", () => {
             throw hookFailure;
           }
         },
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4421,10 +4433,10 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: {
-          attempts: 1,
+        retry: {
+          maxRetries: 1,
           delayMs: 0,
-          shouldReconnect() {
+          shouldRetry() {
             throw policyFailure;
           },
         },
@@ -4463,7 +4475,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
+        retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
       },
     );
 
@@ -4495,11 +4507,11 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: {
-          attempts: 1,
+        retry: {
+          maxRetries: 1,
           delayMs: 0,
-          shouldReconnect() {
-            // eslint-disable-next-line @typescript-eslint/only-throw-error -- shouldReconnect under test throws undefined to exercise handling of a non-Error throw
+          shouldRetry() {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error -- shouldRetry under test throws undefined to exercise handling of a non-Error throw
             throw undefined;
           },
         },
@@ -4554,10 +4566,10 @@ describe("web socket runtime environment edge cases", () => {
         createClient(withEndpoint("http://localhost")),
         useSocket,
         {
-          reconnect: {
-            attempts: 1,
+          retry: {
+            maxRetries: 1,
             delayMs: 0,
-            shouldReconnect() {
+            shouldRetry() {
               throw policyFailure;
             },
           },
@@ -4597,7 +4609,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4642,7 +4654,7 @@ describe("web socket runtime environment edge cases", () => {
             return new Promise<void>(() => undefined);
           }
         },
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4743,7 +4755,7 @@ describe("web socket runtime environment edge cases", () => {
       useSocket,
       {
         heartbeat: { intervalMs: 50, message: () => ({ type: "ping" }) },
-        reconnect: { attempts: 1, delayMs: 1_000 },
+        retry: { maxRetries: 1, delayMs: 1_000 },
       },
     );
 
@@ -5577,11 +5589,12 @@ describe("web socket preflight precedence", () => {
             heartbeatReads += 1;
             throw new Error("heartbeat should not be read");
           },
+          message: () => undefined,
         };
-        config.webSocket.reconnect = {
-          get attempts(): number {
+        config.retry = {
+          get maxRetries(): number {
             reconnectReads += 1;
-            throw new Error("reconnect should not be read");
+            throw new Error("retry should not be read");
           },
         };
       })({ signal: controller.signal }),
@@ -5611,7 +5624,7 @@ describe("web socket preflight precedence", () => {
 
     const [error, session] = await endpoint(
       guardedClient(opened, controller.signal, {
-        heartbeat: { intervalMs: 0 },
+        heartbeat: { intervalMs: 0, message: () => undefined },
       }),
     );
 
@@ -5641,6 +5654,7 @@ describe("web socket preflight precedence", () => {
               reads += 1;
               throw new Error("heartbeat should not be read");
             },
+            message: () => undefined,
           };
         },
       )({ signal: controller.signal }),

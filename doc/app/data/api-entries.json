@@ -76,13 +76,6 @@
   },
   {
     "package": "@defjs/core",
-    "name": "withSSEReconnect",
-    "kind": "function",
-    "slug": "core/withssereconnect",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
     "name": "withSSEOnInvalidEvent",
     "kind": "function",
     "slug": "core/withsseoninvalidevent",
@@ -107,13 +100,6 @@
     "name": "withWebSocketHeartbeat",
     "kind": "function",
     "slug": "core/withwebsocketheartbeat",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withWebSocketReconnect",
-    "kind": "function",
-    "slug": "core/withwebsocketreconnect",
     "related": []
   },
   {

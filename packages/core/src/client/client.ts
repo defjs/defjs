@@ -1,10 +1,5 @@
 import type { HttpProgressFn } from "../internal/http_request";
-import {
-  snapshotHeartbeat,
-  snapshotProtocols,
-  snapshotReconnect,
-  snapshotRetry,
-} from "./capture";
+import { snapshotHeartbeat, snapshotProtocols, snapshotRetry } from "./capture";
 import type {
   ClientConfig,
   ClientWebSocketOptions,
@@ -25,9 +20,7 @@ export const CLIENT = Symbol("Client");
 /**
  * Flat per-call options. Each protocol reads the fields it understands and ignores the rest.
  *
- * SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
- *
- * `signal` cancels HTTP, SSE, and WebSocket calls. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, `heartbeat`, and `reconnect` apply to WebSocket and replace the client setting for that call as a whole value. `client(options)` copies `heartbeat`, `reconnect`, and a `protocols` array at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. There is no `timeout` or `abort` field. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline.
+ * `signal` cancels HTTP, SSE, and WebSocket calls. `retry` applies to all three and replaces the client's retry policy for that call as a whole value, except its `budget`, which is HTTP only and stays with the client. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, and `heartbeat` apply to WebSocket and replace the client setting for that call as a whole value. `client(options)` copies `heartbeat`, `retry`, and a `protocols` array at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. There is no `timeout` or `abort` field. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline.
  *
  * @group client
  */
@@ -44,9 +37,7 @@ export type RequestOptions = {
   protocols?: readonly string[];
   /** WebSocket heartbeat for this call. Replaces the client heartbeat as a whole value. */
   heartbeat?: ClientWebSocketOptions["heartbeat"];
-  /** WebSocket reconnect policy for this call. Replaces the client policy as a whole value. */
-  reconnect?: ClientWebSocketOptions["reconnect"];
-  /** Retry policy for this call. Replaces the client policy as a whole value; the `budget` stays with the client. */
+  /** Retry policy for this call, for HTTP, SSE, and WebSocket. Replaces the client policy as a whole value; the `budget` stays with the client. */
   retry?: Omit<RetryOptions, "budget">;
 };
 
@@ -77,7 +68,7 @@ export interface Client {
  *
  * A factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. `client()` and `client(undefined)` store no request options. `client({})` keeps the empty snapshot produced by reading each top-level field; it is not dropped by inspecting keys.
  *
- * Each provided field is read once, in declaration order, onto a new options object. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `reconnect` copies `attempts`, `connectTimeoutMs`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect`. Missing nested blocks stay `undefined` and do not enable heartbeat or retry. `signal`, `beforeConnect`, and every callback keep their identity. A getter on these fixed fields runs during the call. If it throws, the exception escapes and is not converted into a fault; the factory stays usable. Out-of-range numbers are still checked when the operation runs.
+ * Each provided field is read once, in declaration order, onto a new options object. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `retry` copies `maxRetries`, `delayMs`, `factor`, `maxDelayMs`, `jitter`, `attemptTimeoutMs`, a `methods` array, `shouldRetry`, and `budget`. Missing nested blocks stay `undefined` and do not enable heartbeat or retry. `signal`, `beforeConnect`, and every callback keep their identity. A getter on these fixed fields runs during the call. If it throws, the exception escapes and is not converted into a fault; the factory stays usable.
  *
  * @group client
  * @see {@link createClient}
@@ -100,7 +91,6 @@ function snapshot(options?: RequestOptions): RequestOptions | undefined {
     beforeConnect: options.beforeConnect,
     protocols: snapshotProtocols(options.protocols),
     heartbeat: snapshotHeartbeat(options.heartbeat),
-    reconnect: snapshotReconnect(options.reconnect),
     retry: snapshotRetry(options.retry),
   };
 }

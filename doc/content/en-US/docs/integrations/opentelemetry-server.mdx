@@ -87,9 +87,9 @@ The plugin measures transport lifetimes inside the interceptor chain:
 
 These are the current interceptor observations, not a separate balancer telemetry API:
 
-- Each `withRetry` HTTP attempt has its own client span and duration sample. With an active application parent span, the attempts are siblings under that parent; without one, retries are not automatically grouped into one trace. Core does not create a logical-call parent span.
+- Each `withRetry` HTTP attempt has its own client span and duration sample, because every retry reruns the interceptor chain. With an active application parent span, the attempts are siblings under that parent; without one, retries are not automatically grouped into one trace. Core does not create a logical-call parent span.
 - HTTP attempt URLs identify that attempt's endpoint, but no attempt number, retry reason, budget balance/exhaustion, or ejection/recovery attributes are emitted.
-- SSE and WebSocket keep one logical-session span across reconnects, not one span per physical connection. Their span URL and metric attributes retain the initial endpoint even after failover. Reconnects do not emit another `connected` event. Active metrics count logical sessions awaiting `closed`, not sockets on the currently selected replica.
+- SSE and WebSocket retries (`withRetry`) reconnect inside the transport without rerunning interceptors. They keep one logical-session span across reconnects, not one span per physical connection. Their span URL and metric attributes retain the initial endpoint even after failover. Reconnects do not emit another `connected` event. Active metrics count logical sessions awaiting `closed`, not sockets on the currently selected replica.
 - In a Bun run, an HTTP 503 produced `error.type: "503"`, a connection rejection produced `"TypeError"`, and both a deadline and caller cancellation produced `"Error"`. The latter two returned `NET_TIMEOUT` and `NET_ABORTED` respectively; these Defjs tuple fault codes are not separate HTTP telemetry attributes. For an open WebSocket, default cancellation produced `"AbortError"` without a warning, while a `TimeoutError` abort reason produced `"TimeoutError"` and one warning. Error class names are transport/runtime observations, not a substitute for inspecting the tuple or close outcome.
 
 ### Emitted metrics

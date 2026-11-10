@@ -1,6 +1,7 @@
-import type { ClientWebSocketOptions, WebSocketHandle } from "../client/config";
+import type { WebSocketHandle } from "../client/config";
 import type { AnyStruct } from "../struct";
 import { serializeOutgoingWebSocketMessage } from "./codec";
+import type { WebSocketHeartbeatConfig } from "./web_socket";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
@@ -21,7 +22,7 @@ export function startHeartbeat<
 >(
   socket: WebSocketHandle,
   sessionController: HeartbeatSession<TIncoming>,
-  config: ClientWebSocketOptions["heartbeat"],
+  config: WebSocketHeartbeatConfig | undefined,
   outgoing: TOutgoing | undefined,
   /** `timedOut` is true only when the peer left a heartbeat unacknowledged; other failures are local. */
   onFatal: (error: unknown, timedOut: boolean) => void,
@@ -64,7 +65,7 @@ export function startHeartbeat<
 
     try {
       const message = config.message;
-      const nextMessage = message ? message() : undefined;
+      const nextMessage = message();
       if (!isActive() || typeof nextMessage === "undefined") {
         return;
       }
@@ -75,7 +76,7 @@ export function startHeartbeat<
       if (!isActive()) {
         return;
       }
-      if (typeof config.timeoutMs === "number" && config.timeoutMs > 0) {
+      if (config.timeoutMs !== undefined) {
         ackTimer = setTimeout(() => {
           fail(new Error("WebSocket heartbeat timeout"), true);
         }, config.timeoutMs);

@@ -249,9 +249,9 @@ export interface PickFirstOptions {
  * one step: a `done` that finds the sticky endpoint already changed does nothing.
  *
  * Order and the sticky endpoint follow `members`. When the sticky endpoint is
- * not among this pick's `endpoints`, as on an HTTP retry, the pick takes the
- * next candidate after it in member order without moving it, so a retry never
- * changes where later calls go. Only a sticky endpoint missing from `members`
+ * not among this pick's `endpoints`, as when a wrapper filters candidates, the
+ * pick takes the next candidate after it in member order without moving it, so
+ * a narrowed pick never changes where later calls go. Only a sticky endpoint missing from `members`
  * resets the order to the first.
  *
  * `shuffle: true` assigns each endpoint a random sort key on first sight and
@@ -471,7 +471,7 @@ export interface RoundRobinOptions {
  * to zero. Finite positive weights never produce a non-candidate selection.
  *
  * Without `weights`, every pick advances the counter, including a pick made for
- * an HTTP retry or a stream reconnect. Without `outlierDetection`, and with calls
+ * a retry or a stream reconnect. Without `outlierDetection`, and with calls
  * that run one after another, an endpoint that fails persistently therefore
  * receives more than 1/n of the first attempts. With exactly two endpoints and
  * retries enabled it receives all of them, so every call needs one retry.

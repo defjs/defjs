@@ -12,7 +12,6 @@ import {
   withBalancer,
   pickFirstBalancer,
   withInterceptors,
-  withSSEReconnect,
 } from "../src";
 import type { Balancer, DoneInfo, PickInfo } from "../src";
 import { fixture } from "./fixture/client-auto";
@@ -85,7 +84,7 @@ test("re-picks after an event-stream read failure and the next attempt hits the 
   const client = createClient(
     withEndpoint(fixture),
     withBalancer(recorded.balancer),
-    withSSEReconnect({ attempts: 1, delayMs: 0 }),
+    withRetry({ maxRetries: 1, delayMs: 0 }),
   );
   const useDrop = defineEventStream({
     builder: (input) => ({ query: input }),
@@ -156,7 +155,7 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
   const key = `balancer-${crypto.randomUUID()}`;
 
   const [error, socket] = await useSocket(
-    client({ reconnect: { attempts: 1, delayMs: 0 } }),
+    client({ retry: { maxRetries: 1, delayMs: 0 } }),
     { key },
   );
   expect(error).toBeNull();
@@ -193,7 +192,7 @@ test("default pick-first recovers from a real socket disconnect after consuming 
     path: "/ws",
   });
   const [error, session] = await useSocket(
-    client({ reconnect: { attempts: 1, delayMs: 0 } }),
+    client({ retry: { maxRetries: 1, delayMs: 0 } }),
   );
   expect(error).toBeNull();
   if (!session) throw new Error("expected a socket session");

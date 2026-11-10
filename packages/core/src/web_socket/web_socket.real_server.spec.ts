@@ -214,7 +214,7 @@ describe("web socket browser runtime", () => {
           path: "/ws/reconnect",
         })(client, { key: `browser-reconnect-${crypto.randomUUID()}` }),
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
 

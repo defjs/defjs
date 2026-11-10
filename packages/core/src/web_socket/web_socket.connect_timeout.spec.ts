@@ -4,7 +4,7 @@ import {
   withEndpoint,
   withBalancer,
   withWebSocketHandle,
-  withWebSocketReconnect,
+  withRetry,
 } from "../client/option";
 import { createControllableSocketClass } from "../../test/regression/controllable_socket";
 import type { DoneInfo } from "../balancer/balancer";
@@ -21,7 +21,7 @@ test("WebSocket handshake timeout picks next endpoint after nonzero backoff and 
   const client = createClient(
     withEndpoint(...endpoints),
     withWebSocketHandle(Socket),
-    withWebSocketReconnect({ attempts: 1, delayMs: 10, connectTimeoutMs: 100 }),
+    withRetry({ maxRetries: 1, delayMs: 10, attemptTimeoutMs: 100 }),
   );
   const pending = defineWebSocket({
     path: "/",
@@ -56,7 +56,7 @@ test("WebSocket handshake timeout exhausted ends as NET_TIMEOUT", async () => {
   const client = createClient(
     withEndpoint(...endpoints),
     withWebSocketHandle(Socket),
-    withWebSocketReconnect({ attempts: 0, connectTimeoutMs: 100 }),
+    withRetry({ maxRetries: 0, attemptTimeoutMs: 100 }),
   );
   const pending = defineWebSocket({
     path: "/",
@@ -67,24 +67,6 @@ test("WebSocket handshake timeout exhausted ends as NET_TIMEOUT", async () => {
   expect((await pending)[0]?.code).toBe("NET_TIMEOUT");
   expect(vi.getTimerCount()).toBe(0);
 });
-
-test.each([0, -1, Infinity, NaN])(
-  "invalid WebSocket connectTimeoutMs %s fails before construction",
-  async (connectTimeoutMs) => {
-    const client = createClient(
-      withEndpoint(...endpoints),
-      withWebSocketReconnect({ connectTimeoutMs }),
-    );
-    expect(
-      (
-        await defineWebSocket({
-          path: "/",
-          incoming: struct.unknown(),
-        })(client)
-      )[0]?.code,
-    ).toBe("REQ_OPTIONS_INVALID");
-  },
-);
 
 test("caller cancellation during timed-out socket teardown remains unattributed", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
@@ -113,7 +95,7 @@ test("caller cancellation during timed-out socket teardown remains unattributed"
       },
     }),
     withWebSocketHandle(CancellingSocket),
-    withWebSocketReconnect({ attempts: 0, connectTimeoutMs: 100 }),
+    withRetry({ maxRetries: 0, attemptTimeoutMs: 100 }),
   );
   const pending = defineWebSocket({
     path: "/",

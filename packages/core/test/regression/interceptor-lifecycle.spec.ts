@@ -105,7 +105,7 @@ test.each([
     );
     try {
       const [fault, session, snapshot] = await socketEndpoint(
-        client({ reconnect: { attempts: 1, delayMs: 0 } }),
+        client({ retry: { maxRetries: 1, delayMs: 0 } }),
       );
       expect(fault).toBeNull();
       expect(readConnection).toHaveBeenCalledOnce();

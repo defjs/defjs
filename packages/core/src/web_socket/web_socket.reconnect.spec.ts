@@ -58,7 +58,7 @@ describe("web socket runtime reconnect", () => {
           key: `queue-case-${crypto.randomUUID()}`,
         }),
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
 
@@ -95,7 +95,7 @@ describe("web socket runtime reconnect", () => {
     expect(states).toContain("reconnecting");
   });
 
-  test("should pass actual reconnect attempt count to shouldReconnect", async () => {
+  test("should pass actual reconnect attempt count to shouldRetry", async () => {
     const retryClient = createClient(withEndpoint("http://127.0.0.1:1"));
 
     const useRetrySocket = defineWebSocket({
@@ -107,10 +107,10 @@ describe("web socket runtime reconnect", () => {
 
     const [error, socket, connection] = await useRetrySocket(
       retryClient({
-        reconnect: {
-          attempts: 2,
+        retry: {
+          maxRetries: 2,
           delayMs: 0,
-          shouldReconnect(context: { attempt: number }) {
+          shouldRetry(context: { attempt: number }) {
             attempts.push(context.attempt);
             return context.attempt < 2;
           },
@@ -135,10 +135,10 @@ describe("web socket runtime reconnect", () => {
 
     const attempts: number[] = [];
     const [error, socket] = await run(useSocket, {
-      reconnect: {
-        attempts: 1,
+      retry: {
+        maxRetries: 1,
         delayMs: 0,
-        shouldReconnect(context: { attempt: number }) {
+        shouldRetry(context: { attempt: number }) {
           attempts.push(context.attempt);
           return false;
         },

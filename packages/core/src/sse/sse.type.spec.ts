@@ -17,7 +17,6 @@ import {
   createClient,
   defineEventStream,
   struct,
-  withSSEReconnect,
   type AnyStruct,
   type EventStreamData,
   type EventStreamEndpoint,
@@ -25,6 +24,7 @@ import {
   type EventStructs,
   type Fault,
   type HttpStatusFaultOf,
+  withRetry,
 } from "../index";
 import type {
   EventStreamHandle,
@@ -287,10 +287,20 @@ async function assertUndeclaredSseStartupFault(): Promise<void> {
 }
 void assertUndeclaredSseStartupFault;
 
-withSSEReconnect({
-  shouldReconnect: ({ method }) => {
-    expectTypeOf(method).toEqualTypeOf<string>();
-    return method === "GET";
+withRetry({
+  shouldRetry: (context) => {
+    expectTypeOf(context.transport).toEqualTypeOf<
+      "http" | "sse" | "websocket"
+    >();
+    expectTypeOf(context.retryable).toEqualTypeOf<boolean>();
+    expectTypeOf(context.attempt).toEqualTypeOf<number>();
+    if (context.transport === "sse") {
+      expectTypeOf(context.method).toEqualTypeOf<string>();
+      expectTypeOf(context.lastEventId).toEqualTypeOf<string>();
+      expectTypeOf(context.status).toEqualTypeOf<number | undefined>();
+      return context.method === "GET";
+    }
+    return context.retryable;
   },
 });
 

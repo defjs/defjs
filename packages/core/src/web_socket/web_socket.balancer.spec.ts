@@ -249,7 +249,7 @@ describe("web socket endpoint balancer", () => {
     ]);
     behaviors = ["close-before-open"];
     const [fault] = await room(
-      clientFor(record.balancer)({ reconnect: { attempts: 1, delayMs: 0 } }),
+      clientFor(record.balancer)({ retry: { maxRetries: 1, delayMs: 0 } }),
     );
 
     expect(fault?.code).toBe("NET_UNREACHABLE");
@@ -284,7 +284,7 @@ describe("web socket endpoint balancer", () => {
         }),
       ),
     );
-    const pending = room(switched({ reconnect: { attempts: 1, delayMs: 0 } }));
+    const pending = room(switched({ retry: { maxRetries: 1, delayMs: 0 } }));
     await flush();
     expect(donesWhenNextReturned).toEqual([{ attempted: false }]);
     expect(socketAt(0).url).toBe("ws://127.0.0.1:9/ws");
@@ -427,7 +427,7 @@ describe("web socket endpoint balancer", () => {
     const controller = new AbortController();
     const reconnectPending = room(
       clientFor(reconnecting.balancer)({
-        reconnect: { attempts: 1, delayMs: 5_000 },
+        retry: { maxRetries: 1, delayMs: 5_000 },
         signal: controller.signal,
       }),
     );
@@ -459,7 +459,7 @@ describe("web socket endpoint balancer", () => {
           }
           return undefined;
         },
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       }),
     );
     await flush();
@@ -611,7 +611,7 @@ describe("web socket endpoint balancer", () => {
         record.balancer,
         ThrowingSocket,
       )({
-        reconnect: { delayMs: 0 },
+        retry: { delayMs: 0 },
       }),
     );
 
@@ -672,7 +672,7 @@ describe("web socket endpoint balancer", () => {
         withEndpoint(PRIMARY, SECONDARY, "not a url"),
         withBalancer(record.balancer),
         withWebSocketHandle(ControllableSocket),
-      )({ reconnect: { attempts: 1, delayMs: 0 } }),
+      )({ retry: { maxRetries: 1, delayMs: 0 } }),
     );
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(record.dones).toEqual([
@@ -704,7 +704,7 @@ describe("web socket endpoint balancer", () => {
     ]);
     const [fault] = await room(
       clientFor(beforeOpen.balancer)({
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       }),
     );
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
@@ -737,7 +737,7 @@ describe("web socket endpoint balancer", () => {
     };
     const afterOpenDones: DoneInfo[] = [];
     const pending = room(
-      clientFor(afterOpen)({ reconnect: { attempts: 1, delayMs: 0 } }),
+      clientFor(afterOpen)({ retry: { maxRetries: 1, delayMs: 0 } }),
     );
     await flush();
     socketAt(0).open();
@@ -761,7 +761,7 @@ describe("web socket endpoint balancer", () => {
       { error: ERR_NO_CANDIDATE },
     ]);
     const openedPending = room(
-      clientFor(opened.balancer)({ reconnect: { attempts: 1, delayMs: 0 } }),
+      clientFor(opened.balancer)({ retry: { maxRetries: 1, delayMs: 0 } }),
     );
     await flush();
     socketAt(0).open();
@@ -831,7 +831,7 @@ describe("web socket endpoint balancer", () => {
         },
       };
       const pending = room(
-        clientFor(balancer)({ reconnect: { attempts: 1, delayMs: 0 } }),
+        clientFor(balancer)({ retry: { maxRetries: 1, delayMs: 0 } }),
       );
       await flush();
       socketAt(0).open();
@@ -898,7 +898,7 @@ describe("web socket endpoint balancer", () => {
     async (code, report) => {
       const record = scriptedBalancer([{ endpoint: PRIMARY }]);
       const pending = room(
-        clientFor(record.balancer)({ reconnect: { attempts: 1, delayMs: 0 } }),
+        clientFor(record.balancer)({ retry: { maxRetries: 1, delayMs: 0 } }),
       );
       await flush();
       // Firefox can dispatch the peer's close frame without `open` when the server closes right after accepting.
@@ -938,7 +938,7 @@ describe("web socket endpoint balancer", () => {
           record.balancer,
           AbnormalOnClose,
         )({
-          reconnect: { attempts: 1, delayMs: 0 },
+          retry: { maxRetries: 1, delayMs: 0 },
           signal: controller.signal,
         }),
       );
@@ -1025,7 +1025,12 @@ describe("web socket endpoint balancer", () => {
     const record = scriptedBalancer([{ endpoint: PRIMARY }]);
     const pending = pinged(
       clientFor(record.balancer)({
-        heartbeat: { intervalMs: 10, message, timeoutMs: 20 },
+        heartbeat: {
+          intervalMs: 10,
+          message,
+          isAck: () => false,
+          timeoutMs: 20,
+        },
       }),
     );
     await flush();
@@ -1175,7 +1180,7 @@ describe("web socket endpoint balancer", () => {
   );
 
   test.each(["false", "throw"])(
-    "keeps the physical close failure when shouldReconnect returns %s",
+    "keeps the physical close failure when shouldRetry returns %s",
     async (mode) => {
       const record = scriptedBalancer([{ endpoint: PRIMARY }]);
       const policyError = new Error("application policy");
@@ -1185,7 +1190,7 @@ describe("web socket endpoint balancer", () => {
       });
       const pending = room(
         clientFor(record.balancer)({
-          reconnect: { attempts: 1, delayMs: 0, shouldReconnect: policy },
+          retry: { maxRetries: 1, delayMs: 0, shouldRetry: policy },
         }),
       );
       await flush();
@@ -1196,7 +1201,7 @@ describe("web socket endpoint balancer", () => {
       expect(await session.closed).toMatchObject(
         mode === "throw"
           ? { kind: "error", cause: policyError }
-          : { kind: "closed", code: 1006 },
+          : { kind: "error", code: 1006 },
       );
       expect(policy).toHaveBeenCalledOnce();
       expect(record.dones).toEqual([

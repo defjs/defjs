@@ -93,11 +93,9 @@ The origin check covers the URL the library builds. Fetch follows redirects itse
 
 ### SSE knobs
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### WebSocket knobs
 
@@ -107,9 +105,9 @@ The origin check covers the URL the library builds. Fetch follows redirects itse
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+Reconnection comes from [`withRetry`](/api/core/withretry), not from a WebSocket option. `withWebSocketHeartbeat` takes a [`WebSocketHeartbeatConfig`](/api/core/websocketheartbeatconfig-type): `message` is required, and `timeoutMs` is allowed only together with `isAck`. Defjs has no default heartbeat format, interval, or timeout.
 
 ## Types
 
@@ -123,7 +121,7 @@ The root client returned by `createClient`, in two shapes. The factory is a func
 
 <ApiSignature name="Client" />
 
-A `Client` is a value, not a function. Calling the [`DerivableClient`](/api/core/derivableclient-type) with [`RequestOptions`](/api/core/requestoptions-type) returns one. `client()` and `client(undefined)` store no request options. `client({})` keeps an empty snapshot. The call reads each top-level field once. A `protocols` array is copied. `heartbeat` and `reconnect` copy their known fields. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. A getter on a captured field runs during that call and, if it throws, escapes the call. Invalid numbers still fail later with `REQ_OPTIONS_INVALID`. Deriving performs no I/O. A client value is not callable, and calling one fails to compile and throws a `TypeError` at runtime. Create a client value per call. The same value can be passed to many operations, but reusing a value that carries `signal` shares that signal. `signal` is not combined; combine signals with `AbortSignal.any` in application code. The factory's base configuration stays shared and is not frozen. Standard `with*` helpers copy the fixed records they own when they are applied.
+A `Client` is a value, not a function. Calling the [`DerivableClient`](/api/core/derivableclient-type) with [`RequestOptions`](/api/core/requestoptions-type) returns one. `client()` and `client(undefined)` store no request options. `client({})` keeps an empty snapshot. The call reads each top-level field once. A `protocols` array is copied. `heartbeat` and `retry` copy their known fields, and the `retry` copy includes its `methods` array. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. A getter on a captured field runs during that call and, if it throws, escapes the call. Deriving performs no I/O. A client value is not callable, and calling one fails to compile and throws a `TypeError` at runtime. Create a client value per call. The same value can be passed to many operations, but reusing a value that carries `signal` shares that signal. `signal` is not combined; combine signals with `AbortSignal.any` in application code. The factory's base configuration stays shared and is not frozen. Standard `with*` helpers copy the fixed records they own when they are applied.
 
 Do not pass the factory to a React state setter (`setState(factory)` would call it as an updater) or use it as a Vue `watch` or `computed` source (those call a function).
 
@@ -131,7 +129,7 @@ Do not pass the factory to a React state setter (`setState(factory)` would call 
 
 <ApiSignature name="RequestOptions" />
 
-Seven flat fields. Each protocol reads the fields it understands and ignores the rest. Passing `heartbeat` to HTTP is ignored, not a fault. `client(options)` copies a `protocols` array and the known `heartbeat` and `reconnect` fields at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter and no `timeout` or `abort` field.
+Seven flat fields. Each protocol reads the fields it understands and ignores the rest. Passing `heartbeat` to HTTP is ignored, not a fault. `client(options)` copies a `protocols` array and the known `heartbeat` and `retry` fields at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. `retry` applies to HTTP, SSE, and WebSocket alike and replaces the client's retry policy for that call as a whole value. There is no compile-time protocol filter and no `timeout` or `abort` field.
 
 | Field                | Protocol                 | Replacement                                                                                  |
 | -------------------- | ------------------------ | -------------------------------------------------------------------------------------------- |
@@ -141,9 +139,9 @@ Seven flat fields. Each protocol reads the fields it understands and ignores the
 | `beforeConnect`      | WebSocket                | Replaces the client setting for that call.                                                   |
 | `protocols`          | WebSocket                | Replaces the client list.                                                                    |
 | `heartbeat`          | WebSocket                | Replaced whole. `timeoutMs` is the acknowledgement wait, not a request deadline.             |
-| `reconnect`          | WebSocket                | Replaced whole.                                                                              |
+| `retry`              | HTTP, SSE, and WebSocket | Replaces the client policy whole. The HTTP `budget` stays with the client.                   |
 
-[`HttpExecuteOptions`](/api/core/httpexecuteoptions-type) is the HTTP slice (`signal` plus progress). [`EventStreamExecuteOptions`](/api/core/eventstreamexecuteoptions-type) is `{ signal? }`. [`WebSocketExecuteOptions`](/api/core/websocketexecuteoptions-type) is the WebSocket slice plus `signal`.
+[`HttpExecuteOptions`](/api/core/httpexecuteoptions-type) is the HTTP slice (`signal`, progress, and `retry`). [`EventStreamExecuteOptions`](/api/core/eventstreamexecuteoptions-type) is `{ signal?, retry? }`. [`WebSocketExecuteOptions`](/api/core/websocketexecuteoptions-type) is the WebSocket slice plus `signal` and `retry`.
 
 ### ClientOption
 
@@ -167,37 +165,21 @@ The call signature Defjs needs from a Fetch implementation. It is not `typeof fe
 
 <ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
 
-Reconnect is opt-in for both transports: without `withSSEReconnect` / `withWebSocketReconnect` there is no retry. Once `reconnect` is set, these defaults apply:
-
-| Field        | SSE            | WebSocket      |
-| ------------ | -------------- | -------------- |
-| `attempts`   | `3` per outage | `3` per outage |
-| `delayMs`    | `1000`         | `1000`         |
-| `factor`     | `1`            | `2`            |
-| `jitter`     | `0`            | `0`            |
-| `maxDelayMs` | no cap         | `30000`        |
-
-`connectTimeoutMs` is optional and must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It bounds Fetch to response headers for SSE, and construction to `open` for WebSocket; it is cleared after the handshake. Expiry reports `NET_UNREACHABLE` to the balancer so a reconnect can pick the next endpoint. Exhausting retries ends with `NET_TIMEOUT`. It exists only inside the reconnect options, and `attempts` defaults to `3` whenever that object is present, so setting `connectTimeoutMs` alone also enables reconnect. For a handshake-only deadline, set `attempts: 0` as well.
-
-For both transports, a successful handshake resets the per-outage retry budget, callback attempt, and backoff exponent. `attempts: 0` disables retry; omitting `attempts` does not give unlimited retries within one outage. `maxDelayMs` caps the final delay after jitter and rounding; the platform timer limit of `2_147_483_647` ms also applies, including when SSE has no configured cap. A zero base stays zero; valid-number overflow saturates at the caps.
-
-Reconnect options are validated before transport: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID`. WebSocket `attempts: 0` disables subsequent retries, but all explicitly supplied reconnect fields are still validated before the initial connection, just as in SSE. Jitter scales the capped base in either direction before the final cap is applied.
-
-For SSE, `delayMs` is only the starting base delay: a digits-only server `retry:` field replaces it for later attempts, including after recovery. `shouldReconnect` returning `false` stops retrying. The SSE callback also receives `lastEventId`, the request `method`, and the latest `open` info, and may be async. Without it, SSE reconnects only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests; with it, its result decides for every method. The latest event ID is sent as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it and an ID containing NUL is ignored. The WebSocket callback receives the close `code`, `reason` and `wasClean` instead.
+Neither interface holds a retry policy. SSE and WebSocket retries come from the client-wide [`withRetry`](/api/core/withretry) policy, and without one a failed stream or a closed socket ends the call. Their defaults, the decision order after a failure, and what each transport retries by default are described under [withRetry()](#withretry).
 
 SSE `onInvalidEvent` handles an event with no matching struct, including no `default` (`missing-struct`), or whose data fails its struct (`validation-failed`). The event is always dropped; the handler's return value is ignored, and an error it throws does not close the stream.
 
-For WebSocket, `beforeConnect`, `heartbeat`, `protocols` and `reconnect` can also be passed on a derived client; each replaces the corresponding client setting for that call as a whole. `heartbeat.message` builds each ping; nothing is sent when it is omitted or returns `undefined`. `heartbeat.timeoutMs` waits for an acknowledgement. It is not a request deadline.
+For WebSocket, `beforeConnect`, `heartbeat`, and `protocols` can also be passed on a derived client; each replaces the corresponding client setting for that call as a whole. `heartbeat.message` builds each ping; nothing is sent when it returns `undefined`. `heartbeat.timeoutMs` waits for an acknowledgement and needs `isAck`. It is not a request deadline. An unanswered heartbeat closes the socket and enters the retry flow like any close that `session.close()` did not request.
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-The shown fields are `sse` and `webSocket`. The other six — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, and `withCredentials` — are inherited from the non-exported HTTP base. `endpoints` is `readonly string[]`. The resolved default is `[]`. An empty array is a legal value and fails the call with `REQ_BUILD_FAILED`. There is no client-level `timeout`. `createClient` does not take this object; it takes option helpers.
+The shown fields are `retry`, `sse`, and `webSocket`. The other six — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, and `withCredentials` — are inherited from the non-exported HTTP base. `endpoints` is `readonly string[]`. The resolved default is `[]`. An empty array is a legal value and fails the call with `REQ_BUILD_FAILED`. There is no client-level `timeout`. `createClient` does not take this object; it takes option helpers.
 
 ### ClientConfig
 
-The resolved snapshot that option helpers mutate and an operation reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`), `webSocket`, and `balancer` always present. `http.retry` is optional and defaults to `undefined` (one attempt, no budget); `withRetry(options?)` configures it. `balancer` defaults to a new `pickFirstBalancer()` for that client. It is not a [`RequestOptions`](/api/core/requestoptions-type) field.
+The resolved snapshot that option helpers mutate and an operation reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`), `webSocket`, and `balancer` always present. `retry` is optional and defaults to `undefined` (one attempt, no budget); `withRetry(options?)` configures it for every transport. `balancer` defaults to a new `pickFirstBalancer()` for that client. It is not a [`RequestOptions`](/api/core/requestoptions-type) field.
 
 ### ClientSSEConfig
 
@@ -223,7 +205,7 @@ The constructor passed to `withWebSocketHandle`. It must expose the `OPEN` ready
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` advances on `NET_UNREACHABLE` or `NET_UNAVAILABLE` (HTTP 502, 503, or 504); an HTTP retry never moves its sticky endpoint, and order follows `members`, the client's whole endpoint list. Its optional positive finite `failbackMs` returns to the first endpoint by time alone: once the sticky endpoint has been away from the first for that long, the next pick whose candidates include the first selects it again, with no judgement of whether it has recovered; if it fails again, the ordinary advance rule applies and the time starts anew. HTTP retries are a separate client policy configured with `withRetry`. `roundRobinBalancer` walks the list. `weights` is optional. See [Multiple endpoints](/docs/client#multiple-endpoints).
+`pickFirstBalancer` advances on `NET_UNREACHABLE` or `NET_UNAVAILABLE` (HTTP 502, 503, or 504). A retry picks again from every endpoint, so it follows that rule: after a refused connection it reaches the next endpoint, and after a timeout, which does not advance pick-first, it tries the same endpoint again. Order follows `members`, the client's whole endpoint list. Its optional positive finite `failbackMs` returns to the first endpoint by time alone: once the sticky endpoint has been away from the first for that long, the next pick whose candidates include the first selects it again, with no judgement of whether it has recovered; if it fails again, the ordinary advance rule applies and the time starts anew. Retries are a separate client policy configured with `withRetry`. `roundRobinBalancer` walks the list. `weights` is optional. See [Multiple endpoints](/docs/client#multiple-endpoints).
 
 ### p2cBalancer()
 
@@ -239,13 +221,33 @@ Counts classified failures and ejects an endpoint by time, and skips an endpoint
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
-Enables same-call HTTP retry independently of endpoint selection. Omitting `withRetry` means one attempt and no budget. `withRetry()` is equivalent to `withRetry({})` and defaults to `maxAttempts: 2` (including the original), `on: ["connect-failure"]`, and safe methods `GET`, `HEAD`, `OPTIONS`, `TRACE`. Methods are case-insensitive; `[]` disables retries. `maxAttempts` is a safe integer at least 1, and each endpoint is tried at most once. `"gateway-error"` includes `NET_UNAVAILABLE` (HTTP 502/503/504) and gateway bodies rejected by `RES_*` decoding; `"attempt-timeout"` uses `attemptTimeoutMs`. Streaming request bodies never retry.
+Enables retries for HTTP, SSE, and WebSocket with one policy, stored in `config.retry`. Without `withRetry` every call makes one attempt, simple and without backoff. `withRetry()` and `withRetry(undefined)` are equivalent to `withRetry({})`. A later `withRetry` replaces the policy; `withRetry({ maxRetries: 0 })` turns retries off after they were enabled. The option captures owned fields, the `methods` array, and the nested budget when it is applied. Options are not validated at runtime; a value that TypeScript would refuse behaves as JavaScript treats it.
 
-Backoff defaults to `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`, with the same field semantics as SSE/WebSocket reconnect. `delayMs: 0` skips waiting. `attemptTimeoutMs` must be finite, positive, and no greater than 2147483647 (the timer limit); otherwise the operation returns `REQ_OPTIONS_INVALID`. It times each Fetch sent to the selected endpoint, from invocation until its response body has been read; interceptor work around the send and struct decoding are not timed and never count against the endpoint. The caller signal covers the whole call, including backoff waits. When a retry round cannot use any endpoint (the balancer's pick fails, or the next endpoint's URL does not resolve), the call returns the previous attempt's fault instead of `REQ_BUILD_FAILED`.
+The defaults are `maxRetries: 3` (retries after the first attempt; `0` never retries), `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000` (`Infinity` removes the cap, and the platform timer limit of `2_147_483_647` ms still applies), and `jitter: 0.2` (a 0 to 1 multiplicative factor). Retry _n_ waits `delayMs * factor^(n-1)`, capped; jitter and rounding follow, then the final delay is capped again. A zero base stays zero. `methods` defaults to `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, and `DELETE`, compared case-insensitively. `attemptTimeoutMs` bounds one attempt: HTTP counts to the end of the response body, SSE to the response headers, and WebSocket to `open`. An attempt that runs out is a failure like a refused connection. For a time limit without retries use `withRetry({ maxRetries: 0, attemptTimeoutMs })`.
 
-The client-owned Finagle budget defaults to 20% plus 10 retries/second of reserve over a 10s TTL. Credits and debits expire lazily in ten TTL/10 slices. `budget: false` removes the limit. Derived clients sharing a configuration share its budget; separate clients do not, even with one shared balancer. Invalid options return `REQ_OPTIONS_INVALID` with `Invalid retry options` when HTTP runs. The option captures owned fields, arrays, and the nested budget at application time. `withRetry()` and `withRetry(undefined)` behave like `withRetry({})`. A later `withRetry` replaces the policy; `withRetry({ maxAttempts: 1 })` turns retries off after they were enabled. Balancers and health wrappers have no retry settings. See [Load balancing & failover](/docs/load-balancing).
+After each failed attempt the same flow runs on every transport, in this order:
+
+1. A caller abort, a manual `close()`, a fatal error such as a mismatched media type, and a `ReadableStream` request body end the call. `shouldRetry` is not called.
+2. When `maxRetries` retries have been made, the call ends. `shouldRetry` is not called.
+3. `shouldRetry(context)` decides; without it, `context.retryable` does. It may return a promise, and the caller's signal cancels it. If it throws, the call ends with that error as the cause: HTTP returns `EXT_HOOK_FAILED` with it as `cause`, and SSE and WebSocket end the stream or session with it as the `error` cause.
+4. HTTP only: the budget must pay for the retry, or the call ends.
+5. The call waits for the backoff delay, then the balancer picks again from every endpoint, including the one that just failed. A single endpoint is tried again after the delay. For HTTP each retry rebuilds the request and reruns the complete interceptor chain; SSE and WebSocket reuse their request and re-resolve only the URL.
+
+`context` is a [`RetryContext`](/api/core/retrycontext-type), narrowed by `transport`. Every context has `attempt` (the number of the retry about to start, from 1), `cause` (the fault, error, or close cause), and `retryable` (what the default policy decides). HTTP adds `method`, `endpoint`, and `status`; SSE adds `method`, `lastEventId`, `open`, and `status`; WebSocket adds `code`, `reason`, and `wasClean`. Return `context.retryable` to keep the default and add a rule on top, or return your own verdict to replace it.
+
+What is retryable by default differs only in which failures count:
+
+| Transport | Default `retryable`                                                                                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP      | The method is in `methods` and the attempt got no response, got a 502, 503, or 504, or ran out of `attemptTimeoutMs`. Any other status is given to `shouldRetry` with `retryable: false`. Local failures before Fetch starts never reach it. |
+| SSE       | The method is in `methods` and the handshake failed on the network, the handshake answered 502, 503, or 504, the attempt ran out of `attemptTimeoutMs`, or an open stream failed on the network. A normal end of the stream never retries.   |
+| WebSocket | Every close that `session.close()` did not request, including a connection that never opened and an unanswered heartbeat.                                                                                                                    |
+
+For SSE a digits-only server `retry:` field replaces `delayMs` for later attempts, the committed event ID is sent as UTF-8 bytes in `Last-Event-ID`, and a successful handshake resets the count. For WebSocket a successful `open` resets the count. A server that accepts and immediately closes every connection therefore keeps being retried; stop it with `shouldRetry`. SSE and WebSocket have no budget. HTTP offline failures never retry.
+
+The HTTP budget is client-owned and Finagle-style. It defaults to 20% plus 10 retries per second of reserve over a 10 s TTL, credits and debits expire lazily in ten TTL/10 slices, and `budget: false` removes the limit. Derived clients sharing a configuration share its budget; separate clients do not, even with one shared balancer. When a retry round cannot use any endpoint (the balancer's pick fails, or the next endpoint's URL does not resolve), the call returns the previous attempt's fault. The caller signal covers the whole call, including backoff waits. A request option `retry` replaces the policy for one call. Balancers and health wrappers have no retry settings. See [Load balancing & failover](/docs/load-balancing).
 
 <include cwd>examples/client/http-retry.ts#example</include>
 

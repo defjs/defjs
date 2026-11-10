@@ -28,10 +28,8 @@ export {
   withQuerySerializer,
   withSSEHandle,
   withSSEOnInvalidEvent,
-  withSSEReconnect,
   withWebSocketBeforeConnect,
   withWebSocketHandle,
   withWebSocketHeartbeat,
   withWebSocketProtocols,
-  withWebSocketReconnect,
 } from "./option";

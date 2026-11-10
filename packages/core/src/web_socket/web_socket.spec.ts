@@ -58,14 +58,13 @@ describe("web socket runtime", () => {
 
   test.each([
     {
-      options: { heartbeat: { intervalMs: Number.POSITIVE_INFINITY } },
-      source: "heartbeat",
-    },
-    {
       options: {
-        reconnect: { attempts: Number.POSITIVE_INFINITY, delayMs: 0 },
+        heartbeat: {
+          intervalMs: Number.POSITIVE_INFINITY,
+          message: () => undefined,
+        },
       },
-      source: "reconnect",
+      source: "heartbeat",
     },
   ])(
     "should reject invalid $source timer config before constructing a socket",
@@ -253,6 +252,7 @@ describe("web socket runtime", () => {
             heartbeat: {
               intervalMs: 10,
               message: () => ({ type: "ping" as const }),
+              isAck: () => false,
               timeoutMs: 5,
             },
           }),
@@ -638,7 +638,7 @@ describe("web socket runtime", () => {
       (client) => useSocket(client, { key: testKey }),
       {
         signal: controller.signal,
-        reconnect: { attempts: 2, delayMs: 20 },
+        retry: { maxRetries: 2, delayMs: 20 },
       },
     );
 
@@ -702,7 +702,7 @@ describe("web socket runtime", () => {
         signal: controller.signal,
         // The delay is the clock under test: abort is joined to the reconnecting signal, so the
         // delay only has to outlive that observation instead of a fixed sleep.
-        reconnect: { attempts: 2, delayMs: 60_000 },
+        retry: { maxRetries: 2, delayMs: 60_000 },
       },
     );
 
@@ -751,7 +751,7 @@ describe("web socket runtime", () => {
           key: `immediate-case-${crypto.randomUUID()}`,
         }),
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
 
@@ -1008,7 +1008,7 @@ describe("web socket runtime", () => {
     });
     const key = `provider-queue-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const [error, socket] = await useProviderSocket(
-      client({ reconnect: { attempts: 1, delayMs: 0 } }),
+      client({ retry: { maxRetries: 1, delayMs: 0 } }),
       { key, mode: "queue" },
     );
 

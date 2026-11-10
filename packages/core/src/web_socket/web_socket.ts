@@ -1,9 +1,10 @@
 import type { Client, RequestOptions } from "../client/client";
 import { CLIENT } from "../client/client";
-import { snapshotProtocols } from "../client/capture";
+import { snapshotHeartbeat, snapshotProtocols } from "../client/capture";
 import type {
   ClientConfig,
   ClientWebSocketOptions,
+  RetryOptions,
   WebSocketHandle,
 } from "../client/config";
 
@@ -61,7 +62,8 @@ import {
   validateHeartbeatConfig,
 } from "./heartbeat";
 import { computeReconnectDelay, wait } from "../internal/backoff";
-import { normalizeReconnectConfig, shouldReconnect } from "./reconnect";
+import type { RetryPolicy } from "../internal/retry";
+import { decideRetry, resolveRetryPolicy } from "../internal/retry";
 
 /**
  * Lifecycle state of a managed WebSocket session.
@@ -280,13 +282,13 @@ interface UseWebSocketBaseConfig<TIncoming = unknown, TOutgoing = unknown> {
   beforeConnect?: ClientWebSocketOptions["beforeConnect"];
   heartbeat?: WebSocketHeartbeatConfig<TIncoming, TOutgoing>;
   protocols?: readonly string[];
-  reconnect?: ClientWebSocketOptions["reconnect"];
+  retry?: Omit<RetryOptions, "budget">;
 }
 
 /**
  * WebSocket fields of {@link RequestOptions}, plus `signal`.
  *
- * `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for one call. `signal` covers the whole session, including after it opens. There is no startup-only deadline and no `abort` field.
+ * `beforeConnect`, `heartbeat`, `protocols`, and `retry` override the client-level options for one call. `signal` covers the whole session, including after it opens. There is no startup-only deadline and no `abort` field.
  *
  * @group web-socket
  */
@@ -352,33 +354,37 @@ export type ManualSocketCloseReason = {
 };
 
 /**
- * Heartbeat ping and acknowledgement settings for a live WebSocket session.
+ * Heartbeat settings for a live WebSocket session: what to send, how often, and how to recognize the answer.
+ *
+ * Defjs defines no heartbeat format. `message` and `isAck` are yours.
  *
  * - `intervalMs` is the delay between heartbeat messages.
  *
- * - `message()` builds the payload. It is sent through the `outgoing` struct. Nothing is sent when it is omitted or returns `undefined`.
+ * - `message()` builds the payload. It is sent through the `outgoing` struct as JSON text, so the endpoint needs an `outgoing` struct. Nothing is sent when it returns `undefined`.
  *
- * - After struct encoding, non-JSON values fail with `TypeError` through the same serializer as `session.send`; that heartbeat failure ends the logical session without reconnecting.
+ * - After struct encoding, non-JSON values fail with `TypeError` through the same serializer as `session.send`; that heartbeat failure ends the session without a retry.
  *
- * - `isAck(message)` receives each decoded incoming message. When it returns `true`, the message is treated as the acknowledgement and is not delivered to `receive`.
+ * - `isAck(message)` receives each decoded incoming message. When it returns `true`, the message is the acknowledgement and is not delivered to `receive`. A frame that fails the `incoming` struct never reaches it.
  *
- * - `timeoutMs` is how long to wait for an acknowledgement after a heartbeat. Missing it fails the session and reports `NET_UNREACHABLE` for the endpoint to the balancer. A throwing `message()` or a serialization failure also fails the session, but is not attributed to the endpoint.
- *
- * - `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`.
+ * - `timeoutMs` is how long to wait for an acknowledgement after a heartbeat, and it needs `isAck`: the type allows `timeoutMs` only together with `isAck`. A missing acknowledgement counts as a connection failure, reported to the balancer as `NET_UNREACHABLE`. The socket is closed and the attempt enters the retry flow of `withRetry`; without a retry policy the session ends with an `error`. A throwing `message()` or a serialization failure also ends the session, but is not attributed to the endpoint and is not retried.
  *
  * Set it with {@link withWebSocketHeartbeat} or the `heartbeat` request option.
  *
  * @group web-socket
  */
-export interface WebSocketHeartbeatConfig<
-  TIncoming = unknown,
-  TOutgoing = unknown,
-> {
-  intervalMs: number;
-  isAck?: (message: TIncoming) => boolean;
-  message?: () => TOutgoing;
-  timeoutMs?: number;
-}
+export type WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> =
+  | {
+      intervalMs: number;
+      isAck?: (message: TIncoming) => boolean;
+      message: () => TOutgoing;
+      timeoutMs?: undefined;
+    }
+  | {
+      intervalMs: number;
+      isAck: (message: TIncoming) => boolean;
+      message: () => TOutgoing;
+      timeoutMs: number;
+    };
 
 /**
  * Declare a typed WebSocket endpoint.
@@ -462,7 +468,7 @@ type ResolvedCallOptions = {
   beforeConnect: ClientWebSocketOptions["beforeConnect"];
   heartbeat: ClientWebSocketOptions["heartbeat"];
   protocols: readonly string[] | undefined;
-  reconnect: ReturnType<typeof normalizeReconnectConfig>;
+  retry: RetryPolicy | undefined;
 };
 
 function readQueueLimits(
@@ -478,7 +484,7 @@ function readQueueLimits(
 
 function readCallOptions(
   config: RequestOptions | undefined,
-  webSocket: ClientWebSocketOptions,
+  clientConfig: ClientConfig,
 ): StageOutcome<ResolvedCallOptions> {
   try {
     const beforeConnect = config?.beforeConnect;
@@ -486,19 +492,12 @@ function readCallOptions(
     const protocols = configuredProtocols
       ? [...configuredProtocols]
       : undefined;
-    const reconnectOption = config?.reconnect ?? webSocket.reconnect;
-    const heartbeatOption = config?.heartbeat ?? webSocket.heartbeat;
-    const heartbeat = heartbeatOption
-      ? {
-          intervalMs: heartbeatOption.intervalMs,
-          isAck: heartbeatOption.isAck,
-          message: heartbeatOption.message,
-          timeoutMs: heartbeatOption.timeoutMs,
-        }
-      : undefined;
+    const heartbeat = snapshotHeartbeat(
+      config?.heartbeat ?? clientConfig.webSocket.heartbeat,
+    );
     validateHeartbeatConfig(heartbeat);
-    const reconnect = normalizeReconnectConfig(reconnectOption);
-    return [undefined, { beforeConnect, heartbeat, protocols, reconnect }];
+    const retry = resolveRetryPolicy(config?.retry ?? clientConfig.retry);
+    return [undefined, { beforeConnect, heartbeat, protocols, retry }];
   } catch (error) {
     return [createPreflightFault("REQ_OPTIONS_INVALID", error), undefined];
   }
@@ -627,16 +626,13 @@ async function runWebSocketCommand<
     return stopInvalidOptions(queueFault);
   }
 
-  const [optionsFault, callOptions] = readCallOptions(
-    config,
-    clientConfig.webSocket,
-  );
+  const [optionsFault, callOptions] = readCallOptions(config, clientConfig);
   if (optionsFault) {
     return stopInvalidOptions(optionsFault);
   }
   const beforeConnectOption = callOptions.beforeConnect;
   const protocolsOption = callOptions.protocols;
-  const reconnect = callOptions.reconnect;
+  const retry = callOptions.retry;
   const heartbeatConfig = callOptions.heartbeat;
 
   // `signal` stays in force after open and across reconnects.
@@ -788,7 +784,6 @@ async function runWebSocketCommand<
           let closeError: unknown;
           let physicalCleanupDetach: (() => void) | undefined;
 
-          const hasReconnectPredicate = reconnect?.hasShouldReconnect ?? false;
           const beforeConnect =
             beforeConnectOption ?? clientConfig.webSocket.beforeConnect;
           const baseProtocols = [
@@ -924,18 +919,27 @@ async function runWebSocketCommand<
                 return;
               }
 
+              // Every close the caller did not ask for is retryable by default, a connection that never opened included.
               const nextAttempt = attempt + 1;
-              let reconnectRequested = false;
-              let reconnectPredicateDeclined = false;
-              if (reconnect && nextAttempt <= reconnect.attempts) {
+              let retryRequested = false;
+              if (retry) {
                 try {
-                  reconnectRequested = shouldReconnect(
-                    reconnect,
-                    outcome,
-                    nextAttempt,
+                  retryRequested = await decideRetry(
+                    retry,
+                    attempt,
+                    signal,
+                    (upcoming) => ({
+                      transport: "websocket",
+                      attempt: upcoming,
+                      cause: outcome.cause,
+                      retryable: true,
+                      code: outcome.closeInfo.code,
+                      reason: outcome.closeInfo.reason,
+                      wasClean: outcome.closeInfo.wasClean,
+                    }),
                   );
-                  reconnectPredicateDeclined =
-                    hasReconnectPredicate && !reconnectRequested;
+                  // The session can finish while the answer is on its way; every finish aborts this signal.
+                  signal.throwIfAborted();
                 } catch (cause) {
                   if (finished) {
                     return;
@@ -948,15 +952,7 @@ async function runWebSocketCommand<
                   return;
                 }
               }
-              if (finished) {
-                return;
-              }
-              if (signal.aborted) {
-                finishFromSignal(outcome.closeInfo);
-                return;
-              }
-
-              if (reconnectRequested && reconnect) {
+              if (retryRequested && retry) {
                 attempt = nextAttempt;
                 setSocketState(state, "reconnecting");
                 if (finished) {
@@ -966,7 +962,7 @@ async function runWebSocketCommand<
                   finishFromSignal(outcome.closeInfo);
                   return;
                 }
-                const delayMs = computeReconnectDelay(reconnect, nextAttempt);
+                const delayMs = computeReconnectDelay(retry, nextAttempt);
                 if (delayMs > 0) {
                   try {
                     await wait(delayMs, signal);
@@ -985,11 +981,6 @@ async function runWebSocketCommand<
                   outcome.cause ?? new Error("WebSocket closed before open");
                 const startupError = createNetworkFault(cause);
                 finish(toErrorInfo(outcome.closeInfo, cause), { startupError });
-                return;
-              }
-
-              if (reconnectPredicateDeclined) {
-                finish(toClosedInfo(outcome.closeInfo));
                 return;
               }
 
@@ -1229,10 +1220,21 @@ async function runWebSocketCommand<
                       heartbeatConfig,
                       endpoint.outgoing,
                       (cause, timedOut) => {
-                        // An unanswered ping is a connection failure, as in gRPC keepalive; a failing
-                        // local heartbeat callback or serializer is not the endpoint's fault.
-                        if (timedOut) runtimeCause = cause;
-                        finish({ cause, kind: "error" });
+                        // A failing local heartbeat callback or serializer is not the endpoint's fault and ends the session.
+                        if (!timedOut) {
+                          finish({ cause, kind: "error" });
+                          return;
+                        }
+                        // An unanswered ping is a connection failure, as in gRPC keepalive: the socket is closed
+                        // and the attempt settles like a drop, so the retry policy decides what follows.
+                        runtimeCause = cause;
+                        requestNativeCloseBestEffort(socket);
+                        settleAttempt({
+                          cause,
+                          closeInfo: extractCloseInfo(undefined, cause),
+                          connection: connectionInfo(),
+                          opened: true,
+                        });
                       },
                       WebSocketCtor.OPEN,
                     );
@@ -1419,7 +1421,7 @@ async function runWebSocketCommand<
                   socket,
                 };
 
-                if (reconnect?.connectTimeoutMs !== undefined)
+                if (retry?.attemptTimeoutMs !== undefined)
                   connectTimer = setTimeout(() => {
                     connectTimedOut = true;
                     runtimeCause = ERR_TIMEOUT;
@@ -1430,7 +1432,7 @@ async function runWebSocketCommand<
                       connection: connectionInfo(),
                       opened: false,
                     });
-                  }, reconnect.connectTimeoutMs);
+                  }, retry.attemptTimeoutMs);
                 signal.addEventListener("abort", handleAbort, { once: true });
                 socket.addEventListener("open", handleOpen);
                 socket.addEventListener("message", onMessage);
@@ -1753,7 +1755,7 @@ async function runWebSocketCommand<
 /**
  * The outcome of a **single connect attempt**, not the final result of the session.
  *
- * The reconnect logic uses it to decide whether to try again.
+ * The retry logic uses it to decide whether to try again.
  *
  * - `closeInfo` holds the close details of that attempt: `{ cause?, code?, reason?, wasClean? }`.
  *
@@ -1763,7 +1765,7 @@ async function runWebSocketCommand<
  *
  * - `opened` tells whether the socket reached `open` before it ended.
  *
- * The `shouldReconnect` option does not receive this object. It gets `attempt`, `cause`, `code`, `reason`, and `wasClean`, taken from it. The final result of the session is {@link WebSocketCloseInfo}.
+ * `shouldRetry` does not receive this object. Its context carries `attempt`, `cause`, `code`, `reason`, and `wasClean`, taken from it. The final result of the session is {@link WebSocketCloseInfo}.
  *
  * @group web-socket
  */

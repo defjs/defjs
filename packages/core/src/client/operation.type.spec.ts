@@ -43,7 +43,6 @@ export type OptionKeys = Expect<
     | "beforeConnect"
     | "protocols"
     | "heartbeat"
-    | "reconnect"
     | "retry"
   >
 >;
@@ -121,6 +120,7 @@ void room(
   client({
     heartbeat: {
       intervalMs: 1000,
+      message: () => ({ type: "ping" }),
       isAck: (message) =>
         typeof message === "object" && message !== null && "count" in message,
     },

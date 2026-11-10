@@ -12,8 +12,8 @@ import {
   withHTTPHandle,
   withInterceptors,
   withSSEHandle,
-  withSSEReconnect,
   withWebSocketHandle,
+  withRetry,
 } from "../../src";
 
 function socketHandle(constructed: (url: string) => void) {
@@ -94,13 +94,13 @@ describe.each(["http", "sse", "ws"] as const)(
         const interceptor = vi.fn(() => {
           throw new Error("Must not run");
         });
-        const shouldReconnect = vi.fn(() => true);
+        const shouldRetry = vi.fn(() => true);
         const client = createClient(
           withEndpoint("https://trusted.example/api"),
           withHTTPHandle(handle),
           withSSEHandle(handle),
           withWebSocketHandle(Socket),
-          withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+          withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
           withInterceptors(
             createHttpInterceptor(interceptor),
             createSSEInterceptor(interceptor),
@@ -118,7 +118,7 @@ describe.each(["http", "sse", "ws"] as const)(
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
         expect(interceptor).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
       },
     );
 
@@ -130,13 +130,13 @@ describe.each(["http", "sse", "ws"] as const)(
         );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
-        const shouldReconnect = vi.fn(() => true);
+        const shouldRetry = vi.fn(() => true);
         const client = createClient(
           withEndpoint(endpoint),
           withHTTPHandle(handle),
           withSSEHandle(handle),
           withWebSocketHandle(Socket),
-          withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+          withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
         );
         const command = commands("/events");
         const [fault, delivered] = await (transport === "http"
@@ -148,7 +148,7 @@ describe.each(["http", "sse", "ws"] as const)(
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
       },
     );
 
@@ -160,13 +160,13 @@ describe.each(["http", "sse", "ws"] as const)(
         );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
-        const shouldReconnect = vi.fn(() => true);
+        const shouldRetry = vi.fn(() => true);
         const client = createClient(
           withEndpoint("https://trusted.example/api"),
           withHTTPHandle(handle),
           withSSEHandle(handle),
           withWebSocketHandle(Socket),
-          withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+          withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
           withInterceptors(
             createHttpInterceptor((request, next) =>
               next({ ...request, endpoint: path }),
@@ -189,7 +189,7 @@ describe.each(["http", "sse", "ws"] as const)(
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
       },
     );
 
@@ -201,13 +201,13 @@ describe.each(["http", "sse", "ws"] as const)(
         );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
-        const shouldReconnect = vi.fn(() => true);
+        const shouldRetry = vi.fn(() => true);
         const client = createClient(
           withEndpoint("https://trusted.example/api"),
           withHTTPHandle(handle),
           withSSEHandle(handle),
           withWebSocketHandle(Socket),
-          withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+          withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
           withInterceptors(
             createHttpInterceptor((request, next) =>
               next({ ...request, baseEndpoint }),
@@ -229,7 +229,7 @@ describe.each(["http", "sse", "ws"] as const)(
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
       },
     );
   },

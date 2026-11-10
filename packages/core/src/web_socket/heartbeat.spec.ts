@@ -130,7 +130,7 @@ describe("heartbeat", () => {
     startHeartbeat(
       createMockSocket(),
       session,
-      { intervalMs: 1000 },
+      { intervalMs: 1000, message: () => undefined },
       undefined,
       vi.fn(),
       WebSocket.OPEN,
@@ -183,29 +183,6 @@ describe("heartbeat", () => {
     expect(onFatal).not.toHaveBeenCalled();
   });
 
-  test("should ignore a falsy non-function heartbeat message at the runtime boundary", () => {
-    const socket = createMockSocket();
-    const session = createMockSession(socket);
-    const onFatal = vi.fn();
-
-    startHeartbeat(
-      socket,
-      session,
-      {
-        intervalMs: 100,
-        // @ts-expect-error non-function message is ignored at runtime
-        message: false,
-      },
-      undefined,
-      onFatal,
-      WebSocket.OPEN,
-    );
-
-    vi.advanceTimersByTime(100);
-    expect(method(socket, "send")).not.toHaveBeenCalled();
-    expect(onFatal).not.toHaveBeenCalled();
-  });
-
   test("should not send when outgoing serialization stops the active heartbeat runtime", () => {
     const socket = createMockSocket();
     const session = createMockSession(socket);
@@ -220,7 +197,12 @@ describe("heartbeat", () => {
     startHeartbeat(
       socket,
       session,
-      { intervalMs: 100, message: () => message, timeoutMs: 200 },
+      {
+        intervalMs: 100,
+        message: () => message,
+        isAck: () => false,
+        timeoutMs: 200,
+      },
       struct.object({ type: struct.literal("ping"), text: struct.string() }),
       vi.fn(),
       WebSocket.OPEN,
@@ -243,6 +225,7 @@ describe("heartbeat", () => {
       {
         intervalMs: 100,
         message: () => ({ type: "ping" as const }),
+        isAck: () => false,
         timeoutMs: 200,
       },
       struct.object({ type: struct.literal("ping") }),
@@ -271,6 +254,7 @@ describe("heartbeat", () => {
       {
         intervalMs: 100,
         timeoutMs: 50,
+        isAck: () => false,
         message: () => ({ type: "ping" as const }),
       },
       struct.object({ type: struct.literal("ping") }),
@@ -309,6 +293,7 @@ describe("heartbeat", () => {
         {
           intervalMs: 100,
           timeoutMs: 50,
+          isAck: () => false,
           message: () => ({ type: "ping" as const }),
         },
         struct.object({ type: struct.literal("ping") }),
@@ -337,6 +322,7 @@ describe("heartbeat", () => {
       const config = {
         intervalMs: 100,
         timeoutMs: 50,
+        isAck: () => false,
         message: () => ({ type: "ping" as const }),
       };
       const outgoing = struct.object({ type: struct.literal("ping") });
@@ -401,7 +387,7 @@ describe("heartbeat", () => {
     startHeartbeat(
       openSocket,
       openSession,
-      { intervalMs: 100 },
+      { intervalMs: 100, message: () => undefined },
       undefined,
       vi.fn(),
       WebSocket.OPEN,
@@ -444,7 +430,7 @@ describe("heartbeat", () => {
       startHeartbeat(
         socket,
         session,
-        { intervalMs: 100, timeoutMs: 200, message },
+        { intervalMs: 100, timeoutMs: 200, isAck: () => false, message },
         outgoing,
         onFatal,
         WebSocket.OPEN,
@@ -496,6 +482,7 @@ describe("heartbeat", () => {
       {
         intervalMs: 100,
         timeoutMs: 50,
+        isAck: () => false,
         message: () => ({ type: "ping" as const }),
       },
       struct.object({ type: struct.literal("ping") }),
@@ -521,6 +508,7 @@ describe("heartbeat", () => {
       {
         intervalMs: 5,
         timeoutMs: 20,
+        isAck: () => false,
         message: () => ({ type: "ping" as const }),
       },
       struct.object({ type: struct.literal("ping") }),

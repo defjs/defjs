@@ -91,11 +91,9 @@ Der Header wird gesetzt, wenn alle Bedingungen zutreffen: Die Methode ist nicht 
 
 ### SSE-Optionen
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### WebSocket-Optionen
 
@@ -105,9 +103,7 @@ Der Header wird gesetzt, wenn alle Bedingungen zutreffen: Die Methode ist nicht 
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
-
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
 ## Typen
 
@@ -237,7 +233,7 @@ Umhüllt ein Kind mit Consecutive-Failure-Circuit-Breaking im Stil von Linkerd. 
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
 Aktiviert Same-Call-HTTP-Retry unabhängig von der Endpunktauswahl. Weglassen bedeutet einen Versuch und kein Budget. `withRetry()` entspricht `withRetry({})` und hat die Defaults `maxAttempts: 2` (den ursprünglichen Versuch eingeschlossen), `on: ["connect-failure"]` und die sicheren Methoden `GET`, `HEAD`, `OPTIONS`, `TRACE`. Methoden ignorieren die Großschreibung; `[]` deaktiviert Retries. `maxAttempts` ist eine sichere Ganzzahl von mindestens 1, und jeder Endpunkt wird höchstens einmal versucht. `"gateway-error"` umfasst `NET_UNAVAILABLE` (HTTP 502/503/504) und Gateway-Bodies, die von der `RES_*`-Dekodierung zurückgewiesen werden; `"attempt-timeout"` nutzt `attemptTimeoutMs`. Streaming-Request-Bodies werden nie erneut versucht.
 

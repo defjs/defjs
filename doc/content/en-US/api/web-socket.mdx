@@ -16,9 +16,9 @@ Declare a socket, call the operation with a client, send and receive typed messa
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-The call returns `[null, session, connection]` or `[error, undefined, connection?]`. Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). WebSocket reads `signal`, `beforeConnect`, `heartbeat`, `protocols`, and `reconnect`, and ignores HTTP progress fields.
+The call returns `[null, session, connection]` or `[error, undefined, connection?]`. Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). WebSocket reads `signal`, `beforeConnect`, `heartbeat`, `protocols`, and `retry`, and ignores HTTP progress fields.
 
-`beforeConnect`, `heartbeat`, `protocols`, and `reconnect` each override the client-level option for that call as a whole. Protocol precedence is the derived client, then `withWebSocketProtocols`, then the definition's `protocols`. `heartbeat.timeoutMs` is the acknowledgement wait, not a request deadline.
+`beforeConnect`, `heartbeat`, `protocols`, and `retry` each override the client-level option for that call as a whole. Protocol precedence is the derived client, then `withWebSocketProtocols`, then the definition's `protocols`. `heartbeat.timeoutMs` is the acknowledgement wait, not a request deadline.
 
 ## WebSocketSession
 
@@ -44,19 +44,19 @@ Prefer `await using ownedSession = session` for owned scope cleanup. Manual `ses
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` is `closed`, `aborted`, or `error`. `cause` is absent on `closed`, optional on `aborted`, and required on `error`. On `error`, the same cause rejects `receive` after the messages already queued, and reaches `onRuntimeError`. Unread messages are discarded when the session ends as `aborted`, and when the caller ends it with `session.close()` or disposal. Heartbeat timeout and exhausted reconnects keep ordinary runtime `Error` causes without a separate stable code. A connection that was open and then dropped without a close frame (code `1006`) is `error` on every runtime. `code`, `reason`, and `wasClean` may appear on every variant. A manual `session.close()` fills `code` and `reason` on `{ kind: "closed" }` when the close event carries none.
+`kind` is `closed`, `aborted`, or `error`. `cause` is absent on `closed`, optional on `aborted`, and required on `error`. On `error`, the same cause rejects `receive` after the messages already queued, and reaches `onRuntimeError`. Unread messages are discarded when the session ends as `aborted`, and when the caller ends it with `session.close()` or disposal. A heartbeat timeout and exhausted retries keep ordinary runtime `Error` causes without a separate stable code. A connection that was open and then dropped without a close frame (code `1006`) is `error` on every runtime. `code`, `reason`, and `wasClean` may appear on every variant. A manual `session.close()` fills `code` and `reason` on `{ kind: "closed" }` when the close event carries none.
 
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` is [`UseWebSocketConfig`](/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect`, and `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, optional `message`, `isAck`, `timeoutMs`. There is no `timeout` or `abort` field.
+`WebSocketExecuteOptions` is [`UseWebSocketConfig`](/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `retry`, and `signal`. `WebSocketHeartbeatConfig`: `intervalMs` and `message` are required; `timeoutMs` is allowed only together with `isAck`. There is no `timeout` or `abort` field.
 
 `signal` covers the whole session, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no startup-only deadline and no client-level default deadline. `signal` is the call's signal; combine signals with `AbortSignal.any` in application code. `heartbeat` is replaced whole; its `timeoutMs` waits for an acknowledgement and is not a request deadline.
 
 The builder and interceptor chain run once per operation. Reconnect reuses that built path/query and captured protocols, and constructs the URL before `beforeConnect`. If an interceptor has not replaced the request's base endpoint, reconnect also substitutes a newly picked endpoint. The hook cannot rotate URL or subprotocol credentials within a session; start a new operation with fresh input or client configuration.
 
-When `reconnect` is set, `attempts` defaults to 3 per outage; `0` disables. Successful `open` resets the budget and backoff exponent, so each new outage starts at retry 1. Omitting `attempts` does not give unlimited retries within one outage. See [Client](/api/client) for the defaults and validation rules.
+When a retry policy is set (`withRetry`), `maxRetries` defaults to 3 per outage; `0` disables. Every close that `session.close()` did not request is retried by default, including a connection that never opened and an unanswered heartbeat, and `shouldRetry` can overrule that. Successful `open` resets the count and backoff exponent, so each new outage starts at retry 1. See [Client](/api/client#withretry) for the defaults and the decision order.
 
 ## Messages
 
@@ -84,7 +84,7 @@ The operation returned by `defineWebSocket`. The first argument is a client. Fur
 
 ## UseWebSocketConfig
 
-`beforeConnect`, `heartbeat`, `protocols`, `reconnect`, and `signal`. `WebSocketExecuteOptions` is this slice. There is no `abort` field.
+`beforeConnect`, `heartbeat`, `protocols`, `retry`, and `signal`. `WebSocketExecuteOptions` is this slice. There is no `abort` field.
 
 ## SocketAwaitResult
 
@@ -96,7 +96,7 @@ Reason recorded when the session is closed via `session.close()`.
 
 ## WebSocketHeartbeatConfig
 
-`intervalMs`, optional `message`, `isAck`, `timeoutMs`.
+`intervalMs` and `message` are required. `isAck` recognizes the acknowledgement, and `timeoutMs` is allowed only together with `isAck`; the union type enforces that and nothing checks it at runtime. Defjs defines no heartbeat format: every value comes from your functions. The payload is sent through the `outgoing` struct as JSON text. An unanswered heartbeat closes the socket and enters the retry flow of `withRetry`; without a retry policy the session ends with an `error`.
 
 ## WebSocketIncomingData
 
@@ -108,4 +108,4 @@ Value accepted by `session.send`: `StructInput` of the `outgoing` struct, or `ne
 
 ## SocketLifecycleOutcome
 
-Outcome of one connect attempt (`closeInfo`, `connection`, `cause`, `opened`), used by reconnect logic. It is not the final result of the session; see `WebSocketCloseInfo` for that.
+Outcome of one connect attempt (`closeInfo`, `connection`, `cause`, `opened`), used by the retry logic. It is not the final result of the session; see `WebSocketCloseInfo` for that.

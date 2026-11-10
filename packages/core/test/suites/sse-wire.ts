@@ -1,3 +1,4 @@
+import { resolveRetryPolicy } from "../../src/internal/retry.ts";
 import { expect, inject, test } from "vitest";
 import { fetchEventStream } from "../../src/sse/transport/event_stream.ts";
 import type { EventStreamMessage } from "../../src/sse/transport/parser.ts";
@@ -38,7 +39,7 @@ export function registerSseWireSuite(): void {
         },
         {
           maxBufferSize: 1024,
-          reconnect: { attempts: 1, delayMs: 0 },
+          retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
           transformMessage(message) {
             firstSeen.resolve();
             return message;
@@ -84,7 +85,7 @@ export function registerSseWireSuite(): void {
       {
         maxBufferSize: 1024,
         transformMessage: (message) => message,
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
         async fetch(input, init) {
           const response = await globalThis.fetch(input, init);
           if (++calls !== 1) return response;

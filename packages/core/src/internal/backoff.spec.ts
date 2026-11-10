@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { computeReconnectDelay } from "./backoff";
+import { computeReconnectDelay, wait } from "./backoff";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -100,13 +100,55 @@ describe("computeReconnectDelay", () => {
       ),
     ).toBe(1_500_000_000);
   });
+});
 
-  test("rejects a non-finite delay supplied after reconnect normalization", () => {
-    expect(() =>
-      computeReconnectDelay(
-        { delayMs: Number.NaN, factor: 2, jitter: 0, maxDelayMs: 50 },
-        1,
-      ),
-    ).toThrow("Reconnect delay must be finite");
+describe("wait", () => {
+  test("resolves at once for a zero delay without listening to the signal", async () => {
+    const controller = new AbortController();
+    const add = vi.spyOn(controller.signal, "addEventListener");
+    await wait(0, controller.signal);
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  test("rejects with the reason of a signal that is already aborted, and sets no timer", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const controller = new AbortController();
+      const reason = new Error("stop");
+      controller.abort(reason);
+      await expect(wait(1000, controller.signal)).rejects.toBe(reason);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("rejects with the signal reason when it aborts during the delay and clears its timer", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const controller = new AbortController();
+      const pending = wait(1000, controller.signal);
+      const caught = pending.catch((reason: unknown) => reason);
+      expect(vi.getTimerCount()).toBe(1);
+      controller.abort("because");
+      expect(await caught).toBe("because");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("resolves after the delay and leaves no listener on the signal", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const controller = new AbortController();
+      const remove = vi.spyOn(controller.signal, "removeEventListener");
+      const pending = wait(1000, controller.signal);
+      await vi.advanceTimersByTimeAsync(1000);
+      await pending;
+      expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

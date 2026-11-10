@@ -55,7 +55,7 @@ An HTTP interceptor can return a synthetic response without calling `next(req)` 
 
 ## 3. Retry safe HTTP reads
 
-HTTP retries are off by default. For failover to another endpoint on `502`, `503`, or `504`, use [`withRetry({ on: ["gateway-error"] })`](/docs/load-balancing). It re-picks an untried endpoint, rebuilds the request, and reruns the complete interceptor chain.
+HTTP retries are off by default. To retry a connection failure, a timeout, or a `502`, `503`, or `504` on another endpoint, use [`withRetry()`](/docs/load-balancing#retries). After the backoff delay it lets the balancer pick again, rebuilds the request, and reruns the complete interceptor chain.
 
 An application interceptor can instead implement same-endpoint status handling, such as `429` and `Retry-After`. This bounded safe-read recipe also handles `502`/`503`/`504`:
 
@@ -63,14 +63,14 @@ An application interceptor can instead implement same-endpoint status handling, 
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
-- **Two retry layers**: This `next(request)` loop stays on the selected endpoint and does not rerun outer authentication or the builder. Combining three inner sends with `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` can send four HTTP requests (three to a failing primary, one to a healthy backup); `maxAttempts` bounds outer attempts, not physical sends. Choose which layer owns each condition rather than accidentally stacking them.
+- **Two retry layers**: This `next(request)` loop stays on the selected endpoint and does not rerun outer authentication or the builder. Combining three inner sends with `withRetry({ maxRetries: 1 })` can send four HTTP requests (three to a failing primary, one to a healthy backup); `maxRetries` bounds outer attempts, not physical sends. Choose which layer owns each condition rather than accidentally stacking them.
 - **`Retry-After` policy**: Core `withRetry` does not read this header. The recipe's 30-second cap and 250 ms fallback are application choices. Capping a longer server delay can retry earlier than requested; if that is unacceptable, wait for the full delay or return the response instead.
 - **401 writes**: The [Bearer-refresh recipe](/recipes/refresh-bearer-once) can deliver a JSON POST twice. Require authentication rejection before business processing and a stable idempotency key with server-side deduplication, or do not automatically replay writes. Stream request bodies are not replayed.
 - **Handling transport rejections**: `next(request)` rejects when a network error occurs (there is no status-0 response). Catching and rethrowing that rejection preserves the original `NET_*` fault code.
 - **Requests that cannot be sent**: In an HTTP interceptor, when the platform refuses the request (an invalid or forbidden method, a GET or HEAD body, a URL with credentials, a header value it rejects) or a `finalizeHeaders` hook throws, `next(request)` rejects with the platform's own error (a `TypeError`) or the value the hook threw, not with the library's `BodyFailure` wrapper. Rethrowing it keeps the fault code (`REQ_BUILD_FAILED` or `EXT_HOOK_FAILED`); throwing a different error makes the failure yours (`EXT_INTERCEPTOR_FAILED`). The other failures found around the transport still reach `next(request)` as `BodyFailure`: a response body that cannot be read, decoded or matched to its media type, a truncated body, and a throwing upload progress observer (`EXT_OBSERVER_FAILED`), which can happen before the request is sent.
 - **Throwing inside an interceptor**: An unhandled throw of the interceptor's own (or returning a non-response value, or passing `next()` a `signal` that is not an `AbortSignal`) resolves the operation tuple with `EXT_INTERCEPTOR_FAILED` and sets `fault.cause`. Throwing `ERR_ABORTED` or `ERR_TIMEOUT` resolves `NET_ABORTED` or `NET_TIMEOUT`.
 
-For SSE, prefer `withSSEReconnect` over an interceptor that calls `next()` repeatedly. Calling the interceptor's `next()` more than once disables endpoint attribution and re-picking for those replacement streams; it is unrelated to consuming events with an iterator's `next()`.
+For SSE, prefer `withRetry` over an interceptor that calls `next()` repeatedly. Calling the interceptor's `next()` more than once disables endpoint attribution and re-picking for those replacement streams; it is unrelated to consuming events with an iterator's `next()`.
 
 ## 4. Wrap WebSocket sessions
 

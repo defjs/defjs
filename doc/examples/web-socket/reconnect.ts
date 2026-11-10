@@ -4,23 +4,22 @@ import {
   defineWebSocket,
   struct,
   withEndpoint,
-  withWebSocketReconnect,
+  withRetry,
 } from "@defjs/core";
 
 const client = createClient(
   withEndpoint("https://quotes.example.com"),
-  withWebSocketReconnect({
-    attempts: 3,
-    connectTimeoutMs: 5_000,
+  withRetry({
+    maxRetries: 3,
+    attemptTimeoutMs: 5_000,
     delayMs: 500,
     factor: 2,
     maxDelayMs: 10_000,
     jitter: 0.2,
-    shouldReconnect({ attempt, code, wasClean }) {
-      // `wasClean: true` does not mean the application close was healthy: 1011 is clean too.
-      return (
-        attempt <= 3 && (wasClean !== true || code === 1006 || code === 1011)
-      );
+    shouldRetry(context) {
+      if (context.transport !== "websocket") return context.retryable;
+      // A server that closed normally (1000) or refused with a policy violation (1008) would only repeat itself.
+      return context.code !== 1000 && context.code !== 1008;
     },
   }),
 );

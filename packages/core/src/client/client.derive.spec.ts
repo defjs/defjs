@@ -58,7 +58,7 @@ describe("client factory and client values", () => {
       onDownloadProgress: undefined,
       onUploadProgress: undefined,
       protocols: undefined,
-      reconnect: undefined,
+      retry: undefined,
       signal: undefined,
     });
     expect(derived[CLIENT].options).not.toBe(empty);
@@ -73,7 +73,12 @@ describe("client factory and client values", () => {
     const beforeConnect = () => undefined;
     const protocols = ["chat.v1"];
     const heartbeat = { intervalMs: 1_000, message: () => "ping" };
-    const reconnect = { attempts: 1, connectTimeoutMs: 123, delayMs: 10 };
+    const retry = {
+      maxRetries: 1,
+      attemptTimeoutMs: 123,
+      delayMs: 10,
+      methods: ["GET"],
+    };
     const options = {
       signal,
       onUploadProgress,
@@ -81,7 +86,7 @@ describe("client factory and client values", () => {
       beforeConnect,
       protocols,
       heartbeat,
-      reconnect,
+      retry,
     } satisfies RequestOptions;
 
     const derived = base(options);
@@ -103,35 +108,38 @@ describe("client factory and client values", () => {
     });
     expect(stored.heartbeat).not.toBe(heartbeat);
     expect(stored.heartbeat?.message).toBe(heartbeat.message);
-    expect(stored.reconnect).toEqual({
-      attempts: 1,
-      connectTimeoutMs: 123,
+    expect(stored.retry).toEqual({
+      maxRetries: 1,
+      attemptTimeoutMs: 123,
       delayMs: 10,
       factor: undefined,
       jitter: undefined,
       maxDelayMs: undefined,
-      shouldReconnect: undefined,
+      methods: ["GET"],
+      shouldRetry: undefined,
+      budget: undefined,
     });
-    expect(stored.reconnect).not.toBe(reconnect);
+    expect(stored.retry).not.toBe(retry);
+    expect(stored.retry?.methods).not.toBe(retry.methods);
   });
 
-  test("keeps nested heartbeat, protocols, and reconnect independent of later edits", () => {
+  test("keeps nested heartbeat, protocols, and retry independent of later edits", () => {
     const base = createClient(withEndpoint("https://example.test"));
-    const heartbeat = { intervalMs: 1_000 };
+    const heartbeat = { intervalMs: 1_000, message: () => "ping" };
     const protocols = ["chat.v1"];
-    const reconnect = { attempts: 1, delayMs: 10 };
-    const derived = base({ heartbeat, protocols, reconnect });
+    const retry = { maxRetries: 1, delayMs: 10 };
+    const derived = base({ heartbeat, protocols, retry });
     const stored = derived[CLIENT].options;
     if (!stored) throw new Error("Expected captured options");
 
     heartbeat.intervalMs = 2_000;
     protocols.push("chat.v2");
     protocols[0] = "changed";
-    reconnect.attempts = 5;
+    retry.maxRetries = 5;
 
     expect(stored.heartbeat?.intervalMs).toBe(1_000);
     expect(stored.protocols).toEqual(["chat.v1"]);
-    expect(stored.reconnect?.attempts).toBe(1);
+    expect(stored.retry?.maxRetries).toBe(1);
   });
 
   test("does not perform I/O or listen for abort while deriving", () => {
@@ -213,7 +221,7 @@ describe("client factory and client values", () => {
   test("reads option getters while deriving and keeps the values", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const signal = new AbortController().signal;
-    const heartbeat = { intervalMs: 1_000 };
+    const heartbeat = { intervalMs: 1_000, message: () => "ping" };
     let signalReads = 0;
     let heartbeatReads = 0;
     const options: RequestOptions = {
@@ -345,11 +353,11 @@ describe("request options ignored by other protocols", () => {
     const [error, data] = await read(
       client({
         protocols: ["chat.v1"],
-        heartbeat: { intervalMs: 1_000 },
+        heartbeat: { intervalMs: 1_000, message: () => "ping" },
         beforeConnect: () => {
           seen.push("before");
         },
-        reconnect: { attempts: 2 },
+        retry: { maxRetries: 2 },
       }),
     );
 

@@ -29,20 +29,20 @@ import {
   withEndpoint,
   withHTTPHandle,
   withQuerySerializer,
+  withRetry,
   withSSEHandle,
   withSSEOnInvalidEvent,
   withWebSocketBeforeConnect,
   withWebSocketHandle,
   withWebSocketHeartbeat,
   withWebSocketProtocols,
-  withWebSocketReconnect,
 } from "./index";
 
 type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Expect<T extends true> = T;
 
 declare const heartbeatConfig: ClientWebSocketOptions;
-const heartbeatPayload = heartbeatConfig.heartbeat?.message?.();
+const heartbeatPayload = heartbeatConfig.heartbeat?.message();
 type HeartbeatPayload = Expect<Equal<typeof heartbeatPayload, unknown>>;
 
 const serializer: QuerySerializer = (query) => {
@@ -102,10 +102,12 @@ const client = createClient(
   withWebSocketProtocols(["json"]),
   withWebSocketHeartbeat({
     intervalMs: 1_000,
+    message: () => "ping",
+    isAck: (message) => message === "pong",
     timeoutMs: 5_000,
   }),
-  withWebSocketReconnect({
-    attempts: 3,
+  withRetry({
+    maxRetries: 3,
     delayMs: 1_000,
   }),
   withQuerySerializer(serializer),
@@ -156,13 +158,15 @@ const options = {
     },
     heartbeat: {
       intervalMs: 1_000,
+      message: () => "ping",
+      isAck: (message) => message === "pong",
       timeoutMs: 5_000,
     },
     protocols: ["json"],
-    reconnect: {
-      attempts: 3,
-      delayMs: 1_000,
-    },
+  },
+  retry: {
+    maxRetries: 3,
+    delayMs: 1_000,
   },
   withCredentials: true,
 } satisfies ClientOptions;
@@ -235,9 +239,37 @@ void removedQueue;
 
 createClient(
   withEndpoint("https://api.example.com"),
-  // @ts-expect-error withWebSocketReconnect attempts must be numeric
-  withWebSocketReconnect({ attempts: "3" }),
+  // @ts-expect-error withRetry maxRetries must be numeric
+  withRetry({ maxRetries: "3" }),
 );
+
+// A heartbeat needs its message; an acknowledgement timeout needs the predicate that recognizes it.
+withWebSocketHeartbeat({ intervalMs: 1_000, message: () => "ping" });
+withWebSocketHeartbeat({
+  intervalMs: 1_000,
+  message: () => "ping",
+  isAck: () => true,
+});
+// @ts-expect-error message is required
+withWebSocketHeartbeat({ intervalMs: 1_000 });
+// @ts-expect-error timeoutMs needs isAck
+withWebSocketHeartbeat({
+  intervalMs: 1_000,
+  message: () => "ping",
+  timeoutMs: 5_000,
+});
+
+// Retry options are shared by every transport and replace the client policy per call.
+const retryRequest: RequestOptions = {
+  retry: { maxRetries: 1, shouldRetry: (context) => context.retryable },
+};
+void retryRequest;
+// @ts-expect-error the budget belongs to the client
+const budgetRequest: RequestOptions = { retry: { budget: false } };
+void budgetRequest;
+// @ts-expect-error reconnect was replaced by retry
+const reconnectRequest: RequestOptions = { reconnect: { attempts: 1 } };
+void reconnectRequest;
 
 export type Cases = [
   HeartbeatPayload,

@@ -1,5 +1,5 @@
 import { statusOutcome } from "../../internal/attempt_outcome";
-import type { ClientSSEOptions, FetchHandle } from "../../client/config";
+import type { FetchHandle } from "../../client/config";
 import type {
   DecodeFault,
   FaultCode,
@@ -33,7 +33,8 @@ import {
 } from "../../internal/abort";
 import { AsyncQueue } from "../../internal/async_queue";
 import { computeReconnectDelay, wait } from "../../internal/backoff";
-import { normalizeReconnectOptions } from "../../internal/reconnect_options";
+import type { RetryPolicy } from "../../internal/retry";
+import { decideRetry, isRetryMethod } from "../../internal/retry";
 import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
 import type {
   HttpRequest,
@@ -64,20 +65,6 @@ export const LAST_EVENT_ID_HEADER = "last-event-id";
 const DEFAULT_RETRY_INTERVAL = 1000;
 // Events waiting for the consumer. A full queue pauses reading the response; nothing is dropped.
 const MAX_QUEUE_SIZE = 1024;
-export const SSE_RECONNECT_DEFAULTS = {
-  delayMs: DEFAULT_RETRY_INTERVAL,
-  factor: 1,
-  jitter: 0,
-  maxDelayMs: Number.POSITIVE_INFINITY,
-};
-// RFC 9110 §9.2.2 idempotent methods that Fetch can send (it forbids TRACE).
-const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set([
-  "DELETE",
-  "GET",
-  "HEAD",
-  "OPTIONS",
-  "PUT",
-]);
 
 /**
  * Metadata available once an SSE response has opened.
@@ -197,7 +184,8 @@ export interface FetchEventStreamOptions<
     signal: AbortSignal,
   ) => Promise<TEvent | undefined> | TEvent | undefined;
   retryInterval?: number;
-  reconnect?: ClientSSEOptions["reconnect"];
+  /** The resolved retry policy. Absent means the stream is not retried. */
+  retry?: RetryPolicy;
   maxBufferSize: number;
   /**
    * @internal First-`next()` attribution. Absent when this stream must not
@@ -276,7 +264,7 @@ export function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
 /**
  * The `HTTP_STATUS` fault for a non-2xx handshake, with `data` when the declared error body decoded.
  * A body that could not be decoded leaves `data` undefined and its failure on `cause`. Interceptors,
- * reconnect policies and a reconnect's `closed` all see this fault.
+ * the retry policy and a reconnect's `closed` all see this fault.
  */
 export function createHandshakeStatusFault<TBody>(
   response: HttpResponse<unknown>,
@@ -298,7 +286,7 @@ function isHandshakeStatusFault(error: unknown): error is Error {
 }
 
 function toEventStreamFatalError(error: unknown): Error | undefined {
-  if (error instanceof EventStreamFatalError || isHandshakeStatusFault(error)) {
+  if (error instanceof EventStreamFatalError) {
     return error;
   }
   if (error instanceof SSEParserLimitError) {
@@ -329,11 +317,7 @@ export async function fetchEventStream<
   request: HttpRequest,
   options: FetchEventStreamOptions<TEvent, TError>,
 ): Promise<EventStreamHandle<TEvent>> {
-  const reconnect = normalizeReconnectOptions(
-    options.reconnect,
-    SSE_RECONNECT_DEFAULTS,
-    "SSE",
-  );
+  const policy = options.retry;
   let url = resolveAttemptUrl(request);
   const failure: EventStreamFailureInfo<HandshakeBody<TError>> =
     options.failure ?? {};
@@ -351,7 +335,7 @@ export async function fetchEventStream<
   let settledClosed = false;
   let settledOpen = false;
   let retryInterval =
-    options.retryInterval ?? reconnect?.delayMs ?? DEFAULT_RETRY_INTERVAL;
+    options.retryInterval ?? policy?.delayMs ?? DEFAULT_RETRY_INTERVAL;
   let retryCount = 0;
   let lastEventId = "";
   // Headers validate every write. The id only matters to the next attempt, so it is applied there.
@@ -564,11 +548,11 @@ export async function fetchEventStream<
           () => {
             startAttempt?.();
             fetchStarted = true;
-            if (reconnect?.connectTimeoutMs !== undefined)
+            if (policy?.attemptTimeoutMs !== undefined)
               connectTimer = setTimeout(() => {
                 connectTimedOut = true;
                 connectController.abort(ERR_TIMEOUT);
-              }, reconnect.connectTimeoutMs);
+              }, policy.attemptTimeoutMs);
             return fetchImpl(eventRequest);
           },
           attemptAbort,
@@ -655,13 +639,8 @@ export async function fetchEventStream<
         }
 
         const retryError = normalizedError ?? error;
-        // A 502, 503 or 504 handshake retries like a refused connection, even when its declared error
-        // body fails to decode; every other non-2xx handshake stays fatal.
-        const fatalError =
-          response !== undefined &&
-          statusOutcome(response.status) === "NET_UNAVAILABLE"
-            ? undefined
-            : toEventStreamFatalError(retryError);
+        // A non-2xx handshake is not fatal: the retry policy decides, and only 502, 503 and 504 retry by default.
+        const fatalError = toEventStreamFatalError(retryError);
         if (fatalError) {
           await observeFatalError(fatalError, attemptAbort);
           if (closeController.signal.aborted || request.signal?.aborted) {
@@ -673,7 +652,7 @@ export async function fetchEventStream<
         }
 
         // A stream body is spent by the first attempt and the request is built once per execute, so nothing can be
-        // retried: no observer, reconnect policy or delay, and the caller gets the real failure. Keyed on the body
+        // retried: no observer, retry policy or delay, and the caller gets the real failure. Keyed on the body
         // type, not `locked`: when a failed attempt locks the stream differs by runtime.
         if (isReadableStreamBody(request.body)) {
           finishError(retryError);
@@ -682,7 +661,11 @@ export async function fetchEventStream<
 
         let retryDelay: number | null;
         try {
-          retryDelay = await resolveRetryDelay(retryError, retryAbort);
+          retryDelay = await resolveRetryDelay(
+            retryError,
+            retryAbort,
+            response,
+          );
         } catch (policyError) {
           if (closeController.signal.aborted || request.signal?.aborted) {
             finishAborted(retryAbort);
@@ -799,6 +782,7 @@ export async function fetchEventStream<
   async function resolveRetryDelay(
     error: unknown,
     signal: AbortSignal,
+    response: Response | undefined,
   ): Promise<number | null> {
     retryCount += 1;
 
@@ -819,38 +803,39 @@ export async function fetchEventStream<
       return null;
     }
 
-    // Opt-in reconnect (match WebSocket): no reconnect object → do not retry.
-    if (!reconnect) {
+    // Opt-in retry: without a policy the stream is not retried.
+    if (!policy) {
       return null;
     }
 
-    // 2. The caller's policy decides; without one, only an idempotent request is sent again.
-    if (options.reconnect?.shouldReconnect) {
-      const should = await awaitWithSignal(
-        () =>
-          options.reconnect?.shouldReconnect?.({
-            attempt: retryCount,
-            cause: error,
-            lastEventId,
-            method: request.method,
-            open: latestOpen,
-          }),
-        signal,
-      );
-      if (!should) {
-        return null;
-      }
-    } else if (!IDEMPOTENT_METHODS.has(request.method.toUpperCase())) {
-      return null;
-    }
-
-    // 3. Check attempts limit (default 3 when reconnect is configured, like WebSocket)
-    if (retryCount > reconnect.attempts) {
+    // A handshake status other than 502, 503 and 504 is not retried by default; every other failure is a
+    // network failure of the handshake or of the open stream.
+    const unavailable =
+      response !== undefined &&
+      statusOutcome(response.status) === "NET_UNAVAILABLE";
+    const retry = await decideRetry(
+      policy,
+      retryCount - 1,
+      signal,
+      (attempt) => ({
+        transport: "sse",
+        attempt,
+        cause: error,
+        retryable:
+          isRetryMethod(policy, request.method) &&
+          (!isHandshakeStatusFault(error) || unavailable),
+        method: request.method,
+        lastEventId,
+        open: latestOpen,
+        status: response?.status,
+      }),
+    );
+    if (!retry) {
       return null;
     }
 
     const delayMs = typeof next === "number" ? next : retryInterval;
-    return computeReconnectDelay({ ...reconnect, delayMs }, retryCount);
+    return computeReconnectDelay({ ...policy, delayMs }, retryCount);
   }
 
   async function observeFatalError(

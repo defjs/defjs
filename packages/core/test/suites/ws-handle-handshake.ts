@@ -6,7 +6,7 @@ import { createClient } from "../../src/client/client";
 import {
   withEndpoint,
   withWebSocketHandle,
-  withWebSocketReconnect,
+  withRetry,
 } from "../../src/client/option";
 import { struct } from "../../src/struct";
 import { defineWebSocket } from "../../src/web_socket/web_socket";
@@ -98,7 +98,7 @@ export function registerWsHandleHandshakeSuite(): void {
       createClient(
         withEndpoint(origin),
         withWebSocketHandle(Observed),
-        withWebSocketReconnect({ attempts: 0, connectTimeoutMs: 50 }),
+        withRetry({ maxRetries: 0, attemptTimeoutMs: 50 }),
       )(),
     );
     expect(error).toMatchObject({ code: "NET_TIMEOUT" });

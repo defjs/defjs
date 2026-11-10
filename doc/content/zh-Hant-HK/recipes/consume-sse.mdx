@@ -34,5 +34,5 @@ description: 開啟帶型別嘅事件流，迭代一次，然後關閉並等待 
 build started
 ```
 
-- 除非你喺 client 設定咗 [`withSSEReconnect(...)`](/zh-Hant-HK/api/core/withssereconnect)，否則 SSE 喺遇到網絡中斷或讀取錯誤時**唔會**自動重連。
+- 除非你喺 client 設定咗 [`withRetry(...)`](/zh-Hant-HK/api/core/withretry)，否則 SSE 喺遇到網絡中斷或讀取錯誤時**唔會**自動重連。
 - 當設定咗 `withSSEReconnect(...)` 時，`attempts` 預設為每次斷線 `3` 次，並會喺握手成功後重設（`attempts: 0` 即停用重連）。冇自訂 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` 請求會重連。帶 `ReadableStream` body 嘅請求永遠唔會重連。詳情請參閱 [SSE 事件流](/zh-Hant-HK/docs/sse)。

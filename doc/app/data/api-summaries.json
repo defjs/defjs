@@ -50,11 +50,6 @@
     "description": "Cookie and header names for withXSRF."
   },
   {
-    "slug": "core/withssereconnect",
-    "name": "withSSEReconnect",
-    "description": "Configures automatic reconnection after an SSE stream fails."
-  },
-  {
     "slug": "core/withsseoninvalidevent",
     "name": "withSSEOnInvalidEvent",
     "description": "Observes SSE events that have no matching event struct or fail validation."
@@ -73,11 +68,6 @@
     "slug": "core/withwebsocketheartbeat",
     "name": "withWebSocketHeartbeat",
     "description": "Enables WebSocket heartbeat messages with optional acknowledgement detection."
-  },
-  {
-    "slug": "core/withwebsocketreconnect",
-    "name": "withWebSocketReconnect",
-    "description": "Configures automatic reconnection when the socket closes for any reason other than a manual session.close()."
   },
   {
     "slug": "core/client-type",
@@ -107,7 +97,7 @@
   {
     "slug": "core/clientsseoptions-type",
     "name": "ClientSSEOptions",
-    "description": "Optional SSE settings applied when creating a client: fetch handle, invalid-event hook, and reconnect policy."
+    "description": "Optional SSE settings applied when creating a client: fetch handle and invalid-event hook."
   },
   {
     "slug": "core/clientsseconfig-type",
@@ -117,7 +107,7 @@
   {
     "slug": "core/clientwebsocketoptions-type",
     "name": "ClientWebSocketOptions",
-    "description": "Optional WebSocket settings applied when creating a client: constructor, beforeConnect hook, heartbeat, protocols, and reconnect policy."
+    "description": "Optional WebSocket settings applied when creating a client: constructor, beforeConnect hook, heartbeat, and protocols."
   },
   {
     "slug": "core/queryserializer-type",
@@ -617,7 +607,7 @@
   {
     "slug": "core/eventstreamexecuteoptions-type",
     "name": "EventStreamExecuteOptions",
-    "description": "SSE field of RequestOptions. HTTP progress and WebSocket fields are ignored."
+    "description": "SSE fields of RequestOptions. HTTP progress and WebSocket fields are ignored."
   },
   {
     "slug": "core/streamawaitresult-type",
@@ -712,7 +702,7 @@
   {
     "slug": "core/websocketheartbeatconfig-type",
     "name": "WebSocketHeartbeatConfig",
-    "description": "Heartbeat ping and acknowledgement settings for a live WebSocket session."
+    "description": "Heartbeat settings for a live WebSocket session: what to send, how often, and how to recognize the answer."
   },
   {
     "slug": "core/websocketincomingdata-type",

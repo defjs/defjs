@@ -91,11 +91,9 @@ Fetch(HTTP/SSE)나 WebSocket 생성자를 바꿔요.
 
 ### SSE 설정
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### WebSocket 설정
 
@@ -105,9 +103,7 @@ Fetch(HTTP/SSE)나 WebSocket 생성자를 바꿔요.
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
-
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
 ## 타입
 
@@ -237,7 +233,7 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 파생 �
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
 엔드포인트 선택과 무관하게 같은 호출 HTTP 재시도를 켜요. 생략하면 시도는 한 번이고 예산은 없어요. `withRetry()`는 `withRetry({})`와 같고 기본값은 `maxAttempts: 2`(최초 시도 포함), `on: ["connect-failure"]`, 안전 메서드 `GET`, `HEAD`, `OPTIONS`, `TRACE`예요. 메서드는 대소문자를 가리지 않고, `[]`는 재시도를 꺼요. `maxAttempts`는 1 이상의 안전한 정수이고, 각 엔드포인트는 최대 한 번 시도해요. `"gateway-error"`는 `NET_UNAVAILABLE`(HTTP 502/503/504)과 `RES_*` 디코딩이 거절한 게이트웨이 본문을 포함하고, `"attempt-timeout"`은 `attemptTimeoutMs`를 써요. 스트리밍 요청 본문은 재시도하지 않아요.
 

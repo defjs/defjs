@@ -11,14 +11,13 @@ import {
   withHTTPHandle,
   withInterceptors,
   withQuerySerializer,
+  withRetry,
   withSSEHandle,
   withSSEOnInvalidEvent,
-  withSSEReconnect,
   withWebSocketBeforeConnect,
   withWebSocketHandle,
   withWebSocketHeartbeat,
   withWebSocketProtocols,
-  withWebSocketReconnect,
 } from "./index";
 import type { Client } from "./client";
 import type { FetchHandle } from "./config";
@@ -195,12 +194,16 @@ describe("Client", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEOnInvalidEvent(onInvalidEvent),
-      withSSEReconnect({ attempts: 5, delayMs: 500 }),
+      withRetry({ maxRetries: 3, delayMs: 1_000 }),
       withWebSocketHandle(MockWebSocket),
       withWebSocketBeforeConnect(beforeConnect),
       withWebSocketProtocols(["json"]),
-      withWebSocketHeartbeat({ intervalMs: 1_000, timeoutMs: 5_000 }),
-      withWebSocketReconnect({ attempts: 3, delayMs: 1_000 }),
+      withWebSocketHeartbeat({
+        intervalMs: 1_000,
+        message: () => "ping",
+        isAck: () => true,
+        timeoutMs: 5_000,
+      }),
     );
 
     expect(typeof client).toBe("function");

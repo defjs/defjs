@@ -91,11 +91,9 @@ La cabecera se establece cuando se cumple todo esto: el método no es `GET`, `HE
 
 ### Opciones de SSE
 
-### withSSEReconnect()
-
 ### withSSEOnInvalidEvent()
 
-<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+<ApiSignature name="withSSEOnInvalidEvent" />
 
 ### Opciones de WebSocket
 
@@ -105,9 +103,7 @@ La cabecera se establece cuando se cumple todo esto: el método no es `GET`, `HE
 
 ### withWebSocketHeartbeat()
 
-### withWebSocketReconnect()
-
-<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
 ## Tipos
 
@@ -237,7 +233,7 @@ Envuelve un hijo con un disyuntor de fallos consecutivos al estilo de Linkerd. R
 
 ### withRetry()
 
-<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
+<ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
 Habilita el reintento HTTP en la misma llamada, con independencia de la selección de endpoint. Omitir `withRetry` significa un intento y ningún presupuesto. `withRetry()` equivale a `withRetry({})` y vale por defecto `maxAttempts: 2` (incluido el original), `on: ["connect-failure"]` y los métodos seguros `GET`, `HEAD`, `OPTIONS`, `TRACE`. Los métodos no distinguen entre mayúsculas y minúsculas; `[]` desactiva los reintentos. `maxAttempts` es un entero seguro de al menos 1, y cada endpoint se prueba como máximo una vez. `"gateway-error"` incluye `NET_UNAVAILABLE` (HTTP 502/503/504) y los cuerpos de pasarela rechazados por la decodificación `RES_*`; `"attempt-timeout"` usa `attemptTimeoutMs`. Los cuerpos de solicitud en streaming nunca se reintentan.
 

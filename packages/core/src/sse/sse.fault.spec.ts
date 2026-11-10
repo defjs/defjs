@@ -4,7 +4,7 @@ import {
   withEndpoint,
   withInterceptors,
   withSSEHandle,
-  withSSEReconnect,
+  withRetry,
 } from "../client";
 import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
@@ -56,49 +56,11 @@ const useStream = defineEventStream({
 });
 
 describe("sse startup faults", () => {
-  test.each([
-    { attempts: -1 },
-    { attempts: 1.5 },
-    { attempts: NaN },
-    { attempts: Infinity },
-    { attempts: Number.MAX_SAFE_INTEGER + 1 },
-    { delayMs: -1 },
-    { delayMs: NaN },
-    { delayMs: Infinity },
-    { maxDelayMs: -1 },
-    { maxDelayMs: NaN },
-    { maxDelayMs: -Infinity },
-    { factor: 0 },
-    { factor: -1 },
-    { factor: NaN },
-    { factor: Infinity },
-    { jitter: -0.1 },
-    { jitter: 1.1 },
-    { jitter: NaN },
-    { jitter: Infinity },
-    { attempts: 0, factor: 0 },
-  ])(
-    "should reject invalid reconnect options %j before making a request",
-    async (reconnect) => {
-      const handle = vi.fn(() =>
-        Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
-      );
-      const client = clientReturning(handle, withSSEReconnect(reconnect));
-
-      const [fault, stream, open] = await useStream(client);
-
-      expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
-      expect(stream).toBeUndefined();
-      expect(open).toBeUndefined();
-      expect(handle).not.toHaveBeenCalled();
-    },
-  );
-
-  test("should accept an unbounded positive infinite reconnect cap", async () => {
+  test("should accept an unbounded positive infinite retry cap", async () => {
     const client = clientReturning(
       () =>
         Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
-      withSSEReconnect({ maxDelayMs: Infinity }),
+      withRetry({ maxDelayMs: Infinity }),
     );
 
     const [fault, stream] = await useStream(client);
@@ -111,14 +73,14 @@ describe("sse startup faults", () => {
     expect(await stream.closed).toMatchObject({ kind: "eof" });
   });
 
-  test("should use the reconnect values validated before the interceptor runs", async () => {
+  test("should use the retry values resolved before the interceptor runs", async () => {
     const reads = { delayMs: 0, maxDelayMs: 0 };
     const client = clientReturning(
       () =>
         Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
       (config) => {
-        // Bypass public option capture to exercise execution-time validation.
-        config.sse.reconnect = {
+        // Bypass public option capture to exercise the policy that execution resolves.
+        config.retry = {
           get delayMs() {
             reads.delayMs += 1;
             return reads.delayMs === 1 ? 0 : NaN;
@@ -149,14 +111,14 @@ describe("sse startup faults", () => {
     expect(await stream.closed).toMatchObject({ kind: "eof" });
   });
 
-  test("should preserve the disabled reconnect snapshot if an interceptor adds options", async () => {
+  test("should preserve the disabled retry snapshot if an interceptor adds options", async () => {
     const client = clientReturning(
       () =>
         Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
       (config) => {
         config.interceptors = [
           createSSEInterceptor((request, next) => {
-            config.sse.reconnect = { delayMs: NaN };
+            config.retry = { delayMs: NaN };
             return next(request);
           }),
         ];
@@ -551,11 +513,11 @@ describe("unsupported streaming request body", () => {
     const handle = vi.fn(() =>
       Promise.resolve(new Response(null, { status: 204 })),
     );
-    const shouldReconnect = vi.fn(() => false);
+    const shouldRetry = vi.fn(() => false);
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
-      withSSEReconnect({ delayMs: 60_000, shouldReconnect }),
+      withRetry({ delayMs: 60_000, shouldRetry }),
     );
     const useStream = defineEventStream({
       builder: () => ({ body }),
@@ -571,7 +533,7 @@ describe("unsupported streaming request body", () => {
     expect(events).toBeUndefined();
     expect(open).toBeUndefined();
     expect(handle).toHaveBeenCalledTimes(0);
-    expect(shouldReconnect).toHaveBeenCalledTimes(0);
+    expect(shouldRetry).toHaveBeenCalledTimes(0);
     expect(body.locked).toBe(false);
   });
 });
@@ -646,7 +608,7 @@ test("should return REQ_BUILD_FAILED when the JSON body is an async iterable obj
 describe("ReadableStream body and reconnect", () => {
   test("should reconnect when an interceptor replaces a stream body with a blob", async () => {
     const failure = new TypeError("network down");
-    const shouldReconnect = vi.fn(() => true);
+    const shouldRetry = vi.fn(() => true);
     let attempt = 0;
     const handle = vi.fn(() => {
       attempt += 1;
@@ -660,7 +622,7 @@ describe("ReadableStream body and reconnect", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
-      withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+      withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
       withInterceptors(
         createSSEInterceptor(async (request, next) => {
           return await next({ ...request, body: new Blob(["x"]) });

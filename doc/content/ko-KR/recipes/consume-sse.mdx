@@ -34,5 +34,5 @@ description: 타입화된 이벤트 스트림을 열고 1회 순회한 뒤, 스�
 build started
 ```
 
-- 클라이언트에 [`withSSEReconnect(...)`](/ko-KR/api/core/withssereconnect)를 구성하지 않으면 네트워크나 읽기 실패 시 SSE가 자동으로 재연결되지 않습니다.
+- 클라이언트에 [`withRetry(...)`](/ko-KR/api/core/withretry)를 구성하지 않으면 네트워크나 읽기 실패 시 SSE가 자동으로 재연결되지 않습니다.
 - `withSSEReconnect(...)`를 설정한 경우, `attempts`는 단절마다 기본값 `3`이며 핸드셰이크가 성공하면 재설정됩니다(`attempts: 0`은 재연결 비활성화). 커스텀 `shouldReconnect`가 없으면 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE` 요청만 재연결됩니다. `ReadableStream` 본문이 있는 요청은 재연결하지 않습니다. 자세한 내용은 [SSE 이벤트 스트림](/ko-KR/docs/sse) 문서를 참조하세요.

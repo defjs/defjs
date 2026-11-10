@@ -4,7 +4,7 @@ import {
   withEndpoint,
   withBalancer,
   withSSEHandle,
-  withSSEReconnect,
+  withRetry,
 } from "../client/option";
 import { pickFirstBalancer, type DoneInfo } from "../balancer/balancer";
 import { defineEventStream } from "./sse";
@@ -15,7 +15,7 @@ const endpoints = ["https://first.test", "https://second.test"];
 afterEach(() => vi.useRealTimers());
 
 test.each([false, true])(
-  "SSE handshake timeout reconnects after nonzero backoff and stops its timer after headers (custom policy: %s)",
+  "SSE handshake timeout retries after nonzero backoff and stops its timer after headers (custom policy: %s)",
   async (customPolicy) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const urls: string[] = [];
@@ -39,11 +39,12 @@ test.each([false, true])(
           ];
         },
       }),
-      withSSEReconnect({
-        attempts: 1,
+      withRetry({
+        maxRetries: 1,
         delayMs: 10,
-        connectTimeoutMs: 100,
-        shouldReconnect: customPolicy ? () => Promise.resolve(true) : undefined,
+        jitter: 0,
+        attemptTimeoutMs: 100,
+        shouldRetry: customPolicy ? () => Promise.resolve(true) : undefined,
       }),
       withSSEHandle(async (input) => {
         urls.push(new Request(input).url);
@@ -79,7 +80,7 @@ test("SSE handshake timeout exhausted ends as NET_TIMEOUT", async () => {
   let calls = 0;
   const client = createClient(
     withEndpoint(...endpoints),
-    withSSEReconnect({ attempts: 0, connectTimeoutMs: 100 }),
+    withRetry({ maxRetries: 0, attemptTimeoutMs: 100 }),
     withSSEHandle(async () => {
       calls++;
       return new Promise<Response>(() => {});
@@ -95,30 +96,17 @@ test("SSE handshake timeout exhausted ends as NET_TIMEOUT", async () => {
   expect(vi.getTimerCount()).toBe(0);
 });
 
-test.each([0, -1, Infinity, NaN])(
-  "invalid SSE connectTimeoutMs %s fails before fetch",
-  async (connectTimeoutMs) => {
-    const client = createClient(
-      withEndpoint(...endpoints),
-      withSSEReconnect({ connectTimeoutMs }),
-    );
-    expect(
-      (
-        await defineEventStream({
-          path: "/",
-          events: { message: struct.string() },
-        })(client)
-      )[0]?.code,
-    ).toBe("REQ_OPTIONS_INVALID");
-  },
-);
-
 test("SSE clears handshake timeout before waiting for reconnect backoff", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   let calls = 0;
   const client = createClient(
     withEndpoint(...endpoints),
-    withSSEReconnect({ attempts: 1, delayMs: 1000, connectTimeoutMs: 100 }),
+    withRetry({
+      maxRetries: 1,
+      delayMs: 1000,
+      jitter: 0,
+      attemptTimeoutMs: 100,
+    }),
     withSSEHandle(() => {
       calls++;
       if (calls === 1) return Promise.reject(new Error("connection refused"));
@@ -172,7 +160,12 @@ test.each([
           ];
         },
       }),
-      withSSEReconnect({ attempts: 2, delayMs: 1000, connectTimeoutMs: 100 }),
+      withRetry({
+        maxRetries: 2,
+        delayMs: 1000,
+        jitter: 0,
+        attemptTimeoutMs: 100,
+      }),
       withSSEHandle(async () => {
         calls++;
         return new Promise<Response>(() => {});

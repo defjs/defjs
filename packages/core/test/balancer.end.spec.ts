@@ -8,11 +8,11 @@ import {
   withBalancer,
   withHTTPHandle,
   withSSEHandle,
-  withSSEReconnect,
   withWebSocketHandle,
   withInterceptors,
   struct,
   ERR_TIMEOUT,
+  withRetry,
 } from "../src";
 import type { Balancer, DoneInfo } from "../src";
 import { createControllableSocketClass } from "./regression/controllable_socket";
@@ -292,7 +292,7 @@ test.each(["failure", "cancel", "caller-timeout", "handshake-timeout"])(
     })(
       client({
         signal: controller.signal,
-        reconnect: { attempts: 0, connectTimeoutMs: 100 },
+        retry: { maxRetries: 0, attemptTimeoutMs: 100 },
       }),
     );
     await vi.waitFor(() => expect(latest()).toBeDefined());
@@ -321,7 +321,7 @@ test("SSE handshake timeout ends as unreachable while the operation reports time
   const client = createClient(
     withEndpoint("https://sse.test"),
     withBalancer(h.b),
-    withSSEReconnect({ attempts: 0, connectTimeoutMs: 100 }),
+    withRetry({ maxRetries: 0, attemptTimeoutMs: 100 }),
     withSSEHandle(async () => {
       fetched = true;
       return new Promise<Response>(() => {});

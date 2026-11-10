@@ -11,8 +11,8 @@ import {
   withHTTPHandle,
   withInterceptors,
   withSSEHandle,
-  withSSEReconnect,
   withWebSocketHandle,
+  withRetry,
 } from "../../src";
 import type { EventStreamHandle, WebSocketSessionLike } from "../../src";
 import { MALFORMED_INTERCEPTOR_RESULTS } from "../malformed_interceptor_results";
@@ -101,7 +101,7 @@ test("SSE releases caller abort listeners after a reconnecting stream closes", a
   let attempt = 0;
   const client = createClient(
     withEndpoint("https://example.test"),
-    withSSEReconnect({ attempts: 1, delayMs: 0 }),
+    withRetry({ maxRetries: 1, delayMs: 0 }),
     withSSEHandle(() => {
       attempt += 1;
       if (attempt === 1) {

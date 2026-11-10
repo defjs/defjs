@@ -4,7 +4,7 @@ import {
   withEndpoint,
   withInterceptors,
   withSSEHandle,
-  withSSEReconnect,
+  withRetry,
 } from "../../src/client/index.ts";
 import { createSSEInterceptor } from "../../src/interceptor/index.ts";
 import { struct } from "../../src/struct/index.ts";
@@ -67,7 +67,7 @@ export function registerSseFaultUploadSuite(cap: UploadCapability): void {
     test("should not reconnect when the handle reads a stream body and fails", async () => {
       const failure = new TypeError("network down");
       const body = byteStream();
-      const shouldReconnect = vi.fn(() => true);
+      const shouldRetry = vi.fn(() => true);
       const handle = vi.fn(async (input: RequestInfo | URL) => {
         const request = requireRequest(input);
         await request.arrayBuffer();
@@ -76,7 +76,7 @@ export function registerSseFaultUploadSuite(cap: UploadCapability): void {
       const client = createClient(
         withEndpoint("https://example.com"),
         withSSEHandle(handle),
-        withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+        withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
       );
       const useStream = defineEventStream({
         builder: () => ({ body }),
@@ -93,7 +93,7 @@ export function registerSseFaultUploadSuite(cap: UploadCapability): void {
           events,
           open,
           handleCalls: handle.mock.calls.length,
-          reconnectCalls: shouldReconnect.mock.calls.length,
+          reconnectCalls: shouldRetry.mock.calls.length,
           body,
         });
         return;
@@ -104,12 +104,12 @@ export function registerSseFaultUploadSuite(cap: UploadCapability): void {
       expect(fault?.code).toBe("NET_UNREACHABLE");
       expect(fault?.cause).toBe(failure);
       expect(handle).toHaveBeenCalledTimes(1);
-      expect(shouldReconnect).toHaveBeenCalledTimes(0);
+      expect(shouldRetry).toHaveBeenCalledTimes(0);
     });
 
     test("should not reconnect when an interceptor replaces the body with a stream", async () => {
       const failure = new TypeError("network down");
-      const shouldReconnect = vi.fn(() => true);
+      const shouldRetry = vi.fn(() => true);
       const replaced: ReadableStream<Uint8Array>[] = [];
       const handle = vi.fn(async (input: RequestInfo | URL) => {
         const request = requireRequest(input);
@@ -119,7 +119,7 @@ export function registerSseFaultUploadSuite(cap: UploadCapability): void {
       const client = createClient(
         withEndpoint("https://example.com"),
         withSSEHandle(handle),
-        withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+        withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
         withInterceptors(
           createSSEInterceptor(async (request, next) => {
             const body = byteStream();
@@ -143,7 +143,7 @@ export function registerSseFaultUploadSuite(cap: UploadCapability): void {
           events,
           open,
           handleCalls: handle.mock.calls.length,
-          reconnectCalls: shouldReconnect.mock.calls.length,
+          reconnectCalls: shouldRetry.mock.calls.length,
           body: replaced[0],
         });
         return;
@@ -154,7 +154,7 @@ export function registerSseFaultUploadSuite(cap: UploadCapability): void {
       expect(fault?.code).toBe("NET_UNREACHABLE");
       expect(fault?.cause).toBe(failure);
       expect(handle).toHaveBeenCalledTimes(1);
-      expect(shouldReconnect).toHaveBeenCalledTimes(0);
+      expect(shouldRetry).toHaveBeenCalledTimes(0);
     });
   });
 }

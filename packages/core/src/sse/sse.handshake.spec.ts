@@ -4,7 +4,7 @@ import {
   withEndpoint,
   withInterceptors,
   withSSEHandle,
-  withSSEReconnect,
+  withRetry,
 } from "../client";
 import { createSSEInterceptor } from "../interceptor";
 import { makeResponse } from "../internal/http_response";
@@ -95,7 +95,7 @@ describe("F031 SSE first successful handshake snapshot", () => {
             return Promise.reject(new Error("Unexpected SSE attempt"));
           return Promise.resolve(source.response);
         }),
-        withSSEReconnect({ attempts: 1, delayMs: 0 }),
+        withRetry({ maxRetries: 1, delayMs: 0 }),
         withInterceptors(
           createSSEInterceptor(async (request, next) => {
             const connections: EventStreamHandle<unknown>[] = [];
@@ -195,7 +195,7 @@ describe("F031 SSE first successful handshake snapshot", () => {
       const client = createClient(
         withEndpoint("https://example.test"),
         withSSEHandle(handle),
-        withSSEReconnect({ attempts: 1, delayMs: 0 }),
+        withRetry({ maxRetries: 1, delayMs: 0 }),
         withInterceptors(
           createSSEInterceptor(async (request, next) => {
             const inner = await next(request);
@@ -351,15 +351,17 @@ describe("handshake status faults reach the caller's hooks", () => {
   function observed(handle: ReturnType<typeof answering>, attempts: number) {
     const interceptorSaw: unknown[] = [];
     const policySaw: unknown[] = [];
+    const verdicts: boolean[] = [];
     const client = createClient(
       withEndpoint("https://example.test"),
       withSSEHandle(handle),
-      withSSEReconnect({
-        attempts,
+      withRetry({
+        maxRetries: attempts,
         delayMs: 0,
-        shouldReconnect: (context) => {
+        shouldRetry: (context) => {
           policySaw.push(context.cause);
-          return true;
+          verdicts.push(context.retryable);
+          return context.retryable;
         },
       }),
       withInterceptors(
@@ -373,7 +375,7 @@ describe("handshake status faults reach the caller's hooks", () => {
         }),
       ),
     );
-    return { client, interceptorSaw, policySaw };
+    return { client, interceptorSaw, policySaw, verdicts };
   }
 
   test.each(
@@ -387,10 +389,13 @@ describe("handshake status faults reach the caller's hooks", () => {
       })),
     ),
   )(
-    "reports a $status handshake with $label as $code at startup and as HTTP_STATUS to the interceptor and to the reconnect policy",
+    "reports a $status handshake with $label as $code at startup and as HTTP_STATUS to the interceptor and to the retry policy",
     async ({ status, contentType, body, code }) => {
       const handle = answering(status, contentType, body);
-      const { client, interceptorSaw, policySaw } = observed(handle, 1);
+      const { client, interceptorSaw, policySaw, verdicts } = observed(
+        handle,
+        1,
+      );
 
       const [fault, stream, open] = await useDeclared(client);
 
@@ -403,10 +408,10 @@ describe("handshake status faults reach the caller's hooks", () => {
       // Everything past the transport sees the public status fault, so 503 still retries.
       expect(interceptorSaw).toHaveLength(1);
       expect(interceptorSaw[0]).toMatchObject({ code: "HTTP_STATUS", status });
-      expect(policySaw).toHaveLength(2);
-      for (const cause of policySaw) {
-        expect(cause).toMatchObject({ code: "HTTP_STATUS", status });
-      }
+      // The policy decides once: after the retry there is nothing left to ask about.
+      expect(policySaw).toHaveLength(1);
+      expect(policySaw[0]).toMatchObject({ code: "HTTP_STATUS", status });
+      expect(verdicts).toEqual([true]);
     },
   );
 
@@ -421,10 +426,13 @@ describe("handshake status faults reach the caller's hooks", () => {
       })),
     ),
   )(
-    "reports a fatal $status handshake with $label as $code at startup without calling the reconnect policy",
+    "reports a $status handshake with $label as $code at startup and gives the retry policy its default verdict of no retry",
     async ({ status, contentType, body, code }) => {
       const handle = answering(status, contentType, body);
-      const { client, interceptorSaw, policySaw } = observed(handle, 1);
+      const { client, interceptorSaw, policySaw, verdicts } = observed(
+        handle,
+        1,
+      );
 
       const [fault] = await useDeclared(client);
 
@@ -432,7 +440,9 @@ describe("handshake status faults reach the caller's hooks", () => {
       expect(fault).toMatchObject({ code, status });
       expect(interceptorSaw).toHaveLength(1);
       expect(interceptorSaw[0]).toMatchObject({ code: "HTTP_STATUS", status });
-      expect(policySaw).toEqual([]);
+      expect(policySaw).toHaveLength(1);
+      expect(policySaw[0]).toMatchObject({ code: "HTTP_STATUS", status });
+      expect(verdicts).toEqual([false]);
     },
   );
 
@@ -502,7 +512,7 @@ describe("handshake status faults reach the caller's hooks", () => {
     const client = createClient(
       withEndpoint("https://example.test"),
       withSSEHandle(handle),
-      withSSEReconnect({ attempts: 1, delayMs: 0 }),
+      withRetry({ maxRetries: 1, delayMs: 0 }),
     );
 
     const [error, stream] = await useDeclared(client);
