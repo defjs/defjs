@@ -30,18 +30,6 @@ export async function buildFingerprint(
   }
   return hash.digest("hex");
 }
-export async function assertFreshBuild(
-  directory: string,
-  fingerprint: string,
-): Promise<void> {
-  const file = Bun.file(joinPath(directory, "build-stamp.txt"));
-  if (!(await file.exists()))
-    throw new Error(
-      "Missing build stamp; build the documentation before site tests",
-    );
-  if ((await file.text()).trim() !== fingerprint)
-    throw new Error("Stale documentation build; rebuild before site tests");
-}
 export async function writeBuildStamp(
   directory: string,
   fingerprint: string,

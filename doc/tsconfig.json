@@ -4,10 +4,8 @@
     "app/**/*.ts",
     "app/**/*.tsx",
     "scripts/**/*.ts",
-    "e2e/**/*.ts",
     "*.ts",
     ".react-router/types/**/*.ts",
-    "e2e/**/*.tsx",
     "examples/**/*.spec.ts"
   ],
   "compilerOptions": {

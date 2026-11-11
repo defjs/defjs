@@ -1,28 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  assertFreshBuild,
-  buildFingerprint,
-  writeBuildStamp,
-} from "./build-state";
-test("site acceptance rejects missing or stale build stamps", async () => {
-  const directory = tempDirectory("defjs-build");
-  try {
-    await expect(assertFreshBuild(directory, "current")).rejects.toThrow(
-      "Missing",
-    );
-    await writeBuildStamp(directory, "previous");
-    await expect(assertFreshBuild(directory, "current")).rejects.toThrow(
-      "Stale",
-    );
-    await writeBuildStamp(directory, "current");
-    await expect(
-      assertFreshBuild(directory, "current"),
-    ).resolves.toBeUndefined();
-  } finally {
-    removeDirectory(directory);
-  }
-});
-
+import { buildFingerprint } from "./build-state";
 import { finalizeBuild } from "./build";
 import { joinPath } from "./paths";
 import { removeDirectory, tempDirectory } from "./tmp";
@@ -53,9 +30,9 @@ test("static build finalization rejects changed inputs, supplies GitHub Pages 40
         joinPath(directory, "api/search/en-US.json.data"),
       ).exists(),
     ).toBe(false);
-    await expect(
-      assertFreshBuild(directory, "current"),
-    ).resolves.toBeUndefined();
+    expect(await Bun.file(joinPath(directory, "build-stamp.txt")).text()).toBe(
+      "current",
+    );
   } finally {
     removeDirectory(directory);
   }

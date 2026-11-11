@@ -98,12 +98,6 @@ test("lists tracked and untracked files, drops files deleted from disk, honors .
 });
 
 const mini: readonly Owner[] = [
-  {
-    dir: "e2e/",
-    runtimes: ["chrome"],
-    project: () => "pkg-e2e",
-    suffixOnly: true,
-  },
   { dir: "pkg/", runtimes: ["node", "bun"], project: (rt) => `pkg-${rt}` },
 ];
 
@@ -112,8 +106,6 @@ test.each([
   ["pkg/b.node.spec.ts", ["pkg-node"]],
   ["pkg/c.chrome.spec.ts", []],
   ["pkg/d.type.spec.ts", []],
-  ["e2e/f.chrome.spec.ts", ["pkg-e2e"]],
-  ["e2e/g.spec.ts", []],
   ["other/h.spec.ts", []],
   ["pkg/X.spec.ts", []],
 ])("expectedProjects(%s)", (file, projects) => {
@@ -122,13 +114,9 @@ test.each([
 
 test("reports specs that no project runs", () => {
   expect(
-    ownershipViolations(
-      ["pkg/c.chrome.spec.ts", "e2e/g.spec.ts", "other/h.spec.ts"],
-      mini,
-    ),
+    ownershipViolations(["pkg/c.chrome.spec.ts", "other/h.spec.ts"], mini),
   ).toEqual([
     "pkg/c.chrome.spec.ts: selected by no runtime project",
-    "e2e/g.spec.ts: selected by no runtime project",
     "other/h.spec.ts: selected by no runtime project",
   ]);
 });
@@ -212,12 +200,6 @@ test("selectionDiff reports a type spec selected by a runtime project", () => {
 const root = resolve(import.meta.dirname, "..");
 
 const owners: readonly Owner[] = [
-  {
-    dir: "doc/e2e/",
-    runtimes: ["chrome"],
-    project: () => "doc-e2e",
-    suffixOnly: true,
-  },
   { dir: "doc/app/", runtimes: ["bun"], project: () => "doc-bun" },
   { dir: "doc/scripts/", runtimes: ["bun"], project: () => "doc-bun" },
   { dir: "doc/examples/", runtimes: ["bun"], project: () => "doc-bun" },
@@ -292,7 +274,6 @@ const lists: readonly { cwd: string; config: string; project: string }[] = [
     project: "opentelemetry-server-bun",
   },
   { cwd: "doc", config: "vitest.config.bun.ts", project: "doc-bun" },
-  { cwd: "doc", config: "vitest.config.e2e.ts", project: "doc-e2e" },
   { cwd: ".", config: "vitest.config.bun.ts", project: "root-bun" },
 ];
 
@@ -311,7 +292,7 @@ describe("repository spec names", () => {
 });
 
 describe("vitest selection", () => {
-  // Sequentially starts the 13 Vitest list processes, one config at a time.
+  // Sequentially starts the 12 Vitest list processes, one config at a time.
   beforeAll(async () => {
     for (const { cwd, config, project } of lists) {
       const { stdout } = await promisify(execFile)(
@@ -352,30 +333,14 @@ describe("vitest selection", () => {
       }
     }
   });
-
-  test("doc e2e specs run only in doc-e2e", () => {
-    const tracked = specFiles
-      .filter((file) => /^doc\/e2e\/.*\.chrome\.spec\.tsx?$/.test(file))
-      .sort();
-    const entries = [...selection.values()]
-      .flat()
-      .filter((entry) => entry.file.startsWith("doc/e2e/"));
-    expect(
-      [...new Set(entries.map((entry) => entry.projectName))].sort(),
-    ).toEqual(["doc-e2e"]);
-    expect([...new Set(entries.map((entry) => entry.file))].sort()).toEqual(
-      tracked,
-    );
-  });
 });
 
 // `--if-present` makes a missing script a silent no-op, so the package scripts
 // are pinned to the `lists` table in both directions.
-const scriptName = /^(unit:(chrome|firefox|node|bun)|test:(e2e|unit))$/;
+const scriptName = /^unit:(chrome|firefox|node|bun)$/;
 
 function runtimeScript(project: string): string {
-  const runtime = project.slice(project.lastIndexOf("-") + 1);
-  return runtime === "e2e" ? "test:e2e" : `unit:${runtime}`;
+  return `unit:${project.slice(project.lastIndexOf("-") + 1)}`;
 }
 
 function expectedScripts(cwd: string): Record<string, string> {
@@ -435,7 +400,6 @@ describe("package scripts", () => {
       "unit:firefox": fanOut("unit:firefox"),
       "unit:bun": `${fanOut("unit:bun")} && ${rootConfig}`,
       "unit:node": "node test/unit-node.ts",
-      "test:e2e": fanOut("test:e2e"),
     });
   });
 

@@ -15,7 +15,6 @@ test.each([
   ["root-bun", "bun"],
   ["core-chrome", "browser-main"],
   ["react-firefox", "browser-main"],
-  ["doc-e2e", "browser-main"],
   ["opentelemetry-server-node", "node"],
   ["core-plain", "any"],
 ] as const)("expectedRuntime(%s) is %s", (name, runtime) => {
@@ -66,7 +65,7 @@ describe("setup", () => {
   });
 
   test("accepts a browser project", () => {
-    expect(() => setup({ name: "doc-e2e" })).not.toThrow();
+    expect(() => setup({ name: "core-chrome" })).not.toThrow();
   });
 
   test("rejects a node project under Bun", () => {

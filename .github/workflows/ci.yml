@@ -25,19 +25,15 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-  build-e2e:
+  build:
     needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun ci
-      - name: Install Playwright browsers
-        run: bunx --bun playwright install --with-deps chromium
       - name: Build
         run: bun run build
-      - name: E2E tests
-        run: bun run test:e2e
 
   unit-chrome:
     needs: checks

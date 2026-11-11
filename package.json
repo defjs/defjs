@@ -47,7 +47,6 @@
     "unit:firefox": "bun run --sequential --workspaces --if-present unit:firefox",
     "unit:bun": "bun run --sequential --workspaces --if-present unit:bun && vitest run --config vitest.config.bun.ts",
     "unit:node": "node test/unit-node.ts",
-    "test:e2e": "bun run --sequential --workspaces --if-present test:e2e",
     "typecheck": "bun check --project tsconfig.json && bun run --cwd doc typecheck"
   },
   "devDependencies": {

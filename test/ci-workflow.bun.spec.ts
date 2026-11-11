@@ -10,7 +10,7 @@ const setupNode = "actions/setup-node@v7";
 
 const jobOrder = [
   "checks",
-  "build-e2e",
+  "build",
   "unit-chrome",
   "unit-firefox",
   "unit-bun",
@@ -24,15 +24,10 @@ interface JobCommands {
   needs: unknown;
 }
 
-// Every command of the E2E job and the four unit jobs, in order. A suffix such
+// Every command of the build job and the four unit jobs, in order. A suffix such
 // as `|| true` changes the string and fails the comparison.
 const jobRuns: Record<string, string[]> = {
-  "build-e2e": [
-    "bun ci",
-    "bunx --bun playwright install --with-deps chromium",
-    "bun run build",
-    "bun run test:e2e",
-  ],
+  build: ["bun ci", "bun run build"],
   "unit-chrome": [
     "bun ci",
     "bunx --bun playwright install --with-deps chromium",

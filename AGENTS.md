@@ -17,7 +17,7 @@ Definitions can be published on their own; the consuming application keeps owner
 | `packages/react`                | `@defjs/react`                | `ClientProvider`, `useClient`                                                                                                                                                      | Thin plugin; not a query/cache/state library                                    |
 | `packages/vue`                  | `@defjs/vue`                  | `HTTP_CLIENT`, `createClientPlugin`, `injectClient`                                                                                                                                | Thin plugin; not a query/cache/state library                                    |
 | `packages/opentelemetry-server` | `@defjs/opentelemetry-server` | Server-side outbound OpenTelemetry for core clients                                                                                                                                | Does not initialize the OTel SDK; no bodies or full headers captured by default |
-| `doc`                           | private                       | Fumadocs + React Router + Vite documentation site and its E2E suite                                                                                                                | Content and site code only                                                      |
+| `doc`                           | private                       | Fumadocs + React Router + Vite documentation site                                                                                                                                  | Content and site code only                                                      |
 | `test`                          | root                          | Root test infrastructure: `spec-matrix.ts`, `vitest-shared.ts`, `runtime-guard.ts`, `no-skip-reporter.ts`, `unit-node.ts`, `assert-pack.ts`, Firefox env, and the `root-bun` specs | Not a package                                                                   |
 
 Read the reference that matches your change before editing:
@@ -65,13 +65,12 @@ Specs live beside the source. `packages/core/test/` holds end-to-end specs and t
 
 ### `doc`
 
-| Path            | Contents                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `doc/app/`      | site application, components, generated API data, routing, LLM output                                            |
-| `doc/content/`  | guides and the 11 API overview pages per locale; entry pages are not stored here                                 |
-| `doc/examples/` | complete, typechecked examples embedded by content pages                                                         |
-| `doc/e2e/`      | Vitest Browser Mode specs (`*.chrome.spec.ts`) driving Chromium through Playwright against the built static site |
-| `doc/scripts/`  | API extraction, build, build fingerprint, link check, site URL check                                             |
+| Path            | Contents                                                                         |
+| --------------- | -------------------------------------------------------------------------------- |
+| `doc/app/`      | site application, components, generated API data, routing, LLM output            |
+| `doc/content/`  | guides and the 11 API overview pages per locale; entry pages are not stored here |
+| `doc/examples/` | complete, typechecked examples embedded by content pages                         |
+| `doc/scripts/`  | API extraction, build, build fingerprint, link check, site URL check             |
 
 Documentation unit specs (`*.spec.ts`, run by the `doc-bun` project) sit beside the source in `app/`, `scripts/`, and `examples/`; there is no separate `doc/test/` directory. Specs are excluded from the build fingerprint, so editing one does not stale `doc/build`.
 
@@ -89,7 +88,7 @@ Documentation unit specs (`*.spec.ts`, run by the `doc-bun` project) sit beside 
   | `*.bun.spec.ts`     | Bun only                                           | Bun APIs                        |
   | `*.type.spec.ts`    | no runtime project; checked by `bun run typecheck` | type-level contracts            |
 
-  Runtime sets per package: `packages/core` runs chrome, firefox, node and bun; `packages/react` and `packages/vue` run chrome and firefox; `packages/opentelemetry-server` runs node and bun; `doc` unit specs and the root `test/` run on bun. `doc/e2e` specs are `*.chrome.spec.ts` and run only in the `doc-e2e` project through `test:e2e`, after the build.
+  Runtime sets per package: `packages/core` runs chrome, firefox, node and bun; `packages/react` and `packages/vue` run chrome and firefox; `packages/opentelemetry-server` runs node and bun; `doc` unit specs and the root `test/` run on bun.
 
 - The part of the name before the suffix is free (`balancer.end.spec.ts`, `http.upload_progress.worker.chrome.spec.ts`), but its last segment must not be a reserved word: `browser`, `server`, `chromium`, `webkit`, `safari`, `deno`, `edge`, `workerd`, `chrome`, `firefox`, `node`, `bun`, `type`, `test`, `spec`. `x.node.spec.ts` is valid; `x.browser.spec.ts`, `x.chrome.node.spec.ts` and `x.type.node.spec.ts` are not. `.test.` test files do not exist, and file names use only lowercase letters, digits, `_`, `-` and `.`. `test/spec-naming.bun.spec.ts` enforces this and compares `vitest list` output of every project with the expected table.
 - Do not skip inside a shared spec with `process.platform`-style checks. Put the test in the runtime-specific file. A package runs only the runtimes of its own `unit:<runtime>` scripts (React and Vue: chrome and firefox; OpenTelemetry: node and bun), so a runtime suffix that the package does not run fails the naming check instead of being ignored.
@@ -132,9 +131,9 @@ bunx --bun playwright install --with-deps chromium firefox
 git config core.hooksPath .githooks
 ```
 
-Playwright browsers are needed by the Core, React, and Vue browser projects and the documentation E2E suite. Bun runs everything except the Node projects: `node --run unit:node` is the only command that needs Node.js, 24.2 or newer (native type stripping plus `import.meta.main`: the root `test/unit-node.ts` runs as TypeScript, and on older Node it would silently do nothing and exit 0). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core` and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core` and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook fixes the fully staged files and stages them again, only checks a file that also has unstaged changes (so it never stages them), formats the staged files and runs the type check. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun run lint` (the hook and CI do).
+Playwright browsers are needed by the Core, React, and Vue browser projects. Bun runs everything except the Node projects: `node --run unit:node` is the only command that needs Node.js, 24.2 or newer (native type stripping plus `import.meta.main`: the root `test/unit-node.ts` runs as TypeScript, and on older Node it would silently do nothing and exit 0). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core` and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core` and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook fixes the fully staged files and stages them again, only checks a file that also has unstaged changes (so it never stages them), formats the staged files and runs the type check. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun run lint` (the hook and CI do).
 
-Run these in order from the repository root and stop at the first failure. CI runs `checks` (gates 1, 2, 3) first. Once it passes, `build-e2e` (gates 5, 6) and `unit-chrome`, `unit-firefox`, `unit-bun`, `unit-node` (gate 4 split by runtime) run in parallel.
+Run these in order from the repository root and stop at the first failure. CI runs `checks` (gates 1, 2, 3) first. Once it passes, `build` (gate 5) and `unit-chrome`, `unit-firefox`, `unit-bun`, `unit-node` (gate 4 split by runtime) run in parallel.
 
 | #   | Command                                                                                   | Covers                                                                                                                               |
 | --- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -143,9 +142,8 @@ Run these in order from the repository root and stop at the first failure. CI ru
 | 3   | `bun run typecheck`                                                                       | library project, documentation app, TS/TSX examples                                                                                  |
 | 4   | `bun run unit:chrome`, `bun run unit:firefox`, `bun run unit:bun`, `node --run unit:node` | one command per runtime: the chrome, firefox, bun and node projects; `unit:bun` includes the root `test/` specs and the naming check |
 | 5   | `bun run build`                                                                           | all workspaces, including the static documentation site                                                                              |
-| 6   | `bun run test:e2e`                                                                        | the built documentation site in Chromium                                                                                             |
 
-A change is verified only when all six pass on the same revision. Gate 4 is one command per runtime, the same four that CI runs as separate jobs. `node --run unit:node` is the only one that needs Node.js: the runtime guard fails the Node projects when it detects Bun, and inside `bun run` a `node` command is Bun.
+A change is verified only when all five pass on the same revision. Gate 4 is one command per runtime, the same four that CI runs as separate jobs. `node --run unit:node` is the only one that needs Node.js: the runtime guard fails the Node projects when it detects Bun, and inside `bun run` a `node` command is Bun.
 
 `bun fmt` is a Bun built-in, deliberately not wrapped in a script: there is no `fmt` script and `bun run fmt` does not exist. Linting is the `lint` script, which runs `oxlint`:
 
@@ -156,7 +154,7 @@ bun fmt            # write
 bun fmt --check    # verify
 ```
 
-Every other command in the table is a repository script; gates 1, 3, 4, 5 and 6 are resolved through `bun run`, and the Node projects of gate 4 through `node --run`.
+Every other command in the table is a repository script; gates 1, 3, 4 and 5 are resolved through `bun run`, and the Node projects of gate 4 through `node --run`.
 
 ### Workspace-local checks
 
@@ -187,9 +185,9 @@ node --run unit:node                       # all Node projects from the root (te
 
 Each project's globalSetup calls the runtime guard (`test/runtime-guard.ts`): the `*-node` projects fail when Bun is detected (`This project must run on Node.js; use "node --run unit:node".`), and the `*-bun`, chrome and firefox projects fail when it is missing. `bun run unit:node` therefore fails by design.
 
-### Build and E2E freshness
+### Documentation build
 
-`test:e2e` serves `doc/build/client` and rejects a stale build, so run `bun run build` first. To rebuild only the documentation site:
+To rebuild only the documentation site:
 
 ```bash
 bun run --cwd doc build
@@ -205,11 +203,11 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
   - **Integration over a real socket or server** waits for the concrete event (`socket.closed`, the first frame, `open`) or a condition (`vi.waitFor` on observable state). Never assert on elapsed time. A liveness guard may race a promise that has no observable event, such as an execute expected to fail without a socket ever opening, but it is a safety net, not an assertion: name it in one short comment, use a budget that does not depend on machine speed (10s, not 2s), keep `timeout.unref?.()`, and still prove the behavior with the event wait and the code-path assertions.
   - **Real browser engines** run on real time. Wait for events and give a generous budget. Never use a tight window.
 - Assert the bytes that were sent, not a runtime's re-parse of them. Bun's multipart parser drops a file part's `Content-Type`, so multipart tests compare the raw body (`packages/core/test/multipart-fixture.ts` and the `/e2e/echo-raw` route).
-- Browser projects share a fixed Vitest port. Run one browser test process at a time. Firefox Vitest instances pass `browserLaunchEnv()` from `test/firefox-app-data.ts` so Firefox starts on macOS 27; the Chromium Vitest provider does not. The documentation E2E project is Chromium only.
+- Browser projects share a fixed Vitest port. Run one browser test process at a time. Firefox Vitest instances pass `browserLaunchEnv()` from `test/firefox-app-data.ts` so Firefox starts on macOS 27; the Chromium Vitest provider does not.
 - The root `test/` specs (`*.bun.spec.ts`) run in the `root-bun` project as part of `unit:bun`. That is where the naming and selection check, the config check, the CI workflow check, the runtime guard checks, the catalog-sync check, the unit-node check, the no-skip reporter check, the spec-matrix check, the shared Vitest settings check, the XSRF runtime guard check, and the skill and lint-plugin specs live. Do not use `bun test` or `bun:test` imports; all specs use Vitest.
 - A test observes behavior, or an independent public contract or generated artifact. Do not read an implementation file, a function's source text, or the layout of its dependencies as a stand-in for that observation. Text a transformer is specified to accept, and a check that authored documents meet a content rule, are contracts about that text; they are not covered by this prohibition.
-- **No skipped tests.** Every runtime config registers `NoSkipReporter` (`test/no-skip-reporter.ts`); a test in the skipped or todo state fails the run, and no unit script or job uses `--passWithNoTests`. A test that does not apply to a runtime belongs in a file for the runtime that runs it. `test/vitest-configs.bun.spec.ts` checks that every runtime config, including the React and Vue base configs and all six browser configs, registers the reporter, enables istanbul coverage with 100% thresholds, and carries its project name `<package>-<runtime>` and browser instance; `test/ci-workflow.bun.spec.ts` pins the commands of the E2E job and each unit job and rejects `continue-on-error`, `if` on a job or on a step that runs a command, and any `shell` other than `bash` or `sh`.
-- **Naming and selection check.** `test/spec-naming.bun.spec.ts` lists files with `git ls-files --cached --others --exclude-standard` (so unstaged new files count) and checks names against the naming table and the reserved words. It also runs `vitest list --filesOnly --json` for every project and compares the result with an independent expected table: plain specs in each runtime of their package, `.<runtime>.spec` in that runtime only, `*.type.spec.*` nowhere, `doc/e2e` only in `doc-e2e`. The same table pins the `unit:*` and `test:e2e` scripts of every `package.json`. When you add a package or a runtime, update the expected table in that file as well as the configs.
+- **No skipped tests.** Every runtime config registers `NoSkipReporter` (`test/no-skip-reporter.ts`); a test in the skipped or todo state fails the run, and no unit script or job uses `--passWithNoTests`. A test that does not apply to a runtime belongs in a file for the runtime that runs it. `test/vitest-configs.bun.spec.ts` checks that every runtime config, including the React and Vue base configs and all six browser configs, registers the reporter, enables istanbul coverage with 100% thresholds, and carries its project name `<package>-<runtime>` and browser instance; `test/ci-workflow.bun.spec.ts` pins the commands of the build job and each unit job and rejects `continue-on-error`, `if` on a job or on a step that runs a command, and any `shell` other than `bash` or `sh`.
+- **Naming and selection check.** `test/spec-naming.bun.spec.ts` lists files with `git ls-files --cached --others --exclude-standard` (so unstaged new files count) and checks names against the naming table and the reserved words. It also runs `vitest list --filesOnly --json` for every project and compares the result with an independent expected table: plain specs in each runtime of their package, `.<runtime>.spec` in that runtime only, `*.type.spec.*` nowhere. The same table pins the `unit:*` scripts of every `package.json`. When you add a package or a runtime, update the expected table in that file as well as the configs.
 - **Fixture server.** Shared HTTP, SSE and WebSocket endpoints for tests live in `packages/core/test/fixture/`. A test registers its own endpoints through `fixture(host, token)` on the data plane (`endpoint(name, scenario, params)`, then requests to the returned URL) and steers or inspects them on the control plane (`act`, `log`). Ids are random per test and `onTestFinished` deletes the state, so tests do not share endpoints or add a route to the shared app for one test. Control calls need the `x-fixture-token` header; data-plane calls do not. The business modules (`app.ts`, `data-plane.ts`, `control-plane.ts`, `raw-scenarios.ts`, `state.ts`) never import a runtime adapter (`@hono/bun`, `@hono/node-server`, `hono/bun`) and never touch `Bun`; only `startup-bun.ts` and `startup-node.ts` do. Modules under the root `test/` that Vite loads while bundling a config use only `node:` built-ins and `import type` from external packages, except `test/firefox-app-data.ts`, which uses `Bun` and is loaded only by the Firefox configs that run on Bun.
 
 ## Documentation site rules
@@ -232,7 +230,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 - Each package builds with `tsdown`, publishes from `dist`, and uses `publishConfig.directory`. The build writes `dist/package.json`, copies `LICENSE` and the package `README.md`. The `build` scripts call `bun --bun tsdown`, so they run on Bun from any directory, not only the repository root.
 - `bun test/assert-pack.ts <publish-dir>` must pass before publishing: it checks that `npm pack --dry-run` includes `LICENSE`, `README.md`, `package.json`, and every file referenced by the entry fields.
 - Packages that depend on Core build Core first. A Core patch within the plugins' `^0.7.0` peer range does not require a plugin release.
-- CI runs the six gates on pull requests and `main`, with gate 4 split into the jobs `unit-chrome`, `unit-firefox`, `unit-bun` and `unit-node`; the required checks are those four plus `checks` and `build-e2e`. The release workflow does not wait for CI; verify the intended revision first.
+- CI runs the five gates on pull requests and `main`, with gate 4 split into the jobs `unit-chrome`, `unit-firefox`, `unit-bun` and `unit-node`; the required checks are those four plus `checks` and `build`. The release workflow does not wait for CI; verify the intended revision first.
 
 ## Do not
 
@@ -249,4 +247,4 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 
 ## Definition of done
 
-All six gates pass on the same revision. New behavior has an accompanying test, public API changes have TSDoc and regenerated API data, guide changes are reflected in every locale, and no unrelated file was reformatted or refactored. Every runtime project that the change touches passes with its own 100% coverage report.
+All five gates pass on the same revision. New behavior has an accompanying test, public API changes have TSDoc and regenerated API data, guide changes are reflected in every locale, and no unrelated file was reformatted or refactored. Every runtime project that the change touches passes with its own 100% coverage report.

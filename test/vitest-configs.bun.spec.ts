@@ -93,12 +93,6 @@ const loadable: readonly RuntimeConfig[] = [
   { file: "doc/vitest.config.bun.ts", name: "doc-bun", thresholds: true },
   { file: "vitest.config.ts", name: "root-plain", thresholds: false },
   { file: "vitest.config.bun.ts", name: "root-bun", thresholds: false },
-  {
-    file: "doc/vitest.config.e2e.ts",
-    name: "doc-e2e",
-    thresholds: false,
-    browser: "chromium",
-  },
 ];
 
 function isNoSkipReporter(reporter: unknown): boolean {

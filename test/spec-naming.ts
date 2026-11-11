@@ -28,7 +28,6 @@ export interface Owner {
   readonly dir: string;
   readonly runtimes: readonly string[];
   readonly project: (runtime: string) => string;
-  readonly suffixOnly?: boolean;
 }
 
 export interface ListEntry {
@@ -88,7 +87,6 @@ export function expectedProjects(
   const owner = owners.find((candidate) => file.startsWith(candidate.dir));
   if (owner === undefined) return [];
   if (suffix === undefined) {
-    if (owner.suffixOnly === true) return [];
     return owner.runtimes.map((runtime) => owner.project(runtime));
   }
   if (!owner.runtimes.includes(suffix)) return [];

@@ -31,7 +31,6 @@ export function expectedRuntime(projectName: string): ExpectedRuntime {
       return "bun";
     case "chrome":
     case "firefox":
-    case "e2e":
       return "browser-main";
     case "plain":
       return "any";
