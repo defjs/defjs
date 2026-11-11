@@ -25,7 +25,7 @@ export interface ResolvedEndpoint {
    * Reports the attempt outcome. The first call invokes the balancer's `done`
    * synchronously. A throw is contained and reported with `reportError` where
    * the runtime defines it. `done` must be synchronous; a returned promise is
-   * not awaited and its rejection is ignored. Later calls do nothing.
+   * not awaited. Later calls do nothing.
    * When `pick` omitted `done`, the first call only marks this attempt finished.
    */
   done: (info: DoneInfo) => void;
@@ -44,7 +44,7 @@ export interface ResolvedEndpoint {
  *   `undefined`. A throw is contained and reported with `reportError` where the
  *   runtime defines it.
  * - `start`, `end`, and `done` must be synchronous. A returned promise is not
- *   awaited and its rejection is ignored.
+ *   awaited.
  * - Success returns the selected endpoint and a `done` wrapper. Call that
  *   wrapper, not the function on the raw pick result.
  *
@@ -80,7 +80,7 @@ function resolve(result: PickResult): ResolvedEndpoint {
       if (settled || started) return;
       started = true;
       try {
-        ignoreRejection(start?.());
+        start?.();
       } catch (thrown) {
         // Callback failures must not change the transport attempt.
         reportContainedError(thrown);
@@ -90,7 +90,7 @@ function resolve(result: PickResult): ResolvedEndpoint {
       if (!started || ended || settled) return;
       ended = true;
       try {
-        ignoreRejection(end?.(attributed(info)));
+        end?.(attributed(info));
       } catch (thrown) {
         // Callback failures must not change the transport attempt.
         reportContainedError(thrown);
@@ -105,29 +105,13 @@ function resolve(result: PickResult): ResolvedEndpoint {
         return;
       }
       try {
-        ignoreRejection(done(attributed(info)));
+        done(attributed(info));
       } catch (thrown) {
         // A throwing done must not replace the operation tuple.
         reportContainedError(thrown);
       }
     },
   };
-}
-
-function ignoreRejection(value: unknown): void {
-  try {
-    if (
-      (typeof value === "object" && value !== null) ||
-      typeof value === "function"
-    ) {
-      const then = "then" in value ? value.then : undefined;
-      if (typeof then === "function") {
-        then.call(value, undefined, () => undefined);
-      }
-    }
-  } catch {
-    // Observing a non-conforming thenable must not replace the operation tuple.
-  }
 }
 
 /** Only an explicit browser offline signal suppresses endpoint attribution. */

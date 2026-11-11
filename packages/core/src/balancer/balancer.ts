@@ -70,8 +70,7 @@ export interface PickInfo {
  * the attempt or the operation tuple. It is reported with `reportError` where
  * the runtime defines it, and that can end a Bun or Deno process that has no
  * error handler. Where the runtime has no `reportError`, as in Node.js, the
- * throw stays contained. A returned promise is not awaited and its rejection is
- * ignored.
+ * throw stays contained. A returned promise is not awaited.
  *
  * @group client
  */
@@ -81,19 +80,19 @@ export interface PickResult {
   /**
    * Called synchronously at most once immediately before the attempt begins.
    * Not called for build failures, interceptor short-circuits, or pre-transport cancellation.
-   * A throw or returned thenable is contained exactly like `done`.
+   * A throw is contained exactly like `done`.
    */
   readonly start?: () => void;
   /**
    * Called synchronously at most once after start, when the peer response begins,
    * or when transport fails before that response. Caller cancellation is unattributed,
    * and so is a network error on a streamed HTTP request body.
-   * A throw or returned thenable is contained exactly like `done`.
+   * A throw is contained exactly like `done`.
    */
   readonly end?: (info: DoneInfo) => void;
   /**
    * Called once with the attempt outcome. Omit when the balancer keeps no per-pick state.
-   * Must be synchronous: a returned promise is not awaited and its rejection is ignored.
+   * Must be synchronous: a returned promise is not awaited.
    * A throw does not replace the operation tuple; it is reported as described above.
    */
   readonly done?: (info: DoneInfo) => void;

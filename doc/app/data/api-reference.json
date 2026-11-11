@@ -8528,7 +8528,7 @@
     "slug": "core/pickresult-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Endpoint selected for one call.\n\n`done` is optional. When present, the runtime calls it once, synchronously,\nwith the outcome of this pick, or `{ attempted: false }` when no attempt can\nbe attributed to the endpoint.\n\nThe runtime reads `start`, `end`, and `done` once, when the pick returns, and\ncalls each without a receiver, so `this` is `undefined`. Use arrow functions,\nclosures, or bound functions for state. A synchronous throw does not change\nthe attempt or the operation tuple. It is reported with `reportError` where\nthe runtime defines it, and that can end a Bun or Deno process that has no\nerror handler. Where the runtime has no `reportError`, as in Node.js, the\nthrow stays contained. A returned promise is not awaited and its rejection is\nignored.",
+    "description": "Endpoint selected for one call.\n\n`done` is optional. When present, the runtime calls it once, synchronously,\nwith the outcome of this pick, or `{ attempted: false }` when no attempt can\nbe attributed to the endpoint.\n\nThe runtime reads `start`, `end`, and `done` once, when the pick returns, and\ncalls each without a receiver, so `this` is `undefined`. Use arrow functions,\nclosures, or bound functions for state. A synchronous throw does not change\nthe attempt or the operation tuple. It is reported with `reportError` where\nthe runtime defines it, and that can end a Bun or Deno process that has no\nerror handler. Where the runtime has no `reportError`, as in Node.js, the\nthrow stays contained. A returned promise is not awaited.",
     "signatures": [
       "interface PickResult {\n  readonly endpoint: string;\n  readonly start?: () => void;\n  readonly end?: (info: DoneInfo) => void;\n  readonly done?: (info: DoneInfo) => void;\n}"
     ],
@@ -8549,7 +8549,7 @@
       },
       {
         "name": "start",
-        "description": "Called synchronously at most once immediately before the attempt begins.\nNot called for build failures, interceptor short-circuits, or pre-transport cancellation.\nA throw or returned thenable is contained exactly like `done`.",
+        "description": "Called synchronously at most once immediately before the attempt begins.\nNot called for build failures, interceptor short-circuits, or pre-transport cancellation.\nA throw is contained exactly like `done`.",
         "type": "(() => void) | undefined",
         "simplifiedType": "function",
         "required": false,
@@ -8558,7 +8558,7 @@
       },
       {
         "name": "end",
-        "description": "Called synchronously at most once after start, when the peer response begins,\nor when transport fails before that response. Caller cancellation is unattributed,\nand so is a network error on a streamed HTTP request body.\nA throw or returned thenable is contained exactly like `done`.",
+        "description": "Called synchronously at most once after start, when the peer response begins,\nor when transport fails before that response. Caller cancellation is unattributed,\nand so is a network error on a streamed HTTP request body.\nA throw is contained exactly like `done`.",
         "type": "((info: DoneInfo) => void) | undefined",
         "simplifiedType": "function",
         "required": false,
@@ -8567,7 +8567,7 @@
       },
       {
         "name": "done",
-        "description": "Called once with the attempt outcome. Omit when the balancer keeps no per-pick state.\nMust be synchronous: a returned promise is not awaited and its rejection is ignored.\nA throw does not replace the operation tuple; it is reported as described above.",
+        "description": "Called once with the attempt outcome. Omit when the balancer keeps no per-pick state.\nMust be synchronous: a returned promise is not awaited.\nA throw does not replace the operation tuple; it is reported as described above.",
         "type": "((info: DoneInfo) => void) | undefined",
         "simplifiedType": "function",
         "required": false,

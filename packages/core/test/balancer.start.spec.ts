@@ -60,37 +60,32 @@ test("HTTP failover starts and finishes each physical attempt separately", async
     `done:${host}`,
   ]);
 });
-test.each(["throw", "reject"])(
-  "throwing or rejected HTTP start (%s) cannot replace the result",
-  async (mode) => {
-    const report = vi.fn();
-    vi.stubGlobal("reportError", report);
-    let calls = 0;
-    const b: Balancer = {
-      pick: () => [
-        null,
-        {
-          endpoint: inject("testServerHost"),
-          // eslint-disable-next-line @typescript-eslint/no-misused-promises -- start is typed to return void; the mock returns a rejected promise to exercise asynchronous start failure
-          start() {
-            calls++;
-            if (mode === "throw") throw new Error("start");
-            return Promise.reject(new Error("start"));
-          },
+test("a throwing HTTP start cannot replace the result", async () => {
+  const report = vi.fn();
+  vi.stubGlobal("reportError", report);
+  let calls = 0;
+  const b: Balancer = {
+    pick: () => [
+      null,
+      {
+        endpoint: inject("testServerHost"),
+        start() {
+          calls++;
+          throw new Error("start");
         },
-      ],
-    };
-    const client = createClient(
-      withEndpoint(inject("testServerHost")),
-      withBalancer(b),
-    );
-    expect(
-      (await defineRequest({ method: "GET", path: "/json" })(client))[0],
-    ).toBeNull();
-    expect(calls).toBe(1);
-    expect(report).toHaveBeenCalledTimes(mode === "throw" ? 1 : 0);
-  },
-);
+      },
+    ],
+  };
+  const client = createClient(
+    withEndpoint(inject("testServerHost")),
+    withBalancer(b),
+  );
+  expect(
+    (await defineRequest({ method: "GET", path: "/json" })(client))[0],
+  ).toBeNull();
+  expect(calls).toBe(1);
+  expect(report).toHaveBeenCalledOnce();
+});
 test("SSE starts immediately before Fetch and closes its one attributed attempt", async () => {
   const host = inject("testServerHost");
   const events: string[] = [];

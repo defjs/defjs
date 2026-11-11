@@ -247,7 +247,7 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` は error-first タプルを返します。任意の `start` は、選ばれたトランスポートが始まる直前に、同期的に多くて 1 回実行されます。任意の `end` は `start` のあと 1 回、ピアの応答が始まるとき（またはレスポンス前の失敗）に実行されます。任意の `done` は完了時に 1 回実行されます。Fetch は Linkerd の最初のボディフレームの境界も、Envoy のストリームの境界も公開できません。すべてのフックからの throw と thenable の rejection は封じ込められます。候補外の選択は `REQ_BUILD_FAILED` で失敗し、その `done` は `{ attempted: false }` で呼ばれます。`ERR_NO_CANDIDATE` は `REQ_BUILD_FAILED` の `cause` でしかありません。`FaultCode` ではありません。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーをまたいでもそれを認識します。
+`pick` は error-first タプルを返します。任意の `start` は、選ばれたトランスポートが始まる直前に、同期的に多くて 1 回実行されます。任意の `end` は `start` のあと 1 回、ピアの応答が始まるとき（またはレスポンス前の失敗）に実行されます。任意の `done` は完了時に 1 回実行されます。Fetch は Linkerd の最初のボディフレームの境界も、Envoy のストリームの境界も公開できません。すべてのフックからの throw は封じ込められます。返された Promise は待機されません。候補外の選択は `REQ_BUILD_FAILED` で失敗し、その `done` は `{ attempted: false }` で呼ばれます。`ERR_NO_CANDIDATE` は `REQ_BUILD_FAILED` の `cause` でしかありません。`FaultCode` ではありません。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーをまたいでもそれを認識します。
 
 バランサーが見るのは中立な結果だけです。各トランスポートは自身の情報を `DoneInfo.code` へ変換します。デフォルトの外れ値検出は、`NET_TIMEOUT` と `NET_BODY_INCOMPLETE` を含め、code を持つ結果をすべて失敗としてカウントします。生の `DoneInfo.status` はカスタムバランサーのためだけに残され、組み込み戦略は決して読みません。`PickInfo` は、1 回の pick の候補 `endpoints`、`members`（クライアントの全エンドポイントリストで、どの試行でも同じです）、任意の `operation` を含み、トランスポートを区別するフィールドはありません。
 

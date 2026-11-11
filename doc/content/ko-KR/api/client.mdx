@@ -247,7 +247,7 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 파생 �
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick`은 error-first 튜플을 돌려줘요. 선택인 `start`는 고른 전송이 시작하기 직전에 동기적으로 많아야 한 번 실행돼요. 선택인 `end`는 `start` 뒤에 한 번, 피어 응답이 시작될 때(또는 응답 전 실패가 있을 때) 실행돼요. 선택인 `done`은 완료 때 한 번 실행돼요. Fetch는 Linkerd의 첫 본문 프레임이나 Envoy의 스트림 경계를 드러낼 수 없어요. 모든 훅의 throw와 thenable rejection은 가둬져요. 후보 밖의 선택은 `REQ_BUILD_FAILED`로 실패하고, 그 `done`은 `{ attempted: false }`로 호출돼요. `ERR_NO_CANDIDATE`은 `REQ_BUILD_FAILED`의 `cause`로만 쓰여요. `FaultCode`는 아니에요. [`isNoCandidateCause`](/ko-KR/api/core/isnocandidatecause)는 Core 사본을 넘어서도 그것을 알아봐요.
+`pick`은 error-first 튜플을 돌려줘요. 선택인 `start`는 고른 전송이 시작하기 직전에 동기적으로 많아야 한 번 실행돼요. 선택인 `end`는 `start` 뒤에 한 번, 피어 응답이 시작될 때(또는 응답 전 실패가 있을 때) 실행돼요. 선택인 `done`은 완료 때 한 번 실행돼요. Fetch는 Linkerd의 첫 본문 프레임이나 Envoy의 스트림 경계를 드러낼 수 없어요. 모든 훅의 throw는 가둬져요. 반환된 Promise는 기다리지 않아요. 후보 밖의 선택은 `REQ_BUILD_FAILED`로 실패하고, 그 `done`은 `{ attempted: false }`로 호출돼요. `ERR_NO_CANDIDATE`은 `REQ_BUILD_FAILED`의 `cause`로만 쓰여요. `FaultCode`는 아니에요. [`isNoCandidateCause`](/ko-KR/api/core/isnocandidatecause)는 Core 사본을 넘어서도 그것을 알아봐요.
 
 밸런서는 중립 결과만 봐요. 각 전송이 자기 사실을 `DoneInfo.code`로 옮겨요. 기본 이상치 감지(outlier detection)는 코드가 있는 모든 결과를 실패로 세며, `NET_TIMEOUT`과 `NET_BODY_INCOMPLETE`도 포함해요. 원시 `DoneInfo.status`는 커스텀 밸런서만을 위해 남고, 내장 전략은 읽지 않아요. `PickInfo`는 한 번의 pick에 대한 후보 `endpoints`, `members`(클라이언트의 전체 엔드포인트 목록으로 모든 시도에서 같아요), 정의의 선택적 `operation`을 담고, 전송 구분자는 없어요.
 

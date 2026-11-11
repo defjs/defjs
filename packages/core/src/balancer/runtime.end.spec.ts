@@ -1,7 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { pickEndpoint } from "./runtime";
 import type { PickResult } from "./balancer";
-import { yieldMacrotask } from "../../test/macrotask";
 const info = { endpoints: ["a"] };
 afterEach(() => {
   vi.restoreAllMocks();
@@ -51,43 +50,26 @@ test("a throwing end getter preserves its cause", () => {
     )[0]?.cause,
   ).toBe(cause);
 });
-test.each(["throw", "reject", "then-getter", "then-call"])(
-  "end contains %s and still completes",
-  async (mode) => {
-    const report = vi.fn();
-    vi.stubGlobal("reportError", report);
-    const done = vi.fn();
-    const raw: PickResult & { end(): unknown } = {
-      endpoint: "a",
-      done,
-      end() {
-        if (mode === "throw") throw new Error(mode);
-        if (mode === "reject") return Promise.reject(new Error(mode));
-        if (mode === "then-getter")
-          return Object.defineProperty({}, "then", {
-            get() {
-              throw new Error(mode);
-            },
-          });
-        return {
-          then() {
-            throw new Error(mode);
-          },
-        };
-      },
-    };
-    const [, p] = pickEndpoint({ pick: () => [null, raw] }, info);
-    if (!p || !("end" in p) || typeof p.end !== "function")
-      throw new Error("missing end");
-    p.start();
-    p.end({ attempted: true });
-    p.done({ attempted: true });
-    await yieldMacrotask();
-    expect(done).toHaveBeenCalledOnce();
-    // Only a synchronous throw is reported; a returned rejection stays ignored.
-    expect(report).toHaveBeenCalledTimes(mode === "throw" ? 1 : 0);
-  },
-);
+test("end contains a throw and still completes", () => {
+  const report = vi.fn();
+  vi.stubGlobal("reportError", report);
+  const done = vi.fn();
+  const raw: PickResult = {
+    endpoint: "a",
+    done,
+    end() {
+      throw new Error("end");
+    },
+  };
+  const [, p] = pickEndpoint({ pick: () => [null, raw] }, info);
+  if (!p || !("end" in p) || typeof p.end !== "function")
+    throw new Error("missing end");
+  p.start();
+  p.end({ attempted: true });
+  p.done({ attempted: true });
+  expect(done).toHaveBeenCalledOnce();
+  expect(report).toHaveBeenCalledOnce();
+});
 test("offline failures are unattributed at end as well as done", () => {
   vi.stubGlobal("navigator", { onLine: false });
   try {

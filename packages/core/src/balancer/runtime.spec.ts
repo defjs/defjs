@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { PickInfo } from "./balancer";
 import { pickEndpoint } from "./runtime";
-import { yieldMacrotask } from "../../test/macrotask";
 
 const info: PickInfo = { endpoints: ["https://a"] };
 
@@ -59,118 +58,6 @@ describe("pick outcome normalization", () => {
     expect(endpointReads).toBe(1);
     expect(doneReads).toBe(1);
   });
-});
-
-describe("synchronous balancer callbacks", () => {
-  test("observes a rejected async done and finishes once", async () => {
-    let calls = 0;
-    const [fault, selected] = pickEndpoint(
-      {
-        pick: () => [
-          null,
-          {
-            endpoint: "https://a",
-            // eslint-disable-next-line @typescript-eslint/no-misused-promises -- done is typed to return void; returning a rejected promise exercises the balancer's handling of an asynchronous completion failure
-            done() {
-              calls += 1;
-              return Promise.reject(new Error("async done rejection"));
-            },
-          },
-        ],
-      },
-      info,
-    );
-    expect(fault).toBeNull();
-    selected?.done({ attempted: true, status: 200 });
-    selected?.done({ attempted: false });
-    expect(selected?.finished()).toBe(true);
-    expect(calls).toBe(1);
-    await yieldMacrotask();
-  });
-
-  test("observes custom thenables with their receiver and only a rejection handler", () => {
-    const observations: unknown[][] = [];
-    const thenable = {
-      then(
-        this: unknown,
-        fulfilled: unknown,
-        rejected: (reason: unknown) => void,
-      ) {
-        observations.push([this, fulfilled, typeof rejected]);
-        rejected(new Error("custom rejection"));
-      },
-    };
-    const [, selected] = pickEndpoint(
-      {
-        pick: () => [
-          null,
-          {
-            endpoint: "https://a",
-            done: () => thenable,
-          },
-        ],
-      },
-      info,
-    );
-    selected?.done({ attempted: false });
-    expect(observations).toEqual([[thenable, undefined, "function"]]);
-  });
-
-  test("observes callable thenables and ignores non-callable then fields", () => {
-    let observations = 0;
-    const thenable = Object.assign(() => undefined, {
-      then(_fulfilled: undefined, rejected: (reason: unknown) => void) {
-        observations += 1;
-        rejected("ignored");
-      },
-    });
-    for (const returned of [thenable, null, 42, {}, { then: 42 }]) {
-      const [, selected] = pickEndpoint(
-        {
-          pick: () => [
-            null,
-            {
-              endpoint: "https://a",
-              done: () => returned,
-            },
-          ],
-        },
-        info,
-      );
-      expect(() => selected?.done({ attempted: false })).not.toThrow();
-    }
-    expect(observations).toBe(1);
-  });
-
-  test.each(["get", "call"])(
-    "ignores a throw from a done thenable's %s",
-    (phase) => {
-      const thenable = {
-        get then() {
-          if (phase === "get") {
-            throw new Error("then getter");
-          }
-          return () => {
-            throw new Error("then call");
-          };
-        },
-      };
-      const [, selected] = pickEndpoint(
-        {
-          pick: () => [
-            null,
-            {
-              endpoint: "https://a",
-              done: () => thenable,
-            },
-          ],
-        },
-        info,
-      );
-      expect(() => selected?.done({ attempted: false })).not.toThrow();
-      expect(selected?.finished()).toBe(true);
-    },
-  );
 });
 
 describe("callback receiver and failure reporting", () => {
@@ -256,45 +143,5 @@ describe("callback receiver and failure reporting", () => {
     expect(report.mock.calls[0]?.[0]).toBe(startError);
     expect(report.mock.calls[1]?.[0]).toBe(endError);
     expect(report.mock.calls[2]?.[0]).toBe(doneError);
-  });
-
-  test("does not report returned rejections or non-conforming thenables", async () => {
-    const report = vi.fn();
-    vi.stubGlobal("reportError", report);
-    const thenables = [
-      () => Promise.reject(new Error("rejected")),
-      () =>
-        Object.defineProperty({}, "then", {
-          get() {
-            throw new Error("then getter");
-          },
-        }),
-      () => ({
-        then() {
-          throw new Error("then call");
-        },
-      }),
-    ];
-    for (const returned of thenables) {
-      const [, selected] = pickEndpoint(
-        {
-          pick: () => [
-            null,
-            {
-              endpoint: "https://a",
-              start: returned,
-              end: returned,
-              done: returned,
-            },
-          ],
-        },
-        info,
-      );
-      selected?.start();
-      selected?.end({ attempted: true });
-      selected?.done({ attempted: true });
-    }
-    await yieldMacrotask();
-    expect(report).not.toHaveBeenCalled();
   });
 });

@@ -247,7 +247,7 @@ Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` 回傳一個 error-first tuple。可選嘅 `start` 喺所選傳輸層開始之前至多同步執行一次；可選嘅 `end` 喺 `start` 之後執行一次，時機係對端 response 開始（或者 response 之前發生失敗）；可選嘅 `done` 喺完成時執行一次。Fetch 暴露唔到 Linkerd 嘅 first body frame，亦暴露唔到 Envoy 嘅 stream boundary。所有 hook 嘅 throw，同 thenable 嘅 rejection，都會被接住。揀咗候選以外嘅值會以 `REQ_BUILD_FAILED` 失敗，而佢嘅 `done` 會以 `{ attempted: false }` 呼叫。`ERR_NO_CANDIDATE` 只係 `REQ_BUILD_FAILED` 嘅 `cause`。佢唔係 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-HK/api/core/isnocandidatecause) 亦可以識別另一份 Core 副本入面嘅佢。
+`pick` 回傳一個 error-first tuple。可選嘅 `start` 喺所選傳輸層開始之前至多同步執行一次；可選嘅 `end` 喺 `start` 之後執行一次，時機係對端 response 開始（或者 response 之前發生失敗）；可選嘅 `done` 喺完成時執行一次。Fetch 暴露唔到 Linkerd 嘅 first body frame，亦暴露唔到 Envoy 嘅 stream boundary。所有 hook 嘅 throw 都會被接住；回傳嘅 Promise 唔會被等待。揀咗候選以外嘅值會以 `REQ_BUILD_FAILED` 失敗，而佢嘅 `done` 會以 `{ attempted: false }` 呼叫。`ERR_NO_CANDIDATE` 只係 `REQ_BUILD_FAILED` 嘅 `cause`。佢唔係 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-HK/api/core/isnocandidatecause) 亦可以識別另一份 Core 副本入面嘅佢。
 
 balancer 只見到中立結果；每種傳輸層會將自己嘅事實翻譯成 `DoneInfo.code`。預設嘅 outlier detection 將每個帶 code 嘅結果都計為失敗，包括 `NET_TIMEOUT` 同 `NET_BODY_INCOMPLETE`。原始嘅 `DoneInfo.status` 只留給自訂 balancer，內建策略從不讀取佢。`PickInfo` 包含單次 pick 嘅候選 `endpoints`、`members`（client 嘅完整端點清單，每次嘗試都一樣）同可選嘅 `operation`，冇 transport 判別欄位。
 

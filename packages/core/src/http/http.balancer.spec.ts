@@ -18,7 +18,6 @@ import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "./transport/fetch";
 import type { FixtureClient } from "../../test/fixture/client";
 import { fixture } from "../../test/fixture/client-auto";
 import type { ScenarioName, ScenarioParams } from "../../test/fixture/types";
-import { yieldMacrotask } from "../../test/macrotask";
 
 interface Probe {
   url: string;
@@ -774,34 +773,6 @@ describe("HTTP endpoint balancer", () => {
 
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(fault?.cause).toBe(cause);
-  });
-
-  test("keeps the successful operation tuple when async done rejects", async () => {
-    const live = await serve("respond", { status: 204 });
-    const reports: DoneInfo[] = [];
-    const client = createClient(
-      withEndpoint(live.url),
-      withBalancer({
-        pick: () => [
-          null,
-          {
-            endpoint: live.url,
-            // eslint-disable-next-line @typescript-eslint/no-misused-promises -- done is typed to return void; returning a rejected promise exercises the balancer's handling of an asynchronous completion failure
-            done(report) {
-              reports.push(report);
-              return Promise.reject(new Error("HTTP async done rejection"));
-            },
-          },
-        ],
-      }),
-    );
-
-    const [fault] = await get(client);
-    expect(fault).toBeNull();
-    expect(await live.hits()).toHaveLength(1);
-    expect(reports).toEqual([{ attempted: true, status: 204 }]);
-    // Give unhandled rejections a turn to reach Vitest's process listener.
-    await yieldMacrotask();
   });
 
   test("still returns the tuple when done throws", async () => {

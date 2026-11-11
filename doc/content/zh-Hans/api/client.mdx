@@ -247,7 +247,7 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` 返回错误优先元组。可选的 `start` 在所选传输开始前至多同步运行一次；可选的 `end` 在 `start` 之后、对端响应开始（或响应前发生失败）时运行一次；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有 Hook 的抛出和 thenable rejection 都会被接住。选中候选集之外的值会以 `REQ_BUILD_FAILED` 失败，其 `done` 以 `{ attempted: false }` 调用。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能跨 Core 副本识别它。
+`pick` 返回错误优先元组。可选的 `start` 在所选传输开始前至多同步运行一次；可选的 `end` 在 `start` 之后、对端响应开始（或响应前发生失败）时运行一次；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有 Hook 的抛出都会被接住；返回的 Promise 不会被等待。选中候选集之外的值会以 `REQ_BUILD_FAILED` 失败，其 `done` 以 `{ attempted: false }` 调用。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能跨 Core 副本识别它。
 
 均衡器只看到中立结果；每种传输把自己的事实转换成 `DoneInfo.code`。默认离群检测（`outlierDetection`）把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。原始 `DoneInfo.status` 只保留给自定义均衡器，内置策略从不读取。`PickInfo` 包含一次 pick 的候选 `endpoints`、`members`（client 的完整端点列表，每次尝试都相同）和可选的 `operation`，没有传输类型判别字段。
 
