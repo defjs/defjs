@@ -99,7 +99,7 @@ export function withRetry(options?: RetryOptions): ClientOption {
  *
  * WebSocket connections do not use them. The `HeadersInit` is copied into a `Headers` object when the option is applied. A later call replaces the earlier headers instead of merging.
  *
- * Headers returned by a request builder replace a default of the same name. The first value for that name replaces the default; later values in the same array append only to that replacement. A scalar or a `Headers` instance also replaces. Other default names stay.
+ * Headers returned by a request builder replace a default of the same name. The first value for that name replaces the default, and later values of that name, from a `[name, value]` array or a `Headers` instance, are appended to it. A record value is one value: an array joins with a comma the JavaScript way. Other default names stay.
  *
  * Per-request or computed credentials, such as a refreshed Bearer token or an HMAC signature, belong in an interceptor, because they need the serialized body or a refreshed credential.
  *

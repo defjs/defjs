@@ -1,10 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { appendHeaderEntries } from "./url";
 import {
-  appendRecordToHeaders,
   createResolvedRequestUrl,
   createSearchParams,
   fillUrl,
+  mergeHeaders,
 } from "./url";
 
 describe("url helpers", () => {
@@ -144,110 +143,47 @@ describe("url helpers", () => {
     expect(paramsWithUndefinedArray.toString()).toBe("");
   });
 
-  test("should append record-like values into headers", () => {
-    const fromHeaders = new Headers();
-    fromHeaders.set("x-trace-id", "trace-1");
+  describe("mergeHeaders", () => {
+    test("copies every name of the source into the target", () => {
+      const target = new Headers({ "x-keep": "keep" });
 
-    const copied = new Headers();
-    appendRecordToHeaders(copied, fromHeaders);
-    expect(copied.get("x-trace-id")).toBe("trace-1");
+      mergeHeaders(target, new Headers({ "x-trace-id": "trace-1" }));
 
-    const fromTuples = new Headers();
-    appendRecordToHeaders(fromTuples, [
-      ["set-cookie", "a=1"],
-      ["set-cookie", "b=2"],
-    ]);
-    expect(fromTuples.get("set-cookie")).toBe("a=1, b=2");
-
-    const fromRecord = new Headers();
-    appendRecordToHeaders(fromRecord, {
-      "x-number": 1,
-      "x-roles": ["admin", "user"],
-      "x-skip": undefined,
+      expect(target.get("x-trace-id")).toBe("trace-1");
+      expect(target.get("x-keep")).toBe("keep");
     });
-    expect(fromRecord.get("x-number")).toBe("1");
-    expect(fromRecord.get("x-roles")).toBe("admin, user");
-    expect(fromRecord.has("x-skip")).toBe(false);
 
-    expect(() =>
-      appendRecordToHeaders(new Headers(), { "x-object": { nested: true } }),
-    ).toThrow('header value for "x-object" requires a scalar value');
-    expect(() =>
-      appendRecordToHeaders(new Headers(), {
-        "x-object": [{ nested: true }],
-      }),
-    ).toThrow('header value for "x-object" requires a scalar value');
+    test("replaces a target value of the same name, whatever its case", () => {
+      const target = new Headers({ "X-Scope": "default", "X-Keep": "keep" });
+
+      mergeHeaders(target, new Headers({ "x-scope": "command" }));
+
+      expect(target.get("x-scope")).toBe("command");
+      expect(target.get("x-keep")).toBe("keep");
+    });
+
+    test("keeps each Set-Cookie of the source and drops the target's", () => {
+      const target = new Headers([["set-cookie", "default=0"]]);
+      const source = new Headers([
+        ["set-cookie", "a=1"],
+        ["set-cookie", "b=2"],
+      ]);
+
+      mergeHeaders(target, source);
+
+      expect(target.getSetCookie()).toEqual(["a=1", "b=2"]);
+    });
+
+    test("leaves the target alone when the source is empty", () => {
+      const target = new Headers({ "x-scope": "default" });
+
+      mergeHeaders(target, new Headers());
+
+      expect(target.get("x-scope")).toBe("default");
+    });
   });
 
-  test.each<{
-    name: string;
-    value: Parameters<typeof appendRecordToHeaders>[1];
-    expected: string;
-  }>([
-    {
-      name: "Headers",
-      value: new Headers({ "x-scope": "command" }),
-      expected: "command",
-    },
-    {
-      name: "scalar record",
-      value: { "x-scope": "command" },
-      expected: "command",
-    },
-    {
-      name: "array record",
-      value: { "x-scope": ["first", "second"] },
-      expected: "first, second",
-    },
-    {
-      name: "mixed-case array record",
-      value: { "X-Scope": ["first"], "x-scope": ["second"] },
-      expected: "first, second",
-    },
-    {
-      name: "pairs",
-      value: [
-        ["X-Scope", "first"],
-        ["x-scope", "second"],
-      ],
-      expected: "first, second",
-    },
-    { name: "undefined input", value: undefined, expected: "default" },
-    {
-      name: "undefined field",
-      value: { "x-scope": undefined },
-      expected: "default",
-    },
-    { name: "empty pairs", value: [], expected: "default" },
-    {
-      name: "empty array field",
-      value: { "x-scope": [] },
-      expected: "default",
-    },
-  ])(
-    "overrides defaults without losing command values for $name",
-    ({ value, expected }) => {
-      const headers = new Headers({ "X-Scope": "default", "X-Keep": "keep" });
-
-      appendRecordToHeaders(headers, value);
-
-      expect(headers.get("x-scope")).toBe(expected);
-      expect(headers.get("x-keep")).toBe("keep");
-    },
-  );
-
-  test("applies header entries the way Headers coerces them", () => {
-    const headers = new Headers();
-    // @ts-expect-error Exercise the original runtime coercion of an invalid typed header pair.
-    appendRecordToHeaders(headers, [["a", 1]]);
-    expect(headers.get("a")).toBe("1");
-    expect(() =>
-      // @ts-expect-error A non-iterable header entry intentionally violates HeadersInit.
-      appendRecordToHeaders(new Headers(), [1]),
-    ).toThrow(TypeError);
-  });
-
-  test("keeps an own __proto__ key in path, query, and header application", () => {
+  test("keeps an own __proto__ key in path and query application", () => {
     const record: { [key: string]: string } = {};
     Object.defineProperty(record, "__proto__", {
       configurable: true,
@@ -256,32 +192,8 @@ describe("url helpers", () => {
       writable: true,
     });
 
-    const headers = new Headers();
-    appendRecordToHeaders(headers, record);
-
     expect(fillUrl("/files/:__proto__", record)).toBe("/files/safe");
     expect(createSearchParams(record).get("__proto__")).toBe("safe");
-    expect(headers.get("__proto__")).toBe("safe");
     expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
-  });
-});
-
-describe("header entries from untyped input", () => {
-  test("destructures each entry and converts its value the way Headers does", () => {
-    const headers = new Headers();
-    appendHeaderEntries(headers, ["ab", ["x-number", 1], ["x-missing"]]);
-
-    expect(headers.get("a")).toBe("b");
-    expect(headers.get("x-number")).toBe("1");
-    expect(headers.get("x-missing")).toBe("undefined");
-  });
-
-  test("rejects a name that is not a string and a symbol value", () => {
-    expect(() => appendHeaderEntries(new Headers(), [[1, "value"]])).toThrow(
-      "header name must be a string",
-    );
-    expect(() =>
-      appendHeaderEntries(new Headers(), [["x-symbol", Symbol("value")]]),
-    ).toThrow('header value for "x-symbol" must not be a symbol');
   });
 });

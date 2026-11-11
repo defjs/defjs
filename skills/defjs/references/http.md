@@ -62,7 +62,7 @@ Whenever `input` is declared, `builder` is **required**. Defjs never infers plac
 - `builder` is a synchronous pure function `(input) => ({ path?, query?, headers?, body? })`.
 - If `builder` throws or returns an illegal placement, the call does not throw; it resolves to a `REQ_BUILD_FAILED` fault on the tuple.
 - `path` values must be scalars. Each placeholder segment is percent-encoded once; empty strings, `.`, `..`, `null`, and `undefined` fail with `REQ_BUILD_FAILED`.
-- `headers` values may be a scalar or an array of scalars. `undefined` header and query values are omitted; `null` in `path`, `query`, or `headers` fails with `REQ_BUILD_FAILED`.
+- `headers` is a `Headers`, an array of `[name, value]` pairs, or a record of scalars and arrays of scalars. `Headers` converts each header value to a string the JavaScript way, so an array joins with a comma (`["a", "b"]` sends `a,b`); a value the platform rejects fails with `REQ_BUILD_FAILED`. `undefined` header and query values are omitted; `null` in `path` or `query` fails with `REQ_BUILD_FAILED`.
 - `GET` and `HEAD` definitions cannot return `body` from `builder` (compile-time type error).
 
 ```ts

@@ -101,9 +101,76 @@ describe("Client", () => {
       await stream?.closed;
 
       expect(fault).toBeNull();
-      expect(sent?.get("x-scope")).toBe("first, second");
+      // Two pair entries are combined by Headers; a record array is one value that JavaScript joins with a comma.
+      expect(sent?.get("x-scope")).toBe(
+        transport === "HTTP" ? "first, second" : "first,second",
+      );
       expect(sent?.get("x-keep")).toBe("keep");
       expect(defaults["X-Scope"]).toBe("default");
+    },
+  );
+
+  test.each(["HTTP", "SSE"] as const)(
+    "%s reports REQ_BUILD_FAILED when Headers rejects an array header entry",
+    async (transport) => {
+      const handle = vi.fn<FetchHandle>(() =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      );
+      const client = createClient(
+        withEndpoint("https://example.test"),
+        withHTTPHandle(handle),
+        withSSEHandle(handle),
+      );
+
+      const [fault] =
+        transport === "HTTP"
+          ? await defineRequest({
+              // @ts-expect-error A one-item entry is not a [name, value] pair.
+              builder: () => ({ headers: [["x-missing"]] }),
+              method: "GET",
+              path: "/headers",
+            })(client)
+          : await defineEventStream({
+              // @ts-expect-error A one-item entry is not a [name, value] pair.
+              builder: () => ({ headers: [["x-missing"]] }),
+              events: { message: struct.unknown() },
+              path: "/headers",
+            })(client);
+
+      expect(fault?.code).toBe("REQ_BUILD_FAILED");
+      expect(fault?.cause).toBeInstanceOf(TypeError);
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(["HTTP", "SSE"] as const)(
+    "%s reports REQ_BUILD_FAILED when Headers rejects a record header value",
+    async (transport) => {
+      const handle = vi.fn<FetchHandle>(() =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      );
+      const client = createClient(
+        withEndpoint("https://example.test"),
+        withHTTPHandle(handle),
+        withSSEHandle(handle),
+      );
+
+      const [fault] =
+        transport === "HTTP"
+          ? await defineRequest({
+              builder: () => ({ headers: { "x-line": "line\nbreak" } }),
+              method: "GET",
+              path: "/headers",
+            })(client)
+          : await defineEventStream({
+              builder: () => ({ headers: { "x-line": "line\nbreak" } }),
+              events: { message: struct.unknown() },
+              path: "/headers",
+            })(client);
+
+      expect(fault?.code).toBe("REQ_BUILD_FAILED");
+      expect(fault?.cause).toBeInstanceOf(TypeError);
+      expect(handle).not.toHaveBeenCalled();
     },
   );
 

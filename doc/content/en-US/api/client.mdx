@@ -55,7 +55,7 @@ Sets static default headers for HTTP and SSE requests. WebSocket requests do not
 Precedence for one request:
 
 1. The defaults are the starting header set.
-2. `headers` returned by the request builder replace a default of the same name. The first value for that name replaces the default; later values in the same array append only to that replacement. A scalar or a `Headers` instance also replaces. Other default names stay.
+2. `headers` returned by the request builder replace a default of the same name. The first value for that name replaces the default, and later values of that name, from a `[name, value]` array or a `Headers` instance, are appended to it. A record value is one value: an array joins with a comma the JavaScript way. Other default names stay.
 3. Interceptors receive the merged headers and may change them.
 4. With `@defjs/core/xsrf`, the XSRF header is added last, only when still absent (see `withXSRF`).
 

@@ -179,11 +179,14 @@ function buildHttp<TInput>(
 }
 
 describe("outbound request builder", () => {
-  test("keeps a header pair array, including values Headers will coerce", () => {
-    const headers = [["a", 1]];
-    expect(materializeOutboundRequest({ headers }, "http").headers).toBe(
-      headers,
+  test("turns a header pair array into Headers, which coerces the values", () => {
+    const { headers } = materializeOutboundRequest(
+      { headers: [["a", 1]] },
+      "http",
     );
+
+    expect(headers).toBeInstanceOf(Headers);
+    expect(headers instanceof Headers ? headers.get("a") : undefined).toBe("1");
   });
 
   test("formData and urlencoded are object structs with a codec tag", () => {
@@ -1360,12 +1363,12 @@ describe("outbound request builder", () => {
       headers: [["x-tuple", "1"]],
     }));
 
-    expect(record.headers?.get("x-tag")).toBe("a, b");
+    expect(record.headers?.get("x-tag")).toBe("a,b");
     expect(live.headers?.get("x-live")).toBe("1");
     expect(tuple.headers?.get("x-tuple")).toBe("1");
   });
 
-  test("rejects null and nested values in path, query, and headers", () => {
+  test("rejects null and nested values in path and query", () => {
     expect(() =>
       buildHttp("GET", "/users/:id", undefined, () => ({ path: { id: null } })),
     ).toThrow(/id/);
@@ -1377,16 +1380,6 @@ describe("outbound request builder", () => {
     expect(() =>
       buildHttp("GET", "/users", undefined, () => ({ query: { id: null } })),
     ).toThrow(/id/);
-    expect(() =>
-      buildHttp("GET", "/users", undefined, () => ({
-        headers: { "x-id": null },
-      })),
-    ).toThrow(/x-id/);
-    expect(() =>
-      buildHttp("GET", "/users", undefined, () => ({
-        headers: { "x-id": { raw: 1 } },
-      })),
-    ).toThrow(/x-id/);
   });
 
   test("rejects a non-object builder result", () => {

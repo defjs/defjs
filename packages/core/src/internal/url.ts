@@ -1,15 +1,12 @@
 import type { QuerySerializer } from "../client/config";
 import { isPlainObject } from "../struct/utils";
 import type { HttpRequest } from "./http_request";
-import type { RequestScalarValue } from "./request_values";
 import {
   isRequestScalarValue,
   serializeRequestScalarValue,
 } from "./request_values";
 
 export class RequestUrlError extends TypeError {}
-
-type UrlScalarValue = Exclude<RequestScalarValue, bigint>;
 
 export function fillUrl(
   path: string,
@@ -86,100 +83,20 @@ export function resolveTransportQuery(
   };
 }
 
-/** The first value of a name replaces a default header; later values of that name are appended. */
-function headerWriter(
-  headers: Headers,
-): (key: string, headerValue: string) => void {
-  const applied = new Set<string>();
-  return (key, headerValue) => {
-    const name = key.toLowerCase();
-    if (applied.has(name)) {
-      headers.append(key, headerValue);
-    } else {
-      headers.set(key, headerValue);
-      applied.add(name);
-    }
-  };
-}
-
 /**
- * Applies `[name, value]` entries in order. Each entry is destructured, and the value becomes a string the way
- * Headers converts it. A non-iterable entry, a name that is not a string, or a symbol value throws TypeError.
+ * Copies `source` into `target`. The first value of a name replaces the target's value of that name, so a builder
+ * header overrides a default; later values of the same name, such as each Set-Cookie, are appended.
  */
-export function appendHeaderEntries(
-  headers: Headers,
-  entries: readonly unknown[],
-): void {
-  const appendValue = headerWriter(headers);
-  for (const entry of entries) {
-    if (!isIterable(entry)) {
-      throw new TypeError("header entry must be a [name, value] pair");
+export function mergeHeaders(target: Headers, source: Headers): void {
+  const replaced = new Set<string>();
+  source.forEach((value, name) => {
+    if (replaced.has(name)) {
+      target.append(name, value);
+    } else {
+      target.set(name, value);
+      replaced.add(name);
     }
-    const [key, headerValue] = entry;
-    if (typeof key !== "string") {
-      throw new TypeError("header name must be a string");
-    }
-    if (typeof headerValue === "symbol") {
-      throw new TypeError(`header value for "${key}" must not be a symbol`);
-    }
-    appendValue(key, String(headerValue));
-  }
-}
-
-function isIterable(value: unknown): value is Iterable<unknown> {
-  return (
-    typeof value === "string" ||
-    (typeof value === "object" &&
-      value !== null &&
-      typeof Reflect.get(value, Symbol.iterator) === "function")
-  );
-}
-
-export function appendRecordToHeaders(
-  headers: Headers,
-  value?: HeadersInit | { [key: string]: unknown },
-): void {
-  if (!value) {
-    return;
-  }
-
-  if (value instanceof Headers) {
-    value.forEach((headerValue, key) => {
-      headers.set(key, headerValue);
-    });
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    appendHeaderEntries(headers, value);
-    return;
-  }
-
-  const appendValue = headerWriter(headers);
-
-  for (const [key, headerValue] of Object.entries(value)) {
-    if (typeof headerValue === "undefined") {
-      continue;
-    }
-
-    if (Array.isArray(headerValue)) {
-      for (const item of headerValue) {
-        if (!isUrlScalarValue(item)) {
-          throw new TypeError(
-            `header value for "${key}" requires a scalar value`,
-          );
-        }
-        appendValue(key, serializeRequestScalarValue(item));
-      }
-      continue;
-    }
-
-    if (!isUrlScalarValue(headerValue)) {
-      throw new TypeError(`header value for "${key}" requires a scalar value`);
-    }
-
-    appendValue(key, serializeRequestScalarValue(headerValue));
-  }
+  });
 }
 
 /**
@@ -280,10 +197,6 @@ function appendQueryLeaf(
   throw new TypeError(
     `a query serializer is required for nested query value "${key}"`,
   );
-}
-
-function isUrlScalarValue(value: unknown): value is UrlScalarValue {
-  return isRequestScalarValue(value) && typeof value !== "bigint";
 }
 
 // One client usually talks to one endpoint. `new URL(path, base)` only reads the base, so it is shared.

@@ -45,8 +45,7 @@ export type OutboundBuilder = (input: never) => unknown;
 export type MaterializedRequest = {
   body?: object | string;
   defaultContentType?: string;
-  /** A builder's header array is kept as given and applied by appendHeaderEntries. */
-  headers?: HeadersInit | unknown[] | { [key: string]: unknown };
+  headers?: Headers;
   params?: { [key: string]: string };
   query?: URLSearchParams | { [key: string]: unknown };
 };
@@ -434,23 +433,25 @@ function materializeQuery(
 function materializeHeaders(
   value: unknown,
   guides?: WeakMap<object, Guide>,
-): HeadersInit | unknown[] | { [key: string]: unknown } {
+): Headers {
   if (typeof Headers !== "undefined" && value instanceof Headers) {
     return value;
   }
   if (Array.isArray(value)) {
-    const entries: unknown[] = value;
-    return entries;
+    // Fetch decides which entries are valid and what throws. Narrowing them by hand would be a rule set of its own:
+    // it would read the entry "ab" as a: b and a one-item entry as "undefined", where Headers throws.
+    return new Headers(value);
   }
 
   const encoded = encodeOutbound(value, guides);
   if (!isPlainObject(encoded)) {
     throw new TypeError("headers value must be a header record or HeadersInit");
   }
-  for (const [key, item] of Object.entries(encoded)) {
-    assertHeaderValue(item, key);
-  }
-  return encoded;
+  // String() leaves the conversion to JavaScript: null becomes "null" and an array joins with a comma. Encoding turns
+  // a nested object into a null-prototype one, so converting it throws a TypeError.
+  return new Headers(
+    Object.entries(encoded).map(([key, item]) => [key, String(item)]),
+  );
 }
 
 function materializeBody(
@@ -1102,21 +1103,6 @@ function rejectNullValue(value: unknown, key: string, section: string): void {
   }
   if (isPlainObject(value)) {
     rejectNullValues(value, section);
-  }
-}
-
-function assertHeaderValue(value: unknown, key: string): void {
-  if (value === null) {
-    throw new TypeError(`header value for "${key}" must not be null`);
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      assertHeaderValue(item, key);
-    }
-    return;
-  }
-  if (typeof value === "object" && value !== null) {
-    throw new TypeError(`header value for "${key}" must be a scalar`);
   }
 }
 

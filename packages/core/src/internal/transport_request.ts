@@ -11,9 +11,8 @@ import {
   runOutboundBuilder,
 } from "./outbound_request";
 import {
-  appendHeaderEntries,
-  appendRecordToHeaders,
   fillUrl,
+  mergeHeaders,
   resolveRequestUrl,
   resolveTransportQuery,
 } from "./url";
@@ -67,10 +66,8 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
     ? new Headers(options.defaultHeaders)
     : new Headers();
 
-  if (Array.isArray(built.headers)) {
-    appendHeaderEntries(headers, built.headers);
-  } else {
-    appendRecordToHeaders(headers, built.headers);
+  if (built.headers) {
+    mergeHeaders(headers, built.headers);
   }
   const declaredContentType = headers.has("content-type");
   if (

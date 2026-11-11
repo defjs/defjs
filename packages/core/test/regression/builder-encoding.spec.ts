@@ -252,11 +252,7 @@ describe("builder refactor adversarial audit", () => {
     });
     const request = materializeOutboundRequest({ headers }, "http");
 
-    if (!isRecord(request.headers) || request.headers instanceof Headers) {
-      throw new Error("Expected a header record");
-    }
-    expect(Object.hasOwn(request.headers, "__proto__")).toBe(true);
-    expect(request.headers["__proto__"]).toBe("safe");
+    expect(request.headers?.get("__proto__")).toBe("safe");
     expect(Reflect.get(Object.prototype, "polluted")).toBeUndefined();
   });
 
@@ -287,10 +283,7 @@ describe("builder refactor adversarial audit", () => {
       throw new Error("Expected a query record");
     }
     expect(request.query["constructor"]).toBe("safe");
-    if (!isRecord(request.headers) || request.headers instanceof Headers) {
-      throw new Error("Expected a header record");
-    }
-    expect(request.headers["constructor"]).toBe("safe");
+    expect(request.headers?.get("constructor")).toBe("safe");
   });
 
   test("rejects path injection and header CR/LF before transport", () => {
