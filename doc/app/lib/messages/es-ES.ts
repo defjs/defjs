@@ -53,6 +53,7 @@ export default {
   "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.(404 page)":
     "Es posible que la página que buscas se haya eliminado, haya cambiado de nombre o no esté disponible temporalmente.",
   "Back to Home(404 page)": "Volver al inicio",
+  "Skip to Content(skip link)": "Saltar al contenido",
   "ui.message": "Publicado bajo la licencia MIT.",
   "ui.copyright": "Copyright © 2026 MunMunMiao",
   "nav.home": "Resumen del proyecto",

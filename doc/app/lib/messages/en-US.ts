@@ -52,6 +52,7 @@ const messages = {
   "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.(404 page)":
     "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.",
   "Back to Home(404 page)": "Back to Home",
+  "Skip to Content(skip link)": "Skip to Content",
   "ui.message": "Released under the MIT License.",
   "ui.copyright": "Copyright © 2026 MunMunMiao",
   "nav.home": "Overview",

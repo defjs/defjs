@@ -53,6 +53,7 @@ export default {
   "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.(404 page)":
     "你要查找的页面可能已被移除、更名或暂时不可用。",
   "Back to Home(404 page)": "返回首页",
+  "Skip to Content(skip link)": "跳到正文",
   "ui.message": "基于 MIT 许可证发布。",
   "ui.copyright": "Copyright © 2026 MunMunMiao",
   "nav.home": "项目概览",

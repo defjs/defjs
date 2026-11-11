@@ -54,6 +54,7 @@ export default {
   "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.(404 page)":
     "お探しのページは削除されたか、名前が変更されたか、一時的に利用できない可能性があります。",
   "Back to Home(404 page)": "ホームに戻る",
+  "Skip to Content(skip link)": "本文へスキップ",
   "ui.message": "MIT ライセンスで公開しています。",
   "ui.copyright": "Copyright © 2026 MunMunMiao",
   "nav.home": "プロジェクト概要",

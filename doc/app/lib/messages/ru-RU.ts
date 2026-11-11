@@ -55,6 +55,7 @@ export default {
   "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.(404 page)":
     "Возможно, страница была удалена, переименована или временно недоступна.",
   "Back to Home(404 page)": "На главную",
+  "Skip to Content(skip link)": "Перейти к содержимому",
   "ui.message": "Под лицензией MIT.",
   "ui.copyright": "Copyright © 2026 MunMunMiao",
   "nav.home": "Обзор проекта",

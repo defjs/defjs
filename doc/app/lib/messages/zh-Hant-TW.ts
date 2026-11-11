@@ -54,6 +54,7 @@ export default {
   "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.(404 page)":
     "你要尋找的頁面可能已被移除、更名或暫時無法使用。",
   "Back to Home(404 page)": "回到首頁",
+  "Skip to Content(skip link)": "跳到內文",
   "ui.message": "以 MIT 授權條款發布。",
   "ui.copyright": "Copyright © 2026 MunMunMiao",
   "nav.home": "專案概覽",

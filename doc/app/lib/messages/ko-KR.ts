@@ -53,6 +53,7 @@ export default {
   "The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.(404 page)":
     "찾으시는 페이지가 삭제되었거나 이름이 변경되었거나 일시적으로 사용할 수 없을 수 있습니다.",
   "Back to Home(404 page)": "홈으로 돌아가기",
+  "Skip to Content(skip link)": "본문으로 건너뛰기",
   "ui.message": "MIT 라이선스로 배포됩니다.",
   "ui.copyright": "Copyright © 2026 MunMunMiao",
   "nav.home": "프로젝트 개요",
