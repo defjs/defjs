@@ -66,3 +66,24 @@ html {
   a[aria-label="GitHub"]::after {
   content: attr(aria-label);
 }
+
+/* The skip link from fumadocs-ui is only `sr-only`, which leaves the first Tab stop without a focus indicator. */
+a[href="#nd-page"].sr-only:focus-visible {
+  position: fixed;
+  z-index: 60;
+  inset-block-start: 0.5rem;
+  inset-inline-start: 0.5rem;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  overflow: visible;
+  clip: auto;
+  clip-path: none;
+  border-radius: 0.375rem;
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: normal;
+}
