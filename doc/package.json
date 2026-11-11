@@ -18,7 +18,7 @@
     "unit:bun": "vitest run --config vitest.config.bun.ts"
   },
   "dependencies": {
-    "isbot": "^5"
+    "isbot": "^5.2.3"
   },
   "devDependencies": {
     "@defjs/core": "workspace:^",
@@ -28,8 +28,8 @@
     "@fuma-translate/react": "1.0.2",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/api-logs": "0.223.0",
-    "@opentelemetry/core": "3.0.0",
-    "@opentelemetry/sdk-logs": "3.0.0",
+    "@opentelemetry/core": "3.1.1",
+    "@opentelemetry/sdk-logs": "3.1.1",
     "@react-router/dev": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/mdx": "catalog:",
@@ -47,6 +47,6 @@
     "tailwindcss": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "vue": "3.5.44"
+    "vue": "3.5.45"
   }
 }
