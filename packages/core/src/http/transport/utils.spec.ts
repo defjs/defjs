@@ -150,7 +150,6 @@ describe("Handler util", () => {
       ).toBeNull();
       return Promise.resolve();
     });
-    return Promise.resolve();
   });
 
   test("should get content length", () => {

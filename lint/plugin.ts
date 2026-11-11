@@ -94,7 +94,7 @@ const preferTypeofSwitch: Rule.RuleModule = {
 };
 
 /**
- * Project lint rules, loaded through `[lint] plugins` in bunfig.toml.
+ * Project lint rules, loaded through `jsPlugins` in oxlint.config.ts.
  */
 const plugin: ESLint.Plugin = {
   meta: { name: "defjs" },

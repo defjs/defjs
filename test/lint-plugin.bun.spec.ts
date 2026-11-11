@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
 
 const plugin = `${import.meta.dirname}/../lint/plugin.ts`;
+const oxlint = `${import.meta.dirname}/../node_modules/oxlint/bin/oxlint`;
 
-// The pretty reporter differs per platform (XML-ish on macOS, a block of text on
-// Linux), so this reads the JSON reporter instead.
+// The default reporter is meant for people, so this reads the JSON reporter instead.
 const source = `declare function next(): unknown;
 export function chain(x: unknown) {
   if (typeof x !== "string" && typeof x !== "number") throw new TypeError("x");
@@ -33,14 +33,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function lintMessages(report: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(report)) throw new TypeError("expected a lint report");
-  return report.flatMap((file) => {
-    if (!isRecord(file) || !Array.isArray(file["messages"])) {
-      throw new TypeError("expected a file result");
-    }
-    return file["messages"].filter(isRecord);
-  });
+function lintDiagnostics(report: unknown): Record<string, unknown>[] {
+  if (!isRecord(report) || !Array.isArray(report["diagnostics"])) {
+    throw new TypeError("expected a lint report");
+  }
+  return report["diagnostics"].filter(isRecord);
+}
+
+function firstLine(diagnostic: Record<string, unknown>): unknown {
+  const { labels } = diagnostic;
+  if (!Array.isArray(labels) || !isRecord(labels[0])) return undefined;
+  const { span } = labels[0];
+  return isRecord(span) ? span["line"] : undefined;
 }
 
 test(
@@ -49,22 +53,25 @@ test(
   async () => {
     const dir = `${Bun.env["TMPDIR"] ?? "/tmp"}/defjs-lint-${crypto.randomUUID()}`;
     await Bun.write(
-      `${dir}/bunfig.toml`,
-      `[lint]\nplugins = ["${plugin}"]\n[lint.rules]\n"defjs/prefer-typeof-switch" = "error"\n`,
+      `${dir}/oxlintrc.json`,
+      JSON.stringify({
+        jsPlugins: [plugin],
+        categories: { correctness: "off" },
+        rules: { "defjs/prefer-typeof-switch": "error" },
+      }),
     );
     await Bun.write(`${dir}/a.ts`, source);
-    const run = Bun.spawn(["bun", "lint", "--no-script", "--format", "json"], {
-      cwd: dir,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const run = Bun.spawn(
+      ["bun", oxlint, "--config", "oxlintrc.json", "--format", "json", "a.ts"],
+      { cwd: dir, stdout: "pipe", stderr: "pipe" },
+    );
     const stdout = await new Response(run.stdout).text();
     expect(await run.exited).toBe(1);
 
     const report: unknown = JSON.parse(stdout);
-    const messages = lintMessages(report);
-    expect(messages).toHaveLength(1);
-    expect(messages[0]?.["ruleId"]).toBe("defjs/prefer-typeof-switch");
-    expect(messages[0]?.["line"]).toBe(3);
+    const diagnostics = lintDiagnostics(report);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.["code"]).toBe("defjs(prefer-typeof-switch)");
+    expect(firstLine(diagnostics[0] ?? {})).toBe(3);
   },
 );

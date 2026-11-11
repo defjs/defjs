@@ -96,8 +96,9 @@ Documentation unit specs (`*.spec.ts`, run by the `doc-bun` project) sit beside 
 - TypeScript is strict: `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`, `noPropertyAccessFromIndexSignature`, `verbatimModuleSyntax`, `allowImportingTsExtensions`. Use `import type` for type-only imports. The root catalog pins `typescript` to the exact `7.1.0-beta`; a caret range would resolve to nightly `7.1.0-dev` builds.
 - Type assertions are banned by lint: `x as T`, `<T>x`, and `as unknown as T` all fail (`@typescript-eslint/consistent-type-assertions` with `assertionStyle = "never"`). `as const`, `satisfies`, and import/export aliases are allowed. Fix the type at its source with annotations, generics, `satisfies`, or real narrowing; an overload whose implementation is wider than its signature without a real check is an assertion in disguise. A test that passes invalid input on purpose uses `@ts-expect-error` with a description. Keep an assertion only in a test that must violate types, where removing it measurably costs performance, or where the typed alternative would change runtime behaviour or what users can compile. Put `// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: <numbers>` or `-- INTENT: <the behaviour that would change>` on the line above. Do not hide an assertion behind a helper that casts.
 - Lint rules that commonly bite: no `any`, and no `any` flowing in unnarrowed from an external API (bind `JSON.parse` and `.json()` results to `unknown` and narrow), no non-null assertions, no namespace imports, `@ts-ignore` banned, `@ts-expect-error` requires a description of at least 10 characters.
-- Lint configuration lives in `bunfig.toml` `[lint]`: `bun lint`'s recommended rules plus those project rules. `bun lint` needs a Bun build that ships the built-in linter, so every Bun job in CI installs the `canary` channel until the next stable release includes it.
-- Project-specific lint rules live in `lint/plugin.ts` and load through `[lint] plugins`. `defjs/prefer-typeof-switch` reports a rejecting chain of `typeof x !== "…" && …` comparisons on one plain identifier or `this` and asks for a `switch`; it does not report positive `||` / `===` chains or subjects that contain a call or property read, because a `switch` would change how often those run. The repository contains no JavaScript files; plugins and scripts are TypeScript.
+- Lint is oxlint, configured in `oxlint.config.ts`: every rule is spelled out, the project rules above plus a fixed set of ESLint and typescript-eslint rules, and `categories.correctness` is off so oxlint's own default set does not run on top. Type-aware rules run through `oxlint-tsgolint` (`options.typeAware`). `oxlint` and `oxlint-tsgolint` are exact pins in the root catalog and move together. An unused `eslint-disable` comment is reported as a warning, so a suppression that stops matching must be deleted; the repository is kept at zero diagnostics, warnings included. oxlint honors `eslint-disable-next-line @typescript-eslint/<rule>` comments and maps the names to its `typescript/` rules.
+- `oxlint-tsgolint` 7.0.2006 does not apply `typescript/no-misused-promises` to a Promise-returning method shorthand that reaches a void callback through a union or optional type, so write such a callback as an arrow property.
+- Project-specific lint rules live in `lint/plugin.ts` and load through `jsPlugins` in `oxlint.config.ts` (an ESLint-compatible rule; oxlint JS plugins are alpha, so `test/lint-plugin.bun.spec.ts` runs the real CLI). `defjs/prefer-typeof-switch` reports a rejecting chain of `typeof x !== "…" && …` comparisons on one plain identifier or `this` and asks for a `switch`; it does not report positive `||` / `===` chains or subjects that contain a call or property read, because a `switch` would change how often those run. The repository contains no JavaScript files; plugins and scripts are TypeScript.
 - Formatting is Bun's built-in formatter: 2 spaces, LF, UTF-8, final newline. Run `bun fmt`.
 - Write a comment only when the reason is non-obvious. Do not restate what the code does.
 - Capture fixed configuration records by assigning each field, including nested owned records, and copy array containers. Preserve functions, signals, schemas, SDK handles, and other identity-bearing values. Keep absent optional configuration blocks `undefined` rather than creating empty placeholders. Do not add runtime field registries or per-field missing-versus-undefined handling. Keep dynamic dictionaries, wire serialization, security checks, and allowlists where the keys are not fixed.
@@ -131,13 +132,13 @@ bunx --bun playwright install --with-deps chromium firefox
 git config core.hooksPath .githooks
 ```
 
-Playwright browsers are needed by the Core, React, and Vue browser projects and the documentation E2E suite. The unit gate runs the Node projects on Node.js, so local verification needs Node 24.2 or newer (native type stripping plus `import.meta.main`: the root `test/unit-node.ts` runs as TypeScript, and on older Node it would silently do nothing and exit 0). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core` and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core` and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook lints and formats the staged files and runs the type check. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun lint` (the hook and CI do).
+Playwright browsers are needed by the Core, React, and Vue browser projects and the documentation E2E suite. The unit gate runs the Node projects on Node.js, so local verification needs Node 24.2 or newer (native type stripping plus `import.meta.main`: the root `test/unit-node.ts` runs as TypeScript, and on older Node it would silently do nothing and exit 0). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core` and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core` and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook fixes the fully staged files and stages them again, only checks a file that also has unstaged changes (so it never stages them), formats the staged files and runs the type check. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun run lint` (the hook and CI do).
 
 Run these in order from the repository root and stop at the first failure. CI runs `checks` (gates 1, 2, 3) first. Once it passes, `build-e2e` (gates 5, 6) and `unit-chrome`, `unit-firefox`, `unit-bun`, `unit-node` (gate 4 split by runtime) run in parallel.
 
 | #   | Command                | Covers                                                                                                  |
 | --- | ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| 1   | `bun lint`             | `bun lint` over the whole repository                                                                    |
+| 1   | `bun run lint`         | oxlint (type-aware) over the whole repository                                                           |
 | 2   | `bun fmt --check`      | formatting for every file                                                                               |
 | 3   | `bun run typecheck`    | library project, documentation app, TS/TSX examples                                                     |
 | 4   | `node --run test:unit` | all runtime projects: chrome, firefox, node, bun, including the root `test/` specs and the naming check |
@@ -146,15 +147,16 @@ Run these in order from the repository root and stop at the first failure. CI ru
 
 A change is verified only when all six pass on the same revision. Start gate 4 with `node --run`, not `bun run`: its Node step must run on Node.js, and the runtime guard fails the Node project when it detects Bun. Its inner `bun run` calls still run on Bun.
 
-`bun lint` and `bun fmt` are Bun built-ins, deliberately not wrapped in scripts. There are no `lint` or `fmt` scripts and `bun run lint` does not exist:
+`bun fmt` is a Bun built-in, deliberately not wrapped in a script: there is no `fmt` script and `bun run fmt` does not exist. Linting is the `lint` script, which runs `oxlint`:
 
 ```bash
-bun lint          # verify, with --fix to write
-bun fmt           # write
-bun fmt --check   # verify
+bun run lint       # verify
+bun run lint:fix   # write fixes
+bun fmt            # write
+bun fmt --check    # verify
 ```
 
-Every other command in the table is a repository script; gates 3, 5 and 6 are resolved through `bun run`, gate 4 through `node --run`.
+Every other command in the table is a repository script; gates 1, 3, 5 and 6 are resolved through `bun run`, gate 4 through `node --run`.
 
 ### Workspace-local checks
 

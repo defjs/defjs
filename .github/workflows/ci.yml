@@ -21,7 +21,7 @@ jobs:
       - name: Generate route types
         run: bun run --cwd doc typegen
       - name: Lint
-        run: bun lint
+        run: bun run lint
       - name: Format check
         run: bun fmt --check
       - name: Typecheck
@@ -81,7 +81,7 @@ jobs:
           bun-version: canary
       - run: bun ci
       # Type-aware lint reads the generated route types in doc/.react-router, which are not committed.
-      # root-bun's lint-plugin.bun.spec.ts runs bun lint.
+      # root-bun's lint-plugin.bun.spec.ts runs oxlint.
       - name: Generate route types
         run: bun run --cwd doc typegen
       - name: Unit tests (Bun)

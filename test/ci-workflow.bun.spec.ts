@@ -185,7 +185,7 @@ test("checks runs only the install and the static checks", () => {
   expect(checks.runs).toEqual([
     "bun ci",
     "bun run --cwd doc typegen",
-    "bun lint",
+    "bun run lint",
     "bun fmt --check",
     "bun run typecheck",
   ]);
