@@ -30,9 +30,3 @@ export async function buildFingerprint(
   }
   return hash.digest("hex");
 }
-export async function writeBuildStamp(
-  directory: string,
-  fingerprint: string,
-): Promise<void> {
-  await Bun.write(joinPath(directory, "build-stamp.txt"), fingerprint);
-}

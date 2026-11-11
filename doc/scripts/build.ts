@@ -1,5 +1,5 @@
 import { locales } from "../app/lib/i18n";
-import { buildFingerprint, writeBuildStamp } from "./build-state";
+import { buildFingerprint } from "./build-state";
 import { checkLinks } from "./check-links";
 import { joinPath } from "./paths";
 export async function finalizeBuild(
@@ -8,9 +8,7 @@ export async function finalizeBuild(
   after: string,
 ): Promise<void> {
   if (before !== after)
-    throw new Error(
-      "Documentation inputs changed during build; rebuild before acceptance",
-    );
+    throw new Error("Documentation inputs changed during build; rebuild");
   const notFound = Bun.file(joinPath(directory, "404/index.html"));
   if (!(await notFound.exists())) throw new Error("Missing generated 404 page");
   await Bun.write(
@@ -27,14 +25,11 @@ export async function finalizeBuild(
     }),
   );
   await checkLinks(directory);
-  await writeBuildStamp(directory, before);
 }
 /* istanbul ignore next -- @preserve: command-line entry point */
 if (import.meta.main) {
   const root = `${import.meta.dirname}/../`,
     output = joinPath(root, "build/client");
-  const stamp = Bun.file(joinPath(output, "build-stamp.txt"));
-  if (await stamp.exists()) await stamp.delete();
   const before = await buildFingerprint();
   const child = Bun.spawn(["bun", "--bun", "react-router", "build"], {
     cwd: root,

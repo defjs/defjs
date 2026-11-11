@@ -193,7 +193,7 @@ To rebuild only the documentation site:
 bun run --cwd doc build
 ```
 
-The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` and fails if inputs change during the build.
+The build fails if its inputs change while it runs.
 
 ## Testing rules
 

@@ -15,9 +15,6 @@ test("static build finalization rejects changed inputs, supplies GitHub Pages 40
     await expect(finalizeBuild(directory, "before", "after")).rejects.toThrow(
       "changed",
     );
-    expect(
-      await Bun.file(joinPath(directory, "build-stamp.txt")).exists(),
-    ).toBe(false);
     await finalizeBuild(directory, "current", "current");
     expect(await Bun.file(joinPath(directory, "404.html")).text()).toContain(
       "<h1>404</h1>",
@@ -30,9 +27,6 @@ test("static build finalization rejects changed inputs, supplies GitHub Pages 40
         joinPath(directory, "api/search/en-US.json.data"),
       ).exists(),
     ).toBe(false);
-    expect(await Bun.file(joinPath(directory, "build-stamp.txt")).text()).toBe(
-      "current",
-    );
   } finally {
     removeDirectory(directory);
   }
