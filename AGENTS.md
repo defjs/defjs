@@ -132,20 +132,20 @@ bunx --bun playwright install --with-deps chromium firefox
 git config core.hooksPath .githooks
 ```
 
-Playwright browsers are needed by the Core, React, and Vue browser projects and the documentation E2E suite. The unit gate runs the Node projects on Node.js, so local verification needs Node 24.2 or newer (native type stripping plus `import.meta.main`: the root `test/unit-node.ts` runs as TypeScript, and on older Node it would silently do nothing and exit 0). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core` and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core` and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook fixes the fully staged files and stages them again, only checks a file that also has unstaged changes (so it never stages them), formats the staged files and runs the type check. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun run lint` (the hook and CI do).
+Playwright browsers are needed by the Core, React, and Vue browser projects and the documentation E2E suite. Bun runs everything except the Node projects: `node --run unit:node` is the only command that needs Node.js, 24.2 or newer (native type stripping plus `import.meta.main`: the root `test/unit-node.ts` runs as TypeScript, and on older Node it would silently do nothing and exit 0). Local Node runs must use the package's own binary through `node --run`. Locally Node uses the packages Bun already installed; `npm ci` is for CI only, because it would replace the Bun-managed `node_modules` of `packages/core` and `packages/opentelemetry-server`. CI installs with `npm ci --ignore-scripts --workspaces=false` in `packages/core` and `packages/opentelemetry-server`. The packaging check (`test/assert-pack.ts`) runs in the release workflow, not in the unit gate. The pre-commit hook fixes the fully staged files and stages them again, only checks a file that also has unstaged changes (so it never stages them), formats the staged files and runs the type check. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun run lint` (the hook and CI do).
 
 Run these in order from the repository root and stop at the first failure. CI runs `checks` (gates 1, 2, 3) first. Once it passes, `build-e2e` (gates 5, 6) and `unit-chrome`, `unit-firefox`, `unit-bun`, `unit-node` (gate 4 split by runtime) run in parallel.
 
-| #   | Command                | Covers                                                                                                  |
-| --- | ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| 1   | `bun run lint`         | oxlint (type-aware) over the whole repository                                                           |
-| 2   | `bun fmt --check`      | formatting for every file                                                                               |
-| 3   | `bun run typecheck`    | library project, documentation app, TS/TSX examples                                                     |
-| 4   | `node --run test:unit` | all runtime projects: chrome, firefox, node, bun, including the root `test/` specs and the naming check |
-| 5   | `bun run build`        | all workspaces, including the static documentation site                                                 |
-| 6   | `bun run test:e2e`     | the built documentation site in Chromium                                                                |
+| #   | Command                                                                                   | Covers                                                                                                                               |
+| --- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `bun run lint`                                                                            | oxlint (type-aware) over the whole repository                                                                                        |
+| 2   | `bun fmt --check`                                                                         | formatting for every file                                                                                                            |
+| 3   | `bun run typecheck`                                                                       | library project, documentation app, TS/TSX examples                                                                                  |
+| 4   | `bun run unit:chrome`, `bun run unit:firefox`, `bun run unit:bun`, `node --run unit:node` | one command per runtime: the chrome, firefox, bun and node projects; `unit:bun` includes the root `test/` specs and the naming check |
+| 5   | `bun run build`                                                                           | all workspaces, including the static documentation site                                                                              |
+| 6   | `bun run test:e2e`                                                                        | the built documentation site in Chromium                                                                                             |
 
-A change is verified only when all six pass on the same revision. Start gate 4 with `node --run`, not `bun run`: its Node step must run on Node.js, and the runtime guard fails the Node project when it detects Bun. Its inner `bun run` calls still run on Bun.
+A change is verified only when all six pass on the same revision. Gate 4 is one command per runtime, the same four that CI runs as separate jobs. `node --run unit:node` is the only one that needs Node.js: the runtime guard fails the Node projects when it detects Bun, and inside `bun run` a `node` command is Bun.
 
 `bun fmt` is a Bun built-in, deliberately not wrapped in a script: there is no `fmt` script and `bun run fmt` does not exist. Linting is the `lint` script, which runs `oxlint`:
 
@@ -156,7 +156,7 @@ bun fmt            # write
 bun fmt --check    # verify
 ```
 
-Every other command in the table is a repository script; gates 1, 3, 5 and 6 are resolved through `bun run`, gate 4 through `node --run`.
+Every other command in the table is a repository script; gates 1, 3, 4, 5 and 6 are resolved through `bun run`, and the Node projects of gate 4 through `node --run`.
 
 ### Workspace-local checks
 

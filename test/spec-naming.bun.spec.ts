@@ -435,8 +435,6 @@ describe("package scripts", () => {
       "unit:firefox": fanOut("unit:firefox"),
       "unit:bun": `${fanOut("unit:bun")} && ${rootConfig}`,
       "unit:node": "node test/unit-node.ts",
-      "test:unit":
-        "bun run unit:chrome && bun run unit:firefox && node --run unit:node && bun run unit:bun",
       "test:e2e": fanOut("test:e2e"),
     });
   });
