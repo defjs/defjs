@@ -37,8 +37,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: canary
       - run: bun ci
       - run: bun run typecheck
       - run: bun run build
@@ -57,8 +55,6 @@ jobs:
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: canary
       - run: bun ci
       # tsdown emits declarations with --noCheck, so this is the typecheck.
       - name: Typecheck build config
@@ -85,8 +81,6 @@ jobs:
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: canary
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
       - name: Build @defjs/core
@@ -116,8 +110,6 @@ jobs:
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: canary
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
       - name: Build @defjs/core
@@ -147,8 +139,6 @@ jobs:
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: canary
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
       - name: Build @defjs/core
@@ -177,8 +167,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: canary
       - run: bun ci
       - name: Validate production site URL
         env:

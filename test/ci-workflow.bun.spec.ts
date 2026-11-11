@@ -191,7 +191,7 @@ test("checks runs only the install and the static checks", () => {
   ]);
 });
 
-test("bun jobs install canary bun, the node job does not", () => {
+test("bun jobs install bun, the node job does not", () => {
   const jobs = workflowJobs();
   const node = requireJob(jobs, "unit-node");
   if (!node) return;
