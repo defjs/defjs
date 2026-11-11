@@ -57,7 +57,7 @@ description: Fault 的各个变体与工厂辅助函数。
 
 所有可能在响应存在之前就失败的情况：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。传输层有元数据可报之前，`response` 是 `undefined`，比如下载中途被截断的 body。
 
-无效的 `withRetry` 选项会在 HTTP 传输开始之前返回 `REQ_OPTIONS_INVALID`，消息为 `Invalid retry options`。这包括非对象的策略、不是至少为 1 的安全整数的 `maxAttempts`，以及无效的条件、方法、超时、退避或预算设置。省略 `withRetry` 会关闭重试。`withRetry()` 与 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。`withRetry({ maxAttempts: 1 })` 会在启用之后关闭重试。
+重试选项在运行时不会校验。省略 `withRetry` 会关闭重试。`withRetry()` 与 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。`withRetry({ maxRetries: 0 })` 会在启用之后关闭重试。抛出异常的 `shouldRetry` 函数会以 `EXT_HOOK_FAILED` 结束调用，并把抛出的值作为 `cause`，HTTP、SSE 和 WebSocket 都一样；对于已经打开的流或会话，见 [Client](/zh-Hans/api/client#withretry)。
 
 ### AnyFault
 

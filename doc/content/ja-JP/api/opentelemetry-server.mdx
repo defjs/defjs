@@ -48,15 +48,15 @@ HTTP、SSE、WebSocket はデフォルトでオンです。トランスポート
 
 <ApiSignature name="OpenTelemetryServerTransportOptions, OpenTelemetryServerHttpOptions, OpenTelemetryServerSSEOptions, OpenTelemetryServerWebSocketOptions" />
 
-`enabled` のデフォルトは `true` で、トランスポートをオフにするのは `enabled: false` だけです。古い真偽値のスイッチ（`http: false`）とトップレベルのフックは、TypeScript の型でのみ拒否されます。実行時のチェックはないため、実行時には `http: false` でもトランスポートは有効のままで、トップレベルのフックは黙って無視されます。
+`enabled` のデフォルトは `true` で、トランスポートをオフにするのは `enabled: false` だけです。
 
 スパンフックは `tracer` が渡された場合にのみ呼び出されます。`startSpanHook` は、自分の HTTP、SSE、または WebSocket トランスポートについて、スパン作成前に同期実行されます。その属性は組み込み属性のあとに適用されるので、アプリケーションは `url.full` や別の初期値を上書きできます。throw すると Defjs は組み込み属性でスパンを作り、リクエストを続けます。`requestHook` と `responseHook` はスパン作成後に実行されます。どちらも await されず、throw や reject が操作をブロックしたり失敗させたりすることはありません。
 
-`span.isRecording()` が true の間、hook failure は `defjs.otel.hook.error` と `exception` イベントとして記録されます。記録しないスパン（終了済みまたはサンプリング対象外）の場合、エラーは `diag.error` を通じて OpenTelemetry 診断 logger に送られます。受け取るには、アプリケーション側で `@opentelemetry/api` の `diag.setLogger(...)` を設定する必要があり、デフォルトでは自動出力されません。このパッケージは SDK を初期化せず、この診断も独立した SDK `LogRecord` ではありません。
+`span.isRecording()` が true の間、hook failure は `defjs.otel.hook.error` と `exception` イベントとして記録されます。`exception` イベントが持つのは `exception.type`（クラス名であり、Defjs の Fault コードではありません）だけで、`exception.message` も `exception.stacktrace` も持ちません。ランタイムのエラー文には完全なリクエスト URL やレスポンスボディの断片が含まれ得るためです。同じ規則は、トランスポートが失敗したときに記録される `exception` イベントにも適用されます。記録しないスパン（終了済みまたはサンプリング対象外）の場合、エラーは `diag.error` を通じて OpenTelemetry 診断 logger に送られます。受け取るには、アプリケーション側で `@opentelemetry/api` の `diag.setLogger(...)` を設定する必要があり、デフォルトでは自動出力されません。このパッケージは SDK を初期化せず、この診断も独立した SDK `LogRecord` ではありません。
 
 `responseHook` は、トランスポートが返したものを受け取ります。HTTP では `HttpResponse`、SSE では開始に成功したあとのストリームハンドル、WebSocket では開いたあとのセッションです。第 3 引数は元のリクエストです。
 
-デフォルトでは、`url.full` は任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、独立した `request.queryString` は付けません。その境界は秘匿化ではなく、このパッケージに組み込みの秘匿化処理や機密キーのポリシーもありません。必要なら、アプリケーションが所有する URL を明示的に組み立て、必要に応じて秘匿化してください。
+デフォルトでは、`url.full` は任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、独立した `request.queryString` は付けません。その境界はクエリの秘匿化ではありません。OpenTelemetry のセマンティック規約が求めるとおり、エンドポイントの userinfo にある認証情報は `REDACTED:REDACTED` に置き換えられ、デフォルトの機密クエリキー（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）の値は `REDACTED` に置き換えられますが、このパッケージにそれ以外の組み込みの秘匿化処理や機密キーのポリシーはありません。`startSpanHook` が返す `url.full` も同じように秘匿化されますが、`requestHook` や `responseHook` の中でアプリケーションが `Span` オブジェクトを通じて書いた URL にはライブラリが手を加えないので、必要なら明示的に組み立て、必要に応じて秘匿化してください。
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example
@@ -74,7 +74,7 @@ HTTP、SSE、WebSocket はデフォルトでオンです。トランスポート
 | SSE または WebSocket の接続に失敗                                         | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
 | SSE または WebSocket がエラーで終了（reject された `closed` を含む）      | 同じトランスポートのイベント                                      | `connection`  |
 
-通常の status のレスポンス（宣言した `error` ボディがデコードできる 4xx/5xx を含む）、成功、正常終了、EOF、呼び出し側によるキャンセルでは LogRecord を出力しません。HTTP の期限 abort が 1 回ログに出るのは、タイムアウトによる reject が OTel インターセプターの `next()` / トランスポート境界に届いた場合だけです（理由が `TimeoutError` の abort、たとえば `AbortSignal.timeout()` は、キャンセルではなくタイムアウトとして扱われます）。入力のパース、ビルド、`next()` の後のアプリケーションインターセプターの処理、チェーン後のボディ変換で、操作の呼び出しだけが期限を観測した場合、LogRecord は出力されません。操作の呼び出しを観測してください。HTTP ハンドラー境界内で宣言した `output` / `error` のボディ読み取りが失敗すると、どの表現でもログに出ます。メディアタイプと `JSON.parse` の失敗がログに出るのは JSON 表現だけで、HTTP status は問いません。JSON 以外のテキスト、blob、バイト列は、メディアタイプが JSON でないというだけでは失敗になりません。宣言していないボディは読まれないので、ログに出ることはありません。struct の検証、204 のような宣言したボディの欠如、そのあとの `HTTP_STATUS` への変換はインターセプターの後に起きるので、ログに出ません。2xx 以外の SSE ハンドシェイクは常に 1 回ログに出ます。サーバーからの WebSocket の close フレームは、code にかかわらずログに出ません。close フレームのない突然の切断（1006）はランタイムによって異なります。プラットフォームの WebSocket が `close` の前に `error` を発火する場合（Node.js 現行 LTS）はセッションがエラーで終わり、1 回ログに出ます。発火しない場合（Bun）は通常の close として扱われ、何もログされません。
+通常の status のレスポンス（宣言した `error` ボディがデコードできる 4xx/5xx を含む）、成功、正常終了、EOF、呼び出し側によるキャンセルでは LogRecord を出力しません。HTTP の期限 abort が 1 回ログに出るのは、タイムアウトによる reject が OTel インターセプターの `next()` / トランスポート境界に届いた場合だけです（理由が `TimeoutError` の abort、たとえば `AbortSignal.timeout()` は、キャンセルではなくタイムアウトとして扱われます）。入力のパース、ビルド、`next()` の後のアプリケーションインターセプターの処理、チェーン後のボディ変換で、操作の呼び出しだけが期限を観測した場合、LogRecord は出力されません。操作の呼び出しを観測してください。HTTP ハンドラー境界内で宣言した `output` / `error` のボディ読み取りが失敗すると、どの表現でもログに出ます。メディアタイプと `JSON.parse` の失敗がログに出るのは JSON 表現だけで、HTTP status は問いません。JSON 以外のテキスト、blob、バイト列は、メディアタイプが JSON でないというだけでは失敗になりません。宣言していないボディは読まれないので、ログに出ることはありません。struct の検証、204 のような宣言したボディの欠如、そのあとの `HTTP_STATUS` への変換はインターセプターの後に起きるので、ログに出ません。2xx 以外の SSE ハンドシェイクは常に 1 回ログに出ます。サーバーからの WebSocket の close フレームは、code にかかわらずログに出ません。close フレームのない突然の切断（1006）は、どのランタイムでもセッションがエラーで終わり、1 回ログに出ます。
 
 `exception.type` は、インターセプターが観測したもののクラス名であり、Defjs の Fault コードではありません。たとえば `BodyFailure`（HTTP ボディ）、`EventStreamFatalError`（非 2xx ステータス以外の理由で失敗した SSE ハンドシェイク。たとえば応答が `text/event-stream` でない場合）、`DefjsFault`（WebSocket の開始、および非 2xx ステータスの SSE ハンドシェイク）、`TypeError`（ネットワーク障害）、`Error`（タイムアウト）です。フィルター、exporter、flush、shutdown はアプリケーションが管理します。
 

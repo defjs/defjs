@@ -38,7 +38,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions`는 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)의 HTTP 조각인 [`UseRequestConfig`](/ko-KR/api/core/userequestconfig-type)예요. `signal`과 `onDownloadProgress`, `onUploadProgress`예요. `timeout`이나 `abort` 필드는 없어요. 데드라인은 `signal: AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. `signal`은 그 호출의 신호예요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 클라이언트 기본 데드라인은 없어요. `heartbeat` 같은 다른 요청 필드는 무시돼요.
+`HttpExecuteOptions`는 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)의 HTTP 조각인 [`UseRequestConfig`](/ko-KR/api/core/userequestconfig-type)예요. `signal`과 `onDownloadProgress`, `onUploadProgress`, `retry`예요. `timeout`이나 `abort` 필드는 없어요. 데드라인은 `signal: AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. `signal`은 그 호출의 신호예요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 클라이언트 기본 데드라인은 없어요. `heartbeat` 같은 다른 요청 필드는 무시돼요.
 
 ## 타입
 
@@ -78,9 +78,9 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ### HttpProgressFn
 
-`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소는 여전히 `NET_ABORTED`를 보고하고, abort 이유가 타임아웃이면 `NET_TIMEOUT`을 보고해요. 변환은 `fetch`가 스트리밍 요청 본문을 지원하는 런타임에서 일어나요. `Blob` / `File`, `ArrayBuffer`, `FormData`는 스트림으로 바뀌고 업로드 진행률이 보고돼요. Chromium은 HTTP/2 이상에서만 쓸 수 있어요. HTTP/1.1에서 `onUploadProgress`가 있는 업로드는 실패해요(`NET_UNREACHABLE`). Firefox는 그 본문을 그대로 보내고 `onUploadProgress`를 호출하지 않아요.
+`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소는 여전히 `NET_ABORTED`를 보고하고, abort 이유가 타임아웃이면 `NET_TIMEOUT`을 보고해요. 업로드 진행률은 요청 본문이 직접 넘긴 `ReadableStream`일 때만 보고돼요. 그 밖의 본문(`Blob`, `File`, `ArrayBuffer`, `FormData`, 문자열, `URLSearchParams`)은 만든 그대로 보내지고, 모든 런타임에서 `onUploadProgress`는 호출되지 않아요. 라이브러리는 본문을 스트림으로 바꾸지 않아요. `ReadableStream` 본문은 `onUploadProgress` 유무와 관계없이 스트리밍 요청 본문의 Fetch 규칙을 따라요. Chromium과 WebKit은 HTTP/2 이상에서만 받아들이고, HTTP/1.1에서는 `NET_UNREACHABLE`이에요(WebKit은 27.2에서만 수동으로 확인했어요. Node.js와 Bun은 HTTP/1.1을 받아들여요). Firefox는 요청 본문을 스트리밍할 수 없어 `ENV_UNSUPPORTED`예요. 브라우저에서 교차 출처 요청은 캐시된 preflight 결과가 없으면 CORS preflight가 필요하므로 서버가 `OPTIONS`에 응답해야 해요. 301, 302, 307, 308 리다이렉트는 본문을 한 번 보낸 뒤 실패하고, 303은 GET이 되어 성공해요. 브라우저는 `Content-Length`를 보내지 않아요. `fetch`는 이런 실패와, `fetch`가 읽는 동안 throw하는 원본 `ReadableStream`을 도달할 수 없는 엔드포인트와 같은 네트워크 오류로 보고하므로, 로드 밸런서는 이것들에 `{ attempted: false }`를 받아요. throw하는 진행률 콜백(`EXT_OBSERVER_FAILED`)도 같아요. 따라서 스트리밍 업로드만으로는 다운된 엔드포인트를 감지할 수 없고, 거절된 스트리밍 업로드는 재시도되지 않아요. `ReadableStream` 본문은 `shouldRetry`에 묻기 전에 재시도 흐름을 끝내요.
 
-그 변환이 실행되는 런타임에서 FormData는 본문 전체를 Blob으로 버퍼링하지 않고 직렬화된 스트림을 쓰며, 실제 multipart boundary를 유지해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 명시 content type은 업로드 변환 뒤에도 남지만, FormData는 그 직렬화의 boundary를 써야 해요. `loaded`는 서버 확인이 아니라 스트림 바이트를 세요. identity가 아닌 `Content-Encoding`의 다운로드는 `total: 0`과 `lengthComputable: false`를 보고하고, 스트림 바이트는 이미 압축이 풀려 있을 수 있어요.
+스트리밍 본문은 길이를 알 수 없어요. 유효한 명시적 `Content-Length` 헤더가 지정하지 않으면 보고되는 total은 알 수 없고, 브라우저는 그 헤더를 보내지 않아요. `loaded`는 서버 확인이 아니라 스트림 바이트를 세요. identity가 아닌 `Content-Encoding`의 다운로드는 `total: 0`과 `lengthComputable: false`를 보고하고, 스트림 바이트는 이미 압축이 풀려 있을 수 있어요.
 
 [HTTP 가이드](/ko-KR/docs/http)와 [Client](/ko-KR/docs/client)를 보세요.
 
@@ -102,7 +102,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ## UseRequestConfig
 
-`signal`과 선택 `onDownloadProgress`, `onUploadProgress`예요. `HttpExecuteOptions`가 이 조각이에요. `timeout`이나 `abort` 필드는 없어요.
+`signal`과 선택 `onDownloadProgress`, `onUploadProgress`, `retry`예요. `HttpExecuteOptions`가 이 조각이에요. `timeout`이나 `abort` 필드는 없어요.
 
 ## RequestSuccessData
 

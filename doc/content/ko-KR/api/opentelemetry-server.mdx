@@ -48,15 +48,15 @@ HTTP, SSE, WebSocket은 기본으로 켜져 있어요. 전송에 `{ enabled: fal
 
 <ApiSignature name="OpenTelemetryServerTransportOptions, OpenTelemetryServerHttpOptions, OpenTelemetryServerSSEOptions, OpenTelemetryServerWebSocketOptions" />
 
-`enabled`의 기본값은 `true`이고, `enabled: false`일 때만 전송이 꺼져요. 예전의 boolean 스위치(`http: false`)와 최상위 훅은 TypeScript 타입에서만 거부돼요. 런타임 검사는 없어서, 런타임에는 `http: false`여도 전송이 켜진 채로 남고 최상위 훅은 조용히 무시돼요.
+`enabled`의 기본값은 `true`이고, `enabled: false`일 때만 전송이 꺼져요.
 
 span 훅은 `tracer`를 전달했을 때만 실행돼요. `startSpanHook`은 해당 HTTP, SSE, WebSocket 전송의 span을 만들기 전에 동기적으로 실행돼요. 반환한 속성은 내장 속성 뒤에 적용되므로 애플리케이션이 `url.full`이나 다른 초기 값을 덮어쓸 수 있어요. 훅이 throw해도 Defjs는 내장 속성으로 span을 만들고 요청을 계속해요. `requestHook`과 `responseHook`은 span을 만든 뒤 실행돼요. 둘 다 await하지 않아요. throw나 reject는 작업을 막거나 실패시키지 않아요.
 
-`span.isRecording()`이 true인 동안 훅 실패는 `defjs.otel.hook.error`와 `exception` 이벤트로 기록돼요. 기록하지 않는 span(종료됐거나 샘플링되지 않은 경우)의 실패는 `diag.error`를 통해 OpenTelemetry 진단 로거로 전달돼요. 이를 받으려면 애플리케이션에서 `@opentelemetry/api`의 `diag.setLogger(...)`를 설정해야 해요. 기본적으로 자동 출력되지 않아요. 패키지는 SDK를 초기화하지 않으며 이 진단은 별도의 SDK `LogRecord`가 아니에요.
+`span.isRecording()`이 true인 동안 훅 실패는 `defjs.otel.hook.error`와 `exception` 이벤트로 기록돼요. `exception` 이벤트는 `exception.type`(클래스 이름이며 Defjs 결함 코드가 아님)만 담고, `exception.message`나 `exception.stacktrace`는 절대 담지 않아요. 런타임 오류 텍스트에 전체 요청 URL이나 응답 본문 조각이 들어갈 수 있기 때문이에요. 전송이 실패할 때 기록되는 `exception` 이벤트에도 같은 규칙이 적용돼요. 기록하지 않는 span(종료됐거나 샘플링되지 않은 경우)의 실패는 `diag.error`를 통해 OpenTelemetry 진단 로거로 전달돼요. 이를 받으려면 애플리케이션에서 `@opentelemetry/api`의 `diag.setLogger(...)`를 설정해야 해요. 기본적으로 자동 출력되지 않아요. 패키지는 SDK를 초기화하지 않으며 이 진단은 별도의 SDK `LogRecord`가 아니에요.
 
 `responseHook`은 전송이 돌려준 값을 받아요. HTTP는 `HttpResponse`, SSE는 시작에 성공한 뒤의 스트림 핸들, WebSocket은 열린 뒤의 세션이에요. 세 번째 인자는 원래의 요청이에요.
 
-기본적으로 `url.full`은 `request.endpoint`만 선택적인 `request.baseEndpoint`에 대해 해석해요. 별도의 `request.queryString`은 덧붙이지 않아요. 이 경계는 민감 정보 제거가 아니며, 패키지에는 내장 제거기나 민감 키 정책이 없어요. 애플리케이션이 소유하는 URL을 직접 만들고, 필요하면 민감 정보 제거도 명시적으로 하세요.
+기본적으로 `url.full`은 `request.endpoint`만 선택적인 `request.baseEndpoint`에 대해 해석해요. 별도의 `request.queryString`은 덧붙이지 않아요. 이 경계는 쿼리 민감 정보 제거가 아니에요. OpenTelemetry 시맨틱 컨벤션이 요구하듯, 엔드포인트 userinfo의 자격 증명은 `REDACTED:REDACTED`로 바뀌고, 기본 민감 쿼리 키(`sig`, `Signature`, `AWSAccessKeyId`, `X-Amz-Signature`, `X-Amz-Credential`, `X-Amz-Security-Token`, `X-Goog-Signature`)의 값은 `REDACTED`로 바뀌지만, 패키지에는 그 밖의 내장 제거기나 민감 키 정책이 없어요. `startSpanHook`이 돌려준 `url.full`도 같은 방식으로 제거되지만, 애플리케이션이 `requestHook`이나 `responseHook`에서 `Span` 객체로 쓰는 URL은 가로채지 않으므로, 직접 만들고 필요하면 명시적으로 민감 정보를 제거하세요.
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example
@@ -74,7 +74,7 @@ span 훅은 `tracer`를 전달했을 때만 실행돼요. `startSpanHook`은 해
 | SSE 또는 WebSocket 연결 실패                              | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
 | SSE 또는 WebSocket이 오류로 끝남 (reject된 `closed` 포함) | 같은 전송 이벤트                                                  | `connection`  |
 
-일반적인 상태 코드의 응답(선언된 `error` 본문이 디코딩되는 4xx/5xx 포함), 성공, 정상 종료, EOF, 호출자의 취소는 LogRecord를 만들지 않아요. HTTP 데드라인 abort는 타임아웃 reject이 OTel 인터셉터의 `next()` / 전송 경계에 닿을 때만 한 번 기록해요(이유가 `TimeoutError`인 abort, 예를 들어 `AbortSignal.timeout()`은 취소가 아니라 타임아웃으로 취급해요). 입력 파싱, 빌드, `next()` 뒤의 애플리케이션 인터셉터 작업, 체인 이후 본문 변환 중에 작업 호출만 데드라인을 보면 LogRecord는 나오지 않아요. 작업 호출을 관찰하세요. HTTP 핸들러 경계 안의 선언된 `output` / `error` 본문 읽기 실패는 모든 표현에 대해 기록하고, 미디어 타입과 `JSON.parse` 실패는 JSON 표현에서만, HTTP 상태 코드와 관계없이 기록해요. JSON이 아닌 텍스트, blob, 바이트는 미디어 타입이 JSON이 아니라는 이유만으로 실패가 아니에요. 선언하지 않은 본문은 읽지 않으므로 기록할 수 없어요. struct 검증, 204처럼 선언은 됐지만 본문이 없는 경우, 이후의 `HTTP_STATUS` 변환은 인터셉터 뒤에서 일어나므로 기록하지 않아요. 2xx가 아닌 SSE 핸드셰이크는 항상 한 번 기록하고, 서버가 보낸 WebSocket close 프레임은 코드와 관계없이 기록하지 않아요. close 프레임 없이 갑자기 끊기는 경우(1006)는 런타임에 따라 달라요. 플랫폼 WebSocket이 `close` 전에 `error`를 발생시키는 경우(Node.js 현재 LTS)에는 세션이 오류로 끝나고 한 번 기록해요. 발생시키지 않는 경우(Bun)에는 정상 close이므로 아무것도 기록하지 않아요.
+일반적인 상태 코드의 응답(선언된 `error` 본문이 디코딩되는 4xx/5xx 포함), 성공, 정상 종료, EOF, 호출자의 취소는 LogRecord를 만들지 않아요. HTTP 데드라인 abort는 타임아웃 reject이 OTel 인터셉터의 `next()` / 전송 경계에 닿을 때만 한 번 기록해요(이유가 `TimeoutError`인 abort, 예를 들어 `AbortSignal.timeout()`은 취소가 아니라 타임아웃으로 취급해요). 입력 파싱, 빌드, `next()` 뒤의 애플리케이션 인터셉터 작업, 체인 이후 본문 변환 중에 작업 호출만 데드라인을 보면 LogRecord는 나오지 않아요. 작업 호출을 관찰하세요. HTTP 핸들러 경계 안의 선언된 `output` / `error` 본문 읽기 실패는 모든 표현에 대해 기록하고, 미디어 타입과 `JSON.parse` 실패는 JSON 표현에서만, HTTP 상태 코드와 관계없이 기록해요. JSON이 아닌 텍스트, blob, 바이트는 미디어 타입이 JSON이 아니라는 이유만으로 실패가 아니에요. 선언하지 않은 본문은 읽지 않으므로 기록할 수 없어요. struct 검증, 204처럼 선언은 됐지만 본문이 없는 경우, 이후의 `HTTP_STATUS` 변환은 인터셉터 뒤에서 일어나므로 기록하지 않아요. 2xx가 아닌 SSE 핸드셰이크는 항상 한 번 기록하고, 서버가 보낸 WebSocket close 프레임은 코드와 관계없이 기록하지 않아요. close 프레임 없이 갑자기 끊기는 경우(1006)는 모든 런타임에서 세션이 오류로 끝나고 한 번 기록해요.
 
 `exception.type`은 Defjs 결함 코드가 아니라 인터셉터가 관찰한 대상의 클래스 이름이에요. 예를 들어 `BodyFailure`(HTTP 본문), `EventStreamFatalError`(비 2xx 상태 외의 이유로 실패한 SSE 핸드셰이크. 예: 응답이 `text/event-stream`이 아닌 경우), `DefjsFault`(WebSocket 시작, 그리고 비 2xx 상태의 SSE 핸드셰이크), `TypeError`(네트워크 실패), `Error`(타임아웃)가 있어요. 필터, 익스포터, flush, shutdown은 애플리케이션이 관리해요.
 

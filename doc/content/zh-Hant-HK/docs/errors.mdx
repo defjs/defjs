@@ -7,6 +7,8 @@ description: 由 SDK 宣告服務錯誤契約，使用方應用程式按型別�
 
 喺 Defjs 入面，請求、傳輸層同解碼失敗都唔會喺呼叫處拋出例外。每個操作都會回傳一個 error-first tuple（`[error, ...]`），其中 `error` 要麼係 `null`，要麼就係一個帶型別嘅 `Fault`（以 `error.code` 作為判別標記嘅原生 `Error` 實例）。
 
+程式誤用係例外。佢通常會以 `TypeError` reject，而唔係回傳 `Fault`：`signal` 選項唔係 `AbortSignal`、HTTP 操作嘅 `output` 或 `error` 唔係 `struct`，以及冇傳 client 就呼叫操作。
+
 ## 1. 喺 SDK 宣告服務錯誤，喺應用程式分流處理
 
 <Tabs items={["完整列舉錯誤碼分支", "基本狀態碼檢查", "各傳輸方式嘅 tuple 結構"]}>
@@ -41,15 +43,17 @@ description: 由 SDK 宣告服務錯誤契約，使用方應用程式按型別�
 
 首個底線 `_` 前面嘅前綴代表 Fault 嘅類別（`HTTP`、`REQ`、`NET`、`RES`、`EXT`、`CAP`、`ENV`），而完整嘅 `code` 組成一個封閉型別集合（closed union），可以直接寫窮舉（exhaustive）嘅 `switch` 語句：
 
-| 類別   | 錯誤碼                                                                 | 意思與應對方式                                                                                          |
-| ------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `HTTP` | `HTTP_STATUS`                                                          | 伺服器回傳咗非 `2xx` 狀態碼（`3xx`、`4xx`、`5xx`），並成功解碼任何宣告過嘅 `error` struct。             |
-| `REQ`  | `REQ_INPUT_INVALID`、`REQ_OPTIONS_INVALID`、`REQ_BUILD_FAILED`         | 呼叫端傳入嘅 input 驗證失敗、client 選項超出範圍、URL/路徑無效，或者 `builder` 拋出例外。絕唔應該重試。 |
-| `RES`  | `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH`   | 伺服器回應違反咗宣告嘅 media type、資料格式或 `struct` 契約。                                           |
-| `NET`  | `NET_ABORTED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`NET_BODY_INCOMPLETE` | 呼叫端主動中斷（`NET_ABORTED`）、逾時期限屆滿（`NET_TIMEOUT`）、連線失敗，或串流中途截斷。              |
-| `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | 應用程式嘅攔截器、hook 或進度／狀態監聽器拋出例外或回傳咗無效值。                                       |
-| `CAP`  | `CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`                            | SSE frame 緩衝區或 SSE/WebSocket 消費佇列超出設定上限。                                                 |
-| `ENV`  | `ENV_UNSUPPORTED`                                                      | 當前執行環境缺少所需嘅 Web API（例如喺 Firefox 中串流上傳 request body）。                              |
+| 類別   | 錯誤碼                                                                 | 意思與應對方式                                                                                                                                                                                                                                   |
+| ------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `HTTP` | `HTTP_STATUS`                                                          | 伺服器回傳咗非 `2xx` 狀態碼（`3xx`、`4xx`、`5xx`），並成功解碼任何宣告過嘅 `error` struct。                                                                                                                                                      |
+| `REQ`  | `REQ_INPUT_INVALID`、`REQ_BUILD_FAILED`                                | 呼叫端傳入嘅 input 驗證失敗、URL/路徑無效、`builder` 拋出例外，或者 request 無法建構（HTTP：body 串流已經用過、無效或被禁止嘅 method、GET/HEAD 帶 body、無效嘅 `Content-Type`；HTTP 同 SSE：帶憑證嘅 URL、平台拒絕嘅 header 值）。絕唔應該重試。 |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH`   | 伺服器回應違反咗宣告嘅 media type、資料格式或 `struct` 契約。                                                                                                                                                                                    |
+| `NET`  | `NET_ABORTED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`NET_BODY_INCOMPLETE` | 呼叫端主動中斷（`NET_ABORTED`）、逾時期限屆滿（`NET_TIMEOUT`）、連線失敗，或串流中途截斷。                                                                                                                                                       |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | 應用程式嘅攔截器、hook 或進度／狀態監聽器拋出自己嘅錯誤，或者攔截器傳俾 `next()` 嘅 `signal` 唔係 `AbortSignal`。                                                                                                                                |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`                                                  | SSE frame 緩衝區超出設定上限。                                                                                                                                                                                                                   |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | 當前執行環境缺少所需嘅 Web API（例如喺 Firefox 中串流上傳 request body）。                                                                                                                                                                       |
+
+錯誤碼講嘅係邊樣失敗，唔係邊個提供咗個值。對 HTTP 嚟講，平台建構唔到嘅 request 就係 `REQ_BUILD_FAILED`，無論壞值嚟自 `builder`、client 設定定攔截器。SSE 對 header 值、無效 URL，以及帶憑證嘅 URL 套用同一條規則，第一次嘗試同每一次重連都係。函式庫自己檢查最後嗰項，因為 Bun 會接受呢種 URL 並送出 request。平台可能拒絕、但函式庫喺 SSE 同 WebSocket 上唔會檢查嘅其他值（SSE 上無效嘅 method；WebSocket 上帶憑證嘅 URL、無效嘅子協議，或者唔支援嘅 scheme），拒絕會以 `NET_UNREACHABLE` 報告，並以平台嘅錯誤作為 `cause`；接受該值嘅 runtime（Bun，對於無效嘅 SSE method）就會送出 request。`EXT_INTERCEPTOR_FAILED` 涵蓋攔截器自己嘅行為：佢拋出嘅錯誤，或者唔係 `AbortSignal` 嘅 `signal`（取消通道，唔係 request 內容）。
 
 ### 各錯誤碼嘅屬性一覽
 
@@ -93,11 +97,11 @@ description: 由 SDK 宣告服務錯誤契約，使用方應用程式按型別�
 
 對於長連線，操作回傳嘅 tuple 淨係會報告**啟動階段**嘅失敗（即串流或 socket 開啟之前）。連線一旦成功開啟，後續嘅執行時錯誤會透過 handle 或 session 嘅生命週期派發：
 
-| 傳輸層        | 啟動階段失敗（喺 Tuple 回傳）                                                                                               | 連線建立後失敗（喺 Tuple resolve 之後）                                                                                                                                                                                                                                 |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **HTTP**      | 所有失敗都會一次過喺操作 tuple 完成結算。                                                                                   | 不適用                                                                                                                                                                                                                                                                  |
-| **SSE**       | 非 `2xx`（`HTTP_STATUS`）、錯誤嘅 content type（`RES_MEDIA_TYPE_INVALID`），或握手 body 缺失／無效（`RES_DECODE_FAILED`）。 | 非同步迭代器會 reject；`stream.closed` 會 resolve 出 `{ kind: 'error', code }`。                                                                                                                                                                                        |
-| **WebSocket** | 握手完成前被關閉、建構函式失敗，或喺握手期間被中斷。                                                                        | 非致命 frame 錯誤會觸發 `session.onRuntimeError`；致命錯誤會 reject `session.receive`，並令 `session.closed` resolve 為 `{ kind: 'error', cause }`。傳入佇列溢出使用 `cause.code === 'CAP_QUEUE_OVERFLOW'`；心跳逾時同重連次數用盡仍然用一般 runtime `Error` 做 cause。 |
+| 傳輸層        | 啟動階段失敗（喺 Tuple 回傳）                                                                                                                     | 連線建立後失敗（喺 Tuple resolve 之後）                                                                                                                                                                         |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HTTP**      | 所有失敗都會一次過喺操作 tuple 完成結算。                                                                                                         | 不適用                                                                                                                                                                                                          |
+| **SSE**       | 非 `2xx`（`HTTP_STATUS`，或者宣告咗嘅 `error` body 解碼唔到時嘅 decode fault），或者 content type 唔啱嘅 `2xx` 握手（`RES_MEDIA_TYPE_INVALID`）。 | 非同步迭代器會 reject；`stream.closed` 會 resolve 出 `{ kind: 'error', code }`。                                                                                                                                |
+| **WebSocket** | 握手完成前被關閉、建構函式失敗，或喺握手期間被中斷。                                                                                              | 非致命 frame 錯誤會觸發 `session.onRuntimeError`；致命錯誤會 reject `session.receive`，並令 `session.closed` resolve 為 `{ kind: 'error', cause }`。心跳逾時同重試次數用盡仍然用一般 runtime `Error` 做 cause。 |
 
 ## 5. 安全嘅結構化日誌與 Cause 檢查
 

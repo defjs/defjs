@@ -100,8 +100,9 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 
 1. **按 `ok`（`200..299`）选择一侧**：`2xx` 用 `output`，非 `2xx` 用 `error`。
 2. **省略即不读取**：该侧没有声明 struct 时，响应 body 从不读取（`2xx` 解析为 `data: undefined` + `HttpMeta`；非 `2xx` 解析为 `HTTP_STATUS` 且 `data: undefined`）。
-3. **先校验 JSON 媒体类型**：对于 JSON struct，非 JSON 的 `Content-Type` 会在读取 body 流之前以 `RES_MEDIA_TYPE_INVALID` 失败。
+3. **先校验 JSON 媒体类型**：对于 JSON struct，非 JSON 的 `Content-Type` 会在读取或查找 body 之前以 `RES_MEDIA_TYPE_INVALID` 失败。没有内容的响应（`HEAD`、`204`、`205`、`304`）与其他响应一样接受声明的约束。
 4. **读取并解析**：无法读取的流或无效 JSON 以 `RES_DECODE_FAILED` 失败（流中途截断时为 `NET_BODY_INCOMPLETE`）。
+   没有内容的响应（`HEAD`、`204`、`205`、`304`）没有 body 可读：`struct.string()` 得到 `''`，`struct.arrayBuffer()` 得到空的 `ArrayBuffer`，`struct.blob()` 得到空的 `Blob`。通过了第 3 步的 JSON struct 会解析这些空字节，并以 `RES_DECODE_FAILED` 失败。
 5. **用 `struct` 校验**：schema 不匹配以 `RES_STRUCT_MISMATCH` 失败。
 
 ## 5. 取消请求与设置超时期限 [#cancel-the-work]
@@ -130,8 +131,8 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 ## 6. 凭证、XSRF 与传输进度
 
 - **`withCredentials(true)`**：为 HTTP 和 SSE 请求设置 Fetch `credentials: "include"`。
-- **`withXSRF(options?)`**：来自 `@defjs/core/xsrf`。在浏览器中读取 XSRF cookie（默认 `XSRF-TOKEN`），并在同源的变更类 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上注入请求头（`X-XSRF-TOKEN`）。调用 `withXSRF()` 时，若缺少 `location` 或 `document`（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。
-- **`onDownloadProgress` / `onUploadProgress`**：通过 `client({ onDownloadProgress, onUploadProgress })` 传入。仅当 `Content-Length` 为正且 `Content-Encoding` 缺失或为 `identity` 时，下载进度才报告 `lengthComputable: true`。在 `fetch` 支持流式请求体的运行时，上传进度会把 `Blob`、`File`、`ArrayBuffer` 和 `FormData` 转成流。Chromium 只在 HTTP/2 及以上报告该进度；HTTP/1.1 下带 `onUploadProgress` 的上传会失败。Firefox 原样发送这些请求体，且不调用回调。进度回调抛出异常会以 `EXT_OBSERVER_FAILED` 使调用失败。
+- **`withXSRF(options?)`**：来自 `@defjs/core/xsrf`。在浏览器中读取 XSRF cookie（默认 `XSRF-TOKEN`），并在同源的变更类 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上注入请求头（`X-XSRF-TOKEN`）。调用 `withXSRF()` 时，若缺少 `location` 或 `document`（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。同源检查针对的是库构建出的 URL；Fetch 自己跟随重定向，并在重定向到另一个源之后保留这个请求头（它只移除 `Authorization`）。要拒绝这种情况，见 [`withXSRF`](/zh-Hans/api/core/withxsrf)。
+- **`onDownloadProgress` / `onUploadProgress`**：通过 `client({ onDownloadProgress, onUploadProgress })` 传入。仅当 `Content-Length` 为正且 `Content-Encoding` 缺失或为 `identity` 时，下载进度才报告 `lengthComputable: true`。上传进度只在请求 body 是你传入的 `ReadableStream` 时才会报告；其他任何 body（`Blob`、`File`、`ArrayBuffer`、`FormData`、字符串、`URLSearchParams`）都按构建结果发送，并且在每个运行时上都不会调用 `onUploadProgress`。`ReadableStream` body 遵循 Fetch 对流式请求体的规则，无论有没有 `onUploadProgress`：Chromium 和 WebKit 只在 HTTP/2 及以上接受它，因此在 HTTP/1.1 上调用会以 `NET_UNREACHABLE` 失败（Node.js 和 Bun 接受 HTTP/1.1）；Firefox 不能流式发送请求体，并以 `ENV_UNSUPPORTED` 失败；在浏览器中，跨源请求需要 CORS 预检，除非浏览器持有缓存的预检结果；301、302、307 或 308 重定向会失败。浏览器不发送 `Content-Length`。负载均衡器对这些失败，以及对抛出的源流，收到 `{ attempted: false }`，因为 `fetch` 把它们报告成与不可达端点相同的网络错误；因此仅靠流式上传无法发现已宕机的端点。细节见 API 参考中的 `HttpProgressFn` 条目。进度回调抛出异常会以 `EXT_OBSERVER_FAILED` 使调用失败。
 
 ## 相关阅读
 

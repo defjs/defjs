@@ -68,7 +68,7 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 
 - `startSpanHook(request): Attributes` 在创建 Span 前同步运行；返回的属性最后应用，可覆盖内置属性（例如对 `url.full` 脱敏）。
 - `requestHook(span, request)` 与 `responseHook(span, responseOrHandle, request)` 接收已创建的 Span，可以是同步或异步函数。传输流水线**不会** await 它们；HTTP Span 在 `responseHook` 的同步部分返回后立即结束。
-- Hook 失败绝不会中止 Client 调用。`span.isRecording()` 为 true 时，Hook 错误会在 Span 上记录 `defjs.otel.hook.error` 与 `exception` 事件；未记录中的 Span 则通过 `@opentelemetry/api` 的 `diag.error` 报告 `hook.name`、`error.type`、`traceId` 和 `spanId`。
+- Hook 失败绝不会中止 Client 调用。`span.isRecording()` 为 true 时，Hook 错误会在 Span 上记录 `defjs.otel.hook.error` 与 `exception` 事件（`exception` 事件与传输失败时记录的那条一样，只携带 `exception.type`，从不携带 `exception.message` 或 `exception.stacktrace`）；未记录中的 Span 则通过 `@opentelemetry/api` 的 `diag.error` 报告（`hook.name`、`error.type`、`traceId`、`spanId`）。
 - `withOpenTelemetryServer` 在创建时快照 `http`、`sse` 和 `webSocket` 选项块。传入 `{ enabled: false }` 会禁用该传输，且不读取其 Hook。
 
 ---
@@ -77,32 +77,34 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 
 插件在拦截器链内部度量传输生命周期：
 
-- **HTTP**：Span 在 HTTP 拦截器中开始，在 `HttpResponse` 返回时结束。声明的 `output` / `error` body 会在处理函数边界**内部**读取（并校验和解析 JSON）。body 读取失败或 JSON 媒体类型/解析失败会通过拦截器 reject（`error.type: "BodyFailure"`），把 Span 标记为 `ERROR`，在指标中记录 `BodyFailure`，并输出一条 `WARN` 日志。状态码 `400+` 会把 Span 标记为 `ERROR`，并以状态码字符串作为 `error.type`。struct 校验（`RES_STRUCT_MISMATCH`）和 `HTTP_STATUS` 元组转换发生在拦截器链之后，不会改变已结束的传输 Span。
+- **HTTP**：Span 在 HTTP 拦截器中开始，在 `HttpResponse` 返回时结束。声明的 `output` / `error` body 会在处理函数边界**内部**读取（并校验和解析 JSON）。body 读取失败或 JSON 媒体类型/解析失败会通过拦截器 reject（`error.type: "BodyFailure"`），把 Span 标记为 `ERROR`，在指标中记录 `BodyFailure`，并输出一条 `WARN` 日志。请求在发出前被拒绝（无效方法、带凭据的 URL、平台拒绝的请求头值，或抛出的 `finalizeHeaders` hook）也会通过拦截器 reject，带上平台的错误或 hook 自己的错误，因此 `error.type` 是该错误的类（通常是 `TypeError`）。状态码 `400+` 会把 Span 标记为 `ERROR`，并以状态码字符串作为 `error.type`。struct 校验（`RES_STRUCT_MISMATCH`）和 `HTTP_STATUS` 元组转换发生在拦截器链之后，不会改变已结束的传输 Span。
 - **SSE**：一条逻辑流（包括自动重连）产生一个 Span，保持打开到 `stream.closed` 结算。记录的事件：`sse.connected`，随后是 `sse.closed`、`sse.aborted`（`stream.close()` 或非超时的调用方中止以 `OK` 结束）或 `sse.error`（以 `ERROR` 结束，包括超时形态的调用方中止）。Span 属性 `url.full`、`server.address` 和 `server.port` 描述的是首次连接；重连到另一个端点不会改变它们。
-- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 结算。记录事件：`websocket.connected`、`websocket.closed`、`websocket.error`。服务端发来的关闭帧（不论 code 为何）都以 `OK` 结束 Span 并记录 `websocket.closed`；调用方中止以 `ERROR` 结束 Span 并记录 `websocket.error`，不生成日志，但取消原因是 `TimeoutError` 时例外，会生成一条 `WARN`。没有关闭帧的突然断开（`1006`）取决于运行时：在 socket 的 `error` 事件先于 `close` 触发的环境中以 `ERROR` 结束并记录一条日志；不触发该事件的环境（Bun）则以 `OK` 结束。与 SSE 一样，`url.full`、`server.address` 和 `server.port` 描述首次连接，重连到另一个端点时不会改变。
+- **WebSocket**：单个逻辑会话（包括自动重连）对应一个 Span，直至 `session.closed` 结算。记录事件：`websocket.connected`、`websocket.closed`、`websocket.error`。服务端发来的关闭帧（不论 code 为何）都以 `OK` 结束 Span 并记录 `websocket.closed`；调用方中止以 `ERROR` 结束 Span 并记录 `websocket.error`，不生成日志，但取消原因是 `TimeoutError` 时例外，会生成一条 `WARN`。没有关闭帧的突然断开（`1006`）在每个运行时上都以 `ERROR` 结束并记录一条日志。与 SSE 一样，`url.full`、`server.address` 和 `server.port` 描述首次连接，重连到另一个端点时不会改变。`url.full` 使用连接 URL 的 `ws:` 或 `wss:` 形式。
+
+`server.address` 是解析后 URL 的主机；IPv6 字面量保留方括号，与 `URL.hostname` 和 `Host` 请求头一样。`server.port` 是显式端口，URL 没有端口时则是 scheme 的默认值：`http:` 和 `ws:` 为 80，`https:` 和 `wss:` 为 443。SSE 和 WebSocket 的 Span 还带有 `http.request.method`：SSE 是请求方法，WebSocket 是 `GET`（打开握手的方法）。不属于 RFC 9110 方法、`PATCH` 或 `QUERY` 的方法记录为 `_OTHER`，给定的方法放在 `http.request.method_original` 里。
 
 ### 重试与重连边界
 
 以下是当前拦截器观测到的行为，并非独立的负载均衡器遥测 API：
 
-- 每次 `withRetry` HTTP 尝试都有自己的 Client Span 和耗时样本。存在活跃应用父 Span 时，各次尝试是该父 Span 的兄弟节点；否则重试不会自动归入同一条 trace。Core 不创建逻辑调用父 Span。
+- 每次 `withRetry` HTTP 尝试都有自己的 Client Span 和耗时样本，因为每一次重试都会重新运行拦截器链。存在活跃应用父 Span 时，各次尝试是该父 Span 的兄弟节点；否则重试不会自动归入同一条 trace。Core 不创建逻辑调用父 Span。
 - HTTP 尝试的 URL 标识该次尝试的端点，但不输出尝试次数、重试原因、预算余额/耗尽或逐出/恢复属性。
-- SSE 和 WebSocket 在重连过程中保留同一个逻辑会话 Span，不会为每条物理连接分别创建 Span。即使发生故障转移，Span 的 URL 和指标属性仍保留初始端点。重连不会再次输出 `connected` 事件。活跃指标统计的是等待 `closed` 的逻辑会话，而不是当前选中副本上的 socket。
+- SSE 和 WebSocket 的重试（`withRetry`）在传输内部重连，不会重新运行拦截器。它们在重连过程中保留同一个逻辑会话 Span，不会为每条物理连接分别创建 Span。即使发生故障转移，Span 的 URL 和指标属性仍保留初始端点。重连不会再次输出 `connected` 事件。活跃指标统计的是等待 `closed` 的逻辑会话，而不是当前选中副本上的 socket。
 - 在一次 Bun 运行中，HTTP 503 产生了 `error.type: "503"`，连接被拒绝产生了 `"TypeError"`，而期限到期和调用方取消均产生了 `"Error"`。后两者分别返回 `NET_TIMEOUT` 和 `NET_ABORTED`；这些 Defjs 元组错误码并不是独立的 HTTP 遥测属性。对于已打开的 WebSocket，默认取消产生了 `"AbortError"`，不记录警告；以 `TimeoutError` 为取消原因时，则产生了 `"TimeoutError"` 和一条警告。错误类名是对传输/运行时的观测，不能代替检查元组或关闭结果。
 
 ### 导出的指标列表
 
 传入 `meter` 时，每次把该选项应用到 Client 都会创建指标（直方图桶边界为 `0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10` 秒）：
 
-| 指标名称                                     | 业务含义                                    |
-| -------------------------------------------- | ------------------------------------------- |
-| `http.client.request.duration`               | HTTP 单次尝试耗时（秒）                     |
-| `defjs.client.sse.connect.duration`          | 截至返回 SSE 句柄的耗时                     |
-| `defjs.client.sse.connection.duration`       | 从获得句柄到流最终 `stream.closed` 的总时长 |
-| `defjs.client.sse.active_streams`            | 当前活跃的逻辑 SSE 流数量                   |
-| `defjs.client.websocket.connect.duration`    | 截至返回 WebSocket 会话对象的耗时           |
-| `defjs.client.websocket.connection.duration` | 从获得会话到最终 `session.closed` 的总时长  |
-| `defjs.client.websocket.active_connections`  | 当前活跃的逻辑 WebSocket 会话数量           |
+| 指标名称                                     | 业务含义                                         |
+| -------------------------------------------- | ------------------------------------------------ |
+| `http.client.request.duration`               | HTTP 单次尝试耗时（秒）                          |
+| `defjs.client.sse.connect.duration`          | 截至返回 SSE 句柄的耗时                          |
+| `defjs.client.sse.connection.duration`       | 从获得句柄到流最终 `stream.closed` 的总时长      |
+| `defjs.client.sse.active_streams`            | 当前活跃、`closed` 尚未结算的逻辑 SSE 流         |
+| `defjs.client.websocket.connect.duration`    | 截至返回 WebSocket 会话对象的耗时                |
+| `defjs.client.websocket.connection.duration` | 从获得会话到最终 `session.closed` 的总时长       |
+| `defjs.client.websocket.active_connections`  | 当前活跃、`closed` 尚未结算的逻辑 WebSocket 会话 |
 
 ---
 
@@ -121,13 +123,13 @@ description: 在服务端应用的 Client 上为 SDK 请求插桩，同时让 AP
 | 观察到的物理传输结果                                                                                                                     | 生成的 Defjs LogRecord 诊断日志                                                                                       |
 | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | HTTP OTel `next()` 被 reject 拒绝（底层网络故障、观测到的超时或已声明的响应体读取失败），排除非超时的主动取消与公开的 `HTTP_STATUS` 故障 | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`                                    |
-| 普通的 HTTP 响应（包括已声明 `error` 成功解码的 4xx/5xx，未声明响应体的响应，或 status 为 0）                                            | 不生成日志                                                                                                            |
-| 声明的 `output` / `error` 响应体读取失败，或 JSON 格式的响应体媒体类型不匹配/JSON 解析失败                                               | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`，`exception.type: "BodyFailure"`   |
+| 普通的 HTTP 响应（包括已声明 `error` body 能解码或没有声明 body 的 4xx/5xx，或 status 为 `0`）                                           | 不生成日志                                                                                                            |
+| 声明的 `output` / `error` body 读取失败，或声明的 JSON 表示形式媒体类型不是 JSON，或 `JSON.parse` 失败                                   | 生成一条 `WARN` 日志，事件名为 `http.client.request.exception`，phase 为 `request`，`exception.type: "BodyFailure"`   |
 | SSE 或 WebSocket 握手建连失败（包括 SSE 非 2xx 状态码）                                                                                  | 生成一条 `WARN` 日志，事件名为 `defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，phase 为 `connect` |
-| SSE 或 WebSocket 终态异常断开或 `closed` reject（包括 Node.js 当前 LTS 下的 `1006` Socket 报错、队列溢出、心跳超时）                     | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
+| SSE 或 WebSocket 终态错误或 `closed` 被 reject（包括没有关闭帧的 `1006` 断开、心跳超时）                                                 | 生成一条 `WARN` 日志，使用对应传输事件名，phase 为 `connection`                                                       |
 | 正常完成通信、正常消息交互、流 EOF、服务端主动断开 WebSocket（包括 `1011`）或主动发起的非超时取消                                        | 不生成日志                                                                                                            |
 
-诊断记录固定消息、`exception.type`（平台/传输层类名，如 `BodyFailure`、`EventStreamFatalError`（响应不是 `text/event-stream` 的 SSE 握手）、`DefjsFault`（包括返回非 2xx 的 SSE 握手）、`TypeError` 或 `Error`）、phase、静态 `operation`、服务端地址/端口和协议字段——从不记录原始 URL、query 字符串、请求头、body 或错误堆栈。
+诊断记录固定消息、`exception.type`（平台/传输层类名，如 `BodyFailure`、`EventStreamFatalError`（响应不是 `text/event-stream` 的 SSE 握手）、`DefjsFault`（包括返回非 2xx 的 SSE 握手）、`TypeError` 或 `Error`）、phase、静态 `operation`、服务端地址/端口和协议字段——从不记录原始 URL、query 字符串、请求头、body 或错误堆栈。Span 的 `exception` 事件遵循同一规则，只携带 `exception.type`；`url.full` 会把端点中的 userinfo 替换为 `REDACTED:REDACTED`，并把语义约定默认敏感查询键（例如 `sig` 和 `X-Amz-Signature`）的值替换为 `REDACTED`。
 
 ---
 

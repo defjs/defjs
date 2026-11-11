@@ -5,7 +5,7 @@ description: 接続を確立し、型付けされたエンベロープを送信�
 
 # WebSocket セッションを開く
 
-`defineWebSocket` で `incoming` と `outgoing` の Struct スキーマを、受信キューを制限する `maxIncomingQueueSize` とともに宣言します。アプリケーション側では、`session.onRuntimeError(...)` を購読し、`session.receive` を消費し、`finally` ブロック内で必ず購読解除、`session.close(...)` の呼び出し、および `await session.closed` を行います。
+`defineWebSocket` で `incoming` と `outgoing` の Struct スキーマを宣言します。アプリケーション側では、`session.onRuntimeError(...)` を購読し、`session.receive` を消費し、`finally` ブロック内で必ず購読解除、`session.close(...)` の呼び出し、および `await session.closed` を行います。
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ description: 接続を確立し、型付けされたエンベロープを送信�
 ACME 142.5
 ```
 
-- 再接続（`withWebSocketReconnect`）およびハートビート（`withWebSocketHeartbeat`）は、クライアント側のオプトイン設定です。
+- 再接続（`withRetry`）およびハートビート（`withWebSocketHeartbeat`）は、クライアント側のオプトイン設定です。
 - ブラウザの WebSocket はアップグレードハンドシェイク時に任意の HTTP ヘッダーを送信できません。Cookie、サブプロトコル、または短寿命のチケットを使用してください。詳細は [WebSocket セッション](/ja-JP/docs/web-socket) を参照してください。

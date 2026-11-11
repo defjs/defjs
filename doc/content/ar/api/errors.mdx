@@ -23,7 +23,7 @@ description: أنواع الأخطاء ودوال المصانع.
 
 <ApiSignature name="Fault" />
 
-فرّع باستخدام `switch` على `fault.code`.
+فرّع باستخدام switch على `fault.code`.
 
 ### FaultOf
 
@@ -57,7 +57,7 @@ description: أنواع الأخطاء ودوال المصانع.
 
 كل ما كان يمكن أن يفشل قبل وجود استجابة: `REQ_*` و`NET_*` و`EXT_*` و`CAP_*` و`ENV_UNSUPPORTED`. وتبقى قيمة `response` هي `undefined` إلى أن تتوفر لدى طبقة النقل بيانات وصفية تُبلِّغ عنها، كجسم انقطع في منتصف التنزيل.
 
-تُرجع خيارات `withRetry` غير الصالحة `REQ_OPTIONS_INVALID` قبل أن يبدأ نقل HTTP، مع الرسالة `Invalid retry options`. يشمل ذلك سياسة ليست كائنًا، وقيمة `maxAttempts` ليست عددًا صحيحًا آمنًا لا يقل عن 1، وإعدادات غير صالحة للشروط أو الطرق أو المُهل أو backoff أو الميزانية. حذف `withRetry` يعطّل إعادات المحاولة. `withRetry()` و`withRetry(undefined)` يتصرفان مثل `withRetry({})`. `withRetry({ maxAttempts: 1 })` يوقف إعادات المحاولة بعد أن كانت مفعّلة.
+لا تُتحقق خيارات إعادة المحاولة في وقت التشغيل. حذف `withRetry` يعطّل إعادات المحاولة. `withRetry()` و`withRetry(undefined)` يتصرفان مثل `withRetry({})`. `withRetry({ maxRetries: 0 })` يوقف إعادات المحاولة بعد أن كانت مفعّلة. الدالة `shouldRetry` التي ترمي تنهي الاستدعاء بـ `EXT_HOOK_FAILED` والقيمة المرمية كـ `cause`، في HTTP وSSE وWebSocket على السواء؛ ولتدفق أو جلسة كانت مفتوحة أصلًا، راجع [العميل](/ar/api/client#withretry).
 
 ### AnyFault
 

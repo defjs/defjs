@@ -65,7 +65,7 @@ SSE 및 WebSocket 핸들은 최초 `openStream(...)`이나 `connectChat(...)` �
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- WebSocket 작업에 전달된 `signal`을 abort하면 세션이 `aborted` 상태로 종료되고 `session.receive`가 `AbortError`로 reject됩니다. 정리된 후에는 `catch` 블록에서 정리 상태를 걸러내어 큐 오버플로나 하트비트 타임아웃 등 실제 런타임 오류만 표출되도록 하세요.
+- WebSocket 작업에 전달된 `signal`을 abort하면 세션이 `aborted` 상태로 종료되고 `session.receive`가 `AbortError`로 reject됩니다. 정리된 후에는 `catch` 블록에서 정리 상태를 걸러내어 하트비트 타임아웃 등 실제 런타임 오류만 표출되도록 하세요.
 - SSE 스트림을 abort하면 예외를 던지지 않고 `for await (const msg of stream)` 루프가 깔끔하게 종료됩니다.
 
 ---

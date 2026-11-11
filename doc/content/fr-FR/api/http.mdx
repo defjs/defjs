@@ -46,7 +46,7 @@ qu’une valeur venue du fil ; il n’y a pas de court-circuit de confiance.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` est la tranche HTTP de [`RequestOptions`](/fr-FR/api/core/requestoptions-type) : [`UseRequestConfig`](/fr-FR/api/core/userequestconfig-type), c’est-à-dire `signal` plus `onDownloadProgress` et `onUploadProgress`. Il n’y a pas de champ `timeout` ou `abort`. Une échéance est `signal: AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. `signal` est le signal de l’appel ; combinez les signaux avec `AbortSignal.any` dans le code applicatif. Il n’y a pas d’échéance par défaut au niveau du client. Les autres champs de requête, comme `heartbeat`, sont ignorés.
+`HttpExecuteOptions` est la tranche HTTP de [`RequestOptions`](/fr-FR/api/core/requestoptions-type) : [`UseRequestConfig`](/fr-FR/api/core/userequestconfig-type), c’est-à-dire `signal` plus `onDownloadProgress`, `onUploadProgress` et `retry`. Il n’y a pas de champ `timeout` ou `abort`. Une échéance est `signal: AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. `signal` est le signal de l’appel ; combinez les signaux avec `AbortSignal.any` dans le code applicatif. Il n’y a pas d’échéance par défaut au niveau du client. Les autres champs de requête, comme `heartbeat`, sont ignorés.
 
 ## Types
 
@@ -93,9 +93,9 @@ et les blobs sont bruts et sont analysés une fois. `DecodedResponse` est ce qui
 
 `loaded`, `total`, `lengthComputable`. Les callbacks peuvent être async. Un `onDownloadProgress` ou `onUploadProgress` qui lève fait échouer l’appel avec
 `EXT_OBSERVER_FAILED`, la valeur levée servant de `cause` ; l’annulation signale toujours `NET_ABORTED`, ou `NET_TIMEOUT` quand la raison de l’abort est un timeout.
-La progression de l’envoi convertit les corps `Blob` / `File`, `ArrayBuffer` et `FormData` là où `fetch` accepte un corps de requête en flux. Chromium ne signale cette progression qu’à partir de HTTP/2 ; sous HTTP/1.1, un envoi avec `onUploadProgress` échoue (`NET_UNREACHABLE`). Firefox envoie ces corps inchangés et n’appelle pas `onUploadProgress`.
+La progression de l’envoi n’est signalée que lorsque le corps de la requête est un `ReadableStream` que vous transmettez. Tout autre corps (`Blob`, `File`, `ArrayBuffer`, `FormData`, une chaîne, `URLSearchParams`) est envoyé tel qu’il a été construit et `onUploadProgress` n’est pas appelé, sur tous les runtimes ; la bibliothèque ne convertit jamais un corps en flux. Un corps `ReadableStream` suit les règles de Fetch pour les corps de requête en flux, avec ou sans `onUploadProgress` : Chromium et WebKit ne l’acceptent qu’à partir de HTTP/2 (`NET_UNREACHABLE` sous HTTP/1.1 ; WebKit n’a été vérifié manuellement qu’en 27.2 ; Node.js et Bun acceptent HTTP/1.1) ; Firefox ne peut pas transmettre de corps de requête en flux (`ENV_UNSUPPORTED`) ; dans les navigateurs, une requête cross-origin a besoin d’un preflight CORS sauf si le navigateur détient un résultat de preflight en cache, donc le serveur doit répondre à `OPTIONS` ; une redirection 301, 302, 307 ou 308 échoue après que le corps a été envoyé une fois, tandis qu’un 303 devient un GET et réussit. Les navigateurs n’envoient pas de `Content-Length`. `fetch` signale ces échecs, ainsi qu’un `ReadableStream` source qui lève pendant que `fetch` le lit, comme la même erreur réseau qu’un endpoint injoignable, si bien que le répartiteur de charge reçoit `{ attempted: false }` pour eux, comme pour un callback de progression qui lève (`EXT_OBSERVER_FAILED`). Un envoi en flux, à lui seul, ne peut donc pas détecter un endpoint hors service, et un envoi en flux rejeté n’est jamais retenté : un corps `ReadableStream` met fin au flux de retry avant que `shouldRetry` ne soit consulté.
 
-Là où cette conversion a lieu, FormData utilise son flux sérialisé sans mise en tampon Blob du corps entier et conserve la boundary multipart réelle. Son total est inconnu sauf si un `Content-Length` explicite valide le fournit. Les types de contenu explicites survivent à la conversion d’envoi, sauf que FormData doit utiliser la boundary de sa sérialisation. `loaded` compte les octets du flux, pas les acquittements du serveur. Les téléchargements dont le `Content-Encoding` n’est pas identity signalent `total: 0` et `lengthComputable: false` ; les octets de leur flux peuvent déjà être décompressés.
+Un corps en flux n’a pas de longueur connue : le total signalé est inconnu sauf si un en-tête `Content-Length` explicite et valide en fixe la valeur (les navigateurs n’envoient pas cet en-tête). `loaded` compte les octets du flux, pas les acquittements du serveur. Les téléchargements dont le `Content-Encoding` n’est pas identity signalent `total: 0` et `lengthComputable: false` ; les octets de leur flux peuvent déjà être décompressés.
 
 Voir le [guide HTTP](/fr-FR/docs/http) et [Client](/fr-FR/docs/client).
 
@@ -117,7 +117,7 @@ Les quatre champs sont facultatifs. `query` est `URLSearchParams` ou un record ;
 
 ## UseRequestConfig
 
-`signal`, plus `onDownloadProgress` et `onUploadProgress` facultatifs. `HttpExecuteOptions` est cette tranche. Il n’y a pas de champ `timeout` ou `abort`.
+`signal`, plus `onDownloadProgress`, `onUploadProgress` et `retry` facultatifs. `HttpExecuteOptions` est cette tranche. Il n’y a pas de champ `timeout` ou `abort`.
 
 ## RequestSuccessData
 

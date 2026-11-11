@@ -61,11 +61,11 @@ En este caso, `throw error` constituye una frontera explícita de adaptación ex
 
 ## 4. Gestionar el ciclo de vida de SSE y WebSocket en efectos
 
-Los handles de SSE y WebSocket sobreviven a la llamada inicial a `openStream(...)` o `connectChat(...)`. Registra la limpieza antes de esperar al arranque, cierra cualquier handle que se resuelva tras el desmontaje, consume su iterador asíncrono único y haz `await .closed`:
+Los handles de SSE y WebSocket sobreviven a la llamada inicial a `openStream(...)` o `connectChat(...)`. Registra la limpieza antes de esperar al arranque, cierra cualquier handle que se resuelva tras el desmontaje, consume su iterador asíncrono único y espera `.closed`:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Abortar la señal `signal` pasada a una operación WebSocket finaliza la sesión como `aborted` y rechaza `session.receive` con `AbortError`. Protege el bloque `catch` al desmontar para que solo emerjan errores auténticos de tiempo de ejecución (como desbordamiento de cola o tiempo de espera de latidos).
+- Abortar la señal `signal` pasada a una operación WebSocket finaliza la sesión como `aborted` y rechaza `session.receive` con `AbortError`. Protege el bloque `catch` al desmontar para que solo emerjan errores auténticos de tiempo de ejecución (como un tiempo de espera de latidos).
 - Abortar un flujo SSE finaliza el bucle `for await (const msg of stream)` de forma limpia sin lanzar excepciones.
 
 ---
@@ -83,4 +83,4 @@ Los handles de SSE y WebSocket sobreviven a la llamada inicial a `openStream(...
 - `ClientProvider` — provee un `DerivableClient` (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
 - `useClient(overrideClient?)` — lee la sobreescritura explícita o el cliente provisto más cercano.
 - Guías relacionadas: [Cliente](/es-ES/docs/client), [Tratamiento de errores](/es-ES/docs/errors), [Flujos de eventos SSE](/es-ES/docs/sse), [Sesiones WebSocket](/es-ES/docs/web-socket).
-- Recetas relacionadas: [Manejar una 404 declarada](/es-ES/recipes/get-declared-404), [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http), [Consumir eventos SSE](/es-ES/recipes/consume-sse), [Gestionar sesiones WebSocket](/es-ES/recipes/websocket-session).
+- Recetas relacionadas: [GET con una 404 declarada](/es-ES/recipes/get-declared-404), [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http), [Consumir eventos SSE](/es-ES/recipes/consume-sse), [Gestionar sesiones WebSocket](/es-ES/recipes/websocket-session).

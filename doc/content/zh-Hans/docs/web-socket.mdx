@@ -5,7 +5,7 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 
 # WebSocket 会话
 
-在 SDK 中，`defineWebSocket` 声明双向 WebSocket 契约：路径模板、可选的 `input` 与 `builder`（仅限 `path` 和 `query`）、`incoming` 与 `outgoing` 消息 struct、队列上限，以及静态子协议。消费方应用在自己的 Client 上配置心跳、重连和生命周期清理。
+在 SDK 中，`defineWebSocket` 声明双向 WebSocket 契约：路径模板、可选的 `input` 与 `builder`（仅限 `path` 和 `query`）、`incoming` 与 `outgoing` 消息 struct、队列上限，以及静态子协议。消费方应用在自己的 Client 上配置心跳、重试（`withRetry`）和生命周期清理。
 
 ## 1. 定义契约并运行会话
 
@@ -37,7 +37,7 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 
 ## 2. 消息校验与双向通信规则
 
-- **入站帧（`session.receive`）**：文本、`ArrayBuffer`、类型化数组和 `Blob` 帧都按 UTF-8 解码，解析为 JSON，再用 `incoming` 校验。畸形 JSON 或 schema 不匹配会上报给 `session.onRuntimeError` 并被丢弃，不会关闭会话。`session.receive` 是单消费者；请求第二个迭代器会抛出 `TypeError`。
+- **入站帧（`session.receive`）**：文本、`ArrayBuffer`、类型化数组和 `Blob` 帧都按 UTF-8 解码，解析为 JSON，再用 `incoming` 校验。畸形 JSON 或 schema 不匹配会上报给 `session.onRuntimeError` 并被丢弃，不会关闭会话。`session.receive` 是单消费者；请求第二个迭代器会抛出 `TypeError`。传输失败时，已经收到的消息会先送达，然后 `receive` 以 `closed.cause` reject，心跳超时也算在内。调用方的取消（中止 `signal`）、`session.close()` 和销毁会丢弃未读消息，并且 `receive` 立即结束，无论会话是否已经结束；`session.close()` 之后到达的帧也会被丢弃。会话打开期间到期的 `signal`（如 `AbortSignal.timeout(ms)`）是超时：会话以错误结束，并先送达已入队的消息。会话已经结束之后才到期的，是一次停止，并丢弃它们。
 - **出站帧（`session.send(payload)`）**：同步用 `outgoing` 校验，应用 `.alias()` 和编解码器，再用 `JSON.stringify` 序列化。`open` 状态下立即发送；`reconnecting` 期间若队列可用（`maxOutgoingQueueSize > 0`）则排队；载荷无效、队列已满/被禁用或会话已关闭时同步抛出异常。
 
 ## 3. 会话状态与观察者机制
@@ -56,11 +56,11 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
   examples/web-socket/state-snapshots.ts#example
 </include>
 
-## 4. 重连策略、心跳保活与队列管理
+## 4. 重试、心跳与队列
 
-重连与心跳都需显式开启（opt-in），可通过 Client 选项（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或单次调用的派生 Client 选项（`client({ reconnect, heartbeat })`）配置：
+重连与心跳都需显式开启（opt-in），可通过 Client 选项（`withRetry`、`withWebSocketHeartbeat`）或单次调用的派生 Client 选项（`client({ retry, heartbeat })`）配置。重连使用与 HTTP 和 SSE 相同的 `withRetry` 策略：
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tabs items={["Retry policy", "Application heartbeat"]}>
 <Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
@@ -73,14 +73,14 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 </Tab>
 </Tabs>
 
-- **重连**：启用时的默认值为 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次物理连接 `open` 都会重置中断预算。`beforeConnect({ attempt, signal })` 在首次连接和每次重连尝试之前运行。已打开的 socket 向均衡器报告的结果只取决于关闭码，与 `wasClean` 无关：`1006` 或 `1015`（没有收到关闭帧）为 `NET_UNREACHABLE`，`1012` 或 `1013` 为 `NET_UNAVAILABLE`，其他关闭码都不算失败。
-- **握手超时（`connectTimeoutMs`）**：提供时必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它限制从构造到 `open` 的时间，握手后清除。该选项只存在于 `withWebSocketReconnect({...})` 的选项对象（或请求选项 `reconnect`）内；只要传入该对象，就会按默认的 `attempts: 3` 启用自动重连，因此仅设置 `connectTimeoutMs` 同样会开启重连。若只想限制握手，请同时设置 `attempts: 0`。
-- **心跳**：定期通过 `outgoing` struct 发送 `message()`，并在至多 `timeoutMs` 内等待匹配 `isAck(msg)` 的帧。匹配的 ack 帧由心跳监视器消费，不转发给 `session.receive`。漏掉 ack 对逻辑会话是致命的：`closed.kind` 为 `"error"`，`closed.cause` 是普通 `Error("WebSocket heartbeat timeout")`；这不会启动重连。漏掉的 ack 还会作为 `NET_UNREACHABLE` 报告给均衡器，归属于该端点。心跳序列化失败或 `message()` 抛出，也沿同一致命路径结束并保留原始 cause，但属于本地问题，不归属于端点。
+- **重试**：设置了重试策略时，默认值为 `maxRetries: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0.2`。`session.close()` 没有请求的每一次关闭默认都会重试，包括从未打开的连接。构造函数抛出是重试只会重复的本地失败，因此它结束调用，且不会询问 `shouldRetry`。每次物理 `open` 都会重置中断计数。`shouldRetry` 可以推翻默认，也可以是异步的；手动关闭、调用方中止，或已经做了 `maxRetries` 次重试之后，不会调用它。被拒绝或用尽的重试会像没有策略时那样结束会话：连接错误是 `closed.kind: "error"`，对端的关闭帧是 `"closed"`。`beforeConnect({ attempt, signal })` 在首次连接和每次重试之前运行。已打开的 socket 向均衡器报告的结果只取决于关闭码，与 `wasClean` 无关：`1006` 或 `1015`（没有收到关闭帧）为 `NET_UNREACHABLE`，`1012` 或 `1013` 为 `NET_UNAVAILABLE`，其他关闭码都不算失败。
+- **尝试超时（`attemptTimeoutMs`）**：提供时，它限制从构造到 `open` 的时间，握手后清除。它是 `withRetry`（或请求选项 `retry`）的选项，因此 `withRetry({ attemptTimeoutMs })` 也会重试，默认 `maxRetries: 3`。只要握手期限，写成 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。到期向均衡器报告 `NET_UNREACHABLE`，重试耗尽则以 `NET_TIMEOUT` 结束。
+- **心跳**：Defjs 不定义心跳格式、间隔或超时：`message` 和 `isAck` 是你的函数，类型要求有 `message`，并且只允许 `timeoutMs` 与 `isAck` 一起出现。浏览器 `WebSocket` 接口无法发送协议级 ping，因此应用级消息是唯一可移植的心跳。每过 `intervalMs`，它通过 `outgoing` struct 以 JSON 文本发送 `message()`，因此端点要声明 `outgoing` struct，裸的文本或二进制 ping 不可行。它至多等待 `timeoutMs`，寻找匹配 `isAck(msg)` 的已解码帧；未通过 `incoming` struct 的帧会报告给 `onRuntimeError`，永远到不了 `isAck`。匹配的 ack 帧由心跳监视器消费，不转发给 `session.receive`。漏掉 ack 算连接失败：socket 被关闭，漏掉的 ack 作为 `NET_UNREACHABLE` 报告给均衡器并归属于该端点，这次尝试像其他关闭一样进入重试流程。没有重试策略，或重试已经用尽时，`closed.kind` 为 `"error"`，`closed.cause` 是普通的 `Error("WebSocket heartbeat timeout")`。心跳序列化失败或 `message()` 抛出属于本地问题：它们以原始 cause 结束会话，不会重试，也不归属于端点。
 - **队列上限**：
-  - `maxIncomingQueueSize`（必填正的安全整数）：同时限制等待解码的原始帧和等待消费者的解码后消息。溢出会以 `CAP_QUEUE_OVERFLOW` Fault 作为 `closed.cause` 终止会话；同一个 cause 会传给 `onRuntimeError` 并使 `session.receive` reject。会话打开期间请持续消费 `session.receive`。
-  - `maxOutgoingQueueSize`（可选非负安全整数，默认 `0`）：仅在 `state === 'reconnecting'` 时缓冲 `session.send()` 调用，并在下一次 `open` 发布前全部刷出。
+  - 入站消息：没有选项，也没有数量上限。库会把平台送达的每条消息排队，直到 `session.receive` 读走它，因此从不读取的消费者会让队列无界增长；会话打开期间请消费 `session.receive`，或者关闭会话。
+  - `maxOutgoingQueueSize`（可选，默认 `0`）：仅在 `state === 'reconnecting'` 时缓冲 `session.send()` 调用，并在下一次 `open` 发布前全部刷出。
 
-`shouldReconnect` 接收原生关闭码和 `wasClean`。服务端可能以应用错误码 `1011` 完成正常的关闭握手，因此 `wasClean === true` 不代表应用处理成功。示例显式允许 `1011`；请根据自己的协议选择应用关闭码，而不要只依赖 `!wasClean`。
+`shouldRetry` 在其 WebSocket context 中接收原生关闭 `code`、`reason` 和 `wasClean`，并且那里的 `retryable` 始终为 `true`。服务端可能以应用错误码 `1011` 完成正常的关闭握手，因此 `wasClean === true` 不代表应用处理成功。示例根据 `code` 决定；请根据自己的协议选择应用关闭码，而不要只依赖 `!wasClean`。
 
 ## 5. 子协议与身份认证 [#protocols-and-authentication]
 
@@ -99,7 +99,9 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-重连中断耗尽尝试后，会话以 `closed.kind: "error"` 结束，`closed.cause` 是普通传输错误，并带有原生关闭快照（升级失败时通常为代码 `1006`）；没有单独的稳定耗尽代码。组件或 worker 结束工作时，始终注销 `onStateChange` 和 `onRuntimeError` 监听器。
+曾经打开、随后在没有关闭帧的情况下断开的连接（代码 `1006`，`wasClean: false`）始终以 `closed.kind: "error"` 结束，`closed.cause` 为 `Error("WebSocket connection error")`，无论运行时是否触发原生 `error` 事件。
+
+重试中断耗尽其 `maxRetries` 后，会话以 `closed.kind: "error"` 结束，`closed.cause` 是普通传输错误，并带有原生关闭快照（升级失败时通常为代码 `1006`）；没有单独的稳定耗尽代码。会话以 `closed.kind: "error"` 结束时，已经入队的消息仍会送达，`session.receive` 在最后一条之后以 `closed.cause` reject；来自对端的关闭也会在 `session.receive` 结束之前送达已入队的消息。调用方停止会话时，未读消息被丢弃，`session.receive` 立即结束：调用方中止（`closed.kind: "aborted"`）、手动 `session.close()`，以及用 `await using` 销毁，都会这样做，会话已经结束之后也一样。会话结束之后的停止会丢弃未读消息，且不改变其他东西：`closed` 保持原值，一旦没有未读内容，`session.receive` 仍会以 `closed.cause` reject。组件或 worker 结束工作时，始终注销 `onStateChange` 和 `onRuntimeError` 监听器。
 
 ## 相关阅读
 

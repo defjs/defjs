@@ -16,13 +16,13 @@ description: defineRequest, опции запроса и типы запроса
 
 <include cwd>examples/api/define-request.ts#example</include>
 
-`output` — один struct для тела `2xx`; `error` — один struct для каждого тела вне `2xx`. Ни то ни другое не
+`output` — один struct для тела 2xx; `error` — один struct для каждого тела вне 2xx. Ни то ни другое не
 привязано к статусу. Пропустить одну сторону значит, что это тело не читают — см.
 [Объявление — это утверждение](/ru-RU/docs/design-decisions#declaration-is-an-assertion).
 
 Вызов операции возвращает promise кортежа, описанного в [`HttpAwaitResult`](/ru-RU/api/core/httpawaitresult-type). Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). HTTP читает `signal` и колбэки прогресса и игнорирует остальные поля.
 
-Статус вне `2xx` — это `HTTP_STATUS`, если struct `error` не объявлен или объявленное тело `error` декодируется. У сбоя поле `data` — декодированное
+Статус вне 2xx — это `HTTP_STATUS`, если struct `error` не объявлен или объявленное тело `error` декодируется. У сбоя поле `data` — декодированное
 тело `error`, если оно было объявлено, иначе `undefined`. Если объявленное тело `error` не удаётся прочитать (неверный тип медиа, невалидный JSON) или
 оно не соответствует своему struct, вместо этого возвращается сбой — `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED` или `RES_STRUCT_MISMATCH`, а статус ответа по-прежнему
 указан в его метаданных. При сбое третий слот кортежа — `undefined`; метаданные ответа несёт сбой.
@@ -46,7 +46,7 @@ struct, что и ответ из сети; доверенного short-circuit
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` — срез HTTP у [`RequestOptions`](/ru-RU/api/core/requestoptions-type): [`UseRequestConfig`](/ru-RU/api/core/userequestconfig-type), то есть `signal` плюс `onDownloadProgress` и `onUploadProgress`. Полей `timeout` или `abort` нет. Дедлайн — это `signal: AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручная отмена — `NET_ABORTED`. `signal` — сигнал вызова; объединяйте сигналы через `AbortSignal.any` в коде приложения. Дедлайна по умолчанию на уровне клиента нет. Остальные поля запроса, например `heartbeat`, игнорируются.
+`HttpExecuteOptions` — срез HTTP у [`RequestOptions`](/ru-RU/api/core/requestoptions-type): [`UseRequestConfig`](/ru-RU/api/core/userequestconfig-type), то есть `signal` плюс `onDownloadProgress`, `onUploadProgress` и `retry`. Полей `timeout` или `abort` нет. Дедлайн — это `signal: AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручная отмена — `NET_ABORTED`. `signal` — сигнал вызова; объединяйте сигналы через `AbortSignal.any` в коде приложения. Дедлайна по умолчанию на уровне клиента нет. Остальные поля запроса, например `heartbeat`, игнорируются.
 
 ## Типы
 
@@ -93,9 +93,9 @@ struct, что и ответ из сети; доверенного short-circuit
 
 `loaded`, `total`, `lengthComputable`. Колбэки могут быть асинхронными. Если `onDownloadProgress` или `onUploadProgress` выбрасывает исключение, вызов завершается с
 `EXT_OBSERVER_FAILED`, а выброшенное значение передаётся в `cause`; отмена по-прежнему сообщает `NET_ABORTED`, или `NET_TIMEOUT`, когда причина отмены — таймаут.
-Прогресс загрузки превращает тела `Blob` / `File`, `ArrayBuffer` и `FormData` в поток там, где `fetch` поддерживает потоковое тело запроса. Chromium сообщает этот прогресс только на HTTP/2 и новее; на HTTP/1.1 загрузка с `onUploadProgress` завершается ошибкой (`NET_UNREACHABLE`). Firefox отправляет эти тела без изменений и не вызывает `onUploadProgress`.
+Прогресс загрузки сообщается, только если тело запроса — это `ReadableStream`, который передаёте вы. Любое другое тело (`Blob`, `File`, `ArrayBuffer`, `FormData`, строка, `URLSearchParams`) отправляется как есть, и `onUploadProgress` не вызывается ни в одной среде выполнения; библиотека никогда не превращает тело в поток. Тело `ReadableStream` следует правилам Fetch для потоковых тел запроса — с `onUploadProgress` или без него: Chromium и WebKit принимают его только по HTTP/2 и новее (`NET_UNREACHABLE` на HTTP/1.1; WebKit проверялся вручную только на 27.2; Node.js и Bun принимают HTTP/1.1); Firefox не умеет передавать тело запроса потоком (`ENV_UNSUPPORTED`); в браузерах кросс-origin запрос требует CORS preflight, если только у браузера нет кэшированного результата preflight, поэтому сервер должен ответить на `OPTIONS`; редирект 301, 302, 307 или 308 завершается ошибкой после того, как тело было отправлено один раз, а 303 становится GET и завершается успешно. Браузеры не отправляют `Content-Length`. `fetch` сообщает об этих сбоях и об исходном `ReadableStream`, который бросает исключение, пока `fetch` его читает, как о той же сетевой ошибке, что и о недоступном эндпоинте, поэтому балансировщик нагрузки получает `{ attempted: false }` для них, как и для бросающего колбэка прогресса (`EXT_OBSERVER_FAILED`). Одна лишь потоковая загрузка не может обнаружить упавший эндпоинт, а отклонённая потоковая загрузка никогда не повторяется: тело `ReadableStream` завершает поток повторов до того, как будет спрошен `shouldRetry`.
 
-Там, где выполняется это преобразование, `FormData` использует сериализованный поток без буферизации всего тела в `Blob` и сохраняет фактический разделитель multipart. Полный размер неизвестен, если его не задаёт корректный явный `Content-Length`. Явные типы контента сохраняются при преобразовании загрузки, кроме того что FormData должен использовать разделитель своей сериализации. `loaded` считает байты потока, а не подтверждения сервера. Скачивания с `Content-Encoding`, отличным от `identity`, сообщают `total: 0` и `lengthComputable: false`; байты их потока уже могут быть распакованы.
+У потокового тела нет известной длины: сообщаемый полный размер неизвестен, если его не задаёт корректный явный заголовок `Content-Length` (браузеры этот заголовок не отправляют). `loaded` считает байты потока, а не подтверждения сервера. Скачивания с `Content-Encoding`, отличным от identity, сообщают `total: 0` и `lengthComputable: false`; байты их потока уже могут быть распакованы.
 
 См. [руководство по HTTP](/ru-RU/docs/http) и [Клиент](/ru-RU/docs/client).
 
@@ -117,7 +117,7 @@ struct, что и ответ из сети; доверенного short-circuit
 
 ## UseRequestConfig
 
-`signal` плюс необязательные `onDownloadProgress` и `onUploadProgress`. `HttpExecuteOptions` — этот срез. Полей `timeout` или `abort` нет.
+`signal` плюс необязательные `onDownloadProgress`, `onUploadProgress` и `retry`. `HttpExecuteOptions` — этот срез. Полей `timeout` или `abort` нет.
 
 ## RequestSuccessData
 

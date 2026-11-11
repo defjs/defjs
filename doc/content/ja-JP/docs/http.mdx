@@ -100,8 +100,9 @@ JSON で表現できない値（`NaN`、`±Infinity`、`Map`、`Set`、関数、
 
 1. **`ok` (`200..299`) による分岐**: `2xx` は `output`、非 `2xx` は `error` を使用します。
 2. **省略時の明示的スキップ**: その側に宣言された struct がない場合、レスポンスボディは一切読み取られません（`2xx` では `data: undefined` + `HttpMeta` が返り、非 `2xx` では `data: undefined` の `HTTP_STATUS` が返ります）。
-3. **JSON メディアタイプの先行検証**: JSON struct の場合、ボディストリームを読み取る前に、非 JSON の `Content-Type` が返されていないか検証し、不一致なら即座に `RES_MEDIA_TYPE_INVALID` を返します。
+3. **JSON メディアタイプの先行検証**: JSON struct の場合、ボディを読む前にも、ボディの有無を見る前にも、非 JSON の `Content-Type` は `RES_MEDIA_TYPE_INVALID` で失敗します。内容のないレスポンス（`HEAD`、`204`、`205`、`304`）も、他と同じように宣言に従います。
 4. **ストリームの読み取りとパース**: 読み取り不可のストリームや壊れた JSON は `RES_DECODE_FAILED`（ストリーム途中切断の場合は `NET_BODY_INCOMPLETE`）で失敗します。
+   内容のないレスポンス（`HEAD`、`204`、`205`、`304`）には読むボディがありません。`struct.string()` は `''` を、`struct.arrayBuffer()` は空の `ArrayBuffer` を、`struct.blob()` は空の `Blob` を受け取ります。手順 3 を通過した JSON struct は空のバイト列をパースし、`RES_DECODE_FAILED` で失敗します。
 5. **`struct` による検証**: スキーマと一致しないデータは `RES_STRUCT_MISMATCH` で失敗します。
 
 ## 5. 処理のキャンセルと期限の設定 [#cancel-the-work]
@@ -130,8 +131,8 @@ JSON で表現できない値（`NaN`、`±Infinity`、`Map`、`Set`、関数、
 ## 6. クレデンシャル、XSRF、転送進捗
 
 - **`withCredentials(true)`**: HTTP および SSE リクエストの Fetch 設定に `credentials: "include"` を適用します。
-- **`withXSRF(options?)`**: `@defjs/core/xsrf` から読み込みます。ブラウザでは、同一オリジンに対するデータ変更 HTTP メソッド（`POST`、`PUT`、`PATCH`、`DELETE`）において、XSRF クッキー（デフォルトは `XSRF-TOKEN`）を読み取り、対応するヘッダー（`X-XSRF-TOKEN`）を自動注入します。`location` または `document` がない実行環境（Worker を含む）では、`withXSRF()` が例外を投げます。ブラウザとサーバーで共有するコードは、このオプションをブラウザだけで追加します。別の出所のトークンはインターセプターで設定します。
-- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })` に渡します。ダウンロード進捗は、正の `Content-Length` が存在し `Content-Encoding` が未指定または `identity` の場合にのみ `lengthComputable: true` を報告します。`fetch` がストリーミングリクエストボディに対応するランタイムでは、アップロード進捗は `Blob`、`File`、`ArrayBuffer`、`FormData` をストリームへ変換します。Chromium がその進捗を報告するのは HTTP/2 以降だけです。HTTP/1.1 では `onUploadProgress` 付きのアップロードは失敗します。Firefox はそれらのボディをそのまま送り、コールバックを呼び出しません。進捗コールバック内で例外が throw された場合、呼び出しは `EXT_OBSERVER_FAILED` で失敗します。
+- **`withXSRF(options?)`**: `@defjs/core/xsrf` から読み込みます。ブラウザでは、同一オリジンに対するデータ変更 HTTP メソッド（`POST`、`PUT`、`PATCH`、`DELETE`）において、XSRF クッキー（デフォルトは `XSRF-TOKEN`）を読み取り、対応するヘッダー（`X-XSRF-TOKEN`）を自動注入します。`location` または `document` がない実行環境（Worker を含む）では、`withXSRF()` が例外を投げます。ブラウザとサーバーで共有するコードは、このオプションをブラウザだけで追加します。別の出所のトークンはインターセプターで設定します。同一オリジンの検査が対象とするのは、ライブラリが構築する URL です。Fetch はリダイレクトを自分でたどり、別オリジンへのリダイレクトのあともこのヘッダーを残します（取り除くのは `Authorization` だけです）。それを拒否するには、[`withXSRF`](/ja-JP/api/core/withxsrf) を参照してください。
+- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })` に渡します。ダウンロード進捗は、正の `Content-Length` が存在し `Content-Encoding` が未指定または `identity` の場合にのみ `lengthComputable: true` を報告します。アップロード進捗が報告されるのは、渡したリクエストボディが `ReadableStream` のときだけです。それ以外のボディ（`Blob`、`File`、`ArrayBuffer`、`FormData`、文字列、`URLSearchParams`）は構築されたまま送られ、どのランタイムでも `onUploadProgress` は呼ばれません。`ReadableStream` ボディは、`onUploadProgress` の有無にかかわらず、ストリーミングリクエストボディの Fetch の規則に従います。Chromium と WebKit が受け入れるのは HTTP/2 以降だけなので、HTTP/1.1 では呼び出しが `NET_UNREACHABLE` で失敗します（Node.js と Bun は HTTP/1.1 を受け入れます）。Firefox はリクエストボディをストリームできず、`ENV_UNSUPPORTED` で失敗します。ブラウザでは、キャッシュされたプリフライト結果をブラウザが持っていない限り、クロスオリジンのリクエストに CORS プリフライトが必要です。301、302、307、308 のリダイレクトは失敗します。ブラウザは `Content-Length` を送りません。これらの失敗と、元のストリームが throw した場合について、ロードバランサーが受け取るのは `{ attempted: false }` です。`fetch` が、到達不能なエンドポイントと同じネットワークエラーとして報告するためです。そのため、ストリーミングアップロードだけでは停止したエンドポイントを検出できません。詳細は API リファレンスの `HttpProgressFn` の項目を参照してください。進捗コールバック内で例外が throw された場合、呼び出しは `EXT_OBSERVER_FAILED` で失敗します。
 
 ## 関連ドキュメント
 

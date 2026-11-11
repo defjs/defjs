@@ -67,15 +67,15 @@ Defjs가 HTTP 응답을 읽는 방식에는 6가지 엄격한 규칙이 적용�
 
 ### 규칙 3: 단언에서 벗어난 모든 경우는 명확한 결함으로 처리된다
 
-Defjs는 `response.ok`로 응답 쪽을 고릅니다. `2xx`는 `output`, `2xx`가 아니면 `error`입니다. 그 쪽에 선언된 JSON struct만 디코딩을 일으키고 `RES_MEDIA_TYPE_INVALID` 또는 `RES_DECODE_FAILED`를 낼 수 있으며, 그 `Content-Type`은 본문 바이트를 읽기 **전에** 검증합니다. `2xx`가 아닌 HTML 게이트웨이 페이지는 JSON `error` struct가 선언된 경우에만 `RES_MEDIA_TYPE_INVALID`를 냅니다. 활성 쪽에 선언이 없으면 본문을 읽지 않으며, `2xx`가 아닌 응답은 디코딩되지 않은 `HTTP_STATUS`를 반환합니다.
+Defjs는 `response.ok`로 응답 쪽을 고릅니다. `2xx`는 `output`, `2xx`가 아니면 `error`입니다. 그 쪽에 선언된 JSON struct만 디코딩을 일으키고 `RES_MEDIA_TYPE_INVALID` 또는 `RES_DECODE_FAILED`를 낼 수 있으며, 그 `Content-Type`은 본문을 읽거나 찾기 **전에** 먼저 검증합니다. 내용이 없는 응답(`HEAD`, `204`, `205`, `304`)도 같은 검사를 받습니다. 선언된 JSON 표현에 JSON `Content-Type`이 없으면 `RES_MEDIA_TYPE_INVALID`로 실패하고, 있으면 빈 바이트를 파싱해 `RES_DECODE_FAILED`로 실패합니다. `2xx`가 아닌 HTML 게이트웨이 페이지는 JSON `error` struct가 선언된 경우에만 `RES_MEDIA_TYPE_INVALID`를 냅니다. 활성 쪽에 선언이 없으면 본문을 읽지 않으며, `2xx`가 아닌 응답은 디코딩되지 않은 `HTTP_STATUS`를 반환합니다. SSE 핸드셰이크도 같은 규칙을 따릅니다. 선언된 `error` 본문을 디코딩할 수 없는 비`2xx` 핸드셰이크는 시작 시 그 디코딩 결함을 반환하고 메타데이터에 상태를 담으며, 인터셉터, 재연결 정책, 재연결의 `closed`는 여전히 `HTTP_STATUS`를 봅니다.
 
-| 응답을 읽는 도중 실패한 원인                       | 반환되는 결함                                                       |
-| -------------------------------------------------- | ------------------------------------------------------------------- |
-| 미디어 타입이 선언된 JSON 표현과 일치하지 않음     | `RES_MEDIA_TYPE_INVALID` (본문 바이트를 전혀 읽지 않음)             |
-| 바이트를 선언된 표현 형식으로 디코딩할 수 없음     | `RES_DECODE_FAILED`                                                 |
-| 디코딩된 값이 `struct` 스키마 검증을 통과하지 못함 | `RES_STRUCT_MISMATCH` (HTTP) / `RES_DECODE_FAILED` (SSE 핸드셰이크) |
-| 디코딩된 `error` struct를 포함한 비`2xx` 상태 코드 | 타입화된 `error.data`를 포함하는 `HTTP_STATUS`                      |
-| `error`가 선언되지 않은 비`2xx` 상태 코드          | `error.data: undefined`인 `HTTP_STATUS`                             |
+| 응답을 읽는 도중 실패한 원인                       | 반환되는 결함                                                                            |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 미디어 타입이 선언된 JSON 표현과 일치하지 않음     | `RES_MEDIA_TYPE_INVALID` (먼저 검사함. 본문은 읽지 않으며, 내용이 있든 없든 차이가 없음) |
+| 바이트를 선언된 표현 형식으로 디코딩할 수 없음     | `RES_DECODE_FAILED` (빈 JSON 바이트 포함)                                                |
+| 디코딩된 값이 `struct` 스키마 검증을 통과하지 못함 | `RES_STRUCT_MISMATCH`                                                                    |
+| 디코딩된 `error` struct를 포함한 비`2xx` 상태 코드 | 타입화된 `error.data`를 포함하는 `HTTP_STATUS`                                           |
+| `error`가 선언되지 않은 비`2xx` 상태 코드          | `error.data: undefined`인 `HTTP_STATUS`                                                  |
 
 ### 규칙 4: 디코딩에 실패하면 본문도 존재하지 않는다
 

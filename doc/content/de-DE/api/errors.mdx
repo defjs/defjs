@@ -23,7 +23,7 @@ Eine geschlossene Menge. Das Segment vor dem ersten `_` ist die Klasse; ein sepa
 
 <ApiSignature name="Fault" />
 
-Prüfe `fault.code` mit einem `switch`.
+Prüfe `fault.code` mit einem switch.
 
 ### FaultOf
 
@@ -43,7 +43,7 @@ Rufe `format()`, `flatten()` oder `prettify()` erst auf, nachdem du `fault.cause
 
 <ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
 
-Jeder Nicht-`2xx`-Status. Hat die Definition `error` deklariert und wurde der Body dekodiert, ist `data` dieser Body und `response` trägt ihn. Wurde `error` ausgelassen, wird der Body nie gelesen — `data` bleibt damit `undefined` und `response` besteht nur aus Metadaten.
+Jeder Nicht-2xx-Status. Hat die Definition `error` deklariert und wurde der Body dekodiert, ist `data` dieser Body und `response` trägt ihn. Wurde `error` ausgelassen, wird der Body nie gelesen — `data` bleibt damit `undefined` und `response` besteht nur aus Metadaten.
 
 ### DecodeFault
 
@@ -57,7 +57,7 @@ Eine Response kam an, ließ sich aber nicht wie deklariert lesen. `response` ent
 
 Alles, was fehlschlagen konnte, bevor eine Response existierte: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` ist `undefined`, bis der Transport Metadaten zu melden hat — etwa einen Body, der mitten im Download abgeschnitten wurde.
 
-Ungültige `withRetry`-Optionen geben `REQ_OPTIONS_INVALID` zurück, bevor der HTTP-Transport startet, mit `Invalid retry options`. Dazu zählen eine Policy, die kein Objekt ist, ein `maxAttempts`-Wert, der keine sichere Ganzzahl von mindestens 1 ist, sowie ungültige Bedingungen, Methoden, Timeouts, Backoff- oder Budget-Einstellungen. `withRetry` wegzulassen schaltet Retries ab. `withRetry()` und `withRetry(undefined)` verhalten sich wie `withRetry({})`. `withRetry({ maxAttempts: 1 })` schaltet Retries aus, nachdem sie aktiviert wurden.
+Retry-Optionen werden zur Laufzeit nicht validiert. `withRetry` wegzulassen schaltet Retries ab. `withRetry()` und `withRetry(undefined)` verhalten sich wie `withRetry({})`. `withRetry({ maxRetries: 0 })` schaltet Retries aus, nachdem sie aktiviert wurden. Eine `shouldRetry`-Funktion, die wirft, beendet den Aufruf mit `EXT_HOOK_FAILED` und dem geworfenen Wert als `cause`, bei HTTP, SSE und WebSocket gleichermaßen; für einen Stream oder eine Sitzung, die bereits offen war, siehe [Client](/de-DE/api/client#withretry).
 
 ### AnyFault
 

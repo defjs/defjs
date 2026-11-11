@@ -11,14 +11,14 @@ Declara un socket, llama a la operación con un cliente, envía y recibe mensaje
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`, un struct `incoming` y el `maxIncomingQueueSize` entero positivo obligatorio; structs `outgoing` e `input` opcionales, `operation`, `protocols` estáticos y un `maxOutgoingQueueSize` no negativo. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`. Estos miembros de `definition` están documentados en [`WebSocketDefinition`](/es-ES/api/core/websocketdefinition-type). `builder` es obligatorio exactamente cuando se declara `input`.
+- **definition** — `path` y un struct `incoming`; structs `outgoing` e `input` opcionales, `operation`, `protocols` estáticos y `maxOutgoingQueueSize`. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`. Estos miembros de `definition` están documentados en [`WebSocketDefinition`](/es-ES/api/core/websocketdefinition-type). `builder` es obligatorio exactamente cuando se declara `input`.
 - **Devuelve** una operación. El primer argumento es un [`Client`](/es-ES/api/core/client-type). Los demás argumentos son solo la entrada. Llamarla abre la sesión.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-La llamada devuelve `[null, session, connection]` o `[error, undefined, connection?]`. Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). WebSocket lee `signal`, `beforeConnect`, `heartbeat`, `protocols` y `reconnect`, e ignora los campos de progreso HTTP.
+La llamada devuelve `[null, session, connection]` o `[error, undefined, connection?]`. Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). WebSocket lee `signal`, `beforeConnect`, `heartbeat`, `protocols` y `retry`, e ignora los campos de progreso HTTP.
 
-`beforeConnect`, `heartbeat`, `protocols` y `reconnect` sustituyen cada uno, como un todo, el valor del cliente para esa llamada. La precedencia de protocolos es el cliente derivado, luego `withWebSocketProtocols` y luego los `protocols` de la definición. `heartbeat.timeoutMs` es la espera del acuse, no un plazo de la solicitud.
+`beforeConnect`, `heartbeat`, `protocols` y `retry` sustituyen cada uno, como un todo, el valor del cliente para esa llamada. La precedencia de protocolos es el cliente derivado, luego `withWebSocketProtocols` y luego los `protocols` de la definición. `heartbeat.timeoutMs` es la espera del acuse, no un plazo de la solicitud.
 
 ## WebSocketSession
 
@@ -44,19 +44,19 @@ Prefiere `await using ownedSession = session` para la limpieza de un ámbito pro
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` es `closed`, `aborted` o `error`. `cause` está ausente en `closed`, es opcional en `aborted` y es obligatorio en `error`. Un desbordamiento de la cola de tramas entrantes en bruto o mensajes decodificados tiene `cause.code === "CAP_QUEUE_OVERFLOW"`; la misma causa rechaza `receive` y llega a `onRuntimeError`. El timeout del heartbeat y las reconexiones agotadas conservan causas `Error` ordinarias del runtime, sin un código estable separado. `code`, `reason` y `wasClean` pueden aparecer en cada variante. Un `session.close()` manual rellena `code` y `reason` en `{ kind: "closed" }` cuando el evento de cierre no los trae.
+`kind` es `closed`, `aborted` o `error`. `cause` está ausente en `closed`, es opcional en `aborted` y es obligatorio en `error`. En `error`, la misma causa rechaza `receive` después de los mensajes ya encolados, y llega a `onRuntimeError`. Los mensajes no leídos se descartan cuando la sesión termina como `aborted`, y cuando quien llama la termina con `session.close()` o con la liberación. Una parada de quien llama (`session.close()`, la liberación o un aborto de `signal`) también los descarta después de que la sesión ha terminado, sin cambiar `closed` ni el rechazo de `receive`. Un timeout de heartbeat y los reintentos agotados conservan causas `Error` ordinarias del runtime, sin un código estable separado. Una conexión que estaba abierta y luego se cayó sin trama de cierre (código `1006`) es `error` en todos los runtimes. `code`, `reason` y `wasClean` pueden aparecer en cada variante. Un `session.close()` manual rellena `code` y `reason` en `{ kind: "closed" }` cuando el evento de cierre no los trae.
 
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` es [`UseWebSocketConfig`](/es-ES/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` y `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, `message` opcional, `isAck`, `timeoutMs`. No hay campo `timeout` ni `abort`.
+`WebSocketExecuteOptions` es [`UseWebSocketConfig`](/es-ES/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `retry` y `signal`. `WebSocketHeartbeatConfig`: `intervalMs` y `message` son obligatorios; `timeoutMs` solo se permite junto con `isAck`. No hay campo `timeout` ni `abort`.
 
-`signal` cubre toda la sesión, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. `heartbeat` se sustituye entero; su `timeoutMs` espera un acuse y no es un plazo de la solicitud.
+`signal` cubre toda la sesión, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo por defecto a nivel de cliente. Un plazo solo de la conexión es `retry: { maxRetries: 0, attemptTimeoutMs }`, que termina en `open`. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. `heartbeat` se sustituye entero; su `timeoutMs` espera un acuse y no es un plazo de la solicitud.
 
 El builder y la cadena de interceptores se ejecutan una vez por operación. La reconexión reutiliza el path/query construido y los protocolos capturados, y construye la URL antes de `beforeConnect`. Si ningún interceptor ha reemplazado el endpoint base de la solicitud, la reconexión también sustituye un endpoint recién seleccionado. El hook no puede rotar credenciales de URL o subprotocolo dentro de una sesión; inicia una operación nueva con entrada o configuración del cliente actualizadas.
 
-Cuando se define `reconnect`, `attempts` vale por defecto 3 por interrupción; `0` lo desactiva. Un `open` correcto reinicia el presupuesto y el exponente de backoff, así que cada interrupción nueva empieza en el reintento 1. Omitir `attempts` no da reintentos ilimitados dentro de una interrupción. Consulta [Cliente](/es-ES/api/client) para los valores por defecto y las reglas de validación.
+Cuando hay una política de reintento (`withRetry`), `maxRetries` vale por defecto 3 por interrupción; `0` lo desactiva. Por defecto se reintenta todo cierre que `session.close()` no haya pedido, incluida una conexión que nunca se abrió y un heartbeat sin respuesta, y `shouldRetry` puede anular eso. Un constructor de WebSocket que lanza (un subprotocolo que la plataforma rechaza, por ejemplo) es un fallo local que un reintento solo repetiría: termina la llamada sin consultar a `shouldRetry`. Un `open` correcto reinicia el recuento y el exponente de backoff, así que cada interrupción nueva empieza en el reintento 1. Consulta [Cliente](/es-ES/api/client#withretry) para los valores por defecto y el orden de decisión.
 
 ## Mensajes
 
@@ -72,7 +72,7 @@ Consulta la [guía de WebSocket](/es-ES/docs/web-socket) y [Abrir una sesión We
 
 ## WebSocketDefinition
 
-`path`, `incoming`, `maxIncomingQueueSize` obligatorio, `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` opcionales. El builder solo puede devolver `path` y `query`. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
+`path`, `incoming`, `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` opcionales. El builder solo puede devolver `path` y `query`. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
 
 ## WebSocketEndpoint
 
@@ -84,7 +84,7 @@ Solo `path` y `query`. `headers` y `body` son `never`.
 
 ## UseWebSocketConfig
 
-`beforeConnect`, `heartbeat`, `protocols`, `reconnect` y `signal`. `WebSocketExecuteOptions` es este recorte. No hay campo `abort`.
+`beforeConnect`, `heartbeat`, `protocols`, `retry` y `signal`. `WebSocketExecuteOptions` es este recorte. No hay campo `abort`.
 
 ## SocketAwaitResult
 
@@ -96,7 +96,7 @@ Motivo registrado cuando la sesión se cierra mediante `session.close()`.
 
 ## WebSocketHeartbeatConfig
 
-`intervalMs`, `message` opcional, `isAck`, `timeoutMs`.
+`intervalMs` y `message` son obligatorios. `isAck` reconoce el acuse, y `timeoutMs` solo se permite junto con `isAck`; el tipo unión lo exige y nada lo comprueba en runtime. Defjs no define ningún formato de heartbeat: cada valor sale de tus funciones. La carga se envía a través del struct `outgoing` como texto JSON. Un heartbeat sin respuesta cierra el socket y entra en el flujo de reintento de `withRetry`; sin una política de reintento la sesión termina con un `error`.
 
 ## WebSocketIncomingData
 
@@ -108,4 +108,4 @@ Valor que acepta `session.send`: `StructInput` del struct `outgoing`, o `never` 
 
 ## SocketLifecycleOutcome
 
-Resultado de un intento de conexión (`closeInfo`, `connection`, `cause`, `opened`), usado por la lógica de reconexión. No es el resultado final de la sesión; para eso consulta `WebSocketCloseInfo`.
+Resultado de un intento de conexión (`closeInfo`, `connection`, `cause`, `opened`), usado por la lógica de reintento. No es el resultado final de la sesión; para eso consulta `WebSocketCloseInfo`.

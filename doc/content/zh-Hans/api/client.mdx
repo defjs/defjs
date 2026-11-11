@@ -44,7 +44,7 @@ description: createClient、选项辅助函数，以及 Client 类型。
 
 <ApiSignature name="withQuerySerializer" />
 
-替换 HTTP、SSE 和 WebSocket 的查询编码。`serializer(query)` 接收**已编码的网络对象**（别名已应用，`Date` 为 ISO，`bigint` 为字符串），必须返回不带前导 `?` 的查询字符串。请求没有 query 时不会调用它。`builder` 返回 `URLSearchParams` 时会跳过序列化器。
+替换 HTTP、SSE 和 WebSocket 的查询编码。`serializer(query)` 接收**已编码的网络对象**（别名已应用，`Date` 为 ISO，`bigint` 为字符串），必须返回不带前导 `?` 的查询字符串。请求没有 query 时不会调用它。builder 返回 `URLSearchParams` 时会跳过序列化器。
 
 ### withHeaders()
 
@@ -55,7 +55,7 @@ description: createClient、选项辅助函数，以及 Client 类型。
 单个请求的优先级：
 
 1. 默认请求头是起始集合。
-2. 请求 `builder` 返回的 `headers` 会替换同名默认值。该名称的第一个值替换默认值；同一数组中的后续值只追加到这次替换上。标量或 `Headers` 实例也会整体替换。其他默认名称保留。
+2. 请求 builder 返回的 `headers` 会替换同名默认值。该名称的第一个值替换默认值，来自 `[name, value]` 数组或 `Headers` 实例的该名称的后续值会追加到它上面。record 的值是一个值：数组会按 JavaScript 的方式用逗号连接。其他默认名称保留。
 3. 拦截器收到合并后的请求头，并可以修改它们。
 4. 使用 `@defjs/core/xsrf` 时，XSRF 请求头最后添加，且仅在仍然缺失时添加（见 `withXSRF`）。
 
@@ -87,7 +87,9 @@ description: createClient、选项辅助函数，以及 Client 类型。
 
 为浏览器中的 HTTP 请求添加 XSRF 令牌请求头。从 `@defjs/core/xsrf` 导入。`options` 是 `XSRFOptions`：`cookieName`（默认 `XSRF-TOKEN`）和 `headerName`（默认 `X-XSRF-TOKEN`）。不带参数调用 `withXSRF()` 会启用这些默认值；缺少 `location` 或 `document` 时（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。SSE 和 WebSocket 请求不受影响。
 
-只在以下条件全部成立时设置该请求头：方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；请求尚未带有该请求头；解析后的请求源等于页面 origin；并且 `document.cookie` 中有非空令牌。跨源请求不会读取 cookie。读取 cookie 时抛错视为没有令牌。空令牌不设置该请求头。
+只在以下条件全部成立时设置该请求头：方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；请求尚未带有该请求头；解析后的请求源等于页面 origin；并且 `document.cookie` 中有非空令牌。跨源请求不会读取 cookie。读取 cookie 时抛错视为没有令牌。空令牌不设置该请求头。无效的 `headerName`，或不是合法请求头值的 cookie 值，会在任何请求发出之前以 `EXT_HOOK_FAILED` 使调用失败。
+
+源检查覆盖的是库构建出的 URL。Fetch 自己跟随重定向，重定向到另一个源之后它只移除 `Authorization`，因此 XSRF 请求头会一起带过去。目标在 CORS 预检中允许该请求头时就会收到令牌。要拒绝这种情况，给 `withHTTPHandle` 传入一个函数，对发往页面源且携带该请求头的请求调用 `fetch(new Request(request, { mode: "same-origin" }))`。不要把这种 mode 用在请求头来自拦截器的跨源 API 上：Fetch 会拒绝该模式下发往另一个源的任何请求。这样的请求在重定向离开源时以 `NET_UNREACHABLE` 失败，但仍会跟随同源重定向。在 `Referrer-Policy: no-referrer` 下，Fetch 对该模式下的同源 POST 发送 `Origin: null`，而默认模式发送序列化后的 origin，因此检查 `Origin` 的服务器可能拒绝它。有些引擎的实现与此不同。
 
 ### SSE 选项
 
@@ -105,6 +107,8 @@ description: createClient、选项辅助函数，以及 Client 类型。
 
 <ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
+重连来自 [`withRetry`](/zh-Hans/api/core/withretry)，而不是某个 WebSocket 选项。`withWebSocketHeartbeat` 接收 [`WebSocketHeartbeatConfig`](/zh-Hans/api/core/websocketheartbeatconfig-type)：`message` 必填，`timeoutMs` 只允许与 `isAck` 一起出现。Defjs 没有默认的心跳格式、间隔或超时。
+
 ## 类型
 
 ### DerivableClient
@@ -117,7 +121,7 @@ description: createClient、选项辅助函数，以及 Client 类型。
 
 <ApiSignature name="Client" />
 
-`Client` 是一个值，不是函数。调用 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type) 并传入 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 会得到一个。`client()` 和 `client(undefined)` 不保存请求选项。`client({})` 保留空快照。该调用会把每个顶层字段读取一次。`protocols` 数组会被复制。`heartbeat` 和 `reconnect` 复制各自的已知字段。缺失的嵌套块保持缺失。`signal`、`beforeConnect` 和回调保持自身身份。被捕获字段上的 getter 会在该调用期间运行；如果它抛出异常，异常会离开该调用。无效数字仍会在之后以 `REQ_OPTIONS_INVALID` 失败。派生不执行 I/O。Client 值不可调用，调用它无法通过编译，运行时会抛出 `TypeError`。每次调用创建一个 Client 值。同一个值可以传给多个操作，但复用携带 `signal` 的值会共享该 signal。`signal` 不会自动组合；要组合 signal，请在应用代码中使用 `AbortSignal.any`。工厂的基础配置仍然共享，不会被冻结。标准 `with*` 辅助函数被应用时会复制它们拥有的固定记录。
+`Client` 是一个值，不是函数。调用 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type) 并传入 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 会得到一个。`client()` 和 `client(undefined)` 不保存请求选项。`client({})` 保留空快照。该调用会把每个顶层字段读取一次。`protocols` 数组会被复制。`heartbeat` 和 `retry` 复制各自的已知字段，`retry` 的副本包含它的 `methods` 数组。缺失的嵌套块保持缺失。`signal`、`beforeConnect` 和回调保持自身身份。被捕获字段上的 getter 会在该调用期间运行；如果它抛出异常，异常会离开该调用。派生不执行 I/O。Client 值不可调用，调用它无法通过编译，运行时会抛出 `TypeError`。每次调用创建一个 Client 值。同一个值可以传给多个操作，但复用携带 `signal` 的值会共享该 signal。`signal` 不会自动组合；要组合 signal，请在应用代码中使用 `AbortSignal.any`。工厂的基础配置仍然共享，不会被冻结。标准 `with*` 辅助函数被应用时会复制它们拥有的固定记录。
 
 不要把工厂传给 React 状态设置函数（`setState(factory)` 会把它当作更新函数调用），也不要把它用作 Vue `watch` 或 `computed` 的来源（那些 API 会调用函数）。
 
@@ -125,7 +129,7 @@ description: createClient、选项辅助函数，以及 Client 类型。
 
 <ApiSignature name="RequestOptions" />
 
-七个扁平字段。每种协议只读取自己理解的字段，忽略其余字段。把 `heartbeat` 传给 HTTP 会被忽略，这不是 `Fault`。`client(options)` 在该次调用中复制 `protocols` 数组，以及 `heartbeat` 和 `reconnect` 的已知字段。缺失的嵌套块保持缺失。`signal`、`beforeConnect` 和回调保持自身身份。SSE 从请求选项中只读取 `signal`。SSE 重连来自 Client 配置（`withSSEReconnect`），所以 `client({ reconnect })` 只影响 WebSocket。没有编译期协议过滤，也没有 `timeout` 或 `abort` 字段。
+七个扁平字段。每种协议只读取自己理解的字段，忽略其余字段。把 `heartbeat` 传给 HTTP 会被忽略，这不是 fault。`client(options)` 在该次调用中复制 `protocols` 数组，以及 `heartbeat` 和 `retry` 的已知字段。缺失的嵌套块保持缺失。`signal`、`beforeConnect` 和回调保持自身身份。`retry` 对 HTTP、SSE 和 WebSocket 都适用，并作为整体值替换该次调用的 Client 重试策略。没有编译期协议过滤，也没有 `timeout` 或 `abort` 字段。
 
 | 字段                 | 协议                   | 替换方式                                                          |
 | -------------------- | ---------------------- | ----------------------------------------------------------------- |
@@ -135,9 +139,9 @@ description: createClient、选项辅助函数，以及 Client 类型。
 | `beforeConnect`      | WebSocket              | 替换该次调用的 client 设置。                                      |
 | `protocols`          | WebSocket              | 替换 client 上的列表。                                            |
 | `heartbeat`          | WebSocket              | 整体替换。`timeoutMs` 是等待确认的时间，不是请求期限。            |
-| `reconnect`          | WebSocket              | 整体替换。                                                        |
+| `retry`              | HTTP、SSE 和 WebSocket | 整体替换 Client 策略。HTTP 的 `budget` 仍留在 Client 上。         |
 
-[`HttpExecuteOptions`](/zh-Hans/api/core/httpexecuteoptions-type) 是 HTTP 切片（`signal` 加上进度）。[`EventStreamExecuteOptions`](/zh-Hans/api/core/eventstreamexecuteoptions-type) 是 `{ signal? }`。[`WebSocketExecuteOptions`](/zh-Hans/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `signal`。
+[`HttpExecuteOptions`](/zh-Hans/api/core/httpexecuteoptions-type) 是 HTTP 切片（`signal`、进度和 `retry`）。[`EventStreamExecuteOptions`](/zh-Hans/api/core/eventstreamexecuteoptions-type) 是 `{ signal?, retry? }`。[`WebSocketExecuteOptions`](/zh-Hans/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `signal` 和 `retry`。
 
 ### ClientOption
 
@@ -161,37 +165,21 @@ Defjs 对 Fetch 实现所需的调用签名。它不是 `typeof fetch`，所以 
 
 <ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
 
-两种传输的重连都是可选开启：没有 `withSSEReconnect` / `withWebSocketReconnect` 就不会重试。一旦设置了 `reconnect`，以下默认值生效：
-
-| 字段         | SSE             | WebSocket       |
-| ------------ | --------------- | --------------- |
-| `attempts`   | 每次中断 `3` 次 | 每次中断 `3` 次 |
-| `delayMs`    | `1000`          | `1000`          |
-| `factor`     | `1`             | `2`             |
-| `jitter`     | `0`             | `0`             |
-| `maxDelayMs` | 无上限          | `30000`         |
-
-`connectTimeoutMs` 可选，且必须是有限正数，并且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。对 SSE，它把从 Fetch 到响应头的时间加上限；对 WebSocket，它把从构造到 `open` 的时间加上限；握手之后会被清掉。到期会向均衡器报告 `NET_UNREACHABLE`，这样重连可以选择下一个端点。重试耗尽后以 `NET_TIMEOUT` 结束。它只存在于重连选项内；只要该对象存在，`attempts` 就默认为 `3`，因此单独设置 `connectTimeoutMs` 也会启用重连。只想限制握手时，请同时设置 `attempts: 0`。
-
-两种传输在成功握手后，都会重置每次连接中断的重试预算、回调中的尝试次数和退避指数。`attempts: 0` 禁用重试；省略 `attempts` 并不表示单次中断期间可以无限重试。`maxDelayMs` 限制抖动和取整后的最终延迟；平台计时器上限 `2_147_483_647` 毫秒也始终生效，包括 SSE 未配置上限时。基础延迟为零时始终为零；有效数字溢出时会饱和到这些上限。
-
-重连选项在传输层运行前校验：`attempts` 必须是非负安全整数；`delayMs` 必须是非负有限数；`maxDelayMs` 必须是非负有限数或正 `Infinity`，后者移除配置上限，但最终等待仍不超过 `2_147_483_647` ms；`factor` 必须是正的有限数；`jitter` 必须是 0–1 范围内的有限数。无效值返回 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 禁用后续重试，但所有显式提供的重连字段仍会在首次连接前校验，与 SSE 一样。抖动会在最终上限应用前，让已经受限的基础延迟向任一方向按比例浮动。
-
-对 SSE，`delayMs` 只是起始基础延迟：服务器的 `retry:` 字段若只含数字，会为之后的尝试替换它，恢复连接后也继续生效。`shouldReconnect` 返回 `false` 会停止重试。SSE 回调还会收到 `lastEventId`、请求的 `method` 和最新的 `open` 信息，并且可以是异步的。没有该回调时，SSE 只重连 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求；提供后，其返回值决定每个方法是否重连。最新事件 ID 会以 UTF-8 字节写入 `Last-Event-ID`；空 ID 会清除它，包含 NUL 的 ID 会被忽略。WebSocket 回调则接收关闭的 `code`、`reason` 和 `wasClean`。
+两个接口都不保存重试策略。SSE 和 WebSocket 的重试来自 Client 范围的 [`withRetry`](/zh-Hans/api/core/withretry) 策略；没有该策略时，失败的流或已关闭的 socket 会结束调用。它们的默认值、失败之后的决策顺序，以及每种传输默认重试什么，写在 [withRetry()](#withretry) 下。
 
 SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `default`，即 `missing-struct`），或数据未通过其 struct 校验的事件（`validation-failed`）。事件一律被丢弃；处理函数的返回值被忽略，它抛出的错误也不会关闭流。
 
-对 WebSocket，`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect` 也可以在派生 Client 上传入；每一项都整体替换该次调用的 Client 设置。`heartbeat.message` 构造每次 ping；省略它或它返回 `undefined` 时不发送任何内容。`heartbeat.timeoutMs` 等待确认。它不是请求期限。
+对 WebSocket，`beforeConnect`、`heartbeat` 和 `protocols` 也可以在派生 Client 上传入；每一项都整体替换该次调用的 Client 设置。`heartbeat.message` 构造每次 ping；它返回 `undefined` 时不发送任何内容。`heartbeat.timeoutMs` 等待确认，并且需要 `isAck`。它不是请求期限。没有得到应答的心跳会关闭 socket，并像 `session.close()` 没有请求的其他关闭一样进入重试流程。
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-显示的字段是 `sse` 和 `webSocket`。另外六个——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer` 和 `withCredentials`——继承自未导出的 HTTP 基础类型。`endpoints` 是 `readonly string[]`。解析后的默认值是 `[]`。空数组是合法值，调用会以 `REQ_BUILD_FAILED` 失败。没有 Client 级 `timeout`。`createClient` 不接收这个对象，它接收选项辅助函数。
+显示的字段是 `retry`、`sse` 和 `webSocket`。另外六个——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer` 和 `withCredentials`——继承自未导出的 HTTP 基础类型。`endpoints` 是 `readonly string[]`。解析后的默认值是 `[]`。空数组是合法值，调用会以 `REQ_BUILD_FAILED` 失败。没有 Client 级 `timeout`。`createClient` 不接收这个对象，它接收选项辅助函数。
 
 ### ClientConfig
 
-选项辅助函数修改、操作读取的解析后快照：应用默认值后的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一个 `ClientSSEConfig`）、`webSocket` 和 `balancer` 始终存在。`http.retry` 可选，默认为 `undefined`（一次尝试，无预算）；`withRetry(options?)` 配置它。`balancer` 默认为该 Client 新建的 `pickFirstBalancer()`。它不是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 字段。
+选项辅助函数修改、操作读取的解析后快照：应用默认值后的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一个 `ClientSSEConfig`）、`webSocket` 和 `balancer` 始终存在。`retry` 可选，默认为 `undefined`（一次尝试，无预算）；`withRetry(options?)` 为每种传输配置它。`balancer` 默认为该 Client 新建的 `pickFirstBalancer()`。它不是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 字段。
 
 ### ClientSSEConfig
 
@@ -217,7 +205,7 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` 会在 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前进；HTTP 重试从不移动其粘滞端点，顺序遵循 client 的完整端点列表 `members`。可选的有限正数 `failbackMs` 在这段间隔之后，对第一个端点做至多一个同时进行的探测；探测在对端响应开始（`end`）时判定，从未到达 `end` 的探测由 `done` 判定。HTTP 重试是用 `withRetry` 配置的另一份 client 策略。`roundRobinBalancer` 沿列表走。`weights` 可选。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
+`pickFirstBalancer` 会在 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前进。重试会从全部端点中再次选择，因此遵循这条规则：连接被拒绝之后会到达下一个端点，而超时不会让 pick-first 前进，于是会再次尝试同一个端点。顺序遵循 client 的完整端点列表 `members`。可选的 `failbackMs` 仅按时间回到第一个端点：粘滞端点离开第一个端点达到这段时间后，下一次候选中包含第一个端点的 pick 会再次选中它，并不判断它是否已经恢复；如果它再次失败，就适用普通的前进规则，时间重新开始。重试是用 `withRetry` 配置的另一份 client 策略。`roundRobinBalancer` 沿列表走。`weights` 可选。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
 
 ### p2cBalancer()
 
@@ -229,17 +217,37 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-用 Linkerd 风格的连续失败熔断包装子均衡器。Round robin 和 p2c 默认启用（与 Finagle 相同）；`false` 关闭。Pick-first 传入对象时启用。默认分类器把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。连续五次失败后，惩罚从 1000 ms 起，探测失败后翻倍，加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。到期后接纳一次探测，在 `end` 时判定；若没有 `end`，则在 `done` 时判定。成功会重置退避；取消只释放名额。没有假定成功的超时、配额、最后一台主机保护、结算网格、百分比判据或慢启动。`isHealthy` 读取应用持有的缓存状态，从不取消惩罚。所有主机都可以熔断；Finagle 式的列表内失败时放行仍会发出请求。与 Envoy/gRPC A50 不同，没有驱逐配额。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
+统计已分类的失败并按时间逐出端点，并跳过应用提供的 `isHealthy` 函数拒绝的端点。Defjs 不决定什么叫健康。除非传入对象，否则它是关闭的：pick-first、round robin 和 p2c 都通过各自的 `outlierDetection` 选项接收它（默认值用 `{}`），也可以直接包装自定义子均衡器。默认的 `isFailure` 把每个带 code 的结果都计入，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`；它只决定什么计入逐出，并且可以替换。连续五次失败后，惩罚从 1000 ms 起，每次逐出增加 1000 ms，加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。时间一到，端点就可以再次被选择，没有试探请求，也不判断是否恢复；惩罚等级会保留，每 10 秒没有新的逐出就减一（与 gRPC A50 相同）。在逐出之前开始、或端点处于逐出期间开始的尝试，其迟到的结果会被忽略。没有配额、最后一台主机保护、结算网格、百分比判据或慢启动。`isHealthy` 是唯一的健康判断；它与逐出按 AND 组合，因此 `true` 从不会结束惩罚，它抛出的异常会报告为 `REQ_BUILD_FAILED`。所有主机都可以被逐出；Finagle 式的列表内失败时放行仍会发出请求。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
-独立于端点选择，启用同一次调用内的 HTTP 重试。省略 `withRetry` 表示一次尝试且没有预算。`withRetry()` 与 `withRetry({})` 等价，默认值为 `maxAttempts: 2`（含首次）、`on: ["connect-failure"]`，以及安全方法 `GET`、`HEAD`、`OPTIONS`、`TRACE`。方法名不区分大小写；`[]` 关闭重试。`maxAttempts` 是至少为 1 的安全整数，且每个端点最多尝试一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504）以及被 `RES_*` 解码拒绝的网关 body；`"attempt-timeout"` 使用 `attemptTimeoutMs`。流式请求 body 从不重试。
+为 HTTP、SSE 和 WebSocket 启用同一份策略，保存在 `config.retry`。没有 `withRetry` 时，每次调用只尝试一次，既简单也没有退避。`withRetry()` 和 `withRetry(undefined)` 等价于 `withRetry({})`。后一次 `withRetry` 会替换策略；`withRetry({ maxRetries: 0 })` 会在启用后关闭重试。该选项在应用时捕获自己拥有的字段、`methods` 数组和嵌套的 budget。选项不会在运行时校验；TypeScript 会拒绝的值按 JavaScript 对待它的方式处理。
 
-退避默认值为 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，字段语义与 SSE/WebSocket 重连相同。`delayMs: 0` 跳过等待。`attemptTimeoutMs` 必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它为发往所选端点的每次 Fetch 计时，从发起一直到其响应 body 读取完成；发送前后的拦截器工作以及 struct 解码都不计时，也绝不会算到端点头上。调用方 signal 覆盖整次调用，包括退避等待。当某一轮重试无法使用任何端点（均衡器 pick 失败，或下一个端点的 URL 无法解析）时，调用返回上一次尝试的错误，而不是 `REQ_BUILD_FAILED`。
+默认值是 `maxRetries: 3`（首次尝试之后的重试次数；`0` 从不重试）、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`（`Infinity` 去掉上限，平台计时器上限 `2_147_483_647` ms 仍然生效）和 `jitter: 0.2`（0 到 1 的乘性因子）。第 _n_ 次重试等待 `delayMs * factor^(n-1)`，并封顶；随后是抖动和取整，最终延迟再封顶一次。基础延迟为零时始终为零。`methods` 默认为 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 和 `DELETE`，比较时不区分大小写。`attemptTimeoutMs` 限制单次尝试：HTTP 计到响应 body 结束，SSE 计到响应头，WebSocket 计到 `open`。用尽时间的尝试与连接被拒绝一样算作失败。只要时间限制、不要重试时，使用 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。
 
-归 Client 所有的 Finagle 预算默认为 20%，外加 10 秒 TTL 内每秒 10 次重试的储备。存入与取出在十个 TTL/10 切片上惰性过期。`budget: false` 移除该限制。共享同一配置的派生 Client 共享其预算；独立 Client 不共享，即使共用一个均衡器。无效选项会在 HTTP 运行时返回 `REQ_OPTIONS_INVALID`，消息为 `Invalid retry options`。该选项在应用时捕获自己拥有的字段、数组和嵌套 budget。`withRetry()` 与 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。后一次 `withRetry` 会替换策略；`withRetry({ maxAttempts: 1 })` 会在启用后关闭重试。均衡器和健康包装器没有重试设置。见 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)。
+每次失败的尝试之后，每种传输都按这个顺序走同一条流程：
+
+1. 调用方中止、手动 `close()`、致命错误（例如媒体类型不匹配）、构造函数抛出的 WebSocket，以及 `ReadableStream` 请求 body，都会结束调用。不会调用 `shouldRetry`。
+2. 已经进行了 `maxRetries` 次重试时，调用结束。不会调用 `shouldRetry`。
+3. `shouldRetry(context)` 做决定；没有它时由 `context.retryable` 决定。它可以返回 promise，调用方的 signal 会取消它。如果它抛出，调用以 `EXT_HOOK_FAILED` 结束，抛出的值作为 `cause`。已经打开的 SSE 流在 `closed.code` 中报告 `EXT_HOOK_FAILED`，并在 `closed.cause` 中放一个 `cause` 为抛出值的 error。已经打开的 WebSocket 会话以 `closed.kind: "error"` 结束，抛出的值作为 `closed.cause`。
+4. 仅 HTTP：预算必须为这次重试付费，否则调用结束。
+5. 调用等待退避延迟，然后均衡器从全部端点中再次选择，包括刚刚失败的那个。单个端点会在延迟之后再次尝试。对 HTTP，每次重试都会重建请求并重新跑完整条拦截器链；SSE 和 WebSocket 复用它们的请求，只重新解析 URL。
+
+`context` 是按 `transport` 收窄的 [`RetryContext`](/zh-Hans/api/core/retrycontext-type)。每个 context 都有 `attempt`（即将开始的重试序号，从 1 起）、`cause`（fault、error 或关闭原因）和 `retryable`（默认策略的判断）。HTTP 还加上 `method`、`endpoint` 和 `status`；SSE 还加上 `method`、`lastEventId`、`open` 和 `status`；WebSocket 还加上 `code`、`reason` 和 `wasClean`。返回 `context.retryable` 可以保留默认规则并在上面加一条规则，或者返回你自己的结论来替换它。
+
+默认哪些结果可以重试，差别只在于哪些失败计入：
+
+| 传输      | 默认 `retryable`                                                                                                                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP      | 方法在 `methods` 中，并且这次尝试没有得到响应、得到了 502、503 或 504，或者用尽了 `attemptTimeoutMs`。任何其他状态都会交给 `shouldRetry`，且 `retryable: false`。Fetch 开始之前的本地失败永远到不了它。 |
+| SSE       | 方法在 `methods` 中，并且握手在网络上失败、握手返回 502、503 或 504、尝试用尽了 `attemptTimeoutMs`，或者已打开的流在网络上失败。流的正常结束从不重试。                                                  |
+| WebSocket | `session.close()` 没有请求的每一次关闭，包括从未打开的连接和没有得到应答的心跳。                                                                                                                        |
+
+对 SSE，只含数字的服务器 `retry:` 字段会为之后的尝试替换 `delayMs`，已提交的事件 ID 以 UTF-8 字节写入 `Last-Event-ID`，成功的握手会重置计数。对 WebSocket，成功的 `open` 会重置计数。因此，接受连接后立刻关闭的服务器会一直被重试；用 `shouldRetry` 停掉它。SSE 和 WebSocket 没有预算。HTTP 的离线失败从不重试。
+
+HTTP 预算归 Client 所有，采用 Finagle 风格。它默认为 20%，外加 10 秒 TTL 内每秒 10 次重试的储备，存入与取出在十个 TTL/10 切片上惰性过期，`budget: false` 移除该限制。共享同一配置的派生 Client 共享其预算；独立 Client 不共享，即使共用一个均衡器。当某一轮重试无法使用任何端点（均衡器的 pick 失败，或下一个端点的 URL 无法解析）时，调用返回上一次尝试的 fault。调用方 signal 覆盖整次调用，包括退避等待。请求选项 `retry` 为一次调用替换策略。均衡器和健康包装器没有重试设置。见 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)。
 
 <include cwd>examples/client/http-retry.ts#example</include>
 
@@ -247,8 +255,8 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` 返回错误优先元组。可选的 `start` 在所选传输开始前至多同步运行一次；可选的 `end` 在 `start` 之后、对端响应开始（或响应前发生失败）时运行一次；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有 Hook 的抛出都会被接住；返回的 Promise 不会被等待。选中候选集之外的值会以 `REQ_BUILD_FAILED` 失败，其 `done` 以 `{ attempted: false }` 调用。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能跨 Core 副本识别它。
+`pick` 返回错误优先元组。可选的 `start` 在所选传输开始前至多同步运行一次；可选的 `end` 在 `start` 之后、对端响应开始（或响应前发生失败）时运行一次；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有 Hook 的抛出都会被接住，并在运行时定义了 `reportError` 时用它报告（未处理的报告可以结束一个没有错误处理程序的 Bun 或 Deno 进程）；返回的 promise 不会被等待。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能跨 Core 副本识别它。
 
-均衡器只看到中立结果；每种传输把自己的事实转换成 `DoneInfo.code`。默认离群检测（`outlierDetection`）把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。原始 `DoneInfo.status` 只保留给自定义均衡器，内置策略从不读取。`PickInfo` 包含一次 pick 的候选 `endpoints`、`members`（client 的完整端点列表，每次尝试都相同）和可选的 `operation`，没有传输类型判别字段。
+均衡器只看到中立结果；每种传输把自己的事实转换成 `DoneInfo.code`。默认离群检测把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。原始 `DoneInfo.status` 只保留给自定义均衡器，内置策略从不读取。`PickInfo` 包含一次 pick 的候选 `endpoints`、`members`（client 的完整端点列表，每次尝试都相同）和可选的 `operation`，没有传输类型判别字段。
 
 见 [Client 指南](/zh-Hans/docs/client)。

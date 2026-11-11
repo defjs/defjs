@@ -35,4 +35,4 @@ build started
 ```
 
 - 除非在 client 上設定 [`withRetry(...)`](/zh-Hant-TW/api/core/withretry)，否則 SSE 不會在網路或讀取失敗時自動重連。
-- 設定 `withSSEReconnect(...)` 後，每次中斷的 `attempts` 預設為 `3`，並在交握成功時重設（`attempts: 0` 會停用重連）。沒有自訂 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求會重連。帶有 `ReadableStream` 本文的請求永遠不會重連。詳見 [SSE 事件串流](/zh-Hant-TW/docs/sse)。
+- 設定 `withRetry(...)` 後，每次中斷的 `maxRetries` 預設為 `3`，並在交握成功時重設（`maxRetries: 0` 會停用重試）。沒有自訂 `shouldRetry` 時，只有 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 與 `DELETE` 請求會重試。帶有 `ReadableStream` 本文的請求永遠不會重試。詳見 [SSE 事件串流](/zh-Hant-TW/docs/sse)。

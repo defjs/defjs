@@ -23,7 +23,7 @@ Un ensemble fermé. Le segment avant le premier `_` est la classe ; il n’y a p
 
 <ApiSignature name="Fault" />
 
-Faites un `switch` sur `fault.code`.
+Faites un switch sur `fault.code`.
 
 ### FaultOf
 
@@ -57,7 +57,7 @@ Une réponse est arrivée mais n’a pas pu être lue telle que déclarée. `res
 
 Tout ce qui a pu échouer avant qu’une réponse existe : `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` vaut `undefined` tant que le transport n’a pas de métadonnées à rapporter, comme un corps tronqué en pleine descente.
 
-Des options `withRetry` invalides renvoient `REQ_OPTIONS_INVALID` avant que le transport HTTP ne démarre, avec `Invalid retry options`. Cela comprend une politique qui n’est pas un objet, une valeur de `maxAttempts` qui n’est pas un entier sûr d’au moins 1, ainsi que des conditions, méthodes, timeouts, backoff ou réglages de budget invalides. Omettre `withRetry` désactive les retries. `withRetry()` et `withRetry(undefined)` se comportent comme `withRetry({})`. `withRetry({ maxAttempts: 1 })` désactive les retries après qu’ils ont été activés.
+Les options de retry ne sont pas validées au runtime. Omettre `withRetry` désactive les retries. `withRetry()` et `withRetry(undefined)` se comportent comme `withRetry({})`. `withRetry({ maxRetries: 0 })` désactive les retries après qu’ils ont été activés. Une fonction `shouldRetry` qui lève termine l’appel avec `EXT_HOOK_FAILED` et la valeur levée comme `cause`, pour HTTP, SSE et WebSocket indifféremment ; pour un flux déjà ouvert ou une session déjà ouverte, voir [Client](/fr-FR/api/client#withretry).
 
 ### AnyFault
 

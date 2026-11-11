@@ -5,7 +5,7 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 
 # SSE 事件流
 
-在 SDK 中，用 `defineEventStream` 声明 Server-Sent Events（SSE）操作，指定路径、可选的 `input` 与 `builder`、由 struct 组成的 `events` 字典，以及缓冲区与队列上限。消费方应用在自己的 Client 上配置认证与可选的重连策略，打开流，迭代带类型的事件，并负责关闭流。
+在 SDK 中，用 `defineEventStream` 声明 Server-Sent Events（SSE）操作，指定路径、可选的 input 与 builder、由 struct 组成的 `events` 字典，以及缓冲区上限。消费方应用在自己的 Client 上配置认证与可选的重试（`withRetry`），打开流，迭代带类型的事件，并负责关闭流。
 
 ## 1. 声明事件流并在应用中消费
 
@@ -37,7 +37,7 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 
 ## 2. 初始握手与返回元组
 
-只有当初始 HTTP 响应为 `2xx`、媒体类型为 `text/event-stream` 且带有可读 body 时，调用操作才会解析为 `[error, stream, startupOpen]`：
+只有当初始 HTTP 响应为 `2xx` 且媒体类型为 `text/event-stream` 时，调用操作才会解析为 `[error, stream, startupOpen]`：
 
 <Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
 <Tab>
@@ -56,40 +56,55 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 </Tab>
 </Tabs>
 
-- **非 `2xx` 握手**：返回 `HTTP_STATUS`（定义声明了 `error` struct 时，`error.data` 是解码后的错误体）。这对当前操作是致命的，不会调用 `shouldReconnect`；例外是配置了 `withSSEReconnect` 时的 `502`、`503` 或 `504` 握手：它会像连接被拒绝一样，按第 4 节的重连规则重试，并在设置了 `shouldReconnect` 时咨询它。重试耗尽以 `HTTP_STATUS` 结束。下一次操作会重新选择端点，因此均衡器可能选中另一个端点。
-- **媒体类型错误或 body 不可读**：返回 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
+- **非 `2xx` 握手**：返回 `HTTP_STATUS`。声明了 `error` struct 时，`error.data` 是解码后的 body。该 body 无法解码时，结果改为解码 Fault，与 HTTP 一样：JSON 声明遇到另一种媒体类型时为 `RES_MEDIA_TYPE_INVALID`（例如网关返回的 HTML `503`），不可读或无法解析的 body 为 `RES_DECODE_FAILED`，与 struct 不匹配的 body 为 `RES_STRUCT_MISMATCH`。它的 `status` 和 `response` 把握手状态作为元数据携带，`cause` 保存原因。拦截器、`shouldRetry`，以及在重连时失败的流的 `closed`，对该响应仍收到 `HTTP_STATUS`，其 `cause` 是同一原因，因此网关 `503` 无论 body 长什么样都会被重试。声明了 `error` 会让 Client 在报告 Fault 之前把握手 body 读到结尾，因此服务端应当结束每一个非 `2xx` 响应。状态没有内容时（`304`），或 JSON 声明遇到不是 JSON 的媒体类型时，不会读取 body。被读取且永不结束的 body 会让调用一直挂起，直到调用方的 `signal` 中止，或平台切断连接。被切断的连接是不可读的 body，因此调用返回 `RES_DECODE_FAILED`，并以平台失败作为 `cause`。`attemptTimeoutMs` 不限制这次读取。没有声明 `error` 时，body 会被取消且不读取。没有 `withRetry` 时，这会结束当前操作。有它时，`502`、`503` 或 `504` 握手会像连接被拒绝一样，按第 4 节的规则重试，其他任何状态都会连同 `retryable: false` 和它的 `status` 交给 `shouldRetry`，因此除非你的函数另有表示，否则流会结束。重试耗尽或被拒绝都以 `HTTP_STATUS` 结束。下一次操作会重新选择端点，因此均衡器可能选中另一个端点。
+- **内容类型不对**：媒体类型不是 `text/event-stream` 的 `2xx` 握手返回 `RES_MEDIA_TYPE_INVALID`，包括 `204` 或 `205`。
+- **没有 body**：带 `text/event-stream` 且没有 body 的 `2xx` 握手（Node.js 和 Bun 把 `204` 或 `205` 暴露为空 body）是一条空事件流：调用成功，流立即以 `kind: "eof"` 结束，且从不重试。
 - **`startupOpen` 与 `stream.open`**：元组第三项（`startupOpen`）是首次握手响应的快照；`stream.open` 会在之后重连时实时更新。如果重连握手以非 2xx 状态结束流，迭代器会 reject，`stream.closed` 报告 `HTTP_STATUS`，而 `stream.open.response.status` 保持该状态；请检查 `stream.open` 获取实时响应状态。
 
 ## 3. 事件分发与解码
 
 收到 SSE 帧时（按 WHATWG 规则以空行结束）：
 
-1. **事件路由**：网络上的 `event:` 字段选择 `events[eventName]`；没有该字段时默认为 `"message"`。没有匹配项时，若声明了 `events.default` 就用它；未声明且无 `events.default` 的事件会被丢弃。
+1. **事件路由**：网络上的 `event:` 字段选择 `events[eventName]`，若已声明则回退到 `events.default`。省略 `event:` 字段时默认为 `"message"`。未声明且没有 `events.default` 的事件会被丢弃。
 2. **载荷解码**：`struct.string()` schema 接收原始文本 `data:`。其他 struct 类型会先把 `data:` 解析为 JSON，再用 struct 校验。
 3. **观察无效事件**：无效或未声明的事件会被丢弃，不会终止流。需要在 Client 上配置 `withSSEOnInvalidEvent(...)` 进行有界诊断：
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
-## 4. 自动重连与 `Last-Event-ID` [#reconnect]
+## 4. 重试与 `Last-Event-ID` [#reconnect]
 
-SSE 重连是**显式开启（opt-in）**的。没有 `withSSEReconnect(...)` 时，任何网络中断或流读取错误都会终止流。
+SSE 重试是**显式开启（opt-in）**的，并使用与 HTTP 和 WebSocket 相同的 `withRetry` 策略。没有 `withRetry(...)` 时，任何网络中断或流读取错误都会终止流。请求选项 `retry` 会为单次调用替换 Client 策略。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **中断预算（`attempts`）**：向 `withSSEReconnect` 传入选项对象时默认为 `3`。每次成功握手都会重置尝试计数器和退避指数，因此只要每次都能成功打开，`attempts: 1` 也能在长会话中建立许多物理连接。服务器的正常 EOF **不是**失败，不会触发重连。
-- **游标追踪（`Last-Event-ID`）**：解析到事件末尾的空行时才提交游标，并在重连时自动作为 `Last-Event-ID` 发送。无论连接正常结束还是失败，不完整帧都不会提交其 `id`。重连后从最后一个已提交的 id 恢复；服务器必须实现从该游标重放。
-- **幂等性安全**：默认只有幂等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）会自动重连。非幂等方法（`POST`、`PATCH`，例如 LLM 流式请求）只有在自定义 `shouldReconnect` 回调显式返回 `true` 时才重连。`ReadableStream` 请求体在首次尝试时被消耗，永远不会重连。
-- **网关握手**：`502`、`503` 或 `504` 握手（无论是首次打开还是重连）会像连接被拒绝一样，按相同的重连规则（方法、`shouldReconnect`、`attempts`、`ReadableStream` 请求体）重试。其他非 2xx 握手仍然是致命的。重试耗尽以及致命的重连握手都以 `HTTP_STATUS` 结束。
-- **握手超时（`connectTimeoutMs`）**：提供时必须是有限正数，且不大于 2147483647（计时器上限）；否则操作返回 `REQ_OPTIONS_INVALID`。它限制每次握手从 Fetch 调用到响应头的时间，不限制已打开的流存活多久。该选项只存在于 `withSSEReconnect({...})` 的选项对象内；只要传入该对象，就会按默认的 `attempts: 3` 启用自动重连，因此仅设置 `connectTimeoutMs` 同样会开启重连。若只想限制握手，请同时设置 `attempts: 0`。
+- **中断预算（`maxRetries`）**：默认为 `3`。每次成功握手都会重置重试次数和退避指数，因此只要每次都能成功打开，`maxRetries: 1` 也能在长会话中建立许多物理连接；用 `shouldRetry` 停掉反复闪断的服务器。服务器的正常 EOF **不是**失败，不会触发重试。
+- **游标追踪（`Last-Event-ID`）**：解析到事件末尾的空行时才提交游标，并在重连时自动作为 `Last-Event-ID` 发送。无论连接正常结束还是失败，不完整帧都不会提交其 `id`。可重连的读取/网络失败之后，从最后一个已提交的 id 恢复；服务器必须实现从该游标重放。没有自己的 `id:` 字段的事件携带最近一次提交的 id，同一连接上和重连之后都是如此。空的 `id:` 字段会清除它：之后的事件没有 `id`，之后的重连会省略 `Last-Event-ID`。
+- **幂等性安全**：默认只有 `methods` 中的方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT`、`DELETE`）会自动重试。其他方法（`POST`、`PATCH`，例如 LLM 流式请求）只有在你把它们加入 `methods`，或 `shouldRetry` 返回 `true` 时才会重试；返回 `context.retryable` 的函数保持默认。`ReadableStream` 请求体在首次尝试时被消耗，永远不会重试。
+- **网关握手**：`502`、`503` 或 `504` 握手（无论是首次打开还是重连）会像连接被拒绝一样，按相同规则（方法、`shouldRetry`、`maxRetries`、`ReadableStream` body）重试。其他非 2xx 握手会以 `retryable: false` 交给 `shouldRetry`，默认结束流。重试耗尽以及被拒绝的重试都以 `HTTP_STATUS` 结束。重试这三个状态是对 HTML 标准的有意偏离：`EventSource` 把任何不是 `200` 事件流的响应都当作失败的连接，并且不再尝试，而 Defjs 把暂时不可用的网关当作连接被拒绝来处理。
+- **握手超时（`attemptTimeoutMs`）**：提供时，它限制每次握手从 Fetch 调用到响应头的时间，不限制已打开的流存活多久。它是 `withRetry` 的选项，因此 `withRetry({ attemptTimeoutMs })` 也会重试，默认 `maxRetries: 3`。只要握手期限，写成 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。到期的尝试向均衡器报告 `NET_UNREACHABLE`，以便重试可以选择另一个端点，重试耗尽则以 `NET_TIMEOUT` 结束。
+
+### Node.js 上的空闲流 [#idle-streams]
+
+Node.js 内置的 `fetch`（undici）对每个响应 body 应用 `bodyTimeout`，默认 300 秒，以两段数据之间的间隔来计。静默这么久的 SSE 流会被运行时切断，即使服务器是健康的。
+
+- **你会看到什么**：迭代器以运行时自己的错误 reject，这是一条消息为 `terminated` 的 `TypeError`，其 `cause.code` 为 `UND_ERR_BODY_TIMEOUT`。`stream.closed` 以 `kind: "error"`、`code: "NET_UNREACHABLE"` 解析，并以该 `TypeError` 作为 `cause`。没有 `withRetry(...)` 时，流到此结束。有它时，流按 [重试规则](#reconnect) 用 `Last-Event-ID` 恢复，每次切断都向端点均衡器报告一次 `NET_UNREACHABLE` 结果（见 [负载均衡](/zh-Hans/docs/load-balancing)）。
+- **在服务端修复**：以远低于 300 秒的间隔发送注释行，例如 `: keepalive`。HTML 标准的编写说明建议大约每 15 秒一次，以免旧代理丢弃空闲连接。解析器忽略注释行，但这些字节仍会重置计时器。
+- **没有客户端设置**：Defjs 自己没有空闲超时选项。如果服务器不能发送注释行，保持静默的流会在运行时的上限到达时被切断。
+
+其他运行时上的空闲行为不同，这里不讨论。
 
 ## 5. 缓冲区与队列上限
 
-默认值是 `maxBufferSize: 64 * 1024` 字节和 `maxQueueSize: 1024` 个事件。两个上限都必须是正的安全整数。没有默认握手期限：挂起的 Fetch 会等待平台、调用方取消或显式配置的 `connectTimeoutMs`。超出任一容量上限都是致命的（`stream.closed` 以 `kind: "error"` 解析，迭代器 reject——事件绝不会被静默丢弃）：
+定义上唯一的选项是 `maxBufferSize`，默认 `64 * 1024` 字节。事件队列不可配置：库最多保留 1024 个已校验、等待 `for await` 消费者的事件。没有默认握手期限：挂起的 Fetch 会等待平台、调用方取消或显式配置的 `attemptTimeoutMs`。
 
-| 定义选项        | 约束内容                                                        | 终态 Fault 代码       |
-| --------------- | --------------------------------------------------------------- | --------------------- |
-| `maxBufferSize` | 单个 SSE 帧在遇到空行之前所允许的最大不完整或过长字节数         | `CAP_BUFFER_EXCEEDED` |
-| `maxQueueSize`  | 已解码但尚未被 `for await` 消费的事件在内存队列中的最大积压数量 | `CAP_QUEUE_OVERFLOW`  |
+| 上限                    | 约束内容                            | 到达上限时                                                                            |
+| ----------------------- | ----------------------------------- | ------------------------------------------------------------------------------------- |
+| `maxBufferSize`（选项） | 空行之前不完整或过长的 SSE 帧字节   | 致命：`stream.closed` 以 `kind: "error"` 和 `CAP_BUFFER_EXCEEDED` 解析；迭代器 reject |
+| 事件队列（固定 1024）   | 等待 `for await` 消费者的已校验事件 | 读取响应会暂停，直到消费者取走一个事件；不会因为没有空间而丢弃事件                    |
+
+- **慢消费者拖慢的是服务器，不是流。** 大于队列的突发（例如 `Last-Event-ID` 重放）会完整送达；队列满时库停止读取响应，因此积压留在连接里，而不是被丢弃或让流失败。队列最多保留 1024 个事件，外加一个等待空位的已解析事件。
+- **无人看管的流会停止读取。** 没有人迭代的流在队列满后停止读取，`stream.closed` 不会自己解析，直到读取到达响应末尾；`stream.close()`、中止或超时仍会让它解析，关闭或中止会丢弃已入队的事件。不再需要流时，调用 `stream.close()` 或使用 `await using`。
+- **失败会保留已经收到的内容。** 流以错误或超时结束时，已经入队的事件仍会送达，迭代器在最后一个之后 reject，除非调用方先停止流（见第 6 节）。`stream.closed` 在连接结束时解析，这可能早于迭代器读完每一个事件。连接失败时响应 body 中仍未读的字节不会送达，也从不会推进 `Last-Event-ID`，因此启用重试时，服务器必须从已提交的游标重放。
 
 ## 6. 连接关闭与资源释放 [#close-and-dispose]
 
@@ -110,7 +125,9 @@ SSE 重连是**显式开启（opt-in）**的。没有 `withSSEReconnect(...)` �
 </Tab>
 </Tabs>
 
-通过 `client({ signal })` 传入的 `signal` 管整个流的生命周期。如果只想限制初始握手，而不在之后终止已打开的流，可以在 `await watchOrders(...)` 返回后清除定时器（如上方第二个选项卡所示），或在 `withSSEReconnect` 中同时设置 `connectTimeoutMs` 与 `attempts: 0`（单独设置 `connectTimeoutMs` 也会启用 3 次自动重连）。
+`stream.close()`、销毁，以及调用方 `signal` 的中止，是调用方在停止流：它们立即结束流，并丢弃还没有人读过的事件，就像 `EventSource.close()` 那样。无论流是否已经结束都是如此，因此响应已经结束或流已经失败时仍未读的事件也会被丢弃。失败之后，这次停止不改变其他东西：`stream.closed` 保持原值，一旦没有未读内容，迭代器仍会以该失败 reject。正常结束的响应，以及以错误或超时失败的流，会先送达已经入队的事件（见第 5 节），除非调用方停止流。流运行期间到期的 `signal`（如 `AbortSignal.timeout(ms)`）是超时，属于后一组，而不是调用方的停止；流已经结束之后才到期的，才是停止。
+
+通过 `client({ signal })` 传入的 `signal` 管整个流的生命周期。如果只想限制初始握手，而不在之后终止已打开的流，可以在 `await watchOrders(...)` 返回后清除定时器（如上方第二个选项卡所示），或写成 `withRetry({ maxRetries: 0, attemptTimeoutMs })`；没有 `maxRetries: 0` 时，`withRetry` 保持默认的 3 次重试。
 
 ## 相关阅读
 

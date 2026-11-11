@@ -65,7 +65,7 @@ bun add @defjs/core @defjs/react react
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- يؤدي إلغاء إشارة `signal` الممررة إلى عملية WebSocket إلى إنهاء الجلسة كـ `aborted` ورفض `session.receive` بخطأ `AbortError`. قم بحماية كتلة `catch` عند تفكيك المكون حتى لا تطفو إلا أخطاء وقت التشغيل الحقيقية (مثل فيضان قائمة الانتظار أو مهلة نبضات القلب).
+- يؤدي إلغاء إشارة `signal` الممررة إلى عملية WebSocket إلى إنهاء الجلسة كـ `aborted` ورفض `session.receive` بخطأ `AbortError`. قم بحماية كتلة `catch` عند تفكيك المكون حتى لا تطفو إلا أخطاء وقت التشغيل الحقيقية (مثل مهلة نبضات القلب).
 - يؤدي إلغاء تدفق SSE إلى إنهاء حلقة `for await (const msg of stream)` بنظافة ودون إلقاء أي استثناءات.
 
 ---

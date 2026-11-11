@@ -59,15 +59,15 @@ description: 配置应用如何调用导入的 SDK 操作，与 API 定义解耦
 
 `RequestOptions` 包含七个扁平属性字段。每种传输协议在运行时只读取与自身相关的字段，其余字段会被自动安全忽略：
 
-| 属性字段             | 适用协议             | 行为表现                                                                                                             |
-| -------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `signal`             | HTTP、SSE、WebSocket | 取消/中断当前调用（`AbortSignal.timeout(ms)` 映射为 `NET_TIMEOUT`；手动调用 abort 映射为 `NET_ABORTED`）。           |
-| `onUploadProgress`   | HTTP                 | 监听流式请求体上传进度。                                                                                             |
-| `onDownloadProgress` | HTTP                 | 监听声明过的响应体下载进度。                                                                                         |
-| `beforeConnect`      | WebSocket            | 覆盖当前会话在 Client 级别配置的 `beforeConnect` 钩子。                                                              |
-| `protocols`          | WebSocket            | 覆盖当前会话在 Client 级别配置的子协议列表。                                                                         |
-| `heartbeat`          | WebSocket            | 覆盖当前会话在 Client 级别配置的心跳检测策略。                                                                       |
-| `reconnect`          | WebSocket            | 覆盖当前会话在 Client 级别配置的重连策略。（注意：SSE 的重连策略通过 Client 上的 `withSSEReconnect` 进行全局配置）。 |
+| 属性字段             | 适用协议             | 行为表现                                                                                                   |
+| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP、SSE、WebSocket | 取消/中断当前调用（`AbortSignal.timeout(ms)` 映射为 `NET_TIMEOUT`；手动调用 abort 映射为 `NET_ABORTED`）。 |
+| `onUploadProgress`   | HTTP                 | 监听流式请求体上传进度。                                                                                   |
+| `onDownloadProgress` | HTTP                 | 监听声明过的响应体下载进度。                                                                               |
+| `beforeConnect`      | WebSocket            | 覆盖当前会话在 Client 级别配置的 `beforeConnect` 钩子。                                                    |
+| `protocols`          | WebSocket            | 覆盖当前会话在 Client 级别配置的子协议列表。                                                               |
+| `heartbeat`          | WebSocket            | 覆盖当前会话在 Client 级别配置的心跳检测策略。                                                             |
+| `retry`              | HTTP、SSE、WebSocket | 为这次调用替换 Client 级的重试策略。HTTP 的 `budget` 仍留在 Client 上。                                    |
 
 ## 3. 浏览器单例模式 vs. 服务端请求作用域
 
@@ -78,20 +78,20 @@ description: 配置应用如何调用导入的 SDK 操作，与 API 定义解耦
 
 `withEndpoint(...urls)` 支持传入一个或多个候选服务基地址。在默认配置下：
 
-- 每个 Client 默认使用 [`pickFirstBalancer`](/zh-Hans/api/core/pickfirstbalancer)，持续停在首个 URL，直到遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。HTTP 重试不会移动粘滞端点。
-- **同一次调用内的 HTTP 重试默认关闭。** `withRetry()` 与 `withRetry({})` 等价，会在安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）的连接失败上，带着退避，对一个尚未尝试过的端点再做一次尝试。Finagle 重试预算属于 Client 配置，由其派生出的 Client 共享，与均衡器的身份无关。
+- 每个 Client 默认使用 [`pickFirstBalancer`](/zh-Hans/api/core/pickfirstbalancer)，持续停在首个 URL，直到遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。
+- **重试默认关闭。** 一次调用只做一次尝试。`withRetry()` 与 `withRetry({})` 等价：HTTP、SSE 和 WebSocket 都最多重试三次，并带退避。每次失败后，均衡器会从全部端点中再次选择，因此在 pick-first 下，连接被拒绝之后的重试会到达下一个端点，而只有一个端点时，延迟之后会再次尝试它。HTTP 的 Finagle 重试预算属于 Client 配置，由其派生出的 Client 共享，与均衡器的身份无关。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-只配置了一个端点时，`withRetry` 不会重放请求，因为每一次重试都会排除已经试过的端点。若提供了 `attemptTimeoutMs` 和 `connectTimeoutMs`，它们必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。`connectTimeoutMs` 只存在于 SSE 与 WebSocket 的重连选项内；这些选项默认 `attempts: 3`，所以单独设置它也会启用重连，只想限制握手时请再加上 `attempts: 0`。
+`attemptTimeoutMs` 限制单次尝试：HTTP 计到响应 body 结束，SSE 计到响应头，WebSocket 计到 `open`。只要时间限制、不要重试时，写成 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。重试选项在运行时不会校验。决策顺序，以及从 `withSSEReconnect` 和 `withWebSocketReconnect` 迁移的说明，见 [负载均衡与故障转移](/zh-Hans/docs/load-balancing#retries)。
 
 ### 被动健康检测与 P2C 算法 [#health-filtering-and-p2c]
 
-对于多个对等的服务端副本，[`roundRobinBalancer`](/zh-Hans/api/core/roundrobinbalancer) 与 [`p2cBalancer`](/zh-Hans/api/core/p2cbalancer)（基于 PeakEwma 衰减 RTT × 在途负载）默认开启了类似 Linkerd 的连续失败熔断剔除机制（`outlierDetection`）。它把每个带错误码的结果都计为失败（包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`）；原始响应 `status` 只供自定义均衡器使用。
+对于多个对等的服务端副本，[`roundRobinBalancer`](/zh-Hans/api/core/roundrobinbalancer) 与 [`p2cBalancer`](/zh-Hans/api/core/p2cbalancer)（基于 PeakEwma 衰减 RTT × 在途负载）可以接收 `outlierDetection` 选项；除非传入对象（默认值用 `{}`），否则它是关闭的。它统计失败并把端点逐出一段时间，也会跳过你自己的 `isHealthy` 函数拒绝的端点；Defjs 不决定什么叫健康。默认情况下，每个带错误码的结果都计为失败（包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`），你可以用 `isFailure` 替换这条规则；原始响应 `status` 只供自定义均衡器使用。
 
-关于重试预算、主动/被动健康检测、P2C 负载估算及编写自定义均衡器的详细内容，请参阅专门的[负载均衡与故障转移](/zh-Hans/docs/load-balancing)指南。
+关于重试预算、失败逐出和你自己的健康函数、P2C 负载估算及编写自定义均衡器的详细内容，请参阅专门的[负载均衡与故障转移](/zh-Hans/docs/load-balancing)指南。
 
 ## 5. 注入测试传输层
 
@@ -105,19 +105,19 @@ description: 配置应用如何调用导入的 SDK 操作，与 API 定义解耦
 
 ## 6. Client 配置辅助函数速查
 
-| 辅助函数                                                                                                      | 作用说明                                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | 设置一个或多个候选服务基地址（直接替换原有列表）。                                                                                                                                                                                                               |
-| `withHeaders(HeadersInit)`                                                                                    | 为 HTTP 和 SSE 配置静态默认请求头（会被 builder 返回的 headers 覆盖）。                                                                                                                                                                                          |
-| `withInterceptors(...items)`                                                                                  | 按洋葱模型追加 HTTP、SSE 及 WebSocket 拦截器。                                                                                                                                                                                                                   |
-| `withQuerySerializer(fn)`                                                                                     | 自定义将带有别名的 Query 对象序列化为查询字符串的算法。                                                                                                                                                                                                          |
-| `withCredentials(boolean)`                                                                                    | 当为 `true` 时，为 HTTP 和 SSE 请求开启 Fetch `credentials: "include"`。                                                                                                                                                                                         |
-| `withXSRF(options?)`                                                                                          | 来自 `@defjs/core/xsrf`。在浏览器中，于同源且产生数据变更的 HTTP 请求上，自动将 XSRF Cookie 拷贝注入至对应请求头中。调用 `withXSRF()` 时，若缺少 `location` 或 `document`（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。 |
-| `withBalancer(balancer)`                                                                                      | 替换服务节点选择策略（如 `pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。                                                                                                                                                                            |
-| `withRetry(options?)`                                                                                         | 配置可选加入的 HTTP 重试条件、方法、退避、单次尝试超时，以及一份归 client 所有的预算。                                                                                                                                                                           |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | 配置 SSE 断线重连机制以及未知/无效事件监听。                                                                                                                                                                                                                     |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 配置 WebSocket 会话默认行为（重连、心跳、子协议及连接前钩子）。                                                                                                                                                                                                  |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 注入自定义或 Mock 的传输层实现，用于离线单测。                                                                                                                                                                                                                   |
+| 辅助函数                                                                           | 作用说明                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                            | 设置一个或多个候选服务基地址（直接替换原有列表）。                                                                                                                                                                                                               |
+| `withHeaders(HeadersInit)`                                                         | 为 HTTP 和 SSE 配置静态默认请求头（会被 builder 返回的 headers 覆盖）。                                                                                                                                                                                          |
+| `withInterceptors(...items)`                                                       | 按洋葱模型追加 HTTP、SSE 及 WebSocket 拦截器。                                                                                                                                                                                                                   |
+| `withQuerySerializer(fn)`                                                          | 自定义将带有别名的 Query 对象序列化为查询字符串的算法。                                                                                                                                                                                                          |
+| `withCredentials(boolean)`                                                         | 当为 `true` 时，为 HTTP 和 SSE 请求开启 Fetch `credentials: "include"`。                                                                                                                                                                                         |
+| `withXSRF(options?)`                                                               | 来自 `@defjs/core/xsrf`。在浏览器中，于同源且产生数据变更的 HTTP 请求上，自动将 XSRF Cookie 拷贝注入至对应请求头中。调用 `withXSRF()` 时，若缺少 `location` 或 `document`（包括 Worker）会抛错。同构代码只在浏览器里添加这个选项。令牌来自别处时，用拦截器设置。 |
+| `withBalancer(balancer)`                                                           | 替换服务节点选择策略（如 `pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。                                                                                                                                                                            |
+| `withRetry(options?)`                                                              | 为 HTTP、SSE 和 WebSocket 配置可选开启的重试：重试次数、退避、方法、单次尝试超时、`shouldRetry` 函数，以及归 HTTP Client 所有的预算。                                                                                                                            |
+| `withSSEOnInvalidEvent`                                                            | 观察没有 struct 或校验失败的 SSE 事件。                                                                                                                                                                                                                          |
+| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 配置 WebSocket 会话的默认行为。                                                                                                                                                                                                                                  |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | 注入自定义或 Mock 的传输层实现，用于离线单测。                                                                                                                                                                                                                   |
 
 ## 相关阅读
 

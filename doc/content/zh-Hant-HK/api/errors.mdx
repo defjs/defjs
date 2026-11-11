@@ -23,7 +23,7 @@ description: Fault 嘅各個變體同工廠輔助函式。
 
 <ApiSignature name="Fault" />
 
-對 `fault.code` 做 `switch`。
+對 `fault.code` 做 switch。
 
 ### FaultOf
 
@@ -57,7 +57,7 @@ Response 到咗，但冇辦法按宣告讀出嚟。`response` 只有 metadata：
 
 所有可能喺 response 存在之前就失敗嘅情況：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。傳輸層有 metadata 可以報告之前，`response` 係 `undefined`，例如下載中途截斷咗嘅 body。
 
-無效嘅 `withRetry` 選項會喺 HTTP 傳輸層開始之前回傳 `REQ_OPTIONS_INVALID`，訊息係 `Invalid retry options`。呢個包括唔係 object 嘅策略、唔係至少為 1 嘅安全整數嘅 `maxAttempts`，以及無效嘅條件、method、timeout、backoff 或 budget 設定。省略 `withRetry` 會關閉重試。`withRetry()` 同 `withRetry(undefined)` 嘅行為同 `withRetry({})` 一樣。`withRetry({ maxAttempts: 1 })` 會喺啟用之後關閉重試。
+重試選項唔會喺 runtime 驗證。省略 `withRetry` 會關閉重試。`withRetry()` 同 `withRetry(undefined)` 嘅行為同 `withRetry({})` 一樣。`withRetry({ maxRetries: 0 })` 會喺啟用之後關閉重試。`shouldRetry` 函式拋出例外會令該次呼叫以 `EXT_HOOK_FAILED` 結束，並以拋出嘅值作為 `cause`，HTTP、SSE 同 WebSocket 都一樣；已經開啟嘅串流或會話，請睇 [Client](/zh-Hant-HK/api/client#withretry)。
 
 ### AnyFault
 
@@ -81,7 +81,7 @@ Response 到咗，但冇辦法按宣告讀出嚟。`response` 只有 metadata：
 
 `createHttpStatusFault` 收一個已經帶住解碼後 body 嘅 response；`createUndecodedHttpStatusFault` 只收 metadata，俾嗰啲冇宣告 `error` 嘅定義用。
 
-`createNetworkFault` 用 [`isAbortCause`](/zh-Hant-HK/api/core/isabortcause) 揀 `NET_ABORTED`，用 [`isTimeoutCause`](/zh-Hant-HK/api/core/istimeoutcause) 揀 `NET_TIMEOUT`：兩者會識別任何 Core 副本帶 brand 嘅 sentinel，前者亦識別名為 `AbortError` 嘅 `DOMException`，後者亦識別名為 `TimeoutError` 嘅 `DOMException` 或 `Error`。其餘一律映射去 `NET_UNREACHABLE`。`createPreflightFault` 直接收錯誤碼；唔俾 `cause` 嘅時候，錯誤碼就變成 message。
+`createNetworkFault` 用 [`isAbortCause`](/zh-Hant-HK/api/core/isabortcause) 揀 `NET_ABORTED`，用 [`isTimeoutCause`](/zh-Hant-HK/api/core/istimeoutcause) 揀 `NET_TIMEOUT`：兩者會識別任何 Core 副本帶 brand 嘅 sentinel；`isAbortCause` 亦識別名為 `AbortError` 嘅 `DOMException`，`isTimeoutCause` 亦識別名為 `TimeoutError` 嘅 `DOMException` 或 `Error`。其餘一律映射去 `NET_UNREACHABLE`。`createPreflightFault` 直接收錯誤碼；唔俾 `cause` 嘅時候，錯誤碼就變成 message。
 
 所有工廠都回傳帶住上述結構化欄位嘅原生 `Error` 實例；佢哋唔會建立普通 object error，`String(fault)` 亦唔需要 adapter。
 

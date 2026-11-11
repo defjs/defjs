@@ -5,7 +5,7 @@ description: Подключитесь, отправьте типизирован
 
 # Открытие WebSocket-сессии
 
-Объявите структуры `incoming` и `outgoing` в `defineWebSocket` вместе с ограничением `maxIncomingQueueSize`. В приложении подпишитесь на `session.onRuntimeError(...)`, читайте `session.receive` и всегда отписывайтесь, вызывайте `session.close(...)` и дожидайтесь `await session.closed` в блоке `finally`:
+Объявите структуры `incoming` и `outgoing` в `defineWebSocket`. В приложении подпишитесь на `session.onRuntimeError(...)`, читайте `session.receive` и всегда отписывайтесь, вызывайте `session.close(...)` и дожидайтесь `await session.closed` в блоке `finally`:
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ description: Подключитесь, отправьте типизирован
 ACME 142.5
 ```
 
-- И переподключение (`withWebSocketReconnect`), и heartbeat (`withWebSocketHeartbeat`) подключаются на клиенте опционально.
+- И переподключение (`withRetry`), и heartbeat (`withWebSocketHeartbeat`) подключаются на клиенте опционально.
 - Браузерные WebSocket не могут отправлять произвольные HTTP-заголовки во время хэндшейка обновления протокола; используйте cookies, субпротоколы или короткоживущие тикеты подключения. См. раздел [Сессии WebSocket](/ru-RU/docs/web-socket).

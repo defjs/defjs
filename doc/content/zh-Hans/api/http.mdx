@@ -21,7 +21,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 调用该操作会返回一个 promise，其值是 [`HttpAwaitResult`](/zh-Hans/api/core/httpawaitresult-type) 描述的元组。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。HTTP 读取 `signal` 和进度回调，忽略其他字段。
 
-未声明 `error` struct，或声明的 `error` body 能解码时，非 2xx 状态为 `HTTP_STATUS`。声明过 `error` 时，`Fault` 的 `data` 是解码后的错误 body，否则为 `undefined`。如果声明的 `error` body 无法读取（媒体类型错误、JSON 无效）或与 struct 不匹配，`Fault` 改为 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，响应状态仍记录在其元数据中。失败时元组第三项为 `undefined`；响应元数据由 `Fault` 携带。
+未声明 `error` struct，或声明的 `error` body 能解码时，非 2xx 状态为 `HTTP_STATUS`。声明过 `error` 时，Fault 的 `data` 是解码后的错误 body，否则为 `undefined`。如果声明的 `error` body 无法读取（媒体类型错误、JSON 无效）或与 struct 不匹配，Fault 改为 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，响应状态仍记录在其元数据中。失败时元组第三项为 `undefined`；响应元数据由 Fault 携带。
 
 ## fetchHandler()
 
@@ -39,7 +39,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 的 HTTP 部分：[`UseRequestConfig`](/zh-Hans/api/core/userequestconfig-type)，即 `signal` 加上 `onDownloadProgress` 和 `onUploadProgress`。没有 `timeout` 或 `abort` 字段。期限是 `signal: AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。`signal` 是本次调用的 signal；要组合 signal，在应用代码中使用 `AbortSignal.any`。没有 Client 级默认期限。其他请求字段（例如 `heartbeat`）会被忽略。
+`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 的 HTTP 部分：[`UseRequestConfig`](/zh-Hans/api/core/userequestconfig-type)，即 `signal` 加上 `onDownloadProgress`、`onUploadProgress` 和 `retry`。没有 `timeout` 或 `abort` 字段。期限是 `signal: AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。`signal` 是本次调用的 signal；要组合 signal，在应用代码中使用 `AbortSignal.any`。没有 Client 级默认期限。其他请求字段（例如 `heartbeat`）会被忽略。
 
 ## 类型
 
@@ -51,7 +51,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 <ApiSignature name="HttpAwaitResult" />
 
-成功时，只有声明过 `output`，第三项才携带 `body`。失败时它仍是 `undefined`——`Fault` 已经持有当时存在的响应元数据。
+成功时，只有声明过 `output`，第三项才携带 `body`。失败时它仍是 `undefined`——Fault 已经持有当时存在的响应元数据。
 
 ### HttpRequest
 
@@ -79,9 +79,10 @@ body 已按声明的 struct 解码成功的响应。持有这个类型就证明�
 
 ### HttpProgressFn
 
-`loaded`、`total`、`lengthComputable`。回调可以异步执行。`onDownloadProgress` 或 `onUploadProgress` 抛出异常时，调用会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`；取消仍报告 `NET_ABORTED`，中止原因是超时时报告 `NET_TIMEOUT`。转换发生在 `fetch` 支持流式请求体的运行时：`Blob` / `File`、`ArrayBuffer` 和 `FormData` 会转成流并报告上传进度。Chromium 只在 HTTP/2 及以上可用；HTTP/1.1 下带 `onUploadProgress` 的上传会失败（`NET_UNREACHABLE`）。Firefox 原样发送这些请求体，且不调用 `onUploadProgress`。
+`loaded`、`total`、`lengthComputable`。回调可以异步执行。`onDownloadProgress` 或 `onUploadProgress` 抛出异常时，调用会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`；取消仍报告 `NET_ABORTED`，中止原因是超时时报告 `NET_TIMEOUT`。
+上传进度只在请求 body 是你传入的 `ReadableStream` 时才会报告。其他任何 body（`Blob`、`File`、`ArrayBuffer`、`FormData`、字符串、`URLSearchParams`）都按构建结果发送，并且在每个运行时上都不会调用 `onUploadProgress`；库从不把 body 转成流。`ReadableStream` body 遵循 Fetch 对流式请求体的规则，无论有没有 `onUploadProgress`：Chromium 和 WebKit 只在 HTTP/2 及以上接受它（HTTP/1.1 上为 `NET_UNREACHABLE`；WebKit 只在 27.2 上做过人工检查；Node.js 和 Bun 接受 HTTP/1.1）；Firefox 不能流式发送请求体（`ENV_UNSUPPORTED`）；在浏览器中，跨源请求需要 CORS 预检，除非浏览器持有缓存的预检结果，因此服务端必须应答 `OPTIONS`；301、302、307 或 308 重定向会在 body 发送一次之后失败，而 303 会变成 GET 并成功。浏览器不发送 `Content-Length`。`fetch` 把这些失败，以及 `fetch` 读取时抛出的源 `ReadableStream`，报告成与不可达端点相同的网络错误，因此负载均衡器对它们收到 `{ attempted: false }`，对抛出异常的进度回调（`EXT_OBSERVER_FAILED`）也一样。因此仅靠流式上传无法发现已宕机的端点，被拒绝的流式上传也从不重试：`ReadableStream` body 会在询问 `shouldRetry` 之前结束重试流程。
 
-发生该转换的运行时里，FormData 使用其序列化后的流，不会把整个 body 缓冲成 Blob，并保留实际的 multipart 边界。除非提供了有效的显式 `Content-Length`，否则总长度未知。显式内容类型会在上传转换中保留，但 FormData 必须使用其序列化产生的边界。`loaded` 统计流中的字节，不代表服务端确认。带非 identity `Content-Encoding` 的下载报告 `total: 0` 和 `lengthComputable: false`；其流字节可能已经解压。
+流式 body 没有已知长度：除非有效的显式 `Content-Length` 请求头设定了它（浏览器不会发送该请求头），报告的总量未知。`loaded` 统计流中的字节，不代表服务端确认。带非 identity `Content-Encoding` 的下载报告 `total: 0` 和 `lengthComputable: false`；其流字节可能已经解压。
 
 见 [HTTP 指南](/zh-Hans/docs/http) 和 [Client](/zh-Hans/docs/client)。
 
@@ -103,7 +104,7 @@ body 已按声明的 struct 解码成功的响应。持有这个类型就证明�
 
 ## UseRequestConfig
 
-`signal`，加上可选的 `onDownloadProgress` 和 `onUploadProgress`。`HttpExecuteOptions` 就是这个切片。没有 `timeout` 或 `abort` 字段。
+`signal`，加上可选的 `onDownloadProgress`、`onUploadProgress` 和 `retry`。`HttpExecuteOptions` 就是这个切片。没有 `timeout` 或 `abort` 字段。
 
 ## RequestSuccessData
 

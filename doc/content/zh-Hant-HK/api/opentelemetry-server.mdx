@@ -48,15 +48,15 @@ HTTP、SSE 同 WebSocket 預設全部開啟。喺某個傳輸層傳 `{ enabled: 
 
 <ApiSignature name="OpenTelemetryServerTransportOptions, OpenTelemetryServerHttpOptions, OpenTelemetryServerSSEOptions, OpenTelemetryServerWebSocketOptions" />
 
-`enabled` 預設係 `true`；只有 `enabled: false` 先會關閉某個傳輸層。舊嘅 boolean 開關（`http: false`）同頂層 hook 只會被 TypeScript 型別拒絕，runtime 並冇檢查，所以 runtime 時 `http: false` 會令傳輸層保持啟用，頂層 hook 亦會被默默忽略。
+`enabled` 預設係 `true`；只有 `enabled: false` 先會關閉某個傳輸層。
 
 span hook 只會喺有傳入 `tracer` 時執行。`startSpanHook` 會喺所屬 HTTP、SSE 或 WebSocket 傳輸層建立 span 之前同步執行。佢回傳嘅屬性會喺內建屬性之後套用，所以應用程式可以覆蓋 `url.full` 或者其他初始值。如果佢 throw，Defjs 會用內建屬性建立 span，然後繼續處理 request；`requestHook` 同 `responseHook` 會喺 span 建立之後執行。兩者都唔會被 await：throw 或者 rejection 唔會阻擋或者令操作失敗。
 
-當 `span.isRecording()` 係 true，hook 失敗會記錄 `defjs.otel.hook.error` 同 `exception` event。span 唔再 recording（已結束或者未採樣）時，失敗會經 `diag.error` 交畀 OpenTelemetry diagnostic logger。應用程式必須設定 `@opentelemetry/api` 嘅 `diag.setLogger(...)` 先接收到；預設唔會自動輸出。呢個 package 唔會初始化 SDK，呢類診斷亦唔係獨立嘅 SDK `LogRecord`。
+當 `span.isRecording()` 係 true，hook 失敗會記錄 `defjs.otel.hook.error` 同 `exception` event。`exception` event 只帶 `exception.type`（class 名稱，唔係 Defjs fault code），絕唔會帶 `exception.message` 或 `exception.stacktrace`，因為 runtime 錯誤文字可能包含完整 request URL 或 response body 片段；傳輸層失敗時記錄嘅 `exception` event 都跟同一條規則。span 唔再 recording（已結束或者未採樣）時，失敗會經 `diag.error` 交畀 OpenTelemetry diagnostic logger。應用程式必須設定 `@opentelemetry/api` 嘅 `diag.setLogger(...)` 先接收到；預設唔會自動輸出。呢個 package 唔會初始化 SDK，呢類診斷亦唔係獨立嘅 SDK `LogRecord`。
 
 `responseHook` 收到傳輸層回傳嘅內容：HTTP 係 `HttpResponse`，SSE 係啟動成功之後嘅事件流 handle，WebSocket 係開啟成功之後嘅 session。第三個參數係原本嘅 request。
 
-預設情況下，`url.full` 只會將 `request.endpoint` 對可選嘅 `request.baseEndpoint` 解析；獨立嘅 `request.queryString` 唔會附加上去。呢條界線並唔係 redaction，而且 package 冇內建 redactor 或者敏感 key 政策。請明確建立應用程式自己擁有嘅 URL，有需要時再自行 redact：
+預設情況下，`url.full` 只會將 `request.endpoint` 對可選嘅 `request.baseEndpoint` 解析；獨立嘅 `request.queryString` 唔會附加上去。呢條界線並唔係 query redaction。按照 OpenTelemetry 語義慣例嘅要求，端點 userinfo 入面嘅憑證會被換成 `REDACTED:REDACTED`，預設敏感 query key（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）嘅值會被換成 `REDACTED`，但 package 冇其他內建 redactor 或者敏感 key 政策。`startSpanHook` 回傳嘅 `url.full` 會以同樣方式 redact，但應用程式喺 `requestHook` 或 `responseHook` 入面透過 `Span` 物件寫入嘅 URL 唔會被攔截，所以請明確建立，有需要時再自行 redact：
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example
@@ -74,7 +74,7 @@ span hook 只會喺有傳入 `tracer` 時執行。`startSpanHook` 會喺所屬 H
 | SSE 或 WebSocket 連線失敗                               | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
 | SSE 或 WebSocket 以 error 結束，包括 `closed` 被 reject | 同一個傳輸層 event                                                | `connection`  |
 
-一般狀態碼嘅 response（包括已宣告嘅 `error` body 可以解碼嘅 4xx/5xx）、成功、正常關閉、EOF 同 caller 取消，都唔會產生 LogRecord。只有 timeout rejection 到達 OTel 攔截器嘅 `next()` / 傳輸層邊界，HTTP 截止期限 abort 先會記錄一次（reason 係 `TimeoutError` 嘅 abort，例如 `AbortSignal.timeout()`，算係 timeout，唔係取消）。如果只有操作呼叫喺 input 解析、建構、應用程式攔截器喺 `next()` 之後嘅工作，或者鏈之後嘅 body 轉換期間觀察到截止期限，就唔會發出 LogRecord；應該觀察該次操作呼叫。HTTP handler 邊界內，已宣告嘅 `output` / `error` body 讀取失敗，所有表示形式都會記錄；media-type 同 `JSON.parse` 失敗就只會喺 JSON 表示形式記錄，與 HTTP 狀態碼無關。非 JSON 文字、blob 同 bytes 唔會單純因為 media type 唔係 JSON 就當失敗。冇宣告嘅 body 永遠唔會被讀取，所以唔會記錄。Struct 驗證、已宣告嘅 body 缺失（例如 204），以及之後嘅 `HTTP_STATUS` 轉換，都發生喺攔截器之後，所以唔會記錄。非 2xx 嘅 SSE handshake 一定會記錄一次；伺服器傳嚟嘅 WebSocket close frame 永遠唔會記錄，無論錯誤碼係乜。冇 close frame 嘅突然斷線（1006）要視乎 runtime：如果平台 WebSocket 喺 `close` 之前先觸發 `error`（Node.js 目前 LTS），session 就以 error 結束並記錄一次；如果唔會（Bun），就當正常關閉，唔會記錄。
+一般狀態碼嘅 response（包括已宣告嘅 `error` body 可以解碼嘅 4xx/5xx）、成功、正常關閉、EOF 同 caller 取消，都唔會產生 LogRecord。只有 timeout rejection 到達 OTel 攔截器嘅 `next()` / 傳輸層邊界，HTTP 截止期限 abort 先會記錄一次（reason 係 `TimeoutError` 嘅 abort，例如 `AbortSignal.timeout()`，算係 timeout，唔係取消）。如果只有操作呼叫喺 input 解析、建構、應用程式攔截器喺 `next()` 之後嘅工作，或者鏈之後嘅 body 轉換期間觀察到截止期限，就唔會發出 LogRecord；應該觀察該次操作呼叫。HTTP handler 邊界內，已宣告嘅 `output` / `error` body 讀取失敗，所有表示形式都會記錄；media-type 同 `JSON.parse` 失敗就只會喺 JSON 表示形式記錄，與 HTTP 狀態碼無關。非 JSON 文字、blob 同 bytes 唔會單純因為 media type 唔係 JSON 就當失敗。冇宣告嘅 body 永遠唔會被讀取，所以唔會記錄。Struct 驗證、已宣告嘅 body 缺失（例如 204），以及之後嘅 `HTTP_STATUS` 轉換，都發生喺攔截器之後，所以唔會記錄。非 2xx 嘅 SSE handshake 一定會記錄一次；伺服器傳嚟嘅 WebSocket close frame 永遠唔會記錄，無論錯誤碼係乜。冇 close frame 嘅突然斷線（1006）喺每個 runtime 都會令 session 以 error 結束並記錄一次。
 
 `exception.type` 係攔截器觀察到嘅對象嘅 class 名稱，而唔係 Defjs 錯誤碼：例如 `BodyFailure`（HTTP body）、`EventStreamFatalError`（SSE handshake 因非 2xx 狀態以外嘅原因失敗，例如回應唔係 `text/event-stream`）、`DefjsFault`（WebSocket 啟動，以及返回非 2xx 狀態嘅 SSE handshake）、`TypeError`（網絡失敗）或者 `Error`（timeout）。過濾、exporter、flush 同 shutdown 由應用程式負責。
 

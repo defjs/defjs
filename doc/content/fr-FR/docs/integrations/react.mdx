@@ -65,7 +65,7 @@ Les handles SSE et WebSocket survivent à l'appel initial `openStream(...)` ou `
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Annuler le `signal` transmis à une opération WebSocket clôt la session en `'aborted'` et rejette `session.receive` avec une `AbortError`. Protégez le bloc `catch` lors du nettoyage afin de ne faire remonter que les véritables erreurs runtime (telles que le débordement de file ou l'expiration du heartbeat).
+- Annuler le `signal` transmis à une opération WebSocket clôt la session en `aborted` et rejette `session.receive` avec une `AbortError`. Protégez le bloc `catch` lors du nettoyage afin de ne faire remonter que les véritables erreurs runtime (telles que l'expiration du heartbeat).
 - Annuler un flux SSE met fin à la boucle `for await (const msg of stream)` proprement sans lever d'exception.
 
 ---

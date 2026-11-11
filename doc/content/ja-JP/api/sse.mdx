@@ -11,18 +11,18 @@ description: defineEventStream、リクエストオプション、ストリー�
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` と `events` マップ、任意の `method`（デフォルト `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（デフォルト `64 * 1024`）、`maxQueueSize`（デフォルト `1024`）です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`EventStreamDefinition`](/ja-JP/api/core/eventstreamdefinition-type) にあります。`error` が必須なのは error struct の型を渡したときだけで、`builder` が必須なのは `input` を宣言したときだけです。
+- **definition** — `path` と `events` マップ、任意の `method`（デフォルト `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（デフォルト `64 * 1024`）です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`EventStreamDefinition`](/ja-JP/api/core/eventstreamdefinition-type) にあります。`error` が必須なのは error struct の型を渡したときだけで、`builder` が必須なのは `input` を宣言したときだけです。
 - **戻り値** 操作です。第 1 引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとストリームが始まります。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼び出しは `[null, stream, open]` または `[error, undefined, open?]` を返します。`error` を宣言していれば Fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`signal` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `signal` だけで、進捗と WebSocket のフィールドは無視します。
+呼び出しは `[null, stream, open]` または `[error, undefined, open?]` を返します。`error` を宣言していれば Fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`signal` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `signal` と `retry` だけで、進捗と WebSocket のフィールドは無視します。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` は `{ signal? }` です。`timeout` フィールドも `abort` フィールドも、進捗コールバックもありません。`signal` は、開いたあとも含めてストリーム全体を対象にします。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位のデフォルトの期限もありません。起動時だけの期限が欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
+`EventStreamExecuteOptions` は `{ signal?, retry? }` です。`timeout` フィールドも `abort` フィールドも、進捗コールバックもありません。`signal` は、開いたあとも含めてストリーム全体を対象にします。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。クライアント単位のデフォルトの期限はありません。ハンドシェイクだけに期限を設けるには `withRetry({ maxRetries: 0, attemptTimeoutMs })`、1 回の呼び出しなら `retry: { maxRetries: 0, attemptTimeoutMs }` で、レスポンスヘッダーで終わります。
 
 ## EventStreamHandle
 
@@ -44,7 +44,7 @@ description: defineEventStream、リクエストオプション、ストリー�
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) のいずれかで、`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。`REQ_BUILD_FAILED` と `REQ_OPTIONS_INVALID` は、ストリームが開いたあとの再接続時のエンドポイント選択が失敗したことを意味します。`HTTP_STATUS` は、再接続のハンドシェイクが 2xx 以外のステータスで終了したことを意味します。
+`kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) のいずれかで、`'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。`REQ_BUILD_FAILED` は、ストリームが開いたあとの再接続時のエンドポイント選択が失敗したことを意味します。`EXT_HOOK_FAILED` は `shouldRetry` 関数が throw したことを意味し、`cause` が投げられた値を包みます。`HTTP_STATUS` は、再接続のハンドシェイクがリトライされなかった 2xx 以外のステータスで終わったか、リトライを使い切ったことを意味します。満杯のキューはエラーではありません。ライブラリが保持するのは未読イベントが最大 1024 件で、コンシューマーが 1 件取るまでレスポンスの読み取りが止まります。`close()`、解放、呼び出し元の `signal` の abort は、まだ誰も読んでいないイベントを捨て、ストリームがすでに終わっていたかどうかにかかわらずイテレーターをすぐに終えます。`error` で終わったあとは、未読のイベントがなくなればイテレーターは引き続き `cause` で reject します。そのような停止がなければ、`error` で終わったあとにすでにキューにあったイベントは、イテレーターが reject する前に届けられます。
 
 ## EventStructs
 
@@ -52,9 +52,9 @@ description: defineEventStream、リクエストオプション、ストリー�
 
 キーは SSE のイベント名です。`event:` フィールドのないメッセージの名前は `message` です。どのキーにも一致しないときは `default` struct が使われます。`string` のイベント struct は生の `data` テキストを保ちます。それ以外の種類は JSON テキストです。`JSON.parse` してから struct です。だから裸の `struct.literal` には、引用のないトークンではなく JSON テキストが要ります。ハンドシェイクの `error` ボディは HTTP と同じ種類の規則です。`string` はテキスト、`blob` / `file` は blob、`arrayBuffer` はバイト列、それ以外は JSON です。
 
-再接続はクライアントにあります（`withSSEReconnect`）。SSE の `jitter` は WebSocket と同じ、**0–1 の乗法因子**です。
+リトライはクライアントにあります（`withRetry`）。リクエストオプションの `retry` は、1 回の呼び出しについてポリシーを置き換えます。同じポリシーが HTTP と WebSocket を担います。
 
-リトライバジェットとバックオフの指数は、ハンドシェイクが成功するたびにリセットされ、障害ごとに適用されます。そのため、`attempts: 1` でも長いセッションでは何度も接続を確立できます。サーバーの正常な EOF では再接続せず、EOF 時点で未完了のイベントの id も確定しません。`502`、`503`、`504` を返すハンドシェイクは、同じ再接続ルール（メソッド、`shouldReconnect`、`attempts`、`ReadableStream` ボディ）のもとで接続拒否と同様にリトライされ、それ以外の 2xx 以外のハンドシェイクは致命的です。リトライを使い切った場合と致命的な再接続ハンドシェイクは `HTTP_STATUS` で終了します。そのステータスはライブの `stream.open.response.status` で確認してください。不正な数値オプションは、ストリームを開く前に `REQ_OPTIONS_INVALID` を返します。`maxDelayMs` はジッター後の最終的な待ち時間に上限を設けます。検証規則、デフォルト、UTF-8 の `Last-Event-ID` の扱いについては、[`withRetry`](/ja-JP/api/core/withretry) を参照してください。
+リトライ回数とバックオフの指数は、ハンドシェイクが成功するたびにリセットされ、障害ごとに適用されます。そのため、`maxRetries: 1` でも長いセッションでは何度も接続を確立できます。サーバーの正常な EOF では再接続せず、EOF 時点で未完了のイベントの id も確定しません。502、503、504 を返すハンドシェイクは、同じ規則（メソッド、`shouldRetry`、`maxRetries`、`ReadableStream` ボディ）のもとで接続拒否と同様にリトライされます。それ以外の 2xx 以外のハンドシェイクは `retryable: false` で `shouldRetry` に渡されるため、関数が別のことを言わない限りストリームは終わります。リトライを使い切った場合と、辞退された 2xx 以外のハンドシェイクは `HTTP_STATUS` で終了します。そのステータスはライブの `stream.open.response.status` で確認してください。デフォルト、判断の順序、UTF-8 の `Last-Event-ID` の扱いについては、[`withRetry`](/ja-JP/api/core/withretry) を参照してください。
 
 パーサーは WHATWG SSE の行とフィールドの規則に従い、各物理ストリームの先頭にある UTF-8 BOM を 1 つだけ除去します。データや ID 値の U+FEFF は保持されます。ストリームの途中で BOM が付いたフィールド名は、未知のフィールドとして無視されます。複数行のデータは `\n` で結合され、空行でデータを持つイベントが配信されます。EOF 時点で未完了のイベントは破棄されます。
 
@@ -62,7 +62,7 @@ description: defineEventStream、リクエストオプション、ストリー�
 
 ## EventStreamDefinition
 
-`path`、`events`、任意の `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize` です。リクエストの形は HTTP と同じで、`body` も含みます。`GET` と `HEAD` はボディを持てません。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+`path`、`events`、任意の `method` / `operation` / `input` / `error` / `maxBufferSize` です。リクエストの形は HTTP と同じで、`body` も含みます。`GET` と `HEAD` はボディを持てません。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
 
 ## EventStreamEndpoint
 

@@ -11,14 +11,14 @@ description: defineWebSocket, session и опции запроса.
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`, один struct `incoming` и обязательный `maxIncomingQueueSize` (положительное целое); необязательные structs `outgoing` и `input`, `operation`, статические `protocols` и неотрицательный `maxOutgoingQueueSize`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`WebSocketDefinition`](/ru-RU/api/core/websocketdefinition-type). `builder` обязателен ровно тогда, когда объявлен `input`.
+- **definition** — `path` и один struct `incoming`; необязательные structs `outgoing` и `input`, `operation`, статические `protocols` и `maxOutgoingQueueSize`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`WebSocketDefinition`](/ru-RU/api/core/websocketdefinition-type). `builder` обязателен ровно тогда, когда объявлен `input`.
 - **Возвращает** операцию. Первый аргумент — [`Client`](/ru-RU/api/core/client-type). Дальше идёт только input. Вызов открывает сессию.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `reconnect` и игнорирует поля прогресса HTTP.
+Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `retry` и игнорирует поля прогресса HTTP.
 
-Каждый из параметров `beforeConnect`, `heartbeat`, `protocols` и `reconnect` целиком заменяет значение клиента для этого вызова. Приоритет protocols: выведенный клиент, затем `withWebSocketProtocols`, затем `protocols` определения. `heartbeat.timeoutMs` — ожидание подтверждения, а не дедлайн запроса.
+Каждый из параметров `beforeConnect`, `heartbeat`, `protocols` и `retry` целиком заменяет значение клиента для этого вызова. Приоритет protocols: выведенный клиент, затем `withWebSocketProtocols`, затем `protocols` определения. `heartbeat.timeoutMs` — ожидание подтверждения, а не дедлайн запроса.
 
 ## WebSocketSession
 
@@ -30,7 +30,7 @@ description: defineWebSocket, session и опции запроса.
   examples/api/consume-web-socket.ts#consume
 </include>
 
-`closed` сообщает окончательное логическое состояние. Асинхронное освобождение запрашивает нативное закрытие и ждёт освобождения ресурсов, которыми управляет Defjs, но при отсутствии события `close` ограничивает ожидание одной секундой и может завершиться отклонением Promise с `DOMException` с именем `TimeoutError`. Оно не доказывает, что физическое TCP-соединение закрылось.
+`closed` сообщает окончательное логическое состояние. Асинхронное освобождение запрашивает нативное закрытие и ждёт освобождения ресурсов, которыми управляет Defjs, но при отсутствии события close ограничивает ожидание одной секундой и может завершиться отклонением Promise с `DOMException` с именем `TimeoutError`. Оно не доказывает, что физическое TCP-соединение закрылось.
 
 ### WebSocketState
 
@@ -44,19 +44,19 @@ description: defineWebSocket, session и опции запроса.
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` — это `closed`, `aborted` или `error`. `cause` отсутствует у `closed`, необязателен у `aborted` и обязателен у `error`. При переполнении очереди входящих сырых кадров или декодированных сообщений `cause.code === "CAP_QUEUE_OVERFLOW"`; та же причина отклоняет `receive` и передаётся в `onRuntimeError`. Таймаут heartbeat и исчерпание попыток переподключения сохраняют обычные причины типа `Error` среды выполнения без отдельного стабильного кода. `code`, `reason` и `wasClean` могут быть у каждого варианта. Ручной `session.close()` заполняет `code` и `reason` у `{ kind: "closed" }`, если событие close их не несёт.
+`kind` — это `closed`, `aborted` или `error`. `cause` отсутствует у `closed`, необязателен у `aborted` и обязателен у `error`. При `error` та же причина отклоняет `receive` после уже поставленных в очередь сообщений и передаётся в `onRuntimeError`. Непрочитанные сообщения отбрасываются, когда сессия завершается как `aborted` и когда вызывающий код завершает её через `session.close()` или освобождение. Остановка вызывающим кодом (`session.close()`, освобождение или прерывание `signal`) отбрасывает их и после того, как сессия закончилась, не меняя `closed` и отклонение `receive`. Таймаут heartbeat и исчерпанные повторы сохраняют обычные причины типа `Error` среды выполнения без отдельного стабильного кода. Соединение, которое было открыто и затем оборвалось без кадра закрытия (код `1006`), — это `error` в любой среде выполнения. `code`, `reason` и `wasClean` могут быть у каждого варианта. Ручной `session.close()` заполняет `code` и `reason` у `{ kind: "closed" }`, если событие close их не несёт.
 
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательный `message`, `isAck`, `timeoutMs`. Полей `timeout` или `abort` нет.
+`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `retry` и `signal`. `WebSocketHeartbeatConfig`: `intervalMs` и `message` обязательны; `timeoutMs` допустим только вместе с `isAck`. Полей `timeout` или `abort` нет.
 
-`signal` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. `signal` — сигнал вызова; объединяйте сигналы через `AbortSignal.any` в коде приложения. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
+`signal` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна по умолчанию на уровне клиента нет. Дедлайн только на подключение — это `retry: { maxRetries: 0, attemptTimeoutMs }`, и он заканчивается на `open`. `signal` — сигнал вызова; объединяйте сигналы через `AbortSignal.any` в коде приложения. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
 
 Builder и цепочка перехватчиков выполняются один раз на операцию. Переподключение повторно использует собранные path/query и зафиксированные протоколы и строит URL до `beforeConnect`. Если перехватчик не заменил базовый эндпоинт запроса, переподключение также подставляет заново выбранный эндпоинт. Хук не может обновлять учётные данные URL или субпротокола внутри одной сессии; начните новую операцию со свежими входными данными или конфигурацией клиента.
 
-Когда задан `reconnect`, `attempts` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени для задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. Значения по умолчанию и правила проверки см. в [Клиент](/ru-RU/api/client).
+Когда задана политика повторов (`withRetry`), `maxRetries` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. По умолчанию повторяется каждое закрытие, которого не запрашивал `session.close()`, включая соединение, которое так и не открылось, и heartbeat без ответа, а `shouldRetry` может это отменить. Конструктор WebSocket, который бросает исключение (например, субпротокол, который отвергает платформа), — локальный сбой, который повтор только повторил бы: вызов завершается, не спрашивая `shouldRetry`. Успешный `open` сбрасывает счётчик и показатель степени задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Значения по умолчанию и порядок решения см. в [Клиент](/ru-RU/api/client#withretry).
 
 ## Сообщения
 
@@ -72,7 +72,7 @@ Builder и цепочка перехватчиков выполняются од
 
 ## WebSocketDefinition
 
-`path`, `incoming`, обязательный `maxIncomingQueueSize`, необязательные `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. Builder может вернуть только `path` и `query`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
+`path`, `incoming`, необязательные `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. Builder может вернуть только `path` и `query`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
 
 ## WebSocketEndpoint
 
@@ -84,7 +84,7 @@ Builder и цепочка перехватчиков выполняются од
 
 ## UseWebSocketConfig
 
-`beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `signal`. `WebSocketExecuteOptions` — этот срез. Поля `abort` нет.
+`beforeConnect`, `heartbeat`, `protocols`, `retry` и `signal`. `WebSocketExecuteOptions` — этот срез. Поля `abort` нет.
 
 ## SocketAwaitResult
 
@@ -96,7 +96,7 @@ Builder и цепочка перехватчиков выполняются од
 
 ## WebSocketHeartbeatConfig
 
-`intervalMs`, необязательные `message`, `isAck`, `timeoutMs`.
+`intervalMs` и `message` обязательны. `isAck` распознаёт подтверждение, а `timeoutMs` допустим только вместе с `isAck`; union-тип это обеспечивает, и во время выполнения это никто не проверяет. Defjs не задаёт формат heartbeat: каждое значение приходит из ваших функций. Полезная нагрузка отправляется через структуру `outgoing` как JSON-текст. Heartbeat без ответа закрывает сокет и входит в поток повторов `withRetry`; без политики повторов сессия завершается с `error`.
 
 ## WebSocketIncomingData
 
@@ -108,4 +108,4 @@ Builder и цепочка перехватчиков выполняются од
 
 ## SocketLifecycleOutcome
 
-Итог одной попытки подключения (`closeInfo`, `connection`, `cause`, `opened`), который использует логика переподключения. Это не окончательный результат сессии; для него см. `WebSocketCloseInfo`.
+Итог одной попытки подключения (`closeInfo`, `connection`, `cause`, `opened`), который использует логика повторов. Это не окончательный результат сессии; для него см. `WebSocketCloseInfo`.

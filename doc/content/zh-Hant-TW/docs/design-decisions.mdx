@@ -67,15 +67,15 @@ Defjs 依循六項嚴格的規則來讀取與處理 HTTP 回應：
 
 ### 規則 3：任何違反宣告的情況都會明確報錯
 
-Defjs 用 `response.ok` 選擇回應的一側：`2xx` 用 `output`，非 `2xx` 用 `error`。只有在該側宣告了 JSON struct，才會觸發解碼，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 會在讀取本文位元組**之前**驗證。非 `2xx` 的 HTML 閘道頁面只有在宣告了 JSON `error` struct 時，才會產生 `RES_MEDIA_TYPE_INVALID`。該側沒有宣告時就不會讀取本文；非 `2xx` 回應會回傳未解碼的 `HTTP_STATUS`。
+Defjs 用 `response.ok` 選擇回應的一側：`2xx` 用 `output`，非 `2xx` 用 `error`。只有在該側宣告了 JSON struct，才會觸發解碼，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 會**先**驗證，在讀取或尋找本文之前。沒有內容的回應（`HEAD`、`204`、`205`、`304`）也要通過同樣的檢查：宣告了 JSON 表示法卻沒有 JSON `Content-Type` 時，會以 `RES_MEDIA_TYPE_INVALID` 失敗；有的話，則會剖析空位元組並以 `RES_DECODE_FAILED` 失敗。非 `2xx` 的 HTML 閘道頁面只有在宣告了 JSON `error` struct 時，才會產生 `RES_MEDIA_TYPE_INVALID`。該側沒有宣告時就不會讀取本文；非 `2xx` 回應會回傳未解碼的 `HTTP_STATUS`。SSE 交握遵循相同規則：非 `2xx` 交握若無法解碼已宣告的 `error` 本文，啟動時會回傳該解碼 fault，狀態碼放在其中繼資料裡；攔截器、重連策略，以及重連的 `closed` 仍會看到 `HTTP_STATUS`。
 
-| 讀取回應時發生的失敗情況                   | 回傳的 Fault                                                   |
-| ------------------------------------------ | -------------------------------------------------------------- |
-| 媒體型別不符合宣告的 JSON 格式             | `RES_MEDIA_TYPE_INVALID`（完全不讀取本文串流）                 |
-| 位元組無法以宣告的表示法解碼               | `RES_DECODE_FAILED`                                            |
-| 解碼後的值未通過 `struct` 結構驗證         | `RES_STRUCT_MISMATCH`（HTTP）/ `RES_DECODE_FAILED`（SSE 交握） |
-| 非 `2xx` 狀態碼且成功解碼出 `error` struct | `HTTP_STATUS`，並帶有具型別的 `error.data`                     |
-| 非 `2xx` 狀態碼但未宣告 `error`            | `HTTP_STATUS`，且 `error.data: undefined`                      |
+| 讀取回應時發生的失敗情況                   | 回傳的 Fault                                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------------------ |
+| 媒體型別不符合宣告的 JSON 格式             | `RES_MEDIA_TYPE_INVALID`（最先檢查；本文完全不會被讀取，有沒有內容都沒有差別） |
+| 位元組無法以宣告的表示法解碼               | `RES_DECODE_FAILED`（包含空的 JSON 位元組）                                    |
+| 解碼後的值未通過 `struct` 結構驗證         | `RES_STRUCT_MISMATCH`                                                          |
+| 非 `2xx` 狀態碼且成功解碼出 `error` struct | `HTTP_STATUS`，並帶有具型別的 `error.data`                                     |
+| 非 `2xx` 狀態碼但未宣告 `error`            | `HTTP_STATUS`，且 `error.data: undefined`                                      |
 
 ### 規則 4：解碼失敗的回應沒有本文
 

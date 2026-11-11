@@ -38,7 +38,7 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) の HTTP スライスです。[`UseRequestConfig`](/ja-JP/api/core/userequestconfig-type)、つまり `signal` に `onDownloadProgress` と `onUploadProgress` を足したものです。`timeout` フィールドも `abort` フィールドもありません。期限は `signal: AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。クライアント単位のデフォルトの期限はありません。`heartbeat` のような他のリクエストフィールドは無視されます。
+`HttpExecuteOptions` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) の HTTP スライスです。[`UseRequestConfig`](/ja-JP/api/core/userequestconfig-type)、つまり `signal` に `onDownloadProgress`、`onUploadProgress`、`retry` を足したものです。`timeout` フィールドも `abort` フィールドもありません。期限は `signal: AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。クライアント単位のデフォルトの期限はありません。`heartbeat` のような他のリクエストフィールドは無視されます。
 
 ## 型
 
@@ -78,9 +78,9 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 ### HttpProgressFn
 
-`loaded`、`total`、`lengthComputable` です。コールバックは非同期でも構いません。`onDownloadProgress` または `onUploadProgress` が例外を投げると、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。キャンセルは引き続き `NET_ABORTED` を報告し、abort の理由がタイムアウトなら `NET_TIMEOUT` を報告します。変換が起きるのは、`fetch` がリクエストボディのストリーミングに対応するランタイムです。`Blob` / `File`、`ArrayBuffer`、`FormData` はストリームへ変換され、アップロード進捗が報告されます。Chromium で使えるのは HTTP/2 以降だけです。HTTP/1.1 では `onUploadProgress` 付きのアップロードは失敗します（`NET_UNREACHABLE`）。Firefox はそれらのボディをそのまま送り、`onUploadProgress` を呼び出しません。
+`loaded`、`total`、`lengthComputable` です。コールバックは非同期でも構いません。`onDownloadProgress` または `onUploadProgress` が例外を投げると、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。キャンセルは引き続き `NET_ABORTED` を報告し、abort の理由がタイムアウトなら `NET_TIMEOUT` を報告します。アップロード進捗が報告されるのは、渡したリクエストボディが `ReadableStream` のときだけです。それ以外のボディ（`Blob`、`File`、`ArrayBuffer`、`FormData`、文字列、`URLSearchParams`）は構築されたまま送られ、どのランタイムでも `onUploadProgress` は呼ばれません。ライブラリがボディをストリームに変換することはありません。`ReadableStream` ボディは、`onUploadProgress` の有無にかかわらず、ストリーミングリクエストボディの Fetch の規則に従います。Chromium と WebKit が受け入れるのは HTTP/2 以降だけです（HTTP/1.1 では `NET_UNREACHABLE`。WebKit は 27.2 でのみ手動で確認しました。Node.js と Bun は HTTP/1.1 を受け入れます）。Firefox はリクエストボディをストリームできません（`ENV_UNSUPPORTED`）。ブラウザでは、キャッシュされたプリフライト結果をブラウザが持っていない限り、クロスオリジンのリクエストに CORS プリフライトが必要なので、サーバーは `OPTIONS` に答えなければなりません。301、302、307、308 のリダイレクトは、ボディが一度送られたあと失敗し、303 は GET になって成功します。ブラウザは `Content-Length` を送りません。`fetch` はこれらの失敗と、`fetch` が読んでいるあいだに throw する元の `ReadableStream` を、到達不能なエンドポイントと同じネットワークエラーとして報告するので、ロードバランサーはそれらについて `{ attempted: false }` を受け取ります。throw する進捗コールバック（`EXT_OBSERVER_FAILED`）と同じです。そのため、ストリーミングアップロードだけでは停止したエンドポイントを検出できず、拒否されたストリーミングアップロードはリトライされません。`ReadableStream` ボディは、`shouldRetry` が聞かれる前にリトライの流れを終えるからです。
 
-その変換が走るランタイムでは、FormData はボディ全体を Blob にバッファリングせず、シリアライズされたストリームを使い、実際の multipart boundary を保持します。有効な明示的 `Content-Length` がなければ総量は不明です。アップロード変換後も明示的な Content-Type は保持されますが、FormData はシリアライズ時の boundary を使う必要があります。`loaded` が数えるのはストリームのバイト数であり、サーバーの受信確認ではありません。`Content-Encoding` が identity 以外のダウンロードは `total: 0`、`lengthComputable: false` を報告します。そのストリームのバイト列はすでに展開されている場合があります。
+ストリーミングボディの長さは分かりません。報告される総量は、有効な明示的 `Content-Length` ヘッダーがそれを設定しない限り不明です（ブラウザはそのヘッダーを送りません）。`loaded` が数えるのはストリームのバイト数であり、サーバーの受信確認ではありません。`Content-Encoding` が identity 以外のダウンロードは `total: 0`、`lengthComputable: false` を報告します。そのストリームのバイト列はすでに展開されている場合があります。
 
 [HTTP ガイド](/ja-JP/docs/http) と [Client](/ja-JP/docs/client) を見てください。
 
@@ -102,7 +102,7 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 ## UseRequestConfig
 
-`signal` に、任意の `onDownloadProgress` と `onUploadProgress` が加わります。`HttpExecuteOptions` はこのスライスです。`timeout` フィールドも `abort` フィールドもありません。
+`signal` に、任意の `onDownloadProgress`、`onUploadProgress`、`retry` が加わります。`HttpExecuteOptions` はこのスライスです。`timeout` フィールドも `abort` フィールドもありません。
 
 ## RequestSuccessData
 

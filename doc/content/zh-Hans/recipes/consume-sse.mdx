@@ -35,4 +35,4 @@ build started
 ```
 
 - 除非在 Client 上配置了 [`withRetry(...)`](/zh-Hans/api/core/withretry)，否则 SSE 不会在网络或读取失败后自动重连。
-- 设置了 `withSSEReconnect(...)` 时，`attempts` 每次中断默认为 `3`，并在成功握手后重置（`attempts: 0` 关闭重连）。没有自定义 `shouldReconnect` 时，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求会重连。带 `ReadableStream` body 的请求永远不会重连。见 [SSE 事件流](/zh-Hans/docs/sse)。
+- 设置了 `withRetry(...)` 时，`maxRetries` 每次中断默认为 `3`，并在成功握手后重置（`maxRetries: 0` 关闭重试）。没有自定义 `shouldRetry` 时，只有 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 和 `DELETE` 请求会重试。带 `ReadableStream` body 的请求永远不会重试。见 [SSE 事件流](/zh-Hans/docs/sse)。

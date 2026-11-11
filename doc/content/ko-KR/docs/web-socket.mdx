@@ -5,7 +5,7 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
 
 # WebSocket 세션
 
-`defineWebSocket`은 SDK에서 양방향 WebSocket 계약을 선언합니다: 경로 템플릿, 선택적 `input` 및 `builder`(`path` 및 `query` 전용), `incoming` 및 `outgoing` 메시지 struct, 큐 크기 제한, 정적 서브프로토콜을 지정합니다. SDK를 사용하는 애플리케이션은 클라이언트에서 하트비트, 재연결, 수명 주기 정리 작업을 직접 구성합니다.
+`defineWebSocket`은 SDK에서 양방향 WebSocket 계약을 선언합니다: 경로 템플릿, 선택적 `input` 및 `builder`(`path` 및 `query` 전용), `incoming` 및 `outgoing` 메시지 struct, 큐 크기 제한, 정적 서브프로토콜을 지정합니다. SDK를 사용하는 애플리케이션은 클라이언트에서 하트비트, 재시도(`withRetry`), 수명 주기 정리 작업을 직접 구성합니다.
 
 ## 1. 계약 정의 및 세션 실행하기
 
@@ -37,7 +37,7 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
 
 ## 2. 메시지 유효성 검증 및 방향 규칙
 
-- **수신 프레임 (`session.receive`)**: 텍스트, `ArrayBuffer`, typed array, `Blob` 프레임은 UTF-8로 디코딩된 후 JSON으로 파싱되며 `incoming` struct에 대해 유효성을 검증받습니다. 잘못된 형식의 JSON이나 스키마 불일치는 `session.onRuntimeError`에 보고되고 세션을 닫지 않은 채 폐기됩니다. `session.receive`는 단일 소비자(single-consumer) 전용이므로, 두 번째 이터레이터를 요청하면 `TypeError`가 발생합니다.
+- **수신 프레임 (`session.receive`)**: 텍스트, `ArrayBuffer`, typed array, `Blob` 프레임은 UTF-8로 디코딩된 후 JSON으로 파싱되며 `incoming` struct에 대해 유효성을 검증받습니다. 잘못된 형식의 JSON이나 스키마 불일치는 `session.onRuntimeError`에 보고되고 세션을 닫지 않은 채 폐기됩니다. `session.receive`는 단일 소비자(single-consumer) 전용이므로, 두 번째 이터레이터를 요청하면 `TypeError`가 발생합니다. 전송이 실패하면 이미 받은 메시지가 먼저 전달된 뒤 `receive`가 `closed.cause`로 reject되며, 하트비트 타임아웃도 포함됩니다. 호출자의 취소(`signal` abort), `session.close()`, 폐기는 읽지 않은 메시지를 버리고, 세션이 이미 끝났는지와 관계없이 `receive`를 즉시 끝냅니다. `session.close()` 뒤에 도착하는 프레임도 버려집니다. `AbortSignal.timeout(ms)`처럼 세션이 열린 동안 만료되는 `signal`은 타임아웃입니다. 세션은 오류로 끝나고 큐에 있던 메시지를 먼저 전달합니다. 세션이 끝난 뒤에 만료되는 것은 멈춤이며 그 메시지를 버립니다.
 - **송신 프레임 (`session.send(payload)`)**: `outgoing` struct에 대해 동기식으로 유효성을 검증하고, `.alias()` 및 코덱을 적용한 뒤 `JSON.stringify`로 직렬화합니다. `open` 상태에서는 즉시 전송되고, `reconnecting` 상태에서는 큐에 저장되며(`maxOutgoingQueueSize > 0`인 경우), 페이로드가 유효하지 않거나 큐가 가득 찼거나 비활성화되었거나 세션이 닫힌 상태라면 동기식 예외를 던집니다.
 
 ## 3. 세션 상태 및 옵저버
@@ -56,11 +56,11 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
   examples/web-socket/state-snapshots.ts#example
 </include>
 
-## 4. 재연결, 하트비트 및 큐 관리
+## 4. 재시도, 하트비트 및 큐 관리
 
-재연결과 하트비트는 모두 클라이언트 옵션(`withWebSocketReconnect`, `withWebSocketHeartbeat`) 또는 호출별 파생 클라이언트 옵션(`client({ reconnect, heartbeat })`)을 통해 선택적으로 활성화(opt-in)합니다:
+재연결과 하트비트는 모두 클라이언트 옵션(`withRetry`, `withWebSocketHeartbeat`) 또는 호출별 파생 클라이언트 옵션(`client({ retry, heartbeat })`)을 통해 선택적으로 활성화(opt-in)합니다. 재연결은 HTTP 및 SSE와 같은 `withRetry` 정책을 사용합니다:
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tabs items={["Retry policy", "Application heartbeat"]}>
 <Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
@@ -73,14 +73,14 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
 </Tab>
 </Tabs>
 
-- **재연결**: 활성화 시 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`입니다. 물리적 소켓이 `open`될 때마다 단절 예산이 재설정됩니다. `beforeConnect({ attempt, signal })`는 최초 연결 및 모든 재연결 시도 직전에 실행됩니다. 열린 소켓이 밸런서에 보고되는 결과는 `wasClean` 값과 무관하게 종료 코드만으로 정해집니다. `1006` 또는 `1015`(종료 프레임이 도착하지 않음)는 `NET_UNREACHABLE`, `1012` 또는 `1013`은 `NET_UNAVAILABLE`이며, 그 밖의 코드는 실패가 아닙니다.
-- **핸드셰이크 타임아웃 (`connectTimeoutMs`)**: 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제됩니다. 이 옵션은 `withWebSocketReconnect({...})` 옵션 객체(또는 `reconnect` 요청 옵션) 안에만 있습니다. 그 객체를 전달하면 기본값 `attempts: 3`으로 자동 재연결이 활성화되므로 `connectTimeoutMs`만 설정해도 재연결이 켜집니다. 핸드셰이크만 제한하려면 `attempts: 0`을 함께 설정하세요.
-- **하트비트**: `outgoing` struct를 통해 주기적으로 `message()`를 전송하고, 최대 `timeoutMs` 동안 `isAck(msg)`와 일치하는 프레임을 기다립니다. 일치하는 확인(ack) 프레임은 하트비트 모니터가 소비하며 `session.receive`로 전달되지 않습니다. 확인을 받지 못하면 논리적 세션에 치명적 오류가 발생합니다. `closed.kind`는 `"error"`이고 `closed.cause`는 일반 `Error("WebSocket heartbeat timeout")`이며, 재연결을 시작하지 않습니다. 확인 누락은 밸런서에도 해당 엔드포인트의 `NET_UNREACHABLE`로 보고됩니다. 하트비트 직렬화 실패나 `message()`의 throw도 원래 cause를 유지하면서 같은 치명적 종료 경로를 따르지만, 로컬 문제이므로 엔드포인트에 귀속되지 않습니다.
+- **재시도**: 재시도 정책이 있으면 기본값은 `maxRetries: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0.2`입니다. `session.close()`가 요청하지 않은 모든 close는 기본으로 재시도되며, 한 번도 열리지 않은 연결도 포함됩니다. 생성자가 throw하는 경우는 재시도해도 반복될 뿐인 로컬 실패이므로, `shouldRetry`에 묻지 않고 호출이 끝납니다. 물리적 소켓이 `open`될 때마다 단절 횟수가 재설정됩니다. `shouldRetry`는 기본을 뒤집을 수 있고 비동기일 수 있습니다. 수동 close, 호출자 abort, 또는 `maxRetries`번의 재시도가 이루어진 뒤에는 호출되지 않습니다. 거절되었거나 소진된 재시도는 정책이 없을 때와 같이 세션을 끝냅니다. 연결 오류는 `closed.kind: "error"`이고, 피어의 close 프레임은 `"closed"`입니다. `beforeConnect({ attempt, signal })`는 최초 연결과 모든 재시도 직전에 실행됩니다. 열린 소켓이 밸런서에 보고되는 결과는 `wasClean` 값과 무관하게 종료 코드만으로 정해집니다. `1006` 또는 `1015`(종료 프레임이 도착하지 않음)는 `NET_UNREACHABLE`, `1012` 또는 `1013`은 `NET_UNAVAILABLE`이며, 그 밖의 코드는 실패가 아닙니다.
+- **시도 타임아웃 (`attemptTimeoutMs`)**: 제공하면 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제됩니다. 이것은 `withRetry`(또는 `retry` 요청 옵션)의 옵션이므로 `withRetry({ attemptTimeoutMs })`도 재시도하며, 기본값은 `maxRetries: 3`입니다. 핸드셰이크만 제한하려면 `withRetry({ maxRetries: 0, attemptTimeoutMs })`로 쓰세요. 만료는 밸런서에 `NET_UNREACHABLE`을 보고하고, 재시도를 모두 소진하면 `NET_TIMEOUT`으로 끝납니다.
+- **하트비트**: Defjs는 하트비트 형식, 간격, 타임아웃을 정의하지 않습니다. `message`와 `isAck`는 함수이고, 타입은 `message`를 필수로 하며 `timeoutMs`는 `isAck`와 함께일 때만 허용합니다. 브라우저 `WebSocket` 인터페이스에는 프로토콜 수준의 ping을 보낼 방법이 없으므로, 애플리케이션 수준의 메시지가 이식 가능한 유일한 하트비트입니다. `intervalMs`마다 `outgoing` struct를 통해 `message()`를 JSON 텍스트로 보내므로, 엔드포인트는 `outgoing` struct를 선언해야 하고 텍스트나 바이너리 ping만으로는 불가능합니다. 디코딩된 프레임이 `isAck(msg)`와 일치할 때까지 최대 `timeoutMs`를 기다립니다. `incoming` struct에 실패한 프레임은 `onRuntimeError`에 보고되고 `isAck`에 닿지 않습니다. 일치하는 확인(ack) 프레임은 하트비트 모니터가 소비하며 `session.receive`로 전달되지 않습니다. 확인 누락은 연결 실패로 셉니다. 소켓이 닫히고, 확인 누락은 해당 엔드포인트의 `NET_UNREACHABLE`로 밸런서에 보고되며, 시도는 다른 close와 같이 재시도 흐름으로 들어갑니다. 재시도 정책이 없거나 재시도를 모두 쓰면 `closed.kind`는 `"error"`이고 `closed.cause`는 일반 `Error("WebSocket heartbeat timeout")`입니다. 하트비트 직렬화 실패나 `message()`의 throw는 로컬입니다. 원래 cause로 세션을 끝내고, 재시도되지 않으며, 엔드포인트에 귀속되지 않습니다.
 - **큐 한도**:
-  - `maxIncomingQueueSize` (필수 양의 정수): 디코딩을 기다리는 원시 프레임과 소비자를 기다리는 디코딩된 메시지 모두를 제한합니다. 초과하면 `CAP_QUEUE_OVERFLOW` 결함을 `closed.cause`로 하여 세션을 종료합니다. 같은 cause가 `onRuntimeError`로 전달되고 `session.receive`를 reject합니다. 세션이 열려 있는 동안 `session.receive`를 계속 소비하세요.
-  - `maxOutgoingQueueSize` (선택적 0 이상의 정수, 기본값 `0`): `state === 'reconnecting'`인 동안에만 `session.send()` 호출을 버퍼링하고, 다음 `open`이 발행되기 전에 버퍼의 메시지를 비워냅니다(flush).
+  - 수신 메시지: 옵션도 개수 제한도 없습니다. 라이브러리는 플랫폼이 전달하는 모든 메시지를 `session.receive`가 읽을 때까지 큐에 넣으므로, 읽지 않는 소비자는 큐를 제한 없이 키웁니다. 세션이 열려 있는 동안 `session.receive`를 소비하거나 세션을 닫으세요.
+  - `maxOutgoingQueueSize` (선택, 기본값 `0`): `state === 'reconnecting'`인 동안에만 `session.send()` 호출을 버퍼링하고, 다음 `open`이 발행되기 전에 버퍼의 메시지를 비워냅니다(flush).
 
-`shouldReconnect`는 네이티브 종료 코드와 `wasClean`을 받습니다. 서버는 애플리케이션 오류 코드 `1011`로도 정상 종료 핸드셰이크를 완료할 수 있으므로, `wasClean === true`가 애플리케이션 성공을 의미하지는 않습니다. 예제는 `1011`을 명시적으로 허용합니다. `!wasClean`에만 의존하지 말고 프로토콜에 맞춰 애플리케이션 코드를 선택하세요.
+`shouldRetry`는 WebSocket context에서 네이티브 close `code`, `reason`, `wasClean`을 받으며, 그곳의 `retryable`은 항상 `true`입니다. 서버는 애플리케이션 오류 코드 `1011`로도 정상 종료 핸드셰이크를 완료할 수 있으므로, `wasClean === true`가 애플리케이션 성공을 의미하지는 않습니다. 예제는 `code`로 결정합니다. `!wasClean`에만 의존하지 말고 프로토콜에 맞춰 애플리케이션 코드를 선택하세요.
 
 ## 5. 서브프로토콜 및 인증 [#protocols-and-authentication]
 
@@ -99,7 +99,9 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-재연결 단절이 시도 횟수를 모두 소진하면 세션은 `closed.kind: "error"`로 종료됩니다. 네이티브 종료 스냅샷(업그레이드 실패 시 보통 코드 `1006`)을 유지하고 일반 전송 오류를 `closed.cause`로 사용하며, 별도의 안정적인 소진 코드는 제공하지 않습니다. 컴포넌트나 워커의 작업이 끝나면 항상 `onStateChange`와 `onRuntimeError` 리스너를 구독 해제하세요.
+한 번 열린 뒤 close 프레임 없이 끊긴 연결(코드 `1006`, `wasClean: false`)은 런타임이 네이티브 `error` 이벤트를 발생시키는지와 관계없이 항상 `closed.kind: "error"`와 `closed.cause` `Error("WebSocket connection error")`로 끝납니다.
+
+재시도 단절이 `maxRetries`를 모두 소진하면 세션은 `closed.kind: "error"`로 종료됩니다. 네이티브 종료 스냅샷(업그레이드 실패 시 보통 코드 `1006`)을 유지하고 일반 전송 오류를 `closed.cause`로 사용하며, 별도의 안정적인 소진 코드는 제공하지 않습니다. 세션이 `closed.kind: "error"`로 끝나면 이미 큐에 있던 메시지는 그대로 전달되고, `session.receive`는 마지막 메시지 뒤에 `closed.cause`로 reject됩니다. 피어의 close도 `session.receive`가 끝나기 전에 큐에 있던 메시지를 전달합니다. 호출자가 세션을 멈추면 읽지 않은 메시지는 버려지고 `session.receive`는 즉시 끝납니다. 호출자 abort(`closed.kind: "aborted"`), 수동 `session.close()`, `await using` 폐기가 모두 그렇게 하며, 세션이 이미 끝난 뒤에도 그렇습니다. 세션이 끝난 뒤의 멈춤은 읽지 않은 메시지를 버리고 그 밖에는 바꾸지 않습니다. `closed`는 값을 유지하고, 읽지 않은 것이 없으면 `session.receive`는 여전히 `closed.cause`로 reject됩니다. 컴포넌트나 워커의 작업이 끝나면 항상 `onStateChange`와 `onRuntimeError` 리스너를 구독 해제하세요.
 
 ## 관련 문서
 

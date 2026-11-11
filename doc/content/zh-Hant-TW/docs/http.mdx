@@ -100,8 +100,9 @@ SDK 開發者用 `defineRequest` 定義每項 HTTP 操作：HTTP 方法、路徑
 
 1. **依 `ok` (`200..299`) 選邊**：`2xx` 走 `output`，非 `2xx` 走 `error`。
 2. **省略即不讀取**：該側沒有宣告 struct 時，回應本文完全不會被讀取（`2xx` 解析為 `data: undefined` + `HttpMeta`；非 `2xx` 解析為 `HTTP_STATUS` 且 `data: undefined`）。
-3. **先驗證 JSON 媒體型別**：對於 JSON struct，非 JSON 的 `Content-Type` 會在讀取本文串流之前以 `RES_MEDIA_TYPE_INVALID` 失敗。
+3. **先驗證 JSON 媒體型別**：對於 JSON struct，非 JSON 的 `Content-Type` 會在讀取或尋找本文之前以 `RES_MEDIA_TYPE_INVALID` 失敗。沒有內容的回應（`HEAD`、`204`、`205`、`304`）與其他回應一樣受宣告約束。
 4. **讀取與剖析**：無法讀取的串流或無效的 JSON 會以 `RES_DECODE_FAILED` 失敗（若在傳輸途中被截斷則為 `NET_BODY_INCOMPLETE`）。
+   沒有內容的回應（`HEAD`、`204`、`205`、`304`）沒有本文可讀：`struct.string()` 得到 `''`，`struct.arrayBuffer()` 得到空的 `ArrayBuffer`，`struct.blob()` 得到空的 `Blob`。通過步驟 3 的 JSON struct 會剖析這些空位元組，並以 `RES_DECODE_FAILED` 失敗。
 5. **以 `struct` 驗證**：schema 不符時以 `RES_STRUCT_MISMATCH` 失敗。
 
 ## 5. 取消工作與設定逾時期限 [#cancel-the-work]
@@ -130,8 +131,8 @@ SDK 開發者用 `defineRequest` 定義每項 HTTP 操作：HTTP 方法、路徑
 ## 6. 憑證、XSRF 與傳輸進度
 
 - **`withCredentials(true)`**：為 HTTP 與 SSE 請求設定 Fetch 的 `credentials: "include"`。
-- **`withXSRF(options?)`**：來自 `@defjs/core/xsrf`。在瀏覽器中，於同源的變更型 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上，讀取 XSRF Cookie（預設 `XSRF-TOKEN`）並注入標頭（`X-XSRF-TOKEN`）。呼叫 `withXSRF()` 時，若缺少 `location` 或 `document`（包含 Worker）會丟出錯誤。同構程式只在瀏覽器裡加上這個選項。令牌來自別處時，用攔截器設定。
-- **`onDownloadProgress` / `onUploadProgress`**：透過 `client({ onDownloadProgress, onUploadProgress })` 傳入。只有當 `Content-Length` 為正值、且沒有 `Content-Encoding` 或為 `identity` 時，下載進度才會回報 `lengthComputable: true`。在 `fetch` 支援串流請求本文的執行環境，上傳進度會把 `Blob`、`File`、`ArrayBuffer` 與 `FormData` 轉成串流。Chromium 只在 HTTP/2 及以上回報該進度；HTTP/1.1 下帶 `onUploadProgress` 的上傳會失敗。Firefox 原樣送出這些本文，且不會呼叫回呼。進度回呼若拋出例外，該次呼叫會以 `EXT_OBSERVER_FAILED` 失敗。
+- **`withXSRF(options?)`**：來自 `@defjs/core/xsrf`。在瀏覽器中，於同源的變更型 HTTP 方法（`POST`、`PUT`、`PATCH`、`DELETE`）上，讀取 XSRF Cookie（預設 `XSRF-TOKEN`）並注入標頭（`X-XSRF-TOKEN`）。呼叫 `withXSRF()` 時，若缺少 `location` 或 `document`（包含 Worker）會丟出錯誤。同構程式只在瀏覽器裡加上這個選項。令牌來自別處時，用攔截器設定。同源檢查適用於函式庫組出的 URL；Fetch 會自行跟隨重新導向，並在重新導向到另一個來源後保留這個標頭（它只會移除 `Authorization`）。若要拒絕這種情況，見 [`withXSRF`](/zh-Hant-TW/api/core/withxsrf)。
+- **`onDownloadProgress` / `onUploadProgress`**：透過 `client({ onDownloadProgress, onUploadProgress })` 傳入。只有當 `Content-Length` 為正值、且沒有 `Content-Encoding` 或為 `identity` 時，下載進度才會回報 `lengthComputable: true`。上傳進度只有在你傳入的請求本文是 `ReadableStream` 時才會回報；其他本文（`Blob`、`File`、`ArrayBuffer`、`FormData`、字串、`URLSearchParams`）都會照組好的形式送出，且在每個執行環境都不會呼叫 `onUploadProgress`。`ReadableStream` 本文遵循 Fetch 對串流請求本文的規則，不論有沒有 `onUploadProgress`：Chromium 與 WebKit 只在 HTTP/2 及以上接受它，因此在 HTTP/1.1 上該次呼叫會以 `NET_UNREACHABLE` 失敗（Node.js 與 Bun 接受 HTTP/1.1）；Firefox 無法串流請求本文，會以 `ENV_UNSUPPORTED` 失敗；在瀏覽器中，跨來源請求需要 CORS 預檢，除非瀏覽器持有快取的預檢結果；而 301、302、307 或 308 重新導向會失敗。瀏覽器不會送出 `Content-Length`。這些失敗，以及會拋出例外的來源串流，會讓負載平衡器收到 `{ attempted: false }`，因為 `fetch` 把它們回報成與無法到達的端點相同的網路錯誤；因此單靠串流上傳無法偵測已停機的端點。詳情見 API 參考中的 `HttpProgressFn` 項目。進度回呼若拋出例外，該次呼叫會以 `EXT_OBSERVER_FAILED` 失敗。
 
 ## 相關閱讀
 

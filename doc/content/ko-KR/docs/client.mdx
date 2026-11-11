@@ -59,15 +59,15 @@ description: API 정의와 독립적으로 애플리케이션이 import한 SDK �
 
 `RequestOptions`는 7개의 평면 필드를 갖습니다. 각 전송 방식은 자신에게 해당하는 필드만 읽고 나머지는 무시합니다:
 
-| 필드                 | 대상 전송 방식       | 동작 설명                                                                                                                          |
-| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `signal`             | HTTP, SSE, WebSocket | 호출 취소 (`AbortSignal.timeout(ms)` → `NET_TIMEOUT`, 수동 abort → `NET_ABORTED`).                                                 |
-| `onUploadProgress`   | HTTP                 | 스트리밍 요청 본문 업로드 진행률 보고.                                                                                             |
-| `onDownloadProgress` | HTTP                 | 선언된 응답 본문 다운로드 진행률 보고.                                                                                             |
-| `beforeConnect`      | WebSocket            | 이 세션에 한해 클라이언트 수준의 `beforeConnect` 훅을 대체.                                                                        |
-| `protocols`          | WebSocket            | 이 세션에 한해 클라이언트 수준의 서브프로토콜 목록을 대체.                                                                         |
-| `heartbeat`          | WebSocket            | 이 세션에 한해 클라이언트 수준의 하트비트 설정을 대체.                                                                             |
-| `reconnect`          | WebSocket            | 이 세션에 한해 클라이언트 수준의 WebSocket 재연결 정책을 대체. (SSE 재연결은 클라이언트 수준에서 `withSSEReconnect`로 구성합니다.) |
+| 필드                 | 대상 전송 방식       | 동작 설명                                                                                         |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE, WebSocket | 호출 취소 (`AbortSignal.timeout(ms)` → `NET_TIMEOUT`, 수동 abort → `NET_ABORTED`).                |
+| `onUploadProgress`   | HTTP                 | 스트리밍 요청 본문 업로드 진행률 보고.                                                            |
+| `onDownloadProgress` | HTTP                 | 선언된 응답 본문 다운로드 진행률 보고.                                                            |
+| `beforeConnect`      | WebSocket            | 이 세션에 한해 클라이언트 수준의 `beforeConnect` 훅을 대체.                                       |
+| `protocols`          | WebSocket            | 이 세션에 한해 클라이언트 수준의 서브프로토콜 목록을 대체.                                        |
+| `heartbeat`          | WebSocket            | 이 세션에 한해 클라이언트 수준의 하트비트 설정을 대체.                                            |
+| `retry`              | HTTP, SSE, WebSocket | 이 호출에 한해 클라이언트 수준의 재시도 정책을 대체합니다. HTTP `budget`은 클라이언트에 남습니다. |
 
 ## 3. 브라우저 싱글톤 vs. 서버 요청 스코프
 
@@ -78,20 +78,20 @@ description: API 정의와 독립적으로 애플리케이션이 import한 SDK �
 
 `withEndpoint(...urls)`는 하나 이상의 후보 기본 URL을 전달받을 수 있습니다. 기본 동작은 다음과 같습니다:
 
-- 각 클라이언트는 [`pickFirstBalancer`](/ko-KR/api/core/pickfirstbalancer)를 사용하여, `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 504)에서 다음으로 넘어가기 전까지 첫 번째 URL을 계속 유지합니다. HTTP 재시도는 고정된 엔드포인트를 옮기지 않습니다.
-- **동일 호출 내 HTTP 재시도는 기본적으로 꺼져 있습니다.** `withRetry()`는 `withRetry({})`와 같으며, 안전한 메서드(`GET`, `HEAD`, `OPTIONS`, `TRACE`)의 연결 실패에 대해 아직 시도하지 않은 엔드포인트로의 두 번째 시도를 백오프와 함께 켭니다. Finagle 재시도 예산은 클라이언트 설정에 속하며, 밸런서 자체와는 무관하게 그 파생 클라이언트들이 공유합니다.
+- 각 클라이언트는 [`pickFirstBalancer`](/ko-KR/api/core/pickfirstbalancer)를 사용하여, `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 또는 504)에서 다음으로 넘어가기 전까지 첫 번째 URL을 계속 유지합니다.
+- **재시도는 기본적으로 꺼져 있습니다.** 호출은 시도 한 번입니다. `withRetry()`는 `withRetry({})`와 같습니다. HTTP, SSE, WebSocket 모두에 대해 백오프와 함께 최대 세 번의 재시도를 켭니다. 실패할 때마다 밸런서는 모든 엔드포인트에서 다시 고르므로, pick-first에서는 연결 거부 뒤의 재시도가 다음 엔드포인트에 닿고, 엔드포인트가 하나면 지연 뒤에 다시 시도합니다. HTTP Finagle 재시도 예산은 클라이언트 설정에 속하며, 밸런서 자체와는 무관하게 그 파생 클라이언트들이 공유합니다.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
 </include>
 
-설정된 엔드포인트가 하나뿐이면, 각 재시도가 이미 시도한 엔드포인트를 제외하므로 `withRetry`는 요청을 다시 보내지 않습니다. `attemptTimeoutMs`와 `connectTimeoutMs`는 제공할 경우 유한한 양수여야 하고 2147483647(타이머 상한)을 넘지 않아야 합니다. 그렇지 않으면 작업은 `REQ_OPTIONS_INVALID`를 반환합니다. `connectTimeoutMs`는 SSE와 WebSocket 재연결 옵션 안에만 있습니다. 이 옵션들은 `attempts` 기본값이 `3`이라서 이것만 설정해도 재연결이 켜지므로, 핸드셰이크만 제한하려면 `attempts: 0`을 함께 설정하세요.
+`attemptTimeoutMs`는 시도 하나를 제한합니다. HTTP는 응답 본문이 끝날 때까지, SSE는 응답 헤더까지, WebSocket은 `open`까지입니다. 재시도 없이 시간 제한만 하려면 `withRetry({ maxRetries: 0, attemptTimeoutMs })`로 씁니다. 재시도 옵션은 런타임에 검증되지 않습니다. 결정 순서와 `withSSEReconnect`, `withWebSocketReconnect`에서 옮겨 오는 방법은 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing#retries)를 참조하세요.
 
 ### 헬스 필터링 및 p2c [#health-filtering-and-p2c]
 
-동일한 역할을 하는 서버 레플리카 집합의 경우, [`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer) 및 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)(PeakEwma RTT × 진행 중인 부하)가 기본적으로 Linkerd 스타일의 연속 실패 기반 서킷 브레이킹(`outlierDetection`)을 활성화합니다. 이는 코드가 있는 결과를 모두 실패로 세며(`NET_TIMEOUT`과 `NET_BODY_INCOMPLETE` 포함), 원시 응답 `status`는 커스텀 밸런서만을 위한 것입니다.
+동일한 역할을 하는 서버 레플리카 집합의 경우, [`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer) 및 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)(PeakEwma RTT × 진행 중인 부하)는 `outlierDetection` 옵션을 받을 수 있으며, 객체를 넘기지 않으면 꺼져 있습니다(`{}`를 넘기면 기본 설정입니다). 실패를 세어 한동안 엔드포인트를 방출하고, 직접 작성한 `isHealthy` 함수가 거부하는 엔드포인트는 건너뜁니다. Defjs는 건강함의 의미를 정하지 않습니다. 기본적으로 코드가 있는 결과는 모두 실패로 세며(`NET_TIMEOUT`과 `NET_BODY_INCOMPLETE` 포함), 그 규칙은 `isFailure`로 바꿀 수 있습니다. 원시 응답 `status`는 커스텀 밸런서만을 위한 것입니다.
 
-재시도 예산, 능동/수동 헬스 체크, P2C 부하 추정, 커스텀 밸런서에 대한 자세한 내용은 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing) 가이드를 참조하세요.
+재시도 예산, 실패 방출과 직접 작성한 헬스 함수, P2C 부하 추정, 커스텀 밸런서에 대한 자세한 내용은 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing) 가이드를 참조하세요.
 
 ## 5. 테스트용 전송 계층 주입
 
@@ -105,19 +105,19 @@ description: API 정의와 독립적으로 애플리케이션이 import한 SDK �
 
 ## 6. 클라이언트 옵션 헬퍼 레퍼런스
 
-| 헬퍼                                                                                                          | 목적                                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | 하나 이상의 후보 기본 URL 설정 (이전 목록을 완전히 대체).                                                                                                                                                                                                                                                                  |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP 및 SSE용 정적 기본 헤더 설정 (`builder` 헤더가 우선).                                                                                                                                                                                                                                                                 |
-| `withInterceptors(...items)`                                                                                  | 양파 껍질 순서로 HTTP, SSE, WebSocket 인터셉터 추가.                                                                                                                                                                                                                                                                       |
-| `withQuerySerializer(fn)`                                                                                     | 이미 별칭이 적용된 쿼리 객체를 쿼리 스트링으로 직렬화.                                                                                                                                                                                                                                                                     |
-| `withCredentials(boolean)`                                                                                    | `true`일 때 HTTP 및 SSE 요청에 대해 Fetch `credentials: "include"` 설정.                                                                                                                                                                                                                                                   |
-| `withXSRF(options?)`                                                                                          | `@defjs/core/xsrf`에서 가져옵니다. 브라우저에서 동일 출처의 변경 HTTP 요청에 XSRF 쿠키 값을 헤더로 복사합니다. `location`이나 `document`가 없는 런타임(Worker 포함)에서는 `withXSRF()`가 예외를 던집니다. 서버와 브라우저가 공유하는 코드는 이 옵션을 브라우저에서만 추가합니다. 다른 출처의 토큰은 인터셉터로 설정합니다. |
-| `withBalancer(balancer)`                                                                                      | 엔드포인트 선택 전략 교체 (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).                                                                                                                                                                                                                                      |
-| `withRetry(options?)`                                                                                         | 선택적 HTTP 재시도의 조건, 메서드, 백오프, 시도 제한 시간, 클라이언트가 소유하는 예산을 구성합니다.                                                                                                                                                                                                                        |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 재연결 및 유효하지 않은 이벤트 관측 구성.                                                                                                                                                                                                                                                                              |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 세션 기본 동작 구성.                                                                                                                                                                                                                                                                                             |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 커스텀 또는 테스트 모의 전송 구현체 주입.                                                                                                                                                                                                                                                                                  |
+| 헬퍼                                                                               | 목적                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                            | 하나 이상의 후보 기본 URL 설정 (이전 목록을 완전히 대체).                                                                                                                                                                                                                                                                  |
+| `withHeaders(HeadersInit)`                                                         | HTTP 및 SSE용 정적 기본 헤더 설정 (builder 헤더가 우선).                                                                                                                                                                                                                                                                   |
+| `withInterceptors(...items)`                                                       | 양파 껍질 순서로 HTTP, SSE, WebSocket 인터셉터 추가.                                                                                                                                                                                                                                                                       |
+| `withQuerySerializer(fn)`                                                          | 이미 별칭이 적용된 쿼리 객체를 쿼리 스트링으로 직렬화.                                                                                                                                                                                                                                                                     |
+| `withCredentials(boolean)`                                                         | `true`일 때 HTTP 및 SSE 요청에 대해 Fetch `credentials: "include"` 설정.                                                                                                                                                                                                                                                   |
+| `withXSRF(options?)`                                                               | `@defjs/core/xsrf`에서 가져옵니다. 브라우저에서 동일 출처의 변경 HTTP 요청에 XSRF 쿠키 값을 헤더로 복사합니다. `location`이나 `document`가 없는 런타임(Worker 포함)에서는 `withXSRF()`가 예외를 던집니다. 서버와 브라우저가 공유하는 코드는 이 옵션을 브라우저에서만 추가합니다. 다른 출처의 토큰은 인터셉터로 설정합니다. |
+| `withBalancer(balancer)`                                                           | 엔드포인트 선택 전략 교체 (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).                                                                                                                                                                                                                                      |
+| `withRetry(options?)`                                                              | HTTP, SSE, WebSocket의 선택적 재시도를 구성합니다. 재시도 횟수, 백오프, 메서드, 시도 제한 시간, `shouldRetry` 함수, HTTP 클라이언트가 소유하는 예산입니다.                                                                                                                                                                 |
+| `withSSEOnInvalidEvent`                                                            | struct가 없거나 검증에 실패한 SSE 이벤트를 관측합니다.                                                                                                                                                                                                                                                                     |
+| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 세션 기본 동작 구성.                                                                                                                                                                                                                                                                                             |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | 커스텀 또는 테스트 모의 전송 구현체 주입.                                                                                                                                                                                                                                                                                  |
 
 ## 관련 문서
 

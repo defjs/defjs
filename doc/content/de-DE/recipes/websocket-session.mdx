@@ -5,7 +5,7 @@ description: Verbinden, einen typisierten Envelope senden, einmalig empfangen, d
 
 # Eine WebSocket-Sitzung öffnen
 
-Deklariere `incoming`- und `outgoing`-Structs an `defineWebSocket` zusammen mit einem `maxIncomingQueueSize`, das die eingehende Warteschlange begrenzt. Abonniere in deiner Anwendung `session.onRuntimeError(...)`, konsumiere `session.receive` und melde Listener immer ab, rufe `session.close(...)` auf und warte im `finally`-Block auf `await session.closed`:
+Deklariere `incoming`- und `outgoing`-Structs an `defineWebSocket`. Abonniere in deiner Anwendung `session.onRuntimeError(...)`, konsumiere `session.receive` und melde Listener immer ab, rufe `session.close(...)` auf und warte im `finally`-Block auf `await session.closed`:
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ Antwortet der Server auf `{ "type": "subscribe", "symbol": "ACME" }` mit `{ "typ
 ACME 142.5
 ```
 
-- Sowohl Reconnect (`withWebSocketReconnect`) als auch Heartbeat (`withWebSocketHeartbeat`) sind am Client Opt-in.
+- Sowohl die Wiederverbindung (`withRetry`) als auch der Heartbeat (`withWebSocketHeartbeat`) sind am Client Opt-in.
 - Browser-WebSockets können beim Upgrade-Handshake keine beliebigen HTTP-Header senden; nutze stattdessen Cookies, Subprotokolle oder kurzlebige Tickets. Siehe [WebSocket-Sitzungen](/de-DE/docs/web-socket).

@@ -5,7 +5,7 @@ description: 連線、送出一個具型別的封套、接收一次，然後關�
 
 # 開啟 WebSocket 工作階段
 
-在 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` struct，以及限制傳入佇列的 `maxIncomingQueueSize`。在應用程式端訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並一律在 `finally` 中取消訂閱、呼叫 `session.close(...)` 與 `await session.closed`：
+在 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` struct。在應用程式端訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並一律在 `finally` 中取消訂閱、呼叫 `session.close(...)` 與 `await session.closed`：
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ description: 連線、送出一個具型別的封套、接收一次，然後關�
 ACME 142.5
 ```
 
-- 重連（`withWebSocketReconnect`）與心跳（`withWebSocketHeartbeat`）都需要在 client 上主動啟用。
+- 重連（`withRetry`）與心跳（`withWebSocketHeartbeat`）都需要在 client 上主動啟用。
 - 瀏覽器 WebSocket 無法在升級交握時送出任意 HTTP 標頭；請改用 Cookie、子協定或短期票證。詳見 [WebSocket 工作階段](/zh-Hant-TW/docs/web-socket)。

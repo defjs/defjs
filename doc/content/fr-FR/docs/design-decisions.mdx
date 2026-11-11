@@ -67,15 +67,15 @@ Une réponse `2xx` est décodée exclusivement avec `output`. Tout autre statut 
 
 ### Règle 3 : Tout écart par rapport à l'affirmation est un échec explicite
 
-Defjs choisit le côté de la réponse avec `response.ok` : `output` pour `2xx`, `error` pour un non-`2xx`. Seul un struct JSON déclaré de ce côté déclenche le décodage et peut produire `RES_MEDIA_TYPE_INVALID` ou `RES_DECODE_FAILED` ; son `Content-Type` est vérifié **avant** de lire les octets du corps. Une page de passerelle HTML non-`2xx` produit `RES_MEDIA_TYPE_INVALID` seulement lorsqu'un struct JSON `error` est déclaré. Sans déclaration pour le côté actif, le corps n'est pas lu ; une réponse non-`2xx` renvoie un `HTTP_STATUS` non décodé.
+Defjs choisit le côté de la réponse avec `response.ok` : `output` pour `2xx`, `error` pour un non-`2xx`. Seul un struct JSON déclaré de ce côté déclenche le décodage et peut produire `RES_MEDIA_TYPE_INVALID` ou `RES_DECODE_FAILED` ; son `Content-Type` est vérifié **d'abord**, avant que le corps soit lu ou recherché. Une réponse sans contenu (`HEAD`, `204`, `205`, `304`) est soumise au même contrôle : une représentation JSON déclarée sans `Content-Type` JSON échoue avec `RES_MEDIA_TYPE_INVALID`, et avec un `Content-Type` JSON elle analyse les octets vides et échoue avec `RES_DECODE_FAILED`. Une page de passerelle HTML non-`2xx` produit `RES_MEDIA_TYPE_INVALID` seulement lorsqu'un struct JSON `error` est déclaré. Sans déclaration pour le côté actif, le corps n'est pas lu ; une réponse non-`2xx` renvoie un `HTTP_STATUS` non décodé. Un handshake SSE suit les mêmes règles : un handshake non-`2xx` dont le corps `error` déclaré ne peut pas être décodé renvoie ce fault de décodage au démarrage, avec le statut dans ses métadonnées, tandis que les intercepteurs, les politiques de reconnexion et le `closed` d'une reconnexion voient toujours `HTTP_STATUS`.
 
-| Ce qui a échoué pendant la lecture de la réponse          | Fault retourné                                                     |
-| --------------------------------------------------------- | ------------------------------------------------------------------ |
-| Le media type ne correspond pas au JSON déclaré           | `RES_MEDIA_TYPE_INVALID` (le corps n'est jamais lu)                |
-| Les octets ne peuvent être décodés dans la représentation | `RES_DECODE_FAILED`                                                |
-| La valeur décodée échoue à la validation `struct`         | `RES_STRUCT_MISMATCH` (HTTP) / `RES_DECODE_FAILED` (handshake SSE) |
-| Statut non-`2xx` avec struct `error` décodé               | `HTTP_STATUS` avec `error.data` typé                               |
-| Statut non-`2xx` avec `error` omis                        | `HTTP_STATUS` avec `error.data: undefined`                         |
+| Ce qui a échoué pendant la lecture de la réponse          | Fault retourné                                                                                        |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Le media type ne correspond pas au JSON déclaré           | `RES_MEDIA_TYPE_INVALID` (vérifié d'abord ; le corps n'est jamais lu, contenu ou non n'y change rien) |
+| Les octets ne peuvent être décodés dans la représentation | `RES_DECODE_FAILED` (octets JSON vides compris)                                                       |
+| La valeur décodée échoue à la validation `struct`         | `RES_STRUCT_MISMATCH`                                                                                 |
+| Statut non-`2xx` avec struct `error` décodé               | `HTTP_STATUS` avec `error.data` typé                                                                  |
+| Statut non-`2xx` avec `error` omis                        | `HTTP_STATUS` avec `error.data: undefined`                                                            |
 
 ### Règle 4 : Un décodage échoué n'a pas de corps
 

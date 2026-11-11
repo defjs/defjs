@@ -5,7 +5,7 @@ description: SDK で WebSocket メッセージの契約を定義し、アプリ�
 
 # WebSocket セッション
 
-`defineWebSocket` は、SDK における双方向の WebSocket 契約を宣言します。パステンプレート、任意の `input` と `builder`（`path` と `query` のみ）、`incoming` および `outgoing` メッセージの struct、キューの上限、静的なサブプロトコルを指定します。利用側アプリケーションは、ハートビート、再接続、ライフサイクルのクリーンアップをクライアント側で構成します。
+`defineWebSocket` は、SDK における双方向の WebSocket 契約を宣言します。パステンプレート、任意の `input` と `builder`（`path` と `query` のみ）、`incoming` および `outgoing` メッセージの struct、キューの上限、静的なサブプロトコルを指定します。利用側アプリケーションは、ハートビート、リトライ（`withRetry`）、ライフサイクルのクリーンアップをクライアント側で構成します。
 
 ## 1. 契約の定義とセッションの実行
 
@@ -37,7 +37,7 @@ description: SDK で WebSocket メッセージの契約を定義し、アプリ�
 
 ## 2. メッセージ検証と方向のルール
 
-- **受信フレーム (`session.receive`)**: テキスト、`ArrayBuffer`、typed array、`Blob` の各フレームは UTF-8 としてデコードされ、JSON としてパースされた後に `incoming` スキーマで検証されます。壊れた JSON やスキーマ不一致は `session.onRuntimeError` に報告され、セッションを切断することなく破棄されます。`session.receive` は単一コンシューマー専用です。2 つ目のイテレーターを取得しようとすると `TypeError` が throw されます。
+- **受信フレーム (`session.receive`)**: テキスト、`ArrayBuffer`、typed array、`Blob` の各フレームは UTF-8 としてデコードされ、JSON としてパースされた後に `incoming` スキーマで検証されます。壊れた JSON やスキーマ不一致は `session.onRuntimeError` に報告され、セッションを切断することなく破棄されます。`session.receive` は単一コンシューマー専用です。2 つ目のイテレーターを取得しようとすると `TypeError` が throw されます。トランスポートが失敗したときは、すでに受信したメッセージが先に届けられ、そのあと `receive` が `closed.cause` で reject します。ハートビートのタイムアウトも含まれます。呼び出し元によるキャンセル（`signal` の abort）、`session.close()`、解放は、未読のメッセージを捨て、セッションがすでに終わっていたかどうかにかかわらず `receive` をすぐに終えます。`session.close()` のあとに届いたフレームも捨てられます。`AbortSignal.timeout(ms)` のように、セッションが開いているあいだに期限が切れる `signal` はタイムアウトです。セッションはエラーとして終わり、キューにあるメッセージを先に届けます。セッションが終わったあとに期限が切れるものは停止であり、それらを捨てます。
 - **送信フレーム (`session.send(payload)`)**: `outgoing` スキーマに対して同期的に検証され、`.alias()` とコーデックが適用され、`JSON.stringify` でシリアライズされます。`open` 状態では即座に送信され、`reconnecting`（再接続中）状態では `maxOutgoingQueueSize > 0` の場合にキューイングされます。ペイロードが無効な場合、キューが無効または満杯の場合、あるいはセッションがクローズされている場合は、同期的に例外が throw されます。
 
 ## 3. セッションの状態とオブザーバー
@@ -56,11 +56,11 @@ description: SDK で WebSocket メッセージの契約を定義し、アプリ�
   examples/web-socket/state-snapshots.ts#example
 </include>
 
-## 4. 再接続、ハートビート、キューの制御
+## 4. リトライ、ハートビート、キューの制御
 
-再接続とハートビートは、クライアントオプション（`withWebSocketReconnect`、`withWebSocketHeartbeat`）または呼び出しごとの一時クライアントオプション（`client({ reconnect, heartbeat })`）を通じたオプトイン設定です。
+再接続とハートビートは、クライアントオプション（`withRetry`、`withWebSocketHeartbeat`）または呼び出しごとの一時クライアントオプション（`client({ retry, heartbeat })`）を通じたオプトイン設定です。再接続は HTTP と SSE と同じ `withRetry` ポリシーを使います。
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tabs items={["Retry policy", "Application heartbeat"]}>
 <Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
@@ -73,14 +73,14 @@ description: SDK で WebSocket メッセージの契約を定義し、アプリ�
 </Tab>
 </Tabs>
 
-- **再接続**: 有効時のデフォルト値は `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0` です。物理的な `open` が完了するたびに試行回数の予算がリセットされます。`beforeConnect({ attempt, signal })` は、初回接続および再接続試行の直前に実行されます。open 済みのソケットがバランサーへ報告される結果は、`wasClean` の値にかかわらずクローズコードだけで決まります。`1006` または `1015`（クローズフレームが届かなかった）は `NET_UNREACHABLE`、`1012` または `1013` は `NET_UNAVAILABLE`、それ以外のコードは失敗として扱われません。
-- **ハンドシェイクのタイムアウト (`connectTimeoutMs`)**: 渡したときは、有限の正の数であり、2147483647（タイマー上限）以下でなければなりません。そうでなければ、操作は `REQ_OPTIONS_INVALID` を返します。構築から `open` までを区切り、ハンドシェイクのあとで解除されます。このオプションは `withWebSocketReconnect({...})` のオプションオブジェクト（または `reconnect` リクエストオプション）の中にしか存在しません。このオブジェクトを渡すとデフォルトの `attempts: 3` で自動再接続が有効になるため、`connectTimeoutMs` だけを指定しても再接続が有効になります。ハンドシェイクだけに期限を設けたい場合は、`attempts: 0` を併せて指定してください。
-- **ハートビート**: `outgoing` struct を通じて定期的に `message()` を送信し、最大 `timeoutMs` の間 `isAck(msg)` に一致するフレームの到着を待機します。合致した ACK フレームはハートビートモニターによって消費され、`session.receive` には転送されません。ACK を受信できなければ論理セッションにとって致命的となり、`closed.kind` は `"error"`、`closed.cause` は通常の `Error("WebSocket heartbeat timeout")` になります。再接続は開始しません。ACK の未受信は、そのエンドポイントについて `NET_UNREACHABLE` としてバランサーにも報告されます。ハートビートのシリアライズ失敗や `message()` の throw も、元の cause を保持して同じ致命的な終了経路をたどりますが、ローカルの事象でありエンドポイントには帰属しません。
+- **リトライ**: リトライポリシーを設定したときのデフォルトは `maxRetries: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0.2` です。`session.close()` が要求していないすべての close はデフォルトでリトライされます。開かなかった接続も含みます。throw するコンストラクターは、リトライしても繰り返すだけのローカルな失敗なので、`shouldRetry` を聞かずに呼び出しを終えます。物理的な `open` が完了するたびに障害の回数がリセットされます。`shouldRetry` はデフォルトを覆すことができ、非同期でも構いません。手動の close、呼び出し元の abort、`maxRetries` 回のリトライを終えたあとには呼ばれません。辞退された、または使い切ったリトライは、ポリシーがないときと同じようにセッションを終えます。接続エラーは `closed.kind: "error"`、ピアからの close フレームは `"closed"` です。`beforeConnect({ attempt, signal })` は、初回接続およびすべてのリトライの直前に実行されます。open 済みのソケットがバランサーへ報告される結果は、`wasClean` の値にかかわらずクローズコードだけで決まります。`1006` または `1015`（クローズフレームが届かなかった）は `NET_UNREACHABLE`、`1012` または `1013` は `NET_UNAVAILABLE`、それ以外のコードは失敗として扱われません。
+- **試行のタイムアウト (`attemptTimeoutMs`)**: 渡したときは、構築から `open` までを区切り、ハンドシェイクのあとで解除されます。これは `withRetry`（または `retry` リクエストオプション）のオプションなので、`withRetry({ attemptTimeoutMs })` はデフォルトの `maxRetries: 3` でリトライもします。ハンドシェイクだけに期限を設けるには、`withRetry({ maxRetries: 0, attemptTimeoutMs })` と書いてください。期限が切れるとバランサーへ `NET_UNREACHABLE` を報告し、リトライを使い切ると `NET_TIMEOUT` で終わります。
+- **ハートビート**: Defjs はハートビートの形式、間隔、タイムアウトを定義しません。`message` と `isAck` は利用者の関数であり、型は `message` を必須とし、`timeoutMs` は `isAck` と一緒のときだけ許可します。ブラウザの `WebSocket` インターフェイスにはプロトコルレベルの ping を送る手段がないため、移植できるハートビートはアプリケーションレベルのメッセージだけです。`intervalMs` ごとに `message()` を `outgoing` struct 経由で JSON テキストとして送るので、エンドポイントは `outgoing` struct を宣言し、素のテキストやバイナリの ping はできません。デコードされたフレームが `isAck(msg)` に一致するまで、最大 `timeoutMs` 待ちます。`incoming` struct に失敗したフレームは `onRuntimeError` に報告され、`isAck` には届きません。合致した ACK フレームはハートビートモニターによって消費され、`session.receive` には転送されません。ACK を受信できなければ接続失敗として数えられます。ソケットは閉じられ、ACK の未受信はそのエンドポイントについて `NET_UNREACHABLE` としてバランサーに報告され、試行は他の close と同じようにリトライの流れに入ります。リトライポリシーがないとき、またはリトライを使い切ったとき、`closed.kind` は `"error"`、`closed.cause` は通常の `Error("WebSocket heartbeat timeout")` です。ハートビートのシリアライズ失敗や `message()` の throw はローカルです。元の cause でセッションを終え、リトライされず、エンドポイントにも帰属しません。
 - **キューの制限**:
-  - `maxIncomingQueueSize`（必須の正の整数）: デコード待ちの生フレームと、コンシューマー待ちのデコード済みメッセージの両方を制限します。オーバーフロー時は `CAP_QUEUE_OVERFLOW` Fault を `closed.cause` としてセッションが終了し、同じ cause が `onRuntimeError` に通知され、`session.receive` を reject します。セッションが開いている間は、`session.receive` から継続的にメッセージを消費してください。
-  - `maxOutgoingQueueSize`（任意の非負整数、デフォルトは `0`）: `state === 'reconnecting'` の間のみ `session.send()` の呼び出しをバッファリングし、次の `open` 状態が公開される直前にフラッシュ（送信）します。
+  - 受信メッセージ: オプションも件数の上限もありません。ライブラリは、プラットフォームが届けたメッセージを `session.receive` が読むまで全部キューに入れるので、読まないコンシューマーはキューを際限なく増やします。セッションが開いているあいだは `session.receive` を消費するか、セッションを閉じてください。
+  - `maxOutgoingQueueSize`（任意、デフォルトは `0`）: `state === 'reconnecting'` の間のみ `session.send()` の呼び出しをバッファリングし、次の `open` 状態が公開される直前にフラッシュ（送信）します。
 
-`shouldReconnect` はネイティブのクローズコードと `wasClean` を受け取ります。サーバーはアプリケーションエラーコード `1011` でも正常なクローズハンドシェイクを完了できるため、`wasClean === true` はアプリケーションの成功を意味しません。サンプルは `1011` を明示的に許可しています。`!wasClean` だけに頼らず、プロトコルに応じてアプリケーションのコードを選んでください。
+`shouldRetry` は、WebSocket のコンテキストでネイティブの close の `code`、`reason`、`wasClean` を受け取り、そこでの `retryable` は常に `true` です。サーバーはアプリケーションエラーコード `1011` でも正常なクローズハンドシェイクを完了できるため、`wasClean === true` はアプリケーションの成功を意味しません。サンプルは `code` で判断します。`!wasClean` だけに頼らず、プロトコルに応じてアプリケーションのコードを選んでください。
 
 ## 5. サブプロトコルと認証 [#protocols-and-authentication]
 
@@ -99,7 +99,9 @@ description: SDK で WebSocket メッセージの契約を定義し、アプリ�
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-1 回の障害に対する再接続の試行回数を使い切ると、セッションは `closed.kind: "error"` で終了し、ネイティブのクローズスナップショット（アップグレード失敗では多くの場合コード `1006`）を保持し、通常のトランスポートエラーを `closed.cause` とします。試行回数の枯渇を表す専用の安定したコードは公開しません。コンポーネントやワーカーの処理が終わったら、`onStateChange` と `onRuntimeError` のリスナーを必ず解除してください。
+開いたあとクローズフレームなしで切れた接続（コード `1006`、`wasClean: false`）は、ランタイムがネイティブの `error` イベントを発火するかどうかにかかわらず、常に `closed.kind: "error"` と `closed.cause` の `Error("WebSocket connection error")` で終わります。
+
+リトライの障害が `maxRetries` を使い切ると、セッションは `closed.kind: "error"` で終了し、ネイティブのクローズスナップショット（アップグレード失敗では多くの場合コード `1006`）を保持し、通常のトランスポートエラーを `closed.cause` とします。試行回数の枯渇を表す専用の安定したコードは公開しません。セッションが `closed.kind: "error"` で終わるとき、すでにキューにあったメッセージは届けられ、`session.receive` は最後の 1 件のあと `closed.cause` で reject します。ピアからの close も、`session.receive` が終わる前にキューのメッセージを届けます。呼び出し元がセッションを止めるときは、未読のメッセージが捨てられ、`session.receive` はすぐに終わります。呼び出し元の abort（`closed.kind: "aborted"`）、手動の `session.close()`、`await using` による解放は、セッションがすでに終わったあとでもこれをします。セッションが終わったあとの停止は、未読のメッセージを捨て、それ以外は何も変えません。`closed` は値を保ち、未読がなくなれば `session.receive` は引き続き `closed.cause` で reject します。コンポーネントやワーカーの処理が終わったら、`onStateChange` と `onRuntimeError` のリスナーを必ず解除してください。
 
 ## 関連ドキュメント
 

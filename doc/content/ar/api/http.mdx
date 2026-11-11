@@ -44,7 +44,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` هو شريحة HTTP من [`RequestOptions`](/ar/api/core/requestoptions-type): [`UseRequestConfig`](/ar/api/core/userequestconfig-type)، وهو `signal` مع `onDownloadProgress` و`onUploadProgress`. لا يوجد حقل `timeout` أو `abort`. المهلة هي `signal: AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإلغاء اليدوي هو `NET_ABORTED`. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. لا توجد مهلة افتراضية على مستوى العميل. تُتجاهل حقول الطلب الأخرى، مثل `heartbeat`.
+`HttpExecuteOptions` هو شريحة HTTP من [`RequestOptions`](/ar/api/core/requestoptions-type): [`UseRequestConfig`](/ar/api/core/userequestconfig-type)، وهو `signal` مع `onDownloadProgress` و`onUploadProgress` و`retry`. لا يوجد حقل `timeout` أو `abort`. المهلة هي `signal: AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإلغاء اليدوي هو `NET_ABORTED`. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. لا توجد مهلة افتراضية على مستوى العميل. تُتجاهل حقول الطلب الأخرى، مثل `heartbeat`.
 
 ## الأنواع
 
@@ -91,9 +91,9 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 `loaded` و`total` و`lengthComputable`. قد تكون ردود النداء غير متزامنة. `onDownloadProgress` أو `onUploadProgress` الذي يُلقي استثناءً يُفشل الاستدعاء بـ
 `EXT_OBSERVER_FAILED`، مع القيمة المُلقاة في `cause`؛ ويظل الإلغاء يُبلَّغ `NET_ABORTED`، أو `NET_TIMEOUT` عندما يكون سبب الإلغاء مهلة.
-يحدث التحويل حيث يدعم `fetch` بث جسم الطلب: تتحول أجسام `Blob` / `File` و`ArrayBuffer` و`FormData` إلى دفق ويُبلَّغ تقدم الرفع. يعمل Chromium على HTTP/2 فما فوق فقط؛ وعلى HTTP/1.1 يفشل الرفع الذي يضبط `onUploadProgress` (`NET_UNREACHABLE`). يرسل Firefox هذه الأجسام كما هي ولا يستدعي `onUploadProgress`.
+يُبلَّغ تقدم الرفع فقط عندما يكون جسم الطلب `ReadableStream` تمرّره أنت. أي جسم آخر (`Blob` أو `File` أو `ArrayBuffer` أو `FormData` أو سلسلة نصية أو `URLSearchParams`) يُرسَل كما بُني ولا يُستدعى `onUploadProgress`، على كل بيئة تشغيل؛ ولا تحوّل المكتبة جسمًا إلى تدفق أبدًا. يتبع جسم `ReadableStream` قواعد Fetch لأجسام الطلب المتدفقة، مع `onUploadProgress` أو دونه: يقبل Chromium وWebKit ذلك على HTTP/2 فما فوق فقط (`NET_UNREACHABLE` على HTTP/1.1؛ وفُحص WebKit يدويًا عند 27.2 فقط؛ ويقبل Node.js وBun على HTTP/1.1)؛ ولا يستطيع Firefox بث أجسام الطلب (`ENV_UNSUPPORTED`)؛ وفي المتصفحات يحتاج الطلب العابر للأصل إلى فحص CORS المسبق ما لم يحتفظ المتصفح بنتيجة فحص مسبق مخزّنة، فيجب أن يجيب الخادم على `OPTIONS`؛ ويفشل إعادة التوجيه 301 أو 302 أو 307 أو 308 بعد إرسال الجسم مرة واحدة، بينما يصبح 303 طلب GET وينجح. لا ترسل المتصفحات `Content-Length`. يبلّغ `fetch` عن هذه الإخفاقات، وعن `ReadableStream` مصدر يرمي بينما يقرأه `fetch`، بوصفها خطأ الشبكة نفسه لنقطة نهاية لا يمكن الوصول إليها، فيتلقى موازن الحمل `{ attempted: false }` لها، كما يفعل لرد نداء تقدّم يرمي (`EXT_OBSERVER_FAILED`). لذا لا يستطيع رفع متدفق وحده اكتشاف نقطة نهاية متوقفة، ولا تُعاد محاولة رفع متدفق مرفوض أبدًا: ينهي جسم `ReadableStream` مسار إعادة المحاولة قبل أن تُسأل `shouldRetry`.
 
-حيث يحدث هذا التحويل، يستخدم FormData تدفقه المسلسَل دون تخزين الجسم كاملًا كـ Blob ويحافظ على حد multipart الفعلي. مجموعه غير معروف إلا إذا وفّره `Content-Length` صريح صالح. تبقى أنواع المحتوى الصريحة بعد تحويل الرفع، إلا أن FormData يجب أن يستخدم حد تسلسله. يعدّ `loaded` بايتات التدفق، لا إقرارات الخادم. التنزيلات ذات `Content-Encoding` غير `identity` تبلّغ `total: 0` و`lengthComputable: false`؛ وقد تكون بايتات تدفقها مفكوكة الضغط أصلًا.
+ليس لجسم متدفق طول معروف: المجموع المبلَّغ عنه غير معروف ما لم تضبطه ترويسة `Content-Length` صريحة صالحة (ولا ترسل المتصفحات تلك الترويسة). يعدّ `loaded` بايتات التدفق، لا إقرارات الخادم. التنزيلات ذات `Content-Encoding` غير identity تبلّغ `total: 0` و`lengthComputable: false`؛ وقد تكون بايتات تدفقها مفكوكة الضغط أصلًا.
 
 انظر [دليل HTTP](/ar/docs/http) و[العميل](/ar/docs/client).
 
@@ -115,7 +115,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 ## UseRequestConfig
 
-`signal`، مع `onDownloadProgress` و`onUploadProgress` الاختياريين. `HttpExecuteOptions` هو هذه الشريحة. لا يوجد حقل `timeout` أو `abort`.
+`signal`، مع `onDownloadProgress` و`onUploadProgress` و`retry` الاختيارية. `HttpExecuteOptions` هو هذه الشريحة. لا يوجد حقل `timeout` أو `abort`.
 
 ## RequestSuccessData
 

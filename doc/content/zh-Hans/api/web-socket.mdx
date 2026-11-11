@@ -11,14 +11,14 @@ description: defineWebSocket、会话与请求选项。
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`、一个 `incoming` struct，以及必填的正的安全整数 `maxIncomingQueueSize`；可选 `outgoing` 和 `input` struct、`operation`、静态 `protocols`，以及非负安全整数 `maxOutgoingQueueSize`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明 `input` 时必填。
+- **definition** — `path`，以及一个 `incoming` struct；可选 `outgoing` 和 `input` struct、`operation`、静态 `protocols` 和 `maxOutgoingQueueSize`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明 `input` 时必填。
 - **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即打开会话。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-调用返回 `[null, session, connection]` 或 `[error, undefined, connection?]`。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect`，忽略 HTTP 进度字段。
+调用返回 `[null, session, connection]` 或 `[error, undefined, connection?]`。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `retry`，忽略 HTTP 进度字段。
 
-`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect` 各自整体覆盖该次调用的 Client 级选项。协议优先级依次为：派生的 Client、`withWebSocketProtocols`、定义的 `protocols`。`heartbeat.timeoutMs` 是等待确认的时间，不是请求期限。
+`beforeConnect`、`heartbeat`、`protocols` 和 `retry` 各自整体覆盖该次调用的 Client 级选项。协议优先级依次为：派生的 Client、`withWebSocketProtocols`、定义的 `protocols`。`heartbeat.timeoutMs` 是等待确认的时间，不是请求期限。
 
 ## WebSocketSession
 
@@ -44,19 +44,19 @@ description: defineWebSocket、会话与请求选项。
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上可选，在 `error` 上必填。入站的原始帧或解码后消息队列溢出时，`cause.code === "CAP_QUEUE_OVERFLOW"`；同一个 cause 会让 `receive` reject，并传给 `onRuntimeError`。心跳超时和重连耗尽保留普通运行时 `Error` cause，没有单独的稳定代码。`code`、`reason` 和 `wasClean` 可以出现在每个变体上。手动 `session.close()` 在 close 事件没有这两项时，会为 `{ kind: "closed" }` 填入 `code` 和 `reason`。
+`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上可选，在 `error` 上必填。在 `error` 上，同一个 cause 会在已经入队的消息之后让 `receive` reject，并传给 `onRuntimeError`。会话以 `aborted` 结束时，以及调用方用 `session.close()` 或销毁结束它时，未读消息会被丢弃。调用方的停止（`session.close()`、销毁，或中止 `signal`）在会话已经结束之后也会丢弃它们，且不改变 `closed` 或 `receive` 的 reject。心跳超时和重试耗尽保留普通运行时 `Error` cause，没有单独的稳定代码。曾经打开、随后在没有关闭帧的情况下断开的连接（代码 `1006`）在每个运行时上都是 `error`。`code`、`reason` 和 `wasClean` 可以出现在每个变体上。手动 `session.close()` 在 close 事件没有这两项时，会为 `{ kind: "closed" }` 填入 `code` 和 `reason`。
 
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hans/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `signal`。`WebSocketHeartbeatConfig`：`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。没有 `timeout` 或 `abort` 字段。
+`WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hans/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`retry` 和 `signal`。`WebSocketHeartbeatConfig`：`intervalMs` 和 `message` 必填；`timeoutMs` 只允许与 `isAck` 一起出现。没有 `timeout` 或 `abort` 字段。
 
-`signal` 覆盖整个会话，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 Client 级默认期限。`signal` 是本次调用的 signal；要组合 signal，在应用代码中使用 `AbortSignal.any`。`heartbeat` 整体替换；其 `timeoutMs` 等待确认，不是请求期限。
+`signal` 覆盖整个会话，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有 Client 级默认期限。仅限连接过程的期限是 `retry: { maxRetries: 0, attemptTimeoutMs }`，它在 `open` 时结束。`signal` 是本次调用的 signal；要组合 signal，在应用代码中使用 `AbortSignal.any`。`heartbeat` 整体替换；其 `timeoutMs` 等待确认，不是请求期限。
 
 `builder` 和拦截器链每次操作只运行一次。重连复用已构建的 path/query 和捕获的 protocols，并在 `beforeConnect` 之前构造 URL。如果拦截器没有替换请求的基础端点，重连还会代入新选择的端点。该 Hook 不能在同一个会话内轮换 URL 或子协议凭据；请用新的 input 或 Client 配置发起新操作。
 
-设置 `reconnect` 后，每次中断的 `attempts` 默认为 3；`0` 禁用。成功 `open` 会重置预算和退避指数，因此每次新中断都从第 1 次重试开始。省略 `attempts` 并不表示单次中断内可以无限重试。默认值和校验规则见 [Client](/zh-Hans/api/client)。
+设置了重试策略（`withRetry`）后，每次中断的 `maxRetries` 默认为 3；`0` 禁用。`session.close()` 没有请求的每一次关闭默认都会重试，包括从未打开的连接和没有得到应答的心跳，`shouldRetry` 可以推翻这一默认。WebSocket 构造函数抛出（例如平台拒绝的子协议）是重试只会重复的本地失败：它结束调用，且不会询问 `shouldRetry`。成功 `open` 会重置计数和退避指数，因此每次新中断都从第 1 次重试开始。默认值和决策顺序见 [Client](/zh-Hans/api/client#withretry)。
 
 ## 消息
 
@@ -72,7 +72,7 @@ description: defineWebSocket、会话与请求选项。
 
 ## WebSocketDefinition
 
-`path`、`incoming`，必填的 `maxIncomingQueueSize`，可选 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。`builder` 只能返回 `path` 和 `query`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
+`path`、`incoming`，可选 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。`builder` 只能返回 `path` 和 `query`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ## WebSocketEndpoint
 
@@ -84,7 +84,7 @@ description: defineWebSocket、会话与请求选项。
 
 ## UseWebSocketConfig
 
-`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `signal`。`WebSocketExecuteOptions` 就是这个切片。没有 `abort` 字段。
+`beforeConnect`、`heartbeat`、`protocols`、`retry` 和 `signal`。`WebSocketExecuteOptions` 就是这个切片。没有 `abort` 字段。
 
 ## SocketAwaitResult
 
@@ -96,7 +96,7 @@ description: defineWebSocket、会话与请求选项。
 
 ## WebSocketHeartbeatConfig
 
-`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。
+`intervalMs` 和 `message` 必填。`isAck` 识别确认，`timeoutMs` 只允许与 `isAck` 一起出现；联合类型强制这一点，运行时并不检查。Defjs 不定义心跳格式：每个值都来自你的函数。载荷通过 `outgoing` struct 以 JSON 文本发送。没有得到应答的心跳会关闭 socket，并进入 `withRetry` 的重试流程；没有重试策略时，会话以 `error` 结束。
 
 ## WebSocketIncomingData
 
@@ -108,4 +108,4 @@ description: defineWebSocket、会话与请求选项。
 
 ## SocketLifecycleOutcome
 
-一次连接尝试的结果（`closeInfo`、`connection`、`cause`、`opened`），供重连逻辑使用。它不是会话的最终结果；最终结果见 `WebSocketCloseInfo`。
+一次连接尝试的结果（`closeInfo`、`connection`、`cause`、`opened`），供重试逻辑使用。它不是会话的最终结果；最终结果见 `WebSocketCloseInfo`。

@@ -1,19 +1,19 @@
 ---
 title: "负载均衡与故障转移"
-description: 在多个端点之间分发流量，剔除不健康的副本，并在单次调用内对安全的 HTTP 请求做故障转移。
+description: 在多个端点之间分发流量，逐出持续失败的副本，跳过你自己的健康检查拒绝的副本，并带退避重试 HTTP、SSE 和 WebSocket 调用。
 ---
 
 # 负载均衡与故障转移
 
-当应用通过 `withEndpoint(...urls)` 配置多个基地址时，Defjs 可以在副本间分发请求，用被动熔断或主动健康检查剔除不健康主机，并可选择在同一次调用内对安全 HTTP 方法做故障转移。
+当应用通过调用 `withEndpoint(...urls)` 配置多个基地址时，Defjs 可以在副本间分发请求，把持续失败的主机逐出一段时间，跳过你自己的健康函数拒绝的主机，并可选择在另一个端点上重试失败的调用。Defjs 不决定什么叫健康：只有你提供的函数才能把端点标为不健康。
 
 ## 1. 选择负载均衡策略
 
-| 均衡策略                                                                        | 适用场景                                              | 默认健康检测机制                                   |
-| ------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------- |
-| [`pickFirstBalancer(options?)`](/zh-Hans/api/core/pickfirstbalancer) _（默认）_ | 前端浏览器应用，配置了有序的“主节点 + 备用区域”列表   | 默认关闭（可通过 `outlierDetection` 选项显式开启） |
-| [`roundRobinBalancer(options?)`](/zh-Hans/api/core/roundrobinbalancer)          | 服务端对等副本间调用（支持配置可选的 `weights` 权重） | 默认开启（连续 `5` 次失败后熔断剔除）              |
-| [`p2cBalancer(options?)`](/zh-Hans/api/core/p2cbalancer)                        | 服务端调用，各副本间响应耗时或在途负载不均衡的场景    | 默认开启（连续 `5` 次失败后熔断剔除）              |
+| 均衡策略                                                                        | 适用场景                                              | 默认健康过滤                                 |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/zh-Hans/api/core/pickfirstbalancer) _（默认）_ | 前端浏览器应用，配置了有序的“主节点 + 备用区域”列表   | 关闭（通过 `outlierDetection: {}` 显式开启） |
+| [`roundRobinBalancer(options?)`](/zh-Hans/api/core/roundrobinbalancer)          | 服务端对等副本间调用（支持配置可选的 `weights` 权重） | 关闭（通过 `outlierDetection: {}` 显式开启） |
+| [`p2cBalancer(options?)`](/zh-Hans/api/core/p2cbalancer)                        | 服务端调用，各副本间响应耗时或在途负载不均衡的场景    | 关闭（通过 `outlierDetection: {}` 显式开启） |
 
 <Tabs items={["主备（Pick-first）", "对等服务端（Round-robin 与 P2C）", "自定义均衡器"]}>
 <Tab>
@@ -41,50 +41,94 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 
 ### `pickFirstBalancer` 与 `p2cBalancer` 的工作机制
 
-- **`pickFirstBalancer`（主备粘性）**：始终停在第一个 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。顺序与粘滞端点遵循 client 的完整端点列表（`members`），并且 HTTP 重试从不移动粘滞端点：对第一个端点的超时被重试到第二个端点后，后续调用仍留在第一个端点上，failback 也保持待命。配置 `failbackMs: 30_000`，在备用端点上停留这段时间之后，再探测主端点。同时最多只能有一个在途主端点探测。探测在对端响应开始时判定（HTTP 响应头、SSE 握手或 WebSocket 打开），因此作为探测的长连接流不会让整个 client 的 failback 被一直阻塞；从未到达该时刻的尝试则在完成时判定。故障转移后第一次探测主端点之前，必须满足间隔已过，且离开主端点后至少选中过一次备用端点。探测失败会重新开始这两个要求：下一次探测前，必须重新选中过备用端点，并再次经过该间隔，即使 SSE/WebSocket 重连退避比 `failbackMs` 更长也不例外。这样健康的备用端点才有机会被使用，而不是每次重连都访问已经失效的主端点。
-- **`roundRobinBalancer` 权重**：未指定的权重为 `1`；配置的权重必须是有限正数。平滑加权轮询保留按比例选择的特性（例如 `3:1` 会让权重较高的节点在每四次选择中被选中三次）。极端量级会被缩放以避免溢出；低于浮点精度的比例可能舍入为零。每次选择及过期 current 值的清理都需要 O(候选数量) 的工作量。
+- **`pickFirstBalancer`**：始终停在第一个 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）时才前进。顺序与粘滞端点遵循 client 的完整端点列表（`members`）。重试会从全部端点中再次选择，因此遵循同一条规则：连接被拒绝，或遇到 502、503 或 504 之后，会到达下一个端点；超时不会让 pick-first 前进，于是会再次尝试同一个端点。配置 `failbackMs: 30_000`，仅按时间回到第一个端点：粘滞端点离开第一个端点达到这段时间后，下一次候选中包含第一个端点的 pick 会选中它，并再次把它变成粘滞端点。没有任何东西判断第一个端点是否已经恢复。如果它再次失败，上面的前进规则会离开它，时间重新开始。选择一个比两次 pick 间隔更长的 `failbackMs`，例如 SSE 或 WebSocket 的重连延迟；否则每一次 pick 都会回到第一个端点。
+- **`roundRobinBalancer` 不带权重**：计数器从一个随机的 `uint32` 开始，每一次 `pick` 都让它前进，包括为重试或流重连做的那次 pick。没有 `outlierDetection`，并且调用一个接一个地运行时，持续失败的端点因此会收到超过 1/n 的首次尝试。恰好两个端点且启用了重试时，它会收到全部首次尝试，于是每次调用都需要一次重试。并发调用会交错各自的 pick，打破这个模式。带上 `outlierDetection: {}` 后，失败的端点会被逐出一段时间。
+- **`roundRobinBalancer` 权重**：未指定的权重为 `1`；配置的权重是有限正数。平滑加权轮询保留按比例选择的特性（例如 `3:1` 会让权重较高的节点在每四次选择中被选中三次）。极端量级会被缩放以避免溢出；低于浮点精度的比例可能舍入为零。选择和过期 current 值的清理，每次 pick 需要 O(成员数量 + 候选数量) 的工作量。
 - **`p2cBalancer`（双选择随机 P2C 算法）**：不放回地随机抽取两个不同的候选端点，并选出综合评分更低的一个：`PeakEwma RTT × (pending + 1)`（或在配置 `load: "pending"` 时直接比较在途 `pending` 请求数）。其默认值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd 与 tower 的惯例。pending 在 `pick` 选中端点的那一刻就被预留，因此同一个 tick 内的一批调用会分散到不同端点；它在对端响应开始时（HTTP 响应头、SSE 握手、WebSocket 打开）释放，若没有响应开始，则在尝试完成时释放。对 SSE 和 WebSocket 而言，这意味着 p2c 均衡的是握手，而不是已打开连接的数量。
 
 均衡器状态（粘滞端点、逐出状态与 p2c 负载）以及重试预算都归 Client 所有：整个应用只创建一次 Client，并用 `client(options)` 派生每次调用的 Client：派生出的 Client 同时保留均衡器状态和重试预算。用 `withBalancer` 把同一个均衡器值传给多个 Client 时，只共享均衡器状态；每个 Client 仍有各自的重试预算。每个请求都新建一个 `createClient`，则两者都会从头开始。
 
-## 2. 同一次调用内的 HTTP 重试
+## 2. 重试 [#retries]
 
-重试由三个彼此独立的决定支配：**是否再试**（`withRetry`）、**发到哪里**（运行时让均衡器重新选择，并排除已经试过的端点），以及**等多久**（退避）。HTTP 的 `withRetry`、SSE 的 `withSSEReconnect` 和 WebSocket 的 `withWebSocketReconnect` 是对称的、各自传输上的策略。它们扁平的退避字段同名、同样校验、同样计算延迟。均衡器不知道重试策略；自定义均衡器不需要专门配合。
+重试由三个彼此独立的决定支配：**是否再试**（`withRetry`）、**发到哪里**（运行时让均衡器从全部端点中再次选择），以及**等多久**（退避）。一份 `withRetry(options)` 覆盖 HTTP、SSE 和 WebSocket，并保存在 `config.retry`；请求选项 `retry` 为一次调用替换它。三种传输共享这些选项、决策顺序和退避计算，差别只在于默认重试哪些失败。均衡器不知道重试策略；自定义均衡器不需要专门配合。
 
-同一次调用内的 HTTP 重试**默认关闭**。省略 `withRetry` 时，每次调用只尝试一次，既不会创建重试预算，也不会向它存入额度。之后各次调用的选择方式不变：`pickFirstBalancer` 仍可以在一次失败的调用之后前进。`withRetry()` 与 `withRetry({})` 等价，会为 `GET`、`HEAD`、`OPTIONS` 和 `TRACE` 上的连接失败启用总共两次尝试。
+重试**默认关闭**。省略 `withRetry` 表示每次调用只尝试一次，没有退避，对 HTTP 也不会创建或存入重试预算。之后各次调用的选择方式不变：`pickFirstBalancer` 仍可以在一次失败的调用之后前进。`withRetry()` 等价于 `withRetry({})`：首次尝试之后最多 `maxRetries: 3` 次重试，`1000` ms 的延迟每次重试翻倍，上限 `30000` ms，以及 ±20% 的抖动。
 
-这与 Go 生态一致：[gRPC 把 `retryPolicy` 放在 service configuration 里](https://grpc.io/docs/guides/retry/)，与负载均衡配置并列；[go-kit 的 `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) 则显式包住一个均衡器。二者默认都不套用应用自己的重试策略。gRPC 的重试策略要求配置退避，并使用 ±0.2 的抖动；[Envoy 默认以 25 毫秒为基数，上限是该基数的十倍](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-retry-policy-retrybackoff)。Defjs 使用 25 毫秒、系数 2、250 毫秒上限，以及 ±20% 的抖动。gRPC 可以针对底层竞态做透明重试；Defjs 不模拟这些行为。
+这与 Go 生态一致：[gRPC 把 `retryPolicy` 放在 service configuration 里](https://grpc.io/docs/guides/retry/)，与负载均衡配置并列；[go-kit 的 `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) 则显式包住一个均衡器。二者默认都不套用应用自己的重试策略。gRPC 的重试策略要求配置退避，并使用 ±0.2 的抖动。不含首次尝试的重试次数（`maxRetries`）与 ky、got、undici 以及 Go 的 `go-retryablehttp` 一致；gRPC 的 `maxAttempts` 把最初那一次也算进去。gRPC 可以针对底层竞态做透明重试；Defjs 不模拟这些行为。
 
 <include cwd lang="typescript">
   examples/client/http-retry.ts#example
 </include>
 
-- **总尝试次数（`maxAttempts`）**：包含首次尝试，与 gRPC 的 `retryPolicy.maxAttempts` 以及 go-kit `lb.Retry` 的 `max` 一致。该值必须是至少为 1 的安全整数；`1` 表示不重试。没有配置上的上限，但均衡器每次选择都会排除该调用内已经选中过的端点。这里统计的是外层尝试，而不是应用拦截器内部的物理发送次数：循环调用 `next()` 的拦截器可以多次向同一个端点发送请求。例如，在 `maxAttempts: 2` 时，拦截器向故障主端点发送三次，再由外层向健康备用端点重试一次，就会产生四次网络请求；builder 和拦截器链外层的认证只运行两次，而不是四次。流式请求 body 从不重试。`methods` 不区分大小写；`methods: []` 会关闭所有方法的重试。
-- **重试条件（`on`）**：默认为 `["connect-failure"]`。可以追加 `"gateway-error"`，对应 `NET_UNAVAILABLE`（HTTP `502`/`503`/`504`），包括被 `RES_*` 解码拒绝的网关错误体；配置了 `attemptTimeoutMs` 时还可以追加 `"attempt-timeout"`。一次符合条件的重试会重建请求，并从最外层重新跑整条拦截器链。
-- **退避（`delayMs`、`factor`、`jitter`、`maxDelayMs`）**：第 n 次重试之前，等待 `delayMs × factor^(n−1)`，并带上乘性抖动，在抖动和取整之后封顶。默认值是 `25`、`2`、`0.2` 和 `250`。`delayMs: 0` 跳过等待。与重连一样，`delayMs` 必须是非负有限数，`factor` 必须是正的有限数，`jitter` 必须是 `[0, 1]` 内的有限数，`maxDelayMs` 必须是非负有限数或正 `Infinity`。平台计时器上限仍然生效。
-  Core 的 `withRetry` 不读取 `Retry-After`。这个响应头的处理方式（包括任何延迟上限）属于[应用拦截器策略](/zh-Hans/docs/interceptors)，不是这里的退避机制。
-  只配置了一个端点时，`withRetry` 不会重放请求，因为每一次重试都会排除已经试过的端点。
+每次失败的尝试之后，每种传输上的流程都相同，按这个顺序：
 
-- **单次尝试超时 vs. 整次调用超时**：`attemptTimeoutMs` 必须是有限正数，且不得大于 2147483647（计时器上限）；否则该操作返回 `REQ_OPTIONS_INVALID`。它为发往所选端点的每次 Fetch 计时，从发起一直到其响应 body 读取完成。发送前后的拦截器工作（例如 `401` 之后刷新令牌）以及 struct 解码都不计时，也绝不会算到端点头上；发送已完成之后，调用方期限在拦截器工作期间到期，不会以 `NET_TIMEOUT` 报告给均衡器，报告的是端点自身的结果。调用方的 `client({ signal: AbortSignal.timeout(ms) })` 覆盖每一次尝试**以及退避等待**。等待期间取消会返回调用方的取消错误，并且不再 pick。
-- **重试时没有可用端点**：当某一轮重试无法使用任何端点（均衡器 pick 失败，或下一个端点的 URL 无法解析）时，调用返回上一次尝试的错误（例如 `NET_UNREACHABLE`），而不是 `REQ_BUILD_FAILED`。
-- **Finagle / Linkerd 重试预算（`budget`）**：每份 client 配置拥有一份预算，只有使用这份配置的派生 client 会共享，共享均衡器的 client 并不共享。默认值是 `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`：原始流量的 20% 再加上储备。存入和取出都在十个 TTL/10 切片上惰性过期。一次重试会在等待之前先取出额度；预算耗尽时既不等待，也不重试。设置 `budget: false` 可去掉这一上限。
-- **浏览器离线环境感知**：当 `navigator.onLine === false` 时，连接失败会报告 `{ attempted: false }`，此时不会推进均衡器，也不会触发重试。
+1. 调用方中止、手动 `close()`、致命错误，以及 `ReadableStream` 请求 body，都会结束调用。不会调用 `shouldRetry`。
+2. 已经进行了 `maxRetries` 次重试时，调用结束。不会调用 `shouldRetry`。
+3. `shouldRetry(context)` 做决定；没有它时由 `context.retryable` 决定。这个函数可以是异步的，并收到按 `transport` 收窄的 [`RetryContext`](/zh-Hans/api/core/retrycontext-type)。返回 `context.retryable` 可以保留默认规则，并在上面加上你自己的规则。
+4. 仅 HTTP：预算为这次重试付费，否则调用结束。
+5. 调用等待退避延迟，然后均衡器再次选择。
+
+- **重试次数（`maxRetries`）**：首次尝试之后的重试，默认 `3`；`0` 从不重试。带有 `maxRetries: 0` 和 `attemptTimeoutMs` 的调用只限制每次尝试的时间。对 SSE 和 WebSocket，连接再次建立（成功的握手或 `open`）时计数重新开始，因此它限制的是每次中断，而不是整个会话。接受连接后立刻丢掉每一次连接的服务器因此会一直被重试；用 `shouldRetry` 停掉它。没有配置上的上限。这里统计的是外层尝试，而不是应用拦截器内部的物理发送次数：循环调用 `next()` 的拦截器可以多次向同一个端点发送请求。例如，拦截器向故障主端点发送三次，再加上一次到健康备用端点的外层重试，在 `maxRetries: 1` 时会产生四次网络请求；builder 和拦截器链外层的认证层运行两次，而不是四次。
+- **默认重试哪些失败**：当方法在 `methods` 中，且这次尝试没有得到响应（`NET_UNREACHABLE`）、得到 `502`、`503` 或 `504`（`NET_UNAVAILABLE`），或用尽了 `attemptTimeoutMs` 时，HTTP 会重试。当方法在 `methods` 中，握手网络失败、`502`/`503`/`504` 握手、尝试超时，或已打开的流发生网络错误之后，SSE 会重试；流的正常结束会结束调用。WebSocket 会重试 `session.close()` 没有请求的每一次关闭，包括从未打开的连接和没有得到应答的心跳，但不会重试抛出的构造函数。`429` 或 `500` 这样的状态默认不重试；`shouldRetry` 收到它时带有 `retryable: false` 和 `status`，并且可以返回 `true`。`methods` 默认为 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 和 `DELETE`，比较时不区分大小写；HTTP 要求一次尝试发出的每一个方法，在拦截器改写之后，都在其中。只有当你把 POST 加进 `methods`，或从 `shouldRetry` 返回 `true` 时，POST 才会被重试，这需要应用层保证跨副本幂等。符合条件的 HTTP 重试会重建请求，并从最外层重新跑整条拦截器链。SSE 复用已构建的请求，只替换 URL，WebSocket 会重新运行 `beforeConnect`。
+- **退避（`delayMs`、`factor`、`jitter`、`maxDelayMs`）**：第 n 次重试之前，等待 `delayMs × factor^(n−1)`，并带上乘性抖动，在抖动和取整之后封顶。默认值是 `1000`、`2`、`0.2` 和 `30000`。`delayMs: 0` 跳过等待；`maxDelayMs: Infinity` 去掉上限。平台计时器上限仍然生效。对 SSE，只含数字的服务器 `retry:` 字段会为之后的尝试替换 `delayMs`。Core 不读取 `Retry-After`。这个响应头的处理方式（包括任何延迟上限）属于[应用拦截器策略](/zh-Hans/docs/interceptors)，不是这里的退避机制。
+- **单个端点**：重试会从全部端点中选择，包括刚刚失败的那个，因此单个端点会在退避延迟之后再次尝试。重试预算和 `maxRetries` 限制这种风暴。
+- **单次尝试超时 vs. 整次调用超时**：`attemptTimeoutMs` 限制单次尝试。HTTP 为发往所选端点的每次 Fetch 计时，从发起一直到其响应 body 读取完成；SSE 停在响应头，WebSocket 停在 `open`。HTTP 发送前后的拦截器工作（例如 `401` 之后刷新令牌）以及 struct 解码都不计时，也绝不会算到端点头上；发送已完成之后，调用方期限在拦截器工作期间到期，不会以 `NET_TIMEOUT` 报告给均衡器，报告的是端点自身的结果。调用方的 `client({ signal: AbortSignal.timeout(ms) })` 覆盖每一次尝试**以及退避等待**。等待期间取消会返回调用方的取消错误，并且不再 pick。选项不会在运行时校验。
+- **重试时没有可用端点**：当某一轮重试无法使用任何端点（均衡器 pick 失败，或下一个端点的 URL 无法解析）时，HTTP 调用返回上一次尝试的错误（例如 `NET_UNREACHABLE`），而不是 `REQ_BUILD_FAILED`。
+- **Finagle / Linkerd 重试预算（`budget`）**：仅 HTTP。每份 client 配置拥有一份预算，只有使用这份配置的派生 client 会共享，共享均衡器的 client 并不共享。默认值是 `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`：原始流量的 20% 再加上储备。存入和取出都在十个 TTL/10 切片上惰性过期。一次重试会在等待之前先取出额度；预算耗尽时既不等待，也不重试。设置 `budget: false` 可去掉这一上限。SSE 和 WebSocket 没有预算：共享 HTTP 的预算会让一阵 HTTP 重试挡住一次重连。
+- **浏览器离线环境感知**：当 `navigator.onLine === false` 时，连接失败会报告 `{ attempted: false }`，此时不会推进均衡器，也不会触发 HTTP 重试。
+
+后一次 `withRetry` 会替换策略。`withRetry()` 和 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。要在启用之后关闭重试，传入 `withRetry({ maxRetries: 0 })`。
+
+### 从 `withSSEReconnect` 和 `withWebSocketReconnect` 迁移
+
+`withSSEReconnect` 和 `withWebSocketReconnect` 已经移除，没有别名。`withRetry` 覆盖 SSE 和 WebSocket，请求选项 `reconnect` 现在是 `retry`。
+
+- `attempts: N` 变成 `maxRetries: N`。
+- `shouldReconnect` 变成 `shouldRetry`。它的 context 增加了 `transport` 和 `retryable`，并且只在仍有剩余重试时才会被调用。和 `shouldReconnect` 一样，它替换默认规则，包括方法规则，因此返回 `true` 的函数仍会重试 `POST` 流。
+- 默认值变了：SSE 的 `factor` 从 `1` 变为 `2`，SSE 的 `maxDelayMs` 从无上限变为 `30000`；两种传输的 `jitter` 都从 `0` 变为 `0.2`。
+- SSE 握手：在 0.6 中，每一个非 2xx 握手都会结束流，且不会询问 `shouldReconnect`。现在 `502`、`503` 或 `504` 握手会像连接被拒绝一样被重试，其他非 2xx 握手会以 `retryable: false` 到达 `shouldRetry`。
+- 错误码：以非 2xx 状态结束 SSE 流的重连握手，现在在 `closed.code` 中报告 `HTTP_STATUS`；0.6 报告的是 `RES_DECODE_FAILED`，`EventStreamFaultCode` 已经不再有它。`shouldRetry` 抛出时，每种传输上的调用都以 `EXT_HOOK_FAILED` 结束，抛出的值作为 `cause`；抛出的 `shouldReconnect` 曾以 `NET_UNREACHABLE` 结束 SSE 流。
+- WebSocket 心跳：在 0.6 中，没有得到应答的心跳以错误结束会话，并且永远到不了 `shouldReconnect`。它现在和其他中断一样：`shouldRetry` 收到它时 `retryable: true`，带有 `cause`，没有关闭 `code`，可以返回 `false`，像以前一样以那个错误结束会话。
+- `withRetry` 也会重试 HTTP。要让 HTTP 调用只尝试一次，对 `context.transport === "http"` 返回 `false`。
+
+```ts
+// Before
+createClient(
+  withEndpoint(url),
+  withSSEReconnect({ attempts: 3, delayMs: 1000 }),
+  withWebSocketReconnect({
+    attempts: 3,
+    shouldReconnect: ({ code }) => code !== 1008,
+  }),
+);
+// After
+createClient(
+  withEndpoint(url),
+  withRetry({
+    maxRetries: 3,
+    shouldRetry: (context) => {
+      if (context.transport === "http") return false;
+      if (context.transport === "websocket" && context.code === 1008)
+        return false;
+      return context.retryable;
+    },
+  }),
+);
+```
 
 ### 浏览器部署边界
 
-- 浏览器 CORS 失败会以连接失败的形式传给 Fetch，并报告为 `NET_UNREACHABLE`，无法与主机宕机区分。它可能推进端点选择，并触发显式启用的安全方法重试；成功的故障转移因此可能掩盖主区域的 CORS 配置错误。
+- 浏览器 CORS 失败会以连接失败的形式传给 Fetch，并报告为 `NET_UNREACHABLE`，无法与主机宕机区分。它可能推进端点选择，并触发显式启用的安全方法重试；成功的重试因此可能掩盖主区域的 CORS 配置错误。
 - 即使响应缺少必需的 CORS 响应头，服务端仍可能已处理 POST。应用随后收到 `NET_UNREACHABLE`，却不知道写操作是否成功。默认不会重放 POST；显式启用写操作重试，需要应用层保证跨副本幂等性。
 - 浏览器中，服务端拒绝的 WebSocket 升级（例如 `401`）与端点不可达无法区分，都会报告为 `NET_UNREACHABLE`，因此过期的凭据可能导致端点被逐出。
 - Cookie 的作用域按主机划分，而非端口：`localhost` 上不同端口的两个端点可以共享 Cookie，但 `localhost` 和 `127.0.0.1` 不会。多来源端点集合需要明确规划 Cookie/Token 和 CORS 凭据策略；`withCredentials(true)` 不会改变 Cookie 的作用域。
 - 显式离线提示（`navigator.onLine === false`）会抑制端点归因和连接失败重试。它只是浏览器提示，不是可靠的可达性检查。
 
-后一次 `withRetry` 会替换先前的策略。`withRetry()` 与 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。启用之后若要关闭重试，传入 `withRetry({ maxAttempts: 1 })`。无效的重试设置会在 HTTP 操作运行时返回 `REQ_OPTIONS_INVALID`，消息为 `Invalid retry options`。
+## 3. 失败逐出与你自己的健康函数（`outlierDetection`）
 
-## 3. 被动熔断剔除与主动健康检查（`outlierDetection`）
+Defjs 没有内建的健康端点概念。[`outlierDetection`](/zh-Hans/api/core/outlierdetection) 做两件可选的事，每个内置均衡器都通过自己的 `outlierDetection` 选项接收它（`pickFirstBalancer`、`roundRobinBalancer` 和 `p2cBalancer` 除非你传入对象，否则保持关闭，默认值用 `{}`）。它统计已分类的失败并把端点逐出一段时间，也会跳过你的 `isHealthy` 函数拒绝的端点：
 
-`roundRobinBalancer()` 和 `p2cBalancer()` 默认在候选选择外包裹 [`outlierDetection`](/zh-Hans/api/core/outlierdetection) 离群检测：
-
-<Tabs items={["单探测恢复", "主动健康检查缓存"]}>
+<Tabs items={["按时间逐出", "你自己的健康函数"]}>
 <Tab>
 
 <include cwd lang="typescript">
@@ -101,16 +145,17 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 </Tab>
 </Tabs>
 
-1. **连续失败**：默认分类器把每个带 code 的结果都计为失败：`NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR`、`NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。已尝试但没有 code 的结果会重置连续计数；未归属的尝试和被丢弃的样本则保持计数不变。连续出现 `consecutiveFailures` 次（默认 `5` 次）被计入的结果后，该端点在 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 至 `60000ms`）期间被逐出，并加上最高 `50%` 的均匀正向抖动；基础时长加抖动的总和不会超过 `maxPenaltyMs`。
-2. **单探测恢复**：惩罚到期后，一个请求会探测该主机。若对端响应在 `end` 开始且不是被计入的失败，正常流量立即恢复，惩罚等级重置为 `0`；若探测失败（包括超时），该端点会再次被逐出，惩罚翻倍。
-3. **有界历史记录**：在派生 client 和每次调用的候选排除之间，健康历史记录总共至少保留 256 个端点，且至少覆盖当前成员数量。优先淘汰最近最少使用的干净或已过期条目，然后才是尚未达到阈值的部分连续失败记录。只有所有保留条目都受保护时，才会淘汰惩罚尚未到期或有在途探测的条目，此时移除最旧的一条。仅在一次调用中省略端点，并不会重置其惩罚。P2C 的负载历史同样至少保留 256 条且至少覆盖当前成员数量，因此超过 256 个端点的列表也会保留每一份估计，先淘汰空闲条目，再淘汰繁忙条目；被遗忘的端点会从 `defaultRttMs` 重新开始。Pick-first 的 shuffle key 在 LRU 缓存中至少保留 256 条且至少覆盖当前成员，因此被遗忘的端点回来时会获得新 key。加权轮询为客户端的成员保留 current 值：在某次选择中被排除的端点（HTTP 重试或健康过滤）仍保留其值，如同 nginx 跳过已下线的节点，只有离开成员列表的端点才会丢弃其值；复制后的权重配置在构造时固定。可用时，时长使用平台的单调 Performance 时钟，仅以 `Date.now()` 作为后备。
-4. **Panic 模式 fail-open**：如果 `isHealthy` 否决了所有未被逐出的端点，均衡器会忽略 `isHealthy`，在未被逐出的端点中选择；只有当所有配置的端点都被逐出时，才会 fail-open，回退到 Client 的完整候选列表，而不是在本地丢弃所有流量。
+1. **统计失败**：默认的 `isFailure` 规则把每个带 code 的结果都计为失败：`NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR`、`NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。它只决定哪些结果计入逐出；它不是健康判断，你可以传入 `isFailure` 来替换它。已尝试但没有 code 的结果会重置连续计数；未归属的尝试保持计数不变。连续出现 `consecutiveFailures` 次（默认 `5` 次）被计入的结果后，该端点被逐出。设置 `consecutiveFailures: 0` 可关闭计数。
+2. **按时间逐出**：端点被逐出 `min(minPenaltyMs × level, maxPenaltyMs)`（`1000ms` 到 `60000ms`），再加上最高 `50%` 的均匀正向抖动；基础时长加抖动的总和不会超过 `maxPenaltyMs`。`level` 是 gRPC 离群检测（gRFC A50）的逐出乘数：每次逐出加一，成功从不会清掉它，每 `10` 秒没有新的逐出就减一，从逐出结束的那一刻起算。时间一到，端点就可以再次被选择。没有任何东西去探测它，或判断它是否已经恢复；如果它仍然失败，再累计 `consecutiveFailures` 次被计入的结果就会把它逐出更长时间，因此一个接受连接后又丢掉它的端点会被逐出 1s、2s、3s，依此类推直到 `maxPenaltyMs`，只要它的失败回来得比一个等级衰减得更快。在逐出之前开始、或端点处于逐出期间开始的尝试，其结果会被忽略，即使它在端点再次可选之后才到达，因此迟到的结果不会再次把它逐出。逐出结束与否在下一次 pick 时对照时钟计算；没有计时器在跑。
+3. **`isHealthy`**：唯一的健康判断。它是同步的，对每一次 pick 中每个当前未被逐出的端点运行（被逐出的端点不会被询问），因此把它保持成对应用自己维护的状态的廉价读取，如第二个标签页所示。它返回 `false` 的端点不会被选中。返回 `true` 不会结束逐出：端点只有在未被逐出且 `isHealthy` 没有拒绝它时才可选。抛出不会被 Defjs 接住：pick 以 `REQ_BUILD_FAILED` 失败，抛出的值是 `cause`。
+4. **有界历史记录**：在派生 client 之间，健康历史记录至少保留 256 个端点，且至少覆盖当前成员数量。优先淘汰最近最少使用的干净或已过期条目，然后才是部分失败序列。只有当所有保留条目都被逐出时，才会淘汰尚未到期的逐出，此时移除最旧的一条。仅在一次调用中省略端点，并不会重置其惩罚。P2C 的负载历史同样至少保留 256 条且至少覆盖当前成员数量，因此超过 256 个端点的列表也会保留每一份估计，先淘汰空闲条目，再淘汰繁忙条目；被遗忘的端点会从 `defaultRttMs` 重新开始。Pick-first 的 shuffle key 在 LRU 缓存中至少保留 256 条且至少覆盖当前成员，因此被遗忘的端点回来时会获得新 key。加权轮询为客户端的成员保留 current 值：在某次选择中被排除的端点（一次健康过滤后的选择）仍保留其值，如同 nginx 跳过已下线的节点，只有离开成员列表的端点才会丢弃其值；复制后的权重配置在构造时固定。可用时，时长使用平台的单调 Performance 时钟，仅以 `Date.now()` 作为后备。
+5. **Panic 模式 fail-open**：如果 `isHealthy` 否决了所有未被逐出的端点，均衡器会忽略 `isHealthy`，在未被逐出的端点中选择；只有当所有配置的端点都被逐出时，才会 fail-open，回退到 Client 的完整候选列表，而不是在本地丢弃所有流量。
 
 ## 4. 传输层生命周期记账（`pick` → `start` → `end` → `done`）
 
-自定义均衡器必须选择 `info.endpoints` 中某个完全一致的字符串。选中候选集之外的值时，会返回包含 `REQ_BUILD_FAILED` 的元组，非敏感的 cause 消息为 `Balancer selected an endpoint outside the candidate set`；不会启动任何传输，该选择的 `done` 会以 `{ attempted: false }` 运行一次。这条规则保证健康过滤和每次调用的重试排除仍然有效。
+自定义均衡器必须选择 `info.endpoints` 中某个完全一致的字符串；这样健康过滤仍然有效。
 
-自定义均衡器实现同步的 `pick(info)`，以及可选的 `start()`、`end(info)` 和 `done(info)` 回调。`PickInfo` 包含一次 pick 的候选 `endpoints`（重试以及包装器过滤时该列表会缩小）、`members`（client 的完整端点列表，每次尝试都相同；有状态的均衡器以它为依据维护顺序和状态）和可选的定义 `operation`，没有传输类型判别字段。传输层把自己的事实翻译成中立的 `DoneInfo.code` 结果。内置均衡器从不读取 `status`；这份原始响应信息只留给自定义均衡器。`start` 在尝试之前运行，`end` 在对端响应开始或响应前失败时运行，`done` 在完成时运行。因此，更晚发生的 body 失败可以改变最终的 code，而不改变更早的 `end` 样本：
+自定义均衡器实现同步的 `pick(info)`，以及可选的 `start()`、`end(info)` 和 `done(info)` 回调。运行时调用这些回调时不绑定接收者，因此 `this` 是 `undefined`；把状态放在闭包、箭头函数或绑定后的函数里。同步抛出不会改变这次尝试；在运行时定义了 `reportError` 时用它报告，未处理的报告可以结束一个没有错误处理程序的 Bun 或 Deno 进程。Node.js 没有定义 `reportError`，因此抛出在那里保持被接住。`PickInfo` 包含一次 pick 的候选 `endpoints`（包装器过滤时该列表会缩小）、`members`（client 的完整端点列表，每次尝试都相同；有状态的均衡器以它为依据维护顺序和状态）和可选的定义 `operation`；它没有传输类型判别字段。传输层把自己的事实翻译成中立的 `DoneInfo.code` 结果。内置均衡器从不读取 `status`；这份原始响应信息只留给自定义均衡器。`start` 在尝试之前运行，`end` 在对端响应开始或响应前失败时运行，`done` 在完成时运行。因此，更晚发生的 body 失败可以改变最终的 code，而不改变更早的 `end` 样本：
 
 | 物理传输实际结果                                                | 最终 `done(info)` 统计样本                                 |
 | --------------------------------------------------------------- | ---------------------------------------------------------- |
@@ -119,18 +164,19 @@ description: 在多个端点之间分发流量，剔除不健康的副本，并�
 | HTTP/SSE 响应状态 2xx、3xx 或 4xx（包括 429）                   | `{ attempted: true, status }`                              |
 | HTTP 响应体在传输流中途中断                                     | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
 | SSE 握手成功，随后流 `reader.read()` 发生 reject                | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| SSE 正常 EOF、握手成功后的解码失败，或队列上限                  | `{ attempted: true, status }`                              |
+| SSE 正常 EOF、不是事件流的 2xx 握手，或缓冲区上限               | `{ attempted: true, status }`                              |
 | 已建立的 WebSocket 以 `1006` 或 `1015` 关闭（没有收到关闭帧）   | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
 | 已建立的 WebSocket 以 `1012` 或 `1013` 关闭                     | `{ attempted: true, code: "NET_UNAVAILABLE" }`             |
 | WebSocket 心跳确认超时                                          | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
 | 已建立的 WebSocket 以其他任意关闭码关闭，不论 `wasClean` 为何值 | `{ attempted: true }`                                      |
 | 调用方主动取消请求，或手动关闭长连接流/Socket                   | `{ attempted: false }`                                     |
+| `fetch` 以网络错误拒绝流式 HTTP 请求 body                       | `{ attempted: false }`                                     |
 | 请求尝试开始后调用方设置的超时期限到期                          | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
 
-握手解码失败会保留由握手状态推导出的中立结果（例如状态 `503` 对应 `NET_UNAVAILABLE`）。不完整的 HTTP body 则保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使那是网关响应；与任何带 code 的结果一样，它会被默认离群检测计为失败。无法发送的心跳（`message()` 抛出或序列化失败）属于本地问题，保持中立。
+流式 HTTP 请求 body 是调用方提供的 `ReadableStream`。无论连接被拒绝还是 HTTP/1.1、重定向无法重放该流、CORS 预检失败，或源流抛出，`fetch` 都会以同一个网络错误拒绝它，因此这个错误并不能可靠地表明端点已宕机。调用仍以 `NET_UNREACHABLE` 失败，但均衡器收到的是 `{ attempted: false }`，与抛出的进度回调（`EXT_OBSERVER_FAILED`）一样。代价是，只有流式上传检测不到宕机的端点：它们不会让 `pickFirst` 离开它，也不会计入 `outlierDetection`，被拒绝的流式上传也从不重试：`ReadableStream` body 会在询问 `shouldRetry` 之前结束重试流程。握手解码失败会保留由握手状态推导出的中立结果（例如状态 `503` 对应 `NET_UNAVAILABLE`）。不完整的 HTTP body 则保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使那是网关响应；与任何带 code 的结果一样，它会被默认离群检测计为失败。无法发送的心跳（`message()` 抛出或序列化失败）属于本地问题，保持中立。
 
 ## 相关阅读
 
 - [Client 配置](/zh-Hans/docs/client)
-- [SSE 自动重连](/zh-Hans/docs/sse#reconnect)
-- [WebSocket 自动重连](/zh-Hans/docs/web-socket)
+- [SSE 重试](/zh-Hans/docs/sse#reconnect)
+- [WebSocket 重试](/zh-Hans/docs/web-socket)

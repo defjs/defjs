@@ -5,7 +5,7 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 
 # WebSocket 工作階段
 
-`defineWebSocket` 在 SDK 中宣告雙向的 WebSocket 契約：路徑模板、選用的 `input` 與 `builder`（僅限 `path` 與 `query`）、`incoming` 與 `outgoing` 訊息 struct、佇列上限，以及靜態子協定。取用端應用程式則在自己的 Client 上設定心跳、重連與生命週期清理。
+`defineWebSocket` 在 SDK 中宣告雙向的 WebSocket 契約：路徑模板、選用的 `input` 與 `builder`（僅限 `path` 與 `query`）、`incoming` 與 `outgoing` 訊息 struct、佇列上限，以及靜態子協定。取用端應用程式則在自己的 Client 上設定心跳、重試（`withRetry`）與生命週期清理。
 
 ## 1. 定義契約並執行工作階段
 
@@ -37,7 +37,7 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 
 ## 2. 訊息驗證與方向性規範
 
-- **接收訊框（`session.receive`）**：文字、`ArrayBuffer`、型別化陣列與 `Blob` 訊框都會以 UTF-8 解碼、剖析為 JSON，再對照 `incoming` 驗證。格式錯誤的 JSON 或 schema 不符會回報給 `session.onRuntimeError` 並直接丟棄，不會關閉工作階段。`session.receive` 是單一消費者；要求第二個迭代器會拋出 `TypeError`。
+- **接收訊框（`session.receive`）**：文字、`ArrayBuffer`、型別化陣列與 `Blob` 訊框都會以 UTF-8 解碼、剖析為 JSON，再對照 `incoming` 驗證。格式錯誤的 JSON 或 schema 不符會回報給 `session.onRuntimeError` 並直接丟棄，不會關閉工作階段。`session.receive` 是單一消費者；要求第二個迭代器會拋出 `TypeError`。傳輸失敗時，已經收到的訊息會先送出，然後 `receive` 以 `closed.cause` 拒絕，心跳逾時也包含在內。呼叫端的取消（中止 `signal`）、`session.close()` 與釋放會丟棄未讀訊息，`receive` 立刻結束，不論工作階段是否已經結束；`session.close()` 之後才到的訊框也會被丟棄。工作階段開啟期間到期的 `signal`（例如 `AbortSignal.timeout(ms)`）是逾時：工作階段以錯誤結束，並先送出已排入佇列的訊息。工作階段結束之後才到期的，則是停止，並把那些訊息丟掉。
 - **發送訊框（`session.send(payload)`）**：同步對照 `outgoing` 驗證、套用 `.alias()` 與編解碼器，再以 `JSON.stringify` 序列化。狀態為 `open` 時立即送出；`reconnecting` 期間會排入佇列（若 `maxOutgoingQueueSize > 0`）；若酬載無效、佇列已滿或停用，或工作階段已關閉，則同步拋出例外。
 
 ## 3. 工作階段狀態與觀察者
@@ -56,11 +56,11 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
   examples/web-socket/state-snapshots.ts#example
 </include>
 
-## 4. 重連、心跳與佇列
+## 4. 重試、心跳與佇列
 
-重新連線與心跳都需要主動啟用，可透過 Client 選項（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或單次呼叫的衍生 Client 選項（`client({ reconnect, heartbeat })`）設定：
+重新連線與心跳都需要主動啟用，可透過 Client 選項（`withRetry`、`withWebSocketHeartbeat`）或單次呼叫的衍生 Client 選項（`client({ retry, heartbeat })`）設定。重新連線使用與 HTTP、SSE 相同的 `withRetry` 策略：
 
-<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tabs items={["Retry policy", "Application heartbeat"]}>
 <Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
@@ -73,14 +73,14 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 </Tab>
 </Tabs>
 
-- **重新連線**：啟用時的預設值為 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線 `open` 都會重設中斷額度。`beforeConnect({ attempt, signal })` 會在初始連線與每次重連嘗試之前執行。已開啟的 socket 回報給平衡器的結果只取決於關閉代碼，與 `wasClean` 無關：`1006` 或 `1015`（未收到關閉訊框）為 `NET_UNREACHABLE`，`1012` 或 `1013` 為 `NET_UNAVAILABLE`，其他代碼都不算失敗。
-- **交握逾時（`connectTimeoutMs`）**：有提供時，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制從建構到 `open` 的時間，交握完成後即清除。此選項只存在於 `withWebSocketReconnect({...})` 的選項物件（或 `reconnect` 請求選項）內；只要傳入該物件，就會以預設的 `attempts: 3` 啟用自動重連，因此單獨設定 `connectTimeoutMs` 同樣會開啟重連。若只想限制交握，請同時設定 `attempts: 0`。
-- **心跳**：定期透過 `outgoing` struct 送出 `message()`，並在 `timeoutMs` 內等待符合 `isAck(msg)` 的訊框。符合的 ACK 訊框會被心跳監控器吃掉，不會轉給 `session.receive`。沒收到 ACK 對邏輯工作階段是致命錯誤：`closed.kind` 為 `"error"`，`closed.cause` 是普通的 `Error("WebSocket heartbeat timeout")`；這不會啟動重連。沒收到的 ACK 也會以 `NET_UNREACHABLE` 回報給平衡器，歸屬於該端點。心跳序列化失敗或 `message()` 拋出，也會走同一條致命路徑並保留原始的 cause，但屬於本機問題，不歸屬於端點。
+- **重試**：設定重試策略時，預設值為 `maxRetries: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0.2`。`session.close()` 沒有要求的每一次關閉預設都會重試，包括從未開啟的連線。建構子拋出是重試只會重複的本機失敗，因此會結束呼叫，不會詢問 `shouldRetry`。每次實體連線 `open` 都會重設中斷次數。`shouldRetry` 可以推翻預設，也可以是非同步的；手動關閉、呼叫端中止，或已經做完 `maxRetries` 次重試之後，都不會呼叫它。被拒絕或用盡的重試會讓工作階段像沒有策略時一樣結束：連線錯誤是 `closed.kind: "error"`，來自對端的關閉訊框是 `"closed"`。`beforeConnect({ attempt, signal })` 會在初始連線與每一次重試之前執行。已開啟的 socket 回報給平衡器的結果只取決於關閉代碼，與 `wasClean` 無關：`1006` 或 `1015`（未收到關閉訊框）為 `NET_UNREACHABLE`，`1012` 或 `1013` 為 `NET_UNAVAILABLE`，其他代碼都不算失敗。
+- **嘗試逾時（`attemptTimeoutMs`）**：有提供時，它限制從建構到 `open` 的時間，交握完成後即清除。它是 `withRetry`（或 `retry` 請求選項）的選項，所以 `withRetry({ attemptTimeoutMs })` 也會重試，並使用預設的 `maxRetries: 3`。只想限制交握時，寫 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。到期會向平衡器回報 `NET_UNREACHABLE`，重試用盡時以 `NET_TIMEOUT` 結束。
+- **心跳**：Defjs 沒有定義心跳格式、間隔或逾時：`message` 與 `isAck` 是你的函式，型別要求 `message`，而且 `timeoutMs` 只允許與 `isAck` 一起出現。瀏覽器的 `WebSocket` 介面無法送出協定層的 ping，因此應用程式層的訊息是唯一可攜的心跳。每過 `intervalMs`，它就透過 `outgoing` struct 以 JSON 文字送出 `message()`，所以端點要宣告 `outgoing` struct，純文字或二進位的 ping 做不到。它最多等 `timeoutMs`，尋找解碼後符合 `isAck(msg)` 的訊框；沒通過 `incoming` struct 的訊框會回報給 `onRuntimeError`，絕不會到達 `isAck`。符合的 ACK 訊框會被心跳監控器吃掉，不會轉給 `session.receive`。沒收到 ACK 算連線失敗：socket 會關閉，沒收到的 ACK 會以 `NET_UNREACHABLE` 回報給平衡器並歸屬於該端點，這次嘗試會像其他關閉一樣進入重試流程。沒有重試策略，或重試用盡之後，`closed.kind` 為 `"error"`，`closed.cause` 是普通的 `Error("WebSocket heartbeat timeout")`。心跳序列化失敗或 `message()` 拋出屬於本機問題：它們會以原始 cause 結束工作階段，不會重試，也不歸屬於端點。
 - **佇列上限**：
-  - `maxIncomingQueueSize`（必填的正安全整數）：同時限制等待解碼的原始訊框，以及等待消費端的已解碼訊息。溢位會以 `CAP_QUEUE_OVERFLOW` Fault 作為 `closed.cause` 終止工作階段；同一個 cause 也會傳給 `onRuntimeError`，並讓 `session.receive` 拒絕。工作階段開啟期間請持續消費 `session.receive`。
-  - `maxOutgoingQueueSize`（選用的非負安全整數，預設 `0`）：只在 `state === 'reconnecting'` 時緩衝 `session.send()` 呼叫，並在下一次 `open` 發布前送完。
+  - 傳入訊息：沒有選項，也沒有數量上限。函式庫會把平台送達的每一則訊息排進佇列，直到 `session.receive` 讀走，因此從不讀取的消費端會讓佇列無限制成長；工作階段開啟期間請消費 `session.receive`，或關閉工作階段。
+  - `maxOutgoingQueueSize`（選用，預設 `0`）：只在 `state === 'reconnecting'` 時緩衝 `session.send()` 呼叫，並在下一次 `open` 發布前送完。
 
-`shouldReconnect` 會收到原生關閉代碼與 `wasClean`。伺服器可以使用應用程式錯誤碼 `1011` 完成正常的關閉交握，因此 `wasClean === true` 不代表應用程式處理成功。範例明確允許 `1011`；請依照你的通訊協定選擇應用程式代碼，不要只依賴 `!wasClean`。
+`shouldRetry` 會在它的 WebSocket context 裡收到原生關閉的 `code`、`reason` 與 `wasClean`，而且那裡的 `retryable` 一律是 `true`。伺服器可以使用應用程式錯誤碼 `1011` 完成正常的關閉交握，因此 `wasClean === true` 不代表應用程式處理成功。範例依 `code` 決定；請依照你的通訊協定選擇應用程式代碼，不要只依賴 `!wasClean`。
 
 ## 5. 子協定與身分驗證 [#protocols-and-authentication]
 
@@ -99,7 +99,9 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-一次中斷的重連嘗試用盡後，工作階段會以 `closed.kind: "error"` 結束，`closed.cause` 是一般的傳輸錯誤，並附上原生的關閉快照（升級失敗時通常是代碼 `1006`）；不會另外提供一個穩定的「額度用盡」代碼。元件或背景 Worker 結束時，務必取消訂閱 `onStateChange` 與 `onRuntimeError` 監聽器。
+曾經開啟、隨後在沒有關閉訊框的情況下斷線的連線（代碼 `1006`、`wasClean: false`）一律以 `closed.kind: "error"` 與 `closed.cause` `Error("WebSocket connection error")` 結束，不論執行環境有沒有觸發原生 `error` 事件。
+
+一次中斷的重試把 `maxRetries` 用盡後，工作階段會以 `closed.kind: "error"` 結束，`closed.cause` 是一般的傳輸錯誤，並附上原生的關閉快照（升級失敗時通常是代碼 `1006`）；不會另外提供一個穩定的「額度用盡」代碼。工作階段以 `closed.kind: "error"` 結束時，已經排入佇列的訊息仍會送出，`session.receive` 在最後一則之後以 `closed.cause` 拒絕；來自對端的關閉也會先送出已排入佇列的訊息，然後 `session.receive` 才結束。呼叫端停止工作階段時，未讀訊息會被丟棄，`session.receive` 立刻結束：呼叫端中止（`closed.kind: "aborted"`）、手動 `session.close()`，以及以 `await using` 釋放，都會這樣做，工作階段已經結束之後也一樣。工作階段結束之後的停止會丟棄未讀訊息，其他什麼都不改：`closed` 保持原值，`session.receive` 仍會在沒有未讀內容時以 `closed.cause` 拒絕。元件或背景 Worker 結束時，務必取消訂閱 `onStateChange` 與 `onRuntimeError` 監聽器。
 
 ## 相關閱讀
 

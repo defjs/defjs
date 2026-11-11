@@ -35,4 +35,4 @@ build started
 ```
 
 - SSE verbindet sich bei Netzwerk- oder Lesefehlern nicht automatisch wieder, es sei denn, du konfigurierst [`withRetry(...)`](/de-DE/api/core/withretry) am Client.
-- Ist `withSSEReconnect` mit einem Optionen-Objekt aktiviert, beträgt `attempts` standardmäßig `3` pro Ausfall und setzt sich bei einem erfolgreichen Handshake zurück (`attempts: 0` deaktiviert Reconnects). Ohne ein eigenes `shouldReconnect` verbinden sich nur `GET`-, `HEAD`-, `OPTIONS`-, `PUT`- und `DELETE`-Anfragen erneut. Eine Anfrage mit einem `ReadableStream`-Body wird nie erneut verbunden. Siehe [SSE-Event-Streams](/de-DE/docs/sse).
+- Ist `withRetry(...)` gesetzt, beträgt `maxRetries` standardmäßig `3` pro Ausfall und setzt sich bei einem erfolgreichen Handshake zurück (`maxRetries: 0` deaktiviert Retries). Ohne ein eigenes `shouldRetry` werden nur `GET`-, `HEAD`-, `OPTIONS`-, `TRACE`-, `PUT`- und `DELETE`-Anfragen wiederholt. Eine Anfrage mit einem `ReadableStream`-Body wird nie wiederholt. Siehe [SSE-Event-Streams](/de-DE/docs/sse).

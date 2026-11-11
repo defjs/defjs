@@ -5,7 +5,7 @@ description: 在 SDK 中匯出具型別的事件串流定義，由取用端應�
 
 # SSE 事件串流
 
-SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：指定路徑、選用的 `input` 與 `builder`、以 `events` 字典對應事件 struct，以及緩衝區與佇列上限。取用端應用程式則在自己的 Client 上設定身分驗證與需主動啟用的重連，開啟串流、迭代具型別的事件，並負責關閉串流。
+SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：指定路徑、選用的 input 與 builder、以 `events` 字典對應事件 struct，以及緩衝區上限。取用端應用程式則在自己的 Client 上設定身分驗證與需主動啟用的重試（`withRetry`），開啟串流、迭代具型別的事件，並負責關閉串流。
 
 ## 1. 定義事件串流並使用它
 
@@ -37,7 +37,7 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 
 ## 2. 開啟連線交握與 Tuple 結構
 
-只有在初始 HTTP 回應為 `2xx`、媒體型別為 `text/event-stream` 且帶有可讀取的本文時，呼叫該操作才會解析為 `[error, stream, startupOpen]`：
+只有在初始 HTTP 回應為 `2xx` 且媒體型別為 `text/event-stream` 時，呼叫該操作才會解析為 `[error, stream, startupOpen]`：
 
 <Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
 <Tab>
@@ -56,8 +56,9 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 </Tab>
 </Tabs>
 
-- **非 `2xx` 交握**：回傳 `HTTP_STATUS`（若定義上宣告了 `error` struct，則帶有解碼後的 `error.data`）。這對目前的操作是致命錯誤，不會呼叫 `shouldReconnect`；例外是設定了 `withSSEReconnect` 時的 `502`、`503` 或 `504` 交握：它會像連線被拒絕一樣，依第 4 節的重連規則重試，並在設定了 `shouldReconnect` 時諮詢它。重試用盡則以 `HTTP_STATUS` 結束。下一次操作會重新選取端點，因此平衡器可能選到另一個端點。
-- **Content-Type 不符或本文無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
+- **非 `2xx` 交握**：回傳 `HTTP_STATUS`。若宣告了 `error` struct，`error.data` 就是解碼後的本文。該本文無法解碼時，結果改為解碼 fault，與 HTTP 相同：JSON 宣告遇到另一種媒體型別時是 `RES_MEDIA_TYPE_INVALID`（例如閘道回傳的 HTML `503`），無法讀取或無法剖析的本文是 `RES_DECODE_FAILED`，不符合 struct 的本文是 `RES_STRUCT_MISMATCH`。它的 `status` 與 `response` 把交握狀態當成中繼資料帶上，`cause` 則放著原因。攔截器、`shouldRetry`，以及重連時失敗的串流的 `closed`，對該回應仍會收到 `HTTP_STATUS`，而且它的 `cause` 是同一個原因，因此閘道的 `503` 不論本文長什麼樣子都會重試。宣告了 `error` 會讓 client 在回報 fault 之前把交握本文讀到結尾，所以伺服器應該結束每一個非 `2xx` 回應。狀態沒有內容時（`304`），或 JSON 宣告遇到不是 JSON 的媒體型別時，不會讀取本文。被讀取卻永不結束的本文會讓呼叫一直懸著，直到呼叫端的 `signal` 中止，或平台切斷連線。被切斷的連線就是無法讀取的本文，因此呼叫會回傳 `RES_DECODE_FAILED`，並以平台的失敗作為 `cause`。`attemptTimeoutMs` 不會限制那次讀取。沒有宣告 `error` 時，本文會在未讀的情況下被取消。沒有 `withRetry` 時，這會結束目前的操作。有的話，`502`、`503` 或 `504` 交握會像連線被拒絕一樣，依第 4 節的規則重試，其他任何狀態會帶著 `retryable: false` 與其 `status` 交給 `shouldRetry`，因此除非你的函式另有決定，否則會結束串流。用盡或被拒絕的重試以 `HTTP_STATUS` 結束。下一次操作會重新選取端點，因此平衡器可能選到另一個端點。
+- **Content-Type 不符**：媒體型別不是 `text/event-stream` 的 `2xx` 交握會回傳 `RES_MEDIA_TYPE_INVALID`，包含 `204` 與 `205`。
+- **沒有本文**：媒體型別為 `text/event-stream` 且沒有本文的 `2xx` 交握（Node.js 與 Bun 會把 `204` 或 `205` 呈現為 null 本文）是一條空的事件串流：呼叫成功，串流立刻以 `kind: "eof"` 結束，而且絕不會重試。
 - **`startupOpen` 與 `stream.open`**：tuple 的第三項（`startupOpen`）是首次交握回應的快照；`stream.open` 會在串流之後重連時即時更新。若重連交握以非 2xx 狀態結束串流，迭代器會拒絕，`stream.closed` 回報 `HTTP_STATUS`，而 `stream.open.response.status` 保持該狀態；即時的回應狀態請看 `stream.open`。
 
 ## 3. 事件分派與解碼
@@ -70,26 +71,40 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
-## 4. 重新連線與 Last-Event-ID [#reconnect]
+## 4. 重試與 `Last-Event-ID` [#reconnect]
 
-SSE 的重新連線是**需主動啟用（opt-in）**的功能。沒有設定 `withSSEReconnect(...)` 時，任何網路斷線或串流讀取錯誤都會直接終止串流。
+SSE 重試是**需主動啟用（opt-in）**的，並使用與 HTTP、WebSocket 相同的 `withRetry` 策略。沒有設定 `withRetry(...)` 時，任何網路斷線或串流讀取錯誤都會直接終止串流。請求選項 `retry` 會為單次呼叫替換 client 的策略。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-- **中斷額度（`attempts`）**：傳入設定物件給 `withSSEReconnect` 時，預設為 `3`。每次交握成功都會重設嘗試次數與退避指數，因此只要每次連線都成功開啟，即使設定 `attempts: 1`，長時間的工作階段仍可能建立多次實體連線。伺服器正常的 EOF **不算**失敗，不會觸發重連。
-- **游標追蹤（`Last-Event-ID`）**：事件結尾的空行被剖析時，游標才會提交，並在重連時自動以 `Last-Event-ID` 送出。不完整的訊框不論連線是正常結束或失敗，都不會提交其 `id`。在可重連的讀取或網路失敗之後，會從最後提交的 id 續傳；伺服器必須支援從該游標重播。
-- **冪等安全性**：預設只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）會自動重連。非冪等方法（`POST`、`PATCH`——例如 LLM 串流請求）只有在自訂 `shouldReconnect` 明確回傳 `true` 時才會重連。帶有 `ReadableStream` 請求本文的請求會在第一次嘗試時用掉本文，因此永遠不會重連。
-- **閘道交握**：`502`、`503` 或 `504` 交握（無論是初次開啟或重連）會像連線被拒絕一樣，依相同的重連規則（方法、`shouldReconnect`、`attempts`、`ReadableStream` 請求本文）重試。其他非 2xx 交握仍然是致命的。重試用盡以及致命的重連交握都以 `HTTP_STATUS` 結束。
-- **交握逾時（`connectTimeoutMs`）**：有提供時，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它限制每次交握從呼叫 Fetch 到收到回應標頭的時間，但不限制已建立串流的存活時間。此選項只存在於 `withSSEReconnect({...})` 的選項物件內；只要傳入該物件，就會以預設的 `attempts: 3` 啟用自動重連，因此單獨設定 `connectTimeoutMs` 同樣會開啟重連。若只想限制交握，請同時設定 `attempts: 0`。
+- **中斷額度（`maxRetries`）**：預設為 `3`。每次交握成功都會重設重試次數與退避指數，因此只要每次連線都成功開啟，即使設定 `maxRetries: 1`，長時間的工作階段仍可能建立多次實體連線；請用 `shouldRetry` 停掉反覆閃斷的伺服器。伺服器正常的 EOF **不算**失敗，不會觸發重試。
+- **游標追蹤（`Last-Event-ID`）**：事件結尾的空行被剖析時，游標才會提交，並在重連時自動以 `Last-Event-ID` 送出。不完整的訊框不論連線是正常結束或失敗，都不會提交其 `id`。在可重連的讀取或網路失敗之後，會從最後提交的 id 續傳；伺服器必須支援從該游標重播。沒有自己的 `id:` 欄位的事件會帶上最近一次提交的 id，同一條連線上以及重連之後都一樣。空的 `id:` 欄位會把它清掉：之後的事件沒有 `id`，之後的重連也不會送出 `Last-Event-ID`。
+- **冪等安全性**：預設只有 `methods` 裡的方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT`、`DELETE`）會自動重試。其他方法（`POST`、`PATCH`——例如 LLM 串流請求）只有在你把它們加進 `methods`，或 `shouldRetry` 回傳 `true` 時才會重試；回傳 `context.retryable` 的函式會保留預設。帶有 `ReadableStream` 請求本文的請求會在第一次嘗試時用掉本文，因此永遠不會重試。
+- **閘道交握**：`502`、`503` 或 `504` 交握（無論是初次開啟或重連）會像連線被拒絕一樣，依相同規則（方法、`shouldRetry`、`maxRetries`、`ReadableStream` 請求本文）重試。其他非 2xx 交握會帶著 `retryable: false` 交給 `shouldRetry`，預設會結束串流。用盡與被拒絕的重試都以 `HTTP_STATUS` 結束。重試這三個狀態是對 HTML 標準的刻意偏離：`EventSource` 把任何不是 `200` 事件串流的回應都當成失敗的連線，而且絕不再試；Defjs 則把暫時無法使用的閘道，當成連線被拒絕來處理。
+- **交握逾時（`attemptTimeoutMs`）**：有提供時，它限制每次交握從呼叫 Fetch 到收到回應標頭的時間，但不限制已建立串流的存活時間。它是 `withRetry` 的選項，所以 `withRetry({ attemptTimeoutMs })` 也會重試，並使用預設的 `maxRetries: 3`。只想限制交握時，寫 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。逾時的嘗試會向平衡器回報 `NET_UNREACHABLE`，讓重試可以選取另一個端點；重試用盡時以 `NET_TIMEOUT` 結束。
+
+### Node.js 上的閒置串流 [#idle-streams]
+
+Node.js 內建的 `fetch`（undici）會對每個回應本文套用 `bodyTimeout`，預設 300 秒，以兩段資料之間的間隔來量。SSE 串流安靜超過這段時間，即使伺服器仍然健康，也會被執行環境切斷。
+
+- **你會看到什麼**：迭代器會以執行環境自己的錯誤拒絕，那是訊息為 `terminated` 的 `TypeError`，其 `cause.code` 是 `UND_ERR_BODY_TIMEOUT`。`stream.closed` 會以 `kind: "error"`、`code: "NET_UNREACHABLE"` 解析，並以該 `TypeError` 作為 `cause`。沒有 `withRetry(...)` 時，串流就停在這裡。有的話，串流會依[重試規則](#reconnect)用 `Last-Event-ID` 續傳，每一次切斷都會向端點平衡器回報一次 `NET_UNREACHABLE` 結果（見[負載平衡](/zh-Hant-TW/docs/load-balancing)）。
+- **在伺服器上修正**：以遠低於 300 秒的間隔送出註解行，例如 `: keepalive`。HTML 標準的撰寫說明建議大約每 15 秒一次，以免舊式代理丟掉閒置連線。剖析器會忽略註解行，但它們的位元組仍會重設計時器。
+- **沒有 client 端的設定**：Defjs 自己沒有閒置逾時選項。若伺服器無法送出註解行，保持安靜的串流會在執行環境的上限到達時被切斷。
+
+其他執行環境的閒置行為不同，這裡不涵蓋。
 
 ## 5. 緩衝區與佇列上限
 
-預設為 `maxBufferSize: 64 * 1024` 位元組與 `maxQueueSize: 1024` 個事件。兩項上限都必須是正的安全整數。沒有預設的交握期限：未完成的 Fetch 會一直等待平台、呼叫端取消，或明確設定的 `connectTimeoutMs`。超過任一容量上限都是致命錯誤（`stream.closed` 以 `kind: "error"` 解析，迭代器拒絕——事件絕不會被悄悄丟棄）：
+定義上只有一個選項 `maxBufferSize`，預設 `64 * 1024` 位元組。事件佇列無法設定：函式庫最多保留 1024 個已驗證、等待 `for await` 消費端的事件。沒有預設的交握期限：未完成的 Fetch 會一直等待平台、呼叫端取消，或明確設定的 `attemptTimeoutMs`。
 
-| 定義選項        | 限制範圍                                  | 終結錯誤碼            |
-| --------------- | ----------------------------------------- | --------------------- |
-| `maxBufferSize` | 遇到空行前未完成或過大的 SSE 訊框位元組數 | `CAP_BUFFER_EXCEEDED` |
-| `maxQueueSize`  | 等待 `for await` 消費端處理的已驗證事件數 | `CAP_QUEUE_OVERFLOW`  |
+| 上限                    | 限制範圍                                  | 到達上限時                                                                         |
+| ----------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------- |
+| `maxBufferSize`（選項） | 遇到空行前未完成或過大的 SSE 訊框位元組數 | 致命：`stream.closed` 以 `kind: "error"` 與 `CAP_BUFFER_EXCEEDED` 解析；迭代器拒絕 |
+| 事件佇列（固定 1024）   | 等待 `for await` 消費端處理的已驗證事件數 | 讀取回應會暫停，直到消費端取走一個事件；不會因為沒有空間而丟棄事件                 |
+
+- **慢的消費端拖慢的是伺服器，不是串流。** 大於佇列的一陣湧入，例如 `Last-Event-ID` 重播，會完整送達；佇列滿的時候函式庫會停止讀取回應，因此積壓留在連線裡，而不是被丟棄或讓串流失敗。佇列最多保留 1024 個事件，再加上一個正在等空位的已剖析事件。
+- **無人看管的串流會停止讀取。** 沒有人迭代的串流一旦佇列滿了就停止讀取，`stream.closed` 不會自己解析，直到讀到回應結尾；`stream.close()`、中止或逾時仍會讓它解析，而關閉或中止會丟掉已排入佇列的事件。不再需要串流時，請呼叫 `stream.close()` 或使用 `await using`。
+- **失敗會留下已經收到的內容。** 串流以錯誤或逾時結束時，已經排入佇列的事件仍會送出，迭代器在最後一個之後才拒絕，除非呼叫端先停止串流（見第 6 節）。`stream.closed` 在連線結束時解析，這可能早於迭代器讀完每一個事件。連線失敗時回應本文裡還沒讀到的位元組不會送出，也絕不會推進 `Last-Event-ID`，因此啟用重試時，伺服器必須從已提交的游標重播。
 
 ## 6. 關閉與釋放資源 [#close-and-dispose]
 
@@ -110,7 +125,9 @@ SSE 的重新連線是**需主動啟用（opt-in）**的功能。沒有設定 `w
 </Tab>
 </Tabs>
 
-透過 `client({ signal })` 傳入的 `signal` 會掌管串流的整個生命週期。若只想限制初始連線交握、又不想在之後殺掉已開啟的串流，請在 `await watchOrders(...)` 回傳後清除計時器（如上方的第二個分頁），或在 `withSSEReconnect` 中同時設定 `connectTimeoutMs` 與 `attempts: 0`（單獨設定 `connectTimeoutMs` 也會啟用 3 次自動重連）。
+`stream.close()`、釋放，以及呼叫端 `signal` 的中止，都是呼叫端在停止串流：它們會立刻結束串流，並丟棄還沒有人讀過的事件，如同 `EventSource.close()`。不論串流是否已經結束都是如此，因此回應已經結束或串流已經失敗時仍未讀的事件也會被丟棄。失敗之後，這次停止不會改變其他東西：`stream.closed` 保持原值，迭代器仍會在沒有未讀內容時以該失敗拒絕。正常結束的回應，以及以錯誤或逾時失敗的串流，會先送出已經排入佇列的事件（見第 5 節），除非呼叫端停止串流。串流還在跑時到期的 `signal`（例如 `AbortSignal.timeout(ms)`）是逾時，屬於後一組，不是呼叫端的停止；串流結束之後才到期的，才是停止。
+
+透過 `client({ signal })` 傳入的 `signal` 會掌管串流的整個生命週期。若只想限制初始連線交握、又不想在之後殺掉已開啟的串流，請在 `await watchOrders(...)` 回傳後清除計時器（如上方的第二個分頁），或寫 `withRetry({ maxRetries: 0, attemptTimeoutMs })`；沒有 `maxRetries: 0` 時，`withRetry` 會維持預設的 3 次重試。
 
 ## 相關閱讀
 

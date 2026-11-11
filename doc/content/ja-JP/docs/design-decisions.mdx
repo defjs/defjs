@@ -38,7 +38,7 @@ SDK パッケージは、各操作（`defineRequest`、`defineEventStream`、`de
 `getOrder` はクライアントの状態を一切保持しないため、次のことが可能です。
 
 - ブラウザ UI、バックグラウンドジョブ、SSR リクエストハンドラー、ユニットテストのすべてが、異なる `Client` 構成を用いて同じ `getOrder` 操作を呼び出せます。
-- フレームワークプラグイン（`@defjs/react`、`@defjs/vue`）や可観測性ミドルウェアプラグイン（`@defjs/opentelemetry-server`）はアプリケーション側の `Client` にアタッチされるため、公開される SDK パッケージは外部依存ゼロのまま保たれます。
+- フレームワークプラグイン（`@defjs/react`、`@defjs/vue`）や可観測性ミドルウェアプラグイン（`@defjs/opentelemetry-server`）はアプリケーション側の `Client` にアタッチされるため、公開される SDK パッケージは 100% 依存関係がないまま保たれます。
 
 ## 2. 明示的な入力配置と双方向エイリアス
 
@@ -67,15 +67,15 @@ Defjs が HTTP レスポンスを読み取る際には、6 つの厳格なルー
 
 ### ルール 3: アサーションからの逸脱は明確な Fault になる
 
-Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、非 `2xx` は `error` です。その側に宣言された JSON struct だけがデコードを起こし、`RES_MEDIA_TYPE_INVALID` または `RES_DECODE_FAILED` を生み得ます。その `Content-Type` はボディのバイト列を読む**前**に検証されます。非 `2xx` の HTML ゲートウェイページが `RES_MEDIA_TYPE_INVALID` になるのは、JSON の `error` struct が宣言されているときだけです。有効な側に宣言がなければボディは読まれず、非 `2xx` のレスポンスは未デコードの `HTTP_STATUS` を返します。
+Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、非 `2xx` は `error` です。その側に宣言された JSON struct だけがデコードを起こし、`RES_MEDIA_TYPE_INVALID` または `RES_DECODE_FAILED` を生み得ます。その `Content-Type` は、ボディを読む前にも、ボディの有無を見る前にも、**最初に**検証されます。内容のないレスポンス（`HEAD`、`204`、`205`、`304`）も同じ検査を受けます。JSON の `Content-Type` がない宣言済み JSON 表現は `RES_MEDIA_TYPE_INVALID` で失敗し、ある場合は空のバイト列をパースして `RES_DECODE_FAILED` で失敗します。非 `2xx` の HTML ゲートウェイページが `RES_MEDIA_TYPE_INVALID` になるのは、JSON の `error` struct が宣言されているときだけです。有効な側に宣言がなければボディは読まれず、非 `2xx` のレスポンスは未デコードの `HTTP_STATUS` を返します。SSE のハンドシェイクも同じ規則に従います。宣言された `error` ボディをデコードできない非 `2xx` のハンドシェイクは、起動時にそのデコード Fault を返し、メタデータにステータスを持ちます。一方、インターセプター、再接続ポリシー、再接続の `closed` が見るのは引き続き `HTTP_STATUS` です。
 
-| レスポンス読み取り時の失敗要因                              | 返される Fault コード                                                     |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------- |
-| メディアタイプが宣言された JSON 表現と一致しない            | `RES_MEDIA_TYPE_INVALID`（ボディの読み取りは一切行われません）            |
-| バイト列を宣言された表現としてデコードできない              | `RES_DECODE_FAILED`                                                       |
-| デコードされた値が `struct` の検証にパスしない              | `RES_STRUCT_MISMATCH`（HTTP） / `RES_DECODE_FAILED`（SSE ハンドシェイク） |
-| 非 `2xx` ステータスで `error` struct が正常にデコードされた | `HTTP_STATUS`（型付けされた `error.data` が格納されます）                 |
-| 非 `2xx` ステータスで `error` の宣言が省略されていた        | `HTTP_STATUS`（`error.data` は `undefined`）                              |
+| レスポンス読み取り時の失敗要因                              | 返される Fault コード                                                                          |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| メディアタイプが宣言された JSON 表現と一致しない            | `RES_MEDIA_TYPE_INVALID`（最初に検査されます。ボディは読まれず、内容の有無は違いを生みません） |
+| バイト列を宣言された表現としてデコードできない              | `RES_DECODE_FAILED`（空の JSON バイト列を含みます）                                            |
+| デコードされた値が `struct` の検証にパスしない              | `RES_STRUCT_MISMATCH`                                                                          |
+| 非 `2xx` ステータスで `error` struct が正常にデコードされた | `HTTP_STATUS`（型付けされた `error.data` が格納されます）                                      |
+| 非 `2xx` ステータスで `error` の宣言が省略されていた        | `HTTP_STATUS`（`error.data: undefined`）                                                       |
 
 ### ルール 4: デコードに失敗したレスポンスにはボディが存在しない
 

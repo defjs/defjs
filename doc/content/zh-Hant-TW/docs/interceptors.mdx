@@ -39,7 +39,7 @@ description: 在應用程式 Client 上套用身分驗證與傳輸策略，不�
 
 ### 攔截器管線規範
 
-- **洋蔥式順序**：出去時依註冊順序執行（`next(req)` 之前），回來時則反向執行（`await next(req)` 之後）。把範圍較廣的日誌與追蹤攔截器放在外層，較窄的驗證或重試攔截器放在內層。
+- **洋蔥式順序**：出去時依註冊順序執行（`before next(req)`），回來時則反向執行（`after await next(req)`）。把範圍較廣的日誌與追蹤攔截器放在外層，較窄的身分驗證或重試攔截器放在內層。
 - **請求不可變的慣例**：一律複製 `req.headers`（`new Headers(req.headers)`），並把新的請求物件（`{ ...req, headers }`）傳給 `next(...)`，讓外層的重試看到乾淨的標頭。
 - **`content-type` 與 `bodyContentType`**：Defjs 會把推論出的本文 content type 放在 `req.bodyContentType`，不會修改 `req.headers`。請求簽署邏輯應讀取 `req.headers.get("content-type") ?? req.bodyContentType`。若攔截器把 `req.body` 換成其他格式，請明確設定 `content-type` 標頭。
 
@@ -55,7 +55,7 @@ HTTP 攔截器可以用 `makeResponse(...)` 建構合成回應，不呼叫 `next
 
 ## 3. 重試安全的 HTTP 讀取請求
 
-HTTP 重試預設關閉。若要在 `502`、`503` 或 `504` 時容錯移轉到另一個端點，請使用 [`withRetry({ on: ["gateway-error"] })`](/zh-Hant-TW/docs/load-balancing)。它會重新選取尚未嘗試的端點、重新建構請求，並重新執行完整的攔截器鏈。
+HTTP 重試預設關閉。若要在連線失敗、逾時，或 `502`、`503`、`504` 時改到另一個端點重試，請使用 [`withRetry()`](/zh-Hant-TW/docs/load-balancing#retries)。退避延遲之後，它會讓平衡器重新選取、重新建構請求，並重新執行完整的攔截器鏈。
 
 應用程式攔截器也可以改為處理同一端點的狀態碼，例如 `429` 與 `Retry-After`。以下有次數限制的安全讀取範例也會處理 `502`/`503`/`504`：
 
@@ -63,13 +63,14 @@ HTTP 重試預設關閉。若要在 `502`、`503` 或 `504` 時容錯移轉到�
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
-- **兩層重試**：這個 `next(request)` 迴圈會留在已選取的端點，不會重新執行外層驗證或 builder。將三次內層傳送與 `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` 組合使用，可能送出四次 HTTP 請求（三次送往故障主端點，一次送往健康備援端點）；`maxAttempts` 限制的是外層嘗試次數，不是實際傳送次數。請明確決定各項條件由哪一層負責，避免無意間疊加。
+- **兩層重試**：這個 `next(request)` 迴圈會留在已選取的端點，不會重新執行外層身分驗證或 builder。將三次內層傳送與 `withRetry({ maxRetries: 1 })` 組合使用，可能送出四次 HTTP 請求（三次送往故障主端點，一次送往健康備援端點）；`maxRetries` 限制的是外層嘗試次數，不是實際傳送次數。請明確決定各項條件由哪一層負責，避免無意間疊加。
 - **`Retry-After` 策略**：Core 的 `withRetry` 不會讀取這個標頭。範例中的 30 秒上限與 250 ms 後備值是應用程式的選擇。若伺服器要求的延遲更長，設定上限可能導致提早重試；若無法接受，請等待完整延遲，或直接回傳回應。
-- **401 寫入**：[Bearer 更新範例](/zh-Hant-TW/recipes/refresh-bearer-once) 可能傳遞同一個 JSON POST 兩次。必須確保驗證在業務處理前拒絕請求，並使用穩定的冪等鍵與伺服器端去重，否則不要自動重播寫入。串流請求本文不會重播。
+- **401 寫入**：[Bearer 更新範例](/zh-Hant-TW/recipes/refresh-bearer-once) 可能傳遞同一個 JSON POST 兩次。必須確保身分驗證在業務處理前拒絕請求，並使用穩定的冪等鍵與伺服器端去重，否則不要自動重播寫入。串流請求本文不會重播。
 - **處理傳輸層拒絕**：發生網路錯誤時，`next(request)` 會拒絕（不會有狀態碼 0 的回應）。接住並重新拋出該拒絕，就能保留原本的 `NET_*` 錯誤碼。
-- **在攔截器內拋出例外**：未處理的拋出（或回傳非 response 的值）會讓操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 解析，並設定 `fault.cause`。拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT` 則解析為 `NET_ABORTED` 或 `NET_TIMEOUT`。
+- **無法送出的請求**：在 HTTP 攔截器中，當平台拒絕該請求（無效或被禁止的方法、GET 或 HEAD 的本文、帶有憑證的 URL、平台拒絕的標頭值），或 `finalizeHeaders` hook 拋出例外時，`next(request)` 會以平台自己的錯誤（`TypeError`）或 hook 拋出的值拒絕，而不是函式庫的 `BodyFailure` 包裝。重新拋出它會保留 fault code（`REQ_BUILD_FAILED` 或 `EXT_HOOK_FAILED`）；拋出不同的錯誤則讓這次失敗歸你（`EXT_INTERCEPTOR_FAILED`）。傳輸層附近的其他失敗仍會以 `BodyFailure` 到達 `next(request)`：無法讀取、解碼或對上媒體型別的回應本文、被截斷的本文，以及會拋出例外的上傳進度觀察者（`EXT_OBSERVER_FAILED`），後者可能在請求送出前就發生。
+- **在攔截器內拋出例外**：攔截器自己未處理的拋出（或傳給 `next()` 的 `signal` 不是 `AbortSignal`）會讓操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 解析，並設定 `fault.cause`。拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT` 則解析為 `NET_ABORTED` 或 `NET_TIMEOUT`。
 
-對 SSE 而言，請優先使用 `withSSEReconnect`，而不是反覆呼叫 `next()` 的攔截器。多次呼叫攔截器的 `next()` 會讓這些替代串流失去端點歸屬與重新選取；這和以迭代器的 `next()` 消費事件無關。
+對 SSE 而言，請優先使用 `withRetry`，而不是反覆呼叫 `next()` 的攔截器。多次呼叫攔截器的 `next()` 會讓這些替代串流失去端點歸屬與重新選取；這和以迭代器的 `next()` 消費事件無關。
 
 ## 4. 包裝 WebSocket 工作階段
 

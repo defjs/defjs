@@ -67,19 +67,19 @@ Defjs 在读取 HTTP 响应时严格遵循以下六大规则：
 
 ### 规则 3：任何偏离声明都是明确的 Fault
 
-Defjs 用 `response.ok` 选择响应的一侧：`2xx` 用 `output`，非 `2xx` 用 `error`。只有该侧声明了 JSON struct 才会触发解码，并可能产生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 会在读取 body 字节**之前**校验。非 `2xx` 的 HTML 网关页只有在声明了 JSON `error` struct 时才会产生 `RES_MEDIA_TYPE_INVALID`。当前响应一侧没有声明时，不会读取 body；非 `2xx` 响应返回未解码的 `HTTP_STATUS`。
+Defjs 用 `response.ok` 选择响应的一侧：`2xx` 用 `output`，非 `2xx` 用 `error`。只有该侧声明了 JSON struct 才会触发解码，并可能产生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；它的 `Content-Type` 会**首先**校验，在读取或查找 body 之前。没有内容的响应（`HEAD`、`204`、`205`、`304`）同样接受这项检查：声明了 JSON 表示形式但没有 JSON `Content-Type` 时，以 `RES_MEDIA_TYPE_INVALID` 失败；有 JSON `Content-Type` 时则解析空字节，并以 `RES_DECODE_FAILED` 失败。非 `2xx` 的 HTML 网关页只有在声明了 JSON `error` struct 时才会产生 `RES_MEDIA_TYPE_INVALID`。当前响应一侧没有声明时，不会读取 body；非 `2xx` 响应返回未解码的 `HTTP_STATUS`。SSE 握手遵循同样的规则：非 `2xx` 握手中，声明的 `error` body 无法解码时，启动阶段返回该解码 Fault，状态码在其元数据中；而拦截器、重连策略以及一次重连的 `closed` 仍看到 `HTTP_STATUS`。
 
-| 读取响应时出现的失败                               | 返回的 `Fault` 代码                                            |
-| -------------------------------------------------- | -------------------------------------------------------------- |
-| 媒体类型与所声明的 JSON 格式不匹配                 | `RES_MEDIA_TYPE_INVALID`（根本不会读取 body 字节流）           |
-| 底层字节流无法按所声明的格式解码                   | `RES_DECODE_FAILED`                                            |
-| 解码后的数据未能通过 `struct` 模式校验             | `RES_STRUCT_MISMATCH`（HTTP）/ `RES_DECODE_FAILED`（SSE 握手） |
-| 非 `2xx` 状态码，且成功解码了声明的 `error` struct | `HTTP_STATUS`（附带强类型的 `error.data`）                     |
-| 非 `2xx` 状态码，但未声明 `error`                  | `HTTP_STATUS`（此时 `error.data` 为 `undefined`）              |
+| 读取响应时出现的失败                   | 返回的 Fault                                                          |
+| -------------------------------------- | --------------------------------------------------------------------- |
+| 媒体类型与所声明的 JSON 表示形式不匹配 | `RES_MEDIA_TYPE_INVALID`（最先检查；从不读取 body，有没有内容都一样） |
+| 底层字节无法按所声明的表示形式解码     | `RES_DECODE_FAILED`（包括空的 JSON 字节）                             |
+| 解码后的值未能通过 `struct` 校验       | `RES_STRUCT_MISMATCH`                                                 |
+| 非 `2xx` 状态，且解码了 `error` struct | `HTTP_STATUS`，附带强类型的 `error.data`                              |
+| 非 `2xx` 状态，但省略了 `error`        | `HTTP_STATUS`，此时 `error.data: undefined`                           |
 
 ### 规则 4：解码失败则无 Body 数据
 
-只有通过解码与校验之后才存在 body。解码失败时，`Fault` 的 `response` 类型是 `HttpMeta`（没有 `body` 属性），解析或校验错误挂在 `fault.cause` 上。
+只有通过解码与校验之后才存在 body。解码失败时，Fault 的 `response` 类型是 `HttpMeta`（没有 `body` 属性），解析或校验错误挂在 `fault.cause` 上。
 
 ### 规则 5：省略声明即代表主动放弃读取
 
@@ -102,6 +102,6 @@ Client 承载配置，不承载活跃连接。发起 HTTP 请求、SSE 流或 We
 ## 相关阅读
 
 - [数据结构 / Struct](/zh-Hans/docs/struct)
-- [HTTP 请求](/zh-Hans/docs/http)
+- [HTTP 操作](/zh-Hans/docs/http)
 - [错误处理](/zh-Hans/docs/errors)
 - [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)

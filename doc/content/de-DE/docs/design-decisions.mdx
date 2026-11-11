@@ -67,15 +67,15 @@ Eine `2xx`-Antwort wird ausschließlich über `output` dekodiert. Jeder andere S
 
 ### Regel 3: Jede Abweichung von der Zusicherung führt zu einem expliziten Fehler
 
-Defjs wählt die Response-Seite über `response.ok`: `output` für `2xx`, `error` für Nicht-`2xx`. Nur ein auf dieser Seite deklariertes JSON-Struct löst die Dekodierung aus und kann `RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED` erzeugen; sein `Content-Type` wird **vor** dem Auslesen der Body-Bytes geprüft. Eine HTML-Gateway-Seite bei Nicht-`2xx` erzeugt `RES_MEDIA_TYPE_INVALID` nur, wenn ein JSON-`error`-Struct deklariert ist. Ohne Deklaration für die aktive Seite wird der Body nicht gelesen; eine Nicht-`2xx`-Response liefert einen undekodierten `HTTP_STATUS`.
+Defjs wählt die Response-Seite über `response.ok`: `output` für `2xx`, `error` für Nicht-`2xx`. Nur ein auf dieser Seite deklariertes JSON-Struct löst die Dekodierung aus und kann `RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED` erzeugen; sein `Content-Type` wird **zuerst** geprüft, bevor der Body gelesen oder gesucht wird. Eine Response ohne Inhalt (`HEAD`, `204`, `205`, `304`) unterliegt derselben Prüfung: Eine deklarierte JSON-Repräsentation ohne JSON-`Content-Type` schlägt mit `RES_MEDIA_TYPE_INVALID` fehl, und mit einem solchen parst sie die leeren Bytes und schlägt mit `RES_DECODE_FAILED` fehl. Eine HTML-Gateway-Seite bei Nicht-`2xx` erzeugt `RES_MEDIA_TYPE_INVALID` nur, wenn ein JSON-`error`-Struct deklariert ist. Ohne Deklaration für die aktive Seite wird der Body nicht gelesen; eine Nicht-`2xx`-Response liefert einen undekodierten `HTTP_STATUS`. Ein SSE-Handshake folgt denselben Regeln: Ein Nicht-`2xx`-Handshake, dessen deklarierter `error`-Body nicht dekodiert werden kann, liefert diesen Dekodierfehler beim Start, mit dem Status in seinen Metadaten, während Interceptors, Reconnect-Policies und das `closed` eines Reconnects weiterhin `HTTP_STATUS` sehen.
 
-| Was beim Lesen der Antwort fehlgeschlagen ist                           | Zurückgegebener Fault                                              |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Medientyp stimmt nicht mit der deklarierten JSON-Repräsentation überein | `RES_MEDIA_TYPE_INVALID` (Body wird erst gar nicht gelesen)        |
-| Bytes können nicht als deklarierte Repräsentation dekodiert werden      | `RES_DECODE_FAILED`                                                |
-| Dekodierter Wert verletzt die `struct`-Validierung                      | `RES_STRUCT_MISMATCH` (HTTP) / `RES_DECODE_FAILED` (SSE-Handshake) |
-| Nicht-`2xx`-Status mit dekodiertem `error`-Struct                       | `HTTP_STATUS` mit typisiertem `error.data`                         |
-| Nicht-`2xx`-Status mit weggelassenem `error`                            | `HTTP_STATUS` mit `error.data: undefined`                          |
+| Was beim Lesen der Antwort fehlgeschlagen ist                           | Zurückgegebener Fault                                                                                                       |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Medientyp stimmt nicht mit der deklarierten JSON-Repräsentation überein | `RES_MEDIA_TYPE_INVALID` (zuerst geprüft; der Body wird nie gelesen, und ob Inhalt vorhanden ist, macht keinen Unterschied) |
+| Bytes können nicht als deklarierte Repräsentation dekodiert werden      | `RES_DECODE_FAILED` (leere JSON-Bytes eingeschlossen)                                                                       |
+| Dekodierter Wert verletzt die `struct`-Validierung                      | `RES_STRUCT_MISMATCH`                                                                                                       |
+| Nicht-`2xx`-Status mit dekodiertem `error`-Struct                       | `HTTP_STATUS` mit typisiertem `error.data`                                                                                  |
+| Nicht-`2xx`-Status mit weggelassenem `error`                            | `HTTP_STATUS` mit `error.data: undefined`                                                                                   |
 
 ### Regel 4: Ein fehlgeschlagener Decode besitzt keinen Body
 

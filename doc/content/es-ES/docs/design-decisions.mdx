@@ -38,7 +38,7 @@ Un paquete de SDK exporta operaciones (`defineRequest`, `defineEventStream`, `de
 Dado que `getOrder` no captura ningún estado del cliente:
 
 - Una interfaz de navegador, una tarea en segundo plano, un gestor de peticiones en SSR y una prueba unitaria pueden invocar la misma operación `getOrder` con diferentes configuraciones de `Client`.
-- Los plugins para frameworks (`@defjs/react`, `@defjs/vue`) y el plugin de middleware de observabilidad (`@defjs/opentelemetry-server`) se conectan al `Client` de la aplicación, manteniendo el paquete publicado del SDK completamente libre de dependencias.
+- Los plugins para frameworks (`@defjs/react`, `@defjs/vue`) y el plugin de middleware de observabilidad (`@defjs/opentelemetry-server`) se conectan al `Client` de la aplicación, manteniendo el paquete publicado del SDK 100% libre de dependencias.
 
 ## 2. Ubicación explícita de entradas y alias bidireccionales
 
@@ -67,15 +67,15 @@ Una respuesta `2xx` se decodifica únicamente con `output`. Cualquier otro códi
 
 ### Regla 3: Cualquier desviación respecto a lo declarado es un fallo explícito
 
-Defjs elige el lado de la respuesta con `response.ok`: `output` para `2xx` y `error` para lo que no es `2xx`. Solo un struct JSON declarado en ese lado dispara la decodificación y puede producir `RES_MEDIA_TYPE_INVALID` o `RES_DECODE_FAILED`; su `Content-Type` se verifica **antes** de leer los bytes del cuerpo. Una página HTML de pasarela que no sea `2xx` produce `RES_MEDIA_TYPE_INVALID` solo cuando hay un struct JSON `error` declarado. Sin una declaración para el lado activo, el cuerpo no se lee; una respuesta que no sea `2xx` devuelve un `HTTP_STATUS` sin decodificar.
+Defjs elige el lado de la respuesta con `response.ok`: `output` para `2xx` y `error` para lo que no es `2xx`. Solo un struct JSON declarado en ese lado dispara la decodificación y puede producir `RES_MEDIA_TYPE_INVALID` o `RES_DECODE_FAILED`; su `Content-Type` se verifica **primero**, antes de que el cuerpo se lea o se busque. Una respuesta sin contenido (`HEAD`, `204`, `205`, `304`) se somete a la misma comprobación: una representación JSON declarada sin un `Content-Type` JSON falla con `RES_MEDIA_TYPE_INVALID`, y con uno analiza los bytes vacíos y falla con `RES_DECODE_FAILED`. Una página HTML de pasarela que no sea `2xx` produce `RES_MEDIA_TYPE_INVALID` solo cuando hay un struct JSON `error` declarado. Sin una declaración para el lado activo, el cuerpo no se lee; una respuesta que no sea `2xx` devuelve un `HTTP_STATUS` sin decodificar. Un handshake SSE sigue las mismas reglas: un handshake no `2xx` cuyo cuerpo de `error` declarado no puede decodificarse devuelve ese fallo de decodificación al arrancar, con el estado en sus metadatos, mientras que los interceptores, las políticas de reconexión y el `closed` de una reconexión siguen viendo `HTTP_STATUS`.
 
-| Qué falló durante la lectura de la respuesta                      | Fallo devuelto                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------ |
-| El tipo de medio no coincide con la representación JSON declarada | `RES_MEDIA_TYPE_INVALID` (el cuerpo nunca se lee)                  |
-| Los bytes no pueden decodificarse según lo declarado              | `RES_DECODE_FAILED`                                                |
-| El valor decodificado no supera la validación del `struct`        | `RES_STRUCT_MISMATCH` (HTTP) / `RES_DECODE_FAILED` (handshake SSE) |
-| Código no `2xx` con struct de `error` decodificado                | `HTTP_STATUS` con `error.data` tipado                              |
-| Código no `2xx` habiendo omitido `error`                          | `HTTP_STATUS` con `error.data: undefined`                          |
+| Qué falló durante la lectura de la respuesta                      | Fallo devuelto                                                                                                    |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| El tipo de medio no coincide con la representación JSON declarada | `RES_MEDIA_TYPE_INVALID` (se comprueba primero; el cuerpo nunca se lee, y que haya contenido o no no cambia nada) |
+| Los bytes no pueden decodificarse según lo declarado              | `RES_DECODE_FAILED` (incluidos los bytes JSON vacíos)                                                             |
+| El valor decodificado no supera la validación del `struct`        | `RES_STRUCT_MISMATCH`                                                                                             |
+| Código no `2xx` con struct de `error` decodificado                | `HTTP_STATUS` con `error.data` tipado                                                                             |
+| Código no `2xx` habiendo omitido `error`                          | `HTTP_STATUS` con `error.data: undefined`                                                                         |
 
 ### Regla 4: Una decodificación fallida no tiene cuerpo
 

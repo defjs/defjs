@@ -39,7 +39,7 @@ Cada transporte cuenta con su propia factoría tipada de interceptores (`createH
 
 ### Reglas del flujo de interceptores
 
-- **Orden en capas de cebolla**: los interceptores se ejecutan en el orden de registro en la fase de salida (`antes de next(req)`) y en orden inverso en la fase de retorno (`después de await next(req)`). Coloca los interceptores generales de registro o trazado por fuera de los interceptores más específicos de autenticación o reintentos.
+- **Orden en capas de cebolla**: los interceptores se ejecutan en el orden de registro en la fase de salida (`before next(req)`) y en orden inverso en la fase de retorno (`after await next(req)`). Coloca los interceptores generales de registro o trazado por fuera de los interceptores más específicos de autenticación o reintentos.
 - **Convención de petición inmutable**: clona siempre `req.headers` (`new Headers(req.headers)`) y pasa un nuevo objeto de petición (`{ ...req, headers }`) a `next(...)` para que los reintentos externos vean cabeceras limpias.
 - **`content-type` y `bodyContentType`**: Defjs almacena el tipo de contenido inferido para el cuerpo en `req.bodyContentType` sin mutar `req.headers`. Los firmadores de peticiones deben leer `req.headers.get("content-type") ?? req.bodyContentType`. Si un interceptor reemplaza `req.body` con un nuevo formato, establece explícitamente una cabecera `content-type`.
 
@@ -55,7 +55,7 @@ Un interceptor HTTP puede devolver una respuesta sintética sin llamar a `next(r
 
 ## 3. Reintentar lecturas HTTP seguras
 
-Los reintentos HTTP están desactivados por defecto. Para conmutar a otro endpoint ante `502`, `503` o `504`, usa [`withRetry({ on: ["gateway-error"] })`](/es-ES/docs/load-balancing). Vuelve a seleccionar un endpoint aún no probado, reconstruye la petición y ejecuta de nuevo toda la cadena de interceptores.
+Los reintentos HTTP están desactivados por defecto. Para reintentar un fallo de conexión, un tiempo de espera o un `502`, `503` o `504` en otro endpoint, usa [`withRetry()`](/es-ES/docs/load-balancing#retries). Tras el retardo de backoff deja que el balanceador vuelva a elegir, reconstruye la petición y ejecuta de nuevo toda la cadena de interceptores.
 
 Un interceptor de la aplicación puede, en cambio, tratar estados en el mismo endpoint, como `429` y `Retry-After`. Esta receta acotada de lecturas seguras también trata `502`/`503`/`504`:
 
@@ -63,14 +63,14 @@ Un interceptor de la aplicación puede, en cambio, tratar estados en el mismo en
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
-- **Dos capas de reintentos**: Este bucle `next(request)` permanece en el endpoint seleccionado y no vuelve a ejecutar la autenticación externa ni el builder. Combinar tres envíos internos con `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` puede enviar cuatro peticiones HTTP (tres a un primario fallido y una a un respaldo saludable); `maxAttempts` limita los intentos externos, no los envíos físicos. Elige qué capa controla cada condición en lugar de acumularlas por accidente.
+- **Dos capas de reintentos**: Este bucle `next(request)` permanece en el endpoint seleccionado y no vuelve a ejecutar la autenticación externa ni el builder. Combinar tres envíos internos con `withRetry({ maxRetries: 1 })` puede enviar cuatro peticiones HTTP (tres a un primario fallido y una a un respaldo saludable); `maxRetries` limita los intentos externos, no los envíos físicos. Elige qué capa controla cada condición en lugar de acumularlas por accidente.
 - **Política de `Retry-After`**: El `withRetry` de Core no lee esta cabecera. El tope de 30 segundos y la alternativa de 250 ms de la receta son decisiones de la aplicación. Limitar un retardo mayor del servidor puede reintentar antes de lo solicitado; si no es aceptable, espera el retardo completo o devuelve la respuesta.
 - **Escrituras tras 401**: La [receta de renovación Bearer](/es-ES/recipes/refresh-bearer-once) puede entregar un POST JSON dos veces. Exige un rechazo de autenticación antes del procesamiento de negocio y una clave de idempotencia estable con desduplicación en el servidor, o no repitas automáticamente las escrituras. Los cuerpos de petición en streaming no se repiten.
-
 - **Tratamiento de rechazos de transporte**: `next(request)` rechaza cuando ocurre un error de red (no existe una respuesta con estado 0). Capturar y relanzar ese rechazo preserva el código de fallo original `NET_*`.
-- **Lanzar excepciones dentro de un interceptor**: una excepción no capturada (o devolver un valor que no sea una respuesta) resuelve la tupla de la operación con `EXT_INTERCEPTOR_FAILED` y asigna `fault.cause`. Lanzar `ERR_ABORTED` o `ERR_TIMEOUT` resuelve con `NET_ABORTED` o `NET_TIMEOUT`.
+- **Peticiones que no pueden enviarse**: en un interceptor HTTP, cuando la plataforma rechaza la petición (un método no válido o prohibido, un cuerpo en GET o HEAD, una URL con credenciales, un valor de cabecera que rechaza) o un hook `finalizeHeaders` lanza una excepción, `next(request)` rechaza con el error propio de la plataforma (un `TypeError`) o con el valor que lanzó el hook, no con el envoltorio `BodyFailure` de la biblioteca. Relanzarlo conserva el código de fallo (`REQ_BUILD_FAILED` o `EXT_HOOK_FAILED`); lanzar un error distinto hace que el fallo sea tuyo (`EXT_INTERCEPTOR_FAILED`). Los demás fallos que aparecen alrededor del transporte siguen llegando a `next(request)` como `BodyFailure`: un cuerpo de respuesta que no se puede leer, decodificar o hacer coincidir con su tipo de medio, un cuerpo truncado y un observador de progreso de subida que lanza (`EXT_OBSERVER_FAILED`), lo que puede ocurrir antes de enviar la petición.
+- **Lanzar excepciones dentro de un interceptor**: una excepción no capturada del propio interceptor (o pasar a `next()` una `signal` que no sea un `AbortSignal`) resuelve la tupla de la operación con `EXT_INTERCEPTOR_FAILED` y asigna `fault.cause`. Lanzar `ERR_ABORTED` o `ERR_TIMEOUT` resuelve con `NET_ABORTED` o `NET_TIMEOUT`.
 
-Para SSE, prefiere `withSSEReconnect` a un interceptor que llame a `next()` repetidamente. Llamar al `next()` del interceptor más de una vez desactiva la atribución al endpoint y la reselección para esos flujos de reemplazo; no está relacionado con consumir eventos mediante el `next()` de un iterador.
+Para SSE, prefiere `withRetry` a un interceptor que llame a `next()` repetidamente. Llamar al `next()` del interceptor más de una vez desactiva la atribución al endpoint y la reselección para esos flujos de reemplazo; no está relacionado con consumir eventos mediante el `next()` de un iterador.
 
 ## 4. Envolver sesiones WebSocket
 

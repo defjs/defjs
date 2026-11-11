@@ -57,7 +57,7 @@ description: Fault のバリアントとファクトリーヘルパー。
 
 レスポンスが存在する前に失敗しうるものすべてです。`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。トランスポートが報告できるメタデータを持つまで、`response` は `undefined` です。たとえばダウンロード途中で切れたボディです。
 
-無効な `withRetry` のオプションは、HTTP トランスポートが始まる前に `REQ_OPTIONS_INVALID` を返します。メッセージは `Invalid retry options` です。これには、オブジェクトでないポリシー、1 以上の安全な整数でない `maxAttempts`、それに無効な条件、メソッド、タイムアウト、バックオフ、バジェットの設定が含まれます。`withRetry` を省くとリトライは無効になります。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。`withRetry({ maxAttempts: 1 })` は、有効にしたあとリトライを無効にします。
+リトライのオプションは実行時には検証されません。`withRetry` を省くとリトライは無効になります。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。`withRetry({ maxRetries: 0 })` は、有効にしたあとリトライを無効にします。`shouldRetry` 関数が throw すると、HTTP、SSE、WebSocket のいずれでも、投げられた値を `cause` として呼び出しが `EXT_HOOK_FAILED` で終わります。すでに開いていたストリームやセッションについては、[Client](/ja-JP/api/client#withretry) を参照してください。
 
 ### AnyFault
 

@@ -100,8 +100,9 @@ JSON으로 표현할 수 없는 값(`NaN`, `±Infinity`, `Map`, `Set`, 함수, `
 
 1. **`ok` (`200..299`)에 따른 분기**: `2xx`는 `output`, 비`2xx`는 `error`를 선택합니다.
 2. **생략 시 읽기 건너뛰기**: 해당 측면에 struct가 선언되어 있지 않으면 응답 본문을 전혀 읽지 않습니다(`2xx`는 `data: undefined` + `HttpMeta`로 확인, 비`2xx`는 `data: undefined`인 `HTTP_STATUS`로 확인).
-3. **JSON 미디어 타입 우선 확인**: JSON struct의 경우 본문 스트림을 읽기 전에 `Content-Type`이 JSON이 아니면 `RES_MEDIA_TYPE_INVALID`로 즉시 실패합니다.
+3. **JSON 미디어 타입 우선 확인**: JSON struct의 경우 본문을 읽거나 찾기 전에 `Content-Type`이 JSON이 아니면 `RES_MEDIA_TYPE_INVALID`로 즉시 실패합니다. 내용이 없는 응답(`HEAD`, `204`, `205`, `304`)도 다른 응답과 같이 선언을 따릅니다.
 4. **본문 읽기 및 파싱**: 읽을 수 없는 스트림이나 잘못된 JSON은 `RES_DECODE_FAILED`(스트림 도중 끊긴 경우 `NET_BODY_INCOMPLETE`)로 실패합니다.
+   내용이 없는 응답(`HEAD`, `204`, `205`, `304`)에는 읽을 본문이 없습니다. `struct.string()`은 `''`를, `struct.arrayBuffer()`는 빈 `ArrayBuffer`를, `struct.blob()`은 빈 `Blob`을 받습니다. 3단계를 통과한 JSON struct는 빈 바이트를 파싱하며, 이는 `RES_DECODE_FAILED`로 실패합니다.
 5. **`struct` 유효성 검증**: 스키마와 일치하지 않는 경우 `RES_STRUCT_MISMATCH`로 실패합니다.
 
 ## 5. 작업 취소 및 마감 시간 설정 [#cancel-the-work]
@@ -130,8 +131,8 @@ JSON으로 표현할 수 없는 값(`NaN`, `±Infinity`, `Map`, `Set`, 함수, `
 ## 6. 자격 증명, XSRF 및 전송 진행률
 
 - **`withCredentials(true)`**: HTTP 및 SSE 요청에 대해 Fetch의 `credentials: "include"`를 설정합니다.
-- **`withXSRF(options?)`**: `@defjs/core/xsrf`에서 가져옵니다. 브라우저에서 XSRF 쿠키(기본값 `XSRF-TOKEN`)를 읽어 동일 출처의 변경 HTTP 메서드(`POST`, `PUT`, `PATCH`, `DELETE`)에 해당 헤더(`X-XSRF-TOKEN`)를 주입합니다. `location`이나 `document`가 없는 런타임(Worker 포함)에서는 `withXSRF()`가 예외를 던집니다. 서버와 브라우저가 공유하는 코드는 이 옵션을 브라우저에서만 추가합니다. 다른 출처의 토큰은 인터셉터로 설정합니다.
-- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })`로 전달합니다. 다운로드 진행률은 `Content-Length`가 양수이고 `Content-Encoding`이 없거나 `identity`일 때만 `lengthComputable: true`를 보고합니다. `fetch`가 스트리밍 요청 본문을 지원하는 런타임에서는 업로드 진행률이 `Blob`, `File`, `ArrayBuffer`, `FormData`를 스트림으로 변환합니다. Chromium은 HTTP/2 이상에서만 그 진행률을 보고합니다. HTTP/1.1에서 `onUploadProgress`가 있는 업로드는 실패합니다. Firefox는 그 본문을 그대로 보내고 콜백을 호출하지 않습니다. 진행률 콜백에서 예외가 발생하면 호출은 `EXT_OBSERVER_FAILED`로 실패합니다.
+- **`withXSRF(options?)`**: `@defjs/core/xsrf`에서 가져옵니다. 브라우저에서 XSRF 쿠키(기본값 `XSRF-TOKEN`)를 읽어 동일 출처의 변경 HTTP 메서드(`POST`, `PUT`, `PATCH`, `DELETE`)에 해당 헤더(`X-XSRF-TOKEN`)를 주입합니다. `location`이나 `document`가 없는 런타임(Worker 포함)에서는 `withXSRF()`가 예외를 던집니다. 서버와 브라우저가 공유하는 코드는 이 옵션을 브라우저에서만 추가합니다. 다른 출처의 토큰은 인터셉터로 설정합니다. 동일 출처 검사는 라이브러리가 만드는 URL에 적용됩니다. Fetch는 리다이렉트를 스스로 따라가며, 다른 출처로 리다이렉트된 뒤에도 이 헤더를 유지합니다(`Authorization`만 제거합니다). 이를 거부하려면 [`withXSRF`](/ko-KR/api/core/withxsrf)를 참조하세요.
+- **`onDownloadProgress` / `onUploadProgress`**: `client({ onDownloadProgress, onUploadProgress })`로 전달합니다. 다운로드 진행률은 `Content-Length`가 양수이고 `Content-Encoding`이 없거나 `identity`일 때만 `lengthComputable: true`를 보고합니다. 업로드 진행률은 요청 본문이 직접 넘긴 `ReadableStream`일 때만 보고됩니다. 그 밖의 본문(`Blob`, `File`, `ArrayBuffer`, `FormData`, 문자열, `URLSearchParams`)은 만든 그대로 보내지고, 모든 런타임에서 `onUploadProgress`는 호출되지 않습니다. `ReadableStream` 본문은 `onUploadProgress` 유무와 관계없이 스트리밍 요청 본문의 Fetch 규칙을 따릅니다. Chromium과 WebKit은 HTTP/2 이상에서만 받아들이므로 HTTP/1.1에서는 `NET_UNREACHABLE`로 실패합니다(Node.js와 Bun은 HTTP/1.1을 받아들입니다). Firefox는 요청 본문을 스트리밍할 수 없어 `ENV_UNSUPPORTED`로 실패합니다. 브라우저에서 교차 출처 요청은 캐시된 preflight 결과가 없으면 CORS preflight가 필요하며, 301, 302, 307, 308 리다이렉트는 실패합니다. 브라우저는 `Content-Length`를 보내지 않습니다. 로드 밸런서는 이런 실패와, throw하는 원본 스트림에 `{ attempted: false }`를 받습니다. `fetch`가 이를 도달할 수 없는 엔드포인트와 같은 네트워크 오류로 보고하기 때문이며, 따라서 스트리밍 업로드만으로는 다운된 엔드포인트를 감지할 수 없습니다. 자세한 내용은 API 레퍼런스의 `HttpProgressFn` 항목을 참조하세요. 진행률 콜백에서 예외가 발생하면 호출은 `EXT_OBSERVER_FAILED`로 실패합니다.
 
 ## 관련 문서
 

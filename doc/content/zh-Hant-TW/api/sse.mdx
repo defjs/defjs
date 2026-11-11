@@ -11,18 +11,18 @@ description: defineEventStream、請求選項，以及串流 handle。
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` 與 `events` 對照表；選用的 `method`（預設 `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（預設 `64 * 1024`）與 `maxQueueSize`（預設 `1024`）。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。這些 `definition` 成員的文件位於 [`EventStreamDefinition`](/zh-Hant-TW/api/core/eventstreamdefinition-type)。只有提供 error struct 型別時，`error` 才必填；`builder` 恰好在宣告 `input` 時必填。
+- **definition** — `path` 與 `events` 對照表；選用的 `method`（預設 `'GET'`）、`operation`、`input`、`error` 與 `maxBufferSize`（預設 `64 * 1024`）。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。這些 `definition` 成員的文件位於 [`EventStreamDefinition`](/zh-Hant-TW/api/core/eventstreamdefinition-type)。只有提供 error struct 型別時，`error` 才必填；`builder` 恰好在宣告 `input` 時必填。
 - **回傳** 一個操作。第一個引數是 [`Client`](/zh-Hant-TW/api/core/client-type)。其餘引數只有 input。呼叫它就會啟動串流。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼叫會回傳 `[null, stream, open]` 或 `[error, undefined, open?]`。有宣告 `error` 時，fault 是該 struct 的 `Fault`；否則為 `Fault<undefined>`。`signal` 請從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。SSE 只讀 `signal`，並忽略進度與 WebSocket 欄位。
+呼叫會回傳 `[null, stream, open]` 或 `[error, undefined, open?]`。有宣告 `error` 時，fault 是該 struct 的 `Fault`；否則為 `Fault<undefined>`。`signal` 請從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。SSE 只讀 `signal` 與 `retry`，並忽略進度與 WebSocket 欄位。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` 是 `{ signal? }`。沒有 `timeout` 或 `abort` 欄位，也沒有進度回呼。`signal` 涵蓋整條串流，包括開啟之後。期限是 `AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動中止歸類為 `NET_ABORTED`。沒有只涵蓋啟動期的期限，也沒有 client 層級的預設期限。若應用程式想要只限制啟動期，可以自行建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` 中止它，並在 await 回傳後清除計時器。
+`EventStreamExecuteOptions` 是 `{ signal?, retry? }`。沒有 `timeout` 或 `abort` 欄位，也沒有進度回呼。`signal` 涵蓋整條串流，包括開啟之後。期限是 `AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動中止歸類為 `NET_ABORTED`。沒有 client 層級的預設期限。只限制交握的期限是 `withRetry({ maxRetries: 0, attemptTimeoutMs })`，單次呼叫則是 `retry: { maxRetries: 0, attemptTimeoutMs }`；它在回應標頭處結束。
 
 ## EventStreamHandle
 
@@ -44,7 +44,7 @@ tuple 第三項是 `open` 的啟動快照；重連之後，`stream.open` 會跟�
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` 是 `eof`、`aborted` 或 `error`。每個變體都可以帶 `reason` 與 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-TW/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 與 `REQ_OPTIONS_INVALID` 表示串流已開啟後，重連時的端點選取失敗。`HTTP_STATUS` 表示重連交握以非 2xx 狀態結束。
+`kind` 是 `eof`、`aborted` 或 `error`。每個變體都可以帶 `reason` 與 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-TW/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 表示串流已開啟後，重連時的端點選取失敗。`EXT_HOOK_FAILED` 表示 `shouldRetry` 函式拋出例外，`cause` 包住拋出的值。`HTTP_STATUS` 表示重連交握以未重試的非 2xx 狀態結束，或重試已用盡。佇列滿了不是錯誤：函式庫最多保留 1024 個未讀事件，讀取回應會暫停，直到消費端取走一個。`close()`、釋放，以及呼叫端 `signal` 的中止，會丟棄還沒有人讀過的事件，並立刻結束迭代器，不論串流是否已經結束；以 `error` 結束之後，一旦沒有未讀事件，迭代器仍會以 `cause` 拒絕。沒有這種停止時，`error` 結束之後已經排入佇列的事件仍會先送出，然後迭代器才拒絕。
 
 ## EventStructs
 
@@ -52,9 +52,9 @@ tuple 第三項是 `open` 的啟動快照；重連之後，`stream.open` 會跟�
 
 鍵是 SSE 事件名稱；沒有 `event:` 欄位的訊息，名稱是 `message`。沒有鍵相符時，會使用 `default` struct。`string` 事件 struct 會保留原始的 `data` 文字。其他種類都是 JSON 文字：先 `JSON.parse`，再交給 struct。因此單獨的 `struct.literal` 需要 JSON 文字，而不是未加引號的 token。交握 `error` 本文與 HTTP 採用同一套種類規則：`string` 是文字，`blob`／`file` 是 blob，`arrayBuffer` 是位元組，其餘都是 JSON。
 
-重連設定在 client 上（`withSSEReconnect`）。SSE 的 `jitter` 是 **0–1 的乘性因子**，與 WebSocket 相同。
+重試設定在 client 上（`withRetry`），請求選項 `retry` 會為單次呼叫替換該策略。同一套策略也服務 HTTP 與 WebSocket。
 
-每次交握成功後都會重設重試預算與 backoff 指數；它們以每次中斷為單位，因此即使設定 `attempts: 1`，長時間的工作階段仍可能建立多次連線。伺服器正常 EOF 不會重連，EOF 時未完成的事件也不會提交其 id。回傳 502、503 或 504 的交握會像連線被拒絕一樣，依相同的重連規則（方法、`shouldReconnect`、`attempts`、`ReadableStream` 請求本文）重試；其他非 2xx 交握是致命的。重試用盡以及致命的重連交握都以 `HTTP_STATUS` 結束；請查看即時的 `stream.open.response.status` 取得該狀態。無效的數值選項會在開啟串流之前回傳 `REQ_OPTIONS_INVALID`，而 `maxDelayMs` 會在 jitter 之後限制最終延遲。驗證規則、預設值與 UTF-8 的 `Last-Event-ID` 處理，見 [`withRetry`](/zh-Hant-TW/api/core/withretry)。
+每次交握成功後都會重設重試次數與 backoff 指數；它們以每次中斷為單位，因此即使設定 `maxRetries: 1`，長時間的工作階段仍可能建立多次連線。伺服器正常 EOF 不會重連，EOF 時未完成的事件也不會提交其 id。回傳 502、503 或 504 的交握會像連線被拒絕一樣，依相同規則（方法、`shouldRetry`、`maxRetries`、`ReadableStream` 請求本文）重試；其他任何非 2xx 交握會帶著 `retryable: false` 交給 `shouldRetry`，因此除非你的函式另有決定，否則會結束串流。重試用盡以及被拒絕的非 2xx 交握都以 `HTTP_STATUS` 結束；請查看即時的 `stream.open.response.status` 取得該狀態。預設值、決策順序與 UTF-8 的 `Last-Event-ID` 處理，見 [`withRetry`](/zh-Hant-TW/api/core/withretry)。
 
 剖析器遵循 WHATWG 的 SSE 行與欄位規則，並且在每條實體串流開頭只移除一個前導 UTF-8 BOM。data 或 ID 值中的 U+FEFF 會保留；較晚出現、以 BOM 為前綴的欄位名稱會當成未知欄位忽略。多行 data 會以 `\n` 連接，空行會分派一個帶有 data 的事件，EOF 時未完成的事件則會被丟棄。
 
@@ -62,7 +62,7 @@ tuple 第三項是 `open` 的啟動快照；重連之後，`stream.open` 會跟�
 
 ## EventStreamDefinition
 
-`path`、`events`，以及選用的 `method`／`operation`／`input`／`error`／`maxBufferSize`／`maxQueueSize`。請求形狀與 HTTP 相同，包括 `body`。`GET` 與 `HEAD` 不能攜帶本文。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。
+`path`、`events`，以及選用的 `method`／`operation`／`input`／`error`／`maxBufferSize`。請求形狀與 HTTP 相同，包括 `body`。`GET` 與 `HEAD` 不能攜帶本文。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。
 
 ## EventStreamEndpoint
 

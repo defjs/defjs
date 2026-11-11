@@ -11,14 +11,14 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`、`incoming` struct 1 つ、必須で正の整数の `maxIncomingQueueSize`、任意の `outgoing` と `input` struct、`operation`、静的な `protocols`、0 以上の `maxOutgoingQueueSize` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`WebSocketDefinition`](/ja-JP/api/core/websocketdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
+- **definition** — `path` と `incoming` struct 1 つ、任意の `outgoing` と `input` struct、`operation`、静的な `protocols`、`maxOutgoingQueueSize` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`WebSocketDefinition`](/ja-JP/api/core/websocketdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
 - **戻り値** 操作です。第 1 引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとセッションが開きます。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` で、HTTP の進捗フィールドは無視します。
+呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`retry` で、HTTP の進捗フィールドは無視します。
 
-`beforeConnect`、`heartbeat`、`protocols`、`reconnect` は、それぞれがその呼び出しに限りクライアントの値を全体として置き換えます。protocols の優先順位は、派生したクライアント、`withWebSocketProtocols`、定義の `protocols` の順です。`heartbeat.timeoutMs` は確認待ちであり、リクエストの期限ではありません。
+`beforeConnect`、`heartbeat`、`protocols`、`retry` は、それぞれがその呼び出しに限り、クライアントレベルのオプションを全体として置き換えます。protocols の優先順位は、派生したクライアント、`withWebSocketProtocols`、定義の `protocols` の順です。`heartbeat.timeoutMs` は確認待ちであり、リクエストの期限ではありません。
 
 ## WebSocketSession
 
@@ -44,19 +44,19 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` は `closed`、`aborted`、`error` のいずれかです。`cause` は `closed` にはなく、`aborted` では任意、`error` では必須です。受信した生フレームやデコード済みメッセージのキューがあふれると、`cause.code === "CAP_QUEUE_OVERFLOW"` になります。同じ cause で `receive` が reject され、`onRuntimeError` にも通知されます。ハートビートのタイムアウトや再接続回数の使い切りでは、通常の実行時 `Error` が cause となり、個別の安定したコードはありません。`code`、`reason`、`wasClean` はどのバリアントにも現れ得ます。手動の `session.close()` は、close イベント側にそれらが無いとき、`{ kind: "closed" }` の `code` と `reason` を埋めます。
+`kind` は `closed`、`aborted`、`error` のいずれかです。`cause` は `closed` にはなく、`aborted` では任意、`error` では必須です。`error` では、同じ cause が、すでにキューにあったメッセージのあとで `receive` を reject し、`onRuntimeError` にも届きます。セッションが `aborted` で終わるとき、および呼び出し元が `session.close()` または解放で終えるとき、未読のメッセージは捨てられます。呼び出し元の停止（`session.close()`、解放、`signal` の abort）は、セッションが終わったあとでもそれらを捨て、`closed` や `receive` の reject は変えません。ハートビートのタイムアウトやリトライ回数の使い切りでは、通常の実行時 `Error` が cause となり、個別の安定したコードはありません。開いたあとクローズフレームなしで切れた接続（コード `1006`）は、どのランタイムでも `error` です。`code`、`reason`、`wasClean` はどのバリアントにも現れ得ます。手動の `session.close()` は、close イベント側にそれらが無いとき、`{ kind: "closed" }` の `code` と `reason` を埋めます。
 
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`signal` です。`WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。`timeout` フィールドも `abort` フィールドもありません。
+`WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`retry`、`signal` です。`WebSocketHeartbeatConfig` は `intervalMs` と `message` が必須で、`timeoutMs` は `isAck` と一緒のときだけ許可されます。`timeout` フィールドも `abort` フィールドもありません。
 
-`signal` は、開いたあとも含めてセッション全体を対象にします。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位のデフォルトの期限もありません。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
+`signal` は、開いたあとも含めてセッション全体を対象にします。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。クライアント単位のデフォルトの期限はありません。接続の確立中だけに期限を設けるには `retry: { maxRetries: 0, attemptTimeoutMs }` で、`open` で終わります。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
 
 `builder` とインターセプターチェーンは操作ごとに 1 回だけ実行されます。再接続では構築済みの path/query と取り込んだ protocols を再利用し、`beforeConnect` より前に URL を構築します。インターセプターがリクエストのベースエンドポイントを置き換えていない場合、再接続では新たに選んだエンドポイントに置き換えます。このフックではセッション内で URL やサブプロトコルの認証情報を更新できません。新しい input またはクライアント設定で新たな操作を開始してください。
 
-`reconnect` を指定したとき、`attempts` のデフォルトは障害ごとに 3 です。`0` はリトライを無効にします。`open` に成功すると予算とバックオフの指数がリセットされるため、新たな障害ではリトライ 1 から始まります。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。デフォルトと検証規則は [Client](/ja-JP/api/client) を参照してください。
+リトライポリシー（`withRetry`）を設定したとき、`maxRetries` のデフォルトは障害ごとに 3 です。`0` は無効にします。`session.close()` が要求していないすべての close はデフォルトでリトライされます。開かなかった接続と、応答のないハートビートを含み、`shouldRetry` はそれを覆せます。WebSocket のコンストラクターが throw する（たとえばプラットフォームが拒否するサブプロトコル）のは、リトライしても繰り返すだけのローカルな失敗です。`shouldRetry` を聞かずに呼び出しを終えます。`open` に成功すると回数とバックオフの指数がリセットされるため、新たな障害ではリトライ 1 から始まります。デフォルトと判断の順序は [Client](/ja-JP/api/client#withretry) を参照してください。
 
 ## メッセージ
 
@@ -72,7 +72,7 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 ## WebSocketDefinition
 
-`path`、`incoming`、必須の `maxIncomingQueueSize`、任意の `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` です。`builder` が返せるのは `path` と `query` だけです。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+`path`、`incoming`、任意の `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` です。`builder` が返せるのは `path` と `query` だけです。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
 
 ## WebSocketEndpoint
 
@@ -84,7 +84,7 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 ## UseWebSocketConfig
 
-`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`signal` です。`WebSocketExecuteOptions` はこのスライスです。`abort` フィールドはありません。
+`beforeConnect`、`heartbeat`、`protocols`、`retry`、`signal` です。`WebSocketExecuteOptions` はこのスライスです。`abort` フィールドはありません。
 
 ## SocketAwaitResult
 
@@ -96,7 +96,7 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 ## WebSocketHeartbeatConfig
 
-`intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。
+`intervalMs` と `message` は必須です。`isAck` は確認を識別し、`timeoutMs` は `isAck` と一緒のときだけ許可されます。union 型がそれを強制し、実行時に検査するものはありません。Defjs はハートビートの形式を定義しません。すべての値は利用者の関数から来ます。ペイロードは `outgoing` struct を通じて JSON テキストとして送られます。応答のないハートビートはソケットを閉じ、`withRetry` のリトライの流れに入ります。リトライポリシーがなければ、セッションは `error` で終わります。
 
 ## WebSocketIncomingData
 
@@ -108,4 +108,4 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 ## SocketLifecycleOutcome
 
-1 回の接続試行の結果（`closeInfo`、`connection`、`cause`、`opened`）で、再接続のロジックが使います。セッションの最終結果ではありません。それは `WebSocketCloseInfo` を見てください。
+1 回の接続試行の結果（`closeInfo`、`connection`、`cause`、`opened`）で、リトライのロジックが使います。セッションの最終結果ではありません。それは `WebSocketCloseInfo` を見てください。

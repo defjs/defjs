@@ -5,7 +5,7 @@ description: 连接，发送一个带类型的信封，接收一次，然后关�
 
 # 打开 WebSocket 会话
 
-在 `defineWebSocket` 上声明 `incoming` 和 `outgoing` struct，以及限制入站队列的 `maxIncomingQueueSize`。在应用中订阅 `session.onRuntimeError(...)`，消费 `session.receive`，并始终在 `finally` 中退订、调用 `session.close(...)` 和 `await session.closed`：
+在 `defineWebSocket` 上声明 `incoming` 和 `outgoing` struct。在应用中订阅 `session.onRuntimeError(...)`，消费 `session.receive`，并始终在 `finally` 中退订、调用 `session.close(...)` 和 `await session.closed`：
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ description: 连接，发送一个带类型的信封，接收一次，然后关�
 ACME 142.5
 ```
 
-- 重连（`withWebSocketReconnect`）和心跳（`withWebSocketHeartbeat`）在 Client 上都需要显式开启（opt-in）。
+- 重连（`withRetry`）和心跳（`withWebSocketHeartbeat`）在 Client 上都需要显式开启（opt-in）。
 - 浏览器 WebSocket 无法在升级握手时发送任意 HTTP 请求头；请改用 cookie、子协议或短期 ticket。见 [WebSocket 会话](/zh-Hans/docs/web-socket)。

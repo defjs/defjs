@@ -5,7 +5,7 @@ description: 연결하고, 타입화된 엔벨로프를 전송하며, 1회 수�
 
 # WebSocket 세션 열기
 
-`defineWebSocket`에 수신 큐를 제한하는 `maxIncomingQueueSize`와 함께 `incoming` 및 `outgoing` Struct를 선언합니다. 애플리케이션에서는 `session.onRuntimeError(...)`를 구독하고, `session.receive`를 소비하며, `finally` 블록에서 항상 구독 해제, `session.close(...)` 호출, `await session.closed`를 수행하세요:
+`defineWebSocket`에 `incoming` 및 `outgoing` Struct를 선언합니다. 애플리케이션에서는 `session.onRuntimeError(...)`를 구독하고, `session.receive`를 소비하며, `finally` 블록에서 항상 구독 해제, `session.close(...)` 호출, `await session.closed`를 수행하세요:
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ description: 연결하고, 타입화된 엔벨로프를 전송하며, 1회 수�
 ACME 142.5
 ```
 
-- 재연결(`withWebSocketReconnect`)과 하트비트(`withWebSocketHeartbeat`)는 모두 클라이언트에서 선택적으로 활성화(opt-in)합니다.
+- 재연결(`withRetry`)과 하트비트(`withWebSocketHeartbeat`)는 모두 클라이언트에서 선택적으로 활성화(opt-in)합니다.
 - 브라우저의 WebSocket은 업그레이드 핸드셰이크 중에 임의의 HTTP 헤더를 보낼 수 없으므로, 쿠키, 서브프로토콜, 또는 짧은 수명의 티켓을 대신 사용하세요. 자세한 내용은 [WebSocket 세션](/ko-KR/docs/web-socket) 문서를 참조하세요.

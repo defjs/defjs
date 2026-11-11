@@ -5,7 +5,7 @@ description: 連線、傳送一個帶型別嘅 envelope、接收一次，然後�
 
 # 開啟 WebSocket 會話
 
-喺 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` Struct，並設定有上限嘅 `maxIncomingQueueSize`。喺你嘅應用程式入面，訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並保證喺 `finally` 區塊入面取消訂閱監聽器、呼叫 `session.close(...)` 並等待 `await session.closed`：
+喺 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` Struct。喺你嘅應用程式入面，訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並保證喺 `finally` 區塊入面取消訂閱監聽器、呼叫 `session.close(...)` 並等待 `await session.closed`：
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ description: 連線、傳送一個帶型別嘅 envelope、接收一次，然後�
 ACME 142.5
 ```
 
-- 自動重連（`withWebSocketReconnect`）同心跳偵測（`withWebSocketHeartbeat`）都係喺 client 端 opt-in 開啟嘅。
+- 重連（`withRetry`）同心跳偵測（`withWebSocketHeartbeat`）都係喺 client 端 opt-in 開啟嘅。
 - 瀏覽器環境嘅 WebSocket 喺握手階段無法發送自訂 HTTP headers；請改用 Cookie、子協議或短期連線 ticket 代替。詳情請參閱 [WebSocket 會話](/zh-Hant-HK/docs/web-socket)。

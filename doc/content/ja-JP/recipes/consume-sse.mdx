@@ -35,4 +35,4 @@ build started
 ```
 
 - クライアント側で [`withRetry(...)`](/ja-JP/api/core/withretry) を設定しない限り、ネットワークエラーや読み取り障害時に SSE が自動再接続されることはありません。
-- `withSSEReconnect` にオプションオブジェクトを指定して有効化した場合、障害ごとの試行回数 `attempts` はデフォルトで `3` 回となり、ハンドシェイクが成功するたびにリセットされます（`attempts: 0` で再接続を無効化できます）。カスタムの `shouldReconnect` を指定しない限り、再接続されるのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` リクエストだけです。`ReadableStream` ボディを持つリクエストは再接続されません。詳細は [SSE イベントストリーム](/ja-JP/docs/sse) を参照してください。
+- `withRetry(...)` を設定した場合、障害ごとの `maxRetries` はデフォルトで `3` となり、ハンドシェイクが成功するたびにリセットされます（`maxRetries: 0` でリトライを無効化できます）。カスタムの `shouldRetry` を指定しない限り、リトライされるのは `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT`、`DELETE` リクエストだけです。`ReadableStream` ボディを持つリクエストはリトライされません。詳細は [SSE イベントストリーム](/ja-JP/docs/sse) を参照してください。

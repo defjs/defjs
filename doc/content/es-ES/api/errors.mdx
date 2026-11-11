@@ -57,7 +57,7 @@ Llegó una respuesta, pero no se pudo leer como se declaró. `response` son solo
 
 Todo lo que pudo fallar antes de que existiera una respuesta: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` es `undefined` hasta que el transporte tiene metadatos que reportar, como un cuerpo que se truncó a mitad de la descarga.
 
-Las opciones no válidas de `withRetry` devuelven `REQ_OPTIONS_INVALID` antes de que arranque el transporte HTTP, con `Invalid retry options`. Esto incluye una política que no es un objeto, un valor de `maxAttempts` que no es un entero seguro de al menos 1, y condiciones, métodos, timeouts, backoff o ajustes de presupuesto no válidos. Omitir `withRetry` desactiva los reintentos. `withRetry()` y `withRetry(undefined)` se comportan como `withRetry({})`. `withRetry({ maxAttempts: 1 })` desactiva los reintentos después de haberlos habilitado.
+Las opciones de reintento no se validan en tiempo de ejecución. Omitir `withRetry` desactiva los reintentos. `withRetry()` y `withRetry(undefined)` se comportan como `withRetry({})`. `withRetry({ maxRetries: 0 })` desactiva los reintentos después de haberlos habilitado. Una función `shouldRetry` que lanza termina la llamada con `EXT_HOOK_FAILED` y el valor lanzado como `cause`, por igual en HTTP, SSE y WebSocket; para un flujo o una sesión que ya estaba abierta, consulta [Cliente](/es-ES/api/client#withretry).
 
 ### AnyFault
 
@@ -81,7 +81,7 @@ Cualquier fallo, sea cual sea el tipo de su cuerpo de error decodificado. Úsalo
 
 `createHttpStatusFault` toma una respuesta que ya lleva el cuerpo decodificado; `createUndecodedHttpStatusFault` toma solo metadatos, para una definición que no declaró `error`.
 
-`createNetworkFault` usa [`isAbortCause`](/es-ES/api/core/isabortcause) para `NET_ABORTED` y [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) para `NET_TIMEOUT`: reconocen centinelas con marca de cualquier copia de Core, un `DOMException` llamado `AbortError` y un `DOMException` o `Error` llamado `TimeoutError`, respectivamente. Todo lo demás se mapea a `NET_UNREACHABLE`. `createPreflightFault` toma el código directamente; sin `cause`, el código pasa a ser el mensaje.
+`createNetworkFault` usa [`isAbortCause`](/es-ES/api/core/isabortcause) para `NET_ABORTED` y [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) para `NET_TIMEOUT`: ambos reconocen centinelas con marca de cualquier copia de Core; `isAbortCause` reconoce además un `DOMException` llamado `AbortError`, y `isTimeoutCause` reconoce un `DOMException` o `Error` llamado `TimeoutError`. Todo lo demás se mapea a `NET_UNREACHABLE`. `createPreflightFault` toma el código directamente; sin `cause`, el código pasa a ser el mensaje.
 
 Todas las fábricas devuelven instancias de `Error` nativo con los campos estructurados de arriba; no crean errores de objeto plano y no necesitan adaptador para `String(fault)`.
 

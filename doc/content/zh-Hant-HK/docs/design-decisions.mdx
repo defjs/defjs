@@ -67,15 +67,15 @@ Defjs 遵循六條嚴格規則嚟讀取 HTTP 回應：
 
 ### 規則 3：任何偏離斷言嘅行為都會即刻報錯
 
-Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 `error`。只有喺嗰一邊宣告咗 JSON struct，先會觸發 decode，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；佢嘅 `Content-Type` 會喺讀取 body bytes **之前**檢查。非 `2xx` 嘅 HTML 網關頁只有喺宣告咗 JSON `error` struct 時先會產生 `RES_MEDIA_TYPE_INVALID`。生效嗰一邊冇宣告，就唔會讀 body；非 `2xx` 回應會返回未解碼嘅 `HTTP_STATUS`。
+Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 `error`。只有喺嗰一邊宣告咗 JSON struct，先會觸發 decode，並可能產生 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`；佢嘅 `Content-Type` 會**最先**檢查，早過讀取或者查詢 body。冇內容嘅回應（`HEAD`、`204`、`205`、`304`）都要過同一項檢查：宣告咗 JSON representation 但 `Content-Type` 唔係 JSON，就會以 `RES_MEDIA_TYPE_INVALID` 失敗；如果係 JSON，就會解析空 bytes，並以 `RES_DECODE_FAILED` 失敗。非 `2xx` 嘅 HTML 網關頁只有喺宣告咗 JSON `error` struct 時先會產生 `RES_MEDIA_TYPE_INVALID`。生效嗰一邊冇宣告，就唔會讀 body；非 `2xx` 回應會返回未解碼嘅 `HTTP_STATUS`。SSE 握手跟同一套規則：非 `2xx` 握手如果宣告咗嘅 `error` body 解碼唔到，啟動時會回傳嗰個 decode fault，狀態放喺佢嘅 metadata；而攔截器、重連策略同重連嘅 `closed` 仍然見到 `HTTP_STATUS`。
 
-| 讀取回應時出錯嘅情況                       | 回傳嘅 Fault                                                   |
-| ------------------------------------------ | -------------------------------------------------------------- |
-| Media type 唔符合宣告嘅 JSON 格式          | `RES_MEDIA_TYPE_INVALID`（根本唔會讀取 body）                  |
-| Bytes 無法解碼成宣告嘅資料格式             | `RES_DECODE_FAILED`                                            |
-| 解碼後嘅值無法通過 `struct` 驗證           | `RES_STRUCT_MISMATCH`（HTTP）/ `RES_DECODE_FAILED`（SSE 握手） |
-| 非 `2xx` 狀態碼，並成功解碼 `error` struct | `HTTP_STATUS`，帶有具型別嘅 `error.data`                       |
-| 非 `2xx` 狀態碼，但冇宣告 `error`          | `HTTP_STATUS`，且 `error.data: undefined`                      |
+| 讀取回應時出錯嘅情況                       | 回傳嘅 Fault                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------------- |
+| Media type 唔符合宣告嘅 JSON 格式          | `RES_MEDIA_TYPE_INVALID`（最先檢查；body 根本唔會被讀，有冇內容都冇分別） |
+| Bytes 無法解碼成宣告嘅資料格式             | `RES_DECODE_FAILED`（包括空嘅 JSON bytes）                                |
+| 解碼後嘅值無法通過 `struct` 驗證           | `RES_STRUCT_MISMATCH`                                                     |
+| 非 `2xx` 狀態碼，並成功解碼 `error` struct | `HTTP_STATUS`，帶有具型別嘅 `error.data`                                  |
+| 非 `2xx` 狀態碼，但冇宣告 `error`          | `HTTP_STATUS`，且 `error.data: undefined`                                 |
 
 ### 規則 4：解碼失敗就冇 Body
 

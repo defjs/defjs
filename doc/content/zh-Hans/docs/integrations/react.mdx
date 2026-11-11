@@ -65,7 +65,7 @@ SSE 与 WebSocket 句柄的存活时间长于最初的 `openStream(...)` 或 `co
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- 中止传入 WebSocket 操作的 `signal` 会让会话以 `aborted` 结束，并使 `session.receive` 以 `AbortError` reject。在已销毁时保护 `catch` 块，只让真正的运行时错误（例如队列溢出或心跳超时）暴露出来。
+- 中止传入 WebSocket 操作的 `signal` 会让会话以 `aborted` 结束，并使 `session.receive` 以 `AbortError` reject。在已销毁时保护 `catch` 块，只让真正的运行时错误（例如心跳超时）暴露出来。
 - 中止 SSE 流会让 `for await (const msg of stream)` 正常结束，不抛出异常。
 
 ---

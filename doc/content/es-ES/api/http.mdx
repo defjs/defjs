@@ -39,14 +39,14 @@ con una respuesta sintética — cuando ninguna respuesta llegó al cliente o fa
 <ApiSignature name="makeResponse" />
 
 Construye un `HttpResponse` sin una llamada de red (interceptores, tests). El estado por defecto es `0`. `ok` es
-`true` para 2xx. El valor que devuelve pasa por la misma comprobación de media type y el mismo struct declarado
+true para 2xx. El valor que devuelve pasa por la misma comprobación de media type y el mismo struct declarado
 que uno del cable; no hay un cortocircuito de confianza.
 
 ## HttpExecuteOptions
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` es el recorte HTTP de [`RequestOptions`](/es-ES/api/core/requestoptions-type): [`UseRequestConfig`](/es-ES/api/core/userequestconfig-type), que es `signal` más `onDownloadProgress` y `onUploadProgress`. No hay campo `timeout` ni `abort`. Un plazo es `signal: AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. No hay un plazo por defecto a nivel de cliente. Los demás campos de la solicitud, como `heartbeat`, se ignoran.
+`HttpExecuteOptions` es el recorte HTTP de [`RequestOptions`](/es-ES/api/core/requestoptions-type): [`UseRequestConfig`](/es-ES/api/core/userequestconfig-type), que es `signal` más `onDownloadProgress`, `onUploadProgress` y `retry`. No hay campo `timeout` ni `abort`. Un plazo es `signal: AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. No hay un plazo por defecto a nivel de cliente. Los demás campos de la solicitud, como `heartbeat`, se ignoran.
 
 ## Tipos
 
@@ -93,9 +93,9 @@ y los blobs son crudos y se analizan una vez. `DecodedResponse` es lo que llega 
 
 `loaded`, `total`, `lengthComputable`. Los callbacks pueden ser async. Un `onDownloadProgress` o `onUploadProgress` que lanza falla la llamada con
 `EXT_OBSERVER_FAILED`, con el valor lanzado como `cause`; la cancelación sigue informando `NET_ABORTED`, o `NET_TIMEOUT` cuando el motivo del abort es un timeout.
-El progreso de subida convierte los cuerpos `Blob` / `File`, `ArrayBuffer` y `FormData` donde `fetch` admite un cuerpo de petición en streaming. Chromium informa de ese progreso solo en HTTP/2 o posterior; en HTTP/1.1, una subida con `onUploadProgress` falla (`NET_UNREACHABLE`). Firefox envía esos cuerpos sin cambios y no llama a `onUploadProgress`.
+El progreso de subida se informa solo cuando el cuerpo de la petición es un `ReadableStream` que tú pasas. Cualquier otro cuerpo (`Blob`, `File`, `ArrayBuffer`, `FormData`, un string, `URLSearchParams`) se envía tal como se construyó y `onUploadProgress` no se llama, en todos los runtimes; la biblioteca nunca convierte un cuerpo en un stream. Un cuerpo `ReadableStream` sigue las reglas de Fetch para cuerpos de petición en streaming, con o sin `onUploadProgress`: Chromium y WebKit lo aceptan solo sobre HTTP/2 o posterior (`NET_UNREACHABLE` en HTTP/1.1; WebKit se comprobó a mano solo en 27.2; Node.js y Bun aceptan HTTP/1.1); Firefox no puede hacer streaming de cuerpos de petición (`ENV_UNSUPPORTED`); en los navegadores, una petición cross-origin necesita un preflight CORS salvo que el navegador conserve un resultado de preflight en caché, así que el servidor debe responder a `OPTIONS`; un redirect 301, 302, 307 o 308 falla después de que el cuerpo se envió una vez, mientras que 303 pasa a ser un GET y tiene éxito. Los navegadores no envían `Content-Length`. `fetch` informa de estos fallos, y de un `ReadableStream` de origen que lanza mientras `fetch` lo lee, como el mismo error de red que un endpoint inalcanzable, así que el balanceador de carga recibe `{ attempted: false }` para ellos, igual que para un callback de progreso que lanza (`EXT_OBSERVER_FAILED`). Una subida en streaming por sí sola no puede detectar un endpoint caído, y una subida en streaming rechazada nunca se reintenta: un cuerpo `ReadableStream` termina el flujo de reintento antes de que se consulte a `shouldRetry`.
 
-Donde ocurre esa conversión, FormData usa su stream serializado sin almacenar todo el cuerpo en un Blob y conserva el boundary multipart real. Su total es desconocido salvo que lo aporte un `Content-Length` explícito válido. Los content types explícitos sobreviven a la conversión de subida, salvo que FormData debe usar el boundary de su serialización. `loaded` cuenta bytes del stream, no acuses del servidor. Las descargas con un `Content-Encoding` distinto de identity informan `total: 0` y `lengthComputable: false`; sus bytes de stream pueden estar ya descomprimidos.
+Un cuerpo en streaming no tiene longitud conocida: el total informado es desconocido salvo que lo fije una cabecera `Content-Length` explícita y válida (los navegadores no envían esa cabecera). `loaded` cuenta bytes del stream, no acuses del servidor. Las descargas con un `Content-Encoding` distinto de identity informan `total: 0` y `lengthComputable: false`; sus bytes de stream pueden estar ya descomprimidos.
 
 Consulta la [guía de HTTP](/es-ES/docs/http) y [Cliente](/es-ES/docs/client).
 
@@ -117,7 +117,7 @@ Los cuatro campos son opcionales. `query` es `URLSearchParams` o un record; un o
 
 ## UseRequestConfig
 
-`signal`, más `onDownloadProgress` y `onUploadProgress` opcionales. `HttpExecuteOptions` es este recorte. No hay campo `timeout` ni `abort`.
+`signal`, más `onDownloadProgress`, `onUploadProgress` y `retry` opcionales. `HttpExecuteOptions` es este recorte. No hay campo `timeout` ni `abort`.
 
 ## RequestSuccessData
 

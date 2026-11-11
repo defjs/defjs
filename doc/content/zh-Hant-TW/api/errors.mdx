@@ -57,7 +57,7 @@ description: Fault 的各個變體與建立函式。
 
 所有可能在回應出現之前就失敗的情況：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。在傳輸層有中繼資料可回報之前，`response` 是 `undefined`，例如下載到一半被截斷的本文。
 
-無效的 `withRetry` 選項會在 HTTP 傳輸開始之前回傳 `REQ_OPTIONS_INVALID`，訊息為 `Invalid retry options`。這包括非物件的策略、不是至少為 1 之安全整數的 `maxAttempts`，以及無效的條件、方法、逾時、退避或預算設定。省略 `withRetry` 會關閉重試。`withRetry()` 與 `withRetry(undefined)` 的行為與 `withRetry({})` 相同。`withRetry({ maxAttempts: 1 })` 會在啟用之後關閉重試。
+重試選項不會在執行時期驗證。省略 `withRetry` 會關閉重試。`withRetry()` 與 `withRetry(undefined)` 的行為與 `withRetry({})` 相同。`withRetry({ maxRetries: 0 })` 會在啟用之後關閉重試。`shouldRetry` 函式若拋出例外，該次呼叫會以 `EXT_HOOK_FAILED` 結束，拋出的值成為 `cause`；HTTP、SSE 與 WebSocket 皆同。對於已經開啟的串流或工作階段，見 [Client](/zh-Hant-TW/api/client#withretry)。
 
 ### AnyFault
 

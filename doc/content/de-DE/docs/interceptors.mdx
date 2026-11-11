@@ -39,7 +39,7 @@ Jeder Transport verfügt über eine eigene typisierte Interceptor-Factory (`crea
 
 ### Regeln für die Interceptor-Pipeline
 
-- **Onion-Reihenfolge (Zwiebelprinzip)**: Interceptors laufen beim Hinausgehen in Registrierungsreihenfolge (`vor next(req)`) und beim Zurückkommen in umgekehrter Reihenfolge (`nach await next(req)`). Platziere breite Logging-/Tracing-Interceptors außerhalb engerer Auth- oder Retry-Interceptors.
+- **Onion-Reihenfolge (Zwiebelprinzip)**: Interceptors laufen beim Hinausgehen in Registrierungsreihenfolge (`before next(req)`) und beim Zurückkommen in umgekehrter Reihenfolge (`after await next(req)`). Platziere breite Logging-/Tracing-Interceptors außerhalb engerer Auth- oder Retry-Interceptors.
 - **Unveränderlichkeit von Requests**: Klone stets `req.headers` (`new Headers(req.headers)`) und übergib ein neues Request-Objekt (`{ ...req, headers }`) an `next(...)`, damit äußere Wiederholungsversuche saubere Header vorfinden.
 - **`content-type` und `bodyContentType`**: Defjs hinterlegt den ermittelten Body-Content-Type auf `req.bodyContentType`, ohne `req.headers` direkt zu verändern. Signier-Interceptors sollten `req.headers.get("content-type") ?? req.bodyContentType` auslesen. Ersetzt ein Interceptor `req.body` durch ein anderes Format, setze explizit den `content-type`-Header.
 
@@ -55,7 +55,7 @@ Ein HTTP-Interceptor kann eine synthetische Antwort zurückgeben, ohne `next(req
 
 ## 3. Sichere HTTP-Lesezugriffe wiederholen
 
-HTTP-Retries sind standardmäßig aus. Verwende für ein Failover zu einem anderen Endpunkt bei `502`, `503` oder `504` [`withRetry({ on: ["gateway-error"] })`](/de-DE/docs/load-balancing). Es wählt einen noch nicht versuchten Endpunkt, baut den Request neu und führt die vollständige Interceptor-Kette erneut aus.
+HTTP-Retries sind standardmäßig aus. Um einen Verbindungsfehler, einen Timeout oder einen `502`, `503` oder `504` an einem anderen Endpunkt zu wiederholen, verwende [`withRetry()`](/de-DE/docs/load-balancing#retries). Nach der Backoff-Verzögerung lässt es den Balancer erneut wählen, baut den Request neu und führt die vollständige Interceptor-Kette erneut aus.
 
 Ein Anwendungs-Interceptor kann stattdessen Statusbehandlung auf demselben Endpunkt umsetzen, etwa für `429` und `Retry-After`. Dieses begrenzte Rezept für sichere Lesezugriffe behandelt auch `502`/`503`/`504`:
 
@@ -63,14 +63,14 @@ Ein Anwendungs-Interceptor kann stattdessen Statusbehandlung auf demselben Endpu
   examples/interceptors/retry-safe-reads.ts#example
 </include>
 
-- **Zwei Retry-Schichten**: Diese `next(request)`-Schleife bleibt auf dem ausgewählten Endpunkt und führt weder die äußere Authentifizierung noch den Builder erneut aus. Drei innere Sendevorgänge zusammen mit `withRetry({ maxAttempts: 2, on: ["gateway-error"] })` können vier HTTP-Requests senden (drei an einen fehlerhaften primären Endpunkt, einen an ein gesundes Backup); `maxAttempts` begrenzt äußere Versuche, nicht physische Sendevorgänge. Lege fest, welche Schicht welche Bedingung behandelt, statt die Schichten versehentlich zu stapeln.
+- **Zwei Retry-Schichten**: Diese `next(request)`-Schleife bleibt auf dem ausgewählten Endpunkt und führt weder die äußere Authentifizierung noch den Builder erneut aus. Drei innere Sendevorgänge zusammen mit `withRetry({ maxRetries: 1 })` können vier HTTP-Requests senden (drei an einen fehlerhaften primären Endpunkt, einen an ein gesundes Backup); `maxRetries` begrenzt äußere Versuche, nicht physische Sendevorgänge. Lege fest, welche Schicht welche Bedingung behandelt, statt die Schichten versehentlich zu stapeln.
 - **`Retry-After`-Policy**: Core-`withRetry` liest diesen Header nicht. Die 30-Sekunden-Obergrenze und der 250-ms-Fallback des Rezepts sind Entscheidungen der Anwendung. Das Deckeln einer längeren Server-Wartezeit kann früher als angefordert erneut versuchen; ist das nicht akzeptabel, warte die volle Dauer oder gib stattdessen die Antwort zurück.
 - **Schreibzugriffe nach 401**: Das [Bearer-Refresh-Rezept](/de-DE/recipes/refresh-bearer-once) kann einen JSON-POST zweimal zustellen. Verlange eine Ablehnung durch die Authentifizierung vor der Geschäftsverarbeitung sowie einen stabilen Idempotenzschlüssel mit serverseitiger Deduplizierung, oder spiele Schreibzugriffe nicht automatisch erneut ab. Streaming-Request-Bodys werden nicht erneut gesendet.
-
 - **Umgang mit Transport-Rejections**: `next(request)` schlägt fehl (rejectet), sobald ein Netzwerkfehler auftritt (es gibt keine Status-0-Antwort). Das Abfangen und erneute Werfen dieser Rejection erhält den ursprünglichen `NET_*`-Fault-Code.
-- **Fehler im Interceptor**: Ein unbehandelter Fehler (oder die Rückgabe eines Nicht-Response-Werts) löst das Operations-Tupel mit `EXT_INTERCEPTOR_FAILED` auf und setzt `fault.cause`. Das Werfen von `ERR_ABORTED` oder `ERR_TIMEOUT` führt zu `NET_ABORTED` oder `NET_TIMEOUT`.
+- **Requests, die nicht gesendet werden können**: In einem HTTP-Interceptor lehnt `next(request)`, wenn die Plattform den Request ablehnt (eine ungültige oder verbotene Methode, ein GET- oder HEAD-Body, eine URL mit Zugangsdaten, ein Header-Wert, den sie ablehnt) oder ein `finalizeHeaders`-Hook wirft, mit dem eigenen Fehler der Plattform (einem `TypeError`) oder dem vom Hook geworfenen Wert ab, nicht mit dem `BodyFailure`-Wrapper der Bibliothek. Erneutes Werfen behält den Fault-Code (`REQ_BUILD_FAILED` oder `EXT_HOOK_FAILED`); das Werfen eines anderen Fehlers macht den Fehler zu deinem (`EXT_INTERCEPTOR_FAILED`). Die übrigen Fehler rund um den Transport erreichen `next(request)` weiterhin als `BodyFailure`: ein Response-Body, der nicht gelesen, dekodiert oder seinem Medientyp zugeordnet werden kann, ein abgeschnittener Body und ein werfender Upload-Fortschrittsbeobachter (`EXT_OBSERVER_FAILED`), was auch vor dem Senden des Requests geschehen kann.
+- **Fehler im Interceptor**: Ein unbehandelter Wurf des Interceptors selbst (oder das Übergeben eines `signal` an `next()`, das kein `AbortSignal` ist) löst das Operations-Tupel mit `EXT_INTERCEPTOR_FAILED` auf und setzt `fault.cause`. Das Werfen von `ERR_ABORTED` oder `ERR_TIMEOUT` führt zu `NET_ABORTED` oder `NET_TIMEOUT`.
 
-Bevorzuge bei SSE `withSSEReconnect` gegenüber einem Interceptor, der `next()` wiederholt aufruft. Mehr als ein Aufruf von `next()` des Interceptors deaktiviert Endpunktzuordnung und erneute Endpunktauswahl für diese Ersatz-Streams; das hat nichts mit dem Konsumieren von Events über `next()` eines Iterators zu tun.
+Bevorzuge bei SSE `withRetry` gegenüber einem Interceptor, der `next()` wiederholt aufruft. Mehr als ein Aufruf von `next()` des Interceptors deaktiviert Endpunktzuordnung und erneute Endpunktauswahl für diese Ersatz-Streams; das hat nichts mit dem Konsumieren von Events über `next()` eines Iterators zu tun.
 
 ## 4. WebSocket-Sitzungen umhüllen
 

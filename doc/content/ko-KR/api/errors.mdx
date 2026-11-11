@@ -57,7 +57,7 @@ description: Fault의 변형들과 팩토리 헬퍼예요.
 
 응답이 존재하기 전에 실패할 수 있었던 모든 것이에요. `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. 전송이 보고할 메타데이터를 갖기 전까지 `response`는 `undefined`예요. 예를 들어 다운로드 중간에 잘린 본문이에요.
 
-잘못된 `withRetry` 옵션은 HTTP 전송이 시작되기 전에 `REQ_OPTIONS_INVALID`를 돌려요. 메시지는 `Invalid retry options`예요. 객체가 아닌 정책, 1 이상의 안전한 정수가 아닌 `maxAttempts` 값, 그리고 잘못된 조건, 메서드, 타임아웃, 백오프, 예산 설정이 여기 포함돼요. `withRetry`를 생략하면 재시도가 꺼져요. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같이 동작해요. `withRetry({ maxAttempts: 1 })`는 재시도를 켠 뒤 꺼요.
+재시도 옵션은 런타임에 검증되지 않아요. `withRetry`를 생략하면 재시도가 꺼져요. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같이 동작해요. `withRetry({ maxRetries: 0 })`는 재시도를 켠 뒤 꺼요. `shouldRetry` 함수가 throw하면 HTTP, SSE, WebSocket 모두 던진 값을 `cause`로 담아 호출이 `EXT_HOOK_FAILED`로 끝나요. 이미 열린 스트림이나 세션은 [Client](/ko-KR/api/client#withretry)를 보세요.
 
 ### AnyFault
 
@@ -81,7 +81,7 @@ description: Fault의 변형들과 팩토리 헬퍼예요.
 
 `createHttpStatusFault`는 디코딩된 본문을 이미 지닌 응답을 받아요. `createUndecodedHttpStatusFault`는 메타데이터만 받고, `error`를 선언하지 않은 정의용이에요.
 
-`createNetworkFault`는 `NET_ABORTED`에 [`isAbortCause`](/ko-KR/api/core/isabortcause)를, `NET_TIMEOUT`에 [`isTimeoutCause`](/ko-KR/api/core/istimeoutcause)를 써요. 각각 어느 Core 사본의 브랜드 센티넬이든, 이름이 `AbortError`인 `DOMException`이든, 이름이 `TimeoutError`인 `DOMException` 또는 `Error`든 알아봐요. 나머지는 `NET_UNREACHABLE`로 매핑해요. `createPreflightFault`는 `code`를 바로 받고, `cause`를 주지 않으면 `code`가 그대로 메시지가 돼요.
+`createNetworkFault`는 `NET_ABORTED`에 [`isAbortCause`](/ko-KR/api/core/isabortcause)를, `NET_TIMEOUT`에 [`isTimeoutCause`](/ko-KR/api/core/istimeoutcause)를 써요. 둘 다 어느 Core 사본의 브랜드 센티넬이든 알아봐요. `isAbortCause`는 이름이 `AbortError`인 `DOMException`도 알아봐요. `isTimeoutCause`는 이름이 `TimeoutError`인 `DOMException` 또는 `Error`를 알아봐요. 나머지는 `NET_UNREACHABLE`로 매핑해요. `createPreflightFault`는 `code`를 바로 받고, `cause`를 주지 않으면 `code`가 그대로 메시지가 돼요.
 
 모든 팩토리는 위의 구조화된 필드를 갖춘 네이티브 `Error` 인스턴스를 돌려줘요. 평범한 객체 오류를 만들지 않으니 `String(fault)`에 어댑터가 필요 없어요.
 

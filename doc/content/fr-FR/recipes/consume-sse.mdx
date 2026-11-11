@@ -35,4 +35,4 @@ build started
 ```
 
 - SSE ne se reconnecte pas automatiquement lors d'une déconnexion réseau ou d'une erreur de lecture sans avoir configuré [`withRetry(...)`](/fr-FR/api/core/withretry) sur le client.
-- Lorsque `withSSEReconnect(...)` est configuré, `attempts` vaut `3` par défaut par coupure et se réinitialise après un handshake réussi (`attempts: 0` désactive la reconnexion). Sans callback personnalisé `shouldReconnect`, seules les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE` se reconnectent. Une requête dont le corps est un `ReadableStream` ne se reconnecte jamais. Consultez [Flux d'événements SSE](/fr-FR/docs/sse).
+- Lorsque `withRetry(...)` est configuré, `maxRetries` vaut `3` par défaut par coupure et se réinitialise après un handshake réussi (`maxRetries: 0` désactive les retries). Sans `shouldRetry` personnalisé, seules les requêtes `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT` et `DELETE` sont retentées. Une requête dont le corps est un `ReadableStream` ne l'est jamais. Consultez [Flux d'événements SSE](/fr-FR/docs/sse).

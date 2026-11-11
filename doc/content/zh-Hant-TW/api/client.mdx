@@ -55,7 +55,7 @@ description: createClient、選項輔助函式與 Client 型別。
 單一請求的優先順序：
 
 1. 起始的標頭集合就是預設值。
-2. 請求 builder 回傳的 `headers` 會取代同名的預設值。該名稱的第一個值取代預設；同一陣列中後面的值只會接在這次取代結果之後。純量或 `Headers` 實例同樣是取代。其他預設名稱維持不變。
+2. 請求 builder 回傳的 `headers` 會取代同名的預設值。該名稱的第一個值取代預設，而來自 `[name, value]` 陣列或 `Headers` 實例、同一名稱後面的值會附加在它後面。record 的值是單一值：陣列會以 JavaScript 的方式用逗號連接。其他預設名稱維持不變。
 3. 攔截器收到的是合併後的標頭，可以加以修改。
 4. 使用 `@defjs/core/xsrf` 時，XSRF 標頭最後才加入，而且只在它仍不存在時才加入（見 `withXSRF`）。
 
@@ -87,7 +87,9 @@ Client 層級沒有預設期限。某次呼叫需要期限時，在衍生的 cli
 
 為瀏覽器中的 HTTP 請求加上 XSRF token 標頭。從 `@defjs/core/xsrf` 匯入。`options` 是 `XSRFOptions`：`cookieName`（預設 `XSRF-TOKEN`）與 `headerName`（預設 `X-XSRF-TOKEN`）。不帶參數呼叫 `withXSRF()` 會啟用這些預設值；缺少 `location` 或 `document` 時（包含 Worker）會丟出錯誤。同構程式只在瀏覽器裡加上這個選項。令牌來自別處時，用攔截器設定。SSE 與 WebSocket 請求不受影響。
 
-只在下列條件全部成立時設定該標頭：HTTP 方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；請求尚未帶有該標頭；解析後的請求 origin 等於頁面 origin；而且 `document.cookie` 中有非空 token。跨來源請求不會讀取 cookie。讀取 cookie 時丟出錯誤視為沒有 token。空 token 不設定該標頭。
+只在下列條件全部成立時設定該標頭：HTTP 方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；請求尚未帶有該標頭；解析後的請求 origin 等於頁面 origin；而且 `document.cookie` 中有非空 token。跨來源請求不會讀取 cookie。讀取 cookie 時丟出錯誤視為沒有 token。空 token 不設定該標頭。無效的 `headerName`，或不是合法標頭值的 cookie 值，會在任何請求送出前以 `EXT_HOOK_FAILED` 讓呼叫失敗。
+
+origin 檢查涵蓋函式庫所建立的 URL。Fetch 自己會跟隨重新導向；重新導向到另一個 origin 之後，它只會移除 `Authorization`，因此 XSRF 標頭會跟著過去。目標若在 CORS 預檢中允許該標頭，就會收到 token。若要拒絕這種情況，請傳給 `withHTTPHandle` 一個函式，對帶有該標頭、且目標是頁面 origin 的請求呼叫 `fetch(new Request(request, { mode: "same-origin" }))`。不要把這個 mode 套用到標頭來自攔截器的跨來源 API：Fetch 會拒絕該 mode 下任何前往另一個 origin 的請求。當重新導向離開 origin 時，這樣的請求會以 `NET_UNREACHABLE` 失敗，同源重新導向則仍會跟隨。在 `Referrer-Policy: no-referrer` 下，Fetch 會對該 mode 的同源 POST 送出 `Origin: null`，而預設 mode 會送出序列化後的 origin，因此檢查 `Origin` 的伺服器可以拒絕它。有些引擎的實作不同。
 
 ### SSE 設定項
 
@@ -105,6 +107,8 @@ Client 層級沒有預設期限。某次呼叫需要期限時，在衍生的 cli
 
 <ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat" />
 
+重連來自 [`withRetry`](/zh-Hant-TW/api/core/withretry)，不是 WebSocket 選項。`withWebSocketHeartbeat` 接受 [`WebSocketHeartbeatConfig`](/zh-Hant-TW/api/core/websocketheartbeatconfig-type)：`message` 必填，`timeoutMs` 只允許與 `isAck` 一起出現。Defjs 沒有預設的心跳格式、間隔或逾時。
+
 ## 型別
 
 ### DerivableClient
@@ -117,7 +121,7 @@ Client 層級沒有預設期限。某次呼叫需要期限時，在衍生的 cli
 
 <ApiSignature name="Client" />
 
-`Client` 是一個值，不是函式。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 就會得到一個。`client()` 與 `client(undefined)` 不儲存任何 request options。`client({})` 保留一份空快照。這次呼叫會把每個頂層欄位讀一次。`protocols` 陣列會被複製。`heartbeat` 與 `reconnect` 會複製各自已知的欄位。缺少的巢狀區塊仍然保持缺少。`signal`、`beforeConnect` 與 callback 保持原本的身份。被複製欄位上的 getter 會在該次呼叫期間執行；若它拋出例外，例外會離開該次呼叫。無效數字仍會在稍後以 `REQ_OPTIONS_INVALID` 失敗。衍生不會進行 I/O。Client 值不可呼叫，呼叫它會在編譯時失敗，並在執行時拋出 `TypeError`。請為每次呼叫建立一個 client 值。同一個值可以傳給許多操作，但重複使用帶有 `signal` 的值會共用該 signal。`signal` 不會合併；請在應用程式碼中用 `AbortSignal.any` 組合。factory 的基礎設定仍然共用，也不會凍結。標準的 `with*` 輔助函式會在套用時複製它們擁有的固定 record。
+`Client` 是一個值，不是函式。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 就會得到一個。`client()` 與 `client(undefined)` 不儲存任何 request options。`client({})` 保留一份空快照。這次呼叫會把每個頂層欄位讀一次。`protocols` 陣列會被複製。`heartbeat` 與 `retry` 會複製各自已知的欄位，而且 `retry` 的複本包含它的 `methods` 陣列。缺少的巢狀區塊仍然保持缺少。`signal`、`beforeConnect` 與 callback 保持原本的身份。被複製欄位上的 getter 會在該次呼叫期間執行；若它拋出例外，例外會離開該次呼叫。衍生不會進行 I/O。Client 值不可呼叫，呼叫它會在編譯時失敗，並在執行時拋出 `TypeError`。請為每次呼叫建立一個 client 值。同一個值可以傳給許多操作，但重複使用帶有 `signal` 的值會共用該 signal。`signal` 不會合併；請在應用程式碼中用 `AbortSignal.any` 組合。factory 的基礎設定仍然共用，也不會凍結。標準的 `with*` 輔助函式會在套用時複製它們擁有的固定 record。
 
 不要把 factory 傳給 React 的 state setter（`setState(factory)` 會把它當成 updater 呼叫），也不要當成 Vue 的 `watch` 或 `computed` 來源（它們會呼叫函式）。
 
@@ -125,7 +129,7 @@ Client 層級沒有預設期限。某次呼叫需要期限時，在衍生的 cli
 
 <ApiSignature name="RequestOptions" />
 
-七個扁平欄位。每種協定只讀自己看得懂的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 會被忽略，不會產生 fault。`client(options)` 會在該次呼叫複製 `protocols` 陣列，以及 `heartbeat` 與 `reconnect` 的已知欄位。缺少的巢狀區塊仍然保持缺少。`signal`、`beforeConnect` 與 callback 保持原本的身份。SSE 只從請求 options 讀取 `signal`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選，也沒有 `timeout` 或 `abort` 欄位。
+七個扁平欄位。每種協定只讀自己看得懂的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 會被忽略，不會產生 fault。`client(options)` 會在該次呼叫複製 `protocols` 陣列，以及已知的 `heartbeat` 與 `retry` 欄位。缺少的巢狀區塊仍然保持缺少。`signal`、`beforeConnect` 與 callback 保持原本的身份。`retry` 同樣適用於 HTTP、SSE 與 WebSocket，並以完整的值替換該次呼叫的 client 重試策略。沒有編譯期的協定篩選，也沒有 `timeout` 或 `abort` 欄位。
 
 | 欄位                 | 協定                   | 替換方式                                                          |
 | -------------------- | ---------------------- | ----------------------------------------------------------------- |
@@ -135,9 +139,9 @@ Client 層級沒有預設期限。某次呼叫需要期限時，在衍生的 cli
 | `beforeConnect`      | WebSocket              | 在該次呼叫取代 client 的設定。                                    |
 | `protocols`          | WebSocket              | 取代 client 的清單。                                              |
 | `heartbeat`          | WebSocket              | 整份替換。`timeoutMs` 是確認等待，不是請求期限。                  |
-| `reconnect`          | WebSocket              | 整份替換。                                                        |
+| `retry`              | HTTP、SSE 與 WebSocket | 整份取代 client 的策略。HTTP 的 `budget` 仍留在 client。          |
 
-[`HttpExecuteOptions`](/zh-Hant-TW/api/core/httpexecuteoptions-type) 是 HTTP 切片（`signal` 加上進度）。[`EventStreamExecuteOptions`](/zh-Hant-TW/api/core/eventstreamexecuteoptions-type) 是 `{ signal? }`。[`WebSocketExecuteOptions`](/zh-Hant-TW/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `signal`。
+[`HttpExecuteOptions`](/zh-Hant-TW/api/core/httpexecuteoptions-type) 是 HTTP 切片（`signal`、進度與 `retry`）。[`EventStreamExecuteOptions`](/zh-Hant-TW/api/core/eventstreamexecuteoptions-type) 是 `{ signal?, retry? }`。[`WebSocketExecuteOptions`](/zh-Hant-TW/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `signal` 與 `retry`。
 
 ### ClientOption
 
@@ -161,37 +165,21 @@ Defjs 對 Fetch 實作要求的呼叫簽章。它不是 `typeof fetch`，所以 
 
 <ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
 
-兩種傳輸的重新連線都需要主動啟用：沒有 `withSSEReconnect`／`withWebSocketReconnect` 就不會重試。一旦設定 `reconnect`，就套用以下預設值：
-
-| 欄位         | SSE            | WebSocket      |
-| ------------ | -------------- | -------------- |
-| `attempts`   | `3` 每一次中斷 | `3` 每一次中斷 |
-| `delayMs`    | `1000`         | `1000`         |
-| `factor`     | `1`            | `2`            |
-| `jitter`     | `0`            | `0`            |
-| `maxDelayMs` | 無上限         | `30000`        |
-
-`connectTimeoutMs` 是選用的，必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。對 SSE 而言，它限制從 Fetch 到收到回應標頭的時間；對 WebSocket 而言，它限制從建構到 `open` 的時間；交握之後就會清除。到期時會向平衡器回報 `NET_UNREACHABLE`，讓重連可以選取下一個端點。重試次數用盡時以 `NET_TIMEOUT` 結束。它只存在於重連選項內；只要該物件存在，`attempts` 就預設為 `3`，因此單獨設定 `connectTimeoutMs` 也會啟用重連。只想限制交握時，請同時設定 `attempts: 0`。
-
-兩種傳輸在交握成功後，都會重設每次中斷的重試額度、回呼的 attempt 與 backoff 指數。`attempts: 0` 停用重試；省略 `attempts` 並不會在同一次中斷內取得無限次重試。`maxDelayMs` 會在 jitter 與捨入之後限制最終延遲；平台計時器上限 `2_147_483_647` ms 同樣適用，包括 SSE 未設定上限的情況。base 為零時維持零；有效數值溢位時會飽和在這些上限。
-
-重連選項會在傳輸之前驗證：`attempts` 必須是非負安全整數；`delayMs` 必須是有限非負數；`maxDelayMs` 必須是有限非負數或正 `Infinity`，後者移除設定的上限，但最終等待仍不超過 `2_147_483_647` ms；`factor` 必須有限且為正；`jitter` 必須有限且在 0–1 之間。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 停用後續重試，但所有明確提供的重連欄位仍會在首次連線前驗證，與 SSE 相同。jitter 會在套用最終上限之前，把已設限的 base 往正負兩個方向縮放。
-
-對 SSE 而言，`delayMs` 只是起始的 base delay：伺服器送出的純數字 `retry:` 欄位會取代它，用於之後的嘗試，包括恢復之後。`shouldReconnect` 回傳 `false` 就停止重試。SSE 的回呼另外會收到 `lastEventId`、請求的 `method` 與最新的 `open` 資訊，也可以是非同步函式。未提供此回呼時，SSE 只會重連 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求；有提供時，所有請求方法是否重連都由它的回傳值決定。最新的事件 ID 會以 UTF-8 位元組放進 `Last-Event-ID` 送出；空 ID 會清除它，含 NUL 的 ID 則會被忽略。WebSocket 的回呼則會收到關閉時的 `code`、`reason` 與 `wasClean`。
+這兩個介面都不持有重試策略。SSE 與 WebSocket 的重試來自 client 範圍的 [`withRetry`](/zh-Hant-TW/api/core/withretry) 策略；沒有策略時，失敗的串流或已關閉的 socket 會結束呼叫。預設值、失敗後的決策順序，以及每種傳輸預設重試哪些失敗，寫在 [withRetry()](#withretry)。
 
 SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事件（包括連 `default` 都沒有，`missing-struct`），以及資料未通過其 struct 驗證的事件（`validation-failed`）。這類事件一律會被丟棄；handler 的回傳值會被忽略，它拋出的錯誤也不會關閉串流。
 
-對 WebSocket 而言，`beforeConnect`、`heartbeat`、`protocols` 與 `reconnect` 也可以在衍生的 client 上傳入；每一項都會在該次呼叫整份取代 client 的設定。`heartbeat.message` 負責產生每一次 ping；省略它或它回傳 `undefined` 時就不會送出任何東西。`heartbeat.timeoutMs` 是等待確認的時間，不是請求期限。
+對 WebSocket 而言，`beforeConnect`、`heartbeat` 與 `protocols` 也可以在衍生的 client 上傳入；每一項都會在該次呼叫整份取代對應的 client 設定。`heartbeat.message` 負責產生每一次 ping；它回傳 `undefined` 時就不會送出任何東西。`heartbeat.timeoutMs` 是等待確認的時間，而且需要 `isAck`。它不是請求期限。沒有得到回應的心跳會關閉 socket，並像任何不是 `session.close()` 要求的關閉一樣進入重試流程。
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-簽名中列出的是 `sse` 與 `webSocket`。另外六個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer` 與 `withCredentials`——繼承自未匯出的 HTTP 基底型別。`endpoints` 是 `readonly string[]`。解析後的預設值是 `[]`。空陣列是合法值，呼叫會以 `REQ_BUILD_FAILED` 失敗。沒有 client 層級的 `timeout`。`createClient` 不接收這個物件，而是接收選項輔助函式。
+簽名中列出的是 `retry`、`sse` 與 `webSocket`。另外六個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer` 與 `withCredentials`——繼承自未匯出的 HTTP 基底型別。`endpoints` 是 `readonly string[]`。解析後的預設值是 `[]`。空陣列是合法值，呼叫會以 `REQ_BUILD_FAILED` 失敗。沒有 client 層級的 `timeout`。`createClient` 不接收這個物件，而是接收選項輔助函式。
 
 ### ClientConfig
 
-由選項輔助函式修改、供操作讀取的解析後快照：套用預設值之後的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）、`webSocket` 與 `balancer` 必定存在。`http.retry` 是選用的，預設為 `undefined`（一次嘗試，沒有預算）；由 `withRetry(options?)` 設定。`balancer` 預設為該 client 新建的 `pickFirstBalancer()`。它不是 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 的欄位。
+由選項輔助函式修改、供操作讀取的解析後快照：套用預設值之後的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）、`webSocket` 與 `balancer` 必定存在。`retry` 是選用的，預設為 `undefined`（一次嘗試，沒有預算）；`withRetry(options?)` 會為每一種傳輸設定它。`balancer` 預設為該 client 新建的 `pickFirstBalancer()`。它不是 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 的欄位。
 
 ### ClientSSEConfig
 
@@ -217,7 +205,7 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事�
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` 會停在第一個端點，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進；HTTP 重試絕不會移動其黏性端點，順序遵循 client 的完整端點清單 `members`。它選用的正有限數 `failbackMs` 會在該間隔之後，對第一個端點進行一次單一並行探測；探測在對端回應開始（`end`）時判定，從未到達 `end` 的探測由 `done` 判定。HTTP 重試是另一套以 `withRetry` 設定的 client 策略。`roundRobinBalancer` 依序走訪清單，`weights` 為選用。見[多個端點](/zh-Hant-TW/docs/client#multiple-endpoints)。
+`pickFirstBalancer` 遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時會前進。重試會從每一個端點重新選取，因此遵循這條規則：連線被拒絕之後會到達下一個端點；逾時不會推進 pick-first，於是會再試同一個端點。順序遵循 `members`，也就是 client 的完整端點清單。它選用的 `failbackMs` 單靠時間回到第一個端點：黏性端點離開第一個端點達到這段時間後，下一次候選包含第一個端點的 pick 會再次選中它，並不判斷它是否已復原；若它再次失敗，一般的前進規則會生效，時間重新起算。重試是另一套以 `withRetry` 設定的 client 策略。`roundRobinBalancer` 依序走訪清單。`weights` 為選用。見[多個端點](/zh-Hant-TW/docs/client#multiple-endpoints)。
 
 ### p2cBalancer()
 
@@ -229,17 +217,37 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事�
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-以 Linkerd 風格的連續失敗斷路包裝子策略。Round robin 與 p2c 預設啟用它（與 Finagle 相同）；傳入 `false` 可關閉。Pick-first 則要傳入物件才會啟用。預設分類器把每個帶 code 的結果都計為失敗，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。連續五次失敗之後，懲罰從 1000 ms 起算，探測失敗後加倍，再加上不超過基數 0.5 倍的正向抖動，上限為 60000 ms。到期後只允許一次探測，並在 `end` 時判定；若沒有 `end`，則在 `done` 時判定。成功會重設退避；取消只會釋放名額。沒有假定成功的逾時、配額、最後一台主機保護、結算網格、百分比判準或慢啟動。`isHealthy` 讀取的是應用程式自己持有的快取狀態，永遠不會取消懲罰。所有主機都可能被斷路；Finagle 式、只限目前清單的失敗時放行仍會送出請求。與 Envoy/gRPC A50 不同，這裡沒有驅逐配額。見[健康過濾與 p2c](/zh-Hant-TW/docs/client#health-filtering-and-p2c)。
+計入已分類的失敗並依時間剔除端點，也會略過應用程式提供的 `isHealthy` 函式所拒絕的端點。Defjs 不決定什麼叫做健康。除非傳入物件，否則它是關閉的：pick-first、round robin 與 p2c 都透過自己的 `outlierDetection` 選項接受它（`{}` 表示預設值），它也可以直接包住自訂的子平衡器。預設的 `isFailure` 把每個帶 code 的結果都計入，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`；它只決定哪些結果計入剔除，而且可以替換。連續五次失敗之後，懲罰從 1000 ms 起算，每一次剔除增加 1000 ms，再加上不超過基數 0.5 倍的正向抖動，上限為 60000 ms。時間一到，端點就可以再被選取，沒有試探請求，也不判斷是否已復原；懲罰等級會保留，每 10 秒沒有剔除就減一（與 gRPC A50 相同）。在剔除之前就開始的嘗試，或端點被剔除期間開始的嘗試，其遲到的結果會被忽略。沒有配額、最後一台主機保護、結算網格、百分比判準或慢啟動。`isHealthy` 是唯一的健康判斷；它與剔除以 AND 結合，因此 `true` 絕不會結束懲罰，它拋出的例外會以 `REQ_BUILD_FAILED` 回報。所有主機都可能故障；Finagle 式、只限目前清單的失敗時放行仍會送出請求。見[健康過濾與 p2c](/zh-Hant-TW/docs/client#health-filtering-and-p2c)。
 
 ### withRetry()
 
 <ApiSignature name="withRetry, RetryOptions, RetryContext, HttpRetryContext, SSERetryContext, WebSocketRetryContext" />
 
-獨立於端點選擇，啟用同一次呼叫內的 HTTP 重試。省略 `withRetry` 代表只嘗試一次，也不會建立預算。`withRetry()` 等於 `withRetry({})`，預設為 `maxAttempts: 2`（含首次）、`on: ["connect-failure"]`，以及安全方法 `GET`、`HEAD`、`OPTIONS`、`TRACE`。方法名稱不區分大小寫；`[]` 會關閉重試。`maxAttempts` 是至少為 1 的安全整數，且每個端點最多嘗試一次。`"gateway-error"` 涵蓋 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` 解碼拒絕的閘道本文；`"attempt-timeout"` 則使用 `attemptTimeoutMs`。串流請求本文不會重試。
+為 HTTP、SSE 與 WebSocket 啟用同一份重試策略，存在 `config.retry` 裡。沒有 `withRetry` 時，每次呼叫只嘗試一次，單純且沒有退避。`withRetry()` 與 `withRetry(undefined)` 等同於 `withRetry({})`。後一次 `withRetry` 會取代該策略；`withRetry({ maxRetries: 0 })` 會在啟用之後關閉重試。該選項會在套用時複製自己擁有的欄位、`methods` 陣列與巢狀 budget。選項不會在執行時期驗證；TypeScript 會拒絕的值，會照 JavaScript 對待它的方式運作。
 
-退避預設為 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語意與 SSE/WebSocket 重連相同。`delayMs: 0` 會跳過等待。`attemptTimeoutMs` 必須是有限正數，且不得大於 2147483647（計時器上限）；否則該操作回傳 `REQ_OPTIONS_INVALID`。它為送往所選端點的每次 Fetch 計時，從呼叫一直到其回應本文讀取完成；傳送前後的攔截器工作以及 struct 解碼都不計時，也絕不會算到端點頭上。呼叫端的 signal 涵蓋整次呼叫，包括退避等待。當某一輪重試無法使用任何端點（平衡器 pick 失敗，或下一個端點的 URL 無法解析）時，呼叫會回傳上一次嘗試的錯誤，而不是 `REQ_BUILD_FAILED`。
+預設值是 `maxRetries: 3`（第一次嘗試之後的重試次數；`0` 絕不重試）、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`（`Infinity` 會移除上限，平台計時器上限 `2_147_483_647` ms 仍然生效），以及 `jitter: 0.2`（0 到 1 的乘性係數）。第 _n_ 次重試等待 `delayMs * factor^(n-1)`，先封頂；接著套用抖動與捨入，然後最終延遲再封頂一次。base 為零時維持零。`methods` 預設為 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 與 `DELETE`，比較時不區分大小寫。`attemptTimeoutMs` 限制單次嘗試：HTTP 計到回應本文結束，SSE 計到回應標頭，WebSocket 計到 `open`。用完時間的嘗試是一次失敗，與連線被拒絕相同。只要時間限制、不要重試時，使用 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。
 
-由 client 擁有的 Finagle 預算預設為 20%，再加上 10 秒 TTL 內每秒 10 次的儲備。存入與取出會在十個 TTL/10 的時間切片上惰性到期。`budget: false` 會移除這項限制。共用同一份設定的衍生 client 會共用預算；各自獨立的 client 則不共用，即使共用同一個平衡器也一樣。無效選項會在 HTTP 執行時回傳 `REQ_OPTIONS_INVALID`，訊息為 `Invalid retry options`。該選項會在套用時複製自己擁有的欄位、陣列與巢狀 budget。`withRetry()` 與 `withRetry(undefined)` 的行為與 `withRetry({})` 相同。後一次 `withRetry` 會取代該策略；`withRetry({ maxAttempts: 1 })` 會在啟用之後關閉重試。平衡器與健康包裝器沒有重試設定。見[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)。
+每次失敗的嘗試之後，每種傳輸都依這個順序執行同一套流程：
+
+1. 呼叫端中止、手動 `close()`、致命錯誤（例如媒體類型不符）、建構子會拋出例外的 WebSocket，以及 `ReadableStream` 請求本文都會結束呼叫。不會呼叫 `shouldRetry`。
+2. 已經做完 `maxRetries` 次重試時，呼叫結束。不會呼叫 `shouldRetry`。
+3. 由 `shouldRetry(context)` 決定；沒有它時，由 `context.retryable` 決定。它可以回傳 promise，呼叫端的 signal 會取消它。若它拋出，呼叫會以 `EXT_HOOK_FAILED` 結束，拋出的值成為 `cause`。已經開啟的 SSE 串流會在 `closed.code` 回報 `EXT_HOOK_FAILED`，並在 `closed.cause` 放一個 error，其 `cause` 是拋出的值。已經開啟的 WebSocket 工作階段會以 `closed.kind: "error"` 結束，拋出的值成為 `closed.cause`。
+4. 僅 HTTP：預算必須支付這次重試，否則呼叫結束。
+5. 呼叫等待退避延遲，然後平衡器從每一個端點重新選取，包括剛剛失敗的那個。單一端點會在延遲之後再試一次。對 HTTP 而言，每一次重試都會重建請求並重新執行完整的攔截器鏈；SSE 與 WebSocket 會重用請求，只重新解析 URL。
+
+`context` 是依 `transport` 收窄的 [`RetryContext`](/zh-Hant-TW/api/core/retrycontext-type)。每個 context 都有 `attempt`（即將開始的重試編號，從 1 起算）、`cause`（fault、error 或關閉原因）與 `retryable`（預設策略的決定）。HTTP 另外有 `method`、`endpoint` 與 `status`；SSE 另外有 `method`、`lastEventId`、`open` 與 `status`；WebSocket 另外有 `code`、`reason` 與 `wasClean`。回傳 `context.retryable` 可保留預設，再在上面加上規則；回傳你自己的判定則會取代它。
+
+預設哪些情況可重試，差別只在哪些失敗算進去：
+
+| 傳輸      | 預設 `retryable`                                                                                                                                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP      | 方法屬於 `methods`，且該次嘗試沒有得到回應、得到 502、503 或 504，或用完 `attemptTimeoutMs`。其他任何狀態都會帶著 `retryable: false` 交給 `shouldRetry`。Fetch 開始之前的本機失敗絕不會到達它。 |
+| SSE       | 方法屬於 `methods`，且交握發生網路失敗、交握回了 502、503 或 504、嘗試用完 `attemptTimeoutMs`，或已開啟的串流發生網路失敗。串流正常結束絕不會重試。                                             |
+| WebSocket | `session.close()` 沒有要求的每一次關閉，包括從未開啟的連線與沒有得到回應的心跳。                                                                                                                |
+
+對 SSE 而言，伺服器送出的純數字 `retry:` 欄位會取代之後嘗試的 `delayMs`，已提交的事件 ID 會以 UTF-8 位元組放進 `Last-Event-ID`，成功的交握會重設次數。對 WebSocket 而言，成功的 `open` 會重設次數。會接受連線然後立刻關掉的伺服器因此會一直被重試；請用 `shouldRetry` 停掉它。SSE 與 WebSocket 沒有預算。HTTP 的離線失敗絕不會重試。
+
+HTTP 預算歸 client 所有，採 Finagle 風格。預設為 20%，再加上 10 秒 TTL 上每秒 10 次的儲備；存入與取出會在十個 TTL/10 的時間切片上惰性到期，`budget: false` 會移除這項限制。共用同一份設定的衍生 client 會共用預算；各自獨立的 client 則不共用，即使共用同一個平衡器也一樣。當某一輪重試無法使用任何端點（平衡器 pick 失敗，或下一個端點的 URL 無法解析）時，呼叫會回傳上一次嘗試的錯誤。呼叫端的 signal 涵蓋整次呼叫，包括退避等待。請求選項 `retry` 會為單次呼叫替換該策略。平衡器與健康包裝器沒有重試設定。見[負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)。
 
 <include cwd>examples/client/http-retry.ts#example</include>
 
@@ -247,7 +255,7 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：找不到對應 struct 的事�
 
 <ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`pick` 回傳 error-first tuple。選用的 `start` 會在所選傳輸開始之前同步執行至多一次；選用的 `end` 會在 `start` 之後、對端回應開始（或回應前發生失敗）時執行一次；選用的 `done` 則在完成時執行一次。Fetch 無法揭露 Linkerd 的首個本文訊框，也無法揭露 Envoy 的串流邊界。所有鉤子拋出的例外都會被接住；回傳的 Promise 不會被等待。選取候選集之外的值會以 `REQ_BUILD_FAILED` 失敗，其 `done` 會以 `{ attempted: false }` 呼叫。`ERR_NO_CANDIDATE` 只會作為 `REQ_BUILD_FAILED` 的 `cause`，不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-TW/api/core/isnocandidatecause) 也能辨識來自另一份 Core 副本的它。
+`pick` 回傳 error-first tuple。選用的 `start` 會在所選傳輸開始之前同步執行至多一次；選用的 `end` 會在 `start` 之後、對端回應開始（或回應前發生失敗）時執行一次；選用的 `done` 則在完成時執行一次。Fetch 無法揭露 Linkerd 的首個本文訊框，也無法揭露 Envoy 的串流邊界。所有鉤子拋出的例外都會被接住，並在執行環境有定義 `reportError` 的地方以它回報（未被處理的回報可以結束沒有錯誤處理常式的 Bun 或 Deno 行程）；回傳的 Promise 不會被等待。`ERR_NO_CANDIDATE` 只會作為 `REQ_BUILD_FAILED` 的 `cause`，不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-TW/api/core/isnocandidatecause) 也能辨識來自另一份 Core 副本的它。
 
 平衡器只看得到中立的結果；每種傳輸會把自己的事實轉譯成 `DoneInfo.code`。預設的 outlier detection 把每個帶 code 的結果都計為失敗，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。原始的 `DoneInfo.status` 只保留給自訂平衡器，內建策略從不讀取它。`PickInfo` 包含一次 pick 的候選 `endpoints`、`members`（client 的完整端點清單，每次嘗試都相同）與選用的 `operation`，沒有傳輸類型的判別欄位。
 

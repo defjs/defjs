@@ -5,7 +5,7 @@ description: اتصل وأرسل غلافاً محدد الأنواع واستق
 
 # فتح جلسة WebSocket وإدارتها
 
-صرّح عن بنيتي الرسائل الواردة `incoming` والصادرة `outgoing` في `defineWebSocket`، إلى جانب `maxIncomingQueueSize` الذي يقيّد قائمة الانتظار الواردة. وفي تطبيقك، اشترك في أحداث `session.onRuntimeError(...)`، واستهلك مكرر `session.receive`، واحرص دائماً على إلغاء الاشتراك، واستدعاء `session.close(...)`، وانتظار `await session.closed` داخل كتلة `finally`:
+صرّح عن بنيتي الرسائل الواردة `incoming` والصادرة `outgoing` في `defineWebSocket`. وفي تطبيقك، اشترك في أحداث `session.onRuntimeError(...)`، واستهلك مكرر `session.receive`، واحرص دائماً على إلغاء الاشتراك، واستدعاء `session.close(...)`، وانتظار `await session.closed` داخل كتلة `finally`:
 
 <Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ description: اتصل وأرسل غلافاً محدد الأنواع واستق
 ACME 142.5
 ```
 
-- ميزتا إعادة الاتصال (`withWebSocketReconnect`) ونبضات القلب (`withWebSocketHeartbeat`) اختياريتان تماماً على العميل.
+- ميزتا إعادة الاتصال (`withRetry`) ونبضات القلب (`withWebSocketHeartbeat`) اختياريتان تماماً على العميل.
 - لا يمكن لمقابس WebSocket في المتصفح إرسال ترويسات HTTP اعتباطية أثناء مصافحة الترقية؛ استخدم ملفات تعريف الارتباط، أو البروتوكولات الفرعية، أو تذاكر الاتصال قصيرة العمر بدلاً من ذلك. راجع [جلسات WebSocket](/ar/docs/web-socket).

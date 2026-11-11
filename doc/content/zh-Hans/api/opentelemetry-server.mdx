@@ -48,15 +48,15 @@ HTTP、SSE、WebSocket 默认开。某个传输传 `{ enabled: false }` 就跳�
 
 <ApiSignature name="OpenTelemetryServerTransportOptions, OpenTelemetryServerHttpOptions, OpenTelemetryServerSSEOptions, OpenTelemetryServerWebSocketOptions" />
 
-`enabled` 默认为 `true`；只有 `enabled: false` 才会关闭某个传输。旧的布尔开关（`http: false`）和顶层 hook 只会被 TypeScript 类型拒绝，没有运行时检查，所以运行时 `http: false` 仍保持该传输启用，顶层 hook 则被静默忽略。
+`enabled` 默认为 `true`；只有 `enabled: false` 才会关闭某个传输。
 
 仅在传入 `tracer` 时运行 Span Hook。`startSpanHook` 在为对应 HTTP、SSE 或 WebSocket 传输创建 Span 前同步运行。返回的属性在内置属性之后应用，因此应用可以覆盖 `url.full` 或其他初始值。如果它抛出异常，Defjs 会用内置属性创建 Span 并继续请求；`requestHook` 与 `responseHook` 在 Span 创建之后运行。两者都不会被 await：抛出或 reject 不会阻塞或使操作失败。
 
-`span.isRecording()` 为 true 时，Hook 失败会记录 `defjs.otel.hook.error` 与 `exception` 事件。Span 未 recording（已结束或未采样）时，失败通过 `diag.error` 交给 OpenTelemetry 诊断 logger。应用必须用 `@opentelemetry/api` 的 `diag.setLogger(...)` 配置接收通道；默认不会自动输出。本包不初始化 SDK，这个诊断也不是独立的 SDK `LogRecord`。
+`span.isRecording()` 为 true 时，Hook 失败会记录 `defjs.otel.hook.error` 与 `exception` 事件。`exception` 事件只携带 `exception.type`（类名，不是 Defjs 的 Fault 代码），从不携带 `exception.message` 或 `exception.stacktrace`，因为运行时错误文本可能包含完整请求 URL 或响应 body 片段；传输失败时记录的 `exception` 事件也遵循同一规则。Span 未 recording（已结束或未采样）时，失败通过 `diag.error` 交给 OpenTelemetry 诊断 logger。应用必须用 `@opentelemetry/api` 的 `diag.setLogger(...)` 配置接收通道；默认不会自动输出。本包不初始化 SDK，这个诊断也不是独立的 SDK `LogRecord`。
 
 `responseHook` 接收传输返回的内容：HTTP 为 `HttpResponse`，SSE 为启动成功后的流句柄，WebSocket 为打开后的会话。它的第三个参数是原始请求。
 
-默认情况下，`url.full` 只把 `request.endpoint` 相对可选的 `request.baseEndpoint` 解析，不追加独立的 `request.queryString`。这条边界不是脱敏，包内也没有内置脱敏器或敏感键策略。请显式构造应用自有的 URL，并按需脱敏：
+默认情况下，`url.full` 只把 `request.endpoint` 相对可选的 `request.baseEndpoint` 解析，不追加独立的 `request.queryString`。这条边界不是查询脱敏。按照 OpenTelemetry 语义约定的要求，端点 userinfo 中的凭据会被替换为 `REDACTED:REDACTED`，默认敏感查询键（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）的值会被替换为 `REDACTED`，但包内没有其他内置脱敏器或敏感键策略。`startSpanHook` 返回的 `url.full` 会以同样方式脱敏，但应用通过 `requestHook` 或 `responseHook` 中的 `Span` 对象写入的 URL 不会被拦截，因此请显式构造，并按需脱敏：
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example
@@ -74,7 +74,7 @@ HTTP、SSE、WebSocket 默认开。某个传输传 `{ enabled: false }` 就跳�
 | SSE 或 WebSocket 连接失败                            | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
 | SSE 或 WebSocket 以错误结束，包括 `closed` 被 reject | 同一传输事件                                                      | `connection`  |
 
-普通状态的响应（包括声明的 `error` body 能解码或无声明 body 的 4xx/5xx，或 status 为 `0`）、成功、正常关闭、EOF 和调用方取消都不产生 `LogRecord`。HTTP 期限中止只有在超时 rejection 到达 OTel 拦截器的 `next()` / 传输边界时才记录一次（abort 的 reason 是 `TimeoutError`，例如 `AbortSignal.timeout()`，算超时而不是取消）。如果只有操作调用在输入解析、构建、`next()` 之后的应用拦截器工作或链后 body 转换中观察到期限已过，则不会产生 `LogRecord`；应观察操作调用。在 HTTP 处理函数边界内，声明的 `output` / `error` body 读取失败会为每种表示形式记录日志；媒体类型和 `JSON.parse` 失败只为 JSON 表示形式记录日志，无论 HTTP 状态如何。非 JSON 文本、blob 和字节不会仅仅因为媒体类型不是 JSON 就算失败。未声明的 body 从不读取，也不会产生日志。struct 校验、声明的 body 缺失（例如 204）以及之后的 `HTTP_STATUS` 转换发生在拦截器之后，不产生日志。非 2xx 的 SSE 握手总是记录一次；服务器发来的 WebSocket 关闭帧，无论 code 是什么，都不记录。没有关闭帧的突然断开（1006）取决于运行时：平台 WebSocket 在 `close` 之前先触发 `error` 时（Node.js 当前 LTS），会话以 error 结束并记录一次；不会先触发时（Bun），这次断开算正常关闭，不记录。
+普通状态的响应（包括声明的 `error` body 能解码的 4xx/5xx）、成功、正常关闭、EOF 和调用方取消都不产生 LogRecord。HTTP 期限中止只有在超时 rejection 到达 OTel 拦截器的 `next()` / 传输边界时才记录一次（abort 的 reason 是 `TimeoutError`，例如 `AbortSignal.timeout()`，算超时而不是取消）。如果只有操作调用在输入解析、构建、`next()` 之后的应用拦截器工作或链后 body 转换中观察到期限已过，则不会产生 LogRecord；应观察操作调用。在 HTTP 处理函数边界内，声明的 `output` / `error` body 读取失败会为每种表示形式记录日志；媒体类型和 `JSON.parse` 失败只为 JSON 表示形式记录日志，无论 HTTP 状态如何。非 JSON 文本、blob 和字节不会仅仅因为媒体类型不是 JSON 就算失败。未声明的 body 从不读取，也不会产生日志。struct 校验、声明的 body 缺失（例如 204）以及之后的 `HTTP_STATUS` 转换发生在拦截器之后，不产生日志。非 2xx 的 SSE 握手总是记录一次；服务器发来的 WebSocket 关闭帧，无论 code 是什么，都不记录。没有关闭帧的突然断开（1006）会在每个运行时上以 error 结束会话，并记录一次。
 
 `exception.type` 是拦截器观察到的对象类名，不是 Defjs 的 Fault 代码：例如 `BodyFailure`（HTTP body）、`EventStreamFatalError`（SSE 握手因非 2xx 状态之外的原因失败，例如响应不是 `text/event-stream`）、`DefjsFault`（WebSocket 启动，以及返回非 2xx 状态的 SSE 握手）、`TypeError`（网络失败）或 `Error`（超时）。过滤、exporter、flush 与 shutdown 由应用负责。
 

@@ -11,14 +11,14 @@ Deklariere einen Socket, rufe die Operation mit einem Client auf, sende und empf
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`, ein `incoming`-Struct und das erforderliche `maxIncomingQueueSize` (eine positive sichere Ganzzahl); optional `outgoing`- und `input`-Structs, `operation`, statische `protocols` und `maxOutgoingQueueSize` (eine nicht negative sichere Ganzzahl). Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`WebSocketDefinition`](/de-DE/api/core/websocketdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
+- **definition** — `path` und ein `incoming`-Struct; optional `outgoing`- und `input`-Structs, `operation`, statische `protocols` und `maxOutgoingQueueSize`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`WebSocketDefinition`](/de-DE/api/core/websocketdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
 - **Returns** eine Operation. Das erste Argument ist ein [`Client`](/de-DE/api/core/client-type). Weitere Argumente sind nur der Input. Der Aufruf öffnet die Session.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-Der Aufruf gibt `[null, session, connection]` oder `[error, undefined, connection?]` zurück. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. WebSocket liest `signal`, `beforeConnect`, `heartbeat`, `protocols` und `reconnect` und ignoriert HTTP-Progress-Felder.
+Der Aufruf gibt `[null, session, connection]` oder `[error, undefined, connection?]` zurück. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. WebSocket liest `signal`, `beforeConnect`, `heartbeat`, `protocols` und `retry` und ignoriert HTTP-Progress-Felder.
 
-`beforeConnect`, `heartbeat`, `protocols` und `reconnect` ersetzen jeweils den Client-Wert für diesen Aufruf als Ganzes. Der Vorrang der Protokolle ist der abgeleitete Client, dann `withWebSocketProtocols`, dann die `protocols` der Definition. `heartbeat.timeoutMs` ist die Wartezeit auf die Bestätigung, keine Request-Deadline.
+`beforeConnect`, `heartbeat`, `protocols` und `retry` ersetzen jeweils die Option auf Client-Ebene für diesen Aufruf als Ganzes. Der Vorrang der Protokolle ist der abgeleitete Client, dann `withWebSocketProtocols`, dann die `protocols` der Definition. `heartbeat.timeoutMs` ist die Wartezeit auf die Bestätigung, keine Request-Deadline.
 
 ## WebSocketSession
 
@@ -44,19 +44,19 @@ Nutze lieber `await using ownedSession = session` für die Bereinigung deines Sc
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` ist `closed`, `aborted` oder `error`. `cause` fehlt bei `closed`, ist bei `aborted` optional und bei `error` erforderlich. Ein Überlauf der Warteschlange für eingehende Roh-Frames oder dekodierte Nachrichten hat `cause.code === "CAP_QUEUE_OVERFLOW"`; dieselbe Ursache lässt `receive` fehlschlagen und erreicht `onRuntimeError`. Heartbeat-Timeout und ausgeschöpfte Reconnects behalten gewöhnliche Laufzeit-`Error`-Ursachen ohne separaten stabilen Code. `code`, `reason` und `wasClean` können in jeder Variante vorkommen. Ein manuelles `session.close()` füllt `code` und `reason` von `{ kind: "closed" }`, wenn das Close-Event sie nicht trägt.
+`kind` ist `closed`, `aborted` oder `error`. `cause` fehlt bei `closed`, ist bei `aborted` optional und bei `error` erforderlich. Bei `error` lässt dieselbe Ursache `receive` fehlschlagen, nachdem die bereits eingereihten Nachrichten zugestellt wurden, und erreicht `onRuntimeError`. Ungelesene Nachrichten werden verworfen, wenn die Session als `aborted` endet und wenn der Aufrufer sie mit `session.close()` oder Disposal beendet. Ein Stopp durch den Aufrufer (`session.close()`, Disposal oder ein Abbruch von `signal`) verwirft sie auch, nachdem die Session geendet hat, ohne `closed` oder die Ablehnung von `receive` zu ändern. Ein Heartbeat-Timeout und ausgeschöpfte Retries behalten gewöhnliche Laufzeit-`Error`-Ursachen ohne separaten stabilen Code. Eine Verbindung, die offen war und dann ohne Close-Frame abgerissen wurde (Code `1006`), ist auf jeder Laufzeit `error`. `code`, `reason` und `wasClean` können in jeder Variante vorkommen. Ein manuelles `session.close()` füllt `code` und `reason` von `{ kind: "closed" }`, wenn das Close-Event sie nicht trägt.
 
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` ist [`UseWebSocketConfig`](/de-DE/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` und `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, optionales `message`, `isAck`, `timeoutMs`. Es gibt kein `timeout`- oder `abort`-Feld.
+`WebSocketExecuteOptions` ist [`UseWebSocketConfig`](/de-DE/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `retry` und `signal`. `WebSocketHeartbeatConfig`: `intervalMs` und `message` sind erforderlich; `timeoutMs` ist nur zusammen mit `isAck` erlaubt. Es gibt kein `timeout`- oder `abort`-Feld.
 
-`signal` deckt die ganze Session ab, auch nachdem sie geöffnet wurde. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Deadline nur für den Start und keine Default-Deadline auf Client-Ebene. `signal` ist das Signal des Aufrufs; kombiniere Signale in Anwendungscode mit `AbortSignal.any`. `heartbeat` wird als Ganzes ersetzt; sein `timeoutMs` wartet auf eine Bestätigung und ist keine Request-Deadline.
+`signal` deckt die ganze Session ab, auch nachdem sie geöffnet wurde. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Default-Deadline auf Client-Ebene. Eine Deadline nur für das Verbinden ist `retry: { maxRetries: 0, attemptTimeoutMs }`, die bei `open` endet. `signal` ist das Signal des Aufrufs; kombiniere Signale in Anwendungscode mit `AbortSignal.any`. `heartbeat` wird als Ganzes ersetzt; sein `timeoutMs` wartet auf eine Bestätigung und ist keine Request-Deadline.
 
 Builder und Interceptor-Kette laufen einmal pro Operation. Ein Reconnect verwendet den gebauten Pfad/die Query und die erfassten Protokolle erneut und konstruiert die URL vor `beforeConnect`. Hat kein Interceptor den Basis-Endpunkt des Requests ersetzt, setzt der Reconnect außerdem einen neu ausgewählten Endpunkt ein. Der Hook kann URL- oder Subprotokoll-Zugangsdaten nicht innerhalb einer Session austauschen; starte eine neue Operation mit frischem Input oder neuer Client-Konfiguration.
 
-Ist `reconnect` gesetzt, ist der Default für `attempts` 3 je Ausfall; `0` schaltet aus. Ein erfolgreiches `open` setzt Budget und Backoff-Exponenten zurück, daher beginnt jeder neue Ausfall bei Retry 1. `attempts` wegzulassen ergibt innerhalb eines Ausfalls keine unbegrenzten Retries. Defaults und Validierungsregeln stehen unter [Client](/de-DE/api/client).
+Ist eine Retry-Policy gesetzt (`withRetry`), ist der Default für `maxRetries` 3 je Ausfall; `0` schaltet aus. Jeder Close, den `session.close()` nicht angefordert hat, wird standardmäßig wiederholt, einschließlich einer Verbindung, die nie geöffnet wurde, und eines unbeantworteten Heartbeats, und `shouldRetry` kann das überstimmen. Ein WebSocket-Konstruktor, der wirft (etwa ein Subprotokoll, das die Plattform ablehnt), ist ein lokaler Fehler, den ein Retry nur wiederholen würde: Er beendet den Aufruf, ohne `shouldRetry` zu fragen. Ein erfolgreiches `open` setzt den Zähler und den Backoff-Exponenten zurück, daher beginnt jeder neue Ausfall bei Retry 1. Defaults und die Entscheidungsreihenfolge stehen unter [Client](/de-DE/api/client#withretry).
 
 ## Nachrichten
 
@@ -72,7 +72,7 @@ Siehe [WebSocket-Leitfaden](/de-DE/docs/web-socket) und [WebSocket-Session öffn
 
 ## WebSocketDefinition
 
-`path`, `incoming`, erforderliche `maxIncomingQueueSize`, optional `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. Der Builder darf nur `path` und `query` zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+`path`, `incoming`, optional `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. Der Builder darf nur `path` und `query` zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ## WebSocketEndpoint
 
@@ -84,7 +84,7 @@ Nur `path` und `query`. `headers` und `body` sind `never`.
 
 ## UseWebSocketConfig
 
-`beforeConnect`, `heartbeat`, `protocols`, `reconnect` und `signal`. `WebSocketExecuteOptions` ist dieser Ausschnitt. Es gibt kein `abort`-Feld.
+`beforeConnect`, `heartbeat`, `protocols`, `retry` und `signal`. `WebSocketExecuteOptions` ist dieser Ausschnitt. Es gibt kein `abort`-Feld.
 
 ## SocketAwaitResult
 
@@ -96,7 +96,7 @@ Grund, der aufgezeichnet wird, wenn die Session über `session.close()` geschlos
 
 ## WebSocketHeartbeatConfig
 
-`intervalMs`, optional `message`, `isAck`, `timeoutMs`.
+`intervalMs` und `message` sind erforderlich. `isAck` erkennt die Bestätigung, und `timeoutMs` ist nur zusammen mit `isAck` erlaubt; der Union-Typ erzwingt das, und zur Laufzeit prüft nichts. Defjs definiert kein Heartbeat-Format: Jeder Wert kommt aus deinen Funktionen. Die Payload wird durch das `outgoing`-Struct als JSON-Text gesendet. Ein unbeantworteter Heartbeat schließt den Socket und tritt in den Retry-Ablauf von `withRetry` ein; ohne Retry-Policy endet die Session mit einem `error`.
 
 ## WebSocketIncomingData
 
@@ -108,4 +108,4 @@ Wert, den `session.send` akzeptiert: `StructInput` des `outgoing`-Structs, oder 
 
 ## SocketLifecycleOutcome
 
-Ergebnis eines Verbindungsversuchs (`closeInfo`, `connection`, `cause`, `opened`), das die Reconnect-Logik nutzt. Es ist nicht das Endergebnis der Session; dafür siehe `WebSocketCloseInfo`.
+Ergebnis eines Verbindungsversuchs (`closeInfo`, `connection`, `cause`, `opened`), das die Retry-Logik nutzt. Es ist nicht das Endergebnis der Session; dafür siehe `WebSocketCloseInfo`.

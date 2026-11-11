@@ -67,7 +67,7 @@ SSE- und WebSocket-Handles überdauern den ursprünglichen `openStream(...)`- od
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Das Abbrechen des an eine WebSocket-Operation übergebenen `signal` beendet die Sitzung als `aborted` und lässt `session.receive` mit `AbortError` fehlschlagen. Schütze den `catch`-Block nach dem Disposal, sodass nur echte Laufzeitfehler (wie Warteschlangenüberlauf oder Heartbeat-Timeout) sichtbar werden.
+- Das Abbrechen des an eine WebSocket-Operation übergebenen `signal` beendet die Sitzung als `aborted` und lässt `session.receive` mit `AbortError` fehlschlagen. Schütze den `catch`-Block nach dem Disposal, sodass nur echte Laufzeitfehler (wie ein Heartbeat-Timeout) sichtbar werden.
 - Das Abbrechen eines SSE-Streams beendet `for await (const msg of stream)` sauber ohne Exception.
 
 ---
