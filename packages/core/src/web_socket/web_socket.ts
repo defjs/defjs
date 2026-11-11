@@ -1901,11 +1901,7 @@ function setSocketState(state: SocketRefState, next: WebSocketState): void {
       break;
     }
     try {
-      const result = listener(next);
-      const runtimeErrorListeners = [...state.listeners.runtimeError];
-      consumeObserverResult(result, (error) =>
-        emitRuntimeErrorToListeners(runtimeErrorListeners, error),
-      );
+      listener(next);
     } catch (error) {
       emitRuntimeError(state, error);
     }
@@ -1922,8 +1918,7 @@ function emitRuntimeErrorToListeners(
 ): void {
   for (const listener of listeners) {
     try {
-      const result = listener(error);
-      consumeObserverResult(result, reportObserverError);
+      listener(error);
     } catch (observerError) {
       reportObserverError(observerError);
     }
@@ -1936,24 +1931,10 @@ function reportObserverError(error: unknown): void {
     return;
   }
   try {
-    const result = reportError(error);
-    consumeObserverResult(result, () => undefined);
+    reportError(error);
   } catch {
     // Reporting observer failures must never re-enter the session lifecycle.
   }
-}
-
-function consumeObserverResult(
-  result: unknown,
-  onRejected: (error: unknown) => void,
-): void {
-  if (
-    (typeof result !== "object" || result === null) &&
-    typeof result !== "function"
-  ) {
-    return;
-  }
-  void Promise.resolve(result).catch(onRejected);
 }
 
 function validateWebSocketClose(

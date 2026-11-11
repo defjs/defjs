@@ -2583,66 +2583,6 @@ describe("web socket runtime environment edge cases", () => {
     expect(reported).toHaveLength(2);
   });
 
-  test("should route async state observer rejections through runtime observers without unhandled rejection", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const useSocket = defineWebSocket({
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-    );
-    if (!socket) {
-      throw new Error("Expected socket");
-    }
-    const stateFailure = new Error("async state observer failed");
-    const runtimeErrors: unknown[] = [];
-    socket.onRuntimeError((error) => runtimeErrors.push(error));
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- the observer is typed to return void; the test returns a rejected promise to check that the session reports it
-    socket.onStateChange(() => Promise.reject(stateFailure));
-
-    socket.close(1000, "done");
-    await socket.closed;
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(runtimeErrors).toEqual([stateFailure, stateFailure]);
-  });
-
-  test("should report async runtime observer and reporter rejections without unhandled rejection", async () => {
-    const reported: unknown[] = [];
-    vi.stubGlobal("reportError", (error: unknown) => {
-      reported.push(error);
-      return Promise.reject(new Error("async reporter failed"));
-    });
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const useSocket = defineWebSocket({
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-    );
-    if (!socket) {
-      throw new Error("Expected socket");
-    }
-    const runtimeFailure = new Error("async runtime observer failed");
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises -- the observer is typed to return void; the test returns a rejected promise to check that the session reports it
-    socket.onRuntimeError(() => Promise.reject(runtimeFailure));
-    socket.onStateChange(() => {
-      throw new Error("state observer failed");
-    });
-
-    socket.close(1000, "done");
-    await socket.closed;
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(reported).toEqual([runtimeFailure, runtimeFailure]);
-  });
-
   test("should isolate observer failures when the runtime has no reportError hook", async () => {
     vi.stubGlobal("reportError", undefined);
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
