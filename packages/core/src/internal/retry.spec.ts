@@ -1,6 +1,7 @@
 import { expect, test, vi } from "vitest";
 import type { RetryContext } from "../client/config";
-import { decideRetry, isRetryMethod, resolveRetryPolicy } from "./retry";
+import { resolveAbortedFault } from "./abort";
+import { isRetryMethod, resolveRetryPolicy, retryStep } from "./retry";
 
 const context = (retryable: boolean): RetryContext => ({
   transport: "websocket",
@@ -52,7 +53,7 @@ test("given fields replace their defaults and methods compare case-insensitively
   expect(policy && isRetryMethod(policy, "GET")).toBe(false);
 });
 
-test("decideRetry uses the default verdict without a policy function and asks for retry n + 1", async () => {
+test("retryStep uses the default verdict without a policy function and asks for retry n + 1", async () => {
   const policy = resolveRetryPolicy({ maxRetries: 2 });
   if (!policy) throw new Error("expected a policy");
   const describe = vi.fn((attempt: number) => ({
@@ -60,44 +61,41 @@ test("decideRetry uses the default verdict without a policy function and asks fo
     attempt,
   }));
   const signal = new AbortController().signal;
-  expect(await decideRetry(policy, 0, signal, describe)).toBe(true);
-  expect(await decideRetry(policy, 1, signal, describe)).toBe(false);
+  expect(await retryStep(policy, 0, signal, describe)).toBe("retry");
+  expect(await retryStep(policy, 1, signal, describe)).toBe("stop");
   expect(describe.mock.calls).toEqual([[1], [2]]);
 });
 
-test("decideRetry builds nothing and calls nothing once the retries are used", async () => {
+test("retryStep builds nothing and calls nothing once the retries are used", async () => {
   const shouldRetry = vi.fn(() => true);
   const policy = resolveRetryPolicy({ maxRetries: 1, shouldRetry });
   if (!policy) throw new Error("expected a policy");
   const describe = vi.fn(() => context(true));
   expect(
-    await decideRetry(policy, 1, new AbortController().signal, describe),
-  ).toBe(false);
+    await retryStep(policy, 1, new AbortController().signal, describe),
+  ).toBe("stop");
   expect(describe).not.toHaveBeenCalled();
   expect(shouldRetry).not.toHaveBeenCalled();
 });
 
-test("decideRetry hands the context to the policy function and returns its answer", async () => {
+test("retryStep hands the context to the policy function and returns its answer", async () => {
   const shouldRetry = vi.fn((_context: RetryContext) => Promise.resolve(false));
   const policy = resolveRetryPolicy({ shouldRetry });
   if (!policy) throw new Error("expected a policy");
   const described = context(true);
   expect(
-    await decideRetry(policy, 0, new AbortController().signal, () => described),
-  ).toBe(false);
+    await retryStep(policy, 0, new AbortController().signal, () => described),
+  ).toBe("stop");
   expect(shouldRetry).toHaveBeenCalledWith(described);
 });
 
-test("decideRetry rejects with the signal reason when the signal aborts during the policy function", async () => {
+test("retryStep ends with the abort fault when the signal aborts during the policy function", async () => {
   const policy = resolveRetryPolicy({
     shouldRetry: () => new Promise<boolean>(() => {}),
   });
   if (!policy) throw new Error("expected a policy");
   const controller = new AbortController();
-  const pending = decideRetry(policy, 0, controller.signal, () =>
-    context(true),
-  );
-  const reason = new Error("stop");
-  controller.abort(reason);
-  await expect(pending).rejects.toBe(reason);
+  const pending = retryStep(policy, 0, controller.signal, () => context(true));
+  controller.abort(new Error("stop"));
+  expect(await pending).toEqual(resolveAbortedFault(controller.signal));
 });
