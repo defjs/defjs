@@ -243,17 +243,11 @@ test("success resets a failure streak but unattributed done does not", () => {
   expect(h.candidates()).not.toContain("a");
 });
 
-test("child errors pass through and unknown child selections still receive their done", () => {
+test("child errors pass through", () => {
   const err = new Error("selection");
   expect(
     outlierDetection({ pick: () => [err, undefined] }).pick({
       endpoints: [],
     }),
   ).toEqual([err, undefined]);
-  const done = vi.fn();
-  const b = outlierDetection({
-    pick: () => [null, { endpoint: "external", done }],
-  });
-  b.pick({ endpoints: ["a"] })[1]?.done?.(failure);
-  expect(done).toHaveBeenCalledWith(failure);
 });

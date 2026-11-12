@@ -53,8 +53,13 @@ interface HealthState {
   ejections: number;
 }
 /** Default classifier: every classified attempt failure, including timeouts and incomplete bodies. */
-export function defaultEndpointFailure(info: DoneInfo): boolean {
+function defaultEndpointFailure(info: DoneInfo): boolean {
   return info.code !== undefined;
+}
+/** Clean or expired states are evicted first, then partial failure sequences, then ejected endpoints. */
+function penalizedLast(state: HealthState): number {
+  if (monotonicNow() < state.until) return 2;
+  return state.consecutive === 0 ? 0 : 1;
 }
 /**
  * Wraps a strategy with consecutive-failure ejection by time.
@@ -119,16 +124,7 @@ export function outlierDetection(
         ejections: 0,
       };
     }
-    rememberEndpoint(
-      states,
-      endpoint,
-      state,
-      (value) => {
-        if (monotonicNow() < value.until) return 2;
-        return value.consecutive === 0 ? 0 : 1;
-      },
-      members,
-    );
+    rememberEndpoint(states, endpoint, state, penalizedLast, members);
     return state;
   }
   function refresh(state: HealthState, now: number): void {
@@ -186,13 +182,10 @@ export function outlierDetection(
           : { ...info, endpoints: candidates, members },
       );
       if (error !== null) return [error, undefined];
-      const state = candidates.includes(result.endpoint)
-        ? stateFor(result.endpoint, members.length)
-        : undefined;
+      const state = stateFor(result.endpoint, members.length);
       // An attempt that starts while the endpoint is ejected, or that an
       // ejection overtakes, no longer says anything about the endpoint.
-      const counted =
-        state !== undefined && now >= state.until ? state.ejections : undefined;
+      const counted = now >= state.until ? state.ejections : undefined;
       const childDone = result.done;
       return [
         null,
@@ -202,10 +195,8 @@ export function outlierDetection(
           end: result.end,
           done(report) {
             // The child hears first, so an `isFailure` that throws cannot leave state it reserved unreleased.
-            const returned = childDone?.(report);
-            if (state !== undefined && state.ejections === counted)
-              sample(state, report);
-            return returned;
+            childDone?.(report);
+            if (state.ejections === counted) sample(state, report);
           },
         },
       ];
