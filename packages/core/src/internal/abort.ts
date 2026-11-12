@@ -60,6 +60,36 @@ export async function awaitWithSignal<T>(
   }
 }
 
+function stopFollowingNothing(): void {}
+
+/**
+ * Makes `controller` abort with `source`'s reason when `source` aborts. Returns the function that stops following.
+ *
+ * - No `source`: nothing to follow, and nothing is allocated.
+ * - A `source` that is already aborted aborts `controller` now.
+ * - Otherwise one listener is added to `source`, and the returned function removes it. It may be called more than once.
+ *
+ * The caller releases on every exit, so that nothing stays attached to a signal the caller keeps. There is no
+ * registry and no unwrapping: to follow two sources, call it twice. After the release an abort of `source` is no
+ * longer seen through `controller.signal`; read `source.aborted` where that still matters. Do not pass
+ * `controller.signal` as its own source.
+ */
+export function followAbort(
+  controller: AbortController,
+  source: AbortSignal | undefined,
+): () => void {
+  if (source === undefined) {
+    return stopFollowingNothing;
+  }
+  if (source.aborted) {
+    controller.abort(source.reason);
+    return stopFollowingNothing;
+  }
+  const onAbort = () => controller.abort(source.reason);
+  source.addEventListener("abort", onAbort, { once: true });
+  return () => source.removeEventListener("abort", onAbort);
+}
+
 type ForwardingSignalState = {
   active: boolean;
   release: () => void;

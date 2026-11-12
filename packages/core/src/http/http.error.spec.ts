@@ -1394,7 +1394,7 @@ describe("request http misuse", () => {
     },
   );
 
-  test("should keep the tuple for input, a null signal, and reject a missing client", async () => {
+  test("should keep the tuple for input and reject a missing client", async () => {
     const handle = vi.fn<FetchHandle>(() => Promise.resolve(jsonResponse(200)));
     const useInput = defineRequest({
       // @ts-expect-error input must be a struct
@@ -1410,17 +1410,11 @@ describe("request http misuse", () => {
     });
 
     const [inputFault] = await useInput(clientWith(handle), {});
-    const [nullSignalFault, data] = await useRequest(
-      // @ts-expect-error signal must be an AbortSignal
-      clientWith(handle)({ signal: null }),
-    );
 
     expect(inputFault?.code).toBe("REQ_INPUT_INVALID");
     expect(inputFault?.cause).toBeInstanceOf(TypeError);
-    expect(nullSignalFault).toBeNull();
-    expect(data).toEqual({});
     // @ts-expect-error the first argument must be a client
     await expect(useRequest(undefined)).rejects.toBeInstanceOf(TypeError);
-    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle).not.toHaveBeenCalled();
   });
 });

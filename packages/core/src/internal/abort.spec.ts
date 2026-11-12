@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   awaitWithSignal,
+  followAbort,
   hasAborted,
   mergeAbortSignals,
   releaseAbortSignal,
@@ -120,6 +121,44 @@ describe("abort helpers", () => {
     expect(merged.aborted).toBe(false);
     expect(hasAborted(merged)).toBe(true);
     expect(hasAborted(mergeAbortSignals(merged, []))).toBe(true);
+  });
+
+  test("followAbort aborts the controller with the source's reason when the source aborts", () => {
+    const controller = new AbortController();
+    const source = new AbortController();
+    followAbort(controller, source.signal);
+
+    source.abort("stop");
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toBe("stop");
+  });
+
+  test("followAbort aborts the controller at once for a source that is already aborted", () => {
+    const controller = new AbortController();
+    const source = AbortSignal.abort("gone");
+    const add = vi.spyOn(source, "addEventListener");
+
+    followAbort(controller, source);
+
+    expect(controller.signal.reason).toBe("gone");
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  test("followAbort stops following once released, and leaves nothing on the source", () => {
+    const controller = new AbortController();
+    const source = new AbortController();
+    const add = vi.spyOn(source.signal, "addEventListener");
+    const remove = vi.spyOn(source.signal, "removeEventListener");
+
+    followAbort(controller, source.signal)();
+    source.abort("late");
+
+    expect(controller.signal.aborted).toBe(false);
+    expect(remove).toHaveBeenCalledExactlyOnceWith(
+      "abort",
+      add.mock.calls[0]?.[1],
+    );
   });
 
   test("should drop unread items for any abort except a deadline that expired before the end", () => {
