@@ -52,8 +52,8 @@ export function createOpenTelemetryWebSocketInterceptor(
     let query = req.query;
 
     if (queryPropagation) {
-      // The injected pairs go last, after any earlier pair of the same name, so a receiver that reads the first
-      // value of a name gets the injected one. The caller's own query is left as it was.
+      // Every caller pair with an injected name is removed and the injected pairs are appended, so the receiver sees
+      // only the injected value. The caller's own query is left as it was.
       const injected = new URLSearchParams();
       propagator.inject(call.context, injected, carrierSetter);
       query = new URLSearchParams(req.query);
