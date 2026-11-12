@@ -4,33 +4,31 @@ import { serializeOutgoingWebSocketMessage } from "./codec";
 import type { WebSocketHeartbeatConfig } from "./web_socket";
 
 export type HeartbeatRuntime<TIncoming> = {
-  isAck?: (message: TIncoming) => boolean;
+  readonly isAck: ((message: TIncoming) => boolean) | undefined;
   markAck(): void;
   stop(): void;
 };
 
-export type HeartbeatSession<TIncoming> = {
-  currentSocket: WebSocketHandle | undefined;
-  heartbeat: HeartbeatRuntime<TIncoming> | undefined;
-};
-
+/**
+ * Starts the heartbeat of one physical socket. The caller owns the returned runtime and stops it when the socket
+ * ends; a runtime also stops itself once it has reported a failure.
+ *
+ * `onTimeout` receives a heartbeat the peer left unanswered, a connection failure. `onError` receives a local
+ * failure: the message factory, the encoding or the native send threw. Neither is called once the runtime has stopped
+ * or the socket is no longer open.
+ */
 export function startHeartbeat<
   TIncoming,
   TOutgoing extends AnyStruct | undefined,
 >(
   socket: WebSocketHandle,
-  sessionController: HeartbeatSession<TIncoming>,
-  config: WebSocketHeartbeatConfig | undefined,
-  outgoing: TOutgoing | undefined,
-  /** `timedOut` is true only when the peer left a heartbeat unacknowledged; other failures are local. */
-  onFatal: (error: unknown, timedOut: boolean) => void,
   openState: number,
-): void {
-  stopHeartbeat(sessionController);
-  if (!config) {
-    return;
-  }
-
+  config: WebSocketHeartbeatConfig,
+  outgoing: TOutgoing | undefined,
+  onTimeout: (cause: Error) => void,
+  onError: (cause: unknown) => void,
+): HeartbeatRuntime<TIncoming> {
+  let stopped = false;
   let ackTimer: ReturnType<typeof setTimeout> | undefined;
   let interval: ReturnType<typeof setInterval> | undefined;
   const runtime: HeartbeatRuntime<TIncoming> = {
@@ -40,18 +38,22 @@ export function startHeartbeat<
       ackTimer = undefined;
     },
     stop() {
+      stopped = true;
       clearInterval(interval);
       clearTimeout(ackTimer);
       interval = undefined;
       ackTimer = undefined;
     },
   };
-  const isActive = () =>
-    sessionController.heartbeat === runtime &&
-    sessionController.currentSocket === socket &&
-    socket.readyState === openState;
+  const isActive = () => !stopped && socket.readyState === openState;
+  // A failure ends the runtime. It is reported only while it still counts: a stop, or a socket that is
+  // already closing, leaves the end of the attempt to the close event.
+  const failed = (): boolean => {
+    const active = isActive();
+    runtime.stop();
+    return active;
+  };
 
-  sessionController.heartbeat = runtime;
   interval = setInterval(() => {
     if (!isActive()) {
       return;
@@ -75,29 +77,17 @@ export function startHeartbeat<
       }
       if (config.timeoutMs !== undefined) {
         ackTimer = setTimeout(() => {
-          fail(new Error("WebSocket heartbeat timeout"), true);
+          if (failed()) {
+            onTimeout(new Error("WebSocket heartbeat timeout"));
+          }
         }, config.timeoutMs);
       }
       socket.send(serialized);
     } catch (error) {
-      fail(error, false);
+      if (failed()) {
+        onError(error);
+      }
     }
   }, config.intervalMs);
-
-  function fail(error: unknown, timedOut: boolean): void {
-    runtime.stop();
-    /* istanbul ignore if -- @preserve defensive: a cleared platform timeout callback may already be queued when the runtime stops */
-    if (!isActive()) {
-      return;
-    }
-    sessionController.heartbeat = undefined;
-    onFatal(error, timedOut);
-  }
-}
-
-export function stopHeartbeat<T>(sessionController: {
-  heartbeat: HeartbeatRuntime<T> | undefined;
-}): void {
-  sessionController.heartbeat?.stop();
-  sessionController.heartbeat = undefined;
+  return runtime;
 }

@@ -57,8 +57,8 @@ import {
   serializeOutgoingWebSocketMessage,
 } from "./codec";
 import type { WebSocketCloseSnapshot } from "./codec";
-import type { HeartbeatRuntime, HeartbeatSession } from "./heartbeat";
-import { startHeartbeat, stopHeartbeat } from "./heartbeat";
+import type { HeartbeatRuntime } from "./heartbeat";
+import { startHeartbeat } from "./heartbeat";
 import { computeReconnectDelay, wait } from "../internal/backoff";
 import type { RetryPolicy } from "../internal/retry";
 import { decideRetry, resolveRetryPolicy } from "../internal/retry";
@@ -704,12 +704,9 @@ async function runWebSocketCommand<
             WebSocketIncomingData<TIncoming>
           >();
           const closedDeferred = Promise.withResolvers<WebSocketCloseInfo>();
-          const sessionController: HeartbeatSession<
-            WebSocketIncomingData<TIncoming>
-          > = {
-            currentSocket: undefined,
-            heartbeat: undefined,
-          };
+          const sessionController: {
+            currentSocket: WebSocketHandle | undefined;
+          } = { currentSocket: undefined };
           const sendQueue: string[] = [];
           let startupSettled = false;
           let finished = false;
@@ -1056,6 +1053,9 @@ async function runWebSocketCommand<
                 let closeOutcome: SocketLifecycleOutcome | undefined;
                 let closeObserved = false;
                 let errorCloseTimer: ReturnType<typeof setTimeout> | undefined;
+                let heartbeat:
+                  | HeartbeatRuntime<WebSocketIncomingData<TIncoming>>
+                  | undefined;
                 // Aborts the Blob read in flight. Every way an attempt ends passes through `cleanup`.
                 const readController = new AbortController();
                 // Frames that arrived behind a Blob read, in arrival order. Only their data is kept.
@@ -1092,7 +1092,7 @@ async function runWebSocketCommand<
                   // Re-detach those listeners without touching a replacement runtime's owned state.
                   if (cleanedUp) return;
                   cleanedUp = true;
-                  stopHeartbeat(sessionController);
+                  heartbeat?.stop();
                   readController.abort();
                   backlog.length = 0;
                   sessionController.currentSocket = undefined;
@@ -1177,30 +1177,26 @@ async function runWebSocketCommand<
                   if (finished) {
                     return;
                   }
-                  if (state.status === "open") {
-                    startHeartbeat(
+                  if (
+                    heartbeatConfig !== undefined &&
+                    state.status === "open"
+                  ) {
+                    heartbeat = startHeartbeat(
                       socket,
-                      sessionController,
+                      WebSocketCtor.OPEN,
                       heartbeatConfig,
                       endpoint.outgoing,
-                      (cause, timedOut) => {
-                        // A failing local heartbeat callback or serializer is not the endpoint's fault and ends the session.
-                        if (!timedOut) {
-                          finish({ cause, kind: "error" });
-                          return;
-                        }
+                      (cause) => {
                         // An unanswered ping is a connection failure, as in gRPC keepalive: the socket is closed
                         // and the attempt settles like a drop, so the retry policy decides what follows.
                         runtimeCause = cause;
                         requestNativeCloseBestEffort(socket);
-                        settleAttempt({
-                          cause,
-                          closeInfo: {},
-                          connection: connectionInfo(),
-                          opened: true,
-                        });
+                        settleAttempt(failedOutcome());
                       },
-                      WebSocketCtor.OPEN,
+                      // A failing local heartbeat callback or serializer is not the endpoint's fault and ends the session.
+                      (cause) => {
+                        finish({ cause, kind: "error" });
+                      },
                     );
                   }
                 };
@@ -1219,17 +1215,15 @@ async function runWebSocketCommand<
                   }
 
                   try {
-                    const heartbeat = sessionController.heartbeat;
                     const isAck = heartbeat?.isAck?.(decoded) ?? false;
                     if (
                       finished ||
-                      sessionController.currentSocket !== socket ||
-                      sessionController.heartbeat !== heartbeat
+                      sessionController.currentSocket !== socket
                     ) {
                       return;
                     }
-                    if (isAck && heartbeat) {
-                      heartbeat.markAck();
+                    if (isAck) {
+                      heartbeat?.markAck();
                       return;
                     }
                     incomingQueue.push(decoded);
@@ -1319,7 +1313,7 @@ async function runWebSocketCommand<
                 const handleError = () => {
                   runtimeCause =
                     runtimeCause ?? new Error(CONNECTION_ERROR_MESSAGE);
-                  stopHeartbeat(sessionController);
+                  heartbeat?.stop();
                   detachErrorListener();
                   // No close event within the grace, or no way to ask for one: the attempt failed, and the
                   // retry policy decides what follows, as for a connect timeout or a missed heartbeat.
@@ -1348,7 +1342,7 @@ async function runWebSocketCommand<
                     (opened && event.code === 1006
                       ? new Error(CONNECTION_ERROR_MESSAGE)
                       : undefined);
-                  sessionController.heartbeat?.stop();
+                  heartbeat?.stop();
                   socket.removeEventListener("open", handleOpen);
                   socket.removeEventListener("message", onMessage);
                   detachErrorListener();
@@ -1364,8 +1358,9 @@ async function runWebSocketCommand<
                 };
 
                 activeAttempt = {
-                  abortReads() {
+                  stop() {
                     readController.abort();
+                    heartbeat?.stop();
                   },
                   cancel() {
                     // A locally failed message pump must not discard an already observed close.
@@ -1423,7 +1418,6 @@ async function runWebSocketCommand<
 
             finished = true;
             endedBeforeAbort = !hasAborted(callerAbort);
-            stopHeartbeat(sessionController);
 
             const activeSocket = sessionController.currentSocket;
             if (final.kind !== "closed" && activeSocket) {
@@ -1493,8 +1487,7 @@ async function runWebSocketCommand<
 
             manualClose = { code, kind: "manual-web-socket-close", reason };
             // The caller reads nothing more, so a Blob that is still being read is dropped with the frames behind it.
-            activeAttempt?.abortReads();
-            sessionController.heartbeat?.stop();
+            activeAttempt?.stop();
             setSocketState(state, "closing");
             if (finished) {
               return;
@@ -1685,7 +1678,7 @@ export type SocketLifecycleOutcome = {
 };
 
 type ActiveSocketAttempt = {
-  abortReads(): void;
+  stop(): void;
   cancel(): void;
   socket: WebSocketHandle;
 };
@@ -1702,10 +1695,7 @@ function createWebSocketSession<
   receive: AsyncIterable<TIncoming>,
   closed: Promise<WebSocketCloseInfo>,
   state: SocketRefState,
-  sessionController: {
-    currentSocket: WebSocketHandle | undefined;
-    heartbeat: HeartbeatRuntime<TIncoming> | undefined;
-  },
+  sessionController: { currentSocket: WebSocketHandle | undefined },
   sendQueue: string[],
   maxOutgoingQueueSize: number,
   openState: number,
