@@ -1,13 +1,10 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   createClient,
-  type DerivableClient,
   withEndpoint,
   withInterceptors,
   withQuerySerializer,
   withWebSocketHandle,
-  type Client,
-  type RequestOptions,
   withRetry,
 } from "../client";
 import {
@@ -24,333 +21,25 @@ import {
 import { StructError, struct } from "../struct";
 import { yieldMacrotask } from "../../test/macrotask";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
-
-let lastMockInstance: MockWebSocketInstance | undefined;
-let mockInstances: MockWebSocketInstance[] = [];
-
-interface MockWebSocketInstance {
-  bufferedAmount: number;
-  readyState: number;
-  url: string;
-  protocol: string;
-  extensions: string;
-  binaryType: string;
-  close: (code?: number, reason?: string) => void;
-  send: (data: string) => void;
-  addEventListener: (type: string, fn: (event: unknown) => void) => void;
-  removeEventListener: (type: string, fn: (event: unknown) => void) => void;
-  triggerOpen: () => void;
-  triggerClose: (event: {
-    code: number;
-    reason: string;
-    wasClean: boolean;
-  }) => void;
-  triggerError: () => void;
-  triggerMessage: (data: unknown) => void;
-  listenerCount: (type?: string) => number;
-  listenerRefs: (type?: string) => ReadonlyArray<(event: unknown) => void>;
-}
-
-function createMockWebSocketClass(
-  options: {
-    autoOpen?: boolean;
-    autoCloseDelay?: number;
-    closeEventDelayMs?: number;
-    closeErrors?: readonly unknown[];
-    emitCloseEvent?: boolean;
-    onListenerRegistered?: (type: string) => void;
-    onSend?: (data: string) => void;
-    sendError?: Error;
-    throwOnConstruct?: Error;
-  } = {},
-) {
-  const {
-    autoOpen = true,
-    autoCloseDelay = -1,
-    closeEventDelayMs = 0,
-    closeErrors = [],
-    emitCloseEvent = true,
-    onListenerRegistered,
-    onSend,
-    sendError,
-    throwOnConstruct,
-  } = options;
-  let closeCall = 0;
-
-  return class MockWebSocket {
-    static CONNECTING = 0;
-    static OPEN = 1;
-    static CLOSING = 2;
-    static CLOSED = 3;
-
-    bufferedAmount: number;
-    readyState: number;
-    url: string;
-    protocol: string;
-    extensions: string;
-    binaryType: string;
-    close: MockWebSocketInstance["close"];
-    send: MockWebSocketInstance["send"];
-    addEventListener: MockWebSocketInstance["addEventListener"];
-    removeEventListener: MockWebSocketInstance["removeEventListener"];
-    triggerOpen: MockWebSocketInstance["triggerOpen"];
-    triggerClose: MockWebSocketInstance["triggerClose"];
-    triggerError: MockWebSocketInstance["triggerError"];
-    triggerMessage: MockWebSocketInstance["triggerMessage"];
-    listenerCount: MockWebSocketInstance["listenerCount"];
-    listenerRefs: MockWebSocketInstance["listenerRefs"];
-
-    private listeners: { [key: string]: Array<(event: unknown) => void> };
-
-    constructor(url: string, protocols?: string | string[]) {
-      if (throwOnConstruct) {
-        throw throwOnConstruct;
-      }
-
-      this.readyState = MockWebSocket.CONNECTING;
-      this.bufferedAmount = 0;
-      this.url = url;
-      this.protocol = Array.isArray(protocols)
-        ? (protocols[0] ?? "")
-        : (protocols ?? "");
-      this.extensions = "";
-      this.binaryType = "blob";
-      this.listeners = {};
-      this.close = vi.fn((code?: number, reason?: string) => {
-        const hasCloseError = closeCall in closeErrors;
-        const closeError = closeErrors[closeCall];
-        closeCall += 1;
-        if (hasCloseError) {
-          throw closeError;
-        }
-        this.readyState = MockWebSocket.CLOSING;
-        if (!emitCloseEvent) {
-          return;
-        }
-        setTimeout(() => {
-          this.readyState = MockWebSocket.CLOSED;
-          this.listeners["close"]?.forEach((fn) => {
-            fn({ code: code ?? 1000, reason: reason ?? "", wasClean: true });
-          });
-        }, closeEventDelayMs);
-      });
-      this.send = vi.fn((data: string) => {
-        onSend?.(data);
-        if (sendError) {
-          throw sendError;
-        }
-      });
-      this.addEventListener = (type: string, fn: (event: unknown) => void) => {
-        this.listeners[type] = this.listeners[type] || [];
-        // DOM: registering a callback that is already registered for the type is a no-op.
-        if (!this.listeners[type].includes(fn)) this.listeners[type].push(fn);
-        onListenerRegistered?.(type);
-      };
-      this.removeEventListener = (
-        type: string,
-        fn: (event: unknown) => void,
-      ) => {
-        this.listeners[type] =
-          this.listeners[type]?.filter((listener) => listener !== fn) || [];
-      };
-      this.triggerOpen = () => {
-        this.readyState = MockWebSocket.OPEN;
-        this.listeners["open"]?.forEach((fn) => fn(new Event("open")));
-      };
-      this.triggerClose = (event: {
-        code: number;
-        reason: string;
-        wasClean: boolean;
-      }) => {
-        this.readyState = MockWebSocket.CLOSED;
-        this.listeners["close"]?.forEach((fn) => fn(event));
-      };
-      this.triggerError = () => {
-        this.listeners["error"]?.forEach((fn) => fn(new Event("error")));
-      };
-      this.triggerMessage = (data: unknown) => {
-        this.listeners["message"]?.forEach((fn) => fn({ data }));
-      };
-      this.listenerCount = (type?: string) =>
-        typeof type === "string"
-          ? (this.listeners[type]?.length ?? 0)
-          : Object.values(this.listeners).reduce(
-              (count, listeners) => count + listeners.length,
-              0,
-            );
-      this.listenerRefs = (type?: string) => {
-        const groups =
-          typeof type === "string"
-            ? [this.listeners[type] ?? []]
-            : Object.values(this.listeners);
-        return groups.flat();
-      };
-
-      mockInstances.push(this);
-      lastMockInstance = mockInstances.at(-1);
-
-      if (autoOpen) {
-        setTimeout(() => this.triggerOpen(), 0);
-      }
-      if (autoCloseDelay >= 0) {
-        setTimeout(
-          () =>
-            this.triggerClose({ code: 1000, reason: "done", wasClean: true }),
-          autoCloseDelay,
-        );
-      }
-    }
-  };
-}
-
-function createDeferred<T>() {
-  let resolveValue: (value: T) => void = () => undefined;
-  const promise = new Promise<T>((resolve) => {
-    resolveValue = resolve;
-  });
-  return { promise, resolve: resolveValue };
-}
-
-type AbortListener = (event: Event) => void;
-
-/**
- * Records abort callbacks by function identity.
- * A merged session signal also carries forwarding listeners, so a generation is the set captured
- * while that attempt is open — not "whatever count happens to remain".
- */
-function instrumentAbortListeners(signal: AbortSignal): {
-  listeners(): readonly AbortListener[];
-  assertReleased(generation: readonly AbortListener[]): void;
-} {
-  const live = new Set<AbortListener>();
-  const removed = new Set<AbortListener>();
-  const add = signal.addEventListener.bind(signal);
-  const remove = signal.removeEventListener.bind(signal);
-  Object.defineProperty(signal, "addEventListener", {
-    configurable: true,
-    enumerable: true,
-    value: (...args: Parameters<AbortSignal["addEventListener"]>) => {
-      const [type, listener] = args;
-      if (type === "abort" && typeof listener === "function") {
-        live.add(listener);
-      }
-      add(...args);
-    },
-    writable: true,
-  });
-  Object.defineProperty(signal, "removeEventListener", {
-    configurable: true,
-    enumerable: true,
-    value: (...args: Parameters<AbortSignal["removeEventListener"]>) => {
-      const [type, listener] = args;
-      if (type === "abort" && typeof listener === "function") {
-        live.delete(listener);
-        removed.add(listener);
-      }
-      remove(...args);
-    },
-    writable: true,
-  });
-  return {
-    listeners: () => [...live],
-    assertReleased(generation) {
-      expect(generation.length).toBeGreaterThan(0);
-      for (const listener of generation) {
-        expect(live.has(listener)).toBe(false);
-        expect(removed.has(listener)).toBe(true);
-      }
-      for (const listener of live) {
-        expect(generation).not.toContain(listener);
-      }
-    },
-  };
-}
-
-function soleListener(
-  socket: MockWebSocketInstance,
-  type: string,
-): (event: unknown) => void {
-  const listeners = socket.listenerRefs(type);
-  expect(listeners).toHaveLength(1);
-  const listener = listeners[0];
-  if (!listener) {
-    throw new Error(`Expected one ${type} listener`);
-  }
-  return listener;
-}
-
-// Whenever the transport detaches its own `error` handler, one no-op `error` listener must remain so a
-// late `error` from an EventEmitter-based handle has a receiver. The survivor must be that sink and not a
-// transport handler left behind: a leftover `handleError` would close the socket again when it runs.
-function expectInertErrorListener(socket: MockWebSocketInstance): void {
-  const errorListeners = socket.listenerRefs("error");
-  expect(errorListeners).toHaveLength(1);
-  const closeCalls = vi.mocked(socket.close).mock.calls.length;
-  errorListeners[0]?.(new Event("error"));
-  expect(socket.close).toHaveBeenCalledTimes(closeCalls);
-}
-
-function expectOnlyErrorSink(socket: MockWebSocketInstance): void {
-  expect(socket.listenerCount("open")).toBe(0);
-  expect(socket.listenerCount("message")).toBe(0);
-  expect(socket.listenerCount("close")).toBe(0);
-  expectInertErrorListener(socket);
-}
-
-function expectListenerReleased(
-  socket: MockWebSocketInstance,
-  type: string,
-  listener: (event: unknown) => void,
-): void {
-  expect(socket.listenerRefs(type)).not.toContain(listener);
-  expect(socket.listenerCount(type)).toBe(0);
-}
-
-function clientObservingAbortListeners(): {
-  client: DerivableClient;
-  observed: {
-    current: ReturnType<typeof instrumentAbortListeners> | undefined;
-  };
-} {
-  const observed: {
-    current: ReturnType<typeof instrumentAbortListeners> | undefined;
-  } = { current: undefined };
-  const client = createClient(
-    withEndpoint("http://localhost"),
-    withInterceptors(
-      createWebSocketInterceptor((request, next) => {
-        const signal = request.signal;
-        if (!signal) {
-          throw new Error("Expected session signal");
-        }
-        observed.current = instrumentAbortListeners(signal);
-        return next(request);
-      }),
-    ),
-  );
-  return { client, observed };
-}
-
-function encodeMessage(value: unknown): ArrayBuffer {
-  return new TextEncoder().encode(JSON.stringify(value)).buffer;
-}
+import {
+  useFakeClock,
+  lastMockInstance,
+  mockInstances,
+  createMockWebSocketClass,
+  createDeferred,
+  soleListener,
+  expectInertErrorListener,
+  expectOnlyErrorSink,
+  expectListenerReleased,
+  clientObservingAbortListeners,
+  encodeMessage,
+  run,
+  countingSocket,
+  guardedClient,
+  watchAbortListeners,
+} from "../../test/mock_web_socket";
 
 describe("web socket runtime environment edge cases", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-    lastMockInstance = undefined;
-    mockInstances = [];
-  });
-
-  async function run(
-    client: DerivableClient,
-    operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
-    options?: Record<string, unknown>,
-  ): Promise<SocketAwaitResult<unknown, unknown>> {
-    return operation(client(options));
-  }
-
   test("should preserve a pre-aborted timeout without constructing a physical socket", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     const controller = new AbortController();
@@ -753,7 +442,6 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should report a missing WebSocket constructor as an environment fault", async () => {
-    const originalWebSocket = globalThis.WebSocket;
     vi.stubGlobal("WebSocket", undefined);
 
     const useSocket = defineWebSocket({
@@ -767,8 +455,6 @@ describe("web socket runtime environment edge cases", () => {
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
     expect(error?.code).toBe("ENV_UNSUPPORTED");
-
-    vi.stubGlobal("WebSocket", originalWebSocket);
   });
 
   test("should set duplicate open state only once", async () => {
@@ -893,7 +579,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should run heartbeat through an injected handle without global WebSocket", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const InjectedWebSocket = createMockWebSocketClass({
       autoOpen: false,
       emitCloseEvent: false,
@@ -927,7 +613,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("F062 should keep an injected socket open when send synchronously delivers every heartbeat pong", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const isAck = vi.fn((message: { type: string }) => message.type === "pong");
     const InjectedWebSocket = createMockWebSocketClass({
       autoOpen: false,
@@ -988,7 +674,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should send the next heartbeat after a decoded pong acknowledges the open cycle", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1050,7 +736,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should stop a heartbeat callback that aborts the logical session before send or timeout", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1098,7 +784,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should stop heartbeat timers only after accepting a valid manual close request", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1187,7 +873,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should not acknowledge through a heartbeat runtime removed by its isAck callback", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1240,7 +926,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should ignore an isAck rejection after the callback aborts its heartbeat session", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1293,7 +979,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should fail the session with the cause when an isAck classifier throws", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1341,7 +1027,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should snapshot heartbeat config before beforeConnect can mutate it", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1403,7 +1089,7 @@ describe("web socket runtime environment edge cases", () => {
       test.each(["open", "message", "close", "error"] as const)(
         "cleans all listeners when abort fires during %s registration",
         async (registrationPoint) => {
-          vi.useFakeTimers();
+          useFakeClock();
           const controller = new AbortController();
           let abortedDuringRegistration = false;
           vi.stubGlobal(
@@ -1470,7 +1156,7 @@ describe("web socket runtime environment edge cases", () => {
   );
 
   test("cleans the physical socket when its constructor aborts before listener registration", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const controller = new AbortController();
     const BaseSocket = createMockWebSocketClass({ autoOpen: false });
     class AbortingSocket extends BaseSocket {
@@ -1501,7 +1187,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("ignores a late error after a connecting attempt was cancelled", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const controller = new AbortController();
     const endpoint = defineWebSocket({
@@ -1533,7 +1219,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("reports a manual close, not the late error, when session.close() runs during a reconnect handshake", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
@@ -1614,7 +1300,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should wait for the errored physical socket close before constructing its replacement", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1668,7 +1354,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should keep the replacement open after the errored socket close grace elapses", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -1982,7 +1668,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should reconnect after more recovered outages than the attempt budget", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const policyAttempts: number[] = [];
     const useSocket = defineWebSocket({
@@ -2040,7 +1726,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should use the base reconnect delay after each recovered outage", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -2085,7 +1771,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should fail after a bounded grace when an errored socket never emits close", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -3193,7 +2879,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should saturate finite reconnect jitter overflow at the timer limit and finish after reconnecting", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -3980,7 +3666,8 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should flush a reconnect frame before an open observer can send", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    useFakeClock();
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const useSocket = defineWebSocket({
       maxOutgoingQueueSize: 1,
       incoming: struct.unknown(),
@@ -3990,13 +3677,16 @@ describe("web socket runtime environment edge cases", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
+    const pending = run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
         retry: { maxRetries: 1, delayMs: 30 },
       },
     );
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [, socket] = await pending;
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
     }
@@ -4021,7 +3711,12 @@ describe("web socket runtime environment edge cases", () => {
       reason: "restart",
       wasClean: true,
     });
-    await vi.waitFor(() => expect(socket.connection.generation).toBe(2));
+    // Let the retry decision schedule its delay, then pass it: 30 ms plus at most 20% jitter.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(40);
+    expect(mockInstances).toHaveLength(2);
+    lastMockInstance?.triggerOpen();
+    expect(socket.connection.generation).toBe(2);
     const replacement = lastMockInstance;
     if (!replacement) {
       throw new Error("Expected replacement socket");
@@ -4040,24 +3735,29 @@ describe("web socket runtime environment edge cases", () => {
     await Promise.resolve();
     expect(replacement.send).toHaveBeenCalledTimes(2);
     socket.close(1000, "done");
+    await vi.advanceTimersByTimeAsync(0);
     await socket.closed;
   });
 
   test("should reject an undefined JSON message before it enters the reconnect queue", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    useFakeClock();
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const useSocket = defineWebSocket({
       maxOutgoingQueueSize: 2,
       incoming: struct.unknown(),
       outgoing: struct.string().optional(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
+    const pending = run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
         retry: { maxRetries: 1, delayMs: 30 },
       },
     );
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [, socket] = await pending;
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
     }
@@ -4078,7 +3778,12 @@ describe("web socket runtime environment edge cases", () => {
       reason: "restart",
       wasClean: true,
     });
-    await vi.waitFor(() => expect(socket.connection.generation).toBe(2));
+    // Let the retry decision schedule its delay, then pass it: 30 ms plus at most 20% jitter.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(40);
+    expect(mockInstances).toHaveLength(2);
+    lastMockInstance?.triggerOpen();
+    expect(socket.connection.generation).toBe(2);
     const replacement = lastMockInstance;
     if (!replacement) {
       throw new Error("Expected replacement socket");
@@ -4089,6 +3794,7 @@ describe("web socket runtime environment edge cases", () => {
     );
     expect(replacement.send).not.toHaveBeenCalled();
     socket.close(1000, "done");
+    await vi.advanceTimersByTimeAsync(0);
     await socket.closed;
   });
 
@@ -4137,20 +3843,24 @@ describe("web socket runtime environment edge cases", () => {
   );
 
   test("should reject a non-JSON message before it enters the reconnect queue", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    useFakeClock();
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       maxOutgoingQueueSize: 2,
       outgoing: struct.object({ n: struct.number() }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
+    const pending = run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
         retry: { maxRetries: 1, delayMs: 30 },
       },
     );
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [, socket] = await pending;
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
     }
@@ -4171,7 +3881,12 @@ describe("web socket runtime environment edge cases", () => {
       reason: "restart",
       wasClean: true,
     });
-    await vi.waitFor(() => expect(socket.connection.generation).toBe(2));
+    // Let the retry decision schedule its delay, then pass it: 30 ms plus at most 20% jitter.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(40);
+    expect(mockInstances).toHaveLength(2);
+    lastMockInstance?.triggerOpen();
+    expect(socket.connection.generation).toBe(2);
     const replacement = lastMockInstance;
     if (!replacement) {
       throw new Error("Expected replacement socket");
@@ -4186,6 +3901,7 @@ describe("web socket runtime environment edge cases", () => {
     );
     expect(replacement.send).not.toHaveBeenCalled();
     socket.close(1000, "done");
+    await vi.advanceTimersByTimeAsync(0);
     await socket.closed;
   });
 
@@ -4316,18 +4032,22 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should not deliver a stale reconnecting state after a listener closes reentrantly", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    useFakeClock();
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
+    const pending = run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
         retry: { maxRetries: 1, delayMs: 30 },
       },
     );
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [, socket] = await pending;
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
     }
@@ -4647,7 +4367,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should cache one disposal promise and wait for native close plus lifecycle teardown", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, closeEventDelayMs: 25 }),
@@ -4706,7 +4426,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should stop reconnect and heartbeat timers when disposed during reconnect delay", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -4784,7 +4504,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   test("should preserve an observed remote close when disposal starts after a blocked message pump", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
     const useSocket = defineWebSocket({
       incoming: struct.object({
@@ -4847,7 +4567,7 @@ describe("web socket runtime environment edge cases", () => {
   ] as const)(
     "should preserve a thrown %s close value over disposal timeout and still clean up",
     async (_label, closeFailure) => {
-      vi.useFakeTimers();
+      useFakeClock();
       vi.stubGlobal(
         "WebSocket",
         createMockWebSocketClass({
@@ -5029,12 +4749,6 @@ describe("web socket runtime environment edge cases", () => {
 });
 
 describe("web socket incoming frame path", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    lastMockInstance = undefined;
-    mockInstances = [];
-  });
-
   const useSocket = defineWebSocket({
     incoming: struct.object({
       text: struct.string(),
@@ -5289,7 +5003,7 @@ describe("web socket incoming frame path", () => {
   });
 
   test("should reject only disposal with TimeoutError when native close never arrives", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
@@ -5566,88 +5280,3 @@ describe("web socket preflight precedence", () => {
     expect(reads).toBe(0);
   });
 });
-
-type CountingSocket = {
-  constructed: () => number;
-  handle: Parameters<typeof withWebSocketHandle>[0];
-};
-
-function countingSocket(): CountingSocket {
-  let constructed = 0;
-  class Socket {
-    static readonly OPEN = 1;
-    bufferedAmount = 0;
-    binaryType = "blob";
-    extensions = "";
-    protocol = "";
-    readyState = 0;
-    readonly url: string;
-
-    constructor(url: string | URL) {
-      this.url = String(url);
-      constructed += 1;
-    }
-
-    addEventListener(): void {}
-
-    close(): void {
-      this.readyState = 3;
-    }
-
-    removeEventListener(): void {}
-
-    send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {}
-  }
-
-  return {
-    constructed: () => constructed,
-    handle: Socket,
-  };
-}
-
-function guardedClient(
-  opened: CountingSocket,
-  signal: AbortSignal,
-  options?: Omit<RequestOptions, "signal">,
-): Client {
-  return createClient(
-    withEndpoint("https://example.test"),
-    withWebSocketHandle(opened.handle),
-  )({ ...options, signal });
-}
-
-function watchAbortListeners(signal: AbortSignal): {
-  added: () => number;
-  removed: () => number;
-} {
-  let added = 0;
-  let removed = 0;
-  const add = signal.addEventListener.bind(signal);
-  const remove = signal.removeEventListener.bind(signal);
-  const watchedAdd = (
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    options?: boolean | AddEventListenerOptions,
-  ): void => {
-    if (type === "abort") {
-      added += 1;
-    }
-    add(type, listener, options);
-  };
-  const watchedRemove = (
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    options?: boolean | EventListenerOptions,
-  ): void => {
-    if (type === "abort") {
-      removed += 1;
-    }
-    remove(type, listener, options);
-  };
-  signal.addEventListener = watchedAdd;
-  signal.removeEventListener = watchedRemove;
-  return {
-    added: () => added,
-    removed: () => removed,
-  };
-}
