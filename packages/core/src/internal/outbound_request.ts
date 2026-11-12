@@ -11,7 +11,7 @@ import {
   isURLSearchParams,
 } from "./type_guards";
 
-export type OutboundTransport = "http" | "sse" | "webSocket";
+export type OutboundTransport = "http" | "sse" | "web-socket";
 
 /** Accepts any concrete builder. `never` keeps the parameter contravariant. */
 export type OutboundBuilder = (input: never) => unknown;
@@ -57,7 +57,7 @@ export function materializeOutboundRequest(
     throw new TypeError("builder must return an object");
   }
 
-  if (transport === "webSocket") {
+  if (transport === "web-socket") {
     if (shape["headers"] !== undefined) {
       throw new TypeError("WebSocket request does not support headers");
     }

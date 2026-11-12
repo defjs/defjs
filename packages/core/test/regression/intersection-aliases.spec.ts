@@ -56,7 +56,7 @@ test("shared object field preserves its agreed parent alias", () => {
   expect(actual).toEqual({ wire_profile: wire });
 });
 
-test.each(["http", "sse", "webSocket"] as const)(
+test.each(["http", "sse", "web-socket"] as const)(
   "extracted merged child retains both aliases for %s query",
   (transport) => {
     const schema = struct.intersection(

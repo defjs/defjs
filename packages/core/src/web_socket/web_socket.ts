@@ -461,7 +461,7 @@ function buildSocketRequest(
         endpoint.builder,
         endpoint.input !== undefined,
       ),
-      "webSocket",
+      "web-socket",
       scope.guides,
     );
   } catch (error) {
