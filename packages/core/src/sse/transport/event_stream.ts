@@ -260,8 +260,7 @@ function createHandshakeStatusFault<TBody>(
 }
 
 /**
- * The fault a stream that never opened reports. Only a reconnect pick that fails during startup is a fault
- * already; a failed handshake is `HTTP_STATUS`, or the decode fault when its declared error body could not be
+ * The fault a stream that never opened reports. A failed handshake is `HTTP_STATUS`, or the decode fault when its declared error body could not be
  * decoded, as `defineRequest` reports it. A hook the caller supplied that threw is named by the failing hook and
  * the thrown value is the cause, even when the handshake it ran for answered with a status.
  */
@@ -269,10 +268,6 @@ function startupFault<TBody>(
   cause: unknown,
   { open, decoded, bodyFault }: Handshake<TBody>,
 ): EventStreamStartupFailure<TBody>["fault"] {
-  if (isEventStreamPickFault(cause)) {
-    return cause;
-  }
-
   const response = open?.response;
   const fatal = cause instanceof EventStreamFatalError ? cause.code : undefined;
   if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
@@ -594,7 +589,7 @@ export async function fetchEventStream<
         if (pickNext) {
           const picked = pickNext();
           if (picked[0] !== null) {
-            finishError(picked[0], "REQ_BUILD_FAILED");
+            finishError(picked[0], "REQ_BUILD_FAILED", picked[0]);
             return;
           }
           const next = picked[1];
@@ -605,10 +600,8 @@ export async function fetchEventStream<
             });
           } catch (error) {
             next.done({ attempted: false });
-            finishError(
-              createPreflightFault("REQ_BUILD_FAILED", error),
-              "REQ_BUILD_FAILED",
-            );
+            const fault = createPreflightFault("REQ_BUILD_FAILED", error);
+            finishError(fault, "REQ_BUILD_FAILED", fault);
             return;
           }
           attempt = { endpoint: next, fetchStarted: false, outcome: undefined };
@@ -863,10 +856,14 @@ export async function fetchEventStream<
     });
   }
 
-  function finishError(error: unknown, code: EventStreamFaultCode): void {
+  function finishError(
+    error: unknown,
+    code: EventStreamFaultCode,
+    fault?: PreflightFault,
+  ): void {
     settleAttempt();
     if (phase === "connecting") {
-      failStartup(error);
+      failStartup(error, fault);
     } else {
       queue.fail(error);
     }
@@ -879,9 +876,14 @@ export async function fetchEventStream<
     });
   }
 
-  function failStartup(cause: unknown): void {
+  /** `fault` is given when the cause is one already: a pick or a URL that failed before a connection. */
+  function failStartup(cause: unknown, fault?: PreflightFault): void {
     openDeferred.resolve([
-      { cause, fault: startupFault(cause, latest), open: latest.open },
+      {
+        cause,
+        fault: fault ?? startupFault(cause, latest),
+        open: latest.open,
+      },
       undefined,
     ]);
   }
@@ -905,14 +907,6 @@ function toTransformFailure(error: unknown, signal: AbortSignal): unknown {
         "Failed to process event stream message",
         { cause: error },
       );
-}
-
-function isEventStreamPickFault(error: unknown): error is PreflightFault {
-  if (!(error instanceof Error) || !("code" in error)) {
-    return false;
-  }
-  const code = error.code;
-  return code === "REQ_BUILD_FAILED";
 }
 
 function cancelLateResponseBody(

@@ -442,6 +442,22 @@ describe("sse runtime faults", () => {
       kind: "error",
     });
   });
+
+  test("should report a handle that rejects with a coded error as a network failure", async () => {
+    const rejection = Object.assign(new Error("not a fault"), {
+      code: "REQ_BUILD_FAILED",
+    });
+    const client = createClient(
+      withEndpoint("https://api.example.test"),
+      withSSEHandle(() => Promise.reject(rejection)),
+    );
+
+    const [fault, stream] = await useStream(client);
+
+    expect(stream).toBeUndefined();
+    expect(fault?.code).toBe("NET_UNREACHABLE");
+    expect(fault?.cause).toBe(rejection);
+  });
 });
 
 describe("unsupported streaming request body", () => {
