@@ -38,16 +38,17 @@ export interface ClientCall {
   context: Context;
   /** `defjs.operation`, `server.address` and `server.port`: what the span, metrics and logs share. */
   attributes: Attributes;
-  /** The normalized `http.request.method`. */
+  /** The normalized `http.request.method`; as given when nothing observes the call, because nothing reads it then. */
   method: string;
 }
+
+/** The options as the shared code reads them: the response type only sets the hook's parameter and `never` accepts every transport's, and `unknown` accepts every transport's metrics. */
+type AnyClientCallOptions = ClientCallOptions<never, unknown>;
 
 const NO_ATTRIBUTES: Attributes = Object.freeze({});
 
 /** `requireParentSpan` applies only with a tracer: without one there is no span to parent. */
-export function requiresActiveSpan(
-  options: ClientCallOptions<never, unknown>,
-): boolean {
+export function requiresActiveSpan(options: AnyClientCallOptions): boolean {
   return options.tracer !== undefined && options.requireParentSpan === true;
 }
 
@@ -60,7 +61,7 @@ export function requiresActiveSpan(
  * follows the name when the request has one.
  */
 export function startClientCall(
-  options: ClientCallOptions<never, unknown>,
+  options: AnyClientCallOptions,
   req: HttpRequest,
   resolve: (endpoint: string, baseEndpoint?: string) => ResolvedUrl,
   method: string,

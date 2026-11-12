@@ -5,8 +5,8 @@ import { createMockTracer } from "../../test/mocks";
 import {
   normalizeHttpMethod,
   runSpanHook,
-  setSpanError,
-  setSpanHttpResponse,
+  endSpanWithError,
+  endSpanWithResponse,
 } from "./trace";
 
 describe("trace helpers", () => {
@@ -22,10 +22,10 @@ describe("trace helpers", () => {
     expect(normalizeHttpMethod(input)).toBe(expected);
   });
 
-  test("setSpanHttpResponse with 2xx status", () => {
+  test("endSpanWithResponse with 2xx status", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    setSpanHttpResponse(span, 200);
+    endSpanWithResponse(span, 200);
 
     expect(spans[0]?.attributes["http.response.status_code"]).toBe(200);
     expect(spans[0]?.attributes["error.type"]).toBeUndefined();
@@ -34,11 +34,11 @@ describe("trace helpers", () => {
   });
 
   test.each([400, 404, 500, 599])(
-    "setSpanHttpResponse with error status %i",
+    "endSpanWithResponse with error status %i",
     (status) => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
-      setSpanHttpResponse(span, status);
+      endSpanWithResponse(span, status);
 
       expect(spans[0]?.attributes["http.response.status_code"]).toBe(status);
       expect(spans[0]?.attributes["error.type"]).toBe(String(status));
@@ -47,12 +47,12 @@ describe("trace helpers", () => {
     },
   );
 
-  test("setSpanHttpResponse leaves a status-0 response unattributed", () => {
+  test("endSpanWithResponse leaves a status-0 response unattributed", () => {
     // A real transport failure is a fault and never arrives as a response; status 0 can only come
     // from a synthetic interceptor response, which carries nothing to report.
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    setSpanHttpResponse(span, 0);
+    endSpanWithResponse(span, 0);
 
     expect(spans[0]?.attributes["http.response.status_code"]).toBeUndefined();
     expect(spans[0]?.attributes["error.type"]).toBeUndefined();
@@ -60,10 +60,10 @@ describe("trace helpers", () => {
     expect(spans[0]?.ended).toBe(true);
   });
 
-  test("setSpanError with Error instance", () => {
+  test("endSpanWithError with Error instance", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    setSpanError(span, new Error("boom"));
+    endSpanWithError(span, new Error("boom"));
 
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "Error" });
     expect(spans[0]?.attributes["error.type"]).toBe("Error");
@@ -71,10 +71,10 @@ describe("trace helpers", () => {
     expect(spans[0]?.ended).toBe(true);
   });
 
-  test("setSpanError with non-Error value", () => {
+  test("endSpanWithError with non-Error value", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    setSpanError(span, "string error");
+    endSpanWithError(span, "string error");
 
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "string" });
     expect(spans[0]?.attributes["error.type"]).toBe("string");
@@ -82,10 +82,10 @@ describe("trace helpers", () => {
     expect(spans[0]?.ended).toBe(true);
   });
 
-  test("setSpanError with undefined", () => {
+  test("endSpanWithError with undefined", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    setSpanError(span, undefined);
+    endSpanWithError(span, undefined);
 
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "_OTHER" });
     expect(spans[0]?.attributes["error.type"]).toBe("_OTHER");
@@ -93,10 +93,10 @@ describe("trace helpers", () => {
     expect(spans[0]?.ended).toBe(true);
   });
 
-  test("setSpanError uses the fallback error type for null", () => {
+  test("endSpanWithError uses the fallback error type for null", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
-    setSpanError(span, null);
+    endSpanWithError(span, null);
 
     expect(spans[0]?.attributes["error.type"]).toBe("_OTHER");
     expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
@@ -120,10 +120,10 @@ describe("trace helpers", () => {
       );
     }
 
-    test("setSpanError records only the error type", () => {
+    test("endSpanWithError records only the error type", () => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
-      setSpanError(span, leakyError());
+      endSpanWithError(span, leakyError());
 
       expectOnlyType(spans[0], "TypeError");
     });
@@ -145,7 +145,7 @@ describe("trace helpers", () => {
     ])("records $name for a non-Error value", ({ thrown, name }) => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
-      setSpanError(span, thrown);
+      endSpanWithError(span, thrown);
 
       expectOnlyType(spans[0], name);
     });

@@ -5,7 +5,11 @@ import type { Logger } from "@opentelemetry/api-logs";
 import { emitClientException } from "../telemetry/logs";
 import type { ConnectionClientMetrics } from "../telemetry/metrics";
 import { durationSeconds } from "../telemetry/metrics";
-import { getErrorType, runSpanHook, setSpanError } from "../telemetry/trace";
+import {
+  getErrorType,
+  runSpanHook,
+  endSpanWithError,
+} from "../telemetry/trace";
 import type { ClientCall, ClientCallOptions } from "./call";
 
 /** How a connection ended, as plain data: what to record and how the span ends. */
@@ -21,12 +25,14 @@ export type Outcome =
       error: unknown;
       /** Attributes of the event and of the connection duration sample; `error.type` is added. */
       attributes?: Attributes;
-      /** Present when the failure is logged: what the transport adds to the log record. */
-      log?: Attributes;
+      /** What the transport adds to the log record. */
+      extra?: Attributes;
+      /** The failure is not logged. */
+      quiet?: true;
     };
 
 /** What finishing a connection needs from the call that opened it. */
-interface Connection {
+interface ConnectionRecord {
   transport: "sse" | "websocket";
   call: ClientCall;
   logger: Logger | undefined;
@@ -36,7 +42,7 @@ interface Connection {
 }
 
 function finishConnection(
-  { transport, call, logger, metrics, signal, connectedAtMs }: Connection,
+  { transport, call, logger, metrics, signal, connectedAtMs }: ConnectionRecord,
   outcome: Outcome,
 ): void {
   const { span } = call;
@@ -44,7 +50,7 @@ function finishConnection(
   const failed = outcome.end === "error";
   let attributes = outcome.attributes;
   if (failed) {
-    if (outcome.log) {
+    if (!outcome.quiet) {
       emitClientException(logger, {
         transport,
         phase: "connection",
@@ -52,7 +58,7 @@ function finishConnection(
         signal,
         error: outcome.error,
         attributes: call.attributes,
-        extra: outcome.log,
+        extra: outcome.extra,
       });
     }
     attributes = { ...attributes, "error.type": getErrorType(outcome.error) };
@@ -64,44 +70,40 @@ function finishConnection(
     ...attributes,
   });
   if (!span) return;
-  if (failed) setSpanError(span, outcome.error);
+  if (failed) endSpanWithError(span, outcome.error);
   else span.end();
 }
 
 /**
- * The lifecycle SSE and WebSocket share. `next(nextReq)` opens the connection; a failure is recorded and
+ * The lifecycle SSE and WebSocket share. `connect()` opens the connection; a failure is recorded and
  * rethrown. A connection that opened is observed until its `closed` settles, which
  * {@link finishConnection} records once: `outcomeOf` maps a fulfilled close, a rejection is an
  * error.
  */
 export function observeConnection<
-  TRequest extends HttpRequest,
-  TConnection extends { readonly closed: Promise<TClosed> },
+  THandle extends { readonly closed: Promise<TClosed> },
   TClosed,
 >(
   transport: "sse" | "websocket",
-  options: ClientCallOptions<TConnection, ConnectionClientMetrics>,
+  options: ClientCallOptions<THandle, ConnectionClientMetrics>,
   call: ClientCall,
   req: HttpRequest,
-  next: (req: TRequest) => Promise<TConnection>,
-  nextReq: TRequest,
+  connect: () => Promise<THandle>,
   outcomeOf: (closed: TClosed) => Outcome,
-): Promise<TConnection> {
+): Promise<THandle> {
   const { span } = call;
   const { logger, metrics, responseHook } = options;
   const connectStartMs = performance.now();
 
   // With a client span, the rest of the chain runs with it active.
-  return (
-    span ? context.with(call.context, next, undefined, nextReq) : next(nextReq)
-  ).then(
-    (connection) => {
+  return (span ? context.with(call.context, connect) : connect()).then(
+    (handle) => {
       const connectedAtMs = performance.now();
 
       if (span) {
         if (responseHook) {
           runSpanHook(span, "responseHook", () =>
-            responseHook(span, connection, req),
+            responseHook(span, handle, req),
           );
         }
         span.addEvent(`${transport}.connected`);
@@ -112,7 +114,7 @@ export function observeConnection<
       );
       metrics?.active.add(1, call.attributes);
 
-      const observed: Connection = {
+      const record: ConnectionRecord = {
         transport,
         call,
         logger,
@@ -120,12 +122,11 @@ export function observeConnection<
         signal: req.signal,
         connectedAtMs,
       };
-      connection.closed.then(
-        (closed) => finishConnection(observed, outcomeOf(closed)),
-        (error: unknown) =>
-          finishConnection(observed, { end: "error", error, log: {} }),
+      handle.closed.then(
+        (closed) => finishConnection(record, outcomeOf(closed)),
+        (error: unknown) => finishConnection(record, { end: "error", error }),
       );
-      return connection;
+      return handle;
     },
     (error: unknown): never => {
       emitClientException(logger, {
@@ -141,7 +142,7 @@ export function observeConnection<
         "defjs.result": "error",
         "error.type": getErrorType(error),
       });
-      if (span) setSpanError(span, error);
+      if (span) endSpanWithError(span, error);
       throw error;
     },
   );

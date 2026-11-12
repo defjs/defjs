@@ -26,7 +26,7 @@ function sseOutcome(info: EventStreamCloseInfo): Outcome {
     end: "error",
     error: info.cause,
     attributes: { "sse.close.kind": info.kind, ...code },
-    log: code,
+    extra: code,
   };
 }
 
@@ -56,8 +56,7 @@ export function createOpenTelemetrySSEInterceptor(
       options,
       call,
       req,
-      next,
-      { ...req, headers },
+      () => next({ ...req, headers }),
       sseOutcome,
     );
   });

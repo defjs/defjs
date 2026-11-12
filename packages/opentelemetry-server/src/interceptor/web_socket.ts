@@ -19,12 +19,15 @@ export interface WebSocketInterceptorOptions extends ClientCallOptions<
 function webSocketOutcome(info: WebSocketCloseInfo): Outcome {
   if (info.kind === "closed") return { end: "closed" };
   if (info.kind === "aborted") {
-    return { end: "error", error: info.cause ?? ERR_ABORTED };
+    return { end: "error", error: info.cause ?? ERR_ABORTED, quiet: true };
   }
   return {
     end: "error",
     error: info.cause,
-    log: info.code === undefined ? {} : { "websocket.close.code": info.code },
+    extra:
+      info.code === undefined
+        ? undefined
+        : { "websocket.close.code": info.code },
   };
 }
 
@@ -66,8 +69,7 @@ export function createOpenTelemetryWebSocketInterceptor(
       options,
       call,
       req,
-      next,
-      { ...req, queryParams, queryString },
+      () => next({ ...req, queryParams, queryString }),
       webSocketOutcome,
     );
   });

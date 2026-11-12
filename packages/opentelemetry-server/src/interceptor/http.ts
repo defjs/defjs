@@ -10,8 +10,8 @@ import {
   getErrorType,
   getHttpResponseErrorType,
   runSpanHook,
-  setSpanError,
-  setSpanHttpResponse,
+  endSpanWithError,
+  endSpanWithResponse,
 } from "../telemetry/trace";
 import { resolveHttpUrl } from "../telemetry/url";
 import type { ClientCall, ClientCallOptions } from "./call";
@@ -75,7 +75,7 @@ export function createOpenTelemetryHttpInterceptor(
         extra: { "http.request.method": call.method },
       });
 
-      if (span) setSpanError(span, error);
+      if (span) endSpanWithError(span, error);
       metrics?.requestDuration.record(durationS, {
         ...call.attributes,
         "http.request.method": call.method,
@@ -92,7 +92,7 @@ export function createOpenTelemetryHttpInterceptor(
           responseHook(span, response, req),
         );
       }
-      setSpanHttpResponse(span, response.status);
+      endSpanWithResponse(span, response.status);
     }
 
     metrics?.requestDuration.record(

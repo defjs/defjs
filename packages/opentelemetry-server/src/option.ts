@@ -40,6 +40,8 @@ import {
  *
  * By default, `url.full` resolves only `request.endpoint` against optional `request.baseEndpoint`; an independent `request.queryString` is not appended. That boundary is not query redaction. As the OpenTelemetry semantic conventions require, credentials in the endpoint's userinfo are replaced with `REDACTED:REDACTED`, and the values of the default sensitive query keys (`sig`, `Signature`, `AWSAccessKeyId`, `X-Amz-Signature`, `X-Amz-Credential`, `X-Amz-Security-Token`, `X-Goog-Signature`) are replaced with `REDACTED`, but the package has no other built-in redactor or sensitive-key policy. A `url.full` returned by `startSpanHook` is redacted the same way, but a URL an application writes through the `Span` object in `requestHook` or `responseHook` is not intercepted, so construct and, if needed, redact it explicitly.
  *
+ * Every span carries `http.request.method`, which is `GET` for the WebSocket handshake. A method outside RFC 9110, `PATCH` and `QUERY` is recorded as `_OTHER`, and a method that Fetch sends in upper case is recorded in upper case; `http.request.method_original` keeps the method as given when it differs. The span name uses the same value, with `HTTP` in place of `_OTHER`.
+ *
  * @group opentelemetry-server
  * @see {@link OpenTelemetryServerHttpOptions}
  * @see {@link OpenTelemetryServerSSEOptions}
@@ -86,7 +88,7 @@ export type OpenTelemetryServerHttpOptions =
  *
  * - `responseHook(span, stream, req)` runs once the stream has opened, before the span records `sse.connected`. `stream` is the `EventStreamHandle` the transport returned; `req` is the original `HttpRequest`.
  *
- * - SSE is traced at connection level. After startup the span stays open until `stream.closed` settles, and records `sse.connected`, then one of `sse.closed` (server EOF), `sse.aborted` (`stream.close()` or a caller abort of the open stream whose reason is not `TimeoutError`; the span still ends without error), or `sse.error` (including an abort whose reason is `TimeoutError`, which ends the span `ERROR`). No per-event spans are created. The span carries `http.request.method`, which is `_OTHER` for a method outside RFC 9110, `PATCH` and `QUERY`, with the method as given in `http.request.method_original`. Reconnects happen inside the transport without rerunning interceptors, so `url.full`, `server.address` and `server.port` describe the first connection even when a reconnect picks another endpoint.
+ * - SSE is traced at connection level. After startup the span stays open until `stream.closed` settles, and records `sse.connected`, then one of `sse.closed` (server EOF), `sse.aborted` (`stream.close()` or a caller abort of the open stream whose reason is not `TimeoutError`; the span still ends without error), or `sse.error` (including an abort whose reason is `TimeoutError`, which ends the span `ERROR`). No per-event spans are created. Reconnects happen inside the transport without rerunning interceptors, so `url.full`, `server.address` and `server.port` describe the first connection even when a reconnect picks another endpoint.
  *
  * - A non-2xx handshake is observed as a connection failure: the span ends `ERROR` and, with a `logger`, one `WARN` is emitted whatever the response body.
  *

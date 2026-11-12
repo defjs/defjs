@@ -55,7 +55,7 @@ const readOrder = defineRequest({
 });
 ```
 
-Without it, HTTP spans use the method alone and SSE/WebSocket use their transport name. Never derive an operation from a resolved URL or a path containing identifiers.
+Without it, HTTP spans use the normalized method (`HTTP` for `_OTHER`) and SSE/WebSocket use their transport name. Never derive an operation from a resolved URL or a path containing identifiers.
 
 ## Configuration
 

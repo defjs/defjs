@@ -30,7 +30,7 @@ export function normalizeHttpMethod(method: string): string {
   return FETCH_NORMALIZED_METHODS.has(upper) ? upper : "_OTHER";
 }
 
-export function setSpanHttpResponse(span: Span, status: number): void {
+export function endSpanWithResponse(span: Span, status: number): void {
   if (status !== 0) {
     span.setAttribute("http.response.status_code", status);
   }
@@ -51,7 +51,7 @@ function recordSpanException(span: Span, error: unknown): void {
   span.recordException({ name: getErrorType(error) });
 }
 
-export function setSpanError(span: Span, error: unknown): void {
+export function endSpanWithError(span: Span, error: unknown): void {
   recordSpanException(span, error);
   span.setAttribute("error.type", getErrorType(error));
   span.setStatus({ code: SpanStatusCode.ERROR });
