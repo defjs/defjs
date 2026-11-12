@@ -23,48 +23,12 @@ export function ApiEntryPage({ view }: { view: RenderedApiEntry }) {
       const button = target.closest("button[data-api-copy]");
       if (button instanceof HTMLButtonElement) {
         event.preventDefault();
-        const pre = button.closest("figure")?.querySelector("pre");
-        if (!pre) return;
-        const scratch = document.createElement("div");
-        scratch.append(pre.cloneNode(true));
-        for (const ignored of scratch.querySelectorAll(".nd-copy-ignore"))
-          ignored.replaceWith("\n");
-        const text = scratch.textContent ?? "";
-        const copied = button.getAttribute("data-copied-label") ?? "";
-        const label = button.querySelector(".sr-only");
-        const idle = label?.textContent ?? "";
-        const write = navigator.clipboard?.writeText?.bind(navigator.clipboard);
-        if (!write) return;
-        void Promise.resolve()
-          .then(() => write(text))
-          .then(() => {
-            button.setAttribute("data-checked", "true");
-            if (label) label.textContent = copied;
-            const timer = window.setTimeout(() => {
-              button.removeAttribute("data-checked");
-              if (label) label.textContent = idle;
-              timers.delete(timer);
-            }, 1500);
-            timers.add(timer);
-          })
-          .catch(() => undefined);
+        copyCodeBlock(button, timers);
         return;
       }
       const anchor = target.closest("a");
       if (!(anchor instanceof HTMLAnchorElement)) return;
-      const path = clientNavigationPath({
-        href: anchor.getAttribute("href"),
-        target: anchor.getAttribute("target"),
-        download: anchor.hasAttribute("download"),
-        discover: anchor.hasAttribute("data-discover"),
-        button: event.button,
-        metaKey: event.metaKey,
-        ctrlKey: event.ctrlKey,
-        shiftKey: event.shiftKey,
-        altKey: event.altKey,
-        origin: window.location.origin,
-        defaultPrevented: event.defaultPrevented,
-      });
+      const path = injectedLinkPath(anchor, event);
       if (!path) return;
       event.preventDefault();
       void navigate(path);
@@ -143,6 +107,55 @@ export function ApiEntryPage({ view }: { view: RenderedApiEntry }) {
       </nav>
     </div>
   );
+}
+
+/** Copies the code of the block that owns `button` and shows the copied state for 1.5 s; `timers` holds the pending resets. */
+function copyCodeBlock(button: HTMLButtonElement, timers: Set<number>): void {
+  const pre = button.closest("figure")?.querySelector("pre");
+  if (!pre) return;
+  const scratch = document.createElement("div");
+  scratch.append(pre.cloneNode(true));
+  for (const ignored of scratch.querySelectorAll(".nd-copy-ignore"))
+    ignored.replaceWith("\n");
+  const text = scratch.textContent ?? "";
+  const copied = button.getAttribute("data-copied-label") ?? "";
+  const label = button.querySelector(".sr-only");
+  const idle = label?.textContent ?? "";
+  const write = navigator.clipboard?.writeText?.bind(navigator.clipboard);
+  if (!write) return;
+  void Promise.resolve()
+    .then(() => write(text))
+    .then(() => {
+      button.setAttribute("data-checked", "true");
+      if (label) label.textContent = copied;
+      const timer = window.setTimeout(() => {
+        button.removeAttribute("data-checked");
+        if (label) label.textContent = idle;
+        timers.delete(timer);
+      }, 1500);
+      timers.add(timer);
+    })
+    .catch(() => undefined);
+}
+
+/** The path to navigate to on the client for a click on an injected link, or null when the browser should handle it. */
+function injectedLinkPath(
+  anchor: HTMLAnchorElement,
+  event: MouseEvent,
+): string | null {
+  return clientNavigationPath({
+    href: anchor.getAttribute("href"),
+    target: anchor.getAttribute("target"),
+    download: anchor.hasAttribute("download"),
+    discover: anchor.hasAttribute("data-discover"),
+    button: event.button,
+    metaKey: event.metaKey,
+    ctrlKey: event.ctrlKey,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    origin: window.location.origin,
+    defaultPrevented: event.defaultPrevented,
+  });
 }
 
 function EnglishHtml({ locale, html }: { locale: string; html: string }) {

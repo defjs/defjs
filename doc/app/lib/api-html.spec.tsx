@@ -33,7 +33,7 @@ function entry(overrides: Partial<ApiEntryView> = {}): ApiEntryView {
     source: "packages/core/src/client/client.ts",
     group: "client",
     summary: "Creates a client.",
-    description: "Second paragraph.",
+    description: "Creates a client.\n\nSecond paragraph.",
     signatures: ["function createClient(): Client;"],
     parameterTables: [
       {
@@ -103,6 +103,7 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
   expect(rendered.membersHtml).toContain("Identifier");
   expect(rendered.membersHtml).not.toContain('lang="en"');
   expect(rendered.descriptionHtml).toContain("Second paragraph");
+  expect(rendered.descriptionHtml).not.toContain("Creates a client");
   expect(rendered.examplesHtml[2]).toContain('href="/api/core/client-type"');
   expect(rendered.examplesHtml[2]).toContain("<li>one</li>");
   expect(rendered.examplesHtml[2]).toContain("github-light");

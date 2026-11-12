@@ -7,7 +7,7 @@ import { rehypeCode } from "fumadocs-core/mdx-plugins/rehype-code";
 import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
 import { wrapEnglishHtml } from "./api-entry-actions";
 import type { ApiEntryView } from "./api-entry-view";
-import type { ApiField } from "./api-text";
+import { withoutFirstParagraph, type ApiField } from "./api-text";
 import type { Translator } from "./translations";
 
 const themes = { light: "github-light", dark: "github-dark" } as const;
@@ -163,7 +163,11 @@ export async function renderApiEntry(
     signaturesHtml: await Promise.all(
       view.signatures.map((code) => highlightCode(code, "ts", labels)),
     ),
-    descriptionHtml: await renderMarkdown(view.description, labels),
+    // The first paragraph is the summary shown above the page body.
+    descriptionHtml: await renderMarkdown(
+      withoutFirstParagraph(view.description),
+      labels,
+    ),
     parameterSections,
     membersHtml: await renderFieldTable(view.members, t, locale),
     returnsHtml: await Promise.all(

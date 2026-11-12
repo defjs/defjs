@@ -248,21 +248,21 @@ test("a code fence keeps an unknown signature tag literal", () => {
   });
 });
 
-test("the documentation catalog loads from disk and renders a real signature", () => {
+test("the documentation catalog loads from disk and renders a real signature", async () => {
   const transform = remarkApiSignatures();
-  transform({ type: "root", children: [] }, sourceFile("overview.mdx"));
+  await transform({ type: "root", children: [] }, sourceFile("overview.mdx"));
   const tree: SignatureRoot = { type: "root", children: [tag("createClient")] };
-  transform(tree, sourceFile("overview.mdx"));
+  await transform(tree, sourceFile("overview.mdx"));
   const rendered = tree.children[0];
   if (!rendered || !("value" in rendered) || typeof rendered.value !== "string")
     throw new Error("expected a rendered signature");
   expect(rendered.value).toContain("function createClient");
-  expect(() =>
+  await expect(
     transform(
       { type: "root", children: [tag("NotAnExport")] },
       sourceFile("overview.mdx"),
     ),
-  ).toThrow('Unknown API signature "NotAnExport" in overview.mdx');
+  ).rejects.toThrow('Unknown API signature "NotAnExport" in overview.mdx');
 });
 
 test("catalog lookup follows the documentation workspace or the repository root", async () => {
@@ -280,32 +280,37 @@ test("catalog lookup follows the documentation workspace or the repository root"
       ]),
     );
     expect(
-      readSignatureCatalog(apiReferenceFile(workspace)).get("FromRoot"),
+      (await readSignatureCatalog(apiReferenceFile(workspace))).get("FromRoot"),
     ).toEqual(["type FromRoot = 1;"]);
-    const docRoot = `${workspace}/doc`;
+    // A separate file: a version of a file is told apart by its modification time, which two writes in a row can share.
+    const docRoot = `${workspace}/inside-doc`;
     await Bun.write(`${docRoot}/app/data/.keep`, "");
     await Bun.write(
       `${docRoot}/app/data/api-reference.json`,
       JSON.stringify([{ name: "FromDoc", signatures: ["type FromDoc = 2;"] }]),
     );
     const fromDoc = apiReferenceFile(docRoot);
-    expect(readSignatureCatalog(fromDoc).get("FromDoc")).toEqual([
+    expect((await readSignatureCatalog(fromDoc)).get("FromDoc")).toEqual([
       "type FromDoc = 2;",
     ]);
-    await Bun.write(fromDoc, "{}");
-    expect(() => readSignatureCatalog(fromDoc)).toThrow(
+    // One file per content, for the same reason.
+    const notList = `${workspace}/not-a-list.json`;
+    await Bun.write(notList, "{}");
+    await expect(readSignatureCatalog(notList)).rejects.toThrow(
       "API reference is not a list",
     );
+    const malformed = `${workspace}/malformed-entry.json`;
     await Bun.write(
-      fromDoc,
+      malformed,
       JSON.stringify([{ name: "Broken", signatures: [1] }]),
     );
-    expect(() => readSignatureCatalog(fromDoc)).toThrow(
-      `API reference has a malformed entry: ${fromDoc}`,
+    await expect(readSignatureCatalog(malformed)).rejects.toThrow(
+      `API reference has a malformed entry: ${malformed}`,
     );
-    await Bun.write(fromDoc, "not json");
-    expect(() => readSignatureCatalog(fromDoc)).toThrow(
-      `Cannot read API signatures from ${fromDoc}`,
+    const notJson = `${workspace}/not-json.json`;
+    await Bun.write(notJson, "not json");
+    await expect(readSignatureCatalog(notJson)).rejects.toThrow(
+      `Cannot read API signatures from ${notJson}`,
     );
   } finally {
     Bun.spawnSync(["rm", "-rf", workspace]);
@@ -326,7 +331,7 @@ test("fences keep example code and reject a hand-copied generated entry", async 
   const root = `${import.meta.dirname}/../../content`;
   const hits: string[] = [];
   const generatedNames = new Set(
-    readSignatureCatalog(apiReferenceFile()).keys(),
+    (await readSignatureCatalog(apiReferenceFile())).keys(),
   );
   for (const locale of new Bun.Glob("*").scanSync(root)) {
     const dir = `${root}/${locale}/api`;

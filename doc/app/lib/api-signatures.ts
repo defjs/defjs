@@ -31,7 +31,7 @@ export interface SignatureTree {
 interface CatalogCache {
   path: string;
   mtimeMs: number;
-  catalog: SignatureCatalog;
+  catalog: Promise<SignatureCatalog>;
 }
 
 let catalogCache: CatalogCache | undefined;
@@ -71,16 +71,10 @@ export function apiReferenceFile(cwd = `${import.meta.dirname}/../..`): string {
   throw new Error(`Cannot find api-reference.json from ${cwd}`);
 }
 
-/** Reads the catalog from disk so a rebuilt page sees a changed reference file. */
-export function readSignatureCatalog(path: string): SignatureCatalog {
-  const file = Bun.file(path);
-  const mtimeMs = file.lastModified;
-  if (catalogCache?.path === path && catalogCache.mtimeMs === mtimeMs)
-    return catalogCache.catalog;
+async function loadSignatureCatalog(path: string): Promise<SignatureCatalog> {
   let parsed: unknown;
   try {
-    // The remark transform is synchronous; Bun exposes no synchronous file read.
-    parsed = JSON.parse(Bun.spawnSync(["cat", path]).stdout.toString());
+    parsed = await Bun.file(path).json();
   } catch (error) {
     throw new Error(`Cannot read API signatures from ${path}`, {
       cause: error,
@@ -90,7 +84,18 @@ export function readSignatureCatalog(path: string): SignatureCatalog {
     throw new Error(`API reference is not a list: ${path}`);
   if (!parsed.every(isSignatureEntry))
     throw new Error(`API reference has a malformed entry: ${path}`);
-  const catalog = signatureCatalog(parsed);
+  return signatureCatalog(parsed);
+}
+
+/**
+ * Reads the catalog from disk so a rebuilt page sees a changed reference file.
+ * The read is cached by modification time, so pages compiled together share it.
+ */
+export function readSignatureCatalog(path: string): Promise<SignatureCatalog> {
+  const mtimeMs = Bun.file(path).lastModified;
+  if (catalogCache?.path === path && catalogCache.mtimeMs === mtimeMs)
+    return catalogCache.catalog;
+  const catalog = loadSignatureCatalog(path);
   catalogCache = { path, mtimeMs, catalog };
   return catalog;
 }
@@ -179,9 +184,13 @@ export function replaceApiSignatures(
 export function remarkApiSignatures(): (
   tree: SignatureRoot,
   file: SignatureSourceFile,
-) => void {
-  return (tree, file) => {
-    replaceApiSignatures(tree, file, readSignatureCatalog(apiReferenceFile()));
+) => Promise<void> {
+  return async (tree, file) => {
+    replaceApiSignatures(
+      tree,
+      file,
+      await readSignatureCatalog(apiReferenceFile()),
+    );
   };
 }
 

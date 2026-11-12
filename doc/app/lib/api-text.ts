@@ -105,16 +105,21 @@ function fieldFingerprint(rows: readonly ApiField[]): string {
     .join("\n");
 }
 
+/** The index after the inline code span that opens at `index`. An unclosed span runs to the end of the line. */
+function inlineCodeEnd(line: string, index: number): number {
+  let end = index + 1;
+  while (end < line.length && line[end] === "`") end += 1;
+  const marker = line.slice(index, end);
+  const close = line.indexOf(marker, end);
+  return close === -1 ? line.length : close + marker.length;
+}
+
 /** `<Type>` in prose is a type argument. Inline code keeps search from seeing an MDX component. */
 function escapeTypeAngles(line: string): string {
   let out = "";
   for (let index = 0; index < line.length;) {
     if (line[index] === "`") {
-      let end = index + 1;
-      while (end < line.length && line[end] === "`") end += 1;
-      const marker = line.slice(index, end);
-      const close = line.indexOf(marker, end);
-      const stop = close === -1 ? line.length : close + marker.length;
+      const stop = inlineCodeEnd(line, index);
       out += line.slice(index, stop);
       index = stop;
       continue;
@@ -158,11 +163,7 @@ function replaceDocLinks(
   let out = "";
   for (let index = 0; index < line.length;) {
     if (line[index] === "`") {
-      let end = index + 1;
-      while (end < line.length && line[end] === "`") end += 1;
-      const marker = line.slice(index, end);
-      const close = line.indexOf(marker, end);
-      const stop = close === -1 ? line.length : close + marker.length;
+      const stop = inlineCodeEnd(line, index);
       out += line.slice(index, stop);
       index = stop;
       continue;

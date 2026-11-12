@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { ApiReferenceEntry } from "../../scripts/api-model";
 import { apiReference } from "../data/api-reference";
+import { buildApiEntryView } from "./api-entry-view";
 import { readableMarkdown } from "./markdown";
 import {
   renderApiEntryMarkdown,
@@ -60,8 +61,12 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
   };
 }
 
+function markdown(item: ApiReferenceEntry, locale: string): string {
+  return renderApiEntryMarkdown(buildApiEntryView(item, locale, targets));
+}
+
 test("markdown includes the signature, fields, prose, examples, related pages and overview", () => {
-  const text = renderApiEntryMarkdown(entry(), "en-US", targets);
+  const text = markdown(entry(), "en-US");
   expect(text).toContain("@defjs/core · function");
   expect(text).toContain("```ts\nfunction createClient(): Client;\n```");
   expect(text).toContain("## Parameters");
@@ -80,7 +85,7 @@ test("markdown includes the signature, fields, prose, examples, related pages an
 });
 
 test("members, a broken code fence and a deprecated field stay readable", () => {
-  const text = renderApiEntryMarkdown(
+  const text = markdown(
     entry({
       signatures: ["const raw = ```;"],
       typeTable: [
@@ -109,7 +114,6 @@ test("members, a broken code fence and a deprecated field stay readable", () => 
       description: "",
     }),
     "zh-Hans",
-    targets,
   );
   expect(text).toContain("## Members");
   expect(text).toContain("deprecated. Gone \\| away.");
@@ -121,8 +125,8 @@ test("members, a broken code fence and a deprecated field stay readable", () => 
   expect(text).toContain("[Overview](/zh-Hans/api/client)");
 });
 
-test("different overloads each keep a parameter table and a missing related target fails", () => {
-  const text = renderApiEntryMarkdown(
+test("different overloads each keep a parameter table", () => {
+  const text = markdown(
     entry({
       related: [],
       typeTable: [],
@@ -160,22 +164,10 @@ test("different overloads each keep a parameter table and a missing related targ
       ],
     }),
     "en-US",
-    targets,
   );
   expect(text.match(/## Parameters/g)?.length).toBe(2);
   expect(text).toContain("function enum(value: string): void;");
   expect(text).toContain("A number.");
-  expect(() =>
-    renderApiEntryMarkdown(
-      entry({
-        related: ["@defjs/core:Missing"],
-        exampleFiles: [],
-        tags: [],
-      }),
-      "en-US",
-      targets,
-    ),
-  ).toThrow("Unknown related API: @defjs/core:Missing");
 });
 
 test("every published entry renders Markdown that search can index", () => {

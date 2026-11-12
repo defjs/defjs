@@ -56,15 +56,9 @@ test("the page view resolves links, examples and the owning overview", () => {
   expect(view.summary).toBe("Creates a Client.");
   expect(view.source).toBe("packages/core/src/client/client.ts");
   expect(view.group).toBe("client");
-  expect(view.description).toContain("[Client](/api/core/client-type)");
-  expect(view.description).not.toContain("Creates a");
-  expect(
-    buildApiEntryView(
-      entry({ description: "Only {@link Client}." }),
-      "en-US",
-      targets,
-    ).description,
-  ).toBe("");
+  expect(view.description).toBe(
+    "Creates a [Client](/api/core/client-type).\n\nSee [Client](/api/core/client-type) again.",
+  );
   expect(view.parameterTables).toEqual([
     {
       rows: [
