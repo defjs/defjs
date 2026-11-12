@@ -151,13 +151,13 @@ test("checks runs first and every other job waits for it", () => {
 });
 
 test("bun jobs install bun, the node job does not", () => {
-  const jobs = workflowJobs();
-  for (const [id, job] of Object.entries(jobs)) {
-    expect(job.uses.includes("oven-sh/setup-bun@v2"), id).toBe(
-      id !== "unit-node",
-    );
+  const { "unit-node": node, ...bunJobs } = workflowJobs();
+  for (const [id, job] of Object.entries(bunJobs)) {
+    expect(job.uses, id).toContain("oven-sh/setup-bun@v2");
   }
-  expect(jobs["unit-node"]?.uses).toContain(setupNode);
+  expect(node?.uses).toContain(setupNode);
+  // Any version of the action, not only the one the Bun jobs pin.
+  expect(node?.uses.filter((use) => use.includes("setup-bun"))).toEqual([]);
 });
 
 test.each(Object.entries(expectedRuns))(
