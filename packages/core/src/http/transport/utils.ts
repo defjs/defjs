@@ -38,3 +38,10 @@ export function isJsonMediaType(contentType: string): boolean {
   const suffixAt = subtype.lastIndexOf("+");
   return suffixAt > 0 && subtype.slice(suffixAt + 1) === "json";
 }
+
+/** The cause of `RES_MEDIA_TYPE_INVALID` when a JSON declaration meets another media type. */
+export function jsonMediaTypeError(contentType: string): TypeError {
+  return new TypeError(
+    `Expected a JSON media type, received ${contentType || "<none>"}`,
+  );
+}

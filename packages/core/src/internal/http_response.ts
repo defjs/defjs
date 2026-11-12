@@ -107,6 +107,17 @@ export function makeResponse<R>(
   };
 }
 
+/** The metadata of `response`: every field but the body. */
+export function toHttpMeta(response: HttpResponse<unknown>): HttpMeta {
+  return {
+    headers: response.headers,
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    url: response.url,
+  };
+}
+
 function requestUrl(request: HttpRequest | undefined): string {
   if (!request) {
     return "";

@@ -15,7 +15,12 @@ import { resolveRequestUrl } from "../../internal/url";
 import { applyRequestContentType } from "./body";
 import { BodyFailure, isBodyFailure } from "./body_failure";
 import { createFetchInitBase, isReadableStreamBody } from "./fetch_init";
-import { getContentLength, getContentType, isJsonMediaType } from "./utils";
+import {
+  getContentLength,
+  getContentType,
+  isJsonMediaType,
+  jsonMediaTypeError,
+} from "./utils";
 
 /**
  * Relays a caller's stream so its bytes can be counted and its failure seen: a stream `fetch` holds
@@ -310,10 +315,11 @@ async function parseFetchResponse(
   // read, the parse, and the struct entirely.
   if (stream && responseType === "json" && !isJsonMediaType(contentType)) {
     discardBody(stream);
-    const cause = new TypeError(
-      `Expected a JSON media type, received ${contentType || "<none>"}`,
+    throw new BodyFailure(
+      "RES_MEDIA_TYPE_INVALID",
+      jsonMediaTypeError(contentType),
+      meta,
     );
-    throw new BodyFailure("RES_MEDIA_TYPE_INVALID", cause, meta);
   }
 
   // Progress needs the chunks, so only an unobserved read takes the bulk path.

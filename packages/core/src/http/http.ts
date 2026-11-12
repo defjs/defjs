@@ -24,10 +24,8 @@ import type {
 import {
   ERR_TIMEOUT,
   createDecodeFault,
-  createHttpStatusFault,
   createNetworkFault,
   createPreflightFault,
-  createUndecodedHttpStatusFault,
 } from "../error";
 import { networkCauseCode } from "../error/cause";
 import { makeChain, resolveHttpInterceptors } from "../interceptor/interceptor";
@@ -40,17 +38,13 @@ import {
   resolveAbortCause,
   resolveAbortFault,
 } from "../internal/abort";
-import { parseBytesBody, readBytesText } from "../internal/bytes";
 import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { createTransportOrigin } from "../internal/transport_origin";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
 import type { EndpointInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
-import type {
-  HttpProgressFn,
-  HttpResponseType,
-} from "../internal/http_request";
+import type { HttpProgressFn } from "../internal/http_request";
 import type {
   DecodedResponse,
   HttpMeta,
@@ -59,10 +53,8 @@ import type {
 import type { BuilderField, HttpRequestShape } from "../internal/builder_types";
 import type { OutboundBuilder } from "../internal/outbound_request";
 import type { AnyStruct, Infer } from "../struct";
-import { decodeJson } from "../struct/codec/json";
-import { StructError } from "../struct/errors";
-import { parseStructValue } from "../struct/introspection";
 import type { Guide } from "../struct/guide";
+import { decodeResponse } from "./decode";
 import { createHttpRequest } from "./request";
 import type { AnyBodyFailure } from "./transport/body_failure";
 import type { BodyFailure } from "./transport/body_failure";
@@ -72,7 +64,6 @@ import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
   isReadableStreamBody,
 } from "./transport/fetch_init";
-import { getContentType, isJsonMediaType } from "./transport/utils";
 
 /**
  * HTTP fields of {@link RequestOptions}: progress callbacks, `retry`, and `signal`.
@@ -130,7 +121,7 @@ type DeclaredBody<TStruct> = [TStruct] extends [undefined]
   ? undefined
   : Infer<TStruct>;
 
-type DeclaredResponse<TStruct> = [TStruct] extends [undefined]
+export type DeclaredResponse<TStruct> = [TStruct] extends [undefined]
   ? HttpMeta
   : DecodedResponse<Infer<TStruct>>;
 
@@ -200,7 +191,7 @@ export type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
     ]
   | [error: FaultOf<TErrorData>, result: undefined, response: undefined];
 
-type HttpExecuteAwaitResult<
+export type HttpExecuteAwaitResult<
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined,
 > =
@@ -812,79 +803,15 @@ async function executeHttpAttempt<
       }
     }
 
-    const settledResponse = response;
-    const meta = toHttpMeta(settledResponse);
-
-    // Philosophy 2: `ok` is the only fork, and only one side ever decodes.
-    const struct = settledResponse.ok ? definition.output : definition.error;
-
-    // Philosophy 5: with nothing declared for this side, that body is never read — not even to
-    // fail on. An unreadable representation on the side you opted out of is none of your business.
-    // A caller abort during interceptor work is reported before this point. An undecoded status has no body to cancel.
-    if (!struct) {
-      releaseAbortSignal(requestSignal);
-      if (settledResponse.ok) {
-        finish(null);
-        return [
-          null,
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unnecessary-type-assertion -- INTENT: the published RequestSuccessData<TOutput> is a conditional on the caller's generic TOutput that the runtime `!struct` check cannot narrow. Unasserted: TS2322, `undefined` is not assignable to `DeclaredBody<TOutput>`; the type-aware lint reads the deferred conditional as undefined and calls the assertion unnecessary. Typing the internal result as unknown instead fails at defineRequest's published RequestEndpoint return (TS2322)
-          undefined as RequestSuccessData<TOutput>,
-          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: with no output struct the response is the HttpMeta itself, but the published DeclaredResponse<TOutput> is a conditional on the caller's generic TOutput. Unasserted: TS2322, `HttpMeta` is not assignable to `DeclaredResponse<TOutput>`
-          meta as DeclaredResponse<TOutput>,
-        ];
-      }
-      const fault = createUndecodedHttpStatusFault(meta);
-      finish(fault);
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: with no `error` struct the published Fault<TError> data is ErrorBody<TError>, a conditional on the caller's generic TError that the runtime `!struct` check cannot narrow. Unasserted: TS2345, `undefined` is not assignable to `ErrorBody<TError>`. Typing this internal result as AnyFault instead fails at defineRequest's published RequestEndpoint return (TS2322, AnyFault is not FaultOf<DeclaredBody<TError>>)
-      return fail(fault as Fault<TError>);
-    }
-
-    let decoded: unknown;
+    // A caller abort during interceptor work is reported before this point.
+    // The caller signal stays armed while a declared body is still being converted.
     try {
-      decoded = await decodeDeclaredBody(
-        struct,
-        settledResponse,
-        requestSignal,
-      );
-    } catch (error) {
-      // A caller abort wins over a conversion fault.
-      const cancelled = resolveAbortFault(requestSignal);
-      if (cancelled) {
-        finish(cancelled);
-        return fail(cancelled);
-      }
-      // Philosophy 3 + 4: representation failures are not struct mismatches, and a failed decode has no body.
-      const fault =
-        error instanceof JsonMediaTypeError
-          ? createDecodeFault("RES_MEDIA_TYPE_INVALID", error, meta)
-          : error instanceof StructError
-            ? createDecodeFault("RES_STRUCT_MISMATCH", error, meta)
-            : createDecodeFault("RES_DECODE_FAILED", error, meta);
-      finish(fault);
-      return fail(fault);
+      const result = await decodeResponse(definition, response, requestSignal);
+      finish(result[0]);
+      return result;
     } finally {
       releaseAbortSignal(requestSignal);
     }
-
-    const decodedResponse: DecodedResponse<unknown> = {
-      ...meta,
-      body: decoded,
-    };
-    if (settledResponse.ok) {
-      finish(null);
-      return [
-        null,
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: decodeDeclaredBody parsed `decoded` with definition.output, but the published RequestSuccessData<TOutput> is a conditional on the caller's generic TOutput. Unasserted: TS2322, `unknown` is not assignable to `DeclaredBody<TOutput>`
-        decoded as RequestSuccessData<TOutput>,
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: same decoded body inside the published DeclaredResponse<TOutput> conditional. Unasserted: TS2322, `DecodedResponse<unknown>` is not assignable to `DeclaredResponse<TOutput>`
-        decodedResponse as DeclaredResponse<TOutput>,
-      ];
-    }
-
-    const fault = createHttpStatusFault(decodedResponse);
-    finish(fault);
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: `data` was decoded with definition.error, but the published Fault<TError> types it as ErrorBody<TError>, a conditional on the caller's generic TError. Unasserted: TS2345, `unknown` is not assignable to `ErrorBody<TError>`. Typing this internal result as AnyFault instead fails at defineRequest's published RequestEndpoint return (TS2322)
-    return fail(fault as Fault<TError>);
   } finally {
     for (const timer of sendTimers) clearTimeout(timer);
     state.info = httpAttemptDone(
@@ -980,54 +907,6 @@ function httpAttemptDone(
   return attempt?.info ?? { attempted: false };
 }
 
-function toHttpMeta(response: HttpResponse<unknown>): HttpMeta {
-  return {
-    headers: response.headers,
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    url: response.url,
-  };
-}
-
-class JsonMediaTypeError extends TypeError {
-  constructor(contentType: string) {
-    super(`Expected a JSON media type, received ${contentType || "<none>"}`);
-    this.name = "TypeError";
-  }
-}
-
-async function decodeDeclaredBody<S extends AnyStruct>(
-  struct: S,
-  response: HttpResponse<unknown>,
-  signal: AbortSignal,
-): Promise<Infer<S>> {
-  const representation = resolveInboundRepresentation(struct);
-  const contentType = getContentType(response.headers);
-  // The media type is checked first, before the body is looked at or read, so a response without
-  // content (HEAD, 204, 205, 304) is held to the declaration like any other.
-  if (representation === "json" && !isJsonMediaType(contentType)) {
-    throw new JsonMediaTypeError(contentType);
-  }
-  if (response.body === undefined) {
-    // Fetch reads an absent body as zero bytes. JSON parses them like any other bytes and fails.
-    return parseStructValue(
-      struct,
-      parseBytesBody(representation, new Uint8Array(0), contentType),
-    );
-  }
-  // Only a Blob read is asynchronous and not itself cancellable, so only it races the request signal.
-  // Every other body converts synchronously, and the caller checks cancellation right after.
-  if (typeof Blob !== "undefined" && response.body instanceof Blob) {
-    return await awaitWithSignal(
-      () => parseStructResponse(struct, representation, response.body),
-      signal,
-    );
-  }
-  signal.throwIfAborted();
-  return await parseStructResponse(struct, representation, response.body);
-}
-
 /** A request refused before it was sent: the hook or platform error behind it is what interceptors are shown. */
 function isLocalFailure(
   value: unknown,
@@ -1049,36 +928,4 @@ function fromBodyFailure(
   }
 
   return createPreflightFault(code, cause, meta);
-}
-
-async function parseStructResponse<S extends AnyStruct>(
-  struct: S,
-  responseType: HttpResponseType,
-  body: unknown,
-): Promise<Infer<S>> {
-  // Interceptor bodies may already be text, bytes, or a parsed value. The struct kind decides.
-  // A JSON string is a string root: the transport already parsed bytes, so do not parse again.
-  if (responseType === "json") {
-    if (typeof body === "string") {
-      return decodeJson(struct, body);
-    }
-    const text = await readBodyText(body);
-    const value: unknown = text === undefined ? body : JSON.parse(text);
-    return decodeJson(struct, value);
-  }
-  if (responseType === "text") {
-    const text = await readBodyText(body);
-    return parseStructValue(struct, text ?? body);
-  }
-  return parseStructValue(struct, body);
-}
-
-function readBodyText(value: unknown): string | Promise<string> | undefined {
-  const text = readBytesText(value);
-  return (
-    text ??
-    (typeof Blob !== "undefined" && value instanceof Blob
-      ? value.text()
-      : undefined)
-  );
 }
