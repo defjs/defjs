@@ -7,7 +7,7 @@ description: Déclarez les contrats d'erreur du service dans votre SDK et traite
 
 Dans Defjs, les échecs de requête, de transport et de décodage ne lèvent aucune exception au point d'appel. Chaque opération renvoie un tuple error-first (`[error, ...]`) dans lequel `error` vaut soit `null`, soit un `Fault` typé (une instance native d'`Error` discriminée par `error.code`).
 
-Le mésusage de programmation fait exception. Il rejette en général avec `TypeError` au lieu de renvoyer un `Fault` : une option `signal` qui n'est pas un `AbortSignal`, une opération HTTP dont `output` ou `error` n'est pas un `struct`, et l'appel d'une opération sans client.
+Un appel que TypeScript rejette fait exception : son résultat n'est pas spécifié et ce n'est pas un `Fault`. En pratique, il rejette en général avec le `TypeError` de la plateforme.
 
 ## 1. Déclarer les erreurs dans le SDK, trier dans l'application
 

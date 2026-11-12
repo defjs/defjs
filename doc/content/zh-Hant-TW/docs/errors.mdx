@@ -7,7 +7,7 @@ description: 在 SDK 中宣告服務錯誤契約，並在取用端應用程式�
 
 在 Defjs 中，請求、傳輸與解碼失敗都不會在呼叫端拋出例外。每項操作都會回傳 error-first tuple（`[error, ...]`），其中 `error` 不是 `null`，就是具型別的 `Fault`（以 `error.code` 區分的原生 `Error` 實例）。
 
-程式誤用是例外。它通常會以 `TypeError` 拒絕，而不是回傳 `Fault`：`signal` 選項不是 `AbortSignal`、HTTP 操作的 `output` 或 `error` 不是 `struct`，以及沒有 client 就呼叫操作。
+TypeScript 拒絕的呼叫是例外：它沒有規定的結果，也不是 `Fault`。實際上它通常會以平台的 `TypeError` 拒絕。
 
 ## 1. 在 SDK 宣告服務錯誤，在應用程式中進行分類處理
 

@@ -7,7 +7,7 @@ description: Declara en tu SDK los contratos de error del servicio y trata los f
 
 En Defjs, los fallos de petición, transporte y decodificación no lanzan excepciones en el punto de llamada. Cada operación devuelve una tupla con el error por delante (`[error, ...]`) donde `error` es `null` o bien una instancia tipada de `Fault` (una instancia nativa de `Error` discriminada por `error.code`).
 
-El mal uso de programación es la excepción. Suele rechazar con `TypeError` en lugar de devolver un `Fault`: una opción `signal` que no es un `AbortSignal`, una operación HTTP cuyo `output` o `error` no es un `struct`, y llamar a una operación sin un cliente.
+Una llamada que TypeScript rechaza es la excepción: no tiene un resultado especificado y no es un `Fault`. En la práctica suele rechazar con el `TypeError` de la plataforma.
 
 ## 1. Declarar errores del servicio en el SDK y clasificarlos en la aplicación
 

@@ -7,7 +7,7 @@ description: 在 SDK 中声明服务错误契约，并在消费方应用中处�
 
 在 Defjs 中，请求、传输和解码失败不会在调用处抛出异常。每个操作都返回错误优先元组（`[error, ...]`），其中 `error` 要么是 `null`，要么是带类型的 `Fault`（原生 `Error` 实例，由 `error.code` 判别）。
 
-编程误用是例外。它通常以 `TypeError` reject，而不是返回 `Fault`：不是 `AbortSignal` 的 `signal` 选项、`output` 或 `error` 不是 `struct` 的 HTTP 操作，以及不带 Client 调用操作。
+TypeScript 拒绝的调用是例外：它没有规定的结果，也不是 `Fault`。实际上它通常以平台的 `TypeError` reject。
 
 ## 1. 在 SDK 中声明业务错误，在应用中进行分流
 

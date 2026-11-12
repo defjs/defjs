@@ -7,7 +7,7 @@ description: Deklariere Service-Fehlerverträge im SDK und behandle typisierte A
 
 In Defjs werfen Request-, Transport- und Dekodierungsfehler an der Aufrufstelle keine Exceptions. Jede Operation gibt ein Error-first-Tupel (`[error, ...]`) zurück, bei dem `error` entweder `null` oder ein typisierter `Fault` ist (eine native `Error`-Instanz, diskriminiert über `error.code`).
 
-Fehlverwendung ist die Ausnahme. Sie wird typischerweise mit `TypeError` abgelehnt, statt einen `Fault` zurückzugeben: eine `signal`-Option, die kein `AbortSignal` ist, eine HTTP-Operation, deren `output` oder `error` kein `struct` ist, und der Aufruf einer Operation ohne Client.
+Ein Aufruf, den TypeScript ablehnt, ist die Ausnahme: Er hat kein festgelegtes Ergebnis und ist kein `Fault`. In der Praxis wird er typischerweise mit dem `TypeError` der Plattform abgelehnt.
 
 ## 1. Service-Fehler im SDK deklarieren, in der Anwendung triagieren
 

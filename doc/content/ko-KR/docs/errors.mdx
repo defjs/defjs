@@ -7,7 +7,7 @@ description: SDK에서 서비스 오류 계약을 선언하고, 사용하는 애
 
 Defjs에서는 요청, 전송, 디코딩 실패가 발생해도 호출 지점에서 예외(throw)를 던지지 않습니다. 모든 작업은 error-first 튜플(`[error, ...]`)을 반환하며, `error`는 `null`이거나 `error.code`로 구분되는 표준 `Error` 인스턴스인 타입화된 `Fault` 객체입니다.
 
-프로그래밍 오용은 예외입니다. 보통 `Fault`를 반환하는 대신 `TypeError`로 reject됩니다. `AbortSignal`이 아닌 `signal` 옵션, `struct`가 아닌 `output`이나 `error`를 가진 HTTP 작업, 클라이언트 없이 작업을 호출하는 경우가 그렇습니다.
+TypeScript가 거부하는 호출은 예외입니다. 결과가 규정되어 있지 않으며 `Fault`도 아닙니다. 실제로는 보통 플랫폼의 `TypeError`로 reject됩니다.
 
 ## 1. SDK에서 서비스 오류 선언하고 애플리케이션에서 분류하기
 

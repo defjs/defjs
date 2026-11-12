@@ -14,7 +14,7 @@ Operations never throw for request, response, validation, or transport failures.
 
 Always check `if (error)` and return from the surrounding function before reading the second or third element.
 
-Programming misuse typically rejects with `TypeError` instead: a `signal` option that is not an `AbortSignal`, an HTTP `output` or `error` that is not a `struct`, or an operation called without a client.
+A call that TypeScript rejects has no specified result and is not a `Fault`; in practice it typically rejects with the platform's `TypeError`.
 
 ## Fault variants and codes
 

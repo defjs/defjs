@@ -7,7 +7,7 @@ description: SDK でサービスエラーの契約を宣言し、利用側アプ
 
 Defjs では、リクエスト、トランスポート、デコードの各処理において、呼び出し元で例外を throw することはありません。すべての操作はエラーファーストのタプル（`[error, ...]`）を返し、`error` は `null` または型付けされた `Fault`（`error.code` で判別可能なネイティブの `Error` インスタンス）になります。
 
-プログラミングの誤用は例外です。`Fault` を返すのではなく、通常は `TypeError` で reject します。`AbortSignal` ではない `signal` オプション、`output` または `error` が `struct` ではない HTTP 操作、クライアントなしでの操作の呼び出しです。
+TypeScript が拒否する呼び出しは例外です。結果は規定されておらず、`Fault` でもありません。実際には、通常はプラットフォームの `TypeError` で reject します。
 
 ## 1. SDK でエラーを宣言し、アプリケーションで分岐処理する
 
