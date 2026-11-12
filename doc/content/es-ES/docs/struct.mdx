@@ -123,7 +123,7 @@ Cada `StructIssue` contiene `code` (`invalid_type`, `missing_key`, `invalid_lite
 
 ### Structs recursivos
 
-Un tipo autorreferencial se lee a sí mismo mediante una propiedad getter de la shape. El getter se ejecuta cuando el análisis llega a ese campo, así que la constante puede nombrarse a sí misma. Anota la constante con `Struct<T>`: TypeScript no puede inferir un tipo que se refiere a sí mismo.
+Un tipo autorreferencial se lee a sí mismo mediante una propiedad getter de la shape. Los getters se ejecutan una vez, cuando el struct de objeto se usa por primera vez, no al definir la constante, así que la constante puede nombrarse a sí misma. Anota la constante con `Struct<T>`: TypeScript no puede inferir un tipo que se refiere a sí mismo.
 
 <include cwd lang="typescript">
   examples/struct/recursive.ts#example

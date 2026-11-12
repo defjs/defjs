@@ -123,7 +123,7 @@ Defjs 嚴格區分**欄位是否存在**（`undefined`）與**值是否可為 nu
 
 ### 遞迴 struct
 
-自我參照的型別透過 shape 上的 getter 屬性讀取自身。getter 在解析到該欄位時才執行，因此常數可以引用自己。請以 `Struct<T>` 標註該常數：TypeScript 無法推斷參照自身的型別。
+自我參照的型別透過 shape 上的 getter 屬性讀取自身。getter 不在定義常數時執行，而是在物件 struct 首次被使用時執行一次，因此常數可以引用自己。請以 `Struct<T>` 標註該常數：TypeScript 無法推斷參照自身的型別。
 
 <include cwd lang="typescript">
   examples/struct/recursive.ts#example

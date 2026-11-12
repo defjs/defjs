@@ -123,7 +123,7 @@ Defjs 区分**字段是否存在**（`undefined`）与**是否可为 null**（`n
 
 ### 递归 struct
 
-自引用类型通过 shape 上的 getter 属性读取自身。getter 在解析到该字段时才运行，因此常量可以引用自己。请用 `Struct<T>` 标注该常量：TypeScript 无法推断引用自身的类型。
+自引用类型通过 shape 上的 getter 属性读取自身。getter 不在定义常量时运行，而是在对象 struct 首次被使用时运行一次，因此常量可以引用自己。请用 `Struct<T>` 标注该常量：TypeScript 无法推断引用自身的类型。
 
 <include cwd lang="typescript">
   examples/struct/recursive.ts#example

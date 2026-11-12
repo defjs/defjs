@@ -123,7 +123,7 @@ Defjs는 **필드 존재 여부**(`undefined`)와 **null 허용 여부**(`null`)
 
 ### 재귀 struct
 
-자기 참조 타입은 shape의 getter 프로퍼티로 자기 자신을 읽습니다. getter는 파싱이 해당 필드에 도달할 때 실행되므로 상수가 자기 자신을 가리킬 수 있습니다. 이 상수에는 `Struct<T>`를 명시하세요. TypeScript는 자기 자신을 참조하는 타입을 추론할 수 없습니다.
+자기 참조 타입은 shape의 getter 프로퍼티로 자기 자신을 읽습니다. getter는 상수를 정의할 때가 아니라 객체 struct가 처음 사용될 때 한 번 실행되므로 상수가 자기 자신을 가리킬 수 있습니다. 이 상수에는 `Struct<T>`를 명시하세요. TypeScript는 자기 자신을 참조하는 타입을 추론할 수 없습니다.
 
 <include cwd lang="typescript">
   examples/struct/recursive.ts#example

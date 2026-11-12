@@ -123,7 +123,7 @@ Defjs では、**フィールドの存在有無**（`undefined`）と **値の n
 
 ### 再帰的な struct
 
-自己参照する型は、shape 上の getter プロパティで自分自身を読み取ります。getter は解析がそのフィールドに到達したときに実行されるため、定数が自分自身を参照できます。この定数には `Struct<T>` を注釈してください。TypeScript は自分自身を参照する型を推論できません。
+自己参照する型は、shape 上の getter プロパティで自分自身を読み取ります。getter は定数の定義時ではなく、オブジェクト struct が初めて使われたときに一度だけ実行されるため、定数が自分自身を参照できます。この定数には `Struct<T>` を注釈してください。TypeScript は自分自身を参照する型を推論できません。
 
 <include cwd lang="typescript">
   examples/struct/recursive.ts#example

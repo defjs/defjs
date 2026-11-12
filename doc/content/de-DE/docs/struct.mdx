@@ -123,7 +123,7 @@ Jedes `StructIssue` enthält `code` (`invalid_type`, `missing_key`, `invalid_lit
 
 ### Rekursive Structs
 
-Ein selbstbezüglicher Typ liest sich über eine Getter-Eigenschaft der Shape selbst. Der Getter läuft, sobald das Parsen dieses Feld erreicht, daher kann die Konstante sich selbst nennen. Annotieren Sie die Konstante mit `Struct<T>`: TypeScript kann einen Typ, der auf sich selbst verweist, nicht ableiten.
+Ein selbstbezüglicher Typ liest sich über eine Getter-Eigenschaft der Shape selbst. Die Getter laufen einmal, wenn das Objekt-Struct zum ersten Mal verwendet wird, nicht beim Definieren der Konstante, daher kann die Konstante sich selbst nennen. Annotieren Sie die Konstante mit `Struct<T>`: TypeScript kann einen Typ, der auf sich selbst verweist, nicht ableiten.
 
 <include cwd lang="typescript">
   examples/struct/recursive.ts#example

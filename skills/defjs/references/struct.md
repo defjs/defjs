@@ -284,7 +284,7 @@ const FormUrlEncoded = struct.urlencoded({ name: struct.string() });
 
 ### Recursive structs [#recursive-structs]
 
-A self-referential type reads itself through a getter property on the shape. The getter runs when parsing reaches that field, so the constant can name itself. Annotate the constant with `Struct<T>`: TypeScript cannot infer a type that refers to itself.
+A self-referential type reads itself through a getter property on the shape. The getters run once, when the object struct is first used, not when the constant is defined, so the constant can name itself. Annotate the constant with `Struct<T>`: TypeScript cannot infer a type that refers to itself.
 
 ```typescript
 import { struct, type Struct } from "@defjs/core";

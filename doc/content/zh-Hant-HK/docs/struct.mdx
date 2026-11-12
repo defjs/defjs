@@ -123,7 +123,7 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
 
 ### 遞迴 struct
 
-自我參照嘅型別透過 shape 上面嘅 getter 屬性讀取自己。getter 喺解析到該欄位先會執行，所以常數可以引用自己。請用 `Struct<T>` 標註該常數：TypeScript 推斷唔到參照自己嘅型別。
+自我參照嘅型別透過 shape 上面嘅 getter 屬性讀取自己。getter 唔係喺定義常數嗰陣執行，而係喺物件 struct 第一次被使用時執行一次，所以常數可以引用自己。請用 `Struct<T>` 標註該常數：TypeScript 推斷唔到參照自己嘅型別。
 
 <include cwd lang="typescript">
   examples/struct/recursive.ts#example
