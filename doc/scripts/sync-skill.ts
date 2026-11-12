@@ -98,8 +98,8 @@ export async function writeSkillReferences(
 }
 /* istanbul ignore next -- @preserve: command-line entry point */
 if (import.meta.main) {
-  const build = joinPath(docRoot, "build/client");
-  if (Bun.argv.includes("--check"))
-    await checkSkillReferences(build, referencesDirectory);
-  else await writeSkillReferences(build, referencesDirectory);
+  await writeSkillReferences(
+    joinPath(docRoot, "build/client"),
+    referencesDirectory,
+  );
 }
