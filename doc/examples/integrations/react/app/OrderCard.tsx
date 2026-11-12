@@ -9,14 +9,22 @@ export function OrderCard({ id }: { id: number }) {
 
   useEffect(() => {
     const controller = new AbortController();
+
     void getOrder(client({ signal: controller.signal }), { id }).then(
       ([error, order]) => {
-        if (!error) setStatus(order.status);
+        if (controller.signal.aborted) return;
+        if (error) {
+          console.error(error.code);
+          setStatus(undefined);
+          return;
+        }
+        setStatus(order.status);
       },
     );
+
     return () => controller.abort();
   }, [client, id]);
 
-  return <span>{status ?? "loading"}</span>;
+  return <span>{status ?? "Loading..."}</span>;
 }
 // #endregion

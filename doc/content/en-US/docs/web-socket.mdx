@@ -52,9 +52,7 @@ Model multiple frame types on `incoming` or `outgoing` using `struct.discriminat
 | `onRuntimeError(fn)` | Subscribes to non-startup frame/parse errors; returns an `unsubscribe` function                       |
 | `closed`             | Promise resolving to the terminal outcome (`kind: 'closed' \| 'aborted' \| 'error'`)                  |
 
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
+<ApiSignature name="SocketAwaitResult" />
 
 ## 4. Retries, heartbeat, and queues
 

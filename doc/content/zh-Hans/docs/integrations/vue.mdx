@@ -76,10 +76,6 @@ bun add @defjs/core @defjs/vue vue
 
 ## 公共导出与相关指南
 
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
 - `HTTP_CLIENT` —— 供原生 `provide` / `inject` 使用的 `InjectionKey<DerivableClient>`。
 - `createClientPlugin(client)` —— 在 `HTTP_CLIENT` 下提供 `client` 的 Vue `Plugin`。
 - `injectClient(key?)` —— 解析 `key` 最近的 Client（默认 `HTTP_CLIENT`）。

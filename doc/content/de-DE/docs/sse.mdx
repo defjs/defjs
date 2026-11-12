@@ -39,7 +39,7 @@ Gib ein geöffnetes `EventStreamHandle` immer mit `await using` (oder `stream.cl
 
 Der Aufruf der Operation liefert `[error, stream, startupOpen]` erst zurück, nachdem die anfängliche HTTP-Antwort `2xx` ist und den Medientyp `text/event-stream` aufweist:
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
 
 <include cwd lang="typescript">
@@ -49,9 +49,7 @@ Der Aufruf der Operation liefert `[error, stream, startupOpen]` erst zurück, na
 </Tab>
 <Tab>
 
-<include cwd lang="typescript">
-  examples/sse/stream-result.ts#example
-</include>
+<ApiSignature name="StreamAwaitResult" />
 
 </Tab>
 </Tabs>

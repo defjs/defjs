@@ -76,10 +76,6 @@ Pour un travail initié dans un composable ou un composant hors d'un watcher, as
 
 ## Exports publics & guides connexes
 
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
 - `HTTP_CLIENT` — `InjectionKey<DerivableClient>` pour le `provide` / `inject` natif.
 - `createClientPlugin(client)` — `Plugin` Vue fournissant `client` sous la clé `HTTP_CLIENT`.
 - `injectClient(key?)` — résout le client le plus proche pour `key` (`HTTP_CLIENT` par défaut).

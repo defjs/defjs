@@ -52,9 +52,7 @@ description: SDK で WebSocket メッセージの契約を定義し、アプリ�
 | `onRuntimeError(fn)` | 接続確立後のフレームパースエラーなどを購読。`unsubscribe` 関数を返します                              |
 | `closed`             | 最終的な結果（`kind: 'closed' \| 'aborted' \| 'error'`）へと解決される Promise                        |
 
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
+<ApiSignature name="SocketAwaitResult" />
 
 ## 4. リトライ、ハートビート、キューの制御
 

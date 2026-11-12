@@ -39,7 +39,7 @@ SDK는 `defineEventStream`을 사용하여 Server-Sent Events(SSE) 작업을 선
 
 초기 HTTP 응답이 `2xx`이고 미디어 타입이 `text/event-stream`일 때 비로소 `[error, stream, startupOpen]` 튜플이 반환됩니다:
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
 
 <include cwd lang="typescript">
@@ -49,9 +49,7 @@ SDK는 `defineEventStream`을 사용하여 Server-Sent Events(SSE) 작업을 선
 </Tab>
 <Tab>
 
-<include cwd lang="typescript">
-  examples/sse/stream-result.ts#example
-</include>
+<ApiSignature name="StreamAwaitResult" />
 
 </Tab>
 </Tabs>

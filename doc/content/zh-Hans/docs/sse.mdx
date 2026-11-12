@@ -39,7 +39,7 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 
 只有当初始 HTTP 响应为 `2xx` 且媒体类型为 `text/event-stream` 时，调用操作才会解析为 `[error, stream, startupOpen]`：
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
 
 <include cwd lang="typescript">
@@ -49,9 +49,7 @@ description: 在 SDK 中导出强类型的 SSE 事件流定义，并在消费方
 </Tab>
 <Tab>
 
-<include cwd lang="typescript">
-  examples/sse/stream-result.ts#example
-</include>
+<ApiSignature name="StreamAwaitResult" />
 
 </Tab>
 </Tabs>

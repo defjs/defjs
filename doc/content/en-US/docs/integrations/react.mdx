@@ -23,13 +23,17 @@ bun add @defjs/core @defjs/react react
 
 Create the client at the application boundary, wrap your tree in `<ClientProvider client={client}>`, and abort in-flight work when the effect cleans up:
 
-<Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
+<Tabs items={["sdk/orders.ts", "app/App.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+    <include cwd>examples/integrations/react/sdk/orders.ts#example</include>
+
+  </Tab>
   <Tab>
     <include cwd>examples/react/client-provider.tsx#example</include>
 
   </Tab>
   <Tab>
-    <include cwd>examples/react/basic-setup.tsx#example</include>
+    <include cwd>examples/integrations/react/app/OrderCard.tsx#example</include>
 
   </Tab>
 </Tabs>

@@ -23,13 +23,17 @@ bun add @defjs/core @defjs/react react
 
 애플리케이션 경계에서 클라이언트를 생성하고 컴포넌트 트리를 `<ClientProvider client={client}>`로 감싼 뒤, effect 정리(cleanup) 시점에 진행 중인 작업을 abort하세요:
 
-<Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
+<Tabs items={["sdk/orders.ts", "app/App.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+    <include cwd>examples/integrations/react/sdk/orders.ts#example</include>
+
+  </Tab>
   <Tab>
     <include cwd>examples/react/client-provider.tsx#example</include>
 
   </Tab>
   <Tab>
-    <include cwd>examples/react/basic-setup.tsx#example</include>
+    <include cwd>examples/integrations/react/app/OrderCard.tsx#example</include>
 
   </Tab>
 </Tabs>

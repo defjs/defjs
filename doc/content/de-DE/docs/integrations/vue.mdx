@@ -77,10 +77,6 @@ Für asynchrone Arbeiten innerhalb eines Composables oder einer Komponente auße
 
 ## Öffentliche Exporte & verwandte Leitfäden
 
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
 - `HTTP_CLIENT` — `InjectionKey<DerivableClient>` für natives `provide` / `inject`.
 - `createClientPlugin(client)` — Vue `Plugin`, das `client` unter `HTTP_CLIENT` bereitstellt.
 - `injectClient(key?)` — Löst den nächstgelegenen Client für `key` auf (standardmäßig `HTTP_CLIENT`).

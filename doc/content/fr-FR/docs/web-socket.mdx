@@ -52,9 +52,7 @@ Modélisez plusieurs types de trames pour `incoming` ou `outgoing` à l'aide de 
 | `onRuntimeError(fn)` | S'abonne aux erreurs d'analyse ou de trames hors phase de démarrage ; renvoie une fonction `unsubscribe` |
 | `closed`             | Promesse résolue avec l'issue terminale (`kind: 'closed' \| 'aborted' \| 'error'`)                       |
 
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
+<ApiSignature name="SocketAwaitResult" />
 
 ## 4. Retries, heartbeat et files d'attente
 

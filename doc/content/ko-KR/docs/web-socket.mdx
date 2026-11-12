@@ -52,9 +52,7 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
 | `onRuntimeError(fn)` | 초기 연결 이후의 프레임/파싱 오류를 구독하며, `unsubscribe` 함수를 반환                               |
 | `closed`             | 최종 종료 결과(`kind: 'closed' \| 'aborted' \| 'error'`)로 확인되는 Promise                           |
 
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
+<ApiSignature name="SocketAwaitResult" />
 
 ## 4. 재시도, 하트비트 및 큐 관리
 

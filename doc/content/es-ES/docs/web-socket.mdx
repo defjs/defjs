@@ -52,9 +52,7 @@ Modela múltiples tipos de tramas en `incoming` o `outgoing` con `struct.discrim
 | `onRuntimeError(fn)` | Se suscribe a errores de análisis o tramas posteriores al inicio; devuelve una función `unsubscribe`  |
 | `closed`             | Promesa que resuelve al resultado terminal (`kind: 'closed' \| 'aborted' \| 'error'`)                 |
 
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
+<ApiSignature name="SocketAwaitResult" />
 
 ## 4. Reintentos, latidos y colas
 

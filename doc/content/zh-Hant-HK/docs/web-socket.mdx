@@ -52,9 +52,7 @@ description: SDK 定義 WebSocket 訊息契約，應用程式負責連線設定�
 | `onRuntimeError(fn)` | 訂閱非啟動階段嘅 frame／解析錯誤；回傳 `unsubscribe` 函式                                             |
 | `closed`             | Promise 解析出最終終止狀態（`kind: 'closed' \| 'aborted' \| 'error'`）                                |
 
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
+<ApiSignature name="SocketAwaitResult" />
 
 ## 4. 重試、心跳與佇列
 

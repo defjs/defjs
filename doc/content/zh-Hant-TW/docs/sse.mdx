@@ -39,7 +39,7 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 
 只有在初始 HTTP 回應為 `2xx` 且媒體型別為 `text/event-stream` 時，呼叫該操作才會解析為 `[error, stream, startupOpen]`：
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
 
 <include cwd lang="typescript">
@@ -49,9 +49,7 @@ SDK 開發者用 `defineEventStream` 宣告 Server-Sent Events（SSE）操作：
 </Tab>
 <Tab>
 
-<include cwd lang="typescript">
-  examples/sse/stream-result.ts#example
-</include>
+<ApiSignature name="StreamAwaitResult" />
 
 </Tab>
 </Tabs>

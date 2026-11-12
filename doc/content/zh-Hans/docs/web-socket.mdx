@@ -52,9 +52,7 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 | `onRuntimeError(fn)` | 订阅连接建立后的非启动期数据帧/解析异常；返回一个 `unsubscribe` 函数                                                |
 | `closed`             | 一个返回最终终态结果（`kind: 'closed' \| 'aborted' \| 'error'`）的 Promise                                          |
 
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
+<ApiSignature name="SocketAwaitResult" />
 
 ## 4. 重试、心跳与队列
 

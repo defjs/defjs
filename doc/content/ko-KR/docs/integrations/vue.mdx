@@ -76,10 +76,6 @@ watcher 외부의 composable이나 컴포넌트 내부에서 시작된 작업의
 
 ## 공개 Export 및 관련 가이드
 
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
 - `HTTP_CLIENT` — 네이티브 `provide` / `inject`를 위한 `InjectionKey<DerivableClient>`.
 - `createClientPlugin(client)` — `HTTP_CLIENT` 아래에 `client`를 제공하는 Vue `Plugin`.
 - `injectClient(key?)` — `key`(기본값 `HTTP_CLIENT`)에 해당하는 가장 가까운 클라이언트를 조회.

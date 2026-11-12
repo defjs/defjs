@@ -77,10 +77,6 @@ bun add @defjs/core @defjs/vue vue
 
 ## Публичные экспорты и руководства
 
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
 - `HTTP_CLIENT` — `InjectionKey<DerivableClient>` для стандартных вызовов `provide` / `inject`.
 - `createClientPlugin(client)` — плагин Vue `Plugin`, предоставляющий `client` по ключу `HTTP_CLIENT`.
 - `injectClient(key?)` — разрешает ближайший клиент для ключа `key` (по умолчанию `HTTP_CLIENT`).

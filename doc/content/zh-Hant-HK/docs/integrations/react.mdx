@@ -23,13 +23,17 @@ bun add @defjs/core @defjs/react react
 
 喺應用程式頂層建立 client，用 `<ClientProvider client={client}>` 包裝元件樹，並喺 effect 清理函式中中斷未完成嘅工作：
 
-<Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
+<Tabs items={["sdk/orders.ts", "app/App.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+    <include cwd>examples/integrations/react/sdk/orders.ts#example</include>
+
+  </Tab>
   <Tab>
     <include cwd>examples/react/client-provider.tsx#example</include>
 
   </Tab>
   <Tab>
-    <include cwd>examples/react/basic-setup.tsx#example</include>
+    <include cwd>examples/integrations/react/app/OrderCard.tsx#example</include>
 
   </Tab>
 </Tabs>

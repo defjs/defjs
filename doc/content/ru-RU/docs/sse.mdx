@@ -39,7 +39,7 @@ SDK объявляет операцию Server-Sent Events (SSE) с помощь
 
 Вызов операции возвращает кортеж `[error, stream, startupOpen]` только когда исходный HTTP-ответ имеет статус `2xx` и тип медиа `text/event-stream`:
 
-<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
 
 <include cwd lang="typescript">
@@ -49,9 +49,7 @@ SDK объявляет операцию Server-Sent Events (SSE) с помощь
 </Tab>
 <Tab>
 
-<include cwd lang="typescript">
-  examples/sse/stream-result.ts#example
-</include>
+<ApiSignature name="StreamAwaitResult" />
 
 </Tab>
 </Tabs>

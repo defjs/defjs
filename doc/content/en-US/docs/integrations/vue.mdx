@@ -76,10 +76,6 @@ For work started inside a composable or component outside a watcher, pair `Abort
 
 ## Public exports & related guides
 
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
 - `HTTP_CLIENT` — `InjectionKey<DerivableClient>` for native `provide` / `inject`.
 - `createClientPlugin(client)` — Vue `Plugin` providing `client` under `HTTP_CLIENT`.
 - `injectClient(key?)` — resolves the nearest client for `key` (defaults to `HTTP_CLIENT`).

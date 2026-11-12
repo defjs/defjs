@@ -76,10 +76,6 @@ Vue ネイティブの `provide(HTTP_CLIENT, childClient)` を使用して、特
 
 ## 公開エクスポートと関連ドキュメント
 
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
 - `HTTP_CLIENT` — ネイティブな `provide` / `inject` 用の `InjectionKey<DerivableClient>`
 - `createClientPlugin(client)` — `client` を `HTTP_CLIENT` のキーで提供する Vue `Plugin`
 - `injectClient(key?)` — `key`（デフォルトは `HTTP_CLIENT`）に対応する最も近いクライアントを解決

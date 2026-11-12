@@ -52,9 +52,7 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 | `onRuntimeError(fn)` | 訂閱連線建立後的訊框／剖析錯誤；回傳 `unsubscribe` 取消訂閱函式                                       |
 | `closed`             | 解析為最終終結結果的 Promise（`kind: 'closed' \| 'aborted' \| 'error'`）                              |
 
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
+<ApiSignature name="SocketAwaitResult" />
 
 ## 4. 重試、心跳與佇列
 

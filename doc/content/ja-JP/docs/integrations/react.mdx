@@ -23,13 +23,17 @@ bun add @defjs/core @defjs/react react
 
 アプリケーションの境界でクライアントを作成し、ツリーを `<ClientProvider client={client}>` でラップします。Effect のクリーンアップ時には進行中の通信を中断（abort）します。
 
-<Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
+<Tabs items={["sdk/orders.ts", "app/App.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+    <include cwd>examples/integrations/react/sdk/orders.ts#example</include>
+
+  </Tab>
   <Tab>
     <include cwd>examples/react/client-provider.tsx#example</include>
 
   </Tab>
   <Tab>
-    <include cwd>examples/react/basic-setup.tsx#example</include>
+    <include cwd>examples/integrations/react/app/OrderCard.tsx#example</include>
 
   </Tab>
 </Tabs>

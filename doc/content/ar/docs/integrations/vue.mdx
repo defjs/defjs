@@ -76,10 +76,6 @@ bun add @defjs/core @defjs/vue vue
 
 ## الصادرات العامة والأدلة ذات الصلة
 
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
 - `HTTP_CLIENT` — رمز `InjectionKey<DerivableClient>` لدوال `provide` و`inject` الأصلية.
 - `createClientPlugin(client)` — إضافة Vue `Plugin` توفر `client` تحت الرمز `HTTP_CLIENT`.
 - `injectClient(key?)` — يحل أقرب عميل للمفتاح `key` (افتراضياً `HTTP_CLIENT`).
