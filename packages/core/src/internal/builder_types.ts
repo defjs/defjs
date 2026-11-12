@@ -1,20 +1,5 @@
 import type { STRUCT } from "../struct/symbols";
-import type {
-  AnyStruct,
-  ArrayStruct,
-  CarriedStruct,
-  DiscriminatedUnionStruct,
-  Infer,
-  IntersectionStruct,
-  ObjectStruct,
-  RecordStruct,
-  StructLike,
-  TupleStruct,
-  UnionStruct,
-} from "../struct/types";
-
-/** Object produced by endpoint input parsing. The symbol points at the struct that produced the node. */
-export type Typed = { readonly [STRUCT]: AnyStruct };
+import type { TaggedObject, TaggedStructOutput } from "../struct/types";
 
 export type Scalar = string | number | bigint | boolean | Date;
 
@@ -55,7 +40,7 @@ export type PathValue<P extends string> = [PathParams<P>] extends [never]
   : | ({ readonly [K in PathParams<P>]: Scalar } & {
         readonly [STRUCT]?: never;
       })
-    | (Typed & { readonly [key: string]: Scalar });
+    | (TaggedObject & { readonly [key: string]: Scalar });
 
 /**
  * Request shape an HTTP builder returns: path, query, headers, and body.
@@ -132,29 +117,10 @@ export type EventStreamRequestShape<
   M extends string,
 > = HttpRequestShape<P, M>;
 
-type NullishBuilderInput<S, Inner> =
-  null extends Infer<S>
-    ? undefined extends Infer<S>
-      ? BuilderInput<Inner> | null | undefined
-      : BuilderInput<Inner> | null
-    : undefined extends Infer<S>
-      ? BuilderInput<Inner> | undefined
-      : BuilderInput<Inner>;
-
-type IntersectBuilderInputs<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = T extends readonly [
-  infer Head extends StructLike<unknown, unknown, boolean>,
-  ...infer Tail extends readonly StructLike<unknown, unknown, boolean>[],
-]
-  ? BuilderInput<Head> &
-      (Tail["length"] extends 0 ? unknown : IntersectBuilderInputs<Tail>)
-  : unknown;
-
 /**
  * Parsed endpoint input that a request builder receives.
  *
- * Object nodes are intersected with the internal `Typed` brand, so they carry the struct that
+ * Object nodes are intersected with the internal `TaggedObject` brand, so they carry the struct that
  * produced them and alias, `Date`, and `bigint` encoding follow the value into
  * the request. Record entries and tuple items are branded the same way. At
  * runtime a record container is also tagged when the parsed value is an object,
@@ -163,37 +129,11 @@ type IntersectBuilderInputs<
  * wrapped. Union options are distributed; intersection options are combined.
  * Any other struct falls back to `Infer<S>`.
  *
- * `CarriedStruct`, `NullishBuilderInput`, `IntersectBuilderInputs`, and `Typed`
- * are internal helper types.
+ * `TaggedStructOutput` and `TaggedObject` are internal helper types.
  *
  * @group http
  */
-export type BuilderInput<S> =
-  S extends CarriedStruct<infer Inner>
-    ? NullishBuilderInput<S, Inner>
-    : S extends UnionStruct<infer Options>
-      ? BuilderInput<Options[number]>
-      : S extends DiscriminatedUnionStruct<infer Options>
-        ? BuilderInput<Options[number]>
-        : S extends IntersectionStruct<infer Options>
-          ? IntersectBuilderInputs<Options>
-          : S extends RecordStruct<infer Value>
-            ? { [key: string]: BuilderInput<Value> }
-            : S extends TupleStruct<infer Items>
-              ? {
-                  [K in keyof Items]: Items[K] extends StructLike<
-                    unknown,
-                    unknown,
-                    boolean
-                  >
-                    ? BuilderInput<Items[K]>
-                    : Items[K];
-                }
-              : S extends ArrayStruct<infer Item>
-                ? BuilderInput<Item>[]
-                : S extends ObjectStruct<infer Shape>
-                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
-                  : Infer<S>;
+export type BuilderInput<S> = TaggedStructOutput<S>;
 
 export type BuilderField<TInput, TShape> = [TInput] extends [undefined]
   ? {

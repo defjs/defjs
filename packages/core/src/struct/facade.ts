@@ -24,7 +24,7 @@ import {
   createUrlencodedBodyStruct,
 } from "./constructors";
 import { parseStructTuple } from "./parse";
-import type { Struct, StructLike, UnionStruct } from "./types";
+import type { Struct } from "./types";
 
 type EnumValue<T> = T extends readonly (infer U extends string)[]
   ? U
@@ -68,52 +68,11 @@ function structEnum(
 }
 
 /**
- * Struct that accepts a value matching any one of several structs.
- *
- * `struct.or` is variadic: pass each option as its own argument.
- *
- * - Tries the options in order and returns the result of the first one that parses.
- *
- * - If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.
- *
- * - Throws `TypeError` when an option is not a struct.
- *
- * `UnionStruct<T>` is not exported. It is a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.
- *
- * @group struct
- */
-function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
-  ...options: T
-): UnionStruct<T> {
-  return createUnionStruct(options);
-}
-
-/**
  * Facade object for building protocol-boundary structs and parsing values with its constructors and `struct.parse`.
  *
  * Prefer this object over importing the constructor functions one by one. Compose shapes with
  * `struct.object`, then parse with `struct.parse` or let HTTP/SSE/WebSocket
  * endpoints apply the same contracts at the wire boundary. `struct` is a plain object of helpers.
- *
- * ```ts
- * import { struct } from "@defjs/core";
- *
- * const Order = struct.object({
- *   id: struct.number(),
- *   customerName: struct.string().alias("customer_name"),
- * });
- *
- * function readOrder() {
- *   const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
- *   if (error) {
- *     console.error(error.message);
- *     return;
- *   }
- *   console.log(order.customerName);
- * }
- *
- * readOrder();
- * ```
  *
  * ### Primitives and containers
  *
@@ -195,7 +154,7 @@ export const struct = {
   null: createNullStruct,
   number: createNumberStruct,
   object: createObjectStruct,
-  or: structOr,
+  or: createUnionStruct,
   parse: parseStructTuple,
   record: createRecordStruct,
   string: createStringStruct,

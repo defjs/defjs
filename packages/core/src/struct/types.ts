@@ -43,7 +43,8 @@ export interface StructLike<
   readonly _struct: StructTypes<I, O, OO>;
 }
 
-export type AnyStructLike = StructLike<unknown, unknown, boolean>;
+// Kept until web_socket/codec.ts names StructLike itself.
+export type AnyStructLike = StructLike;
 
 export type OptionalOutputStruct = {
   readonly _struct: {
@@ -202,6 +203,19 @@ interface PreservedStruct<T, I, O, OO extends boolean>
   optional(): PreservedStruct<T, I | undefined, O | undefined, true>;
 }
 
+// The modifiers every composite struct inherits: each keeps the composite itself (`Self`) behind the new struct.
+interface PreservingModifiers<Self, I, O> extends StructMethods<I, O, false> {
+  null(): PreservedStruct<Self, I | null, O | null, false>;
+  nullable(): PreservedStruct<Self, I | null, O | null, false>;
+  nullish(): PreservedStruct<
+    Self,
+    I | null | undefined,
+    O | null | undefined,
+    true
+  >;
+  optional(): PreservedStruct<Self, I | undefined, O | undefined, true>;
+}
+
 /**
  * Broad struct constraint that accepts any struct, for endpoint and client generics.
  *
@@ -255,18 +269,15 @@ type StructOutput<T> = T extends {
  */
 export type Infer<T> = StructOutput<T>;
 
-// Type boundary: FieldOutput inspects the generic struct surface; `unknown` lets the
-// conditional type match any StructLike without over-constraining callers.
-export type FieldOutput<S> =
-  S extends StructLike<unknown, unknown, boolean>
-    ? S extends OptionalOutputStruct
-      ? Exclude<S["_struct"]["output"], undefined>
-      : S["_struct"]["output"]
-    : never;
+export type FieldOutput<S> = S extends StructLike
+  ? S extends OptionalOutputStruct
+    ? Exclude<S["_struct"]["output"], undefined>
+    : S["_struct"]["output"]
+  : never;
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- INTENT: published, and documented on struct.object(), as `{ [key: string]: any }`. With `unknown` values the `T[K]["_struct"]` lookups fail (TS2322 in outbound_request.spec.ts and json.spec.ts); with `AnyStructLike` values a recursive shape loses inference (TS7022 in json.spec.ts "caches recursive discriminator metadata…") and a hand-built shape in coverage.spec.ts no longer type-checks (TS2322)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- INTENT: published, and documented on struct.object(), as `{ [key: string]: any }`. With `unknown` values the `T[K]["_struct"]` lookups fail (TS2322 in outbound_request.spec.ts and json.spec.ts); with `StructLike` values a recursive shape loses inference (TS7022 in json.spec.ts "caches recursive discriminator metadata…")
 export type ObjectShape = { [key: string]: any };
 
 export type ObjectInput<T extends ObjectShape> = Simplify<
@@ -293,51 +304,49 @@ export type ObjectOutput<T extends ObjectShape> = Simplify<
   }
 >;
 
-export type TupleInput<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = {
+export type TupleInput<T extends readonly StructLike[]> = {
   -readonly [K in keyof T]: StructInput<T[K]>;
 };
 
-export type TupleOutput<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = {
+export type TupleOutput<T extends readonly StructLike[]> = {
   -readonly [K in keyof T]: StructOutput<T[K]>;
 };
 
-export type UnionOutput<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = Exclude<StructOutput<T[number]>, undefined>;
+export type UnionOutput<T extends readonly StructLike[]> = Exclude<
+  StructOutput<T[number]>,
+  undefined
+>;
 
-export type UnionInput<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = Exclude<StructInput<T[number]>, undefined>;
+export type UnionInput<T extends readonly StructLike[]> = Exclude<
+  StructInput<T[number]>,
+  undefined
+>;
 
-type IntersectionInputValue<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = T extends readonly [
-  infer Head extends StructLike<unknown, unknown, boolean>,
-  ...infer Tail extends StructLike<unknown, unknown, boolean>[],
-]
-  ? StructInput<Head> & IntersectionInputValue<Tail>
-  : unknown;
+type IntersectionInputValue<T extends readonly StructLike[]> =
+  T extends readonly [
+    infer Head extends StructLike,
+    ...infer Tail extends StructLike[],
+  ]
+    ? StructInput<Head> & IntersectionInputValue<Tail>
+    : unknown;
 
-export type IntersectionInput<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = Exclude<IntersectionInputValue<T>, undefined>;
+export type IntersectionInput<T extends readonly StructLike[]> = Exclude<
+  IntersectionInputValue<T>,
+  undefined
+>;
 
-type IntersectionOutputValue<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = T extends readonly [
-  infer Head extends StructLike<unknown, unknown, boolean>,
-  ...infer Tail extends StructLike<unknown, unknown, boolean>[],
-]
-  ? StructOutput<Head> & IntersectionOutputValue<Tail>
-  : unknown;
+type IntersectionOutputValue<T extends readonly StructLike[]> =
+  T extends readonly [
+    infer Head extends StructLike,
+    ...infer Tail extends StructLike[],
+  ]
+    ? StructOutput<Head> & IntersectionOutputValue<Tail>
+    : unknown;
 
-export type IntersectionOutput<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> = Exclude<IntersectionOutputValue<T>, undefined>;
+export type IntersectionOutput<T extends readonly StructLike[]> = Exclude<
+  IntersectionOutputValue<T>,
+  undefined
+>;
 
 export type StringStruct = Struct<string, string>;
 
@@ -345,51 +354,24 @@ export type NumberStruct = Struct<number, number>;
 
 export type UnknownStruct = Struct<PresentValue, unknown>;
 
-// Type boundary: ArrayInput/Output work with any element struct; `unknown` is the generic placeholder.
-export type ArrayInput<S extends StructLike<unknown, unknown, boolean>> =
-  StructInput<S>[];
-export type ArrayOutput<S extends StructLike<unknown, unknown, boolean>> =
-  StructOutput<S>[];
+export type ArrayInput<S extends StructLike> = StructInput<S>[];
+export type ArrayOutput<S extends StructLike> = StructOutput<S>[];
 
-// Type boundary: ArrayStructTypes generalises over any element struct.
-export interface ArrayStructTypes<
-  S extends StructLike<unknown, unknown, boolean>,
-> extends StructTypes<ArrayInput<S>, ArrayOutput<S>, false> {
+export interface ArrayStructTypes<S extends StructLike> extends StructTypes<
+  ArrayInput<S>,
+  ArrayOutput<S>,
+  false
+> {
   input: ArrayInput<S>;
   optionalOut: undefined;
   output: ArrayOutput<S>;
 }
 
-// Type boundary: ArrayStruct generalises over any element struct.
-export interface ArrayStruct<S extends StructLike<unknown, unknown, boolean>>
+export interface ArrayStruct<S extends StructLike>
   extends
-    StructMethods<ArrayInput<S>, ArrayOutput<S>, false>,
+    PreservingModifiers<ArrayStruct<S>, ArrayInput<S>, ArrayOutput<S>>,
     StructLike<ArrayInput<S>, ArrayOutput<S>, false> {
   readonly _struct: ArrayStructTypes<S>;
-  null(): PreservedStruct<
-    ArrayStruct<S>,
-    ArrayInput<S> | null,
-    ArrayOutput<S> | null,
-    false
-  >;
-  nullable(): PreservedStruct<
-    ArrayStruct<S>,
-    ArrayInput<S> | null,
-    ArrayOutput<S> | null,
-    false
-  >;
-  nullish(): PreservedStruct<
-    ArrayStruct<S>,
-    ArrayInput<S> | null | undefined,
-    ArrayOutput<S> | null | undefined,
-    true
-  >;
-  optional(): PreservedStruct<
-    ArrayStruct<S>,
-    ArrayInput<S> | undefined,
-    ArrayOutput<S> | undefined,
-    true
-  >;
 }
 
 export interface ObjectStructTypes<T extends ObjectShape> extends StructTypes<
@@ -411,42 +393,18 @@ export interface ObjectStructTypes<T extends ObjectShape> extends StructTypes<
  */
 export interface ObjectStruct<T extends ObjectShape>
   extends
-    StructMethods<ObjectInput<T>, ObjectOutput<T>, false>,
+    PreservingModifiers<ObjectStruct<T>, ObjectInput<T>, ObjectOutput<T>>,
     StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
   readonly _struct: ObjectStructTypes<T>;
-  null(): PreservedStruct<
-    ObjectStruct<T>,
-    ObjectInput<T> | null,
-    ObjectOutput<T> | null,
-    false
-  >;
-  nullable(): PreservedStruct<
-    ObjectStruct<T>,
-    ObjectInput<T> | null,
-    ObjectOutput<T> | null,
-    false
-  >;
-  nullish(): PreservedStruct<
-    ObjectStruct<T>,
-    ObjectInput<T> | null | undefined,
-    ObjectOutput<T> | null | undefined,
-    true
-  >;
-  optional(): PreservedStruct<
-    ObjectStruct<T>,
-    ObjectInput<T> | undefined,
-    ObjectOutput<T> | undefined,
-    true
-  >;
 }
 
 declare const recordValueStruct: unique symbol;
 declare const tupleItemStructs: unique symbol;
 
-type RecordInput<S extends StructLike<unknown, unknown, boolean>> = {
+type RecordInput<S extends StructLike> = {
   [key: string]: StructInput<S>;
 };
-type RecordOutput<S extends StructLike<unknown, unknown, boolean>> = {
+type RecordOutput<S extends StructLike> = {
   [key: string]: FieldOutput<S>;
 };
 
@@ -454,161 +412,58 @@ type RecordOutput<S extends StructLike<unknown, unknown, boolean>> = {
  * Value struct carried by `struct.record`.
  * Tagged parsing stores this struct on the record object itself. `null` and `undefined` are not tagged.
  */
-export interface RecordStruct<
-  S extends StructLike<unknown, unknown, boolean>,
-> extends Struct<RecordInput<S>, RecordOutput<S>> {
+export interface RecordStruct<S extends StructLike>
+  extends
+    PreservingModifiers<RecordStruct<S>, RecordInput<S>, RecordOutput<S>>,
+    StructLike<RecordInput<S>, RecordOutput<S>, false> {
   readonly [recordValueStruct]: S;
-  null(): PreservedStruct<
-    RecordStruct<S>,
-    RecordInput<S> | null,
-    RecordOutput<S> | null,
-    false
-  >;
-  nullable(): PreservedStruct<
-    RecordStruct<S>,
-    RecordInput<S> | null,
-    RecordOutput<S> | null,
-    false
-  >;
-  nullish(): PreservedStruct<
-    RecordStruct<S>,
-    RecordInput<S> | null | undefined,
-    RecordOutput<S> | null | undefined,
-    true
-  >;
-  optional(): PreservedStruct<
-    RecordStruct<S>,
-    RecordInput<S> | undefined,
-    RecordOutput<S> | undefined,
-    true
-  >;
 }
 
 /** Item structs carried by `struct.tuple`, so builders tag each position. The tuple itself is not tagged. */
-export interface TupleStruct<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> extends Struct<TupleInput<T>, TupleOutput<T>> {
+export interface TupleStruct<T extends readonly StructLike[]>
+  extends
+    PreservingModifiers<TupleStruct<T>, TupleInput<T>, TupleOutput<T>>,
+    StructLike<TupleInput<T>, TupleOutput<T>, false> {
   readonly [tupleItemStructs]: T;
-  null(): PreservedStruct<
-    TupleStruct<T>,
-    TupleInput<T> | null,
-    TupleOutput<T> | null,
-    false
-  >;
-  nullable(): PreservedStruct<
-    TupleStruct<T>,
-    TupleInput<T> | null,
-    TupleOutput<T> | null,
-    false
-  >;
-  nullish(): PreservedStruct<
-    TupleStruct<T>,
-    TupleInput<T> | null | undefined,
-    TupleOutput<T> | null | undefined,
-    true
-  >;
-  optional(): PreservedStruct<
-    TupleStruct<T>,
-    TupleInput<T> | undefined,
-    TupleOutput<T> | undefined,
-    true
-  >;
 }
 
-export interface UnionStruct<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> extends Struct<UnionInput<T>, UnionOutput<T>> {
+export interface UnionStruct<T extends readonly StructLike[]>
+  extends
+    PreservingModifiers<UnionStruct<T>, UnionInput<T>, UnionOutput<T>>,
+    StructLike<UnionInput<T>, UnionOutput<T>, false> {
   readonly [unionStructOptions]: T;
-  null(): PreservedStruct<
-    UnionStruct<T>,
-    UnionInput<T> | null,
-    UnionOutput<T> | null,
-    false
-  >;
-  nullable(): PreservedStruct<
-    UnionStruct<T>,
-    UnionInput<T> | null,
-    UnionOutput<T> | null,
-    false
-  >;
-  nullish(): PreservedStruct<
-    UnionStruct<T>,
-    UnionInput<T> | null | undefined,
-    UnionOutput<T> | null | undefined,
-    true
-  >;
-  optional(): PreservedStruct<
-    UnionStruct<T>,
-    UnionInput<T> | undefined,
-    UnionOutput<T> | undefined,
-    true
-  >;
 }
 
 export interface DiscriminatedUnionStruct<
   TOptions extends readonly ObjectStruct<ObjectShape>[],
-> extends Struct<
-  StructInput<TOptions[number]>,
-  StructOutput<TOptions[number]>
-> {
+>
+  extends
+    PreservingModifiers<
+      DiscriminatedUnionStruct<TOptions>,
+      StructInput<TOptions[number]>,
+      StructOutput<TOptions[number]>
+    >,
+    StructLike<
+      StructInput<TOptions[number]>,
+      StructOutput<TOptions[number]>,
+      false
+    > {
   readonly [discriminatedUnionOptions]: TOptions;
-  null(): PreservedStruct<
-    DiscriminatedUnionStruct<TOptions>,
-    StructInput<TOptions[number]> | null,
-    StructOutput<TOptions[number]> | null,
-    false
-  >;
-  nullable(): PreservedStruct<
-    DiscriminatedUnionStruct<TOptions>,
-    StructInput<TOptions[number]> | null,
-    StructOutput<TOptions[number]> | null,
-    false
-  >;
-  nullish(): PreservedStruct<
-    DiscriminatedUnionStruct<TOptions>,
-    StructInput<TOptions[number]> | null | undefined,
-    StructOutput<TOptions[number]> | null | undefined,
-    true
-  >;
-  optional(): PreservedStruct<
-    DiscriminatedUnionStruct<TOptions>,
-    StructInput<TOptions[number]> | undefined,
-    StructOutput<TOptions[number]> | undefined,
-    true
-  >;
 }
 
-export interface IntersectionStruct<
-  T extends readonly StructLike<unknown, unknown, boolean>[],
-> extends Struct<IntersectionInput<T>, IntersectionOutput<T>> {
+export interface IntersectionStruct<T extends readonly StructLike[]>
+  extends
+    PreservingModifiers<
+      IntersectionStruct<T>,
+      IntersectionInput<T>,
+      IntersectionOutput<T>
+    >,
+    StructLike<IntersectionInput<T>, IntersectionOutput<T>, false> {
   readonly [intersectionStructOptions]: T;
-  null(): PreservedStruct<
-    IntersectionStruct<T>,
-    IntersectionInput<T> | null,
-    IntersectionOutput<T> | null,
-    false
-  >;
-  nullable(): PreservedStruct<
-    IntersectionStruct<T>,
-    IntersectionInput<T> | null,
-    IntersectionOutput<T> | null,
-    false
-  >;
-  nullish(): PreservedStruct<
-    IntersectionStruct<T>,
-    IntersectionInput<T> | null | undefined,
-    IntersectionOutput<T> | null | undefined,
-    true
-  >;
-  optional(): PreservedStruct<
-    IntersectionStruct<T>,
-    IntersectionInput<T> | undefined,
-    IntersectionOutput<T> | undefined,
-    true
-  >;
 }
 
-type TaggedObject = { readonly [STRUCT]: AnyStruct };
+/** The node of an endpoint-input parse: a plain object that carries the struct that produced it. */
+export type TaggedObject = { readonly [STRUCT]: AnyStruct };
 type NullishTagged<S, Inner> =
   null extends Infer<S>
     ? undefined extends Infer<S>
@@ -621,8 +476,7 @@ type IntersectTagged<T extends readonly StructLike[]> = T extends readonly [
   infer H extends StructLike,
   ...infer Tail extends readonly StructLike[],
 ]
-  ? TaggedStructOutput<H> &
-      (Tail["length"] extends 0 ? unknown : IntersectTagged<Tail>)
+  ? TaggedStructOutput<H> & IntersectTagged<Tail>
   : unknown;
 /** Runtime-tagged output of an internal endpoint-input parse. Not part of the package root. */
 export type TaggedStructOutput<S> =
@@ -649,13 +503,9 @@ export type TaggedStructOutput<S> =
                       [K in keyof Shape]: TaggedStructOutput<Shape[K]>;
                     } & TaggedObject
                   : Infer<S>;
-type ParsedSchema<
-  S extends AnyStructLike,
-  Tag extends boolean,
-> = Tag extends true
-  ? StructLike<unknown, TaggedStructOutput<S>, boolean>
-  : StructLike<unknown, Infer<S>, boolean>;
-export type ParsedStructOutput<
-  S extends AnyStructLike,
-  Tag extends boolean,
-> = ParsedSchema<S, Tag>["_struct"]["output"];
+// `[Tag]` is not a bare type parameter: a generic caller that returns `Infer<S>` would otherwise infer `Tag` from its own return type.
+export type ParsedStructOutput<S extends StructLike, Tag extends boolean> = [
+  Tag,
+] extends [true]
+  ? TaggedStructOutput<S>
+  : Infer<S>;

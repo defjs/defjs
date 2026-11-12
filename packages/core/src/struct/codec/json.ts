@@ -1,12 +1,12 @@
 import { parseStructValue } from "../parse";
-import type { AnyStructLike, Infer } from "../types";
+import type { StructLike, Infer } from "../types";
 import { encodeObjectByAlias } from "./common";
 
-export function encodeJson(struct: AnyStructLike, value: unknown): unknown {
+export function encodeJson(struct: StructLike, value: unknown): unknown {
   return encodeObjectByAlias(struct, value, "json");
 }
 
-export function decodeJson<S extends AnyStructLike>(
+export function decodeJson<S extends StructLike>(
   struct: S,
   value: unknown,
 ): Infer<S> {

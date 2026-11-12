@@ -206,9 +206,9 @@ export function createObjectEnumStruct<
  *
  * @group struct
  */
-export function createArrayStruct<
-  S extends StructLike<unknown, unknown, boolean>,
->(item: S): ArrayStruct<S> {
+export function createArrayStruct<S extends StructLike>(
+  item: S,
+): ArrayStruct<S> {
   assertStruct(item, "array item");
 
   return makeStruct<ArrayStruct<S>>({
@@ -327,9 +327,9 @@ function createCodecObjectStruct<T extends ObjectShape>(
  *
  * @group struct
  */
-export function createRecordStruct<
-  S extends StructLike<unknown, unknown, boolean>,
->(value: S): RecordStruct<S> {
+export function createRecordStruct<S extends StructLike>(
+  value: S,
+): RecordStruct<S> {
   assertStruct(value, "record value");
 
   return makeStruct<RecordStruct<S>>({
@@ -359,10 +359,7 @@ export function createRecordStruct<
  * @group struct
  */
 export function createTupleStruct<
-  const T extends readonly [
-    StructLike<unknown, unknown, boolean>,
-    ...StructLike<unknown, unknown, boolean>[],
-  ],
+  const T extends readonly [StructLike, ...StructLike[]],
 >(items: T): TupleStruct<T> {
   const tupleItems: readonly unknown[] = [...items];
   assertStructs(tupleItems, "tuple item");
@@ -374,12 +371,24 @@ export function createTupleStruct<
   });
 }
 
+/**
+ * Struct that accepts a value matching any one of several structs.
+ *
+ * `struct.or` is variadic: pass each option as its own argument.
+ *
+ * - Tries the options in order and returns the result of the first one that parses.
+ *
+ * - If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.
+ *
+ * - Throws `TypeError` when an option is not a struct.
+ *
+ * `UnionStruct<T>` is not exported. It is a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.
+ *
+ * @group struct
+ */
 export function createUnionStruct<
-  const T extends readonly [
-    StructLike<unknown, unknown, boolean>,
-    ...StructLike<unknown, unknown, boolean>[],
-  ],
->(options: T): UnionStruct<T> {
+  const T extends readonly [StructLike, ...StructLike[]],
+>(...options: T): UnionStruct<T> {
   const unionOptions: readonly unknown[] = [...options];
   assertStructs(unionOptions, "or option");
 
@@ -622,10 +631,7 @@ export function createDateStruct(): Struct<Date | number | string, Date> {
  * @group struct
  */
 export function createIntersectionStruct<
-  const T extends readonly [
-    StructLike<unknown, unknown, boolean>,
-    ...StructLike<unknown, unknown, boolean>[],
-  ],
+  const T extends readonly [StructLike, ...StructLike[]],
 >(
   ...structs: T
 ): T extends readonly [unknown]
@@ -634,11 +640,8 @@ export function createIntersectionStruct<
     ? IntersectionStruct<T>
     : T[0] | IntersectionStruct<T>;
 export function createIntersectionStruct(
-  ...structs: [
-    StructLike<unknown, unknown, boolean>,
-    ...StructLike<unknown, unknown, boolean>[],
-  ]
-): StructLike<unknown, unknown, boolean> {
+  ...structs: [StructLike, ...StructLike[]]
+): StructLike {
   assertStructs(structs, "intersection item");
 
   if (structs.length === 1) {

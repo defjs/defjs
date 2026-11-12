@@ -13,12 +13,12 @@ import { selectUnionOptions } from "../match";
 import { isPlainObject, nullObject } from "../plain_object";
 import { assertStruct, resolveStructFields } from "../shape";
 import { DEFINITION } from "../symbols";
-import type { AnyStructLike } from "../types";
+import type { StructLike } from "../types";
 
 // The struct-walking encoder. Only WebSocket sends go through it; HTTP and SSE use encodeOutbound in ../encode.
 
 export function encodeObjectByAlias(
-  struct: AnyStructLike,
+  struct: StructLike,
   value: unknown,
   label = "json",
   depth = 0,
