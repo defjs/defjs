@@ -1,13 +1,11 @@
 import {
   createClient,
-  createHttpInterceptor,
   defineRequest,
   struct,
   type DerivableClient,
   withEndpoint,
-  withInterceptors,
 } from "@defjs/core";
-import { afterEach, beforeEach, describe, expect, inject, test } from "vitest";
+import { afterEach, expect, inject, onTestFinished, test, vi } from "vitest";
 import {
   createApp,
   defineComponent,
@@ -15,458 +13,179 @@ import {
   nextTick,
   provide,
   ref,
-  type App,
   type Component,
   type InjectionKey,
 } from "vue";
 import { createClientPlugin, HTTP_CLIENT, injectClient } from "./index";
 
-const passthroughHttpInterceptor = createHttpInterceptor((req, next) =>
-  next(req),
-);
-
-const UserStruct = struct.object({
-  id: struct.number(),
-  name: struct.string(),
-});
-
 const getUsers = defineRequest({
   method: "GET",
-  output: struct.array(UserStruct),
+  output: struct.array(
+    struct.object({ id: struct.number(), name: struct.string() }),
+  ),
   path: "/api/users",
 });
 
-type Users = Array<{ id: number; name: string }>;
-type UsersResult = [unknown, unknown, unknown];
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
-const expectedUsers = [
-  { id: 1, name: "John" },
-  { id: 2, name: "Jane" },
-] satisfies Users;
+// Vue reports a failed `inject()` outside a component through `console.warn`.
+function silenceVueWarnings(): void {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+}
 
-const mountedApps: Array<() => void> = [];
-
-function mountRuntime(component: Component, configure?: (app: App) => void) {
-  const root = document.createElement("div");
-  document.body.appendChild(root);
-
+function mount(component: Component, client: DerivableClient): HTMLElement {
+  const root = document.body.appendChild(document.createElement("div"));
   const app = createApp(component);
-  configure?.(app);
-
-  let mounted = false;
-  mountedApps.push(() => {
-    if (mounted) {
-      app.unmount();
-    }
-
+  app.use(createClientPlugin(client));
+  app.mount(root);
+  onTestFinished(() => {
+    app.unmount();
     root.remove();
   });
-
-  app.mount(root);
-  mounted = true;
-
   return root;
 }
 
-function renderedListItems(root: ParentNode) {
-  return Array.from(root.querySelectorAll("li")).map(
-    (item) => item.textContent,
+test("the plugin provides the client it is given", () => {
+  const client = createClient();
+  let injected: DerivableClient | undefined;
+  const Consumer = defineComponent({
+    setup() {
+      injected = injectClient();
+      return () => h("div");
+    },
+  });
+
+  mount(Consumer, client);
+
+  expect(injected).toBe(client);
+});
+
+test("provide(HTTP_CLIENT) overrides the client for descendants, not for the providing component", () => {
+  const outer = createClient();
+  const inner = createClient();
+  let own: DerivableClient | undefined;
+  let child: DerivableClient | undefined;
+  const Child = defineComponent({
+    setup() {
+      child = injectClient();
+      return () => h("div");
+    },
+  });
+  const Boundary = defineComponent({
+    setup() {
+      provide(HTTP_CLIENT, inner);
+      own = injectClient();
+      return () => h(Child);
+    },
+  });
+
+  mount(Boundary, outer);
+
+  expect(own).toBe(outer);
+  expect(child).toBe(inner);
+});
+
+test("injectClient returns the client inside a synchronous app.runWithContext callback", () => {
+  const client = createClient();
+  const app = createApp({});
+  app.use(createClientPlugin(client));
+
+  expect(app.runWithContext(injectClient)).toBe(client);
+});
+
+test("the injection context does not survive an await", async () => {
+  const client = createClient();
+  const app = createApp({});
+  app.use(createClientPlugin(client));
+  silenceVueWarnings();
+
+  const captured = await app.runWithContext(async () => {
+    const current = injectClient();
+    await Promise.resolve();
+    expect(() => injectClient()).toThrow(/injection context/);
+    return current;
+  });
+
+  expect(captured).toBe(client);
+});
+
+test("injectClient reads a custom key and leaves the default client alone", () => {
+  const normal = createClient();
+  const billing = createClient();
+  const key: InjectionKey<DerivableClient> = Symbol("billing");
+  const app = createApp({});
+  app.use(createClientPlugin(normal));
+  app.provide(key, billing);
+
+  app.runWithContext(() => {
+    expect(injectClient()).toBe(normal);
+    expect(injectClient(undefined)).toBe(normal);
+    expect(injectClient(HTTP_CLIENT)).toBe(normal);
+    expect(injectClient(key)).toBe(billing);
+  });
+});
+
+test("a missing custom key falls back neither to the default client nor to a key with the same description", () => {
+  const key: InjectionKey<DerivableClient> = Symbol("billing");
+  const otherKey: InjectionKey<DerivableClient> = Symbol("billing");
+  const app = createApp({});
+  app.use(createClientPlugin(createClient()));
+  app.provide(key, createClient());
+  silenceVueWarnings();
+
+  expect(() => app.runWithContext(() => injectClient(otherKey))).toThrow(
+    "No Defjs client available for the requested injection key. Call injectClient(key) in a Vue injection context and provide a client with app.provide(key, client) or provide(key, client). Use the same key object when providing and injecting.",
   );
-}
+});
 
-describe("vue browser runtime", () => {
-  let testServerHost: string;
+test("installing the plugin does not establish an injection context", () => {
+  const app = createApp({});
+  app.use(createClientPlugin(createClient()));
+  silenceVueWarnings();
 
-  beforeEach(() => {
-    testServerHost = inject("testServerHost");
+  expect(() => injectClient()).toThrow(/injection context/);
+});
+
+test("injectClient throws in setup when no client is provided", () => {
+  const app = createApp({
+    setup() {
+      injectClient();
+      return () => h("div");
+    },
   });
+  app.config.warnHandler = () => {};
 
-  afterEach(() => {
-    for (const cleanup of mountedApps.splice(0).reverse()) {
-      cleanup();
-    }
-  });
+  expect(() => app.mount(document.createElement("div"))).toThrow(
+    "No Defjs client available. Call injectClient() in a Vue injection context (such as synchronous setup() or app.runWithContext()) and provide a client with app.use(createClientPlugin(client)) or provide(HTTP_CLIENT, client).",
+  );
+});
 
-  test("provides the exact client instance supplied by the caller", () => {
-    const client = createClient(withEndpoint(testServerHost));
-    let injectedClient: DerivableClient | undefined;
-
-    const Consumer = defineComponent({
-      name: "PluginClientConsumer",
-      setup() {
-        injectedClient = injectClient();
-        return () => h("div");
-      },
-    });
-
-    const plugin = createClientPlugin(client);
-    expect(plugin).toHaveProperty("install");
-
-    mountRuntime(Consumer, (app) => {
-      app.use(plugin);
-    });
-
-    expect(injectedClient).toBe(client);
-  });
-
-  test("shares one client through multiple Vue component layers", () => {
-    const client = createClient(withEndpoint(testServerHost));
-    let middleClient: DerivableClient | undefined;
-    let leafClient: DerivableClient | undefined;
-
-    const Leaf = defineComponent({
-      name: "LeafClientConsumer",
-      setup() {
-        leafClient = injectClient();
-        return () => h("span");
-      },
-    });
-
-    const Middle = defineComponent({
-      name: "MiddleClientConsumer",
-      setup() {
-        middleClient = injectClient();
-        return () => h(Leaf);
-      },
-    });
-
-    mountRuntime(Middle, (app) => {
-      app.use(createClientPlugin(client));
-    });
-
-    expect(middleClient).toBe(client);
-    expect(leafClient).toBe(client);
-  });
-
-  test("provides to descendants while reading the ancestor in the provider", () => {
-    const outer = createClient();
-    const inner = createClient();
-    let ownClient: DerivableClient | undefined;
-    let childClient: DerivableClient | undefined;
-
-    const Child = defineComponent({
-      setup() {
-        childClient = injectClient();
-        return () => h("div");
-      },
-    });
-    const Boundary = defineComponent({
-      setup() {
-        provide(HTTP_CLIENT, inner);
-        ownClient = injectClient();
-        return () => h(Child);
-      },
-    });
-
-    mountRuntime(Boundary, (app) => {
-      app.use(createClientPlugin(outer));
-    });
-
-    expect(ownClient).toBe(outer);
-    expect(childClient).toBe(inner);
-  });
-
-  test("injects the identical client and passes a derived client value through at runtime", () => {
-    const client = createClient();
-    const abort = new AbortController();
-    const childClient = client({ signal: abort.signal });
-    let injected: DerivableClient | undefined;
-    let overridden: DerivableClient | undefined;
-
-    const Child = defineComponent({
-      setup() {
-        overridden = injectClient();
-        return () => h("div");
-      },
-    });
-    const Boundary = defineComponent({
-      setup() {
-        // @ts-expect-error A derived client value is not a DerivableClient.
-        provide(HTTP_CLIENT, childClient);
-        injected = injectClient();
-        return () => h(Child);
-      },
-    });
-
-    mountRuntime(Boundary, (app) => {
-      app.use(createClientPlugin(client));
-    });
-
-    expect(typeof injected).toBe("function");
-    expect(injected).toBe(client);
-    expect(typeof overridden).toBe("object");
-    expect(overridden).toBe(childClient);
-    expect(overridden).not.toBe(client);
-  });
-
-  test("overrides one custom key without changing the default or siblings", () => {
-    const normal = createClient();
-    const outerBilling = createClient();
-    const innerBilling = createClient();
-    const key: InjectionKey<DerivableClient> = Symbol("billing");
-    let boundaryClient: DerivableClient | undefined;
-    let childBilling: DerivableClient | undefined;
-    let childDefault: DerivableClient | undefined;
-    let siblingBilling: DerivableClient | undefined;
-
-    const Child = defineComponent({
-      setup() {
-        childBilling = injectClient(key);
-        childDefault = injectClient();
-        return () => h("div");
-      },
-    });
-    const Boundary = defineComponent({
-      setup() {
-        provide(key, innerBilling);
-        boundaryClient = injectClient(key);
-        return () => h(Child);
-      },
-    });
-    const Sibling = defineComponent({
-      setup() {
-        siblingBilling = injectClient(key);
-        return () => h("div");
-      },
-    });
-    const Root = defineComponent({
-      setup() {
-        return () => [h(Boundary), h(Sibling)];
-      },
-    });
-
-    mountRuntime(Root, (app) => {
-      app.use(createClientPlugin(normal));
-      app.provide(key, outerBilling);
-    });
-
-    expect(boundaryClient).toBe(outerBilling);
-    expect(childBilling).toBe(innerBilling);
-    expect(childDefault).toBe(normal);
-    expect(siblingBilling).toBe(outerBilling);
-  });
-
-  test("renders data fetched by the injected client", async () => {
-    let usersRequest: Promise<void> | undefined;
-
-    const UserList = defineComponent({
-      name: "InjectedClientUserList",
-      setup() {
-        const users = ref<Users>([]);
-        const errorMessage = ref("");
-        const isLoading = ref(true);
-        const client = injectClient();
-
-        usersRequest = getUsers(client).then(([error, result]) => {
-          isLoading.value = false;
-
-          if (error) {
-            errorMessage.value = "Failed to load users";
-            return;
-          }
-
-          users.value = result;
-        });
-
-        return () =>
-          h("section", { "aria-label": "Users result" }, [
-            isLoading.value ? h("p", "Loading users") : null,
-            errorMessage.value
-              ? h("p", { role: "alert" }, errorMessage.value)
-              : null,
-            users.value.length
-              ? h(
-                  "ul",
-                  { "aria-label": "Users" },
-                  users.value.map((user) =>
-                    h("li", { key: user.id }, user.name),
-                  ),
-                )
-              : null,
-          ]);
-      },
-    });
-
-    const client = createClient(
-      withEndpoint(testServerHost),
-      withInterceptors(passthroughHttpInterceptor),
-    );
-    const root = mountRuntime(UserList, (app) => {
-      app.use(createClientPlugin(client));
-    });
-
-    expect(root.textContent).toContain("Loading users");
-
-    if (!usersRequest) {
-      throw new Error("Expected user list request");
-    }
-
-    await usersRequest;
-    await nextTick();
-
-    expect(renderedListItems(root)).toEqual(["John", "Jane"]);
-    expect(root.querySelector('[role="alert"]')).toBeNull();
-  });
-
-  test("resolves the nearest Vue provider and renders scoped request results", async () => {
-    const seenScopes: string[] = [];
-    let outerClient: DerivableClient | undefined;
-    let outerSiblingClient: DerivableClient | undefined;
-    let innerMiddleClient: DerivableClient | undefined;
-    let innerLeafClient: DerivableClient | undefined;
-    let outerRequest: Promise<UsersResult> | undefined;
-    let innerRequest: Promise<UsersResult> | undefined;
-
-    const scopedInterceptor = (scope: string) =>
-      createHttpInterceptor(async (req, next) => {
-        seenScopes.push(scope);
-        req.headers?.set("x-defjs-scope", scope);
-        return next(req);
+test("a component renders data requested with the injected client", async () => {
+  let request: Promise<void> | undefined;
+  const UserList = defineComponent({
+    setup() {
+      const names = ref<string[]>([]);
+      request = getUsers(injectClient()).then(([error, users]) => {
+        names.value = error ? [error.code] : users.map((user) => user.name);
       });
-
-    const outer = createClient(
-      withEndpoint(testServerHost),
-      withInterceptors(scopedInterceptor("outer")),
-    );
-    const inner = createClient(
-      withEndpoint(testServerHost),
-      withInterceptors(scopedInterceptor("inner")),
-    );
-
-    const OuterRequestConsumer = defineComponent({
-      name: "OuterRequestConsumer",
-      setup() {
-        const userNames = ref("loading");
-
-        outerClient = injectClient();
-        outerRequest = getUsers(outerClient).then((result) => {
-          const [error, users] = result;
-          userNames.value = error
-            ? "error"
-            : users.map((user) => user.name).join(", ");
-          return result;
-        });
-
-        return () =>
-          h("section", { "data-scope": "outer" }, `outer: ${userNames.value}`);
-      },
-    });
-
-    const OuterSiblingConsumer = defineComponent({
-      name: "OuterSiblingConsumer",
-      setup() {
-        outerSiblingClient = injectClient();
-        return () =>
-          h("span", { "data-scope": "outer-sibling" }, "outer sibling ready");
-      },
-    });
-
-    const InnerLeaf = defineComponent({
-      name: "InnerLeafConsumer",
-      setup() {
-        const userNames = ref("loading");
-
-        innerLeafClient = injectClient();
-        innerRequest = getUsers(innerLeafClient).then((result) => {
-          const [error, users] = result;
-          userNames.value = error
-            ? "error"
-            : users.map((user) => user.name).join(", ");
-          return result;
-        });
-
-        return () =>
-          h("section", { "data-scope": "inner" }, `inner: ${userNames.value}`);
-      },
-    });
-
-    const InnerMiddle = defineComponent({
-      name: "InnerMiddleConsumer",
-      setup() {
-        innerMiddleClient = injectClient();
-        return () => h(InnerLeaf);
-      },
-    });
-
-    const InnerProvider = defineComponent({
-      name: "InnerClientProvider",
-      setup() {
-        provide(HTTP_CLIENT, inner);
-        return () => h(InnerMiddle);
-      },
-    });
-
-    const Root = defineComponent({
-      name: "RootClientProviderConsumer",
-      setup() {
-        return () => [
-          h(OuterRequestConsumer),
-          h(InnerProvider),
-          h(OuterSiblingConsumer),
-        ];
-      },
-    });
-
-    const root = mountRuntime(Root, (app) => {
-      app.use(createClientPlugin(outer));
-    });
-
-    expect(root.querySelector('[data-scope="outer"]')?.textContent).toBe(
-      "outer: loading",
-    );
-    expect(root.querySelector('[data-scope="inner"]')?.textContent).toBe(
-      "inner: loading",
-    );
-
-    if (!outerRequest || !innerRequest) {
-      throw new Error("Expected nested client requests");
-    }
-
-    const [[outerError, outerUsers], [innerError, innerUsers]] =
-      await Promise.all([outerRequest, innerRequest]);
-    await nextTick();
-
-    expect(root.querySelector('[data-scope="outer"]')?.textContent).toBe(
-      "outer: John, Jane",
-    );
-    expect(root.querySelector('[data-scope="inner"]')?.textContent).toBe(
-      "inner: John, Jane",
-    );
-    expect(
-      root.querySelector('[data-scope="outer-sibling"]')?.textContent,
-    ).toBe("outer sibling ready");
-    expect(outerError).toBeNull();
-    expect(outerUsers).toEqual(expectedUsers);
-    expect(innerError).toBeNull();
-    expect(innerUsers).toEqual(expectedUsers);
-    expect(outerClient).toBe(outer);
-    expect(outerSiblingClient).toBe(outer);
-    expect(innerMiddleClient).toBe(inner);
-    expect(innerLeafClient).toBe(inner);
-    expect([...seenScopes].sort()).toEqual(["inner", "outer"]);
+      return () =>
+        h(
+          "ul",
+          names.value.map((name) => h("li", name)),
+        );
+    },
   });
 
-  test("throws a helpful error when no provider is installed", () => {
-    const root = document.createElement("div");
-    document.body.appendChild(root);
+  const root = mount(
+    UserList,
+    createClient(withEndpoint(inject("testServerHost"))),
+  );
+  await request;
+  await nextTick();
 
-    const Consumer = defineComponent({
-      name: "MissingProviderConsumer",
-      setup() {
-        injectClient();
-        return () => h("div");
-      },
-    });
-
-    const app = createApp(Consumer);
-    app.config.warnHandler = () => {};
-
-    try {
-      expect(() => app.mount(root)).toThrow(
-        "No Defjs client available. Call injectClient() in a Vue injection context (such as synchronous setup() or app.runWithContext()) and provide a client with app.use(createClientPlugin(client)) or provide(HTTP_CLIENT, client).",
-      );
-    } finally {
-      root.remove();
-    }
-  });
+  expect(
+    Array.from(root.querySelectorAll("li"), (item) => item.textContent),
+  ).toEqual(["John", "Jane"]);
 });

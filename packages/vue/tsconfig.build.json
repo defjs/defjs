@@ -12,5 +12,5 @@
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": ["test", "src/**/*.spec.ts"]
+  "exclude": ["src/**/*.spec.ts"]
 }

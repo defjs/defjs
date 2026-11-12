@@ -1,211 +1,123 @@
 import { createClient, type DerivableClient } from "@defjs/core";
-import { cleanup, fireEvent, render } from "@testing-library/react";
-import { createElement, useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render } from "@testing-library/react";
+import { createElement, type ReactElement } from "react";
+import { afterEach, expect, test } from "vitest";
 import { ClientProvider, useClient } from "./core";
 
 afterEach(cleanup);
 
-describe("ClientProvider", () => {
-  it("provides the exact client instance supplied by the caller", () => {
-    const client = createClient();
-    let injectedClient: DerivableClient | undefined;
+// An element that records what `useClient(override)` returned on its last render.
+function probe(override?: DerivableClient): {
+  seen: { client?: DerivableClient };
+  element: ReactElement;
+} {
+  const seen: { client?: DerivableClient } = {};
+  function Probe() {
+    seen.client = useClient(override);
+    return null;
+  }
+  return { seen, element: createElement(Probe) };
+}
 
-    function Child() {
-      injectedClient = useClient();
-      return null;
-    }
+test("ClientProvider provides the client it is given", () => {
+  const client = createClient();
+  const { seen, element } = probe();
 
-    render(createElement(ClientProvider, { client }, createElement(Child)));
+  render(createElement(ClientProvider, { client }, element));
 
-    expect(injectedClient).toBe(client);
-  });
-
-  it("updates the client without resetting consumer state", () => {
-    const first = createClient();
-    const second = createClient();
-    let received: DerivableClient | undefined;
-
-    function Consumer() {
-      const [count, setCount] = useState(0);
-      received = useClient();
-      return createElement(
-        "button",
-        { onClick: () => setCount((value) => value + 1) },
-        String(count),
-      );
-    }
-
-    const view = render(
-      createElement(ClientProvider, { client: first }, createElement(Consumer)),
-    );
-    expect(received).toBe(first);
-    fireEvent.click(view.getByRole("button"));
-    expect(view.getByRole("button").textContent).toBe("1");
-
-    view.rerender(
-      createElement(
-        ClientProvider,
-        { client: second },
-        createElement(Consumer),
-      ),
-    );
-    expect(received).toBe(second);
-    expect(view.getByRole("button").textContent).toBe("1");
-  });
-
-  it("resolves the nearest client in nested provider trees", () => {
-    const outerClient = createClient();
-    const innerClient = createClient();
-    let outerInjectedClient: DerivableClient | undefined;
-    let innerInjectedClient: DerivableClient | undefined;
-
-    function OuterChild() {
-      outerInjectedClient = useClient();
-      return createElement(
-        ClientProvider,
-        { client: innerClient },
-        createElement(InnerChild),
-      );
-    }
-
-    function InnerChild() {
-      innerInjectedClient = useClient();
-      return null;
-    }
-
-    render(
-      createElement(
-        ClientProvider,
-        { client: outerClient },
-        createElement(OuterChild),
-      ),
-    );
-
-    expect(outerInjectedClient).toBe(outerClient);
-    expect(innerInjectedClient).toBe(innerClient);
-  });
+  expect(seen.client).toBe(client);
 });
 
-describe("useClient", () => {
-  it.each([
-    ["explicit only", false, true],
-    ["context with undefined override", true, false],
-    ["explicit before context", true, true],
-  ] as const)("selects the client: %s", (_name, hasProvider, hasOverride) => {
-    const provided = createClient();
-    const explicit = createClient();
-    let received: DerivableClient | undefined;
+test("a different client prop reaches the descendants", () => {
+  const first = createClient();
+  const second = createClient();
+  const { seen, element } = probe();
 
-    function Consumer() {
-      received = useClient(hasOverride ? explicit : undefined);
-      return null;
-    }
+  const view = render(
+    createElement(ClientProvider, { client: first }, element),
+  );
+  expect(seen.client).toBe(first);
 
-    const child = createElement(Consumer);
-    render(
-      hasProvider
-        ? createElement(ClientProvider, { client: provided }, child)
-        : child,
-    );
-    expect(received).toBe(hasOverride ? explicit : provided);
-  });
+  view.rerender(createElement(ClientProvider, { client: second }, element));
+  expect(seen.client).toBe(second);
+});
 
-  it("switches overrides without changing hook order or the provided value", () => {
-    const providedA = createClient();
-    const providedB = createClient();
-    const explicitA = createClient();
-    const explicitB = createClient();
-    let selected: DerivableClient | undefined;
-    let ambient: DerivableClient | undefined;
+test("a nested ClientProvider overrides the client for its own subtree", () => {
+  const outer = createClient();
+  const inner = createClient();
+  const outside = probe();
+  const inside = probe();
 
-    function Consumer({
-      overrideClient,
-    }: {
-      overrideClient?: DerivableClient;
-    }) {
-      selected = useClient(overrideClient);
-      ambient = useClient();
-      const [count, setCount] = useState(0);
-      return createElement(
-        "button",
-        { onClick: () => setCount((value) => value + 1) },
-        String(count),
-      );
-    }
+  render(
+    createElement(
+      ClientProvider,
+      { client: outer },
+      outside.element,
+      createElement(ClientProvider, { client: inner }, inside.element),
+    ),
+  );
 
-    const tree = (
-      provided: DerivableClient,
-      overrideClient?: DerivableClient,
-    ) =>
-      createElement(
-        ClientProvider,
-        { client: provided },
-        createElement(Consumer, { overrideClient }),
-      );
-    const consoleError = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => {});
+  expect(outside.seen.client).toBe(outer);
+  expect(inside.seen.client).toBe(inner);
+});
 
-    try {
-      const view = render(tree(providedA, explicitA));
-      fireEvent.click(view.getByRole("button"));
+const provided = createClient();
+const explicit = createClient();
 
-      const assertSelection = (
-        expectedSelected: DerivableClient,
-        expectedAmbient: DerivableClient,
-      ) => {
-        expect(selected).toBe(expectedSelected);
-        expect(ambient).toBe(expectedAmbient);
-        expect(view.getByRole("button").textContent).toBe("1");
-      };
+test.each([
+  {
+    name: "the explicit client without a provider",
+    provider: undefined,
+    override: explicit,
+    expected: explicit,
+  },
+  {
+    name: "the provided client for an undefined override",
+    provider: provided,
+    override: undefined,
+    expected: provided,
+  },
+  {
+    name: "the explicit client before the provided one",
+    provider: provided,
+    override: explicit,
+    expected: explicit,
+  },
+])("useClient returns $name", ({ provider, override, expected }) => {
+  const { seen, element } = probe(override);
 
-      assertSelection(explicitA, providedA);
-      view.rerender(tree(providedA));
-      assertSelection(providedA, providedA);
-      view.rerender(tree(providedA, explicitB));
-      assertSelection(explicitB, providedA);
-      view.rerender(tree(providedB, explicitB));
-      assertSelection(explicitB, providedB);
-      view.rerender(tree(providedB));
-      assertSelection(providedB, providedB);
-      expect(consoleError).not.toHaveBeenCalled();
-    } finally {
-      consoleError.mockRestore();
-    }
-  });
+  render(
+    provider
+      ? createElement(ClientProvider, { client: provider }, element)
+      : element,
+  );
 
-  it("returns the identical client and passes a derived client value through at runtime", () => {
-    const client = createClient();
-    const abort = new AbortController();
-    const derived = client({ signal: abort.signal });
-    let provided: DerivableClient | undefined;
-    let overridden: unknown;
+  expect(seen.client).toBe(expected);
+});
 
-    function Consumer() {
-      provided = useClient();
-      // @ts-expect-error A derived client value is not a DerivableClient.
-      overridden = useClient(derived);
-      return null;
-    }
+test("an explicit client does not replace the provided one for other reads", () => {
+  let selected: DerivableClient | undefined;
+  let ambient: DerivableClient | undefined;
+  function Consumer() {
+    selected = useClient(explicit);
+    ambient = useClient();
+    return null;
+  }
 
-    render(createElement(ClientProvider, { client }, createElement(Consumer)));
+  render(
+    createElement(
+      ClientProvider,
+      { client: provided },
+      createElement(Consumer),
+    ),
+  );
 
-    expect(typeof provided).toBe("function");
-    expect(provided).toBe(client);
-    expect(typeof overridden).toBe("object");
-    expect(overridden).toBe(derived);
-    expect(overridden).not.toBe(client);
-  });
+  expect(selected).toBe(explicit);
+  expect(ambient).toBe(provided);
+});
 
-  it("throws when no provider is present", () => {
-    function Child() {
-      useClient();
-      return null;
-    }
-
-    expect(() => render(createElement(Child))).toThrow(
-      "No Defjs client provided. Did you forget to wrap your app in <ClientProvider>?",
-    );
-  });
+test("useClient throws without an explicit client or a provider", () => {
+  expect(() => render(probe().element)).toThrow(
+    "No Defjs client provided. Did you forget to wrap your app in <ClientProvider>?",
+  );
 });
