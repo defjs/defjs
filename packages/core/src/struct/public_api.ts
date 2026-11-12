@@ -10,6 +10,7 @@ export type {
   FormattedStructError,
   Infer,
   IntersectionStruct,
+  NumberStruct,
   ObjectStruct,
   ParseResult,
   PreservedStruct,
@@ -17,8 +18,10 @@ export type {
   Struct,
   StructInput,
   StructIssue,
+  StringStruct,
   StructLike,
   StructMethods,
   TupleStruct,
   UnionStruct,
+  UnknownStruct,
 } from "./types";

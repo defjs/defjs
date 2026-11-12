@@ -85,6 +85,18 @@ description: واجهة struct، وInfer، وStructError.
 
 `.alias()` و`.null()` / `.nullable()` و`.nullish()` و`.optional()`.
 
+## StringStruct
+
+struct بشكل سلسلة نصية من `struct.string`.
+
+## NumberStruct
+
+struct بشكل رقم من `struct.number`.
+
+## UnknownStruct
+
+struct بشكل unknown من `struct.unknown`.
+
 ## ObjectStruct
 
 struct بشكل كائن من `struct.object`.

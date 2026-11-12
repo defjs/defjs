@@ -85,6 +85,18 @@ description: struct 퍼사드, Infer, StructError예요.
 
 `.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`이에요.
 
+## StringStruct
+
+`struct.string`로 만든 문자열 struct예요.
+
+## NumberStruct
+
+`struct.number`로 만든 숫자 struct예요.
+
+## UnknownStruct
+
+`struct.unknown`으로 만든 unknown struct예요.
+
 ## ObjectStruct
 
 `struct.object`가 만든 객체 모양 struct예요.

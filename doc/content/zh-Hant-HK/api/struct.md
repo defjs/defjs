@@ -85,6 +85,18 @@ description: struct facade、Infer，同 StructError。
 
 `.alias()`、`.null()` / `.nullable()`、`.nullish()`、`.optional()`。
 
+## StringStruct
+
+由 `struct.string` 建立嘅字串 struct。
+
+## NumberStruct
+
+由 `struct.number` 建立嘅數字 struct。
+
+## UnknownStruct
+
+由 `struct.unknown` 建立嘅 unknown struct。
+
 ## ObjectStruct
 
 由 `struct.object` 建立嘅 object 形狀 struct。

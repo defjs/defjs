@@ -85,6 +85,18 @@ description: Фасад struct, Infer и StructError.
 
 `.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
+## StringStruct
+
+Форма строки от `struct.string`.
+
+## NumberStruct
+
+Форма числа от `struct.number`.
+
+## UnknownStruct
+
+Форма unknown от `struct.unknown`.
+
 ## ObjectStruct
 
 Объектная форма от `struct.object`.

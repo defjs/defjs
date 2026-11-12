@@ -353,10 +353,31 @@ export type IntersectionOutput<T extends readonly StructLike[]> = Exclude<
   undefined
 >;
 
+/**
+ * String struct type produced by `struct.string()`.
+ *
+ * Its input and output are `string`. Declaration files of an SDK name this type when they export a string struct or a composite that holds one.
+ *
+ * @group struct
+ */
 export type StringStruct = Struct<string, string>;
 
+/**
+ * Number struct type produced by `struct.number()`.
+ *
+ * Its input and output are `number`. Declaration files of an SDK name this type when they export a number struct or a composite that holds one.
+ *
+ * @group struct
+ */
 export type NumberStruct = Struct<number, number>;
 
+/**
+ * Unknown struct type produced by `struct.unknown()`.
+ *
+ * Its input is any present value and its output is `unknown`. Declaration files of an SDK name this type when they export an unknown struct or a composite that holds one.
+ *
+ * @group struct
+ */
 export type UnknownStruct = Struct<PresentValue, unknown>;
 
 export type ArrayInput<S extends StructLike> = StructInput<S>[];

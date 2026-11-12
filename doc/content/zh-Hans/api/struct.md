@@ -85,6 +85,18 @@ description: struct 门面、Infer，以及 StructError。
 
 `.alias()`、`.null()` / `.nullable()`、`.nullish()`、`.optional()`。
 
+## StringStruct
+
+由 `struct.string` 构造的字符串 struct。
+
+## NumberStruct
+
+由 `struct.number` 构造的数字 struct。
+
+## UnknownStruct
+
+由 `struct.unknown` 构造的 unknown struct。
+
 ## ObjectStruct
 
 由 `struct.object` 构造的对象 struct。

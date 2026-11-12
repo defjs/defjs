@@ -85,6 +85,18 @@ Cualquier cosa con un payload de tipo `_struct`. Consulta [`StructLike`](/es-ES/
 
 `.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
+## StringStruct
+
+Struct de cadena, de `struct.string`.
+
+## NumberStruct
+
+Struct de número, de `struct.number`.
+
+## UnknownStruct
+
+Struct unknown, de `struct.unknown`.
+
 ## ObjectStruct
 
 Struct con forma de objeto, de `struct.object`.

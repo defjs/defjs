@@ -85,6 +85,18 @@ Facade。請優先使用這個，不要直接用內部的建構子。
 
 `.alias()`、`.null()`／`.nullable()`、`.nullish()`、`.optional()`。
 
+## StringStruct
+
+由 `struct.string` 建立的字串 struct。
+
+## NumberStruct
+
+由 `struct.number` 建立的數字 struct。
+
+## UnknownStruct
+
+由 `struct.unknown` 建立的 unknown struct。
+
 ## ObjectStruct
 
 由 `struct.object` 建立的物件形狀。

@@ -85,6 +85,18 @@ description: struct ファサード、Infer、StructError です。
 
 `.alias()`、`.null()` / `.nullable()`、`.nullish()`、`.optional()` です。
 
+## StringStruct
+
+`struct.string` が作る、文字列の struct です。
+
+## NumberStruct
+
+`struct.number` が作る、数値の struct です。
+
+## UnknownStruct
+
+`struct.unknown` が作る、unknown の struct です。
+
 ## ObjectStruct
 
 `struct.object` が作る、オブジェクト形の struct です。

@@ -85,6 +85,18 @@ Tout ce qui a une charge utile de type `_struct`. Voir [`StructLike`](/fr-FR/api
 
 `.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
+## StringStruct
+
+Struct de chaîne, issu de `struct.string`.
+
+## NumberStruct
+
+Struct de nombre, issu de `struct.number`.
+
+## UnknownStruct
+
+Struct unknown, issu de `struct.unknown`.
+
 ## ObjectStruct
 
 Struct en forme d’objet, issu de `struct.object`.

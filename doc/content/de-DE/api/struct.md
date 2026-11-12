@@ -85,6 +85,18 @@ Alles mit einem `_struct`-Typ-Payload. Siehe [`StructLike`](/de-DE/api/core/stru
 
 `.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
+## StringStruct
+
+String-Struct von `struct.string`.
+
+## NumberStruct
+
+Number-Struct von `struct.number`.
+
+## UnknownStruct
+
+Unknown-Struct von `struct.unknown`.
+
 ## ObjectStruct
 
 Objektförmiges Struct von `struct.object`.

@@ -1002,6 +1002,13 @@
   },
   {
     "package": "@defjs/core",
+    "name": "NumberStruct",
+    "kind": "type",
+    "slug": "core/numberstruct-type",
+    "description": "Number struct type produced by struct.number()."
+  },
+  {
+    "package": "@defjs/core",
     "name": "ObjectStruct",
     "kind": "type",
     "slug": "core/objectstruct-type",
@@ -1034,6 +1041,13 @@
     "kind": "type",
     "slug": "core/struct-symbol-type",
     "description": "Type-only export of the internal enumerable tag key on objects produced while parsing endpoint input, used by the outbound encoder."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StringStruct",
+    "kind": "type",
+    "slug": "core/stringstruct-type",
+    "description": "String struct type produced by struct.string()."
   },
   {
     "package": "@defjs/core",
@@ -1090,6 +1104,13 @@
     "kind": "type",
     "slug": "core/unionstruct-type",
     "description": "Union struct type produced by struct.or(...options)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UnknownStruct",
+    "kind": "type",
+    "slug": "core/unknownstruct-type",
+    "description": "Unknown struct type produced by struct.unknown()."
   },
   {
     "package": "@defjs/core",

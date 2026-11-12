@@ -6159,6 +6159,27 @@
   },
   {
     "package": "@defjs/core",
+    "name": "NumberStruct",
+    "kind": "type",
+    "slug": "core/numberstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Number struct type produced by `struct.number()`.\n\nIts input and output are `number`. Declaration files of an SDK name this type when they export a number struct or a composite that holds one.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type NumberStruct = Struct<number, number>;",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
     "name": "ObjectStruct",
     "kind": "type",
     "slug": "core/objectstruct-type",
@@ -6455,6 +6476,27 @@
     "overloads": [
       {
         "signature": "const STRUCT: unique symbol;",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StringStruct",
+    "kind": "type",
+    "slug": "core/stringstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "String struct type produced by `struct.string()`.\n\nIts input and output are `string`. Declaration files of an SDK name this type when they export a string struct or a composite that holds one.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type StringStruct = Struct<string, string>;",
         "parameters": []
       }
     ]
@@ -7023,6 +7065,27 @@
     "overloads": [
       {
         "signature": "interface UnionStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<UnionStruct<T>, UnionInput<T>, UnionOutput<T>>,\n    StructLike<UnionInput<T>, UnionOutput<T>, false> {\n  readonly [unionStructOptions]: T;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UnknownStruct",
+    "kind": "type",
+    "slug": "core/unknownstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Unknown struct type produced by `struct.unknown()`.\n\nIts input is any present value and its output is `unknown`. Declaration files of an SDK name this type when they export an unknown struct or a composite that holds one.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "overloads": [
+      {
+        "signature": "type UnknownStruct = Struct<PresentValue, unknown>;",
         "parameters": []
       }
     ]
