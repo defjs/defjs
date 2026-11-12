@@ -17,6 +17,7 @@ import type {
   AnyFault,
   DecodeFault,
   Fault,
+  FaultCode,
   FaultOf,
   PreflightFault,
 } from "../error";
@@ -28,6 +29,7 @@ import {
   createPreflightFault,
   createUndecodedHttpStatusFault,
 } from "../error";
+import { networkCauseCode } from "../error/cause";
 import { makeChain, resolveHttpInterceptors } from "../interceptor/interceptor";
 import {
   awaitWithSignal,
@@ -711,9 +713,7 @@ async function executeHttpAttempt<
               resolved.end(
                 httpAttemptDone(
                   classified,
-                  createNetworkFault(
-                    resolveAbortCause(transportAbort) ?? error,
-                  ),
+                  networkCauseCode(resolveAbortCause(transportAbort) ?? error),
                   true,
                 ),
               );
@@ -897,7 +897,11 @@ async function executeHttpAttempt<
     return fail(fault as Fault<TError>);
   } finally {
     for (const timer of sendTimers) clearTimeout(timer);
-    state.info = httpAttemptDone(attempt, finalFault, abortedWhileSending);
+    state.info = httpAttemptDone(
+      attempt,
+      finalFault?.code,
+      abortedWhileSending,
+    );
     resolved.done(state.info);
   }
 }
@@ -943,7 +947,7 @@ function classifyHttpAttempt(
       },
     };
   }
-  if (createNetworkFault(error).code === "NET_UNREACHABLE") {
+  if (networkCauseCode(error) === "NET_UNREACHABLE") {
     // With a streamed request body, fetch rejects with the same network error whether the endpoint is
     // down, the connection is HTTP/1.x, a redirect cannot replay the stream, a CORS preflight failed,
     // or the body source itself threw. None of these shows the endpoint is down, so none is attributed.
@@ -960,7 +964,7 @@ function classifyHttpAttempt(
 }
 
 /**
- * Fold the transport note and the call's final fault into the one `done` report.
+ * Fold the transport note and the code of the call's final fault into the one `done` report.
  *
  * No landed attempt is `{ attempted: false }`, including a timeout that fired
  * before fetch. A call that ends as `NET_TIMEOUT` while a send to the endpoint
@@ -970,15 +974,15 @@ function classifyHttpAttempt(
  */
 function httpAttemptDone(
   attempt: HttpAttempt | undefined,
-  fault: AnyFault | null | undefined,
+  code: FaultCode | undefined,
   abortedWhileSending: boolean,
 ): DoneInfo {
-  if (fault?.code === "NET_ABORTED") {
+  if (code === "NET_ABORTED") {
     return { attempted: false };
   }
   if (
     attempt?.landed === true &&
-    fault?.code === "NET_TIMEOUT" &&
+    code === "NET_TIMEOUT" &&
     abortedWhileSending
   ) {
     return { attempted: true, code: "NET_TIMEOUT" };

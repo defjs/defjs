@@ -107,18 +107,6 @@ export function makeResponse<R>(
   };
 }
 
-export function getHttpErrorMessage(response: {
-  readonly status: number;
-  readonly statusText: string;
-  readonly url: string;
-}): string {
-  let message = `Http failure response: ${response.status}`;
-  if (response.statusText) {
-    message += ` - ${response.statusText}`;
-  }
-  return message;
-}
-
 function requestUrl(request: HttpRequest | undefined): string {
   if (!request) {
     return "";

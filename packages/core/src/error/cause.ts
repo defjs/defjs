@@ -105,6 +105,19 @@ export function isTimeoutCause(cause: unknown): boolean {
   );
 }
 
+/**
+ * Which `NET_*` code a cause stands for: cancellation first, then a timeout, otherwise an unreachable peer.
+ * `createNetworkFault` builds the fault for it; use this when only the code is needed.
+ */
+export function networkCauseCode(
+  cause: unknown,
+): "NET_ABORTED" | "NET_TIMEOUT" | "NET_UNREACHABLE" {
+  if (isAbortCause(cause)) {
+    return "NET_ABORTED";
+  }
+  return isTimeoutCause(cause) ? "NET_TIMEOUT" : "NET_UNREACHABLE";
+}
+
 /** Message carried by `cause`, or its string form when it is not an error. */
 export function describeCause(cause: unknown): string {
   try {

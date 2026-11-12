@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { getHttpErrorMessage, makeResponse } from "./http_response";
+import { makeResponse } from "./http_response";
 
 describe("Response", () => {
   test("should make response", () => {
@@ -43,23 +43,6 @@ describe("Response", () => {
     expect(parsedNull.body).toBeNull();
     expect(makeResponse({ ...parsedNull }).body).toBeNull();
     expect({ ...absent }.body).toBeUndefined();
-  });
-
-  test("should omit resolved urls from http failure messages", () => {
-    expect(
-      getHttpErrorMessage({
-        status: 404,
-        statusText: "Not Found",
-        url: "https://secret.example/users/1?token=abc",
-      }),
-    ).toBe("Http failure response: 404 - Not Found");
-    expect(
-      getHttpErrorMessage({
-        status: 500,
-        statusText: "",
-        url: "",
-      }),
-    ).toBe("Http failure response: 500");
   });
 
   test("should copy request headers and url when short-circuiting", () => {
