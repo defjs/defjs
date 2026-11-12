@@ -65,12 +65,12 @@ Specs live beside the source. `packages/core/test/` holds end-to-end specs and t
 
 ### `doc`
 
-| Path            | Contents                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------ |
-| `doc/app/`      | site application, components, generated API data, routing, LLM output                      |
-| `doc/content/`  | guides and the 11 API overview pages per locale; entry pages are not stored here           |
-| `doc/examples/` | complete, typechecked examples embedded by content pages                                   |
-| `doc/scripts/`  | API extraction, build, build fingerprint, link check, site URL check, skill reference sync |
+| Path            | Contents                                                                         |
+| --------------- | -------------------------------------------------------------------------------- |
+| `doc/app/`      | site application, components, generated API data, routing, LLM output            |
+| `doc/content/`  | guides and the 11 API overview pages per locale; entry pages are not stored here |
+| `doc/examples/` | complete, typechecked examples embedded by content pages                         |
+| `doc/scripts/`  | API extraction, build, build fingerprint, link check, site URL check             |
 
 Documentation unit specs (`*.spec.ts`, run by the `doc-bun` project) sit beside the source in `app/`, `scripts/`, and `examples/`; there is no separate `doc/test/` directory. Specs are excluded from the build fingerprint, so editing one does not stale `doc/build`.
 
@@ -227,7 +227,7 @@ The build fails if its inputs change while it runs.
 
 ### Skill references
 
-`skills/defjs/SKILL.md` is the only hand-written skill file. Every file in `skills/defjs/references/` is the en-US processed Markdown of one guide page, copied byte for byte from `doc/build/client/llms.mdx/<slug>/content.md` by `doc/scripts/sync-skill.ts`; its `skillPages` list names the pages. `bun run --cwd doc build` ends by calling that script's `checkSkillReferences`, which fails when a reference differs from the build output. After changing a listed guide, its examples, or the list, run `bun run --cwd doc sync-skill` against that fresh build, commit the result, and build again. `.prettierignore` keeps `bun fmt` away from the references. Guidance for agents that belongs to no guide goes into `SKILL.md`. Add a page to `skillPages` and a row to the routing table of `SKILL.md` together; `test/defjs-skill.bun.spec.ts` fails for a reference that is not routed.
+`skills/defjs/SKILL.md` and the four task-domain reference files under `skills/defjs/references/` (`http-and-struct.md`, `client-retry-interceptors.md`, `realtime-sse-ws.md`, `integrations-and-testing.md`) are hand-written for AI agents and formatted with `bun fmt`. Each topic explains the contract alongside a runnable best-practice pattern and directs agents to the English documentation on `https://defjs.lyz.cloud` (no locale prefix) when deeper reference material is needed. `test/defjs-skill.bun.spec.ts` checks that every reference file is routed from `SKILL.md` and that every `with*`, `define*`, and `create*` identifier in code resolves to a public export.
 
 ## Release and packaging
 
@@ -242,7 +242,7 @@ The build fails if its inputs change while it runs.
 ## Do not
 
 - Run `bun run fmt`; the formatter is `bun fmt`.
-- Edit generated output: `dist/`, `coverage/`, `doc/build/`, `doc/.react-router/`, `test-out/`, `skills/defjs/references/`.
+- Edit generated output: `dist/`, `coverage/`, `doc/build/`, `doc/.react-router/`, `test-out/`.
 - Reintroduce removed APIs: global client, `client.execute`, command objects, `executeHttpCommand` and the other `execute*Command` exports, `withTimeout`, the `timeout` and `abort` request options, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, OpenAPI generation.
 - Add a `.js`, `.mjs`, or `.cjs` file anywhere in the repository.
 - Put authentication or tracing into `builder`, or infer request placement from `input` field names.

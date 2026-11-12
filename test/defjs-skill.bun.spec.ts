@@ -5,25 +5,19 @@ const coreExports = new Set([
   ...Object.keys(await import("../packages/core/src/index.ts")),
   ...Object.keys(await import("../packages/core/src/xsrf/index.ts")),
 ]);
-// Names that start like a Core export but are not one: documented integrations, Vue's own API, names the examples define themselves, and the removed names the migration notes mention.
+// Names that start like a Core export but belong to the documented integrations or Vue itself.
 const otherNames = new Set([
   "createApp",
-  "createBatch",
   "createClientPlugin",
-  "createOrder",
-  "createReader",
-  "defineComponent",
   "defineProps",
   "withOpenTelemetryServer",
-  "withSSEReconnect",
-  "withWebSocketReconnect",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-test("Defjs skill has valid metadata and routes every generated reference", async () => {
+test("Defjs skill has valid metadata, routes the 4 task references, and links English official docs", async () => {
   const text = await Bun.file(skillFile).text();
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(text);
   if (!match?.[1]) throw new Error("SKILL.md requires YAML frontmatter");
@@ -32,21 +26,36 @@ test("Defjs skill has valid metadata and routes every generated reference", asyn
   expect(metadata["name"]).toBe("defjs");
   const description = metadata["description"];
   if (typeof description !== "string") throw new Error("Expected description");
-  expect(description.length).toBeGreaterThan(0);
+  expect(description.startsWith("Use when ")).toBe(true);
   expect(description.length).toBeLessThanOrEqual(1024);
+
   const routed = Array.from(
-    text.matchAll(/\]\((references\/[^)]+\.md)\)/g),
-    (route) => route[1],
+    new Set(
+      Array.from(
+        text.matchAll(/\]\((references\/[^)]+\.md)\)/g),
+        (route) => route[1],
+      ),
+    ),
   ).sort();
-  const generated = await Array.fromAsync(
+  const references = await Array.fromAsync(
     new Bun.Glob("references/*.md").scan({
       cwd: Bun.fileURLToPath(new URL(".", skillFile)),
     }),
   );
-  expect(routed).toEqual(generated.sort());
+  expect(routed).toEqual([
+    "references/client-retry-interceptors.md",
+    "references/http-and-struct.md",
+    "references/integrations-and-testing.md",
+    "references/realtime-sse-ws.md",
+  ]);
+  expect(routed).toEqual(references.sort());
+
+  expect(text).toContain("https://defjs.lyz.cloud/llms.txt");
+  expect(text).toContain("https://defjs.lyz.cloud/llms-full.txt");
+  expect(text).toContain("https://defjs.lyz.cloud/llms.mdx/");
 });
 
-test("Defjs skill and reference code names resolve to public Core exports", async () => {
+test("Defjs skill and reference files have clean Markdown, no locale slugs, and valid Core exports", async () => {
   const directory = new URL("references/", skillFile);
   const files = [
     skillFile,
@@ -57,6 +66,32 @@ test("Defjs skill and reference code names resolve to public Core exports", asyn
   ];
   for (const file of files) {
     const text = await Bun.file(file).text();
+    expect(text, `${file.pathname} contains MDX <Tabs>/<Tab>`).not.toMatch(
+      /<\/?Tabs?\b/,
+    );
+    expect(text, `${file.pathname} contains heading anchor [#...]`).not.toMatch(
+      /\[#[a-z0-9-]+\]/,
+    );
+    expect(
+      text,
+      `${file.pathname} contains locale-prefixed official doc URL`,
+    ).not.toMatch(
+      /https:\/\/defjs\.lyz\.cloud\/(?:en-US|zh-Hans|zh-Hant-TW|zh-Hant-HK|ja-JP|ko-KR|de-DE|fr-FR|es-ES|ru-RU|ar)(?:\/|$)/,
+    );
+
+    for (const slugMatch of text.matchAll(
+      /\b((?:docs|recipes|api)\/[a-z0-9-]+(?:\/[a-z0-9-]+)*?)(?:\/content\.md\b|(?![a-z0-9/-]))/g,
+    )) {
+      const slug = slugMatch[1];
+      if (!slug) continue;
+      const md = new URL(`../doc/content/en-US/${slug}.md`, import.meta.url);
+      const mdx = new URL(`../doc/content/en-US/${slug}.mdx`, import.meta.url);
+      expect(
+        (await Bun.file(md).exists()) || (await Bun.file(mdx).exists()),
+        `${file.pathname}: doc slug "${slug}" does not exist in doc/content/en-US/`,
+      ).toBe(true);
+    }
+
     const code = Array.from(
       text.matchAll(/```[^\n]*\n([\s\S]*?)```|`([^`\n]+)`/g),
       (match) => match[1] ?? match[2] ?? "",

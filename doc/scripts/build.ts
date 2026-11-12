@@ -2,7 +2,6 @@ import { locales } from "../app/lib/i18n";
 import { buildFingerprint } from "./build-state";
 import { checkLinks } from "./check-links";
 import { docRoot, joinPath } from "./paths";
-import { checkSkillReferences, referencesDirectory } from "./sync-skill";
 export async function finalizeBuild(
   directory: string,
   before: string,
@@ -42,5 +41,4 @@ if (import.meta.main) {
   if (await child.exited)
     throw new Error("React Router documentation build failed");
   await finalizeBuild(output, before, await buildFingerprint());
-  await checkSkillReferences(output, referencesDirectory);
 }
