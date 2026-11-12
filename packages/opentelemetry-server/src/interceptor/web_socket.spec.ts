@@ -173,14 +173,13 @@ describe("WebSocket client diagnostic logs", () => {
     },
   );
 
-  test.each(["emit", "close-code", "rejected"] as const)(
+  test.each(["emit", "rejected"] as const)(
     "preserves termination when logging fails in %s",
     async (failure) => {
       const { logger } = createMockLogger();
-      if (failure !== "close-code")
-        logger.emit.mockImplementation(() => {
-          throw new Error("logger failed");
-        });
+      logger.emit.mockImplementation(() => {
+        throw new Error("logger failed");
+      });
       const report = vi
         .spyOn(diag, "error")
         .mockImplementation(() => undefined);
@@ -201,15 +200,7 @@ describe("WebSocket client diagnostic logs", () => {
         session.reject(cause);
         await expect(session.session.closed).rejects.toBe(cause);
       } else {
-        session.close({
-          kind: "error",
-          cause,
-          get code(): number | undefined {
-            if (failure === "close-code")
-              throw new Error("private close getter");
-            return undefined;
-          },
-        });
+        session.close({ kind: "error", cause });
         await expect(session.session.closed).resolves.toMatchObject({
           kind: "error",
           cause,

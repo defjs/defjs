@@ -286,6 +286,30 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     );
   });
 
+  test("uses only the explicit operation as the metric identity", async () => {
+    const metrics = createMockMetrics();
+    const interceptor = createOpenTelemetryHttpInterceptor({
+      propagator: mockPropagator,
+      metrics,
+    });
+
+    await interceptor.fn(
+      { ...makeHttpRequest(), endpoint: "/users/42", operation: "users.read" },
+      () => Promise.resolve(makeHttpResponse()),
+    );
+
+    expect(metrics.requestDuration.record).toHaveBeenCalledWith(
+      expect.any(Number),
+      {
+        "defjs.operation": "users.read",
+        "http.request.method": "GET",
+        "http.response.status_code": 200,
+        "server.address": "api.example.com",
+        "server.port": 443,
+      },
+    );
+  });
+
   test("records error.type _OTHER on the duration sample when the rejection carries no error", async () => {
     const metrics = createMockMetrics();
     const interceptor = createOpenTelemetryHttpInterceptor({

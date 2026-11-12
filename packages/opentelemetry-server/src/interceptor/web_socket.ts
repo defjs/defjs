@@ -4,11 +4,7 @@ import { trace } from "@opentelemetry/api";
 import { carrierSetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { WebSocketClientMetrics } from "../telemetry/metrics";
-import {
-  createConnectionMetricAttributes,
-  createServerMetricAttributes,
-  durationSeconds,
-} from "../telemetry/metrics";
+import { durationSeconds } from "../telemetry/metrics";
 import {
   addSpanEvent,
   getErrorType,
@@ -39,13 +35,11 @@ export function createOpenTelemetryWebSocketInterceptor(
     }
 
     // The opening handshake is always a GET (RFC 6455 section 4.1).
-    const { span, context: spanCtx } = startClientCall(
-      options,
-      req,
-      resolveWebSocketUrl,
-      "GET",
-      "WebSocket",
-    );
+    const {
+      span,
+      context: spanCtx,
+      attributes,
+    } = startClientCall(options, req, resolveWebSocketUrl, "GET", "WebSocket");
 
     let queryParams = req.queryParams;
     let queryString = req.queryString;
@@ -65,7 +59,6 @@ export function createOpenTelemetryWebSocketInterceptor(
     try {
       const session = await next({ ...req, queryParams, queryString });
       const connectedAtMs = performance.now();
-      const activeAttributes = createServerMetricAttributes(req);
 
       if (span) {
         if (responseHook) {
@@ -78,12 +71,12 @@ export function createOpenTelemetryWebSocketInterceptor(
 
       metrics?.connectDuration.record(
         durationSeconds(connectStartMs, connectedAtMs),
-        createConnectionMetricAttributes(req, "success"),
+        { ...attributes, "defjs.result": "success" },
       );
-      metrics?.activeConnections.add(1, activeAttributes);
+      metrics?.activeConnections.add(1, attributes);
 
       const closeActiveConnection = () => {
-        metrics?.activeConnections.add(-1, activeAttributes);
+        metrics?.activeConnections.add(-1, attributes);
       };
 
       session.closed.then(
@@ -91,10 +84,10 @@ export function createOpenTelemetryWebSocketInterceptor(
           closeActiveConnection();
           if (closeInfo.kind === "closed") {
             if (span) addSpanEvent(span, "websocket.closed");
-            metrics?.connectionDuration.record(
-              durationSeconds(connectedAtMs),
-              createConnectionMetricAttributes(req, "success"),
-            );
+            metrics?.connectionDuration.record(durationSeconds(connectedAtMs), {
+              ...attributes,
+              "defjs.result": "success",
+            });
             span?.end();
             return;
           }
@@ -105,37 +98,44 @@ export function createOpenTelemetryWebSocketInterceptor(
               : closeInfo.cause;
           if (closeInfo.kind === "error") {
             emitClientException(logger, {
-              request: req,
-              context: spanCtx,
-              error,
               transport: "websocket",
               phase: "connection",
-              closeInfo,
+              context: spanCtx,
+              signal: req.signal,
+              error,
+              attributes,
+              extra:
+                closeInfo.code === undefined
+                  ? undefined
+                  : { "websocket.close.code": closeInfo.code },
             });
           }
           const errorAttributes = { "error.type": getErrorType(error) };
           if (span) addSpanEvent(span, "websocket.error", errorAttributes);
-          metrics?.connectionDuration.record(
-            durationSeconds(connectedAtMs),
-            createConnectionMetricAttributes(req, "error", errorAttributes),
-          );
+          metrics?.connectionDuration.record(durationSeconds(connectedAtMs), {
+            ...attributes,
+            "defjs.result": "error",
+            ...errorAttributes,
+          });
           if (span) setSpanError(span, error);
         },
         (error: unknown) => {
           closeActiveConnection();
           emitClientException(logger, {
-            request: req,
-            context: spanCtx,
-            error,
             transport: "websocket",
             phase: "connection",
+            context: spanCtx,
+            signal: req.signal,
+            error,
+            attributes,
           });
           const errorAttributes = { "error.type": getErrorType(error) };
           if (span) addSpanEvent(span, "websocket.error", errorAttributes);
-          metrics?.connectionDuration.record(
-            durationSeconds(connectedAtMs),
-            createConnectionMetricAttributes(req, "error", errorAttributes),
-          );
+          metrics?.connectionDuration.record(durationSeconds(connectedAtMs), {
+            ...attributes,
+            "defjs.result": "error",
+            ...errorAttributes,
+          });
           if (span) setSpanError(span, error);
         },
       );
@@ -143,18 +143,18 @@ export function createOpenTelemetryWebSocketInterceptor(
       return session;
     } catch (error) {
       emitClientException(logger, {
-        request: req,
-        context: spanCtx,
-        error,
         transport: "websocket",
         phase: "connect",
+        context: spanCtx,
+        signal: req.signal,
+        error,
+        attributes,
       });
-      metrics?.connectDuration.record(
-        durationSeconds(connectStartMs),
-        createConnectionMetricAttributes(req, "error", {
-          "error.type": getErrorType(error),
-        }),
-      );
+      metrics?.connectDuration.record(durationSeconds(connectStartMs), {
+        ...attributes,
+        "defjs.result": "error",
+        "error.type": getErrorType(error),
+      });
       if (span) setSpanError(span, error);
       throw error;
     }

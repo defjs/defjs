@@ -6,11 +6,7 @@ import {
 } from "@defjs/core";
 import { diag, ROOT_CONTEXT } from "@opentelemetry/api";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import {
-  createMockLogger,
-  makeHttpRequest,
-  makeHttpResponse,
-} from "../../test/mocks";
+import { createMockLogger, makeHttpResponse } from "../../test/mocks";
 import { emitClientException } from "./logs";
 
 describe("client exception logs", () => {
@@ -40,19 +36,17 @@ describe("client exception logs", () => {
     ({ transport, eventName, body, extras }) => {
       const { logger, records } = createMockLogger();
       emitClientException(logger, {
-        context: ROOT_CONTEXT,
-        error: new TypeError("password=secret"),
-        phase: "connect",
-        request: {
-          ...makeHttpRequest(new Headers({ authorization: "secret" })),
-          baseEndpoint: "https://user:secret@api.example.com:8443",
-          endpoint: "/secret",
-          body: "secret",
-          queryString: "token=secret",
-          operation: "orders.create",
-        },
         transport,
-        closeInfo: { code: transport === "sse" ? "NET_UNREACHABLE" : 1006 },
+        phase: "connect",
+        context: ROOT_CONTEXT,
+        signal: undefined,
+        error: new TypeError("password=secret"),
+        attributes: {
+          "defjs.operation": "orders.create",
+          "server.address": "api.example.com",
+          "server.port": 8443,
+        },
+        extra: extras,
       });
       expect(records).toEqual([
         {
@@ -85,7 +79,8 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error,
       phase: "request",
-      request: makeHttpRequest(),
+      signal: undefined,
+      attributes: {},
       transport: "http",
     });
     expect(records).toEqual([]);
@@ -101,7 +96,8 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: foreign,
       phase: "request",
-      request: makeHttpRequest(),
+      signal: undefined,
+      attributes: {},
       transport: "http",
     });
     expect(foreign).not.toBe(ERR_ABORTED);
@@ -114,7 +110,8 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: new TypeError("lost the race"),
       phase: "request",
-      request: { ...makeHttpRequest(), signal: AbortSignal.abort() },
+      signal: AbortSignal.abort(),
+      attributes: {},
       transport: "http",
     });
     expect(records).toEqual([]);
@@ -126,7 +123,8 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: new Error("socket hang up"),
       phase: "request",
-      request: { ...makeHttpRequest(), signal: AbortSignal.abort(ERR_TIMEOUT) },
+      signal: AbortSignal.abort(ERR_TIMEOUT),
+      attributes: {},
       transport: "http",
     });
     expect(records).toHaveLength(1);
@@ -141,7 +139,8 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: new TypeError("refused"),
       phase: "connect",
-      request: { ...makeHttpRequest(), signal: abort.signal },
+      signal: abort.signal,
+      attributes: {},
       transport: "websocket",
     });
     expect(records).toHaveLength(1);
@@ -154,7 +153,8 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: new TypeError("offline"),
       phase: "request",
-      request: { ...makeHttpRequest(), signal: new AbortController().signal },
+      signal: new AbortController().signal,
+      attributes: {},
       transport: "http",
     });
     expect(records).toHaveLength(1);
@@ -177,7 +177,8 @@ describe("client exception logs", () => {
         context: ROOT_CONTEXT,
         error,
         phase: "request",
-        request: makeHttpRequest(),
+        signal: undefined,
+        attributes: {},
         transport: "http",
       });
       expect(records).toHaveLength(1);
@@ -198,7 +199,8 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error,
       phase: "request",
-      request: makeHttpRequest(),
+      signal: undefined,
+      attributes: {},
       transport: "http",
     });
     expect(records).toEqual([]);
@@ -206,33 +208,12 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error,
       phase: "connect",
-      request: makeHttpRequest(),
+      signal: undefined,
+      attributes: {},
       transport: "sse",
     });
     expect(records).toHaveLength(1);
     expect(records[0]?.attributes?.["exception.type"]).toBe("DefjsFault");
-  });
-
-  test("omits unavailable close metadata", () => {
-    const { logger, records } = createMockLogger();
-    for (const transport of ["sse", "websocket"] as const) {
-      emitClientException(logger, {
-        context: ROOT_CONTEXT,
-        error: new Error("offline"),
-        phase: "connect",
-        request: makeHttpRequest(),
-        transport,
-      });
-    }
-    expect(records).toHaveLength(2);
-    for (const record of records) {
-      expect(record.attributes).toEqual({
-        "defjs.phase": "connect",
-        "exception.type": "Error",
-        "server.address": "api.example.com",
-        "server.port": 443,
-      });
-    }
   });
 
   test("does not read error attributes without a logger", () => {
@@ -247,14 +228,15 @@ describe("client exception logs", () => {
         context: ROOT_CONTEXT,
         error,
         phase: "request",
-        request: makeHttpRequest(),
+        signal: undefined,
+        attributes: {},
         transport: "http",
       }),
     ).not.toThrow();
     expect(readName).not.toHaveBeenCalled();
   });
 
-  test.each(["emit", "name", "code", "close-code", "diag"] as const)(
+  test.each(["emit", "name", "code", "diag"] as const)(
     "isolates %s failures from callers",
     (failure) => {
       const { logger } = createMockLogger();
@@ -268,27 +250,19 @@ describe("client exception logs", () => {
             throw new Error("private getter failure");
           },
         });
-      } else if (failure !== "close-code") {
+      } else {
         logger.emit.mockImplementation(() => {
           throw new Error("private exporter failure");
         });
       }
-      const closeInfo =
-        failure === "close-code"
-          ? {
-              get code(): number {
-                throw new Error("private close detail");
-              },
-            }
-          : undefined;
       expect(() =>
         emitClientException(logger, {
           context: ROOT_CONTEXT,
           error,
           phase: "connection",
-          request: makeHttpRequest(),
+          signal: undefined,
+          attributes: {},
           transport: "websocket",
-          closeInfo,
         }),
       ).not.toThrow();
       expect(report).toHaveBeenCalledExactlyOnceWith(

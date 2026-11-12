@@ -1,12 +1,4 @@
-import type { HttpRequest, HttpResponse } from "@defjs/core";
-import type {
-  Attributes,
-  Histogram,
-  Meter,
-  UpDownCounter,
-} from "@opentelemetry/api";
-import { getErrorType, getHttpResponseErrorType } from "./trace";
-import { resolveHttpUrl } from "./url";
+import type { Histogram, Meter, UpDownCounter } from "@opentelemetry/api";
 
 const DURATION_BUCKETS = [
   0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10,
@@ -101,61 +93,4 @@ export function durationSeconds(
   endMs: number = performance.now(),
 ): number {
   return (endMs - startMs) / 1000;
-}
-
-export function createHttpMetricAttributes(
-  req: HttpRequest,
-  method: string,
-  response?: HttpResponse<unknown>,
-  error?: unknown,
-): Attributes {
-  const attributes: Attributes = {
-    ...createServerMetricAttributes(req),
-    "http.request.method": method,
-  };
-
-  const errorType = response
-    ? getHttpResponseErrorType(response.status)
-    : getErrorType(error);
-  if (errorType) {
-    attributes["error.type"] = errorType;
-  }
-
-  if (response && response.status !== 0) {
-    attributes["http.response.status_code"] = response.status;
-  }
-
-  return attributes;
-}
-
-export function createConnectionMetricAttributes(
-  req: HttpRequest,
-  result: "success" | "error",
-  extras?: Attributes,
-): Attributes {
-  return {
-    ...createServerMetricAttributes(req),
-    "defjs.result": result,
-    ...extras,
-  };
-}
-
-export function createServerMetricAttributes(req: HttpRequest): Attributes {
-  const { serverAddress, serverPort } = resolveHttpUrl(
-    req.endpoint,
-    req.baseEndpoint,
-  );
-  const attributes: Attributes = {};
-
-  if (req.operation) {
-    attributes["defjs.operation"] = req.operation;
-  }
-  if (serverAddress) {
-    attributes["server.address"] = serverAddress;
-  }
-  if (serverPort) {
-    attributes["server.port"] = serverPort;
-  }
-
-  return attributes;
 }

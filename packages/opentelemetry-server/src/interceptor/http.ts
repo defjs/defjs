@@ -1,26 +1,41 @@
 import type { HttpResponse } from "@defjs/core";
 import { createHttpInterceptor } from "@defjs/core";
+import type { Attributes } from "@opentelemetry/api";
 import { trace } from "@opentelemetry/api";
 import { carrierSetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { HttpClientMetrics } from "../telemetry/metrics";
+import { durationSeconds } from "../telemetry/metrics";
 import {
-  createHttpMetricAttributes,
-  durationSeconds,
-} from "../telemetry/metrics";
-import {
+  getErrorType,
+  getHttpResponseErrorType,
   runSpanHook,
   setSpanError,
   setSpanHttpResponse,
 } from "../telemetry/trace";
 import { resolveHttpUrl } from "../telemetry/url";
-import type { ClientCallOptions } from "./call";
+import type { ClientCall, ClientCallOptions } from "./call";
 import { requiresActiveSpan, startClientCall } from "./call";
 
 export type HttpInterceptorOptions = ClientCallOptions<
   HttpResponse<unknown>,
   HttpClientMetrics
 >;
+
+function responseMetricAttributes(
+  call: ClientCall,
+  status: number,
+): Attributes {
+  const attributes: Attributes = {
+    ...call.attributes,
+    "http.request.method": call.method,
+  };
+  // Status 0 is a synthetic interceptor response and carries nothing to report.
+  if (status !== 0) attributes["http.response.status_code"] = status;
+  const errorType = getHttpResponseErrorType(status);
+  if (errorType) attributes["error.type"] = errorType;
+  return attributes;
+}
 
 export function createOpenTelemetryHttpInterceptor(
   options: HttpInterceptorOptions,
@@ -33,13 +48,10 @@ export function createOpenTelemetryHttpInterceptor(
       return next(req);
     }
 
-    const {
-      span,
-      context: spanCtx,
-      method,
-    } = startClientCall(options, req, resolveHttpUrl, req.method);
+    const call = startClientCall(options, req, resolveHttpUrl, req.method);
+    const { span } = call;
     const headers = new Headers(req.headers);
-    propagator.inject(spanCtx, headers, carrierSetter);
+    propagator.inject(call.context, headers, carrierSetter);
 
     const startTime = performance.now();
 
@@ -58,7 +70,7 @@ export function createOpenTelemetryHttpInterceptor(
 
       metrics?.requestDuration.record(
         durationS,
-        createHttpMetricAttributes(req, method, response),
+        responseMetricAttributes(call, response.status),
       );
 
       return response;
@@ -66,18 +78,21 @@ export function createOpenTelemetryHttpInterceptor(
       const durationS = durationSeconds(startTime);
 
       emitClientException(logger, {
-        request: req,
-        context: spanCtx,
-        error,
         transport: "http",
         phase: "request",
+        context: call.context,
+        signal: req.signal,
+        error,
+        attributes: call.attributes,
+        extra: { "http.request.method": call.method },
       });
 
       if (span) setSpanError(span, error);
-      metrics?.requestDuration.record(
-        durationS,
-        createHttpMetricAttributes(req, method, undefined, error),
-      );
+      metrics?.requestDuration.record(durationS, {
+        ...call.attributes,
+        "http.request.method": call.method,
+        "error.type": getErrorType(error),
+      });
 
       throw error;
     }

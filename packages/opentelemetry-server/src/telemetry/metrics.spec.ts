@@ -1,11 +1,7 @@
 import type { Meter } from "@opentelemetry/api";
 import { describe, expect, test, vi } from "vitest";
-import { makeHttpRequest, makeHttpResponse } from "../../test/mocks";
 import {
-  createConnectionMetricAttributes,
   createHttpClientMetrics,
-  createHttpMetricAttributes,
-  createServerMetricAttributes,
   createSSEClientMetrics,
   createWebSocketClientMetrics,
   durationSeconds,
@@ -80,120 +76,6 @@ describe("metrics helpers", () => {
     vi.spyOn(performance, "now").mockReturnValue(350);
 
     expect(durationSeconds(50)).toBe(0.3);
-  });
-
-  test("createHttpMetricAttributes includes status when response is present", () => {
-    expect(
-      createHttpMetricAttributes(makeHttpRequest(), "GET", makeHttpResponse()),
-    ).toEqual({
-      "http.request.method": "GET",
-      "http.response.status_code": 200,
-      "server.address": "api.example.com",
-      "server.port": 443,
-    });
-  });
-
-  test.each([404, 503])(
-    "createHttpMetricAttributes classifies client error status %i",
-    (status) => {
-      expect(
-        createHttpMetricAttributes(makeHttpRequest(), "GET", {
-          ...makeHttpResponse(),
-          status,
-        }),
-      ).toEqual({
-        "error.type": String(status),
-        "http.request.method": "GET",
-        "http.response.status_code": status,
-        "server.address": "api.example.com",
-        "server.port": 443,
-      });
-    },
-  );
-
-  test("createHttpMetricAttributes omits both status and error type for a status-0 response", () => {
-    // Transport failures are faults now, so status 0 carries no failure to report.
-    expect(
-      createHttpMetricAttributes(makeHttpRequest(), "GET", {
-        ...makeHttpResponse(),
-        status: 0,
-      }),
-    ).toEqual({
-      "http.request.method": "GET",
-      "server.address": "api.example.com",
-      "server.port": 443,
-    });
-  });
-
-  test("createHttpMetricAttributes includes error when request throws", () => {
-    expect(
-      createHttpMetricAttributes(
-        makeHttpRequest(),
-        "GET",
-        undefined,
-        new TypeError("boom"),
-      ),
-    ).toEqual({
-      "error.type": "TypeError",
-      "http.request.method": "GET",
-      "server.address": "api.example.com",
-      "server.port": 443,
-    });
-  });
-
-  test("createConnectionMetricAttributes merges custom extras", () => {
-    expect(
-      createConnectionMetricAttributes(makeHttpRequest(), "error", {
-        "error.type": "string",
-      }),
-    ).toEqual({
-      "defjs.result": "error",
-      "error.type": "string",
-      "server.address": "api.example.com",
-      "server.port": 443,
-    });
-  });
-
-  test("createServerMetricAttributes includes the scheme default port", () => {
-    expect(createServerMetricAttributes(makeHttpRequest())).toEqual({
-      "server.address": "api.example.com",
-      "server.port": 443,
-    });
-  });
-
-  test("createServerMetricAttributes includes explicit server port", () => {
-    expect(
-      createServerMetricAttributes({
-        ...makeHttpRequest(),
-        baseEndpoint: "https://api.example.com:8443",
-      }),
-    ).toEqual({
-      "server.address": "api.example.com",
-      "server.port": 8443,
-    });
-  });
-
-  test("uses only the explicit operation as the metric identity", () => {
-    expect(
-      createServerMetricAttributes({
-        ...makeHttpRequest(),
-        endpoint: "/users/42",
-        operation: "users.read",
-      }),
-    ).toEqual({
-      "defjs.operation": "users.read",
-      "server.address": "api.example.com",
-      "server.port": 443,
-    });
-  });
-
-  test("createServerMetricAttributes returns empty object for relative URL without base", () => {
-    expect(
-      createServerMetricAttributes({
-        ...makeHttpRequest(),
-        baseEndpoint: undefined,
-      }),
-    ).toEqual({});
   });
 });
 

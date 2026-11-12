@@ -4,11 +4,7 @@ import { trace } from "@opentelemetry/api";
 import { carrierSetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { SSEClientMetrics } from "../telemetry/metrics";
-import {
-  createConnectionMetricAttributes,
-  createServerMetricAttributes,
-  durationSeconds,
-} from "../telemetry/metrics";
+import { durationSeconds } from "../telemetry/metrics";
 import {
   addSpanEvent,
   getErrorType,
@@ -35,13 +31,11 @@ export function createOpenTelemetrySSEInterceptor(
       return next(req);
     }
 
-    const { span, context: spanCtx } = startClientCall(
-      options,
-      req,
-      resolveHttpUrl,
-      req.method,
-      "SSE",
-    );
+    const {
+      span,
+      context: spanCtx,
+      attributes,
+    } = startClientCall(options, req, resolveHttpUrl, req.method, "SSE");
     const headers = new Headers(req.headers);
     propagator.inject(spanCtx, headers, carrierSetter);
 
@@ -50,7 +44,6 @@ export function createOpenTelemetrySSEInterceptor(
     try {
       const stream = await next({ ...req, headers });
       const connectedAtMs = performance.now();
-      const activeAttributes = createServerMetricAttributes(req);
 
       if (span) {
         if (responseHook) {
@@ -63,12 +56,12 @@ export function createOpenTelemetrySSEInterceptor(
 
       metrics?.connectDuration.record(
         durationSeconds(connectStartMs, connectedAtMs),
-        createConnectionMetricAttributes(req, "success"),
+        { ...attributes, "defjs.result": "success" },
       );
-      metrics?.activeStreams.add(1, activeAttributes);
+      metrics?.activeStreams.add(1, attributes);
 
       const closeActiveStream = () => {
-        metrics?.activeStreams.add(-1, activeAttributes);
+        metrics?.activeStreams.add(-1, attributes);
       };
 
       stream.closed.then(
@@ -87,18 +80,20 @@ export function createOpenTelemetrySSEInterceptor(
               "error.type": getErrorType(closeInfo.cause),
             };
             emitClientException(logger, {
-              request: req,
-              context: spanCtx,
-              error: closeInfo.cause,
               transport: "sse",
               phase: "connection",
-              closeInfo,
+              context: spanCtx,
+              signal: req.signal,
+              error: closeInfo.cause,
+              attributes,
+              extra: { "defjs.sse.fault.code": closeInfo.code },
             });
             if (span) addSpanEvent(span, "sse.error", errorAttributes);
-            metrics?.connectionDuration.record(
-              durationSeconds(connectedAtMs),
-              createConnectionMetricAttributes(req, "error", errorAttributes),
-            );
+            metrics?.connectionDuration.record(durationSeconds(connectedAtMs), {
+              ...attributes,
+              "defjs.result": "error",
+              ...errorAttributes,
+            });
             if (span) setSpanError(span, closeInfo.cause);
             return;
           }
@@ -109,27 +104,30 @@ export function createOpenTelemetrySSEInterceptor(
               closeInfo.kind === "aborted" ? "sse.aborted" : "sse.closed",
               closeAttributes,
             );
-          metrics?.connectionDuration.record(
-            durationSeconds(connectedAtMs),
-            createConnectionMetricAttributes(req, "success", closeAttributes),
-          );
+          metrics?.connectionDuration.record(durationSeconds(connectedAtMs), {
+            ...attributes,
+            "defjs.result": "success",
+            ...closeAttributes,
+          });
           span?.end();
         },
         (error: unknown) => {
           closeActiveStream();
           emitClientException(logger, {
-            request: req,
-            context: spanCtx,
-            error,
             transport: "sse",
             phase: "connection",
+            context: spanCtx,
+            signal: req.signal,
+            error,
+            attributes,
           });
           const errorAttributes = { "error.type": getErrorType(error) };
           if (span) addSpanEvent(span, "sse.error", errorAttributes);
-          metrics?.connectionDuration.record(
-            durationSeconds(connectedAtMs),
-            createConnectionMetricAttributes(req, "error", errorAttributes),
-          );
+          metrics?.connectionDuration.record(durationSeconds(connectedAtMs), {
+            ...attributes,
+            "defjs.result": "error",
+            ...errorAttributes,
+          });
           if (span) setSpanError(span, error);
         },
       );
@@ -137,18 +135,18 @@ export function createOpenTelemetrySSEInterceptor(
       return stream;
     } catch (error) {
       emitClientException(logger, {
-        request: req,
-        context: spanCtx,
-        error,
         transport: "sse",
         phase: "connect",
+        context: spanCtx,
+        signal: req.signal,
+        error,
+        attributes,
       });
-      metrics?.connectDuration.record(
-        durationSeconds(connectStartMs),
-        createConnectionMetricAttributes(req, "error", {
-          "error.type": getErrorType(error),
-        }),
-      );
+      metrics?.connectDuration.record(durationSeconds(connectStartMs), {
+        ...attributes,
+        "defjs.result": "error",
+        "error.type": getErrorType(error),
+      });
       if (span) setSpanError(span, error);
       throw error;
     }
