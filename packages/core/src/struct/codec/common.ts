@@ -96,7 +96,7 @@ function writeObjectFieldsMerged(
   depth: number,
 ): void {
   for (const field of resolveStructFields(struct[DEFINITION])) {
-    if (!hasOwnKey(value, field.key)) {
+    if (!Object.hasOwn(value, field.key)) {
       continue;
     }
     const fieldValue = value[field.key];
@@ -164,7 +164,7 @@ export function encodeValue(
       if (!isPlainObject(value)) {
         return value;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made encodeStructValue of a 4-key record 1.083x/1.084x/1.083x and encodeJson of a 1-key record 1.131x/1.140x/1.134x slower (Bun 1.4.4, 3 runs x 21 interleaved rounds x 3e5/4e5 encodes, medians, against an unchanged control copy within 1.3%)
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made encodeJson of a 1-key record 1.131x/1.140x/1.134x slower (Bun 1.4.4, 3 runs x 21 interleaved rounds x 3e5/4e5 encodes, medians, against an unchanged control copy within 1.3%)
       const output: { [key: string]: unknown } = Object.create(null);
       for (const [key, entry] of Object.entries(value)) {
         output[key] = encodeValue(definition.value, entry, depth + 1);
@@ -261,7 +261,7 @@ function mapAliasedObjectFields(
 ): { [key: string]: unknown } {
   const output = nullObject();
   for (const field of resolveStructFields(definition)) {
-    if (!hasOwnKey(value, field.key)) {
+    if (!Object.hasOwn(value, field.key)) {
       continue;
     }
 
@@ -274,9 +274,4 @@ function mapAliasedObjectFields(
   }
 
   return output;
-}
-
-// PERF: a direct Object.hasOwn in the two field loops above made encodeJson 1.118x slower for a 4-field object, 1.163x for 8 fields and 1.180x for 64 fields (Bun 1.4.4, 8 process rounds per variant, interleaved, medians); this wrapper is gone with the module.
-function hasOwnKey(value: { [key: string]: unknown }, key: string): boolean {
-  return Object.hasOwn(value, key);
 }
