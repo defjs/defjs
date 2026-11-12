@@ -207,7 +207,7 @@ export function createArrayStruct<S extends StructLike>(
 ): ArrayStruct<S> {
   return makeStruct<ArrayStruct<S>>({
     flags: DEFAULT_FLAGS,
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: S is a published struct type whose `_struct` brand has no runtime member, so no declared type relates it to RuntimeStruct; every struct made by makeStruct is both
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: a published Struct has no runtime members, so constraining S to RuntimeStruct would make every Struct a caller holds fail to compile; every struct made by makeStruct is both
     item: item as S & RuntimeStruct,
     kind: "array",
   });
@@ -322,7 +322,7 @@ export function createRecordStruct<S extends StructLike>(
   return makeStruct<RecordStruct<S>>({
     flags: DEFAULT_FLAGS,
     kind: "record",
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: S is a published struct type whose `_struct` brand has no runtime member, so no declared type relates it to RuntimeStruct; every struct made by makeStruct is both
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: a published Struct has no runtime members, so constraining S to RuntimeStruct would make every Struct a caller holds fail to compile; every struct made by makeStruct is both
     value: value as S & RuntimeStruct,
   });
 }
@@ -345,7 +345,7 @@ export function createRecordStruct<S extends StructLike>(
 export function createTupleStruct<
   const T extends readonly [StructLike, ...StructLike[]],
 >(items: T): TupleStruct<T> {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the items are published struct types whose `_struct` brand has no runtime member, so no declared type relates them to RuntimeStruct; every struct made by makeStruct is both
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: a published Struct has no runtime members, so constraining the items to RuntimeStruct would make every Struct a caller holds fail to compile; every struct made by makeStruct is both
   const tupleItems = [...items] as (T[number] & RuntimeStruct)[];
 
   return makeStruct<TupleStruct<T>>({
@@ -371,7 +371,7 @@ export function createTupleStruct<
 export function createUnionStruct<
   const T extends readonly [StructLike, ...StructLike[]],
 >(...options: T): UnionStruct<T> {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the options are published struct types whose `_struct` brand has no runtime member, so no declared type relates them to RuntimeStruct; every struct made by makeStruct is both
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: a published Struct has no runtime members, so constraining the options to RuntimeStruct would make every Struct a caller holds fail to compile; every struct made by makeStruct is both
   const unionOptions = [...options] as (T[number] & RuntimeStruct)[];
 
   return makeStruct<UnionStruct<T>>({
@@ -443,7 +443,7 @@ export function createDiscriminatedUnionStruct<
   discriminator: TDiscriminator,
   options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
 ): DiscriminatedUnionStruct<TOptions> {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the options are published object struct types whose `_struct` brand has no runtime member, so no declared type relates them to ObjectRuntimeStruct; every struct made by makeStruct is both
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: a published ObjectStruct has no runtime members, so constraining the options to ObjectRuntimeStruct would make every ObjectStruct a caller holds fail to compile; every struct made by makeStruct is both
   const unionOptions = [...options] as ObjectRuntimeStruct[];
   const map = new Map<unknown, ObjectRuntimeStruct>();
   const wireKeyByValue = new Map<unknown, string>();
@@ -609,7 +609,7 @@ export function createIntersectionStruct(
     return structs[0];
   }
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the members are published struct types whose `_struct` brand has no runtime member, so no declared type relates them to RuntimeStruct; every struct made by makeStruct is both
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: a published Struct has no runtime members, so constraining the members to RuntimeStruct would make every Struct a caller holds fail to compile; every struct made by makeStruct is both
   const members = structs as [RuntimeStruct, ...RuntimeStruct[]];
   const expected = members
     .map((item) => expectedType(item[DEFINITION]))
