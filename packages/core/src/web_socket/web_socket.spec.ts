@@ -19,6 +19,7 @@ import {
   openControllableSocket,
 } from "../../test/regression/controllable_socket";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
+import { useFakeClock } from "../../test/mock_web_socket";
 
 describe("web socket runtime", () => {
   let client: DerivableClient;
@@ -194,136 +195,128 @@ describe("web socket runtime", () => {
   });
 
   test("should support heartbeat with timeout", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const { Socket, latest } = createControllableSocketClass();
-    try {
-      const useHeartbeatSocket = defineWebSocket({
-        incoming: struct.object({
-          type: struct.literal("pong"),
-          ok: struct.boolean(),
+    const useHeartbeatSocket = defineWebSocket({
+      incoming: struct.object({
+        type: struct.literal("pong"),
+        ok: struct.boolean(),
+      }),
+      outgoing: struct.object({ type: struct.literal("ping") }),
+      path: "/ws/heartbeat-silent",
+    });
+    const handled = createClient(
+      withEndpoint("https://example.test"),
+      withWebSocketHandle(Socket),
+    );
+    const [error, socket] = await openControllableSocket(
+      useHeartbeatSocket(
+        handled({
+          heartbeat: {
+            intervalMs: 10,
+            message: () => ({ type: "ping" as const }),
+            isAck: () => false,
+            timeoutMs: 5,
+          },
         }),
-        outgoing: struct.object({ type: struct.literal("ping") }),
-        path: "/ws/heartbeat-silent",
-      });
-      const handled = createClient(
-        withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket),
-      );
-      const [error, socket] = await openControllableSocket(
-        useHeartbeatSocket(
-          handled({
-            heartbeat: {
-              intervalMs: 10,
-              message: () => ({ type: "ping" as const }),
-              isAck: () => false,
-              timeoutMs: 5,
-            },
-          }),
-        ),
-        latest,
-      );
+      ),
+      latest,
+    );
 
-      expect(error).toBeNull();
-      if (!socket) {
-        throw new Error("Expected socket");
-      }
-
-      let runtimeError: unknown;
-      socket.onRuntimeError((err: unknown) => {
-        runtimeError = err;
-      });
-
-      // The ack deadline is armed only after the first ping. Advancing both timers explicitly keeps a
-      // stalled event loop from observing the deadline before this assertion.
-      await vi.advanceTimersByTimeAsync(15);
-      const closed = await socket.closed;
-      expect(closed.kind).toBe("error");
-      if (closed.kind !== "error") {
-        throw new Error("expected an error close");
-      }
-      const cause = closed.cause;
-      if (!(cause instanceof Error)) {
-        throw new Error("expected an Error cause");
-      }
-      expect(cause.message).toBe("WebSocket heartbeat timeout");
-      expect(runtimeError).toEqual(
-        expect.objectContaining({ message: "WebSocket heartbeat timeout" }),
-      );
-    } finally {
-      vi.useRealTimers();
+    expect(error).toBeNull();
+    if (!socket) {
+      throw new Error("Expected socket");
     }
+
+    let runtimeError: unknown;
+    socket.onRuntimeError((err: unknown) => {
+      runtimeError = err;
+    });
+
+    // The ack deadline is armed only after the first ping. Advancing both timers explicitly keeps a
+    // stalled event loop from observing the deadline before this assertion.
+    await vi.advanceTimersByTimeAsync(15);
+    const closed = await socket.closed;
+    expect(closed.kind).toBe("error");
+    if (closed.kind !== "error") {
+      throw new Error("expected an error close");
+    }
+    const cause = closed.cause;
+    if (!(cause instanceof Error)) {
+      throw new Error("expected an Error cause");
+    }
+    expect(cause.message).toBe("WebSocket heartbeat timeout");
+    expect(runtimeError).toEqual(
+      expect.objectContaining({ message: "WebSocket heartbeat timeout" }),
+    );
   });
 
   test("should mark heartbeat ack when server responds with pong", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const { Socket, latest } = createControllableSocketClass();
-    try {
-      const useHeartbeatSocket = defineWebSocket({
-        incoming: struct.object({
-          type: struct.literal("pong"),
-          ok: struct.boolean(),
+    const useHeartbeatSocket = defineWebSocket({
+      incoming: struct.object({
+        type: struct.literal("pong"),
+        ok: struct.boolean(),
+      }),
+      outgoing: struct.object({ type: struct.literal("ping") }),
+      path: "/ws/heartbeat",
+    });
+    const handled = createClient(
+      withEndpoint("https://example.test"),
+      withWebSocketHandle(Socket),
+    );
+    const [error, socket] = await openControllableSocket(
+      useHeartbeatSocket(
+        handled({
+          heartbeat: {
+            intervalMs: 10,
+            isAck: (message: unknown) =>
+              typeof message === "object" &&
+              message !== null &&
+              "type" in message &&
+              message.type === "pong",
+            message: () => ({ type: "ping" as const }),
+            timeoutMs: 1_000,
+          },
         }),
-        outgoing: struct.object({ type: struct.literal("ping") }),
-        path: "/ws/heartbeat",
-      });
-      const handled = createClient(
-        withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket),
-      );
-      const [error, socket] = await openControllableSocket(
-        useHeartbeatSocket(
-          handled({
-            heartbeat: {
-              intervalMs: 10,
-              isAck: (message: unknown) =>
-                typeof message === "object" &&
-                message !== null &&
-                "type" in message &&
-                message.type === "pong",
-              message: () => ({ type: "ping" as const }),
-              timeoutMs: 1_000,
-            },
-          }),
-        ),
-        latest,
-      );
-      const native = latest();
+      ),
+      latest,
+    );
+    const native = latest();
 
-      expect(error).toBeNull();
-      if (!socket || !native) {
-        throw new Error("Expected socket");
-      }
-
-      let runtimeError: unknown;
-      socket.onRuntimeError((err: unknown) => {
-        runtimeError = err;
-      });
-      await vi.advanceTimersByTimeAsync(10);
-      expect(JSON.parse(native.sent[0] ?? "")).toEqual({ type: "ping" });
-      native.triggerMessage('{"ok":true,"type":"pong"}');
-      await vi.advanceTimersByTimeAsync(0);
-      await vi.advanceTimersByTimeAsync(1_000);
-
-      expect(runtimeError).toBeUndefined();
-      expect(socket.state).toBe("open");
-      const iterator = socket.receive[Symbol.asyncIterator]();
-      socket.close(1000, "heartbeat-ok");
-      native.triggerClose({
-        code: 1000,
-        reason: "heartbeat-ok",
-        wasClean: true,
-      });
-      await expect(socket.closed).resolves.toMatchObject({
-        code: 1000,
-        reason: "heartbeat-ok",
-      });
-      await expect(iterator.next()).resolves.toEqual({
-        done: true,
-        value: undefined,
-      });
-    } finally {
-      vi.useRealTimers();
+    expect(error).toBeNull();
+    if (!socket || !native) {
+      throw new Error("Expected socket");
     }
+
+    let runtimeError: unknown;
+    socket.onRuntimeError((err: unknown) => {
+      runtimeError = err;
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(JSON.parse(native.sent[0] ?? "")).toEqual({ type: "ping" });
+    native.triggerMessage('{"ok":true,"type":"pong"}');
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(runtimeError).toBeUndefined();
+    expect(socket.state).toBe("open");
+    const iterator = socket.receive[Symbol.asyncIterator]();
+    socket.close(1000, "heartbeat-ok");
+    native.triggerClose({
+      code: 1000,
+      reason: "heartbeat-ok",
+      wasClean: true,
+    });
+    await expect(socket.closed).resolves.toMatchObject({
+      code: 1000,
+      reason: "heartbeat-ok",
+    });
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
   });
 
   test("should report malformed JSON, drop the frame, and keep the session alive", async () => {
@@ -1100,137 +1093,133 @@ describe("web socket runtime", () => {
   });
 
   test("encodes heartbeat commands with aliases and consumes the decoded pong as ack", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const { Socket, latest } = createControllableSocketClass();
-    try {
-      const useProviderSocket = defineWebSocket({
-        builder: (input) => ({ query: input }),
-        incoming: struct.or(
-          struct.object({ channel: struct.literal("heartbeat") }),
-          struct.object({
-            method: struct.literal("pong"),
-            reqId: struct.number().alias("req_id"),
-          }),
-          struct.object({
-            method: struct.literal("wire"),
-            result: struct.object({
-              attempt: struct.number(),
-              hasType: struct.boolean(),
-              keys: struct.array(struct.string()),
-              method: struct.string(),
-              reqId: struct.number().alias("req_id"),
-            }),
-            success: struct.boolean(),
-          }),
-        ),
-        input: struct.object({
-          key: struct.string(),
-          mode: struct.literal("heartbeat"),
-        }),
-        outgoing: struct.object({
-          method: struct.literal("ping"),
+    const useProviderSocket = defineWebSocket({
+      builder: (input) => ({ query: input }),
+      incoming: struct.or(
+        struct.object({ channel: struct.literal("heartbeat") }),
+        struct.object({
+          method: struct.literal("pong"),
           reqId: struct.number().alias("req_id"),
         }),
-        path: "/ws/provider-envelopes",
-      });
-      const acks: Array<{ method: "pong"; reqId: number }> = [];
-      const handled = createClient(
-        withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket),
-      );
-      const [error, socket] = await openControllableSocket(
-        useProviderSocket(
-          handled({
-            heartbeat: {
-              intervalMs: 20,
-              isAck(message: unknown) {
-                if (
-                  typeof message === "object" &&
-                  message !== null &&
-                  "method" in message &&
-                  message.method === "pong" &&
-                  "reqId" in message &&
-                  typeof message.reqId === "number"
-                ) {
-                  acks.push({ method: "pong", reqId: message.reqId });
-                  return true;
-                }
-                return false;
-              },
-              message: () => ({ method: "ping" as const, reqId: 7 }),
-              timeoutMs: 200,
-            },
+        struct.object({
+          method: struct.literal("wire"),
+          result: struct.object({
+            attempt: struct.number(),
+            hasType: struct.boolean(),
+            keys: struct.array(struct.string()),
+            method: struct.string(),
+            reqId: struct.number().alias("req_id"),
           }),
-          { key: "provider-heartbeat", mode: "heartbeat" },
-        ),
-        latest,
-      );
-      const native = latest();
+          success: struct.boolean(),
+        }),
+      ),
+      input: struct.object({
+        key: struct.string(),
+        mode: struct.literal("heartbeat"),
+      }),
+      outgoing: struct.object({
+        method: struct.literal("ping"),
+        reqId: struct.number().alias("req_id"),
+      }),
+      path: "/ws/provider-envelopes",
+    });
+    const acks: Array<{ method: "pong"; reqId: number }> = [];
+    const handled = createClient(
+      withEndpoint("https://example.test"),
+      withWebSocketHandle(Socket),
+    );
+    const [error, socket] = await openControllableSocket(
+      useProviderSocket(
+        handled({
+          heartbeat: {
+            intervalMs: 20,
+            isAck(message: unknown) {
+              if (
+                typeof message === "object" &&
+                message !== null &&
+                "method" in message &&
+                message.method === "pong" &&
+                "reqId" in message &&
+                typeof message.reqId === "number"
+              ) {
+                acks.push({ method: "pong", reqId: message.reqId });
+                return true;
+              }
+              return false;
+            },
+            message: () => ({ method: "ping" as const, reqId: 7 }),
+            timeoutMs: 200,
+          },
+        }),
+        { key: "provider-heartbeat", mode: "heartbeat" },
+      ),
+      latest,
+    );
+    const native = latest();
 
-      expect(error).toBeNull();
-      if (!socket || !native) {
-        throw new Error("Expected provider socket");
-      }
+    expect(error).toBeNull();
+    if (!socket || !native) {
+      throw new Error("Expected provider socket");
+    }
 
-      const runtimeErrors: unknown[] = [];
-      const unsubscribe = socket.onRuntimeError((runtimeError) => {
-        runtimeErrors.push(runtimeError);
+    const runtimeErrors: unknown[] = [];
+    const unsubscribe = socket.onRuntimeError((runtimeError) => {
+      runtimeErrors.push(runtimeError);
+    });
+    const iterator = socket.receive[Symbol.asyncIterator]();
+    const wireReply = {
+      method: "wire" as const,
+      result: {
+        attempt: 1,
+        hasType: false,
+        keys: ["method", "req_id"],
+        method: "ping",
+        reqId: 7,
+      },
+      success: true,
+    };
+
+    try {
+      native.triggerMessage(JSON.stringify({ channel: "heartbeat" }));
+      await expect(iterator.next()).resolves.toEqual({
+        done: false,
+        value: { channel: "heartbeat" },
       });
-      const iterator = socket.receive[Symbol.asyncIterator]();
-      const wireReply = {
-        method: "wire" as const,
-        result: {
-          attempt: 1,
-          hasType: false,
-          keys: ["method", "req_id"],
-          method: "ping",
-          reqId: 7,
-        },
-        success: true,
-      };
 
-      try {
-        native.triggerMessage(JSON.stringify({ channel: "heartbeat" }));
-        await expect(iterator.next()).resolves.toEqual({
-          done: false,
-          value: { channel: "heartbeat" },
-        });
+      await vi.advanceTimersByTimeAsync(20);
+      expect(native.sent).toHaveLength(1);
+      echoProviderPing(native, native.sent[0] ?? "");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(acks).toEqual([{ method: "pong", reqId: 7 }]);
+      await expect(iterator.next()).resolves.toEqual({
+        done: false,
+        value: wireReply,
+      });
 
-        await vi.advanceTimersByTimeAsync(20);
-        expect(native.sent).toHaveLength(1);
-        echoProviderPing(native, native.sent[0] ?? "");
-        await vi.advanceTimersByTimeAsync(0);
-        expect(acks).toEqual([{ method: "pong", reqId: 7 }]);
-        await expect(iterator.next()).resolves.toEqual({
-          done: false,
-          value: wireReply,
-        });
+      // The second ping re-arms the ack deadline. Acknowledge it before advancing past timeoutMs.
+      await vi.advanceTimersByTimeAsync(20);
+      expect(native.sent).toHaveLength(2);
+      echoProviderPing(native, native.sent[1] ?? "");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(acks).toEqual([
+        { method: "pong", reqId: 7 },
+        { method: "pong", reqId: 7 },
+      ]);
+      await expect(iterator.next()).resolves.toEqual({
+        done: false,
+        value: wireReply,
+      });
+      await vi.advanceTimersByTimeAsync(200);
 
-        // The second ping re-arms the ack deadline. Acknowledge it before advancing past timeoutMs.
-        await vi.advanceTimersByTimeAsync(20);
-        expect(native.sent).toHaveLength(2);
-        echoProviderPing(native, native.sent[1] ?? "");
-        await vi.advanceTimersByTimeAsync(0);
-        expect(acks).toEqual([
-          { method: "pong", reqId: 7 },
-          { method: "pong", reqId: 7 },
-        ]);
-        await expect(iterator.next()).resolves.toEqual({
-          done: false,
-          value: wireReply,
-        });
-        await vi.advanceTimersByTimeAsync(200);
-
-        expect(socket.state).toBe("open");
-        expect(runtimeErrors).toEqual([]);
-      } finally {
-        unsubscribe();
-        socket.close(1000, "done");
-        native.triggerClose({ code: 1000, reason: "done", wasClean: true });
-        await socket.closed;
-      }
+      expect(socket.state).toBe("open");
+      expect(runtimeErrors).toEqual([]);
     } finally {
-      vi.useRealTimers();
+      unsubscribe();
+      socket.close(1000, "done");
+      native.triggerClose({ code: 1000, reason: "done", wasClean: true });
+      await socket.closed;
     }
   });
 

@@ -57,7 +57,6 @@ function decodeWebSocketText<S extends StructLike>(
 }
 
 export interface WebSocketCloseSnapshot {
-  cause?: unknown;
   code?: number;
   reason?: string;
   wasClean?: boolean;

@@ -38,7 +38,7 @@ interface Attempt extends ActiveAttempt {
   timedOut: boolean;
   /** The close that was observed while a Blob read still had to be delivered. */
   closeOutcome: AttemptOutcome | undefined;
-  heartbeat: HeartbeatRuntime<unknown> | undefined;
+  heartbeat: HeartbeatRuntime | undefined;
   connectTimer: ReturnType<typeof setTimeout> | undefined;
   errorTimer: ReturnType<typeof setTimeout> | undefined;
   /** Whether a Blob read is in flight. Frames that arrive behind it wait in `backlog`. */
@@ -55,7 +55,7 @@ interface Attempt extends ActiveAttempt {
   readonly onAbort: () => void;
 }
 
-export type OpenedSocket =
+type OpenedSocket =
   { ok: true; socket: WebSocketHandle } | { ok: false; cause: unknown };
 
 /** Creates the socket. A throw, from the constructor or from `binaryType`, is a failure of this call, not of the connection. */
@@ -116,7 +116,7 @@ export function runAttempt(
       settle(
         session,
         attempt,
-        attempt.closeOutcome ?? failed(session, attempt),
+        attempt.closeOutcome ?? localFailure(session, attempt),
       ),
     stop: () => {
       attempt.reads.abort();
@@ -136,7 +136,7 @@ export function runAttempt(
       attempt.timedOut = true;
       attempt.cause = ERR_TIMEOUT;
       requestNativeCloseBestEffort(socket);
-      settle(session, attempt, failed(session, attempt));
+      settle(session, attempt, localFailure(session, attempt));
     }, attemptTimeoutMs);
   }
   // Last, so that an abort that is already pending ends the attempt after every listener it has to remove is attached.
@@ -160,7 +160,7 @@ function connectionInfo(
 }
 
 /** The outcome of an attempt that ended without a close event: it failed locally, or the socket went quiet. */
-function failed(session: Session, attempt: Attempt): AttemptOutcome {
+function localFailure(session: Session, attempt: Attempt): AttemptOutcome {
   return {
     closeInfo: {},
     connection: connectionInfo(session, attempt.socket),
@@ -263,7 +263,7 @@ function handleOpen(session: Session, attempt: Attempt): void {
         // and the attempt settles like a drop, so the retry policy decides what follows.
         attempt.cause = cause;
         requestNativeCloseBestEffort(attempt.socket);
-        settle(session, attempt, failed(session, attempt));
+        settle(session, attempt, localFailure(session, attempt));
       },
       // A failing local heartbeat callback or serializer is not the endpoint's fault and ends the session.
       (cause) => {
@@ -296,7 +296,7 @@ function handleMessage(
   const blob = receiveFrame(session, attempt, event.data);
   if (blob !== undefined) {
     attempt.reading = true;
-    session.drain = drain(session, attempt, blob);
+    session.drain = drainFrames(session, attempt, blob);
   }
 }
 
@@ -308,7 +308,7 @@ function receiveFrame(
 ): Promise<unknown> | undefined {
   // After close() the caller reads nothing more, so a frame that arrives during the closing handshake is dropped
   // before it is decoded: a Blob read that no drain awaits would reject with no handler.
-  if (isSettled(attempt) || session.manualClose !== undefined) {
+  if (attempt.phase === "settled" || session.manualClose !== undefined) {
     return undefined;
   }
   let decoded: unknown;
@@ -318,14 +318,18 @@ function receiveFrame(
     emitRuntimeError(session, error);
     return undefined;
   }
-  if (isPromise(decoded)) {
+  if (decoded instanceof Promise) {
     return decoded;
   }
-  deliver(session, attempt, decoded);
+  enqueueFrame(session, attempt, decoded);
   return undefined;
 }
 
-function deliver(session: Session, attempt: Attempt, decoded: unknown): void {
+function enqueueFrame(
+  session: Session,
+  attempt: Attempt,
+  decoded: unknown,
+): void {
   if (typeof decoded === "undefined") {
     return;
   }
@@ -349,7 +353,7 @@ function deliver(session: Session, attempt: Attempt, decoded: unknown): void {
 }
 
 // Reads a Blob, then the frames that arrived behind it, in order. Only the Blob read races the signal.
-async function drain(
+async function drainFrames(
   session: Session,
   attempt: Attempt,
   blob: Promise<unknown>,
@@ -358,7 +362,7 @@ async function drain(
   while (reading !== undefined) {
     try {
       const read = reading;
-      deliver(
+      enqueueFrame(
         session,
         attempt,
         await awaitWithSignal(() => read, attempt.reads.signal),
@@ -389,12 +393,12 @@ function handleError(session: Session, attempt: Attempt): void {
   // retry policy decides what follows, as for a connect timeout or a missed heartbeat.
   attempt.errorTimer = setTimeout(() => {
     attempt.errorTimer = undefined;
-    settle(session, attempt, failed(session, attempt));
+    settle(session, attempt, localFailure(session, attempt));
   }, SOCKET_CLOSE_GRACE_MS);
   try {
     attempt.socket.close();
   } catch {
-    settle(session, attempt, failed(session, attempt));
+    settle(session, attempt, localFailure(session, attempt));
   }
 }
 
@@ -490,8 +494,4 @@ export function doneInfoForNetworkCause(cause: unknown): DoneInfo {
     return { attempted: false };
   }
   return { attempted: true, code: "NET_UNREACHABLE" };
-}
-
-function isPromise(value: unknown): value is Promise<unknown> {
-  return value instanceof Promise;
 }

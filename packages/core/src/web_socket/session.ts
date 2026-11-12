@@ -65,12 +65,12 @@ export interface SessionConfig {
   readonly release: () => void;
   /** The call's signal combined with the interceptor's. The session ends when it aborts. */
   readonly signal: AbortSignal;
-  /** The balancer's pick for the attempt about to start. `undefined` once it has been reported, or when not attributable. */
-  pick: ResolvedEndpoint | undefined;
 }
 
 /** One WebSocket session: everything its attempts, its public object and its lifecycle share. */
 export interface Session extends SessionConfig {
+  /** The balancer's pick for the attempt about to start. `undefined` once it has been reported, or when not attributable. */
+  pick: ResolvedEndpoint | undefined;
   status: WebSocketState;
   /** Counts state changes, so that a listener that causes another change stops the rest of the notification. */
   transition: number;
@@ -112,10 +112,12 @@ export interface Session extends SessionConfig {
 /** The first state is `idle`; the lifecycle moves it to `connecting` before anything can observe it. */
 export function createSession(
   config: SessionConfig,
+  pick: ResolvedEndpoint | undefined,
   startup: PromiseWithResolvers<WebSocketSessionLike>,
 ): Session {
   return {
     ...config,
+    pick,
     status: "idle",
     transition: 0,
     listeners: { runtimeError: new Set(), stateChange: new Set() },
@@ -259,11 +261,7 @@ export function finishFromSignal(
   );
 }
 
-export function requestClose(
-  session: Session,
-  code?: number,
-  reason?: string,
-): void {
+function requestClose(session: Session, code?: number, reason?: string): void {
   validateWebSocketClose(code, reason);
   // The caller stopped the session, ended or not: what it has not read is gone from this call on, as a closed WebSocket dispatches no more messages.
   session.incomingQueue.discard();
@@ -293,7 +291,7 @@ export function requestClose(
   }
 }
 
-export function dispose(session: Session): Promise<void> {
+function dispose(session: Session): Promise<void> {
   return (session.disposal ??= Promise.resolve().then(() =>
     disposeOnce(session),
   ));
@@ -490,7 +488,7 @@ export function toClosedInfo(
   };
 }
 
-export function toAbortedInfo(
+function toAbortedInfo(
   snapshot: WebSocketCloseSnapshot,
   cause: unknown,
 ): WebSocketCloseInfo {

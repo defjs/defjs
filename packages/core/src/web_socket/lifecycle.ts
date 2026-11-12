@@ -1,3 +1,4 @@
+import type { ResolvedEndpoint } from "../balancer/runtime";
 import { pickEndpoint } from "../balancer/runtime";
 import type { PreflightFault } from "../error";
 import { createNetworkFault, createPreflightFault } from "../error";
@@ -22,12 +23,15 @@ import {
 import { createWebSocketUrlFromRequest } from "./build";
 
 /** Creates the session and starts its lifecycle. The promise settles with the session at its first open, or fails the call. */
-export function startSession(config: SessionConfig): {
+export function startSession(
+  config: SessionConfig,
+  pick: ResolvedEndpoint | undefined,
+): {
   session: Session;
   opened: Promise<WebSocketSessionLike>;
 } {
   const startup = Promise.withResolvers<WebSocketSessionLike>();
-  const session = createSession(config, startup);
+  const session = createSession(config, pick, startup);
   /* istanbul ignore next -- @preserve defensive: run() settles every attempt, hook and delay inside its own failure boundaries */
   session.lifecycle = run(session).catch((cause) => {
     finishWithFault(

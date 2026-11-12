@@ -6,13 +6,14 @@ import type { HeartbeatRuntime } from "./heartbeat";
 import { startHeartbeat } from "./heartbeat";
 import type { WebSocketHeartbeatConfig } from "./web_socket";
 import { method } from "../../test/method";
+import { useFakeClock } from "../../test/mock_web_socket";
 
 describe("heartbeat", () => {
-  let runtimes: HeartbeatRuntime<unknown>[];
+  let runtimes: HeartbeatRuntime[];
 
   beforeEach(() => {
     runtimes = [];
-    vi.useFakeTimers();
+    useFakeClock();
   });
 
   afterEach(() => {
@@ -73,7 +74,7 @@ describe("heartbeat", () => {
   ) {
     const onTimeout = vi.fn<(cause: Error) => void>();
     const onError = vi.fn<(cause: unknown) => void>();
-    const runtime = startHeartbeat<unknown, AnyStruct | undefined>(
+    const runtime = startHeartbeat(
       socket,
       openState,
       config,
@@ -120,7 +121,7 @@ describe("heartbeat", () => {
 
   test("should not send when outgoing serialization stops the runtime", () => {
     const socket = createMockSocket();
-    let runtime: HeartbeatRuntime<unknown> | undefined;
+    let runtime: HeartbeatRuntime | undefined;
     const message = {
       get text() {
         runtime?.stop();
@@ -147,7 +148,7 @@ describe("heartbeat", () => {
 
   test("should not arm an acknowledgement timeout when native send stops the runtime", () => {
     const socket = createMockSocket();
-    let runtime: HeartbeatRuntime<unknown> | undefined;
+    let runtime: HeartbeatRuntime | undefined;
     socket.send = vi.fn(() => runtime?.stop());
 
     const { onError, onTimeout, ...started } = start(
@@ -173,7 +174,7 @@ describe("heartbeat", () => {
 
   test("F062 should accept an acknowledgement delivered synchronously by send on every heartbeat", () => {
     const socket = createMockSocket();
-    let runtime: HeartbeatRuntime<unknown> | undefined;
+    let runtime: HeartbeatRuntime | undefined;
     socket.send = vi.fn(() => runtime?.markAck());
 
     const started = start(
@@ -203,7 +204,7 @@ describe("heartbeat", () => {
     "F062 should clean up when send performs %s and then throws",
     (action) => {
       const socket = createMockSocket();
-      let runtime: HeartbeatRuntime<unknown> | undefined;
+      let runtime: HeartbeatRuntime | undefined;
       const failure = new Error("send failed after reentry");
       socket.send = vi.fn(() => {
         if (action === "ack") runtime?.markAck();

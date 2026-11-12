@@ -594,7 +594,7 @@ async function runWebSocketCommand<
         () => chain(request, (req) => openSession(current, req)),
         chainSignal,
       );
-      const [, connection] = await deliver(current, session);
+      const connection = await deliveredConnection(current, session);
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published WebSocketInterceptor/WebSocketHandler types carry WebSocketSessionLike, and an interceptor may return its own session, which is delivered by identity, while the published SocketAwaitResult needs the endpoint's WebSocketSession types. Unasserted: TS2322, `WebSocketSessionLike` is not assignable to `WebSocketSession<StructOutput<TIncoming>, WebSocketOutgoingData<TOutgoing>>`. A validating adapter would replace the delivered session
       const typedSession = session as WebSocketSession<
         WebSocketIncomingData<TIncoming>,
@@ -642,32 +642,34 @@ function openSession(
   if (!attributable) {
     pick.done({ attempted: false });
   }
-  const started = startSession({
-    incoming: endpoint.incoming,
-    outgoing: endpoint.outgoing,
-    maxOutgoingQueueSize: endpoint.maxOutgoingQueueSize ?? 0,
-    clientConfig,
-    operation: endpoint.operation,
-    Socket: call.Socket,
-    openState: call.openState,
-    retry: options.retry,
-    heartbeat: options.heartbeat,
-    beforeConnect:
-      options.beforeConnect ?? clientConfig.webSocket.beforeConnect,
-    protocols: [
-      ...(options.protocols ??
-        clientConfig.webSocket.protocols ??
-        endpoint.protocols ??
-        []),
-    ],
-    request: req,
-    attributable,
-    callerSignal: call.callerSignal,
-    controller: call.scope.controller,
-    release: call.scope.release,
-    signal,
-    pick: attributable ? pick : undefined,
-  });
+  const started = startSession(
+    {
+      incoming: endpoint.incoming,
+      outgoing: endpoint.outgoing,
+      maxOutgoingQueueSize: endpoint.maxOutgoingQueueSize ?? 0,
+      clientConfig,
+      operation: endpoint.operation,
+      Socket: call.Socket,
+      openState: call.openState,
+      retry: options.retry,
+      heartbeat: options.heartbeat,
+      beforeConnect:
+        options.beforeConnect ?? clientConfig.webSocket.beforeConnect,
+      protocols: [
+        ...(options.protocols ??
+          clientConfig.webSocket.protocols ??
+          endpoint.protocols ??
+          []),
+      ],
+      request: req,
+      attributable,
+      callerSignal: call.callerSignal,
+      controller: call.scope.controller,
+      release: call.scope.release,
+      signal,
+    },
+    attributable ? pick : undefined,
+  );
   call.owned = started.session;
   // An interceptor may drop the promise without handling it.
   void started.opened.catch(() => undefined);
@@ -675,15 +677,13 @@ function openSession(
 }
 
 /**
- * The call's result once the chain returned `session`: the session itself, and the connection to report with it.
- * A session the call built but did not hand out is discarded.
+ * The connection the call reports once the chain returned `session`. A session the call built but did not hand
+ * out is discarded.
  */
-async function deliver(
+async function deliveredConnection(
   call: Call,
   session: WebSocketSessionLike,
-): Promise<
-  [session: WebSocketSessionLike, connection: WebSocketConnectionInfo]
-> {
+): Promise<WebSocketConnectionInfo> {
   const publicConnection = session.connection;
   call.chainSettled = true;
   const { owned } = call;
@@ -695,14 +695,14 @@ async function deliver(
         new Error("WebSocket session was replaced by interceptor"),
       );
     }
-    return [session, publicConnection];
+    return publicConnection;
   }
   // The call reports the first open, for a session that still shows its own live `connection`.
   const first = owned.first;
   const reportsFirst =
     first !== undefined &&
     (first.facade === session || publicConnection === first.facade.connection);
-  return [session, reportsFirst ? first.connection : publicConnection];
+  return reportsFirst ? first.connection : publicConnection;
 }
 
 /** Whether `session`, the one the interceptors returned, is the session this call built or wraps it. */
@@ -724,7 +724,7 @@ async function discardOwned(owned: Session, reason: unknown): Promise<void> {
  *
  * The retry logic uses it to decide whether to try again.
  *
- * - `closeInfo` holds the close details of that attempt: `{ cause?, code?, reason?, wasClean? }`.
+ * - `closeInfo` holds the close details of that attempt: `{ code?, reason?, wasClean? }`.
  *
  * - `connection` is the connection snapshot, when the attempt got one.
  *

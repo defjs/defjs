@@ -3,8 +3,8 @@ import type { AnyStruct } from "../struct";
 import { serializeOutgoingWebSocketMessage } from "./codec";
 import type { WebSocketHeartbeatConfig } from "./web_socket";
 
-export type HeartbeatRuntime<TIncoming> = {
-  readonly isAck: ((message: TIncoming) => boolean) | undefined;
+export type HeartbeatRuntime = {
+  readonly isAck: ((message: unknown) => boolean) | undefined;
   markAck(): void;
   stop(): void;
 };
@@ -17,21 +17,18 @@ export type HeartbeatRuntime<TIncoming> = {
  * failure: the message factory, the encoding or the native send threw. Neither is called once the runtime has stopped
  * or the socket is no longer open.
  */
-export function startHeartbeat<
-  TIncoming,
-  TOutgoing extends AnyStruct | undefined,
->(
+export function startHeartbeat(
   socket: WebSocketHandle,
   openState: number,
   config: WebSocketHeartbeatConfig,
-  outgoing: TOutgoing | undefined,
+  outgoing: AnyStruct | undefined,
   onTimeout: (cause: Error) => void,
   onError: (cause: unknown) => void,
-): HeartbeatRuntime<TIncoming> {
+): HeartbeatRuntime {
   let stopped = false;
   let ackTimer: ReturnType<typeof setTimeout> | undefined;
   let interval: ReturnType<typeof setInterval> | undefined;
-  const runtime: HeartbeatRuntime<TIncoming> = {
+  const runtime: HeartbeatRuntime = {
     isAck: config.isAck,
     markAck() {
       clearTimeout(ackTimer);
@@ -48,7 +45,7 @@ export function startHeartbeat<
   const isActive = () => !stopped && socket.readyState === openState;
   // A failure ends the runtime. It is reported only while it still counts: a stop, or a socket that is
   // already closing, leaves the end of the attempt to the close event.
-  const failed = (): boolean => {
+  const endIfActive = (): boolean => {
     const active = isActive();
     runtime.stop();
     return active;
@@ -77,14 +74,14 @@ export function startHeartbeat<
       }
       if (config.timeoutMs !== undefined) {
         ackTimer = setTimeout(() => {
-          if (failed()) {
+          if (endIfActive()) {
             onTimeout(new Error("WebSocket heartbeat timeout"));
           }
         }, config.timeoutMs);
       }
       socket.send(serialized);
     } catch (error) {
-      if (failed()) {
+      if (endIfActive()) {
         onError(error);
       }
     }

@@ -54,6 +54,7 @@ describe("web socket send with a mock handle", () => {
   });
 
   test("should reject sends while manual close is pending before serializing or enqueueing", async () => {
+    useFakeClock();
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({ closeEventDelayMs: 30 }),
@@ -67,10 +68,12 @@ describe("web socket send with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
+    const pending = run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
     );
+    await vi.advanceTimersByTimeAsync(0);
+    const [, socket] = await pending;
     if (!socket) {
       throw new Error("Expected socket");
     }
@@ -79,6 +82,7 @@ describe("web socket send with a mock handle", () => {
     expect(() => socket.send({ text: "late", type: "message" })).toThrow(
       expect.objectContaining({ name: "InvalidStateError" }),
     );
+    await vi.advanceTimersByTimeAsync(30);
     await socket.closed;
   });
 

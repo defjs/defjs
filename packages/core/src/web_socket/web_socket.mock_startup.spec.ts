@@ -302,10 +302,8 @@ describe("web socket startup with a mock handle", () => {
   });
 
   test("should set binaryType to arraybuffer on socket creation", async () => {
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ autoCloseDelay: 50 }),
-    );
+    useFakeClock();
+    vi.stubGlobal("WebSocket", createMockWebSocketClass());
 
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -313,10 +311,17 @@ describe("web socket startup with a mock handle", () => {
     });
 
     const client = createClient(withEndpoint("http://localhost"));
-    const [, socket] = await run(client, useSocket);
+    const pending = run(client, useSocket);
+    await vi.advanceTimersByTimeAsync(0);
+    const [, socket] = await pending;
 
-    expect(socket).toBeDefined();
+    if (!socket) {
+      throw new Error("Expected socket");
+    }
     expect(lastMockInstance?.binaryType).toBe("arraybuffer");
+    socket.close(1000, "done");
+    await vi.advanceTimersByTimeAsync(0);
+    await socket.closed;
   });
 
   test("cleans the physical socket when its constructor aborts before listener registration", async () => {

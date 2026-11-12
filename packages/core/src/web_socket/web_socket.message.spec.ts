@@ -16,6 +16,7 @@ import {
   openControllableSocket,
 } from "../../test/regression/controllable_socket";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
+import { useFakeClock } from "../../test/mock_web_socket";
 
 const ChatIncoming = struct.discriminatedUnion("type", [
   struct.object({
@@ -186,85 +187,81 @@ describe("web socket single struct messages", () => {
   });
 
   test("sends a heartbeat through the outgoing struct and classifies the decoded ack", async () => {
-    vi.useFakeTimers();
+    useFakeClock();
     const { Socket, latest } = createControllableSocketClass();
-    try {
-      const useHeartbeat = defineWebSocket({
-        incoming: HeartbeatIncoming,
-        outgoing: HeartbeatOutgoing,
-        path: "/ws/heartbeat",
-      });
-      const acks: Array<{ ok: boolean; type: "pong" }> = [];
-      const client = createClient(
-        withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket),
-      );
-      const pending = useHeartbeat(
-        client({
-          heartbeat: {
-            intervalMs: 10,
-            isAck(message: unknown) {
-              if (
-                typeof message === "object" &&
-                message !== null &&
-                "type" in message &&
-                message.type === "pong" &&
-                "ok" in message &&
-                message.ok === true
-              ) {
-                acks.push({ ok: true, type: "pong" });
-                return true;
-              }
-              return false;
-            },
-            message: () => ({ at: 1, type: "ping" as const }),
-            timeoutMs: 1_000,
+    const useHeartbeat = defineWebSocket({
+      incoming: HeartbeatIncoming,
+      outgoing: HeartbeatOutgoing,
+      path: "/ws/heartbeat",
+    });
+    const acks: Array<{ ok: boolean; type: "pong" }> = [];
+    const client = createClient(
+      withEndpoint("https://example.test"),
+      withWebSocketHandle(Socket),
+    );
+    const pending = useHeartbeat(
+      client({
+        heartbeat: {
+          intervalMs: 10,
+          isAck(message: unknown) {
+            if (
+              typeof message === "object" &&
+              message !== null &&
+              "type" in message &&
+              message.type === "pong" &&
+              "ok" in message &&
+              message.ok === true
+            ) {
+              acks.push({ ok: true, type: "pong" });
+              return true;
+            }
+            return false;
           },
-        }),
-      );
-      const [error, socket] = await openControllableSocket(pending, latest);
-      const native = latest();
+          message: () => ({ at: 1, type: "ping" as const }),
+          timeoutMs: 1_000,
+        },
+      }),
+    );
+    const [error, socket] = await openControllableSocket(pending, latest);
+    const native = latest();
 
-      expect(error).toBeNull();
-      if (!socket || !native) {
-        throw new Error("Expected socket session");
-      }
-
-      const runtimeErrors: unknown[] = [];
-      socket.onRuntimeError((runtimeError) => {
-        runtimeErrors.push(runtimeError);
-      });
-      await vi.advanceTimersByTimeAsync(10);
-      expect(JSON.parse(native.sent[0] ?? "")).toEqual({
-        sent_at: 1,
-        type: "ping",
-      });
-      native.triggerMessage('{"ok":true,"type":"pong"}');
-      await vi.advanceTimersByTimeAsync(0);
-      expect(acks).toEqual([{ ok: true, type: "pong" }]);
-      await vi.advanceTimersByTimeAsync(1_000);
-
-      expect(runtimeErrors).toEqual([]);
-      expect(socket.state).toBe("open");
-      const iterator = socket.receive[Symbol.asyncIterator]();
-      socket.close(1000, "heartbeat-ok");
-      native.triggerClose({
-        code: 1000,
-        reason: "heartbeat-ok",
-        wasClean: true,
-      });
-      await expect(socket.closed).resolves.toMatchObject({
-        code: 1000,
-        kind: "closed",
-        reason: "heartbeat-ok",
-      });
-      await expect(iterator.next()).resolves.toEqual({
-        done: true,
-        value: undefined,
-      });
-    } finally {
-      vi.useRealTimers();
+    expect(error).toBeNull();
+    if (!socket || !native) {
+      throw new Error("Expected socket session");
     }
+
+    const runtimeErrors: unknown[] = [];
+    socket.onRuntimeError((runtimeError) => {
+      runtimeErrors.push(runtimeError);
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(JSON.parse(native.sent[0] ?? "")).toEqual({
+      sent_at: 1,
+      type: "ping",
+    });
+    native.triggerMessage('{"ok":true,"type":"pong"}');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(acks).toEqual([{ ok: true, type: "pong" }]);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(runtimeErrors).toEqual([]);
+    expect(socket.state).toBe("open");
+    const iterator = socket.receive[Symbol.asyncIterator]();
+    socket.close(1000, "heartbeat-ok");
+    native.triggerClose({
+      code: 1000,
+      reason: "heartbeat-ok",
+      wasClean: true,
+    });
+    await expect(socket.closed).resolves.toMatchObject({
+      code: 1000,
+      kind: "closed",
+      reason: "heartbeat-ok",
+    });
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
   });
 
   test("sends a nullable object field as JSON null", async () => {
