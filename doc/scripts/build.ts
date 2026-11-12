@@ -1,7 +1,7 @@
 import { locales } from "../app/lib/i18n";
 import { buildFingerprint } from "./build-state";
 import { checkLinks } from "./check-links";
-import { joinPath } from "./paths";
+import { docRoot, joinPath } from "./paths";
 export async function finalizeBuild(
   directory: string,
   before: string,
@@ -28,14 +28,16 @@ export async function finalizeBuild(
 }
 /* istanbul ignore next -- @preserve: command-line entry point */
 if (import.meta.main) {
-  const root = `${import.meta.dirname}/../`,
-    output = joinPath(root, "build/client");
+  const output = joinPath(docRoot, "build/client");
   const before = await buildFingerprint();
-  const child = Bun.spawn(["bun", "--bun", "react-router", "build"], {
-    cwd: root,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
+  const child = Bun.spawn(
+    [process.execPath, "--bun", "react-router", "build"],
+    {
+      cwd: docRoot,
+      stdout: "inherit",
+      stderr: "inherit",
+    },
+  );
   if (await child.exited)
     throw new Error("React Router documentation build failed");
   await finalizeBuild(output, before, await buildFingerprint());

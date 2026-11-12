@@ -1,8 +1,6 @@
-import { joinPath } from "./paths";
+import { docRoot, joinPath } from "./paths";
 
-export async function buildFingerprint(
-  root = `${import.meta.dirname}/../`,
-): Promise<string> {
+export async function buildFingerprint(root = docRoot): Promise<string> {
   const paths = (
     await Array.fromAsync(
       new Bun.Glob("{app,content,examples,public}/**/*").scan({

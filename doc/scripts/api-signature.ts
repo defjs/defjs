@@ -287,15 +287,6 @@ export function typeParameterClause(
   return text.slice(start + 1, end).trim();
 }
 
-export function cutEnd(
-  mode: "members" | "body" | "node",
-  marker: number | undefined,
-  nodeEnd: number,
-): number {
-  if (mode !== "node" && marker !== undefined) return marker;
-  return nodeEnd;
-}
-
 export function initializerEnd(node: {
   initializer?: { getStart(): number } | undefined;
   end: number;
@@ -331,29 +322,6 @@ export function readableBinding(signature: string): string {
     .replace(/< /g, "<")
     .replace(/ >/g, ">");
   return `${flatHead}(${parameterName(typeName)}: ${typeName})${rest}`;
-}
-
-/** A missing return annotation can use a short checker type. Longer types stay omitted. */
-export function returnTypeSuffix(typeText: string | undefined): string {
-  const text = typeText?.trim() ?? "";
-  if (
-    !text ||
-    text.length > 200 ||
-    text.includes("...") ||
-    text.includes("\n") ||
-    text === "any"
-  )
-    return "";
-  return `: ${text};`;
-}
-
-export function withReturnType(
-  signature: string,
-  printed: string | undefined,
-): string {
-  const suffix = returnTypeSuffix(printed);
-  if (!suffix || /\)\s*:/.test(signature)) return signature;
-  return `${signature.replace(/;\s*$/, "")}${suffix}`;
 }
 
 /** Keep the public class surface and drop implementation bodies. */

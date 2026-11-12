@@ -7,22 +7,11 @@ import {
 } from "typescript/async";
 import type { Checker, Program, Symbol, Type } from "typescript/async";
 import type { Node } from "typescript/ast";
-import { defined, type WorkerEntry } from "./api-model";
+import { defined, type StoredEntry } from "./api-model";
 
 const PRINT_FLAGS =
   TypeFormatFlags.UseAliasDefinedOutsideCurrentScope |
   TypeFormatFlags.NoTruncation;
-
-function dedupe(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const value of values) {
-    if (seen.has(value)) continue;
-    seen.add(value);
-    unique.push(value);
-  }
-  return unique;
-}
 
 /** Port of fumadocs-typescript's coarse type name: alias, union, array, object, or printed type. */
 async function simpleForm(
@@ -61,7 +50,7 @@ async function simpleForm(
       /* istanbul ignore else -- a top-level intersection member is never `never` */
       if (text.length > 0 && text !== "never") parts.unshift(text);
     }
-    return dedupe(parts).join(" & ");
+    return [...new Set(parts)].join(" & ");
   }
   if (type.isObjectType()) {
     if (await checker.isTupleType(type)) return "tuple";
@@ -134,7 +123,7 @@ async function docEntry(
   owner: Type,
   location: Node,
   checker: Checker,
-): Promise<WorkerEntry | undefined> {
+): Promise<StoredEntry | undefined> {
   if (
     owner.isObjectType() &&
     (owner.objectFlags & ObjectFlags.Class) !== 0 &&
@@ -149,7 +138,7 @@ async function docEntry(
     if (tag.name === "internal") return undefined;
     tags.push({ name: tag.name, text: tag.text ?? "" });
   }
-  const entry: WorkerEntry = {
+  const entry: StoredEntry = {
     name: symbol.name,
     description: await checker.getDocumentationCommentOfSymbol(symbol),
     type: await checker.typeToString(type, location, PRINT_FLAGS),
@@ -191,7 +180,7 @@ export async function tableEntries(
   name: string,
   program: Program,
   checker: Checker,
-): Promise<WorkerEntry[]> {
+): Promise<StoredEntry[]> {
   const sourceFile = defined(await program.getSourceFile(file), file);
   const moduleSymbol = defined(
     await checker.getSymbolAtLocation(sourceFile),
@@ -210,7 +199,7 @@ export async function tableEntries(
     /* istanbul ignore if -- checked declarations always resolve */
     if (!declaration) return [];
     const type = await checker.getTypeAtLocation(declaration);
-    const entries: WorkerEntry[] = [];
+    const entries: StoredEntry[] = [];
     for (const property of await checker.getPropertiesOfType(type)) {
       const entry = await docEntry(property, type, declaration, checker);
       if (entry?.name) entries.push(entry);

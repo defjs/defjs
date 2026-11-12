@@ -12,14 +12,13 @@ import {
   functionTypeOf,
   specifierIsTypeOnly,
   syntaxOffender,
-  SyntaxKind,
-  outputDirectory,
   resolveAlias,
   syntheticQuery,
   typeAliasHasMembers,
   typeTableQuery,
   writeExtractedApi,
 } from "./extract-api";
+import { SyntaxKind } from "typescript/ast";
 import { joinPath } from "./paths";
 import { removeDirectory, tempDirectory } from "./tmp";
 
@@ -138,8 +137,6 @@ test("empty parameter lists, hidden tables, and non-aliases stay inert", async (
     });
   expect(await resolveAlias(plain, 1, resolve)).toBe(plain);
   expect(await resolveAlias({ flags: 1 }, 1, resolve)).toEqual({ flags: 2 });
-  expect(outputDirectory(undefined, "fallback")).toBe("fallback");
-  expect(outputDirectory("dir", "fallback")).toBe("dir");
 });
 
 test("extracted JSON is written as catalog, reference and summary files", async () => {

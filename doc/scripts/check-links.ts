@@ -1,4 +1,4 @@
-import { joinPath } from "./paths";
+import { docRoot, joinPath } from "./paths";
 
 async function isRegularFile(path: string): Promise<boolean> {
   return Bun.file(path).exists();
@@ -73,5 +73,4 @@ export async function checkLinks(directory: string): Promise<void> {
   );
 }
 /* istanbul ignore next -- @preserve: command-line entry point */
-if (import.meta.main)
-  await checkLinks(`${import.meta.dirname}/../build/client`);
+if (import.meta.main) await checkLinks(joinPath(docRoot, "build/client"));

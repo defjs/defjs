@@ -1,4 +1,4 @@
-import { joinPath } from "./paths";
+import { docRoot, joinPath, repoRoot } from "./paths";
 import { removeDirectory, tempDirectory } from "./tmp";
 import {
   API,
@@ -16,12 +16,11 @@ import type {
 import {
   SyntaxKind,
   isFunctionDeclaration,
+  isIdentifier,
   isPropertyAssignment,
   isTypeAliasDeclaration,
   isVariableDeclaration,
 } from "typescript/ast";
-
-export { SyntaxKind };
 import type {
   ConstructorTypeNode,
   FunctionDeclaration,
@@ -41,12 +40,9 @@ import {
   expandBindingParameters,
   memberDescription,
   nestedExpression,
-  objectPropertyName,
   overloadNodes,
   parameterRequired,
   parameterTypeText,
-  referenceRecord,
-  requireKind,
   requireNode,
   serializeCatalog,
   serializeReference,
@@ -60,7 +56,7 @@ import {
 import type {
   ApiReferenceEntry,
   ParamDraft,
-  WorkerEntry,
+  StoredEntry,
   WrappedNode,
 } from "./api-model";
 import { apiSlug } from "./api-slug";
@@ -68,7 +64,6 @@ import {
   annotatedTypeText,
   cleanSignature,
   declaredParameterType,
-  cutEnd,
   facadeSignature,
   initializerEnd,
   suppressObjectSignature,
@@ -81,12 +76,9 @@ import {
   identityIndex,
   resolveSee,
   singleGroup,
-  unique,
   validateReference,
 } from "./api-validate";
 
-const repoRoot = Bun.fileURLToPath(new URL("../..", import.meta.url));
-const docRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const packages = [
   { name: "@defjs/core", entry: "packages/core/src/index.ts" },
   { name: "@defjs/core/xsrf", entry: "packages/core/src/xsrf/index.ts" },
@@ -301,7 +293,7 @@ function callablePages(
   for (const fn of selected) {
     const fileText = fn.getSourceFile().text;
     const signature = cleanSignature(
-      fileText.slice(fn.getStart(), cutEnd("body", fn.body?.pos, fn.end)),
+      fileText.slice(fn.getStart(), fn.body?.pos ?? fn.end),
     );
     signatures.push(signature);
     const pieces = parameterPieces(fn, tags);
@@ -471,18 +463,19 @@ async function readStructMembers(
       isPropertyAssignment,
       `unsupported struct property ${property.getText()}`,
     );
-    const name = objectPropertyName(
-      assignment.name.getText(),
-      assignment.name.kind,
-      SyntaxKind.Identifier,
-    );
-    requireKind(
-      assignment.initializer.kind,
-      SyntaxKind.Identifier,
-      `struct.${name} is not an identifier`,
-    );
+    const name = requireNode(
+      assignment.name,
+      isIdentifier,
+      `unsupported struct property name: ${assignment.name.getText()}`,
+    ).text;
     const located = defined(
-      await checker.getSymbolAtLocation(assignment.initializer),
+      await checker.getSymbolAtLocation(
+        requireNode(
+          assignment.initializer,
+          isIdentifier,
+          `struct.${name} is not an identifier`,
+        ),
+      ),
       `struct.${name}`,
     );
     const page = await readPage(
@@ -510,7 +503,7 @@ function tableKey(file: string, name: string): string {
 
 export async function assemblePages(
   drafts: readonly PageDraft[],
-  tables: ReadonlyMap<string, readonly WorkerEntry[]>,
+  tables: ReadonlyMap<string, readonly StoredEntry[]>,
 ): Promise<ApiReferenceEntry[]> {
   const identities = identityIndex(drafts);
   const entries: ApiReferenceEntry[] = [];
@@ -540,28 +533,26 @@ export async function assemblePages(
     const exampleFiles = [];
     for (const spec of draft.exampleSpecs)
       exampleFiles.push(await loadExample(docRoot, spec));
-    entries.push(
-      referenceRecord({
-        package: draft.package,
-        name: draft.name,
-        kind: draft.kind,
-        slug: apiSlug(draft.package, draft.name, draft.kind),
-        source: draft.source,
-        group: draft.group,
-        description: draft.description,
-        signatures: draft.signatures,
-        related: unique(
-          draft.seeTexts.map((text) => resolveSee(text, identities)),
-        ),
-        exampleFiles,
-        returns: draft.returns,
-        throws: draft.throws,
-        tags: draft.tags,
-        typeTable: typeTable === null ? null : visibleMembers(typeTable),
-        parameters: parameterSets[0] ?? [],
-        overloads: zipOverloads(draft.signatures, parameterSets, draft.returns),
-      }),
-    );
+    entries.push({
+      package: draft.package,
+      name: draft.name,
+      kind: draft.kind,
+      slug: apiSlug(draft.package, draft.name, draft.kind),
+      source: draft.source,
+      group: draft.group,
+      description: draft.description,
+      signatures: draft.signatures,
+      related: [
+        ...new Set(draft.seeTexts.map((text) => resolveSee(text, identities))),
+      ],
+      exampleFiles,
+      returns: draft.returns,
+      throws: draft.throws,
+      tags: draft.tags,
+      typeTable: typeTable === null ? null : visibleMembers(typeTable),
+      parameters: parameterSets[0] ?? [],
+      overloads: zipOverloads(draft.signatures, parameterSets, draft.returns),
+    });
   }
   expandBindingParameters(entries);
   entries.sort((left, right) =>
@@ -713,7 +704,7 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
         } else drafts.push(page);
       }
     }
-    const tables = new Map<string, readonly WorkerEntry[]>();
+    const tables = new Map<string, readonly StoredEntry[]>();
     const roots: string[] = [];
     const tempFiles: string[] = [];
     const fileForJob = new Map<string, string>();
@@ -795,28 +786,20 @@ export async function resolveAlias<T extends { flags: number }>(
   return symbol;
 }
 
-export function outputDirectory(
-  directory: string | undefined,
-  fallback: string,
-): string {
-  return directory ?? fallback;
-}
-
 export async function writeExtractedApi(
   entries: readonly ApiReferenceEntry[],
-  directory?: string,
+  directory: string,
 ): Promise<void> {
-  const target = outputDirectory(directory, joinPath(docRoot, "app/data"));
   await Bun.write(
-    joinPath(target, "api-entries.json"),
+    joinPath(directory, "api-entries.json"),
     serializeCatalog(entries),
   );
   await Bun.write(
-    joinPath(target, "api-reference.json"),
+    joinPath(directory, "api-reference.json"),
     serializeReference(entries),
   );
   await Bun.write(
-    joinPath(target, "api-summaries.json"),
+    joinPath(directory, "api-summaries.json"),
     serializeSummaries(entries),
   );
 }
@@ -824,5 +807,5 @@ export async function writeExtractedApi(
 /* istanbul ignore next -- @preserve: command-line entry point */
 if (import.meta.main) {
   const entries = await extractApiData();
-  await writeExtractedApi(entries);
+  await writeExtractedApi(entries, joinPath(docRoot, "app/data"));
 }

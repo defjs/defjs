@@ -39,17 +39,6 @@ export interface ApiReferenceEntry {
   overloads: ApiOverload[];
 }
 
-export interface WorkerEntry {
-  name: string;
-  description: string;
-  type: string;
-  simplifiedType: string;
-  required: boolean;
-  deprecated: boolean;
-  tags: { name: string; text: string }[];
-  typeHref?: string;
-}
-
 export interface ParamDraft {
   name: string;
   required: boolean;
@@ -109,14 +98,6 @@ export function implementationNode<T extends { kind: number }>(
   );
 }
 
-export function requireKind(
-  kind: number,
-  expected: number,
-  label: string,
-): void {
-  if (kind !== expected) throw new Error(label);
-}
-
 export function parameterTypeText(typeText: string | undefined): string {
   const text = typeText?.trim();
   if (!text) return "unknown";
@@ -174,30 +155,17 @@ export function requireNode<N, T extends N>(
   return node;
 }
 
-export function objectPropertyName(
-  text: string,
-  kind: "identifier" | "other" | number,
-  identifierKind?: number,
-): string {
-  const identifier =
-    kind === "identifier" ||
-    (typeof kind === "number" && kind === identifierKind);
-  if (!identifier) throw new Error(`unsupported struct property name: ${text}`);
-  return text;
-}
-
-export function storedEntry(entry: WorkerEntry): StoredEntry {
-  const stored: StoredEntry = {
-    name: stableMemberName(entry.name),
-    description: entry.description,
-    type: entry.type,
-    simplifiedType: entry.simplifiedType,
-    required: entry.required,
-    deprecated: entry.deprecated,
-    tags: entry.tags.map((tag) => ({ name: tag.name, text: tag.text })),
-    typeHref: entry.typeHref || undefined,
+export function storedEntry(row: StoredEntry): StoredEntry {
+  return {
+    name: stableMemberName(row.name),
+    description: row.description,
+    type: row.type,
+    simplifiedType: row.simplifiedType,
+    required: row.required,
+    deprecated: row.deprecated,
+    tags: row.tags.map((tag) => ({ name: tag.name, text: tag.text })),
+    typeHref: row.typeHref || undefined,
   };
-  return stored;
 }
 
 /** Tuple index rows and undocumented symbol keys are not part of the public table. */
@@ -226,7 +194,7 @@ export function preferredParameterType(
 
 export function zipParameters(
   drafts: readonly ParamDraft[],
-  generated: readonly WorkerEntry[],
+  generated: readonly StoredEntry[],
 ): StoredEntry[] {
   if (drafts.length !== generated.length)
     return drafts.map((draft) => ({
@@ -265,20 +233,6 @@ export function namedParameterType(type: string): string | undefined {
   return undefined;
 }
 
-function copyStored(row: StoredEntry): StoredEntry {
-  const stored: StoredEntry = {
-    name: row.name,
-    description: row.description,
-    type: row.type,
-    simplifiedType: row.simplifiedType,
-    required: row.required,
-    deprecated: row.deprecated,
-    tags: row.tags.map((tag) => ({ name: tag.name, text: tag.text })),
-    typeHref: row.typeHref || undefined,
-  };
-  return stored;
-}
-
 export function expandParameterList(
   parameters: readonly StoredEntry[],
   tables: ReadonlyMap<string, readonly StoredEntry[]>,
@@ -299,7 +253,7 @@ export function expandParameterList(
       throw new Error(
         `binding parameter type has no member table: ${typeName}`,
       );
-    for (const row of table) expanded.push(copyStored(row));
+    for (const row of table) expanded.push(storedEntry(row));
   }
   return expanded;
 }
@@ -332,22 +286,8 @@ export function zipOverloads(
   }));
 }
 
-function copyEntry(item: StoredEntry): StoredEntry {
-  const stored: StoredEntry = {
-    name: item.name,
-    description: item.description,
-    type: item.type,
-    simplifiedType: item.simplifiedType,
-    required: item.required,
-    deprecated: item.deprecated,
-    tags: item.tags.map((tag) => ({ name: tag.name, text: tag.text })),
-    typeHref: item.typeHref || undefined,
-  };
-  return stored;
-}
-
 /** Fixed key order so two generations stringify to the same bytes. */
-export function referenceRecord(entry: ApiReferenceEntry): ApiReferenceEntry {
+function referenceRecord(entry: ApiReferenceEntry): ApiReferenceEntry {
   return {
     package: entry.package,
     name: entry.name,
@@ -366,11 +306,12 @@ export function referenceRecord(entry: ApiReferenceEntry): ApiReferenceEntry {
     returns: [...entry.returns],
     throws: [...entry.throws],
     tags: entry.tags.map((tag) => ({ name: tag.name, text: tag.text })),
-    typeTable: entry.typeTable === null ? null : entry.typeTable.map(copyEntry),
-    parameters: entry.parameters.map(copyEntry),
+    typeTable:
+      entry.typeTable === null ? null : entry.typeTable.map(storedEntry),
+    parameters: entry.parameters.map(storedEntry),
     overloads: entry.overloads.map((overload) => ({
       signature: overload.signature,
-      parameters: overload.parameters.map(copyEntry),
+      parameters: overload.parameters.map(storedEntry),
       returns: [...overload.returns],
     })),
   };
@@ -384,7 +325,7 @@ export interface FormatResult {
 
 function defaultFormat(source: string, filename: string): FormatResult {
   const result = Bun.spawnSync({
-    cmd: ["bun", "fmt", `--stdin-filepath=${filename}`],
+    cmd: [process.execPath, "fmt", `--stdin-filepath=${filename}`],
     stdin: new TextEncoder().encode(source),
     stderr: "pipe",
     stdout: "pipe",

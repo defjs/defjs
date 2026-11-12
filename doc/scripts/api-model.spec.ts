@@ -9,13 +9,10 @@ import {
   memberDescription,
   namedParameterType,
   nestedExpression,
-  objectPropertyName,
   overloadNodes,
   parameterRequired,
   parameterTypeText,
-  requireKind,
   requireNode,
-  referenceRecord,
   formatJsonDocument,
   preferredParameterType,
   serializeCatalog,
@@ -90,8 +87,6 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
   expect(() => implementationNode([{ kind: 1 }], 1, 3)).toThrow(
     "implementation declaration",
   );
-  expect(() => requireKind(1, 2, "bad kind")).toThrow("bad kind");
-  requireKind(2, 2, "bad kind");
   const isNamed = (node: { name?: string }): node is { name: string } =>
     node.name !== undefined;
   const named = { name: "x" };
@@ -164,14 +159,6 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
   const wrapped = { kind: 1, expression: { kind: 2 } };
   expect(nestedExpression(wrapped, [1])).toEqual({ kind: 2 });
   expect(nestedExpression({ kind: 1 }, [1])).toBeUndefined();
-  expect(objectPropertyName("any", "identifier")).toBe("any");
-  expect(() => objectPropertyName("['any']", "other")).toThrow(
-    "unsupported struct property name",
-  );
-  expect(objectPropertyName("any", 80, 80)).toBe("any");
-  expect(() => objectPropertyName("['any']", 81, 80)).toThrow(
-    "unsupported struct property name",
-  );
   expect(
     storedEntry({ ...row("id"), typeHref: undefined }).typeHref,
   ).toBeUndefined();
@@ -273,22 +260,22 @@ test("serialized reference JSON uses a fixed field order", () => {
     parameters: [],
     overloads: [],
   };
-  const withTable = referenceRecord({
-    ...entry,
-    typeTable: [row("id", "#id"), row("name")],
-    parameters: [row("options")],
-    overloads: [
-      {
-        signature: "function f(): void;",
-        parameters: [row("options")],
-        returns: [],
-      },
-    ],
-  });
-  const table = withTable.typeTable;
-  if (!table) throw new Error("expected a type table");
-  expect(defined(table[0], "id").typeHref).toBe("#id");
-  expect(defined(table[1], "name").typeHref).toBeUndefined();
+  const withTable = serializeReference([
+    {
+      ...entry,
+      typeTable: [row("id", "#id"), row("name")],
+      parameters: [row("options")],
+      overloads: [
+        {
+          signature: "function f(): void;",
+          parameters: [row("options")],
+          returns: [],
+        },
+      ],
+    },
+  ]);
+  expect(withTable.match(/"typeHref"/g)?.length).toBe(1);
+  expect(withTable).toContain('"typeHref": "#id"');
   expect(serializeReference([entry]).endsWith("\n")).toBe(true);
   expect(serializeCatalog([entry])).toContain('"slug": "core/client-type"');
   expect(serializeCatalog([entry])).toContain(

@@ -6,9 +6,7 @@ import {
   parameterName,
   presentClass,
   readableBinding,
-  returnTypeSuffix,
   suppressObjectSignature,
-  cutEnd,
   annotatedTypeText,
   inferredTypeSuffix,
   initializerEnd,
@@ -19,7 +17,6 @@ import {
   stripInnerDocs,
   typeParameterClause,
   withInferredType,
-  withReturnType,
 } from "./api-signature";
 
 test("signature cleanup keeps the declaration and drops the body marker", () => {
@@ -94,9 +91,6 @@ test("a short inferred type is appended only when the source has no annotation",
   expect(typeParameterClause(" < T extends Foo > ", { pos: 0, end: 18 })).toBe(
     "T extends Foo",
   );
-  expect(cutEnd("members", 12, 40)).toBe(12);
-  expect(cutEnd("body", undefined, 40)).toBe(40);
-  expect(cutEnd("node", 12, 40)).toBe(40);
   expect(initializerEnd({ initializer: { getStart: () => 8 }, end: 20 })).toBe(
     8,
   );
@@ -323,25 +317,4 @@ test("leading async is removed and declarations end consistently", () => {
     "interface Foo {\n  id: string;\n}",
   );
   expect(finishSignature("function f(): void;;")).toBe("function f(): void;");
-  expect(withReturnType("function f(props: ClientProviderProps);", "any")).toBe(
-    "function f(props: ClientProviderProps);",
-  );
-  expect(
-    withReturnType(
-      "function ClientProvider(props: ClientProviderProps);",
-      "FunctionComponentElement<ProviderProps<Client | null>>",
-    ),
-  ).toBe(
-    "function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>;",
-  );
-  expect(withReturnType("function f(x: string): void;", "number")).toBe(
-    "function f(x: string): void;",
-  );
-  expect(returnTypeSuffix(undefined)).toBe("");
-  expect(returnTypeSuffix("")).toBe("");
-  expect(returnTypeSuffix("x".repeat(201))).toBe("");
-  expect(returnTypeSuffix("x".repeat(200))).toBe(`: ${"x".repeat(200)};`);
-  expect(returnTypeSuffix("Array<...>")).toBe("");
-  expect(returnTypeSuffix("a\nb")).toBe("");
-  expect(returnTypeSuffix("any")).toBe("");
 });
