@@ -64,23 +64,16 @@ export function pickEndpoint(
   }
 }
 
-// Attempt phases, in order. Numbers rather than a string union: pick, start,
-// end and done together measured 48 ns against 51 ns per attempt.
-const PICKED = 0;
-const STARTED = 1;
-const ENDED = 2;
-const DONE = 3;
-
 function resolve(result: PickResult): ResolvedEndpoint {
-  let phase = PICKED;
+  let phase: "picked" | "started" | "ended" | "done" = "picked";
   const start = result.start;
   const done = result.done;
   const end = result.end;
   return {
     endpoint: result.endpoint,
     start() {
-      if (phase !== PICKED) return;
-      phase = STARTED;
+      if (phase !== "picked") return;
+      phase = "started";
       try {
         start?.();
       } catch (thrown) {
@@ -89,8 +82,8 @@ function resolve(result: PickResult): ResolvedEndpoint {
       }
     },
     end(info) {
-      if (phase !== STARTED) return;
-      phase = ENDED;
+      if (phase !== "started") return;
+      phase = "ended";
       try {
         end?.(attributed(info));
       } catch (thrown) {
@@ -99,8 +92,8 @@ function resolve(result: PickResult): ResolvedEndpoint {
       }
     },
     done(info) {
-      if (phase === DONE) return;
-      phase = DONE;
+      if (phase === "done") return;
+      phase = "done";
       try {
         done?.(attributed(info));
       } catch (thrown) {
