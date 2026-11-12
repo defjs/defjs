@@ -7,7 +7,7 @@ description: 開啟具型別的事件串流、迭代一次，然後關閉並等�
 
 每個 `EventStreamHandle` 都只提供一個非同步迭代器。一律把 `stream.close(...)` 與 `await stream.closed` 放在 `finally` 區塊中，讓提早執行的 `break` 或 `return` 不會漏掉底層的 Fetch 串流：
 
-<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+<Tabs items={["sdk/deployments.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
@@ -17,12 +17,6 @@ description: 開啟具型別的事件串流、迭代一次，然後關閉並等�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="deploy-events.ts">
-  examples/recipes/consume-sse.ts#example
 </include>
 
   </Tab>

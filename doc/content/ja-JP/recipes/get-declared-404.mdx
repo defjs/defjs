@@ -7,7 +7,7 @@ description: 単一の GET を呼び出し、型付けされた 200 と宣言さ
 
 `defineRequest` で `output`（`2xx` レスポンス用）と `error`（`2xx` 以外のレスポンス用）の両方を宣言します。呼び出し側では、`error?.code === "HTTP_STATUS" && error.status === 404` で分岐し、型付けされた `error.data` ペイロードを読み取ります。
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
@@ -17,12 +17,6 @@ description: 単一の GET を呼び出し、型付けされた 200 と宣言さ
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="get-order.ts">
-  examples/recipes/get-declared-404.ts#example
 </include>
 
   </Tab>

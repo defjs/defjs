@@ -7,7 +7,7 @@ description: Traitez 304 comme un fault de statut HTTP ; conservez la Map de cac
 
 Dans Defjs, seules les réponses `2xx` empruntent la branche de succès, par conséquent un code `304 Not Modified` arrive sous la forme d'un fault `HTTP_STATUS`. Laissez `error` non déclaré sur `defineRequest` afin que le corps vide du `304` ne soit jamais lu, et maintenez votre cache `Map` dans un wrapper applicatif entourant l'appel d'opération :
 
-<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
@@ -21,8 +21,8 @@ Dans Defjs, seules les réponses `2xx` empruntent la branche de succès, par con
 
   </Tab>
   <Tab>
-<include cwd meta="etag-cache.ts">
-  examples/recipes/etag-revalidate.ts#example
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/main.ts#example
 </include>
 
   </Tab>

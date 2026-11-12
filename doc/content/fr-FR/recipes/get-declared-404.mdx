@@ -7,7 +7,7 @@ description: Appelez une requête GET et aiguillez entre un 200 typé et une err
 
 Déclarez à la fois `output` (pour les réponses 2xx) et `error` (pour les réponses hors 2xx) sur `defineRequest`. Au point d'appel, aiguillez sur `error?.code === "HTTP_STATUS" && error.status === 404` pour lire la charge utile typée `error.data`.
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
@@ -17,12 +17,6 @@ Déclarez à la fois `output` (pour les réponses 2xx) et `error` (pour les rép
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="get-order.ts">
-  examples/recipes/get-declared-404.ts#example
 </include>
 
   </Tab>

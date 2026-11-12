@@ -7,7 +7,7 @@ description: Ouvrez un flux d'événements typé, itérez une fois, puis fermez 
 
 Chaque `EventStreamHandle` expose un unique itérateur asynchrone. Placez systématiquement `stream.close(...)` et `await stream.closed` dans un bloc `finally` afin qu'un `break` ou un `return` anticipé ne laisse pas fuiter le flux Fetch sous-jacent :
 
-<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+<Tabs items={["sdk/deployments.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
@@ -17,12 +17,6 @@ Chaque `EventStreamHandle` expose un unique itérateur asynchrone. Placez systé
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="deploy-events.ts">
-  examples/recipes/consume-sse.ts#example
 </include>
 
   </Tab>

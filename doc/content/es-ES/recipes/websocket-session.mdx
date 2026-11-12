@@ -7,7 +7,7 @@ description: Conecta, envía una envoltura tipada, recibe una vez y luego cierra
 
 Declara structs de `incoming` y `outgoing` en `defineWebSocket`. En tu aplicación, suscríbete a `session.onRuntimeError(...)`, consume `session.receive` y asegúrate siempre de cancelar la suscripción, llamar a `session.close(...)` y esperar con `await session.closed` en un bloque `finally`:
 
-<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
@@ -17,12 +17,6 @@ Declara structs de `incoming` y `outgoing` en `defineWebSocket`. En tu aplicaci�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="quotes.ts">
-  examples/recipes/websocket-session.ts#example
 </include>
 
   </Tab>

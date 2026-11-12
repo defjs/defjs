@@ -7,7 +7,7 @@ description: 接続を確立し、型付けされたエンベロープを送信�
 
 `defineWebSocket` で `incoming` と `outgoing` の Struct スキーマを宣言します。アプリケーション側では、`session.onRuntimeError(...)` を購読し、`session.receive` を消費し、`finally` ブロック内で必ず購読解除、`session.close(...)` の呼び出し、および `await session.closed` を行います。
 
-<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
@@ -17,12 +17,6 @@ description: 接続を確立し、型付けされたエンベロープを送信�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="quotes.ts">
-  examples/recipes/websocket-session.ts#example
 </include>
 
   </Tab>

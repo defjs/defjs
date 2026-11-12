@@ -7,7 +7,7 @@ description: 调用一次 GET，并在带类型的 200 与声明的 404 之间�
 
 在 `defineRequest` 上同时声明 `output`（用于 2xx 响应）和 `error`（用于非 2xx 响应）。在调用点用 `error?.code === "HTTP_STATUS" && error.status === 404` 分支，读取带类型的 `error.data`。
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
@@ -17,12 +17,6 @@ description: 调用一次 GET，并在带类型的 200 与声明的 404 之间�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="get-order.ts">
-  examples/recipes/get-declared-404.ts#example
 </include>
 
   </Tab>

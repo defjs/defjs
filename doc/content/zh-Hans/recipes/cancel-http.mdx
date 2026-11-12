@@ -7,7 +7,7 @@ description: 中止或超时一次调用，并读取 NET_ABORTED / NET_TIMEOUT�
 
 用 `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 把调用方 `AbortController` 与期限组合起来，并通过 `client({ signal })` 传入组合后的 signal。Defjs 把调用方手动中止归类为 `NET_ABORTED`，把超时中止归类为 `NET_TIMEOUT`。
 
-<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
@@ -17,12 +17,6 @@ description: 中止或超时一次调用，并读取 NET_ABORTED / NET_TIMEOUT�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
 </include>
 
   </Tab>

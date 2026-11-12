@@ -7,7 +7,7 @@ description: 연결하고, 타입화된 엔벨로프를 전송하며, 1회 수�
 
 `defineWebSocket`에 `incoming` 및 `outgoing` Struct를 선언합니다. 애플리케이션에서는 `session.onRuntimeError(...)`를 구독하고, `session.receive`를 소비하며, `finally` 블록에서 항상 구독 해제, `session.close(...)` 호출, `await session.closed`를 수행하세요:
 
-<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
@@ -17,12 +17,6 @@ description: 연결하고, 타입화된 엔벨로프를 전송하며, 1회 수�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="quotes.ts">
-  examples/recipes/websocket-session.ts#example
 </include>
 
   </Tab>

@@ -7,7 +7,7 @@ description: Einen Aufruf abbrechen oder zeitlich begrenzen und NET_ABORTED / NE
 
 Kombiniere einen aufruferseitigen `AbortController` mit einer Frist über `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` und übergib das kombinierte Signal via `client({ signal })`. Defjs klassifiziert einen manuellen Abbruch durch den Aufrufer als `NET_ABORTED` und einen zeitlimitbedingten Abbruch als `NET_TIMEOUT`.
 
-<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
@@ -17,12 +17,6 @@ Kombiniere einen aufruferseitigen `AbortController` mit einer Frist über `Abort
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
 </include>
 
   </Tab>

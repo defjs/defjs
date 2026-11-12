@@ -7,7 +7,7 @@ description: أرفق ترويسة Authorization وأعد المحاولة مر�
 
 في Defjs، يستدعي `next(request)` بقية سلسلة المعترضات باتجاه الداخل فقط — ولا يعيد توزيع الطلب من المعترض الخارجي الأول مجدداً. ضع إرفاق الرمز، وإلغاء تكرار التحديث المتزامن لرحلة مفردة (single-flight)، وإعادة المحاولة لمرة واحدة عند استلام `401` داخل معترض HTTP **واحد** حتى لا تعمل معترضات السجلات أو التوقيت الخارجية مرتين:
 
-<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
@@ -21,8 +21,8 @@ description: أرفق ترويسة Authorization وأعد المحاولة مر�
 
   </Tab>
   <Tab>
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
 </include>
 
   </Tab>

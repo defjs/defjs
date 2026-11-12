@@ -7,7 +7,7 @@ description: افتح تدفق أحداث محدد الأنواع، وكرر ع�
 
 يوفر كل مقبض تدفق `EventStreamHandle` مكرراً غير متزامن مفرد الاستهلاك. احرص دائماً على وضع `stream.close(...)` متبوعاً بـ `await stream.closed` داخل كتلة `finally` حتى لا تؤدي عبارات `break` أو `return` المبكرة إلى تسريب تدفق Fetch الأساسي:
 
-<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+<Tabs items={["sdk/deployments.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
@@ -17,12 +17,6 @@ description: افتح تدفق أحداث محدد الأنواع، وكرر ع�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="deploy-events.ts">
-  examples/recipes/consume-sse.ts#example
 </include>
 
   </Tab>

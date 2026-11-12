@@ -7,7 +7,7 @@ description: Attach Authorization and replay once inside one interceptor; next()
 
 In Defjs, `next(request)` invokes the remainder of the interceptor chain inwardâ€”it does not re-dispatch from the outermost interceptor. Place token attachment, single-flight refresh deduplication, and the one-time `401` replay inside **one** HTTP interceptor so outer logging or timing interceptors do not run twice:
 
-<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
@@ -21,8 +21,8 @@ In Defjs, `next(request)` invokes the remainder of the interceptor chain inwardâ
 
   </Tab>
   <Tab>
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
 </include>
 
   </Tab>

@@ -7,7 +7,7 @@ description: 呼叫一次 GET，按具型別嘅 200 同已宣告嘅 404 分支�
 
 喺 `defineRequest` 上同時宣告 `output`（對應 2xx 成功回應）同 `error`（對應非 2xx 回應）。喺呼叫處透過 `error?.code === "HTTP_STATUS" && error.status === 404` 進行條件判斷，即可安全讀取帶型別嘅 `error.data` payload。
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
@@ -17,12 +17,6 @@ description: 呼叫一次 GET，按具型別嘅 200 同已宣告嘅 404 分支�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="get-order.ts">
-  examples/recipes/get-declared-404.ts#example
 </include>
 
   </Tab>

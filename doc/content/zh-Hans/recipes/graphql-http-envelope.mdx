@@ -7,7 +7,7 @@ description: 把 GraphQL 保持为 HTTP 200 + 应用层解包；Core 不提供 G
 
 Defjs 不内嵌 GraphQL 客户端或 `errorPolicy`。把基于 HTTP 的 GraphQL 建模为普通 `POST` 操作，其 `builder` 发送 `{ query, operationName, variables }`。在信封 struct 上把 `data` 标为 `.nullish()`，让省略的 `data` 和 `data: null` 都能通过结构校验，然后在应用辅助函数中解包 `errors[]`：
 
-<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
@@ -21,8 +21,8 @@ Defjs 不内嵌 GraphQL 客户端或 `errorPolicy`。把基于 HTTP 的 GraphQL 
 
   </Tab>
   <Tab>
-<include cwd meta="graphql-viewer.ts">
-  examples/recipes/graphql-http-envelope.ts#example
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/main.ts#example
 </include>
 
   </Tab>

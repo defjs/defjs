@@ -7,7 +7,7 @@ description: 在單一攔截器內附加 Authorization 並重試一次；next() 
 
 在 Defjs 中，`next(request)` 只會向內呼叫攔截器鏈剩下的部分——不會從最外層攔截器重新分派。請把 token 附加、single-flight 重新整理去重，以及一次性的 `401` 重試，全部放在**同一個** HTTP 攔截器裡，這樣外層的日誌或計時攔截器就不會執行兩次：
 
-<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
@@ -21,8 +21,8 @@ description: 在單一攔截器內附加 Authorization 並重試一次；next() 
 
   </Tab>
   <Tab>
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
 </include>
 
   </Tab>

@@ -7,7 +7,7 @@ description: أرسل جسم طلب JSON محدد الأنواع وفك ترمي
 
 مرّر كائن مدخلات ذا نوع محدد إلى دالة `builder` وأرجع `{ body: input }`. تُبقي `.alias("customer_name")` اسم `customerName` داخل TypeScript، مع ترميز `"customer_name"` سلكياً وفك ترميزه مجدداً من استجابة `201`.
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
@@ -17,12 +17,6 @@ description: أرسل جسم طلب JSON محدد الأنواع وفك ترمي
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="create-order.ts">
-  examples/recipes/post-json.ts#example
 </include>
 
   </Tab>

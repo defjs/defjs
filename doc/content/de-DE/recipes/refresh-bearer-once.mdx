@@ -7,7 +7,7 @@ description: Authorization anhängen und innerhalb eines einzelnen Interceptors 
 
 In Defjs ruft `next(request)` den verbleibenden Teil der Interceptor-Kette nach innen auf – es startet nicht erneut beim äußersten Interceptor. Platziere das Anhängen von Tokens, die Single-Flight-Deduplizierung von Refresh-Aufrufen und die einmalige Wiederholung nach `401` in **einem** HTTP-Interceptor, damit äußere Logging- oder Timing-Interceptors nicht doppelt laufen:
 
-<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
@@ -21,8 +21,8 @@ In Defjs ruft `next(request)` den verbleibenden Teil der Interceptor-Kette nach 
 
   </Tab>
   <Tab>
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
 </include>
 
   </Tab>

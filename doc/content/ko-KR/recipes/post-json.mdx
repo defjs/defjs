@@ -7,7 +7,7 @@ description: 타입화된 JSON 본문을 전송하고 선언된 201 응답을 �
 
 타입화된 입력 객체를 `builder`에 전달하고 `{ body: input }`을 반환합니다. `.alias("customer_name")`을 사용하면 TypeScript 코드에서는 카멜케이스인 `customerName`을 유지하면서, 통신 시에는 `"customer_name"`으로 인코딩되고 `201` 응답으로부터 다시 올바르게 디코딩됩니다.
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
@@ -17,12 +17,6 @@ description: 타입화된 JSON 본문을 전송하고 선언된 201 응답을 �
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="create-order.ts">
-  examples/recipes/post-json.ts#example
 </include>
 
   </Tab>

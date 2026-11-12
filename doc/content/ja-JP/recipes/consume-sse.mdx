@@ -7,7 +7,7 @@ description: 型付けされたイベントストリームを開いて反復処�
 
 各 `EventStreamHandle` は、単一の非同期イテレーターを提供します。途中の `break` や `return` で基盤の Fetch ストリームがリークしないよう、`finally` ブロック内で必ず `stream.close(...)` と `await stream.closed` を実行してください。
 
-<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+<Tabs items={["sdk/deployments.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
@@ -17,12 +17,6 @@ description: 型付けされたイベントストリームを開いて反復処�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="deploy-events.ts">
-  examples/recipes/consume-sse.ts#example
 </include>
 
   </Tab>

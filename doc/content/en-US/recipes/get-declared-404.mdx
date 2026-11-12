@@ -7,7 +7,7 @@ description: Call one GET and branch on typed 200 vs declared 404.
 
 Declare both `output` (for 2xx responses) and `error` (for non-2xx responses) on `defineRequest`. At the call site, branch on `error?.code === "HTTP_STATUS" && error.status === 404` to read the typed `error.data` payload.
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/sdk/orders.ts#example
@@ -17,12 +17,6 @@ Declare both `output` (for 2xx responses) and `error` (for non-2xx responses) on
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/get-declared-404/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="get-order.ts">
-  examples/recipes/get-declared-404.ts#example
 </include>
 
   </Tab>

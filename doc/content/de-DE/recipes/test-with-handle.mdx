@@ -7,7 +7,7 @@ description: Fetch für einen einzelnen Client mit withHTTPHandle austauschen un
 
 `withHTTPHandle(...)` ersetzt die zugrundeliegende `fetch`-Funktion für einen einzelnen Client und durchläuft dabei die gesamte Defjs-Pipeline – Input-Validierung, `builder`-Mapping, URL-Auflösung, Interceptors, Status-Klassifizierung und Struct-Dekodierung – ganz ohne einen Netzwerk-Socket zu öffnen:
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
@@ -20,20 +20,6 @@ description: Fetch für einen einzelnen Client mit withHTTPHandle austauschen un
 </include>
 
   </Tab>
-  <Tab>
-Das ist eine eigenständige Einzeldatei-Demonstration, keine Test-Runner-Spec. Für Zusicherungen gegen die gemeinsame SDK-Definition nutze den vorherigen Test-Tab.
-
-<include cwd meta="get-order.ts">
-  examples/recipes/test-with-handle.ts#example
-</include>
-
-  </Tab>
 </Tabs>
-
-Die Einzeldatei-Demonstration gibt aus:
-
-```txt
-paid 200
-```
 
 In der Produktion rufst du exakt dieselbe `getOrder`-Operation mit einem mit `withEndpoint(...)` konfigurierten Client auf. Siehe [Tests](/de-DE/docs/testing) und [Client](/de-DE/docs/client).

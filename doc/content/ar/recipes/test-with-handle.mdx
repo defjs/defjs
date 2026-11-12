@@ -7,7 +7,7 @@ description: استبدل دالة Fetch لعميل واحد عبر withHTTPHand
 
 تستبدل الدالة `withHTTPHandle(...)` دالة `fetch` الأساسية لنسخة عميل محددة مع تشغيل خط أنابيب Defjs بالكامل — التحقق من المدخلات، وتطبيق دالة `builder`، وحل الروابط، والمعترضات، وتصنيف الحالات، وفك ترميز كائنات Struct — دون فتح أي مقبس شبكي حقيقي:
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
@@ -20,20 +20,6 @@ description: استبدل دالة Fetch لعميل واحد عبر withHTTPHand
 </include>
 
   </Tab>
-  <Tab>
-هذا عرض مستقل في ملف واحد، وليس مواصفة مشغّل اختبارات. للتوكيدات على تعريف SDK المشترك، استخدم تبويب الاختبار السابق.
-
-<include cwd meta="get-order.ts">
-  examples/recipes/test-with-handle.ts#example
-</include>
-
-  </Tab>
 </Tabs>
-
-يطبع عرض الملف الواحد:
-
-```txt
-paid 200
-```
 
 في بيئة الإنتاج، استدعِ نفس العملية `getOrder` تماماً بعميل مضبوط عبر `withEndpoint(...)`. راجع دليلي [الاختبارات](/ar/docs/testing) و[العميل](/ar/docs/client).

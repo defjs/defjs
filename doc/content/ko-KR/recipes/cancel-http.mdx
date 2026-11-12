@@ -7,7 +7,7 @@ description: 호출을 취소하거나 시간 초과를 설정하고 NET_ABORTED
 
 `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])`를 사용하여 호출자의 `AbortController`와 마감 시간(deadline)을 결합한 뒤, `client({ signal })`을 통해 전달하세요. Defjs는 호출자가 수동으로 abort한 경우 `NET_ABORTED`로, 타임아웃에 의해 abort된 경우 `NET_TIMEOUT`으로 정확히 분류합니다.
 
-<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
@@ -17,12 +17,6 @@ description: 호출을 취소하거나 시간 초과를 설정하고 NET_ABORTED
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
 </include>
 
   </Tab>

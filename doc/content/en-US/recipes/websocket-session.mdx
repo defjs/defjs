@@ -7,7 +7,7 @@ description: Connect, send one typed envelope, receive once, then close and awai
 
 Declare `incoming` and `outgoing` Structs on `defineWebSocket`. In your application, subscribe to `session.onRuntimeError(...)`, consume `session.receive`, and always unsubscribe, call `session.close(...)`, and `await session.closed` in `finally`:
 
-<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
@@ -17,12 +17,6 @@ Declare `incoming` and `outgoing` Structs on `defineWebSocket`. In your applicat
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="quotes.ts">
-  examples/recipes/websocket-session.ts#example
 </include>
 
   </Tab>

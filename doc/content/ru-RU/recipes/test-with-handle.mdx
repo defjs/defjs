@@ -7,7 +7,7 @@ description: Подмените Fetch для одного клиента чер�
 
 Функция `withHTTPHandle(...)` подменяет базовую функцию `fetch` для отдельного экземпляра клиента, полностью выполняя весь конвейер Defjs — валидацию входных данных, маппинг в `builder`, разрешение URL, перехватчики, классификацию статусов и декодирование Struct — без открытия реального сетевого сокета:
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "Single-file demonstration"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
@@ -20,20 +20,6 @@ description: Подмените Fetch для одного клиента чер�
 </include>
 
   </Tab>
-  <Tab>
-Это отдельная однофайловая демонстрация, а не спецификация тест-раннера. Для проверок общего определения SDK используйте предыдущую вкладку с тестом.
-
-<include cwd meta="get-order.ts">
-  examples/recipes/test-with-handle.ts#example
-</include>
-
-  </Tab>
 </Tabs>
-
-Однофайловая демонстрация печатает:
-
-```txt
-paid 200
-```
 
 В продакшене вызывайте ту же самую операцию `getOrder` с клиентом, настроенным через `withEndpoint(...)`. См. разделы [Тестирование](/ru-RU/docs/testing) и [Клиент](/ru-RU/docs/client).

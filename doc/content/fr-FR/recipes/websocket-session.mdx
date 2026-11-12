@@ -7,7 +7,7 @@ description: Connectez-vous, envoyez une enveloppe typée, recevez une fois, pui
 
 Déclarez les structs `incoming` et `outgoing` sur `defineWebSocket`. Dans votre application, abonnez-vous à `session.onRuntimeError(...)`, consommez `session.receive`, et veillez systématiquement à vous désabonner, appeler `session.close(...)` et attendre `await session.closed` dans un bloc `finally` :
 
-<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
@@ -17,12 +17,6 @@ Déclarez les structs `incoming` et `outgoing` sur `defineWebSocket`. Dans votre
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="quotes.ts">
-  examples/recipes/websocket-session.ts#example
 </include>
 
   </Tab>

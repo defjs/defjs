@@ -7,7 +7,7 @@ description: Подключитесь, отправьте типизирован
 
 Объявите структуры `incoming` и `outgoing` в `defineWebSocket`. В приложении подпишитесь на `session.onRuntimeError(...)`, читайте `session.receive` и всегда отписывайтесь, вызывайте `session.close(...)` и дожидайтесь `await session.closed` в блоке `finally`:
 
-<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
@@ -17,12 +17,6 @@ description: Подключитесь, отправьте типизирован
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="quotes.ts">
-  examples/recipes/websocket-session.ts#example
 </include>
 
   </Tab>

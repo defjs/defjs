@@ -7,7 +7,7 @@ description: 呼び出しを中断またはタイムアウトさせ、NET_ABORTE
 
 呼び出し元の `AbortController` と期限を `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` で結合し、`client({ signal })` 経由で渡します。Defjs は、呼び出し元による手動の中断を `NET_ABORTED`、タイムアウトによる中断を `NET_TIMEOUT` として分類します。
 
-<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/sdk/reports.ts#example
@@ -17,12 +17,6 @@ description: 呼び出しを中断またはタイムアウトさせ、NET_ABORTE
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/cancel-http/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
 </include>
 
   </Tab>

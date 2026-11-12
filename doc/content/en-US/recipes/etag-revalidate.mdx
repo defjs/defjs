@@ -7,7 +7,7 @@ description: Treat 304 as an HTTP status fault; keep the cache Map outside the o
 
 In Defjs, only `2xx` responses take the success branch, so `304 Not Modified` arrives as an `HTTP_STATUS` fault. Leave `error` undeclared on `defineRequest` so the empty `304` body is never read, and keep your `Map` cache in an application wrapper around the operation call:
 
-<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
@@ -21,8 +21,8 @@ In Defjs, only `2xx` responses take the success branch, so `304 Not Modified` ar
 
   </Tab>
   <Tab>
-<include cwd meta="etag-cache.ts">
-  examples/recipes/etag-revalidate.ts#example
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/main.ts#example
 </include>
 
   </Tab>

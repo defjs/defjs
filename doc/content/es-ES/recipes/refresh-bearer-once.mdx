@@ -7,7 +7,7 @@ description: Adjunta Authorization y reintenta una vez dentro de un interceptor;
 
 En Defjs, `next(request)` invoca el resto de la cadena de interceptores hacia adentro; no vuelve a despachar desde el interceptor más externo. Ubica la asignación del token, la desduplicación de renovaciones simultáneas (_single-flight_) y el reintento único tras `401` dentro de **un único** interceptor HTTP, de modo que los interceptores externos de registro o de medición de tiempos no se ejecuten dos veces:
 
-<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
@@ -21,8 +21,8 @@ En Defjs, `next(request)` invoca el resto de la cadena de interceptores hacia ad
 
   </Tab>
   <Tab>
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
 </include>
 
   </Tab>

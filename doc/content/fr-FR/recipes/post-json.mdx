@@ -7,7 +7,7 @@ description: Envoyez un corps JSON typé et décodez une réponse 201 déclarée
 
 Transmettez un objet d'entrée typé au `builder` et renvoyez `{ body: input }`. `.alias("customer_name")` conserve `customerName` dans TypeScript tout en encodant `"customer_name"` sur le réseau et en le décodant fidèlement depuis la réponse `201`.
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
@@ -17,12 +17,6 @@ Transmettez un objet d'entrée typé au `builder` et renvoyez `{ body: input }`.
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="create-order.ts">
-  examples/recipes/post-json.ts#example
 </include>
 
   </Tab>

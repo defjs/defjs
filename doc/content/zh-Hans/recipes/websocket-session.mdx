@@ -7,7 +7,7 @@ description: 连接，发送一个带类型的信封，接收一次，然后关�
 
 在 `defineWebSocket` 上声明 `incoming` 和 `outgoing` struct。在应用中订阅 `session.onRuntimeError(...)`，消费 `session.receive`，并始终在 `finally` 中退订、调用 `session.close(...)` 和 `await session.closed`：
 
-<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/sdk/quotes.ts#example
@@ -17,12 +17,6 @@ description: 连接，发送一个带类型的信封，接收一次，然后关�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/websocket-session/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="quotes.ts">
-  examples/recipes/websocket-session.ts#example
 </include>
 
   </Tab>

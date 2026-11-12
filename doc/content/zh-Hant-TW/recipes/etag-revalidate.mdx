@@ -7,7 +7,7 @@ description: 把 304 當成 HTTP 狀態 fault 處理；把快取 Map 留在操�
 
 在 Defjs 中，只有 `2xx` 回應會走成功分支，因此 `304 Not Modified` 會以 `HTTP_STATUS` fault 送達。請在 `defineRequest` 上不宣告 `error`，讓空的 `304` 本文永遠不會被讀取，並把 `Map` 快取留在操作呼叫外圍的應用程式包裝函式中：
 
-<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/etag-revalidate/sdk/catalog.ts#example
@@ -21,8 +21,8 @@ description: 把 304 當成 HTTP 狀態 fault 處理；把快取 Map 留在操�
 
   </Tab>
   <Tab>
-<include cwd meta="etag-cache.ts">
-  examples/recipes/etag-revalidate.ts#example
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/main.ts#example
 </include>
 
   </Tab>

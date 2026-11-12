@@ -7,7 +7,7 @@ description: withHTTPHandle で単一クライアントの Fetch 実装を差し
 
 `withHTTPHandle(...)` は、単一のクライアントインスタンスに対して基底の `fetch` 関数を差し替えます。実際のネットワークソケットを開くことなく、入力値のバリデーション、`builder` による配置、URL 解決、インターセプター、ステータスに応じた振り分け、Struct デコードといった Defjs のパイプライン全体を実行しながらテストできます。
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "単一ファイルのデモ"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/testing/sdk/orders.ts#example
@@ -20,20 +20,6 @@ description: withHTTPHandle で単一クライアントの Fetch 実装を差し
 </include>
 
   </Tab>
-  <Tab>
-これは単体の単一ファイルデモであり、テストランナーの spec ではありません。共有された SDK 定義に対するアサーションは、前のテストタブを使ってください。
-
-<include cwd meta="get-order.ts">
-  examples/recipes/test-with-handle.ts#example
-</include>
-
-  </Tab>
 </Tabs>
-
-単一ファイルのデモが出力するもの：
-
-```txt
-paid 200
-```
 
 本番環境では、`withEndpoint(...)` で設定したクライアントをまったく同じ `getOrder` 操作に渡して呼び出します。詳細は [テスト](/ja-JP/docs/testing) および [Client](/ja-JP/docs/client) を参照してください。

@@ -7,7 +7,7 @@ description: 使用 withHTTPHandle 仅为单个测试 Client 替换底层 Fetch�
 
 `withHTTPHandle(...)` 为单个 Client 替换底层 `fetch`，同时完整跑通 Defjs 流水线——输入校验、`builder` 映射、URL 解析、拦截器、状态码分类和 struct 解码——而无需打开网络 socket：
 
-<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "单文件演示"]}>
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
 <Tab>
 
 <include cwd lang="typescript">
@@ -22,21 +22,6 @@ description: 使用 withHTTPHandle 仅为单个测试 Client 替换底层 Fetch�
 </include>
 
 </Tab>
-<Tab>
-
-这是一份独立的单文件演示，不是测试运行器的 spec。要对共享的 SDK 定义做断言，请用前面的测试页签。
-
-<include cwd meta="get-order.ts">
-  examples/recipes/test-with-handle.ts#example
-</include>
-
-</Tab>
 </Tabs>
-
-单文件演示的输出：
-
-```txt
-paid 200
-```
 
 在生产环境中，用配置了 `withEndpoint(...)` 的 Client 调用完全相同的 `getOrder` 操作。见 [测试](/zh-Hans/docs/testing) 与 [Client](/zh-Hans/docs/client)。

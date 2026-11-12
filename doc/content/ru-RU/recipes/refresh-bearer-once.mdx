@@ -7,7 +7,7 @@ description: Добавьте Authorization и выполните один по�
 
 В Defjs вызов `next(request)` передаёт управление внутрь оставшейся цепочки перехватчиков — он не перезапускает конвейер с самого внешнего перехватчика. Поместите установку токена, дедупликацию параллельных запросов на обновление (single-flight) и однократный повтор запроса при `401` внутрь **одного** HTTP-перехватчика, чтобы внешние перехватчики логирования или замера времени не выполнялись дважды:
 
-<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/refresh-bearer-once/sdk/billing.ts#example
@@ -21,8 +21,8 @@ description: Добавьте Authorization и выполните один по�
 
   </Tab>
   <Tab>
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
 </include>
 
   </Tab>

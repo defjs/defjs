@@ -7,7 +7,7 @@ description: 타입화된 이벤트 스트림을 열고 1회 순회한 뒤, 스�
 
 각 `EventStreamHandle`은 단일 비동기 이터레이터를 제공합니다. 조기 `break`나 `return` 문으로 루프를 빠져나오더라도 기반 Fetch 스트림이 누수되지 않도록, 항상 `finally` 블록 안에서 `stream.close(...)`와 `await stream.closed`를 호출하세요:
 
-<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+<Tabs items={["sdk/deployments.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
@@ -17,12 +17,6 @@ description: 타입화된 이벤트 스트림을 열고 1회 순회한 뒤, 스�
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="deploy-events.ts">
-  examples/recipes/consume-sse.ts#example
 </include>
 
   </Tab>

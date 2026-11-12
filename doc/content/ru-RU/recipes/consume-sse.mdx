@@ -7,7 +7,7 @@ description: Откройте типизированный поток событ
 
 Каждый `EventStreamHandle` предоставляет ровно один асинхронный итератор. Всегда помещайте `stream.close(...)` и `await stream.closed` в блок `finally`, чтобы ранний выход через `break` или `return` не приводил к утечке базового Fetch-потока:
 
-<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+<Tabs items={["sdk/deployments.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/sdk/deployments.ts#example
@@ -17,12 +17,6 @@ description: Откройте типизированный поток событ
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/consume-sse/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="deploy-events.ts">
-  examples/recipes/consume-sse.ts#example
 </include>
 
   </Tab>

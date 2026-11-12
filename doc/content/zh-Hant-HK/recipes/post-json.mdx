@@ -7,7 +7,7 @@ description: "發送帶型別嘅 JSON body，並將宣告過嘅 201 回應順利
 
 將帶型別嘅 input 物件交畀 `builder`，並回傳 `{ body: input }`。`.alias("customer_name")` 畀你喺 TypeScript 入面繼續用 `customerName`，同時喺網絡傳輸時自動編碼成 `"customer_name"`，並喺收到 `201` 回應時將佢解碼返出嚟。
 
-<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/sdk/orders.ts#example
@@ -17,12 +17,6 @@ description: "發送帶型別嘅 JSON body，並將宣告過嘅 201 回應順利
   <Tab>
 <include cwd lang="typescript">
   examples/recipes/post-json/app/main.ts#example
-</include>
-
-  </Tab>
-  <Tab>
-<include cwd meta="create-order.ts">
-  examples/recipes/post-json.ts#example
 </include>
 
   </Tab>
