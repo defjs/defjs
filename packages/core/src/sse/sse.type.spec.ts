@@ -4,9 +4,6 @@ import type { ClientSSEOptions } from "../client/config";
 // @ts-expect-error client-level SSE queue configuration was removed.
 import { withSSEQueue } from "../index";
 
-// @ts-expect-error low-level transport callback context is not part of the public barrel.
-import type { FetchEventStreamErrorContext } from "../index";
-
 // @ts-expect-error low-level transport options are not part of the public barrel.
 import type { FetchEventStreamOptions } from "../index";
 
@@ -53,7 +50,6 @@ function useType<T>(_probe?: T): T | undefined {
 
 void withSSEQueue;
 useType<FetchEventStreamOptions>();
-useType<FetchEventStreamErrorContext>();
 
 const removedClientLimit: ClientSSEOptions = {
   // @ts-expect-error maxBufferSize belongs to each event-stream definition.

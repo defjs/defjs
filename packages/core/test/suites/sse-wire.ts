@@ -1,5 +1,6 @@
 import { resolveRetryPolicy } from "../../src/internal/retry.ts";
 import { expect, inject, test } from "vitest";
+import { DEFAULT_FETCH } from "../../src/client/config.ts";
 import { fetchEventStream } from "../../src/sse/transport/event_stream.ts";
 import type { EventStreamMessage } from "../../src/sse/transport/parser.ts";
 import { fixture } from "../fixture/client-auto.ts";
@@ -38,6 +39,7 @@ export function registerSseWireSuite(): void {
           method: "GET",
         },
         {
+          fetch: DEFAULT_FETCH,
           maxBufferSize: 1024,
           retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
           transformMessage(message) {

@@ -12,6 +12,8 @@ vi.mock("../../internal/backoff", { spy: true });
 
 import { wait } from "../../internal/backoff";
 import { resolveRetryPolicy } from "../../internal/retry";
+import type { FetchHandle } from "../../client/config";
+import { DEFAULT_FETCH } from "../../client/config";
 import { method } from "../../../test/method";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
 import { struct } from "../../struct";
@@ -30,8 +32,9 @@ import type { EventStreamMessage } from "./parser";
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
-  "maxBufferSize" | "transformMessage"
+  "fetch" | "maxBufferSize" | "transformMessage"
 > & {
+  fetch?: FetchHandle;
   maxBufferSize?: number;
 };
 
@@ -41,6 +44,7 @@ function fetchEventStream(
   options: TestOptions<EventStreamMessage> = {},
 ) {
   return fetchEventStreamInternal(request, {
+    fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     transformMessage: (message) => message,
     ...options,
@@ -54,6 +58,7 @@ function fetchTransformedEventStream<T>(
     Pick<FetchEventStreamOptions<T>, "transformMessage">,
 ) {
   return fetchEventStreamInternal(request, {
+    fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     ...options,
   });
@@ -286,9 +291,6 @@ describe("fetchEventStream", () => {
 
     const stream = await fetchEventStream(request, {
       fetch: fetch,
-      onerror() {
-        return 0;
-      },
       retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
     });
 
@@ -342,9 +344,6 @@ describe("fetchEventStream", () => {
 
     const stream = await fetchEventStream(request, {
       fetch: fetch,
-      onerror() {
-        return 0;
-      },
       retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
     });
     const messages: string[] = [];
@@ -387,9 +386,6 @@ describe("fetchEventStream", () => {
 
     const stream = await fetchEventStream(request, {
       fetch: fetch,
-      onerror() {
-        return 0;
-      },
       retry: resolveRetryPolicy({ maxRetries: 10, delayMs: 0 }),
     });
     const messages: string[] = [];
@@ -443,9 +439,6 @@ describe("fetchEventStream", () => {
 
     const stream = await fetchEventStream(request, {
       fetch: fetch,
-      onerror() {
-        return 0;
-      },
       retry: resolveRetryPolicy({ maxRetries: 10, delayMs: 0 }),
     });
     const messages: [data: string, id: string][] = [];
@@ -646,8 +639,6 @@ describe("SSE final endpoint attribution", () => {
 
   test.each([
     { mode: "eof", code: undefined, startup: false, status: 200 },
-    { mode: "onopen", code: "EXT_HOOK_FAILED", startup: true, status: 200 },
-    { mode: "onclose", code: "EXT_HOOK_FAILED", startup: false, status: 200 },
     {
       mode: "transform",
       code: "EXT_OBSERVER_FAILED",
@@ -661,12 +652,6 @@ describe("SSE final endpoint attribution", () => {
       status: 200,
     },
     { mode: "getReader", code: "NET_UNREACHABLE", startup: false, status: 200 },
-    {
-      mode: "error-observer",
-      code: "NET_UNREACHABLE",
-      startup: false,
-      status: 200,
-    },
     { mode: "policy", code: "EXT_HOOK_FAILED", startup: false, status: 200 },
     {
       mode: "media",
@@ -716,7 +701,7 @@ describe("SSE final endpoint attribution", () => {
           status,
         },
       );
-      const owner = ["getReader", "error-observer", "policy"].includes(mode)
+      const owner = ["getReader", "policy"].includes(mode)
         ? response.body?.getReader()
         : undefined;
       try {
@@ -737,15 +722,6 @@ describe("SSE final endpoint attribution", () => {
             handshakeError:
               mode === "handshake-body" ? struct.string() : undefined,
             maxBufferSize: mode === "parser" ? 8 : 1024,
-            onopen() {
-              if (mode === "onopen") throw cause;
-            },
-            onclose() {
-              if (mode === "onclose") throw cause;
-            },
-            onerror() {
-              if (mode === "error-observer") throw cause;
-            },
             transformMessage(message) {
               if (mode === "transform") throw cause;
               return message;
@@ -791,7 +767,7 @@ describe("unsupported streaming request body", () => {
     __resetStreamingRequestBodySupportForTests();
   });
 
-  test("should reject a ReadableStream body with the shared sentinel before onerror or reconnect", async () => {
+  test("should reject a ReadableStream body with the shared sentinel before reconnect", async () => {
     simulateUnsupportedStreaming();
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -799,7 +775,6 @@ describe("unsupported streaming request body", () => {
         controller.close();
       },
     });
-    const onerror = vi.fn(() => undefined);
     const shouldRetry = vi.fn(() => false);
     const fetch = vi.fn(() =>
       Promise.resolve(new Response(null, { status: 204 })),
@@ -813,13 +788,11 @@ describe("unsupported streaming request body", () => {
       },
       {
         fetch: fetch,
-        onerror,
         retry: resolveRetryPolicy({ delayMs: 60_000, shouldRetry }),
       },
     );
 
     await expect(pending).rejects.toBe(ERR_STREAMING_REQUEST_UNSUPPORTED);
-    expect(onerror).toHaveBeenCalledTimes(0);
     expect(shouldRetry).toHaveBeenCalledTimes(0);
     expect(fetch).toHaveBeenCalledTimes(0);
     expect(body.locked).toBe(false);

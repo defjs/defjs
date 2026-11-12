@@ -532,9 +532,6 @@ async function runEventStreamCommand<
             fetch: clientConfig.sse.handle,
             failure,
             handshakeError: endpoint.error,
-            onopen(open) {
-              owned.initialOpen ??= open;
-            },
             transformMessage(message, signal) {
               return transformStreamMessage(
                 endpoint.events,
@@ -549,6 +546,7 @@ async function runEventStreamCommand<
         ).then(
           (stream) => {
             owned.stream = stream;
+            owned.initialOpen = stream.open;
             void stream.closed.then(owned.release, owned.release);
             return stream;
           },

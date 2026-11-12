@@ -60,7 +60,6 @@ import {
 
 export const EVENT_STREAM_CONTENT_TYPE = "text/event-stream";
 export const LAST_EVENT_ID_HEADER = "last-event-id";
-const DEFAULT_RETRY_INTERVAL = 1000;
 // Events waiting for the consumer. A full queue pauses reading the response; nothing is dropped.
 const MAX_QUEUE_SIZE = 1024;
 
@@ -164,22 +163,15 @@ export interface FetchEventStreamOptions<
   TEvent = EventStreamMessage,
   TError extends AnyStruct | undefined = AnyStruct | undefined,
 > {
-  fetch?: FetchHandle;
+  fetch: FetchHandle;
   /** @internal Carries startup failure metadata without annotating shared cause values. */
   failure?: EventStreamFailureInfo<HandshakeBody<TError>>;
   /** Optional struct for a non-2xx handshake body; fills the fault's `data` when declared. */
   handshakeError?: TError;
-  onopen?: (open: EventStreamOpenInfo) => void | Promise<void>;
-  onclose?: (open: EventStreamOpenInfo) => void | Promise<void>;
-  onerror?: (
-    error: unknown,
-    context: FetchEventStreamErrorContext,
-  ) => number | null | undefined | Promise<number | null | undefined>;
   transformMessage: (
     message: EventStreamMessage,
     signal: AbortSignal,
   ) => Promise<TEvent | undefined> | TEvent | undefined;
-  retryInterval?: number;
   /** The resolved retry policy. Absent means the stream is not retried. */
   retry?: RetryPolicy;
   maxBufferSize: number;
@@ -204,13 +196,6 @@ export interface FetchEventStreamOptions<
           },
         ];
   };
-}
-
-export interface FetchEventStreamErrorContext {
-  lastEventId: string;
-  retryCount: number;
-  retryInterval: number;
-  open?: EventStreamOpenInfo;
 }
 
 type EventStreamFatalCode = Exclude<
@@ -305,15 +290,15 @@ export async function fetchEventStream<
   const closedDeferred = Promise.withResolvers<EventStreamCloseInfo>();
   const openDeferred = Promise.withResolvers<EventStreamHandle<TEvent>>();
   const closeController = new AbortController();
-  const fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
+  const fetchImpl = options.fetch;
   const headers = new Headers(request.headers);
 
   let settledClosed = false;
   // Whether the stream ended before the caller's signal aborted. Set once, when `closed` settles.
   let endedBeforeAbort = false;
   let settledOpen = false;
-  let retryInterval =
-    options.retryInterval ?? policy?.delayMs ?? DEFAULT_RETRY_INTERVAL;
+  // A server `retry:` field replaces the policy's base delay for the reconnects that follow.
+  let serverRetryMs: number | undefined;
   let retryCount = 0;
   let lastEventId = "";
   // Headers validate every write. The id only matters to the next attempt, so it is applied there.
@@ -570,11 +555,6 @@ export async function fetchEventStream<
 
         validateOpenResponse(open, decoded, bodyFault);
 
-        await runFatalHook(
-          () => options.onopen?.(open),
-          attemptAbort,
-          "Event stream onopen callback failed",
-        );
         retryCount = 0;
 
         if (!settledOpen) {
@@ -587,12 +567,6 @@ export async function fetchEventStream<
           readerStarted = true;
           await consumeEventStream(response.body, attemptAbort);
         }
-        await runFatalHook(
-          () => options.onclose?.(open),
-          attemptAbort,
-          "Event stream onclose callback failed",
-        );
-
         queue.close();
         finishAttempt();
         settleClosed({ kind: "eof" });
@@ -622,12 +596,7 @@ export async function fetchEventStream<
 
         // A non-2xx handshake is not fatal: the retry policy decides, and only 502, 503 and 504 retry by default.
         if (error instanceof EventStreamFatalError) {
-          await observeFatalError(error, attemptAbort);
-          if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(retryAbort);
-          } else {
-            finishError(error);
-          }
+          finishError(error);
           return;
         }
 
@@ -651,7 +620,7 @@ export async function fetchEventStream<
           return;
         }
 
-        if (typeof retryDelay !== "number" || retryDelay < 0) {
+        if (retryDelay === null) {
           finishError(error);
           return;
         }
@@ -689,7 +658,7 @@ export async function fetchEventStream<
         lastEventIdDirty = true;
       },
       (retry) => {
-        retryInterval = retry;
+        serverRetryMs = retry;
       },
       (message) => {
         // The parser reports a block's id before its message, so the stream's last event id
@@ -760,29 +729,11 @@ export async function fetchEventStream<
     signal: AbortSignal,
     response: Response | undefined,
   ): Promise<number | null> {
-    retryCount += 1;
-
-    const next = options.onerror
-      ? await awaitWithSignal(
-          () =>
-            options.onerror?.(error, {
-              lastEventId,
-              retryCount,
-              retryInterval,
-              open: latestOpen,
-            }),
-          signal,
-        )
-      : undefined;
-
-    if (next === null) {
-      return null;
-    }
-
     // Opt-in retry: without a policy the stream is not retried.
     if (!policy) {
       return null;
     }
+    retryCount += 1;
 
     // A handshake status other than 502, 503 and 504 is not retried by default; every other failure is a
     // network failure of the handshake or of the open stream.
@@ -810,32 +761,12 @@ export async function fetchEventStream<
       return null;
     }
 
-    const delayMs = typeof next === "number" ? next : retryInterval;
-    return computeReconnectDelay({ ...policy, delayMs }, retryCount);
-  }
-
-  async function observeFatalError(
-    error: Error,
-    signal: AbortSignal,
-  ): Promise<void> {
-    if (!options.onerror) {
-      return;
-    }
-
-    try {
-      await awaitWithSignal(
-        () =>
-          options.onerror?.(error, {
-            lastEventId,
-            retryCount,
-            retryInterval,
-            open: latestOpen,
-          }),
-        signal,
-      );
-    } catch {
-      // Fatal errors own the terminal outcome; observers cannot replace them.
-    }
+    return computeReconnectDelay(
+      serverRetryMs === undefined
+        ? policy
+        : { ...policy, delayMs: serverRetryMs },
+      retryCount,
+    );
   }
 
   async function runFatalHook<T>(

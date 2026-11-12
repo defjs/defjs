@@ -13,6 +13,7 @@ vi.mock("../../internal/backoff", { spy: true });
 import { wait } from "../../internal/backoff";
 import { resolveRetryPolicy } from "../../internal/retry";
 import type { FetchHandle } from "../../client/config";
+import { DEFAULT_FETCH } from "../../client/config";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
 import type { HttpRequest } from "../../http";
 import { struct } from "../../struct";
@@ -30,8 +31,9 @@ import { yieldMacrotask } from "../../../test/macrotask";
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
-  "maxBufferSize" | "transformMessage"
+  "fetch" | "maxBufferSize" | "transformMessage"
 > & {
+  fetch?: FetchHandle;
   maxBufferSize?: number;
 };
 
@@ -58,6 +60,7 @@ function fetchEventStream(
   options: TestOptions<EventStreamMessage> = {},
 ) {
   return fetchEventStreamInternal(request, {
+    fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     transformMessage: (message) => message,
     ...options,
@@ -71,6 +74,7 @@ function fetchTransformedEventStream<T>(
     Pick<FetchEventStreamOptions<T>, "transformMessage">,
 ) {
   return fetchEventStreamInternal(request, {
+    fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     ...options,
   });
@@ -128,30 +132,11 @@ describe("fetchEventStream advanced", () => {
     await expect(stream.closed).resolves.toEqual({ kind: "eof" });
   });
 
-  test("should stop retry when onerror returns null", async () => {
-    const networkError = new Error("network failure");
-    const fetch = vi.fn(() => Promise.reject(networkError));
-    const onerror = vi.fn().mockReturnValue(null);
-    const shouldRetry = vi.fn(() => true);
-
-    await expect(
-      fetchEventStream(createRequest("/events"), {
-        fetch,
-        onerror,
-        retry: resolveRetryPolicy({ shouldRetry }),
-      }),
-    ).rejects.toBe(networkError);
-    expect(fetch).toHaveBeenCalledOnce();
-    expect(onerror).toHaveBeenCalledTimes(1);
-    expect(shouldRetry).not.toHaveBeenCalled();
-  });
-
   test("should preserve an undefined network rejection", async () => {
     await expect(
       fetchEventStream(createRequest("/events"), {
         // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the fetch under test rejects with undefined, which the stream must surface unchanged
         fetch: () => Promise.reject(undefined),
-        onerror: () => null,
       }),
     ).rejects.toBeUndefined();
   });
@@ -164,32 +149,6 @@ describe("fetchEventStream advanced", () => {
       events.push(event);
     }
     expect(events[0]).not.toHaveProperty("retry");
-  });
-
-  test("should use custom retry delay from onerror", async () => {
-    const onerror = vi.fn().mockReturnValue(10);
-    const fetch = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("network error"))
-      .mockResolvedValueOnce(
-        new Response("id: 1\nevent: message\ndata: ok\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        }),
-      );
-
-    const stream = await fetchEventStream(createRequest("/events"), {
-      fetch,
-      onerror,
-      retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
-      retryInterval: 1,
-    });
-
-    const events: EventStreamMessage[] = [];
-    for await (const event of stream) {
-      events.push(event);
-    }
-    expect(events).toEqual([{ data: "ok", event: "message", id: "1" }]);
-    expect(onerror).toHaveBeenCalledTimes(1);
   });
 
   test("should close gracefully when close is called after already closed", async () => {
@@ -253,23 +212,6 @@ describe("fetchEventStream advanced", () => {
     await expect(iter.next()).rejects.toThrow(
       "Failed to process event stream message",
     );
-  });
-
-  test("should call onopen and onclose callbacks", async () => {
-    const onopen = vi.fn();
-    const onclose = vi.fn();
-
-    const stream = await fetchEventStream(createRequest("/sse/basic"), {
-      onopen,
-      onclose,
-    });
-
-    for await (const _ of stream) {
-      // consume
-    }
-
-    expect(onopen).toHaveBeenCalledTimes(1);
-    expect(onclose).toHaveBeenCalledTimes(1);
   });
 
   test("should work with default options", async () => {
@@ -468,9 +410,8 @@ describe("fetchEventStream advanced", () => {
     );
   });
 
-  test("should observe but never retry a fatal open-validation error", async () => {
+  test("should never retry a fatal open-validation error", async () => {
     const cancel = vi.fn();
-    const onerror = vi.fn(() => 0);
     const shouldRetry = vi.fn(() => true);
     const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({ cancel });
@@ -481,7 +422,6 @@ describe("fetchEventStream advanced", () => {
 
     const error = await fetchEventStream(createRequest("/events"), {
       fetch,
-      onerror,
       retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
     }).catch((cause: unknown) => cause);
 
@@ -490,7 +430,6 @@ describe("fetchEventStream advanced", () => {
     expect(getEventStreamFatalCode(error)).toBe("RES_MEDIA_TYPE_INVALID");
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
-    expect(onerror).toHaveBeenCalledOnce();
     expect(shouldRetry).not.toHaveBeenCalled();
   });
 
@@ -515,97 +454,45 @@ describe("fetchEventStream advanced", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  test("should cancel the response and terminate when onopen fails", async () => {
-    const cancel = vi.fn();
-    const fetch = vi.fn(() => {
-      const body = new ReadableStream<Uint8Array>({ cancel });
-      return Promise.resolve(
-        new Response(body, {
-          headers: { "content-type": "text/event-stream" },
-        }),
-      );
-    });
-
-    await expect(
-      fetchEventStream(createRequest("/events"), {
-        fetch,
-        onerror: () => 0,
-        onopen() {
-          throw new Error("onopen failed");
-        },
-        retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }),
-      }),
-    ).rejects.toThrow("onopen failed");
-
-    expect(fetch).toHaveBeenCalledOnce();
-    expect(cancel).toHaveBeenCalledOnce();
-  });
-
-  test("should preserve an onopen failure when response cancellation rejects", async () => {
+  test("should preserve a media type failure when response cancellation rejects", async () => {
     const cancel = vi.fn(() => Promise.reject(new Error("cancel failed")));
     const fetch = vi.fn(() =>
       Promise.resolve(
         new Response(new ReadableStream<Uint8Array>({ cancel }), {
-          headers: { "content-type": "text/event-stream" },
+          headers: { "content-type": "text/plain" },
         }),
       ),
     );
 
     const error = await fetchEventStream(createRequest("/events"), {
       fetch,
-      onopen() {
-        throw new Error("onopen failed");
-      },
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
-    expect(thrownMessage(error)).toBe("onopen failed");
-    expect(getEventStreamFatalCode(error)).toBe("EXT_HOOK_FAILED");
+    expect(thrownMessage(error)).toMatch(/Expected content-type/);
+    expect(getEventStreamFatalCode(error)).toBe("RES_MEDIA_TYPE_INVALID");
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  test("should use the stable fallback when onopen throws a non-Error value", async () => {
+  test("should use the stable fallback when shouldRetry throws a non-Error value", async () => {
     const error = await fetchEventStream(createRequest("/events"), {
-      fetch: () =>
-        Promise.resolve(
-          new Response("", {
-            headers: { "content-type": "text/event-stream" },
-          }),
-        ),
-      onopen() {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- onopen under test throws a string primitive to exercise handling of a non-Error failure
-        throw "non-error failure";
-      },
+      fetch: () => Promise.reject(new Error("network failure")),
+      retry: resolveRetryPolicy({
+        shouldRetry() {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- shouldRetry under test throws a string primitive to exercise handling of a non-Error failure
+          throw "non-error failure";
+        },
+      }),
     }).catch((cause: unknown) => cause);
 
     expect(error).toBeInstanceOf(Error);
-    expect(thrownMessage(error)).toBe("Event stream onopen callback failed");
+    expect(thrownMessage(error)).toBe("Retry policy failed");
     expect(getEventStreamFatalCode(error)).toBe("EXT_HOOK_FAILED");
-  });
-
-  test("should retain the original fatal error when its observer fails", async () => {
-    const fetch = vi.fn(() =>
-      Promise.resolve(
-        new Response(null, { headers: { "content-type": "text/plain" } }),
-      ),
-    );
-
-    await expect(
-      fetchEventStream(createRequest("/events"), {
-        fetch,
-        onerror() {
-          throw new Error("observer failed");
-        },
-      }),
-    ).rejects.toThrow(/Expected content-type/);
-    expect(fetch).toHaveBeenCalledOnce();
   });
 
   test.each([200, 204, 205])(
     "should end a %i response without a body as an empty stream",
     async (status) => {
-      const onopen = vi.fn();
-      const onclose = vi.fn();
       const stream = await fetchEventStream(createRequest("/events"), {
         fetch: () =>
           Promise.resolve(
@@ -614,8 +501,6 @@ describe("fetchEventStream advanced", () => {
               headers: { "content-type": "text/event-stream" },
             }),
           ),
-        onclose,
-        onopen,
       });
 
       const events: EventStreamMessage[] = [];
@@ -623,14 +508,11 @@ describe("fetchEventStream advanced", () => {
 
       expect(events).toEqual([]);
       await expect(stream.closed).resolves.toEqual({ kind: "eof" });
-      expect(onopen).toHaveBeenCalledOnce();
-      expect(onclose).toHaveBeenCalledOnce();
     },
   );
 
   test("should cancel upstream and terminate on a parser limit even when callbacks request retry", async () => {
     const cancel = vi.fn();
-    const onerror = vi.fn(() => 0);
     const shouldRetry = vi.fn(() => true);
     const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({
@@ -651,7 +533,6 @@ describe("fetchEventStream advanced", () => {
     const stream = await fetchEventStream(createRequest("/events"), {
       fetch,
       maxBufferSize: 16,
-      onerror,
       retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
     });
     const iterator = stream[Symbol.asyncIterator]();
@@ -665,43 +546,11 @@ describe("fetchEventStream advanced", () => {
     });
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
-    expect(onerror).toHaveBeenCalledOnce();
     expect(shouldRetry).not.toHaveBeenCalled();
-  });
-
-  test("should abort while observing a fatal open error", async () => {
-    const abortController = new AbortController();
-    const cancel = vi.fn();
-    let markObserved: (() => void) | undefined;
-    const observed = new Promise<void>((resolve) => {
-      markObserved = resolve;
-    });
-    const opening = fetchEventStream(
-      { ...createRequest("/events"), signal: abortController.signal },
-      {
-        fetch: () =>
-          Promise.resolve(
-            new Response(new ReadableStream<Uint8Array>({ cancel }), {
-              headers: { "content-type": "text/plain" },
-            }),
-          ),
-        onerror() {
-          markObserved?.();
-          return new Promise<number>(() => undefined);
-        },
-      },
-    );
-
-    await observed;
-    abortController.abort(ERR_ABORTED);
-
-    await expect(opening).rejects.toBe(ERR_ABORTED);
-    expect(cancel).toHaveBeenCalledOnce();
   });
 
   test("should cancel upstream and terminate when message transformation fails", async () => {
     const cancel = vi.fn();
-    const onerror = vi.fn(() => 0);
     const shouldRetry = vi.fn(() => true);
     const fetch = vi.fn(() => {
       const body = new ReadableStream<Uint8Array>({
@@ -719,7 +568,6 @@ describe("fetchEventStream advanced", () => {
 
     const stream = await fetchTransformedEventStream(createRequest("/events"), {
       fetch,
-      onerror,
       retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0, shouldRetry }),
       transformMessage() {
         throw new Error("transform failed");
@@ -735,7 +583,6 @@ describe("fetchEventStream advanced", () => {
     });
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
-    expect(onerror).toHaveBeenCalledOnce();
     expect(shouldRetry).not.toHaveBeenCalled();
   });
 
@@ -751,15 +598,15 @@ describe("fetchEventStream advanced", () => {
       signal: controller.signal,
     };
     const fetch = vi.fn(() => Promise.reject(new Error("network error")));
-    const onerror = vi.fn(() => 10_000);
 
     const opening = fetchEventStream(request, {
       fetch,
-      onerror,
       retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 10_000 }),
     });
 
-    await vi.waitFor(() => expect(onerror).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    // Lets the failed attempt reach its retry wait without elapsing it.
+    await vi.advanceTimersByTimeAsync(1);
     controller.abort(ERR_ABORTED);
 
     await expect(opening).rejects.toBe(ERR_ABORTED);
@@ -987,36 +834,6 @@ describe("fetchEventStream advanced", () => {
     });
   });
 
-  test("should abort while onopen never settles", async () => {
-    const abortController = new AbortController();
-    const cancel = vi.fn();
-    let markStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => {
-      markStarted = resolve;
-    });
-    const opening = fetchEventStream(
-      { ...createRequest("/events"), signal: abortController.signal },
-      {
-        fetch: () =>
-          Promise.resolve(
-            new Response(new ReadableStream<Uint8Array>({ cancel }), {
-              headers: { "content-type": "text/event-stream" },
-            }),
-          ),
-        onopen() {
-          markStarted?.();
-          return new Promise<void>(() => undefined);
-        },
-      },
-    );
-
-    await started;
-    abortController.abort(ERR_ABORTED);
-
-    await expect(opening).rejects.toBe(ERR_ABORTED);
-    expect(cancel).toHaveBeenCalledOnce();
-  });
-
   test("should abort while transformMessage never settles", async () => {
     const abortController = new AbortController();
     const cancel = vi.fn();
@@ -1061,37 +878,6 @@ describe("fetchEventStream advanced", () => {
     });
     expect(transformSignal?.aborted).toBe(true);
     expect(cancel).toHaveBeenCalledOnce();
-  });
-
-  test("should abort while onclose never settles", async () => {
-    const abortController = new AbortController();
-    let markStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => {
-      markStarted = resolve;
-    });
-    const stream = await fetchEventStream(
-      { ...createRequest("/events"), signal: abortController.signal },
-      {
-        fetch: () =>
-          Promise.resolve(
-            new Response("data: value\n\n", {
-              headers: { "content-type": "text/event-stream" },
-            }),
-          ),
-        onclose() {
-          markStarted?.();
-          return new Promise<void>(() => undefined);
-        },
-      },
-    );
-
-    await started;
-    abortController.abort(ERR_ABORTED);
-
-    await expect(stream.closed).resolves.toMatchObject({
-      kind: "aborted",
-      cause: ERR_ABORTED,
-    });
   });
 
   test.each([
@@ -1152,29 +938,6 @@ describe("fetchEventStream advanced", () => {
       cause: timeoutError,
       reason: timeoutError.message,
     });
-  });
-
-  test("should abort while onerror never settles", async () => {
-    const abortController = new AbortController();
-    let markStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => {
-      markStarted = resolve;
-    });
-    const opening = fetchEventStream(
-      { ...createRequest("/events"), signal: abortController.signal },
-      {
-        fetch: () => Promise.reject(new Error("network failure")),
-        onerror() {
-          markStarted?.();
-          return new Promise<number>(() => undefined);
-        },
-      },
-    );
-
-    await started;
-    abortController.abort(ERR_ABORTED);
-
-    await expect(opening).rejects.toBe(ERR_ABORTED);
   });
 
   test("should abort while shouldRetry never settles", async () => {
@@ -1254,7 +1017,6 @@ describe("fetchEventStream advanced", () => {
     const stream = await fetchEventStream(createRequest("/sse/basic"), {
       fetch: mockFetch,
       retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
-      retryInterval: 1,
     });
 
     const events: EventStreamMessage[] = [];
@@ -1777,7 +1539,6 @@ describe("fetchEventStream advanced", () => {
     const stream = await fetchEventStream(request, {
       fetch: mockFetch,
       maxBufferSize: 50,
-      onerror: () => null,
     });
 
     const iter = stream[Symbol.asyncIterator]();
@@ -1873,10 +1634,8 @@ describe("fetchEventStream message path", () => {
       const failure = new Error("transform failed");
       const transformed: string[] = [];
       const fetch = respondWith("data: a\n\ndata: b\n\n");
-      const onerror = vi.fn(() => 0);
       const stream = await fetchTransformedEventStream(request, {
         fetch,
-        onerror,
         retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }),
         transformMessage(message) {
           transformed.push(message.data);
@@ -1901,7 +1660,6 @@ describe("fetchEventStream message path", () => {
       // The failing message ends the stream: nothing after it is read, and a fatal error is not retried.
       expect(transformed).toEqual(["a"]);
       expect(fetch).toHaveBeenCalledOnce();
-      expect(onerror).toHaveBeenCalledOnce();
     },
   );
 
@@ -1957,12 +1715,10 @@ describe("fetchEventStream message path", () => {
   test("should keep an abort as the outcome when a transform throws after aborting", async () => {
     const controller = new AbortController();
     const fetch = respondWith("data: a\n\n");
-    const onerror = vi.fn(() => 0);
     const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
         fetch,
-        onerror,
         retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 0 }),
         transformMessage() {
           controller.abort(ERR_ABORTED);
@@ -1980,7 +1736,6 @@ describe("fetchEventStream message path", () => {
       kind: "aborted",
     });
     expect(fetch).toHaveBeenCalledOnce();
-    expect(onerror).not.toHaveBeenCalled();
   });
 
   test("should observe a transform promise rejection after the transform aborts", async () => {

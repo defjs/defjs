@@ -1,6 +1,7 @@
 import { resolveRetryPolicy } from "../../src/internal/retry.ts";
 import { describe, expect, inject, test, vi } from "vitest";
 import type { FetchHandle } from "../../src/client/config.ts";
+import { DEFAULT_FETCH } from "../../src/client/config.ts";
 import type { HttpRequest } from "../../src/http/index.ts";
 import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "../../src/http/transport/fetch_init.ts";
 import {
@@ -19,10 +20,12 @@ function fetchEventStream(
   request: HttpRequest,
   options: Omit<
     FetchEventStreamOptions<EventStreamMessage>,
-    "maxBufferSize" | "transformMessage"
-  > = {},
+    "fetch" | "maxBufferSize" | "transformMessage"
+  > &
+    Partial<Pick<FetchEventStreamOptions<EventStreamMessage>, "fetch">> = {},
 ) {
   return fetchEventStreamInternal(request, {
+    fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     transformMessage: (message) => message,
     ...options,

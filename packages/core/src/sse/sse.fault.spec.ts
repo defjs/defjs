@@ -19,8 +19,8 @@ import { defineEventStream } from "./index";
 /**
  * Locks SSE onto the one fault-code namespace shared with HTTP.
  *
- * The two `EXT_*` splits live in `transport/event_stream.advanced.spec.ts`: `onopen`/`onclose`
- * and `transformMessage` are `fetchEventStream` options, not client-level surface.
+ * The two `EXT_*` splits live in `transport/event_stream.advanced.spec.ts`: the retry hook and
+ * `transformMessage` are `fetchEventStream` options, not client-level surface.
  *
  * SSE used to carry a parallel `EventStreamErrorCode` set with no `kind` and no mapping to the
  * request error model, and it reported two different kinds of caller code — the lifecycle hooks
