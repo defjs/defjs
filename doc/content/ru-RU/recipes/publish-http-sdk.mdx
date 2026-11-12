@@ -1,22 +1,51 @@
 ---
 title: "Создание и публикация SDK"
-description: Экспортируйте определения API как npm-пакет с типами и дайте каждому приложению настроить собственный клиент.
+description: Организуйте многомодульный S3 SDK с моделями и чистыми функциями-определениями операций, опубликуйте его как npm-пакет и дайте каждому приложению настроить собственный клиент.
 ---
 
 # Создание и публикация SDK [#publish-an-http-sdk-without-hiding-execute]
 
-SDK на базе Defjs экспортирует чистые определения операций и схемы Struct в виде npm-пакета, оставляя `createClient(...)`, эндпоинты, учётные данные и перехватчики на стороне использующего приложения.
+SDK на базе Defjs объединяет общие модели `struct` (`src/models/`) и предметные модули операций (`src/services/`) в поддерживающий tree-shaking npm-пакет, оставляя `createClient(...)`, эндпоинты, учётные данные и перехватчики на стороне использующего приложения.
+
+В отличие от устаревших генераторов OpenAPI, которые оборачивают эндпоинты в хранящие состояние классы `Service` (`ObjectsService.putObject(...)`), Defjs SDK экспортирует **отдельные чистые функции операций** (`putObject`, `getObject`, `listObjectsV2`), вызываемые напрямую с клиентом приложения.
 
 ---
 
-## 1. Описание пакета SDK
+## 1. Структура и определение пакета SDK
 
-Храните определения операций, реэкспорты, `package.json` и `tsconfig.json` в отдельной директории пакета с объявлением `@defjs/core` в качестве `peerDependency`:
+На примере совместимого с Amazon S3 SDK объектного хранилища (`@company/s3-sdk`) разделим пакет на два уровня:
 
-<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+- **`src/models/`**: Общие схемы `struct` и типы TypeScript `Infer<typeof ...>` (с одноимёнными экспортами значений и типов, чтобы потребители могли импортировать один идентификатор как для runtime-схем, так и для статических типов).
+- **`src/services/`**: Предметные модули, сгруппированные по ресурсам (`buckets.ts`, `objects.ts`). Каждый модуль экспортирует самостоятельные функции `defineRequest`, чей синхронный `builder` распределяет плоский входной объект вызова по `path`, `query`, `headers` и бинарному `body`.
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/src/orders.ts#example
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
 </include>
 
   </Tab>
@@ -29,7 +58,7 @@ SDK на базе Defjs экспортирует чистые определен
   <Tab>
 ```json
 {
-  "name": "@company/orders-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -53,7 +82,6 @@ SDK на базе Defjs экспортирует чистые определен
   }
 }
 ```
-
   </Tab>
   <Tab>
 ```json
@@ -69,12 +97,12 @@ SDK на базе Defjs экспортирует чистые определен
   "include": ["src/**/*.ts"]
 }
 ```
-
   </Tab>
 </Tabs>
 
-- Пакет `@defjs/core` остаётся внешней runtime-зависимостью (`peerDependency`), разделяемой с использующим приложением.
-- Поле `"sideEffects": false` позволяет бандлерам удалять неиспользуемые операции с помощью tree-shaking, если приложение импортирует только часть из них.
+- **Чистые функции, а не классы `Service`**: Каждая операция (`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`) экспортируется как независимое значение `defineRequest`. Не оборачивайте их в `class` или объект пространства имён — отдельные функции сохраняют соглашение о вызове идентичным `@defjs/core` (`await putObject(client, input)`) и позволяют бандлерам удалять неиспользуемые эндпоинты с помощью tree-shaking при установленном `"sideEffects": false`.
+- **Пустые, бинарные и структурированные ответы**: `listBuckets` и `listObjectsV2` декодируют JSON-структуры с маппингом полей через `.alias()`; `getObject` декодирует бинарный `Blob` (`output: struct.blob()`); `putObject`, `headObject` и `deleteObject` опускают `output` для пустых тел ответа, сохраняя при этом доступ к `response.headers` (например, `etag`) в третьем элементе кортежа.
+- **Внешняя runtime-зависимость**: `@defjs/core` остаётся `peerDependency`, разделяемой с использующим приложением.
 
 ---
 
@@ -98,26 +126,26 @@ bun pm pack
 Установите ваш SDK вместе с `@defjs/core`:
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.7.0
 ```
 
-Приложение создаёт собственный экземпляр `Client` и передаёт его в импортированную операцию:
+Поскольку SDK не привязывает клиент, использующее приложение само управляет эндпоинтом (AWS S3, Cloudflare R2 или MinIO), перехватчиком подписи запросов и политикой повторов, вызывая каждую импортированную операцию напрямую как чистую функцию:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-paid
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-В продакшен-коде замените относительный импорт `./src/orders.ts` на `@company/orders-sdk` и удалите вызов `withHTTPHandle(...)`, чтобы использовать платформенный `fetch`.
+В продакшен-коде замените относительный импорт `./src/index.ts` на `@company/s3-sdk` и удалите вызов `withHTTPHandle(...)`, чтобы использовать платформенный `fetch`.
 
 ---
 
 ## 4. Тестирование и публикация
 
-Проверьте экспортированные определения с помощью [тестов с хэндлами в памяти](/ru-RU/recipes/test-with-handle), охватывающих маппинг запроса, декодирование `output`, объявленные сбои `HTTP_STATUS` и отмену. После успешной проверки опубликуйте пакет:
+Проверьте экспортированные определения с помощью [тестов с хэндлами в памяти](/ru-RU/recipes/test-with-handle), охватывающих маппинг пути/query-параметров/заголовков/бинарного тела, декодирование `output`, заголовки ответа `ETag`, объявленные сбои `HTTP_STATUS` (`S3Error`) и отмену. После успешной проверки опубликуйте пакет:
 
 ```sh
 bun publish --access public

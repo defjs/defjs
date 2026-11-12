@@ -1,22 +1,51 @@
 ---
 title: "بناء SDK ونشره"
-description: صدّر تعريفات API كحزمة npm مع تصريحات الأنواع، ودع كل تطبيق يضبط عميله الخاص.
+description: هيكل حزمة S3 SDK متعددة الوحدات مع النماذج وتعريفات العمليات كدوال نقية، وانشرها كحزمة npm، ودع كل تطبيق يضبط عميله الخاص.
 ---
 
 # بناء حزمة SDK ونشرها [#publish-an-http-sdk-without-hiding-execute]
 
-تُصدّر حزمة Defjs SDK تعريفات عمليات نقية ومخططات Struct كحزمة npm مع ترك استدعاء `createClient(...)` وعناوين نقاط النهاية وبيانات الاعتماد والمعترضات بالكامل للتطبيق المستهلك.
+تُنظّم حزمة Defjs SDK نماذج `struct` المشتركة (`src/models/`) ووحدات عمليات النطاق (`src/services/`) في حزمة npm قابلة للتقليم الشجري (tree-shakable) مع ترك استدعاء `createClient(...)` وعناوين نقاط النهاية وبيانات الاعتماد والمعترضات بالكامل للتطبيق المستهلك.
+
+وعلى خلاف مولّدات OpenAPI التقليدية التي تغلّف نقاط النهاية داخل أصناف `Service` ذات حالة (`ObjectsService.putObject(...)`)، تُصدّر حزمة Defjs SDK **دوال عمليات نقية مستقلة** (`putObject` و`getObject` و`listObjectsV2`) تُستدعى مباشرةً مع عميل التطبيق.
 
 ---
 
-## 1. تعريف حزمة SDK
+## 1. هيكلة حزمة SDK وتعريفها
 
-احتفظ بتعريفات العمليات، وملف التصدير الشامل (barrel export)، وملفي `package.json` و`tsconfig.json` في دليل حزمة مخصص، مع التصريح عن `@defjs/core` كاعتمادية نظيرة `peerDependency`:
+باستخدام حزمة SDK لتخزين الكائنات المتوافق مع Amazon S3 (`@company/s3-sdk`) كمثال، قسّم الحزمة إلى طبقتين:
 
-<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+- **`src/models/`**: مخططات `struct` المشتركة وأنواع TypeScript المستنتجة عبر `Infer<typeof ...>` (باستخدام تصدير القيمة والنوع بالاسم نفسه حتى يتمكن المستهلكون من استيراد معرّف واحد لكلٍّ من مخططات وقت التشغيل والأنواع الثابتة).
+- **`src/services/`**: وحدات نطاق مجمّعة حسب المورد (`buckets.ts` و`objects.ts`). تُصدّر كل وحدة دوال `defineRequest` مستقلة يوزّع بانيها المتزامن `builder` مدخلات الاستدعاء المسطحة على `path` و`query` و`headers` و`body` الثنائي.
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/src/orders.ts#example
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
 </include>
 
   </Tab>
@@ -29,7 +58,7 @@ description: صدّر تعريفات API كحزمة npm مع تصريحات ال
   <Tab>
 ```json
 {
-  "name": "@company/orders-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -71,8 +100,9 @@ description: صدّر تعريفات API كحزمة npm مع تصريحات ال
   </Tab>
 </Tabs>
 
-- تبقى `@defjs/core` اعتمادية تشغيل نظيرة خارجية `peerDependency` مشتركة مع التطبيق المستهلك.
-- يتيح الخيار `"sideEffects": false` لأدوات الحزم استبعاد العمليات غير المستخدمة (tree-shaking) عندما يستورد التطبيق مجموعة فرعية فقط من العمليات.
+- **دوال نقية، وليس أصناف `Service` أبدًا**: تُصدَّر كل عملية (`listBuckets` و`listObjectsV2` و`getObject` و`putObject` و`deleteObject`) كقيمة `defineRequest` مستقلة. لا تغلّفها داخل `class` أو كائن مساحة أسماء—فالدوال المستقلة تحافظ على أسلوب الاستدعاء مطابقًا لحزمة `@defjs/core` (`await putObject(client, input)`) وتسمح لأدوات الحزم باستبعاد نقاط النهاية غير المستخدمة (tree-shaking) عند ضبط `"sideEffects": false`.
+- **الاستجابات الفارغة مقابل الثنائية مقابل المهيكلة**: تفك `listBuckets` و`listObjectsV2` ترميز هياكل JSON مع تعيينات الأسلاك `.alias()`؛ وتفك `getObject` ترميز كائن `Blob` ثنائي (`output: struct.blob()`)؛ بينما تغفل `putObject` و`headObject` و`deleteObject` الحقل `output` لأجسام الاستجابة الفارغة مع الاستمرار في إتاحة `response.headers` (مثل `etag`) في الخانة الثالثة من الصف.
+- **اعتمادية تشغيل نظيرة خارجية**: تبقى `@defjs/core` اعتمادية نظيرة `peerDependency` مشتركة مع التطبيق المستهلك.
 
 ---
 
@@ -96,26 +126,26 @@ bun pm pack
 ثبّت حزمة SDK الخاصة بك إلى جانب `@defjs/core`:
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.7.0
 ```
 
-ينشئ التطبيق عميله الخاص `Client` ويمرره إلى العملية المستوردة:
+نظرًا لأن حزمة SDK لا تربط أي عميل، يمتلك التطبيق المستهلك نقطة النهاية (AWS S3 أو Cloudflare R2 أو MinIO)، ومعترض التوقيع، وسياسة إعادة المحاولة، ويستدعي كل عملية مستوردة مباشرةً كدالة نقية:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-paid
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-في كود الإنتاج، استبدل الاستيراد النسبي `./src/orders.ts` باسم الحزمة `@company/orders-sdk` وأزل `withHTTPHandle(...)` لاستخدام دالة `fetch` الأصلية في بيئة التشغيل.
+في كود الإنتاج، استبدل الاستيراد النسبي `./src/index.ts` باسم الحزمة `@company/s3-sdk` وأزل `withHTTPHandle(...)` لاستخدام دالة `fetch` الأصلية في بيئة التشغيل.
 
 ---
 
 ## 4. الاختبار والنشر
 
-اختبر تعريفاتك المصدّرة عبر [اختبارات المقبض في الذاكرة](/ar/recipes/test-with-handle) لتغطية تعيين الطلبات، وفك ترميز `output`، وأخطاء `HTTP_STATUS` المعلنة، والإلغاء. وبمجرد التحقق، انشر الحزمة:
+اختبر تعريفاتك المصدّرة عبر [اختبارات المقبض في الذاكرة](/ar/recipes/test-with-handle) لتغطية تعيين المسار والاستعلام والترويسات والجسم الثنائي، وفك ترميز `output`، وترويسات استجابة `ETag`، وأخطاء `HTTP_STATUS` (`S3Error`) المعلنة، والإلغاء. وبمجرد التحقق، انشر الحزمة:
 
 ```sh
 bun publish --access public

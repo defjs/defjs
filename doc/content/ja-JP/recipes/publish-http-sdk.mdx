@@ -1,22 +1,51 @@
 ---
 title: "SDK を作成・公開する"
-description: API 定義を型定義付きの npm パッケージとして export し、各アプリケーションが独自のクライアントを構成できるようにします。
+description: モデルと純粋関数の操作定義でマルチ構成の S3 SDK を構築して npm パッケージとして公開し、各アプリケーションが独自のクライアントを構成できるようにします。
 ---
 
 # SDK の作成と公開 [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs の SDK は、純粋な操作定義と Struct スキーマを npm パッケージとして export します。一方、`createClient(...)`、ベース URL、認証情報、インターセプターの設定は利用側アプリケーションに委ねます。
+Defjs の SDK は、共有の `struct` モデル（`src/models/`）とドメインごとの操作定義モジュール（`src/services/`）をツリーシェイク可能な npm パッケージとして構成し、`createClient(...)`、エンドポイント、認証情報、インターセプターの設定は利用側アプリケーションに委ねます。
+
+エンドポイントを状態を持つ `Service` クラス（`ObjectsService.putObject(...)` など）でラップする従来の OpenAPI ジェネレーターとは異なり、Defjs の SDK は**独立した純粋関数の操作定義**（`putObject`、`getObject`、`listObjectsV2`）を直接 export し、アプリケーション側のクライアントを渡して呼び出します。
 
 ---
 
-## 1. SDK パッケージの定義
+## 1. SDK パッケージの構成と定義
 
-操作定義、バレル export（エントリポイント）、`package.json`、`tsconfig.json` を専用のパッケージディレクトリ内に配置し、`@defjs/core` を `peerDependency` として宣言します。
+Amazon S3 互換のオブジェクトストレージ SDK（`@company/s3-sdk`）を例に、パッケージを 2 つのレイヤーに分割します。
 
-<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+- **`src/models/`**：複数の操作で共有する `struct` スキーマと `Infer<typeof ...>` による TypeScript 型（値と型を同じ識別子で export することで、利用側は 1 つの import でランタイムスキーマと静的型の両方として利用できます）。
+- **`src/services/`**：リソース領域ごとに分割した操作モジュール（`buckets.ts`、`objects.ts`）。各モジュールは独立した `defineRequest` 純粋関数を export し、同期純粋関数 `builder` によってフラットな入力を `path`、`query`、`headers`、およびバイナリ `body` に振り分けます。
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/src/orders.ts#example
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
 </include>
 
   </Tab>
@@ -29,7 +58,7 @@ Defjs の SDK は、純粋な操作定義と Struct スキーマを npm パッ�
   <Tab>
 ```json
 {
-  "name": "@company/orders-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -71,8 +100,9 @@ Defjs の SDK は、純粋な操作定義と Struct スキーマを npm パッ�
   </Tab>
 </Tabs>
 
-- `@defjs/core` は利用側アプリケーションと共有される外部ランタイム `peerDependency` として維持します。
-- `"sideEffects": false` を設定することで、アプリケーションが一部の操作のみを import した場合に、バンドラーが未使用の操作をツリーシェイクできます。
+- **`Service` クラスを使わず純粋関数を export する**：すべての操作（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）は、独立した `defineRequest` の値として export します。`class` や名前空間オブジェクトでラップしないでください。単体の関数として公開することで、`@defjs/core` と同じ呼び出し規約（`await putObject(client, input)`）を保ちつつ、`"sideEffects": false` によって未使用のエンドポイントをバンドラーで確実にツリーシェイクできます。
+- **空レスポンス・バイナリ・構造化 JSON の使い分け**：`listBuckets` と `listObjectsV2` は `.alias()` のワイヤマッピングを用いて JSON 構造体をデコードします。`getObject` はバイナリの `Blob`（`output: struct.blob()`）をデコードします。`putObject`、`headObject`、`deleteObject` は空のレスポンスボディに対して `output` を省略しつつ、返却タプルの第 3 要素にある `response.headers` から `etag` などのレスポンスヘッダーを参照できます。
+- **外部ランタイムのピア依存関係**：`@defjs/core` は利用側アプリケーションと共有される `peerDependency` として維持します。
 
 ---
 
@@ -96,26 +126,26 @@ tarball に `dist/index.js` と `dist/index.d.ts` が正しく含まれている
 作成した SDK を `@defjs/core` と共にインストールします。
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.7.0
 ```
 
-アプリケーション側で独自の `Client` を作成し、import した操作に渡して実行します。
+SDK はクライアントを束縛しないため、エンドポイント（AWS S3、Cloudflare R2、MinIO など）、署名インターセプター、リトライポリシーは利用側アプリケーションが所有し、import した各操作を純粋関数として直接呼び出します。
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-paid
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-本番コードでは、相対 import `./src/orders.ts` を `@company/orders-sdk` に置き換え、`withHTTPHandle(...)` を削除してプラットフォームの `fetch` を使用します。
+本番コードでは、相対 import `./src/index.ts` を `@company/s3-sdk` に置き換え、`withHTTPHandle(...)` を削除してプラットフォームの `fetch` を使用します。
 
 ---
 
 ## 4. テストとパッケージの公開
 
-リクエストマッピング、`output` のデコード、宣言された `HTTP_STATUS` Fault、キャンセル処理を網羅した [インメモリのハンドルテスト](/ja-JP/recipes/test-with-handle) を通じて、export された定義を検証します。検証完了後、パッケージを npm に公開します。
+パス・クエリ・ヘッダー・バイナリボディのマッピング、`output` のデコード、`ETag` レスポンスヘッダー、宣言された `HTTP_STATUS`（`S3Error`）Fault、およびキャンセル処理を網羅した [インメモリのハンドルテスト](/ja-JP/recipes/test-with-handle) を通じて、export された定義を検証します。検証完了後、パッケージを npm に公開します。
 
 ```sh
 bun publish --access public

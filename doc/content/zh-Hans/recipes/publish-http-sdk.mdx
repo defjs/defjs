@@ -1,22 +1,51 @@
 ---
 title: "构建并发布 SDK"
-description: 把 API 定义导出为带类型的 npm 包，并让每个应用配置自己的 Client。
+description: 用 models 与纯函数操作定义构建多模块 S3 SDK，发布为 npm 包，并让每个应用自行配置 Client。
 ---
 
 # 构建并发布 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs SDK 把纯操作定义和 struct schema 作为 npm 包导出，而把 `createClient(...)`、端点、凭据和拦截器留在消费方应用中。
+Defjs SDK 将共享的 `struct` 数据模型（`src/models/`）与按业务域划分的操作定义模块（`src/services/`）组织为可按需 tree-shake 的 npm 包，同时把 `createClient(...)`、端点地址、认证凭据和拦截器留在消费方应用中。
+
+不同于传统 OpenAPI 生成器将接口封装在带状态的 `Service` 类（如 `ObjectsService.putObject(...)`）中，Defjs SDK **只导出独立的纯函数操作定义**（`putObject`、`getObject`、`listObjectsV2`），在应用侧直接传入 `client` 调用。
 
 ---
 
-## 1. 定义 SDK 包
+## 1. 组织并定义 SDK 包
 
-把操作定义、统一导出入口、`package.json` 和 `tsconfig.json` 放在独立的包目录中，并把 `@defjs/core` 声明为 `peerDependency`：
+以兼容 Amazon S3 协议的对象存储 SDK（`@company/s3-sdk`）为例，将包拆分为两层：
 
-<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+- **`src/models/`**：跨接口复用的 `struct` schema 与 `Infer<typeof ...>` 类型（利用 TypeScript 值与类型同名合并导出，让消费方导入同一个标识符即可同时用作运行时 schema 和静态类型）。
+- **`src/services/`**：按资源域划分的操作模块（`buckets.ts`、`objects.ts`）。每个模块只导出独立的 `defineRequest` 纯函数，通过同步纯函数 `builder` 将调用方扁平入参分发到 `path`、`query`、`headers` 和二进制 `body`。
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/src/orders.ts#example
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
 </include>
 
   </Tab>
@@ -29,7 +58,7 @@ Defjs SDK 把纯操作定义和 struct schema 作为 npm 包导出，而把 `cre
   <Tab>
 ```json
 {
-  "name": "@company/orders-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -71,8 +100,9 @@ Defjs SDK 把纯操作定义和 struct schema 作为 npm 包导出，而把 `cre
   </Tab>
 </Tabs>
 
-- `@defjs/core` 保持为外部运行时 `peerDependency`，与消费方应用共享。
-- `"sideEffects": false` 让打包器在应用只导入部分操作时 tree-shake 掉未使用的操作。
+- **纯函数导出，摒弃 `Service` 类**：每个操作（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）都直接导出为独立的 `defineRequest` 纯函数，不要用 `class` 或命名空间对象包裹。纯函数与 `@defjs/core` 原生调用方式完全一致（`await putObject(client, input)`），且配合 `"sideEffects": false` 可让打包器彻底剔除未引用的接口。
+- **结构化 JSON、二进制流与空响应体**：`listBuckets` 和 `listObjectsV2` 使用 `.alias()` 解码并映射 JSON 字段；`getObject` 将响应体解码为二进制 `Blob`（`output: struct.blob()`）；`putObject`、`headObject` 和 `deleteObject` 针对空响应体省略 `output`，调用方仍可从返回元组的第 3 项 `response.headers` 读取 `etag` 等响应头。
+- **外部运行时对等依赖**：`@defjs/core` 保持为 `peerDependency`，与消费方应用共享。
 
 ---
 
@@ -96,26 +126,26 @@ bun pm pack
 把 SDK 与 `@defjs/core` 一起安装：
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.7.0
 ```
 
-应用创建自己的 `Client`，并传入导入的操作：
+由于 SDK 不绑定任何客户端，消费方应用自行掌控服务端点（AWS S3、Cloudflare R2 或 MinIO）、签名拦截器与重试策略，并以纯函数方式直接调用导入的操作定义：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-paid
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-在生产代码中，把相对导入 `./src/orders.ts` 替换为 `@company/orders-sdk`，并移除 `withHTTPHandle(...)` 以使用平台 `fetch`。
+在生产代码中，把相对导入 `./src/index.ts` 替换为 `@company/s3-sdk`，并移除 `withHTTPHandle(...)` 以使用平台 `fetch`。
 
 ---
 
 ## 4. 测试并发布
 
-用[内存句柄测试](/zh-Hans/recipes/test-with-handle)覆盖导出的定义：请求映射、`output` 解码、声明的 `HTTP_STATUS` Fault 和取消。验证通过后发布包：
+用[内存句柄测试](/zh-Hans/recipes/test-with-handle)覆盖导出的定义：路径/查询/请求头/二进制请求体映射、`output` 解码、`ETag` 响应头读取、声明的 `HTTP_STATUS`（`S3Error`）Fault 和请求取消。验证通过后发布包：
 
 ```sh
 bun publish --access public

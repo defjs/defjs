@@ -1,22 +1,51 @@
 ---
 title: "Créer et publier un SDK"
-description: Exportez les définitions d'API sous forme de paquet npm avec les types, et laissez chaque application configurer son propre client.
+description: Structurez un SDK S3 multi-modules avec des modèles et des définitions d'opérations sous forme de fonctions pures, publiez-le en tant que paquet npm et laissez chaque application configurer son propre client.
 ---
 
 # Créer et publier un SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Un SDK Defjs exporte de pures définitions d'opérations et des schémas Struct sous forme de paquet npm, tout en déléguant `createClient(...)`, les endpoints, les identifiants et les intercepteurs à l'application consommatrice.
+Un SDK Defjs organise des modèles `struct` partagés (`src/models/`) et des modules d'opérations métier (`src/services/`) au sein d'un paquet npm optimisé pour le _tree-shaking_, tout en déléguant `createClient(...)`, les endpoints, les identifiants et les intercepteurs à l'application consommatrice.
+
+Contrairement aux générateurs OpenAPI historiques qui encapsulent les endpoints dans des classes `Service` à état (`ObjectsService.putObject(...)`), un SDK Defjs exporte **des fonctions d'opération pures et autonomes** (`putObject`, `getObject`, `listObjectsV2`) appelées directement avec le client de l'application.
 
 ---
 
-## 1. Définir le paquet du SDK
+## 1. Structurer et définir le paquet du SDK
 
-Conservez vos définitions d'opérations, les exports de point d'entrée, `package.json` et `tsconfig.json` dans un répertoire dédié au paquet avec `@defjs/core` déclaré comme `peerDependency` :
+En prenant pour exemple un SDK de stockage d'objets compatible Amazon S3 (`@company/s3-sdk`), découpez le paquet en deux couches :
 
-<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+- **`src/models/`** : Schémas `struct` partagés et types TypeScript `Infer<typeof ...>` (en utilisant des exports de valeur et de type portant le même nom afin que les consommateurs puissent importer un seul identifiant à la fois pour les schémas à l'exécution et pour les types statiques).
+- **`src/services/`** : Modules métier regroupés par ressource (`buckets.ts`, `objects.ts`). Chaque module exporte des fonctions `defineRequest` autonomes dont le `builder` synchrone répartit une entrée d'appel à plat entre `path`, `query`, `headers` et le `body` binaire.
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/src/orders.ts#example
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
 </include>
 
   </Tab>
@@ -29,7 +58,7 @@ Conservez vos définitions d'opérations, les exports de point d'entrée, `packa
   <Tab>
 ```json
 {
-  "name": "@company/orders-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -71,8 +100,9 @@ Conservez vos définitions d'opérations, les exports de point d'entrée, `packa
   </Tab>
 </Tabs>
 
-- `@defjs/core` reste une dépendance externe `peerDependency` partagée avec l'application consommatrice.
-- `"sideEffects": false` permet aux bundlers de tree-shaker les opérations non utilisées lorsqu'une application n'importe qu'un sous-ensemble d'opérations.
+- **Des fonctions pures, jamais de classes `Service`** : Chaque opération (`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`) est exportée comme une valeur `defineRequest` indépendante. Ne les encapsulez pas dans une `class` ou un objet d'espace de noms : des fonctions autonomes conservent une convention d'appel identique à `@defjs/core` (`await putObject(client, input)`) et permettent aux bundlers de tree-shaker les endpoints inutilisés lorsque `"sideEffects": false` est défini.
+- **Réponses vides, binaires ou structurées** : `listBuckets` et `listObjectsV2` décodent des structs JSON avec des correspondances réseau `.alias()` ; `getObject` décode un `Blob` binaire (`output: struct.blob()`) ; `putObject`, `headObject` et `deleteObject` omettent `output` pour les corps de réponse vides tout en continuant d'exposer `response.headers` (comme `etag`) dans le troisième élément du tuple.
+- **Dépendance pair externe à l'exécution** : `@defjs/core` reste une `peerDependency` partagée avec l'application consommatrice.
 
 ---
 
@@ -96,26 +126,26 @@ Vérifiez que `dist/index.js` et `dist/index.d.ts` figurent bien dans la tarball
 Installez votre SDK aux côtés de `@defjs/core` :
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.7.0
 ```
 
-L'application crée son propre `Client` et le transmet à l'opération importée :
+Comme le SDK ne lie aucun client, l'application consommatrice est propriétaire de l'endpoint (AWS S3, Cloudflare R2 ou MinIO), de l'intercepteur de signature et de la politique de réessai, et appelle directement chaque opération importée comme une fonction pure :
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-paid
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-En production, remplacez l'import relatif `./src/orders.ts` par `@company/orders-sdk` et supprimez `withHTTPHandle(...)` pour exploiter le `fetch` de la plateforme.
+En production, remplacez l'import relatif `./src/index.ts` par `@company/s3-sdk` et supprimez `withHTTPHandle(...)` pour exploiter le `fetch` de la plateforme.
 
 ---
 
 ## 4. Tester et publier
 
-Éprouvez vos définitions exportées avec des [tests en mémoire avec handle](/fr-FR/recipes/test-with-handle) couvrant la projection de requête, le décodage d'`output`, les erreurs `HTTP_STATUS` déclarées et l'annulation. Une fois les vérifications effectuées, publiez le paquet :
+Éprouvez vos définitions exportées avec des [tests en mémoire avec handle](/fr-FR/recipes/test-with-handle) couvrant la projection du chemin/de la requête/des en-têtes/du corps binaire, le décodage d'`output`, les en-têtes de réponse `ETag`, les erreurs `HTTP_STATUS` (`S3Error`) déclarées et l'annulation. Une fois les vérifications effectuées, publiez le paquet :
 
 ```sh
 bun publish --access public

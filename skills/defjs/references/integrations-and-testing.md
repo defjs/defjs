@@ -299,11 +299,217 @@ test("postOrder encodes wire aliases and decodes 201 and 400 responses", async (
 
 ## 5. Publishing a standalone Defjs SDK package
 
-When building a reusable SDK package (for example `@company/orders-sdk`):
+When authoring a reusable SDK package (or an in-repo `src/sdk/` module) such as an Amazon S3-compatible SDK (`@company/s3-sdk`), organize the codebase into `src/models/` and `src/services/`, and export **only standalone pure operation functions**:
 
-1. Export **only** `defineRequest`, `defineEventStream`, `defineWebSocket` definitions, `struct` schemas, and `Infer<typeof ...>` types.
-2. Never call `createClient`, never hardcode environment URLs, and never read credentials inside the SDK package.
-3. Declare `"@defjs/core": "^0.7.0"` under `peerDependencies` (and `devDependencies` for local tests) in the SDK's `package.json`, and ship ESM + `.d.ts` declarations (`"type": "module"`).
+```text
+@company/s3-sdk/
+├── src/
+│   ├── models/           # Shared struct schemas + Infer<typeof ...> same-name types
+│   │   ├── common.ts     # S3Error, StorageClass
+│   │   ├── bucket.ts     # Bucket, ListBucketsOutput
+│   │   └── object.ts     # ObjectSummary, ListObjectsOutput
+│   ├── services/         # Domain modules grouped by resource tag
+│   │   ├── buckets.ts    # listBuckets, headBucket, deleteBucket
+│   │   └── objects.ts    # listObjectsV2, headObject, getObject, putObject, deleteObject
+│   └── index.ts          # Flat barrel re-exports
+├── package.json          # "type": "module", "sideEffects": false, peerDependencies: { "@defjs/core": "^0.7.0" }
+└── tsconfig.json
+```
+
+- **Architecture rules**:
+  1. **Pure functions, never `Service` classes**: Unlike legacy OpenAPI generators that wrap endpoints in stateful classes (`ObjectsService.putObject(...)` or `new S3Client()`), every operation in `src/services/*.ts` is exported directly as a standalone `defineRequest` / `defineEventStream` / `defineWebSocket` value and called as `await putObject(client, input)` or `await getObject(client({ signal }), input)`. Never wrap operations in a `class` or a namespace object—standalone exports preserve per-call `client(options)` derivation and allow bundlers to tree-shake unused operations when `"sideEffects": false` is set.
+  2. **Same-name `struct` + `Infer` exports in `src/models/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
+  3. **Zero client state in the SDK**: Never call `createClient`, never hardcode environment URLs, and never read credentials inside the SDK package. The consuming application owns endpoints (AWS S3, Cloudflare R2, MinIO), auth interceptors, and retry policies.
+  4. **Package metadata**: Declare `"@defjs/core": "^0.7.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
+
+### Best practice: hand-written S3 SDK (`models/` + `services/` + application consumer)
+
+```ts
+// src/models/common.ts
+import { struct, type Infer } from "@defjs/core";
+
+export const StorageClass = struct.enum([
+  "STANDARD",
+  "INTELLIGENT_TIERING",
+  "GLACIER",
+] as const);
+export type StorageClass = Infer<typeof StorageClass>;
+
+export const S3Error = struct.object({
+  code: struct.string(),
+  message: struct.string(),
+  resource: struct.string().optional(),
+  requestId: struct.string().optional().alias("request_id"),
+});
+export type S3Error = Infer<typeof S3Error>;
+```
+
+```ts
+// src/models/object.ts
+import { struct, type Infer } from "@defjs/core";
+import { StorageClass } from "./common.ts";
+
+export const ObjectSummary = struct.object({
+  key: struct.string(),
+  size: struct.number(),
+  etag: struct.string(),
+  lastModified: struct.date().alias("last_modified"),
+  storageClass: StorageClass.alias("storage_class"),
+});
+export type ObjectSummary = Infer<typeof ObjectSummary>;
+
+export const ListObjectsOutput = struct.object({
+  name: struct.string(),
+  prefix: struct.string().optional(),
+  isTruncated: struct.boolean().alias("is_truncated"),
+  nextContinuationToken: struct
+    .string()
+    .optional()
+    .alias("next_continuation_token"),
+  contents: struct.array(ObjectSummary),
+});
+export type ListObjectsOutput = Infer<typeof ListObjectsOutput>;
+```
+
+```ts
+// src/services/objects.ts
+import { defineRequest, struct, type Infer } from "@defjs/core";
+import { S3Error, StorageClass } from "../models/common.ts";
+import { ListObjectsOutput } from "../models/object.ts";
+
+// Wrong: wrapping operations in a Service class or capturing a client
+// export class ObjectsService {
+//   constructor(private readonly client: Client) {}
+//   putObject(input: PutObjectInput) { ... }
+// }
+
+// Right: export standalone pure operation definitions
+export const ListObjectsInput = struct.object({
+  bucket: struct.string(),
+  prefix: struct.string().optional(),
+  continuationToken: struct.string().optional(),
+  maxKeys: struct.number().optional(),
+});
+export type ListObjectsInput = Infer<typeof ListObjectsInput>;
+
+export const listObjectsV2 = defineRequest({
+  operation: "s3.objects.listV2",
+  method: "GET",
+  path: "/:bucket",
+  input: ListObjectsInput,
+  builder: (input) => ({
+    path: { bucket: input.bucket },
+    query: {
+      "list-type": 2,
+      prefix: input.prefix,
+      "continuation-token": input.continuationToken,
+      "max-keys": input.maxKeys,
+    },
+  }),
+  output: ListObjectsOutput,
+  error: S3Error,
+});
+
+export const GetObjectInput = struct.object({
+  bucket: struct.string(),
+  key: struct.string(),
+  ifNoneMatch: struct.string().optional(),
+});
+export type GetObjectInput = Infer<typeof GetObjectInput>;
+
+export const getObject = defineRequest({
+  operation: "s3.objects.get",
+  method: "GET",
+  path: "/:bucket/:key",
+  input: GetObjectInput,
+  builder: (input) => ({
+    path: { bucket: input.bucket, key: input.key },
+    headers: { "if-none-match": input.ifNoneMatch },
+  }),
+  output: struct.blob(),
+  error: S3Error,
+});
+
+export const PutObjectInput = struct.object({
+  bucket: struct.string(),
+  key: struct.string(),
+  body: struct.blob(),
+  contentType: struct.string().optional(),
+  storageClass: StorageClass.optional(),
+});
+export type PutObjectInput = Infer<typeof PutObjectInput>;
+
+export const putObject = defineRequest({
+  operation: "s3.objects.put",
+  method: "PUT",
+  path: "/:bucket/:key",
+  input: PutObjectInput,
+  builder: (input) => ({
+    path: { bucket: input.bucket, key: input.key },
+    headers: {
+      "content-type": input.contentType,
+      "x-amz-storage-class": input.storageClass,
+    },
+    body: input.body,
+  }),
+  error: S3Error,
+});
+```
+
+```ts
+// Consuming application (app.ts): owns the Client and calls SDK operations as pure functions
+import {
+  createClient,
+  createHttpInterceptor,
+  withEndpoint,
+  withInterceptors,
+  withRetry,
+} from "@defjs/core";
+import { getObject, listObjectsV2, putObject } from "@company/s3-sdk";
+
+const s3Client = createClient(
+  withEndpoint("https://s3.us-east-1.amazonaws.com"),
+  withInterceptors(
+    createHttpInterceptor((request, next) => {
+      const headers = new Headers(request.headers);
+      headers.set("authorization", "AWS4-HMAC-SHA256 Credential=...");
+      return next({ ...request, headers });
+    }),
+  ),
+  withRetry({ maxRetries: 3 }),
+);
+
+export async function syncReport(bucket: string, key: string, pdf: Blob) {
+  const [putErr, , putRes] = await putObject(s3Client, {
+    bucket,
+    key,
+    body: pdf,
+    contentType: "application/pdf",
+    storageClass: "STANDARD",
+  });
+  if (putErr) {
+    if (putErr.code === "HTTP_STATUS") {
+      console.error(putErr.data.code, putErr.data.requestId);
+    }
+    return undefined;
+  }
+
+  const [listErr, page] = await listObjectsV2(s3Client, {
+    bucket,
+    prefix: "reports/",
+    maxKeys: 50,
+  });
+  if (listErr) return undefined;
+
+  const [getErr, blob] = await getObject(
+    s3Client({ signal: AbortSignal.timeout(10_000) }),
+    { bucket, key, ifNoneMatch: putRes.headers.get("etag") ?? undefined },
+  );
+  if (getErr) return undefined;
+
+  return { count: page.contents.length, size: blob.size };
+}
+```
 
 ---
 

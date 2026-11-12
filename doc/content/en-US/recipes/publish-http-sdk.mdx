@@ -1,22 +1,51 @@
 ---
 title: "Build and publish an SDK"
-description: Export API definitions as an npm package with types, and let each application configure its own client.
+description: Structure a multi-module S3 SDK with models and pure-function operation definitions, publish it as an npm package, and let each application configure its own client.
 ---
 
 # Build and publish an SDK [#publish-an-http-sdk-without-hiding-execute]
 
-A Defjs SDK exports pure operation definitions and Struct schemas as an npm package while leaving `createClient(...)`, endpoints, credentials, and interceptors in the consuming application.
+A Defjs SDK organizes shared `struct` models (`src/models/`) and domain operation modules (`src/services/`) into a tree-shakable npm package while leaving `createClient(...)`, endpoints, credentials, and interceptors in the consuming application.
+
+Unlike legacy OpenAPI generators that wrap endpoints in stateful `Service` classes (`ObjectsService.putObject(...)`), a Defjs SDK exports **standalone pure operation functions** (`putObject`, `getObject`, `listObjectsV2`) that are called directly with the application's client.
 
 ---
 
-## 1. Define the SDK package
+## 1. Structure and define the SDK package
 
-Keep your operation definitions, barrel exports, `package.json`, and `tsconfig.json` in a dedicated package directory with `@defjs/core` declared as a `peerDependency`:
+Using an Amazon S3-compatible object storage SDK (`@company/s3-sdk`) as an example, split the package into two layers:
 
-<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+- **`src/models/`**: Shared `struct` schemas and `Infer<typeof ...>` TypeScript types (using same-name value + type exports so consumers can import a single identifier for both runtime schemas and static types).
+- **`src/services/`**: Domain modules grouped by resource (`buckets.ts`, `objects.ts`). Each module exports standalone `defineRequest` functions whose synchronous `builder` routes a flat caller input across `path`, `query`, `headers`, and binary `body`.
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/src/orders.ts#example
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
 </include>
 
   </Tab>
@@ -29,7 +58,7 @@ Keep your operation definitions, barrel exports, `package.json`, and `tsconfig.j
   <Tab>
 ```json
 {
-  "name": "@company/orders-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -71,8 +100,9 @@ Keep your operation definitions, barrel exports, `package.json`, and `tsconfig.j
   </Tab>
 </Tabs>
 
-- `@defjs/core` stays an external runtime `peerDependency` shared with the consuming application.
-- `"sideEffects": false` lets bundlers tree-shake unused operations when an application imports only a subset of them.
+- **Pure functions, never `Service` classes**: Every operation (`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`) is exported as an independent `defineRequest` value. Do not wrap them in a `class` or a namespace object—standalone functions keep the calling convention identical to `@defjs/core` (`await putObject(client, input)`) and let bundlers tree-shake unused endpoints when `"sideEffects": false` is set.
+- **Empty vs binary vs structured responses**: `listBuckets` and `listObjectsV2` decode JSON structs with `.alias()` wire mappings; `getObject` decodes a binary `Blob` (`output: struct.blob()`); `putObject`, `headObject`, and `deleteObject` omit `output` for empty response bodies while still exposing `response.headers` (such as `etag`) in the third tuple slot.
+- **External runtime peer**: `@defjs/core` stays a `peerDependency` shared with the consuming application.
 
 ---
 
@@ -96,26 +126,26 @@ Verify that `dist/index.js` and `dist/index.d.ts` are included in the tarball.
 Install your SDK alongside `@defjs/core`:
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.7.0
 ```
 
-The application creates its own `Client` and passes it into the imported operation:
+Because the SDK binds no client, the consuming application owns the endpoint (AWS S3, Cloudflare R2, or MinIO), signing interceptor, and retry policy, and calls each imported operation directly as a pure function:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-paid
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-In production code, replace the relative import `./src/orders.ts` with `@company/orders-sdk` and remove `withHTTPHandle(...)` to use the platform `fetch`.
+In production code, replace the relative import `./src/index.ts` with `@company/s3-sdk` and remove `withHTTPHandle(...)` to use the platform `fetch`.
 
 ---
 
 ## 4. Test and publish
 
-Exercise your exported definitions with [in-memory handle tests](/recipes/test-with-handle) covering request mapping, `output` decoding, declared `HTTP_STATUS` faults, and cancellation. Once verified, publish the package:
+Exercise your exported definitions with [in-memory handle tests](/recipes/test-with-handle) covering path/query/header/binary-body mapping, `output` decoding, `ETag` response headers, declared `HTTP_STATUS` (`S3Error`) faults, and cancellation. Once verified, publish the package:
 
 ```sh
 bun publish --access public

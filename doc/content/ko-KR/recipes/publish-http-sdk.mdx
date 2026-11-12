@@ -1,22 +1,51 @@
 ---
 title: "SDK 작성과 배포"
-description: 타입이 포함된 npm 패키지로 API 정의를 export하고, 각 애플리케이션이 자체 클라이언트를 직접 구성하도록 합니다.
+description: 모델과 순수 함수 기반 작업 정의로 다중 모듈 S3 SDK를 구성해 npm 패키지로 배포하고, 각 애플리케이션이 자체 클라이언트를 직접 구성하도록 합니다.
 ---
 
 # SDK 작성과 배포 [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs 기반 SDK는 순수한 작업 정의와 Struct 스키마만을 npm 패키지로 export하며, `createClient(...)`, 기본 엔드포인트 URL, 자격 증명, 인터셉터 설정은 사용하는 애플리케이션에 온전히 맡깁니다.
+Defjs SDK는 공유 `struct` 모델(`src/models/`)과 도메인별 작업 모듈(`src/services/`)을 트리쉐이킹 가능한 npm 패키지로 구성하며, `createClient(...)`, 엔드포인트, 자격 증명, 인터셉터 설정은 사용하는 애플리케이션에 온전히 맡깁니다.
+
+엔드포인트를 상태를 가진 `Service` 클래스(`ObjectsService.putObject(...)`)로 감싸는 레거시 OpenAPI 생성기와 달리, Defjs SDK는 애플리케이션의 클라이언트로 직접 호출할 수 있는 **독립적인 순수 작업 함수**(`putObject`, `getObject`, `listObjectsV2`)를 export합니다.
 
 ---
 
-## 1. SDK 패키지 정의하기
+## 1. SDK 패키지 구조화 및 정의하기
 
-작업 정의, 배럴(barrel) export, `package.json`, `tsconfig.json`을 전용 패키지 디렉터리에 구성하고, `@defjs/core`를 `peerDependency`로 선언하세요:
+Amazon S3 호환 오브젝트 스토리지 SDK(`@company/s3-sdk`)를 예로 들어 패키지를 두 계층으로 나눕니다:
 
-<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+- **`src/models/`**: 공유 `struct` 스키마 및 `Infer<typeof ...>` TypeScript 타입(런타임 스키마와 정적 타입 모두에 동일한 이름의 값 + 타입 export를 사용하여 사용하는 쪽에서 단일 식별자로 import할 수 있도록 구성).
+- **`src/services/`**: 리소스별로 그룹화된 도메인 모듈(`buckets.ts`, `objects.ts`). 각 모듈은 동기 `builder`를 통해 호출자의 평탄한 입력을 `path`, `query`, `headers`, 바이너리 `body`로 분배하는 독립형 `defineRequest` 함수를 export합니다.
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/src/orders.ts#example
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
 </include>
 
   </Tab>
@@ -29,7 +58,7 @@ Defjs 기반 SDK는 순수한 작업 정의와 Struct 스키마만을 npm 패키
   <Tab>
 ```json
 {
-  "name": "@company/orders-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -71,8 +100,9 @@ Defjs 기반 SDK는 순수한 작업 정의와 Struct 스키마만을 npm 패키
   </Tab>
 </Tabs>
 
-- `@defjs/core`는 사용하는 애플리케이션과 공유되는 외부 런타임 `peerDependency`로 유지됩니다.
-- `"sideEffects": false`를 지정하면 애플리케이션이 작업 중 일부만 import할 때 번들러가 사용되지 않는 작업을 트리쉐이킹할 수 있습니다.
+- **`Service` 클래스가 아닌 순수 함수**: 모든 작업(`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`)은 독립적인 `defineRequest` 값으로 export됩니다. 이를 `class`나 네임스페이스 객체로 감싸지 마세요. 독립형 함수를 사용하면 호출 규약이 `@defjs/core`(`await putObject(client, input)`)와 동일하게 유지되며, `"sideEffects": false`가 설정된 경우 번들러가 사용하지 않는 엔드포인트를 트리쉐이킹할 수 있습니다.
+- **빈 응답, 바이너리 응답, 구조화된 응답**: `listBuckets`와 `listObjectsV2`는 `.alias()` 와이어 매핑이 적용된 JSON struct를 디코딩하고, `getObject`는 바이너리 `Blob`(`output: struct.blob()`)을 디코딩합니다. `putObject`, `headObject`, `deleteObject`는 빈 응답 본문에 대해 `output`을 생략하면서도 세 번째 튜플 슬롯을 통해 `response.headers`(예: `etag`)를 그대로 노출합니다.
+- **외부 런타임 peer 의존성**: `@defjs/core`는 사용하는 애플리케이션과 공유되는 `peerDependency`로 유지됩니다.
 
 ---
 
@@ -96,26 +126,26 @@ Tarball 내에 `dist/index.js`와 `dist/index.d.ts`가 정상적으로 포함되
 애플리케이션에 작성한 SDK와 `@defjs/core`를 함께 설치합니다:
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.7.0
 ```
 
-애플리케이션은 자체 `Client`를 직접 생성하고, 이를 import한 작업 함수에 전달하여 호출합니다:
+SDK는 클라이언트를 바인딩하지 않으므로 사용하는 애플리케이션이 엔드포인트(AWS S3, Cloudflare R2 또는 MinIO), 서명 인터셉터, 재시도 정책의 소유권을 가지며, import한 각 작업을 순수 함수로 직접 호출합니다:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-paid
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-실제 프로덕션 코드에서는 상대 경로 import인 `./src/orders.ts`를 `@company/orders-sdk`로 변경하고, `withHTTPHandle(...)`을 제거하여 플랫폼의 실제 `fetch`를 사용하도록 설정합니다.
+실제 프로덕션 코드에서는 상대 경로 import인 `./src/index.ts`를 `@company/s3-sdk`로 변경하고, `withHTTPHandle(...)`을 제거하여 플랫폼의 실제 `fetch`를 사용하도록 설정합니다.
 
 ---
 
 ## 4. 테스트 및 배포
 
-요청 매핑, `output` 디코딩, 선언된 `HTTP_STATUS` 결함, 취소 동작을 포괄하는 [인메모리 핸들 테스트](/ko-KR/recipes/test-with-handle)로 export된 정의들을 철저히 검증하세요. 검증이 완료되면 패키지를 배포합니다:
+경로/쿼리/헤더/바이너리 본문 매핑, `output` 디코딩, `ETag` 응답 헤더, 선언된 `HTTP_STATUS`(`S3Error`) 결함, 취소 동작을 포괄하는 [인메모리 핸들 테스트](/ko-KR/recipes/test-with-handle)로 export된 정의들을 철저히 검증하세요. 검증이 완료되면 패키지를 배포합니다:
 
 ```sh
 bun publish --access public

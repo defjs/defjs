@@ -1,22 +1,51 @@
 ---
 title: "建置並發布 SDK"
-description: 把 API 定義連同型別匯出成 npm 套件，讓每個應用程式自行設定 client。
+description: 以 models 與純函式操作定義建構多模組 S3 SDK，發布為 npm 套件，並讓每個應用程式自行設定 Client。
 ---
 
 # 建置並發布 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs SDK 以 npm 套件的形式匯出純粹的操作定義與 struct schema，把 `createClient(...)`、端點、憑證與攔截器全都留給取用端應用程式。
+Defjs SDK 將共用的 `struct` 資料模型（`src/models/`）與依業務領域劃分的操作定義模組（`src/services/`）組織為可按需 tree-shake 的 npm 套件，同時把 `createClient(...)`、端點、憑證與攔截器全都留給取用端應用程式。
+
+不同於傳統 OpenAPI 產生器將端點封裝在帶狀態的 `Service` 類別（例如 `ObjectsService.putObject(...)`）中，Defjs SDK **只匯出獨立的純函式操作定義**（`putObject`、`getObject`、`listObjectsV2`），在應用程式端直接傳入 `client` 呼叫。
 
 ---
 
-## 1. 定義 SDK 套件
+## 1. 組織並定義 SDK 套件
 
-把操作定義、barrel 匯出、`package.json` 與 `tsconfig.json` 放在專屬的套件目錄中，並將 `@defjs/core` 宣告為 `peerDependency`：
+以相容 Amazon S3 協定的物件儲存 SDK（`@company/s3-sdk`）為例，將套件拆分為兩層：
 
-<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+- **`src/models/`**：跨端點重用的 `struct` schema 與 `Infer<typeof ...>` TypeScript 型別（利用相同名稱同時匯出值與型別，讓取用端只匯入單一識別字即可同時用作執行時期 schema 與靜態型別）。
+- **`src/services/`**：依資源領域劃分的操作模組（`buckets.ts`、`objects.ts`）。每個模組只匯出獨立的 `defineRequest` 純函式，透過同步純函式 `builder` 將呼叫端的扁平輸入分發至 `path`、`query`、`headers` 與二進位 `body`。
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/orders.ts"'>
-  examples/recipes/publish-http-sdk/src/orders.ts#example
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
 </include>
 
   </Tab>
@@ -29,7 +58,7 @@ Defjs SDK 以 npm 套件的形式匯出純粹的操作定義與 struct schema，
   <Tab>
 ```json
 {
-  "name": "@company/orders-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -71,8 +100,9 @@ Defjs SDK 以 npm 套件的形式匯出純粹的操作定義與 struct schema，
   </Tab>
 </Tabs>
 
-- `@defjs/core` 維持為外部的執行時期 `peerDependency`，與取用端應用程式共用。
-- `"sideEffects": false` 讓打包工具在應用程式只匯入部分操作時，以 tree-shaking 移除未使用的操作程式碼。
+- **純函式匯出，摒棄 `Service` 類別**：每個操作（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）皆直接匯出為獨立的 `defineRequest` 純函式，請勿使用 `class` 或命名空間物件包裹。獨立函式讓呼叫慣例與 `@defjs/core` 完全一致（`await putObject(client, input)`），且搭配 `"sideEffects": false` 可讓打包工具完整 tree-shake 移除未使用的端點。
+- **結構化 JSON、二進位串流與空回應主體**：`listBuckets` 與 `listObjectsV2` 使用 `.alias()` 解碼並對應 JSON 欄位；`getObject` 將回應主體解碼為二進位 `Blob`（`output: struct.blob()`）；`putObject`、`headObject` 與 `deleteObject` 針對空回應主體省略 `output`，呼叫端仍可從回傳 tuple 的第 3 個位置 `response.headers` 讀取 `etag` 等回應標頭。
+- **外部執行時期對等相依性**：`@defjs/core` 維持為 `peerDependency`，與取用端應用程式共用。
 
 ---
 
@@ -96,26 +126,26 @@ bun pm pack
 將你的 SDK 與 `@defjs/core` 一併安裝至應用程式：
 
 ```sh
-bun add @company/orders-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.7.0
 ```
 
-應用程式建立自己的 `Client`，並把它傳給匯入的操作：
+由於 SDK 不綁定任何 client，取用端應用程式自行掌控服務端點（AWS S3、Cloudflare R2 或 MinIO）、簽章攔截器與重試策略，並以純函式方式直接呼叫匯入的操作定義：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-paid
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-在正式環境程式碼中，請把相對匯入 `./src/orders.ts` 換成 `@company/orders-sdk`，並移除 `withHTTPHandle(...)`，改用平台的 `fetch`。
+在正式環境程式碼中，請把相對匯入 `./src/index.ts` 換成 `@company/s3-sdk`，並移除 `withHTTPHandle(...)`，改用平台的 `fetch`。
 
 ---
 
 ## 4. 測試與發布
 
-用[記憶體內的 Handle 測試](/zh-Hant-TW/recipes/test-with-handle)測試匯出的定義，涵蓋請求對應、`output` 解碼、已宣告的 `HTTP_STATUS` fault 與取消。確認無誤後再發布套件：
+用[記憶體內的 Handle 測試](/zh-Hant-TW/recipes/test-with-handle)測試匯出的定義，涵蓋路徑／查詢／標頭／二進位主體對應、`output` 解碼、`ETag` 回應標頭、已宣告的 `HTTP_STATUS`（`S3Error`）fault 與取消。確認無誤後再發布套件：
 
 ```sh
 bun publish --access public
