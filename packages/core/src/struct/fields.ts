@@ -54,15 +54,11 @@ function assertUniqueWireKeys(fields: readonly ResolvedStructField[]): void {
 
 export function mapAliasedObjectFields(
   struct: RuntimeStruct,
+  definition: ObjectDefinition,
   value: { [key: string]: unknown },
   encodeChild: (struct: RuntimeStruct, value: unknown) => unknown,
-  output: { [key: string]: unknown } = nullObject(),
 ): { [key: string]: unknown } {
-  const definition = struct[DEFINITION];
-  if (definition.kind !== "object") {
-    throw new TypeError("json encode expects object struct");
-  }
-
+  const output = nullObject();
   for (const field of resolveStructFields(struct, definition)) {
     if (!hasOwnKey(value, field.key)) {
       continue;

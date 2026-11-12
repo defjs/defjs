@@ -1,16 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { encodeJson } from "./codec/json";
-import { encodeValue } from "./encode";
 import { struct } from "./index";
 import { parseStructTuple } from "./introspection";
-import { assertStruct } from "./shape";
-import type { RuntimeStruct, StructLike } from "./types";
+import type { StructLike } from "./types";
 import { method } from "../../test/method";
-
-function runtimeOf(value: unknown): RuntimeStruct {
-  assertStruct(value, "struct");
-  return value;
-}
 
 describe("performance optimization contracts", () => {
   test("JSON union preserves getter reads and rejects changing wire values", () => {
@@ -274,7 +267,7 @@ describe("performance optimization contracts", () => {
     });
   });
 
-  test("mixed intersections retain generic merging and custom object encoders", () => {
+  test("mixed intersections retain generic merging", () => {
     const mixed = struct.intersection(
       struct.any(),
       struct.object({ value: struct.string() }),
@@ -283,23 +276,5 @@ describe("performance optimization contracts", () => {
       null,
       { value: "x" },
     ]);
-    const objects = struct.intersection(
-      struct.object({ value: struct.string() }),
-      struct.object({ value: struct.string() }),
-    );
-    let calls = 0;
-    const output = encodeValue(
-      runtimeOf(objects),
-      { value: "x" },
-      {
-        encodeObject() {
-          calls += 1;
-          return { [`branch${calls}`]: calls, shared: 1 };
-        },
-      },
-    );
-    expect(output).toEqual({ branch1: 1, branch2: 2, shared: 1 });
-    expect(Object.getPrototypeOf(output)).toBeNull();
-    expect(calls).toBe(2);
   });
 });

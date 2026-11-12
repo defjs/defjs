@@ -6,23 +6,9 @@ import { failure, issue, parkedFailure } from "./errors";
 import type { ErrorMap } from "./index";
 import { struct } from "./index";
 import { parseStructTuple as parse, parseStructValue } from "./introspection";
-import { parseValue } from "./parse";
 import { createPrimitiveStruct } from "./runtime";
-import { assertStruct } from "./shape";
-import { OMIT } from "./symbols";
-import type {
-  ParseResult,
-  Path,
-  RuntimeStruct,
-  StructIssue,
-  StructLike,
-} from "./types";
+import type { ParseResult, Path, StructIssue, StructLike } from "./types";
 import { success } from "./utils";
-
-function runtime(value: unknown): RuntimeStruct {
-  assertStruct(value, "struct");
-  return value;
-}
 
 function nestedResult(
   results: readonly ParseResult<unknown>[],
@@ -1162,52 +1148,6 @@ describe("parse outputs and quiet candidates", () => {
   });
 });
 
-describe("parseValue boundary", () => {
-  test("forwards the mode, reports paths below the caller path, and leaves the caller path alone", () => {
-    const callerPath: Path = ["caller"];
-    const optional = runtime(struct.string().optional());
-
-    expect(parseValue(optional, undefined, callerPath, "field")).toEqual({
-      ok: true,
-      value: OMIT,
-    });
-    expect(parseValue(optional, undefined, callerPath, "value")).toEqual({
-      ok: true,
-      value: undefined,
-    });
-    expect(
-      parseValue(runtime(struct.string()), undefined, [], "field"),
-    ).toEqual({
-      ok: false,
-      issue: {
-        code: "missing_key",
-        expected: "string",
-        message: "Expected string at <root>, received undefined",
-        path: [],
-        received: undefined,
-      },
-    });
-    expect(
-      parseValue(
-        runtime(struct.object({ a: struct.array(struct.string()) })),
-        { a: ["x", 2] },
-        callerPath,
-        "value",
-      ),
-    ).toEqual({
-      ok: false,
-      issue: {
-        code: "invalid_type",
-        expected: "string",
-        message: "Expected string at caller.a[1], received number",
-        path: ["caller", "a", 1],
-        received: 2,
-      },
-    });
-    expect(callerPath).toEqual(["caller"]);
-  });
-});
-
 describe("the parked failure", () => {
   test("is empty after every parse: failed, succeeded after discarded candidates, or threw", () => {
     const Schema = struct.object({
@@ -1234,11 +1174,6 @@ describe("the parked failure", () => {
     };
     expect(() => parse(Schema, { value: 1 }, { errorMap: explode })).toThrow(
       "errorMap exploded",
-    );
-    expect(parkedFailure()).toBeUndefined();
-
-    expect(parseValue(runtime(Schema), { value: 1 }, [], "value").ok).toBe(
-      false,
     );
     expect(parkedFailure()).toBeUndefined();
   });

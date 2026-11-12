@@ -769,7 +769,6 @@ export type UnionDefinition = BaseDefinition & {
   expected: string;
   kind: "or";
   options: readonly RuntimeStruct[];
-  uniformIdentityEncode?: boolean;
 };
 
 export type DiscriminatedUnionDefinition = BaseDefinition & {

@@ -17,7 +17,6 @@ import type {
   RecordStruct,
   RuntimeStruct,
   Struct,
-  StructDefinition,
   StructLike,
   StringStruct,
   TupleStruct,
@@ -394,76 +393,7 @@ export function createUnionStruct<
     flags: DEFAULT_FLAGS,
     kind: "or",
     options: unionOptions,
-    uniformIdentityEncode: computeUniformIdentityEncode(first, unionOptions),
   });
-}
-
-function computeUniformIdentityEncode(
-  first: RuntimeStruct,
-  options: readonly RuntimeStruct[],
-): boolean {
-  const firstDefinition = first[DEFINITION];
-  if (firstDefinition.kind === "object") {
-    const firstShape = identityEncodeShape(first);
-    if (!firstShape) {
-      return false;
-    }
-    for (const option of options.slice(1)) {
-      const shape = identityEncodeShape(option);
-      if (!shape || shape.size !== firstShape.size) {
-        return false;
-      }
-      for (const [key, kind] of firstShape) {
-        if (shape.get(key) !== kind) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-
-  return options.every((option) =>
-    isIdentityEncodeKind(option[DEFINITION].kind),
-  );
-}
-
-function identityEncodeShape(
-  struct: RuntimeStruct,
-): Map<string, StructDefinition["kind"]> | undefined {
-  const definition = struct[DEFINITION];
-  if (definition.kind !== "object") {
-    return undefined;
-  }
-
-  const encoded = new Map<string, StructDefinition["kind"]>();
-  for (const [key, descriptor] of Object.entries(
-    definition.cache.declaredDescriptors,
-  )) {
-    if (typeof descriptor.get === "function") {
-      return undefined;
-    }
-    // Shape fields are validated on first parse (resolveObjectShape). A field that is not a struct only turns this shortcut off.
-    const field: unknown = descriptor.value;
-    const fieldDefinition = isStruct(field) ? field[DEFINITION] : undefined;
-    if (!fieldDefinition || !isIdentityEncodeKind(fieldDefinition.kind)) {
-      return undefined;
-    }
-    encoded.set(key, fieldDefinition.kind);
-  }
-  return encoded;
-}
-
-function isIdentityEncodeKind(kind: StructDefinition["kind"]): boolean {
-  return (
-    kind === "any" ||
-    kind === "boolean" ||
-    kind === "enum" ||
-    kind === "literal" ||
-    kind === "null" ||
-    kind === "number" ||
-    kind === "string" ||
-    kind === "unknown"
-  );
 }
 
 type RequiredDiscriminatorOption<

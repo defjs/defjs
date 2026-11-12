@@ -1,24 +1,15 @@
 import { describe, expect, test } from "vitest";
-import {
-  decodeObjectByAlias,
-  encodeObjectByAlias,
-  mapAliasedObjectFields,
-} from "./codec/common";
+import { decodeObjectByAlias, encodeObjectByAlias } from "./codec/common";
 import { decodeJson, encodeJson } from "./codec/json";
-import { encodeValue, matchesDefinition } from "./encode";
+import { encodeValue } from "./encode";
 import { StructError } from "./errors";
 import { struct as directStruct } from "./facade";
 import { isStruct } from "./guards";
 import { struct } from "./index";
 import { resolveStructFields } from "./fields";
-import {
-  getStructFields,
-  parseStructTuple as parse,
-  parseStructValue,
-} from "./introspection";
+import { parseStructTuple as parse, parseStructValue } from "./introspection";
 import { matchesRuntimeValue } from "./match";
-import { parseValue } from "./parse";
-import { createPrimitiveStruct, DEFAULT_FLAGS, makeStruct } from "./runtime";
+import { DEFAULT_FLAGS, makeStruct } from "./runtime";
 import { assertStruct, resolveObjectShape } from "./shape";
 import { DEFINITION, OMIT } from "./symbols";
 import type {
@@ -27,7 +18,7 @@ import type {
   RuntimeStruct,
   StructDefinition,
 } from "./types";
-import { describeValue, expectedType, success } from "./utils";
+import { describeValue, expectedType } from "./utils";
 
 function runtime(value: unknown): RuntimeStruct {
   assertStruct(value, "struct");
@@ -56,12 +47,7 @@ describe("struct coverage boundary cases", () => {
     expect(DEFINITION).toBe(Symbol.for("defjs.struct.definition"));
     expect(Symbol.keyFor(OMIT)).toBeUndefined();
 
-    expect(
-      parseValue(runtime(directStruct.string()), "x", [], "value"),
-    ).toEqual({
-      ok: true,
-      value: "x",
-    });
+    expect(parse(directStruct.string(), "x")).toEqual([null, "x"]);
     expect(encodeJson(testStruct, { id: "u_1" })).toEqual({ id: "u_1" });
     expect(decodeJson(testStruct, { id: "u_1" })).toEqual({ id: "u_1" });
     return Promise.resolve();
@@ -107,60 +93,30 @@ describe("struct coverage boundary cases", () => {
       id: struct.string(),
       nickname: struct.string().optional(),
     });
-    expect(
-      matchesDefinition(
-        definition(requiredObject),
-        {},
-        runtime(requiredObject),
-      ),
-    ).toBe(false);
-    expect(
-      matchesDefinition(
-        definition(requiredObject),
-        { id: "u_1" },
-        runtime(requiredObject),
-      ),
-    ).toBe(true);
-    expect(
-      matchesDefinition(
-        definition(requiredObject),
-        { id: "u_1" },
-        runtime(struct.string()),
-      ),
-    ).toBe(true);
+    expect(matchesRuntimeValue(runtime(requiredObject), {})).toBe(false);
+    expect(matchesRuntimeValue(runtime(requiredObject), { id: "u_1" })).toBe(
+      true,
+    );
 
     const literalObject = struct.object({ type: struct.literal("message") });
-    expect(
-      matchesDefinition(
-        definition(literalObject),
-        { type: "count" },
-        runtime(literalObject),
-      ),
-    ).toBe(false);
+    expect(matchesRuntimeValue(runtime(literalObject), { type: "count" })).toBe(
+      false,
+    );
 
     const enumObject = struct.object({
       status: struct.enum(["draft", "published"]),
     });
     expect(
-      matchesDefinition(
-        definition(enumObject),
-        { status: "archived" },
-        runtime(enumObject),
-      ),
+      matchesRuntimeValue(runtime(enumObject), { status: "archived" }),
     ).toBe(false);
 
     expect(
-      matchesDefinition(
-        definition(struct.record(struct.string())),
-        [],
-        runtime(struct.record(struct.string())),
-      ),
+      matchesRuntimeValue(runtime(struct.record(struct.string())), []),
     ).toBe(false);
     expect(
-      matchesDefinition(
-        definition(struct.enum(["draft", "published"])),
-        "draft",
+      matchesRuntimeValue(
         runtime(struct.enum(["draft", "published"])),
+        "draft",
       ),
     ).toBe(true);
 
@@ -183,9 +139,7 @@ describe("struct coverage boundary cases", () => {
     });
     expect(encodeValue(runtime(nested), {})).toEqual({});
     expect(encodeValue(runtime(struct.object({})), {})).toEqual({});
-    expect(
-      matchesDefinition(definition(nested), nestedValue, runtime(nested)),
-    ).toBe(true);
+    expect(matchesRuntimeValue(runtime(nested), nestedValue)).toBe(true);
   });
 
   test("null falls through to literal, union, and intersection matching", () => {
@@ -238,9 +192,6 @@ describe("struct coverage boundary cases", () => {
   });
 
   test("introspection and shape guards reject non-object structs", () => {
-    expect(() => getStructFields(struct.string())).toThrow(
-      "object struct is required",
-    );
     expect(() => parseStructValue(struct.string(), 1)).toThrow(StructError);
     expect(() => assertStruct({}, "value")).toThrow("value must be a struct");
 
@@ -258,57 +209,58 @@ describe("struct coverage boundary cases", () => {
   });
 
   test("strict parsing keeps no zero-value construction path", () => {
-    expect(
-      parseValue(runtime(struct.string()), undefined, [], "value").ok,
-    ).toBe(false);
-    expect(
-      parseValue(runtime(struct.string().optional()), undefined, [], "value"),
-    ).toEqual({ ok: true, value: undefined });
-    expect(
-      parseValue(runtime(struct.string().null()), undefined, [], "value").ok,
-    ).toBe(false);
-    expect(
-      parseValue(runtime(struct.string().nullish()), undefined, [], "value"),
-    ).toEqual({ ok: true, value: undefined });
-
-    const [err, value] = parse(
-      struct.intersection(struct.any(), struct.string()),
-      "plain",
+    expect(parse(struct.string(), undefined)[0]).toBeInstanceOf(StructError);
+    expect(parse(struct.string().optional(), undefined)).toEqual([
+      null,
+      undefined,
+    ]);
+    expect(parse(struct.string().null(), undefined)[0]).toBeInstanceOf(
+      StructError,
     );
-    if (err) {
-      throw err;
-    }
-    expect(value).toBe("plain");
+    expect(parse(struct.string().nullish(), undefined)).toEqual([
+      null,
+      undefined,
+    ]);
+    expect(
+      parse(struct.intersection(struct.any(), struct.string()), "plain"),
+    ).toEqual([null, "plain"]);
   });
 
-  test("custom decoders own their paths and parseValue preserves the caller path", () => {
-    const decoderPaths: Path[] = [];
-    const decodedString = createPrimitiveStruct({
-      decode: (value, path) => {
-        decoderPaths.push(path);
-        path.push("decoder-owned");
-        return success(value);
-      },
-      expected: "string",
-      is: (value): value is string => typeof value === "string",
-      kind: "string",
+  test("object parsing covers nested fields", () => {
+    const nested = struct.object({
+      options: struct.object({ include: struct.boolean().optional() }),
+      profile: struct.object({ name: struct.string() }),
+      session: struct.object({ token: struct.string().optional() }),
+      target: struct.object({ id: struct.number() }),
     });
-    const callerPath: Path = ["caller"];
 
-    expect(
-      parseValue(
-        runtime(struct.object({ first: decodedString, second: decodedString })),
-        { first: "a", second: "b" },
-        callerPath,
-        "value",
-      ),
-    ).toEqual({ ok: true, value: { first: "a", second: "b" } });
-    expect(callerPath).toEqual(["caller"]);
-    expect(decoderPaths).toEqual([
-      ["caller", "first", "decoder-owned"],
-      ["caller", "second", "decoder-owned"],
+    expect(parse(struct.string(), null)[0]).toBeInstanceOf(StructError);
+    expect(parse(struct.enum(["draft", "published"]), "draft")).toEqual([
+      null,
+      "draft",
     ]);
-    expect(decoderPaths[0]).not.toBe(decoderPaths[1]);
+    expect(
+      parse(struct.enum(["draft", "published"]), "archived")[0],
+    ).toBeInstanceOf(StructError);
+    expect(parse(nested, "bad")[0]).toBeInstanceOf(StructError);
+    expect(
+      parse(struct.record(struct.string().optional()), { skip: undefined }),
+    ).toEqual([null, {}]);
+    const complete = {
+      options: {},
+      profile: { name: "Miao" },
+      session: {},
+      target: { id: 1 },
+    };
+    expect(parse(nested, complete)).toEqual([null, complete]);
+    expect(parse(nested, { target: { id: "bad" } })[0]).toBeInstanceOf(
+      StructError,
+    );
+    const optionalObject = struct.object({
+      options: struct.object({ include: struct.boolean() }).optional(),
+    });
+    expect(parse(optionalObject, {})).toEqual([null, {}]);
+    expect(parse(struct.object({}), {})).toEqual([null, {}]);
   });
 
   test("errorMap retains discarded paths across reentrant and throwing parses", () => {
@@ -415,93 +367,6 @@ describe("struct coverage boundary cases", () => {
     ).toEqual({
       payload: "hello",
       type: "a",
-    });
-  });
-
-  test("object parsing covers nested fields", () => {
-    const nested = struct.object({
-      options: struct.object({ include: struct.boolean().optional() }),
-      profile: struct.object({ name: struct.string() }),
-      session: struct.object({ token: struct.string().optional() }),
-      target: struct.object({ id: struct.number() }),
-    });
-
-    expect(parseValue(runtime(struct.string()), null, [], "value").ok).toBe(
-      false,
-    );
-    expect(
-      parseValue(
-        runtime(struct.enum(["draft", "published"])),
-        "draft",
-        [],
-        "value",
-      ),
-    ).toEqual({ ok: true, value: "draft" });
-    expect(
-      parseValue(
-        runtime(struct.enum(["draft", "published"])),
-        "archived",
-        [],
-        "value",
-      ).ok,
-    ).toBe(false);
-    expect(parseValue(runtime(nested), "bad", [], "value").ok).toBe(false);
-    expect(
-      parseValue(
-        runtime(struct.record(struct.string().optional())),
-        { skip: undefined },
-        [],
-        "value",
-      ),
-    ).toEqual({
-      ok: true,
-      value: {},
-    });
-    expect(
-      parseValue(
-        runtime(nested),
-        {
-          options: {},
-          profile: { name: "Miao" },
-          session: {},
-          target: { id: 1 },
-        },
-        [],
-        "value",
-      ),
-    ).toEqual({
-      ok: true,
-      value: {
-        options: {},
-        profile: { name: "Miao" },
-        session: {},
-        target: { id: 1 },
-      },
-    });
-    expect(
-      parseValue(
-        runtime(nested),
-        {
-          target: { id: "bad" },
-        },
-        [],
-        "value",
-      ).ok,
-    ).toBe(false);
-    const optionalObject = struct.object({
-      options: struct.object({ include: struct.boolean() }).optional(),
-    });
-    expect(parseValue(runtime(optionalObject), {}, [], "value")).toEqual({
-      ok: true,
-      value: {},
-    });
-    expect(parseValue(runtime(struct.object({})), {}, [], "value")).toEqual({
-      ok: true,
-      value: {},
-    });
-    expect(parseValue(runtime(struct.string()), "hello", [], "value")).toEqual({
-      ok: true,
-      value: "hello",
     });
   });
 
@@ -627,9 +492,7 @@ describe("struct coverage boundary cases", () => {
 
   test("union flag and alias codecs cover optional and ambiguous encode branches", () => {
     const optional = struct.string().optional();
-    expect(
-      matchesDefinition(definition(optional), undefined, runtime(optional)),
-    ).toBe(true);
+    expect(matchesRuntimeValue(runtime(optional), undefined)).toBe(true);
 
     const conflicting = struct.or(
       struct.object({ count: struct.number() }).alias("left"),
@@ -652,7 +515,7 @@ describe("struct coverage boundary cases", () => {
     expect(resolveObjectShape(duplicate, duplicateDefinition)).toBe(
       duplicateShape,
     );
-    expect(() => getStructFields(duplicate)).toThrow(
+    expect(() => parse(duplicate, {})).toThrow(
       'duplicate wire key "same" for object fields "first" and "second"',
     );
 
@@ -707,10 +570,6 @@ describe("struct coverage boundary cases", () => {
     expect(
       matchesRuntimeValue(runtime(missingDiscriminator), { type: "other" }),
     ).toBe(false);
-
-    expect(() =>
-      mapAliasedObjectFields(runtime(struct.string()), {}, () => undefined),
-    ).toThrow("json encode expects object struct");
 
     const nonObjectDiscriminator = makeStruct({
       discriminator: "type",
@@ -778,20 +637,6 @@ describe("struct guards for untyped definitions", () => {
   test("a union needs at least one struct", () => {
     // @ts-expect-error struct.or() requires at least one option
     expect(() => struct.or()).toThrow("or requires at least one struct");
-  });
-
-  test("a union option whose field is not a struct only turns the identity encode shortcut off", () => {
-    const union = struct.or(
-      struct.object({ name: "not a struct" }),
-      struct.object({ name: struct.string() }),
-    );
-    const unionDefinition = definition(union);
-
-    expect(
-      unionDefinition.kind === "or"
-        ? unionDefinition.uniformIdentityEncode
-        : undefined,
-    ).toBe(false);
   });
 
   test("a hand-built discriminator map that points at a non-object struct throws when parsed", () => {

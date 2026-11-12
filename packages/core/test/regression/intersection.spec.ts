@@ -9,12 +9,10 @@ import {
   withSSEHandle,
 } from "../../src";
 import { encodeJson } from "../../src/struct/codec/json";
-import { encodeValue } from "../../src/struct/encode";
-import { encodeStructValue } from "../../src/struct/introspection";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/internal/outbound_request";
 import { DEFINITION, STRUCT } from "../../src/struct/symbols";
-import { assertObject, isRuntimeStruct, symbolValue } from "../narrow";
+import { assertObject, symbolValue } from "../narrow";
 import {
   serializeOutgoingWebSocketMessage,
   transformWebSocketMessage,
@@ -90,7 +88,7 @@ test("unknown and any are intersection identities and an all-identity intersecti
   expect(struct.parse(identities, input)).toEqual([null, input]);
   expect(struct.parse(identities, input)[1]).toBe(input);
   expect(struct.parse(identities, input, { aliases: true })[1]).toBe(input);
-  expect(encodeStructValue(identities, input)).toBe(input);
+  expect(encodeJson(identities, input)).toBe(input);
 
   const nested = struct.intersection(
     struct.intersection(struct.unknown(), struct.any()),
@@ -119,8 +117,6 @@ test("unknown and any are intersection identities and an all-identity intersecti
 });
 
 test("struct encode merges every structured member of a mixed intersection", () => {
-  expect(encodeStructValue(Person, logical)).toEqual(logical);
-  expect(Object.getPrototypeOf(encodeStructValue(Person, logical))).toBeNull();
   expect(encodeJson(Person, logical)).toEqual(wire);
   expect(Object.getPrototypeOf(encodeJson(Person, logical))).toBeNull();
   expect(() =>
@@ -146,20 +142,14 @@ test("struct encode merges every structured member of a mixed intersection", () 
 });
 
 test("struct encode does not merge raw unknown keys into an aliased object", () => {
-  expect(encodeStructValue(Loose, { extra: true, name: "Miao" })).toEqual({
-    name: "Miao",
-  });
   expect(encodeJson(Loose, { extra: true, name: "Miao" })).toEqual({
     full_name: "Miao",
   });
   expect(
-    encodeStructValue(
-      struct.intersection(struct.unknown(), struct.string()),
-      "x",
-    ),
+    encodeJson(struct.intersection(struct.unknown(), struct.string()), "x"),
   ).toBe("x");
   expect(
-    encodeStructValue(struct.intersection(struct.unknown(), struct.any()), {
+    encodeJson(struct.intersection(struct.unknown(), struct.any()), {
       extra: 1,
     }),
   ).toEqual({ extra: 1 });
@@ -342,26 +332,7 @@ test("nested objects and equal-length arrays merge element-wise", () => {
   expect(date.toISOString()).toBe("2020-01-01T00:00:00.000Z");
 });
 
-test("array length mismatch and unequal dates are intersection conflicts", () => {
-  const objects = struct.intersection(
-    struct.object({ value: struct.string() }),
-    struct.object({ value: struct.string() }),
-  );
-  let calls = 0;
-  expect(() =>
-    encodeValue(
-      runtimeStruct(objects),
-      { value: "x" },
-      {
-        encodeObject() {
-          calls += 1;
-          return calls === 1 ? ["a"] : ["a", "b"];
-        },
-      },
-    ),
-  ).toThrow(new TypeError("invalid intersection encode at <root>"));
-  expect(calls).toBe(2);
-
+test("unequal dates are an intersection conflict", () => {
   let reads = 0;
   const [error] = struct.parse(
     struct.intersection(
@@ -547,7 +518,7 @@ test("object-side encode skips an explicit undefined alias and an omitted logica
     struct.object({ id: struct.string() }),
     struct.object({ note: struct.string().optional() }),
   );
-  const encoded = encodeStructValue(Logical, { id: "1" });
+  const encoded = encodeJson(Logical, { id: "1" });
   expect(encoded).toEqual({ id: "1" });
   expect(Object.getPrototypeOf(encoded)).toBeNull();
 });
@@ -562,9 +533,4 @@ test("tagged date intersections keep the equal date and do not attach an object 
 
 function structTag(value: unknown): object {
   return assertObject(symbolValue(value, STRUCT), "struct tag");
-}
-
-function runtimeStruct(value: unknown) {
-  if (!isRuntimeStruct(value)) throw new Error("Expected a runtime struct");
-  return value;
 }

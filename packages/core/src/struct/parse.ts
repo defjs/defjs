@@ -62,26 +62,6 @@ type ParseContext = {
 
 type Provenance = { passthrough?: RuntimeStruct };
 
-export function parseValue(
-  struct: RuntimeStruct,
-  input: unknown,
-  path: Path,
-  mode: ParseMode,
-  useAliases = false,
-  tagObjects = false,
-  guides?: WeakMap<object, Guide>,
-): InternalParseResult<unknown> {
-  return parseEntry(
-    struct,
-    input,
-    [...path],
-    mode,
-    useAliases,
-    tagObjects,
-    guides,
-  );
-}
-
 export function parseRootValue(
   struct: RuntimeStruct,
   input: unknown,

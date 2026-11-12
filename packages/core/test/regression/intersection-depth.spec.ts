@@ -3,7 +3,6 @@ import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/internal/outbound_request";
 import { StructError, struct } from "../../src/struct";
 import { encodeJson } from "../../src/struct/codec/json";
-import { encodeStructValue } from "../../src/struct/introspection";
 
 const Left = struct.object({ value: struct.any().alias("left") });
 const Right = struct.object({ value: struct.any().alias("right") });
@@ -148,27 +147,6 @@ describe("intersection merge depth", () => {
     expect(() =>
       encodeJson(Wire, { wrapper: { left: nest(255), right: nest(255) } }),
     ).toThrow(/invalid intersection encode/);
-  });
-
-  test("carries ordinary encoder depth into a general intersection merge", () => {
-    const Schema = struct.object({
-      wrapper: struct.intersection(
-        struct.record(struct.any()),
-        struct.object({ value: struct.any() }),
-      ),
-    });
-    const input = (depth: number) => ({
-      wrapper: {
-        get value(): unknown {
-          return nest(depth);
-        },
-      },
-    });
-    expect(() => encodeStructValue(Schema, input(254))).not.toThrow();
-    expect(() => encodeStructValue(Schema, input(255))).toThrow(TypeError);
-    expect(() => encodeStructValue(Schema, input(255))).toThrow(
-      /invalid intersection encode/,
-    );
   });
 
   test("carries outbound logical field depth into an opaque array wire merge", () => {

@@ -1,7 +1,7 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import { encodeValue } from "./encode";
 import { struct } from "./index";
-import { encodeStructValue, parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./introspection";
 import { matchesRuntimeValue } from "./match";
 import { assertStruct } from "./shape";
 import type { RuntimeStruct } from "./types";
@@ -84,10 +84,6 @@ describe("encode.ts", () => {
 
     try {
       const encoded = record(encode(schema, value));
-      const duplicateAliases = struct.object({
-        first: struct.string().alias("same"),
-        second: struct.string().alias("same"),
-      });
       const inheritedField = struct.object({ polluted: struct.string() });
 
       expect(Object.getPrototypeOf(encoded)).toBeNull();
@@ -102,9 +98,6 @@ describe("encode.ts", () => {
         Object.getOwnPropertyDescriptor(encoded, "__proto__"),
       ).toMatchObject({ enumerable: true, value: true });
       expect(Object.hasOwn(encoded, "polluted")).toBe(false);
-      expect(
-        encode(duplicateAliases, { first: "first", second: "second" }),
-      ).toEqual({ first: "first", second: "second" });
       expect(matchesRuntimeValue(runtimeOf(schema), value)).toBe(true);
       expect(matchesRuntimeValue(runtimeOf(inheritedField), {})).toBe(false);
     } finally {
@@ -131,17 +124,13 @@ describe("encode.ts", () => {
   });
 
   test("encodes nullable primitive null without calling primitive encoder", () => {
-    expect(encodeStructValue(struct.date().null(), null)).toBeNull();
-    expect(encodeStructValue(struct.bigint().null(), null)).toBeNull();
+    expect(encode(struct.date().null(), null)).toBeNull();
+    expect(encode(struct.bigint().null(), null)).toBeNull();
   });
 
   test("encodes optional primitive undefined without calling primitive encoder", () => {
-    expect(
-      encodeStructValue(struct.date().optional(), undefined),
-    ).toBeUndefined();
-    expect(
-      encodeStructValue(struct.bigint().optional(), undefined),
-    ).toBeUndefined();
+    expect(encode(struct.date().optional(), undefined)).toBeUndefined();
+    expect(encode(struct.bigint().optional(), undefined)).toBeUndefined();
   });
 
   test("struct.discriminatedUnion encodes via discriminator", () => {
@@ -326,7 +315,7 @@ describe("encode.ts", () => {
   test("keeps first matching union branch when encoded output is equivalent", () => {
     const Payload = struct.or(struct.string(), struct.string());
 
-    expect(encodeStructValue(Payload, "x")).toBe("x");
+    expect(encode(Payload, "x")).toBe("x");
   });
 
   test("keeps first matching union branch when aliases differ but encoded output is equivalent", () => {
@@ -335,7 +324,7 @@ describe("encode.ts", () => {
       struct.string().alias("label"),
     );
 
-    expect(encodeStructValue(Payload, "x")).toBe("x");
+    expect(encode(Payload, "x")).toBe("x");
   });
 
   test("keeps first matching union branch when object output differs only by key order", () => {
@@ -344,7 +333,7 @@ describe("encode.ts", () => {
       struct.object({ b: struct.string(), a: struct.string() }),
     );
 
-    expect(encodeStructValue(Payload, { a: "x", b: "y" })).toEqual({
+    expect(encode(Payload, { a: "x", b: "y" })).toEqual({
       a: "x",
       b: "y",
     });
@@ -363,7 +352,7 @@ describe("encode.ts", () => {
     );
 
     expect(laterReads).toBe(0);
-    expect(encodeStructValue(Payload, { name: "x" })).toEqual({ name: "x" });
+    expect(encode(Payload, { name: "x" })).toEqual({ name: "x" });
   });
 
   test("compares overlapping union object branches when nested fields are not identity-encoded", () => {
@@ -373,7 +362,7 @@ describe("encode.ts", () => {
       struct.object({ nested }),
     );
 
-    expect(encodeStructValue(Payload, { nested: { value: "x" } })).toEqual({
+    expect(encode(Payload, { nested: { value: "x" } })).toEqual({
       nested: { value: "x" },
     });
   });
@@ -384,11 +373,11 @@ describe("encode.ts", () => {
       struct.object({ when: struct.date() }),
     );
 
-    expect(
-      encodeStructValue(Payload, { when: new Date("2026-05-12T10:00:00Z") }),
-    ).toEqual({
-      when: "2026-05-12T10:00:00.000Z",
-    });
+    expect(encode(Payload, { when: new Date("2026-05-12T10:00:00Z") })).toEqual(
+      {
+        when: "2026-05-12T10:00:00.000Z",
+      },
+    );
   });
 
   test("compares overlapping union object branches when field kinds differ", () => {
@@ -397,7 +386,7 @@ describe("encode.ts", () => {
       struct.object({ value: struct.string() }),
     );
 
-    expect(encodeStructValue(Payload, { value: "x" })).toEqual({ value: "x" });
+    expect(encode(Payload, { value: "x" })).toEqual({ value: "x" });
   });
 
   test("compares overlapping union object branches when field sets differ", () => {
@@ -409,17 +398,11 @@ describe("encode.ts", () => {
       }),
     );
 
-    expect(encodeStructValue(Payload, { value: "x" })).toEqual({ value: "x" });
+    expect(encode(Payload, { value: "x" })).toEqual({ value: "x" });
   });
 
   test("struct.or falls through when no option matches", () => {
     const s = struct.or(struct.number(), struct.string());
-    expect(encode(s, true)).toBe(true);
-  });
-
-  test("struct.or returns an unmatched value when a branch is not identity-encoded", () => {
-    // A date branch skips the uniform-identity fast path, so the shared miss still returns the input.
-    const s = struct.or(struct.date(), struct.string());
     expect(encode(s, true)).toBe(true);
   });
 
@@ -433,19 +416,6 @@ describe("encode.ts", () => {
     expect(matchesRuntimeValue(dateStruct, "2026-05-12T10:00:00Z")).toBe(false);
     expect(matchesRuntimeValue(bigintStruct, 42n)).toBe(true);
     expect(matchesRuntimeValue(bigintStruct, "42")).toBe(false);
-  });
-
-  test("encode uses injected selectUnionOptions as the union branch source", () => {
-    const union = runtimeOf(struct.or(struct.date(), struct.string()));
-    const mockSelect = vi.fn(() => {
-      throw new Error("selector-called");
-    });
-
-    expect(() =>
-      encodeValue(union, new Date("2026-05-12T10:00:00Z"), {
-        selectUnionOptions: mockSelect,
-      }),
-    ).toThrowError("selector-called");
   });
 
   test("struct.discriminatedUnion falls through when no match", () => {

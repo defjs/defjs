@@ -1,15 +1,7 @@
 import { resolveObjectShapeEntries } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { RuntimeStruct, StructDefinition } from "./types";
+import type { ObjectDefinition, RuntimeStruct } from "./types";
 import { hasOwnKey, isPlainObject, matchesEnum, MAX_DEPTH } from "./utils";
-
-export function matchesRuntimeValue(
-  struct: RuntimeStruct,
-  value: unknown,
-  depth = 0,
-): boolean {
-  return matchesDefinition(struct[DEFINITION], value, struct, depth);
-}
 
 export function selectUnionOptions(
   options: readonly RuntimeStruct[],
@@ -25,12 +17,12 @@ export function selectUnionOptions(
   return matches;
 }
 
-export function matchesDefinition(
-  definition: StructDefinition,
-  value: unknown,
+export function matchesRuntimeValue(
   struct: RuntimeStruct,
+  value: unknown,
   depth = 0,
 ): boolean {
+  const definition = struct[DEFINITION];
   if (value === null) {
     if (definition.kind === "null" || definition.flags.nullable) {
       return true;
@@ -86,7 +78,7 @@ export function matchesDefinition(
       return (
         depth < MAX_DEPTH &&
         isPlainObject(value) &&
-        matchesObjectValue(struct, value, depth)
+        matchesObjectValue(struct, definition, value, depth)
       );
     case "record":
       return (
@@ -119,18 +111,13 @@ export function matchesDefinition(
 
 function matchesObjectValue(
   struct: RuntimeStruct,
+  definition: ObjectDefinition,
   value: { [key: string]: unknown },
   depth: number,
 ): boolean {
-  const definition = struct[DEFINITION];
-  if (definition.kind !== "object") {
-    return true;
-  }
-
   for (const [key, field] of resolveObjectShapeEntries(struct, definition)) {
-    const fieldDefinition = field[DEFINITION];
     if (!hasOwnKey(value, key)) {
-      if (isRequiredField(fieldDefinition)) {
+      if (!field[DEFINITION].flags.optional) {
         return false;
       }
       continue;
@@ -142,8 +129,4 @@ function matchesObjectValue(
   }
 
   return true;
-}
-
-function isRequiredField(definition: StructDefinition): boolean {
-  return !definition.flags.optional;
 }

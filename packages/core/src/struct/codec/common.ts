@@ -1,14 +1,9 @@
 import { encodeValue } from "../encode";
 import { mapAliasedObjectFields } from "../fields";
-
-import { isObjectStruct, parseStructValue } from "../introspection";
+import { parseStructValue } from "../introspection";
 import { assertStruct } from "../shape";
 import { DEFINITION } from "../symbols";
 import type { AnyStructLike, Infer, RuntimeStruct } from "../types";
-
-export { mapAliasedObjectFields } from "../fields";
-
-export const ALIAS_ENCODE_OPTIONS = { encodeObject: mapAliasedObjectFields };
 
 export function encodeObjectByAlias(
   struct: AnyStructLike,
@@ -36,14 +31,18 @@ export function encodeAliasedStruct(
     return undefined;
   }
 
-  if (!isObjectStruct(struct)) {
-    return encodeAliasedField(struct, value, label, depth);
+  if (definition.kind !== "object") {
+    return encodeValue(struct, value, depth);
   }
 
   assertPlainObject(value, `${label} encode expects object value`);
 
-  return mapAliasedObjectFields(struct, value, (fieldStruct, fieldValue) =>
-    encodeAliasedField(fieldStruct, fieldValue, label, depth + 1),
+  return mapAliasedObjectFields(
+    struct,
+    definition,
+    value,
+    (fieldStruct, fieldValue) =>
+      encodeAliasedStruct(fieldStruct, fieldValue, label, depth + 1),
   );
 }
 
@@ -61,17 +60,4 @@ export function assertPlainObject(
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new TypeError(message);
   }
-}
-
-function encodeAliasedField(
-  struct: RuntimeStruct,
-  value: unknown,
-  label: string,
-  depth: number,
-): unknown {
-  if (isObjectStruct(struct)) {
-    return encodeAliasedStruct(struct, value, label, depth);
-  }
-
-  return encodeValue(struct, value, ALIAS_ENCODE_OPTIONS, depth);
 }

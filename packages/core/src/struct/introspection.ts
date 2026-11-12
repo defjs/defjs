@@ -1,59 +1,13 @@
-import { encodeValue } from "./encode";
 import { runWithErrorMap, StructError, type ErrorMap } from "./errors";
-import { resolveStructFields } from "./fields";
-import { isStruct } from "./guards";
 import type { Guide } from "./guide";
 import { parseRootValue } from "./parse";
 import { assertStruct } from "./shape";
-import { DEFINITION } from "./symbols";
 import type {
-  ObjectStruct,
-  ObjectShape,
   ParsedStructOutput,
   ParseResult,
   RuntimeStruct,
   StructLike,
 } from "./types";
-
-export interface StructField {
-  readonly alias: string | undefined;
-  readonly key: string;
-  readonly struct: StructLike<unknown, unknown, boolean>;
-}
-
-export function isObjectStruct(
-  value: unknown,
-): value is ObjectStruct<ObjectShape> & RuntimeStruct {
-  return isStruct(value) && value[DEFINITION].kind === "object";
-}
-
-export function getStructFields(
-  struct: StructLike<unknown, unknown, boolean>,
-): readonly StructField[] {
-  assertStruct(struct, "struct");
-  const definition = struct[DEFINITION];
-  if (definition.kind !== "object") {
-    throw new TypeError("object struct is required");
-  }
-
-  return Object.freeze(
-    resolveStructFields(struct, definition).map((field) =>
-      Object.freeze({
-        alias: field.alias,
-        key: field.key,
-        struct: field.struct,
-      }),
-    ),
-  );
-}
-
-export function encodeStructValue(
-  struct: StructLike<unknown, unknown, boolean>,
-  value: unknown,
-): unknown {
-  assertStruct(struct, "struct");
-  return encodeValue(struct, value);
-}
 
 /**
  * Parses an unknown value with a struct and returns an error-first tuple.
