@@ -26,19 +26,25 @@ function sizeOf(frame: Frame): number {
  * A WebSocket as the WebSockets Standard describes it, driven by the test instead of by a network.
  *
  * Nothing here uses a timer. The code under test calls `send` and `close` like it would on a platform socket; the test
- * plays the peer with `open`, `receive`, `peerClose`, `drop` and `drain`, and each of those is one task of the standard:
+ * plays the peer with `open`, `receive`, `peerClosing`, `peerClose` and `drop`, and each of those is one task of the standard:
  *
- * - `readyState` moves CONNECTING, OPEN, CLOSING, CLOSED, and `states` lists every state the socket entered. A close
- *   that the peer starts passes through CLOSING before CLOSED.
- * - `open` is the first event. `message` is dispatched only while OPEN. A failed or dropped connection fires `error`, then
- *   `close` with code 1006 and `wasClean` false. A close that completed fires `close` with `wasClean` true.
+ * - `readyState` moves CONNECTING, OPEN, CLOSING, CLOSED. A close that the peer starts passes through CLOSING: `peerClosing`
+ *   is its first task, the Close frame has arrived and the connection is still up, and `peerClose` ends it. `peerClose`
+ *   from OPEN runs both at once.
+ * - `open` is the first event. `message` is dispatched only while OPEN, and a binary frame arrives as a Blob or an
+ *   ArrayBuffer according to `binaryType`. A failed or dropped connection fires `error`, then `close` with code 1006, an
+ *   empty reason and `wasClean` false (`drop`); 1006 never arrives in a Close frame, so `peerClose` refuses it. A close
+ *   that completed fires `close` with `wasClean` true.
  * - `close()` while CONNECTING fails the connection. While OPEN it only moves to CLOSING and records the request; the
  *   socket closes when the peer answers (`peerClose`), or at once in a microtask when the fake plays the peer. While
  *   CLOSING or CLOSED it does nothing.
  * - `send()` throws while CONNECTING, and while CLOSING or CLOSED it only grows `bufferedAmount`.
+ * - The constructor throws a `SyntaxError` for a URL that is not a WebSocket URL and for a repeated subprotocol.
  *
- * Not modelled: the `on*` properties (`WebSocketHandle` has none), Ping and Pong frames, and values the types reject.
- * Inject a fault by overriding `send`, `close` or the constructor in a subclass.
+ * Not modelled: the `on*` properties (`WebSocketHandle` has none), Ping and Pong frames, the token syntax of a
+ * subprotocol, that `open` selects one of the requested subprotocols, and values the types reject. `receive` delivers a
+ * Blob as it is given, so that a test can control how its read settles. Inject a fault by overriding `send`, `close` or
+ * the constructor in a subclass.
  */
 export class FakeWebSocket extends EventTarget implements WebSocketHandle {
   static readonly CONNECTING = CONNECTING;
@@ -53,17 +59,17 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
   readonly sent: Frame[] = [];
   /** Every `close()` call, the ones that did nothing included. */
   readonly closeCalls: Array<{ code?: number; reason?: string }> = [];
-  /** The states entered, in order. */
-  readonly states: number[] = [CONNECTING];
   bufferedAmount = 0;
   protocol = "";
   extensions = "";
   /** With `true` the socket opens by itself, in a microtask. */
   protected autoOpen = true;
-  /** With `true` the socket answers by itself, in microtasks: it echoes a close and drains what was sent. */
+  /** With `true` the socket answers by itself, in microtasks: it echoes a close and takes what was sent off `bufferedAmount`. */
   protected autoReply = true;
 
   #binaryType: "arraybuffer" | "blob" = "blob";
+  #readyState = CONNECTING;
+  readonly #origin: string;
 
   readonly #listeners = new Map<
     string,
@@ -72,6 +78,9 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
 
   constructor(url: string | URL, protocols: string | string[] = []) {
     super();
+    if (!URL.canParse(url)) {
+      throw new DOMException("The URL is not valid", "SyntaxError");
+    }
     const parsed = new URL(url);
     if (parsed.protocol === "http:") {
       parsed.protocol = "ws:";
@@ -84,9 +93,14 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
     ) {
       throw new DOMException("The URL is not a WebSocket URL", "SyntaxError");
     }
-    this.url = parsed.href;
-    this.requestedProtocols =
+    const requested =
       typeof protocols === "string" ? [protocols] : [...protocols];
+    if (new Set(requested).size !== requested.length) {
+      throw new DOMException("A subprotocol is repeated", "SyntaxError");
+    }
+    this.url = parsed.href;
+    this.#origin = parsed.origin;
+    this.requestedProtocols = requested;
     queueMicrotask(() => {
       if (this.autoOpen && this.readyState === CONNECTING) {
         this.open();
@@ -104,7 +118,7 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
   }
 
   get readyState(): number {
-    return this.states.at(-1) ?? CONNECTING;
+    return this.#readyState;
   }
 
   /** The text frame that `send` accepted at `index`. */
@@ -152,14 +166,14 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
     }
     this.closeCalls.push({ code, reason });
     if (this.readyState === CONNECTING) {
-      this.states.push(CLOSING);
+      this.#readyState = CLOSING;
       queueMicrotask(() => {
         if (this.autoReply && this.readyState === CLOSING) {
           this.drop();
         }
       });
     } else if (this.readyState === OPEN) {
-      this.states.push(CLOSING);
+      this.#readyState = CLOSING;
       queueMicrotask(() => {
         if (this.autoReply && this.readyState === CLOSING) {
           this.peerClose(code, reason);
@@ -173,46 +187,60 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
     this.#expect("open", CONNECTING);
     this.protocol = init.protocol ?? "";
     this.extensions = init.extensions ?? "";
-    this.states.push(OPEN);
+    this.#readyState = OPEN;
     this.dispatchEvent(new Event("open"));
   }
 
-  /** A message arrives. It is dropped unless the socket is OPEN. */
+  /**
+   * A message arrives. It is dropped unless the socket is OPEN. A text frame is a string and a binary frame an
+   * ArrayBuffer, which the socket delivers as a Blob while its `binaryType` is "blob". A Blob is delivered as it is.
+   */
   receive(data: string | ArrayBuffer | Blob): void {
     if (this.readyState === OPEN) {
+      const frame =
+        data instanceof ArrayBuffer && this.#binaryType === "blob"
+          ? new Blob([data])
+          : data;
       this.dispatchEvent(
-        new MessageEvent("message", { data, origin: this.url }),
+        new MessageEvent("message", { data: frame, origin: this.#origin }),
       );
     }
   }
 
+  /** The peer's Close frame has arrived: OPEN to CLOSING. The connection is up until `peerClose` or `drop`. */
+  peerClosing(): void {
+    this.#expect("peerClosing", OPEN);
+    this.#readyState = CLOSING;
+  }
+
   /**
-   * The peer's Close frame, or its answer to ours: CLOSING first when the socket was OPEN, then CLOSED and the `close`
-   * event. A Close frame without a status code reads as 1005. `wasClean` is false when the connection ended before the
-   * closing handshake completed; no `error` event comes with that.
+   * The peer's Close frame, or its answer to ours, and the connection ends: CLOSED, then the `close` event with
+   * `wasClean` true. From OPEN the socket passes through CLOSING first, as `peerClosing` does. Without a code the
+   * event carries 1005, no status. The codes 1005, 1006 and 1015 never travel in a Close frame, so they are refused; a
+   * connection that was lost is `drop`.
    */
-  peerClose(code = 1005, reason = "", wasClean = true): void {
+  peerClose(code?: number, reason = ""): void {
+    if (code === 1005 || code === 1006 || code === 1015) {
+      throw new RangeError(`${code} never travels in a Close frame`);
+    }
     this.#expect("peerClose", OPEN, CLOSING);
     if (this.readyState === OPEN) {
-      this.states.push(CLOSING);
+      this.peerClosing();
     }
-    this.states.push(CLOSED);
-    this.dispatchEvent(new CloseEvent("close", { code, reason, wasClean }));
+    this.#readyState = CLOSED;
+    this.dispatchEvent(
+      new CloseEvent("close", { code: code ?? 1005, reason, wasClean: true }),
+    );
   }
 
   /** The connection is lost, or never made: CLOSED, then `error`, then `close` with code 1006 and `wasClean` false. */
   drop(): void {
     this.#expect("drop", CONNECTING, OPEN, CLOSING);
-    this.states.push(CLOSED);
+    this.#readyState = CLOSED;
     this.dispatchEvent(new Event("error"));
     this.dispatchEvent(
       new CloseEvent("close", { code: 1006, reason: "", wasClean: false }),
     );
-  }
-
-  /** The network took everything that `send` queued. */
-  drain(): void {
-    this.bufferedAmount = 0;
   }
 
   /** How many listeners are registered, for one event type or for all of them. */
@@ -262,6 +290,22 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
   }
 }
 
+/**
+ * A `close` event alone. The standard cannot produce one without the `error` that comes before a 1006, or with a
+ * `wasClean` that the closing handshake does not give, as Firefox reports it for a Close frame from the server; a handle
+ * that does not follow the standard can, and the code under test accepts it. The socket leaves OPEN for CLOSING first, so
+ * a second call does nothing to a socket that already closed.
+ */
+export function closeEventOnly(
+  socket: FakeWebSocket,
+  init: CloseEventInit,
+): void {
+  if (socket.readyState === FakeWebSocket.OPEN) {
+    socket.peerClosing();
+  }
+  socket.dispatchEvent(new CloseEvent("close", init));
+}
+
 export interface FakeSockets {
   /** A class of its own for this call, so that no state is shared between tests. Pass it to `withWebSocketHandle`. */
   readonly Socket: typeof FakeWebSocket;
@@ -274,7 +318,7 @@ export interface FakeSockets {
 
 /**
  * A fresh `FakeWebSocket` class. With `handshake: "auto"` (the default) each socket plays the peer in microtasks: it
- * opens, answers a close and drains what it was sent. With `"manual"` the test calls `open`, `peerClose` and `drop`.
+ * opens, answers a close and empties `bufferedAmount`. With `"manual"` the test calls `open`, `peerClose` and `drop`.
  * A test that injects a fault extends `Socket` and passes the subclass to `withWebSocketHandle`; its instances are listed
  * in `sockets` like any other.
  */

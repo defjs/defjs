@@ -5,6 +5,7 @@ import { yieldMacrotask } from "../../test/macrotask";
 import { defineWebSocket } from "./index";
 import {
   type FakeWebSocket,
+  closeEventOnly,
   expectInertErrorListener,
   expectOnlyErrorSink,
   openSession,
@@ -232,7 +233,11 @@ describe("web socket incoming messages with a mock handle", () => {
       if (withErrorEvent) {
         fake.last().drop();
       } else {
-        fake.last().peerClose(1006, "", false);
+        closeEventOnly(fake.last(), {
+          code: 1006,
+          reason: "",
+          wasClean: false,
+        });
       }
 
       await expect(socket.closed).resolves.toMatchObject({

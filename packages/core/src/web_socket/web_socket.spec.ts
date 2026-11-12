@@ -6,7 +6,6 @@ import {
   withInterceptors,
   withWebSocketHandle,
   type Client,
-  type WebSocketHandleConstructor,
 } from "../client";
 import { ERR_ABORTED } from "../error";
 import {
@@ -17,6 +16,7 @@ import { StructError, struct } from "../struct";
 import {
   createFakeWebSocket,
   openSession,
+  refusing,
   type FakeWebSocket,
 } from "../../test/fake_web_socket";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
@@ -44,11 +44,7 @@ describe("web socket runtime", () => {
 
     const client = createClient(
       withEndpoint("http://localhost"),
-      withWebSocketHandle(
-        testHandle(() => {
-          throw new Error("invalid client");
-        }),
-      ),
+      withWebSocketHandle(refusing(createFakeWebSocket().Socket)),
     );
 
     const [error, socket, connection] = await useSocket(client);
@@ -1205,14 +1201,10 @@ describe("web socket runtime", () => {
 
   test("should treat an abort inside the builder as NET_ABORTED before opening a socket", async () => {
     const controller = new AbortController();
-    let constructed = 0;
+    const fake = createFakeWebSocket();
     const guardedClient = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(
-        testHandle(() => {
-          constructed += 1;
-        }),
-      ),
+      withWebSocketHandle(fake.Socket),
     );
     const useSocket = defineWebSocket({
       builder: () => {
@@ -1229,7 +1221,7 @@ describe("web socket runtime", () => {
 
     expect(error?.code).toBe("NET_ABORTED");
     expect(session).toBeUndefined();
-    expect(constructed).toBe(0);
+    expect(fake.sockets).toHaveLength(0);
   });
 });
 
@@ -1264,27 +1256,4 @@ function jsonObject(payload: string): Record<string, unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function testHandle(construct: () => void): WebSocketHandleConstructor {
-  return class {
-    static readonly OPEN = 1;
-    bufferedAmount = 0;
-    extensions = "";
-    protocol = "";
-    readyState = 0;
-    url = "";
-
-    constructor() {
-      construct();
-    }
-
-    addEventListener(): void {}
-
-    close(): void {}
-
-    removeEventListener(): void {}
-
-    send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {}
-  };
 }

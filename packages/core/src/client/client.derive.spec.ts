@@ -4,6 +4,7 @@ import { createHttpInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineEventStream } from "../sse";
 import { defineRequest } from "../http";
+import { createFakeWebSocket } from "../../test/fake_web_socket";
 import { defineWebSocket } from "../web_socket";
 import { CLIENT, createClient, type RequestOptions } from "./client";
 import {
@@ -396,33 +397,10 @@ describe("request options ignored by other protocols", () => {
   });
 
   test("WebSocket ignores HTTP progress fields", async () => {
-    const constructed: string[] = [];
+    const fake = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(
-        class extends EventTarget {
-          static readonly OPEN = 1;
-          readonly bufferedAmount = 0;
-          readonly extensions = "";
-          readonly protocol = "";
-          readonly readyState = 0;
-          readonly url: string;
-          constructor(url: string) {
-            super();
-            this.url = url;
-            constructed.push(url);
-            queueMicrotask(() => {
-              this.dispatchEvent(new Event("open"));
-            });
-          }
-          close() {
-            this.dispatchEvent(new CloseEvent("close"));
-          }
-          send() {
-            return undefined;
-          }
-        },
-      ),
+      withWebSocketHandle(fake.Socket),
     );
     const socket = defineWebSocket({
       path: "/room",
@@ -437,7 +415,9 @@ describe("request options ignored by other protocols", () => {
     );
 
     expect(error).toBeNull();
-    expect(constructed).toEqual(["wss://example.test/room"]);
+    expect(fake.sockets.map((native) => native.url)).toEqual([
+      "wss://example.test/room",
+    ]);
     await session?.[Symbol.asyncDispose]();
   });
 });
@@ -509,25 +489,7 @@ describe("AbortSignal.timeout classification", () => {
   test("WebSocket open reports NET_TIMEOUT for AbortSignal.timeout and NET_ABORTED for a manual abort", async () => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(
-        class extends EventTarget {
-          static readonly OPEN = 1;
-          readonly bufferedAmount = 0;
-          readonly extensions = "";
-          readonly protocol = "";
-          readonly readyState = 0;
-          readonly url = "";
-          constructor(_url: string) {
-            super();
-          }
-          close() {
-            return undefined;
-          }
-          send() {
-            return undefined;
-          }
-        },
-      ),
+      withWebSocketHandle(createFakeWebSocket({ handshake: "manual" }).Socket),
     );
     const socket = defineWebSocket({
       path: "/room",

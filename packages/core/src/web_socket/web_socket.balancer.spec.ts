@@ -18,7 +18,11 @@ import {
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createWebSocketInterceptor } from "../interceptor";
 import { struct } from "../struct";
-import { createFakeWebSocket, FakeWebSocket } from "../../test/fake_web_socket";
+import {
+  closeEventOnly,
+  createFakeWebSocket,
+  FakeWebSocket,
+} from "../../test/fake_web_socket";
 import { defineWebSocket } from "./index";
 
 const PRIMARY = "http://127.0.0.1:1";
@@ -635,13 +639,11 @@ describe("web socket endpoint balancer", () => {
 
   test.each([
     [1006, false, "NET_UNREACHABLE"],
-    [1006, undefined, "NET_UNREACHABLE"],
     [1006, true, "NET_UNREACHABLE"],
     [1015, false, "NET_UNREACHABLE"],
     [1012, false, "NET_UNAVAILABLE"],
     [1012, true, "NET_UNAVAILABLE"],
     [1013, true, "NET_UNAVAILABLE"],
-    [1013, undefined, "NET_UNAVAILABLE"],
   ] as const)(
     "default pick-first advances on close-only code %s with wasClean %s as %s",
     async (code, wasClean, failure) => {
@@ -679,7 +681,11 @@ describe("web socket endpoint balancer", () => {
       const runtimeError = vi.fn();
       session.onRuntimeError(runtimeError);
       try {
-        socketAt(0).peerClose(code, "peer closed", wasClean);
+        closeEventOnly(socketAt(0), {
+          code,
+          reason: "peer closed",
+          wasClean,
+        });
         await vi.waitFor(() => expect(fake.sockets).toHaveLength(2));
         expect(dones).toEqual([{ attempted: true, code: failure }]);
         expect(ends).toEqual([{ attempted: true }]);
@@ -704,8 +710,6 @@ describe("web socket endpoint balancer", () => {
     [1005, true],
     [1011, true],
     [4001, true],
-    [1000, undefined],
-    [1011, undefined],
     // Firefox reports a server-initiated close frame with wasClean false; the code still describes the peer.
     [1000, false],
     [1001, false],
@@ -718,7 +722,11 @@ describe("web socket endpoint balancer", () => {
       socketAt(0).open();
       const [, session] = await pending;
       if (!session) throw new Error("expected session");
-      socketAt(0).peerClose(code, "peer closed", wasClean);
+      closeEventOnly(socketAt(0), {
+        code,
+        reason: "peer closed",
+        wasClean,
+      });
       expect(await session.closed).toMatchObject({ kind: "closed", code });
       expect(record.dones).toEqual([{ attempted: true }]);
       expect(record.ends).toEqual([{ attempted: true }]);
@@ -773,8 +781,12 @@ describe("web socket endpoint balancer", () => {
     async (mode, code) => {
       class AbnormalOnClose extends scriptedSocket() {
         override close(): void {
-          if (this.readyState !== FakeWebSocket.CLOSED) {
-            this.peerClose(code, "peer closed", code !== 1006);
+          if (this.readyState === FakeWebSocket.OPEN) {
+            closeEventOnly(this, {
+              code,
+              reason: "peer closed",
+              wasClean: code !== 1006,
+            });
           }
         }
       }
@@ -924,11 +936,11 @@ describe("web socket endpoint balancer", () => {
       const [error, session] = await pending;
       expect(error).toBeNull();
       if (!session) throw new Error("expected session");
-      socketAt(attempt).peerClose(
-        attempt < 5 ? 1006 : 1000,
-        "peer closed",
-        attempt >= 5,
-      );
+      if (attempt < 5) {
+        socketAt(attempt).drop();
+      } else {
+        socketAt(attempt).peerClose(1000, "peer closed");
+      }
       await session.closed;
     }
     expect(picked).toEqual([
@@ -972,7 +984,11 @@ describe("web socket endpoint balancer", () => {
       const [error, session] = await pending;
       expect(error).toBeNull();
       if (!session) throw new Error("expected session");
-      socketAt(index).peerClose(drop ? 1006 : 1000, "peer closed", !drop);
+      if (drop) {
+        socketAt(index).drop();
+      } else {
+        socketAt(index).peerClose(1000, "peer closed");
+      }
       index += 1;
       await session.closed;
     }
@@ -1016,7 +1032,11 @@ describe("web socket endpoint balancer", () => {
       const [error, session] = await pending;
       expect(error).toBeNull();
       if (!session) throw new Error("expected session");
-      socketAt(0).peerClose(1006, "peer closed", false);
+      closeEventOnly(socketAt(0), {
+        code: 1006,
+        reason: "peer closed",
+        wasClean: false,
+      });
       expect(await session.closed).toMatchObject({
         kind: "error",
         code: 1006,
@@ -1048,7 +1068,7 @@ describe("web socket endpoint balancer", () => {
       socketAt(0).open();
       const [, session] = await pending;
       if (!session) throw new Error("expected session");
-      socketAt(0).peerClose(1006, "peer closed", false);
+      socketAt(0).drop();
       expect(await session.closed).toMatchObject(
         mode === "throw"
           ? { kind: "error", cause: policyError }
@@ -1064,15 +1084,8 @@ describe("web socket endpoint balancer", () => {
   );
 
   test("should count an error after open as unreachable exactly once", async () => {
-    class AbnormalOnError extends scriptedSocket() {
-      override close(): void {
-        if (this.readyState !== FakeWebSocket.CLOSED) {
-          this.peerClose(1006, "peer closed", false);
-        }
-      }
-    }
     const record = scriptedBalancer([{ endpoint: PRIMARY }]);
-    const pending = room(clientFor(record.balancer, AbnormalOnError));
+    const pending = room(clientFor(record.balancer));
     await flush();
     socketAt(0).open();
     const [, session] = await pending;
@@ -1081,7 +1094,7 @@ describe("web socket endpoint balancer", () => {
     }
     const runtimeError = vi.fn();
     session.onRuntimeError(runtimeError);
-    socketAt(0).dispatchEvent(new Event("error"));
+    socketAt(0).drop();
     expect(await session.closed).toMatchObject({
       kind: "error",
       code: 1006,

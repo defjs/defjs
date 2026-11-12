@@ -15,6 +15,7 @@ import { struct } from "../struct";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 import {
   type FakeWebSocket,
+  closeEventOnly,
   expectOnlyErrorSink,
   openSession,
   stubFakeWebSocket,
@@ -159,7 +160,11 @@ describe("web socket reconnect with a mock handle", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.sockets).toHaveLength(1);
 
-    firstSocket.peerClose(1006, "transport", false);
+    closeEventOnly(firstSocket, {
+      code: 1006,
+      reason: "transport",
+      wasClean: false,
+    });
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.sockets).toHaveLength(2);
     // autoOpen is off, so the replacement stays connecting until this turn opens it.
