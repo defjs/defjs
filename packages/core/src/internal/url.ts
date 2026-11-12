@@ -100,14 +100,14 @@ export function mergeHeaders(target: Headers, source: Headers): void {
  * @throws TypeError when the endpoint or path is invalid.
  * @param baseEndpoint - A valid absolute client endpoint. Its query and hash are dropped, and a trailing slash is added to its pathname so that the base path is kept: `https://api.example.com/v1` with `/users` gives `https://api.example.com/v1/users`.
  * @param path - A relative endpoint path. A single leading slash is removed. After resolution, the URL must keep the base origin and stay under its directory. Absolute or protocol-relative paths, C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`.
- * @param queryString - Query without a leading `?`. When non-empty it is set as the URL's search verbatim.
+ * @param search - The URL's search without a leading `?`, as `URLSearchParams.toString()` gives it. When non-empty it is set as the URL's `search`.
  * @returns the resolved `URL`.
  * @group http
  */
 export function createResolvedRequestUrl(
   baseEndpoint: string,
   path: string,
-  queryString = "",
+  search = "",
 ): URL {
   const base = createEndpointDirectoryBase(baseEndpoint);
   let url: URL;
@@ -123,8 +123,8 @@ export function createResolvedRequestUrl(
   }
   validateEndpointPath(path);
   // The validated path carries no query, so an empty string would only reassign an empty search.
-  if (queryString) {
-    url.search = queryString;
+  if (search) {
+    url.search = search;
   }
   return url;
 }

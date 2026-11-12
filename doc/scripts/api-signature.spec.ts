@@ -122,9 +122,9 @@ test("public signatures hide internal members, defaults and blank member lines",
   ).toBe("function fetchHandler(\n  fetchImpl?: FetchHandle,\n): void");
   expect(
     hideDefaultExpressions(
-      'function createResolvedRequestUrl(queryString = ""): URL',
+      'function createResolvedRequestUrl(search = ""): URL',
     ),
-  ).toBe("function createResolvedRequestUrl(queryString?: string): URL");
+  ).toBe("function createResolvedRequestUrl(search?: string): URL");
   expect(
     hideDefaultExpressions(
       "function f<T = string>(value = 1, flag = false, name = 'a', raw = `b`): void",
@@ -148,11 +148,9 @@ test("public signatures hide internal members, defaults and blank member lines",
   ).toBe("function f(value?: Foo<Bar, Baz>): void");
   expect(
     hideDefaultExpressions(
-      'function f<const M extends string = "GET">(queryString = ""): void',
+      'function f<const M extends string = "GET">(search = ""): void',
     ),
-  ).toBe(
-    'function f<const M extends string = "GET">(queryString?: string): void',
-  );
+  ).toBe('function f<const M extends string = "GET">(search?: string): void');
   expect(collapseMemberGaps("a\n\n\n  \nb")).toBe("a\nb");
   expect(declaredParameterType(" string ", undefined)).toBe("string");
   expect(declaredParameterType(undefined, '""')).toBe("string");

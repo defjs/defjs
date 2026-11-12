@@ -3125,7 +3125,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function createResolvedRequestUrl(\n  baseEndpoint: string,\n  path: string,\n  queryString?: string,\n): URL;",
+        "signature": "function createResolvedRequestUrl(\n  baseEndpoint: string,\n  path: string,\n  search?: string,\n): URL;",
         "parameters": [
           {
             "name": "baseEndpoint",
@@ -3146,8 +3146,8 @@
             "tags": []
           },
           {
-            "name": "queryString",
-            "description": "Query without a leading `?`. When non-empty it is set as the URL's search verbatim.",
+            "name": "search",
+            "description": "The URL's search without a leading `?`, as `URLSearchParams.toString()` gives it. When non-empty it is set as the URL's `search`.",
             "type": "string",
             "simplifiedType": "string",
             "required": false,
