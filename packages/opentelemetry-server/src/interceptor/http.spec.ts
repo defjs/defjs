@@ -19,14 +19,13 @@ import {
 } from "@opentelemetry/api";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
-  activeSpans,
   createMockLogger,
   createMockMetrics,
   createMockPropagator,
   createMockTracer,
   makeHttpRequest,
   makeHttpResponse,
-} from "../test-utils";
+} from "../../test/mocks";
 import { withOpenTelemetryServer } from "../option";
 import { createOpenTelemetryHttpInterceptor } from "./http";
 import { method } from "../../test/method";
@@ -288,7 +287,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
   });
 
   test("should create span with correct name", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -298,12 +297,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       Promise.resolve(makeHttpResponse()),
     );
 
-    expect(activeSpans).toHaveLength(1);
-    expect(activeSpans[0]?.name).toBe("GET");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.name).toBe("GET");
   });
 
   test("should set span attributes", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -313,14 +312,14 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       Promise.resolve(makeHttpResponse()),
     );
 
-    expect(activeSpans[0]?.attributes["http.request.method"]).toBe("GET");
-    expect(activeSpans[0]?.attributes["url.full"]).toBe(
+    expect(spans[0]?.attributes["http.request.method"]).toBe("GET");
+    expect(spans[0]?.attributes["url.full"]).toBe(
       "https://api.example.com/test",
     );
   });
 
   test("should replace endpoint userinfo in url.full and keep server attributes", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -334,13 +333,11 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       () => Promise.resolve(makeHttpResponse()),
     );
 
-    expect(activeSpans[0]?.attributes["url.full"]).toBe(
+    expect(spans[0]?.attributes["url.full"]).toBe(
       "https://REDACTED:REDACTED@api.example.com:8443/test",
     );
-    expect(activeSpans[0]?.attributes["server.address"]).toBe(
-      "api.example.com",
-    );
-    expect(activeSpans[0]?.attributes["server.port"]).toBe(8443);
+    expect(spans[0]?.attributes["server.address"]).toBe("api.example.com");
+    expect(spans[0]?.attributes["server.port"]).toBe(8443);
   });
 
   test("should merge startSpanHook attributes last into initial HTTP span options", async () => {
@@ -435,7 +432,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
   });
 
   test("should continue HTTP and record a hook error when startSpanHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const next = vi.fn(() => Promise.resolve(makeHttpResponse()));
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
@@ -456,17 +453,14 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       "server.port": 443,
       "url.full": "https://api.example.com/test",
     });
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
-      "defjs.otel.hook.error",
-      {
-        "error.type": "Error",
-        "hook.name": "startSpanHook",
-      },
-    );
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
+      "error.type": "Error",
+      "hook.name": "startSpanHook",
+    });
   });
 
   test("should continue HTTP when startSpanHook throws undefined", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const next = vi.fn(() => Promise.resolve(makeHttpResponse()));
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
@@ -480,17 +474,14 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     await interceptor.fn(makeHttpRequest(), next);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
-      "defjs.otel.hook.error",
-      {
-        "error.type": "_OTHER",
-        "hook.name": "startSpanHook",
-      },
-    );
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
+      "error.type": "_OTHER",
+      "hook.name": "startSpanHook",
+    });
   });
 
   test("should leave span status unset on success", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -500,12 +491,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       Promise.resolve(makeHttpResponse()),
     );
 
-    expect(activeSpans[0]?.ended).toBe(true);
-    expect(activeSpans[0]?.status).toBeUndefined();
+    expect(spans[0]?.ended).toBe(true);
+    expect(spans[0]?.status).toBeUndefined();
   });
 
   test("should end span on 5xx status with ERROR", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -518,13 +509,13 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       }),
     );
 
-    expect(activeSpans[0]?.ended).toBe(true);
-    expect(activeSpans[0]?.attributes["error.type"]).toBe("500");
-    expect(activeSpans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
+    expect(spans[0]?.ended).toBe(true);
+    expect(spans[0]?.attributes["error.type"]).toBe("500");
+    expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
   });
 
   test("should end client span on 4xx status with ERROR", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -537,15 +528,15 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       }),
     );
 
-    expect(activeSpans[0]?.ended).toBe(true);
-    expect(activeSpans[0]?.attributes["error.type"]).toBe("404");
-    expect(activeSpans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
+    expect(spans[0]?.ended).toBe(true);
+    expect(spans[0]?.attributes["error.type"]).toBe("404");
+    expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
   });
 
   test("should leave a status-0 response unattributed for spans and metrics", async () => {
     // Transport failures reject now, so a status-0 response can only be a synthetic one an
     // interceptor built, and it carries nothing to attribute.
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
@@ -558,12 +549,10 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
     ).resolves.toBe(response);
 
-    expect(
-      activeSpans[0]?.attributes["http.response.status_code"],
-    ).toBeUndefined();
-    expect(activeSpans[0]?.attributes["error.type"]).toBeUndefined();
-    expect(activeSpans[0]?.status).toBeUndefined();
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.attributes["http.response.status_code"]).toBeUndefined();
+    expect(spans[0]?.attributes["error.type"]).toBeUndefined();
+    expect(spans[0]?.status).toBeUndefined();
+    expect(spans[0]?.ended).toBe(true);
     expect(metrics.requestDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       {
@@ -575,7 +564,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
   });
 
   test("should record error on exception", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -587,10 +576,10 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       ),
     ).rejects.toThrow("network error");
 
-    expect(activeSpans[0]?.ended).toBe(true);
-    expect(activeSpans[0]?.attributes["error.type"]).toBe("Error");
-    expect(activeSpans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.ended).toBe(true);
+    expect(spans[0]?.attributes["error.type"]).toBe("Error");
+    expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
+    expect(spans[0]?.recordException).toHaveBeenCalled();
   });
 
   test("should pass request with headers to next", async () => {
@@ -615,7 +604,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
   });
 
   test("should skip span creation when requireParentSpan and no active span", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -627,12 +616,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     );
     await interceptor.fn(makeHttpRequest(), next);
 
-    expect(activeSpans).toHaveLength(0);
+    expect(spans).toHaveLength(0);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
   test("should call requestHook before request", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const requestHook = vi.fn();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
@@ -644,11 +633,11 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
     expect(requestHook).toHaveBeenCalledTimes(1);
-    expect(requestHook).toHaveBeenCalledWith(activeSpans[0], req);
+    expect(requestHook).toHaveBeenCalledWith(spans[0], req);
   });
 
   test("should call responseHook before span ends", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     let recordingDuringHook: boolean | undefined;
     const responseHook = vi.fn((span: { isRecording(): boolean }) => {
       recordingDuringHook = span.isRecording();
@@ -664,13 +653,13 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     await interceptor.fn(req, () => Promise.resolve(res));
 
     expect(responseHook).toHaveBeenCalledTimes(1);
-    expect(responseHook).toHaveBeenCalledWith(activeSpans[0], res, req);
+    expect(responseHook).toHaveBeenCalledWith(spans[0], res, req);
     expect(recordingDuringHook).toBe(true);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should keep request running when requestHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const requestHook = vi.fn(() => {
       throw new Error("hook failed");
     });
@@ -686,17 +675,17 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     );
 
     expect(result).toBe(response);
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "defjs.otel.hook.error",
       expect.objectContaining({ "hook.name": "requestHook" }),
     );
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
-    expect(activeSpans[0]?.status).toBeUndefined();
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.status).toBeUndefined();
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should keep response running when responseHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const responseHook = vi.fn(() => {
       throw new Error("hook failed");
@@ -714,13 +703,13 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     );
 
     expect(result).toBe(response);
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "defjs.otel.hook.error",
       expect.objectContaining({ "hook.name": "responseHook" }),
     );
     expect(metrics.requestDuration.record).toHaveBeenCalled();
-    expect(activeSpans[0]?.status).toBeUndefined();
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.status).toBeUndefined();
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should record duration metrics on success", async () => {
@@ -797,7 +786,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
   });
 
   test("should set server.address and server.port from URL", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -807,13 +796,11 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       Promise.resolve(makeHttpResponse()),
     );
 
-    expect(activeSpans[0]?.attributes["server.address"]).toBe(
-      "api.example.com",
-    );
+    expect(spans[0]?.attributes["server.address"]).toBe("api.example.com");
   });
 
   test("should set the scheme default server.port when URL has no explicit port", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -823,11 +810,11 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       Promise.resolve(makeHttpResponse()),
     );
 
-    expect(activeSpans[0]?.attributes["server.port"]).toBe(443);
+    expect(spans[0]?.attributes["server.port"]).toBe(443);
   });
 
   test("should set server.port when URL has explicit port", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -839,14 +826,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     };
     await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
-    expect(activeSpans[0]?.attributes["server.address"]).toBe(
-      "api.example.com",
-    );
-    expect(activeSpans[0]?.attributes["server.port"]).toBe(8443);
+    expect(spans[0]?.attributes["server.address"]).toBe("api.example.com");
+    expect(spans[0]?.attributes["server.port"]).toBe(8443);
   });
 
   test("should fall back to endpoint on invalid baseEndpoint", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -855,7 +840,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     const req = { ...makeHttpRequest(), baseEndpoint: "not-a-url" };
     await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
-    expect(activeSpans[0]?.attributes["url.full"]).toBe("/test");
+    expect(spans[0]?.attributes["url.full"]).toBe("/test");
   });
 
   test.each([false, true])(

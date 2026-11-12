@@ -1,7 +1,7 @@
 import { ROOT_CONTEXT, SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { describe, expect, test, vi } from "vitest";
-import type { MockSpan } from "../test-utils";
-import { createMockTracer, makeHttpRequest } from "../test-utils";
+import type { MockSpan } from "../../test/mocks";
+import { createMockTracer, makeHttpRequest } from "../../test/mocks";
 import {
   addSpanEvent,
   createHttpSpan,

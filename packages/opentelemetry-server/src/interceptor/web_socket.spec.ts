@@ -24,7 +24,6 @@ import {
 } from "@opentelemetry/core";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
-  activeSpans,
   createMockMetrics,
   createMockLogger,
   createMockTracer,
@@ -32,7 +31,7 @@ import {
   makeWsRequest,
   makeWsSession,
   waitForSettledPromises,
-} from "../test-utils";
+} from "../../test/mocks";
 import { createOpenTelemetryWebSocketInterceptor } from "./web_socket";
 import {
   resolveTransportQuery,
@@ -428,7 +427,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should create span with correct name", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -438,12 +437,12 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       Promise.resolve(makeWsSession()),
     );
 
-    expect(activeSpans).toHaveLength(1);
-    expect(activeSpans[0]?.name).toBe("WebSocket");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.name).toBe("WebSocket");
   });
 
   test("should set url.full attribute", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -453,9 +452,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       Promise.resolve(makeWsSession()),
     );
 
-    expect(activeSpans[0]?.attributes["url.full"]).toBe(
-      "wss://api.example.com/ws",
-    );
+    expect(spans[0]?.attributes["url.full"]).toBe("wss://api.example.com/ws");
   });
 
   test.each([
@@ -570,7 +567,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should replace endpoint userinfo in url.full", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -584,7 +581,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       () => Promise.resolve(makeWsSession()),
     );
 
-    expect(activeSpans[0]?.attributes["url.full"]).toBe(
+    expect(spans[0]?.attributes["url.full"]).toBe(
       "wss://REDACTED:REDACTED@api.example.com/ws",
     );
   });
@@ -638,7 +635,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should continue WebSocket and record a hook error when startSpanHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const next = vi.fn(() => Promise.resolve(makeWsSession()));
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
@@ -659,17 +656,14 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       "server.port": 443,
       "url.full": "wss://api.example.com/ws",
     });
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
-      "defjs.otel.hook.error",
-      {
-        "error.type": "Error",
-        "hook.name": "startSpanHook",
-      },
-    );
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
+      "error.type": "Error",
+      "hook.name": "startSpanHook",
+    });
   });
 
   test("should add websocket.connected event on success", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -679,14 +673,14 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       Promise.resolve(makeWsSession()),
     );
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "websocket.connected",
       undefined,
     );
   });
 
   test("should keep span open until session.closed settles", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const ws = makeDeferredWsSession();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
@@ -695,16 +689,16 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
     await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
 
-    expect(activeSpans[0]?.ended).toBe(false);
+    expect(spans[0]?.ended).toBe(false);
 
     ws.close();
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should record websocket.closed and end span when session closes normally", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
@@ -717,12 +711,12 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.close();
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "websocket.closed",
       undefined,
     );
-    expect(activeSpans[0]?.status?.code).toBe(1);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -734,7 +728,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should treat a legacy close info without kind or cause as closed", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
@@ -748,12 +742,12 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.close({ code: 1000, reason: "legacy normal close", wasClean: true });
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "websocket.closed",
       undefined,
     );
-    expect(activeSpans[0]?.recordException).not.toHaveBeenCalled();
-    expect(activeSpans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.recordException).not.toHaveBeenCalled();
+    expect(spans[0]?.status?.code).toBe(1);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({ "defjs.result": "success" }),
@@ -761,7 +755,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should treat a non-object legacy close result as closed", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
@@ -775,12 +769,12 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.close(null);
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "websocket.closed",
       undefined,
     );
-    expect(activeSpans[0]?.recordException).not.toHaveBeenCalled();
-    expect(activeSpans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.recordException).not.toHaveBeenCalled();
+    expect(spans[0]?.status?.code).toBe(1);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({ "defjs.result": "success" }),
@@ -788,7 +782,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should treat a legacy close info cause as an error", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
     const closeCause = new TypeError("legacy connection failure");
@@ -803,13 +797,13 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.close({ cause: closeCause, code: 1006, wasClean: false });
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
       "error.type": "TypeError",
     });
-    expect(activeSpans[0]?.recordException).toHaveBeenCalledWith({
+    expect(spans[0]?.recordException).toHaveBeenCalledWith({
       name: "TypeError",
     });
-    expect(activeSpans[0]?.status?.code).toBe(2);
+    expect(spans[0]?.status?.code).toBe(2);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -820,7 +814,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should record error when session.closed rejects", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
@@ -833,12 +827,12 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.reject(new TypeError("connection lost"));
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
       "error.type": "TypeError",
     });
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
-    expect(activeSpans[0]?.status?.code).toBe(2);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.status?.code).toBe(2);
+    expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -849,7 +843,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should record error when session.closed resolves with a close cause", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
@@ -868,12 +862,12 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
       "error.type": "TypeError",
     });
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
-    expect(activeSpans[0]?.status?.code).toBe(2);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.status?.code).toBe(2);
+    expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -884,7 +878,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should record an aborted session without a cause as an error", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
@@ -897,14 +891,14 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.close({ kind: "aborted" });
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
       "error.type": "Error",
     });
-    expect(activeSpans[0]?.recordException).toHaveBeenCalledWith({
+    expect(spans[0]?.recordException).toHaveBeenCalledWith({
       name: "Error",
     });
-    expect(activeSpans[0]?.status?.code).toBe(2);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(2);
+    expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -915,7 +909,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should record error on next() exception", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
@@ -929,9 +923,9 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       ),
     ).rejects.toThrow("connect failed");
 
-    expect(activeSpans[0]?.ended).toBe(true);
-    expect(activeSpans[0]?.status?.code).toBe(2); // ERROR
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(2); // ERROR
+    expect(spans[0]?.recordException).toHaveBeenCalled();
     expect(metrics.connectDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -943,7 +937,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should skip span creation when requireParentSpan and no active span", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -953,7 +947,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
     await interceptor.fn(makeWsRequest(), next);
 
-    expect(activeSpans).toHaveLength(0);
+    expect(spans).toHaveLength(0);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
@@ -1025,7 +1019,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should call requestHook before request", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const requestHook = vi.fn();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
@@ -1037,11 +1031,11 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     await interceptor.fn(req, () => Promise.resolve(makeWsSession()));
 
     expect(requestHook).toHaveBeenCalledTimes(1);
-    expect(requestHook).toHaveBeenCalledWith(activeSpans[0], req);
+    expect(requestHook).toHaveBeenCalledWith(spans[0], req);
   });
 
   test("should call responseHook after session returned", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const responseHook = vi.fn();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
@@ -1054,11 +1048,11 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     await interceptor.fn(req, () => Promise.resolve(session));
 
     expect(responseHook).toHaveBeenCalledTimes(1);
-    expect(responseHook).toHaveBeenCalledWith(activeSpans[0], session, req);
+    expect(responseHook).toHaveBeenCalledWith(spans[0], session, req);
   });
 
   test("should keep session open when requestHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const ws = makeDeferredWsSession();
     const requestHook = vi.fn(() => {
       throw new Error("hook failed");
@@ -1074,20 +1068,20 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     );
 
     expect(result).toBe(ws.session);
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "defjs.otel.hook.error",
       expect.objectContaining({ "hook.name": "requestHook" }),
     );
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.recordException).toHaveBeenCalled();
 
     ws.close();
     await waitForSettledPromises();
-    expect(activeSpans[0]?.status?.code).toBe(1);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should keep session open when responseHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
     const responseHook = vi.fn(() => {
@@ -1105,7 +1099,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     );
 
     expect(result).toBe(ws.session);
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "defjs.otel.hook.error",
       expect.objectContaining({ "hook.name": "responseHook" }),
     );
@@ -1113,8 +1107,8 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
     ws.close();
     await waitForSettledPromises();
-    expect(activeSpans[0]?.status?.code).toBe(1);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should record connect duration and active connections on success", async () => {
@@ -1199,7 +1193,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
   });
 
   test("should fall back to endpoint on invalid baseEndpoint", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -1208,7 +1202,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     const req = { ...makeWsRequest(), baseEndpoint: "not-a-url" };
     await interceptor.fn(req, () => Promise.resolve(makeWsSession()));
 
-    expect(activeSpans[0]?.attributes["url.full"]).toBe("/ws");
+    expect(spans[0]?.attributes["url.full"]).toBe("/ws");
   });
 
   test("should extract from empty Headers when req.headers is undefined", async () => {

@@ -27,7 +27,7 @@ import {
   makeWsRequest,
   makeWsSession,
   waitForSettledPromises,
-} from "./test-utils";
+} from "../test/mocks";
 import { method } from "../test/method";
 
 function makeConfig(): ClientConfig {

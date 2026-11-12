@@ -99,8 +99,6 @@ export type MockSpan = Omit<
   ended: boolean;
 };
 
-export let activeSpans: MockSpan[];
-
 export interface MockTracer extends Tracer {
   startSpan(name: string, options?: SpanOptions, context?: Context): MockSpan;
 }
@@ -121,7 +119,7 @@ export function createMockPropagator(): TextMapPropagator<Headers> {
 }
 
 export function createMockTracer() {
-  activeSpans = [];
+  const spans: MockSpan[] = [];
 
   const startSpan = vi.fn(
     (
@@ -175,7 +173,7 @@ export function createMockTracer() {
           noop(),
         ),
       };
-      activeSpans.push(span);
+      spans.push(span);
       return span;
     },
   );
@@ -185,7 +183,7 @@ export function createMockTracer() {
     startActiveSpan: vi.fn(),
   };
 
-  return { tracer, spans: activeSpans };
+  return { tracer, spans };
 }
 
 export function createMockMetrics() {
@@ -228,49 +226,37 @@ export function makeSSERequest(headers?: Headers): HttpRequest {
   };
 }
 
-function makeSSEHandleBase(
+function makeSSEHandle(
   closed: Promise<EventStreamCloseInfo>,
-  close: (reason?: unknown) => void = noop,
 ): EventStreamHandle<unknown> {
-  let disposeTask: Promise<void> | undefined;
-  const handle: EventStreamHandle<unknown> = {
+  return {
     open: {
       response: makeHttpResponse(null),
       url: "https://api.example.com/events",
     },
     closed,
-    close,
-    [Symbol.asyncDispose]() {
-      return (disposeTask ??= Promise.resolve()
-        .then(() => {
-          handle.close();
-          return handle.closed;
-        })
-        .then(noop));
-    },
+    close: noop,
+    [Symbol.asyncDispose]: () => Promise.resolve(),
     async *[Symbol.asyncIterator]() {
       // no events
     },
   };
-  return handle;
 }
 
 export function makeSSEStream(
   closeCode: SSECloseCode = "eof",
   closeCause?: unknown,
 ): EventStreamHandle<unknown> {
-  const closed = Promise.resolve(makeSSECloseInfo(closeCode, closeCause));
-  return makeSSEHandleBase(closed);
+  return makeSSEHandle(
+    Promise.resolve(makeSSECloseInfo(closeCode, closeCause)),
+  );
 }
 
 export function makeDeferredSSEStream() {
   const closed = createDeferred<EventStreamCloseInfo>();
-  const stream = makeSSEHandleBase(closed.promise, (reason) => {
-    closed.resolve(makeSSECloseInfo("aborted", reason));
-  });
 
   return {
-    stream,
+    stream: makeSSEHandle(closed.promise),
     close(
       kind: SSECloseCode = "eof",
       cause?: unknown,
@@ -348,8 +334,7 @@ function createDeferred<T>(): Deferred<T> {
 function createWsSession(
   closed: Promise<WebSocketCloseInfo>,
 ): WebSocketSessionLike {
-  let disposeTask: Promise<void> | undefined;
-  const session: WebSocketSessionLike = {
+  return {
     bufferedAmount: 0,
     connection: { generation: 1 },
     closed,
@@ -359,14 +344,6 @@ function createWsSession(
     onRuntimeError: () => noop,
     onStateChange: () => noop,
     send: noop,
-    [Symbol.asyncDispose]() {
-      return (disposeTask ??= Promise.resolve()
-        .then(() => {
-          session.close();
-          return session.closed;
-        })
-        .then(noop));
-    },
+    [Symbol.asyncDispose]: () => Promise.resolve(),
   };
-  return session;
 }

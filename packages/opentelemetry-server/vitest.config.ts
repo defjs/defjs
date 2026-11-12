@@ -24,7 +24,6 @@ export function baseConfig(runtime?: Runtime): UserConfig {
       reporters,
       coverage: coverageSettings({
         reportsDirectory: `${packageRoot}/coverage/${runtime ?? "plain"}`,
-        extraExclude: ["src/test-utils.ts"],
       }),
     },
   };

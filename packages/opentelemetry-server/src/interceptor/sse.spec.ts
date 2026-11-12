@@ -3,7 +3,6 @@ import { createNetworkFault, ERR_ABORTED, ERR_TIMEOUT } from "@defjs/core";
 import { context, diag, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
-  activeSpans,
   createMockMetrics,
   createMockLogger,
   createMockPropagator,
@@ -12,7 +11,7 @@ import {
   makeSSERequest,
   makeSSEStream,
   waitForSettledPromises,
-} from "../test-utils";
+} from "../../test/mocks";
 import { createOpenTelemetrySSEInterceptor } from "./sse";
 import { method } from "../../test/method";
 
@@ -291,7 +290,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should create span with correct name", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -301,12 +300,12 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       Promise.resolve(makeSSEStream()),
     );
 
-    expect(activeSpans).toHaveLength(1);
-    expect(activeSpans[0]?.name).toBe("SSE");
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.name).toBe("SSE");
   });
 
   test("should set url.full attribute", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -316,7 +315,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       Promise.resolve(makeSSEStream()),
     );
 
-    expect(activeSpans[0]?.attributes["url.full"]).toBe(
+    expect(spans[0]?.attributes["url.full"]).toBe(
       "https://api.example.com/events",
     );
   });
@@ -436,7 +435,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should replace endpoint userinfo in url.full", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -450,7 +449,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       () => Promise.resolve(makeSSEStream()),
     );
 
-    expect(activeSpans[0]?.attributes["url.full"]).toBe(
+    expect(spans[0]?.attributes["url.full"]).toBe(
       "https://REDACTED:REDACTED@api.example.com/events",
     );
   });
@@ -504,7 +503,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should continue SSE and record a hook error when startSpanHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const next = vi.fn(() => Promise.resolve(makeSSEStream()));
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
@@ -525,17 +524,14 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       "server.port": 443,
       "url.full": "https://api.example.com/events",
     });
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
-      "defjs.otel.hook.error",
-      {
-        "error.type": "Error",
-        "hook.name": "startSpanHook",
-      },
-    );
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
+      "error.type": "Error",
+      "hook.name": "startSpanHook",
+    });
   });
 
   test("should add sse.connected event on success", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -545,14 +541,11 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       Promise.resolve(makeSSEStream()),
     );
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
-      "sse.connected",
-      undefined,
-    );
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.connected", undefined);
   });
 
   test("should keep span open until stream.closed settles", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const stream = makeDeferredSSEStream();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
@@ -563,44 +556,16 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       Promise.resolve(stream.stream),
     );
 
-    expect(activeSpans[0]?.ended).toBe(false);
+    expect(spans[0]?.ended).toBe(false);
 
     stream.close();
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.ended).toBe(true);
-  });
-
-  test("should dispose a deferred SSE fake through its own close lifecycle once", async () => {
-    const deferred = makeDeferredSSEStream();
-    const close = vi.spyOn(deferred.stream, "close");
-
-    const first = deferred.stream[Symbol.asyncDispose]();
-    const second = deferred.stream[Symbol.asyncDispose]();
-
-    expect(second).toBe(first);
-    await expect(Promise.resolve(first)).resolves.toBeUndefined();
-    expect(close).toHaveBeenCalledOnce();
-    await expect(deferred.stream.closed).resolves.toMatchObject({
-      kind: "aborted",
-    });
-  });
-
-  test("should propagate the original rejection when disposing a rejected SSE fake", async () => {
-    const failure = new Error("stream failed");
-    const deferred = makeDeferredSSEStream();
-    const close = vi.spyOn(deferred.stream, "close");
-    deferred.reject(failure);
-
-    await expect(
-      Promise.resolve(deferred.stream[Symbol.asyncDispose]()),
-    ).rejects.toBe(failure);
-    expect(close).toHaveBeenCalledOnce();
-    await expect(deferred.stream.closed).rejects.toBe(failure);
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should record sse.closed and end span when stream closes normally", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const stream = makeDeferredSSEStream();
     const interceptor = createOpenTelemetrySSEInterceptor({
@@ -615,11 +580,11 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     stream.close("eof");
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("sse.closed", {
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.closed", {
       "sse.close.kind": "eof",
     });
-    expect(activeSpans[0]?.status?.code).toBe(1);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -632,7 +597,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should record sse.aborted without marking span as error", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const stream = makeDeferredSSEStream();
     const interceptor = createOpenTelemetrySSEInterceptor({
@@ -647,11 +612,11 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     stream.close("aborted");
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("sse.aborted", {
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.aborted", {
       "sse.close.kind": "aborted",
     });
-    expect(activeSpans[0]?.recordException).not.toHaveBeenCalled();
-    expect(activeSpans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.recordException).not.toHaveBeenCalled();
+    expect(spans[0]?.status?.code).toBe(1);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -662,7 +627,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should record error when stream closes with error code", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const stream = makeDeferredSSEStream();
     const interceptor = createOpenTelemetrySSEInterceptor({
@@ -677,13 +642,13 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     stream.close("error", new Error("stream broken"), "CAP_BUFFER_EXCEEDED");
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("sse.error", {
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.error", {
       "defjs.sse.fault.code": "CAP_BUFFER_EXCEEDED",
       "sse.close.kind": "error",
     });
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
-    expect(activeSpans[0]?.status?.code).toBe(2);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.status?.code).toBe(2);
+    expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -696,7 +661,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should record error when stream.closed rejects", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const stream = makeDeferredSSEStream();
     const interceptor = createOpenTelemetrySSEInterceptor({
@@ -711,12 +676,12 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     stream.reject(new TypeError("rejected"));
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("sse.error", {
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.error", {
       "error.type": "TypeError",
     });
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
-    expect(activeSpans[0]?.status?.code).toBe(2);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.status?.code).toBe(2);
+    expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -727,7 +692,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should record error on next() exception", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
@@ -741,9 +706,9 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       ),
     ).rejects.toThrow("connect failed");
 
-    expect(activeSpans[0]?.ended).toBe(true);
-    expect(activeSpans[0]?.status?.code).toBe(2); // ERROR
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(2); // ERROR
+    expect(spans[0]?.recordException).toHaveBeenCalled();
     expect(metrics.connectDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -755,7 +720,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should skip span creation when requireParentSpan and no active span", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -765,12 +730,12 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeSSEStream()));
     await interceptor.fn(makeSSERequest(), next);
 
-    expect(activeSpans).toHaveLength(0);
+    expect(spans).toHaveLength(0);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
   test("should call requestHook before request", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const requestHook = vi.fn();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
@@ -782,11 +747,11 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     await interceptor.fn(req, () => Promise.resolve(makeSSEStream()));
 
     expect(requestHook).toHaveBeenCalledTimes(1);
-    expect(requestHook).toHaveBeenCalledWith(activeSpans[0], req);
+    expect(requestHook).toHaveBeenCalledWith(spans[0], req);
   });
 
   test("should call responseHook after stream returned", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const responseHook = vi.fn();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
@@ -799,11 +764,11 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     await interceptor.fn(req, () => Promise.resolve(stream));
 
     expect(responseHook).toHaveBeenCalledTimes(1);
-    expect(responseHook).toHaveBeenCalledWith(activeSpans[0], stream, req);
+    expect(responseHook).toHaveBeenCalledWith(spans[0], stream, req);
   });
 
   test("should keep stream open when requestHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const stream = makeDeferredSSEStream();
     const requestHook = vi.fn(() => {
       throw new Error("hook failed");
@@ -819,20 +784,20 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     );
 
     expect(result).toBe(stream.stream);
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "defjs.otel.hook.error",
       expect.objectContaining({ "hook.name": "requestHook" }),
     );
-    expect(activeSpans[0]?.recordException).toHaveBeenCalled();
+    expect(spans[0]?.recordException).toHaveBeenCalled();
 
     stream.close();
     await waitForSettledPromises();
-    expect(activeSpans[0]?.status?.code).toBe(1);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should keep stream open when responseHook throws", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const stream = makeDeferredSSEStream();
     const responseHook = vi.fn(() => {
@@ -850,7 +815,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     );
 
     expect(result).toBe(stream.stream);
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
       "defjs.otel.hook.error",
       expect.objectContaining({ "hook.name": "responseHook" }),
     );
@@ -858,8 +823,8 @@ describe("createOpenTelemetrySSEInterceptor", () => {
 
     stream.close();
     await waitForSettledPromises();
-    expect(activeSpans[0]?.status?.code).toBe(1);
-    expect(activeSpans[0]?.ended).toBe(true);
+    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.ended).toBe(true);
   });
 
   test("should record connect duration and active streams on success", async () => {
@@ -946,7 +911,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
   });
 
   test("should fall back to endpoint on invalid baseEndpoint", async () => {
-    const { tracer } = createMockTracer();
+    const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetrySSEInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -955,7 +920,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     const req = { ...makeSSERequest(), baseEndpoint: "not-a-url" };
     await interceptor.fn(req, () => Promise.resolve(makeSSEStream()));
 
-    expect(activeSpans[0]?.attributes["url.full"]).toBe("/events");
+    expect(spans[0]?.attributes["url.full"]).toBe("/events");
   });
 
   test.each([false, true])(

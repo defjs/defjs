@@ -25,8 +25,8 @@ import {
 } from "vitest";
 import { createFixtureClient } from "../core/test/fixture/client.ts";
 import { withOpenTelemetryServer } from "./src/option";
-import type { MockSpan } from "./src/test-utils";
-import { createMockLogger, createMockTracer } from "./src/test-utils";
+import type { MockSpan } from "./test/mocks";
+import { createMockLogger, createMockTracer } from "./test/mocks";
 
 interface EchoHeadersResponse {
   headers: { [key: string]: string };
@@ -525,7 +525,7 @@ describe("e2e: opentelemetry-server with real test server", () => {
     expect(span.ended).toBe(true);
   });
 
-  test("a real fetch to an endpoint with userinfo leaves no credentials or query values in the span", async () => {
+  test("a URL with credentials is rejected before it is sent and leaves no credentials or query values in the span", async () => {
     const { tracer, spans } = createMockTracer();
     const host = inject("testServerHost");
     const client = createClient(
@@ -539,24 +539,25 @@ describe("e2e: opentelemetry-server with real test server", () => {
       builder: (input) => ({ query: { token: input.token } }),
     });
 
-    // The transport rejects a URL with credentials before it is sent, so the exception count is
-    // asserted in `e2e.node.spec.ts` and `e2e.bun.spec.ts`; the assertions below hold in both.
-    await useEcho(client, { token: "SECRET-QUERY-TOKEN" });
+    const [error] = await useEcho(client, { token: "SECRET-QUERY-TOKEN" });
 
+    expect(error).toMatchObject({ code: "REQ_BUILD_FAILED" });
     const span = onlySpan(spans);
     expect(span.attributes["url.full"]).toBe(
       `${host.replace("http://", "http://REDACTED:REDACTED@")}/echo-headers`,
     );
     // An Error keeps `message` and `stack` non-enumerable, so serialising it would hide a leak:
-    // each recorded exception must be a plain `{ name }` object instead.
+    // the recorded exception must be a plain `{ name }` object instead.
     const exceptions: unknown[] = [];
     for (const [exception] of span.recordException.mock.calls) {
       exceptions.push(exception);
     }
-    for (const exception of exceptions) {
-      expect(exception).not.toBeInstanceOf(Error);
-      expect(Object.getOwnPropertyNames(exception)).toEqual(["name"]);
-    }
+    expect(exceptions).toHaveLength(1);
+    expect(exceptions[0]).not.toBeInstanceOf(Error);
+    expect(Object.getOwnPropertyNames(exceptions[0])).toEqual(["name"]);
+    // The interceptor sees the platform's TypeError, not a library class.
+    expect(exceptions[0]).toEqual({ name: "TypeError" });
+    expect(span.attributes["error.type"]).toBe("TypeError");
     const recorded = JSON.stringify({
       attributes: span.attributes,
       events: span.addEvent.mock.calls,

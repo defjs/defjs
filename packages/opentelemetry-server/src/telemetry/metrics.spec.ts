@@ -1,6 +1,6 @@
 import type { Meter } from "@opentelemetry/api";
 import { describe, expect, test, vi } from "vitest";
-import { makeHttpRequest, makeHttpResponse } from "../test-utils";
+import { makeHttpRequest, makeHttpResponse } from "../../test/mocks";
 import {
   createConnectionMetricAttributes,
   createErrorMetricAttributes,

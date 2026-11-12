@@ -10,7 +10,7 @@ import {
   createMockLogger,
   makeHttpRequest,
   makeHttpResponse,
-} from "../test-utils";
+} from "../../test/mocks";
 import { emitClientException } from "./logs";
 
 describe("client exception logs", () => {

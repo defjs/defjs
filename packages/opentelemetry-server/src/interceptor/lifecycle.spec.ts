@@ -14,7 +14,7 @@ import { context, diag, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { runSpanHook } from "../telemetry/trace";
-import type { MockSpan } from "../test-utils";
+import type { MockSpan } from "../../test/mocks";
 import {
   createMockMetrics,
   createMockTracer,
@@ -24,7 +24,7 @@ import {
   makeHttpResponse,
   makeSSERequest,
   makeWsRequest,
-} from "../test-utils";
+} from "../../test/mocks";
 import { createOpenTelemetryHttpInterceptor } from "./http";
 import { createOpenTelemetrySSEInterceptor } from "./sse";
 import { createOpenTelemetryWebSocketInterceptor } from "./web_socket";
