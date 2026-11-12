@@ -15,14 +15,21 @@ export function resolveObjectShapeEntries(
     return cached;
   }
 
-  const entries: (readonly [key: string, struct: RuntimeStruct])[] = [];
+  // Every getter runs before any value is checked, so a getter that throws wins over an invalid field before it.
+  const read: [key: string, value: unknown][] = [];
   for (const [key, descriptor] of Object.entries(
     definition.cache.declaredDescriptors,
   )) {
-    const value: unknown =
+    read.push([
+      key,
       typeof descriptor.get === "function"
         ? descriptor.get.call(definition.shape)
-        : descriptor.value;
+        : descriptor.value,
+    ]);
+  }
+
+  const entries: (readonly [key: string, struct: RuntimeStruct])[] = [];
+  for (const [key, value] of read) {
     assertStruct(value, `object field "${key}"`);
     entries.push([key, value]);
   }
