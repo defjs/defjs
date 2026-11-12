@@ -15,7 +15,7 @@ import { DEFINITION, STRUCT } from "../../src/struct/symbols";
 import { assertObject, symbolValue } from "../narrow";
 import {
   serializeOutgoingWebSocketMessage,
-  transformWebSocketMessage,
+  decodeWebSocketMessage,
 } from "../../src/web_socket/codec";
 
 const Person = struct.intersection(
@@ -207,10 +207,8 @@ test("SSE event data preserves every mixed-intersection member", async () => {
   expect(events).toEqual([{ data: logical, event: "person", id: undefined }]);
 });
 
-test("WebSocket codecs preserve every mixed-intersection member", async () => {
-  await expect(
-    transformWebSocketMessage(Person, JSON.stringify(wire)),
-  ).resolves.toEqual(logical);
+test("WebSocket codecs preserve every mixed-intersection member", () => {
+  expect(decodeWebSocketMessage(Person, JSON.stringify(wire))).toEqual(logical);
   expect(
     JSON.parse(serializeOutgoingWebSocketMessage(Person, logical)),
   ).toEqual(wire);

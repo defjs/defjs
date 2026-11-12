@@ -39,13 +39,6 @@ export function serializeOutgoingWebSocketMessage(
   return wire;
 }
 
-export async function transformWebSocketMessage<S extends AnyStructLike>(
-  incoming: S,
-  raw: unknown,
-): Promise<Infer<S> | undefined> {
-  return await decodeWebSocketMessage(incoming, raw);
-}
-
 /** Synchronous for text and bytes. Only a Blob frame has to be read first. */
 export function decodeWebSocketMessage<S extends AnyStructLike>(
   incoming: S,
@@ -75,18 +68,14 @@ export interface WebSocketCloseSnapshot {
   wasClean?: boolean;
 }
 
-export function extractCloseInfo(
-  event?: {
-    code?: number;
-    reason?: string;
-    wasClean?: boolean;
-  },
-  cause?: unknown,
-): WebSocketCloseSnapshot {
+export function extractCloseInfo(event: {
+  code: number;
+  reason: string;
+  wasClean: boolean;
+}): WebSocketCloseSnapshot {
   return {
-    cause,
-    code: event?.code,
-    reason: event?.reason,
-    wasClean: event?.wasClean,
+    code: event.code,
+    reason: event.reason,
+    wasClean: event.wasClean,
   };
 }

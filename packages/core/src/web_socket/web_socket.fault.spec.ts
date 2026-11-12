@@ -206,20 +206,6 @@ describe("web socket startup faults", () => {
     expect(fault?.cause).toBe(cause);
   });
 
-  test("should report a missing WebSocket constructor as ENV_UNSUPPORTED", async () => {
-    const client = createClient(
-      withEndpoint("http://127.0.0.1:1"),
-      withWebSocketHandle(
-        // @ts-expect-error a non-constructor proves ENV_UNSUPPORTED
-        {},
-      ),
-    );
-
-    const [fault] = await useRoom(client);
-
-    expect(fault?.code).toBe("ENV_UNSUPPORTED");
-  });
-
   test("should report invalid input as REQ_INPUT_INVALID", async () => {
     const useTyped = defineWebSocket({
       builder: (input) => ({ path: input }),

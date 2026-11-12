@@ -41,7 +41,7 @@ import {
 } from "../narrow";
 import {
   serializeOutgoingWebSocketMessage,
-  transformWebSocketMessage,
+  decodeWebSocketMessage,
 } from "../../src/web_socket/codec";
 import {
   createControllableSocketClass,
@@ -1406,7 +1406,7 @@ describe("builder fixes re-audit", () => {
   });
 
   test("decodes aliased fields on an incoming WebSocket frame", async () => {
-    const decoded = await transformWebSocketMessage(
+    const decoded = decodeWebSocketMessage(
       struct.object({ code: struct.string().alias("error_code") }),
       '{"error_code":"DENIED"}',
     );

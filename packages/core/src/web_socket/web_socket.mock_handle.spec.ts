@@ -5557,13 +5557,8 @@ describe("web socket preflight precedence", () => {
       incoming: struct.unknown(),
       path: "/socket",
     });
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withWebSocketHandle(
-        // @ts-expect-error a non-constructor proves ENV_UNSUPPORTED
-        {},
-      ),
-    );
+    vi.stubGlobal("WebSocket", undefined);
+    const client = createClient(withEndpoint("https://example.test"));
 
     const [error, session, connection] = await endpoint(
       client({ signal: controller.signal }),

@@ -9,6 +9,7 @@ import type {
 } from "../client/config";
 
 import type { DoneInfo } from "../balancer/balancer";
+import { reportContainedError } from "../balancer/report_error";
 import { pickEndpoint, type ResolvedEndpoint } from "../balancer/runtime";
 import type { AnyFault, Fault, PreflightFault } from "../error";
 import {
@@ -329,7 +330,6 @@ export type WebSocketEndpoint<
 
 type SocketRefState = {
   connection?: WebSocketConnectionInfo;
-  error?: AnyFault;
   listeners: {
     runtimeError: Set<(error: unknown) => void>;
     stateChange: Set<(state: WebSocketState) => void>;
@@ -437,26 +437,13 @@ export function defineWebSocket<
     protocols,
   };
 
-  return async (client: Client, input?: EndpointInput<TInput>) => {
-    const requestOptions = client[CLIENT].options;
-    const controller = new AbortController();
-    const socketState: SocketRefState = {
-      listeners: {
-        runtimeError: new Set(),
-        stateChange: new Set(),
-      },
-      status: "idle",
-      transition: 0,
-    };
-    return runWebSocketCommand(
+  return (client: Client, input?: EndpointInput<TInput>) =>
+    runWebSocketCommand(
       client[CLIENT].config,
       endpoint,
       input,
-      requestOptions,
-      controller,
-      socketState,
+      client[CLIENT].options,
     );
-  };
 }
 
 type StageOutcome<T> =
@@ -570,24 +557,17 @@ async function runWebSocketCommand<
   endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>,
   input: EndpointInput<TInput> | undefined,
   config: RequestOptions | undefined,
-  controller: AbortController,
-  state: SocketRefState,
 ): Promise<
   SocketAwaitResult<
     WebSocketIncomingData<TIncoming>,
     WebSocketOutgoingData<TOutgoing>
   >
 > {
-  setSocketState(state, "connecting");
-
   const callerAbort = config?.signal;
 
   // Same fast path as HTTP/SSE: an already aborted call does not parse, build, or validate the socket.
   if (callerAbort?.aborted) {
-    const aborted = resolveAbortedFault(callerAbort);
-    state.error = aborted;
-    setSocketState(state, aborted.code === "NET_ABORTED" ? "aborted" : "error");
-    return [aborted, undefined, undefined];
+    return [resolveAbortedFault(callerAbort), undefined, undefined];
   }
 
   const callOptions = readCallOptions(config, clientConfig);
@@ -596,21 +576,25 @@ async function runWebSocketCommand<
   const retry = callOptions.retry;
   const heartbeatConfig = callOptions.heartbeat;
 
-  // `signal` stays in force after open and across reconnects.
-  const chainController = new AbortController();
-  const chainSignal = mergeAbortSignals(chainController.signal, [callerAbort]);
-  const signal = mergeAbortSignals(controller.signal, [chainSignal]);
+  // `signal` stays in force after open and across reconnects. The session ending aborts it through `controller`.
+  const controller = new AbortController();
+  const signal = mergeAbortSignals(controller.signal, [callerAbort]);
   const stopBeforeTransport = (
     fault: PreflightFault,
   ): SocketAwaitResult<
     WebSocketIncomingData<TIncoming>,
     WebSocketOutgoingData<TOutgoing>
   > => {
-    releaseAbortSignal(chainSignal);
     releaseAbortSignal(signal);
-    state.error = fault;
-    setSocketState(state, fault.code === "NET_ABORTED" ? "aborted" : "error");
     return [fault, undefined, undefined];
+  };
+  const state: SocketRefState = {
+    listeners: {
+      runtimeError: new Set(),
+      stateChange: new Set(),
+    },
+    status: "idle",
+    transition: 0,
   };
 
   const inputGuides = new WeakMap<object, Guide>();
@@ -708,13 +692,11 @@ async function runWebSocketCommand<
       if (!attributable) {
         initialPick.done({ attempted: false });
       }
-      // Captured before the executor shadows `signal`. Both the caller and an interceptor replacement stay live.
-      const executionSignal = signal;
       const pendingSession = new Promise<WebSocketSessionLike>(
         (resolveSession, rejectSession) => {
-          let signal: AbortSignal;
+          let sessionSignal: AbortSignal;
           try {
-            signal = mergeAbortSignals(executionSignal, [req.signal]);
+            sessionSignal = mergeAbortSignals(signal, [req.signal]);
           } catch (error) {
             initialPick.done({ attempted: false });
             throw error;
@@ -778,7 +760,7 @@ async function runWebSocketCommand<
             sendQueue,
             endpoint.maxOutgoingQueueSize ?? 0,
             WebSocketCtor.OPEN,
-            () => finished || signal.aborted,
+            () => finished || sessionSignal.aborted,
             requestClose,
             disposeSession,
           );
@@ -801,7 +783,7 @@ async function runWebSocketCommand<
             if (manualClose) {
               return { attempted: false };
             }
-            const aborted = resolveAbortFault(signal);
+            const aborted = resolveAbortFault(sessionSignal);
             if (aborted?.code === "NET_TIMEOUT") {
               return { attempted: true, code: "NET_TIMEOUT" };
             }
@@ -841,7 +823,7 @@ async function runWebSocketCommand<
 
           async function run(): Promise<void> {
             while (!finished) {
-              if (signal.aborted) {
+              if (sessionSignal.aborted) {
                 finishFromSignal();
                 return;
               }
@@ -864,7 +846,7 @@ async function runWebSocketCommand<
                 }
                 return;
               }
-              if (signal.aborted) {
+              if (sessionSignal.aborted) {
                 finishFromSignal();
                 return;
               }
@@ -886,7 +868,7 @@ async function runWebSocketCommand<
                 state.connection = latestConnection;
               }
 
-              if (signal.aborted) {
+              if (sessionSignal.aborted) {
                 finishFromSignal(outcome.closeInfo);
                 return;
               }
@@ -906,7 +888,7 @@ async function runWebSocketCommand<
                   retryRequested = await decideRetry(
                     retry,
                     attempt,
-                    signal,
+                    sessionSignal,
                     (upcoming) => ({
                       transport: "websocket",
                       attempt: upcoming,
@@ -918,12 +900,12 @@ async function runWebSocketCommand<
                     }),
                   );
                   // The session can finish while the answer is on its way; every finish aborts this signal.
-                  signal.throwIfAborted();
+                  sessionSignal.throwIfAborted();
                 } catch (cause) {
                   if (finished) {
                     return;
                   }
-                  if (signal.aborted) {
+                  if (sessionSignal.aborted) {
                     finishFromSignal(outcome.closeInfo);
                   } else {
                     // As `defineRequest` does for a throwing retry function: the fault names the hook, `cause` is what it threw.
@@ -943,14 +925,14 @@ async function runWebSocketCommand<
                 if (finished) {
                   return;
                 }
-                if (signal.aborted) {
+                if (sessionSignal.aborted) {
                   finishFromSignal(outcome.closeInfo);
                   return;
                 }
                 const delayMs = computeReconnectDelay(retry, nextAttempt);
                 if (delayMs > 0) {
                   try {
-                    await wait(delayMs, signal);
+                    await wait(delayMs, sessionSignal);
                   } catch {
                     if (!finished) {
                       finishFromSignal(outcome.closeInfo);
@@ -1013,12 +995,12 @@ async function runWebSocketCommand<
             if (beforeConnect) {
               try {
                 await awaitWithSignal(
-                  () => beforeConnect({ attempt, signal }),
-                  signal,
+                  () => beforeConnect({ attempt, signal: sessionSignal }),
+                  sessionSignal,
                 );
-                signal.throwIfAborted();
+                sessionSignal.throwIfAborted();
               } catch (error) {
-                if (signal.aborted) {
+                if (sessionSignal.aborted) {
                   return { aborted: true, ok: false };
                 }
                 return {
@@ -1078,7 +1060,7 @@ async function runWebSocketCommand<
                 let errorCloseTimer: ReturnType<typeof setTimeout> | undefined;
                 let messagePumpRunning = false;
                 const messageController = new AbortController();
-                const messageSignal = mergeAbortSignals(signal, [
+                const messageSignal = mergeAbortSignals(sessionSignal, [
                   messageController.signal,
                 ]);
                 const rawMessages: MessageEvent[] = [];
@@ -1108,7 +1090,7 @@ async function runWebSocketCommand<
                   socket.removeEventListener("message", onMessage);
                   socket.removeEventListener("close", handleClose);
                   detachErrorListener();
-                  signal.removeEventListener("abort", handleAbort);
+                  sessionSignal.removeEventListener("abort", handleAbort);
                   // Registration may synchronously settle this attempt and then attach more listeners.
                   // Re-detach those listeners without touching a replacement runtime's owned state.
                   if (cleanedUp) return;
@@ -1165,7 +1147,7 @@ async function runWebSocketCommand<
                     latestConnection = connectionInfo();
                     state.connection = latestConnection;
                   }
-                  finishFromSignal(extractCloseInfo(undefined, signal.reason));
+                  finishFromSignal();
                 };
 
                 const handleOpen = () => {
@@ -1216,7 +1198,7 @@ async function runWebSocketCommand<
                         requestNativeCloseBestEffort(socket);
                         settleAttempt({
                           cause,
-                          closeInfo: extractCloseInfo(undefined, cause),
+                          closeInfo: {},
                           connection: connectionInfo(),
                           opened: true,
                         });
@@ -1369,7 +1351,7 @@ async function runWebSocketCommand<
                   socket.removeEventListener("message", onMessage);
                   detachErrorListener();
                   closeOutcome = {
-                    closeInfo: extractCloseInfo(event, closeCause),
+                    closeInfo: extractCloseInfo(event),
                     connection: connectionInfo(),
                     cause: closeCause,
                     opened,
@@ -1397,7 +1379,7 @@ async function runWebSocketCommand<
                     // A locally failed message pump must not discard an already observed close.
                     settleAttempt(
                       closeOutcome ?? {
-                        closeInfo: extractCloseInfo(undefined, runtimeCause),
+                        closeInfo: {},
                         connection: connectionInfo(),
                         cause: runtimeCause,
                         opened,
@@ -1415,17 +1397,19 @@ async function runWebSocketCommand<
                     requestNativeCloseBestEffort(socket);
                     settleAttempt({
                       cause: ERR_TIMEOUT,
-                      closeInfo: extractCloseInfo(undefined, ERR_TIMEOUT),
+                      closeInfo: {},
                       connection: connectionInfo(),
                       opened: false,
                     });
                   }, retry.attemptTimeoutMs);
-                signal.addEventListener("abort", handleAbort, { once: true });
+                sessionSignal.addEventListener("abort", handleAbort, {
+                  once: true,
+                });
                 socket.addEventListener("open", handleOpen);
                 socket.addEventListener("message", onMessage);
                 socket.addEventListener("close", handleClose);
                 socket.addEventListener("error", handleError);
-                if (signal.aborted) {
+                if (sessionSignal.aborted) {
                   handleAbort();
                 }
                 if (settled) {
@@ -1471,7 +1455,6 @@ async function runWebSocketCommand<
             sendQueue.length = 0;
             if (final.kind === "closed") {
               incomingQueue.close();
-              state.error = undefined;
             } else {
               const terminalCause =
                 final.cause ?? new DOMException("Aborted", "AbortError");
@@ -1480,7 +1463,6 @@ async function runWebSocketCommand<
                 incomingQueue.discard();
               }
               incomingQueue.fail(terminalCause);
-              state.error = options.startupError ?? faultFromCloseInfo(final);
               if (final.kind === "error") {
                 emitRuntimeError(state, final.cause);
               }
@@ -1494,16 +1476,13 @@ async function runWebSocketCommand<
             state.listeners.runtimeError.clear();
             state.listeners.stateChange.clear();
 
-            if (!controller.signal.aborted) {
-              controller.abort(final);
-            }
+            controller.abort(final);
 
             closedDeferred.resolve(final);
-            releaseAbortSignal(signal);
+            releaseAbortSignal(sessionSignal);
             if (!startupSettled) {
               const startupError =
                 options.startupError ?? faultFromCloseInfo(final);
-              state.error = startupError;
               rejectSession(startupError);
             }
           }
@@ -1513,14 +1492,15 @@ async function runWebSocketCommand<
           ): void {
             /* istanbul ignore next -- @preserve invariant: finishFromSignal is called only after the merged signal aborts */
             const transportError =
-              resolveAbortFault(signal) ?? createNetworkFault(ERR_ABORTED);
+              resolveAbortFault(sessionSignal) ??
+              createNetworkFault(ERR_ABORTED);
             if (transportError.code === "NET_TIMEOUT") {
-              finish(toErrorInfo(snapshot, signal.reason), {
+              finish(toErrorInfo(snapshot, sessionSignal.reason), {
                 startupError: transportError,
               });
               return;
             }
-            finish(toAbortedInfo(snapshot, signal.reason), {
+            finish(toAbortedInfo(snapshot, sessionSignal.reason), {
               startupError: transportError,
             });
           }
@@ -1624,6 +1604,8 @@ async function runWebSocketCommand<
       clientConfig.interceptors,
     );
     const wsChain = makeChain(wsInterceptors);
+    // Only the caller's signal cuts the chain short. The session's own end does not.
+    const chainSignal = callerAbort ?? new AbortController().signal;
 
     try {
       const session = await awaitWithSignal(
@@ -1632,7 +1614,6 @@ async function runWebSocketCommand<
       );
       const publicConnection = session.connection;
       chainSettled = true;
-      releaseAbortSignal(chainSignal);
       let deliveredSession = [...undeliveredSessions].some(
         (createdSession) =>
           createdSession === session ||
@@ -1641,8 +1622,7 @@ async function runWebSocketCommand<
       const pendingSessionSnapshot = [...pendingSessions];
       if (
         !deliveredSession &&
-        (undeliveredSessions.size > 0 || pendingSessionSnapshot.length > 0) &&
-        !controller.signal.aborted
+        (undeliveredSessions.size > 0 || pendingSessionSnapshot.length > 0)
       ) {
         controller.abort(
           new Error("WebSocket session was replaced by interceptor"),
@@ -1686,24 +1666,14 @@ async function runWebSocketCommand<
       return [null, typedSession, connection];
     } catch (error) {
       chainSettled = true;
-      releaseAbortSignal(chainSignal);
       const signalError = resolveAbortFault(chainSignal);
       // The startup catch funnels every failure: a value that is already a fault (a refused
       // connection, a bad URL, a rejected hook) crosses unchanged, and only an unclassified throw
       // is attributed to the extension that produced it.
       const requestError = signalError ?? caughtRequestFault(error);
-      if (signalError) {
-        state.error = signalError;
-        setSocketState(
-          state,
-          signalError.code === "NET_ABORTED" ? "aborted" : "error",
-        );
-      }
       const pendingSessionSnapshot = [...pendingSessions];
       if (undeliveredSessions.size > 0 || pendingSessionSnapshot.length > 0) {
-        if (!controller.signal.aborted) {
-          controller.abort(error);
-        }
+        controller.abort(error);
         await Promise.allSettled(pendingSessionSnapshot);
         await Promise.allSettled(
           [...undeliveredSessions].map((session) => session.closed),
@@ -1909,31 +1879,12 @@ function setSocketState(state: SocketRefState, next: WebSocketState): void {
 }
 
 function emitRuntimeError(state: SocketRefState, error: unknown): void {
-  emitRuntimeErrorToListeners([...state.listeners.runtimeError], error);
-}
-
-function emitRuntimeErrorToListeners(
-  listeners: readonly ((error: unknown) => void)[],
-  error: unknown,
-): void {
-  for (const listener of listeners) {
+  for (const listener of [...state.listeners.runtimeError]) {
     try {
       listener(error);
     } catch (observerError) {
-      reportObserverError(observerError);
+      reportContainedError(observerError);
     }
-  }
-}
-
-function reportObserverError(error: unknown): void {
-  const reportError = globalThis.reportError;
-  if (typeof reportError !== "function") {
-    return;
-  }
-  try {
-    reportError(error);
-  } catch {
-    // Reporting observer failures must never re-enter the session lifecycle.
   }
 }
 
@@ -1964,7 +1915,6 @@ function validateWebSocketClose(
 function connectFailure(error: unknown): SocketLifecycleOutcome {
   return {
     closeInfo: {
-      cause: error,
       reason:
         error instanceof Error ? error.message : "WebSocket connection error",
     },

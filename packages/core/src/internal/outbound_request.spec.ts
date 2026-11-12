@@ -17,7 +17,7 @@ import { defineEventStream } from "../sse/sse";
 import { struct } from "../struct";
 import { STRUCT } from "../struct/symbols";
 import { DEFINITION } from "../struct/symbols";
-import { transformWebSocketMessage } from "../web_socket/codec";
+import { decodeWebSocketMessage } from "../web_socket/codec";
 import { defineWebSocket } from "../web_socket/web_socket";
 
 const birthday = new Date("1815-12-10T00:00:00.000Z");
@@ -1744,7 +1744,7 @@ describe("outbound request builder", () => {
     expectUntagged(sseData);
     expectUntagged(nestedObject(dictionary(sseData), "profile"));
 
-    const message = await transformWebSocketMessage(
+    const message = decodeWebSocketMessage(
       struct.object({
         displayName: struct.string().alias("display_name"),
         profile: struct.object({ traceId: struct.string().alias("trace_id") }),

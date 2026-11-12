@@ -9,7 +9,7 @@ import {
 import { StructError, struct } from "../struct";
 import {
   serializeOutgoingWebSocketMessage,
-  transformWebSocketMessage,
+  decodeWebSocketMessage,
 } from "./codec";
 import {
   createControllableSocketClass,
@@ -72,8 +72,8 @@ describe("web socket single struct messages", () => {
     return operation(client(options));
   }
 
-  test("decodes a discriminated incoming frame as the struct value", async () => {
-    const decoded = await transformWebSocketMessage(
+  test("decodes a discriminated incoming frame as the struct value", () => {
+    const decoded = decodeWebSocketMessage(
       ChatIncoming,
       JSON.stringify({ message_text: "hi", type: "message", userId: 7 }),
     );
