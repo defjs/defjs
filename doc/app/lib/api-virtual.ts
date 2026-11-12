@@ -1,10 +1,5 @@
 import type { MetaData, PageData, VirtualFile } from "fumadocs-core/source";
-
-export interface ApiPageSummary {
-  slug: string;
-  name: string;
-  description: string;
-}
+import type { ApiEntry } from "../data/api-catalog";
 
 export interface ApiPageData extends PageData {
   title: string;
@@ -29,25 +24,25 @@ export function apiVirtualPath(locale: string, slug: string): string {
  * A content file at the same path is a stale hand-written page.
  */
 export function apiVirtualFiles(
-  summaries: readonly ApiPageSummary[],
+  entries: readonly ApiEntry[],
   localeList: readonly string[],
   existing: ReadonlySet<string>,
   load: (slug: string, locale: string) => Promise<string>,
 ): ApiVirtualFile[] {
   const files: ApiVirtualFile[] = [];
   for (const locale of localeList) {
-    for (const summary of summaries) {
-      const path = apiVirtualPath(locale, summary.slug);
+    for (const entry of entries) {
+      const path = apiVirtualPath(locale, entry.slug);
       if (existing.has(path))
         throw new Error(`Content file shadows a generated API entry: ${path}`);
       files.push({
         type: "page",
         path,
         data: {
-          title: summary.name,
-          description: summary.description,
-          apiSlug: summary.slug,
-          getText: () => load(summary.slug, locale),
+          title: entry.name,
+          description: entry.description,
+          apiSlug: entry.slug,
+          getText: () => load(entry.slug, locale),
         },
       });
     }

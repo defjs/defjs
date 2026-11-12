@@ -38,12 +38,10 @@ export function assertNoSiteLinks(entries: readonly ApiReferenceEntry[]): void {
       ...entry.returns,
       ...entry.throws,
       ...entry.tags.map((tag) => tag.text),
-      ...entry.parameters.map((parameter) => parameter.description),
       ...(entry.typeTable ?? []).map((row) => row.description),
-      ...entry.overloads.flatMap((overload) => [
-        ...overload.returns,
-        ...overload.parameters.map((parameter) => parameter.description),
-      ]),
+      ...entry.overloads.flatMap((overload) =>
+        overload.parameters.map((parameter) => parameter.description),
+      ),
     ];
     if (texts.some((text) => siteLink.test(text)))
       offenders.push(`${entry.package}:${entry.name}`);

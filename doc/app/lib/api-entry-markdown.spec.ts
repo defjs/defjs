@@ -22,7 +22,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
     source: "packages/core/src/client/client.ts",
     group: "client",
     description: "Creates a {@link Client}.\n\nMore.",
-    signatures: ["function createClient(): Client;"],
     related: ["@defjs/core:Client"],
     exampleFiles: [
       {
@@ -39,7 +38,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
       { name: "typeParam", text: "ignored" },
     ],
     typeTable: null,
-    parameters: [],
     overloads: [
       {
         signature: "function createClient(): Client;",
@@ -54,7 +52,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
             tags: [],
           },
         ],
-        returns: ["A {@link Client}."],
       },
     ],
     ...overrides,
@@ -87,7 +84,6 @@ test("markdown includes the signature, fields, prose, examples, related pages an
 test("members, a broken code fence and a deprecated field stay readable", () => {
   const text = markdown(
     entry({
-      signatures: ["const raw = ```;"],
       typeTable: [
         {
           name: "old",
@@ -99,7 +95,7 @@ test("members, a broken code fence and a deprecated field stay readable", () => 
           tags: [],
         },
       ],
-      overloads: [],
+      overloads: [{ signature: "const raw = ```;", parameters: [] }],
       related: [],
       exampleFiles: [
         {
@@ -144,7 +140,6 @@ test("different overloads each keep a parameter table", () => {
               tags: [],
             },
           ],
-          returns: [],
         },
         {
           signature: "function enum(value: number): void;",
@@ -159,7 +154,6 @@ test("different overloads each keep a parameter table", () => {
               tags: [],
             },
           ],
-          returns: [],
         },
       ],
     }),

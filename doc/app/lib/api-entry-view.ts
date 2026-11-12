@@ -57,7 +57,7 @@ export function buildApiEntryView(
     group: entry.group,
     summary: firstParagraph(entry.description),
     description: resolve(entry.description),
-    signatures: [...entry.signatures],
+    signatures: entry.overloads.map((overload) => overload.signature),
     parameterTables: parameterSections(
       entry.overloads.map((overload) => ({
         signature: overload.signature,

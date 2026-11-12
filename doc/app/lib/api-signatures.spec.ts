@@ -20,16 +20,21 @@ import {
 const entries: SignatureEntry[] = [
   {
     name: "withEndpoint",
-    signatures: ["function withEndpoint(endpoint: string): ClientOption;"],
+    overloads: [
+      { signature: "function withEndpoint(endpoint: string): ClientOption;" },
+    ],
   },
   {
     name: "struct.enum",
-    signatures: [
-      "function enum<T>(value: T): Struct;",
-      "function enum<T>(value: T): Other;",
+    overloads: [
+      { signature: "function enum<T>(value: T): Struct;" },
+      { signature: "function enum<T>(value: T): Other;" },
     ],
   },
-  { name: "ERR_ABORTED", signatures: [" const ERR_ABORTED: Error; "] },
+  {
+    name: "ERR_ABORTED",
+    overloads: [{ signature: " const ERR_ABORTED: Error; " }],
+  },
 ];
 const catalog: SignatureCatalog = signatureCatalog(entries);
 
@@ -93,11 +98,11 @@ test("signature text joins overloads and names, and rejects unknown or empty nam
   );
   expect(() =>
     signatureCatalog([
-      { name: "A", signatures: ["type A = 1;"] },
-      { name: "A", signatures: ["type A = 2;"] },
+      { name: "A", overloads: [{ signature: "type A = 1;" }] },
+      { name: "A", overloads: [{ signature: "type A = 2;" }] },
     ]),
   ).toThrow('Ambiguous API signature "A"');
-  const empty = signatureCatalog([{ name: "A", signatures: [] }]);
+  const empty = signatureCatalog([{ name: "A", overloads: [] }]);
   expect(() => signatureText(empty, "A", "page.mdx")).toThrow(
     'API signature "A" has no text in page.mdx',
   );
@@ -276,7 +281,7 @@ test("catalog lookup follows the documentation workspace or the repository root"
     await Bun.write(
       `${nested}/api-reference.json`,
       JSON.stringify([
-        { name: "FromRoot", signatures: ["type FromRoot = 1;"] },
+        { name: "FromRoot", overloads: [{ signature: "type FromRoot = 1;" }] },
       ]),
     );
     expect(
@@ -287,7 +292,9 @@ test("catalog lookup follows the documentation workspace or the repository root"
     await Bun.write(`${docRoot}/app/data/.keep`, "");
     await Bun.write(
       `${docRoot}/app/data/api-reference.json`,
-      JSON.stringify([{ name: "FromDoc", signatures: ["type FromDoc = 2;"] }]),
+      JSON.stringify([
+        { name: "FromDoc", overloads: [{ signature: "type FromDoc = 2;" }] },
+      ]),
     );
     const fromDoc = apiReferenceFile(docRoot);
     expect((await readSignatureCatalog(fromDoc)).get("FromDoc")).toEqual([
@@ -302,7 +309,7 @@ test("catalog lookup follows the documentation workspace or the repository root"
     const malformed = `${workspace}/malformed-entry.json`;
     await Bun.write(
       malformed,
-      JSON.stringify([{ name: "Broken", signatures: [1] }]),
+      JSON.stringify([{ name: "Broken", overloads: [{ signature: 1 }] }]),
     );
     await expect(readSignatureCatalog(malformed)).rejects.toThrow(
       `API reference has a malformed entry: ${malformed}`,

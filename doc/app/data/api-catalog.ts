@@ -4,7 +4,7 @@ export interface ApiEntry {
   name: string;
   kind: string;
   slug: string;
-  related: string[];
+  description: string;
 }
 export const apiEntries: ApiEntry[] = catalog;
 export function filterApiEntries(

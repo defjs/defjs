@@ -46,7 +46,6 @@ import {
   requireNode,
   serializeCatalog,
   serializeReference,
-  serializeSummaries,
   storedEntry,
   typeOnlyExport,
   visibleMembers,
@@ -527,7 +526,6 @@ export async function assemblePages(
       source: draft.source,
       group: draft.group,
       description: draft.description,
-      signatures: draft.overloads.map((overload) => overload.signature),
       related: [
         ...new Set(draft.seeTexts.map((text) => resolveSee(text, identities))),
       ],
@@ -536,12 +534,7 @@ export async function assemblePages(
       throws: draft.throws,
       tags: draft.tags,
       typeTable: typeTable ? visibleMembers(typeTable) : null,
-      parameters: draft.overloads[0]?.parameters ?? [],
-      overloads: draft.overloads.map((overload) => ({
-        signature: overload.signature,
-        parameters: overload.parameters,
-        returns: [...draft.returns],
-      })),
+      overloads: draft.overloads,
     });
   }
   expandBindingParameters(entries);
@@ -584,11 +577,11 @@ export async function assertSignatureSyntax(
   entries: readonly {
     package: string;
     name: string;
-    signatures: readonly string[];
+    overloads: readonly { signature: string }[];
   }[],
 ): Promise<void> {
   const pending = entries.flatMap((entry) =>
-    entry.signatures.map((signature) => ({
+    entry.overloads.map(({ signature }) => ({
       id: `${entry.package}:${entry.name}`,
       signature,
     })),
@@ -705,10 +698,6 @@ export async function writeExtractedApi(
   await Bun.write(
     joinPath(directory, "api-reference.json"),
     serializeReference(entries),
-  );
-  await Bun.write(
-    joinPath(directory, "api-summaries.json"),
-    serializeSummaries(entries),
   );
 }
 

@@ -21,7 +21,7 @@ import {
 import { getTranslator } from "../lib/translations";
 import { i18n, locales } from "../lib/i18n";
 import { apiVirtualFiles } from "../lib/api-virtual";
-import summaries from "../data/api-summaries.json";
+import { apiEntries } from "../data/api-catalog";
 
 function metaData(value: unknown): {
   title?: string;
@@ -116,7 +116,7 @@ const existingPages = new Set(
   files.filter((file) => file.type === "page").map((file) => file.path),
 );
 files.push(
-  ...apiVirtualFiles(summaries, locales, existingPages, () =>
+  ...apiVirtualFiles(apiEntries, locales, existingPages, () =>
     Promise.resolve(""),
   ),
 );

@@ -7,21 +7,21 @@ const entries: ApiEntry[] = [
     name: "createClient",
     kind: "function",
     slug: "core/create-client",
-    related: [],
+    description: "Creates.",
   },
   {
     package: "@defjs/react",
     name: "createClient",
     kind: "function",
     slug: "react/create-client",
-    related: [],
+    description: "Creates.",
   },
   {
     package: "@defjs/core",
     name: "ClientOption",
     kind: "type",
     slug: "core/client-option",
-    related: [],
+    description: "Creates.",
   },
 ];
 test("API search ignores case and combines package and category filters", () => {

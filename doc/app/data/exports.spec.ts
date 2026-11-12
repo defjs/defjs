@@ -2,11 +2,7 @@ import { expect, test } from "vitest";
 import { joinPath } from "../../scripts/paths";
 import { apiEntries } from "./api-catalog";
 import { extractApiData } from "../../scripts/extract-api";
-import {
-  serializeCatalog,
-  serializeReference,
-  serializeSummaries,
-} from "../../scripts/api-model";
+import { serializeCatalog, serializeReference } from "../../scripts/api-model";
 import { assertDescribed } from "../../scripts/api-validate";
 
 const packages = ["core", "react", "vue", "opentelemetry-server"];
@@ -148,9 +144,6 @@ test("regenerating the API data matches the committed JSON", async () => {
   );
   expect(serializeReference(entries)).toBe(
     await Bun.file(joinPath(directory, "api-reference.json")).text(),
-  );
-  expect(serializeSummaries(entries)).toBe(
-    await Bun.file(joinPath(directory, "api-summaries.json")).text(),
   );
 }, 180_000);
 

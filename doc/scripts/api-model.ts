@@ -16,7 +16,6 @@ export interface StoredEntry {
 export interface ApiOverload {
   signature: string;
   parameters: StoredEntry[];
-  returns: string[];
 }
 
 export interface ApiReferenceEntry {
@@ -28,14 +27,12 @@ export interface ApiReferenceEntry {
   source: string;
   group: string;
   description: string;
-  signatures: string[];
   related: string[];
   exampleFiles: { path: string; region: string; code: string }[];
   returns: string[];
   throws: string[];
   tags: { name: string; text: string }[];
   typeTable: StoredEntry[] | null;
-  parameters: StoredEntry[];
   overloads: ApiOverload[];
 }
 
@@ -178,11 +175,9 @@ export function expandBindingParameters(entries: ApiReferenceEntry[]): void {
   for (const entry of entries) {
     if (entry.typeTable) tables.set(entry.name, entry.typeTable);
   }
-  for (const entry of entries) {
-    entry.parameters = expandParameterList(entry.parameters, tables);
+  for (const entry of entries)
     for (const overload of entry.overloads)
       overload.parameters = expandParameterList(overload.parameters, tables);
-  }
 }
 
 /** Fixed key order so two generations stringify to the same bytes. */
@@ -195,7 +190,6 @@ function referenceRecord(entry: ApiReferenceEntry): ApiReferenceEntry {
     source: entry.source,
     group: entry.group,
     description: entry.description,
-    signatures: [...entry.signatures],
     related: [...entry.related],
     exampleFiles: entry.exampleFiles.map((file) => ({
       path: file.path,
@@ -207,11 +201,9 @@ function referenceRecord(entry: ApiReferenceEntry): ApiReferenceEntry {
     tags: entry.tags.map((tag) => ({ name: tag.name, text: tag.text })),
     typeTable:
       entry.typeTable === null ? null : entry.typeTable.map(storedEntry),
-    parameters: entry.parameters.map(storedEntry),
     overloads: entry.overloads.map((overload) => ({
       signature: overload.signature,
       parameters: overload.parameters.map(storedEntry),
-      returns: [...overload.returns],
     })),
   };
 }
@@ -250,10 +242,11 @@ export function formatJsonDocument(
   return result.stdout;
 }
 
+/** The page catalog: what the index, the search and the virtual entry pages need, without the reference body. */
 export function serializeCatalog(
   entries: readonly Pick<
     ApiReferenceEntry,
-    "package" | "name" | "kind" | "slug" | "related"
+    "package" | "name" | "kind" | "slug" | "description"
   >[],
 ): string {
   const rows = entries.map((entry) => ({
@@ -261,25 +254,11 @@ export function serializeCatalog(
     name: entry.name,
     kind: entry.kind,
     slug: entry.slug,
-    related: [...entry.related],
-  }));
-  return formatJsonDocument(
-    `${JSON.stringify(rows, null, 2)}\n`,
-    "api-entries.json",
-  );
-}
-
-export function serializeSummaries(
-  entries: readonly ApiReferenceEntry[],
-): string {
-  const rows = entries.map((entry) => ({
-    slug: entry.slug,
-    name: entry.name,
     description: firstParagraph(entry.description),
   }));
   return formatJsonDocument(
     `${JSON.stringify(rows, null, 2)}\n`,
-    "api-summaries.json",
+    "api-entries.json",
   );
 }
 

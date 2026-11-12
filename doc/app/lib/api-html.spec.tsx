@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { ApiEntryPage } from "../components/api-entry-page";
 import { apiReference, apiTargets } from "../data/api-reference";
-import summaries from "../data/api-summaries.json";
+import { apiEntries } from "../data/api-catalog";
 import { apiVirtualFiles } from "./api-virtual";
 import { buildApiEntryView, type ApiEntryView } from "./api-entry-view";
 import { renderApiEntryMarkdownBySlug } from "./api-entry-markdown";
@@ -189,7 +189,7 @@ test("every entry page and its processed text hide raw doc links", async () => {
     assertClean(item.slug, readableMarkdown(processed, "en-US"));
   }
   const files = apiVirtualFiles(
-    summaries,
+    apiEntries,
     ["en-US"],
     new Set(),
     (slug, locale) =>

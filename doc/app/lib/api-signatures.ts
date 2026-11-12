@@ -2,7 +2,7 @@ import { replaceSource } from "fumadocs-core/mdx-plugins/stringifier";
 
 export interface SignatureEntry {
   name: string;
-  signatures: readonly string[];
+  overloads: readonly { signature: string }[];
 }
 
 export type SignatureCatalog = ReadonlyMap<string, readonly string[]>;
@@ -36,15 +36,24 @@ interface CatalogCache {
 
 let catalogCache: CatalogCache | undefined;
 
+function isOverload(value: unknown): value is { signature: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "signature" in value &&
+    typeof value.signature === "string"
+  );
+}
+
 function isSignatureEntry(value: unknown): value is SignatureEntry {
   return (
     typeof value === "object" &&
     value !== null &&
     "name" in value &&
     typeof value.name === "string" &&
-    "signatures" in value &&
-    Array.isArray(value.signatures) &&
-    value.signatures.every((signature) => typeof signature === "string")
+    "overloads" in value &&
+    Array.isArray(value.overloads) &&
+    value.overloads.every(isOverload)
   );
 }
 
@@ -56,7 +65,10 @@ export function signatureCatalog(
   for (const entry of entries) {
     if (catalog.has(entry.name))
       throw new Error(`Ambiguous API signature "${entry.name}"`);
-    catalog.set(entry.name, entry.signatures);
+    catalog.set(
+      entry.name,
+      entry.overloads.map((overload) => overload.signature),
+    );
   }
   return catalog;
 }

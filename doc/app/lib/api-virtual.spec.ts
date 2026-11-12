@@ -2,7 +2,13 @@ import { expect, test } from "vitest";
 import { apiVirtualFiles, apiVirtualPath } from "./api-virtual";
 
 const summaries = [
-  { slug: "core/createclient", name: "createClient", description: "Creates." },
+  {
+    package: "@defjs/core",
+    name: "createClient",
+    kind: "function",
+    slug: "core/createclient",
+    description: "Creates.",
+  },
 ];
 
 test("a content file at a generated entry path fails the build", async () => {

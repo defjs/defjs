@@ -17,14 +17,12 @@ const client: ApiReferenceEntry = {
   source: "packages/core/src/client/client.ts",
   group: "client",
   description: "A client.",
-  signatures: [],
   related: [],
   exampleFiles: [],
   returns: [],
   throws: [],
   tags: [],
   typeTable: null,
-  parameters: [],
   overloads: [],
 };
 
@@ -129,14 +127,9 @@ test("site-link checks walk tags, parameters, tables, and overloads", () => {
         returns: ["ok"],
         throws: ["Error"],
         tags: [{ name: "example", text: "n" }],
-        parameters: [row("value")],
         typeTable: [row("id")],
         overloads: [
-          {
-            signature: "function f(): void;",
-            returns: ["ok"],
-            parameters: [row("value")],
-          },
+          { signature: "function f(): void;", parameters: [row("value")] },
         ],
       },
     ]),
@@ -146,7 +139,12 @@ test("site-link checks walk tags, parameters, tables, and overloads", () => {
       {
         ...client,
         name: "Fault",
-        parameters: [row("See [HTTP](/docs/http).")],
+        overloads: [
+          {
+            signature: "function f(): void;",
+            parameters: [row("See [HTTP](/docs/http).")],
+          },
+        ],
       },
     ]),
   ).toThrow("@defjs/core:Fault");

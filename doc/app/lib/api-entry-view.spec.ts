@@ -13,7 +13,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
     source: "packages/core/src/client/client.ts",
     group: "client",
     description: "Creates a {@link Client}.\n\nSee {@link Client} again.",
-    signatures: ["function createClient(): Client;"],
     related: ["@defjs/core:Client"],
     exampleFiles: [
       {
@@ -29,7 +28,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
       { name: "internal", text: "hidden" },
     ],
     typeTable: [],
-    parameters: [],
     overloads: [
       {
         signature: "function createClient(): Client;",
@@ -44,7 +42,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
             tags: [],
           },
         ],
-        returns: [],
       },
     ],
     ...overrides,

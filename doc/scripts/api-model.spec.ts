@@ -13,7 +13,6 @@ import {
   preferredParameterType,
   serializeCatalog,
   serializeReference,
-  serializeSummaries,
   stableMemberName,
   storedEntry,
   typeOnlyExport,
@@ -145,7 +144,6 @@ test("serialized reference JSON uses a fixed field order", () => {
     source: "packages/core/src/client/client.ts",
     group: "client",
     description: "A client.",
-    signatures: ["interface Client {}"],
     related: ["@defjs/core:HttpAwaitResult"],
     exampleFiles: [
       {
@@ -158,19 +156,16 @@ test("serialized reference JSON uses a fixed field order", () => {
     throws: ["Error"],
     tags: [{ name: "example", text: "n" }],
     typeTable: null,
-    parameters: [],
     overloads: [],
   };
   const withTable = serializeReference([
     {
       ...entry,
       typeTable: [row("id", "#id"), row("name")],
-      parameters: [row("options")],
       overloads: [
         {
           signature: "function f(): void;",
           parameters: [row("options")],
-          returns: [],
         },
       ],
     },
@@ -179,25 +174,8 @@ test("serialized reference JSON uses a fixed field order", () => {
   expect(withTable).toContain('"typeHref": "#id"');
   expect(serializeReference([entry]).endsWith("\n")).toBe(true);
   expect(serializeCatalog([entry])).toContain('"slug": "core/client-type"');
-  expect(serializeCatalog([entry])).toContain(
-    '"related": ["@defjs/core:HttpAwaitResult"]',
-  );
-  expect(serializeCatalog([{ ...entry, related: [] }])).toContain(
-    '"related": []',
-  );
-  expect(serializeCatalog([entry])).not.toContain("description");
-  const wide = serializeCatalog([
-    {
-      ...entry,
-      related: [
-        "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",
-        "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions",
-      ],
-    },
-  ]);
-  expect(wide).toContain(
-    '"related": [\n      "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",\n      "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions"\n    ]',
-  );
+  expect(serializeCatalog([entry])).toContain('"description": "A client."');
+  expect(serializeCatalog([entry])).not.toContain("related");
 });
 
 test("bun fmt failures name the document", () => {
@@ -258,7 +236,7 @@ test("member tables drop tuple indexes, undocumented symbols and internal rows",
   ).toEqual(["length", "[CLIENT]"]);
 });
 
-test("summaries keep the first paragraph and the reference records its source file", () => {
+test("the catalog keeps the first paragraph and the reference records its source file", () => {
   const entry: ApiReferenceEntry = {
     package: "@defjs/core",
     name: "Client",
@@ -267,18 +245,16 @@ test("summaries keep the first paragraph and the reference records its source fi
     source: "packages/core/src/client/client.ts",
     group: "client",
     description: "A client.\n\nMore.",
-    signatures: [],
     related: [],
     exampleFiles: [],
     returns: [],
     throws: [],
     tags: [],
     typeTable: null,
-    parameters: [],
     overloads: [],
   };
-  expect(serializeSummaries([entry])).toContain('"description": "A client."');
-  expect(serializeSummaries([entry])).not.toContain("More");
+  expect(serializeCatalog([entry])).toContain('"description": "A client."');
+  expect(serializeCatalog([entry])).not.toContain("More");
   expect(serializeReference([entry])).toContain(
     '"source": "packages/core/src/client/client.ts"',
   );
