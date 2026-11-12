@@ -87,7 +87,7 @@ Defjs 用 `response.ok` 选择响应的一侧：`2xx` 用 `output`，非 `2xx` �
 
 ### 规则 6：`3xx` 不属于成功状态区间
 
-`ok` 意味着 `200 <= status < 300`。`304 Not Modified` 不是 `2xx`：保持 `error` 未声明并处理 `HTTP_STATUS`（或在 ETag 拦截器中拦截 `304`），或者在期望空文本 body 时声明 `struct.string()`。
+`ok` 意味着 `200 <= status < 300`。`304 Not Modified` 不是 `2xx`：保持 `error` 未声明并处理 `HTTP_STATUS`（参见 [ETag 条件请求](/zh-Hans/recipes/etag-revalidate)），或者在期望空文本 body 时声明 `struct.string()`。
 
 ## 4. 传输专属的返回结果元组
 

@@ -94,7 +94,7 @@ export const getOrder = defineRequest({
 - [ ] Every call site checks `if (error)` and returns before reading the success value.
 - [ ] Call sites are not wrapped in `try/catch` expecting HTTP/network errors to throw (they resolve on the tuple).
 - [ ] Derived clients carrying a `signal` (`client({ signal })`) are created per call, not shared across unrelated calls.
-- [ ] Authentication, token refresh, retries, and tracing live in interceptors (`withInterceptors`), not in `builder`.
-- [ ] Retries only replay safe methods (by default `GET`, `HEAD`, `OPTIONS`, and `TRACE`) with replayable bodies and respect `request.signal`.
+- [ ] Authentication, token refresh, and tracing live in interceptors (`withInterceptors`), not in `builder`.
+- [ ] Retries are enabled with `withRetry`; by default it replays `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, and `DELETE`, never a `ReadableStream` body, and stops when the caller's `signal` aborts.
 - [ ] Every opened SSE stream (`defineEventStream`) and WebSocket session (`defineWebSocket`) is closed via `await using` or `finally { close(); await closed; }`.
 - [ ] React `useEffect` and Vue `watch` / `onScopeDispose` abort in-flight operations on cleanup and ignore late completions after abort.

@@ -37,7 +37,7 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
 
 ## 2. 메시지 유효성 검증 및 방향 규칙
 
-- **수신 프레임 (`session.receive`)**: 텍스트, `ArrayBuffer`, typed array, `Blob` 프레임은 UTF-8로 디코딩된 후 JSON으로 파싱되며 `incoming` struct에 대해 유효성을 검증받습니다. 잘못된 형식의 JSON이나 스키마 불일치는 `session.onRuntimeError`에 보고되고 세션을 닫지 않은 채 폐기됩니다. `session.receive`는 단일 소비자(single-consumer) 전용이므로, 두 번째 이터레이터를 요청하면 `TypeError`가 발생합니다. 전송이 실패하면 이미 받은 메시지가 먼저 전달된 뒤 `receive`가 `closed.cause`로 reject되며, 하트비트 타임아웃도 포함됩니다. 호출자의 취소(`signal` abort), `session.close()`, 폐기는 읽지 않은 메시지를 버리고, 세션이 이미 끝났는지와 관계없이 `receive`를 즉시 끝냅니다. `session.close()` 뒤에 도착하는 프레임도 버려집니다. `AbortSignal.timeout(ms)`처럼 세션이 열린 동안 만료되는 `signal`은 타임아웃입니다. 세션은 오류로 끝나고 큐에 있던 메시지를 먼저 전달합니다. 세션이 끝난 뒤에 만료되는 것은 멈춤이며 그 메시지를 버립니다.
+- **수신 프레임 (`session.receive`)**: 텍스트, `ArrayBuffer`, typed array, `Blob` 프레임은 UTF-8로 디코딩된 후 JSON으로 파싱되며 `incoming` struct에 대해 유효성을 검증받습니다. 잘못된 형식의 JSON이나 스키마 불일치는 `session.onRuntimeError`에 보고되고 세션을 닫지 않은 채 폐기됩니다. `session.receive`는 단일 소비자(single-consumer) 전용이므로, 두 번째 이터레이터를 요청하면 `TypeError`가 발생합니다. 전송이 실패하면 이미 받은 메시지가 먼저 전달된 뒤 `receive`가 `closed.cause`로 reject되며, 하트비트 타임아웃도 포함됩니다. 호출자의 취소(`signal` abort), `session.close()`, 폐기는 세션이 이미 끝났는지와 관계없이 읽지 않은 메시지를 버립니다. 열린 세션에서는 그 뒤 `receive`가 `session.close()`나 폐기 뒤에는 즉시 끝나고, abort 뒤에는 abort 이유(기본값은 `AbortError`)로 reject됩니다. `session.close()` 뒤에 도착하는 프레임도 버려집니다. `AbortSignal.timeout(ms)`처럼 세션이 열린 동안 만료되는 `signal`은 타임아웃입니다. 세션은 오류로 끝나고 큐에 있던 메시지를 먼저 전달합니다. 세션이 끝난 뒤에 만료되는 것은 멈춤이며 그 메시지를 버립니다.
 - **송신 프레임 (`session.send(payload)`)**: `outgoing` struct에 대해 동기식으로 유효성을 검증하고, `.alias()` 및 코덱을 적용한 뒤 `JSON.stringify`로 직렬화합니다. `open` 상태에서는 즉시 전송되고, `reconnecting` 상태에서는 큐에 저장되며(`maxOutgoingQueueSize > 0`인 경우), 페이로드가 유효하지 않거나 큐가 가득 찼거나 비활성화되었거나 세션이 닫힌 상태라면 동기식 예외를 던집니다.
 
 ## 3. 세션 상태 및 옵저버
@@ -101,7 +101,7 @@ description: SDK의 WebSocket 메시지 계약을 정의하고, 애플리케이�
 
 한 번 열린 뒤 close 프레임 없이 끊긴 연결(코드 `1006`, `wasClean: false`)은 런타임이 네이티브 `error` 이벤트를 발생시키는지와 관계없이 항상 `closed.kind: "error"`와 `closed.cause` `Error("WebSocket connection error")`로 끝납니다.
 
-재시도 단절이 `maxRetries`를 모두 소진하면 세션은 `closed.kind: "error"`로 종료됩니다. 네이티브 종료 스냅샷(업그레이드 실패 시 보통 코드 `1006`)을 유지하고 일반 전송 오류를 `closed.cause`로 사용하며, 별도의 안정적인 소진 코드는 제공하지 않습니다. 세션이 `closed.kind: "error"`로 끝나면 이미 큐에 있던 메시지는 그대로 전달되고, `session.receive`는 마지막 메시지 뒤에 `closed.cause`로 reject됩니다. 피어의 close도 `session.receive`가 끝나기 전에 큐에 있던 메시지를 전달합니다. 호출자가 세션을 멈추면 읽지 않은 메시지는 버려지고 `session.receive`는 즉시 끝납니다. 호출자 abort(`closed.kind: "aborted"`), 수동 `session.close()`, `await using` 폐기가 모두 그렇게 하며, 세션이 이미 끝난 뒤에도 그렇습니다. 세션이 끝난 뒤의 멈춤은 읽지 않은 메시지를 버리고 그 밖에는 바꾸지 않습니다. `closed`는 값을 유지하고, 읽지 않은 것이 없으면 `session.receive`는 여전히 `closed.cause`로 reject됩니다. 컴포넌트나 워커의 작업이 끝나면 항상 `onStateChange`와 `onRuntimeError` 리스너를 구독 해제하세요.
+재시도 단절이 `maxRetries`를 모두 소진하면 세션은 `closed.kind: "error"`로 종료됩니다. 네이티브 종료 스냅샷(업그레이드 실패 시 보통 코드 `1006`)을 유지하고 일반 전송 오류를 `closed.cause`로 사용하며, 별도의 안정적인 소진 코드는 제공하지 않습니다. 세션이 `closed.kind: "error"`로 끝나면 이미 큐에 있던 메시지는 그대로 전달되고, `session.receive`는 마지막 메시지 뒤에 `closed.cause`로 reject됩니다. 피어의 close도 `session.receive`가 끝나기 전에 큐에 있던 메시지를 전달합니다. 호출자가 세션을 멈추면 읽지 않은 메시지는 버려집니다. 호출자 abort(`closed.kind: "aborted"`), 수동 `session.close()`, `await using` 폐기가 모두 그렇게 하며, 세션이 이미 끝난 뒤에도 그렇습니다. 열린 세션에서는 그 뒤 `session.receive`가 `session.close()`나 폐기 뒤에는 즉시 끝나고, 호출자 abort 뒤에는 abort 이유인 `closed.cause`로 reject됩니다. 세션이 끝난 뒤의 멈춤은 읽지 않은 메시지를 버리고 그 밖에는 바꾸지 않습니다. `closed`는 값을 유지하고, 읽지 않은 것이 없으면 `session.receive`는 여전히 `closed.cause`로 reject됩니다. 컴포넌트나 워커의 작업이 끝나면 항상 `onStateChange`와 `onRuntimeError` 리스너를 구독 해제하세요.
 
 ## 관련 문서
 

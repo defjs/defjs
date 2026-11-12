@@ -37,7 +37,7 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 
 ## 2. 訊息驗證與方向性規範
 
-- **接收訊框（`session.receive`）**：文字、`ArrayBuffer`、型別化陣列與 `Blob` 訊框都會以 UTF-8 解碼、剖析為 JSON，再對照 `incoming` 驗證。格式錯誤的 JSON 或 schema 不符會回報給 `session.onRuntimeError` 並直接丟棄，不會關閉工作階段。`session.receive` 是單一消費者；要求第二個迭代器會拋出 `TypeError`。傳輸失敗時，已經收到的訊息會先送出，然後 `receive` 以 `closed.cause` 拒絕，心跳逾時也包含在內。呼叫端的取消（中止 `signal`）、`session.close()` 與釋放會丟棄未讀訊息，`receive` 立刻結束，不論工作階段是否已經結束；`session.close()` 之後才到的訊框也會被丟棄。工作階段開啟期間到期的 `signal`（例如 `AbortSignal.timeout(ms)`）是逾時：工作階段以錯誤結束，並先送出已排入佇列的訊息。工作階段結束之後才到期的，則是停止，並把那些訊息丟掉。
+- **接收訊框（`session.receive`）**：文字、`ArrayBuffer`、型別化陣列與 `Blob` 訊框都會以 UTF-8 解碼、剖析為 JSON，再對照 `incoming` 驗證。格式錯誤的 JSON 或 schema 不符會回報給 `session.onRuntimeError` 並直接丟棄，不會關閉工作階段。`session.receive` 是單一消費者；要求第二個迭代器會拋出 `TypeError`。傳輸失敗時，已經收到的訊息會先送出，然後 `receive` 以 `closed.cause` 拒絕，心跳逾時也包含在內。呼叫端的取消（中止 `signal`）、`session.close()` 與釋放會丟棄未讀訊息，不論工作階段是否已經結束。對於開啟中的工作階段，`session.close()` 或釋放之後 `receive` 立刻結束，中止之後則以中止原因（預設是 `AbortError`）拒絕；`session.close()` 之後才到的訊框也會被丟棄。工作階段開啟期間到期的 `signal`（例如 `AbortSignal.timeout(ms)`）是逾時：工作階段以錯誤結束，並先送出已排入佇列的訊息。工作階段結束之後才到期的，則是停止，並把那些訊息丟掉。
 - **發送訊框（`session.send(payload)`）**：同步對照 `outgoing` 驗證、套用 `.alias()` 與編解碼器，再以 `JSON.stringify` 序列化。狀態為 `open` 時立即送出；`reconnecting` 期間會排入佇列（若 `maxOutgoingQueueSize > 0`）；若酬載無效、佇列已滿或停用，或工作階段已關閉，則同步拋出例外。
 
 ## 3. 工作階段狀態與觀察者
@@ -101,7 +101,7 @@ description: 在 SDK 中定義 WebSocket 訊息契約，由應用程式掌控連
 
 曾經開啟、隨後在沒有關閉訊框的情況下斷線的連線（代碼 `1006`、`wasClean: false`）一律以 `closed.kind: "error"` 與 `closed.cause` `Error("WebSocket connection error")` 結束，不論執行環境有沒有觸發原生 `error` 事件。
 
-一次中斷的重試把 `maxRetries` 用盡後，工作階段會以 `closed.kind: "error"` 結束，`closed.cause` 是一般的傳輸錯誤，並附上原生的關閉快照（升級失敗時通常是代碼 `1006`）；不會另外提供一個穩定的「額度用盡」代碼。工作階段以 `closed.kind: "error"` 結束時，已經排入佇列的訊息仍會送出，`session.receive` 在最後一則之後以 `closed.cause` 拒絕；來自對端的關閉也會先送出已排入佇列的訊息，然後 `session.receive` 才結束。呼叫端停止工作階段時，未讀訊息會被丟棄，`session.receive` 立刻結束：呼叫端中止（`closed.kind: "aborted"`）、手動 `session.close()`，以及以 `await using` 釋放，都會這樣做，工作階段已經結束之後也一樣。工作階段結束之後的停止會丟棄未讀訊息，其他什麼都不改：`closed` 保持原值，`session.receive` 仍會在沒有未讀內容時以 `closed.cause` 拒絕。元件或背景 Worker 結束時，務必取消訂閱 `onStateChange` 與 `onRuntimeError` 監聽器。
+一次中斷的重試把 `maxRetries` 用盡後，工作階段會以 `closed.kind: "error"` 結束，`closed.cause` 是一般的傳輸錯誤，並附上原生的關閉快照（升級失敗時通常是代碼 `1006`）；不會另外提供一個穩定的「額度用盡」代碼。工作階段以 `closed.kind: "error"` 結束時，已經排入佇列的訊息仍會送出，`session.receive` 在最後一則之後以 `closed.cause` 拒絕；來自對端的關閉也會先送出已排入佇列的訊息，然後 `session.receive` 才結束。呼叫端停止工作階段時，未讀訊息會被丟棄：呼叫端中止（`closed.kind: "aborted"`）、手動 `session.close()`，以及以 `await using` 釋放，都會這樣做，工作階段已經結束之後也一樣。對於開啟中的工作階段，`session.close()` 或釋放之後 `session.receive` 立刻結束，呼叫端中止之後則以 `closed.cause`（即中止原因）拒絕。工作階段結束之後的停止會丟棄未讀訊息，其他什麼都不改：`closed` 保持原值，`session.receive` 仍會在沒有未讀內容時以 `closed.cause` 拒絕。元件或背景 Worker 結束時，務必取消訂閱 `onStateChange` 與 `onRuntimeError` 監聽器。
 
 ## 相關閱讀
 

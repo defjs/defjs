@@ -37,7 +37,7 @@ description: SDK 定義 WebSocket 訊息契約，應用程式負責連線設定�
 
 ## 2. 訊息驗證與方向規則
 
-- **傳入 frame（`session.receive`）**：文字、`ArrayBuffer`、typed array 同 `Blob` frame 都會解碼成 UTF-8，解析為 JSON，並用 `incoming` struct 驗證。損壞嘅 JSON 或 schema 結構唔吻合會被回報到 `session.onRuntimeError` 並丟棄，唔會中斷會話。`session.receive` 係單一消費者模式；請求第二個 iterator 會拋出 `TypeError`。當傳輸失敗時，已經收到嘅訊息會先送出，然後 `receive` 以 `closed.cause` reject，心跳逾時都包括在內。呼叫端取消（abort `signal`）、`session.close()` 同釋放會丟棄未讀訊息，而 `receive` 會即時結束，無論會話係咪已經結束；`session.close()` 之後先到嘅 frame 亦會被丟棄。會話開着期間到期嘅 `signal`，例如 `AbortSignal.timeout(ms)`，係逾時：會話以錯誤結束，並先送出已排隊嘅訊息。會話結束之後先到期嘅就係停止，會丟棄佢哋。
+- **傳入 frame（`session.receive`）**：文字、`ArrayBuffer`、typed array 同 `Blob` frame 都會解碼成 UTF-8，解析為 JSON，並用 `incoming` struct 驗證。損壞嘅 JSON 或 schema 結構唔吻合會被回報到 `session.onRuntimeError` 並丟棄，唔會中斷會話。`session.receive` 係單一消費者模式；請求第二個 iterator 會拋出 `TypeError`。當傳輸失敗時，已經收到嘅訊息會先送出，然後 `receive` 以 `closed.cause` reject，心跳逾時都包括在內。呼叫端取消（abort `signal`）、`session.close()` 同釋放會丟棄未讀訊息，無論會話係咪已經結束。對於開着嘅會話，`session.close()` 或者釋放之後 `receive` 會即時結束，abort 之後就會以 abort 原因（預設係 `AbortError`）reject；`session.close()` 之後先到嘅 frame 亦會被丟棄。會話開着期間到期嘅 `signal`，例如 `AbortSignal.timeout(ms)`，係逾時：會話以錯誤結束，並先送出已排隊嘅訊息。會話結束之後先到期嘅就係停止，會丟棄佢哋。
 - **傳出 frame（`session.send(payload)`）**：會同步通過 `outgoing` 驗證、套用 `.alias()` 同 codec，然後以 `JSON.stringify` 序列化。喺 `open` 狀態下會即時發送；喺 `reconnecting` 狀態下會排入佇列（若 `maxOutgoingQueueSize > 0`）；如果 payload 無效、佇列已滿／關閉，或會話已終止，則會同步拋出例外。
 
 ## 3. 會話狀態與監聽器
@@ -101,7 +101,7 @@ description: SDK 定義 WebSocket 訊息契約，應用程式負責連線設定�
 
 曾經開着、之後冇 close frame 就斷線嘅連線（代碼 `1006`，`wasClean: false`）永遠以 `closed.kind: "error"` 結束，`closed.cause` 係 `Error("WebSocket connection error")`，無論 runtime 有冇觸發原生 `error` 事件。
 
-一次斷線嘅重試用盡 `maxRetries` 之後，會話會以 `closed.kind: "error"` 結束，保留原生關閉 snapshot（升級失敗時通常係代碼 `1006`），並用一般傳輸層錯誤做 `closed.cause`；唔會提供獨立而穩定嘅用盡錯誤碼。會話以 `closed.kind: "error"` 結束時，已經排咗隊嘅訊息仍然會送出，`session.receive` 會喺最後一條之後以 `closed.cause` reject；對端嘅關閉亦會先送出已排隊嘅訊息，然後 `session.receive` 先結束。呼叫端停止會話時，未讀訊息會被丟棄，而 `session.receive` 會即時結束：呼叫端 abort（`closed.kind: "aborted"`）、手動 `session.close()`，以及用 `await using` 釋放，都會咁做，會話已經結束之後亦一樣。會話結束之後嘅停止會丟棄未讀訊息，而且唔會改變其他嘢：`closed` 保持原值，`session.receive` 仍然會喺冇未讀內容剩低嗰陣以 `closed.cause` reject。當元件或背景 worker 結束工作時，記得取消訂閱 `onStateChange` 同 `onRuntimeError` 監聽器。
+一次斷線嘅重試用盡 `maxRetries` 之後，會話會以 `closed.kind: "error"` 結束，保留原生關閉 snapshot（升級失敗時通常係代碼 `1006`），並用一般傳輸層錯誤做 `closed.cause`；唔會提供獨立而穩定嘅用盡錯誤碼。會話以 `closed.kind: "error"` 結束時，已經排咗隊嘅訊息仍然會送出，`session.receive` 會喺最後一條之後以 `closed.cause` reject；對端嘅關閉亦會先送出已排隊嘅訊息，然後 `session.receive` 先結束。呼叫端停止會話時，未讀訊息會被丟棄：呼叫端 abort（`closed.kind: "aborted"`）、手動 `session.close()`，以及用 `await using` 釋放，都會咁做，會話已經結束之後亦一樣。對於開着嘅會話，`session.close()` 或者釋放之後 `session.receive` 會即時結束，呼叫端 abort 之後就會以 `closed.cause`（即係 abort 原因）reject。會話結束之後嘅停止會丟棄未讀訊息，而且唔會改變其他嘢：`closed` 保持原值，`session.receive` 仍然會喺冇未讀內容剩低嗰陣以 `closed.cause` reject。當元件或背景 worker 結束工作時，記得取消訂閱 `onStateChange` 同 `onRuntimeError` 監聽器。
 
 ## 延伸閱讀
 

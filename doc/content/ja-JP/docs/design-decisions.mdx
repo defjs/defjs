@@ -87,7 +87,7 @@ Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、�
 
 ### ルール 6: `3xx` は成功ステータスではない
 
-`ok` とは厳密に `200 <= status < 300` を意味します。`304 Not Modified` は非 `2xx` です。`error` を未宣言のままにして `HTTP_STATUS` として扱うか（または ETag インターセプターで `304` を処理するか）、空のテキストボディを期待して `struct.string()` を宣言してください。
+`ok` とは厳密に `200 <= status < 300` を意味します。`304 Not Modified` は非 `2xx` です。`error` を未宣言のままにして `HTTP_STATUS` として扱うか（[ETag 条件付きリクエスト](/ja-JP/recipes/etag-revalidate) を参照）、空のテキストボディを期待して `struct.string()` を宣言してください。
 
 ## 4. トランスポートに応じた結果タプル
 

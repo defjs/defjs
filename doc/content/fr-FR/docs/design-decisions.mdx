@@ -87,7 +87,7 @@ Omettre `output` signifie que les corps `2xx` ne sont jamais lus. Omettre `error
 
 ### Règle 6 : `3xx` n'est pas un statut de succès
 
-`ok` signifie strictement `200 <= status < 300`. Un code `304 Not Modified` est non-`2xx` : laissez `error` non déclaré et traitez `HTTP_STATUS` (ou interceptez `304` dans un intercepteur ETag), ou déclarez `struct.string()` si vous attendez un corps texte vide.
+`ok` signifie strictement `200 <= status < 300`. Un code `304 Not Modified` est non-`2xx` : laissez `error` non déclaré et traitez `HTTP_STATUS` (voir [Requêtes conditionnelles ETag](/fr-FR/recipes/etag-revalidate)), ou déclarez `struct.string()` si vous attendez un corps texte vide.
 
 ## 4. Tuples de résultat propres au transport
 

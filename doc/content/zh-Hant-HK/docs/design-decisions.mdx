@@ -87,7 +87,7 @@ Defjs 用 `response.ok` 揀回應邊一邊：`2xx` 用 `output`，非 `2xx` 用 
 
 ### 規則 6：`3xx` 唔算係成功狀態
 
-`ok` 指嘅係 `200 <= status < 300`。`304 Not Modified` 屬於非 `2xx`：你可以唔宣告 `error` 並直接處理 `HTTP_STATUS`（或者喺 ETag 攔截器攔截 `304`）；若預期空文字 body 亦可宣告 `struct.string()`。
+`ok` 指嘅係 `200 <= status < 300`。`304 Not Modified` 屬於非 `2xx`：你可以唔宣告 `error` 並直接處理 `HTTP_STATUS`（參閱 [ETag 條件請求](/zh-Hant-HK/recipes/etag-revalidate)）；若預期空文字 body 亦可宣告 `struct.string()`。
 
 ## 4. 各傳輸層專屬嘅結果 tuple
 

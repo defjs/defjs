@@ -37,7 +37,7 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 
 ## 2. 消息校验与双向通信规则
 
-- **入站帧（`session.receive`）**：文本、`ArrayBuffer`、类型化数组和 `Blob` 帧都按 UTF-8 解码，解析为 JSON，再用 `incoming` 校验。畸形 JSON 或 schema 不匹配会上报给 `session.onRuntimeError` 并被丢弃，不会关闭会话。`session.receive` 是单消费者；请求第二个迭代器会抛出 `TypeError`。传输失败时，已经收到的消息会先送达，然后 `receive` 以 `closed.cause` reject，心跳超时也算在内。调用方的取消（中止 `signal`）、`session.close()` 和销毁会丢弃未读消息，并且 `receive` 立即结束，无论会话是否已经结束；`session.close()` 之后到达的帧也会被丢弃。会话打开期间到期的 `signal`（如 `AbortSignal.timeout(ms)`）是超时：会话以错误结束，并先送达已入队的消息。会话已经结束之后才到期的，是一次停止，并丢弃它们。
+- **入站帧（`session.receive`）**：文本、`ArrayBuffer`、类型化数组和 `Blob` 帧都按 UTF-8 解码，解析为 JSON，再用 `incoming` 校验。畸形 JSON 或 schema 不匹配会上报给 `session.onRuntimeError` 并被丢弃，不会关闭会话。`session.receive` 是单消费者；请求第二个迭代器会抛出 `TypeError`。传输失败时，已经收到的消息会先送达，然后 `receive` 以 `closed.cause` reject，心跳超时也算在内。调用方的取消（中止 `signal`）、`session.close()` 和销毁会丢弃未读消息，无论会话是否已经结束。对于打开的会话，`session.close()` 或销毁之后 `receive` 随即结束，中止之后则以中止原因（默认是 `AbortError`）reject；`session.close()` 之后到达的帧也会被丢弃。会话打开期间到期的 `signal`（如 `AbortSignal.timeout(ms)`）是超时：会话以错误结束，并先送达已入队的消息。会话已经结束之后才到期的，是一次停止，并丢弃它们。
 - **出站帧（`session.send(payload)`）**：同步用 `outgoing` 校验，应用 `.alias()` 和编解码器，再用 `JSON.stringify` 序列化。`open` 状态下立即发送；`reconnecting` 期间若队列可用（`maxOutgoingQueueSize > 0`）则排队；载荷无效、队列已满/被禁用或会话已关闭时同步抛出异常。
 
 ## 3. 会话状态与观察者机制
@@ -101,7 +101,7 @@ description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用
 
 曾经打开、随后在没有关闭帧的情况下断开的连接（代码 `1006`，`wasClean: false`）始终以 `closed.kind: "error"` 结束，`closed.cause` 为 `Error("WebSocket connection error")`，无论运行时是否触发原生 `error` 事件。
 
-重试中断耗尽其 `maxRetries` 后，会话以 `closed.kind: "error"` 结束，`closed.cause` 是普通传输错误，并带有原生关闭快照（升级失败时通常为代码 `1006`）；没有单独的稳定耗尽代码。会话以 `closed.kind: "error"` 结束时，已经入队的消息仍会送达，`session.receive` 在最后一条之后以 `closed.cause` reject；来自对端的关闭也会在 `session.receive` 结束之前送达已入队的消息。调用方停止会话时，未读消息被丢弃，`session.receive` 立即结束：调用方中止（`closed.kind: "aborted"`）、手动 `session.close()`，以及用 `await using` 销毁，都会这样做，会话已经结束之后也一样。会话结束之后的停止会丢弃未读消息，且不改变其他东西：`closed` 保持原值，一旦没有未读内容，`session.receive` 仍会以 `closed.cause` reject。组件或 worker 结束工作时，始终注销 `onStateChange` 和 `onRuntimeError` 监听器。
+重试中断耗尽其 `maxRetries` 后，会话以 `closed.kind: "error"` 结束，`closed.cause` 是普通传输错误，并带有原生关闭快照（升级失败时通常为代码 `1006`）；没有单独的稳定耗尽代码。会话以 `closed.kind: "error"` 结束时，已经入队的消息仍会送达，`session.receive` 在最后一条之后以 `closed.cause` reject；来自对端的关闭也会在 `session.receive` 结束之前送达已入队的消息。调用方停止会话时，未读消息被丢弃：调用方中止（`closed.kind: "aborted"`）、手动 `session.close()`，以及用 `await using` 销毁，都会这样做，会话已经结束之后也一样。对于打开的会话，`session.close()` 或销毁之后 `session.receive` 随即结束，调用方中止之后则以 `closed.cause`（即中止原因）reject。会话结束之后的停止会丢弃未读消息，且不改变其他东西：`closed` 保持原值，一旦没有未读内容，`session.receive` 仍会以 `closed.cause` reject。组件或 worker 结束工作时，始终注销 `onStateChange` 和 `onRuntimeError` 监听器。
 
 ## 相关阅读
 

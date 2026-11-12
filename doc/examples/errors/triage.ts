@@ -9,11 +9,14 @@ function triage(fault: AnyFault): string {
     case "RES_DECODE_FAILED":
     case "RES_STRUCT_MISMATCH":
       return "the contract did not hold";
-    case "NET_TIMEOUT":
     case "NET_ABORTED":
+      return "the caller canceled";
+    case "NET_TIMEOUT":
+      return "the deadline expired";
     case "NET_UNREACHABLE":
+      return "no response arrived";
     case "NET_BODY_INCOMPLETE":
-      return "retryable";
+      return "the response was cut short";
     case "REQ_INPUT_INVALID":
     case "REQ_BUILD_FAILED":
       return "fix the call";

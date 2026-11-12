@@ -182,7 +182,7 @@ This `next()` loop stays on the selected endpoint without rerunning the builder 
 
 ## Short-circuiting and ETag caching
 
-An HTTP interceptor can return a synthetic response with `makeResponse({ status, statusText, headers, body, url })` without calling `next`, or replace a `304 Not Modified` response with a cached `200` `HttpResponse`. When returning a synthetic response for a JSON `output` or `error`, include a JSON `content-type` header and pass the already-parsed value as `body`.
+An HTTP interceptor can return a synthetic response with `makeResponse({ status, statusText, headers, body, url })` without calling `next`. When returning a synthetic response for a JSON `output` or `error`, include a JSON `content-type` header and pass the already-parsed value as `body`. Do not rewrite a `304 Not Modified` into a synthetic `200`: it reaches the call site as an `HTTP_STATUS` fault, and the ETag cache lives in application code around the operation call.
 
 ## SSE and WebSocket interceptors
 
