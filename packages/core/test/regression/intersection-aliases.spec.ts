@@ -9,7 +9,7 @@ import {
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { materializeOutboundRequest } from "../../src/internal/outbound_request";
-import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
+import { encodeObjectByAlias } from "../encode-by-alias";
 import { DEFINITION, STRUCT } from "../../src/struct/symbols";
 
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));

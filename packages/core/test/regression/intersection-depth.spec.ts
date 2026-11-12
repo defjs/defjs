@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
 import { StructError, struct } from "../../src/struct";
-import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
+import { encodeObjectByAlias } from "../encode-by-alias";
 
 const Left = struct.object({ value: struct.any().alias("left") });
 const Right = struct.object({ value: struct.any().alias("right") });

@@ -9,7 +9,7 @@ import {
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
-import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
+import { encodeObjectByAlias } from "../encode-by-alias";
 import { serializeOutgoingWebSocketMessage } from "../../src/web_socket/codec";
 
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));

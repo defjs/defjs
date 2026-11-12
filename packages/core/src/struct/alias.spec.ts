@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { struct } from "./index";
 import { parseStructValue } from "./parse";
-import { encodeObjectByAlias } from "./encode_by_struct";
+import { encodeObjectByAlias } from "../../test/encode-by-alias";
 
 describe("alias wire names", () => {
   test("maps API JSON field names through alias()", () => {
@@ -724,14 +724,5 @@ describe("encodeObjectByAlias nullish objects", () => {
       bag: { a: null, b: { display_name: "M" } },
       rows: [null, { display_name: "N" }],
     });
-  });
-
-  test("still rejects null and undefined for an object that does not allow them", () => {
-    expect(() => encodeObjectByAlias(Profile, null)).toThrow(
-      "json encode expects object value",
-    );
-    expect(() => encodeObjectByAlias(Profile, undefined)).toThrow(
-      "json encode expects object value",
-    );
   });
 });

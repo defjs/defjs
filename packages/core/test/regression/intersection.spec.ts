@@ -8,7 +8,7 @@ import {
   withHTTPHandle,
   withSSEHandle,
 } from "../../src";
-import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
+import { encodeObjectByAlias } from "../encode-by-alias";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
 import { DEFINITION, STRUCT } from "../../src/struct/symbols";

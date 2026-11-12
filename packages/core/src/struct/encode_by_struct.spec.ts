@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { encodeObjectByAlias, encodeValue } from "./encode_by_struct";
+import { encodeValue } from "./encode_by_struct";
 import { struct } from "./index";
 import { parseStructTuple as parse } from "./parse";
 import { matchesRuntimeValue } from "./match";
@@ -461,11 +461,5 @@ describe("struct-walking encoder", () => {
     expect(encode(struct.tuple([struct.string()]), "not-tuple")).toBe(
       "not-tuple",
     );
-  });
-
-  test("encodeObjectByAlias labels its object error json by default", () => {
-    expect(() =>
-      encodeObjectByAlias(struct.object({ name: struct.string() }), "bad"),
-    ).toThrow("json encode expects object value");
   });
 });

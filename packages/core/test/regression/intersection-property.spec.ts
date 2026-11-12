@@ -3,7 +3,7 @@ import { isRecord, isUnknownArray } from "../narrow";
 import { struct, type AnyStruct } from "../../src/struct";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
-import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
+import { encodeObjectByAlias } from "../encode-by-alias";
 
 type Pair = {
   label: string;

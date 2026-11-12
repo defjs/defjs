@@ -282,7 +282,7 @@ export type FieldOutput<S> = S extends StructLike
 
 export type Simplify<T> = { [K in keyof T]: T[K] } & {};
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- INTENT: published, and documented on struct.object(), as `{ [key: string]: any }`. With `unknown` values the `T[K]["_struct"]` lookups fail (TS2322 in outbound_request.spec.ts and json.spec.ts); with `StructLike` values a recursive shape loses inference (TS7022 in json.spec.ts "caches recursive discriminator metadata…")
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- INTENT: published, and documented on struct.object(), as `{ [key: string]: any }`. With `unknown` values the `T[K]["_struct"]` lookups fail (TS2322 in outbound_request.spec.ts and alias.spec.ts); with `StructLike` values a recursive shape loses inference (TS7022 in alias.spec.ts "caches recursive discriminator metadata…")
 export type ObjectShape = { [key: string]: any };
 
 export type ObjectInput<T extends ObjectShape> = Simplify<

@@ -2,9 +2,9 @@ import type { AnyStruct, Infer } from "../struct";
 import type { StructLike } from "../struct/types";
 import { decodeBytes, readBytesText } from "../internal/bytes";
 import { rejectNonJson } from "../internal/outbound_request";
-import { encodeAliasedStruct } from "../struct/encode_by_struct";
+import { encodeValue } from "../struct/encode_by_struct";
 import { parseRuntimeValue, parseStructValue } from "../struct/parse";
-import { assertStruct } from "../struct/shape";
+import { toRuntimeStruct } from "../struct/shape";
 
 export function serializeOutgoingWebSocketMessage(
   outgoing: AnyStruct | undefined,
@@ -16,18 +16,12 @@ export function serializeOutgoingWebSocketMessage(
     );
   }
 
-  // One struct check covers both the parse and the encode.
   // PERF: the shared outbound encoder (a tagging parse, then encodeOutbound) measured 4% to 28% slower on one send: Bun 1.4.4
   // +7.5% on a number, +16% on a nested object, +4% on a union; Node 26.13 +21%, +28%, +17% (seven interleaved runs each).
-  assertStruct(outgoing, "struct");
+  const runtime = toRuntimeStruct(outgoing);
   // Same guard as an HTTP JSON body: non-finite numbers, functions, symbols and non-plain objects throw.
   const wire = JSON.stringify(
-    encodeAliasedStruct(
-      outgoing,
-      parseRuntimeValue(outgoing, message),
-      "json",
-      0,
-    ),
+    encodeValue(runtime, parseRuntimeValue(runtime, message)),
     (key, value: unknown) =>
       rejectNonJson(key, value, "Outgoing WebSocket message"),
   );

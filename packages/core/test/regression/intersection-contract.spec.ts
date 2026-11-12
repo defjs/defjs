@@ -10,7 +10,7 @@ import {
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
-import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
+import { encodeObjectByAlias } from "../encode-by-alias";
 import { guideMembers, readOwnGuide } from "../../src/struct/guide";
 import { assertObject, isRecord } from "../narrow";
 import type { RuntimeStruct } from "../../src/struct/definition";

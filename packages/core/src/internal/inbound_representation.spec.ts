@@ -12,8 +12,4 @@ describe("inbound representation", () => {
     );
     expect(resolveInboundRepresentation(struct.number())).toBe("json");
   });
-
-  test("rejects a value that is not a runtime struct", () => {
-    expect(() => resolveInboundRepresentation({})).toThrow(TypeError);
-  });
 });

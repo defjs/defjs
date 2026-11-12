@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { encodeObjectByAlias } from "./encode_by_struct";
+import { encodeObjectByAlias } from "../../test/encode-by-alias";
 
 import { StructError, struct } from "./index";
 import type { StructLike } from "./index";

@@ -5,6 +5,7 @@ import type {
 } from "./definition";
 import { isStruct } from "./guards";
 import { DEFINITION } from "./symbols";
+import type { StructLike } from "./types";
 
 /** The fields as `[key, struct]` pairs in key order. Getters run once, on the first call for this object struct. */
 export function resolveObjectShapeEntries(
@@ -71,6 +72,15 @@ function assertUniqueWireKeys(fields: readonly ResolvedStructField[]): void {
     }
     seen.set(field.wireKey, field.key);
   }
+}
+
+/**
+ * The runtime view of a struct the types already vouch for. Library code that receives a declared struct reads
+ * its definition through this instead of checking it again on every call.
+ */
+export function toRuntimeStruct(struct: StructLike): RuntimeStruct {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the public StructLike is a compile-time brand with no runtime members, while every struct the constructors build carries the definition RuntimeStruct describes. Unasserted: TS2322, `StructLike` is not assignable to `RuntimeStruct`
+  return struct as RuntimeStruct;
 }
 
 export function assertStruct(

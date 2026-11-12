@@ -11,57 +11,10 @@ import {
 } from "./intersection";
 import { selectUnionOptions } from "./match";
 import { isPlainObject, nullObject } from "./plain_object";
-import { assertStruct, resolveStructFields } from "./shape";
+import { resolveStructFields } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { StructLike } from "./types";
 
 // The struct-walking encoder. Only WebSocket sends go through it; HTTP and SSE use encodeOutbound in ./encode.
-
-export function encodeObjectByAlias(
-  struct: StructLike,
-  value: unknown,
-  label = "json",
-  depth = 0,
-): unknown {
-  assertStruct(struct, "struct");
-  return encodeAliasedStruct(struct, value, label, depth);
-}
-
-/** {@link encodeObjectByAlias} for a struct the caller already checked. */
-export function encodeAliasedStruct(
-  struct: RuntimeStruct,
-  value: unknown,
-  label: string,
-  depth: number,
-): unknown {
-  const definition = struct[DEFINITION];
-  // `.nullable()` and `.optional()` keep kind `object`, so nullish has to win before the object assertion.
-  if (value === null && definition.flags.nullable) {
-    return null;
-  }
-  if (typeof value === "undefined" && definition.flags.optional) {
-    return undefined;
-  }
-
-  if (definition.kind !== "object") {
-    return encodeValue(struct, value, depth);
-  }
-
-  assertPlainObject(value, `${label} encode expects object value`);
-
-  return mapAliasedObjectFields(definition, value, (fieldStruct, fieldValue) =>
-    encodeAliasedStruct(fieldStruct, fieldValue, label, depth + 1),
-  );
-}
-
-export function assertPlainObject(
-  value: unknown,
-  message: string,
-): asserts value is { [key: string]: unknown } {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError(message);
-  }
-}
 
 function sameEncodedShape(
   leftStruct: RuntimeStruct,
@@ -164,7 +117,7 @@ export function encodeValue(
       if (!isPlainObject(value)) {
         return value;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made encodeObjectByAlias of a 1-key record 1.131x/1.140x/1.134x slower (Bun 1.4.4, 3 runs x 21 interleaved rounds x 3e5/4e5 encodes, medians, against an unchanged control copy within 1.3%)
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made encodeValue of a 1-key record 1.131x/1.140x/1.134x slower (Bun 1.4.4, 3 runs x 21 interleaved rounds x 3e5/4e5 encodes, medians, against an unchanged control copy within 1.3%)
       const output: { [key: string]: unknown } = Object.create(null);
       for (const [key, entry] of Object.entries(value)) {
         output[key] = encodeValue(definition.value, entry, depth + 1);

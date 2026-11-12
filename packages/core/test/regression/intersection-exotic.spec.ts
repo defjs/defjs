@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
 import { struct, type AnyStruct } from "../../src/struct";
-import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
+import { encodeObjectByAlias } from "../encode-by-alias";
 import type { Guide } from "../../src/struct/guide";
 
 const Profile = struct.object({ name: struct.string().alias("display_name") });

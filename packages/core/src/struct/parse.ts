@@ -28,7 +28,7 @@ import {
 } from "./intersection";
 import { matchesEnum } from "./match";
 import { isPlainObject, nullObject } from "./plain_object";
-import { assertStruct, resolveStructFields } from "./shape";
+import { assertStruct, resolveStructFields, toRuntimeStruct } from "./shape";
 import { DEFINITION, FAILED, OMIT } from "./symbols";
 import type {
   LiteralValue,
@@ -73,11 +73,12 @@ type ParseState = {
 
 type Provenance = { passthrough?: RuntimeStruct };
 
-// Every reporting FAILED goes through `reject()`, which fills the slot first, so this value is never read.
+// Every reporting FAILED goes through `reject()`, which fills the slot first. Should a future path miss it, the
+// caller still gets a readable failure instead of an empty one.
 const NO_ISSUE: StructIssue = {
   code: "custom",
-  expected: "",
-  message: "",
+  expected: "a decodable value",
+  message: "The value could not be decoded",
   path: [],
   received: undefined,
 };
@@ -159,13 +160,12 @@ export function parseStructValue<
     guides?: WeakMap<object, Guide>;
   },
 ): ParsedStructOutput<S, Tagged> {
-  assertStruct(struct, "struct");
-  const parsed = parseRuntimeValue(struct, value, options);
+  const parsed = parseRuntimeValue(toRuntimeStruct(struct), value, options);
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the parser builds this value at run time, while its type is the struct's compile-time-only `_struct` brand (Infer<S> or TaggedStructOutput<S>); no runtime value carries that brand, so it can only be attached here, the decoders' single typed boundary (HTTP/SSE bodies, WebSocket frames and endpoint input call through it). Unasserted: TS2322, `unknown` is not assignable to `ParsedStructOutput<S, Tagged>`
   return parsed as ParsedStructOutput<S, Tagged>;
 }
 
-/** {@link parseStructValue} for a struct the caller already checked: the output is not typed from it. */
+/** {@link parseStructValue} for a struct already read as a runtime struct: the output is not typed from it. */
 export function parseRuntimeValue(
   struct: RuntimeStruct,
   value: unknown,
