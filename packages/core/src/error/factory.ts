@@ -15,7 +15,7 @@ import type {
 } from "./types";
 
 /** The `name` every fault factory writes; an `Error` carrying it was built by this library. */
-export const FAULT_NAME = "DefjsFault";
+const FAULT_NAME = "DefjsFault";
 
 /**
  * Whether `value` is a fault built by one of the fault factories, in this copy of the library or another.
