@@ -17,6 +17,7 @@ import {
   ERR_TIMEOUT,
   isTimeoutCause,
 } from "../../error";
+import { networkCauseCode } from "../../error/cause";
 import type { DoneInfo } from "../../balancer/balancer";
 import type { pickEndpoint, ResolvedEndpoint } from "../../balancer/runtime";
 import {
@@ -26,7 +27,11 @@ import {
 } from "../../http/transport/fetch_init";
 import { concatChunks, parseBytesBody } from "../../internal/bytes";
 import { parseMediaTypeEssence } from "../../internal/media_type";
-import { getContentType, isJsonMediaType } from "../../http/transport/utils";
+import {
+  getContentType,
+  isJsonMediaType,
+  jsonMediaTypeError,
+} from "../../http/transport/utils";
 import {
   awaitWithSignal,
   followAbort,
@@ -42,18 +47,13 @@ import type { RetryPolicy } from "../../internal/retry";
 import { isRetryMethod, retryStep } from "../../internal/retry";
 import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
 import type { HttpRequest, HttpResponseType } from "../../http/http_request";
-import type {
-  DecodedResponse,
-  HttpMeta,
-  HttpResponse,
-} from "../../http/http_response";
-import { makeResponse } from "../../http/http_response";
+import type { DecodedResponse, HttpResponse } from "../../http/http_response";
+import { makeResponse, toHttpMeta } from "../../http/http_response";
 import { resolveInboundRepresentation } from "../../internal/inbound_representation";
 import { RequestUrlError, resolveRequestUrl } from "../../internal/url";
 import type { AnyStruct } from "../../struct";
-import { decodeJson } from "../../struct/codec/json";
 import { StructError } from "../../struct/errors";
-import { parseStructValue } from "../../struct/introspection";
+import { parseStructValue } from "../../struct/parse";
 import type { EventStreamMessage } from "./parser";
 import {
   createLineParser,
@@ -230,16 +230,6 @@ class EventStreamFatalError extends Error {
   }
 }
 
-function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
-  return {
-    headers: response.headers,
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    url: response.url,
-  };
-}
-
 /**
  * The `HTTP_STATUS` fault for a non-2xx handshake, with `data` when the declared error body decoded.
  * A body that could not be decoded leaves `data` undefined and its failure on `cause`. Interceptors,
@@ -252,7 +242,7 @@ function createHandshakeStatusFault<TBody>(
 ): HttpStatusFaultOf<TBody> | HttpStatusFaultOf<undefined> {
   const fault = decoded
     ? createHttpStatusFault(decoded)
-    : createUndecodedHttpStatusFault(toEventStreamMeta(response));
+    : createUndecodedHttpStatusFault(toHttpMeta(response));
   if (bodyFault) {
     fault.cause = bodyFault.cause;
   }
@@ -271,7 +261,7 @@ function startupFault<TBody>(
   const response = open?.response;
   const fatal = cause instanceof EventStreamFatalError ? cause.code : undefined;
   if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
-    return createDecodeFault(fatal, cause, toEventStreamMeta(response));
+    return createDecodeFault(fatal, cause, toHttpMeta(response));
   }
   if (fatal === "EXT_HOOK_FAILED" && cause instanceof Error) {
     return createPreflightFault("EXT_HOOK_FAILED", cause.cause);
@@ -323,7 +313,7 @@ interface Attempt {
 
 /** What a failed fetch or read tells the balancer about the endpoint. */
 function networkOutcome(error: unknown): DoneInfo {
-  switch (createNetworkFault(error).code) {
+  switch (networkCauseCode(error)) {
     case "NET_TIMEOUT":
       return { attempted: true, code: "NET_TIMEOUT" };
     case "NET_ABORTED":
@@ -937,7 +927,7 @@ async function createOpenInfo<TError extends AnyStruct | undefined>(
   if (!response.ok && handshakeError) {
     const representation = resolveInboundRepresentation(handshakeError);
     const contentType = getContentType(response.headers);
-    const meta = toEventStreamMeta(unread.response);
+    const meta = toHttpMeta(unread.response);
     // A null body status has no body, though Chromium and Firefox expose an empty stream for some.
     let stream = response.body;
     if (stream && NULL_BODY_STATUSES.has(response.status)) {
@@ -955,9 +945,7 @@ async function createOpenInfo<TError extends AnyStruct | undefined>(
         open: unread,
         bodyFault: createDecodeFault(
           "RES_MEDIA_TYPE_INVALID",
-          new TypeError(
-            `Expected a JSON media type, received ${contentType || "<none>"}`,
-          ),
+          jsonMediaTypeError(contentType),
           meta,
         ),
       };
@@ -971,10 +959,10 @@ async function createOpenInfo<TError extends AnyStruct | undefined>(
       // JSON uses the same alias-aware decoder as HTTP. Other kinds stay raw values.
       const body =
         representation === "json"
-          ? decodeJson(handshakeError, raw)
+          ? parseStructValue(handshakeError, raw, { aliases: true })
           : parseStructValue(handshakeError, raw);
       const open = toOpenInfo(response, body);
-      return { open, decoded: { ...toEventStreamMeta(open.response), body } };
+      return { open, decoded: { ...toHttpMeta(open.response), body } };
     } catch (error) {
       if (signal.aborted) {
         throw error;

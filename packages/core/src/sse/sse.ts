@@ -38,8 +38,7 @@ import {
 import { createBaseTransportRequest } from "../http/transport_request";
 import { pickEndpoint } from "../balancer/runtime";
 import type { AnyStruct, Infer } from "../struct";
-import { decodeJson } from "../struct/codec/json";
-import { parseStructValue } from "../struct/introspection";
+import { parseStructValue } from "../struct/parse";
 import type {
   EventStreamHandle,
   EventStreamOpenInfo,
@@ -676,11 +675,14 @@ function resolveEventStruct<TEvents extends EventStructs>(
   return undefined;
 }
 
+// Every JSON event reads its wire names. One shared record saves an allocation per event: parsing only reads it.
+const WIRE_NAMES = { aliases: true };
+
 function decodeSSEEventData(struct: AnyStruct, data: string): unknown {
   // Only a string struct keeps the raw data field. Every other kind is JSON text.
   if (resolveInboundRepresentation(struct) === "text") {
     return parseStructValue(struct, data);
   }
 
-  return decodeJson(struct, JSON.parse(data));
+  return parseStructValue(struct, JSON.parse(data), WIRE_NAMES);
 }
