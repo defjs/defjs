@@ -558,6 +558,34 @@ describe("fetchEventStream", () => {
 });
 
 describe("SSE final endpoint attribution", () => {
+  test("does not pick again when the report of a failed attempt stops the stream", async () => {
+    const controller = new AbortController();
+    const done = vi.fn(() => controller.abort(ERR_ABORTED));
+    const pickNext = vi.fn(() => {
+      throw new Error("unexpected reconnect");
+    });
+    const fetch = vi.fn(() => Promise.reject(new TypeError("down")));
+
+    await expect(
+      fetchEventStream(
+        {
+          baseEndpoint: "https://example.com",
+          endpoint: "/events",
+          method: "GET",
+          signal: controller.signal,
+        },
+        {
+          fetch,
+          endpointAttempt: { start: vi.fn(), end: vi.fn(), done, pickNext },
+          retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
+        },
+      ),
+    ).rejects.toBe(ERR_ABORTED);
+    expect(done).toHaveBeenCalledOnce();
+    expect(pickNext).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
   test.each([
     {
       cause: new TypeError("reader failed"),
@@ -586,6 +614,8 @@ describe("SSE final endpoint attribution", () => {
             ),
           ),
         endpointAttempt: {
+          start: vi.fn(),
+          end: vi.fn(),
           done,
           pickNext() {
             throw new Error("unexpected reconnect");
@@ -623,7 +653,7 @@ describe("SSE final endpoint attribution", () => {
         },
         {
           fetch: () => Promise.resolve(scriptedConnection([], "drop")),
-          endpointAttempt: { done, pickNext },
+          endpointAttempt: { start: vi.fn(), end: vi.fn(), done, pickNext },
           retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0, shouldRetry }),
         },
       );
@@ -713,7 +743,7 @@ describe("SSE final endpoint attribution", () => {
           },
           {
             fetch: () => Promise.resolve(response),
-            endpointAttempt: { done, pickNext },
+            endpointAttempt: { start: vi.fn(), end: vi.fn(), done, pickNext },
             retry: resolveRetryPolicy({
               maxRetries: 1,
               delayMs: 0,
