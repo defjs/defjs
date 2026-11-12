@@ -118,7 +118,7 @@ export interface FlattenedStructError {
  *
  * Each method returns a new struct and leaves the original unchanged.
  *
- * - `alias(name)` sets the wire name of an object field. `struct.parse` reads logical names unless `aliases: true` is passed; JSON and flat request codecs write the alias. A non-string `name` throws `TypeError`.
+ * - `alias(name)` sets the wire name of an object field. `struct.parse` reads logical names unless `aliases: true` is passed; JSON and flat request codecs write the alias.
  *
  * - `null()` and `nullable()` are the same: they also accept `null`.
  *
@@ -705,8 +705,6 @@ export type PrimitiveDefinition<
     path: Path,
     fail: DecodeFailure,
   ) => TOutput | typeof FAILED;
-  /** Receives whatever value is being encoded, which this struct did not necessarily produce. */
-  encode?: (value: unknown) => unknown;
   expected: string;
   is: (value: unknown) => value is TInput;
   kind: K;

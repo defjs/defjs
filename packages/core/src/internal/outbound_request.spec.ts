@@ -1076,14 +1076,6 @@ describe("outbound request builder", () => {
     expect(omitted.bodyContentType).toBe("application/json");
   });
 
-  test("treats an undefined builder result as an empty request", () => {
-    const request = buildHttp("POST", "/users", { id: 1 }, () => undefined);
-
-    expect(request.endpoint).toBe("/users");
-    expect(request.body).toBeUndefined();
-    expect(request.queryString).toBe("");
-  });
-
   test("omits an undefined body", () => {
     const request = buildHttp("POST", "/users", undefined, () => ({
       body: undefined,

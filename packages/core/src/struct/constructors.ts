@@ -23,14 +23,7 @@ import type {
   UnionStruct,
   UnknownStruct,
 } from "./types";
-import {
-  describeValue,
-  expectedType,
-  invokeMethod,
-  isPlainObject,
-  isPrimitive,
-  success,
-} from "./utils";
+import { describeValue, expectedType, isPlainObject, success } from "./utils";
 
 /**
  * Struct that accepts string values.
@@ -381,10 +374,6 @@ export function createUnionStruct<
 >(options: T): UnionStruct<T> {
   const unionOptions: readonly unknown[] = [...options];
   assertStructs(unionOptions, "or option");
-  const first = unionOptions[0];
-  if (first === undefined) {
-    throw new TypeError("or requires at least one struct");
-  }
 
   return makeStruct<UnionStruct<T>>({
     expected: unionOptions
@@ -567,7 +556,6 @@ export function createBigIntStruct(): Struct<bigint | string, bigint> {
         return fail(issue(path, "invalid_type", "bigint", input));
       }
     },
-    encode: encodeBigInt,
     expected: "bigint",
     is: (value): value is bigint | string =>
       typeof value === "bigint" || typeof value === "string",
@@ -596,7 +584,6 @@ export function createDateStruct(): Struct<Date | number | string, Date> {
       }
       return success(date);
     },
-    encode: encodeDate,
     expected: "Date",
     is: (value): value is Date | number | string =>
       value instanceof Date ||
@@ -606,19 +593,6 @@ export function createDateStruct(): Struct<Date | number | string, Date> {
     runtimeIs: (value): value is Date =>
       value instanceof Date && !Number.isNaN(value.getTime()),
   });
-}
-
-// Encode hooks also see values their struct did not produce. Those go through the same method call.
-function encodeBigInt(value: unknown): unknown {
-  return isPrimitive(value)
-    ? value.toString()
-    : invokeMethod(value, "toString");
-}
-
-function encodeDate(value: unknown): unknown {
-  return value instanceof Date
-    ? value.toISOString()
-    : invokeMethod(value, "toISOString");
 }
 
 /**
@@ -634,7 +608,7 @@ function encodeDate(value: unknown): unknown {
  *
  * - Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.
  *
- * - A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. Calling it with no structs throws `TypeError`, and so does a non-struct argument.
+ * - A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. A non-struct argument throws `TypeError`.
  *
  * - A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.
  *
@@ -660,10 +634,6 @@ export function createIntersectionStruct(
     ...StructLike<unknown, unknown, boolean>[],
   ]
 ): StructLike<unknown, unknown, boolean> {
-  if (structs.length === 0) {
-    throw new TypeError("intersection requires at least one struct");
-  }
-
   assertStructs(structs, "intersection item");
 
   if (structs.length === 1) {
@@ -757,7 +727,5 @@ export function createArrayBufferStruct(): Struct<ArrayBuffer, ArrayBuffer> {
     expected: "ArrayBuffer",
     is: (value): value is ArrayBuffer => value instanceof ArrayBuffer,
     kind: "arrayBuffer",
-    runtimeIs: (value): value is ArrayBuffer =>
-      typeof ArrayBuffer !== "undefined" && value instanceof ArrayBuffer,
   });
 }

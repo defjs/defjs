@@ -49,13 +49,6 @@ describe("runtime.ts chain methods", () => {
     expect(val).toEqual({ name: "Miao" });
   });
 
-  test("alias requires a string name", () => {
-    expect(() => {
-      // @ts-expect-error alias requires a string name
-      struct.string().alias(null);
-    }).toThrow("alias() requires a string name");
-  });
-
   test("removed tag method is absent from struct runtime surface", () => {
     expect("tag" in struct.string()).toBe(false);
   });

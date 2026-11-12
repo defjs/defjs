@@ -132,13 +132,6 @@ describe("constructors.ts bigint and date primitives", () => {
 });
 
 describe("constructors.ts intersection", () => {
-  test("intersection rejects empty struct list at runtime", () => {
-    expect(() => {
-      // @ts-expect-error intersection requires at least one struct
-      struct.intersection();
-    }).toThrow(new TypeError("intersection requires at least one struct"));
-  });
-
   test("intersection of one struct is the struct itself", () => {
     const named = struct.object({ name: struct.string() });
 

@@ -78,6 +78,17 @@ function writeObjectFieldsMerged(
   }
 }
 
+/** A Date leaves as its ISO 8601 string and a bigint as its decimal string. Every other leaf leaves as it is. */
+export function coerceWireLeaf(value: unknown): unknown {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  return value;
+}
+
 /** Walks a value by its struct and writes every object under its wire keys. */
 export function encodeValue(
   struct: RuntimeStruct,
@@ -111,7 +122,7 @@ export function encodeValue(
     case "file":
     case "number":
     case "string":
-      return definition.encode ? definition.encode(value) : value;
+      return coerceWireLeaf(value);
 
     case "array":
       return Array.isArray(value)

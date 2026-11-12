@@ -1,4 +1,4 @@
-import { encodeValue } from "../struct/encode";
+import { coerceWireLeaf } from "../struct/encode";
 import {
   resolveStructFields,
   type ResolvedStructField,
@@ -71,8 +71,7 @@ export function runOutboundBuilder(
   }
 
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published OutboundBuilder type, `(input: never) => unknown` in RequestDefinition, EventStreamDefinition and WebSocketDefinition, erases each builder's parameter, so no value can be passed to it unasserted (TS2345, `unknown` is not assignable to `never`). Keeping each definition's own `(input: BuilderInput<TInput>) => …` type would need ParsedInput<TInput> to relate to BuilderInput<TInput>, two conditionals on the caller's generic
-  const result = builder(input as never);
-  return result === undefined ? {} : result;
+  return builder(input as never);
 }
 
 export function materializeOutboundRequest(
@@ -110,22 +109,6 @@ export function materializeOutboundRequest(
   }
   return request;
 }
-
-const LEAF_KINDS: ReadonlySet<string> = new Set([
-  "any",
-  "arrayBuffer",
-  "bigint",
-  "blob",
-  "boolean",
-  "date",
-  "enum",
-  "file",
-  "literal",
-  "null",
-  "number",
-  "string",
-  "unknown",
-]);
 
 type ContainerGuide =
   | { kind: "array"; item: RuntimeStruct }
@@ -191,7 +174,7 @@ function encodeGuided(
   if (isPlainObject(value)) {
     return encodeGuidedObject(value, guide, path, guides);
   }
-  return encodeGuidedLeaf(value, guide);
+  return coerceWireLeaf(value);
 }
 
 function narrowToParent(
@@ -269,7 +252,7 @@ function encodeMembers(
   if (isPlainObject(value)) {
     return encodeObjectNode(value, resolved, path, guides);
   }
-  return encodeLeafMembers(value, resolved);
+  return coerceWireLeaf(value);
 }
 
 function resolveGuideMembers(
@@ -354,35 +337,6 @@ function appendResolved(
     default:
       out.push(struct);
   }
-}
-
-function encodeLeafMembers(
-  value: unknown,
-  members: readonly RuntimeStruct[],
-): unknown {
-  if (value === undefined) {
-    return undefined;
-  }
-  // Null stays a leaf. Container guides must not be walked with Object.keys(null).
-  if (value === null) {
-    for (const member of members) {
-      const definition = member[DEFINITION];
-      if (
-        definition.kind === "null" ||
-        definition.flags.nullable ||
-        LEAF_KINDS.has(definition.kind)
-      ) {
-        return encodeGuidedLeaf(value, member);
-      }
-    }
-    return null;
-  }
-  for (const member of members) {
-    if (LEAF_KINDS.has(member[DEFINITION].kind)) {
-      return encodeGuidedLeaf(value, member);
-    }
-  }
-  return coerceJsonLeaf(value);
 }
 
 function materializePath(
@@ -967,28 +921,6 @@ function encodeGuidedObject(
     return encodeRecord(container.valueStruct, value, path, guides);
   }
   return encodeAnonymousObject(value, path, guides);
-}
-
-function encodeGuidedLeaf(
-  value: unknown,
-  guide: RuntimeStruct | undefined,
-): unknown {
-  // encodeValue is only for leaves. Date and bigint still stringify when the guide does not encode them.
-  const encoded =
-    guide && LEAF_KINDS.has(guide[DEFINITION].kind)
-      ? encodeValue(guide, value)
-      : value;
-  return coerceJsonLeaf(encoded);
-}
-
-function coerceJsonLeaf(value: unknown): unknown {
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-  if (typeof value === "bigint") {
-    return value.toString();
-  }
-  return value;
 }
 
 function containerOf(

@@ -1,28 +1,34 @@
 import { DEFINITION } from "./symbols";
-import type { ObjectRuntimeStruct, RuntimeStruct } from "./types";
+import type {
+  ObjectRuntimeStruct,
+  RuntimeStruct,
+  StructDefinition,
+} from "./types";
 
-const KNOWN_KINDS = new Set<unknown>([
-  "any",
-  "array",
-  "arrayBuffer",
-  "bigint",
-  "blob",
-  "boolean",
-  "date",
-  "discriminatedUnion",
-  "enum",
-  "file",
-  "intersection",
-  "literal",
-  "null",
-  "number",
-  "object",
-  "or",
-  "record",
-  "string",
-  "tuple",
-  "unknown",
-]);
+const KNOWN_KINDS: ReadonlySet<unknown> = new Set(
+  Object.keys({
+    any: true,
+    array: true,
+    arrayBuffer: true,
+    bigint: true,
+    blob: true,
+    boolean: true,
+    date: true,
+    discriminatedUnion: true,
+    enum: true,
+    file: true,
+    intersection: true,
+    literal: true,
+    null: true,
+    number: true,
+    object: true,
+    or: true,
+    record: true,
+    string: true,
+    tuple: true,
+    unknown: true,
+  } satisfies Record<StructDefinition["kind"], true>),
+);
 
 export function isStruct(value: unknown): value is RuntimeStruct {
   if (

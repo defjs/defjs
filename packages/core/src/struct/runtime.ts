@@ -22,8 +22,6 @@ export interface PrimitiveDefinitionInput<
     path: Path,
     fail: DecodeFailure,
   ) => TOutput | typeof FAILED;
-  /** Receives whatever value is being encoded, which this struct did not necessarily produce. */
-  encode?: (value: unknown) => unknown;
   expected: string;
   is: (value: unknown) => value is TInput;
   kind: K;
@@ -72,10 +70,6 @@ export function makeStruct<TStruct extends StructLike = RuntimeStruct>(
   return {
     [DEFINITION]: definition,
     alias(name: string) {
-      if (typeof name !== "string") {
-        throw new TypeError("alias() requires a string name");
-      }
-
       return makeStruct({
         ...definition,
         alias: name,

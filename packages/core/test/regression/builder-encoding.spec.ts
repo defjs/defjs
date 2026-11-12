@@ -417,23 +417,15 @@ describe("builder refactor adversarial audit", () => {
       method: "POST",
       path: "/promise",
     });
-    const returnsUndefined = defineRequest({
-      // @ts-expect-error builder must return request parts, not undefined
-      builder: () => undefined,
-      method: "POST",
-      path: "/undefined",
-    });
 
     const [thrown] = await throwsValue(client);
     const [value] = await returnsValue(client);
     const [promise] = await returnsPromise(client);
-    const [undefinedResult] = await returnsUndefined(client);
 
     expect(thrown?.code).toBe("REQ_BUILD_FAILED");
     expect(thrown?.cause).toBe("boom");
     expect(value?.code).toBe("REQ_BUILD_FAILED");
     expect(promise?.code).toBe("REQ_BUILD_FAILED");
-    expect(undefinedResult).toBeNull();
   });
 
   test.each(["GET", "HEAD"] as const)(

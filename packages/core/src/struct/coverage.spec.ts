@@ -201,13 +201,6 @@ describe("struct coverage boundary cases", () => {
     expect(resolveObjectShape(objectStruct, fields)).toBe(first);
   });
 
-  test("runtime alias guard rejects non-string names", () => {
-    expect(() => {
-      // @ts-expect-error alias requires a string name
-      struct.string().alias(null);
-    }).toThrow("alias() requires a string name");
-  });
-
   test("strict parsing keeps no zero-value construction path", () => {
     expect(parse(struct.string(), undefined)[0]).toBeInstanceOf(StructError);
     expect(parse(struct.string().optional(), undefined)).toEqual([
@@ -634,11 +627,6 @@ describe("struct coverage boundary cases", () => {
 });
 
 describe("struct guards for untyped definitions", () => {
-  test("a union needs at least one struct", () => {
-    // @ts-expect-error struct.or() requires at least one option
-    expect(() => struct.or()).toThrow("or requires at least one struct");
-  });
-
   test("a hand-built discriminator map that points at a non-object struct throws when parsed", () => {
     const handBuilt = makeStruct({
       discriminator: "type",

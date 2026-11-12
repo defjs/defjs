@@ -253,19 +253,6 @@ export function hasOwnKey(
   return Object.hasOwn(value, key);
 }
 
-/** `value[name]()` for an object or function. Any other value, or one without that method, throws TypeError. */
-export function invokeMethod(value: unknown, name: string): unknown {
-  const method: unknown =
-    (typeof value === "object" && value !== null) || typeof value === "function"
-      ? Reflect.get(value, name)
-      : undefined;
-  if (typeof method !== "function") {
-    throw new TypeError(`${name}() is not available on ${describeKind(value)}`);
-  }
-  const result: unknown = Reflect.apply(method, value, []);
-  return result;
-}
-
 /** A value that is neither null, undefined, an object nor a function. */
 export function isPrimitive(
   value: unknown,
