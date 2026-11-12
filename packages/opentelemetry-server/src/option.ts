@@ -163,10 +163,6 @@ export interface OpenTelemetryServerOptions {
   webSocket?: OpenTelemetryServerWebSocketOptions;
 }
 
-interface TransportSwitch {
-  enabled?: boolean;
-}
-
 /**
  * Client option that installs outbound OpenTelemetry interceptors for HTTP, SSE, and WebSocket.
  *
@@ -207,53 +203,38 @@ export function withOpenTelemetryServer(
     }),
     requireParentSpan = false,
   } = options;
+  const shared = { tracer, logger, propagator, requireParentSpan };
   const http = snapshotTransport(options.http);
   const sse = snapshotTransport(options.sse);
   const webSocket = snapshotWebSocket(options.webSocket);
 
   return (config) => {
-    if (isTransportEnabled(http)) {
+    if (http?.enabled !== false) {
       config.interceptors.push(
         createOpenTelemetryHttpInterceptor({
-          tracer,
-          logger,
-          propagator,
+          ...http,
+          ...shared,
           metrics: meter ? createHttpClientMetrics(meter) : undefined,
-          requireParentSpan,
-          startSpanHook: http?.startSpanHook,
-          requestHook: http?.requestHook,
-          responseHook: http?.responseHook,
         }),
       );
     }
 
-    if (isTransportEnabled(sse)) {
+    if (sse?.enabled !== false) {
       config.interceptors.push(
         createOpenTelemetrySSEInterceptor({
-          tracer,
-          logger,
-          propagator,
+          ...sse,
+          ...shared,
           metrics: meter ? createSSEClientMetrics(meter) : undefined,
-          requireParentSpan,
-          startSpanHook: sse?.startSpanHook,
-          requestHook: sse?.requestHook,
-          responseHook: sse?.responseHook,
         }),
       );
     }
 
-    if (isTransportEnabled(webSocket)) {
+    if (webSocket?.enabled !== false) {
       config.interceptors.push(
         createOpenTelemetryWebSocketInterceptor({
-          tracer,
-          logger,
-          propagator,
+          ...webSocket,
+          ...shared,
           metrics: meter ? createWebSocketClientMetrics(meter) : undefined,
-          requireParentSpan,
-          queryPropagation: webSocket?.queryPropagation,
-          startSpanHook: webSocket?.startSpanHook,
-          requestHook: webSocket?.requestHook,
-          responseHook: webSocket?.responseHook,
         }),
       );
     }
@@ -287,8 +268,4 @@ function snapshotWebSocket(
     responseHook: block.responseHook,
     queryPropagation: block.queryPropagation,
   };
-}
-
-function isTransportEnabled(option: TransportSwitch | undefined): boolean {
-  return option?.enabled !== false;
 }

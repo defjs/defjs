@@ -1,18 +1,7 @@
-import type {
-  EventStreamCloseInfo,
-  EventStreamHandle,
-  HttpRequest,
-} from "@defjs/core";
+import type { EventStreamCloseInfo, EventStreamHandle } from "@defjs/core";
 import { createSSEInterceptor } from "@defjs/core";
-import type {
-  Attributes,
-  Span,
-  TextMapPropagator,
-  Tracer,
-} from "@opentelemetry/api";
-import { context, trace } from "@opentelemetry/api";
-import type { Logger } from "@opentelemetry/api-logs";
-import { carrierSetter, headersGetter } from "../propagation/carrier";
+import { trace } from "@opentelemetry/api";
+import { carrierSetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { SSEClientMetrics } from "../telemetry/metrics";
 import {
@@ -22,73 +11,37 @@ import {
 } from "../telemetry/metrics";
 import {
   addSpanEvent,
-  createSSESpan,
   getErrorType,
-  httpMethodAttributes,
-  resolveStartSpanHook,
   runSpanHook,
   setSpanError,
 } from "../telemetry/trace";
-import { resolveHttpUrl, serverAttributes } from "../telemetry/url";
+import { resolveHttpUrl } from "../telemetry/url";
+import type { ClientCallOptions } from "./call";
+import { requiresActiveSpan, startClientCall } from "./call";
 
-export interface SSEInterceptorOptions {
-  tracer?: Tracer;
-  logger?: Logger;
-  propagator: TextMapPropagator;
-  metrics?: SSEClientMetrics;
-  requireParentSpan?: boolean;
-  startSpanHook?: (request: HttpRequest) => Attributes;
-  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void;
-  responseHook?: (
-    span: Span,
-    stream: EventStreamHandle<unknown>,
-    req: HttpRequest,
-  ) => Promise<void> | void;
-}
+export type SSEInterceptorOptions = ClientCallOptions<
+  EventStreamHandle<unknown>,
+  SSEClientMetrics
+>;
 
 export function createOpenTelemetrySSEInterceptor(
   options: SSEInterceptorOptions,
 ): ReturnType<typeof createSSEInterceptor> {
-  return createSSEInterceptor(async (req, next) => {
-    const {
-      tracer,
-      logger,
-      propagator,
-      metrics,
-      requireParentSpan,
-      startSpanHook,
-      requestHook,
-      responseHook,
-    } = options;
+  const { logger, propagator, metrics, responseHook } = options;
+  const needsActiveSpan = requiresActiveSpan(options);
 
-    if (tracer && requireParentSpan && !trace.getActiveSpan()) {
+  return createSSEInterceptor(async (req, next) => {
+    if (needsActiveSpan && !trace.getActiveSpan()) {
       return next(req);
     }
 
-    const parentCtx = propagator.extract(
-      context.active(),
-      req.headers ?? new Headers(),
-      headersGetter,
+    const { span, context: spanCtx } = startClientCall(
+      options,
+      req,
+      resolveHttpUrl,
+      req.method,
+      "SSE",
     );
-    const resolved = resolveHttpUrl(req.endpoint, req.baseEndpoint);
-    let span: Span | undefined;
-    if (tracer) {
-      const startSpanHookResult = resolveStartSpanHook(startSpanHook, req);
-      span = createSSESpan(tracer, resolved.url, parentCtx, req.operation, {
-        ...httpMethodAttributes(req.method),
-        ...serverAttributes(resolved),
-        ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
-      });
-      if (!startSpanHookResult.ok) {
-        runSpanHook(span, "startSpanHook", () => {
-          throw startSpanHookResult.error;
-        });
-      }
-    }
-    const spanCtx = span ? trace.setSpan(parentCtx, span) : parentCtx;
-
-    if (span) runSpanHook(span, "requestHook", () => requestHook?.(span, req));
-
     const headers = new Headers(req.headers);
     propagator.inject(spanCtx, headers, carrierSetter);
 
@@ -100,9 +53,11 @@ export function createOpenTelemetrySSEInterceptor(
       const activeAttributes = createServerMetricAttributes(req);
 
       if (span) {
-        runSpanHook(span, "responseHook", () =>
-          responseHook?.(span, stream, req),
-        );
+        if (responseHook) {
+          runSpanHook(span, "responseHook", () =>
+            responseHook(span, stream, req),
+          );
+        }
         addSpanEvent(span, "sse.connected");
       }
 

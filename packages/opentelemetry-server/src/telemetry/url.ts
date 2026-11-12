@@ -112,10 +112,10 @@ export function serverAttributes({
   serverAddress,
   serverPort,
 }: Omit<ResolvedUrl, "url">): Attributes {
-  return {
-    ...(serverAddress ? { "server.address": serverAddress } : {}),
-    ...(serverPort ? { "server.port": serverPort } : {}),
-  };
+  const attributes: Attributes = {};
+  if (serverAddress) attributes["server.address"] = serverAddress;
+  if (serverPort) attributes["server.port"] = serverPort;
+  return attributes;
 }
 
 function resolveUrl(

@@ -1,231 +1,26 @@
-import { ROOT_CONTEXT, SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { SpanStatusCode } from "@opentelemetry/api";
 import { describe, expect, test, vi } from "vitest";
 import type { MockSpan } from "../../test/mocks";
-import { createMockTracer, makeHttpRequest } from "../../test/mocks";
+import { createMockTracer } from "../../test/mocks";
 import {
   addSpanEvent,
-  createHttpSpan,
-  createSSESpan,
-  createWebSocketSpan,
-  httpMethodAttributes,
-  resolveStartSpanHook,
+  normalizeHttpMethod,
   runSpanHook,
   setSpanError,
   setSpanHttpResponse,
 } from "./trace";
-import { method } from "../../test/method";
 
 describe("trace helpers", () => {
   test.each([
-    ["GET", { "http.request.method": "GET" }],
-    ["PATCH", { "http.request.method": "PATCH" }],
-    ["QUERY", { "http.request.method": "QUERY" }],
-    [
-      "get",
-      { "http.request.method": "GET", "http.request.method_original": "get" },
-    ],
-    [
-      "Delete",
-      {
-        "http.request.method": "DELETE",
-        "http.request.method_original": "Delete",
-      },
-    ],
-    [
-      "patch",
-      {
-        "http.request.method": "_OTHER",
-        "http.request.method_original": "patch",
-      },
-    ],
-    [
-      "PROPFIND",
-      {
-        "http.request.method": "_OTHER",
-        "http.request.method_original": "PROPFIND",
-      },
-    ],
-  ])("httpMethodAttributes(%s)", (input, expected) => {
-    expect(httpMethodAttributes(input)).toEqual(expected);
-  });
-
-  test("createHttpSpan", () => {
-    const { tracer, spans } = createMockTracer();
-    createHttpSpan(
-      tracer,
-      "POST",
-      "https://api.example.com/test",
-      ROOT_CONTEXT,
-    );
-
-    expect(spans).toHaveLength(1);
-    expect(spans[0]?.name).toBe("POST");
-    expect(spans[0]?.kind).toBe(SpanKind.CLIENT);
-    expect(spans[0]?.attributes["url.full"]).toBe(
-      "https://api.example.com/test",
-    );
-  });
-
-  test("createSSESpan", () => {
-    const { tracer, spans } = createMockTracer();
-    createSSESpan(tracer, "https://api.example.com/events", ROOT_CONTEXT);
-
-    expect(spans).toHaveLength(1);
-    expect(spans[0]?.name).toBe("SSE");
-    expect(spans[0]?.kind).toBe(SpanKind.CLIENT);
-    expect(spans[0]?.attributes["url.full"]).toBe(
-      "https://api.example.com/events",
-    );
-  });
-
-  test("createWebSocketSpan", () => {
-    const { tracer, spans } = createMockTracer();
-    createWebSocketSpan(tracer, "wss://api.example.com/ws", ROOT_CONTEXT);
-
-    expect(spans).toHaveLength(1);
-    expect(spans[0]?.name).toBe("WebSocket");
-    expect(spans[0]?.kind).toBe(SpanKind.CLIENT);
-    expect(spans[0]?.attributes["url.full"]).toBe("wss://api.example.com/ws");
-  });
-
-  test("span creators merge application attributes into initial startSpan options last", () => {
-    const { tracer } = createMockTracer();
-
-    createHttpSpan(
-      tracer,
-      "POST",
-      "https://api.example.com/test",
-      ROOT_CONTEXT,
-      undefined,
-      {
-        "app.tenant": "http",
-        "url.full": "https://tenant.example/http",
-      },
-    );
-    createSSESpan(
-      tracer,
-      "https://api.example.com/events",
-      ROOT_CONTEXT,
-      undefined,
-      {
-        "app.tenant": "sse",
-        "url.full": "https://tenant.example/sse",
-      },
-    );
-    createWebSocketSpan(
-      tracer,
-      "wss://api.example.com/ws",
-      ROOT_CONTEXT,
-      undefined,
-      {
-        "app.tenant": "webSocket",
-        "url.full": "wss://tenant.example/socket",
-      },
-    );
-
-    expect(
-      vi
-        .mocked(method(tracer, "startSpan"))
-        .mock.calls.map((call) => call[1]?.attributes),
-    ).toEqual([
-      { "app.tenant": "http", "url.full": "https://tenant.example/http" },
-      { "app.tenant": "sse", "url.full": "https://tenant.example/sse" },
-      { "app.tenant": "webSocket", "url.full": "wss://tenant.example/socket" },
-    ]);
-  });
-
-  test("span creators redact a url.full set by startSpanHook", () => {
-    const { tracer } = createMockTracer();
-    const hookUrl = "https://hook-user:HOOKSECRET@tenant.example/x?sig=HOOKSIG";
-    const redacted = "https://REDACTED:REDACTED@tenant.example/x?sig=REDACTED";
-
-    createHttpSpan(tracer, "GET", "/a", ROOT_CONTEXT, undefined, {
-      "url.full": hookUrl,
-    });
-    createSSESpan(tracer, "/b", ROOT_CONTEXT, undefined, {
-      "url.full": hookUrl,
-    });
-    createWebSocketSpan(tracer, "/c", ROOT_CONTEXT, undefined, {
-      "url.full": hookUrl,
-    });
-
-    expect(
-      vi
-        .mocked(method(tracer, "startSpan"))
-        .mock.calls.map((call) => call[1]?.attributes?.["url.full"]),
-    ).toEqual([redacted, redacted, redacted]);
-  });
-
-  test("span creators leave a non-string url.full from startSpanHook alone", () => {
-    const { tracer } = createMockTracer();
-
-    createHttpSpan(tracer, "GET", "/a", ROOT_CONTEXT, undefined, {
-      "url.full": 5,
-    });
-
-    expect(
-      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
-    ).toEqual({ "url.full": 5 });
-  });
-
-  test("resolveStartSpanHook returns synchronous application attributes", () => {
-    const request = makeHttpRequest();
-    const hook = vi.fn(() => ({ "app.tenant": "acme" }));
-
-    expect(resolveStartSpanHook(hook, request)).toEqual({
-      ok: true,
-      attributes: { "app.tenant": "acme" },
-    });
-    expect(hook).toHaveBeenCalledWith(request);
-  });
-
-  test("resolveStartSpanHook returns no attributes when omitted", () => {
-    expect(resolveStartSpanHook(undefined, makeHttpRequest())).toEqual({
-      ok: true,
-      attributes: undefined,
-    });
-  });
-
-  test("resolveStartSpanHook preserves throw undefined with an explicit failure discriminator", () => {
-    expect(
-      resolveStartSpanHook(() => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: the hook must throw undefined to prove the failure result keeps error undefined
-        throw undefined;
-      }, makeHttpRequest()),
-    ).toEqual({ ok: false, error: undefined });
-  });
-
-  test("uses an explicit static operation without deriving identity from the URL", () => {
-    const { tracer, spans } = createMockTracer();
-
-    createHttpSpan(
-      tracer,
-      "GET",
-      "https://api.example.com/users/42",
-      ROOT_CONTEXT,
-      "users.read",
-    );
-    createSSESpan(
-      tracer,
-      "https://api.example.com/users/42/events",
-      ROOT_CONTEXT,
-      "users.watch",
-    );
-    createWebSocketSpan(
-      tracer,
-      "wss://api.example.com/users/42/socket",
-      ROOT_CONTEXT,
-      "users.connect",
-    );
-
-    expect(spans.map(({ name }) => name)).toEqual([
-      "GET users.read",
-      "SSE users.watch",
-      "WebSocket users.connect",
-    ]);
-    expect(
-      spans.map(({ attributes }) => attributes["defjs.operation"]),
-    ).toEqual(["users.read", "users.watch", "users.connect"]);
+    ["GET", "GET"],
+    ["PATCH", "PATCH"],
+    ["QUERY", "QUERY"],
+    ["get", "GET"],
+    ["Delete", "DELETE"],
+    ["patch", "_OTHER"],
+    ["PROPFIND", "_OTHER"],
+  ])("normalizeHttpMethod(%s)", (input, expected) => {
+    expect(normalizeHttpMethod(input)).toBe(expected);
   });
 
   test("setSpanHttpResponse with 2xx status", () => {
@@ -355,15 +150,6 @@ describe("trace helpers", () => {
 
       expectOnlyType(spans[0], name);
     });
-  });
-
-  test("runSpanHook returns without calling missing hook", () => {
-    const { tracer, spans } = createMockTracer();
-    const span = tracer.startSpan("test");
-    runSpanHook(span, "missingHook", undefined);
-
-    expect(spans[0]?.addEvent).not.toHaveBeenCalled();
-    expect(spans[0]?.recordException).not.toHaveBeenCalled();
   });
 
   test("runSpanHook calls provided hook", () => {

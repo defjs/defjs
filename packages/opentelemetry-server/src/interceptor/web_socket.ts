@@ -1,14 +1,7 @@
-import type { HttpRequest, WebSocketSessionLike } from "@defjs/core";
+import type { WebSocketSessionLike } from "@defjs/core";
 import { createWebSocketInterceptor, ERR_ABORTED } from "@defjs/core";
-import type {
-  Attributes,
-  Span,
-  TextMapPropagator,
-  Tracer,
-} from "@opentelemetry/api";
-import { context, trace } from "@opentelemetry/api";
-import type { Logger } from "@opentelemetry/api-logs";
-import { carrierSetter, headersGetter } from "../propagation/carrier";
+import { trace } from "@opentelemetry/api";
+import { carrierSetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { WebSocketClientMetrics } from "../telemetry/metrics";
 import {
@@ -18,79 +11,41 @@ import {
 } from "../telemetry/metrics";
 import {
   addSpanEvent,
-  createWebSocketSpan,
   getErrorType,
-  resolveStartSpanHook,
   runSpanHook,
   setSpanError,
 } from "../telemetry/trace";
-import { resolveWebSocketUrl, serverAttributes } from "../telemetry/url";
+import { resolveWebSocketUrl } from "../telemetry/url";
+import type { ClientCallOptions } from "./call";
+import { requiresActiveSpan, startClientCall } from "./call";
 
-export interface WebSocketInterceptorOptions {
-  tracer?: Tracer;
-  logger?: Logger;
-  propagator: TextMapPropagator;
-  metrics?: WebSocketClientMetrics;
-  requireParentSpan?: boolean;
+export interface WebSocketInterceptorOptions extends ClientCallOptions<
+  WebSocketSessionLike,
+  WebSocketClientMetrics
+> {
   queryPropagation?: boolean;
-  startSpanHook?: (request: HttpRequest) => Attributes;
-  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void;
-  responseHook?: (
-    span: Span,
-    session: WebSocketSessionLike,
-    req: HttpRequest,
-  ) => Promise<void> | void;
 }
 
 export function createOpenTelemetryWebSocketInterceptor(
   options: WebSocketInterceptorOptions,
 ): ReturnType<typeof createWebSocketInterceptor> {
-  return createWebSocketInterceptor(async (req, next) => {
-    const {
-      tracer,
-      logger,
-      propagator,
-      metrics,
-      requireParentSpan,
-      queryPropagation = false,
-      startSpanHook,
-      requestHook,
-      responseHook,
-    } = options;
+  const { logger, propagator, metrics, queryPropagation, responseHook } =
+    options;
+  const needsActiveSpan = requiresActiveSpan(options);
 
-    if (tracer && requireParentSpan && !trace.getActiveSpan()) {
+  return createWebSocketInterceptor(async (req, next) => {
+    if (needsActiveSpan && !trace.getActiveSpan()) {
       return next(req);
     }
 
-    const resolved = resolveWebSocketUrl(req.endpoint, req.baseEndpoint);
-
-    const parentCtx = propagator.extract(
-      context.active(),
-      req.headers ?? new Headers(),
-      headersGetter,
+    // The opening handshake is always a GET (RFC 6455 section 4.1).
+    const { span, context: spanCtx } = startClientCall(
+      options,
+      req,
+      resolveWebSocketUrl,
+      "GET",
+      "WebSocket",
     );
-    let span: Span | undefined;
-    if (tracer) {
-      const startSpanHookResult = resolveStartSpanHook(startSpanHook, req);
-      span = createWebSocketSpan(
-        tracer,
-        resolved.url,
-        parentCtx,
-        req.operation,
-        {
-          // The opening handshake is always a GET (RFC 6455 section 4.1).
-          "http.request.method": "GET",
-          ...serverAttributes(resolved),
-          ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
-        },
-      );
-      if (!startSpanHookResult.ok) {
-        runSpanHook(span, "startSpanHook", () => {
-          throw startSpanHookResult.error;
-        });
-      }
-    }
-    const spanCtx = span ? trace.setSpan(parentCtx, span) : parentCtx;
 
     let queryParams = req.queryParams;
     let queryString = req.queryString;
@@ -105,8 +60,6 @@ export function createOpenTelemetryWebSocketInterceptor(
       queryParams = new URLSearchParams(queryString);
     }
 
-    if (span) runSpanHook(span, "requestHook", () => requestHook?.(span, req));
-
     const connectStartMs = performance.now();
 
     try {
@@ -115,9 +68,11 @@ export function createOpenTelemetryWebSocketInterceptor(
       const activeAttributes = createServerMetricAttributes(req);
 
       if (span) {
-        runSpanHook(span, "responseHook", () =>
-          responseHook?.(span, session, req),
-        );
+        if (responseHook) {
+          runSpanHook(span, "responseHook", () =>
+            responseHook(span, session, req),
+          );
+        }
         addSpanEvent(span, "websocket.connected");
       }
 

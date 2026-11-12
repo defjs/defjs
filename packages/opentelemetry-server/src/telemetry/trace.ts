@@ -1,31 +1,5 @@
-import type { HttpRequest } from "@defjs/core";
-import type { Attributes, Context } from "@opentelemetry/api";
-import type { Span, Tracer } from "@opentelemetry/api";
-import { diag, SpanKind, SpanStatusCode } from "@opentelemetry/api";
-import { redactEndpoint } from "./url";
-
-// `startSpanHook` attributes are merged over the built-in ones, so a hook that sets `url.full` would
-// otherwise bypass the redaction `resolveUrl` applies; the merged value goes through it again.
-function withRedactedUrl(attributes: Attributes): Attributes {
-  const url = attributes["url.full"];
-  return typeof url === "string"
-    ? { ...attributes, "url.full": redactEndpoint(url) }
-    : attributes;
-}
-
-type StartSpanHookResult =
-  { ok: true; attributes?: Attributes } | { ok: false; error: unknown };
-
-export function resolveStartSpanHook(
-  hook: ((request: HttpRequest) => Attributes) | undefined,
-  request: HttpRequest,
-): StartSpanHookResult {
-  try {
-    return { ok: true, attributes: hook?.(request) };
-  } catch (error) {
-    return { ok: false, error };
-  }
-}
+import type { Attributes, Span } from "@opentelemetry/api";
+import { diag, SpanStatusCode } from "@opentelemetry/api";
 
 // Fetch writes only these six methods in upper case; every other method goes on the wire as given.
 const FETCH_NORMALIZED_METHODS: ReadonlySet<string> = new Set([
@@ -54,88 +28,6 @@ export function normalizeHttpMethod(method: string): string {
   if (KNOWN_HTTP_METHODS.has(method)) return method;
   const upper = method.toUpperCase();
   return FETCH_NORMALIZED_METHODS.has(upper) ? upper : "_OTHER";
-}
-
-/**
- * The span attributes for a request method: the normalized `http.request.method`, with the method
- * as given in `http.request.method_original` whenever the two differ.
- */
-export function httpMethodAttributes(
-  method: string,
-  normalized: string = normalizeHttpMethod(method),
-): Attributes {
-  return normalized === method
-    ? { "http.request.method": normalized }
-    : {
-        "http.request.method": normalized,
-        "http.request.method_original": method,
-      };
-}
-
-/** `method` is the normalized one; a span of an unknown method is named `HTTP`. */
-export function createHttpSpan(
-  tracer: Tracer,
-  method: string,
-  url: string,
-  parentCtx: Context,
-  operation?: string,
-  startAttributes?: Attributes,
-): Span {
-  const name = method === "_OTHER" ? "HTTP" : method;
-  return tracer.startSpan(
-    operation ? `${name} ${operation}` : name,
-    {
-      kind: SpanKind.CLIENT,
-      attributes: withRedactedUrl({
-        ...(operation ? { "defjs.operation": operation } : {}),
-        "url.full": url,
-        ...startAttributes,
-      }),
-    },
-    parentCtx,
-  );
-}
-
-export function createSSESpan(
-  tracer: Tracer,
-  url: string,
-  parentCtx: Context,
-  operation?: string,
-  startAttributes?: Attributes,
-): Span {
-  return tracer.startSpan(
-    operation ? `SSE ${operation}` : "SSE",
-    {
-      kind: SpanKind.CLIENT,
-      attributes: withRedactedUrl({
-        ...(operation ? { "defjs.operation": operation } : {}),
-        "url.full": url,
-        ...startAttributes,
-      }),
-    },
-    parentCtx,
-  );
-}
-
-export function createWebSocketSpan(
-  tracer: Tracer,
-  url: string,
-  parentCtx: Context,
-  operation?: string,
-  startAttributes?: Attributes,
-): Span {
-  return tracer.startSpan(
-    operation ? `WebSocket ${operation}` : "WebSocket",
-    {
-      kind: SpanKind.CLIENT,
-      attributes: withRedactedUrl({
-        ...(operation ? { "defjs.operation": operation } : {}),
-        "url.full": url,
-        ...startAttributes,
-      }),
-    },
-    parentCtx,
-  );
 }
 
 export function setSpanHttpResponse(span: Span, status: number): void {
@@ -169,11 +61,8 @@ export function setSpanError(span: Span, error: unknown): void {
 export function runSpanHook(
   span: Span,
   hookName: string,
-  hook: (() => Promise<void> | void) | undefined,
+  hook: () => Promise<void> | void,
 ): void {
-  if (!hook) {
-    return;
-  }
   try {
     const result = hook();
     void Promise.resolve(result).catch((error) =>
@@ -184,7 +73,7 @@ export function runSpanHook(
   }
 }
 
-function recordSpanHookError(
+export function recordSpanHookError(
   span: Span,
   hookName: string,
   error: unknown,
