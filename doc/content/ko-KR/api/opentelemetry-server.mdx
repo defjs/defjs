@@ -56,7 +56,7 @@ span 훅은 `tracer`를 전달했을 때만 실행돼요. `startSpanHook`은 해
 
 `responseHook`은 전송이 돌려준 값을 받아요. HTTP는 `HttpResponse`, SSE는 시작에 성공한 뒤의 스트림 핸들, WebSocket은 열린 뒤의 세션이에요. 세 번째 인자는 원래의 요청이에요.
 
-기본적으로 `url.full`은 `request.endpoint`만 선택적인 `request.baseEndpoint`에 대해 해석해요. 별도의 `request.queryString`은 덧붙이지 않아요. 이 경계는 쿼리 민감 정보 제거가 아니에요. OpenTelemetry 시맨틱 컨벤션이 요구하듯, 엔드포인트 userinfo의 자격 증명은 `REDACTED:REDACTED`로 바뀌고, 기본 민감 쿼리 키(`sig`, `Signature`, `AWSAccessKeyId`, `X-Amz-Signature`, `X-Amz-Credential`, `X-Amz-Security-Token`, `X-Goog-Signature`)의 값은 `REDACTED`로 바뀌지만, 패키지에는 그 밖의 내장 제거기나 민감 키 정책이 없어요. `startSpanHook`이 돌려준 `url.full`도 같은 방식으로 제거되지만, 애플리케이션이 `requestHook`이나 `responseHook`에서 `Span` 객체로 쓰는 URL은 가로채지 않으므로, 직접 만들고 필요하면 명시적으로 민감 정보를 제거하세요.
+기본적으로 `url.full`은 `request.endpoint`만 선택적인 `request.baseEndpoint`에 대해 해석해요. `request.query`는 덧붙이지 않아요. 이 경계는 쿼리 민감 정보 제거가 아니에요. OpenTelemetry 시맨틱 컨벤션이 요구하듯, 엔드포인트 userinfo의 자격 증명은 `REDACTED:REDACTED`로 바뀌고, 기본 민감 쿼리 키(`sig`, `Signature`, `AWSAccessKeyId`, `X-Amz-Signature`, `X-Amz-Credential`, `X-Amz-Security-Token`, `X-Goog-Signature`)의 값은 `REDACTED`로 바뀌지만, 패키지에는 그 밖의 내장 제거기나 민감 키 정책이 없어요. `startSpanHook`이 돌려준 `url.full`도 같은 방식으로 제거되지만, 애플리케이션이 `requestHook`이나 `responseHook`에서 `Span` 객체로 쓰는 URL은 가로채지 않으므로, 직접 만들고 필요하면 명시적으로 민감 정보를 제거하세요.
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example

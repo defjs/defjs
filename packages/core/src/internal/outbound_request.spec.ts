@@ -1404,7 +1404,7 @@ describe("outbound request builder", () => {
     ).toThrow(/id/);
   });
 
-  test("uses URLSearchParams query verbatim and skips the serializer", () => {
+  test("copies a URLSearchParams query and skips the serializer", () => {
     const query = new URLSearchParams();
     query.append("tag", "a");
     query.append("tag", "b");
@@ -1418,8 +1418,8 @@ describe("outbound request builder", () => {
       },
     );
 
-    expect(request.queryString).toBe("tag=a&tag=b");
-    expect(request.queryParams).toBe(query);
+    expect(request.query?.toString()).toBe("tag=a&tag=b");
+    expect(request.query).not.toBe(query);
   });
 
   test("passes encoded query objects to the current serializer", () => {
@@ -1440,7 +1440,7 @@ describe("outbound request builder", () => {
     );
 
     expect(seen).toEqual({ page_size: 10 });
-    expect(request.queryString).toBe("page_size=10");
+    expect(request.query?.toString()).toBe("page_size=10");
   });
 
   test("keeps nested query behind the current serializer contract", () => {
@@ -1455,10 +1455,10 @@ describe("outbound request builder", () => {
       "/items",
       undefined,
       () => ({ query: { filter: { state: "open" } } }),
-      (query) => JSON.stringify(query),
+      (query) => `filter=${JSON.stringify(query["filter"])}`,
     );
 
-    expect(request.queryString).toBe('{"filter":{"state":"open"}}');
+    expect(request.query?.get("filter")).toBe('{"state":"open"}');
   });
 
   test("treats a non-struct tag as an anonymous object", () => {
@@ -1872,9 +1872,9 @@ describe("outbound request builder", () => {
       },
     );
 
-    expect(plain.queryParams?.get("__proto__")).toBe("safe");
-    expect(plain.queryString).toBe("__proto__=safe");
-    expect(custom.queryString).toBe("ok=1");
+    expect(plain.query?.get("__proto__")).toBe("safe");
+    expect(plain.query?.toString()).toBe("__proto__=safe");
+    expect(custom.query?.toString()).toBe("ok=1");
     expect(Object.getPrototypeOf(seen)).toBeNull();
     expect(Object.hasOwn(dictionary(seen), "__proto__")).toBe(true);
     expect(seen?.["__proto__"]).toEqual({ polluted: true });
@@ -1941,7 +1941,7 @@ describe("outbound request builder", () => {
     expect(decoded["__proto__"]).toBe("safe");
     expect(Object.getPrototypeOf(seen)).toBeNull();
     expect(seen?.["__proto__"]).toBe("safe");
-    expect(query.queryString).toBe("ok=1");
+    expect(query.query?.toString()).toBe("ok=1");
     expect(headers.headers?.get("__proto__")).toBe("safe");
   });
 

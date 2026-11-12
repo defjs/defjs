@@ -44,7 +44,7 @@ description: createClient, хелперы опций и тип Client.
 
 <ApiSignature name="withQuerySerializer" />
 
-Заменяет кодирование query для HTTP, SSE и WebSocket. `serializer(query)` получает **уже закодированный сетевой объект** (алиасы применены, `Date` как ISO, `bigint` как строка) и должен вернуть строку запроса без ведущего `?`. Он не вызывается, когда у запроса нет query. Builder, возвращающий `URLSearchParams`, его пропускает.
+Заменяет кодирование query для HTTP, SSE и WebSocket. `serializer(query)` получает **уже закодированный сетевой объект** (алиасы применены, `Date` как ISO, `bigint` как строка) и должен вернуть строку запроса без ведущего `?`. Строка разбирается в `query` запроса, поэтому запрос отправляет `query.toString()`, сериализацию application/x-www-form-urlencoded из URL Standard: пробел превращается в `+`, `[` — в `%5B`, а байты, которые записала функция, не сохраняются. Он не вызывается, когда у запроса нет query. Builder, возвращающий `URLSearchParams`, его пропускает.
 
 ### withHeaders()
 

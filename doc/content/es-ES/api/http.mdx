@@ -63,7 +63,7 @@ En éxito, el tercer hueco lleva `body` solo cuando se declaró `output`. En fal
 
 ### HttpRequest
 
-Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` y `queryParams`. Cuando los interceptores la ven, `body` ya es el valor de red — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa instancia tal cual. `responseType` y `errorResponseType` son de solo lectura: se derivan de los tipos de struct `output` y `error` declarados y no deben cambiarse.
+Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` y `query`. Cuando los interceptores la ven, `body` ya es el valor de red — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. `query` es la única query que envía la solicitud, un `URLSearchParams`: un interceptor la cambia in situ o pasa un reemplazo a `next()`. Un builder que devuelve `URLSearchParams` hace que se copie esa instancia, y el string de una función `withQuerySerializer` se analiza dentro de ella. La forma de red es `query.toString()`, la serialización application/x-www-form-urlencoded del URL Standard, así que un espacio es `+`, y una `query` vacía no añade `?`. `responseType` y `errorResponseType` son de solo lectura: se derivan de los tipos de struct `output` y `error` declarados y no deben cambiarse.
 
 ### HttpMeta
 

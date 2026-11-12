@@ -74,6 +74,8 @@ SDK определяет каждую HTTP-операцию с помощью `d
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+Возвращённая строка разбирается в `query` запроса, поэтому запрос отправляет `query.toString()`, сериализацию application/x-www-form-urlencoded из URL Standard. Пробел превращается в `+`, а квадратные скобки в `filter[status]=paid` уходят как `filter%5Bstatus%5D=paid`, и декодер форм читает их как то же имя.
+
 ### Форматы тела запроса
 
 Запросы с методами `GET` и `HEAD` не могут содержать тело. Для остальных методов формат тела определяется значением, которое вернул `builder`:

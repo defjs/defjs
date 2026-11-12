@@ -44,7 +44,7 @@ Ajoute des intercepteurs dans l’ordre d’enregistrement. Les types mixtes son
 
 <ApiSignature name="withQuerySerializer" />
 
-Remplace l’encodage de query pour HTTP, SSE et WebSocket. `serializer(query)` reçoit l'**objet réseau déjà encodé** (alias appliqués, `Date` en ISO, `bigint` en chaîne) et doit renvoyer la query string sans `?` initial. Il n’est pas appelé quand la requête n’a pas de query. Un builder qui renvoie `URLSearchParams` le saute.
+Remplace l’encodage de query pour HTTP, SSE et WebSocket. `serializer(query)` reçoit l'**objet réseau déjà encodé** (alias appliqués, `Date` en ISO, `bigint` en chaîne) et doit renvoyer la query string sans `?` initial. La chaîne est analysée dans la `query` de la requête, qui envoie donc `query.toString()`, la sérialisation application/x-www-form-urlencoded de l’URL Standard : l’espace devient `+`, `[` devient `%5B`, et les octets écrits par la fonction ne sont pas conservés. Il n’est pas appelé quand la requête n’a pas de query. Un builder qui renvoie `URLSearchParams` le saute.
 
 ### withHeaders()
 

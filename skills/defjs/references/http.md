@@ -108,7 +108,8 @@ const client = createClient(
 ```
 
 - `query` passed to `withQuerySerializer` already has wire aliases applied, `Date` converted to ISO string, and `bigint` converted to string.
-- If `builder` returns a `URLSearchParams` instance directly, `withQuerySerializer` is skipped.
+- If `builder` returns a `URLSearchParams` instance directly, `withQuerySerializer` is skipped and the instance is copied into `request.query`.
+- The string a serializer returns is parsed into `request.query`, and the request sends `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization: a space is `+`, `[` is `%5B`, and the bytes the serializer wrote are not kept.
 
 ## Body encoding
 

@@ -44,7 +44,7 @@ description: createClient、オプションヘルパー、Client 型です。
 
 <ApiSignature name="withQuerySerializer" />
 
-HTTP、SSE、WebSocket のクエリエンコードを差し替えます。`serializer(query)` は**エンコード済みのワイヤオブジェクト**（エイリアス適用済み、`Date` は ISO、`bigint` は文字列）を受け取り、先頭の `?` のないクエリ文字列を返す必要があります。リクエストにクエリがないときは呼ばれません。`URLSearchParams` を返すビルダーはこれを飛ばします。
+HTTP、SSE、WebSocket のクエリエンコードを差し替えます。`serializer(query)` は**エンコード済みのワイヤオブジェクト**（エイリアス適用済み、`Date` は ISO、`bigint` は文字列）を受け取り、先頭の `?` のないクエリ文字列を返す必要があります。その文字列はリクエストの `query` にパースされるため、リクエストは `query.toString()`、つまり URL Standard の application/x-www-form-urlencoded シリアライズを送ります。空白は `+`、`[` は `%5B` になり、関数が書いたバイト列は保たれません。リクエストにクエリがないときは呼ばれません。`URLSearchParams` を返すビルダーはこれを飛ばします。
 
 ### withHeaders()
 

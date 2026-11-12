@@ -44,7 +44,7 @@ description: "createClient, 옵션 헬퍼, Client 타입이에요."
 
 <ApiSignature name="withQuerySerializer" />
 
-HTTP, SSE, WebSocket의 쿼리 인코딩을 바꿔요. `serializer(query)`는 **인코딩된 와이어 객체**(별칭이 적용되고, `Date`는 ISO, `bigint`는 문자열)를 받고, 앞에 `?`가 없는 쿼리 문자열을 돌려줘야 해요. 요청에 쿼리가 없으면 호출되지 않아요. `URLSearchParams`를 돌려주는 builder는 이걸 건너뛰어요.
+HTTP, SSE, WebSocket의 쿼리 인코딩을 바꿔요. `serializer(query)`는 **인코딩된 와이어 객체**(별칭이 적용되고, `Date`는 ISO, `bigint`는 문자열)를 받고, 앞에 `?`가 없는 쿼리 문자열을 돌려줘야 해요. 그 문자열은 요청의 `query`로 파싱되므로, 요청은 `query.toString()`, 즉 URL Standard의 application/x-www-form-urlencoded 직렬화를 보내요. 공백은 `+`, `[`는 `%5B`이며, 함수가 쓴 바이트는 유지되지 않아요. 요청에 쿼리가 없으면 호출되지 않아요. `URLSearchParams`를 돌려주는 builder는 이걸 건너뛰어요.
 
 ### withHeaders()
 

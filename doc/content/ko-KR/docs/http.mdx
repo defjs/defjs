@@ -74,6 +74,8 @@ SDK 모듈에서 각 작업마다 별도의 `defineRequest`를 export하고, `cr
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+반환한 문자열은 요청의 `query`로 파싱되므로, 요청은 `query.toString()`, 즉 URL Standard의 application/x-www-form-urlencoded 직렬화를 보냅니다. 공백은 `+`이고, `filter[status]=paid`의 대괄호는 `filter%5Bstatus%5D=paid`로 전송되며, 폼 디코더는 이를 같은 이름으로 다시 읽습니다.
+
 ### 요청 본문 형식
 
 `GET`과 `HEAD`는 본문을 가질 수 없습니다. 다른 메서드의 경우 `builder`가 반환한 값에 따라 본문 형식이 결정됩니다:

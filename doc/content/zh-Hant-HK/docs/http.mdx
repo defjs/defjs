@@ -74,6 +74,8 @@ SDK 作者用 `defineRequest` 嚟定義每個 HTTP 操作：包括佢嘅 HTTP me
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+你回傳嘅字串會被解析成請求嘅 `query`，所以請求送出嘅係 `query.toString()`，即係 URL Standard 嘅 application/x-www-form-urlencoded 序列化。空格係 `+`，`filter[status]=paid` 入面嘅方括號會以 `filter%5Bstatus%5D=paid` 送出，表單解碼器會將佢讀返做同一個名。
+
 ### Request Body 格式
 
 `GET` 同 `HEAD` 唔可以帶 body。對於其他 HTTP method，body 嘅格式會根據 `builder` 回傳嘅值自動判斷：

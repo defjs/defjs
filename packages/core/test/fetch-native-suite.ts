@@ -283,7 +283,7 @@ export function defineNativeFetchSuite(): void {
       const response = await fetchHandler(
         request({
           endpoint: "/users/1",
-          queryParams: new URLSearchParams({ a: "1" }),
+          query: new URLSearchParams({ a: "1" }),
           responseType: "json",
         }),
         DEFAULT_FETCH,
@@ -334,7 +334,7 @@ export function defineNativeFetchSuite(): void {
       );
 
       const queries = {
-        queryParams: new URLSearchParams({ q: "a b", r: "ü&=" }),
+        query: new URLSearchParams({ q: "a b", r: "ü&=" }),
       };
       for (const overrides of [
         { endpoint: "/plain" },
@@ -344,7 +344,10 @@ export function defineNativeFetchSuite(): void {
         { endpoint: "/deep//up/../path" },
         { endpoint: "/encoded/%E2%9C%93" },
         { endpoint: "/with-query", ...queries },
-        { endpoint: "/with-query-string", queryString: "a=1&b=%20" },
+        {
+          endpoint: "/with-query-string",
+          query: new URLSearchParams("a=1&b=%20"),
+        },
       ]) {
         const input = request({ ...overrides, responseType: "json" });
         const response = await fetchHandler(input, DEFAULT_FETCH);
@@ -419,7 +422,7 @@ export function defineNativeFetchSuite(): void {
       const response = await fetchHandler(
         request({
           endpoint: "/filled",
-          queryParams: new URLSearchParams({ q: "a b" }),
+          query: new URLSearchParams({ q: "a b" }),
           responseType: "json",
         }),
         DEFAULT_FETCH,
@@ -589,7 +592,7 @@ export function defineNativeFetchSuite(): void {
       const result = await fetchHandler(
         request({
           endpoint: "/custom",
-          queryParams: new URLSearchParams({ a: "1" }),
+          query: new URLSearchParams({ a: "1" }),
           responseType: "json",
         }),
         handle,
@@ -667,7 +670,7 @@ export function defineNativeFetchSuite(): void {
       request({
         baseEndpoint: host,
         endpoint: "/body/stall",
-        queryParams: new URLSearchParams({ key }),
+        query: new URLSearchParams({ key }),
         responseType: "json",
         ...overrides,
       });

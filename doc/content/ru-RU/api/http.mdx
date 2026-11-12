@@ -63,7 +63,7 @@ struct, что и ответ из сети; доверенного short-circuit
 
 ### HttpRequest
 
-Нормализованный исходящий запрос: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` и `queryParams`. К моменту, когда перехватчики его видят, `body` уже имеет сетевое значение — для JSON это строка с JSON-текстом, — поэтому HMAC и дайджесты подписывайте по нему, а не по входному struct. Перехватчики видят `queryParams` как `new URLSearchParams(queryString)`. Builder, который возвращает `URLSearchParams`, передаёт этот же экземпляр. `responseType` и `errorResponseType` только для чтения: они выводятся из видов struct `output` и `error` в определении, и их нельзя менять.
+Нормализованный исходящий запрос: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` и `query`. К моменту, когда перехватчики его видят, `body` уже имеет сетевое значение — для JSON это строка с JSON-текстом, — поэтому HMAC и дайджесты подписывайте по нему, а не по входному struct. `query` — единственная query, которую отправляет запрос, это `URLSearchParams`: перехватчик меняет её на месте или передаёт замену в `next()`. Если builder возвращает `URLSearchParams`, экземпляр копируется, а строка функции `withQuerySerializer` разбирается в него. Сетевая форма — `query.toString()`, сериализация application/x-www-form-urlencoded из URL Standard, поэтому пробел превращается в `+`, а пустая `query` не добавляет `?`. `responseType` и `errorResponseType` только для чтения: они выводятся из видов struct `output` и `error` в определении, и их нельзя менять.
 
 ### HttpMeta
 

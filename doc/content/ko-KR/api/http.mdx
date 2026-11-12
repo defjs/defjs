@@ -54,7 +54,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ### HttpRequest
 
-정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, `queryParams`예요. 인터셉터가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. 인터셉터가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요. `builder`가 `URLSearchParams`를 돌려주면 그 인스턴스가 그대로 통과해요. `responseType`과 `errorResponseType`은 readonly예요. 선언된 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
+정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `query`예요. 인터셉터가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. `query`는 요청이 보내는 유일한 쿼리이고 `URLSearchParams`예요. 인터셉터는 이를 그 자리에서 바꾸거나 대체 값을 `next()`에 넘겨요. `builder`가 `URLSearchParams`를 돌려주면 그 인스턴스는 복사되고, `withQuerySerializer` 함수가 돌려준 문자열은 그 안으로 파싱돼요. 와이어 형태는 `query.toString()`, 즉 URL Standard의 application/x-www-form-urlencoded 직렬화라서 공백은 `+`이고, 비어 있는 `query`는 `?`를 붙이지 않아요. `responseType`과 `errorResponseType`은 readonly예요. 선언된 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
 
 ### HttpMeta
 

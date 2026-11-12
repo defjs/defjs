@@ -63,7 +63,7 @@ On success the third slot carries `body` only when `output` was declared. On fai
 
 ### HttpRequest
 
-Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, and `queryParams`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through. `responseType` and `errorResponseType` are readonly: they are derived from the declared `output` and `error` struct kinds and must not be changed.
+Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, and `query`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. `query` is the one query the request sends, a `URLSearchParams`: an interceptor changes it in place or passes a replacement to `next()`. A builder that returns `URLSearchParams` has it copied, and the string of a `withQuerySerializer` function is parsed into it. The wire form is `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization, so a space is `+`, and an empty `query` adds no `?`. `responseType` and `errorResponseType` are readonly: they are derived from the declared `output` and `error` struct kinds and must not be changed.
 
 ### HttpMeta
 

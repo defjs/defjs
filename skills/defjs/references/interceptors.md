@@ -41,7 +41,7 @@ export const client = createClient(
 ```
 
 - HTTP interceptors see explicit headers only; Defjs applies automatic `Content-Type` headers right before sending. `request.body` is already the wire value (JSON text for JSON bodies), so sign that, and read `request.bodyContentType` for the inferred media type.
-- `request.queryParams` is a `URLSearchParams` snapshot of `queryString`; to change the outgoing URL or headers, pass a modified copy to `next({ ...request, headers })`.
+- `request.query` is the one `URLSearchParams` the request sends; change it in place, or pass a modified copy to `next({ ...request, query, headers })`. Its wire form is `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization.
 
 ## Refresh bearer token once on 401
 

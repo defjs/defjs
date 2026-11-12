@@ -128,7 +128,7 @@ describe("request http runtime", () => {
 
     expect(error).toBeNull();
     expect(capturedRequest?.endpoint).toBe("/search");
-    expect(capturedRequest?.queryString).toBe("");
+    expect(capturedRequest?.query?.toString()).toBe("");
     expect(Array.from(capturedRequest?.headers?.entries() ?? [])).toEqual([]);
   });
 
@@ -210,8 +210,8 @@ describe("request http runtime", () => {
     expect(callCount).toBe(2);
     expect(capturedRequest?.baseEndpoint).toBe("https://example.com/api");
     expect(capturedRequest?.endpoint).toBe("/inspect/7");
-    expect(capturedRequest?.queryParams?.get("include")).toBe("true");
-    expect(capturedRequest?.queryParams?.getAll("tags")).toEqual(["a", "b"]);
+    expect(capturedRequest?.query?.get("include")).toBe("true");
+    expect(capturedRequest?.query?.getAll("tags")).toEqual(["a", "b"]);
     expect(capturedRequest?.headers?.get("x-token")).toBe("secret");
     expect(capturedRequest?.body).toBe('{"nickname":"Miao"}');
   });

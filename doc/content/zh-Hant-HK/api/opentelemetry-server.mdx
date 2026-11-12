@@ -56,7 +56,7 @@ span hook 只會喺有傳入 `tracer` 時執行。`startSpanHook` 會喺所屬 H
 
 `responseHook` 收到傳輸層回傳嘅內容：HTTP 係 `HttpResponse`，SSE 係啟動成功之後嘅事件流 handle，WebSocket 係開啟成功之後嘅 session。第三個參數係原本嘅 request。
 
-預設情況下，`url.full` 只會將 `request.endpoint` 對可選嘅 `request.baseEndpoint` 解析；獨立嘅 `request.queryString` 唔會附加上去。呢條界線並唔係 query redaction。按照 OpenTelemetry 語義慣例嘅要求，端點 userinfo 入面嘅憑證會被換成 `REDACTED:REDACTED`，預設敏感 query key（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）嘅值會被換成 `REDACTED`，但 package 冇其他內建 redactor 或者敏感 key 政策。`startSpanHook` 回傳嘅 `url.full` 會以同樣方式 redact，但應用程式喺 `requestHook` 或 `responseHook` 入面透過 `Span` 物件寫入嘅 URL 唔會被攔截，所以請明確建立，有需要時再自行 redact：
+預設情況下，`url.full` 只會將 `request.endpoint` 對可選嘅 `request.baseEndpoint` 解析；`request.query` 唔會附加上去。呢條界線並唔係 query redaction。按照 OpenTelemetry 語義慣例嘅要求，端點 userinfo 入面嘅憑證會被換成 `REDACTED:REDACTED`，預設敏感 query key（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）嘅值會被換成 `REDACTED`，但 package 冇其他內建 redactor 或者敏感 key 政策。`startSpanHook` 回傳嘅 `url.full` 會以同樣方式 redact，但應用程式喺 `requestHook` 或 `responseHook` 入面透過 `Span` 物件寫入嘅 URL 唔會被攔截，所以請明確建立，有需要時再自行 redact：
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example

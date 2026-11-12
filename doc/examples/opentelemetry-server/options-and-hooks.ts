@@ -21,8 +21,8 @@ const client = createClient(
         const url = createResolvedRequestUrl(
           request.baseEndpoint,
           request.endpoint,
+          request.query?.toString(),
         );
-        if (request.queryString) url.search = request.queryString;
         url.searchParams.delete("access_token");
         return { ...attributes, "url.full": url.href };
       },

@@ -74,6 +74,8 @@ Par défaut, les scalaires et tableaux de scalaires (clés répétées) sont enc
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+La chaîne renvoyée est analysée dans la `query` de la requête, qui envoie donc `query.toString()`, la sérialisation application/x-www-form-urlencoded de l’URL Standard. L’espace devient `+`, et les crochets de `filter[status]=paid` partent sous la forme `filter%5Bstatus%5D=paid`, qu’un décodeur de formulaire relit comme le même nom.
+
 ### Formats du corps de requête
 
 `GET` et `HEAD` ne peuvent pas transporter de corps. Pour les autres méthodes, le format est déterminé selon la valeur renvoyée par le `builder` :

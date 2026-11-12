@@ -207,7 +207,7 @@ describe("Fetch handler responses", () => {
       endpoint: "/delay",
       method: "GET",
       signal: abort.signal,
-      queryParams: new URLSearchParams({ ms: "5000" }),
+      query: new URLSearchParams({ ms: "5000" }),
     };
 
     setTimeout(() => {
@@ -376,7 +376,7 @@ describe("Fetch handler responses", () => {
       endpoint: "/delay",
       method: "GET",
       signal,
-      queryParams: new URLSearchParams({ ms: "10000" }),
+      query: new URLSearchParams({ ms: "10000" }),
     };
 
     await expect(fetchHandler(requestConfig)).rejects.toBe(ERR_TIMEOUT);

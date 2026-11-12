@@ -33,10 +33,6 @@ import {
   waitForSettledPromises,
 } from "../../test/mocks";
 import { createOpenTelemetryWebSocketInterceptor } from "./web_socket";
-import {
-  resolveTransportQuery,
-  resolveRequestUrl,
-} from "../../../core/src/internal/url";
 import { method } from "../../test/method";
 
 function createMockWsPropagator(): TextMapPropagator {
@@ -340,10 +336,10 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
     expect(method(mockPropagator, "inject")).toHaveBeenCalled();
     const calls = vi.mocked(next).mock.calls;
-    expect(calls[0]?.[0].queryParams?.get("traceparent")).toBe("mock-trace-id");
-    expect(calls[0]?.[0].queryParams?.get("tracestate")).toBe("vendor=value");
-    expect(calls[0]?.[0].queryParams?.get("baggage")).toBe("tenant=acme");
-    expect(calls[0]?.[0].queryString).toBe(
+    expect(calls[0]?.[0].query?.get("traceparent")).toBe("mock-trace-id");
+    expect(calls[0]?.[0].query?.get("tracestate")).toBe("vendor=value");
+    expect(calls[0]?.[0].query?.get("baggage")).toBe("tenant=acme");
+    expect(calls[0]?.[0].query?.toString()).toBe(
       "traceparent=mock-trace-id&tracestate=vendor%3Dvalue&baggage=tenant%3Dacme",
     );
   });
@@ -362,11 +358,11 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     await interceptor.fn(req, next);
 
     const calls = vi.mocked(next).mock.calls;
-    expect(calls[0]?.[0].queryParams?.get("room")).toBe("alpha");
-    expect(calls[0]?.[0].queryParams?.get("traceparent")).toBe("mock-trace-id");
+    expect(calls[0]?.[0].query?.get("room")).toBe("alpha");
+    expect(calls[0]?.[0].query?.get("traceparent")).toBe("mock-trace-id");
   });
 
-  test("should append propagation params without rewriting existing queryString", async () => {
+  test("should append propagation params after the existing query without changing the request's own", async () => {
     const { tracer } = createMockTracer();
     const interceptor = createOpenTelemetryWebSocketInterceptor({
       tracer,
@@ -374,24 +370,21 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       queryPropagation: true,
     });
 
-    const req = {
-      ...makeWsRequest(
-        new URLSearchParams([
-          ["room", "alpha"],
-          ["space", "hello world"],
-        ]),
-      ),
-      queryString: "space=hello%20world&room=alpha",
-    };
+    const req = makeWsRequest(
+      new URLSearchParams([
+        ["space", "hello world"],
+        ["room", "alpha"],
+      ]),
+    );
     const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
     const calls = vi.mocked(next).mock.calls;
-    expect(calls[0]?.[0].queryParams?.get("traceparent")).toBe("mock-trace-id");
-    expect(calls[0]?.[0].queryString).toBe(
-      "space=hello%20world&room=alpha&traceparent=mock-trace-id&tracestate=vendor%3Dvalue&baggage=tenant%3Dacme",
+    expect(calls[0]?.[0].query?.toString()).toBe(
+      "space=hello+world&room=alpha&traceparent=mock-trace-id&tracestate=vendor%3Dvalue&baggage=tenant%3Dacme",
     );
+    expect(req.query?.get("traceparent")).toBeNull();
   });
 
   test("should create span with correct name", async () => {
@@ -837,22 +830,18 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    const req = {
-      ...makeWsRequest(new URLSearchParams({ room: "alpha" })),
-      queryString: "room=alpha",
-    };
+    const req = makeWsRequest(new URLSearchParams({ room: "alpha" }));
     const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
     expect(method(mockPropagator, "inject")).not.toHaveBeenCalled();
     const calls = vi.mocked(next).mock.calls;
-    expect(calls[0]?.[0].queryParams?.get("traceparent")).toBeNull();
-    expect(calls[0]?.[0].queryParams).toBe(req.queryParams);
-    expect(calls[0]?.[0].queryString).toBe("room=alpha");
+    expect(calls[0]?.[0].query?.get("traceparent")).toBeNull();
+    expect(calls[0]?.[0].query).toBe(req.query);
   });
 
-  test("should keep queryString unchanged when propagator injects nothing", async () => {
+  test("should keep the query unchanged when propagator injects nothing", async () => {
     const { tracer } = createMockTracer();
     const noOpPropagator: TextMapPropagator = {
       inject: vi.fn(),
@@ -871,11 +860,10 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     await interceptor.fn(req, next);
 
     const calls = vi.mocked(next).mock.calls;
-    expect(calls[0]?.[0].queryParams?.get("room")).toBe("alpha");
-    expect(calls[0]?.[0].queryString).toBe("room=alpha");
+    expect(calls[0]?.[0].query?.toString()).toBe("room=alpha");
   });
 
-  test("should fall back to empty queryString when missing and nothing injected", async () => {
+  test("should fall back to an empty query when missing and nothing injected", async () => {
     const { tracer } = createMockTracer();
     const noOpPropagator: TextMapPropagator = {
       inject: vi.fn(),
@@ -888,13 +876,13 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       queryPropagation: true,
     });
 
-    const req = { ...makeWsRequest(), queryString: undefined };
+    const req = { ...makeWsRequest(), query: undefined };
     const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
 
     await interceptor.fn(req, next);
 
     const calls = vi.mocked(next).mock.calls;
-    expect(calls[0]?.[0].queryString).toBe("");
+    expect(calls[0]?.[0].query?.toString()).toBe("");
   });
 
   test("should call requestHook before request", async () => {
@@ -1116,11 +1104,6 @@ describe("WebSocket query propagation with W3C propagators", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  // Mirrors core: both query forms present, queryString being the serialized form that reaches the socket URL.
-  function makeQueryRequest(queryString: string): HttpRequest {
-    return { ...makeWsRequest(new URLSearchParams(queryString)), queryString };
-  }
-
   async function intercept(
     req: HttpRequest,
     baggage?: string,
@@ -1148,132 +1131,84 @@ describe("WebSocket query propagation with W3C propagators", () => {
   const pairsOf = (params: URLSearchParams | undefined) =>
     Array.from(params ?? []);
 
+  const queryOf = (query: string) => makeWsRequest(new URLSearchParams(query));
+
   test("replaces same-name propagation parameters instead of appending after them", async () => {
     const sent = await intercept(
-      makeQueryRequest(
+      queryOf(
         `room=alpha&traceparent=${staleTraceparent}&baggage=tenant%3Dold`,
       ),
       "new",
     );
 
-    expect(sent.queryString).toBe(
-      `room=alpha&traceparent=${currentTraceparent}&baggage=tenant%3Dnew`,
-    );
-    expect(pairsOf(sent.queryParams)).toEqual(
-      pairsOf(new URLSearchParams(sent.queryString)),
-    );
+    expect(pairsOf(sent.query)).toEqual([
+      ["room", "alpha"],
+      ["traceparent", currentTraceparent],
+      ["baggage", "tenant=new"],
+    ]);
   });
 
   test("drops every earlier pair of the same name", async () => {
     const sent = await intercept(
-      makeQueryRequest(
-        `traceparent=first&room=alpha&traceparent=${staleTraceparent}`,
-      ),
+      queryOf(`traceparent=first&room=alpha&traceparent=${staleTraceparent}`),
     );
 
-    expect(sent.queryString).toBe(
-      `room=alpha&traceparent=${currentTraceparent}`,
-    );
-    expect(sent.queryParams?.getAll("traceparent")).toEqual([
-      currentTraceparent,
+    expect(pairsOf(sent.query)).toEqual([
+      ["room", "alpha"],
+      ["traceparent", currentTraceparent],
     ]);
   });
 
-  test("keeps the serialized form of every other parameter", async () => {
+  test("keeps every other parameter, in order", async () => {
     const sent = await intercept(
-      makeQueryRequest(
+      queryOf(
         `space=hello%20world&traceparent=${staleTraceparent}&path=a%2Fb&tag=x&tag=y`,
       ),
     );
 
-    expect(sent.queryString).toBe(
-      `space=hello%20world&path=a%2Fb&tag=x&tag=y&traceparent=${currentTraceparent}`,
-    );
-    expect(pairsOf(sent.queryParams)).toEqual(
-      pairsOf(new URLSearchParams(sent.queryString)),
-    );
+    expect(pairsOf(sent.query)).toEqual([
+      ["space", "hello world"],
+      ["path", "a/b"],
+      ["tag", "x"],
+      ["tag", "y"],
+      ["traceparent", currentTraceparent],
+    ]);
   });
 
   test("matches percent-encoded names the way the receiver decodes them", async () => {
     const sent = await intercept(
-      makeQueryRequest(`room=alpha&trace%70arent=${staleTraceparent}`),
+      queryOf(`room=alpha&trace%70arent=${staleTraceparent}`),
     );
 
-    expect(sent.queryString).toBe(
-      `room=alpha&traceparent=${currentTraceparent}`,
-    );
+    expect(pairsOf(sent.query)).toEqual([
+      ["room", "alpha"],
+      ["traceparent", currentTraceparent],
+    ]);
   });
 
-  test.each([
-    [
-      "room=alpha&?traceparent=application-data&traceparent=stale",
-      "room=alpha&?traceparent=application-data",
-    ],
-    [
-      "traceparent=stale&?traceparent=application-data",
-      "??traceparent=application-data",
-    ],
-    [
-      "?traceparent=stale&?traceparent=application-data",
-      "??traceparent=application-data",
-    ],
-    [
-      "??traceparent=application-data&trace%70arent=stale",
-      "??traceparent=application-data",
-    ],
-    [
-      "room=a+b&&%3Ftraceparent=application-data&traceparent=stale&tag=%2f&tag=two&",
-      "room=a+b&&%3Ftraceparent=application-data&tag=%2f&tag=two&",
-    ],
-    [
-      "&&traceparent=stale&&flag&=empty&trace%70arent=duplicate&",
-      "&&&flag&=empty&",
-    ],
-  ])(
-    "preserves querySerializer bytes and decoded key identity for %s",
-    async (serialized, kept) => {
-      const query = resolveTransportQuery({ room: "alpha" }, () => serialized);
-      const req = { ...makeWsRequest(), ...query };
-      const sent = await intercept(req);
+  test("keeps a pair whose name only resembles an injected one", async () => {
+    const sent = await intercept(
+      makeWsRequest(
+        new URLSearchParams([
+          ["?traceparent", "application-data"],
+          ["traceparent", "stale"],
+        ]),
+      ),
+    );
 
-      expect(sent.queryString).toBe(
-        `${kept}&traceparent=${currentTraceparent}`,
-      );
-      const before = new URLSearchParams(serialized);
-      const received = resolveRequestUrl(sent).searchParams;
-      const unaffected = [...before].filter(([key]) => key !== "traceparent");
-      expect([...received]).toEqual([
-        ...unaffected,
-        ["traceparent", currentTraceparent],
-      ]);
-      expect(pairsOf(sent.queryParams)).toEqual([...received]);
-    },
-  );
+    expect(pairsOf(sent.query)).toEqual([
+      ["?traceparent", "application-data"],
+      ["traceparent", currentTraceparent],
+    ]);
+  });
 
   test("keeps a propagation parameter the propagator has nothing to inject for", async () => {
-    const sent = await intercept(
-      makeQueryRequest("baggage=tenant%3Dkept&room=alpha"),
-    );
+    const sent = await intercept(queryOf("baggage=tenant%3Dkept&room=alpha"));
 
-    expect(sent.queryString).toBe(
-      `baggage=tenant%3Dkept&room=alpha&traceparent=${currentTraceparent}`,
-    );
-  });
-
-  test("derives the query string from queryParams when queryString is absent", async () => {
-    const req = {
-      ...makeWsRequest(
-        new URLSearchParams({ room: "alpha", traceparent: staleTraceparent }),
-      ),
-      queryString: undefined,
-    };
-    const sent = await intercept(req);
-
-    expect(sent.queryString).toBe(
-      `room=alpha&traceparent=${currentTraceparent}`,
-    );
-    expect(pairsOf(sent.queryParams)).toEqual(
-      pairsOf(new URLSearchParams(sent.queryString)),
-    );
+    expect(pairsOf(sent.query)).toEqual([
+      ["baggage", "tenant=kept"],
+      ["room", "alpha"],
+      ["traceparent", currentTraceparent],
+    ]);
   });
 });

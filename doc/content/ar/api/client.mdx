@@ -44,7 +44,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="withQuerySerializer" />
 
-يستبدل ترميز الاستعلام لـ HTTP وSSE وWebSocket. يتلقى `serializer(query)` **كائن السلك المرمَّز** (الأسماء المستعارة مطبَّقة، و`Date` بصيغة ISO، و`bigint` كسلسلة) ويجب أن يُرجع سلسلة الاستعلام دون `?` بادئة. لا يُستدعى عندما لا يكون للطلب استعلام. دالة البناء التي تُرجع `URLSearchParams` تتجاوزه.
+يستبدل ترميز الاستعلام لـ HTTP وSSE وWebSocket. يتلقى `serializer(query)` **كائن السلك المرمَّز** (الأسماء المستعارة مطبَّقة، و`Date` بصيغة ISO، و`bigint` كسلسلة) ويجب أن يُرجع سلسلة الاستعلام دون `?` بادئة. تُحلَّل السلسلة في `query` الخاصة بالطلب، فيرسل الطلب `query.toString()`، أي تسلسل application/x-www-form-urlencoded في URL Standard: المسافة `+` وحرف `[` يصبح `%5B`، ولا تُحفظ البايتات التي كتبتها الدالة. لا يُستدعى عندما لا يكون للطلب استعلام. دالة البناء التي تُرجع `URLSearchParams` تتجاوزه.
 
 ### withHeaders()
 

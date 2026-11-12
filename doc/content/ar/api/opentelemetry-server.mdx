@@ -56,7 +56,7 @@ HTTP وSSE وWebSocket مفعّلة افتراضيًا. مرّر `{ enabled: fal
 
 يتلقى `responseHook` ما أرجعه النقل: `HttpResponse` لـ HTTP، ومقبض التدفق لـ SSE بعد نجاح البدء، والجلسة لـ WebSocket بعد فتحها. وسيطه الثالث هو الطلب الأصلي.
 
-افتراضيًا، يحل `url.full` فقط `request.endpoint` مقابل `request.baseEndpoint` الاختياري؛ ولا يُلحَق `request.queryString` مستقل. ذلك الحد ليس حجبًا للاستعلام. كما تتطلب اصطلاحات OpenTelemetry الدلالية، تُستبدل بيانات الاعتماد في userinfo لنقطة النهاية بـ `REDACTED:REDACTED`، وتُستبدل قيم مفاتيح الاستعلام الحساسة الافتراضية (`sig` و`Signature` و`AWSAccessKeyId` و`X-Amz-Signature` و`X-Amz-Credential` و`X-Amz-Security-Token` و`X-Goog-Signature`) بـ `REDACTED`، لكن الحزمة بلا محجوب مدمج آخر أو سياسة مفاتيح حساسة. يُحجَب `url.full` الذي يُرجعه `startSpanHook` بالطريقة نفسها، أما عنوان URL يكتبه التطبيق عبر كائن `Span` في `requestHook` أو `responseHook` فلا يُعترَض، فابنِه واحجبه عند الحاجة صراحةً:
+افتراضيًا، يحل `url.full` فقط `request.endpoint` مقابل `request.baseEndpoint` الاختياري؛ ولا يُلحَق `request.query`. ذلك الحد ليس حجبًا للاستعلام. كما تتطلب اصطلاحات OpenTelemetry الدلالية، تُستبدل بيانات الاعتماد في userinfo لنقطة النهاية بـ `REDACTED:REDACTED`، وتُستبدل قيم مفاتيح الاستعلام الحساسة الافتراضية (`sig` و`Signature` و`AWSAccessKeyId` و`X-Amz-Signature` و`X-Amz-Credential` و`X-Amz-Security-Token` و`X-Goog-Signature`) بـ `REDACTED`، لكن الحزمة بلا محجوب مدمج آخر أو سياسة مفاتيح حساسة. يُحجَب `url.full` الذي يُرجعه `startSpanHook` بالطريقة نفسها، أما عنوان URL يكتبه التطبيق عبر كائن `Span` في `requestHook` أو `responseHook` فلا يُعترَض، فابنِه واحجبه عند الحاجة صراحةً:
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example

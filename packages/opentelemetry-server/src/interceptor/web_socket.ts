@@ -51,17 +51,20 @@ export function createOpenTelemetryWebSocketInterceptor(
       "WebSocket",
     );
 
-    let queryParams = req.queryParams;
-    let queryString = req.queryString;
+    let query = req.query;
 
     if (queryPropagation) {
+      // The injected pairs go last, after any earlier pair of the same name, so a receiver that reads the first
+      // value of a name gets the injected one. The caller's own query is left as it was.
       const injected = new URLSearchParams();
       propagator.inject(call.context, injected, carrierSetter);
-      queryString = replaceInjectedPairs(
-        queryString ?? new URLSearchParams(queryParams).toString(),
-        injected,
-      );
-      queryParams = new URLSearchParams(queryString);
+      query = new URLSearchParams(req.query);
+      for (const name of injected.keys()) {
+        query.delete(name);
+      }
+      for (const [name, value] of injected) {
+        query.append(name, value);
+      }
     }
 
     return observeConnection(
@@ -69,36 +72,8 @@ export function createOpenTelemetryWebSocketInterceptor(
       options,
       call,
       req,
-      () => next({ ...req, queryParams, queryString }),
+      () => next({ ...req, query }),
       webSocketOutcome,
     );
   });
-}
-
-/**
- * Put the injected pairs last and drop earlier pairs of the same name, so a receiver reading the first value gets the injected one.
- * Every other pair keeps the bytes it was serialized with.
- */
-function replaceInjectedPairs(
-  queryString: string,
-  injected: URLSearchParams,
-): string {
-  const added = injected.toString();
-  if (!added) return queryString;
-  const prefixed = queryString.startsWith("?");
-  const query = prefixed ? queryString.slice(1) : queryString;
-  // Only the whole query has a '?' prefix. In a pair it is part of the key; '&' prevents stripping it.
-  const kept = query
-    ? query
-        .split("&")
-        .filter(
-          (pair) =>
-            !injected.has(
-              new URLSearchParams(`&${pair}`).keys().next().value ?? "",
-            ),
-        )
-    : [];
-  const combined = [...kept, added].join("&");
-  // A surviving literal '?' key may become first after filtering. Keep it separate from the query prefix.
-  return prefixed || combined.startsWith("?") ? `?${combined}` : combined;
 }

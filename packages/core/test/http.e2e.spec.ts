@@ -210,7 +210,7 @@ describe("request builder through the real server", () => {
     );
   });
 
-  test("sends a builder URLSearchParams query verbatim and skips the query serializer", async () => {
+  test("sends a builder URLSearchParams query and skips the query serializer", async () => {
     const query = new URLSearchParams();
     query.append("tag", "a");
     query.append("tag", "b");
@@ -230,7 +230,7 @@ describe("request builder through the real server", () => {
     expect(report.rawQuery).toBe("tag=a&tag=b");
   });
 
-  test("passes alias-encoded nested query objects to withQuerySerializer and the server receives that string", async () => {
+  test("passes alias-encoded nested query objects to withQuerySerializer and the server receives that query form-urlencoded", async () => {
     let seen: unknown;
     const serialized = createClient(
       withEndpoint(host),
@@ -267,7 +267,7 @@ describe("request builder through the real server", () => {
       tags: ["a", "b"],
     });
     expect(report.rawQuery).toBe(
-      "filter[state_code]=open&page_size=10&tags=a&tags=b",
+      "filter%5Bstate_code%5D=open&page_size=10&tags=a&tags=b",
     );
   });
 

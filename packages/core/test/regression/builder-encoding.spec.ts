@@ -362,7 +362,7 @@ describe("builder refactor adversarial audit", () => {
     });
     expect(error).toBeNull();
     expect(serialized).toEqual({ filters: { tag_name: "large", values } });
-    expect(captured?.queryString).toContain("payload=");
+    expect(captured?.query?.toString()).toContain("payload=");
   });
 
   test("keeps BufferSource view offsets when fetch creates the Request", async () => {
@@ -509,8 +509,8 @@ describe("builder refactor adversarial audit", () => {
 
     const [error] = await endpoint(client, { displayName: "Ada" });
     expect(error).toBeNull();
-    expect(captured?.queryString).toBe("page=2");
-    expect(captured?.queryParams?.get("page")).toBe("2");
+    expect(captured?.query?.toString()).toBe("page=2");
+    expect(captured?.query?.get("page")).toBe("2");
     expect(captured?.headers?.get("x-request")).toBe("yes");
     expect(captured?.body).toBe('{"display_name":"Ada"}');
   });
@@ -542,7 +542,7 @@ describe("builder refactor adversarial audit", () => {
     const [error, stream] = await feed(client, { room: "blue", since: "2" });
     expect(error).toBeNull();
     expect(captured?.endpoint).toBe("/rooms/blue/events");
-    expect(captured?.queryString).toBe("since=2");
+    expect(captured?.query?.toString()).toBe("since=2");
     await stream?.closed;
   });
 
@@ -583,7 +583,7 @@ describe("builder refactor adversarial audit", () => {
     const [error, socket] = await Chat(client, { room: "blue" });
     expect(error).toBeNull();
     expect(captured?.endpoint).toBe("/e2e/ws/blue");
-    expect(captured?.queryString).toBe("since=2");
+    expect(captured?.query?.toString()).toBe("since=2");
     if (!socket) throw new Error("Expected socket");
     socket.close();
     await socket.closed;
@@ -856,8 +856,8 @@ describe("builder fixes re-audit", () => {
       expect(error).toBeNull();
       expect(captured?.endpoint).toBe("/events/safe");
       expect(captured?.headers?.get("__proto__")).toBe("safe");
-      expect(captured?.queryParams?.get("__proto__")).toBe("safe");
-      expect(captured?.queryString).toBe("__proto__=safe");
+      expect(captured?.query?.get("__proto__")).toBe("safe");
+      expect(captured?.query?.toString()).toBe("__proto__=safe");
       expect(captured?.body).toBe('{"__proto__":"safe"}');
       expect(received?.url).toBe(
         "https://example.test/events/safe?__proto__=safe",

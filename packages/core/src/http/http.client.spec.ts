@@ -20,7 +20,7 @@ describe("request http runtime with client config", () => {
       withEndpoint("https://example.com"),
       withInterceptors(
         createHttpInterceptor((request) => {
-          capturedRequestUrl = `${request.endpoint}?${request.queryString ?? ""}`;
+          capturedRequestUrl = `${request.endpoint}?${request.query?.toString() ?? ""}`;
           return Promise.resolve(
             makeResponse({
               body: null,

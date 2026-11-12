@@ -56,7 +56,7 @@ HTTP、SSE、WebSocket はデフォルトでオンです。トランスポート
 
 `responseHook` は、トランスポートが返したものを受け取ります。HTTP では `HttpResponse`、SSE では開始に成功したあとのストリームハンドル、WebSocket では開いたあとのセッションです。第 3 引数は元のリクエストです。
 
-デフォルトでは、`url.full` は任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、独立した `request.queryString` は付けません。その境界はクエリの秘匿化ではありません。OpenTelemetry のセマンティック規約が求めるとおり、エンドポイントの userinfo にある認証情報は `REDACTED:REDACTED` に置き換えられ、デフォルトの機密クエリキー（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）の値は `REDACTED` に置き換えられますが、このパッケージにそれ以外の組み込みの秘匿化処理や機密キーのポリシーはありません。`startSpanHook` が返す `url.full` も同じように秘匿化されますが、`requestHook` や `responseHook` の中でアプリケーションが `Span` オブジェクトを通じて書いた URL にはライブラリが手を加えないので、必要なら明示的に組み立て、必要に応じて秘匿化してください。
+デフォルトでは、`url.full` は任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、`request.query` は付けません。その境界はクエリの秘匿化ではありません。OpenTelemetry のセマンティック規約が求めるとおり、エンドポイントの userinfo にある認証情報は `REDACTED:REDACTED` に置き換えられ、デフォルトの機密クエリキー（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）の値は `REDACTED` に置き換えられますが、このパッケージにそれ以外の組み込みの秘匿化処理や機密キーのポリシーはありません。`startSpanHook` が返す `url.full` も同じように秘匿化されますが、`requestHook` や `responseHook` の中でアプリケーションが `Span` オブジェクトを通じて書いた URL にはライブラリが手を加えないので、必要なら明示的に組み立て、必要に応じて秘匿化してください。
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example

@@ -280,15 +280,14 @@ function makeSSECloseInfo(
 }
 
 export function makeWsRequest(
-  queryParams?: URLSearchParams,
+  query?: URLSearchParams,
   headers?: Headers,
 ): HttpRequest {
   return {
     method: "GET",
     endpoint: "/ws",
     baseEndpoint: "wss://api.example.com",
-    queryParams: queryParams ?? new URLSearchParams(),
-    queryString: queryParams?.toString() ?? "",
+    query: query ?? new URLSearchParams(),
     headers: headers ?? new Headers(),
   };
 }

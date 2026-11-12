@@ -480,13 +480,16 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
   });
 
-  test("should keep the resolved HTTP URL initial and omit req.queryString when startSpanHook is absent", async () => {
+  test("should keep the resolved HTTP URL initial and omit req.query when startSpanHook is absent", async () => {
     const { tracer } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
     });
-    const req = { ...makeHttpRequest(), queryString: "tenant=acme" };
+    const req = {
+      ...makeHttpRequest(),
+      query: new URLSearchParams({ tenant: "acme" }),
+    };
 
     await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
@@ -519,14 +522,17 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     ).toBe("/test?literal=kept");
   });
 
-  test("should let startSpanHook explicitly include req.queryString in url.full", async () => {
+  test("should let startSpanHook explicitly include req.query in url.full", async () => {
     const { tracer } = createMockTracer();
-    const req = { ...makeHttpRequest(), queryString: "tenant=acme" };
+    const req = {
+      ...makeHttpRequest(),
+      query: new URLSearchParams({ tenant: "acme" }),
+    };
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
       startSpanHook: (request) => ({
-        "url.full": `${request.baseEndpoint}${request.endpoint}?${request.queryString}`,
+        "url.full": `${request.baseEndpoint}${request.endpoint}?${request.query}`,
       }),
     });
 

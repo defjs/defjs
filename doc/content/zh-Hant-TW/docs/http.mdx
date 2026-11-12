@@ -74,6 +74,8 @@ SDK 開發者用 `defineRequest` 定義每項 HTTP 操作：HTTP 方法、路徑
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+你回傳的字串會被解析為請求的 `query`，因此請求送出的是 `query.toString()`，也就是 URL Standard 的 application/x-www-form-urlencoded 序列化。空白是 `+`，`filter[status]=paid` 中的方括號會以 `filter%5Bstatus%5D=paid` 送出，表單解碼器會把它讀回同一個名稱。
+
 ### 請求本文格式
 
 `GET` 與 `HEAD` 不能攜帶本文。其他方法的本文格式，取決於 `builder` 回傳的值：

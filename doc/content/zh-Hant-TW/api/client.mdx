@@ -44,7 +44,7 @@ description: createClient、選項輔助函式與 Client 型別。
 
 <ApiSignature name="withQuerySerializer" />
 
-替換 HTTP、SSE 與 WebSocket 的 query 編碼。`serializer(query)` 收到的是**已編碼的傳輸物件**（別名已套用、`Date` 已是 ISO、`bigint` 已是字串），必須回傳不含開頭 `?` 的 query string。請求沒有 query 時不會呼叫它。builder 回傳 `URLSearchParams` 時也會跳過它。
+替換 HTTP、SSE 與 WebSocket 的 query 編碼。`serializer(query)` 收到的是**已編碼的傳輸物件**（別名已套用、`Date` 已是 ISO、`bigint` 已是字串），必須回傳不含開頭 `?` 的 query string。該字串會被解析為請求的 `query`，因此請求送出的是 `query.toString()`，也就是 URL Standard 的 application/x-www-form-urlencoded 序列化：空白是 `+`、`[` 是 `%5B`，函式寫出的位元組不會被保留。請求沒有 query 時不會呼叫它。builder 回傳 `URLSearchParams` 時也會跳過它。
 
 ### withHeaders()
 

@@ -61,7 +61,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 ### HttpRequest
 
-طلب صادر موحّد: `method` و`endpoint` و`headers` و`body` و`signal` و`operation` و`withCredentials` و`finalizeHeaders` و`downloadProgress` / `uploadProgress` و`baseEndpoint` و`queryString` و`queryParams`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات على ذلك، لا على مدخل struct. يرى المعترضون `queryParams` كـ `new URLSearchParams(queryString)`. دالة `builder` التي تُرجع `URLSearchParams` يمرّر تلك النسخة كما هي. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من نوع struct لـ `output` و`error` في التعريف ولا يجوز تغييرهما.
+طلب صادر موحّد: `method` و`endpoint` و`headers` و`body` و`signal` و`operation` و`withCredentials` و`finalizeHeaders` و`downloadProgress` / `uploadProgress` و`baseEndpoint` و`query`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات على ذلك، لا على مدخل struct. `query` هو الاستعلام الوحيد الذي يرسله الطلب، وهو `URLSearchParams`: يغيّره المعترض في مكانه أو يمرّر بديلًا إلى `next()`. عندما تُرجع دالة `builder` كائن `URLSearchParams` يُنسخ ذلك الكائن، وتُحلَّل في `query` السلسلة التي تُرجعها دالة `withQuerySerializer`. الصيغة السلكية هي `query.toString()`، أي تسلسل application/x-www-form-urlencoded في URL Standard، فالمسافة تصبح `+`، والاستعلام `query` الفارغ لا يضيف `?`. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من نوع struct لـ `output` و`error` في التعريف ولا يجوز تغييرهما.
 
 ### HttpMeta
 

@@ -67,9 +67,11 @@ describe("http request helpers", () => {
     expect(request.baseEndpoint).toBe("https://api.example.com/v1");
     expect(request.endpoint).toBe("/user/7");
     expect(request.operation).toBe("users.update");
-    expect(request.queryParams?.get("custom")).toBe("include=true");
-    expect(request.queryParams?.getAll("tags")).toEqual(["a", "b"]);
-    expect(request.queryString).toBe("custom=include=true&tags=a&tags=b");
+    expect(request.query?.get("custom")).toBe("include=true");
+    expect(request.query?.getAll("tags")).toEqual(["a", "b"]);
+    expect(request.query?.toString()).toBe(
+      "custom=include%3Dtrue&tags=a&tags=b",
+    );
     expect(request.headers?.get("x-token")).toBe("secret");
     expect(request.headers?.has("content-type")).toBe(false);
     expect(request.bodyContentType).toBe("application/json");
@@ -105,7 +107,7 @@ describe("http request helpers", () => {
       },
     );
 
-    expect(request.queryString).toBe(
+    expect(request.query?.toString()).toBe(
       `include=true&filter=${encodeURIComponent(JSON.stringify(["active"]))}`,
     );
   });
@@ -146,7 +148,7 @@ describe("http request helpers", () => {
     );
 
     expect(request.endpoint).toBe("/orgs/org_1/users");
-    expect(request.queryString).toBe("");
+    expect(request.query?.toString()).toBe("");
     expect(request.body).toBe(
       '{"profile":{"display_name":"Miao","internalNote":"local"}}',
     );
@@ -192,7 +194,7 @@ describe("http request helpers", () => {
     );
 
     expect(request.endpoint).toBe("/users/7");
-    expect(request.queryString).toBe("name=Jack");
+    expect(request.query?.toString()).toBe("name=Jack");
     if (typeof request.body !== "string")
       throw new Error("expected string body");
     expect(JSON.parse(request.body)).toEqual({

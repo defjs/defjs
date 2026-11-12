@@ -56,7 +56,7 @@ span 鉤子只有在傳入 `tracer` 時才會執行。`startSpanHook` 會在對�
 
 `responseHook` 收到的是傳輸層回傳的東西：HTTP 是 `HttpResponse`，SSE 是啟動成功後的串流 handle，WebSocket 是開啟後的工作階段。它的第三個參數是原始請求。
 
-預設的 `url.full` 只會把 `request.endpoint` 對照選用的 `request.baseEndpoint` 解析，不會附加獨立的 `request.queryString`。這條界線不是 query 遮蔽。依照 OpenTelemetry 語意慣例的要求，端點 userinfo 裡的憑證會被換成 `REDACTED:REDACTED`，預設敏感 query 鍵（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）的值會被換成 `REDACTED`，但套件沒有其他內建的遮蔽器或敏感鍵策略。`startSpanHook` 回傳的 `url.full` 會以同樣方式遮蔽，但應用程式在 `requestHook` 或 `responseHook` 裡透過 `Span` 物件寫入的 URL 不會被攔截，因此請自行建構，並視需要明確遮蔽：
+預設的 `url.full` 只會把 `request.endpoint` 對照選用的 `request.baseEndpoint` 解析，不會附加 `request.query`。這條界線不是 query 遮蔽。依照 OpenTelemetry 語意慣例的要求，端點 userinfo 裡的憑證會被換成 `REDACTED:REDACTED`，預設敏感 query 鍵（`sig`、`Signature`、`AWSAccessKeyId`、`X-Amz-Signature`、`X-Amz-Credential`、`X-Amz-Security-Token`、`X-Goog-Signature`）的值會被換成 `REDACTED`，但套件沒有其他內建的遮蔽器或敏感鍵策略。`startSpanHook` 回傳的 `url.full` 會以同樣方式遮蔽，但應用程式在 `requestHook` 或 `responseHook` 裡透過 `Span` 物件寫入的 URL 不會被攔截，因此請自行建構，並視需要明確遮蔽：
 
 <include cwd>
   examples/api/opentelemetry-server-transport-options.ts#example

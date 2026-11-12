@@ -54,7 +54,7 @@ description: defineRequest、請求選項，以及 HTTP 請求／回應型別。
 
 ### HttpRequest
 
-正規化後的外送請求：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`finalizeHeaders`、`downloadProgress`／`uploadProgress`、`baseEndpoint`、`queryString` 與 `queryParams`。攔截器看到它時，`body` 已經是傳輸值——JSON 就是一串 JSON 文字——所以 HMAC 與摘要請對它計算，而不是對 struct input 計算。攔截器看到的 `queryParams` 是 `new URLSearchParams(queryString)`。builder 回傳 `URLSearchParams` 時，會把該實例直接傳下去。`responseType` 與 `errorResponseType` 是唯讀的：它們由定義的 `output` 與 `error` struct 種類推導而來，不能修改。
+正規化後的外送請求：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`finalizeHeaders`、`downloadProgress`／`uploadProgress`、`baseEndpoint` 與 `query`。攔截器看到它時，`body` 已經是傳輸值——JSON 就是一串 JSON 文字——所以 HMAC 與摘要請對它計算，而不是對 struct input 計算。`query` 是請求會送出的唯一 query，型別為 `URLSearchParams`：攔截器可以就地修改它，也可以把替換值傳給 `next()`。builder 回傳 `URLSearchParams` 時，會複製該實例；`withQuerySerializer` 函式回傳的字串則會被解析進去。傳輸形式是 `query.toString()`，也就是 URL Standard 的 application/x-www-form-urlencoded 序列化，因此空白是 `+`，空的 `query` 不會加上 `?`。`responseType` 與 `errorResponseType` 是唯讀的：它們由定義的 `output` 與 `error` struct 種類推導而來，不能修改。
 
 ### HttpMeta
 

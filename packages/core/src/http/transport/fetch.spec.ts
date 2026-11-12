@@ -65,7 +65,7 @@ describe("Fetch handler request creation", () => {
       baseEndpoint: "https://example.com",
       endpoint: "/v1/user",
       method: "GET",
-      queryParams: new URLSearchParams({ id: "1" }),
+      query: new URLSearchParams({ id: "1" }),
     };
 
     const { url } = await requestOf(requestConfig);

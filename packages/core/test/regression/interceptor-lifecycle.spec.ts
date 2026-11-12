@@ -74,7 +74,7 @@ test.each([
         createWebSocketInterceptor(async (request, next) => {
           const session = await next({
             ...request,
-            queryString: "ticket=private-value",
+            query: new URLSearchParams({ ticket: "private-value" }),
           });
           inner = session;
           if (reconnect) {

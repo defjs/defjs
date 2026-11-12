@@ -893,7 +893,7 @@ describe("web socket runtime", () => {
         createWebSocketInterceptor(async (request, next) =>
           next({
             ...request,
-            queryString: "roomId=from-interceptor",
+            query: new URLSearchParams({ roomId: "from-interceptor" }),
           }),
         ),
       ),

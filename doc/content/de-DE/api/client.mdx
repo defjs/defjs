@@ -44,7 +44,7 @@ Hängt Interceptors in Registrierungsreihenfolge an. Gemischte Arten werden nach
 
 <ApiSignature name="withQuerySerializer" />
 
-Ersetzt Query-Encoding für HTTP, SSE und WebSocket. `serializer(query)` bekommt das **encodierte Wire-Objekt** (Aliasse angewandt, `Date` als ISO, `bigint` als String) und muss den Query-String ohne führendes `?` zurückgeben. Ohne Query wird er nicht aufgerufen. Ein Builder, der `URLSearchParams` zurückgibt, überspringt ihn.
+Ersetzt Query-Encoding für HTTP, SSE und WebSocket. `serializer(query)` bekommt das **encodierte Wire-Objekt** (Aliasse angewandt, `Date` als ISO, `bigint` als String) und muss den Query-String ohne führendes `?` zurückgeben. Der String wird in die `query` des Requests geparst, der Request sendet also `query.toString()`, die application/x-www-form-urlencoded-Serialisierung des URL Standard: Ein Leerzeichen ist `+`, `[` ist `%5B`, und die Bytes, die die Funktion geschrieben hat, bleiben nicht erhalten. Ohne Query wird er nicht aufgerufen. Ein Builder, der `URLSearchParams` zurückgibt, überspringt ihn.
 
 ### withHeaders()
 

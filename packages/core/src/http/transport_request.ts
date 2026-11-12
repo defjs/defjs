@@ -3,9 +3,9 @@ import type { HttpRequest } from "./http_request";
 import type { MaterializedRequest } from "../internal/outbound_request";
 import { isFormData } from "../internal/type_guards";
 import {
+  createResolvedRequestUrl,
   fillUrl,
   mergeHeaders,
-  resolveRequestUrl,
   resolveTransportQuery,
 } from "../internal/url";
 
@@ -13,8 +13,7 @@ type BaseTransportRequest = HttpRequest & {
   signal: AbortSignal;
   baseEndpoint: string;
   headers: Headers;
-  queryParams: URLSearchParams;
-  queryString: string;
+  query: URLSearchParams;
 };
 
 export type BaseTransportRequestOptions = {
@@ -47,10 +46,7 @@ export function createBaseTransportRequest(
   ) {
     throw new TypeError("GET/HEAD requests cannot have a body");
   }
-  const { queryParams, queryString } = resolveTransportQuery(
-    built.query,
-    options.querySerializer,
-  );
+  const query = resolveTransportQuery(built.query, options.querySerializer);
   const headers = options.defaultHeaders
     ? new Headers(options.defaultHeaders)
     : new Headers();
@@ -71,11 +67,11 @@ export function createBaseTransportRequest(
     headers,
     method,
     operation: options.operation,
-    queryParams,
-    queryString,
+    query,
     withCredentials: options.withCredentials ?? false,
   };
 
-  resolveRequestUrl(request);
+  // The query cannot make a URL invalid, so only the endpoint is checked here; every send resolves the whole URL.
+  createResolvedRequestUrl(request.baseEndpoint, request.endpoint);
   return request;
 }

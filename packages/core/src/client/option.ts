@@ -150,7 +150,7 @@ function copyInterceptor<K extends Interceptor["kind"]>(
 /**
  * Replaces query encoding for HTTP, SSE, and WebSocket requests.
  *
- * `serializer(query)` receives the encoded wire object: aliases applied, `Date` as an ISO string, `bigint` as a string. Nested objects and arrays are kept as they are. It must return the query string without a leading `?`. The string is used verbatim.
+ * `serializer(query)` receives the encoded wire object: aliases applied, `Date` as an ISO string, `bigint` as a string. Nested objects and arrays are kept as they are. It must return the query string without a leading `?`. The string is parsed into the request's `query`, so the request sends `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization: a space is `+`, `[` is `%5B`, and the bytes the function wrote are not kept.
  *
  * It is not called when the request has no query. A builder that returns `URLSearchParams` skips it. Without this option, queries use `URLSearchParams`: arrays repeat keys and a nested object fails.
  *

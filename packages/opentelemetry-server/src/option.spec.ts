@@ -313,10 +313,7 @@ describe("withOpenTelemetryServer without a tracer", () => {
         sseNext,
       );
       await webSocketInterceptor(config).fn(
-        {
-          ...makeWsRequest(new URLSearchParams({ room: "a b" }), headers),
-          queryString: "room=a%20b",
-        },
+        makeWsRequest(new URLSearchParams({ room: "a b" }), headers),
         wsNext,
       );
       await waitForSettledPromises();
@@ -331,15 +328,10 @@ describe("withOpenTelemetryServer without a tracer", () => {
         expect(sent?.get("x-custom")).toBe("preserved");
       }
       const sent = wsNext.mock.calls[0]?.[0];
-      expect(sent?.queryString?.startsWith("room=a%20b")).toBe(true);
-      expect(new URLSearchParams(sent?.queryString).get("traceparent")).toBe(
-        traceparent,
-      );
-      expect(new URLSearchParams(sent?.queryString).get("baggage")).toBe(
-        baggage,
-      );
-      expect(sent?.queryParams?.get("traceparent")).toBe(traceparent);
-      expect(sent?.queryParams?.get("tracestate")).toBe(
+      expect(sent?.query?.toString().startsWith("room=a+b")).toBe(true);
+      expect(sent?.query?.get("traceparent")).toBe(traceparent);
+      expect(sent?.query?.get("baggage")).toBe(baggage);
+      expect(sent?.query?.get("tracestate")).toBe(
         source === "headers" ? "vendor=value" : null,
       );
       expect(method(tracer, "startSpan")).toHaveBeenCalledTimes(1);
@@ -355,24 +347,19 @@ describe("withOpenTelemetryServer without a tracer", () => {
     },
   );
 
-  test("leaves WebSocket query bytes unchanged when propagation is not enabled", async () => {
+  test("leaves the WebSocket query unchanged when propagation is not enabled", async () => {
     const config = makeConfig();
     withOpenTelemetryServer({})(config);
-    const req = {
-      ...makeWsRequest(
-        new URLSearchParams({ room: "a b" }),
-        new Headers({
-          traceparent:
-            "00-11111111111111111111111111111111-2222222222222222-01",
-        }),
-      ),
-      queryString: "room=a%20b",
-    };
+    const req = makeWsRequest(
+      new URLSearchParams({ room: "a b" }),
+      new Headers({
+        traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+      }),
+    );
     const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
     await webSocketInterceptor(config).fn(req, next);
-    expect(next.mock.calls[0]?.[0].queryString).toBe("room=a%20b");
-    expect(next.mock.calls[0]?.[0].queryParams).toBe(req.queryParams);
-    expect(req.queryParams?.get("traceparent")).toBeNull();
+    expect(next.mock.calls[0]?.[0].query).toBe(req.query);
+    expect(req.query?.get("traceparent")).toBeNull();
   });
 
   test("preserves the full requireParentSpan bypass for an explicitly supplied tracer", async () => {
@@ -616,8 +603,7 @@ describe("withOpenTelemetryServer", () => {
     expect(method(propagator, "inject")).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
-        queryParams: req.queryParams,
-        queryString: "room=alpha",
+        query: req.query,
       }),
     );
   });
@@ -807,7 +793,7 @@ describe("withOpenTelemetryServer transport capture", () => {
       );
       const session = makeWsSession();
       const next = vi.fn((request: HttpRequest) => {
-        seenQuery.push(request.queryString ?? "");
+        seenQuery.push(request.query?.toString() ?? "");
         return Promise.resolve(session);
       });
       await webSocketInterceptor(config).fn(webSocketCall, next);
@@ -966,8 +952,7 @@ describe("withOpenTelemetryServer transport capture", () => {
 
     expect(requestHook).toHaveBeenCalledTimes(1);
     expect(method(propagator, "inject")).not.toHaveBeenCalled();
-    expect(next.mock.calls[0]?.[0].queryString).toBe("room=alpha");
-    expect(next.mock.calls[0]?.[0].queryParams).toBe(request.queryParams);
+    expect(next.mock.calls[0]?.[0].query).toBe(request.query);
   });
 
   test("throws an enabled getter failure from withOpenTelemetryServer without reading hooks", () => {

@@ -74,6 +74,8 @@ Por defecto, los escalares de consulta y los arrays escalares (claves repetidas)
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+El string que devuelves se analiza en la `query` de la solicitud, así que esta envía `query.toString()`, la serialización application/x-www-form-urlencoded del URL Standard. Un espacio es `+`, y los corchetes de `filter[status]=paid` salen como `filter%5Bstatus%5D=paid`, que un decodificador de formularios vuelve a leer como el mismo nombre.
+
 ### Formatos del cuerpo de la petición
 
 Las peticiones `GET` y `HEAD` no pueden llevar cuerpo. Para otros métodos, el formato del cuerpo se selecciona a partir del valor devuelto por `builder`:

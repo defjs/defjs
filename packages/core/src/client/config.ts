@@ -7,7 +7,7 @@ import type { WebSocketHeartbeatConfig } from "../web_socket/web_socket";
 /**
  * Serializes an encoded query object into a query string.
  *
- * `query` is the wire object: aliases already applied, `Date` values already ISO strings, `bigint` values already strings. Nested objects and arrays are preserved. The string is used verbatim and is not passed through `URLSearchParams`. Interceptors see `queryParams` as `new URLSearchParams(queryString)`.
+ * `query` is the wire object: aliases already applied, `Date` values already ISO strings, `bigint` values already strings. Nested objects and arrays are preserved. The string is parsed into the request's `query`, a `URLSearchParams`, and the request sends `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization, so a space is `+` and the bytes the serializer wrote are not kept.
  *
  * Set it with `withQuerySerializer`. Without one, queries use `URLSearchParams`: arrays repeat keys and a nested object fails. A builder that returns `URLSearchParams` skips the serializer.
  *

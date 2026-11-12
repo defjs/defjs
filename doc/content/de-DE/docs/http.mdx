@@ -74,6 +74,8 @@ Standardmäßig werden Query-Skalare und Skalar-Arrays (wiederholte Schlüssel) 
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+Der zurückgegebene String wird in die `query` des Requests geparst, der Request sendet also `query.toString()`, die application/x-www-form-urlencoded-Serialisierung des URL Standard. Ein Leerzeichen ist `+`, und die eckigen Klammern in `filter[status]=paid` gehen als `filter%5Bstatus%5D=paid` hinaus, was ein Form-Decoder wieder als denselben Namen liest.
+
 ### Formate des Request-Bodys
 
 `GET` und `HEAD` dürfen keinen Body tragen. Bei anderen Methoden wird das Format anhand des vom `builder` zurückgegebenen Werts gewählt:

@@ -54,7 +54,7 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 ### HttpRequest
 
-正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`finalizeHeaders`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString`、`queryParams` です。インターセプターが見る時点で `body` はすでにワイヤ上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。`builder` が `URLSearchParams` を返すと、そのインスタンスがそのまま渡されます。`responseType` と `errorResponseType` は readonly です。宣言された `output` と `error` の struct の種類から導出され、変更してはいけません。
+正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`finalizeHeaders`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`query` です。インターセプターが見る時点で `body` はすでにワイヤ上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。`query` はリクエストが送る唯一のクエリで、`URLSearchParams` です。インターセプターはそれをその場で変更するか、置き換えを `next()` に渡します。`builder` が `URLSearchParams` を返すと、そのインスタンスはコピーされ、`withQuerySerializer` の関数が返した文字列はそこへパースされます。ワイヤ上の形式は `query.toString()`、つまり URL Standard の application/x-www-form-urlencoded シリアライズなので、空白は `+` になり、空の `query` では `?` は付きません。`responseType` と `errorResponseType` は readonly です。宣言された `output` と `error` の struct の種類から導出され、変更してはいけません。
 
 ### HttpMeta
 

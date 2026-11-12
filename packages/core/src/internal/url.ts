@@ -37,13 +37,10 @@ function encodePathSegment(key: string, value: string): string {
   return encodeURIComponent(value);
 }
 
-export function createSearchParams(query?: {
+export function createSearchParams(query: {
   [key: string]: unknown;
 }): URLSearchParams {
   const searchParams = new URLSearchParams();
-  if (!query) {
-    return searchParams;
-  }
 
   for (const [key, value] of Object.entries(query)) {
     appendToSearchParams(searchParams, key, value);
@@ -52,29 +49,26 @@ export function createSearchParams(query?: {
   return searchParams;
 }
 
+/**
+ * The query a request carries. A `URLSearchParams` from the builder is copied, so that an interceptor that changes
+ * the request's query does not change the builder's own instance. A serializer's string is parsed, so that the wire
+ * form is always `query.toString()`.
+ */
 export function resolveTransportQuery(
   query: URLSearchParams | { [key: string]: unknown } | undefined,
   serializer?: QuerySerializer,
-): { queryParams: URLSearchParams; queryString: string } {
+): URLSearchParams {
   if (isURLSearchParams(query)) {
-    return { queryParams: query, queryString: query.toString() };
+    return new URLSearchParams(query);
   }
 
   if (!isPlainObject(query)) {
-    const queryParams = createSearchParams();
-    return { queryParams, queryString: queryParams.toString() };
+    return new URLSearchParams();
   }
 
-  if (!serializer) {
-    const queryParams = createSearchParams(query);
-    return { queryParams, queryString: queryParams.toString() };
-  }
-
-  const queryString = serializer(query);
-  return {
-    queryParams: new URLSearchParams(queryString),
-    queryString,
-  };
+  return serializer
+    ? new URLSearchParams(serializer(query))
+    : createSearchParams(query);
 }
 
 /**
@@ -135,21 +129,15 @@ export function createResolvedRequestUrl(
   return url;
 }
 
-/** The URL of `request`: its endpoint under its base endpoint, with its query string. */
+/** The URL of `request`: its endpoint under its base endpoint, with its query. */
 export function resolveRequestUrl(request: HttpRequest): URL {
   if (!request.baseEndpoint) {
     throw new RequestUrlError("Client endpoint is required");
   }
-  const queryString =
-    typeof request.queryString === "string"
-      ? request.queryString
-      : request.queryParams
-        ? request.queryParams.toString()
-        : "";
   return createResolvedRequestUrl(
     request.baseEndpoint,
     request.endpoint,
-    queryString,
+    request.query?.toString(),
   );
 }
 

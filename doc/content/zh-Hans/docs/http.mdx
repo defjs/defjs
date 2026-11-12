@@ -74,6 +74,8 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+你返回的字符串会被解析为请求的 `query`，因此请求发送的是 `query.toString()`，即 URL Standard 的 application/x-www-form-urlencoded 序列化。空格是 `+`，`filter[status]=paid` 中的方括号会以 `filter%5Bstatus%5D=paid` 发出，表单解码器会把它读回同一个名称。
+
 ### 请求体格式适配
 
 `GET` 和 `HEAD` 不能携带请求体。其他方法下，请求体格式由 `builder` 返回的 `body` 值决定：

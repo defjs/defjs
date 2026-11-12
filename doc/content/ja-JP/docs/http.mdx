@@ -74,6 +74,8 @@ SDK モジュール内で各操作ごとに個別の `defineRequest` を export 
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+返した文字列はリクエストの `query` にパースされるため、リクエストは `query.toString()`、つまり URL Standard の application/x-www-form-urlencoded シリアライズを送ります。空白は `+` になり、`filter[status]=paid` の角括弧は `filter%5Bstatus%5D=paid` として送られ、フォームのデコーダーは同じ名前として読み戻します。
+
 ### リクエストボディの形式
 
 `GET` と `HEAD` ではリクエストボディを送信できません。その他のメソッドでは、`builder` が返した値に応じてボディの形式が選ばれます。

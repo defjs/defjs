@@ -75,8 +75,8 @@ describe("query serializer contract", () => {
       throw new Error("expected a query object");
     }
     expect(Object.getOwnPropertySymbols(received)).not.toContain(STRUCT);
-    expect(captured?.queryString).toBe("ok=1");
-    expect(captured?.queryParams?.get("ok")).toBe("1");
+    expect(captured?.query?.toString()).toBe("ok=1");
+    expect(captured?.query?.get("ok")).toBe("1");
   });
 
   test("default query repeats array keys", async () => {
@@ -99,9 +99,8 @@ describe("query serializer contract", () => {
     const [error] = await list(client);
 
     expect(error).toBeNull();
-    expect(captured?.queryString).toBe("include=true&tags=a&tags=b");
-    expect(captured?.queryParams?.getAll("tags")).toEqual(["a", "b"]);
-    expect(captured?.queryParams?.toString()).toBe(captured?.queryString);
+    expect(captured?.query?.toString()).toBe("include=true&tags=a&tags=b");
+    expect(captured?.query?.getAll("tags")).toEqual(["a", "b"]);
   });
 
   test("default nested query fails with REQ_BUILD_FAILED asking for a query serializer", async () => {
@@ -124,7 +123,7 @@ describe("query serializer contract", () => {
     expect(error.cause.message).toContain("a query serializer is required");
   });
 
-  test("URLSearchParams query bypasses the serializer", async () => {
+  test("URLSearchParams query is copied and bypasses the serializer", async () => {
     const query = new URLSearchParams();
     query.append("tag", "a");
     query.append("tag", "b");
@@ -150,11 +149,13 @@ describe("query serializer contract", () => {
     const [error] = await list(client);
 
     expect(error).toBeNull();
-    expect(captured?.queryString).toBe("tag=a&tag=b");
-    expect(captured?.queryParams).toBe(query);
+    expect(captured?.query?.toString()).toBe("tag=a&tag=b");
+    expect(captured?.query).not.toBe(query);
+    captured?.query?.append("tag", "c");
+    expect(query.toString()).toBe("tag=a&tag=b");
   });
 
-  test("interceptor sees queryParams parsed from the serializer string", async () => {
+  test("interceptor sees the query parsed from the serializer string", async () => {
     let captured: HttpRequest | undefined;
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -177,9 +178,11 @@ describe("query serializer contract", () => {
     const [error] = await search(client);
 
     expect(error).toBeNull();
-    expect(captured?.queryString).toBe("filter[state]=open&tag=a&tag=b");
-    expect(captured?.queryParams?.get("filter[state]")).toBe("open");
-    expect(captured?.queryParams?.getAll("tag")).toEqual(["a", "b"]);
+    expect(captured?.query?.toString()).toBe(
+      "filter%5Bstate%5D=open&tag=a&tag=b",
+    );
+    expect(captured?.query?.get("filter[state]")).toBe("open");
+    expect(captured?.query?.getAll("tag")).toEqual(["a", "b"]);
   });
 
   test("a configured serializer is not called when the request has no query", async () => {
@@ -204,8 +207,7 @@ describe("query serializer contract", () => {
 
     expect(error).toBeNull();
     expect(calls).toBe(0);
-    expect(captured?.queryString).toBe("");
-    expect(captured?.queryParams?.toString()).toBe("");
+    expect(captured?.query?.toString()).toBe("");
   });
 
   test("SSE query uses the serializer and skips URLSearchParams", async () => {

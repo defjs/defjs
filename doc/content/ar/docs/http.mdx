@@ -74,6 +74,8 @@ description: صمّم عمليات HTTP لحزمة SDK الخاصة بك واس�
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
+تُحلَّل السلسلة التي تُرجعها في `query` الخاصة بالطلب، فيرسل الطلب `query.toString()`، أي تسلسل application/x-www-form-urlencoded في URL Standard. المسافة تصبح `+`، والأقواس المربعة في `filter[status]=paid` تخرج بصيغة `filter%5Bstatus%5D=paid`، ويقرؤها فاكّ ترميز النماذج اسمًا واحدًا كما كان.
+
 ### تنسيقات جسم الطلب (Request Body)
 
 لا يمكن لطلبي `GET` و`HEAD` حمل جسم طلب. وبالنسبة للطرق الأخرى، يُحدد تنسيق الجسم بناءً على القيمة التي تُرجعها دالة `builder`:

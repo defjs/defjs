@@ -93,7 +93,7 @@ export type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void;
  * - `bodyContentType` holds the inferred type of the builder's body. `null` suppresses that header. FormData owns its multipart boundary. HTTP inference follows a direct write to `body` and is not copied by object spread; an explicit `bodyContentType` assignment is copied. A replacement body is detected again, so declare its type with a `content-type` header. For the unchanged body, `null` suppresses library inference when there is no explicit header, but native Fetch may add its own string type.
  * - HTTP never writes inferred Content-Type into `headers`; interceptors see only declared headers. An explicit `content-type` header always wins over `bodyContentType` and detection, whether set by the builder, client defaults, an interceptor, or a raw `fetchHandler` request. `body: undefined` has no library-inferred Content-Type. Signers should read `headers.get('content-type') ?? request.bodyContentType`; do not configure internal fields.
  * - `endpoint` is the path with path parameters filled in; `baseEndpoint` is the endpoint selected for this call.
- * - Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through.
+ * - `query` is the one query the request sends. Interceptors change it in place or pass a replacement to `next()`. A builder that returns `URLSearchParams` has it copied, and a `QuerySerializer` string is parsed into it.
  * - `operation` is a static, low-cardinality endpoint identity for telemetry and diagnostics.
  * - `downloadProgress` and `uploadProgress` are the `onDownloadProgress` and `onUploadProgress` hooks of `HttpExecuteOptions`.
  * - `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed. Each is set only when its struct is declared. An interceptor that short-circuits with `makeResponse` reads them to match the transport.
@@ -130,10 +130,8 @@ export interface HttpRequest {
   method: string;
   /** Static, low-cardinality endpoint identity for telemetry and diagnostics. */
   operation?: string;
-  /** The query as `URLSearchParams`. It is ignored while `queryString` is present: change `queryString` instead. */
-  queryParams?: URLSearchParams;
-  /** The query as the URL carries it, without the `?`. When present it decides the query; `queryParams` is not read. */
-  queryString?: string;
+  /** The query the request sends. Its wire form is `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization, so a space is `+`. An empty query adds no `?`. */
+  query?: URLSearchParams;
   /**
    * Representation for a 2xx body, derived from the endpoint `output` struct kind.
    * Set only when `output` is declared. Interceptors that short-circuit with `makeResponse`
