@@ -1,5 +1,3 @@
-import type { AnyFault } from "./types";
-
 const ABORT_BRAND = Symbol.for("defjs.cause.aborted");
 const TIMEOUT_BRAND = Symbol.for("defjs.cause.timeout");
 
@@ -125,15 +123,4 @@ export function describeCause(cause: unknown): string {
   } catch {
     return "Unknown error";
   }
-}
-
-/** The `name` every fault factory writes; an `Error` carrying it was built by this library. */
-export const FAULT_NAME = "DefjsFault";
-
-/**
- * Whether `value` is a fault built by one of the fault factories, in this copy of the library or another.
- * An `Error` from elsewhere is not one, whatever `code` it carries.
- */
-export function isDefjsFault(value: unknown): value is AnyFault {
-  return value instanceof Error && value.name === FAULT_NAME;
 }

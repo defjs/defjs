@@ -22,7 +22,6 @@ import {
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
 import { preflight } from "../internal/preflight";
-import { rejectAs } from "../internal/chain_faults";
 import { resolveRetryPolicy } from "../internal/retry";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
 import type {
@@ -436,9 +435,9 @@ async function openEventStream<
           settleUnattempted();
           releaseAbortSignal(streamAbort);
           // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
-          return rejectAs(failures, resolveAbortedCause(streamAbort), {
-            fault: due,
-          });
+          const cause = resolveAbortedCause(streamAbort);
+          failures.set(cause, { fault: due });
+          throw cause;
         }
         if (
           clientConfig.sse.handle === DEFAULT_FETCH &&
@@ -446,12 +445,13 @@ async function openEventStream<
         ) {
           settleUnattempted();
           releaseAbortSignal(streamAbort);
-          return rejectAs(failures, ERR_FETCH_UNSUPPORTED, {
+          failures.set(ERR_FETCH_UNSUPPORTED, {
             fault: createPreflightFault(
               "ENV_UNSUPPORTED",
               ERR_FETCH_UNSUPPORTED,
             ),
           });
+          throw ERR_FETCH_UNSUPPORTED;
         }
         const owned: OwnedStream = {
           controller: ownerController,
@@ -485,7 +485,8 @@ async function openEventStream<
         );
         if (failure !== null) {
           owned.release();
-          return rejectAs(failures, failure.cause, failure);
+          failures.set(failure.cause, failure);
+          throw failure.cause;
         }
         owned.stream = stream;
         owned.initialOpen = stream.open;

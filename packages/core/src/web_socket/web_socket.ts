@@ -11,7 +11,7 @@ import type { ResolvedEndpoint } from "../balancer/runtime";
 import { pickEndpoint } from "../balancer/runtime";
 import type { Fault, PreflightFault } from "../error";
 import { createPreflightFault } from "../error";
-import { isDefjsFault } from "../error/cause";
+import { isDefjsFault } from "../error/factory";
 import type { WebSocketSessionLike } from "../interceptor/interceptor";
 import {
   makeChain,

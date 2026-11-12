@@ -18,6 +18,7 @@ import {
   isTimeoutCause,
 } from "../../error";
 import { networkCauseCode } from "../../error/cause";
+import { isDefjsFault } from "../../error/factory";
 import type { DoneInfo } from "../../balancer/balancer";
 import type { pickEndpoint, ResolvedEndpoint } from "../../balancer/runtime";
 import {
@@ -258,6 +259,10 @@ function startupFault<TBody>(
   cause: unknown,
   { open, decoded, bodyFault }: Handshake<TBody>,
 ): EventStreamStartupFailure<TBody>["fault"] {
+  // A pick or a URL that failed before a connection is a fault already.
+  if (isDefjsFault(cause) && cause.code === "REQ_BUILD_FAILED") {
+    return cause;
+  }
   const response = open?.response;
   const fatal = cause instanceof EventStreamFatalError ? cause.code : undefined;
   if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
@@ -295,20 +300,24 @@ function resolveAttemptUrl(request: HttpRequest): URL {
 type AttemptResult =
   | { kind: "eof" }
   | { kind: "stopped" }
-  | { kind: "fatal"; error: EventStreamFatalError; response?: Response }
+  | { kind: "fatal"; error: EventStreamFatalError }
   | { kind: "status"; error: Error; response: Response }
   | { kind: "network"; error: unknown; response?: Response };
 
 type AttemptFailure = Exclude<AttemptResult, { kind: "eof" | "stopped" }>;
 
 const EOF: AttemptResult = { kind: "eof" };
-const STOPPED: AttemptResult = { kind: "stopped" };
+const STOPPED = { kind: "stopped" } as const satisfies AttemptResult;
 
 /** The balancer's view of one connection. `outcome` is what the connection showed, `endpoint` is until it reports `done`. */
 interface Attempt {
   endpoint: AttemptEndpoint | undefined;
   fetchStarted: boolean;
   outcome: DoneInfo | undefined;
+}
+
+function newAttempt(endpoint: AttemptEndpoint | undefined): Attempt {
+  return { endpoint, fetchStarted: false, outcome: undefined };
 }
 
 /** What a failed fetch or read tells the balancer about the endpoint. */
@@ -385,11 +394,7 @@ export async function fetchEventStream<
   // The latest handshake. While connecting, only the current attempt's, so a startup failure never reports the
   // response of a retried 503.
   const latest: Handshake<HandshakeBody<TError>> = {};
-  let attempt: Attempt = {
-    endpoint: options.endpointAttempt,
-    fetchStarted: false,
-    outcome: undefined,
-  };
+  let attempt = newAttempt(options.endpointAttempt);
   let disposeTask: Promise<void> | undefined;
 
   const handle: EventStreamHandle<TEvent> = {
@@ -579,7 +584,7 @@ export async function fetchEventStream<
         if (pickNext) {
           const picked = pickNext();
           if (picked[0] !== null) {
-            finishError(picked[0], "REQ_BUILD_FAILED", picked[0]);
+            finishError(picked[0], "REQ_BUILD_FAILED");
             return;
           }
           const next = picked[1];
@@ -591,16 +596,12 @@ export async function fetchEventStream<
           } catch (error) {
             next.done({ attempted: false });
             const fault = createPreflightFault("REQ_BUILD_FAILED", error);
-            finishError(fault, "REQ_BUILD_FAILED", fault);
+            finishError(fault, "REQ_BUILD_FAILED");
             return;
           }
-          attempt = { endpoint: next, fetchStarted: false, outcome: undefined };
+          attempt = newAttempt(next);
         } else {
-          attempt = {
-            endpoint: undefined,
-            fetchStarted: false,
-            outcome: undefined,
-          };
+          attempt = newAttempt(undefined);
         }
       }
     } finally {
@@ -626,9 +627,9 @@ export async function fetchEventStream<
       latest.bodyFault = undefined;
     }
 
-    // A failure ends the attempt here: the endpoint is told, the unread body is released, and a stop outranks the
-    // failure, so it returns `STOPPED` for the caller to return in its place.
-    const failed = (error: unknown): AttemptResult | undefined => {
+    // A failure ends the attempt here: the endpoint is told and the unread body is released. A stop outranks the
+    // failure, so then it returns `STOPPED` for the caller to return in its place, and `undefined` otherwise.
+    const endFailedAttempt = (error: unknown): typeof STOPPED | undefined => {
       if (response?.body && !reading) {
         void response.body.cancel(error).catch(() => undefined);
       }
@@ -713,7 +714,7 @@ export async function fetchEventStream<
           decoded,
           bodyFault,
         );
-        return failed(error) ?? { kind: "status", error, response };
+        return endFailedAttempt(error) ?? { kind: "status", error, response };
       }
       const contentType = response.headers.get("content-type") || "";
       if (parseMediaTypeEssence(contentType) !== EVENT_STREAM_CONTENT_TYPE) {
@@ -721,7 +722,7 @@ export async function fetchEventStream<
           "RES_MEDIA_TYPE_INVALID",
           `Expected content-type ${EVENT_STREAM_CONTENT_TYPE}, got ${contentType || "(empty)"}`,
         );
-        return failed(error) ?? { kind: "fatal", error, response };
+        return endFailedAttempt(error) ?? { kind: "fatal", error };
       }
 
       retried = 0;
@@ -738,9 +739,9 @@ export async function fetchEventStream<
       return EOF;
     } catch (error) {
       return (
-        failed(error) ??
+        endFailedAttempt(error) ??
         (error instanceof EventStreamFatalError
-          ? { kind: "fatal", error, response }
+          ? { kind: "fatal", error }
           : { kind: "network", error, response })
       );
     } finally {
@@ -846,14 +847,10 @@ export async function fetchEventStream<
     });
   }
 
-  function finishError(
-    error: unknown,
-    code: EventStreamFaultCode,
-    fault?: PreflightFault,
-  ): void {
+  function finishError(error: unknown, code: EventStreamFaultCode): void {
     settleAttempt();
     if (phase === "connecting") {
-      failStartup(error, fault);
+      failStartup(error);
     } else {
       queue.fail(error);
     }
@@ -866,12 +863,11 @@ export async function fetchEventStream<
     });
   }
 
-  /** `fault` is given when the cause is one already: a pick or a URL that failed before a connection. */
-  function failStartup(cause: unknown, fault?: PreflightFault): void {
+  function failStartup(cause: unknown): void {
     openDeferred.resolve([
       {
         cause,
-        fault: fault ?? startupFault(cause, latest),
+        fault: startupFault(cause, latest),
         open: latest.open,
       },
       undefined,

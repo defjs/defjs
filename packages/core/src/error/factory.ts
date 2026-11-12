@@ -3,16 +3,28 @@ import {
   describeCause,
   ERR_ABORTED,
   ERR_TIMEOUT,
-  FAULT_NAME,
   networkCauseCode,
 } from "./cause";
 import type {
+  AnyFault,
   DecodeFault,
   DecodeFaultCode,
   HttpStatusFaultOf,
   PreflightFault,
   PreflightFaultCode,
 } from "./types";
+
+/** The `name` every fault factory writes; an `Error` carrying it was built by this library. */
+export const FAULT_NAME = "DefjsFault";
+
+/**
+ * Whether `value` is a fault built by one of the fault factories, in this copy of the library or another.
+ * An `Error` from elsewhere is not one, whatever `code` it carries. The test is the name alone: it does not
+ * check `code` or `response`.
+ */
+export function isDefjsFault(value: unknown): value is AnyFault {
+  return value instanceof Error && value.name === FAULT_NAME;
+}
 
 /** The fields a fault variant adds to Error, before the factory has written them. */
 type Unwritten<TFault extends Error> = Error &
