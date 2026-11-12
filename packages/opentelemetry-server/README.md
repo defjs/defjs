@@ -89,6 +89,10 @@ The plugin calls the supplied Meter's instrument creation methods each time the 
 
 Span hooks run only with a `tracer`. `startSpanHook(request)` is synchronous and runs before span creation; a throw still creates the span with only its built-in attributes, and the operation continues. `requestHook` and `responseHook` are not awaited, and their failures never block or fail the operation. Configure `diag.setLogger(...)` to see hook diagnostics.
 
+## Cancellation and timeouts
+
+HTTP, SSE, and WebSocket follow one rule. A caller cancellation (an abort that is not a timeout) is not a failure: the span status stays unset, with no exception and no `error.type`, and the span records `http.aborted`, `sse.aborted`, or `websocket.aborted`. Duration metrics are still recorded, without `error.type`; the connection metrics carry `defjs.result` `aborted`. No log is emitted. A timeout, including `AbortSignal.timeout()`, stays a failure: the span ends `ERROR` and `error.type` is `timeout`.
+
 ## Privacy defaults
 
 - `webSocket.queryPropagation` defaults to `false`: trace context and baggage do not ride on the WebSocket URL. Enable it only after reviewing how your proxies, browsers, and access logs record query strings.

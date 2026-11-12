@@ -179,7 +179,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     { close: "eof", result: "success", extras: { "sse.close.kind": "eof" } },
     {
       close: "aborted",
-      result: "success",
+      result: "aborted",
       extras: { "sse.close.kind": "aborted" },
     },
     {
@@ -617,12 +617,98 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     });
     expect(spans[0]?.recordException).not.toHaveBeenCalled();
     expect(spans[0]?.status).toBeUndefined();
+    expect(spans[0]?.attributes["error.type"]).toBeUndefined();
+    expect(spans[0]?.ended).toBe(true);
+    expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
+      expect.any(Number),
+      {
+        "defjs.result": "aborted",
+        "server.address": "api.example.com",
+        "server.port": 443,
+        "sse.close.kind": "aborted",
+      },
+    );
+  });
+
+  test("should record a rejected closed that is caller cancellation as sse.aborted", async () => {
+    const { tracer, spans } = createMockTracer();
+    const metrics = createMockMetrics();
+    const stream = makeDeferredSSEStream();
+    const interceptor = createOpenTelemetrySSEInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      metrics,
+    });
+
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
+    stream.reject(ERR_ABORTED);
+    await waitForSettledPromises();
+
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.aborted", undefined);
+    expect(spans[0]?.recordException).not.toHaveBeenCalled();
+    expect(spans[0]?.status).toBeUndefined();
+    expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.objectContaining({ "defjs.result": "aborted" }),
+    );
+  });
+
+  test("should record a timed-out stream as an error with error.type timeout", async () => {
+    const { tracer, spans } = createMockTracer();
+    const metrics = createMockMetrics();
+    const stream = makeDeferredSSEStream();
+    const interceptor = createOpenTelemetrySSEInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      metrics,
+    });
+
+    await interceptor.fn(makeSSERequest(), () =>
+      Promise.resolve(stream.stream),
+    );
+    stream.close("error", ERR_TIMEOUT, "NET_TIMEOUT");
+    await waitForSettledPromises();
+
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
+      "sse.error",
+      expect.objectContaining({ "error.type": "timeout" }),
+    );
+    expect(spans[0]?.status?.code).toBe(2);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
-        "defjs.result": "success",
-        "sse.close.kind": "aborted",
+        "defjs.result": "error",
+        "error.type": "timeout",
       }),
+    );
+  });
+
+  test("should record a cancelled startup as sse.aborted without marking span as error", async () => {
+    const { tracer, spans } = createMockTracer();
+    const metrics = createMockMetrics();
+    const interceptor = createOpenTelemetrySSEInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      metrics,
+    });
+
+    await expect(
+      interceptor.fn(makeSSERequest(), () => Promise.reject(ERR_ABORTED)),
+    ).rejects.toBe(ERR_ABORTED);
+
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.aborted");
+    expect(spans[0]?.recordException).not.toHaveBeenCalled();
+    expect(spans[0]?.status).toBeUndefined();
+    expect(spans[0]?.ended).toBe(true);
+    expect(metrics.connectDuration.record).toHaveBeenCalledWith(
+      expect.any(Number),
+      {
+        "server.address": "api.example.com",
+        "server.port": 443,
+        "defjs.result": "aborted",
+      },
     );
   });
 

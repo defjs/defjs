@@ -7,7 +7,9 @@ import type { ConnectionClientMetrics } from "../telemetry/metrics";
 import { durationSeconds } from "../telemetry/metrics";
 import {
   getErrorType,
+  isCallerCancellation,
   runSpanHook,
+  endSpanAborted,
   endSpanWithError,
 } from "../telemetry/trace";
 import type { ClientCall, ClientCallOptions } from "./call";
@@ -27,9 +29,14 @@ export type Outcome =
       attributes?: Attributes;
       /** What the transport adds to the log record. */
       extra?: Attributes;
-      /** The failure is not logged. */
-      quiet?: true;
     };
+
+/** `defjs.result` of the connection metrics: a cancelled connection is neither a success nor an error. */
+const RESULT = {
+  closed: "success",
+  aborted: "aborted",
+  error: "error",
+} as const;
 
 /** What finishing a connection needs from the call that opened it. */
 interface ConnectionRecord {
@@ -41,32 +48,37 @@ interface ConnectionRecord {
   connectedAtMs: number;
 }
 
+/** A failure the caller caused is the same cancellation as a close that says so. */
+function settle(signal: AbortSignal | undefined, outcome: Outcome): Outcome {
+  return outcome.end === "error" && isCallerCancellation(signal, outcome.error)
+    ? { end: "aborted", attributes: outcome.attributes }
+    : outcome;
+}
+
 function finishConnection(
   { transport, call, logger, metrics, signal, connectedAtMs }: ConnectionRecord,
-  outcome: Outcome,
+  recorded: Outcome,
 ): void {
+  const outcome = settle(signal, recorded);
   const { span } = call;
   metrics?.active.add(-1, call.attributes);
   const failed = outcome.end === "error";
   let attributes = outcome.attributes;
   if (failed) {
-    if (!outcome.quiet) {
-      emitClientException(logger, {
-        transport,
-        phase: "connection",
-        context: call.context,
-        signal,
-        error: outcome.error,
-        attributes: call.attributes,
-        extra: outcome.extra,
-      });
-    }
+    emitClientException(logger, {
+      transport,
+      phase: "connection",
+      context: call.context,
+      error: outcome.error,
+      attributes: call.attributes,
+      extra: outcome.extra,
+    });
     attributes = { ...attributes, "error.type": getErrorType(outcome.error) };
   }
   span?.addEvent(`${transport}.${outcome.end}`, attributes);
   metrics?.connectionDuration.record(durationSeconds(connectedAtMs), {
     ...call.attributes,
-    "defjs.result": failed ? "error" : "success",
+    "defjs.result": RESULT[outcome.end],
     ...attributes,
   });
   if (!span) return;
@@ -129,20 +141,24 @@ export function observeConnection<
       return handle;
     },
     (error: unknown): never => {
-      emitClientException(logger, {
-        transport,
-        phase: "connect",
-        context: call.context,
-        signal: req.signal,
-        error,
-        attributes: call.attributes,
-      });
-      metrics?.connectDuration.record(durationSeconds(connectStartMs), {
-        ...call.attributes,
-        "defjs.result": "error",
-        "error.type": getErrorType(error),
-      });
-      if (span) endSpanWithError(span, error);
+      const durationS = durationSeconds(connectStartMs);
+      const attributes: Attributes = { ...call.attributes };
+      if (isCallerCancellation(req.signal, error)) {
+        attributes["defjs.result"] = "aborted";
+        if (span) endSpanAborted(span, transport);
+      } else {
+        emitClientException(logger, {
+          transport,
+          phase: "connect",
+          context: call.context,
+          error,
+          attributes: call.attributes,
+        });
+        attributes["defjs.result"] = "error";
+        attributes["error.type"] = getErrorType(error);
+        if (span) endSpanWithError(span, error);
+      }
+      metrics?.connectDuration.record(durationS, attributes);
       throw error;
     },
   );

@@ -66,7 +66,7 @@ export const ERR_TIMEOUT = brandSentinel(
  *
  * Pass the underlying `fault.cause`; this function does not unwrap faults.
  * `createNetworkFault` uses this check to select `NET_ABORTED`. OpenTelemetry
- * uses it to suppress caller-cancellation logs while preserving timeout logs.
+ * uses it to treat caller cancellation as no failure while preserving timeouts as failures.
  *
  * @group errors
  * @see {@link ERR_ABORTED}
@@ -89,7 +89,7 @@ export function isAbortCause(cause: unknown): boolean {
  *
  * Pass the underlying `fault.cause`; this function does not unwrap faults.
  * `createNetworkFault` uses this check to select `NET_TIMEOUT`. OpenTelemetry
- * keeps logging timeouts even when the abort signal is also set.
+ * keeps timeouts as failures even when the abort signal is also set.
  *
  * @group errors
  * @see {@link ERR_TIMEOUT}

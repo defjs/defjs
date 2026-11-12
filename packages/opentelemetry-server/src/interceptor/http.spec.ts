@@ -696,6 +696,69 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     expect(spans[0]?.recordException).toHaveBeenCalled();
   });
 
+  test.each([
+    ERR_ABORTED,
+    new DOMException("cancelled", "AbortError"),
+    createNetworkFault(ERR_ABORTED),
+  ])(
+    "records caller cancellation as http.aborted, not a failure: %s",
+    async (cause) => {
+      const { tracer, spans } = createMockTracer();
+      const metrics = createMockMetrics();
+      const interceptor = createOpenTelemetryHttpInterceptor({
+        tracer,
+        metrics,
+        propagator: mockPropagator,
+      });
+
+      await expect(
+        interceptor.fn(makeHttpRequest(), () => Promise.reject(cause)),
+      ).rejects.toBe(cause);
+
+      expect(spans[0]?.addEvent).toHaveBeenCalledWith("http.aborted");
+      expect(spans[0]?.status).toBeUndefined();
+      expect(spans[0]?.attributes["error.type"]).toBeUndefined();
+      expect(spans[0]?.recordException).not.toHaveBeenCalled();
+      expect(spans[0]?.ended).toBe(true);
+      expect(metrics.requestDuration.record).toHaveBeenCalledWith(
+        expect.any(Number),
+        {
+          "http.request.method": "GET",
+          "server.address": "api.example.com",
+          "server.port": 443,
+        },
+      );
+    },
+  );
+
+  test.each([ERR_TIMEOUT, new DOMException("timed out", "TimeoutError")])(
+    "records a timeout as a failure with error.type timeout: %s",
+    async (cause) => {
+      const { tracer, spans } = createMockTracer();
+      const metrics = createMockMetrics();
+      const interceptor = createOpenTelemetryHttpInterceptor({
+        tracer,
+        metrics,
+        propagator: mockPropagator,
+      });
+
+      await expect(
+        interceptor.fn(
+          { ...makeHttpRequest(), signal: AbortSignal.abort(cause) },
+          () => Promise.reject(cause),
+        ),
+      ).rejects.toBe(cause);
+
+      expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
+      expect(spans[0]?.attributes["error.type"]).toBe("timeout");
+      expect(spans[0]?.recordException).toHaveBeenCalledTimes(1);
+      expect(metrics.requestDuration.record).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({ "error.type": "timeout" }),
+      );
+    },
+  );
+
   test("should pass request with headers to next", async () => {
     const { tracer } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({

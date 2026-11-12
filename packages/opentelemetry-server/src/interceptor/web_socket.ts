@@ -1,5 +1,5 @@
 import type { WebSocketCloseInfo, WebSocketSessionLike } from "@defjs/core";
-import { createWebSocketInterceptor, ERR_ABORTED } from "@defjs/core";
+import { createWebSocketInterceptor } from "@defjs/core";
 import { trace } from "@opentelemetry/api";
 import { carrierSetter } from "../propagation/carrier";
 import type { ConnectionClientMetrics } from "../telemetry/metrics";
@@ -18,9 +18,7 @@ export interface WebSocketInterceptorOptions extends ClientCallOptions<
 
 function webSocketOutcome(info: WebSocketCloseInfo): Outcome {
   if (info.kind === "closed") return { end: "closed" };
-  if (info.kind === "aborted") {
-    return { end: "error", error: info.cause ?? ERR_ABORTED, quiet: true };
-  }
+  if (info.kind === "aborted") return { end: "aborted" };
   return {
     end: "error",
     error: info.cause,

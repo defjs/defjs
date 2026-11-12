@@ -1,3 +1,4 @@
+import { isAbortCause, isTimeoutCause } from "@defjs/core";
 import type { Span } from "@opentelemetry/api";
 import { diag, SpanStatusCode } from "@opentelemetry/api";
 
@@ -48,7 +49,7 @@ export function endSpanWithResponse(span: Span, status: number): void {
 // fragment) and its stack can carry credentials, query values or body content, so the exception
 // event keeps only `exception.type`, the same field the diagnostic logs emit.
 function recordSpanException(span: Span, error: unknown): void {
-  span.recordException({ name: getErrorType(error) });
+  span.recordException({ name: getExceptionType(error) });
 }
 
 export function endSpanWithError(span: Span, error: unknown): void {
@@ -56,6 +57,36 @@ export function endSpanWithError(span: Span, error: unknown): void {
   span.setAttribute("error.type", getErrorType(error));
   span.setStatus({ code: SpanStatusCode.ERROR });
   span.end();
+}
+
+/** Caller cancellation is not a failure: the span records `<transport>.aborted` and keeps its status unset. */
+export function endSpanAborted(
+  span: Span,
+  transport: "http" | "sse" | "websocket",
+): void {
+  span.addEvent(`${transport}.aborted`);
+  span.end();
+}
+
+/**
+ * Whether `error` is the caller cancelling the call, which is not a failure. An abort whose reason is
+ * `TimeoutError` or `ERR_TIMEOUT` is a timeout and stays one.
+ *
+ * An aborted `signal` alone is not cancellation: WebSocket `finish()` aborts that same signal
+ * when a connect fails. Cancellation is a `NET_ABORTED` fault, an abort sentinel from any
+ * `@defjs/core` copy, or an `AbortError`, on the rejection or on `signal.reason`. There is no
+ * `timeout` option.
+ */
+export function isCallerCancellation(
+  signal: AbortSignal | undefined,
+  error: unknown,
+): boolean {
+  if (error instanceof Error && "code" in error && error.code === "NET_ABORTED")
+    return true;
+  const reason: unknown = signal?.reason;
+  // A failure that is no abort at all is the common case; it never reaches the timeout checks.
+  if (!isAbortCause(error) && !isAbortCause(reason)) return false;
+  return !isTimeoutCause(error) && !isTimeoutCause(reason);
 }
 
 export function runSpanHook(
@@ -119,7 +150,13 @@ export function getHttpResponseErrorType(status: number): string | undefined {
   return undefined;
 }
 
+/** `error.type` of a failed call: `timeout` for a timeout, otherwise the class name of the error. */
 export function getErrorType(error: unknown): string {
+  return isTimeoutCause(error) ? "timeout" : getExceptionType(error);
+}
+
+/** `exception.type` of a failure: the class name of the error, not a Defjs fault code. */
+export function getExceptionType(error: unknown): string {
   if (error instanceof Error) {
     return error.name || "Error";
   }

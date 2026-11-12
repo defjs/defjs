@@ -1,8 +1,12 @@
+import { createNetworkFault, ERR_ABORTED, ERR_TIMEOUT } from "@defjs/core";
 import { SpanStatusCode } from "@opentelemetry/api";
 import { describe, expect, test, vi } from "vitest";
 import type { MockSpan } from "../../test/mocks";
 import { createMockTracer } from "../../test/mocks";
 import {
+  getErrorType,
+  getExceptionType,
+  isCallerCancellation,
   normalizeHttpMethod,
   runSpanHook,
   endSpanWithError,
@@ -259,4 +263,75 @@ describe("trace helpers", () => {
     });
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "number" });
   });
+
+  describe("isCallerCancellation", () => {
+    const foreign = new Error("Request was aborted");
+    Object.defineProperty(foreign, Symbol.for("defjs.cause.aborted"), {
+      value: true,
+    });
+
+    test.each([
+      ERR_ABORTED,
+      foreign,
+      new DOMException("cancelled", "AbortError"),
+      createNetworkFault(ERR_ABORTED),
+    ])("is true for a rejection that is cancellation: %s", (error) => {
+      expect(isCallerCancellation(undefined, error)).toBe(true);
+    });
+
+    test("is true when the signal reason is cancellation", () => {
+      expect(
+        isCallerCancellation(AbortSignal.abort(), new TypeError("lost")),
+      ).toBe(true);
+    });
+
+    test("is false for a timeout, also when the signal reason is cancellation", () => {
+      expect(isCallerCancellation(undefined, ERR_TIMEOUT)).toBe(false);
+      expect(
+        isCallerCancellation(
+          AbortSignal.abort(),
+          new DOMException("timed out", "TimeoutError"),
+        ),
+      ).toBe(false);
+    });
+
+    test("is false when the signal reason is a timeout", () => {
+      expect(
+        isCallerCancellation(
+          AbortSignal.abort(ERR_TIMEOUT),
+          new Error("socket hang up"),
+        ),
+      ).toBe(false);
+      expect(
+        isCallerCancellation(
+          AbortSignal.abort(ERR_TIMEOUT),
+          new DOMException("cancelled", "AbortError"),
+        ),
+      ).toBe(false);
+    });
+
+    test("is false for a failure, whatever the signal says", () => {
+      expect(
+        isCallerCancellation(new AbortController().signal, new TypeError("x")),
+      ).toBe(false);
+      const abort = new AbortController();
+      abort.abort({ kind: "error", cause: new Error("refused") });
+      expect(isCallerCancellation(abort.signal, new TypeError("x"))).toBe(
+        false,
+      );
+    });
+  });
+
+  test.each([
+    [ERR_TIMEOUT, "timeout", "Error"],
+    [new DOMException("timed out", "TimeoutError"), "timeout", "TimeoutError"],
+    [new TypeError("x"), "TypeError", "TypeError"],
+    [createNetworkFault(ERR_TIMEOUT), "DefjsFault", "DefjsFault"],
+  ])(
+    "error.type of %s is %s and its exception.type is %s",
+    (error, errorType, exceptionType) => {
+      expect(getErrorType(error)).toBe(errorType);
+      expect(getExceptionType(error)).toBe(exceptionType);
+    },
+  );
 });

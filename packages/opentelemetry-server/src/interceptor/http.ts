@@ -9,7 +9,9 @@ import { durationSeconds } from "../telemetry/metrics";
 import {
   getErrorType,
   getHttpResponseErrorType,
+  isCallerCancellation,
   runSpanHook,
+  endSpanAborted,
   endSpanWithError,
   endSpanWithResponse,
 } from "../telemetry/trace";
@@ -65,22 +67,29 @@ export function createOpenTelemetryHttpInterceptor(
     } catch (error) {
       const durationS = durationSeconds(startTime);
 
-      emitClientException(logger, {
-        transport: "http",
-        phase: "request",
-        context: call.context,
-        signal: req.signal,
-        error,
-        attributes: call.attributes,
-        extra: { "http.request.method": call.method },
-      });
-
-      if (span) endSpanWithError(span, error);
-      metrics?.requestDuration.record(durationS, {
-        ...call.attributes,
-        "http.request.method": call.method,
-        "error.type": getErrorType(error),
-      });
+      // Caller cancellation is not a failure: no log, no error status, no `error.type`.
+      if (isCallerCancellation(req.signal, error)) {
+        if (span) endSpanAborted(span, "http");
+        metrics?.requestDuration.record(durationS, {
+          ...call.attributes,
+          "http.request.method": call.method,
+        });
+      } else {
+        emitClientException(logger, {
+          transport: "http",
+          phase: "request",
+          context: call.context,
+          error,
+          attributes: call.attributes,
+          extra: { "http.request.method": call.method },
+        });
+        if (span) endSpanWithError(span, error);
+        metrics?.requestDuration.record(durationS, {
+          ...call.attributes,
+          "http.request.method": call.method,
+          "error.type": getErrorType(error),
+        });
+      }
 
       throw error;
     }

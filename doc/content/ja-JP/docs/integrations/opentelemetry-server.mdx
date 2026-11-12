@@ -77,9 +77,11 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 
 プラグインは、インターセプターチェーンの内部で各トランスポートのライフタイムを計測します。
 
-- **HTTP**: スパンは HTTP インターセプター内で開始され、`HttpResponse` が返された時点で終了します。宣言された `output` / `error` のボディ読み取り（および JSON 表現の検証とパース）は、返却前のハンドラー境界の **内側** で行われます。ボディの読み取り失敗や JSON メディアタイプ／パースの失敗はインターセプターを通過して reject され（`error.type: "BodyFailure"`）、スパンに `ERROR` をマークし、メトリクスに `BodyFailure` を記録し、1 件の `WARN` ログを出力します。送信前に拒否されたリクエスト（不正なメソッド、認証情報を含む URL、プラットフォームが拒否するヘッダー値、throw する `finalizeHeaders` フック）もインターセプターを通過して reject され、そのエラーはプラットフォームのエラーまたはフック自身のエラーなので、`error.type` はそのエラーのクラス（通常は `TypeError`）です。ステータス `400+` は、ステータスコード文字列を `error.type` としてスパンに `ERROR` をマークします。Struct バリデーション（`RES_STRUCT_MISMATCH`）および `HTTP_STATUS` タプル変換はインターセプターチェーンの後に実行されるため、完了済みのトランスポートスパンには影響を与えません。
-- **SSE**: 自動再接続を含む 1 つの論理ストリームが 1 つのスパンを生成し、`stream.closed` が解決されるまでオープン状態を維持します。記録されるイベント: `sse.connected`、それに続く `sse.closed`、`sse.aborted`（`stream.close()` またはタイムアウト以外の呼び出し元中止時。スパンのステータスは未設定のまま）、または `sse.error`（タイムアウトに起因する中止を含め `ERROR` で終了）。スパン属性 `url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。
-- **WebSocket**: 自動再接続を含む 1 つの論理セッションが 1 つのスパンを生成し、`session.closed` が解決されるまで維持されます。記録されるイベント: `websocket.connected`、`websocket.closed`、`websocket.error`。サーバーからのクローズフレーム（コード不問）は `websocket.closed` を記録し、ステータスを未設定のままスパンを終了します。呼び出し元による中止は `ERROR` でスパンを終了し、`websocket.error` を記録します。ログは出力されませんが、中止理由が `TimeoutError` の場合だけは `WARN` を 1 件出力します。クローズフレームを伴わない突然の切断（`1006`）は、どのランタイムでも 1 件のログとともに `ERROR` で終了します。SSE と同様、`url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。`url.full` は接続 URL の `ws:` または `wss:` の形を使います。
+- **HTTP**: スパンは HTTP インターセプター内で開始され、`HttpResponse` が返された時点で終了します。宣言された `output` / `error` のボディ読み取り（および JSON 表現の検証とパース）は、返却前のハンドラー境界の **内側** で行われます。ボディの読み取り失敗や JSON メディアタイプ／パースの失敗はインターセプターを通過して reject され（`error.type: "BodyFailure"`）、スパンに `ERROR` をマークし、メトリクスに `BodyFailure` を記録し、1 件の `WARN` ログを出力します。送信前に拒否されたリクエスト（不正なメソッド、認証情報を含む URL、プラットフォームが拒否するヘッダー値、throw する `finalizeHeaders` フック）もインターセプターを通過して reject され、そのエラーはプラットフォームのエラーまたはフック自身のエラーなので、`error.type` はそのエラーのクラス（通常は `TypeError`）です。ステータス `400+` は、ステータスコード文字列を `error.type` としてスパンに `ERROR` をマークします。呼び出し元のキャンセルは失敗ではありません。スパンは `http.aborted` イベントで終了し、ステータスは未設定のまま、例外も `error.type` も記録されません。タイムアウトは引き続き失敗で、`error.type: "timeout"` になります。 Struct バリデーション（`RES_STRUCT_MISMATCH`）および `HTTP_STATUS` タプル変換はインターセプターチェーンの後に実行されるため、完了済みのトランスポートスパンには影響を与えません。
+- **SSE**: 自動再接続を含む 1 つの論理ストリームが 1 つのスパンを生成し、`stream.closed` が解決されるまでオープン状態を維持します。記録されるイベント: `sse.connected`、それに続く `sse.closed`、`sse.aborted`（`stream.close()`、または開いているストリームやハンドシェイクに対するタイムアウト以外の呼び出し元中止時。スパンのステータスは未設定のまま）、または `sse.error`（タイムアウトに起因する中止を含め `ERROR` で終了）。スパン属性 `url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。
+- **WebSocket**: 自動再接続を含む 1 つの論理セッションが 1 つのスパンを生成し、`session.closed` が解決されるまで維持されます。記録されるイベント: `websocket.connected`、`websocket.closed`、`websocket.aborted`、`websocket.error`。サーバーからのクローズフレーム（コード不問）は `websocket.closed` を記録し、ステータスを未設定のままスパンを終了します。呼び出し元による中止（開いているセッションに対するものも、接続中のものも）は、ステータスを未設定のまま `websocket.aborted` でスパンを終了します。ログは出力されませんが、中止理由が `TimeoutError` の場合だけは、`ERROR` でスパンを終了して `websocket.error` を記録し、`WARN` を 1 件出力します。クローズフレームを伴わない突然の切断（`1006`）は、どのランタイムでも 1 件のログとともに `ERROR` で終了します。SSE と同様、`url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。`url.full` は接続 URL の `ws:` または `wss:` の形を使います。
+
+3 つのトランスポートは 1 つのルールに従います。呼び出し元のキャンセル（タイムアウトではない中止）は失敗ではありません。スパンのステータスは未設定のままで、例外も `error.type` も記録されず、イベント `http.aborted`、`sse.aborted`、または `websocket.aborted` が付きます。所要時間メトリクスは引き続き記録されますが `error.type` は付かず、接続メトリクスには `defjs.result: "aborted"` が付きます。ログは出力されません。タイムアウト（`ERR_TIMEOUT` または `TimeoutError`。`AbortSignal.timeout()` の理由を含む）は引き続き失敗で、スパンは `ERROR` で終了し、`error.type` は `timeout` になります。
 
 インターセプターチェーンの残りの部分とトランスポート自体は、クライアントスパンをアクティブにした状態で実行されます。そのため、そこでの `trace.getActiveSpan()` はこのスパンを返し、それらが作成するスパン（Fetch の自動計装スパンなど）はこのスパンの子になります。コンテキストマネージャーが登録されていなければ、何も変わりません。
 
@@ -92,7 +94,7 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 - `withRetry` による各 HTTP 試行は、リトライのたびにインターセプターチェーンが再実行されるため、個別のクライアントスパンと所要時間サンプルを持ちます。アクティブなアプリケーションの親スパンがある場合、各試行はその下の兄弟スパンになります。親スパンがなければ、リトライは自動的に 1 つのトレースにまとめられません。Core は論理呼び出しの親スパンを作成しません。
 - HTTP 試行の URL は、その試行のエンドポイントを識別しますが、試行番号、リトライ理由、リトライバジェットの残高／枯渇、除外／復帰の属性は出力されません。
 - SSE と WebSocket のリトライ（`withRetry`）は、インターセプターを再実行せずにトランスポートの内部で再接続します。再接続をまたいで 1 つの論理セッションスパンを維持し、物理接続ごとにスパンを作成するわけではありません。フェイルオーバー後もスパンの URL とメトリクス属性は初期エンドポイントを保持します。再接続で別の `connected` イベントは出力されません。アクティブ数のメトリクスは、現在選択されたレプリカ上のソケットではなく、`closed` を待つ論理セッションを数えます。
-- ある Bun 実行では、HTTP 503 は `error.type: "503"`、接続拒否は `"TypeError"`、期限切れと呼び出し元のキャンセルはいずれも `"Error"` を生成しました。後者 2 つの戻り値は、それぞれ `NET_TIMEOUT` と `NET_ABORTED` でした。これらの Defjs タプルの Fault コードは、個別の HTTP テレメトリ属性ではありません。開いた WebSocket のデフォルトのキャンセルでは警告なしの `"AbortError"`、中止理由が `TimeoutError` の場合は `"TimeoutError"` と 1 件の警告になりました。エラークラス名はトランスポート／ランタイムからの観測結果であり、タプルやクローズ結果の確認に代わるものではありません。
+- HTTP 503 は `error.type: "503"`、接続拒否は `"TypeError"`、期限切れは `"timeout"` になり、呼び出し元のキャンセルには `error.type` が付きません。期限切れとキャンセルの戻り値は、それぞれ `NET_TIMEOUT` と `NET_ABORTED` です。これらの Defjs タプルの Fault コードは、個別の HTTP テレメトリ属性ではありません。開いた WebSocket のデフォルトのキャンセルは警告なしで `websocket.aborted` で終了し、中止理由が `TimeoutError` の場合は `websocket.error`、`error.type: "timeout"`、1 件の警告で終了します。それ以外のエラークラス名はトランスポート／ランタイムからの観測結果であり、タプルやクローズ結果の確認に代わるものではありません。
 
 ### 出力されるメトリクス
 
@@ -107,6 +109,8 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 | `defjs.client.websocket.connect.duration`    | WebSocket セッションが返されるまでの所要時間               |
 | `defjs.client.websocket.connection.duration` | セッション返却から最終的な `session.closed` までの継続時間 |
 | `defjs.client.websocket.active_connections`  | `closed` が未解決のアクティブな論理 WebSocket セッション数 |
+
+SSE と WebSocket の接続確立時間および接続継続時間のサンプルには `defjs.result` が付き、値は `success`、`error`（`error.type` 付き）、または呼び出し元のキャンセルを表す `aborted` です。
 
 ---
 

@@ -223,7 +223,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
   test.each([
     { close: "closed", result: "success", extras: {} },
-    { close: "aborted", result: "error", extras: { "error.type": "Error" } },
+    { close: "aborted", result: "aborted", extras: {} },
     { close: "error", result: "error", extras: { "error.type": "TypeError" } },
     {
       close: "rejected",
@@ -749,7 +749,47 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     );
   });
 
-  test("should record an aborted session without a cause as an error", async () => {
+  test.each([
+    { close: "aborted", cause: undefined },
+    { close: "aborted", cause: new DOMException("cancelled", "AbortError") },
+    { close: "rejected", cause: ERR_ABORTED },
+  ] as const)(
+    "should record websocket.aborted without marking span as error: $close $cause",
+    async ({ close, cause }) => {
+      const { tracer, spans } = createMockTracer();
+      const metrics = createMockMetrics();
+      const ws = makeDeferredWsSession();
+      const interceptor = createOpenTelemetryWebSocketInterceptor({
+        tracer,
+        propagator: mockPropagator,
+        metrics,
+      });
+
+      await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
+      if (close === "rejected") ws.reject(cause);
+      else ws.close({ kind: close, cause });
+      await waitForSettledPromises();
+
+      expect(spans[0]?.addEvent).toHaveBeenCalledWith(
+        "websocket.aborted",
+        undefined,
+      );
+      expect(spans[0]?.recordException).not.toHaveBeenCalled();
+      expect(spans[0]?.status).toBeUndefined();
+      expect(spans[0]?.attributes["error.type"]).toBeUndefined();
+      expect(spans[0]?.ended).toBe(true);
+      expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
+        expect.any(Number),
+        {
+          "server.address": "api.example.com",
+          "server.port": 443,
+          "defjs.result": "aborted",
+        },
+      );
+    },
+  );
+
+  test("should record a timed-out session as an error with error.type timeout", async () => {
     const { tracer, spans } = createMockTracer();
     const metrics = createMockMetrics();
     const ws = makeDeferredWsSession();
@@ -760,23 +800,46 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
 
     await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
-    ws.close({ kind: "aborted" });
+    ws.close({ kind: "error", cause: ERR_TIMEOUT });
     await waitForSettledPromises();
 
     expect(spans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
-      "error.type": "Error",
-    });
-    expect(spans[0]?.recordException).toHaveBeenCalledWith({
-      name: "Error",
+      "error.type": "timeout",
     });
     expect(spans[0]?.status?.code).toBe(2);
-    expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
         "defjs.result": "error",
-        "error.type": "Error",
+        "error.type": "timeout",
       }),
+    );
+  });
+
+  test("should record a cancelled startup as websocket.aborted without marking span as error", async () => {
+    const { tracer, spans } = createMockTracer();
+    const metrics = createMockMetrics();
+    const interceptor = createOpenTelemetryWebSocketInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      metrics,
+    });
+
+    await expect(
+      interceptor.fn(makeWsRequest(), () => Promise.reject(ERR_ABORTED)),
+    ).rejects.toBe(ERR_ABORTED);
+
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("websocket.aborted");
+    expect(spans[0]?.recordException).not.toHaveBeenCalled();
+    expect(spans[0]?.status).toBeUndefined();
+    expect(spans[0]?.ended).toBe(true);
+    expect(metrics.connectDuration.record).toHaveBeenCalledWith(
+      expect.any(Number),
+      {
+        "server.address": "api.example.com",
+        "server.port": 443,
+        "defjs.result": "aborted",
+      },
     );
   });
 

@@ -26,7 +26,11 @@ import {
 import { createFixtureClient } from "../core/test/fixture/client.ts";
 import { withOpenTelemetryServer } from "./src/option";
 import type { MockSpan } from "./test/mocks";
-import { createMockLogger, createMockTracer } from "./test/mocks";
+import {
+  createMockLogger,
+  createMockTracer,
+  waitForSettledPromises,
+} from "./test/mocks";
 
 interface EchoHeadersResponse {
   headers: { [key: string]: string };
@@ -285,19 +289,66 @@ describe("operation diagnostic boundary", () => {
     });
   });
 
-  test("SSE caller abort during the handshake does not log", async () => {
+  test("HTTP caller abort is not a failure", async () => {
     const { logger, records } = createMockLogger();
+    const { tracer, spans } = createMockTracer();
     let markStarted: () => void = () => undefined;
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
     });
     const client = createClient(
       withEndpoint("https://example.invalid"),
-      withSSEHandle(() => {
+      withHTTPHandle((_input, init) => {
         markStarted();
-        return new Promise<Response>(() => undefined);
+        return new Promise<Response>((_resolve, reject) => {
+          // Fetch rejects with the signal's reason, an `AbortError` by default.
+          init?.signal?.addEventListener("abort", () =>
+            reject(
+              new DOMException("The operation was aborted.", "AbortError"),
+            ),
+          );
+        });
       }),
-      withOpenTelemetryServer({ logger }),
+      withOpenTelemetryServer({ logger, tracer }),
+    );
+    const abort = new AbortController();
+    const pending = defineRequest({ method: "GET", path: "/inventory" })(
+      client({ signal: abort.signal }),
+    );
+    await started;
+    abort.abort();
+    const [fault] = await pending;
+    expect(fault?.code).toBe("NET_ABORTED");
+    expect(records).toEqual([]);
+    const span = onlySpan(spans);
+    expect(span.addEvent).toHaveBeenCalledWith("http.aborted");
+    expect(span.status).toBeUndefined();
+    expect(span.recordException).not.toHaveBeenCalled();
+    expect(span.attributes["error.type"]).toBeUndefined();
+    expect(span.ended).toBe(true);
+  });
+
+  test("SSE caller abort during the handshake is not a failure", async () => {
+    const { logger, records } = createMockLogger();
+    const { tracer, spans } = createMockTracer();
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const client = createClient(
+      withEndpoint("https://example.invalid"),
+      withSSEHandle((_input, init) => {
+        markStarted();
+        return new Promise<Response>((_resolve, reject) => {
+          // Fetch rejects with the signal's reason, an `AbortError` by default.
+          init?.signal?.addEventListener("abort", () =>
+            reject(
+              new DOMException("The operation was aborted.", "AbortError"),
+            ),
+          );
+        });
+      }),
+      withOpenTelemetryServer({ logger, tracer }),
     );
     const abort = new AbortController();
     const openStream = defineEventStream({
@@ -309,7 +360,13 @@ describe("operation diagnostic boundary", () => {
     abort.abort();
     const [fault] = await pending;
     expect(fault?.code).toBe("NET_ABORTED");
+    await waitForSettledPromises();
     expect(records).toEqual([]);
+    const span = onlySpan(spans);
+    expect(span.addEvent).toHaveBeenCalledWith("sse.aborted");
+    expect(span.status).toBeUndefined();
+    expect(span.recordException).not.toHaveBeenCalled();
+    expect(span.ended).toBe(true);
   });
 
   test("SSE end of stream does not log", async () => {
@@ -359,11 +416,12 @@ describe("operation diagnostic boundary", () => {
     },
   );
 
-  test("WebSocket caller abort after open does not log", async () => {
+  test("WebSocket caller abort after open is not a failure", async () => {
     const { logger, records } = createMockLogger();
+    const { tracer, spans } = createMockTracer();
     const client = createClient(
       withEndpoint(inject("testServerHost").replace(/^http:/, "ws:")),
-      withOpenTelemetryServer({ logger }),
+      withOpenTelemetryServer({ logger, tracer }),
     );
     const abort = new AbortController();
     const [fault, socket] = await defineWebSocket({
@@ -374,6 +432,12 @@ describe("operation diagnostic boundary", () => {
     abort.abort();
     await expect(socket?.closed).resolves.toMatchObject({ kind: "aborted" });
     expect(records).toEqual([]);
+    const span = onlySpan(spans);
+    expect(span.addEvent).toHaveBeenCalledWith("websocket.aborted", undefined);
+    expect(span.status).toBeUndefined();
+    expect(span.recordException).not.toHaveBeenCalled();
+    expect(span.attributes["error.type"]).toBeUndefined();
+    expect(span.ended).toBe(true);
   });
 
   test.each([

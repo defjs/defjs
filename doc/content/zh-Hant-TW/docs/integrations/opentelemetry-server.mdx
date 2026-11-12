@@ -77,9 +77,11 @@ description: 為伺服器端應用程式 client 的 SDK 呼叫加上遙測，同
 
 本外掛在攔截器鏈內部量測傳輸層生命週期：
 
-- **HTTP**：span 在 HTTP 攔截器中開始，於 `HttpResponse` 回傳時結束。已宣告的 `output` / `error` 本文會在回傳**之前**，於處理常式邊界內讀完（並檢查、剖析 JSON 表示法）。本文讀取失敗，或 JSON 媒體型別／剖析失敗時，會讓攔截器拒絕（`error.type: "BodyFailure"`），把 span 標記為 `ERROR`，在 metrics 記錄 `BodyFailure`，並輸出一條 `WARN` 日誌。請求在送出前被拒絕（無效的方法、帶有憑證的 URL、平台拒絕的標頭值，或拋出例外的 `finalizeHeaders` hook）也會讓攔截器拒絕，帶的是平台的錯誤或 hook 自己的錯誤，因此 `error.type` 是該錯誤的類別（通常是 `TypeError`）。狀態碼 `400+` 會把 span 標記為 `ERROR`，並以狀態碼字串作為 `error.type`。struct 驗證（`RES_STRUCT_MISMATCH`）與 `HTTP_STATUS` tuple 轉換發生在攔截器鏈之後，不會改動已完成的傳輸 span。
-- **SSE**：一個邏輯串流（包含自動重連）產生一個 span，直到 `stream.closed` 確定為止都保持開啟。記錄的事件：`sse.connected`，之後是 `sse.closed`、`sse.aborted`（`stream.close()` 或非逾時的呼叫端中止；span 狀態維持未設定），或 `sse.error`（以 `ERROR` 結束，包含逾時形式的呼叫端中止）。Span 屬性 `url.full`、`server.address` 與 `server.port` 描述的是第一次連線；重連到另一個端點不會改變它們。
-- **WebSocket**：一個邏輯工作階段（包含自動重連）產生一個 span，直到 `session.closed` 確定為止。記錄的事件：`websocket.connected`、`websocket.closed`、`websocket.error`。伺服器關閉訊框（任何代碼）都會記錄 `websocket.closed` 並結束 span，不設定其狀態；呼叫端中止則以 `ERROR` 結束 span 並記錄 `websocket.error`，不產生日誌，但中止原因為 `TimeoutError` 時例外，會輸出一條 `WARN`。沒有關閉訊框的突發斷線（`1006`）在每個執行環境都會以 `ERROR` 與一條日誌結束。與 SSE 一樣，`url.full`、`server.address` 與 `server.port` 描述第一次連線，重連到另一個端點時不會改變。`url.full` 使用連線 URL 的 `ws:` 或 `wss:` 形式。
+- **HTTP**：span 在 HTTP 攔截器中開始，於 `HttpResponse` 回傳時結束。已宣告的 `output` / `error` 本文會在回傳**之前**，於處理常式邊界內讀完（並檢查、剖析 JSON 表示法）。本文讀取失敗，或 JSON 媒體型別／剖析失敗時，會讓攔截器拒絕（`error.type: "BodyFailure"`），把 span 標記為 `ERROR`，在 metrics 記錄 `BodyFailure`，並輸出一條 `WARN` 日誌。請求在送出前被拒絕（無效的方法、帶有憑證的 URL、平台拒絕的標頭值，或拋出例外的 `finalizeHeaders` hook）也會讓攔截器拒絕，帶的是平台的錯誤或 hook 自己的錯誤，因此 `error.type` 是該錯誤的類別（通常是 `TypeError`）。狀態碼 `400+` 會把 span 標記為 `ERROR`，並以狀態碼字串作為 `error.type`。呼叫端取消不算失敗：span 以 `http.aborted` 事件結束，狀態維持未設定，不記錄例外，也沒有 `error.type`。逾時仍然是失敗，`error.type: "timeout"`。 struct 驗證（`RES_STRUCT_MISMATCH`）與 `HTTP_STATUS` tuple 轉換發生在攔截器鏈之後，不會改動已完成的傳輸 span。
+- **SSE**：一個邏輯串流（包含自動重連）產生一個 span，直到 `stream.closed` 確定為止都保持開啟。記錄的事件：`sse.connected`，之後是 `sse.closed`、`sse.aborted`（`stream.close()`，或對已開啟的串流或握手的非逾時呼叫端中止；span 狀態維持未設定），或 `sse.error`（以 `ERROR` 結束，包含逾時形式的呼叫端中止）。Span 屬性 `url.full`、`server.address` 與 `server.port` 描述的是第一次連線；重連到另一個端點不會改變它們。
+- **WebSocket**：一個邏輯工作階段（包含自動重連）產生一個 span，直到 `session.closed` 確定為止。記錄的事件：`websocket.connected`、`websocket.closed`、`websocket.aborted`、`websocket.error`。伺服器關閉訊框（任何代碼）都會記錄 `websocket.closed` 並結束 span，不設定其狀態；呼叫端中止（針對已開啟的工作階段或連線過程中）以 `websocket.aborted` 結束 span，不設定其狀態，也不產生日誌，但中止原因為 `TimeoutError` 時例外，此時以 `ERROR` 結束 span 並記錄 `websocket.error`，輸出一條 `WARN`。沒有關閉訊框的突發斷線（`1006`）在每個執行環境都會以 `ERROR` 與一條日誌結束。與 SSE 一樣，`url.full`、`server.address` 與 `server.port` 描述第一次連線，重連到另一個端點時不會改變。`url.full` 使用連線 URL 的 `ws:` 或 `wss:` 形式。
+
+三種傳輸遵循同一條規則。呼叫端取消（不是逾時的中止）不算失敗：span 狀態維持未設定，不記錄例外，也沒有 `error.type`，並取得事件 `http.aborted`、`sse.aborted` 或 `websocket.aborted`。耗時指標仍會記錄，但不帶 `error.type`，連線指標帶有 `defjs.result: "aborted"`。不輸出日誌。逾時（`ERR_TIMEOUT` 或 `TimeoutError`，包含 `AbortSignal.timeout()` 的原因）仍然是失敗：span 以 `ERROR` 結束，`error.type` 為 `timeout`。
 
 攔截器鏈的其餘部分與傳輸本身會在用戶端 span 處於作用中的狀態下執行，因此該處的 `trace.getActiveSpan()` 會回傳該 span，它們建立的 span（例如 Fetch 自動插裝產生的 span）是它的子 span。未註冊 context manager 時，不會有任何變化。
 
@@ -92,7 +94,7 @@ description: 為伺服器端應用程式 client 的 SDK 呼叫加上遙測，同
 - 每次 `withRetry` 的 HTTP 嘗試都有各自的 client span 與耗時樣本，因為每一次重試都會重新執行攔截器鏈。若有進行中的應用程式父 span，各次嘗試會是該父 span 下的同層 span；沒有的話，重試不會自動歸入同一條 trace。Core 不會建立邏輯呼叫的父 span。
 - HTTP 嘗試的 URL 會標示該次嘗試的端點，但不會輸出嘗試編號、重試原因、預算餘額／用盡，或逐出／復原等屬性。
 - SSE 與 WebSocket 的重試（`withRetry`）在傳輸層內部重連，不會重新執行攔截器。它們在重連期間會保留同一個邏輯工作階段 span，不會為每條實體連線各建一個。即使發生容錯移轉，span URL 與指標屬性仍保留初始端點。重連不會再輸出 `connected` 事件。進行中指標計算的是等待 `closed` 的邏輯工作階段，而不是目前所選副本上的 socket。
-- 在一次 Bun 執行中，HTTP 503 產生 `error.type: "503"`，連線被拒產生 `"TypeError"`，期限到期與呼叫端取消則都產生 `"Error"`。後兩者分別回傳 `NET_TIMEOUT` 與 `NET_ABORTED`；這些 Defjs tuple 錯誤碼 並不是獨立的 HTTP 遙測屬性。對已開啟的 WebSocket，預設取消產生 `"AbortError"` 且沒有警告；以 `TimeoutError` 為中止原因時，則產生 `"TimeoutError"` 與一條警告。錯誤類別名稱只是傳輸／執行環境的觀測結果，不能取代檢查 tuple 或關閉結果。
+- HTTP 503 得到 `error.type: "503"`，連線被拒得到 `"TypeError"`，期限到期得到 `"timeout"`；呼叫端取消沒有 `error.type`。期限到期與取消分別回傳 `NET_TIMEOUT` 與 `NET_ABORTED`；這些 Defjs tuple 錯誤碼並不是獨立的 HTTP 遙測屬性。對已開啟的 WebSocket，預設取消以 `websocket.aborted` 結束且沒有警告；以 `TimeoutError` 為中止原因時，則以 `websocket.error`、`error.type: "timeout"` 與一條警告結束。其他錯誤類別名稱只是傳輸／執行環境的觀測結果，不能取代檢查 tuple 或關閉結果。
 
 ### 發出的指標
 
@@ -107,6 +109,8 @@ description: 為伺服器端應用程式 client 的 SDK 呼叫加上遙測，同
 | `defjs.client.websocket.connect.duration`    | 直到回傳 WebSocket 工作階段的時間                 |
 | `defjs.client.websocket.connection.duration` | 從回傳工作階段到最終 `session.closed` 的時間      |
 | `defjs.client.websocket.active_connections`  | 仍在等待 `closed` 的進行中邏輯 WebSocket 工作階段 |
+
+SSE 與 WebSocket 的連線建立耗時與連線持續時間樣本帶有 `defjs.result`：`success`、`error`（帶 `error.type`），或表示呼叫端取消的 `aborted`。
 
 ---
 
