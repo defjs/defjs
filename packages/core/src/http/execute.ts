@@ -51,8 +51,10 @@ type HttpExecutionDefinition<
 
 /** What the retry policy is shown of a failed attempt that it may retry. */
 interface RetryFacts {
-  /** The default verdict: no response, a timeout, and 502, 503 or 504, for a method the policy retries. */
+  /** The failure is a timeout, no response, or 502, 503 or 504; the methods sent decide the rest, once a retry is on the table. */
   readonly retryable: boolean;
+  /** Every method sent in the attempt, for the policy's method list. */
+  readonly methods: readonly string[];
   readonly status: number | undefined;
   /** The method of the last request sent; the defined method until one is sent. */
   readonly method: string;
@@ -118,7 +120,9 @@ export async function executeHttp<
       transport: "http",
       attempt: number,
       cause: attempt.result[0],
-      retryable: facts.retryable,
+      retryable:
+        facts.retryable &&
+        facts.methods.every((sent) => isRetryMethod(policy, sent)),
       method: facts.method,
       endpoint: facts.endpoint,
       status: facts.status,
@@ -210,9 +214,7 @@ async function attemptHttp<
         result,
         unselected: attempt.unselected,
         retry:
-          policy === undefined
-            ? undefined
-            : retryFacts(attempt, result[0], policy),
+          policy === undefined ? undefined : retryFacts(attempt, result[0]),
       };
     } finally {
       for (const record of attempt.sends) {
@@ -331,7 +333,6 @@ async function runChain<
 function retryFacts(
   attempt: Attempt,
   fault: AnyFault | null,
-  policy: RetryPolicy,
 ): RetryFacts | undefined {
   if (fault === null || !attempt.replayable) return undefined;
   const { info } = attempt;
@@ -355,8 +356,8 @@ function retryFacts(
     return undefined;
   }
   return {
-    retryable:
-      retryable && attempt.methods.every((sent) => isRetryMethod(policy, sent)),
+    retryable,
+    methods: attempt.methods,
     status,
     method: attempt.method,
     endpoint: attempt.endpoint.endpoint,
