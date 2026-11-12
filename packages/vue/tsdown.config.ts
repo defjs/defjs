@@ -25,8 +25,6 @@ async function writeDistPackageJson(): Promise<void> {
   };
   delete packageJson["scripts"];
   delete packageJson["devDependencies"];
-  delete packageJson["private"];
-  delete packageJson["publishConfig"];
 
   await Bun.write(
     new URL("./dist/package.json", import.meta.url),
