@@ -5,9 +5,9 @@ import type {
   ClientConfig,
   ClientWebSocketOptions,
   RetryOptions,
-  WebSocketHandle,
 } from "../client/config";
 
+import type { ResolvedEndpoint } from "../balancer/runtime";
 import { pickEndpoint } from "../balancer/runtime";
 import type { Fault, PreflightFault } from "../error";
 import { createPreflightFault } from "../error";
@@ -43,7 +43,7 @@ import { preflight } from "../internal/preflight";
 import { createWebSocketRequest } from "./build";
 import type { WebSocketCloseSnapshot } from "./codec";
 import { startSession } from "./lifecycle";
-import type { Session } from "./session";
+import type { Session, SocketConstructor } from "./session";
 import type { RetryPolicy } from "../internal/retry";
 import { resolveRetryPolicy } from "../internal/retry";
 
@@ -508,6 +508,25 @@ function resolveSocketConstructor(
   return candidate;
 }
 
+/** What one call shares between its entry, the `next` it hands to interceptors, and the delivery of its result. */
+interface Call {
+  readonly clientConfig: ClientConfig;
+  readonly endpoint: WebSocketDefinition<
+    AnyStruct | undefined,
+    AnyStruct,
+    AnyStruct | undefined
+  >;
+  readonly options: ResolvedCallOptions;
+  readonly callerSignal: AbortSignal | undefined;
+  readonly scope: CallScope;
+  readonly pick: ResolvedEndpoint;
+  readonly Socket: SocketConstructor;
+  readonly openState: number;
+  /** The session this call built. It releases the scope and settles the pick when it ends. */
+  owned: Session | undefined;
+  chainSettled: boolean;
+}
+
 async function runWebSocketCommand<
   TInput extends AnyStruct | undefined,
   TIncoming extends AnyStruct,
@@ -527,7 +546,7 @@ async function runWebSocketCommand<
   if (scope instanceof Error) {
     return [scope, undefined, undefined];
   }
-  const [pickFault, initialPick] = pickEndpoint(clientConfig.balancer, {
+  const [pickFault, pick] = pickEndpoint(clientConfig.balancer, {
     endpoints: clientConfig.endpoints,
     operation: endpoint.operation,
   });
@@ -536,19 +555,17 @@ async function runWebSocketCommand<
     return [pickFault, undefined, undefined];
   }
 
-  // The session this call built. It releases the scope and settles the pick when it ends.
-  let owned: Session | undefined;
+  let call: Call | undefined;
   try {
     const request = buildSocketRequest(
       scope,
       endpoint,
       clientConfig,
-      initialPick.endpoint,
+      pick.endpoint,
     );
     if (request instanceof Error) {
       return [request, undefined, undefined];
     }
-
     const WebSocketCtor = resolveSocketConstructor(
       clientConfig.webSocket.handle,
     );
@@ -556,124 +573,145 @@ async function runWebSocketCommand<
       return [WebSocketCtor, undefined, undefined];
     }
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published WebSocketHandleConstructor is `{ readonly OPEN: number } & (new (...args: never[]) => WebSocketHandle)`, so its construct parameters are erased and `new` cannot pass the URL unasserted (TS2345, `string` is not assignable to `never`); giving it real parameters changes that published declaration
-    const WebSocketImpl = WebSocketCtor as unknown as new (
-      url: string | URL,
-      protocols?: string | string[],
-    ) => WebSocketHandle;
-    const { beforeConnect, heartbeat, protocols, retry } = readCallOptions(
-      config,
+    const Socket = WebSocketCtor as unknown as SocketConstructor;
+    const current: Call = {
       clientConfig,
-    );
-
-    let chainSettled = false;
-    const wsHandler = (req: HttpRequest): Promise<WebSocketSessionLike> => {
-      if (chainSettled || owned !== undefined) {
-        return rejected(
-          new Error(
-            chainSettled
-              ? "WebSocket interceptor next() may not be called after the chain settles"
-              : "WebSocket interceptor next() may only be called once",
-          ),
-        );
-      }
-      // Both the caller and an interceptor replacement stay live.
-      let sessionSignal: AbortSignal;
-      try {
-        sessionSignal = mergeAbortSignals(scope.signal, [req.signal]);
-      } catch (error) {
-        return rejected(error);
-      }
-      const attributable = req.baseEndpoint === initialPick.endpoint;
-      if (!attributable) {
-        initialPick.done({ attempted: false });
-      }
-      const started = startSession({
-        incoming: endpoint.incoming,
-        outgoing: endpoint.outgoing,
-        maxOutgoingQueueSize: endpoint.maxOutgoingQueueSize ?? 0,
-        clientConfig,
-        operation: endpoint.operation,
-        Socket: WebSocketImpl,
-        openState: WebSocketCtor.OPEN,
-        retry,
-        heartbeat,
-        beforeConnect: beforeConnect ?? clientConfig.webSocket.beforeConnect,
-        protocols: [
-          ...(protocols ??
-            clientConfig.webSocket.protocols ??
-            endpoint.protocols ??
-            []),
-        ],
-        request: req,
-        attributable,
-        callerSignal: config?.signal,
-        controller: scope.controller,
-        release: scope.release,
-        signal: sessionSignal,
-        pick: attributable ? initialPick : undefined,
-      });
-      owned = started.session;
-      // An interceptor may drop the promise without handling it.
-      void started.opened.catch(() => undefined);
-      return started.opened;
+      endpoint,
+      options: readCallOptions(config, clientConfig),
+      callerSignal: config?.signal,
+      scope,
+      pick,
+      Socket,
+      openState: WebSocketCtor.OPEN,
+      owned: undefined,
+      chainSettled: false,
     };
+    call = current;
 
-    const wsInterceptors = resolveWebSocketInterceptors(
-      clientConfig.interceptors,
+    const chain = makeChain(
+      resolveWebSocketInterceptors(clientConfig.interceptors),
     );
-    const wsChain = makeChain(wsInterceptors);
     // Only the caller's signal cuts the chain short. The session's own end does not.
     const chainSignal = config?.signal ?? new AbortController().signal;
-
     try {
       const session = await awaitWithSignal(
-        () => wsChain(request, wsHandler),
+        () => chain(request, (req) => openSession(current, req)),
         chainSignal,
       );
-      const publicConnection = session.connection;
-      chainSettled = true;
-      // The delivered session is the one this call built, or a wrapper that shares its `closed` promise.
-      const delivered = owned !== undefined && isDelivered(owned, session);
-      if (!delivered) {
-        if (owned !== undefined) {
-          await discardOwned(
-            owned,
-            new Error("WebSocket session was replaced by interceptor"),
-          );
-        }
-      }
+      const [, connection] = await deliver(current, session);
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published WebSocketInterceptor/WebSocketHandler types carry WebSocketSessionLike, and an interceptor may return its own session, which is delivered by identity, while the published SocketAwaitResult needs the endpoint's WebSocketSession types. Unasserted: TS2322, `WebSocketSessionLike` is not assignable to `WebSocketSession<StructOutput<TIncoming>, WebSocketOutgoingData<TOutgoing>>`. A validating adapter would replace the delivered session
       const typedSession = session as WebSocketSession<
         WebSocketIncomingData<TIncoming>,
         WebSocketOutgoingData<TOutgoing>
       >;
-      // The call reports the first open, for a session that still shows its own live `connection`.
-      const first = delivered ? owned?.first : undefined;
-      const connection =
-        first !== undefined &&
-        (first.facade === session ||
-          publicConnection === first.facade.connection)
-          ? first.connection
-          : publicConnection;
       return [null, typedSession, connection];
     } catch (error) {
-      chainSettled = true;
-      const signalError = resolveAbortFault(chainSignal);
+      current.chainSettled = true;
       // The startup catch funnels every failure: a value that is already a fault (a refused
       // connection, a bad URL, a rejected hook) crosses unchanged, and only an unclassified throw
       // is attributed to the extension that produced it.
-      const requestError = signalError ?? caughtRequestFault(error);
-      if (owned !== undefined) {
-        await discardOwned(owned, error);
+      const requestError =
+        resolveAbortFault(chainSignal) ?? caughtRequestFault(error);
+      if (current.owned !== undefined) {
+        await discardOwned(current.owned, error);
       }
-      return [requestError, undefined, owned?.connection];
+      return [requestError, undefined, current.owned?.connection];
     }
   } finally {
-    if (owned === undefined) {
+    if (call?.owned === undefined) {
       scope.release();
-      initialPick.done({ attempted: false });
+      pick.done({ attempted: false });
     }
   }
+}
+
+/** The `next` of the interceptor chain: builds the call's session, once, and starts it. */
+function openSession(
+  call: Call,
+  req: HttpRequest,
+): Promise<WebSocketSessionLike> {
+  if (call.chainSettled || call.owned !== undefined) {
+    return rejected(
+      new Error(
+        call.chainSettled
+          ? "WebSocket interceptor next() may not be called after the chain settles"
+          : "WebSocket interceptor next() may only be called once",
+      ),
+    );
+  }
+  // Both the caller and an interceptor replacement stay live.
+  let signal: AbortSignal;
+  try {
+    signal = mergeAbortSignals(call.scope.signal, [req.signal]);
+  } catch (error) {
+    return rejected(error);
+  }
+  const { clientConfig, endpoint, options, pick } = call;
+  const attributable = req.baseEndpoint === pick.endpoint;
+  if (!attributable) {
+    pick.done({ attempted: false });
+  }
+  const started = startSession({
+    incoming: endpoint.incoming,
+    outgoing: endpoint.outgoing,
+    maxOutgoingQueueSize: endpoint.maxOutgoingQueueSize ?? 0,
+    clientConfig,
+    operation: endpoint.operation,
+    Socket: call.Socket,
+    openState: call.openState,
+    retry: options.retry,
+    heartbeat: options.heartbeat,
+    beforeConnect:
+      options.beforeConnect ?? clientConfig.webSocket.beforeConnect,
+    protocols: [
+      ...(options.protocols ??
+        clientConfig.webSocket.protocols ??
+        endpoint.protocols ??
+        []),
+    ],
+    request: req,
+    attributable,
+    callerSignal: call.callerSignal,
+    controller: call.scope.controller,
+    release: call.scope.release,
+    signal,
+    pick: attributable ? pick : undefined,
+  });
+  call.owned = started.session;
+  // An interceptor may drop the promise without handling it.
+  void started.opened.catch(() => undefined);
+  return started.opened;
+}
+
+/**
+ * The call's result once the chain returned `session`: the session itself, and the connection to report with it.
+ * A session the call built but did not hand out is discarded.
+ */
+async function deliver(
+  call: Call,
+  session: WebSocketSessionLike,
+): Promise<
+  [session: WebSocketSessionLike, connection: WebSocketConnectionInfo]
+> {
+  const publicConnection = session.connection;
+  call.chainSettled = true;
+  const { owned } = call;
+  // The delivered session is the one this call built, or a wrapper that shares its `closed` promise.
+  if (owned === undefined || !isDelivered(owned, session)) {
+    if (owned !== undefined) {
+      await discardOwned(
+        owned,
+        new Error("WebSocket session was replaced by interceptor"),
+      );
+    }
+    return [session, publicConnection];
+  }
+  // The call reports the first open, for a session that still shows its own live `connection`.
+  const first = owned.first;
+  const reportsFirst =
+    first !== undefined &&
+    (first.facade === session || publicConnection === first.facade.connection);
+  return [session, reportsFirst ? first.connection : publicConnection];
 }
 
 /** Whether `session`, the one the interceptors returned, is the session this call built or wraps it. */
