@@ -87,7 +87,7 @@ When reviewing Defjs code, check each item:
 
 ## Reference routing table
 
-The files in `references/` are generated copies of the Defjs documentation pages; do not edit them. Load only the file needed for your current task. Each link is one level deep. A link inside a reference that starts with `/` points to a page of the documentation site, where `/api/...` pages hold the exact signatures; the installed `@defjs/*` types are the authority for your version.
+The files in `references/` are generated copies of the Defjs documentation pages; do not edit them. Load only the file needed for your current task. Each link is one level deep. A link inside a reference that starts with `/docs/` or `/recipes/` names another reference by the last segment of its path (`/recipes/refresh-bearer-once` is `references/refresh-bearer-once.md`). `/api/...` pages are not shipped; the installed `@defjs/*` types hold the exact signatures and are the authority for your version.
 
 | Task or topic                                                                                                | Reference file                                                           |
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
@@ -97,12 +97,20 @@ The files in `references/` are generated copies of the Defjs documentation pages
 | Multiple endpoints, `withBalancer`, strategies, health filtering, `withRetry` defaults and budget            | [references/load-balancing.md](references/load-balancing.md)             |
 | Error-first tuple shapes, `Fault` codes, narrowing declared `HTTP_STATUS` `error.data`, structured logging   | [references/errors.md](references/errors.md)                             |
 | `createHttpInterceptor`, short-circuiting, `Retry-After`, WebSocket session wrapping                         | [references/interceptors.md](references/interceptors.md)                 |
+| Bearer auth with a single-flight refresh and one replay after 401                                            | [references/refresh-bearer-once.md](references/refresh-bearer-once.md)   |
+| `304 Not Modified` as an `HTTP_STATUS` fault, ETag revalidation with an application cache                    | [references/etag-revalidate.md](references/etag-revalidate.md)           |
+| One GET that branches on a typed 200 and a declared 404                                                      | [references/get-declared-404.md](references/get-declared-404.md)         |
+| Sending a typed JSON body and decoding a declared 201                                                        | [references/post-json.md](references/post-json.md)                       |
+| Abort or time out an HTTP call and read the abort and timeout faults                                         | [references/cancel-http.md](references/cancel-http.md)                   |
+| Open a typed SSE stream, iterate, then close and await `closed`                                              | [references/consume-sse.md](references/consume-sse.md)                   |
+| WebSocket session: send one envelope, receive once, close and await `closed`                                 | [references/websocket-session.md](references/websocket-session.md)       |
 | `defineEventStream`, SSE `events` map, buffer limit, startup deadline, retries, `withSSEOnInvalidEvent`      | [references/sse.md](references/sse.md)                                   |
 | `defineWebSocket`, `incoming`/`outgoing` `discriminatedUnion`, `session.send`, heartbeat, retries, protocols | [references/web-socket.md](references/web-socket.md)                     |
 | `@defjs/react`: `ClientProvider`, `useClient`, `useEffect` abort cleanup, owning streams and sockets         | [references/react.md](references/react.md)                               |
 | `@defjs/vue`: `createClientPlugin`, `injectClient`, custom `InjectionKey`, `watch` cleanup                   | [references/vue.md](references/vue.md)                                   |
 | `@defjs/opentelemetry-server`: `withOpenTelemetryServer`, low-cardinality `operation`, propagation, logs     | [references/opentelemetry-server.md](references/opentelemetry-server.md) |
 | Offline tests with `withHTTPHandle`, `withSSEHandle`, `withWebSocketHandle`, fake timers                     | [references/testing.md](references/testing.md)                           |
+| A complete local test that swaps Fetch for `withHTTPHandle`                                                  | [references/test-with-handle.md](references/test-with-handle.md)         |
 | Publishing a standalone SDK package                                                                          | [references/publish-http-sdk.md](references/publish-http-sdk.md)         |
 | Definition vs execution, declaration is an assertion, what Defjs does not provide                            | [references/design-decisions.md](references/design-decisions.md)         |
 

@@ -21,7 +21,15 @@ export const skillPages = [
   "docs/struct",
   "docs/testing",
   "docs/web-socket",
+  "recipes/cancel-http",
+  "recipes/consume-sse",
+  "recipes/etag-revalidate",
+  "recipes/get-declared-404",
+  "recipes/post-json",
   "recipes/publish-http-sdk",
+  "recipes/refresh-bearer-once",
+  "recipes/test-with-handle",
+  "recipes/websocket-session",
 ] as const;
 
 /** The processed Markdown that the documentation build emits for each skill page, keyed by reference file name. */
