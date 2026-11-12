@@ -30,7 +30,7 @@ function createServer(locale: string) {
     },
   );
 }
-const servers = new Map(
+const servers: ReadonlyMap<string, ReturnType<typeof createServer>> = new Map(
   locales.map((locale) => [locale, createServer(locale)]),
 );
 export async function loader({ params }: Route.LoaderArgs) {

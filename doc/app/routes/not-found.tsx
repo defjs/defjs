@@ -1,6 +1,5 @@
-import { useI18n } from "fumadocs-ui/contexts/i18n";
 import { localePrefix } from "../lib/i18n";
-import { useAppTranslations } from "../lib/use-app-translations";
+import { useAppTranslations, useLocale } from "../lib/use-app-translations";
 export function ErrorPage({
   title,
   description,
@@ -8,7 +7,7 @@ export function ErrorPage({
   title: string;
   description?: string;
 }) {
-  const { locale } = useI18n();
+  const locale = useLocale();
   const t = useAppTranslations();
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-8 text-center">

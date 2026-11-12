@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { localePrefix } from "../lib/i18n";
-import { useAppTranslations } from "../lib/use-app-translations";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
+import { useAppTranslations, useLocale } from "../lib/use-app-translations";
 import type { MessageKey } from "../lib/messages";
 import { apiEntries, filterApiEntries } from "../data/api-catalog";
 
@@ -15,7 +14,7 @@ const kindKeys = new Map<string, MessageKey>([
 ]);
 
 export function ApiIndex() {
-  const { locale } = useI18n();
+  const locale = useLocale();
   const [query, setQuery] = useState(""),
     [packageName, setPackageName] = useState(""),
     [kind, setKind] = useState("");

@@ -13,7 +13,6 @@ import {
   type Root,
   type Separator,
 } from "fumadocs-core/page-tree";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
 import { Container } from "fumadocs-ui/layouts/docs/slots/container";
 import {
   Sidebar,
@@ -33,7 +32,7 @@ import {
   PopoverTrigger,
 } from "fumadocs-ui/components/ui/popover";
 import type { LayoutTab } from "fumadocs-ui/layouts/shared";
-import { useAppTranslations } from "../lib/use-app-translations";
+import { useAppTranslations, useLocale } from "../lib/use-app-translations";
 import { getNavigationTabs, getRelatedNavigation } from "../lib/navigation";
 
 function NavigationState({ children }: { children: ReactNode }) {
@@ -238,7 +237,7 @@ export function StaticNavigation({ tree }: { tree: Root }) {
 }
 
 export function RelatedNavigation({ tree }: { tree: Root }) {
-  const { locale = "en-US" } = useI18n();
+  const locale = useLocale();
   const t = useAppTranslations();
   const { pathname } = useLocation();
   const groups = getRelatedNavigation(tree, locale, pathname);

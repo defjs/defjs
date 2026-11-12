@@ -1,8 +1,10 @@
-/** English API prose on a translated page. en-US stays unmarked. */
+import { defaultLocale } from "./i18n";
+
+/** English API prose on a translated page. The default locale stays unmarked. */
 export function englishAttributes(
   locale: string,
 ): { lang: "en"; dir: "ltr" } | null {
-  if (locale === "en-US") return null;
+  if (locale === defaultLocale) return null;
   return { lang: "en", dir: "ltr" };
 }
 

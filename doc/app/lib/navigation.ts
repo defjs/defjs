@@ -6,7 +6,7 @@ import {
   type Root,
 } from "fumadocs-core/page-tree";
 import type { LayoutTab } from "fumadocs-ui/layouts/shared";
-import { localePrefix } from "./i18n";
+import { localePrefix, type Locale } from "./i18n";
 import { getTranslator, type Translator } from "./translations";
 import type { MessageKey } from "./messages";
 
@@ -77,7 +77,7 @@ export const exampleGroups = [
 
 export function getNavigationTree(
   tree: Root,
-  locale: string,
+  locale: Locale,
   t: Translator = getTranslator(locale),
 ): Root {
   const prefix = localePrefix(locale);

@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { ApiEntryPage } from "./api-entry-page";
 import type { RenderedApiEntry } from "../lib/api-html";
+import type { Locale } from "../lib/i18n";
 import { getTranslator } from "../lib/translations";
 import { TestI18nProvider } from "./test-i18n";
 
@@ -33,7 +34,7 @@ function view(overrides: Partial<RenderedApiEntry> = {}): RenderedApiEntry {
   };
 }
 
-const render = (entry: RenderedApiEntry, locale = "en-US") =>
+const render = (entry: RenderedApiEntry, locale: Locale = "en-US") =>
   renderToStaticMarkup(
     <MemoryRouter>
       <TestI18nProvider locale={locale}>

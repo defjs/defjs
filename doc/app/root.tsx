@@ -10,7 +10,7 @@ import {
 import { RootProvider } from "fumadocs-ui/provider/react-router";
 import { getI18nProps } from "./lib/translations";
 import { useAppTranslations } from "./lib/use-app-translations";
-import { locales } from "./lib/i18n";
+import { splitLocale } from "./lib/i18n";
 import NotFound, { ErrorPage } from "./routes/not-found";
 import StaticSearch from "./components/search";
 import type { ReactNode } from "react";
@@ -18,8 +18,7 @@ import type { Route } from "./+types/root";
 import "./app.css";
 export function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
-  const prefix = pathname.split("/")[1] ?? "";
-  const locale = locales.includes(prefix) ? prefix : "en-US";
+  const { locale } = splitLocale(pathname.split("/").slice(1));
   return (
     <html
       lang={locale}

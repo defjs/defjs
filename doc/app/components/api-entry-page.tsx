@@ -5,11 +5,10 @@ import {
   englishAttributes,
 } from "../lib/api-entry-actions";
 import type { RenderedApiEntry } from "../lib/api-html";
-import { useAppTranslations } from "../lib/use-app-translations";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
+import { useAppTranslations, useLocale } from "../lib/use-app-translations";
 
 export function ApiEntryPage({ view }: { view: RenderedApiEntry }) {
-  const { locale = "en-US" } = useI18n();
+  const locale = useLocale();
   const t = useAppTranslations();
   const prose = englishAttributes(locale);
   const root = useRef<HTMLDivElement>(null);

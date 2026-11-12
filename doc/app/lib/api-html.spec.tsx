@@ -87,7 +87,7 @@ function entry(overrides: Partial<ApiEntryView> = {}): ApiEntryView {
 }
 
 test("server rendering highlights like the MDX code blocks and keeps prose", async () => {
-  const rendered = await renderApiEntry(entry(), t, "Client");
+  const rendered = await renderApiEntry(entry(), t, "Client", "en-US");
   expect(rendered.summary).toBe("Creates a client.");
   expect(rendered.name).toBe("createClient");
   expect(rendered.signaturesHtml[0]).toContain("data-api-copy");
@@ -119,12 +119,13 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
     }),
     t,
     "Client",
+    "en-US",
   );
   expect(empty.descriptionHtml).toBe("");
   expect(empty.signaturesHtml).toEqual([]);
   expect(empty.membersHtml).toBe("");
   expect(await renderMarkdown("  ", copyLabels(t))).toBe("");
-  expect(await renderFieldTable([], t)).toBe("");
+  expect(await renderFieldTable([], t, "en-US")).toBe("");
   const arabic = await renderFieldTable(
     [
       {
@@ -171,7 +172,7 @@ test("every entry page and its processed text hide raw doc links", async () => {
   expect(apiReference.map((entry) => entry.name)).not.toContain("ClientState");
   for (const item of apiReference) {
     const view = buildApiEntryView(item, "en-US", apiTargets());
-    const rendered = await renderApiEntry(view, t, "Overview title");
+    const rendered = await renderApiEntry(view, t, "Overview title", "en-US");
     const page = renderToStaticMarkup(
       <MemoryRouter>
         <TestI18nProvider>
