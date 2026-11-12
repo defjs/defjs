@@ -661,54 +661,6 @@ describe("fetchEventStream advanced", () => {
     await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
   });
 
-  test.each([
-    ["an Error", new Error("close failed")],
-    ["undefined", undefined],
-  ])(
-    "should finish teardown before rejecting a synchronous close throw of %s",
-    async (_label, closeError) => {
-      const cancel = vi.fn();
-      const body = new ReadableStream<Uint8Array>({
-        pull() {
-          return new Promise<void>(() => undefined);
-        },
-        cancel,
-      });
-      const stream = await fetchEventStream(createRequest("/events"), {
-        fetch: () =>
-          Promise.resolve(
-            new Response(body, {
-              headers: { "content-type": "text/event-stream" },
-            }),
-          ),
-      });
-      const close = vi.fn(() => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- close() under test throws closeError, which may be a non-Error value, to exercise handling of a throwing close
-        throw closeError;
-      });
-      stream.close = close;
-
-      let first: PromiseLike<void> | undefined;
-      expect(() => {
-        first = stream[Symbol.asyncDispose]();
-      }).not.toThrow();
-      expect(close).not.toHaveBeenCalled();
-      if (!first) {
-        throw new Error("Expected disposal promise");
-      }
-
-      const second = stream[Symbol.asyncDispose]();
-      expect(second).toBe(first);
-      await expect(Promise.resolve(first)).rejects.toBe(closeError);
-      expect(close).toHaveBeenCalledOnce();
-      await expect(settleWithin(stream.closed)).resolves.toMatchObject({
-        kind: "aborted",
-      });
-      expect(cancel).toHaveBeenCalledOnce();
-      expect(body.locked).toBe(false);
-    },
-  );
-
   test("should dispose an active stream once without waiting for a stuck provider cancel", async () => {
     const pull = vi.fn(() => new Promise<void>(() => undefined));
     const cancel = vi.fn(() => new Promise<void>(() => undefined));
@@ -727,15 +679,12 @@ describe("fetchEventStream advanced", () => {
       fetch,
       retry: resolveRetryPolicy({ maxRetries: 3, delayMs: 0 }),
     });
-    const close = vi.fn(stream.close.bind(stream));
-    stream.close = close;
     await vi.waitFor(() => expect(pull).toHaveBeenCalledOnce());
 
     let first: PromiseLike<void> | undefined;
     expect(() => {
       first = stream[Symbol.asyncDispose]();
     }).not.toThrow();
-    expect(close).not.toHaveBeenCalled();
     if (!first) {
       throw new Error("Expected disposal promise");
     }
@@ -744,7 +693,6 @@ describe("fetchEventStream advanced", () => {
     expect(second).toBe(first);
     await expect(settleWithin(Promise.resolve(first))).resolves.toBeUndefined();
 
-    expect(close).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledOnce();
     expect(body.locked).toBe(false);

@@ -319,7 +319,11 @@ export async function fetchEventStream<
     closed: closedDeferred.promise,
     close,
     [Symbol.asyncDispose]() {
-      return disposeHandle();
+      close();
+      return (disposeTask ??= Promise.all([
+        closedDeferred.promise,
+        lifecycleTask,
+      ]).then(() => undefined));
     },
     [Symbol.asyncIterator]() {
       const iterator = queue[Symbol.asyncIterator]();
@@ -339,7 +343,7 @@ export async function fetchEventStream<
         return() {
           if (!returned) {
             returned = true;
-            handle.close("iterator-return");
+            close("iterator-return");
           }
           return Promise.resolve({ done: true, value: undefined });
         },
@@ -411,27 +415,6 @@ export async function fetchEventStream<
     },
   );
   return openDeferred.promise;
-
-  function disposeHandle(): Promise<void> {
-    return (disposeTask ??= Promise.resolve().then(disposeOnce));
-  }
-
-  async function disposeOnce(): Promise<void> {
-    let closeError: unknown;
-    let hasCloseError = false;
-    try {
-      handle.close();
-    } catch (error) {
-      hasCloseError = true;
-      closeError = error;
-      close();
-    }
-
-    await Promise.all([closedDeferred.promise, lifecycleTask]);
-    if (hasCloseError) {
-      throw closeError;
-    }
-  }
 
   function close(reason?: unknown): void {
     if (closeController.signal.aborted) {
