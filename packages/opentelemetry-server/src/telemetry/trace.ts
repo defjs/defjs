@@ -81,8 +81,7 @@ export function isCallerCancellation(
   signal: AbortSignal | undefined,
   error: unknown,
 ): boolean {
-  if (error instanceof Error && "code" in error && error.code === "NET_ABORTED")
-    return true;
+  if (faultCode(error) === "NET_ABORTED") return true;
   const reason: unknown = signal?.reason;
   // A failure that is no abort at all is the common case; it never reaches the timeout checks.
   if (!isAbortCause(error) && !isAbortCause(reason)) return false;
@@ -150,9 +149,26 @@ export function getHttpResponseErrorType(status: number): string | undefined {
   return undefined;
 }
 
-/** `error.type` of a failed call: `timeout` for a timeout, otherwise the class name of the error. */
+/**
+ * The `code` of a fault, or `undefined` for any other value. A failure the call rethrows may carry
+ * a throwing getter, and reading telemetry facts must not replace that failure.
+ */
+function faultCode(error: unknown): unknown {
+  try {
+    return error instanceof Error && "code" in error ? error.code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `error.type` of a failed call: `timeout` for a timeout, which a `NET_TIMEOUT` fault is as well,
+ * otherwise the class name of the error.
+ */
 export function getErrorType(error: unknown): string {
-  return isTimeoutCause(error) ? "timeout" : getExceptionType(error);
+  return isTimeoutCause(error) || faultCode(error) === "NET_TIMEOUT"
+    ? "timeout"
+    : getExceptionType(error);
 }
 
 /** `exception.type` of a failure: the class name of the error, not a Defjs fault code. */

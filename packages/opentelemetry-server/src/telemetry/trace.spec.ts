@@ -310,6 +310,16 @@ describe("trace helpers", () => {
       ).toBe(false);
     });
 
+    test("is false for a failure whose code cannot be read, and its error.type is still its class", () => {
+      const error = Object.defineProperty(new TypeError("x"), "code", {
+        get() {
+          throw new Error("private getter failure");
+        },
+      });
+      expect(isCallerCancellation(undefined, error)).toBe(false);
+      expect(getErrorType(error)).toBe("TypeError");
+    });
+
     test("is false for a failure, whatever the signal says", () => {
       expect(
         isCallerCancellation(new AbortController().signal, new TypeError("x")),
@@ -326,7 +336,7 @@ describe("trace helpers", () => {
     [ERR_TIMEOUT, "timeout", "Error"],
     [new DOMException("timed out", "TimeoutError"), "timeout", "TimeoutError"],
     [new TypeError("x"), "TypeError", "TypeError"],
-    [createNetworkFault(ERR_TIMEOUT), "DefjsFault", "DefjsFault"],
+    [createNetworkFault(ERR_TIMEOUT), "timeout", "DefjsFault"],
   ])(
     "error.type of %s is %s and its exception.type is %s",
     (error, errorType, exceptionType) => {

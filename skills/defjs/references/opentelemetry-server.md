@@ -88,7 +88,7 @@ export const client = createClient(
 
 Current behavior: each `withRetry` HTTP attempt has its own client span; with an active application parent the attempts are siblings, not a logical-call span created by core. No attempt number, retry reason, budget, or endpoint ejection/recovery attributes are emitted. SSE/WebSocket reconnects retain one logical-session span; `url.full`, `server.address`, and `server.port` describe the first connection and do not change when a reconnect picks another endpoint; active metrics count logical sessions, not physical sockets.
 
-Observed HTTP `error.type` values include `"503"` for status 503, `"TypeError"` for connection rejection or a request the platform refuses to build, and `"Error"` for timeout or caller cancellation; they are not Defjs tuple fault codes. An open WebSocket caller abort ends `ERROR` and logs nothing except when its reason is `TimeoutError`, which logs once. SSE with that reason emits `sse.error`, ends `ERROR`, and warns; non-timeout cancellation is not warned.
+Observed HTTP `error.type` values include `"503"` for status 503, `"TypeError"` for connection rejection or a request the platform refuses to build, and `"timeout"` for a timeout; they are not Defjs tuple fault codes. A caller cancellation is not a failure on any transport: the span status stays unset with no `error.type`, the span records `http.aborted`, `sse.aborted` or `websocket.aborted`, the connection metrics carry `defjs.result` `aborted`, and nothing is logged. A timeout, including an abort whose reason is `TimeoutError`, ends `ERROR` with `error.type` `timeout` and logs once; an open SSE stream or WebSocket session also records `sse.error` or `websocket.error`.
 
 ## Redaction and safety
 

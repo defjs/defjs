@@ -15,6 +15,7 @@ import {
   diag,
   propagation,
   ROOT_CONTEXT,
+  SpanStatusCode,
   trace,
 } from "@opentelemetry/api";
 import {
@@ -808,6 +809,31 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     });
     expect(spans[0]?.status?.code).toBe(2);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.objectContaining({
+        "defjs.result": "error",
+        "error.type": "timeout",
+      }),
+    );
+  });
+
+  test("should record a startup timeout fault as an error with error.type timeout", async () => {
+    const { tracer, spans } = createMockTracer();
+    const metrics = createMockMetrics();
+    const interceptor = createOpenTelemetryWebSocketInterceptor({
+      tracer,
+      propagator: mockPropagator,
+      metrics,
+    });
+    const fault = createNetworkFault(ERR_TIMEOUT);
+
+    await expect(
+      interceptor.fn(makeWsRequest(), () => Promise.reject(fault)),
+    ).rejects.toBe(fault);
+
+    expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
+    expect(spans[0]?.attributes["error.type"]).toBe("timeout");
+    expect(metrics.connectDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
         "defjs.result": "error",

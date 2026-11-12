@@ -731,6 +731,26 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     },
   );
 
+  test("rethrows a failure whose code cannot be read", async () => {
+    const { tracer, spans } = createMockTracer();
+    const cause = Object.defineProperty(new TypeError("refused"), "code", {
+      get() {
+        throw new Error("private getter failure");
+      },
+    });
+    const interceptor = createOpenTelemetryHttpInterceptor({
+      tracer,
+      propagator: mockPropagator,
+    });
+
+    await expect(
+      interceptor.fn(makeHttpRequest(), () => Promise.reject(cause)),
+    ).rejects.toBe(cause);
+
+    expect(spans[0]?.attributes["error.type"]).toBe("TypeError");
+    expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
+  });
+
   test.each([ERR_TIMEOUT, new DOMException("timed out", "TimeoutError")])(
     "records a timeout as a failure with error.type timeout: %s",
     async (cause) => {
