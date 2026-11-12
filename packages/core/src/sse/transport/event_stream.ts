@@ -35,7 +35,7 @@ import {
 import { AsyncQueue } from "../../internal/async_queue";
 import { computeReconnectDelay, wait } from "../../internal/backoff";
 import type { RetryPolicy } from "../../internal/retry";
-import { decideRetry, isRetryMethod } from "../../internal/retry";
+import { isRetryMethod, retryStep } from "../../internal/retry";
 import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
 import type { HttpRequest, HttpResponseType } from "../../http/http_request";
 import type {
@@ -299,7 +299,8 @@ export async function fetchEventStream<
   let settledOpen = false;
   // A server `retry:` field replaces the policy's base delay for the reconnects that follow.
   let serverRetryMs: number | undefined;
-  let retryCount = 0;
+  // Retries since the last established connection.
+  let retried = 0;
   let lastEventId = "";
   // Headers validate every write. The id only matters to the next attempt, so it is applied there.
   let lastEventIdDirty = false;
@@ -538,7 +539,7 @@ export async function fetchEventStream<
 
         validateOpenResponse(open, decoded, bodyFault);
 
-        retryCount = 0;
+        retried = 0;
 
         if (!settledOpen) {
           settledOpen = true;
@@ -584,42 +585,72 @@ export async function fetchEventStream<
         }
 
         // A stream body is spent by the first attempt and the request is built once per execute, so nothing can be
-        // retried: no observer, retry policy or delay, and the caller gets the real failure. Keyed on the body
-        // type, not `locked`: when a failed attempt locks the stream differs by runtime.
-        if (isReadableStreamBody(request.body)) {
+        // retried: no retry policy or delay, and the caller gets the real failure. Keyed on the body type, not
+        // `locked`: when a failed attempt locks the stream differs by runtime.
+        if (policy === undefined || isReadableStreamBody(request.body)) {
           finishError(error);
           return;
         }
 
-        let retryDelay: number | null;
-        try {
-          retryDelay = await resolveRetryDelay(error, retryAbort, response);
-        } catch (policyError) {
-          if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(retryAbort);
+        // A handshake status other than 502, 503 and 504 is not retried by default; every other failure is a
+        // network failure of the handshake or of the open stream.
+        const step = await retryStep(
+          policy,
+          retried,
+          retryAbort,
+          (attempt) => ({
+            transport: "sse",
+            attempt,
+            cause: error,
+            retryable:
+              isRetryMethod(policy, request.method) &&
+              (!isHandshakeStatusFault(error) ||
+                (response !== undefined &&
+                  statusOutcome(response.status) === "NET_UNAVAILABLE")),
+            method: request.method,
+            lastEventId,
+            open: latestOpen,
+            status: response?.status,
+          }),
+        );
+        if (step === "stop") {
+          finishError(error);
+          return;
+        }
+        if (step !== "retry") {
+          if (step.code === "EXT_HOOK_FAILED") {
+            const failure: unknown = step.cause;
+            finishError(
+              new EventStreamFatalError(
+                "EXT_HOOK_FAILED",
+                failure instanceof Error
+                  ? failure.message
+                  : "Retry policy failed",
+                { cause: failure },
+              ),
+            );
           } else {
-            finishError(policyError);
+            finishAborted(retryAbort);
           }
           return;
         }
 
-        if (retryDelay === null) {
-          finishError(error);
-          return;
-        }
-
+        retried += 1;
         // Release this attempt before the backoff so it is not in flight while waiting.
         finishAttempt();
         try {
-          await wait(retryDelay, retryAbort);
-        } catch (waitError) {
-          // wait() rejects only from the merged close/request abort signal.
-          /* istanbul ignore else -- @preserve */
-          if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(retryAbort);
-          } else {
-            finishError(waitError);
-          }
+          await wait(
+            computeReconnectDelay(
+              serverRetryMs === undefined
+                ? policy
+                : { ...policy, delayMs: serverRetryMs },
+              retried,
+            ),
+            retryAbort,
+          );
+        } catch {
+          // wait() rejects only from the merged close and request signals.
+          finishAborted(retryAbort);
           return;
         }
         reconnectPick = true;
@@ -704,70 +735,6 @@ export async function fetchEventStream<
         });
       }
       throw error;
-    }
-  }
-
-  async function resolveRetryDelay(
-    error: unknown,
-    signal: AbortSignal,
-    response: Response | undefined,
-  ): Promise<number | null> {
-    // Opt-in retry: without a policy the stream is not retried.
-    if (!policy) {
-      return null;
-    }
-    retryCount += 1;
-
-    // A handshake status other than 502, 503 and 504 is not retried by default; every other failure is a
-    // network failure of the handshake or of the open stream.
-    const unavailable =
-      response !== undefined &&
-      statusOutcome(response.status) === "NET_UNAVAILABLE";
-    const retry = await runFatalHook(
-      () =>
-        decideRetry(policy, retryCount - 1, signal, (attempt) => ({
-          transport: "sse",
-          attempt,
-          cause: error,
-          retryable:
-            isRetryMethod(policy, request.method) &&
-            (!isHandshakeStatusFault(error) || unavailable),
-          method: request.method,
-          lastEventId,
-          open: latestOpen,
-          status: response?.status,
-        })),
-      signal,
-      "Retry policy failed",
-    );
-    if (!retry) {
-      return null;
-    }
-
-    return computeReconnectDelay(
-      serverRetryMs === undefined
-        ? policy
-        : { ...policy, delayMs: serverRetryMs },
-      retryCount,
-    );
-  }
-
-  async function runFatalHook<T>(
-    run: () => T | PromiseLike<T>,
-    signal: AbortSignal,
-    fallback: string,
-  ): Promise<T> {
-    try {
-      return await awaitWithSignal(run, signal);
-    } catch (error) {
-      if (signal.aborted) {
-        throw error;
-      }
-      throw new EventStreamFatalError(
-        "EXT_HOOK_FAILED",
-        error instanceof Error ? error.message : fallback,
-        { cause: error },
-      );
     }
   }
 
