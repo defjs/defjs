@@ -1,10 +1,9 @@
 import type { AnyStruct, Infer } from "../struct";
-import type { AnyStructLike } from "../struct/types";
+import type { StructLike } from "../struct/types";
 import { decodeBytes, readBytesText } from "../internal/bytes";
 import { rejectNonJson } from "../internal/outbound_request";
 import { encodeAliasedStruct } from "../struct/codec/common";
-import { decodeJson } from "../struct/codec/json";
-import { parseRuntimeValue } from "../struct/introspection";
+import { parseRuntimeValue, parseStructValue } from "../struct/parse";
 import { assertStruct } from "../struct/shape";
 
 export function serializeOutgoingWebSocketMessage(
@@ -18,6 +17,8 @@ export function serializeOutgoingWebSocketMessage(
   }
 
   // One struct check covers both the parse and the encode.
+  // PERF: the shared outbound encoder (a tagging parse, then encodeOutbound) measured 4% to 28% slower on one send: Bun 1.4.4
+  // +7.5% on a number, +16% on a nested object, +4% on a union; Node 26.13 +21%, +28%, +17% (seven interleaved runs each).
   assertStruct(outgoing, "struct");
   // Same guard as an HTTP JSON body: non-finite numbers, functions, symbols and non-plain objects throw.
   const wire = JSON.stringify(
@@ -40,7 +41,7 @@ export function serializeOutgoingWebSocketMessage(
 }
 
 /** Synchronous for text and bytes. Only a Blob frame has to be read first. */
-export function decodeWebSocketMessage<S extends AnyStructLike>(
+export function decodeWebSocketMessage<S extends StructLike>(
   incoming: S,
   raw: unknown,
 ): Infer<S> | undefined | Promise<Infer<S> | undefined> {
@@ -52,13 +53,13 @@ export function decodeWebSocketMessage<S extends AnyStructLike>(
   return decodeWebSocketText(incoming, readBytesText(raw));
 }
 
-function decodeWebSocketText<S extends AnyStructLike>(
+function decodeWebSocketText<S extends StructLike>(
   incoming: S,
   text: string | undefined,
 ): Infer<S> | undefined {
   return text === undefined
     ? undefined
-    : decodeJson(incoming, JSON.parse(text));
+    : parseStructValue(incoming, JSON.parse(text), { aliases: true });
 }
 
 export interface WebSocketCloseSnapshot {
