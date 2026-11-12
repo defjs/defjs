@@ -398,6 +398,22 @@ function collectWireKeys(value: unknown, keys: Set<string>): void {
   }
 }
 
+test("a Date put in place of an object that two discriminated unions declare leaves as its ISO string", () => {
+  const event = () =>
+    struct.discriminatedUnion("kind", [
+      struct.object({ kind: struct.literal("created") }),
+    ]);
+  const Schema = struct.intersection(
+    struct.object({ item: event() }),
+    struct.object({ item: event() }),
+  );
+  const input = parseEndpointInput(Schema, { item: { kind: "created" } });
+
+  expect(encodeOutbound({ ...input, item: new Date(0) })).toEqual({
+    item: "1970-01-01T00:00:00.000Z",
+  });
+});
+
 function expectSameWire(
   actual: unknown,
   encoded: unknown,

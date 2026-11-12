@@ -30,7 +30,7 @@ async function equivalent(schema: AnyStruct, input: unknown): Promise<void> {
 }
 
 function tagMembers(node: object): readonly RuntimeStruct[] {
-  const tag = readOwnGuide(node);
+  const tag = readOwnGuide(node, undefined);
   expect(tag).toBeDefined();
   if (tag === undefined) throw new Error("Expected a guide tag");
   return guideMembers(tag);
@@ -426,10 +426,10 @@ test("merging two untagged objects does not invent a parse tag", () => {
     return;
   }
   const mergedValue = assertObject(merged.value, "merged value");
-  expect(readOwnGuide(mergedValue)).toBeUndefined();
+  expect(readOwnGuide(mergedValue, undefined)).toBeUndefined();
   if (!isRecord(mergedValue)) throw new Error("Expected a merged record");
   expect(
-    readOwnGuide(assertObject(mergedValue["shared"], "shared")),
+    readOwnGuide(assertObject(mergedValue["shared"], "shared"), undefined),
   ).toBeUndefined();
   expect(plain(merged.value)).toEqual({
     left: 1,

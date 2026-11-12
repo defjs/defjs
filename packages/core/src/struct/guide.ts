@@ -66,7 +66,7 @@ export function combineGuides(
 
 export function readOwnGuide(
   value: object,
-  guides?: WeakMap<object, Guide>,
+  guides: WeakMap<object, Guide> | undefined,
 ): Guide | undefined {
   // Reflect.get is one ordinary [[Get]], like `value[STRUCT]`; an `in` check would also call a proxy's has trap.
   const tag: unknown = guides?.get(value) ?? Reflect.get(value, STRUCT);
