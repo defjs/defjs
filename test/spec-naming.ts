@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
+import type { Workspace } from "./runtime-matrix.ts";
 
 export const TEST_FILE: RegExp = /\.(spec|test)\.[cm]?tsx?$/;
 export const SPEC_NAME: RegExp =
@@ -23,12 +24,6 @@ export const RESERVED: readonly string[] = [
   "spec",
 ] as const;
 export const FORBIDDEN_TEST: RegExp = /\.test\.[cm]?tsx?$/;
-
-export interface Owner {
-  readonly dir: string;
-  readonly runtimes: readonly string[];
-  readonly project: (runtime: string) => string;
-}
 
 export interface ListEntry {
   file: string;
@@ -76,33 +71,33 @@ export function nameViolations(files: readonly string[]): string[] {
   return messages;
 }
 
+// The projects that run `file`: every runtime of the workspace that owns it,
+// or only the runtime its suffix names. A `type` suffix names no runtime.
 export function expectedProjects(
   file: string,
-  owners: readonly Owner[],
+  workspaces: readonly Workspace[],
 ): string[] {
   const match = SPEC_NAME.exec(basename(file));
-  if (match === null) return [];
+  const owner = workspaces.find(({ dirs }) =>
+    dirs.some((dir) => file.startsWith(dir)),
+  );
+  if (match === null || owner === undefined) return [];
   const suffix = match.groups?.["suffix"];
-  if (suffix === "type") return [];
-  const owner = owners.find((candidate) => file.startsWith(candidate.dir));
-  if (owner === undefined) return [];
-  if (suffix === undefined) {
-    return owner.runtimes.map((runtime) => owner.project(runtime));
-  }
-  if (!owner.runtimes.includes(suffix)) return [];
-  return [owner.project(suffix)];
+  return owner.runtimes
+    .filter((runtime) => suffix === undefined || suffix === runtime)
+    .map((runtime) => `${owner.name}-${runtime}`);
 }
 
 export function ownershipViolations(
   files: readonly string[],
-  owners: readonly Owner[],
+  workspaces: readonly Workspace[],
 ): string[] {
   const messages: string[] = [];
   for (const file of files) {
     const match = SPEC_NAME.exec(basename(file));
     if (match === null) continue;
     if (match.groups?.["suffix"] === "type") continue;
-    if (expectedProjects(file, owners).length === 0) {
+    if (expectedProjects(file, workspaces).length === 0) {
       messages.push(`${file}: selected by no runtime project`);
     }
   }
@@ -131,11 +126,11 @@ export function selectionDiff(
   project: string,
   actual: readonly ListEntry[],
   specFiles: readonly string[],
-  owners: readonly Owner[],
+  workspaces: readonly Workspace[],
 ): { missing: string[]; unexpected: string[] } {
   const expected = new Set(
     specFiles.filter((file) =>
-      expectedProjects(file, owners).includes(project),
+      expectedProjects(file, workspaces).includes(project),
     ),
   );
   const seen = new Set(

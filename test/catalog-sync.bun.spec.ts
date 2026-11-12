@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { nodePackages } from "./runtime-matrix.ts";
 
 const root = join(import.meta.dirname, "..");
-const packages = ["packages/core", "packages/opentelemetry-server"] as const;
 const npmProtocols = ["catalog:", "workspace:", "file:", "link:"] as const;
 
-test.each(packages)(
+test.each(nodePackages)(
   "should keep %s dependency specifiers readable by npm",
   (pkg) => {
     const merged = mergedDependencies(readManifest(pkg));
@@ -19,7 +19,7 @@ test.each(packages)(
   },
 );
 
-test.each(packages)(
+test.each(nodePackages)(
   "should match the root catalog for shared dependencies in %s",
   (pkg) => {
     const catalog = catalogSpecifiers();
@@ -31,7 +31,7 @@ test.each(packages)(
   },
 );
 
-test.each(packages)(
+test.each(nodePackages)(
   "should ship .npmrc with legacy-peer-deps and a package-lock.json in %s",
   (pkg) => {
     const dir = join(root, pkg);
@@ -42,7 +42,7 @@ test.each(packages)(
   },
 );
 
-test.each(packages)(
+test.each(nodePackages)(
   "should keep the lockfile root dependency maps equal to package.json in %s",
   (pkg) => {
     const manifest = readManifest(pkg);

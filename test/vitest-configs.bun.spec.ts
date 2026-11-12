@@ -2,76 +2,22 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { resolveConfig } from "vitest/node";
 import { NoSkipReporter } from "./no-skip-reporter.ts";
+import { projects } from "./runtime-matrix.ts";
+import type { Runtime } from "./spec-matrix.ts";
 
 const root = resolve(import.meta.dirname, "..");
+const engines: Partial<Record<Runtime, string>> = {
+  chrome: "chromium",
+  firefox: "firefox",
+};
 
-interface RuntimeConfig {
-  file: string;
-  name: string;
-  thresholds: boolean;
-  browser?: "chromium" | "firefox";
-}
-
-const loadable: readonly RuntimeConfig[] = [
-  {
-    file: "packages/core/vitest.config.chrome.ts",
-    name: "core-chrome",
-    thresholds: true,
-    browser: "chromium",
-  },
-  {
-    file: "packages/core/vitest.config.firefox.ts",
-    name: "core-firefox",
-    thresholds: true,
-    browser: "firefox",
-  },
-  {
-    file: "packages/core/vitest.config.node.ts",
-    name: "core-node",
-    thresholds: true,
-  },
-  {
-    file: "packages/core/vitest.config.bun.ts",
-    name: "core-bun",
-    thresholds: true,
-  },
-  {
-    file: "packages/react/vitest.config.chrome.ts",
-    name: "react-chrome",
-    thresholds: true,
-    browser: "chromium",
-  },
-  {
-    file: "packages/react/vitest.config.firefox.ts",
-    name: "react-firefox",
-    thresholds: true,
-    browser: "firefox",
-  },
-  {
-    file: "packages/vue/vitest.config.chrome.ts",
-    name: "vue-chrome",
-    thresholds: true,
-    browser: "chromium",
-  },
-  {
-    file: "packages/vue/vitest.config.firefox.ts",
-    name: "vue-firefox",
-    thresholds: true,
-    browser: "firefox",
-  },
-  {
-    file: "packages/opentelemetry-server/vitest.config.node.ts",
-    name: "opentelemetry-server-node",
-    thresholds: true,
-  },
-  {
-    file: "packages/opentelemetry-server/vitest.config.bun.ts",
-    name: "opentelemetry-server-bun",
-    thresholds: true,
-  },
-  { file: "doc/vitest.config.bun.ts", name: "doc-bun", thresholds: true },
-  { file: "vitest.config.bun.ts", name: "root-bun", thresholds: false },
-];
+// The root specs measure no coverage; every other project enforces the floor.
+const configs = projects.map(({ cwd, config, name, runtime }) => ({
+  file: `${cwd}/${config}`,
+  name,
+  thresholds: cwd !== ".",
+  browser: engines[runtime],
+}));
 
 function isNoSkipReporter(reporter: unknown): boolean {
   // The config is bundled by Vite, so the reporter class is a separate copy and
@@ -84,7 +30,7 @@ function isNoSkipReporter(reporter: unknown): boolean {
 }
 
 describe("resolved runtime configs", () => {
-  test.each(loadable)(
+  test.each(configs)(
     "config $file is registered correctly",
     async ({ file, name, thresholds, browser }) => {
       const { test: resolved } = await resolveConfig({

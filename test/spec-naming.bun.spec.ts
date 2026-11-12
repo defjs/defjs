@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { beforeAll, describe, expect, onTestFinished, test } from "vitest";
 import {
@@ -19,9 +19,8 @@ import {
   parseListOutput,
   selectionDiff,
   type ListEntry,
-  type Owner,
 } from "./spec-naming.ts";
-import { listUnitNodePackages } from "./unit-node.ts";
+import { projects, workspaces, type Workspace } from "./runtime-matrix.ts";
 
 const mismatch =
   "name does not match <stem>[.chrome|.firefox|.node|.bun|.type].spec.ts(x)";
@@ -97,8 +96,8 @@ test("lists tracked and untracked files, drops files deleted from disk, honors .
   ]);
 });
 
-const mini: readonly Owner[] = [
-  { dir: "pkg/", runtimes: ["node", "bun"], project: (rt) => `pkg-${rt}` },
+const mini: readonly Workspace[] = [
+  { name: "pkg", cwd: "pkg", dirs: ["pkg/"], runtimes: ["node", "bun"] },
 ];
 
 test.each([
@@ -199,84 +198,6 @@ test("selectionDiff reports a type spec selected by a runtime project", () => {
 
 const root = resolve(import.meta.dirname, "..");
 
-const owners: readonly Owner[] = [
-  { dir: "doc/app/", runtimes: ["bun"], project: () => "doc-bun" },
-  { dir: "doc/scripts/", runtimes: ["bun"], project: () => "doc-bun" },
-  { dir: "doc/examples/", runtimes: ["bun"], project: () => "doc-bun" },
-  {
-    dir: "packages/core/",
-    runtimes: ["chrome", "firefox", "node", "bun"],
-    project: (runtime) => `core-${runtime}`,
-  },
-  {
-    dir: "packages/react/",
-    runtimes: ["chrome", "firefox"],
-    project: (runtime) => `react-${runtime}`,
-  },
-  {
-    dir: "packages/vue/",
-    runtimes: ["chrome", "firefox"],
-    project: (runtime) => `vue-${runtime}`,
-  },
-  {
-    dir: "packages/opentelemetry-server/",
-    runtimes: ["node", "bun"],
-    project: (runtime) => `opentelemetry-server-${runtime}`,
-  },
-  { dir: "test/", runtimes: ["bun"], project: () => "root-bun" },
-];
-
-const lists: readonly { cwd: string; config: string; project: string }[] = [
-  {
-    cwd: "packages/core",
-    config: "vitest.config.chrome.ts",
-    project: "core-chrome",
-  },
-  {
-    cwd: "packages/core",
-    config: "vitest.config.firefox.ts",
-    project: "core-firefox",
-  },
-  {
-    cwd: "packages/core",
-    config: "vitest.config.node.ts",
-    project: "core-node",
-  },
-  { cwd: "packages/core", config: "vitest.config.bun.ts", project: "core-bun" },
-  {
-    cwd: "packages/react",
-    config: "vitest.config.chrome.ts",
-    project: "react-chrome",
-  },
-  {
-    cwd: "packages/react",
-    config: "vitest.config.firefox.ts",
-    project: "react-firefox",
-  },
-  {
-    cwd: "packages/vue",
-    config: "vitest.config.chrome.ts",
-    project: "vue-chrome",
-  },
-  {
-    cwd: "packages/vue",
-    config: "vitest.config.firefox.ts",
-    project: "vue-firefox",
-  },
-  {
-    cwd: "packages/opentelemetry-server",
-    config: "vitest.config.node.ts",
-    project: "opentelemetry-server-node",
-  },
-  {
-    cwd: "packages/opentelemetry-server",
-    config: "vitest.config.bun.ts",
-    project: "opentelemetry-server-bun",
-  },
-  { cwd: "doc", config: "vitest.config.bun.ts", project: "doc-bun" },
-  { cwd: ".", config: "vitest.config.bun.ts", project: "root-bun" },
-];
-
 const files = listRepoFiles(root);
 const specFiles = files.filter((file) => /\.spec\.tsx?$/.test(file));
 const selection = new Map<string, ListEntry[]>();
@@ -287,14 +208,14 @@ describe("repository spec names", () => {
   });
 
   test("every non-type spec is selected by at least one runtime project", () => {
-    expect(ownershipViolations(specFiles, owners)).toEqual([]);
+    expect(ownershipViolations(specFiles, workspaces)).toEqual([]);
   });
 });
 
 describe("vitest selection", () => {
   // Sequentially starts the 12 Vitest list processes, one config at a time.
   beforeAll(async () => {
-    for (const { cwd, config, project } of lists) {
+    for (const { cwd, config, name } of projects) {
       const { stdout } = await promisify(execFile)(
         process.execPath,
         [
@@ -312,17 +233,17 @@ describe("vitest selection", () => {
           maxBuffer: 64 * 1024 * 1024,
         },
       );
-      selection.set(project, parseListOutput(stdout, root));
+      selection.set(name, parseListOutput(stdout, root));
     }
   }, 600_000);
 
-  test.each(lists)("selects the expected files in $project", ({ project }) => {
+  test.each(projects)("selects the expected files in $name", ({ name }) => {
     const expected = specFiles.filter((file) =>
-      expectedProjects(file, owners).includes(project),
+      expectedProjects(file, workspaces).includes(name),
     );
     expect(expected.length).toBeGreaterThan(0);
     expect(
-      selectionDiff(project, selection.get(project) ?? [], specFiles, owners),
+      selectionDiff(name, selection.get(name) ?? [], specFiles, workspaces),
     ).toEqual({ missing: [], unexpected: [] });
   });
 
@@ -336,19 +257,15 @@ describe("vitest selection", () => {
 });
 
 // `--if-present` makes a missing script a silent no-op, so the package scripts
-// are pinned to the `lists` table in both directions.
+// are pinned to the runtime matrix in both directions.
 const scriptName = /^unit:(chrome|firefox|node|bun)$/;
-
-function runtimeScript(project: string): string {
-  return `unit:${project.slice(project.lastIndexOf("-") + 1)}`;
-}
 
 function expectedScripts(cwd: string): Record<string, string> {
   return Object.fromEntries(
-    lists
-      .filter((entry) => entry.cwd === cwd)
-      .map(({ config, project }) => [
-        runtimeScript(project),
+    projects
+      .filter((project) => project.cwd === cwd)
+      .map(({ runtime, config }) => [
+        `unit:${runtime}`,
         `vitest run --config ${config}`,
       ]),
   );
@@ -401,16 +318,5 @@ describe("package scripts", () => {
       "unit:bun": `${fanOut("unit:bun")} && ${rootConfig}`,
       "unit:node": "node test/unit-node.ts",
     });
-  });
-
-  test("unit-node discovers exactly the packages that list a node project", () => {
-    const expected = lists
-      .filter(({ project }) => project.endsWith("-node"))
-      .map(({ cwd }) => basename(cwd))
-      .sort((left, right) => left.localeCompare(right));
-    const discovered = listUnitNodePackages(resolve(root, "packages")).map(
-      (dir) => basename(dir),
-    );
-    expect(discovered).toEqual(expected);
   });
 });
