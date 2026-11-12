@@ -18,7 +18,6 @@ import {
   isTimeoutCause,
 } from "../../error";
 import { networkCauseCode } from "../../error/cause";
-import { isDefjsFault } from "../../error/factory";
 import type { DoneInfo } from "../../balancer/balancer";
 import type { pickEndpoint, ResolvedEndpoint } from "../../balancer/runtime";
 import {
@@ -259,10 +258,6 @@ function startupFault<TBody>(
   cause: unknown,
   { open, decoded, bodyFault }: Handshake<TBody>,
 ): EventStreamStartupFailure<TBody>["fault"] {
-  // A pick or a URL that failed before a connection is a fault already.
-  if (isDefjsFault(cause) && cause.code === "REQ_BUILD_FAILED") {
-    return cause;
-  }
   const response = open?.response;
   const fatal = cause instanceof EventStreamFatalError ? cause.code : undefined;
   if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
@@ -584,7 +579,7 @@ export async function fetchEventStream<
         if (pickNext) {
           const picked = pickNext();
           if (picked[0] !== null) {
-            finishError(picked[0], "REQ_BUILD_FAILED");
+            finishError(picked[0], "REQ_BUILD_FAILED", picked[0]);
             return;
           }
           const next = picked[1];
@@ -596,7 +591,7 @@ export async function fetchEventStream<
           } catch (error) {
             next.done({ attempted: false });
             const fault = createPreflightFault("REQ_BUILD_FAILED", error);
-            finishError(fault, "REQ_BUILD_FAILED");
+            finishError(fault, "REQ_BUILD_FAILED", fault);
             return;
           }
           attempt = newAttempt(next);
@@ -847,10 +842,14 @@ export async function fetchEventStream<
     });
   }
 
-  function finishError(error: unknown, code: EventStreamFaultCode): void {
+  function finishError(
+    error: unknown,
+    code: EventStreamFaultCode,
+    fault?: PreflightFault,
+  ): void {
     settleAttempt();
     if (phase === "connecting") {
-      failStartup(error);
+      failStartup(error, fault);
     } else {
       queue.fail(error);
     }
@@ -863,11 +862,12 @@ export async function fetchEventStream<
     });
   }
 
-  function failStartup(cause: unknown): void {
+  /** `fault` is given when the cause is one already: a pick or a URL that failed before a connection. */
+  function failStartup(cause: unknown, fault?: PreflightFault): void {
     openDeferred.resolve([
       {
         cause,
-        fault: startupFault(cause, latest),
+        fault: fault ?? startupFault(cause, latest),
         open: latest.open,
       },
       undefined,
