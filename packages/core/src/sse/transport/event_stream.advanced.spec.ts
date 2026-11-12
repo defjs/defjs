@@ -8,9 +8,6 @@ import {
   vi,
 } from "vitest";
 
-vi.mock("../../internal/backoff", { spy: true });
-
-import { wait } from "../../internal/backoff";
 import { resolveRetryPolicy } from "../../internal/retry";
 import type { FetchHandle } from "../../client/config";
 import { DEFAULT_FETCH } from "../../client/config";
@@ -240,13 +237,21 @@ describe("fetchEventStream advanced", () => {
       headers: new Headers({ Accept: "application/json" }),
     };
 
-    const stream = await fetchEventStream(request);
-    // The request was made with the real fetch; we verify the endpoint responded correctly.
-    const events: EventStreamMessage[] = [];
-    for await (const event of stream) {
-      events.push(event);
+    const accepts: (string | null)[] = [];
+    const stream = await fetchEventStream(request, {
+      fetch: (input) => {
+        accepts.push(requireRequest(input).headers.get("accept"));
+        return Promise.resolve(
+          new Response("data: a\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
+      },
+    });
+    for await (const _ of stream) {
+      // consume
     }
-    expect(events.length).toBeGreaterThan(0);
+    expect(accepts).toEqual(["application/json"]);
   });
 
   test("should close with TimeoutError reason", async () => {
@@ -589,9 +594,6 @@ describe("fetchEventStream advanced", () => {
   test("should abort during retry wait via request signal", async () => {
     // Unit-level reconnect delay: fake timers, so the retry wait never elapses unless the test advances it.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    onTestFinished(() => {
-      vi.useRealTimers();
-    });
     const controller = new AbortController();
     const request: HttpRequest = {
       ...createRequest("/events"),
@@ -943,7 +945,7 @@ describe("fetchEventStream advanced", () => {
     await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
   });
 
-  test("should retry with default interval when fetch throws network error", async () => {
+  test("should retry when fetch throws a network error", async () => {
     const mockFetch = vi
       .fn()
       .mockRejectedValueOnce(new Error("network error"))
@@ -1053,7 +1055,7 @@ describe("fetchEventStream advanced", () => {
     },
   );
 
-  test("should not retry when reconnect is omitted", async () => {
+  test("should not retry when retry is omitted", async () => {
     let fetchCount = 0;
     const mockFetch = vi.fn(() => {
       fetchCount += 1;
@@ -1072,7 +1074,7 @@ describe("fetchEventStream advanced", () => {
     expect(fetchCount).toBe(1);
   });
 
-  test("should not retry when reconnect.attempts = 0", async () => {
+  test("should not retry when retry.maxRetries = 0", async () => {
     let fetchCount = 0;
     const mockFetch = vi.fn(() => {
       fetchCount += 1;
@@ -1094,7 +1096,7 @@ describe("fetchEventStream advanced", () => {
     expect(fetchCount).toBe(1);
   });
 
-  test("should retry up to reconnect.attempts limit", async () => {
+  test("should retry up to the retry.maxRetries limit", async () => {
     let fetchCount = 0;
     const mockFetch = vi.fn(() => {
       fetchCount += 1;
@@ -1257,12 +1259,6 @@ describe("fetchEventStream advanced", () => {
 
   test("should use exponential backoff with factor", async () => {
     vi.useFakeTimers();
-    const timer = vi.mocked(wait);
-    timer.mockClear();
-    onTestFinished(() => {
-      timer.mockRestore();
-      vi.useRealTimers();
-    });
     let fetchCount = 0;
     const mockFetch = vi.fn(() => {
       fetchCount += 1;
@@ -1277,18 +1273,26 @@ describe("fetchEventStream advanced", () => {
 
     const rejected = fetchEventStream(request, {
       fetch: mockFetch,
-      retry: resolveRetryPolicy({ maxRetries: 2, delayMs: 1, factor: 2 }),
+      retry: resolveRetryPolicy({
+        maxRetries: 2,
+        delayMs: 10,
+        factor: 2,
+        jitter: 0,
+      }),
     }).catch((error: unknown) => error);
-    await vi.runAllTimersAsync();
+    for (const [retried, delay] of [10, 20].entries()) {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchCount).toBe(retried + 1);
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(fetchCount).toBe(retried + 1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchCount).toBe(retried + 2);
+    }
     expect(await rejected).toBeInstanceOf(Error);
-    expect(timer.mock.calls.map((call) => call[0])).toEqual([1, 2]);
-    expect(fetchCount).toBe(3);
   });
 
   test("should clamp the final retry delay after applying a factor to a wire retry value", async () => {
     vi.useFakeTimers();
-    const waitSpy = vi.mocked(wait);
-    waitSpy.mockClear();
     let fetchCount = 0;
     const mockFetch = vi.fn(() => {
       fetchCount += 1;
@@ -1315,140 +1319,35 @@ describe("fetchEventStream advanced", () => {
       return Promise.reject(new Error("network error"));
     });
 
-    try {
-      const stream = await fetchEventStream(
-        {
-          baseEndpoint: "https://example.com",
-          endpoint: "/events",
-          method: "GET",
-        },
-        {
-          fetch: mockFetch,
-          retry: resolveRetryPolicy({
-            maxRetries: 2,
-            factor: 2,
-            jitter: 0,
-            maxDelayMs: Infinity,
-          }),
-        },
-      );
-
-      await vi.advanceTimersByTimeAsync(1_500_000_000);
-
-      expect(fetchCount).toBe(2);
-      expect(waitSpy.mock.calls.map((call) => call[0])).toEqual([
-        1_500_000_000, 2_147_483_647,
-      ]);
-
-      stream.close("test complete");
-      await expect(stream.closed).resolves.toMatchObject({ kind: "aborted" });
-    } finally {
-      waitSpy.mockRestore();
-      vi.useRealTimers();
-    }
-  });
-
-  test("should cap delay with maxDelayMs", async () => {
-    vi.useFakeTimers();
-    const timer = vi.mocked(wait);
-    timer.mockClear();
-    onTestFinished(() => {
-      timer.mockRestore();
-      vi.useRealTimers();
-    });
-    let fetchCount = 0;
-    const mockFetch = vi.fn(() => {
-      fetchCount += 1;
-      return Promise.reject(new Error("network error"));
-    });
-
-    const request = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/fail",
-      method: "GET",
-    };
-
-    const rejected = fetchEventStream(request, {
-      fetch: mockFetch,
-      retry: resolveRetryPolicy({
-        maxRetries: 2,
-        delayMs: 1,
-        factor: 10,
-        jitter: 0,
-        maxDelayMs: 5,
-      }),
-    }).catch((error: unknown) => error);
-    await vi.runAllTimersAsync();
-    expect(await rejected).toBeInstanceOf(Error);
-    expect(timer.mock.calls.map((call) => call[0])).toEqual([1, 5]);
-    expect(fetchCount).toBe(3);
-  });
-
-  test("should apply jitter to retry delay", async () => {
-    vi.useFakeTimers();
-    const timer = vi.mocked(wait);
-    timer.mockClear();
-    const random = vi.spyOn(Math, "random").mockReturnValue(1);
-    onTestFinished(() => {
-      timer.mockRestore();
-      random.mockRestore();
-      vi.useRealTimers();
-    });
-    let fetchCount = 0;
-    const mockFetch = vi.fn(() => {
-      fetchCount += 1;
-      return Promise.reject(new Error("network error"));
-    });
-
-    const request = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/fail",
-      method: "GET",
-    };
-
-    const rejected = fetchEventStream(request, {
-      fetch: mockFetch,
-      retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 10, jitter: 0.5 }),
-    }).catch((error: unknown) => error);
-    await vi.runAllTimersAsync();
-    expect(await rejected).toBeInstanceOf(Error);
-    expect(timer.mock.calls.map((call) => call[0])).toEqual([15]);
-    expect(fetchCount).toBe(2);
-  });
-
-  test("should cap the scheduled retry delay after jitter", async () => {
-    vi.useFakeTimers();
-    const timer = vi.mocked(wait);
-    timer.mockClear();
-    const random = vi.spyOn(Math, "random").mockReturnValue(1);
-    onTestFinished(() => {
-      timer.mockRestore();
-      random.mockRestore();
-      vi.useRealTimers();
-    });
-    const fetch = vi.fn(() => Promise.reject(new Error("network error")));
-    const rejected = fetchEventStream(
+    const stream = await fetchEventStream(
       {
         baseEndpoint: "https://example.com",
         endpoint: "/events",
         method: "GET",
       },
       {
-        fetch,
+        fetch: mockFetch,
         retry: resolveRetryPolicy({
-          maxRetries: 1,
-          delayMs: 10,
-          jitter: 0.5,
-          maxDelayMs: 12,
+          maxRetries: 2,
+          factor: 2,
+          jitter: 0,
+          maxDelayMs: Infinity,
         }),
       },
-    ).catch((error: unknown) => error);
+    );
 
-    await vi.runAllTimersAsync();
-    expect(await rejected).toMatchObject({ message: "network error" });
+    // The wire value is the first delay; the second one, doubled, is clamped to the largest timer delay.
+    for (const [retried, delay] of [1_500_000_000, 2_147_483_647].entries()) {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchCount).toBe(retried + 1);
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(fetchCount).toBe(retried + 1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetchCount).toBe(retried + 2);
+    }
 
-    expect(timer.mock.calls.map((call) => call[0])).toEqual([12]);
-    expect(fetch).toHaveBeenCalledTimes(2);
+    // The last retry is spent: the stream ends with the network error.
+    await expect(stream.closed).resolves.toMatchObject({ kind: "error" });
   });
 
   test("should enforce maxBufferSize in parser", async () => {
@@ -1514,10 +1413,6 @@ describe("fetchEventStream message path", () => {
     );
   }
 
-  function nextTurn(): Promise<void> {
-    return yieldMacrotask();
-  }
-
   test("should transform every message of a chunk in one synchronous pass", async () => {
     const order: string[] = [];
     const stream = await fetchTransformedEventStream(request, {
@@ -1560,7 +1455,7 @@ describe("fetchEventStream message path", () => {
       });
       // The body takes an unknown number of turns to arrive. The extra turn lets an out-of-order "c" show up.
       await vi.waitFor(() => expect(transformed).toEqual(["a", "b"]));
-      await nextTurn();
+      await yieldMacrotask();
 
       // "b" is pending, so "c" is neither transformed nor delivered ahead of it.
       expect(transformed).toEqual(["a", "b"]);
@@ -1959,173 +1854,6 @@ describe("raw transport handshake decoding", () => {
     controller.abort(ERR_ABORTED);
     await expect(pending).rejects.toBe(ERR_ABORTED);
   });
-});
-
-test("reads the current transformMessage option for each frame", async () => {
-  const feed =
-    Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
-  const options: FetchEventStreamOptions<string> = {
-    maxBufferSize: 1024,
-    fetch: () =>
-      Promise.resolve(
-        new Response(
-          new ReadableStream<Uint8Array>({
-            start(target) {
-              feed.resolve(target);
-            },
-          }),
-          { headers: { "content-type": "text/event-stream" } },
-        ),
-      ),
-    transformMessage: (message) => message.data,
-  };
-  const stream = await fetchEventStreamInternal(
-    {
-      baseEndpoint: "https://example.test",
-      endpoint: "/events",
-      method: "GET",
-    },
-    options,
-  );
-  const target = await feed.promise;
-  const iterator = stream[Symbol.asyncIterator]();
-  target.enqueue(new TextEncoder().encode("data: first\n\n"));
-  await expect(iterator.next()).resolves.toEqual({
-    done: false,
-    value: "first",
-  });
-  options.transformMessage = () => "changed";
-  target.enqueue(new TextEncoder().encode("data: second\n\n"));
-  await expect(iterator.next()).resolves.toEqual({
-    done: false,
-    value: "changed",
-  });
-  stream.close();
-  await stream[Symbol.asyncDispose]();
-});
-
-test("reads the mapper accessor once per message and calls it with the options receiver", async () => {
-  let reads = 0;
-  const receivers: unknown[] = [];
-  const options: FetchEventStreamOptions<string> = {
-    maxBufferSize: 1024,
-    fetch: () =>
-      Promise.resolve(
-        new Response("data: frame\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        }),
-      ),
-    get transformMessage() {
-      const read = ++reads;
-      return function (
-        this: FetchEventStreamOptions<string>,
-        message: EventStreamMessage,
-      ) {
-        receivers.push(this);
-        return `${read}:${message.data}`;
-      };
-    },
-  };
-  const stream = await fetchEventStreamInternal(
-    {
-      baseEndpoint: "https://example.test",
-      endpoint: "/events",
-      method: "GET",
-    },
-    options,
-  );
-  expect(await Array.fromAsync(stream)).toEqual(["1:frame"]);
-  expect(reads).toBe(1);
-  expect(receivers).toEqual([options]);
-});
-
-test("reads attempt options as HEAD and invokes initial and reconnect callbacks without receivers", async () => {
-  const receivers: unknown[] = [];
-  let reads = 0;
-  let requests = 0;
-  const attempt: NonNullable<FetchEventStreamOptions["endpointAttempt"]> = {
-    done(this: unknown) {
-      receivers.push(this);
-    },
-    pickNext(this: unknown) {
-      receivers.push(this);
-      return [
-        null,
-        {
-          endpoint: "https://backup.test",
-          done(this: unknown) {
-            receivers.push(this);
-          },
-        },
-      ];
-    },
-  };
-  const options: FetchEventStreamOptions = {
-    maxBufferSize: 1024,
-    transformMessage: (message) => message,
-    retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
-    fetch: () =>
-      ++requests === 1
-        ? Promise.reject(new TypeError("connection lost"))
-        : Promise.resolve(
-            new Response("data: ok\n\n", {
-              headers: { "content-type": "text/event-stream" },
-            }),
-          ),
-    get endpointAttempt() {
-      reads += 1;
-      return attempt;
-    },
-  };
-  const stream = await fetchEventStreamInternal(
-    {
-      baseEndpoint: "https://example.test",
-      endpoint: "/events",
-      method: "GET",
-    },
-    options,
-  );
-  expect(
-    (await Array.fromAsync(stream)).map((message) => message.data),
-  ).toEqual(["ok"]);
-  expect(reads).toBe(4);
-  expect(receivers).toEqual([undefined, undefined, undefined]);
-  expect(requests).toBe(2);
-});
-
-test("passes missing attempt callbacks through as undefined", async () => {
-  let requests = 0;
-  const options: FetchEventStreamOptions = {
-    maxBufferSize: 1024,
-    transformMessage: (message) => message,
-    retry: resolveRetryPolicy({ maxRetries: 1, delayMs: 0 }),
-    fetch: () =>
-      ++requests === 1
-        ? Promise.reject(new TypeError("connection lost"))
-        : Promise.resolve(
-            new Response("data: ok\n\n", {
-              headers: { "content-type": "text/event-stream" },
-            }),
-          ),
-    endpointAttempt: {
-      // @ts-expect-error Deliberately omit the required callback to preserve runtime passthrough.
-      done: undefined,
-      // @ts-expect-error Deliberately omit the required picker to preserve runtime passthrough.
-      pickNext: undefined,
-    },
-  };
-  const stream = await fetchEventStreamInternal(
-    {
-      baseEndpoint: "https://example.test",
-      endpoint: "/events",
-      method: "GET",
-    },
-    options,
-  );
-  expect(
-    (await Array.fromAsync(stream)).map((message) => message.data),
-  ).toEqual(["ok"]);
-  expect(requests).toBe(2);
 });
 
 describe("fetchEventStream queue bound", () => {

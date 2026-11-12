@@ -5,6 +5,7 @@ import {
   createMessageParser,
   readStreamBytes,
 } from "./parser";
+import { yieldMacrotask } from "../../../test/macrotask";
 
 type ParsedMessage = Omit<EventStreamMessage, "id">;
 
@@ -796,10 +797,6 @@ describe("sse parser", () => {
   });
 });
 
-function nextTurn(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
 function collectLines(options?: { maxBufferSize?: number }) {
   const lines: string[] = [];
   const parse = createLineParser((line) => {
@@ -870,7 +867,7 @@ describe("sse line parser scanning", () => {
     });
 
     const done = parse(encoder.encode("a\nb\nc\n"));
-    await nextTurn();
+    await yieldMacrotask();
     expect(seen).toEqual(["a"]);
 
     gate.resolve();
@@ -1051,7 +1048,7 @@ describe("sse message parser hand-off", () => {
     );
 
     const done = parseLine(encoder.encode("data: one\n\ndata: two\n\n"));
-    await nextTurn();
+    await yieldMacrotask();
     expect(dispatched).toEqual(["one"]);
 
     gate.resolve();

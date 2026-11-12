@@ -8,9 +8,6 @@ import {
   vi,
 } from "vitest";
 
-vi.mock("../../internal/backoff", { spy: true });
-
-import { wait } from "../../internal/backoff";
 import { resolveRetryPolicy } from "../../internal/retry";
 import type { FetchHandle } from "../../client/config";
 import { DEFAULT_FETCH } from "../../client/config";
@@ -87,59 +84,62 @@ function scriptedConnection(
   );
 }
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("fetchEventStream", () => {
   test("should reset the retry budget and first delay after each successful reconnect handshake", async () => {
-    const timer = vi.mocked(wait);
     const shouldRetry = vi.fn((_context: { attempt: number }) => true);
     let requests = 0;
-    try {
-      vi.useFakeTimers();
-      timer.mockClear();
-      const stream = await fetchEventStream(
-        {
-          baseEndpoint: "https://example.com",
-          endpoint: "/events",
-          method: "GET",
+    vi.useFakeTimers();
+    const stream = await fetchEventStream(
+      {
+        baseEndpoint: "https://example.com",
+        endpoint: "/events",
+        method: "GET",
+      },
+      {
+        fetch: () => {
+          requests += 1;
+          return Promise.resolve(
+            scriptedConnection(
+              [`data: ${requests}\n\n`],
+              requests < 5 ? "drop" : "eof",
+            ),
+          );
         },
-        {
-          fetch: () => {
-            requests += 1;
-            return Promise.resolve(
-              scriptedConnection(
-                [`data: ${requests}\n\n`],
-                requests < 5 ? "drop" : "eof",
-              ),
-            );
-          },
-          retry: resolveRetryPolicy({
-            maxRetries: 1,
-            delayMs: 10,
-            factor: 2,
-            jitter: 0,
-            shouldRetry,
-          }),
-        },
-      );
-      const consumed = (async () => {
-        const messages: string[] = [];
-        for await (const message of stream) messages.push(message.data);
-        return messages;
-      })();
-      void consumed.catch(() => undefined);
+        retry: resolveRetryPolicy({
+          maxRetries: 1,
+          delayMs: 10,
+          factor: 2,
+          jitter: 0,
+          shouldRetry,
+        }),
+      },
+    );
+    const consumed = (async () => {
+      const messages: string[] = [];
+      for await (const message of stream) messages.push(message.data);
+      return messages;
+    })();
+    void consumed.catch(() => undefined);
 
-      await vi.runAllTimersAsync();
-
-      await expect(consumed).resolves.toEqual(["1", "2", "3", "4", "5"]);
-      expect(requests).toBe(5);
-      expect(
-        shouldRetry.mock.calls.map(([context]) => context.attempt),
-      ).toEqual([1, 1, 1, 1]);
-      expect(timer.mock.calls.map((call) => call[0])).toEqual([10, 10, 10, 10]);
-      await expect(stream.closed).resolves.toEqual({ kind: "eof" });
-    } finally {
-      timer.mockRestore();
-      vi.useRealTimers();
+    // Every recovered handshake restores the first delay: 10 ms each time, never 20.
+    for (let dropped = 1; dropped < 5; dropped++) {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(requests).toBe(dropped);
+      await vi.advanceTimersByTimeAsync(9);
+      expect(requests).toBe(dropped);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(requests).toBe(dropped + 1);
     }
+
+    await expect(consumed).resolves.toEqual(["1", "2", "3", "4", "5"]);
+    expect(shouldRetry.mock.calls.map(([context]) => context.attempt)).toEqual([
+      1, 1, 1, 1,
+    ]);
+    await expect(stream.closed).resolves.toEqual({ kind: "eof" });
   });
 
   test("should reset the retry budget even when a recovered handshake delivers no events", async () => {

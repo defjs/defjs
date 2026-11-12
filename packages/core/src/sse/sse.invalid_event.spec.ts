@@ -8,6 +8,7 @@ import {
 } from "../client";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
+import { yieldMacrotask } from "../../test/macrotask";
 
 type InvalidEventObserver = Parameters<typeof withSSEOnInvalidEvent>[0];
 
@@ -18,10 +19,6 @@ const useStream = defineEventStream({
   events: { count: struct.number(), message: struct.string() },
   path: "/events",
 });
-
-function nextTurn(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
 
 // Liveness guard, not a timing assertion: the awaited promise must settle while the test holds a dependency pending. The budget does not depend on machine speed.
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
@@ -168,7 +165,7 @@ describe("event stream invalid events", () => {
       body: feed.body,
       async onInvalidEvent({ message, reason }) {
         // Work that takes real time: an event delivered meanwhile would reach the log before this one.
-        await nextTurn();
+        await yieldMacrotask();
         log.push(`${reason} ${message.data} done`);
       },
     });
@@ -213,7 +210,7 @@ describe("event stream invalid events", () => {
       expect(received).toEqual(["one"]);
       expect(observed).toEqual(["two"]);
     });
-    await nextTurn();
+    await yieldMacrotask();
 
     // "one" comes before the invalid events and is out. While "two" is pending, nothing behind it is observed or delivered.
     expect(received).toEqual(["one"]);
@@ -283,7 +280,7 @@ describe("event stream invalid events", () => {
 
     // The observer failing afterwards changes nothing.
     gate.reject(new Error("observer failed late"));
-    await nextTurn();
+    await yieldMacrotask();
     await expect(stream.closed).resolves.toMatchObject({
       cause: reason,
       kind: "aborted",

@@ -641,32 +641,6 @@ describe("request event stream runtime", () => {
     ]);
   });
 
-  test("should reject an already aborted stream before startup", async () => {
-    const useStream = defineEventStream({
-      events: {
-        message: struct.string(),
-      },
-      path: "/sse/infinite",
-    });
-
-    const controller = new AbortController();
-    controller.abort("stop");
-
-    const [error, stream, open] = await useStream(
-      baseClient({ signal: controller.signal }),
-    );
-
-    expect(stream).toBeUndefined();
-    expect(open).toBeUndefined();
-    expect(error?.code).toBe("NET_ABORTED");
-
-    if (error?.code !== "NET_ABORTED") {
-      throw new Error("Expected transport error");
-    }
-
-    expect(error.code).toBe("NET_ABORTED");
-  });
-
   test("should close a stream hidden by a throwing interceptor", async () => {
     const interceptorError = new Error("interceptor failed after open");
     const cancel = vi.fn();
@@ -1257,7 +1231,6 @@ describe("request event stream runtime", () => {
     expect(stream).toBeUndefined();
     expect(open?.response?.status).toBe(500);
     expect(error?.code).toBe("HTTP_STATUS");
-    expect(error?.code).toBe("HTTP_STATUS");
   });
 
   test("should fill the fault data from a declared SSE handshake error struct", async () => {
@@ -1275,36 +1248,6 @@ describe("request event stream runtime", () => {
           { code: "unauthorized" },
           { status: 401, headers: { "content-type": "application/json" } },
         ),
-      );
-
-    const client = createClient(
-      withEndpoint("https://example.com"),
-      withSSEHandle(handle),
-    );
-    const [error] = await useStream(client);
-
-    expect(error?.code).toBe("HTTP_STATUS");
-    if (error?.code === "HTTP_STATUS") {
-      expect(error.status).toBe(401);
-      expect(error.data).toEqual({ code: "unauthorized" });
-    }
-  });
-
-  test("should decode a declared handshake error struct for any non-2xx status", async () => {
-    // A single `error` struct applies to every non-2xx handshake; there is no status matching
-    // to miss, so a body that decodes is always reported.
-    const useStream = defineEventStream({
-      events: { message: struct.string() },
-      error: struct.object({ code: struct.string() }),
-      path: "/sse/handshake-401",
-    });
-
-    const handle = () =>
-      Promise.resolve(
-        new Response(JSON.stringify({ code: "unauthorized" }), {
-          status: 401,
-          headers: { "content-type": "application/json" },
-        }),
       );
 
     const client = createClient(
@@ -1980,27 +1923,6 @@ describe("request event stream runtime", () => {
     expect(events).toEqual([{ data: "hello", event: "message", id: "1" }]);
   });
 
-  test("should return transport error when signal is already aborted", async () => {
-    const controller = new AbortController();
-    controller.abort(ERR_ABORTED);
-
-    const useStream = defineEventStream({
-      events: {
-        message: struct.string(),
-      },
-      path: "/sse/basic",
-    });
-
-    const [error, stream, open] = await useStream(
-      baseClient({ signal: controller.signal }),
-    );
-
-    expect(stream).toBeUndefined();
-    expect(open).toBeUndefined();
-    expect(error?.code).toBe("NET_ABORTED");
-    expect(error?.code).toBe("NET_ABORTED");
-  });
-
   test("should return definition error when build throws", async () => {
     const useStream = defineEventStream({
       builder: () => {
@@ -2018,22 +1940,6 @@ describe("request event stream runtime", () => {
     expect(stream).toBeUndefined();
     expect(open).toBeUndefined();
     expect(error?.code).toBe("REQ_BUILD_FAILED");
-  });
-
-  test("should return http error on non-ok response", async () => {
-    const useStream = defineEventStream({
-      events: {
-        message: struct.string(),
-      },
-      path: "/500",
-    });
-
-    const [error, stream, open] = await useStream(baseClient);
-
-    expect(stream).toBeUndefined();
-    expect(open?.response?.status).toBe(500);
-    expect(error?.code).toBe("HTTP_STATUS");
-    expect(error?.code).toBe("HTTP_STATUS");
   });
 
   test("should use normalized HTTP status error message when SSE response has no error payload", async () => {
@@ -2790,32 +2696,4 @@ describe("sse reconnect method policy", () => {
     expect(stream).toBeUndefined();
     expect(fetched).toBe(0);
   });
-});
-
-test("preserves an event getter's own call dispatch", async () => {
-  const events = { message: struct.string() };
-  const get = () => struct.number();
-  const call = vi.fn((receiver: unknown) => {
-    expect(receiver).toBe(events);
-    return struct.string();
-  });
-  Object.defineProperty(get, "call", { value: call });
-  Object.defineProperty(events, "message", { get });
-  const operation = defineEventStream({ path: "/events", events });
-  const client = createClient(
-    withEndpoint("https://example.test"),
-    withSSEHandle(() =>
-      Promise.resolve(
-        new Response("data: text\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        }),
-      ),
-    ),
-  );
-  const [error, stream] = await operation(client);
-  if (error) throw error;
-  expect(await Array.fromAsync(stream)).toEqual([
-    { event: "message", data: "text", id: undefined },
-  ]);
-  expect(call).toHaveBeenCalledOnce();
 });

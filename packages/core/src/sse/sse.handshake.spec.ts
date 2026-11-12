@@ -40,7 +40,7 @@ function controlledResponse(connection: string, attempt: number) {
   return { response, controller, cancel };
 }
 
-describe("F031 SSE first successful handshake snapshot", () => {
+describe("SSE first successful handshake snapshot", () => {
   test.each([
     { label: "the only connection", count: 1, selected: 0, wrapper: false },
     {
