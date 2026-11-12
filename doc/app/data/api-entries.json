@@ -907,7 +907,7 @@
     "name": "WebSocketSessionLike",
     "kind": "type",
     "slug": "core/websocketsessionlike-type",
-    "description": "Minimal WebSocket session surface that interceptors see."
+    "description": "WebSocket session surface that interceptors see: a WebSocketSession whose messages are typed unknown."
   },
   {
     "package": "@defjs/core",
@@ -953,6 +953,20 @@
   },
   {
     "package": "@defjs/core",
+    "name": "ArrayStruct",
+    "kind": "type",
+    "slug": "core/arraystruct-type",
+    "description": "Array struct type produced by struct.array(item)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DiscriminatedUnionStruct",
+    "kind": "type",
+    "slug": "core/discriminatedunionstruct-type",
+    "description": "Discriminated-union struct type produced by struct.discriminatedUnion(tag, options)."
+  },
+  {
+    "package": "@defjs/core",
     "name": "ErrorMap",
     "kind": "type",
     "slug": "core/errormap-type",
@@ -981,6 +995,13 @@
   },
   {
     "package": "@defjs/core",
+    "name": "IntersectionStruct",
+    "kind": "type",
+    "slug": "core/intersectionstruct-type",
+    "description": "Intersection struct type produced by struct.intersection(...structs) for two or more structs."
+  },
+  {
+    "package": "@defjs/core",
     "name": "ObjectStruct",
     "kind": "type",
     "slug": "core/objectstruct-type",
@@ -992,6 +1013,20 @@
     "kind": "type",
     "slug": "core/parseresult-type",
     "description": "Error-first tuple returned by struct.parse."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreservedStruct",
+    "kind": "type",
+    "slug": "core/preservedstruct-type",
+    "description": "Struct a modifier of a composite struct returns."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RecordStruct",
+    "kind": "type",
+    "slug": "core/recordstruct-type",
+    "description": "Record struct type produced by struct.record(value)."
   },
   {
     "package": "@defjs/core",
@@ -1041,6 +1076,20 @@
     "kind": "type",
     "slug": "core/structmethods-type",
     "description": "Chainable modifiers available on every Struct instance."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "TupleStruct",
+    "kind": "type",
+    "slug": "core/tuplestruct-type",
+    "description": "Tuple struct type produced by struct.tuple(items)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UnionStruct",
+    "kind": "type",
+    "slug": "core/unionstruct-type",
+    "description": "Union struct type produced by struct.or(...options)."
   },
   {
     "package": "@defjs/core",

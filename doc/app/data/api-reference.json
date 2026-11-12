@@ -68,49 +68,13 @@
     "slug": "core/clientconfig-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.",
+    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
     "throws": [],
     "tags": [],
     "typeTable": [
-      {
-        "name": "balancer",
-        "description": "Selects one candidate per call. Defaults to a fresh pickFirstBalancer.",
-        "type": "Balancer",
-        "simplifiedType": "object",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "retry",
-        "description": "Retry policy shared by HTTP, SSE, and WebSocket. Unset means every call makes one attempt.",
-        "type": "RetryOptions | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "sse",
-        "description": "Resolved SSE configuration.",
-        "type": "ClientSSEConfig",
-        "simplifiedType": "object",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "webSocket",
-        "description": "Resolved WebSocket configuration.",
-        "type": "ClientWebSocketOptions",
-        "simplifiedType": "object",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
       {
         "name": "endpoints",
         "description": "Candidate base URLs in first-seen order. Empty until `withEndpoint` runs.\nThe balancer picks one per call.",
@@ -173,11 +137,47 @@
         "required": false,
         "deprecated": false,
         "tags": []
+      },
+      {
+        "name": "balancer",
+        "description": "Selects one candidate per call. Defaults to a fresh pickFirstBalancer.",
+        "type": "Balancer",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retry",
+        "description": "Retry policy shared by HTTP, SSE, and WebSocket. Unset means every call makes one attempt.",
+        "type": "RetryOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "sse",
+        "description": "Resolved SSE configuration.",
+        "type": "ClientSSEConfig",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "webSocket",
+        "description": "Resolved WebSocket configuration.",
+        "type": "ClientWebSocketOptions",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "overloads": [
       {
-        "signature": "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  retry?: RetryOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}",
+        "signature": "interface ClientConfig {\n  endpoints: readonly string[];\n  headers?: Headers;\n  http: { handle: FetchHandle };\n  interceptors: Interceptor[];\n  querySerializer?: QuerySerializer;\n  finalizeHeaders?: HttpRequest[\"finalizeHeaders\"];\n  withCredentials?: boolean;\n  balancer: Balancer;\n  retry?: RetryOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}",
         "parameters": []
       }
     ]
@@ -220,40 +220,13 @@
     "slug": "core/clientoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure.\n\nThe user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint`. {@link ClientConfig} is the resolved counterpart. The HTTP members come from the non-exported `HttpClientOptions` base and are shown inline.",
+    "description": "Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure.\n\nThe user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint`. {@link ClientConfig} is the resolved counterpart.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
     "throws": [],
     "tags": [],
     "typeTable": [
-      {
-        "name": "retry",
-        "description": "Opt-in retry policy shared by HTTP, SSE, and WebSocket.",
-        "type": "RetryOptions | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "sse",
-        "description": "SSE transport options.",
-        "type": "ClientSSEOptions | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "webSocket",
-        "description": "WebSocket transport and heartbeat options.",
-        "type": "ClientWebSocketOptions | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
       {
         "name": "endpoints",
         "description": "Candidate base URLs. `withEndpoint` copies them and drops later duplicates.\nAn empty list is legal and fails at execution with `REQ_BUILD_FAILED`.",
@@ -307,11 +280,38 @@
         "required": false,
         "deprecated": false,
         "tags": []
+      },
+      {
+        "name": "retry",
+        "description": "Opt-in retry policy shared by HTTP, SSE, and WebSocket.",
+        "type": "RetryOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "sse",
+        "description": "SSE transport options.",
+        "type": "ClientSSEOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "webSocket",
+        "description": "WebSocket transport and heartbeat options.",
+        "type": "ClientWebSocketOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "overloads": [
       {
-        "signature": "interface ClientOptions extends HttpClientOptions {\n  retry?: RetryOptions;\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}",
+        "signature": "interface ClientOptions {\n  endpoints: readonly string[];\n  headers?: Headers;\n  http?: { handle?: FetchHandle };\n  interceptors?: Interceptor[];\n  querySerializer?: QuerySerializer;\n  withCredentials?: boolean;\n  retry?: RetryOptions;\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}",
         "parameters": []
       }
     ]
@@ -2217,7 +2217,7 @@
     "slug": "core/builderinput-type",
     "source": "packages/core/src/internal/builder_types.ts",
     "group": "http",
-    "description": "Parsed endpoint input that a request builder receives.\n\nObject nodes are intersected with the internal `Typed` brand, so they carry the struct that\nproduced them and alias, `Date`, and `bigint` encoding follow the value into\nthe request. Record entries and tuple items are branded the same way. At\nruntime a record container is also tagged when the parsed value is an object,\nwhether or not it was merged. Array and tuple containers are not. `null` and\n`undefined` are never tagged. Nullish modifiers recover the struct they\nwrapped. Union options are distributed; intersection options are combined.\nAny other struct falls back to `Infer<S>`.\n\n`CarriedStruct`, `NullishBuilderInput`, `IntersectBuilderInputs`, and `Typed`\nare internal helper types.",
+    "description": "Parsed endpoint input that a request builder receives.\n\nObject nodes are intersected with the internal `TaggedObject` brand, so they carry the struct that\nproduced them and alias, `Date`, and `bigint` encoding follow the value into\nthe request. Record entries and tuple items are branded the same way. At\nruntime a record container is also tagged when the parsed value is an object,\nwhether or not it was merged. Array and tuple containers are not. `null` and\n`undefined` are never tagged. Nullish modifiers recover the struct they\nwrapped. Union options are distributed; intersection options are combined.\nAny other struct falls back to `Infer<S>`.\n\n`TaggedStructOutput` and `TaggedObject` are internal helper types.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -2226,7 +2226,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "type BuilderInput<S> =\n  S extends CarriedStruct<infer Inner>\n    ? NullishBuilderInput<S, Inner>\n    : S extends UnionStruct<infer Options>\n      ? BuilderInput<Options[number]>\n      : S extends DiscriminatedUnionStruct<infer Options>\n        ? BuilderInput<Options[number]>\n        : S extends IntersectionStruct<infer Options>\n          ? IntersectBuilderInputs<Options>\n          : S extends RecordStruct<infer Value>\n            ? { [key: string]: BuilderInput<Value> }\n            : S extends TupleStruct<infer Items>\n              ? {\n                  [K in keyof Items]: Items[K] extends StructLike<\n                    unknown,\n                    unknown,\n                    boolean\n                  >\n                    ? BuilderInput<Items[K]>\n                    : Items[K];\n                }\n              : S extends ArrayStruct<infer Item>\n                ? BuilderInput<Item>[]\n                : S extends ObjectStruct<infer Shape>\n                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed\n                  : Infer<S>;",
+        "signature": "type BuilderInput<S> = TaggedStructOutput<S>;",
         "parameters": []
       }
     ]
@@ -2236,7 +2236,7 @@
     "name": "DecodedResponse",
     "kind": "type",
     "slug": "core/decodedresponse-type",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Response metadata plus a body that decoded against a declared struct.\n\nHolding this type is the proof that decoding happened; a failed decode is\nreported as a fault carrying `HttpMeta` alone.",
     "related": [],
@@ -2354,7 +2354,7 @@
     "name": "HttpMeta",
     "kind": "type",
     "slug": "core/httpmeta-type",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Response metadata, available whenever a response reached the client.\n\nIt carries no `body`: a body only exists once a declared struct decoded it.",
     "related": [],
@@ -2421,7 +2421,7 @@
     "name": "HttpProgressEvent",
     "kind": "type",
     "slug": "core/httpprogressevent-type",
-    "source": "packages/core/src/internal/http_request.ts",
+    "source": "packages/core/src/http/http_request.ts",
     "group": "http",
     "description": "Progress snapshot passed to upload and download callbacks.\n\nMirrors the `ProgressEvent` fields `loaded`, `total`, and `lengthComputable`.\n`loaded` counts bytes read from the upload or download stream, not bytes\nacknowledged by the server. Download bytes may already be decompressed.\nUnknown lengths use `total: 0` and `lengthComputable: false`. A download total\nis computable only with a positive `Content-Length` and an absent or\n`identity` `Content-Encoding`; compressed downloads, other encoded responses,\nand bytes exceeding `Content-Length` have an unknown decoded length. A\nstreamed upload also has an unknown total unless a valid explicit\n`Content-Length` supplies it.",
     "related": [],
@@ -2470,7 +2470,7 @@
     "name": "HttpProgressFn",
     "kind": "type",
     "slug": "core/httpprogressfn-type",
-    "source": "packages/core/src/internal/http_request.ts",
+    "source": "packages/core/src/http/http_request.ts",
     "group": "http",
     "description": "Callback invoked as request bytes are uploaded or response bytes are downloaded.\n\nPassed as `onDownloadProgress` or `onUploadProgress` in `HttpExecuteOptions`.\nCallbacks may be async and are awaited before the next chunk is processed. A\ncallback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`,\nwith the thrown value as `cause`, for downloads and uploads alike. Caller\ncancellation still takes precedence and reports `NET_ABORTED`, or `NET_TIMEOUT`\nwhen the abort reason is a timeout.\n\n`onUploadProgress` reports progress only when the request body is a\n`ReadableStream` that the caller passes. Any other body (`Blob`, `File`,\n`ArrayBuffer`, `FormData`, a string, or `URLSearchParams`) is sent as built and\n`onUploadProgress` is not called, on every runtime. The library never converts\na body into a stream. Download progress is unaffected.\n\nA `ReadableStream` request body follows the Fetch rules for streaming request\nbodies, with or without `onUploadProgress`:\n\n- Chromium and WebKit accept a streaming request body only over HTTP/2 or\n  later, so the call fails with `NET_UNREACHABLE` on HTTP/1.1, with a\n  runtime-specific `TypeError` as `cause`. WebKit was checked manually at 27.2\n  only; this repository does not test it. Node.js and Bun accept HTTP/1.1,\n  which departs from the Fetch standard.\n- Firefox cannot stream request bodies, so the call fails with\n  `ENV_UNSUPPORTED`.\n- In browsers, a cross-origin request needs a CORS preflight, unless the\n  browser holds a cached preflight result, and fails unless the server\n  answers `OPTIONS`. A same-origin request is not preflighted.\n- A 301, 302, 307, or 308 redirect fails after the body was sent once. A 303\n  redirect becomes a GET and succeeds.\n\n`fetch` gives the same network error for each of these as for an unreachable\nendpoint, and for a source `ReadableStream` that throws while `fetch` reads\nit, so the error does not reliably show the endpoint is down. The load\nbalancer therefore receives `{ attempted: false }` for it, as it does for a\nthrowing progress callback (`EXT_OBSERVER_FAILED`). A healthy endpoint is not\nejected for these failures, but a down endpoint is not detected by streamed\nuploads alone, and a rejected streamed upload is never retried: a\n`ReadableStream` body ends the retry flow before `shouldRetry` is asked.\n\nA streamed body has no known length, so the reported `total` is `0` and\n`lengthComputable` is `false` unless the request carries a valid\n`Content-Length` header. That header only sets the reported total, since\nbrowsers do not send it. Non-identity encoded downloads also report\n`total: 0` and `lengthComputable: false`, since `loaded` counts decoded\nstream bytes. Cancellation releases the wrapped upload stream.",
     "related": [],
@@ -2501,7 +2501,7 @@
     "name": "HttpRequest",
     "kind": "type",
     "slug": "core/httprequest-type",
-    "source": "packages/core/src/internal/http_request.ts",
+    "source": "packages/core/src/http/http_request.ts",
     "group": "http",
     "description": "Normalized outgoing HTTP request seen by transports, handlers, interceptors, and `fetchHandler` after the builder runs.\n\n`body` is already the wire value. For JSON that is a **JSON text string**;\nsign HMAC or digests against that string (or other final bytes), not the\noriginal struct input.\n\n- `bodyContentType` holds the inferred type of the builder's body. `null` suppresses that header. FormData owns its multipart boundary. HTTP inference follows a direct write to `body` and is not copied by object spread; an explicit `bodyContentType` assignment is copied. A replacement body is detected again, so declare its type with a `content-type` header. For the unchanged body, `null` suppresses library inference when there is no explicit header, but native Fetch may add its own string type.\n- HTTP never writes inferred Content-Type into `headers`; interceptors see only declared headers. An explicit `content-type` header always wins over `bodyContentType` and detection, whether set by the builder, client defaults, an interceptor, or a raw `fetchHandler` request. `body: undefined` has no library-inferred Content-Type. Signers should read `headers.get('content-type') ?? request.bodyContentType`; do not configure internal fields.\n- `endpoint` is the path with path parameters filled in; `baseEndpoint` is the endpoint selected for this call.\n- Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through.\n- `operation` is a static, low-cardinality endpoint identity for telemetry and diagnostics.\n- `downloadProgress` and `uploadProgress` are the `onDownloadProgress` and `onUploadProgress` hooks of `HttpExecuteOptions`.\n- `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed. Each is set only when its struct is declared. An interceptor that short-circuits with `makeResponse` reads them to match the transport.",
     "related": [],
@@ -2593,7 +2593,7 @@
       },
       {
         "name": "queryParams",
-        "description": "",
+        "description": "The query as `URLSearchParams`. It is ignored while `queryString` is present: change `queryString` instead.",
         "type": "URLSearchParams | undefined",
         "simplifiedType": "object",
         "required": false,
@@ -2602,7 +2602,7 @@
       },
       {
         "name": "queryString",
-        "description": "",
+        "description": "The query as the URL carries it, without the `?`. When present it decides the query; `queryParams` is not read.",
         "type": "string | undefined",
         "simplifiedType": "string",
         "required": false,
@@ -2725,7 +2725,7 @@
     "name": "HttpResponse",
     "kind": "type",
     "slug": "core/httpresponse-type",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Wire-shape HTTP response that transports produce and interceptors accept.\n\n`body` is parsed JSON, text, a `Blob`, or an `ArrayBuffer`, according to\n`responseType`, not a decoded struct value. `body` is `undefined` when no body\nwas present; a JSON `null` stays `null`. For a JSON representation, a string\nis a JSON string root and is not parsed again; bytes and blobs are raw and\nare parsed once. `ok` is true for status codes in the 2xx range. A transport\nfailure is a fault, never a response. `DecodedResponse` is what reaches the\ncaller. The symbol key is an internal brand. Build values with `makeResponse`.",
     "related": [],
@@ -2801,7 +2801,7 @@
     "name": "HttpResponseType",
     "kind": "type",
     "slug": "core/httpresponsetype-type",
-    "source": "packages/core/src/internal/http_request.ts",
+    "source": "packages/core/src/http/http_request.ts",
     "group": "http",
     "description": "Representation used to read an HTTP body before struct validation.\n\nChosen from the declared struct kind: `string` is `text`, `blob` and `file`\nare `blob`, `arrayBuffer` is `arraybuffer` (bytes), and every other kind is\n`json`. Not a field on `defineRequest`. It appears on `HttpRequest` as\n`responseType` and `errorResponseType`.",
     "related": [],
@@ -2822,7 +2822,7 @@
     "name": "MakeResponseOptions",
     "kind": "type",
     "slug": "core/makeresponseoptions-type",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Fields accepted by `makeResponse` when building a synthetic `HttpResponse`, for example in interceptors.\n\n`status` defaults to `0` and `statusText` to `''`. `url` and `headers` default\nto values taken from `request`: its resolved URL (base endpoint, path and\nquery) and a copy of its headers. A request without `baseEndpoint` gives its\n`endpoint` as written. Without a request, `url` is `''` and `headers` is\nempty. An omitted `body` stays `undefined`; only an explicit `null` is a JSON\n`null`.",
     "related": [],
@@ -3258,7 +3258,7 @@
     "name": "makeResponse",
     "kind": "function",
     "slug": "core/makeresponse",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Builds an `HttpResponse` without a network call, for interceptors that short-circuit `next` and for tests.\n\nDefault status is `0`, so pass a 2xx `status` for a success. `ok` is true for\n2xx. The value it returns goes through the same media-type check and the same\ndeclared struct as one off the wire; there is no trusted short-circuit. For a\nJSON body, set a JSON `content-type` header.",
     "related": [],
@@ -5100,7 +5100,7 @@
       {
         "name": "encode",
         "description": "",
-        "type": "((credential: BasicCredential) => string) | undefined",
+        "type": "((credential: Credential) => string) | undefined",
         "simplifiedType": "function",
         "required": false,
         "deprecated": false,
@@ -5109,7 +5109,7 @@
     ],
     "overloads": [
       {
-        "signature": "type BasicAuthInterceptorOptions = {\n  encode?: (credential: BasicCredential) => string;\n};",
+        "signature": "type BasicAuthInterceptorOptions = {\n  encode?: (credential: Credential) => string;\n};",
         "parameters": []
       }
     ]
@@ -5475,7 +5475,7 @@
     "slug": "core/websocketsessionlike-type",
     "source": "packages/core/src/interceptor/interceptor.ts",
     "group": "interceptors",
-    "description": "Minimal WebSocket session surface that interceptors see.\n\nStructurally compatible with {@link WebSocketSession} without importing that\ntype, which avoids a circular dependency between interceptors and WebSocket.\nMessages are typed `unknown`.\n\nA wrapper or short-circuit session must forward the same\n`[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle;\nreturning an unrelated resolved promise is not sufficient.",
+    "description": "WebSocket session surface that interceptors see: a {@link WebSocketSession} whose messages are typed `unknown`.\n\nA wrapper or short-circuit session must forward the same\n`[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle;\nreturning an unrelated resolved promise is not sufficient.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -5494,7 +5494,7 @@
       {
         "name": "connection",
         "description": "",
-        "type": "{ extensions?: string; generation: number; protocol?: string; url?: string; }",
+        "type": "WebSocketConnectionInfo",
         "simplifiedType": "object",
         "required": true,
         "deprecated": false,
@@ -5575,7 +5575,7 @@
     ],
     "overloads": [
       {
-        "signature": "interface WebSocketSessionLike extends AsyncDisposable {\n  readonly bufferedAmount: number;\n  readonly connection: {\n    extensions?: string;\n    generation: number;\n    protocol?: string;\n    url?: string;\n  };\n  readonly closed: Promise<WebSocketCloseInfo>;\n  readonly receive: AsyncIterable<unknown>;\n  readonly state: WebSocketState;\n  close(code?: number, reason?: string): void;\n  [Symbol.asyncDispose](): PromiseLike<void>;\n  onRuntimeError(listener: (error: unknown) => void): () => void;\n  onStateChange(listener: (state: WebSocketState) => void): () => void;\n  send(message: unknown): void;\n}",
+        "signature": "interface WebSocketSessionLike extends WebSocketSession<\n  unknown,\n  unknown\n> {}",
         "parameters": []
       }
     ]
@@ -5596,12 +5596,12 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function basicAuthHttpInterceptor(\n  fn: () => BasicCredential,\n  options?: BasicAuthInterceptorOptions,\n): HttpInterceptor;",
+        "signature": "function basicAuthHttpInterceptor(\n  fn: () => Credential,\n  options?: BasicAuthInterceptorOptions,\n): HttpInterceptor;",
         "parameters": [
           {
             "name": "fn",
             "description": "Factory returning username/password for each request.",
-            "type": "() => BasicCredential",
+            "type": "() => Credential",
             "simplifiedType": "function",
             "required": true,
             "deprecated": false,
@@ -5636,12 +5636,12 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function basicAuthSSEInterceptor(\n  fn: () => BasicCredential,\n  options?: BasicAuthInterceptorOptions,\n): SSEInterceptor;",
+        "signature": "function basicAuthSSEInterceptor(\n  fn: () => Credential,\n  options?: BasicAuthInterceptorOptions,\n): SSEInterceptor;",
         "parameters": [
           {
             "name": "fn",
             "description": "Factory returning username/password for each request.",
-            "type": "() => BasicCredential",
+            "type": "() => Credential",
             "simplifiedType": "function",
             "required": true,
             "deprecated": false,
@@ -5776,6 +5776,176 @@
   },
   {
     "package": "@defjs/core",
+    "name": "ArrayStruct",
+    "kind": "type",
+    "slug": "core/arraystruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Array struct type produced by `struct.array(item)`.\n\nIts input is an array of the item's input type and its output is an array of the item's output type. Its modifiers return a {@link PreservedStruct} that keeps this array struct.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "ArrayStructTypes<S>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => ArrayStruct<S>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null, ArrayOutput<S> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null, ArrayOutput<S> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null | undefined, ArrayOutput<S> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<ArrayStruct<S>, ArrayInput<S> | undefined, ArrayOutput<S> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface ArrayStruct<S extends StructLike>\n  extends\n    PreservingModifiers<ArrayStruct<S>, ArrayInput<S>, ArrayOutput<S>>,\n    StructLike<ArrayInput<S>, ArrayOutput<S>, false> {\n  readonly _struct: ArrayStructTypes<S>;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DiscriminatedUnionStruct",
+    "kind": "type",
+    "slug": "core/discriminatedunionstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Discriminated-union struct type produced by `struct.discriminatedUnion(tag, options)`.\n\nIts input and output are the unions of the option object types. Its modifiers return a {@link PreservedStruct} that keeps this struct.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<StructInput<TOptions[number]>, StructOutput<TOptions[number]>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => DiscriminatedUnionStruct<TOptions>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<DiscriminatedUnionStruct<TOptions>, StructInput<TOptions[number]> | null, StructOutput<TOptions[number]> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<DiscriminatedUnionStruct<TOptions>, StructInput<TOptions[number]> | null, StructOutput<TOptions[number]> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<DiscriminatedUnionStruct<TOptions>, StructInput<TOptions[number]> | null | undefined, StructOutput<TOptions[number]> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<DiscriminatedUnionStruct<TOptions>, StructInput<TOptions[number]> | undefined, StructOutput<TOptions[number]> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface DiscriminatedUnionStruct<\n  TOptions extends readonly ObjectStruct<ObjectShape>[],\n>\n  extends\n    PreservingModifiers<\n      DiscriminatedUnionStruct<TOptions>,\n      StructInput<TOptions[number]>,\n      StructOutput<TOptions[number]>\n    >,\n    StructLike<\n      StructInput<TOptions[number]>,\n      StructOutput<TOptions[number]>,\n      false\n    > {\n  readonly [discriminatedUnionOptions]: TOptions;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
     "name": "ErrorMap",
     "kind": "type",
     "slug": "core/errormap-type",
@@ -5904,12 +6074,97 @@
   },
   {
     "package": "@defjs/core",
+    "name": "IntersectionStruct",
+    "kind": "type",
+    "slug": "core/intersectionstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Intersection struct type produced by `struct.intersection(...structs)` for two or more structs.\n\nIts input and output are the intersections of the member types. Its modifiers return a {@link PreservedStruct} that keeps this intersection struct.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<Exclude<IntersectionInputValue<T>, undefined>, Exclude<IntersectionOutputValue<T>, undefined>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => IntersectionStruct<T>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<IntersectionStruct<T>, Exclude<IntersectionInputValue<T>, undefined> | null, Exclude<IntersectionOutputValue<T>, undefined> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<IntersectionStruct<T>, Exclude<IntersectionInputValue<T>, undefined> | null, Exclude<IntersectionOutputValue<T>, undefined> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<IntersectionStruct<T>, Exclude<IntersectionInputValue<T>, undefined> | null | undefined, Exclude<IntersectionOutputValue<T>, undefined> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<IntersectionStruct<T>, Exclude<IntersectionInputValue<T>, undefined> | undefined, Exclude<IntersectionOutputValue<T>, undefined> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface IntersectionStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<\n      IntersectionStruct<T>,\n      IntersectionInput<T>,\n      IntersectionOutput<T>\n    >,\n    StructLike<IntersectionInput<T>, IntersectionOutput<T>, false> {\n  readonly [intersectionStructOptions]: T;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
     "name": "ObjectStruct",
     "kind": "type",
     "slug": "core/objectstruct-type",
     "source": "packages/core/src/struct/types.ts",
     "group": "struct",
-    "description": "Object-shaped struct type produced by `struct.object(shape)`.\n\nFields are required by default. A field marked `optional()` or `nullish()` becomes an optional key, so field presence follows those modifiers. Unknown keys are stripped when parsing. Wire names can differ from TypeScript keys via `.alias()`. A failed parse returns `[StructError, undefined]`. `ObjectInput`, `ObjectOutput`, `ObjectStructTypes`, and `PreservedStruct` are internal helper types.",
+    "description": "Object-shaped struct type produced by `struct.object(shape)`.\n\nFields are required by default. A field marked `optional()` or `nullish()` becomes an optional key, so field presence follows those modifiers. Unknown keys are stripped when parsing. Wire names can differ from TypeScript keys via `.alias()`. A failed parse returns `[StructError, undefined]`. `ObjectInput`, `ObjectOutput`, and `ObjectStructTypes` are internal helper types. Its modifiers return a {@link PreservedStruct} that keeps this object struct.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -5921,42 +6176,6 @@
         "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
         "type": "ObjectStructTypes<T>",
         "simplifiedType": "object",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "null",
-        "description": "Allow `null` in addition to the current input and output types.",
-        "type": "() => PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>",
-        "simplifiedType": "function",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "nullable",
-        "description": "Alias for StructMethods.null.",
-        "type": "() => PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>",
-        "simplifiedType": "function",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "nullish",
-        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
-        "type": "() => PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>",
-        "simplifiedType": "function",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "optional",
-        "description": "Allow `undefined`, marking the field optional in object shapes.",
-        "type": "() => PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>",
-        "simplifiedType": "function",
         "required": true,
         "deprecated": false,
         "tags": []
@@ -5978,11 +6197,47 @@
             "text": "The same struct branded with the alias."
           }
         ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<ObjectStruct<T>, { [K in keyof ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: T[K][\"_struct\"][\"input\"]; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: Exclude<T[K][\"_struct\"][\"input\"], undefined> | undefined; })]: ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: T[K][\"_struct\"][\"input\"]; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: Exclude<T[K][\"_struct\"][\"input\"], undefined> | undefined; })[K]; } | null, { [K in keyof ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: FieldOutput<T[K]>; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: FieldOutput<T[K]> | undefined; })]: ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: FieldOutput<T[K]>; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: FieldOutput<T[K]> | undefined; })[K]; } | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<ObjectStruct<T>, { [K in keyof ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: T[K][\"_struct\"][\"input\"]; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: Exclude<T[K][\"_struct\"][\"input\"], undefined> | undefined; })]: ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: T[K][\"_struct\"][\"input\"]; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: Exclude<T[K][\"_struct\"][\"input\"], undefined> | undefined; })[K]; } | null, { [K in keyof ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: FieldOutput<T[K]>; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: FieldOutput<T[K]> | undefined; })]: ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: FieldOutput<T[K]>; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: FieldOutput<T[K]> | undefined; })[K]; } | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<ObjectStruct<T>, { [K in keyof ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: T[K][\"_struct\"][\"input\"]; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: Exclude<T[K][\"_struct\"][\"input\"], undefined> | undefined; })]: ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: T[K][\"_struct\"][\"input\"]; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: Exclude<T[K][\"_struct\"][\"input\"], undefined> | undefined; })[K]; } | null | undefined, { [K in keyof ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: FieldOutput<T[K]>; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: FieldOutput<T[K]> | undefined; })]: ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: FieldOutput<T[K]>; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: FieldOutput<T[K]> | undefined; })[K]; } | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<ObjectStruct<T>, { [K in keyof ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: T[K][\"_struct\"][\"input\"]; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: Exclude<T[K][\"_struct\"][\"input\"], undefined> | undefined; })]: ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: T[K][\"_struct\"][\"input\"]; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: Exclude<T[K][\"_struct\"][\"input\"], undefined> | undefined; })[K]; } | undefined, { [K in keyof ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: FieldOutput<T[K]>; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: FieldOutput<T[K]> | undefined; })]: ({ -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? never : K]: FieldOutput<T[K]>; } & { -readonly [K in keyof T as true extends T[K][\"_struct\"][\"optionalOut\"] ? K : never]?: FieldOutput<T[K]> | undefined; })[K]; } | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "overloads": [
       {
-        "signature": "interface ObjectStruct<T extends ObjectShape>\n  extends\n    StructMethods<ObjectInput<T>, ObjectOutput<T>, false>,\n    StructLike<ObjectInput<T>, ObjectOutput<T>, false> {\n  readonly _struct: ObjectStructTypes<T>;\n  null(): PreservedStruct<\n    ObjectStruct<T>,\n    ObjectInput<T> | null,\n    ObjectOutput<T> | null,\n    false\n  >;\n  nullable(): PreservedStruct<\n    ObjectStruct<T>,\n    ObjectInput<T> | null,\n    ObjectOutput<T> | null,\n    false\n  >;\n  nullish(): PreservedStruct<\n    ObjectStruct<T>,\n    ObjectInput<T> | null | undefined,\n    ObjectOutput<T> | null | undefined,\n    true\n  >;\n  optional(): PreservedStruct<\n    ObjectStruct<T>,\n    ObjectInput<T> | undefined,\n    ObjectOutput<T> | undefined,\n    true\n  >;\n}",
+        "signature": "interface ObjectStruct<T extends ObjectShape>\n  extends\n    PreservingModifiers<ObjectStruct<T>, ObjectInput<T>, ObjectOutput<T>>,\n    StructLike<ObjectInput<T>, ObjectOutput<T>, false> {\n  readonly _struct: ObjectStructTypes<T>;\n}",
         "parameters": []
       }
     ]
@@ -6004,6 +6259,176 @@
     "overloads": [
       {
         "signature": "type ParseResult<O> =\n  [error: null, value: O] | [error: StructError, value: undefined];",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreservedStruct",
+    "kind": "type",
+    "slug": "core/preservedstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Struct a modifier of a composite struct returns.\n\n`.optional()`, `.nullable()`, `.null()`, and `.nullish()` on an array, object, record, tuple, union, discriminated-union, or intersection struct return a `PreservedStruct`. It is a {@link Struct} that also carries the composite it came from (`T`), and a later modifier keeps it, so request builders still see the fields of the original struct instead of a bare `Infer` type.\n\nDeclaration files of an SDK name this type when they export a modified composite struct.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<T, I | null, O | null, OO>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<T, I | null, O | null, OO>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<T, I | null | undefined, O | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<T, I | undefined, O | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<I, O, OO>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => PreservedStruct<T, I, O, OO>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface PreservedStruct<T, I, O, OO extends boolean>\n  extends Struct<I, O, OO>, CarriedStruct<T> {\n  null(): PreservedStruct<T, I | null, O | null, OO>;\n  nullable(): PreservedStruct<T, I | null, O | null, OO>;\n  nullish(): PreservedStruct<\n    T,\n    I | null | undefined,\n    O | null | undefined,\n    true\n  >;\n  optional(): PreservedStruct<T, I | undefined, O | undefined, true>;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RecordStruct",
+    "kind": "type",
+    "slug": "core/recordstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Record struct type produced by `struct.record(value)`.\n\nIts input is an object with string keys and `value` inputs, and its output is the same object shape with `value` outputs. Its modifiers return a {@link PreservedStruct} that keeps this record struct.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<RecordInput<S>, RecordOutput<S>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => RecordStruct<S>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<RecordStruct<S>, RecordInput<S> | null, RecordOutput<S> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<RecordStruct<S>, RecordInput<S> | null, RecordOutput<S> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<RecordStruct<S>, RecordInput<S> | null | undefined, RecordOutput<S> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<RecordStruct<S>, RecordInput<S> | undefined, RecordOutput<S> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface RecordStruct<S extends StructLike>\n  extends\n    PreservingModifiers<RecordStruct<S>, RecordInput<S>, RecordOutput<S>>,\n    StructLike<RecordInput<S>, RecordOutput<S>, false> {\n  readonly [recordValueStruct]: S;\n}",
         "parameters": []
       }
     ]
@@ -6343,7 +6768,7 @@
     "slug": "core/structmethods-type",
     "source": "packages/core/src/struct/types.ts",
     "group": "struct",
-    "description": "Chainable modifiers available on every `Struct` instance.\n\nEach method returns a new struct and leaves the original unchanged.\n\n- `alias(name)` sets the wire name of an object field. `struct.parse` reads logical names unless `aliases: true` is passed; JSON and flat request codecs write the alias. A non-string `name` throws `TypeError`.\n\n- `null()` and `nullable()` are the same: they also accept `null`.\n\n- `optional()` also accepts `undefined`. In an object, the key may be missing, and an absent field stays absent in the output.\n\n- `nullish()` accepts both `null` and `undefined`.",
+    "description": "Chainable modifiers available on every `Struct` instance.\n\nEach method returns a new struct and leaves the original unchanged.\n\n- `alias(name)` sets the wire name of an object field. `struct.parse` reads logical names unless `aliases: true` is passed; JSON and flat request codecs write the alias.\n\n- `null()` and `nullable()` are the same: they also accept `null`.\n\n- `optional()` also accepts `undefined`. In an object, the key may be missing, and an absent field stays absent in the output.\n\n- `nullish()` accepts both `null` and `undefined`.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -6434,12 +6859,182 @@
   },
   {
     "package": "@defjs/core",
+    "name": "TupleStruct",
+    "kind": "type",
+    "slug": "core/tuplestruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Tuple struct type produced by `struct.tuple(items)`.\n\nIts input and output are tuples of the item types, one per position. Its modifiers return a {@link PreservedStruct} that keeps this tuple struct.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<TupleInput<T>, TupleOutput<T>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => TupleStruct<T>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<TupleStruct<T>, TupleInput<T> | null, TupleOutput<T> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<TupleStruct<T>, TupleInput<T> | null, TupleOutput<T> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<TupleStruct<T>, TupleInput<T> | null | undefined, TupleOutput<T> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<TupleStruct<T>, TupleInput<T> | undefined, TupleOutput<T> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface TupleStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<TupleStruct<T>, TupleInput<T>, TupleOutput<T>>,\n    StructLike<TupleInput<T>, TupleOutput<T>, false> {\n  readonly [tupleItemStructs]: T;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UnionStruct",
+    "kind": "type",
+    "slug": "core/unionstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Union struct type produced by `struct.or(...options)`.\n\nIts input and output are the unions of the option types, without `undefined`. Its modifiers return a {@link PreservedStruct} that keeps this union struct.",
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<Exclude<StructInput<T[number]>, undefined>, Exclude<StructOutput<T[number]>, undefined>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => UnionStruct<T>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<UnionStruct<T>, Exclude<StructInput<T[number]>, undefined> | null, Exclude<StructOutput<T[number]>, undefined> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<UnionStruct<T>, Exclude<StructInput<T[number]>, undefined> | null, Exclude<StructOutput<T[number]>, undefined> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<UnionStruct<T>, Exclude<StructInput<T[number]>, undefined> | null | undefined, Exclude<StructOutput<T[number]>, undefined> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<UnionStruct<T>, Exclude<StructInput<T[number]>, undefined> | undefined, Exclude<StructOutput<T[number]>, undefined> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "interface UnionStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<UnionStruct<T>, UnionInput<T>, UnionOutput<T>>,\n    StructLike<UnionInput<T>, UnionOutput<T>, false> {\n  readonly [unionStructOptions]: T;\n}",
+        "parameters": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
     "name": "struct",
     "kind": "constant",
     "slug": "core/struct",
     "source": "packages/core/src/struct/facade.ts",
     "group": "struct",
-    "description": "Facade object for building protocol-boundary structs and parsing values with its constructors and `struct.parse`.\n\nPrefer this object over importing the constructor functions one by one. Compose shapes with\n`struct.object`, then parse with `struct.parse` or let HTTP/SSE/WebSocket\nendpoints apply the same contracts at the wire boundary. `struct` is a plain object of helpers.\n\n```ts\nimport { struct } from \"@defjs/core\";\n\nconst Order = struct.object({\n  id: struct.number(),\n  customerName: struct.string().alias(\"customer_name\"),\n});\n\nfunction readOrder() {\n  const [error, order] = struct.parse(Order, { id: 1, customerName: \"Ada\" });\n  if (error) {\n    console.error(error.message);\n    return;\n  }\n  console.log(order.customerName);\n}\n\nreadOrder();\n```\n\n### Primitives and containers\n\n| Helper                                                                           | Role                                                      |\n| -------------------------------------------------------------------------------- | --------------------------------------------------------- |\n| {@link struct.string}()                                     | Text                                                      |\n| {@link struct.number}()                                     | Number, `NaN` rejected                                    |\n| {@link struct.boolean}()                                   | Boolean                                                   |\n| {@link struct.bigint}()                                     | `bigint`, or a string that parses as one                  |\n| {@link struct.date}()                                         | `Date`, from a `Date`, timestamp, or string               |\n| {@link struct.literal}(value)                              | Exact literal                                             |\n| {@link struct.null}()                                         | Only `null`                                               |\n| {@link struct.any}() / unknown() ({@link struct.unknown}) | Any value except `null` and `undefined`                   |\n| {@link struct.array}(item)                                   | Array of one item struct                                  |\n| {@link struct.tuple}(items)                                  | Fixed-length array; `items` is one array of structs       |\n| {@link struct.record}(value)                                | Plain object with string keys and one value struct        |\n| {@link struct.object}(shape)                                | Plain object with fixed fields; unknown keys are stripped |\n| {@link struct.or}(...options)                                   | First matching option                                     |\n| {@link struct.intersection}(...structs)               | Every struct must match; object results are merged        |\n| {@link struct.discriminatedUnion}(tag, options) | Object option picked by the value of the `tag` field      |\n| {@link struct.enum}(values)                                   | String array, or the values of a `{ Name: value }` object |\n\n### Body codecs and binary values\n\n| Helper                                                                                                                         | Role                                                                                                        |\n| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |\n| {@link struct.formData}(shape) / urlencoded(shape) ({@link struct.urlencoded})                     | Object struct plus a codec tag. The tag applies only when that value is the request body root               |\n| {@link struct.arrayBuffer}() / blob() ({@link struct.blob}) / file() ({@link struct.file}) | Binary values. As a body root they are sent as bytes; as `output` / `error` they select that representation |\n| {@link struct.string}()                                                                                   | Text. As a body root or an inbound `string` struct, the bytes stay text                                     |\n\n### Parsing and modifiers\n\n{@link struct.parse}(struct, value, options?) parses an unknown value and returns `[null, value]` or `[StructError, undefined]`.\n\nEvery struct has the chainable modifiers `.optional()`, `.null()` / `.nullable()`, `.nullish()`, and `.alias(name)`. See {@link StructMethods}.",
+    "description": "Facade object for building protocol-boundary structs and parsing values with its constructors and `struct.parse`.\n\nPrefer this object over importing the constructor functions one by one. Compose shapes with\n`struct.object`, then parse with `struct.parse` or let HTTP/SSE/WebSocket\nendpoints apply the same contracts at the wire boundary. `struct` is a plain object of helpers.\n\n### Primitives and containers\n\n| Helper                                                                           | Role                                                      |\n| -------------------------------------------------------------------------------- | --------------------------------------------------------- |\n| {@link struct.string}()                                     | Text                                                      |\n| {@link struct.number}()                                     | Number, `NaN` rejected                                    |\n| {@link struct.boolean}()                                   | Boolean                                                   |\n| {@link struct.bigint}()                                     | `bigint`, or a string that parses as one                  |\n| {@link struct.date}()                                         | `Date`, from a `Date`, timestamp, or string               |\n| {@link struct.literal}(value)                              | Exact literal                                             |\n| {@link struct.null}()                                         | Only `null`                                               |\n| {@link struct.any}() / unknown() ({@link struct.unknown}) | Any value except `null` and `undefined`                   |\n| {@link struct.array}(item)                                   | Array of one item struct                                  |\n| {@link struct.tuple}(items)                                  | Fixed-length array; `items` is one array of structs       |\n| {@link struct.record}(value)                                | Plain object with string keys and one value struct        |\n| {@link struct.object}(shape)                                | Plain object with fixed fields; unknown keys are stripped |\n| {@link struct.or}(...options)                                   | First matching option                                     |\n| {@link struct.intersection}(...structs)               | Every struct must match; object results are merged        |\n| {@link struct.discriminatedUnion}(tag, options) | Object option picked by the value of the `tag` field      |\n| {@link struct.enum}(values)                                   | String array, or the values of a `{ Name: value }` object |\n\n### Body codecs and binary values\n\n| Helper                                                                                                                         | Role                                                                                                        |\n| ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |\n| {@link struct.formData}(shape) / urlencoded(shape) ({@link struct.urlencoded})                     | Object struct plus a codec tag. The tag applies only when that value is the request body root               |\n| {@link struct.arrayBuffer}() / blob() ({@link struct.blob}) / file() ({@link struct.file}) | Binary values. As a body root they are sent as bytes; as `output` / `error` they select that representation |\n| {@link struct.string}()                                                                                   | Text. As a body root or an inbound `string` struct, the bytes stay text                                     |\n\n### Parsing and modifiers\n\n{@link struct.parse}(struct, value, options?) parses an unknown value and returns `[null, value]` or `[StructError, undefined]`.\n\nEvery struct has the chainable modifiers `.optional()`, `.null()` / `.nullable()`, `.nullish()`, and `.alias(name)`. See {@link StructMethods}.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -6462,8 +7057,8 @@
       },
       {
         "name": "array",
-        "description": "Struct that parses an array with one item struct.\n\n- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).\n\n- Parsing stops at the first failing element, and `issue.path` holds its index.\n\n- Throws `TypeError` when `item` is not a struct.\n\n`ArrayStruct<S>` is not exported. It is a `Struct<StructInput<S>[], Infer<S>[]>`.",
-        "type": "<S extends StructLike<unknown, unknown, boolean>>(item: S) => ArrayStruct<S>",
+        "description": "Struct that parses an array with one item struct.\n\n- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).\n\n- Parsing stops at the first failing element, and `issue.path` holds its index.\n\n- Throws `TypeError` when `item` is not a struct.\n\nThe result is an {@link ArrayStruct}, a `Struct<StructInput<S>[], Infer<S>[]>`.",
+        "type": "<S extends StructLike>(item: S) => ArrayStruct<S>",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -6516,7 +7111,7 @@
       },
       {
         "name": "discriminatedUnion",
-        "description": "Struct that picks one object struct by the value of a tag field.\n\n```ts\nconst Event = struct.discriminatedUnion(\"kind\", [\n  struct.object({ kind: struct.literal(\"created\"), id: struct.number() }),\n  struct.object({ kind: struct.literal(\"deleted\"), id: struct.number() }),\n]);\n```\n\n- Every option must be an object struct whose `discriminator` field is a required {@link struct.literal}(). A missing field, a non-literal field, an optional field, or a duplicate tag value throws `TypeError` when the struct is created.\n\n- The input must be a plain object. The tag value selects the option, and that option parses the whole object.\n\n- A missing tag fails with `missing_key`, and an unknown tag fails with `invalid_union`. Both report the tag field's path. Other failures come from the selected option.\n\n- With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.\n\n`RequiredDiscriminatorOptions` and `DiscriminatedUnionStruct` are not exported. The type check rejects an option whose tag field is missing or may be `undefined`.",
+        "description": "Struct that picks one object struct by the value of a tag field.\n\n```ts\nconst Event = struct.discriminatedUnion(\"kind\", [\n  struct.object({ kind: struct.literal(\"created\"), id: struct.number() }),\n  struct.object({ kind: struct.literal(\"deleted\"), id: struct.number() }),\n]);\n```\n\n- Every option must be an object struct whose `discriminator` field is a required {@link struct.literal}(). A missing field, a non-literal field, an optional field, or a duplicate tag value throws `TypeError` when the struct is created.\n\n- The input must be a plain object. The tag value selects the option, and that option parses the whole object.\n\n- A missing tag fails with `missing_key`, and an unknown tag fails with `invalid_union`. Both report the tag field's path. Other failures come from the selected option.\n\n- With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.\n\nThe result is a {@link DiscriminatedUnionStruct}. `RequiredDiscriminatorOptions` is not exported. The type check rejects an option whose tag field is missing or may be `undefined`.",
         "type": "<const TDiscriminator extends string, const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]]>(discriminator: TDiscriminator, options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>) => DiscriminatedUnionStruct<TOptions>",
         "simplifiedType": "function",
         "required": true,
@@ -6552,8 +7147,8 @@
       },
       {
         "name": "intersection",
-        "description": "Struct that requires a value to satisfy every given struct.\n\n`struct.intersection` is variadic: pass each struct as its own argument.\n\n- Parses the input with every struct and merges the results.\n\n- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.\n\n- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.\n\n- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.\n\n- A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. Calling it with no structs throws `TypeError`, and so does a non-struct argument.\n\n- A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.\n\n`IntersectionStruct<T>` is not exported. It is a `Struct` whose input and output are the intersections of the member types.",
-        "type": "<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(...structs: T) => T extends readonly [unknown] ? T[0] : T extends readonly [unknown, unknown, ...unknown[]] ? IntersectionStruct<T> : T[0] | IntersectionStruct<T>",
+        "description": "Struct that requires a value to satisfy every given struct.\n\n`struct.intersection` is variadic: pass each struct as its own argument.\n\n- Parses the input with every struct and merges the results.\n\n- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.\n\n- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.\n\n- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.\n\n- A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. A non-struct argument throws `TypeError`.\n\n- A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.\n\nThe result is an {@link IntersectionStruct}, a `Struct` whose input and output are the intersections of the member types.",
+        "type": "<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T) => T extends readonly [unknown] ? T[0] : T extends readonly [unknown, unknown, ...unknown[]] ? IntersectionStruct<T> : T[0] | IntersectionStruct<T>",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -6597,7 +7192,7 @@
       },
       {
         "name": "or",
-        "description": "Struct that accepts a value matching any one of several structs.\n\n`struct.or` is variadic: pass each option as its own argument.\n\n- Tries the options in order and returns the result of the first one that parses.\n\n- If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.\n\n- Throws `TypeError` when an option is not a struct.\n\n`UnionStruct<T>` is not exported. It is a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.",
+        "description": "Struct that accepts a value matching any one of several structs.\n\n`struct.or` is variadic: pass each option as its own argument.\n\n- Tries the options in order and returns the result of the first one that parses.\n\n- If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.\n\n- Throws `TypeError` when an option is not a struct.\n\nThe result is a {@link UnionStruct}, a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.",
         "type": "<const T extends readonly [StructLike, ...StructLike[]]>(...options: T) => UnionStruct<T>",
         "simplifiedType": "function",
         "required": true,
@@ -6607,7 +7202,7 @@
       {
         "name": "parse",
         "description": "Parses an unknown value with a struct and returns an error-first tuple.\n\n- **struct** is the struct to parse with. A value that is not a struct throws `TypeError`.\n\n- **value** is the unknown input.\n\n- **options.aliases** defaults to `false`: object keys are read by their **logical** names (`customerName`). With `true` they are read by their wire names (`customer_name`), the way HTTP/JSON codecs read them. The output always uses logical names.\n\n- **options.errorMap** is an {@link ErrorMap} that rewrites issue messages for this call only, including bigint/date conversion failures from a struct created by another Core copy. Any string, including `''`, replaces the message; only `undefined` keeps the default. Custom text is used verbatim.\n\n- Parsing is fail-fast: it stops at the first failure, so the error holds one issue. Unknown object keys are stripped from the output, and the input is not modified.\n\n- At most **256 nested containers** (`object`, `array`, `record`, or `tuple`) are visited along a path, counting the root container as the first. The next container fails with `invalid_type` at its logical path, with `expected: 'value nested at most 256 levels deep'`. In a union, later candidates may still succeed; if none match, the union reports `invalid_union`. Cycles through declared container fields also reach this limit; shared non-cyclic children are allowed. Union and intersection branches do not add a container level, and `any`/`unknown` values remain opaque rather than being traversed.\n\n```ts\nimport { struct } from \"@defjs/core\";\n\nconst Order = struct.object({ id: struct.number(), customerName: struct.string() });\n\nfunction readOrder() {\n  const [error, order] = struct.parse(Order, { id: 1, customerName: \"Ada\" });\n  if (error) {\n    console.error(error.prettify());\n    return;\n  }\n  console.log(order.customerName);\n}\n\nreadOrder();\n```\n\n`any` and `unknown` do not traverse their values, but an intersection may recursively merge two distinct object or array values returned by those leaves. This merge shares the same 256-container budget with its enclosing logical path. Exceeding it produces `invalid_intersection` at the rejected container's logical path. Identical references are retained without traversal, including a shared cyclic value.",
-        "type": "<S extends StructLike<unknown, unknown, boolean>>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap; }) => ParseResult<S[\"_struct\"][\"output\"]>",
+        "type": "<S extends StructLike>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap; }) => ParseResult<S[\"_struct\"][\"output\"]>",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -6615,8 +7210,8 @@
       },
       {
         "name": "record",
-        "description": "Struct that parses an object with string keys and one value struct.\n\n- Parses every own key of a plain object with `value`. Anything else fails with `invalid_type` (expected `record`).\n\n- Parsing stops at the first failing value, and `issue.path` holds its key.\n\n- The output is a new object with a `null` prototype.\n\n- Throws `TypeError` when `value` is not a struct.\n\n`RecordStruct<S>` is not exported. It is a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.",
-        "type": "<S extends StructLike<unknown, unknown, boolean>>(value: S) => RecordStruct<S>",
+        "description": "Struct that parses an object with string keys and one value struct.\n\n- Parses every own key of a plain object with `value`. Anything else fails with `invalid_type` (expected `record`).\n\n- Parsing stops at the first failing value, and `issue.path` holds its key.\n\n- The output is a new object with a `null` prototype.\n\n- Throws `TypeError` when `value` is not a struct.\n\nThe result is a {@link RecordStruct}, a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.",
+        "type": "<S extends StructLike>(value: S) => RecordStruct<S>",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -6633,8 +7228,8 @@
       },
       {
         "name": "tuple",
-        "description": "Struct that parses a fixed-length array with one struct per position.\n\n`struct.tuple` takes **one array** of structs, not separate arguments:\n\n```ts\nconst Pair = struct.tuple([struct.string(), struct.number()]);\n```\n\n- Each position is parsed with the struct at the same index. The input must be an array of exactly the same length, otherwise it fails with `invalid_type` (expected `tuple of length N`).\n\n- Passing the structs as separate arguments, `struct.tuple(a, b)`, throws a `TypeError`.\n\n- Throws `TypeError` when an item is not a struct.\n\n`TupleStruct<T>` is not exported. It is a `Struct` whose input and output are tuples of the item types.",
-        "type": "<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(items: T) => TupleStruct<T>",
+        "description": "Struct that parses a fixed-length array with one struct per position.\n\n`struct.tuple` takes **one array** of structs, not separate arguments:\n\n```ts\nconst Pair = struct.tuple([struct.string(), struct.number()]);\n```\n\n- Each position is parsed with the struct at the same index. The input must be an array of exactly the same length, otherwise it fails with `invalid_type` (expected `tuple of length N`).\n\n- Passing the structs as separate arguments, `struct.tuple(a, b)`, throws a `TypeError`.\n\n- Throws `TypeError` when an item is not a struct.\n\nThe result is a {@link TupleStruct}, a `Struct` whose input and output are tuples of the item types.",
+        "type": "<const T extends readonly [StructLike, ...StructLike[]]>(items: T) => TupleStruct<T>",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -6689,7 +7284,7 @@
     "slug": "core/struct-array",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that parses an array with one item struct.\n\n- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).\n\n- Parsing stops at the first failing element, and `issue.path` holds its index.\n\n- Throws `TypeError` when `item` is not a struct.\n\n`ArrayStruct<S>` is not exported. It is a `Struct<StructInput<S>[], Infer<S>[]>`.",
+    "description": "Struct that parses an array with one item struct.\n\n- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).\n\n- Parsing stops at the first failing element, and `issue.path` holds its index.\n\n- Throws `TypeError` when `item` is not a struct.\n\nThe result is an {@link ArrayStruct}, a `Struct<StructInput<S>[], Infer<S>[]>`.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -6698,7 +7293,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function array<\n  S extends StructLike<unknown, unknown, boolean>,\n>(item: S): ArrayStruct<S>;",
+        "signature": "function array<S extends StructLike>(\n  item: S,\n): ArrayStruct<S>;",
         "parameters": [
           {
             "name": "item",
@@ -6825,7 +7420,7 @@
     "slug": "core/struct-discriminatedunion",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that picks one object struct by the value of a tag field.\n\n```ts\nconst Event = struct.discriminatedUnion(\"kind\", [\n  struct.object({ kind: struct.literal(\"created\"), id: struct.number() }),\n  struct.object({ kind: struct.literal(\"deleted\"), id: struct.number() }),\n]);\n```\n\n- Every option must be an object struct whose `discriminator` field is a required {@link struct.literal}(). A missing field, a non-literal field, an optional field, or a duplicate tag value throws `TypeError` when the struct is created.\n\n- The input must be a plain object. The tag value selects the option, and that option parses the whole object.\n\n- A missing tag fails with `missing_key`, and an unknown tag fails with `invalid_union`. Both report the tag field's path. Other failures come from the selected option.\n\n- With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.\n\n`RequiredDiscriminatorOptions` and `DiscriminatedUnionStruct` are not exported. The type check rejects an option whose tag field is missing or may be `undefined`.",
+    "description": "Struct that picks one object struct by the value of a tag field.\n\n```ts\nconst Event = struct.discriminatedUnion(\"kind\", [\n  struct.object({ kind: struct.literal(\"created\"), id: struct.number() }),\n  struct.object({ kind: struct.literal(\"deleted\"), id: struct.number() }),\n]);\n```\n\n- Every option must be an object struct whose `discriminator` field is a required {@link struct.literal}(). A missing field, a non-literal field, an optional field, or a duplicate tag value throws `TypeError` when the struct is created.\n\n- The input must be a plain object. The tag value selects the option, and that option parses the whole object.\n\n- A missing tag fails with `missing_key`, and an unknown tag fails with `invalid_union`. Both report the tag field's path. Other failures come from the selected option.\n\n- With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.\n\nThe result is a {@link DiscriminatedUnionStruct}. `RequiredDiscriminatorOptions` is not exported. The type check rejects an option whose tag field is missing or may be `undefined`.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -6962,7 +7557,7 @@
     "slug": "core/struct-intersection",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that requires a value to satisfy every given struct.\n\n`struct.intersection` is variadic: pass each struct as its own argument.\n\n- Parses the input with every struct and merges the results.\n\n- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.\n\n- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.\n\n- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.\n\n- A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. Calling it with no structs throws `TypeError`, and so does a non-struct argument.\n\n- A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.\n\n`IntersectionStruct<T>` is not exported. It is a `Struct` whose input and output are the intersections of the member types.",
+    "description": "Struct that requires a value to satisfy every given struct.\n\n`struct.intersection` is variadic: pass each struct as its own argument.\n\n- Parses the input with every struct and merges the results.\n\n- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.\n\n- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.\n\n- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.\n\n- A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. A non-struct argument throws `TypeError`.\n\n- A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.\n\nThe result is an {@link IntersectionStruct}, a `Struct` whose input and output are the intersections of the member types.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -6971,7 +7566,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function intersection<\n  const T extends readonly [\n    StructLike<unknown, unknown, boolean>,\n    ...StructLike<unknown, unknown, boolean>[],\n  ],\n>(\n  ...structs: T\n): T extends readonly [unknown]\n  ? T[0]\n  : T extends readonly [unknown, unknown, ...unknown[]]\n    ? IntersectionStruct<T>\n    : T[0] | IntersectionStruct<T>;",
+        "signature": "function intersection<\n  const T extends readonly [StructLike, ...StructLike[]],\n>(\n  ...structs: T\n): T extends readonly [unknown]\n  ? T[0]\n  : T extends readonly [unknown, unknown, ...unknown[]]\n    ? IntersectionStruct<T>\n    : T[0] | IntersectionStruct<T>;",
         "parameters": [
           {
             "name": "...structs",
@@ -7095,9 +7690,9 @@
     "name": "struct.or",
     "kind": "function",
     "slug": "core/struct-or",
-    "source": "packages/core/src/struct/facade.ts",
+    "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that accepts a value matching any one of several structs.\n\n`struct.or` is variadic: pass each option as its own argument.\n\n- Tries the options in order and returns the result of the first one that parses.\n\n- If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.\n\n- Throws `TypeError` when an option is not a struct.\n\n`UnionStruct<T>` is not exported. It is a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.",
+    "description": "Struct that accepts a value matching any one of several structs.\n\n`struct.or` is variadic: pass each option as its own argument.\n\n- Tries the options in order and returns the result of the first one that parses.\n\n- If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.\n\n- Throws `TypeError` when an option is not a struct.\n\nThe result is a {@link UnionStruct}, a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -7106,7 +7701,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function or<const T extends readonly [StructLike, ...StructLike[]]>(\n  ...options: T\n): UnionStruct<T>;",
+        "signature": "function or<\n  const T extends readonly [StructLike, ...StructLike[]],\n>(...options: T): UnionStruct<T>;",
         "parameters": [
           {
             "name": "...options",
@@ -7126,7 +7721,7 @@
     "name": "struct.parse",
     "kind": "function",
     "slug": "core/struct-parse",
-    "source": "packages/core/src/struct/introspection.ts",
+    "source": "packages/core/src/struct/parse.ts",
     "group": "struct",
     "description": "Parses an unknown value with a struct and returns an error-first tuple.\n\n- **struct** is the struct to parse with. A value that is not a struct throws `TypeError`.\n\n- **value** is the unknown input.\n\n- **options.aliases** defaults to `false`: object keys are read by their **logical** names (`customerName`). With `true` they are read by their wire names (`customer_name`), the way HTTP/JSON codecs read them. The output always uses logical names.\n\n- **options.errorMap** is an {@link ErrorMap} that rewrites issue messages for this call only, including bigint/date conversion failures from a struct created by another Core copy. Any string, including `''`, replaces the message; only `undefined` keeps the default. Custom text is used verbatim.\n\n- Parsing is fail-fast: it stops at the first failure, so the error holds one issue. Unknown object keys are stripped from the output, and the input is not modified.\n\n- At most **256 nested containers** (`object`, `array`, `record`, or `tuple`) are visited along a path, counting the root container as the first. The next container fails with `invalid_type` at its logical path, with `expected: 'value nested at most 256 levels deep'`. In a union, later candidates may still succeed; if none match, the union reports `invalid_union`. Cycles through declared container fields also reach this limit; shared non-cyclic children are allowed. Union and intersection branches do not add a container level, and `any`/`unknown` values remain opaque rather than being traversed.\n\n```ts\nimport { struct } from \"@defjs/core\";\n\nconst Order = struct.object({ id: struct.number(), customerName: struct.string() });\n\nfunction readOrder() {\n  const [error, order] = struct.parse(Order, { id: 1, customerName: \"Ada\" });\n  if (error) {\n    console.error(error.prettify());\n    return;\n  }\n  console.log(order.customerName);\n}\n\nreadOrder();\n```\n\n`any` and `unknown` do not traverse their values, but an intersection may recursively merge two distinct object or array values returned by those leaves. This merge shares the same 256-container budget with its enclosing logical path. Exceeding it produces `invalid_intersection` at the rejected container's logical path. Identical references are retained without traversal, including a shared cyclic value.",
     "related": ["@defjs/core:Struct", "@defjs/core:ParseResult"],
@@ -7139,7 +7734,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function parse<\n  S extends StructLike<unknown, unknown, boolean>,\n>(\n  struct: S,\n  value: unknown,\n  options?: { aliases?: boolean; errorMap?: ErrorMap },\n): ParseResult<S[\"_struct\"][\"output\"]>;",
+        "signature": "function parse<S extends StructLike>(\n  struct: S,\n  value: unknown,\n  options?: { aliases?: boolean; errorMap?: ErrorMap },\n): ParseResult<S[\"_struct\"][\"output\"]>;",
         "parameters": [
           {
             "name": "struct",
@@ -7179,7 +7774,7 @@
     "slug": "core/struct-record",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that parses an object with string keys and one value struct.\n\n- Parses every own key of a plain object with `value`. Anything else fails with `invalid_type` (expected `record`).\n\n- Parsing stops at the first failing value, and `issue.path` holds its key.\n\n- The output is a new object with a `null` prototype.\n\n- Throws `TypeError` when `value` is not a struct.\n\n`RecordStruct<S>` is not exported. It is a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.",
+    "description": "Struct that parses an object with string keys and one value struct.\n\n- Parses every own key of a plain object with `value`. Anything else fails with `invalid_type` (expected `record`).\n\n- Parsing stops at the first failing value, and `issue.path` holds its key.\n\n- The output is a new object with a `null` prototype.\n\n- Throws `TypeError` when `value` is not a struct.\n\nThe result is a {@link RecordStruct}, a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -7188,7 +7783,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function record<\n  S extends StructLike<unknown, unknown, boolean>,\n>(value: S): RecordStruct<S>;",
+        "signature": "function record<S extends StructLike>(\n  value: S,\n): RecordStruct<S>;",
         "parameters": [
           {
             "name": "value",
@@ -7231,7 +7826,7 @@
     "slug": "core/struct-tuple",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that parses a fixed-length array with one struct per position.\n\n`struct.tuple` takes **one array** of structs, not separate arguments:\n\n```ts\nconst Pair = struct.tuple([struct.string(), struct.number()]);\n```\n\n- Each position is parsed with the struct at the same index. The input must be an array of exactly the same length, otherwise it fails with `invalid_type` (expected `tuple of length N`).\n\n- Passing the structs as separate arguments, `struct.tuple(a, b)`, throws a `TypeError`.\n\n- Throws `TypeError` when an item is not a struct.\n\n`TupleStruct<T>` is not exported. It is a `Struct` whose input and output are tuples of the item types.",
+    "description": "Struct that parses a fixed-length array with one struct per position.\n\n`struct.tuple` takes **one array** of structs, not separate arguments:\n\n```ts\nconst Pair = struct.tuple([struct.string(), struct.number()]);\n```\n\n- Each position is parsed with the struct at the same index. The input must be an array of exactly the same length, otherwise it fails with `invalid_type` (expected `tuple of length N`).\n\n- Passing the structs as separate arguments, `struct.tuple(a, b)`, throws a `TypeError`.\n\n- Throws `TypeError` when an item is not a struct.\n\nThe result is a {@link TupleStruct}, a `Struct` whose input and output are tuples of the item types.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -7240,7 +7835,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function tuple<\n  const T extends readonly [\n    StructLike<unknown, unknown, boolean>,\n    ...StructLike<unknown, unknown, boolean>[],\n  ],\n>(items: T): TupleStruct<T>;",
+        "signature": "function tuple<\n  const T extends readonly [StructLike, ...StructLike[]],\n>(items: T): TupleStruct<T>;",
         "parameters": [
           {
             "name": "items",
@@ -7403,7 +7998,7 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function ClientProvider(props: ClientProviderProps): React.FunctionComponentElement<React.ProviderProps<DerivableClient | null>>;",
+        "signature": "function ClientProvider(props: ClientProviderProps): ReactElement;",
         "parameters": [
           {
             "name": "client",
