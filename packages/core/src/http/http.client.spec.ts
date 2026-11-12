@@ -8,7 +8,7 @@ import {
   withQuerySerializer,
 } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "./http_response";
 import { struct } from "../struct";
 import { defineRequest } from "./index";
 

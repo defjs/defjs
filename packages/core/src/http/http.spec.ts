@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, inject, test } from "vitest";
 import { createClient, withEndpoint, withInterceptors } from "../client";
 import type { Client } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "./http_response";
 import { struct } from "../struct";
 import type { HttpRequest } from "./index";
 import { defineRequest } from "./index";

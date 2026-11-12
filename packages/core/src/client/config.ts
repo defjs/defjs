@@ -1,7 +1,7 @@
 import type { Balancer } from "../balancer/balancer";
 import { pickFirstBalancer } from "../balancer/balancer";
 import type { Interceptor } from "../interceptor/interceptor";
-import type { HttpRequest } from "../internal/http_request";
+import type { HttpRequest } from "../http/http_request";
 import type { WebSocketHeartbeatConfig } from "../web_socket/web_socket";
 
 /**

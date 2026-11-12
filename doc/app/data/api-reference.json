@@ -1460,7 +1460,7 @@
     "name": "makeResponse",
     "kind": "function",
     "slug": "core/makeresponse",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Builds an `HttpResponse` without a network call, for interceptors that short-circuit `next` and for tests.\n\nDefault status is `0`, so pass a 2xx `status` for a success. `ok` is true for\n2xx. The value it returns goes through the same media-type check and the same\ndeclared struct as one off the wire; there is no trusted short-circuit. For a\nJSON body, set a JSON `content-type` header.",
     "signatures": [
@@ -1914,7 +1914,7 @@
     "name": "HttpRequest",
     "kind": "type",
     "slug": "core/httprequest-type",
-    "source": "packages/core/src/internal/http_request.ts",
+    "source": "packages/core/src/http/http_request.ts",
     "group": "http",
     "description": "Normalized outgoing HTTP request seen by transports, handlers, interceptors, and `fetchHandler` after the builder runs.\n\n`body` is already the wire value. For JSON that is a **JSON text string**;\nsign HMAC or digests against that string (or other final bytes), not the\noriginal struct input.\n\n- `bodyContentType` holds the inferred type of the builder's body. `null` suppresses that header. FormData owns its multipart boundary. HTTP inference follows a direct write to `body` and is not copied by object spread; an explicit `bodyContentType` assignment is copied. A replacement body is detected again, so declare its type with a `content-type` header. For the unchanged body, `null` suppresses library inference when there is no explicit header, but native Fetch may add its own string type.\n- HTTP never writes inferred Content-Type into `headers`; interceptors see only declared headers. An explicit `content-type` header always wins over `bodyContentType` and detection, whether set by the builder, client defaults, an interceptor, or a raw `fetchHandler` request. `body: undefined` has no library-inferred Content-Type. Signers should read `headers.get('content-type') ?? request.bodyContentType`; do not configure internal fields.\n- `endpoint` is the path with path parameters filled in; `baseEndpoint` is the endpoint selected for this call.\n- Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through.\n- `operation` is a static, low-cardinality endpoint identity for telemetry and diagnostics.\n- `downloadProgress` and `uploadProgress` are the `onDownloadProgress` and `onUploadProgress` hooks of `HttpExecuteOptions`.\n- `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed. Each is set only when its struct is declared. An interceptor that short-circuits with `makeResponse` reads them to match the transport.",
     "signatures": [
@@ -2085,7 +2085,7 @@
     "name": "HttpMeta",
     "kind": "type",
     "slug": "core/httpmeta-type",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Response metadata, available whenever a response reached the client.\n\nIt carries no `body`: a body only exists once a declared struct decoded it.",
     "signatures": [
@@ -2157,7 +2157,7 @@
     "name": "DecodedResponse",
     "kind": "type",
     "slug": "core/decodedresponse-type",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Response metadata plus a body that decoded against a declared struct.\n\nHolding this type is the proof that decoding happened; a failed decode is\nreported as a fault carrying `HttpMeta` alone.",
     "signatures": [
@@ -2238,7 +2238,7 @@
     "name": "HttpResponse",
     "kind": "type",
     "slug": "core/httpresponse-type",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Wire-shape HTTP response that transports produce and interceptors accept.\n\n`body` is parsed JSON, text, a `Blob`, or an `ArrayBuffer`, according to\n`responseType`, not a decoded struct value. `body` is `undefined` when no body\nwas present; a JSON `null` stays `null`. For a JSON representation, a string\nis a JSON string root and is not parsed again; bytes and blobs are raw and\nare parsed once. `ok` is true for status codes in the 2xx range. A transport\nfailure is a fault, never a response. `DecodedResponse` is what reaches the\ncaller. The symbol key is an internal brand. Build values with `makeResponse`.",
     "signatures": [
@@ -2319,7 +2319,7 @@
     "name": "HttpResponseType",
     "kind": "type",
     "slug": "core/httpresponsetype-type",
-    "source": "packages/core/src/internal/http_request.ts",
+    "source": "packages/core/src/http/http_request.ts",
     "group": "http",
     "description": "Representation used to read an HTTP body before struct validation.\n\nChosen from the declared struct kind: `string` is `text`, `blob` and `file`\nare `blob`, `arrayBuffer` is `arraybuffer` (bytes), and every other kind is\n`json`. Not a field on `defineRequest`. It appears on `HttpRequest` as\n`responseType` and `errorResponseType`.",
     "signatures": [
@@ -2345,7 +2345,7 @@
     "name": "HttpProgressEvent",
     "kind": "type",
     "slug": "core/httpprogressevent-type",
-    "source": "packages/core/src/internal/http_request.ts",
+    "source": "packages/core/src/http/http_request.ts",
     "group": "http",
     "description": "Progress snapshot passed to upload and download callbacks.\n\nMirrors the `ProgressEvent` fields `loaded`, `total`, and `lengthComputable`.\n`loaded` counts bytes read from the upload or download stream, not bytes\nacknowledged by the server. Download bytes may already be decompressed.\nUnknown lengths use `total: 0` and `lengthComputable: false`. A download total\nis computable only with a positive `Content-Length` and an absent or\n`identity` `Content-Encoding`; compressed downloads, other encoded responses,\nand bytes exceeding `Content-Length` have an unknown decoded length. A\nstreamed upload also has an unknown total unless a valid explicit\n`Content-Length` supplies it.",
     "signatures": [
@@ -2399,7 +2399,7 @@
     "name": "HttpProgressFn",
     "kind": "type",
     "slug": "core/httpprogressfn-type",
-    "source": "packages/core/src/internal/http_request.ts",
+    "source": "packages/core/src/http/http_request.ts",
     "group": "http",
     "description": "Callback invoked as request bytes are uploaded or response bytes are downloaded.\n\nPassed as `onDownloadProgress` or `onUploadProgress` in `HttpExecuteOptions`.\nCallbacks may be async and are awaited before the next chunk is processed. A\ncallback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`,\nwith the thrown value as `cause`, for downloads and uploads alike. Caller\ncancellation still takes precedence and reports `NET_ABORTED`, or `NET_TIMEOUT`\nwhen the abort reason is a timeout.\n\n`onUploadProgress` reports progress only when the request body is a\n`ReadableStream` that the caller passes. Any other body (`Blob`, `File`,\n`ArrayBuffer`, `FormData`, a string, or `URLSearchParams`) is sent as built and\n`onUploadProgress` is not called, on every runtime. The library never converts\na body into a stream. Download progress is unaffected.\n\nA `ReadableStream` request body follows the Fetch rules for streaming request\nbodies, with or without `onUploadProgress`:\n\n- Chromium and WebKit accept a streaming request body only over HTTP/2 or\n  later, so the call fails with `NET_UNREACHABLE` on HTTP/1.1, with a\n  runtime-specific `TypeError` as `cause`. WebKit was checked manually at 27.2\n  only; this repository does not test it. Node.js and Bun accept HTTP/1.1,\n  which departs from the Fetch standard.\n- Firefox cannot stream request bodies, so the call fails with\n  `ENV_UNSUPPORTED`.\n- In browsers, a cross-origin request needs a CORS preflight, unless the\n  browser holds a cached preflight result, and fails unless the server\n  answers `OPTIONS`. A same-origin request is not preflighted.\n- A 301, 302, 307, or 308 redirect fails after the body was sent once. A 303\n  redirect becomes a GET and succeeds.\n\n`fetch` gives the same network error for each of these as for an unreachable\nendpoint, and for a source `ReadableStream` that throws while `fetch` reads\nit, so the error does not reliably show the endpoint is down. The load\nbalancer therefore receives `{ attempted: false }` for it, as it does for a\nthrowing progress callback (`EXT_OBSERVER_FAILED`). A healthy endpoint is not\nejected for these failures, but a down endpoint is not detected by streamed\nuploads alone, and a rejected streamed upload is never retried: a\n`ReadableStream` body ends the retry flow before `shouldRetry` is asked.\n\nA streamed body has no known length, so the reported `total` is `0` and\n`lengthComputable` is `false` unless the request carries a valid\n`Content-Length` header. That header only sets the reported total, since\nbrowsers do not send it. Non-identity encoded downloads also report\n`total: 0` and `lengthComputable: false`, since `loaded` counts decoded\nstream bytes. Cancellation releases the wrapped upload stream.",
     "signatures": [
@@ -2445,7 +2445,7 @@
     "name": "MakeResponseOptions",
     "kind": "type",
     "slug": "core/makeresponseoptions-type",
-    "source": "packages/core/src/internal/http_response.ts",
+    "source": "packages/core/src/http/http_response.ts",
     "group": "http",
     "description": "Fields accepted by `makeResponse` when building a synthetic `HttpResponse`, for example in interceptors.\n\n`status` defaults to `0` and `statusText` to `''`. `url` and `headers` default\nto values taken from `request`: its resolved URL (base endpoint, path and\nquery) and a copy of its headers. A request without `baseEndpoint` gives its\n`endpoint` as written. Without a request, `url` is `''` and `headers` is\nempty. An omitted `body` stays `undefined`; only an explicit `null` is a JSON\n`null`.",
     "signatures": [

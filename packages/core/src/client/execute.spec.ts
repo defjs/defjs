@@ -1,5 +1,5 @@
 import { describe, expect, inject, test } from "vitest";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "../http/http_response";
 import { createHttpInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineRequest } from "../http";

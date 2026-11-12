@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { defineRequest } from "../http";
 import { createHttpRequest } from "../http/request";
-import type { HttpRequest } from "../internal/http_request";
-import { makeResponse } from "../internal/http_response";
+import type { HttpRequest } from "../http/http_request";
+import { makeResponse } from "../http/http_response";
 import {
   createHttpInterceptor,
   createSSEInterceptor,

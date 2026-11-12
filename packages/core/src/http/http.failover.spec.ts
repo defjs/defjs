@@ -17,11 +17,11 @@ import type { RetryOptions } from "../client/config";
 import { defineRequest } from "./http";
 import { struct } from "../struct";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "./http_response";
 import { createHttpInterceptor } from "../interceptor";
 import { pickFirstBalancer, type Balancer } from "../balancer/balancer";
 import type { BodyValue } from "../internal/builder_types";
-import type { HttpRequest } from "../internal/http_request";
+import type { HttpRequest } from "./http_request";
 
 const endpoints = ["https://first.test", "https://second.test"];
 const policy = (options: RetryOptions = {}): ClientOption =>

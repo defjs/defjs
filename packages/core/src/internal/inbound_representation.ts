@@ -1,6 +1,6 @@
 import type { AnyStruct } from "../struct";
 import { DEFINITION } from "../struct/symbols";
-import type { HttpResponseType } from "./http_request";
+import type { HttpResponseType } from "../http/http_request";
 
 /**
  * Representation chosen from the struct kind.

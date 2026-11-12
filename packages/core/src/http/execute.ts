@@ -13,8 +13,8 @@ import {
 } from "../internal/abort";
 import { computeReconnectDelay, wait } from "../internal/backoff";
 import type { EndpointInput } from "../internal/endpoint_input";
-import type { HttpRequest, HttpResponseType } from "../internal/http_request";
-import type { HttpResponse } from "../internal/http_response";
+import type { HttpRequest, HttpResponseType } from "./http_request";
+import type { HttpResponse } from "./http_response";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { preflight } from "../internal/preflight";
 import type { RetryPolicy } from "../internal/retry";

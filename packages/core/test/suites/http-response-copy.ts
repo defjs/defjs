@@ -6,7 +6,7 @@ import {
   withEndpoint,
   withInterceptors,
 } from "../../src/index.ts";
-import { makeResponse } from "../../src/internal/http_response.ts";
+import { makeResponse } from "../../src/http/http_response.ts";
 
 export function registerHttpResponseCopySuite(): void {
   test("accepts an interceptor response built by another core module instance", async () => {

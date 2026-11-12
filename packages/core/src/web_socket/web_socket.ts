@@ -33,10 +33,9 @@ import {
   stopsUnreadItems,
 } from "../internal/abort";
 import { AsyncQueue } from "../internal/async_queue";
-import type { EndpointArgs } from "../internal/endpoint_command";
-import type { EndpointInput } from "../internal/endpoint_input";
+import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
-import type { HttpRequest } from "../internal/http_request";
+import type { HttpRequest } from "../http/http_request";
 import type {
   BuilderField,
   WebSocketRequestShape,

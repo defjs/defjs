@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   materializeOutboundRequest,
   runOutboundBuilder,
-} from "./outbound_request";
+} from "../internal/outbound_request";
 import { createBaseTransportRequest } from "./transport_request";
 
 function build(

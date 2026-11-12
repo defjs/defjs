@@ -1,6 +1,6 @@
 import type { PreflightFault } from "../error/types";
 import { createPreflightFault } from "../error/factory";
-import { reportContainedError } from "../internal/report_error";
+import { reportContainedError } from "./report_error";
 import type { Balancer, DoneInfo, PickInfo, PickResult } from "./balancer";
 
 /**

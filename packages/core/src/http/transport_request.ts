@@ -1,13 +1,13 @@
 import type { QuerySerializer } from "../client/config";
 import type { HttpRequest } from "./http_request";
-import type { MaterializedRequest } from "./outbound_request";
-import { isFormData } from "./type_guards";
+import type { MaterializedRequest } from "../internal/outbound_request";
+import { isFormData } from "../internal/type_guards";
 import {
   fillUrl,
   mergeHeaders,
   resolveRequestUrl,
   resolveTransportQuery,
-} from "./url";
+} from "../internal/url";
 
 type BaseTransportRequest = HttpRequest & {
   signal: AbortSignal;

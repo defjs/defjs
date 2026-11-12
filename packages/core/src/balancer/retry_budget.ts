@@ -1,4 +1,4 @@
-import { monotonicNow } from "../internal/clock";
+import { monotonicNow } from "./clock";
 import type { ClientConfig, RetryOptions } from "../client/config";
 
 interface RetryBudget {

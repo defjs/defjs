@@ -1,4 +1,4 @@
-import type { HttpRequest } from "./http_request";
+import type { HttpRequest } from "../http/http_request";
 
 const textDecoder = new TextDecoder();
 

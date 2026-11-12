@@ -1,4 +1,4 @@
-import type { HttpRequest } from "../../internal/http_request";
+import type { HttpRequest } from "../http_request";
 import { isReadableStream } from "../../internal/type_guards";
 import { serializeHttpBody } from "./body";
 

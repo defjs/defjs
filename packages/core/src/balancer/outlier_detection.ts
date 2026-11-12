@@ -1,5 +1,5 @@
 import { rememberEndpoint } from "./retention";
-import { monotonicNow } from "../internal/clock";
+import { monotonicNow } from "./clock";
 import type { Balancer, DoneInfo } from "./balancer";
 import { memberList } from "./balancer";
 

@@ -1,6 +1,6 @@
-import type { HttpRequest } from "../src/internal/http_request";
-import type { HttpResponse } from "../src/internal/http_response";
-import { makeResponse } from "../src/internal/http_response";
+import type { HttpRequest } from "../src/http/http_request";
+import type { HttpResponse } from "../src/http/http_response";
+import { makeResponse } from "../src/http/http_response";
 import { resolveRequestUrl } from "../src/internal/url";
 
 export type TestHandler = (req: HttpRequest) => Promise<HttpResponse<unknown>>;

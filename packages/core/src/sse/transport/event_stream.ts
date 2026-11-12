@@ -37,16 +37,13 @@ import { computeReconnectDelay, wait } from "../../internal/backoff";
 import type { RetryPolicy } from "../../internal/retry";
 import { decideRetry, isRetryMethod } from "../../internal/retry";
 import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
-import type {
-  HttpRequest,
-  HttpResponseType,
-} from "../../internal/http_request";
+import type { HttpRequest, HttpResponseType } from "../../http/http_request";
 import type {
   DecodedResponse,
   HttpMeta,
   HttpResponse,
-} from "../../internal/http_response";
-import { makeResponse } from "../../internal/http_response";
+} from "../../http/http_response";
+import { makeResponse } from "../../http/http_response";
 import { resolveInboundRepresentation } from "../../internal/inbound_representation";
 import { RequestUrlError, resolveRequestUrl } from "../../internal/url";
 import type { AnyStruct } from "../../struct";

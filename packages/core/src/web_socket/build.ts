@@ -1,5 +1,5 @@
 import type { QuerySerializer } from "../client/config";
-import type { HttpRequest } from "../internal/http_request";
+import type { HttpRequest } from "../http/http_request";
 import {
   fillUrl,
   resolveRequestUrl,

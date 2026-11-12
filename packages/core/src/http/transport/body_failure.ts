@@ -1,5 +1,5 @@
 import { describeCause } from "../../error/cause";
-import type { HttpMeta } from "../../internal/http_response";
+import type { HttpMeta } from "../http_response";
 
 /** Which fault a body-stage failure becomes once it reaches operation execution. */
 export type BodyFailureCode =

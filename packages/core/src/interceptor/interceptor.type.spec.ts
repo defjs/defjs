@@ -1,5 +1,5 @@
-import type { HttpRequest } from "../internal/http_request";
-import type { HttpResponse } from "../internal/http_response";
+import type { HttpRequest } from "../http/http_request";
+import type { HttpResponse } from "../http/http_response";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
 import type {
   WebSocketCloseInfo,

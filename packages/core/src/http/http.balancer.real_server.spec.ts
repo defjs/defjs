@@ -7,7 +7,7 @@ import {
   withInterceptors,
 } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "./http_response";
 import { defineRequest } from "./index";
 
 const getJson = defineRequest({ method: "GET", path: "/json" });

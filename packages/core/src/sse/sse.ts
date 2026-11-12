@@ -27,14 +27,13 @@ import {
   resolveAbortedFault,
   resolveAbortFault,
 } from "../internal/abort";
-import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
-import type { EndpointInput } from "../internal/endpoint_input";
+import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
 import { createTransportOrigin } from "../internal/transport_origin";
 import { resolveRetryPolicy } from "../internal/retry";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
-import type { DecodedResponse, HttpResponse } from "../internal/http_response";
+import type { DecodedResponse, HttpResponse } from "../http/http_response";
 import type {
   BuilderField,
   EventStreamRequestShape,
@@ -46,7 +45,7 @@ import {
   materializeOutboundRequest,
   runOutboundBuilder,
 } from "../internal/outbound_request";
-import { createBaseTransportRequest } from "../internal/transport_request";
+import { createBaseTransportRequest } from "../http/transport_request";
 import { pickEndpoint } from "../balancer/runtime";
 import type { AnyStruct, Infer } from "../struct";
 import { decodeJson } from "../struct/codec/json";

@@ -9,8 +9,8 @@ import {
 } from "../client";
 import { ERR_ABORTED } from "../error";
 import { createHttpInterceptor } from "../interceptor";
-import type { HttpResponse } from "../internal/http_response";
-import { makeResponse } from "../internal/http_response";
+import type { HttpResponse } from "./http_response";
+import { makeResponse } from "./http_response";
 import { StructError, struct } from "../struct";
 import { createPrimitiveStruct } from "../struct/runtime";
 import { defineRequest } from "./index";

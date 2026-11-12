@@ -14,7 +14,7 @@ import {
   struct,
 } from "../src";
 import type { Balancer } from "../src";
-import { makeResponse } from "../src/internal/http_response";
+import { makeResponse } from "../src/http/http_response";
 import { p2cBalancer } from "../src/balancer/p2c";
 
 afterEach(() => {

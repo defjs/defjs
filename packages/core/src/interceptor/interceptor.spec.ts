@@ -3,7 +3,7 @@ import type { HttpRequest } from "../http";
 import { makeFakeHandler } from "../../test/make_fake_handler";
 import type { InterceptorFn } from "../interceptor/interceptor";
 import { createHttpInterceptor, makeChain } from "../interceptor/interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "../http/http_response";
 import { initOf } from "../../test/fetch-request-init";
 
 function headersOf(req: HttpRequest): Headers {

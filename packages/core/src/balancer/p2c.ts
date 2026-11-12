@@ -1,5 +1,5 @@
 import { rememberEndpoint } from "./retention";
-import { monotonicNow } from "../internal/clock";
+import { monotonicNow } from "./clock";
 import type { Balancer } from "./balancer";
 import { ERR_NO_CANDIDATE } from "./balancer";
 import { withHealthFilter } from "./outlier_detection";

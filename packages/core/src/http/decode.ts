@@ -6,9 +6,9 @@ import {
 } from "../error";
 import { awaitWithSignal, resolveAbortFault } from "../internal/abort";
 import { parseBytesBody, readBytesText } from "../internal/bytes";
-import type { HttpResponseType } from "../internal/http_request";
-import type { DecodedResponse, HttpResponse } from "../internal/http_response";
-import { toHttpMeta } from "../internal/http_response";
+import type { HttpResponseType } from "./http_request";
+import type { DecodedResponse, HttpResponse } from "./http_response";
+import { toHttpMeta } from "./http_response";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { isBlob } from "../internal/type_guards";
 import type { AnyStruct } from "../struct";

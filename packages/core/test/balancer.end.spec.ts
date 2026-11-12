@@ -16,7 +16,7 @@ import {
 } from "../src";
 import type { Balancer, DoneInfo } from "../src";
 import { createControllableSocketClass } from "./regression/controllable_socket";
-import { makeResponse } from "../src/internal/http_response";
+import { makeResponse } from "../src/http/http_response";
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();

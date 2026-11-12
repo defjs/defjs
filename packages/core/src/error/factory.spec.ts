@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { DecodedResponse, HttpMeta } from "../internal/http_response";
+import type { DecodedResponse, HttpMeta } from "../http/http_response";
 import { ERR_ABORTED, ERR_TIMEOUT } from "./cause";
 import {
   createDecodeFault,

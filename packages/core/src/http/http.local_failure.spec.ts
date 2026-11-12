@@ -6,7 +6,7 @@ import {
   withInterceptors,
   type ClientOption,
 } from "../client/option";
-import type { HttpRequest } from "../internal/http_request";
+import type { HttpRequest } from "./http_request";
 import { createHttpInterceptor } from "../interceptor";
 import { createResolvedRequestUrl } from "../internal/url";
 import { defineRequest } from "./http";

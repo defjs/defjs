@@ -8,7 +8,7 @@ import {
   withWebSocketHandle,
 } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "./http_response";
+import { makeResponse } from "../http/http_response";
 import { parseEndpointInput } from "./endpoint_input";
 import { materializeOutboundRequest } from "./outbound_request";
 import { createHttpRequest } from "../http/request";

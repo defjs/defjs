@@ -17,7 +17,7 @@ import { struct } from "../struct";
 import { StructError } from "../struct/errors";
 import { defineEventStream } from "./index";
 import type { FetchHandle } from "../client/config";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "../http/http_response";
 import type { EventStreamHandle } from "./transport/event_stream";
 
 function requireRequest(input: RequestInfo | URL): Request {

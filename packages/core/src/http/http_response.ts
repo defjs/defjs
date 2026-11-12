@@ -1,5 +1,5 @@
 import type { HttpRequest } from "./http_request";
-import { resolveRequestUrl } from "./url";
+import { resolveRequestUrl } from "../internal/url";
 
 const HTTP_RESPONSE: unique symbol = Symbol.for("defjs.http.response");
 

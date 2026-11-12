@@ -7,7 +7,7 @@ import {
   withRetry,
 } from "../client";
 import { createSSEInterceptor } from "../interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "../http/http_response";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
 import type {

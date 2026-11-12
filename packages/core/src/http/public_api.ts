@@ -3,14 +3,14 @@ export type {
   HttpProgressFn,
   HttpRequest,
   HttpResponseType,
-} from "../internal/http_request";
+} from "./http_request";
 export type {
   DecodedResponse,
   HttpMeta,
   HttpResponse,
   MakeResponseOptions,
-} from "../internal/http_response";
-export { makeResponse } from "../internal/http_response";
+} from "./http_response";
+export { makeResponse } from "./http_response";
 export type {
   BuilderInput,
   HttpAwaitResult,

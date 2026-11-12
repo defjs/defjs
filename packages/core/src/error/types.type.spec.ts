@@ -1,4 +1,4 @@
-import type { DecodedResponse, HttpMeta } from "../internal/http_response";
+import type { DecodedResponse, HttpMeta } from "../http/http_response";
 import type {
   Fault,
   FaultClass,

@@ -6,7 +6,7 @@ import {
   withInterceptors,
 } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "./http_response";
 import { StructError, struct } from "../struct";
 import type { StructLike } from "../struct";
 import { defineRequest } from "./index";

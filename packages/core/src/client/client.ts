@@ -1,4 +1,4 @@
-import type { HttpProgressFn } from "../internal/http_request";
+import type { HttpProgressFn } from "../http/http_request";
 import { snapshotHeartbeat, snapshotProtocols, snapshotRetry } from "./capture";
 import type {
   ClientConfig,

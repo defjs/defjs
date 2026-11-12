@@ -9,8 +9,8 @@ import {
   withWebSocketHandle,
 } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "./http_response";
-import type { HttpRequest } from "./http_request";
+import { makeResponse } from "../http/http_response";
+import type { HttpRequest } from "../http/http_request";
 import { defineRequest } from "../http/http";
 import { defineEventStream } from "../sse/sse";
 import { struct } from "../struct";

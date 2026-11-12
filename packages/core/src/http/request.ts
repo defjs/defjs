@@ -3,13 +3,13 @@ import type {
   HttpProgressFn,
   HttpRequest,
   HttpResponseType,
-} from "../internal/http_request";
+} from "./http_request";
 import type { OutboundBuilder } from "../internal/outbound_request";
 import {
   materializeOutboundRequest,
   runOutboundBuilder,
 } from "../internal/outbound_request";
-import { createBaseTransportRequest } from "../internal/transport_request";
+import { createBaseTransportRequest } from "./transport_request";
 import type { Guide } from "../struct/guide";
 import { resolveHttpBodyContentType } from "./transport/body";
 

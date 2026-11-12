@@ -1,5 +1,5 @@
 import { defineRequest } from "../http";
-import type { HttpRequest } from "../internal/http_request";
+import type { HttpRequest } from "../http/http_request";
 import { struct } from "../struct";
 import type { ClientWebSocketOptions } from "./config";
 import type {

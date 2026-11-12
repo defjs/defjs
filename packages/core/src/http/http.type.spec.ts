@@ -1,6 +1,6 @@
 import { expectTypeOf } from "vitest";
 import { createClient } from "../client";
-import type { DecodedResponse, HttpMeta } from "../internal/http_response";
+import type { DecodedResponse, HttpMeta } from "./http_response";
 // @ts-expect-error RequestCommandBuilder was renamed to RequestEndpoint
 import type { RequestCommandBuilder } from "./http";
 

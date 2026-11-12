@@ -7,7 +7,7 @@ import {
   withHTTPHandle,
 } from "../../src/client/index.ts";
 import { defineRequest } from "../../src/http/index.ts";
-import type { HttpRequest } from "../../src/internal/http_request.ts";
+import type { HttpRequest } from "../../src/http/http_request.ts";
 import { withXSRF, type XSRFOptions } from "../../src/xsrf/index.ts";
 import { assertXsrfRuntime } from "../../src/xsrf/xsrf.ts";
 import { initOf } from "../fetch-request-init.ts";
