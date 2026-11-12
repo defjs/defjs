@@ -5,8 +5,13 @@ import type {
   HttpResponseType,
 } from "../internal/http_request";
 import type { OutboundBuilder } from "../internal/outbound_request";
+import {
+  materializeOutboundRequest,
+  runOutboundBuilder,
+} from "../internal/outbound_request";
 import { createBaseTransportRequest } from "../internal/transport_request";
 import type { Guide } from "../struct/guide";
+import { resolveHttpBodyContentType } from "./transport/body";
 
 export function createHttpRequest(
   method: string,
@@ -29,20 +34,26 @@ export function createHttpRequest(
     finalizeHeaders?: HttpRequest["finalizeHeaders"];
   },
 ): HttpRequest {
-  const request = createBaseTransportRequest(method, path, input, builder, {
+  const built = materializeOutboundRequest(
+    runOutboundBuilder(input, builder, options.inputDeclared),
+    "http",
+    options.inputGuides,
+  );
+  const request = createBaseTransportRequest(method, path, built, {
     signal: options.signal,
     baseEndpoint: options.baseEndpoint,
     defaultHeaders: options.defaultHeaders,
-    inputDeclared: options.inputDeclared,
-    inputGuides: options.inputGuides,
     operation: options.operation,
     querySerializer: options.querySerializer,
-    transport: "http",
     withCredentials: options.withCredentials,
   });
 
   return {
     ...request,
+    // HTTP never stores an inferred type in the headers; the transport applies it when it sends.
+    bodyContentType:
+      built.defaultContentType ?? resolveHttpBodyContentType(request.body),
+
     downloadProgress: options.downloadProgress,
     errorResponseType: options.errorResponseType,
     responseType: options.responseType,

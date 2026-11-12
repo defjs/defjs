@@ -222,6 +222,44 @@ describe("request event stream runtime", () => {
     await expect(stream.closed).resolves.toEqual({ kind: "eof" });
   });
 
+  test.each([
+    { declared: undefined, sent: "text/plain;charset=UTF-8" },
+    { declared: "text/csv", sent: "text/csv" },
+  ])(
+    "should send a non-JSON body on POST event streams as $sent",
+    async ({ declared, sent }) => {
+      const fetchMock = vi.fn((input: RequestInfo | URL) => {
+        const request = input instanceof Request ? input : new Request(input);
+        expect(request.headers.get("content-type")).toBe(sent);
+        return Promise.resolve(
+          new Response("data: pong\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
+      });
+      const client = createClient(
+        withEndpoint("https://api.example.com"),
+        withSSEHandle(fetchMock),
+      );
+      const chat = defineEventStream({
+        builder: () => ({
+          body: "ping",
+          headers:
+            declared === undefined ? undefined : { "content-type": declared },
+        }),
+        method: "POST",
+        path: "/v1/chat/completions",
+        events: { message: struct.string() },
+      });
+
+      const [error, stream] = await chat(client);
+
+      expect(error).toBeNull();
+      expect(fetchMock).toHaveBeenCalledOnce();
+      stream?.close();
+    },
+  );
+
   test("should handle SSE events without id", async () => {
     const useNoIdStream = defineEventStream({
       events: {

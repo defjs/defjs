@@ -1,23 +1,13 @@
 import type { QuerySerializer } from "../client/config";
-import type { Guide } from "../struct/guide";
-import {
-  applyRequestContentType,
-  resolveHttpBodyContentType,
-} from "../http/transport/body";
 import type { HttpRequest } from "./http_request";
-import type { OutboundBuilder } from "./outbound_request";
-import {
-  materializeOutboundRequest,
-  runOutboundBuilder,
-} from "./outbound_request";
+import type { MaterializedRequest } from "./outbound_request";
+import { isFormData } from "./type_guards";
 import {
   fillUrl,
   mergeHeaders,
   resolveRequestUrl,
   resolveTransportQuery,
 } from "./url";
-
-type BaseTransport = "http" | "sse";
 
 type BaseTransportRequest = HttpRequest & {
   signal: AbortSignal;
@@ -27,34 +17,33 @@ type BaseTransportRequest = HttpRequest & {
   queryString: string;
 };
 
-export type BaseTransportRequestOptions<TTransport extends BaseTransport> = {
+export type BaseTransportRequestOptions = {
   signal: AbortSignal;
   baseEndpoint: string;
   defaultHeaders?: Headers;
-  inputDeclared?: boolean;
-  inputGuides?: WeakMap<object, Guide>;
   operation?: string;
   querySerializer?: QuerySerializer;
-  transport: TTransport;
   withCredentials?: boolean;
 };
 
-export function createBaseTransportRequest<TTransport extends BaseTransport>(
+/**
+ * The request that HTTP and SSE share: the materialized `built` request placed on `path` under the endpoint, with the
+ * default headers and the builder's headers merged. The caller materializes the builder's result for its transport
+ * and decides what a body without a declared `Content-Type` is sent as.
+ *
+ * A body on GET or HEAD is a build error here: Bun's Request accepts it and only fetch() throws. A `FormData` body
+ * never keeps a `Content-Type`: the platform adds the multipart boundary.
+ */
+export function createBaseTransportRequest(
   method: string,
   path: string,
-  input: unknown,
-  builder: OutboundBuilder | undefined,
-  options: BaseTransportRequestOptions<TTransport>,
+  built: MaterializedRequest,
+  options: BaseTransportRequestOptions,
 ): BaseTransportRequest {
-  const built = materializeOutboundRequest(
-    runOutboundBuilder(input, builder, options.inputDeclared),
-    options.transport,
-    options.inputGuides,
-  );
-  // A body is a build error here: Bun's Request accepts a GET/HEAD body and only fetch() throws.
+  const upperMethod = method.toUpperCase();
   if (
     built.body !== undefined &&
-    (method.toUpperCase() === "GET" || method.toUpperCase() === "HEAD")
+    (upperMethod === "GET" || upperMethod === "HEAD")
   ) {
     throw new TypeError("GET/HEAD requests cannot have a body");
   }
@@ -69,13 +58,8 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
   if (built.headers) {
     mergeHeaders(headers, built.headers);
   }
-  const declaredContentType = headers.has("content-type");
-  if (
-    options.transport === "sse" &&
-    built.defaultContentType &&
-    !declaredContentType
-  ) {
-    headers.set("content-type", built.defaultContentType);
+  if (isFormData(built.body)) {
+    headers.delete("Content-Type");
   }
 
   const request: BaseTransportRequest = {
@@ -93,12 +77,5 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
   };
 
   resolveRequestUrl(request);
-  if (options.transport === "sse" || declaredContentType) {
-    applyRequestContentType(request, headers);
-  }
-  if (options.transport === "http") {
-    request.bodyContentType =
-      built.defaultContentType ?? resolveHttpBodyContentType(request.body);
-  }
   return request;
 }

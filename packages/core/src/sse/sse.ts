@@ -40,7 +40,12 @@ import type {
   EventStreamRequestShape,
 } from "../internal/builder_types";
 import type { OutboundBuilder } from "../internal/outbound_request";
+import { resolveHttpBodyContentType } from "../http/transport/body";
 import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "../http/transport/fetch_init";
+import {
+  materializeOutboundRequest,
+  runOutboundBuilder,
+} from "../internal/outbound_request";
 import { createBaseTransportRequest } from "../internal/transport_request";
 import { pickEndpoint } from "../balancer/runtime";
 import type { AnyStruct, Infer } from "../struct";
@@ -371,23 +376,36 @@ async function runEventStreamCommand<
   try {
     let request;
     try {
+      const built = materializeOutboundRequest(
+        runOutboundBuilder(
+          parsedInput,
+          endpoint.builder,
+          endpoint.input !== undefined,
+        ),
+        "sse",
+        inputGuides,
+      );
       request = createBaseTransportRequest(
         endpoint.method,
         endpoint.path,
-        parsedInput,
-        endpoint.builder,
+        built,
         {
           signal: requestSignal,
           baseEndpoint: resolved.endpoint,
           defaultHeaders: clientConfig.headers,
-          inputDeclared: endpoint.input !== undefined,
-          inputGuides,
           operation: endpoint.operation,
           querySerializer: clientConfig.querySerializer,
-          transport: "sse",
           withCredentials: clientConfig.withCredentials,
         },
       );
+      // An explicit Content-Type header wins; otherwise the stream request carries the type its body implies.
+      if (!request.headers.has("content-type")) {
+        const contentType =
+          built.defaultContentType ?? resolveHttpBodyContentType(request.body);
+        if (contentType) {
+          request.headers.set("content-type", contentType);
+        }
+      }
     } catch (error) {
       return stopBeforeTransport(
         resolveAbortFault(requestSignal) ??

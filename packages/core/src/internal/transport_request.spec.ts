@@ -1,4 +1,8 @@
 import { describe, expect, test } from "vitest";
+import {
+  materializeOutboundRequest,
+  runOutboundBuilder,
+} from "./outbound_request";
 import { createBaseTransportRequest } from "./transport_request";
 
 function build(
@@ -9,13 +13,14 @@ function build(
   return createBaseTransportRequest(
     "GET",
     "/headers",
-    undefined,
-    () => ({ headers }),
+    materializeOutboundRequest(
+      runOutboundBuilder(undefined, () => ({ headers }), false),
+      transport,
+    ),
     {
       baseEndpoint: "https://api.example.com",
       defaultHeaders,
       signal: new AbortController().signal,
-      transport,
     },
   );
 }
