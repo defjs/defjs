@@ -66,7 +66,7 @@ The `struct` facade currently provides the following constructors. The grouping 
 | Purpose                    | Constructor                                | Description                                                                                                                                   |
 | -------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Basic values               | `string`, `number`, `boolean`, `null`      | Strings, numbers, booleans, and explicit `null`                                                                                               |
-| Opaque values              | `any`, `unknown`                           | Accepts values unconstrained by Struct; the output type of `any` also provides no static guarantee                                            |
+| Opaque values              | `any`, `unknown`                           | Any value except `null` and `undefined`                                                                                                       |
 | Fixed values               | `literal`, `enum`                          | A single literal or a non-empty enum; enums support string arrays and objects with string or number values                                    |
 | Platform/conversion values | `date`, `bigint`                           | Input may come from a wire representation; the outputs are `Date` and `bigint` respectively                                                   |
 | Composite values           | `object`, `array`, `tuple`, `record`       | Objects, lists, fixed-length sequences, and records with arbitrary keys                                                                       |
@@ -124,7 +124,7 @@ const [error, summary] = struct.parse(DailySummary, {
 // error is null; 0, false, [], and '' are legal values explicitly provided by the caller.
 ```
 
-`date`, `bigint`, and the JSON codec still perform boundary conversion: for example, `date` accepts a `Date`, a string, or a number and outputs a `Date`; `bigint` accepts a `bigint` or a string and outputs a `bigint`. An invalid date, or a value that does not match the `bigint` input rules, produces a structural error.
+`date` and `bigint` still perform boundary conversion: for example, `date` accepts a `Date`, a string, or a number and outputs a `Date`; `bigint` accepts a `bigint` or a string and outputs a `bigint`. An invalid date, or a value that does not match the `bigint` input rules, produces a structural error.
 
 `struct.object(shape)` walks only the declared shape; unknown keys are dropped. `array`, `record`, `tuple`, `object`, and `intersection` all stop at the first definite error; a tuple input's length must match the declared length exactly. Parsed objects and records use a null prototype; when you depend on `Object.prototype` methods, use `Object.keys`/`Object.entries`, or explicitly copy into an ordinary object.
 
@@ -332,7 +332,7 @@ Every option must be an object Struct that contains a discriminator field of the
 - A known discriminator routes only to the matching option, then that branch is parsed; it does not fall back across other options.
 - A missing or unknown discriminator cannot be routed and produces a `StructError`, with the issue path pointing at the discriminator.
 - A field error on the selected branch keeps that field's path.
-- The JSON codec supports an alias on the discriminator field; it reads the first wire discriminator that actually exists, in option declaration order, and after the branch is selected it no longer visits other options' aliases.
+- The discriminator field may carry an alias; a parse with aliases reads the first wire discriminator that actually exists, in option declaration order, and after the branch is selected it no longer visits other options' aliases.
 
 ## Request placement
 
@@ -369,9 +369,7 @@ const [error] = await updateOrder(client, {
 });
 ```
 
-After encoding, `path` values must be scalars. A header value may be a scalar or an array of scalars. When no query serializer is configured, `query` must also be flat scalars: arrays expand into repeated keys, and a nested object reports `REQ_BUILD_FAILED`. After `withQuerySerializer` is configured, `query` may be nested; the serializer receives the on-the-wire object with aliases already applied (`Date` as ISO, `bigint` as a string). The codec tag of `urlencoded` and `formData` encodes fields as a form only when that object is the body root; nested inside another object, those fields are encoded as ordinary JSON fields. HTTP and SSE may have a body; `GET` / `HEAD` forbid a body at the type level. A WebSocket builder cannot return headers or a body.
-
-A path placeholder should be passed a raw scalar; Core runs `encodeURIComponent` exactly once on each value. Callers must not pre-encode, or `%` will be encoded again as `%25`.
+After encoding, `path` values must be scalars. A header value may be a scalar or an array of scalars. When no query serializer is configured, `query` must also be flat scalars: arrays expand into repeated keys, and a nested object reports `REQ_BUILD_FAILED`. After `withQuerySerializer` is configured, `query` may be nested; the serializer receives the on-the-wire object with aliases already applied (`Date` as ISO, `bigint` as a string). The codec tag of `urlencoded` and `formData` encodes fields as a form only when that object is the body root; nested inside another object, those fields are encoded as ordinary JSON fields.
 
 The builder is not responsible for application-level validation, and it does not change the transport lifecycle. A validation failure is still `REQ_INPUT_INVALID`; a builder throw or an on-the-wire name conflict is `REQ_BUILD_FAILED`, and it is not thrown from the operation call site.
 
@@ -388,7 +386,7 @@ Failure: [StructError, undefined]
 
 Objects, arrays, records, tuples, and the like stop at the first error; a partially successful output is not exposed to the caller. For compatibility with the error-display API, `StructError.issues` is still an array, but a normal parse failure contains only the current first issue. The internal `parseStructValue` is a throwing adapter; applications should use `struct.parse` from the root entry and not depend on internal paths such as `./parse`.
 
-When an operation executes, the corresponding transport wraps Struct errors again. For example, a structural failure of an HTTP input becomes `REQ_INPUT_INVALID`, and a response body that does not match the declaration becomes `RES_STRUCT_MISMATCH`. The branching conditions are in the HTTP matrix below; this step belongs to the transport layer, not to Struct itself.
+When an operation executes, the corresponding transport wraps Struct errors again. For example, a structural failure of an HTTP input becomes `REQ_INPUT_INVALID`, and a response body that does not match the declaration becomes `RES_STRUCT_MISMATCH`. The branching conditions are in the HTTP documentation; this step belongs to the transport layer, not to Struct itself.
 
 ```typescript
 import { StructError } from "@defjs/core";
@@ -409,28 +407,7 @@ if (error?.code === "RES_STRUCT_MISMATCH") {
 
 ### Struct does not provide an HTTP tuple
 
-`[err, data, response]`, HTTP status, `HTTP_STATUS`, `DecodedResponse`, and a fault's `data` are all contracts of the operation and transport layer. Struct itself has no status, response, or HTTP tuple.
-
-`ok` is the only branch point: 2xx is decoded with `output`, everything else with `error`, and the two are never both tried. Omitting one side means that body is not read at all. The representation is decided by the struct kind: `string` is the original text, `blob` / `file` is a Blob, `arrayBuffer` is bytes, and everything else is JSON. When neither side is declared, the lower layer cancels the response body. There is no `responseType` option.
-
-A real Fetch response checks a JSON media type and JSON-parses that representation inside the interceptor chain. A bad media type or syntax rejects the call as `BodyFailure` before `next()` resolves. Struct validation runs once, after the chain. `makeResponse(...)` skips that in-chain read; its body is decoded only in the post-chain step.
-
-| HTTP branch                                              | Condition                                                               | Current wrapping                                                                         |
-| -------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| That side is not declared                                | The corresponding `output` or `error` is absent; the body is never read | 2xx is success with `data` `undefined`; non-2xx is `HTTP_STATUS` with `data` `undefined` |
-| Media type does not match a declared JSON representation | Decided **first**, before the body is read or looked for                | `RES_MEDIA_TYPE_INVALID`; text, blob, and bytes are not checked this way                 |
-| The representation cannot be read                        | Interpreting the bytes by the effective mode fails                      | `RES_DECODE_FAILED`; no body                                                             |
-| Struct validation fails                                  | Runtime decides the value is not accepted by Struct                     | `RES_STRUCT_MISMATCH`; no body and no `data`                                             |
-| 2xx and decode succeeds                                  | Both the representation and Struct succeed                              | success; both `data` and `response.body` are the parsed value                            |
-| Non-2xx and decode succeeds                              | Both the representation and Struct succeed                              | `HTTP_STATUS`; the typed parsed value is in `err.data`                                   |
-
-A response that has no content (`HEAD`, `204`, `205`, `304`) has an absent body in every runtime, whether or not the engine exposes an empty stream. Decoding reads an absent body as zero bytes, as Fetch does: `string` is `''`, `arrayBuffer` is an empty `ArrayBuffer`, and `blob` / `file` is an empty `Blob`. A declared JSON representation is held to its media type first, so without a JSON `Content-Type` the result is `RES_MEDIA_TYPE_INVALID`, content or not. When the media type passes, JSON parses the zero bytes like any other bytes and fails with `RES_DECODE_FAILED`. The event-stream handshake error body follows the same rules, including a `304` for which the engine exposes an empty stream.
-
-It follows that **the body on the undeclared side cannot produce a read failure**. When an operation that declares only `output` receives a 500 whose body is bad JSON, the result is `HTTP_STATUS` + `status: 500`, not a representation-layer error.
-
-A decode failure leaves no body: the `response` of a `RES_*` fault is `HttpMeta`, which has no `body` field at the type level. Error detail is in `cause` (a `StructError` when Struct does not match). A transport failure is a fault rather than a response, so there is no status-0 response that represents a transport failure.
-
-For HTTP result details and response availability, see the [HTTP documentation](../../../../doc/content/en-US/docs/http.mdx) and the [error documentation](../../../../doc/content/en-US/docs/errors.mdx). Do not reverse-infer operation tuple semantics into the Struct API.
+`[err, data, response]`, HTTP status, `HTTP_STATUS`, `DecodedResponse`, and a fault's `data` are contracts of the operation and transport layer; Struct itself has no status, response, or HTTP tuple. For which branch decodes a response, how a body is read, and which fault a failure becomes, see the [HTTP documentation](../../../../doc/content/en-US/docs/http.mdx) and the [error documentation](../../../../doc/content/en-US/docs/errors.mdx). Do not reverse-infer operation tuple semantics into the Struct API.
 
 ## Current practice and source index
 
@@ -438,8 +415,10 @@ The following sources describe the current public API and actual usage:
 
 - [`index.ts`](./index.ts) and [`facade.ts`](./facade.ts): public exports and the `struct` constructors.
 - [`parse.ts`](./parse.ts): strict Struct parsing, `struct.parse`, and the internal throwing adapters.
+- [`encode.ts`](./encode.ts): the one outbound encoder that HTTP, SSE, and WebSocket share.
+- [`definition.ts`](./definition.ts): the runtime data of every struct kind.
 - [`errors.ts`](./errors.ts): `StructError`, issue messages, and error views.
 - [`doc/content/en-US/docs/struct.mdx`](../../../../doc/content/en-US/docs/struct.mdx): Struct documentation for users.
 - [`doc/content/en-US/docs/http.mdx`](../../../../doc/content/en-US/docs/http.mdx): request input, the explicit builder, and transport constraints.
 
-If historical documents or research materials contain examples of `tag.*`, `RuntimeStruct`, `TypeOf`, `InputOf`, or of importing `codec`/`introspection` directly, they do not represent the current `@defjs/core` public API; the current root-entry exports, type tests, and the sources above are authoritative.
+If historical documents or research materials contain examples of `tag.*`, `RuntimeStruct`, `TypeOf`, `InputOf`, or of importing internal modules such as `codec` directly, they do not represent the current `@defjs/core` public API; the current root-entry exports, type tests, and the sources above are authoritative.
