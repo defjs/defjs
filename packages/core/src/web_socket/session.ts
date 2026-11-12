@@ -1,5 +1,5 @@
 import type { DoneInfo } from "../balancer/balancer";
-import { reportContainedError } from "../balancer/report_error";
+import { reportContainedError } from "../internal/report_error";
 import type { ResolvedEndpoint } from "../balancer/runtime";
 import type { ClientConfig, ClientWebSocketOptions } from "../client/config";
 import type { WebSocketHandle } from "../client/config";

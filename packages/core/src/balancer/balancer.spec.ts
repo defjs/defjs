@@ -142,6 +142,25 @@ describe("pickFirstBalancer", () => {
     );
   });
 
+  test("an empty pick leaves the sticky endpoint and the shuffle keys alone", () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const balancer = pickFirstBalancer({ shuffle: true });
+    expect(balancer.pick({ endpoints: [], members: ["a", "b"] })[0]).toBe(
+      ERR_NO_CANDIDATE,
+    );
+    expect(random).not.toHaveBeenCalled();
+  });
+
+  test("returns ERR_NO_CANDIDATE when no member is a candidate", () => {
+    const balancer = pickFirstBalancer();
+    expect(balancer.pick({ endpoints: ["a"], members: [] })[0]).toBe(
+      ERR_NO_CANDIDATE,
+    );
+    expect(balancer.pick({ endpoints: ["a"], members: ["b"] })[0]).toBe(
+      ERR_NO_CANDIDATE,
+    );
+  });
+
   test("keeps shuffle keys and does not reorder the caller's list", () => {
     const random = vi
       .spyOn(Math, "random")

@@ -266,6 +266,9 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   const child: Balancer = {
     pick(info) {
       const candidates = info.endpoints;
+      if (candidates.length === 0) {
+        return [ERR_NO_CANDIDATE, undefined];
+      }
       const members = info.members ?? candidates;
       const order = shuffle ? shuffledOrder(members, keys) : members;
       const first = order[0];
@@ -405,6 +408,7 @@ function counterRoundRobin(): Balancer {
   return {
     pick(info) {
       const endpoints = info.endpoints;
+      // An empty list makes the index NaN, so `endpoint` is undefined.
       const endpoint = endpoints[counter % endpoints.length];
       if (endpoint === undefined) {
         return [ERR_NO_CANDIDATE, undefined];
