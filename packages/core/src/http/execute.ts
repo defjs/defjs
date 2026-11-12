@@ -19,9 +19,9 @@ import { resolveInboundRepresentation } from "../internal/inbound_representation
 import { preflight } from "../internal/preflight";
 import type { RetryPolicy } from "../internal/retry";
 import {
-  decideRetry,
   isRetryMethod,
   resolveRetryPolicy,
+  retryStep,
 } from "../internal/retry";
 import { RequestUrlError } from "../internal/url";
 import type { AnyStruct } from "../struct";
@@ -114,24 +114,19 @@ export async function executeHttp<
     if (facts === undefined || signal.aborted || isOffline()) {
       return attempt.result;
     }
-    try {
-      const retry = await decideRetry(policy, retried, signal, (number) => ({
-        transport: "http",
-        attempt: number,
-        cause: attempt.result[0],
-        retryable: facts.retryable,
-        method: facts.method,
-        endpoint: facts.endpoint,
-        status: facts.status,
-      }));
-      if (!retry || !budget.tryWithdraw()) return attempt.result;
-    } catch (error) {
-      return failed(
-        signal.aborted
-          ? resolveAbortedFault(signal)
-          : createPreflightFault("EXT_HOOK_FAILED", error),
-      );
+    const step = await retryStep(policy, retried, signal, (number) => ({
+      transport: "http",
+      attempt: number,
+      cause: attempt.result[0],
+      retryable: facts.retryable,
+      method: facts.method,
+      endpoint: facts.endpoint,
+      status: facts.status,
+    }));
+    if (step !== "retry") {
+      return step === "stop" ? attempt.result : failed(step);
     }
+    if (!budget.tryWithdraw()) return attempt.result;
     const delay = computeReconnectDelay(policy, retried + 1);
     if (delay > 0) {
       try {

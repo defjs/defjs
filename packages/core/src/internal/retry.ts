@@ -1,5 +1,7 @@
 import type { RetryContext, RetryOptions } from "../client/config";
-import { awaitWithSignal } from "./abort";
+import type { PreflightFault } from "../error";
+import { createPreflightFault } from "../error";
+import { awaitWithSignal, resolveAbortedFault } from "./abort";
 
 const DEFAULT_METHODS: readonly string[] = [
   "GET",
@@ -77,4 +79,30 @@ export async function decideRetry(
     return context.retryable;
   }
   return awaitWithSignal(() => shouldRetry(context), signal);
+}
+
+/**
+ * The decision after a failed attempt, as a value a transport can switch on: `"retry"`, `"stop"`, or the fault that
+ * ends the call because `shouldRetry` failed.
+ *
+ * It runs {@link decideRetry}. A `shouldRetry` that throws or rejects is `EXT_HOOK_FAILED` with the thrown value as
+ * `cause`, unless `signal` has aborted meanwhile: then the fault is `NET_ABORTED` or `NET_TIMEOUT`. It never rejects.
+ * The wait before the retry is not part of it. The transport does what the retry needs first (spend budget, end the
+ * attempt, take a server-supplied delay), then waits for `computeReconnectDelay` with `wait`.
+ */
+export async function retryStep(
+  policy: RetryPolicy,
+  retried: number,
+  signal: AbortSignal,
+  describe: (attempt: number) => RetryContext,
+): Promise<"retry" | "stop" | PreflightFault> {
+  try {
+    return (await decideRetry(policy, retried, signal, describe))
+      ? "retry"
+      : "stop";
+  } catch (error) {
+    return signal.aborted
+      ? resolveAbortedFault(signal)
+      : createPreflightFault("EXT_HOOK_FAILED", error);
+  }
 }
