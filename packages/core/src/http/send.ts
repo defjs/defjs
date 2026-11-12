@@ -125,8 +125,9 @@ export function send(
     record.controller.abort(signal.reason);
   }
 
+  let url: URL;
   try {
-    resolveRequestUrl(request);
+    url = resolveRequestUrl(request);
   } catch (error) {
     record.outcome = NOT_LANDED;
     return rejectAs(
@@ -159,6 +160,7 @@ export function send(
     { ...request, signal: sendSignal },
     attempt.handle,
     lifecycle(attempt, record, request.method),
+    url,
   ).then(
     (settled) => {
       record.pending = undefined;

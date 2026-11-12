@@ -182,6 +182,7 @@ function applyBodyContentType(request: HttpRequest, headers: Headers): void {
 
 export function createFetchRequestInit(
   request: HttpRequest,
+  url: URL,
   onBodyFailed?: () => void,
 ): RequestInit & { duplex?: "half" } {
   const headers = new Headers(request.headers);
@@ -189,7 +190,7 @@ export function createFetchRequestInit(
   applyBodyContentType(request, headers);
   if (request.finalizeHeaders) {
     try {
-      request.finalizeHeaders(request, headers, resolveRequestUrl(request));
+      request.finalizeHeaders(request, headers, url);
     } catch (error) {
       throw isAbortCause(error) || isTimeoutCause(error)
         ? error
@@ -213,22 +214,6 @@ export function createFetchRequestInit(
             )
         : undefined,
   });
-}
-
-export function createFetchRequest(
-  request: HttpRequest,
-  onBodyFailed?: () => void,
-): Request {
-  const url = resolveRequestUrl(request);
-  assertRequestShape(request, url);
-  const init = createFetchRequestInit(request, onBodyFailed);
-
-  try {
-    return new Request(url, init);
-  } catch (error) {
-    cancelWrappedUploadBody(request, onBodyFailed, init.body, error);
-    throw error;
-  }
 }
 
 /** Release a body we will not read, ignoring a cancellation the provider refuses. */
@@ -258,6 +243,75 @@ async function readWholeBody(
     }
     throw new BodyFailure("NET_BODY_INCOMPLETE", error, meta);
   }
+}
+
+/**
+ * Reads a body chunk by chunk, so that `downloadProgress` can watch it, and returns its bytes. One listener covers
+ * every read: cancelling settles a pending read as done, and the loop then reports the abort. Racing each read would
+ * add a listener and three promises per chunk.
+ */
+async function readChunks(
+  stream: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+  declaredLength: number,
+  meta: HttpMeta,
+  downloadProgress: HttpProgressFn | undefined,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const chunks: Uint8Array[] = [];
+  const reader = stream.getReader();
+  const cancelRead = () =>
+    void reader.cancel(signal?.reason).catch(() => undefined);
+  signal?.addEventListener("abort", cancelRead, { once: true });
+  let total = declaredLength;
+  let receivedLength = 0;
+
+  try {
+    while (true) {
+      signal?.throwIfAborted();
+      const result = await reader.read();
+      signal?.throwIfAborted();
+      if (result.done) {
+        break;
+      }
+
+      chunks.push(result.value);
+      receivedLength += result.value.byteLength;
+      if (receivedLength > total) {
+        total = 0;
+      }
+
+      if (downloadProgress) {
+        const event = {
+          lengthComputable: total > 0,
+          loaded: receivedLength,
+          total,
+        };
+        try {
+          await (signal
+            ? awaitWithSignal(() => downloadProgress(event), signal)
+            : downloadProgress(event));
+        } catch (error) {
+          throw new BodyFailure("EXT_OBSERVER_FAILED", error, meta);
+        }
+      }
+    }
+  } catch (error) {
+    // The stream is cancelled with the original reason; the tag is ours, not its concern.
+    void reader
+      .cancel(isBodyFailure(error) ? error.cause : error)
+      .catch(() => undefined);
+    // Cancellation outranks body classification, and `fetchHandler` turns it into an abort result.
+    if (signal?.aborted) {
+      throw error;
+    }
+    throw isBodyFailure(error)
+      ? error
+      : new BodyFailure("NET_BODY_INCOMPLETE", error, meta);
+  } finally {
+    signal?.removeEventListener("abort", cancelRead);
+    reader.releaseLock();
+  }
+  return concatChunks(chunks, receivedLength);
 }
 
 /** @param platform - `response` came straight from the platform fetch called with the request signal. */
@@ -294,7 +348,7 @@ async function parseFetchResponse(
   }
 
   const contentEncoding = headers.get("Content-Encoding")?.trim().toLowerCase();
-  let contentLength =
+  const contentLength =
     contentEncoding !== undefined && contentEncoding !== "identity"
       ? 0
       : getContentLength(headers);
@@ -323,77 +377,19 @@ async function parseFetchResponse(
   }
 
   // Progress needs the chunks, so only an unobserved read takes the bulk path.
-  if (stream && platform && !downloadProgress) {
-    const bytes = await readWholeBody(response, httpRequest.signal, meta);
+  if (stream) {
+    const bytes =
+      platform && !downloadProgress
+        ? await readWholeBody(response, httpRequest.signal, meta)
+        : await readChunks(
+            stream,
+            httpRequest.signal,
+            contentLength,
+            meta,
+            downloadProgress,
+          );
     try {
       body = parseBytesBody(responseType, bytes, contentType);
-    } catch (error) {
-      throw new BodyFailure("RES_DECODE_FAILED", error, meta);
-    }
-  } else if (stream) {
-    const chunks: Uint8Array[] = [];
-    const reader = stream.getReader();
-    const signal = httpRequest.signal;
-    // One listener covers every read: cancelling settles a pending read as done, and the loop then
-    // reports the abort. Racing each read would add a listener and three promises per chunk.
-    const cancelRead = () =>
-      void reader.cancel(signal?.reason).catch(() => undefined);
-    signal?.addEventListener("abort", cancelRead, { once: true });
-    let receivedLength = 0;
-
-    try {
-      while (true) {
-        signal?.throwIfAborted();
-        const result = await reader.read();
-        signal?.throwIfAborted();
-        if (result.done) {
-          break;
-        }
-
-        chunks.push(result.value);
-        receivedLength += result.value.byteLength;
-        if (receivedLength > contentLength) {
-          contentLength = 0;
-        }
-
-        if (downloadProgress) {
-          const event = {
-            lengthComputable: contentLength > 0,
-            loaded: receivedLength,
-            total: contentLength,
-          };
-          try {
-            await (signal
-              ? awaitWithSignal(() => downloadProgress(event), signal)
-              : downloadProgress(event));
-          } catch (error) {
-            throw new BodyFailure("EXT_OBSERVER_FAILED", error, meta);
-          }
-        }
-      }
-    } catch (error) {
-      // The stream is cancelled with the original reason; the tag is ours, not its concern.
-      void reader
-        .cancel(isBodyFailure(error) ? error.cause : error)
-        .catch(() => undefined);
-      // Cancellation outranks body classification, and `fetchHandler` turns it into an abort result.
-      if (signal?.aborted) {
-        throw error;
-      }
-      throw isBodyFailure(error)
-        ? error
-        : new BodyFailure("NET_BODY_INCOMPLETE", error, meta);
-    } finally {
-      signal?.removeEventListener("abort", cancelRead);
-      reader.releaseLock();
-    }
-
-    try {
-      body = parseBytesBody(
-        responseType,
-        concatChunks(chunks, receivedLength),
-        contentType,
-      );
     } catch (error) {
       throw new BodyFailure("RES_DECODE_FAILED", error, meta);
     }
@@ -448,13 +444,14 @@ export async function fetchHandlerWithLifecycle(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
   lifecycle?: FetchLifecycle,
+  url?: URL,
 ): Promise<HttpResponse<unknown>> {
   if (fetchImpl === DEFAULT_FETCH) {
     fetchImpl = resolveGlobalFetch();
   }
   const uploadProgress = httpRequest.uploadProgress;
   if (!uploadProgress) {
-    return sendFetchRequest(httpRequest, fetchImpl, lifecycle);
+    return sendFetchRequest(httpRequest, fetchImpl, lifecycle, url);
   }
 
   let observerFailure: BodyFailure<"EXT_OBSERVER_FAILED"> | undefined;
@@ -476,7 +473,7 @@ export async function fetchHandlerWithLifecycle(
 
   let response: HttpResponse<unknown>;
   try {
-    response = await sendFetchRequest(observed, fetchImpl, lifecycle);
+    response = await sendFetchRequest(observed, fetchImpl, lifecycle, url);
   } catch (error) {
     // sendFetchRequest already turned cancellation into the abort cause, and cancellation outranks the observer.
     throw observerFailure !== undefined && !httpRequest.signal?.aborted
@@ -493,50 +490,41 @@ export async function fetchHandlerWithLifecycle(
 async function sendFetchRequest(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
-  lifecycle?: FetchLifecycle,
+  lifecycle: FetchLifecycle | undefined,
+  resolved: URL | undefined,
 ): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.signal;
   const platform = fetchImpl === PLATFORM_FETCH_HANDLE;
+  let url: URL;
+  let init: RequestInit | undefined;
   let request: Request | undefined;
-  let platformBody: RequestInit["body"];
-  let fallbackUrl: string;
   let response: Response;
 
   try {
     const streamedBody = isReadableStreamBody(httpRequest.body);
-    if (platform) {
-      // fetch(url, init) builds the Request itself, so building one here would only do that work twice.
-      const url = resolveRequestUrl(httpRequest);
-      assertRequestShape(httpRequest, url);
-      const init = createFetchRequestInit(httpRequest, lifecycle?.bodyFailed);
-      platformBody = init.body;
-      fallbackUrl = url.href;
-      response = await fetchWithSignal(
-        () => {
-          lifecycle?.start(streamedBody);
-          return fetchImpl(url, init);
-        },
-        abortSignal,
-        cancelLateResponseBody,
-      );
-    } else {
-      const built = createFetchRequest(httpRequest, lifecycle?.bodyFailed);
-      request = built;
-      fallbackUrl = built.url;
-      response = await fetchWithSignal(
-        () => {
-          lifecycle?.start(streamedBody);
-          return fetchImpl(built);
-        },
-        abortSignal,
-        cancelLateResponseBody,
-      );
+    url = resolved ?? resolveRequestUrl(httpRequest);
+    assertRequestShape(httpRequest, url);
+    init = createFetchRequestInit(httpRequest, url, lifecycle?.bodyFailed);
+    // PERF: fetch(url, init) builds the Request itself, so building one here would only do that work twice.
+    // Any other handle is given the Request.
+    if (!platform) {
+      request = new Request(url, init);
     }
+    response = await fetchWithSignal(
+      () => {
+        lifecycle?.start(streamedBody);
+        return request === undefined
+          ? fetchImpl(url, init)
+          : fetchImpl(request);
+      },
+      abortSignal,
+      cancelLateResponseBody,
+    );
   } catch (error) {
     cancelWrappedUploadBody(
       httpRequest,
       lifecycle?.bodyFailed,
-      request?.body ?? platformBody,
+      request?.body ?? init?.body,
       error,
     );
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
@@ -544,12 +532,7 @@ async function sendFetchRequest(
 
   lifecycle?.response(response);
   try {
-    return await parseFetchResponse(
-      httpRequest,
-      response,
-      fallbackUrl,
-      platform,
-    );
+    return await parseFetchResponse(httpRequest, response, url.href, platform);
   } catch (error) {
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
   }

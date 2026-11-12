@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { HttpRequest } from "../http";
-import { createFetchRequestInit } from "../http/transport/fetch";
 import { makeFakeHandler } from "../../test/make_fake_handler";
 import type { InterceptorFn } from "../interceptor/interceptor";
 import { createHttpInterceptor, makeChain } from "../interceptor/interceptor";
 import { makeResponse } from "../internal/http_response";
+import { initOf } from "../../test/fetch-request-init";
 
 function headersOf(req: HttpRequest): Headers {
-  const headers = createFetchRequestInit(req).headers;
+  const headers = initOf(req).headers;
   if (headers instanceof Headers) return headers;
   throw new Error("expected Headers");
 }

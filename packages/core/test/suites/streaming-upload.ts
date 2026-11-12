@@ -8,12 +8,10 @@ import {
   isReadableStreamBody,
   supportsStreamingRequestBody,
 } from "../../src/http/transport/fetch_init.ts";
-import {
-  createFetchRequestInit,
-  fetchHandler,
-} from "../../src/http/transport/fetch.ts";
+import { fetchHandler } from "../../src/http/transport/fetch.ts";
 import { createNotesForm, notesFormBody } from "../multipart-fixture.ts";
 import { uploadOutcome, type UploadCapability } from "../upload-capability.ts";
+import { initOf } from "../fetch-request-init.ts";
 
 function streamBody(body: unknown): ReadableStream<Uint8Array> {
   if (isReadableStreamBody(body)) return body;
@@ -192,7 +190,7 @@ export function registerStreamingUploadSuite(cap: UploadCapability): void {
           controller.enqueue(new Uint8Array([1]));
         },
       });
-      const init = createFetchRequestInit({
+      const init = initOf({
         baseEndpoint: "https://example.com",
         body: stream,
         endpoint: "/upload",
@@ -220,7 +218,7 @@ export function registerStreamingUploadSuite(cap: UploadCapability): void {
         (_reason?: unknown) => new Promise<void>(() => undefined),
       );
       const stream = new ReadableStream<Uint8Array>({ cancel });
-      const init = createFetchRequestInit({
+      const init = initOf({
         baseEndpoint: "https://example.com",
         body: stream,
         endpoint: "/upload",
@@ -451,7 +449,7 @@ export function registerStreamingUploadSuite(cap: UploadCapability): void {
           },
         });
         const observerError = new Error("observer failed after cancel");
-        const init = createFetchRequestInit({
+        const init = initOf({
           baseEndpoint: "https://example.com",
           body: stream,
           endpoint: "/upload",

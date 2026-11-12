@@ -13,9 +13,10 @@ import {
 } from "../../interceptor";
 import { struct } from "../../struct";
 import { createHttpRequest } from "../request";
-import { createFetchRequestInit, fetchHandler } from "./fetch";
+import { fetchHandler } from "./fetch";
 import { __resetStreamingRequestBodySupportForTests } from "./fetch_init";
 import { fixture } from "../../../test/fixture/client-auto";
+import { initOf } from "../../../test/fetch-request-init";
 
 function requireRequest(input: RequestInfo | URL): Request {
   if (input instanceof Request) return input;
@@ -277,9 +278,9 @@ describe("HTTP transport boundary regressions", () => {
       },
     );
     expect(
-      new Headers(
-        createFetchRequestInit({ ...request, body: undefined }).headers,
-      ).get("content-type"),
+      new Headers(initOf({ ...request, body: undefined }).headers).get(
+        "content-type",
+      ),
     ).toBe("application/custom");
     return Promise.resolve();
   });

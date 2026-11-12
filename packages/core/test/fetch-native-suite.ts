@@ -10,6 +10,7 @@ import {
 import type { FetchHandle } from "../src/client/config";
 import type { HttpRequest, HttpResponse } from "../src/http";
 import { isUnknownArray } from "./narrow";
+import { resolveRequestUrl } from "../src/internal/url";
 
 const ORIGIN = "https://example.com";
 const JSON_HEADERS = { "content-type": "application/json" };
@@ -125,7 +126,6 @@ async function importLibrary() {
   ]);
   return {
     client,
-    createFetchRequest: transport.createFetchRequest,
     DEFAULT_FETCH: config.DEFAULT_FETCH,
     DEFAULT_HTTP_OPTIONS: config.DEFAULT_HTTP_OPTIONS,
     DEFAULT_SSE_OPTIONS: config.DEFAULT_SSE_OPTIONS,
@@ -332,10 +332,9 @@ export function defineNativeFetchSuite(): void {
     });
 
     test("keeps the fallback response url identical to the url a Request reports", async () => {
-      const { createFetchRequest, DEFAULT_FETCH, fetchHandler } =
-        await loadTransport(ORIGIN, () =>
-          Promise.resolve(new Response("{}", { headers: JSON_HEADERS })),
-        );
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response("{}", { headers: JSON_HEADERS })),
+      );
 
       const queries = {
         queryParams: new URLSearchParams({ q: "a b", r: "ü&=" }),
@@ -352,7 +351,7 @@ export function defineNativeFetchSuite(): void {
       ]) {
         const input = request({ ...overrides, responseType: "json" });
         const response = await fetchHandler(input, DEFAULT_FETCH);
-        expect(response.url).toBe(createFetchRequest(input).url);
+        expect(response.url).toBe(new Request(resolveRequestUrl(input)).url);
       }
     });
 

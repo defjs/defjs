@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { HttpRequest } from "../../http";
-import {
-  createFetchRequest,
-  createFetchRequestInit,
-  fetchHandler,
-} from "./fetch";
+import { fetchHandler } from "./fetch";
 import {
   __resetStreamingRequestBodySupportForTests,
   supportsStreamingRequestBody,
@@ -12,6 +8,19 @@ import {
 import { isBodyFailure } from "./body_failure";
 import { PLATFORM_FETCH_HANDLE } from "../../client/config";
 import type { FetchHandle } from "../../client/config";
+import { initOf } from "../../../test/fetch-request-init";
+
+/** The `Request` that `fetchHandler` gives a custom handle for `request`. */
+async function requestOf(request: HttpRequest): Promise<Request> {
+  let given: Request | undefined;
+  await fetchHandler(request, (input) => {
+    if (!(input instanceof Request)) throw new Error("expected a Request");
+    given = input;
+    return Promise.resolve(new Response());
+  });
+  if (given === undefined) throw new Error("the handle was not called");
+  return given;
+}
 
 function headersOf(init: RequestInit): Headers {
   if (init.headers instanceof Headers) return init.headers;
@@ -36,8 +45,8 @@ describe("Fetch handler request creation", () => {
       body: { id: 1 },
       withCredentials: true,
     };
-    const request = createFetchRequest(requestConfig);
-    const init = createFetchRequestInit(requestConfig);
+    const request = await requestOf(requestConfig);
+    const init = initOf(requestConfig);
 
     expect(request.url).toEqual(
       new URL(requestConfig.endpoint, requestConfig.baseEndpoint).toString(),
@@ -51,7 +60,7 @@ describe("Fetch handler request creation", () => {
     }
   });
 
-  test("should add url search", () => {
+  test("should add url search", async () => {
     const requestConfig: HttpRequest = {
       baseEndpoint: "https://example.com",
       endpoint: "/v1/user",
@@ -59,12 +68,12 @@ describe("Fetch handler request creation", () => {
       queryParams: new URLSearchParams({ id: "1" }),
     };
 
-    const { url } = createFetchRequest(requestConfig);
+    const { url } = await requestOf(requestConfig);
     const { searchParams } = new URL(url);
     expect(searchParams.get("id")).toEqual("1");
   });
 
-  test("should add content type when header not set", () => {
+  test("should add content type when header not set", async () => {
     const requestConfig: HttpRequest = {
       baseEndpoint: "https://example.com",
       endpoint: "/v1/user",
@@ -74,7 +83,7 @@ describe("Fetch handler request creation", () => {
       },
     };
 
-    const request = createFetchRequest(requestConfig);
+    const request = await requestOf(requestConfig);
     expect(request.headers.get("Content-Type")).toEqual("application/json");
   });
 
@@ -107,15 +116,15 @@ describe("Fetch handler request creation", () => {
       body: new ArrayBuffer(0),
     };
 
-    expect(
-      headersOf(createFetchRequestInit(jsonRequest)).get("content-type"),
-    ).toBe("text/plain");
-    expect(
-      headersOf(createFetchRequestInit(builderRequest)).get("content-type"),
-    ).toBe("text/plain");
-    expect(
-      headersOf(createFetchRequestInit(binaryRequest)).get("content-type"),
-    ).toBe("text/plain");
+    expect(headersOf(initOf(jsonRequest)).get("content-type")).toBe(
+      "text/plain",
+    );
+    expect(headersOf(initOf(builderRequest)).get("content-type")).toBe(
+      "text/plain",
+    );
+    expect(headersOf(initOf(binaryRequest)).get("content-type")).toBe(
+      "text/plain",
+    );
   });
 
   test("should remove or suppress Content-Type from final body rules", () => {
@@ -137,33 +146,31 @@ describe("Fetch handler request creation", () => {
       bodyContentTypeSource: textBody,
     };
 
-    expect(
-      headersOf(createFetchRequestInit(formDataRequest)).has("content-type"),
-    ).toBe(false);
-    expect(
-      headersOf(createFetchRequestInit(suppressedRequest)).has("content-type"),
-    ).toBe(false);
+    expect(headersOf(initOf(formDataRequest)).has("content-type")).toBe(false);
+    expect(headersOf(initOf(suppressedRequest)).has("content-type")).toBe(
+      false,
+    );
   });
 
-  test("should reject requests without baseEndpoint", () => {
+  test("should reject requests without baseEndpoint", async () => {
     const requestConfig: HttpRequest = {
       endpoint: "/v1/user",
       method: "GET",
     };
 
-    expect(() => createFetchRequest(requestConfig)).toThrowError(
+    await expect(requestOf(requestConfig)).rejects.toThrowError(
       "Client endpoint is required",
     );
   });
 
-  test("should reject requests with invalid baseEndpoint", () => {
+  test("should reject requests with invalid baseEndpoint", async () => {
     const requestConfig: HttpRequest = {
       baseEndpoint: "/api",
       endpoint: "/v1/user",
       method: "GET",
     };
 
-    expect(() => createFetchRequest(requestConfig)).toThrowError(
+    await expect(requestOf(requestConfig)).rejects.toThrowError(
       "Client endpoint must be a valid URL",
     );
   });

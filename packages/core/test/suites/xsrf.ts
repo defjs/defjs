@@ -7,10 +7,10 @@ import {
   withHTTPHandle,
 } from "../../src/client/index.ts";
 import { defineRequest } from "../../src/http/index.ts";
-import { createFetchRequestInit } from "../../src/http/transport/fetch.ts";
 import type { HttpRequest } from "../../src/internal/http_request.ts";
 import { withXSRF, type XSRFOptions } from "../../src/xsrf/index.ts";
 import { assertXsrfRuntime } from "../../src/xsrf/xsrf.ts";
+import { initOf } from "../fetch-request-init.ts";
 
 const UNIT_COOKIE = "XSRF-UNIT";
 const UNIT_HEADER = "X-XSRF-UNIT";
@@ -151,7 +151,7 @@ export function registerXsrfSuite(): void {
       finalizeHeaders,
       method: "TRACE",
     };
-    const init = createFetchRequestInit(request);
+    const init = initOf(request);
     if (!(init.headers instanceof Headers)) throw new Error("expected Headers");
     expect(init.headers.get(UNIT_HEADER)).toBeNull();
     expect(reads).not.toHaveBeenCalled();

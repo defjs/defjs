@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { parseEndpointInput } from "../internal/endpoint_input";
 import { struct } from "../struct";
 import { createHttpRequest } from "./request";
-import { createFetchRequestInit } from "./transport/fetch";
+import { initOf } from "../../test/fetch-request-init";
 
 async function formBlob(
   value: unknown,
@@ -372,9 +372,9 @@ describe("http request helpers", () => {
     );
     const copied = { ...request, headers: new Headers(request.headers) };
     expect(copied.bodyContentType).toBe("application/json");
-    expect(
-      new Headers(createFetchRequestInit(copied).headers).get("content-type"),
-    ).toBe("application/json");
+    expect(new Headers(initOf(copied).headers).get("content-type")).toBe(
+      "application/json",
+    );
   });
 
   test.each([
@@ -401,11 +401,9 @@ describe("http request helpers", () => {
         bodyContentType: type,
         headers: new Headers(header ? { "content-type": header } : undefined),
       };
-      expect(
-        new Headers(createFetchRequestInit(replaced).headers).get(
-          "content-type",
-        ),
-      ).toBe(sent);
+      expect(new Headers(initOf(replaced).headers).get("content-type")).toBe(
+        sent,
+      );
     },
   );
 
@@ -419,9 +417,9 @@ describe("http request helpers", () => {
     );
     request.headers = undefined;
     expect(request.bodyContentType).toBe("application/json");
-    expect(
-      new Headers(createFetchRequestInit(request).headers).get("content-type"),
-    ).toBe("application/json");
+    expect(new Headers(initOf(request).headers).get("content-type")).toBe(
+      "application/json",
+    );
   });
 
   test("should build form data bodies and reject unsupported nested values", async () => {

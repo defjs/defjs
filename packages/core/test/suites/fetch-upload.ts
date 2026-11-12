@@ -6,14 +6,11 @@ import {
   supportsStreamingRequestBody,
 } from "../../src/http/transport/fetch_init.ts";
 import {
-  createFetchRequest,
-  createFetchRequestInit,
-} from "../../src/http/transport/fetch.ts";
-import {
   uploadOutcome,
   type UploadCapability,
   type UploadOutcome,
 } from "../upload-capability.ts";
+import { initOf } from "../fetch-request-init.ts";
 
 function streamBody(body: unknown): ReadableStream<Uint8Array> {
   if (isReadableStreamBody(body)) return body;
@@ -45,12 +42,12 @@ export function registerFetchUploadSuite(cap: UploadCapability): void {
       };
       const outcome = uploadOutcome(cap, "ReadableStream", "custom");
       if (outcome !== "observed") {
-        expectUnsupported(outcome, () => createFetchRequest(requestConfig));
+        expectUnsupported(outcome, () => initOf(requestConfig));
         expect(body.locked).toBe(false);
         return;
       }
 
-      const init = createFetchRequestInit(requestConfig);
+      const init = initOf(requestConfig);
       expect(init.duplex).toBe("half");
     });
 
@@ -86,16 +83,14 @@ export function registerFetchUploadSuite(cap: UploadCapability): void {
         };
         const outcome = uploadOutcome(cap, "ReadableStream", "custom");
         if (outcome !== "observed") {
-          expectUnsupported(outcome, () =>
-            createFetchRequestInit(requestConfig),
-          );
+          expectUnsupported(outcome, () => initOf(requestConfig));
           expect(events).toEqual([]);
           expect(body.locked).toBe(false);
           return;
         }
 
         expect(supportsStreamingRequestBody()).toBe(true);
-        const init = createFetchRequestInit(requestConfig);
+        const init = initOf(requestConfig);
         expect(init.duplex).toBe("half");
         expect(await new Response(init.body).text()).toBe("hello");
         expect(events).toEqual([
@@ -115,12 +110,12 @@ export function registerFetchUploadSuite(cap: UploadCapability): void {
       };
       const outcome = uploadOutcome(cap, "ReadableStream", "custom");
       if (outcome !== "observed") {
-        expectUnsupported(outcome, () => createFetchRequestInit(requestConfig));
+        expectUnsupported(outcome, () => initOf(requestConfig));
         expect(stream.locked).toBe(false);
         return;
       }
 
-      const init = createFetchRequestInit(requestConfig);
+      const init = initOf(requestConfig);
       const reader = streamBody(init.body).getReader();
       const { value } = await reader.read();
       expect(value).toBeDefined();
@@ -143,12 +138,12 @@ export function registerFetchUploadSuite(cap: UploadCapability): void {
       };
       const outcome = uploadOutcome(cap, "ReadableStream", "custom");
       if (outcome !== "observed") {
-        expectUnsupported(outcome, () => createFetchRequestInit(requestConfig));
+        expectUnsupported(outcome, () => initOf(requestConfig));
         expect(stream.locked).toBe(false);
         return;
       }
 
-      const init = createFetchRequestInit(requestConfig);
+      const init = initOf(requestConfig);
       const reader = streamBody(init.body).getReader();
       await expect(reader.read()).rejects.toThrow("source failed");
     });

@@ -18,7 +18,8 @@ import {
   installProbeRequest,
   simulateUnsupportedStreaming,
 } from "../../../test/streaming-support";
-import { createFetchRequest, fetchHandler } from "./fetch";
+import { fetchHandler } from "./fetch";
+import { initOf } from "../../../test/fetch-request-init";
 
 function streamBody(body: unknown): ReadableStream<Uint8Array> {
   if (isReadableStreamBody(body)) return body;
@@ -62,7 +63,7 @@ describe("Fetch handler streaming", () => {
       }),
     };
 
-    expect(() => createFetchRequest(requestConfig)).toThrow(
+    expect(() => initOf(requestConfig)).toThrow(
       ERR_STREAMING_REQUEST_UNSUPPORTED,
     );
   });
@@ -106,7 +107,7 @@ describe("streaming request body capability", () => {
     installProbeRequest("text/plain;charset=UTF-8");
 
     expect(() =>
-      createFetchRequest({
+      initOf({
         baseEndpoint: "https://example.com",
         body: closedUploadStream(),
         endpoint: "/upload",
