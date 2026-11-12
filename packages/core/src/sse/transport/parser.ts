@@ -20,9 +20,9 @@ export async function readStreamBytes(
   onReadError?: (error: unknown) => void,
 ): Promise<void> {
   const reader = stream.getReader();
+  const read = () => reader.read();
   try {
     for (;;) {
-      const read = () => reader.read();
       let result: Awaited<ReturnType<typeof read>>;
       try {
         result = signal ? await awaitWithSignal(read, signal) : await read();

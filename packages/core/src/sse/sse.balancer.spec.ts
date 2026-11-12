@@ -1041,6 +1041,38 @@ test("does not pick or call done for a second next, and repicks the first stream
   expectPicks(recorded);
 });
 
+test("does not report a second next that fails while the first attempt is in flight", async () => {
+  const recorded = track(() => "https://example.com");
+  const abort = new AbortController();
+  const handle = vi.fn(() => new Promise<Response>(() => undefined));
+  const pending = orders(
+    createClient(
+      withEndpoint("https://example.com"),
+      withBalancer(recorded.balancer),
+      withSSEHandle(handle),
+      withInterceptors(
+        createSSEInterceptor(async (req, next) => {
+          const first = next(req);
+          const second = await next({
+            ...req,
+            endpoint: "https://elsewhere.example/x",
+          }).catch((error: unknown) => error);
+          expect(second).toBeInstanceOf(RequestUrlError);
+          expect(recorded.dones).toEqual([]);
+          abort.abort(ERR_ABORTED);
+          return await first;
+        }),
+      ),
+    )({ signal: abort.signal }),
+  );
+  const [error] = await pending;
+  expect(error?.code).toBe("NET_ABORTED");
+  expect(recorded.dones).toEqual([
+    { endpoint: "https://example.com", info: { attempted: false } },
+  ]);
+  expect(recorded.pending()).toBe(0);
+});
+
 test("calls done once for each sseHandler exit before fetchEventStream", async () => {
   const handle = vi.fn(() => Promise.resolve(sseResponse("data: hi\n\n")));
   const urlRecord = track(() => "https://example.com");

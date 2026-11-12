@@ -360,10 +360,12 @@ async function runEventStreamCommand<
     return stopBeforeTransport(parsedCancellation);
   }
 
-  const picked = pickEndpoint(clientConfig.balancer, {
-    endpoints: clientConfig.endpoints,
-    operation: endpoint.operation,
-  });
+  const pick = () =>
+    pickEndpoint(clientConfig.balancer, {
+      endpoints: clientConfig.endpoints,
+      operation: endpoint.operation,
+    });
+  const picked = pick();
   if (picked[0] !== null) {
     return stopBeforeTransport(picked[0]);
   }
@@ -449,15 +451,15 @@ async function runEventStreamCommand<
         if (attributed) {
           handedOff = true;
         }
-        let settled = !attributed;
+        // The wrapper `done` reports once, so a repeat is harmless.
         const settleUnattempted = (): void => {
-          if (settled) {
-            return;
+          if (attributed) {
+            resolved.done({ attempted: false });
           }
-          settled = true;
-          resolved.done({ attempted: false });
         };
-        if (attributed && req.baseEndpoint !== resolved.endpoint) {
+        const ownsEndpointAttempt =
+          attributed && req.baseEndpoint === resolved.endpoint;
+        if (attributed && !ownsEndpointAttempt) {
           settleUnattempted();
         }
         let transportAbort: AbortSignal;
@@ -515,22 +517,14 @@ async function runEventStreamCommand<
           releaseAbortSignal(transportAbort);
         };
         const failure: EventStreamFailureInfo<HandshakeBody<TError>> = {};
-        const endpointAttempt =
-          attributed && !settled
-            ? {
-                start: resolved.start,
-                end: resolved.end,
-                done: resolved.done,
-                pickNext: () =>
-                  pickEndpoint(clientConfig.balancer, {
-                    endpoints: clientConfig.endpoints,
-                    operation: endpoint.operation,
-                  }),
-              }
-            : undefined;
-        if (endpointAttempt) {
-          settled = true;
-        }
+        const endpointAttempt = ownsEndpointAttempt
+          ? {
+              start: resolved.start,
+              end: resolved.end,
+              done: resolved.done,
+              pickNext: pick,
+            }
+          : undefined;
         const promise = fetchEventStream(
           { ...req, signal: streamAbort },
           {
@@ -682,7 +676,7 @@ function transformStreamMessage(
     return notifyInvalidEvent(onInvalidEvent, {
       reason: "missing-struct",
       message: {
-        id: message.id || "",
+        id: message.id,
         event: eventName,
         data: message.data,
       },
@@ -700,7 +694,7 @@ function transformStreamMessage(
     return notifyInvalidEvent(onInvalidEvent, {
       reason: "validation-failed",
       message: {
-        id: message.id || "",
+        id: message.id,
         event: eventName,
         data: message.data,
       },

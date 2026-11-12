@@ -25,7 +25,7 @@ import {
   fetchEventStream as fetchEventStreamInternal,
   getEventStreamFatalCode,
 } from "./event_stream";
-import { type EventStreamMessage, SSEParserLimitError } from "./parser";
+import type { EventStreamMessage } from "./parser";
 import { yieldMacrotask } from "../../../test/macrotask";
 
 type TestOptions<T> = Omit<
@@ -665,23 +665,6 @@ describe("fetchEventStream advanced", () => {
     });
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
-    expect(onerror).toHaveBeenCalledOnce();
-    expect(shouldRetry).not.toHaveBeenCalled();
-  });
-
-  test("should classify a parser limit thrown by the fetch boundary as fatal", async () => {
-    const onerror = vi.fn(() => 0);
-    const shouldRetry = vi.fn(() => true);
-    const fetch = vi.fn(() => Promise.reject(new SSEParserLimitError()));
-
-    const error = await fetchEventStream(createRequest("/events"), {
-      fetch,
-      onerror,
-      retry: resolveRetryPolicy({ shouldRetry }),
-    }).catch((cause: unknown) => cause);
-
-    expect(getEventStreamFatalCode(error)).toBe("CAP_BUFFER_EXCEEDED");
-    expect(fetch).toHaveBeenCalledOnce();
     expect(onerror).toHaveBeenCalledOnce();
     expect(shouldRetry).not.toHaveBeenCalled();
   });

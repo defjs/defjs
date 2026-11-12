@@ -277,18 +277,6 @@ function isHandshakeStatusFault(error: unknown): error is Error {
   return error instanceof Error && handshakeStatusFaults.has(error);
 }
 
-function toEventStreamFatalError(error: unknown): Error | undefined {
-  if (error instanceof EventStreamFatalError) {
-    return error;
-  }
-  if (error instanceof SSEParserLimitError) {
-    return new EventStreamFatalError("CAP_BUFFER_EXCEEDED", error.message, {
-      cause: error,
-    });
-  }
-  return undefined;
-}
-
 /**
  * The Request constructor refuses a URL with credentials with a TypeError (Fetch, "new Request"), but Bun accepts it and
  * sends the request. Refusing here makes the outcome the same on every runtime and keeps it a build failure, not a
@@ -319,10 +307,6 @@ export async function fetchEventStream<
   const closeController = new AbortController();
   const fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
   const headers = new Headers(request.headers);
-
-  if (!headers.has("Accept")) {
-    headers.set("Accept", EVENT_STREAM_CONTENT_TYPE);
-  }
 
   let settledClosed = false;
   // Whether the stream ended before the caller's signal aborted. Set once, when `closed` settles.
@@ -542,7 +526,11 @@ export async function fetchEventStream<
         }
         const eventRequest = new Request(
           url,
-          createEventStreamRequestInit(request, headers, attemptAbort),
+          createFetchInitBase(request, {
+            defaultAccept: EVENT_STREAM_CONTENT_TYPE,
+            headers,
+            signal: attemptAbort,
+          }),
         );
         response = await fetchWithSignal(
           () => {
@@ -573,7 +561,7 @@ export async function fetchEventStream<
           options.handshakeError,
           attemptAbort,
         ).catch((error: unknown) => {
-          latestOpen = toOpenInfo(handshakeResponse, null, false);
+          latestOpen = toOpenInfo(handshakeResponse);
           throw error;
         });
         latestOpen = open;
@@ -615,12 +603,6 @@ export async function fetchEventStream<
           void response.body.cancel(error).catch(() => undefined);
         }
 
-        const normalizedError = normalizeAbortError(
-          error,
-          request.signal,
-          closeController.signal,
-        );
-
         if (
           !handshake &&
           fetchStarted &&
@@ -638,15 +620,13 @@ export async function fetchEventStream<
           return;
         }
 
-        const retryError = normalizedError ?? error;
         // A non-2xx handshake is not fatal: the retry policy decides, and only 502, 503 and 504 retry by default.
-        const fatalError = toEventStreamFatalError(retryError);
-        if (fatalError) {
-          await observeFatalError(fatalError, attemptAbort);
+        if (error instanceof EventStreamFatalError) {
+          await observeFatalError(error, attemptAbort);
           if (closeController.signal.aborted || request.signal?.aborted) {
             finishAborted(retryAbort);
           } else {
-            finishError(fatalError);
+            finishError(error);
           }
           return;
         }
@@ -655,17 +635,13 @@ export async function fetchEventStream<
         // retried: no observer, retry policy or delay, and the caller gets the real failure. Keyed on the body
         // type, not `locked`: when a failed attempt locks the stream differs by runtime.
         if (isReadableStreamBody(request.body)) {
-          finishError(retryError);
+          finishError(error);
           return;
         }
 
         let retryDelay: number | null;
         try {
-          retryDelay = await resolveRetryDelay(
-            retryError,
-            retryAbort,
-            response,
-          );
+          retryDelay = await resolveRetryDelay(error, retryAbort, response);
         } catch (policyError) {
           if (closeController.signal.aborted || request.signal?.aborted) {
             finishAborted(retryAbort);
@@ -676,7 +652,7 @@ export async function fetchEventStream<
         }
 
         if (typeof retryDelay !== "number" || retryDelay < 0) {
-          finishError(retryError);
+          finishError(error);
           return;
         }
 
@@ -882,7 +858,7 @@ export async function fetchEventStream<
   }
 
   function finishAborted(signal: AbortSignal): void {
-    const abortedError = normalizeAbortReason(signal);
+    const abortedError = resolveAbortedCause(signal);
     if (abortedError === ERR_TIMEOUT) {
       finishError(ERR_TIMEOUT);
       return;
@@ -1001,7 +977,7 @@ async function createOpenInfo<TError extends AnyStruct | undefined>(
   if (!response.ok && handshakeError) {
     const representation = resolveInboundRepresentation(handshakeError);
     const contentType = getContentType(response.headers);
-    const unread = toOpenInfo(response, null, false);
+    const unread = toOpenInfo(response);
     const meta = toEventStreamMeta(unread.response);
     // A null body status has no body, though Chromium and Firefox expose an empty stream for some.
     let stream = response.body;
@@ -1038,7 +1014,7 @@ async function createOpenInfo<TError extends AnyStruct | undefined>(
         representation === "json"
           ? decodeJson(handshakeError, raw)
           : parseStructValue(handshakeError, raw);
-      const open = toOpenInfo(response, body, true);
+      const open = toOpenInfo(response, body);
       return { open, decoded: { ...toEventStreamMeta(open.response), body } };
     } catch (error) {
       if (signal.aborted) {
@@ -1061,21 +1037,17 @@ async function createOpenInfo<TError extends AnyStruct | undefined>(
     discardStreamBody(response.body);
   }
 
-  return { open: toOpenInfo(response, null, false) };
+  return { open: toOpenInfo(response) };
 }
 
-function toOpenInfo(
-  response: Response,
-  body: unknown,
-  decoded: boolean,
-): EventStreamOpenInfo {
+/** `body` is the decoded handshake body. It stays absent for a handshake nobody read; a decoded JSON `null` stays `null`. */
+function toOpenInfo(response: Response, body?: unknown): EventStreamOpenInfo {
   const http = makeResponse<unknown>({
     status: response.status,
     statusText: response.statusText,
     headers: response.headers,
     url: response.url,
-    // An unread handshake stays absent. A decoded JSON null stays null.
-    body: decoded ? body : undefined,
+    body,
   });
   return {
     response: http,
@@ -1103,18 +1075,6 @@ async function readHandshakeBody(
   return parseBytesBody(representation, bytes, contentType);
 }
 
-function createEventStreamRequestInit(
-  request: HttpRequest,
-  headers: Headers,
-  abort?: AbortSignal,
-): RequestInit & { duplex?: "half" } {
-  return createFetchInitBase(request, {
-    defaultAccept: EVENT_STREAM_CONTENT_TYPE,
-    headers,
-    signal: abort,
-  });
-}
-
 function validateOpenResponse<TBody>(
   open: EventStreamOpenInfo,
   decoded?: DecodedResponse<TBody>,
@@ -1132,27 +1092,6 @@ function validateOpenResponse<TBody>(
       `Expected content-type ${EVENT_STREAM_CONTENT_TYPE}, got ${contentType || "(empty)"}`,
     );
   }
-}
-
-function normalizeAbortError(
-  error: unknown,
-  requestAbort?: AbortSignal,
-  closeAbort?: AbortSignal,
-): unknown {
-  const signal = closeAbort?.aborted
-    ? closeAbort
-    : requestAbort?.aborted
-      ? requestAbort
-      : undefined;
-  if (!signal?.aborted) {
-    return error;
-  }
-
-  return normalizeAbortReason(signal);
-}
-
-function normalizeAbortReason(signal: AbortSignal): Error {
-  return resolveAbortedCause(signal);
 }
 
 function toCloseReason(reason: unknown): string | undefined {
