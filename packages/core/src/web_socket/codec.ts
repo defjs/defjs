@@ -1,10 +1,10 @@
 import type { AnyStruct, Infer } from "../struct";
+import type { RuntimeStruct } from "../struct/definition";
 import type { StructLike } from "../struct/types";
 import { decodeBytes, readBytesText } from "../internal/bytes";
 import { rejectNonJson } from "../internal/outbound_request";
 import { encodeValue } from "../struct/encode_by_struct";
 import { parseRuntimeValue, parseStructValue } from "../struct/parse";
-import { toRuntimeStruct } from "../struct/shape";
 
 export function serializeOutgoingWebSocketMessage(
   outgoing: AnyStruct | undefined,
@@ -18,7 +18,8 @@ export function serializeOutgoingWebSocketMessage(
 
   // PERF: the shared outbound encoder (a tagging parse, then encodeOutbound) measured 4% to 28% slower on one send: Bun 1.4.4
   // +7.5% on a number, +16% on a nested object, +4% on a union; Node 26.13 +21%, +28%, +17% (seven interleaved runs each).
-  const runtime = toRuntimeStruct(outgoing);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the public StructLike is a compile-time brand with no runtime members, while every struct the constructors build carries the definition RuntimeStruct describes, and making StructLike assignable to it would change the published type. Unasserted: TS2345, `StructLike` is not assignable to `RuntimeStruct`
+  const runtime = outgoing as RuntimeStruct;
   // Same guard as an HTTP JSON body: non-finite numbers, functions, symbols and non-plain objects throw.
   const wire = JSON.stringify(
     encodeValue(runtime, parseRuntimeValue(runtime, message)),

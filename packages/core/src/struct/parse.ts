@@ -28,7 +28,7 @@ import {
 } from "./intersection";
 import { matchesEnum } from "./match";
 import { isPlainObject, nullObject } from "./plain_object";
-import { assertStruct, resolveStructFields, toRuntimeStruct } from "./shape";
+import { assertStruct, resolveStructFields } from "./shape";
 import { DEFINITION, FAILED, OMIT } from "./symbols";
 import type {
   LiteralValue,
@@ -160,7 +160,8 @@ export function parseStructValue<
     guides?: WeakMap<object, Guide>;
   },
 ): ParsedStructOutput<S, Tagged> {
-  const parsed = parseRuntimeValue(toRuntimeStruct(struct), value, options);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the public StructLike is a compile-time brand with no runtime members, while every struct the constructors build carries the definition RuntimeStruct describes, and making StructLike assignable to it would change the published type. Unasserted: TS2345, `S` is not assignable to `RuntimeStruct`
+  const parsed = parseRuntimeValue(struct as S & RuntimeStruct, value, options);
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the parser builds this value at run time, while its type is the struct's compile-time-only `_struct` brand (Infer<S> or TaggedStructOutput<S>); no runtime value carries that brand, so it can only be attached here, the decoders' single typed boundary (HTTP/SSE bodies, WebSocket frames and endpoint input call through it). Unasserted: TS2322, `unknown` is not assignable to `ParsedStructOutput<S, Tagged>`
   return parsed as ParsedStructOutput<S, Tagged>;
 }
