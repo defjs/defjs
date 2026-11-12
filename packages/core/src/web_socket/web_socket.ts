@@ -15,7 +15,6 @@ import type { AnyFault, Fault, PreflightFault } from "../error";
 import {
   createNetworkFault,
   createPreflightFault,
-  ERR_ABORTED,
   ERR_TIMEOUT,
 } from "../error";
 import { isDefjsFault } from "../error/cause";
@@ -724,11 +723,6 @@ async function runWebSocketCommand<
           // The Blob read that is still running when the latest attempt settles. Disposal waits for it.
           let drainTask: Promise<void> | undefined;
           let disposeTask: Promise<void> | undefined;
-          let disposeTimer: ReturnType<typeof setTimeout> | undefined;
-          let disposeTimeout: DOMException | undefined;
-          let hasCloseError = false;
-          let closeError: unknown;
-          let physicalCleanupDetach: (() => void) | undefined;
 
           const beforeConnect =
             beforeConnectOption ?? clientConfig.webSocket.beforeConnect;
@@ -819,7 +813,10 @@ async function runWebSocketCommand<
 
           /* istanbul ignore next -- @preserve defensive: run() settles every attempt, hook and delay inside its own failure boundaries */
           const lifecycleTask = run().catch((cause) => {
-            finish({ cause, kind: "error" });
+            finishWithFault(
+              { cause, kind: "error" },
+              createNetworkFault(cause),
+            );
           });
 
           async function run(): Promise<void> {
@@ -840,9 +837,9 @@ async function runWebSocketCommand<
                 if (prepared.aborted) {
                   finishFromSignal();
                 } else {
-                  finish(
+                  finishWithFault(
                     { cause: prepared.error, kind: "error" },
-                    { startupError: prepared.error },
+                    prepared.error,
                   );
                 }
                 return;
@@ -910,12 +907,10 @@ async function runWebSocketCommand<
                     finishFromSignal(outcome.closeInfo);
                   } else {
                     // As `defineRequest` does for a throwing retry function: the fault names the hook, `cause` is what it threw.
-                    finish(toErrorInfo(outcome.closeInfo, cause), {
-                      startupError: createPreflightFault(
-                        "EXT_HOOK_FAILED",
-                        cause,
-                      ),
-                    });
+                    finishWithFault(
+                      toErrorInfo(outcome.closeInfo, cause),
+                      createPreflightFault("EXT_HOOK_FAILED", cause),
+                    );
                   }
                   return;
                 }
@@ -947,8 +942,10 @@ async function runWebSocketCommand<
               if (!startupSettled) {
                 const cause =
                   outcome.cause ?? new Error("WebSocket closed before open");
-                const startupError = createNetworkFault(cause);
-                finish(toErrorInfo(outcome.closeInfo, cause), { startupError });
+                finishWithFault(
+                  toErrorInfo(outcome.closeInfo, cause),
+                  createNetworkFault(cause),
+                );
                 return;
               }
 
@@ -1083,7 +1080,7 @@ async function runWebSocketCommand<
                   socket.removeEventListener("error", handleError);
                 };
 
-                const cleanup = (keepCurrentSocket: boolean) => {
+                const cleanup = () => {
                   clearErrorCloseTimer();
                   clearTimeout(connectTimer);
                   socket.removeEventListener("open", handleOpen);
@@ -1098,12 +1095,7 @@ async function runWebSocketCommand<
                   stopHeartbeat(sessionController);
                   readController.abort();
                   backlog.length = 0;
-                  if (
-                    !keepCurrentSocket &&
-                    sessionController.currentSocket === socket
-                  ) {
-                    sessionController.currentSocket = undefined;
-                  }
+                  sessionController.currentSocket = undefined;
                 };
 
                 const connectionInfo = (): WebSocketConnectionInfo => ({
@@ -1113,10 +1105,15 @@ async function runWebSocketCommand<
                   url: socket.url,
                 });
 
-                const settleAttempt = (
-                  outcome: SocketLifecycleOutcome,
-                  keepCurrentSocket = false,
-                ) => {
+                // The attempt ended without a close event: it failed locally, or the socket went quiet.
+                const failedOutcome = (): SocketLifecycleOutcome => ({
+                  closeInfo: {},
+                  connection: connectionInfo(),
+                  cause: runtimeCause,
+                  opened,
+                });
+
+                const settleAttempt = (outcome: SocketLifecycleOutcome) => {
                   /* istanbul ignore if -- @preserve defensive: every physical attempt is settled through this once-only gate */
                   if (settled) {
                     return;
@@ -1130,7 +1127,7 @@ async function runWebSocketCommand<
                       outcome.closeInfo,
                     ),
                   );
-                  cleanup(keepCurrentSocket);
+                  cleanup();
                   /* istanbul ignore else -- @preserve invariant: activeAttempt refers to the sole physical socket until settlement */
                   if (activeAttempt?.socket === socket) {
                     activeAttempt = undefined;
@@ -1161,6 +1158,12 @@ async function runWebSocketCommand<
                   generation += 1;
                   latestConnection = connectionInfo();
                   state.connection = latestConnection;
+                  // Nobody holds the session before the first open: nothing is queued and nobody listens yet.
+                  if (!startupSettled) {
+                    startupConnection = latestConnection;
+                    startupSettled = true;
+                    resolveSession(session);
+                  }
                   try {
                     flushSendQueue(socket, sendQueue, WebSocketCtor.OPEN);
                   } catch (cause) {
@@ -1173,11 +1176,6 @@ async function runWebSocketCommand<
                   setSocketState(state, "open");
                   if (finished) {
                     return;
-                  }
-                  if (!startupSettled) {
-                    startupConnection = latestConnection;
-                    startupSettled = true;
-                    resolveSession(session);
                   }
                   if (state.status === "open") {
                     startHeartbeat(
@@ -1323,21 +1321,16 @@ async function runWebSocketCommand<
                     runtimeCause ?? new Error(CONNECTION_ERROR_MESSAGE);
                   stopHeartbeat(sessionController);
                   detachErrorListener();
+                  // No close event within the grace, or no way to ask for one: the attempt failed, and the
+                  // retry policy decides what follows, as for a connect timeout or a missed heartbeat.
                   errorCloseTimer = setTimeout(() => {
                     errorCloseTimer = undefined;
-                    finish(
-                      { cause: runtimeCause, kind: "error" },
-                      { skipNativeClose: true },
-                    );
+                    settleAttempt(failedOutcome());
                   }, SOCKET_CLOSE_GRACE_MS);
                   try {
                     socket.close();
                   } catch {
-                    clearErrorCloseTimer();
-                    finish(
-                      { cause: runtimeCause, kind: "error" },
-                      { skipNativeClose: true },
-                    );
+                    settleAttempt(failedOutcome());
                   }
                 };
 
@@ -1374,17 +1367,9 @@ async function runWebSocketCommand<
                   abortReads() {
                     readController.abort();
                   },
-                  cancel(keepCurrentSocket = false) {
+                  cancel() {
                     // A locally failed message pump must not discard an already observed close.
-                    settleAttempt(
-                      closeOutcome ?? {
-                        closeInfo: {},
-                        connection: connectionInfo(),
-                        cause: runtimeCause,
-                        opened,
-                      },
-                      keepCurrentSocket,
-                    );
+                    settleAttempt(closeOutcome ?? failedOutcome());
                   },
                   socket,
                 };
@@ -1412,16 +1397,25 @@ async function runWebSocketCommand<
                   handleAbort();
                 }
                 if (settled) {
-                  cleanup(false);
+                  cleanup();
                 }
               },
             );
           }
 
-          function finish(
+          /** Ends the session, failing the call with `fault` when the session never opened. */
+          function finishWithFault(
             final: WebSocketCloseInfo,
-            options: FinishOptions = {},
+            fault: AnyFault,
           ): void {
+            if (!startupSettled) {
+              startupSettled = true;
+              rejectSession(fault);
+            }
+            finish(final);
+          }
+
+          function finish(final: WebSocketCloseInfo): void {
             /* istanbul ignore if -- @preserve defensive once-only gate: terminal callers and reentrant state transitions check finished before invoking finish */
             if (finished) {
               return;
@@ -1432,21 +1426,11 @@ async function runWebSocketCommand<
             stopHeartbeat(sessionController);
 
             const activeSocket = sessionController.currentSocket;
-            if (
-              final.kind !== "closed" &&
-              activeSocket &&
-              !options.skipNativeClose
-            ) {
+            if (final.kind !== "closed" && activeSocket) {
               requestNativeCloseBestEffort(activeSocket);
             }
-            if (activeSocket && options.keepPhysicalCleanup) {
-              physicalCleanupDetach = installPhysicalCleanup(
-                activeSocket,
-                sessionController,
-              );
-            }
             const socketAttempt = activeAttempt;
-            activeAttempt?.cancel(options.keepPhysicalCleanup);
+            activeAttempt?.cancel();
             if (socketAttempt === undefined) {
               report({ attempted: false });
             }
@@ -1479,29 +1463,24 @@ async function runWebSocketCommand<
 
             closedDeferred.resolve(final);
             releaseAbortSignal(sessionSignal);
-            if (!startupSettled) {
-              const startupError =
-                options.startupError ?? faultFromCloseInfo(final);
-              rejectSession(startupError);
-            }
           }
 
           function finishFromSignal(
             snapshot: WebSocketCloseSnapshot = {},
           ): void {
-            /* istanbul ignore next -- @preserve invariant: finishFromSignal is called only after the merged signal aborts */
-            const transportError =
-              resolveAbortFault(sessionSignal) ??
-              createNetworkFault(ERR_ABORTED);
+            // Called only once the signal has aborted.
+            const transportError = resolveAbortedFault(sessionSignal);
             if (transportError.code === "NET_TIMEOUT") {
-              finish(toErrorInfo(snapshot, sessionSignal.reason), {
-                startupError: transportError,
-              });
+              finishWithFault(
+                toErrorInfo(snapshot, sessionSignal.reason),
+                transportError,
+              );
               return;
             }
-            finish(toAbortedInfo(snapshot, sessionSignal.reason), {
-              startupError: transportError,
-            });
+            finishWithFault(
+              toAbortedInfo(snapshot, sessionSignal.reason),
+              transportError,
+            );
           }
 
           function requestClose(code?: number, reason?: string): void {
@@ -1529,14 +1508,8 @@ async function runWebSocketCommand<
             try {
               socket.close(code, reason);
             } catch (cause) {
-              try {
-                socket.close();
-              } catch {
-                finish(
-                  { cause, kind: "error" },
-                  { keepPhysicalCleanup: true, skipNativeClose: true },
-                );
-              }
+              // A handle that cannot close ends the session. `finish` asks it once more to close.
+              finish({ cause, kind: "error" });
               throw cause;
             }
           }
@@ -1546,43 +1519,39 @@ async function runWebSocketCommand<
           }
 
           async function disposeOnce(): Promise<void> {
+            let failure: { reason: unknown } | undefined;
             try {
-              try {
-                session.close();
-              } catch (cause) {
-                hasCloseError = true;
-                closeError = cause;
-              }
+              session.close();
+            } catch (cause) {
+              failure = { reason: cause };
+            }
 
-              if (!finished) {
-                disposeTimer = setTimeout(() => {
-                  /* istanbul ignore if -- @preserve defensive: lifecycle completion clears this timer before a later timer task can run */
-                  if (finished) {
-                    return;
-                  }
-                  disposeTimeout = new DOMException(
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            if (!finished) {
+              timer = setTimeout(() => {
+                /* istanbul ignore if -- @preserve defensive: lifecycle completion clears this timer before a later timer task can run */
+                if (finished) {
+                  return;
+                }
+                failure ??= {
+                  reason: new DOMException(
                     "WebSocket close event was not observed before teardown timeout",
                     "TimeoutError",
-                  );
-                  finish(toClosedInfo({}, manualClose), {
-                    skipNativeClose: true,
-                  });
-                }, SOCKET_CLOSE_GRACE_MS);
-              }
+                  ),
+                };
+                finish(toClosedInfo({}, manualClose));
+              }, SOCKET_CLOSE_GRACE_MS);
+            }
 
+            try {
               await lifecycleTask;
               await drainTask;
             } finally {
-              clearTimeout(disposeTimer);
-              disposeTimer = undefined;
-              physicalCleanupDetach?.();
+              clearTimeout(timer);
             }
 
-            if (hasCloseError) {
-              throw closeError;
-            }
-            if (disposeTimeout) {
-              throw disposeTimeout;
+            if (failure) {
+              throw failure.reason;
             }
           }
         },
@@ -1717,14 +1686,8 @@ export type SocketLifecycleOutcome = {
 
 type ActiveSocketAttempt = {
   abortReads(): void;
-  cancel(keepCurrentSocket?: boolean): void;
+  cancel(): void;
   socket: WebSocketHandle;
-};
-
-type FinishOptions = {
-  keepPhysicalCleanup?: boolean;
-  skipNativeClose?: boolean;
-  startupError?: AnyFault;
 };
 
 const SOCKET_CLOSE_GRACE_MS = 1_000;
@@ -1934,26 +1897,6 @@ function requestNativeCloseBestEffort(socket: WebSocketHandle): void {
   }
 }
 
-function installPhysicalCleanup(
-  socket: WebSocketHandle,
-  sessionController: { currentSocket: WebSocketHandle | undefined },
-): () => void {
-  let detached = false;
-  const cleanup = () => {
-    if (detached) {
-      return;
-    }
-    detached = true;
-    socket.removeEventListener("close", cleanup);
-    /* istanbul ignore else -- @preserve invariant: no replacement socket is created while physical cleanup is pending */
-    if (sessionController.currentSocket === socket) {
-      sessionController.currentSocket = undefined;
-    }
-  };
-  socket.addEventListener("close", cleanup, { once: true });
-  return cleanup;
-}
-
 function toClosedInfo(
   snapshot: WebSocketCloseSnapshot,
   fallback?: ManualSocketCloseReason,
@@ -2001,19 +1944,6 @@ function doneInfoForNetworkCause(cause: unknown): DoneInfo {
     return { attempted: false };
   }
   return { attempted: true, code: "NET_UNREACHABLE" };
-}
-
-function faultFromCloseInfo(closeInfo: WebSocketCloseInfo): AnyFault {
-  /* istanbul ignore if -- @preserve invariant: internal abort terminal paths always supply startupError directly */
-  if (closeInfo.kind === "aborted") {
-    return createNetworkFault(ERR_ABORTED);
-  }
-  /* istanbul ignore else -- @preserve invariant: pre-open closed paths supply startupError before this helper is reached */
-  if (closeInfo.kind === "error") {
-    return createNetworkFault(closeInfo.cause);
-  }
-  /* istanbul ignore next -- @preserve invariant: pre-open closed paths supply startupError before this helper is reached */
-  return createNetworkFault(new Error("WebSocket closed before open"));
 }
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {

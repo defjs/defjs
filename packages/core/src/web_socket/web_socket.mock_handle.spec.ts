@@ -2097,9 +2097,6 @@ describe("web socket runtime environment edge cases", () => {
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
-      {
-        retry: { maxRetries: 1, delayMs: 0 },
-      },
     );
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -2156,44 +2153,6 @@ describe("web socket runtime environment edge cases", () => {
     await expect(socket.closed).resolves.toMatchObject({ kind: "error" });
     expect(socket.state).toBe("error");
     expect(lastMockInstance.close).toHaveBeenCalledTimes(1);
-  });
-
-  test("should finish without reconnecting or closing twice when error cleanup close throws", async () => {
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ closeErrors: [new Error("close failed")] }),
-    );
-    const useSocket = defineWebSocket({
-      maxOutgoingQueueSize: 1,
-      incoming: struct.unknown(),
-      outgoing: struct.object({
-        type: struct.literal("message"),
-        text: struct.string(),
-      }),
-      path: "/ws/test",
-    });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
-        retry: { maxRetries: 1, delayMs: 0 },
-      },
-    );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const failedSocket = lastMockInstance;
-
-    failedSocket.triggerError();
-
-    await expect(socket.closed).resolves.toMatchObject({ kind: "error" });
-    expect(socket.state).toBe("error");
-    expect(mockInstances).toHaveLength(1);
-    expect(failedSocket.close).toHaveBeenCalledTimes(1);
-    expect(() => socket.send({ text: "late", type: "message" })).toThrow(
-      expect.objectContaining({ name: "InvalidStateError" }),
-    );
-    expect(failedSocket.close).toHaveBeenCalledTimes(1);
   });
 
   test("should expose generation and native bufferedAmount", async () => {
@@ -3756,7 +3715,7 @@ describe("web socket runtime environment edge cases", () => {
     });
   });
 
-  test("should use one fallback close, rethrow the first error, and wait for the close event", async () => {
+  test("should end the session with an error and rethrow when the native close throws", async () => {
     const firstFailure = new Error("first close failed");
     vi.stubGlobal(
       "WebSocket",
@@ -3775,16 +3734,15 @@ describe("web socket runtime environment edge cases", () => {
     }
 
     expect(() => socket.close(3000, "owner close")).toThrow(firstFailure);
-    expect(socket.state).toBe("closing");
+    expect(socket.state).toBe("error");
     expect(lastMockInstance.close).toHaveBeenCalledTimes(2);
-    expect(() => socket.close(200, "invalid while closing")).toThrow(
+    expect(() => socket.close(200, "invalid after terminal")).toThrow(
       expect.objectContaining({ name: "InvalidAccessError" }),
     );
     expect(lastMockInstance.close).toHaveBeenCalledTimes(2);
     await expect(socket.closed).resolves.toMatchObject({
-      code: 1000,
-      kind: "closed",
-      reason: "",
+      cause: firstFailure,
+      kind: "error",
     });
     expect(lastMockInstance.close).toHaveBeenCalledTimes(2);
   });
@@ -4914,7 +4872,9 @@ describe("web socket runtime environment edge cases", () => {
         throw new Error("Expected socket");
       }
       const nativeSocket = lastMockInstance;
-      const pendingReceive = socket.receive[Symbol.asyncIterator]().next();
+      const pendingReceive = socket.receive[Symbol.asyncIterator]()
+        .next()
+        .catch((error: unknown) => error);
       let disposeTask: PromiseLike<void> | undefined;
 
       expect(() => {
@@ -4932,18 +4892,21 @@ describe("web socket runtime environment edge cases", () => {
 
       expect(result.status).toBe("rejected");
       expect(result.cause).toBe(closeFailure);
-      await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
-      await expect(pendingReceive).resolves.toEqual({
-        done: true,
-        value: undefined,
+      await expect(socket.closed).resolves.toMatchObject({
+        cause: closeFailure,
+        kind: "error",
       });
-      expect(socket.state).toBe("closed");
+      // An error end without a cause rejects readers with an AbortError.
+      await expect(pendingReceive).resolves.toEqual(
+        closeFailure ?? expect.objectContaining({ name: "AbortError" }),
+      );
+      expect(socket.state).toBe("error");
       expectOnlyErrorSink(nativeSocket);
       expect(vi.getTimerCount()).toBe(0);
     },
   );
 
-  test("should detach physical cleanup after both native close attempts throw", async () => {
+  test("should release the socket when both native close attempts throw during disposal", async () => {
     const firstFailure = new Error("first close failed");
     const fallbackFailure = new Error("fallback close failed");
     vi.stubGlobal(
