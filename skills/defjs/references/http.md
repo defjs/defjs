@@ -214,6 +214,8 @@ const client = createClient(
 );
 ```
 
+The string you return is parsed into the request's `query`, so the request sends `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization. A space is `+`, and the brackets in `filter[status]=paid` go out as `filter%5Bstatus%5D=paid`, which a form-encoded decoder reads back as the same name.
+
 ### Request body formats [#request-body-formats]
 
 `GET` and `HEAD` cannot carry a body. For other methods, the body format is selected from the value returned by `builder`:
