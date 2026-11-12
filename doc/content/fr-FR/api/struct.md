@@ -89,6 +89,34 @@ Tout ce qui a une charge utile de type `_struct`. Voir [`StructLike`](/fr-FR/api
 
 Struct en forme d’objet, issu de `struct.object`.
 
+## ArrayStruct
+
+Struct de tableau, issu de `struct.array`.
+
+## RecordStruct
+
+Struct d’enregistrement, issu de `struct.record`.
+
+## TupleStruct
+
+Struct de tuple, issu de `struct.tuple`.
+
+## UnionStruct
+
+Struct d’union, issu de `struct.or`.
+
+## DiscriminatedUnionStruct
+
+Struct d’union discriminée, issu de `struct.discriminatedUnion`.
+
+## IntersectionStruct
+
+Struct d’intersection, issu de `struct.intersection`.
+
+## PreservedStruct
+
+Le struct que renvoie un modificateur tel que `.optional()` ou `.nullable()` sur un struct composite ; il conserve le type du composite.
+
 ## StructIssue
 
 `path`, `code`, `expected`, `received`, `message`. `code` vaut `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` ou `missing_key`.

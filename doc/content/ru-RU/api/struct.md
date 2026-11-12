@@ -89,6 +89,34 @@ description: Фасад struct, Infer и StructError.
 
 Объектная форма от `struct.object`.
 
+## ArrayStruct
+
+Форма массива от `struct.array`.
+
+## RecordStruct
+
+Форма словаря от `struct.record`.
+
+## TupleStruct
+
+Форма кортежа от `struct.tuple`.
+
+## UnionStruct
+
+Форма объединения от `struct.or`.
+
+## DiscriminatedUnionStruct
+
+Форма размеченного объединения от `struct.discriminatedUnion`.
+
+## IntersectionStruct
+
+Форма пересечения от `struct.intersection`.
+
+## PreservedStruct
+
+Struct, который возвращает модификатор вроде `.optional()` или `.nullable()` для составного struct; он сохраняет тип составного struct.
+
 ## StructIssue
 
 `path`, `code`, `expected`, `received`, `message`. `code` — это `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` или `missing_key`.

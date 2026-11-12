@@ -189,8 +189,16 @@ declare const unionStructOptions: unique symbol;
 declare const intersectionStructOptions: unique symbol;
 declare const discriminatedUnionOptions: unique symbol;
 
-// A later modifier must keep the struct the first one carried, or builders fall back to Infer.
-interface PreservedStruct<T, I, O, OO extends boolean>
+/**
+ * Struct a modifier of a composite struct returns.
+ *
+ * `.optional()`, `.nullable()`, `.null()`, and `.nullish()` on an array, object, record, tuple, union, discriminated-union, or intersection struct return a `PreservedStruct`. It is a {@link Struct} that also carries the composite it came from (`T`), and a later modifier keeps it, so request builders still see the fields of the original struct instead of a bare `Infer` type.
+ *
+ * Declaration files of an SDK name this type when they export a modified composite struct.
+ *
+ * @group struct
+ */
+export interface PreservedStruct<T, I, O, OO extends boolean>
   extends Struct<I, O, OO>, CarriedStruct<T> {
   null(): PreservedStruct<T, I | null, O | null, OO>;
   nullable(): PreservedStruct<T, I | null, O | null, OO>;
@@ -367,6 +375,13 @@ export interface ArrayStructTypes<S extends StructLike> extends StructTypes<
   output: ArrayOutput<S>;
 }
 
+/**
+ * Array struct type produced by `struct.array(item)`.
+ *
+ * Its input is an array of the item's input type and its output is an array of the item's output type. Its modifiers return a {@link PreservedStruct} that keeps this array struct.
+ *
+ * @group struct
+ */
 export interface ArrayStruct<S extends StructLike>
   extends
     PreservingModifiers<ArrayStruct<S>, ArrayInput<S>, ArrayOutput<S>>,
@@ -387,7 +402,7 @@ export interface ObjectStructTypes<T extends ObjectShape> extends StructTypes<
 /**
  * Object-shaped struct type produced by `struct.object(shape)`.
  *
- * Fields are required by default. A field marked `optional()` or `nullish()` becomes an optional key, so field presence follows those modifiers. Unknown keys are stripped when parsing. Wire names can differ from TypeScript keys via `.alias()`. A failed parse returns `[StructError, undefined]`. `ObjectInput`, `ObjectOutput`, `ObjectStructTypes`, and `PreservedStruct` are internal helper types.
+ * Fields are required by default. A field marked `optional()` or `nullish()` becomes an optional key, so field presence follows those modifiers. Unknown keys are stripped when parsing. Wire names can differ from TypeScript keys via `.alias()`. A failed parse returns `[StructError, undefined]`. `ObjectInput`, `ObjectOutput`, and `ObjectStructTypes` are internal helper types. Its modifiers return a {@link PreservedStruct} that keeps this object struct.
  *
  * @group struct
  */
@@ -409,8 +424,11 @@ type RecordOutput<S extends StructLike> = {
 };
 
 /**
- * Value struct carried by `struct.record`.
- * Tagged parsing stores this struct on the record object itself. `null` and `undefined` are not tagged.
+ * Record struct type produced by `struct.record(value)`.
+ *
+ * Its input is an object with string keys and `value` inputs, and its output is the same object shape with `value` outputs. Its modifiers return a {@link PreservedStruct} that keeps this record struct.
+ *
+ * @group struct
  */
 export interface RecordStruct<S extends StructLike>
   extends
@@ -419,7 +437,13 @@ export interface RecordStruct<S extends StructLike>
   readonly [recordValueStruct]: S;
 }
 
-/** Item structs carried by `struct.tuple`, so builders tag each position. The tuple itself is not tagged. */
+/**
+ * Tuple struct type produced by `struct.tuple(items)`.
+ *
+ * Its input and output are tuples of the item types, one per position. Its modifiers return a {@link PreservedStruct} that keeps this tuple struct.
+ *
+ * @group struct
+ */
 export interface TupleStruct<T extends readonly StructLike[]>
   extends
     PreservingModifiers<TupleStruct<T>, TupleInput<T>, TupleOutput<T>>,
@@ -427,6 +451,13 @@ export interface TupleStruct<T extends readonly StructLike[]>
   readonly [tupleItemStructs]: T;
 }
 
+/**
+ * Union struct type produced by `struct.or(...options)`.
+ *
+ * Its input and output are the unions of the option types, without `undefined`. Its modifiers return a {@link PreservedStruct} that keeps this union struct.
+ *
+ * @group struct
+ */
 export interface UnionStruct<T extends readonly StructLike[]>
   extends
     PreservingModifiers<UnionStruct<T>, UnionInput<T>, UnionOutput<T>>,
@@ -434,6 +465,13 @@ export interface UnionStruct<T extends readonly StructLike[]>
   readonly [unionStructOptions]: T;
 }
 
+/**
+ * Discriminated-union struct type produced by `struct.discriminatedUnion(tag, options)`.
+ *
+ * Its input and output are the unions of the option object types. Its modifiers return a {@link PreservedStruct} that keeps this struct.
+ *
+ * @group struct
+ */
 export interface DiscriminatedUnionStruct<
   TOptions extends readonly ObjectStruct<ObjectShape>[],
 >
@@ -451,6 +489,13 @@ export interface DiscriminatedUnionStruct<
   readonly [discriminatedUnionOptions]: TOptions;
 }
 
+/**
+ * Intersection struct type produced by `struct.intersection(...structs)` for two or more structs.
+ *
+ * Its input and output are the intersections of the member types. Its modifiers return a {@link PreservedStruct} that keeps this intersection struct.
+ *
+ * @group struct
+ */
 export interface IntersectionStruct<T extends readonly StructLike[]>
   extends
     PreservingModifiers<

@@ -380,6 +380,41 @@
     "description": "Object-shaped struct type produced by struct.object(shape)."
   },
   {
+    "slug": "core/arraystruct-type",
+    "name": "ArrayStruct",
+    "description": "Array struct type produced by struct.array(item)."
+  },
+  {
+    "slug": "core/recordstruct-type",
+    "name": "RecordStruct",
+    "description": "Record struct type produced by struct.record(value)."
+  },
+  {
+    "slug": "core/tuplestruct-type",
+    "name": "TupleStruct",
+    "description": "Tuple struct type produced by struct.tuple(items)."
+  },
+  {
+    "slug": "core/unionstruct-type",
+    "name": "UnionStruct",
+    "description": "Union struct type produced by struct.or(...options)."
+  },
+  {
+    "slug": "core/discriminatedunionstruct-type",
+    "name": "DiscriminatedUnionStruct",
+    "description": "Discriminated-union struct type produced by struct.discriminatedUnion(tag, options)."
+  },
+  {
+    "slug": "core/intersectionstruct-type",
+    "name": "IntersectionStruct",
+    "description": "Intersection struct type produced by struct.intersection(...structs) for two or more structs."
+  },
+  {
+    "slug": "core/preservedstruct-type",
+    "name": "PreservedStruct",
+    "description": "Struct a modifier of a composite struct returns."
+  },
+  {
     "slug": "core/parseresult-type",
     "name": "ParseResult",
     "description": "Error-first tuple returned by struct.parse."

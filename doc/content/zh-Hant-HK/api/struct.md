@@ -89,6 +89,34 @@ description: struct facade、Infer，同 StructError。
 
 由 `struct.object` 建立嘅 object 形狀 struct。
 
+## ArrayStruct
+
+由 `struct.array` 建立嘅陣列 struct。
+
+## RecordStruct
+
+由 `struct.record` 建立嘅 record struct。
+
+## TupleStruct
+
+由 `struct.tuple` 建立嘅元組 struct。
+
+## UnionStruct
+
+由 `struct.or` 建立嘅聯集 struct。
+
+## DiscriminatedUnionStruct
+
+由 `struct.discriminatedUnion` 建立嘅可辨識聯集 struct。
+
+## IntersectionStruct
+
+由 `struct.intersection` 建立嘅交集 struct。
+
+## PreservedStruct
+
+對複合 struct 呼叫 `.optional()`、`.nullable()` 等修飾符時返回嘅 struct，保留嗰個複合 struct 嘅類型。
+
 ## StructIssue
 
 `path`、`code`、`expected`、`received`、`message`。`code` 係 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或者 `missing_key`。

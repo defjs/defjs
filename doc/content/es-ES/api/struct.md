@@ -89,6 +89,34 @@ Cualquier cosa con un payload de tipo `_struct`. Consulta [`StructLike`](/es-ES/
 
 Struct con forma de objeto, de `struct.object`.
 
+## ArrayStruct
+
+Struct de array, de `struct.array`.
+
+## RecordStruct
+
+Struct de registro, de `struct.record`.
+
+## TupleStruct
+
+Struct de tupla, de `struct.tuple`.
+
+## UnionStruct
+
+Struct de unión, de `struct.or`.
+
+## DiscriminatedUnionStruct
+
+Struct de unión discriminada, de `struct.discriminatedUnion`.
+
+## IntersectionStruct
+
+Struct de intersección, de `struct.intersection`.
+
+## PreservedStruct
+
+El struct que devuelve un modificador como `.optional()` o `.nullable()` sobre un struct compuesto; conserva el tipo del compuesto.
+
 ## StructIssue
 
 `path`, `code`, `expected`, `received`, `message`. `code` es `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` o `missing_key`.

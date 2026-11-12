@@ -89,6 +89,34 @@ Anything with a `_struct` type payload. See [`StructLike`](/api/core/structlike-
 
 Object-shaped struct from `struct.object`.
 
+## ArrayStruct
+
+Array struct from `struct.array`.
+
+## RecordStruct
+
+Record struct from `struct.record`.
+
+## TupleStruct
+
+Tuple struct from `struct.tuple`.
+
+## UnionStruct
+
+Union struct from `struct.or`.
+
+## DiscriminatedUnionStruct
+
+Discriminated-union struct from `struct.discriminatedUnion`.
+
+## IntersectionStruct
+
+Intersection struct from `struct.intersection`.
+
+## PreservedStruct
+
+The struct that a modifier such as `.optional()` or `.nullable()` returns for a composite struct; it keeps the composite's type.
+
 ## StructIssue
 
 `path`, `code`, `expected`, `received`, `message`. `code` is `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, or `missing_key`.

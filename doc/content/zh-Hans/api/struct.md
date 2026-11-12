@@ -89,6 +89,34 @@ description: struct 门面、Infer，以及 StructError。
 
 由 `struct.object` 构造的对象 struct。
 
+## ArrayStruct
+
+由 `struct.array` 构造的数组 struct。
+
+## RecordStruct
+
+由 `struct.record` 构造的 record struct。
+
+## TupleStruct
+
+由 `struct.tuple` 构造的元组 struct。
+
+## UnionStruct
+
+由 `struct.or` 构造的联合 struct。
+
+## DiscriminatedUnionStruct
+
+由 `struct.discriminatedUnion` 构造的可辨识联合 struct。
+
+## IntersectionStruct
+
+由 `struct.intersection` 构造的交叉 struct。
+
+## PreservedStruct
+
+对复合 struct 调用 `.optional()`、`.nullable()` 等修饰符时返回的 struct，保留该复合 struct 的类型。
+
 ## StructIssue
 
 `path`、`code`、`expected`、`received`、`message`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。

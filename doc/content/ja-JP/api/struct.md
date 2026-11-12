@@ -89,6 +89,34 @@ description: struct ファサード、Infer、StructError です。
 
 `struct.object` が作る、オブジェクト形の struct です。
 
+## ArrayStruct
+
+`struct.array` が作る、配列の struct です。
+
+## RecordStruct
+
+`struct.record` が作る、レコードの struct です。
+
+## TupleStruct
+
+`struct.tuple` が作る、タプルの struct です。
+
+## UnionStruct
+
+`struct.or` が作る、ユニオンの struct です。
+
+## DiscriminatedUnionStruct
+
+`struct.discriminatedUnion` が作る、判別ユニオンの struct です。
+
+## IntersectionStruct
+
+`struct.intersection` が作る、交差の struct です。
+
+## PreservedStruct
+
+複合 struct に `.optional()` や `.nullable()` などの修飾子を使ったときに返る struct です。元の複合 struct の型を保ちます。
+
 ## StructIssue
 
 `path`、`code`、`expected`、`received`、`message` です。`code` は `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union`、`missing_key` のいずれかです。

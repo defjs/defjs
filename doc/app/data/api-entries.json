@@ -538,6 +538,55 @@
   },
   {
     "package": "@defjs/core",
+    "name": "ArrayStruct",
+    "kind": "type",
+    "slug": "core/arraystruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RecordStruct",
+    "kind": "type",
+    "slug": "core/recordstruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "TupleStruct",
+    "kind": "type",
+    "slug": "core/tuplestruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UnionStruct",
+    "kind": "type",
+    "slug": "core/unionstruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DiscriminatedUnionStruct",
+    "kind": "type",
+    "slug": "core/discriminatedunionstruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "IntersectionStruct",
+    "kind": "type",
+    "slug": "core/intersectionstruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreservedStruct",
+    "kind": "type",
+    "slug": "core/preservedstruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
     "name": "ParseResult",
     "kind": "type",
     "slug": "core/parseresult-type",

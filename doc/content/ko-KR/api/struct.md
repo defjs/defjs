@@ -89,6 +89,34 @@ description: struct 퍼사드, Infer, StructError예요.
 
 `struct.object`가 만든 객체 모양 struct예요.
 
+## ArrayStruct
+
+`struct.array`로 만든 배열 struct예요.
+
+## RecordStruct
+
+`struct.record`로 만든 레코드 struct예요.
+
+## TupleStruct
+
+`struct.tuple`로 만든 튜플 struct예요.
+
+## UnionStruct
+
+`struct.or`로 만든 유니온 struct예요.
+
+## DiscriminatedUnionStruct
+
+`struct.discriminatedUnion`으로 만든 판별 유니온 struct예요.
+
+## IntersectionStruct
+
+`struct.intersection`으로 만든 교차 struct예요.
+
+## PreservedStruct
+
+복합 struct에 `.optional()`이나 `.nullable()` 같은 수식자를 쓰면 돌아오는 struct예요. 복합 struct의 타입을 유지해요.
+
 ## StructIssue
 
 `path`, `code`, `expected`, `received`, `message`예요. `code`는 `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, `missing_key` 중 하나예요.

@@ -89,6 +89,34 @@ Facade。請優先使用這個，不要直接用內部的建構子。
 
 由 `struct.object` 建立的物件形狀。
 
+## ArrayStruct
+
+由 `struct.array` 建立的陣列 struct。
+
+## RecordStruct
+
+由 `struct.record` 建立的 record struct。
+
+## TupleStruct
+
+由 `struct.tuple` 建立的元組 struct。
+
+## UnionStruct
+
+由 `struct.or` 建立的聯集 struct。
+
+## DiscriminatedUnionStruct
+
+由 `struct.discriminatedUnion` 建立的可辨識聯集 struct。
+
+## IntersectionStruct
+
+由 `struct.intersection` 建立的交集 struct。
+
+## PreservedStruct
+
+對複合 struct 呼叫 `.optional()`、`.nullable()` 等修飾符時回傳的 struct，保留該複合 struct 的型別。
+
 ## StructIssue
 
 `path`、`code`、`expected`、`received`、`message`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。

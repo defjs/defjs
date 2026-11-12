@@ -2550,7 +2550,7 @@
       },
       {
         "name": "array",
-        "description": "Struct that parses an array with one item struct.\n\n- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).\n\n- Parsing stops at the first failing element, and `issue.path` holds its index.\n\n- Throws `TypeError` when `item` is not a struct.\n\n`ArrayStruct<S>` is not exported. It is a `Struct<StructInput<S>[], Infer<S>[]>`.",
+        "description": "Struct that parses an array with one item struct.\n\n- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).\n\n- Parsing stops at the first failing element, and `issue.path` holds its index.\n\n- Throws `TypeError` when `item` is not a struct.\n\nThe result is an {@link ArrayStruct}, a `Struct<StructInput<S>[], Infer<S>[]>`.",
         "type": "<S extends StructLike>(item: S) => ArrayStruct<S>",
         "simplifiedType": "function",
         "required": true,
@@ -2604,7 +2604,7 @@
       },
       {
         "name": "discriminatedUnion",
-        "description": "Struct that picks one object struct by the value of a tag field.\n\n```ts\nconst Event = struct.discriminatedUnion(\"kind\", [\n  struct.object({ kind: struct.literal(\"created\"), id: struct.number() }),\n  struct.object({ kind: struct.literal(\"deleted\"), id: struct.number() }),\n]);\n```\n\n- Every option must be an object struct whose `discriminator` field is a required {@link struct.literal}(). A missing field, a non-literal field, an optional field, or a duplicate tag value throws `TypeError` when the struct is created.\n\n- The input must be a plain object. The tag value selects the option, and that option parses the whole object.\n\n- A missing tag fails with `missing_key`, and an unknown tag fails with `invalid_union`. Both report the tag field's path. Other failures come from the selected option.\n\n- With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.\n\n`RequiredDiscriminatorOptions` and `DiscriminatedUnionStruct` are not exported. The type check rejects an option whose tag field is missing or may be `undefined`.",
+        "description": "Struct that picks one object struct by the value of a tag field.\n\n```ts\nconst Event = struct.discriminatedUnion(\"kind\", [\n  struct.object({ kind: struct.literal(\"created\"), id: struct.number() }),\n  struct.object({ kind: struct.literal(\"deleted\"), id: struct.number() }),\n]);\n```\n\n- Every option must be an object struct whose `discriminator` field is a required {@link struct.literal}(). A missing field, a non-literal field, an optional field, or a duplicate tag value throws `TypeError` when the struct is created.\n\n- The input must be a plain object. The tag value selects the option, and that option parses the whole object.\n\n- A missing tag fails with `missing_key`, and an unknown tag fails with `invalid_union`. Both report the tag field's path. Other failures come from the selected option.\n\n- With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.\n\nThe result is a {@link DiscriminatedUnionStruct}. `RequiredDiscriminatorOptions` is not exported. The type check rejects an option whose tag field is missing or may be `undefined`.",
         "type": "<const TDiscriminator extends string, const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]]>(discriminator: TDiscriminator, options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>) => DiscriminatedUnionStruct<TOptions>",
         "simplifiedType": "function",
         "required": true,
@@ -2640,7 +2640,7 @@
       },
       {
         "name": "intersection",
-        "description": "Struct that requires a value to satisfy every given struct.\n\n`struct.intersection` is variadic: pass each struct as its own argument.\n\n- Parses the input with every struct and merges the results.\n\n- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.\n\n- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.\n\n- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.\n\n- A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. A non-struct argument throws `TypeError`.\n\n- A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.\n\n`IntersectionStruct<T>` is not exported. It is a `Struct` whose input and output are the intersections of the member types.",
+        "description": "Struct that requires a value to satisfy every given struct.\n\n`struct.intersection` is variadic: pass each struct as its own argument.\n\n- Parses the input with every struct and merges the results.\n\n- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.\n\n- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.\n\n- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.\n\n- A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. A non-struct argument throws `TypeError`.\n\n- A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.\n\nThe result is an {@link IntersectionStruct}, a `Struct` whose input and output are the intersections of the member types.",
         "type": "<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T) => T extends readonly [unknown] ? T[0] : T extends readonly [unknown, unknown, ...unknown[]] ? IntersectionStruct<T> : T[0] | IntersectionStruct<T>",
         "simplifiedType": "function",
         "required": true,
@@ -2685,7 +2685,7 @@
       },
       {
         "name": "or",
-        "description": "Struct that accepts a value matching any one of several structs.\n\n`struct.or` is variadic: pass each option as its own argument.\n\n- Tries the options in order and returns the result of the first one that parses.\n\n- If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.\n\n- Throws `TypeError` when an option is not a struct.\n\n`UnionStruct<T>` is not exported. It is a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.",
+        "description": "Struct that accepts a value matching any one of several structs.\n\n`struct.or` is variadic: pass each option as its own argument.\n\n- Tries the options in order and returns the result of the first one that parses.\n\n- If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.\n\n- Throws `TypeError` when an option is not a struct.\n\nThe result is a {@link UnionStruct}, a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.",
         "type": "<const T extends readonly [StructLike, ...StructLike[]]>(...options: T) => UnionStruct<T>",
         "simplifiedType": "function",
         "required": true,
@@ -2703,7 +2703,7 @@
       },
       {
         "name": "record",
-        "description": "Struct that parses an object with string keys and one value struct.\n\n- Parses every own key of a plain object with `value`. Anything else fails with `invalid_type` (expected `record`).\n\n- Parsing stops at the first failing value, and `issue.path` holds its key.\n\n- The output is a new object with a `null` prototype.\n\n- Throws `TypeError` when `value` is not a struct.\n\n`RecordStruct<S>` is not exported. It is a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.",
+        "description": "Struct that parses an object with string keys and one value struct.\n\n- Parses every own key of a plain object with `value`. Anything else fails with `invalid_type` (expected `record`).\n\n- Parsing stops at the first failing value, and `issue.path` holds its key.\n\n- The output is a new object with a `null` prototype.\n\n- Throws `TypeError` when `value` is not a struct.\n\nThe result is a {@link RecordStruct}, a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.",
         "type": "<S extends StructLike>(value: S) => RecordStruct<S>",
         "simplifiedType": "function",
         "required": true,
@@ -2721,7 +2721,7 @@
       },
       {
         "name": "tuple",
-        "description": "Struct that parses a fixed-length array with one struct per position.\n\n`struct.tuple` takes **one array** of structs, not separate arguments:\n\n```ts\nconst Pair = struct.tuple([struct.string(), struct.number()]);\n```\n\n- Each position is parsed with the struct at the same index. The input must be an array of exactly the same length, otherwise it fails with `invalid_type` (expected `tuple of length N`).\n\n- Passing the structs as separate arguments, `struct.tuple(a, b)`, throws a `TypeError`.\n\n- Throws `TypeError` when an item is not a struct.\n\n`TupleStruct<T>` is not exported. It is a `Struct` whose input and output are tuples of the item types.",
+        "description": "Struct that parses a fixed-length array with one struct per position.\n\n`struct.tuple` takes **one array** of structs, not separate arguments:\n\n```ts\nconst Pair = struct.tuple([struct.string(), struct.number()]);\n```\n\n- Each position is parsed with the struct at the same index. The input must be an array of exactly the same length, otherwise it fails with `invalid_type` (expected `tuple of length N`).\n\n- Passing the structs as separate arguments, `struct.tuple(a, b)`, throws a `TypeError`.\n\n- Throws `TypeError` when an item is not a struct.\n\nThe result is a {@link TupleStruct}, a `Struct` whose input and output are tuples of the item types.",
         "type": "<const T extends readonly [StructLike, ...StructLike[]]>(items: T) => TupleStruct<T>",
         "simplifiedType": "function",
         "required": true,
@@ -2781,7 +2781,7 @@
     "slug": "core/struct-array",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that parses an array with one item struct.\n\n- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).\n\n- Parsing stops at the first failing element, and `issue.path` holds its index.\n\n- Throws `TypeError` when `item` is not a struct.\n\n`ArrayStruct<S>` is not exported. It is a `Struct<StructInput<S>[], Infer<S>[]>`.",
+    "description": "Struct that parses an array with one item struct.\n\n- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).\n\n- Parsing stops at the first failing element, and `issue.path` holds its index.\n\n- Throws `TypeError` when `item` is not a struct.\n\nThe result is an {@link ArrayStruct}, a `Struct<StructInput<S>[], Infer<S>[]>`.",
     "signatures": [
       "function array<S extends StructLike>(\n  item: S,\n): ArrayStruct<S>;"
     ],
@@ -2947,7 +2947,7 @@
     "slug": "core/struct-discriminatedunion",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that picks one object struct by the value of a tag field.\n\n```ts\nconst Event = struct.discriminatedUnion(\"kind\", [\n  struct.object({ kind: struct.literal(\"created\"), id: struct.number() }),\n  struct.object({ kind: struct.literal(\"deleted\"), id: struct.number() }),\n]);\n```\n\n- Every option must be an object struct whose `discriminator` field is a required {@link struct.literal}(). A missing field, a non-literal field, an optional field, or a duplicate tag value throws `TypeError` when the struct is created.\n\n- The input must be a plain object. The tag value selects the option, and that option parses the whole object.\n\n- A missing tag fails with `missing_key`, and an unknown tag fails with `invalid_union`. Both report the tag field's path. Other failures come from the selected option.\n\n- With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.\n\n`RequiredDiscriminatorOptions` and `DiscriminatedUnionStruct` are not exported. The type check rejects an option whose tag field is missing or may be `undefined`.",
+    "description": "Struct that picks one object struct by the value of a tag field.\n\n```ts\nconst Event = struct.discriminatedUnion(\"kind\", [\n  struct.object({ kind: struct.literal(\"created\"), id: struct.number() }),\n  struct.object({ kind: struct.literal(\"deleted\"), id: struct.number() }),\n]);\n```\n\n- Every option must be an object struct whose `discriminator` field is a required {@link struct.literal}(). A missing field, a non-literal field, an optional field, or a duplicate tag value throws `TypeError` when the struct is created.\n\n- The input must be a plain object. The tag value selects the option, and that option parses the whole object.\n\n- A missing tag fails with `missing_key`, and an unknown tag fails with `invalid_union`. Both report the tag field's path. Other failures come from the selected option.\n\n- With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.\n\nThe result is a {@link DiscriminatedUnionStruct}. `RequiredDiscriminatorOptions` is not exported. The type check rejects an option whose tag field is missing or may be `undefined`.",
     "signatures": [
       "function discriminatedUnion<\n  const TDiscriminator extends string,\n  const TOptions extends readonly [\n    ObjectStruct<ObjectShape>,\n    ...ObjectStruct<ObjectShape>[],\n  ],\n>(\n  discriminator: TDiscriminator,\n  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,\n): DiscriminatedUnionStruct<TOptions>;"
     ],
@@ -3143,7 +3143,7 @@
     "slug": "core/struct-intersection",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that requires a value to satisfy every given struct.\n\n`struct.intersection` is variadic: pass each struct as its own argument.\n\n- Parses the input with every struct and merges the results.\n\n- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.\n\n- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.\n\n- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.\n\n- A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. A non-struct argument throws `TypeError`.\n\n- A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.\n\n`IntersectionStruct<T>` is not exported. It is a `Struct` whose input and output are the intersections of the member types.",
+    "description": "Struct that requires a value to satisfy every given struct.\n\n`struct.intersection` is variadic: pass each struct as its own argument.\n\n- Parses the input with every struct and merges the results.\n\n- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.\n\n- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.\n\n- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.\n\n- A single struct is returned unchanged, so it keeps its own identity and type, including `.optional()` and `.null()`. A non-struct argument throws `TypeError`.\n\n- A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.\n\nThe result is an {@link IntersectionStruct}, a `Struct` whose input and output are the intersections of the member types.",
     "signatures": [
       "function intersection<\n  const T extends readonly [StructLike, ...StructLike[]],\n>(\n  ...structs: T\n): T extends readonly [unknown]\n  ? T[0]\n  : T extends readonly [unknown, unknown, ...unknown[]]\n    ? IntersectionStruct<T>\n    : T[0] | IntersectionStruct<T>;"
     ],
@@ -3329,7 +3329,7 @@
     "slug": "core/struct-or",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that accepts a value matching any one of several structs.\n\n`struct.or` is variadic: pass each option as its own argument.\n\n- Tries the options in order and returns the result of the first one that parses.\n\n- If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.\n\n- Throws `TypeError` when an option is not a struct.\n\n`UnionStruct<T>` is not exported. It is a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.",
+    "description": "Struct that accepts a value matching any one of several structs.\n\n`struct.or` is variadic: pass each option as its own argument.\n\n- Tries the options in order and returns the result of the first one that parses.\n\n- If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.\n\n- Throws `TypeError` when an option is not a struct.\n\nThe result is a {@link UnionStruct}, a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.",
     "signatures": [
       "function or<\n  const T extends readonly [StructLike, ...StructLike[]],\n>(...options: T): UnionStruct<T>;"
     ],
@@ -3461,7 +3461,7 @@
     "slug": "core/struct-record",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that parses an object with string keys and one value struct.\n\n- Parses every own key of a plain object with `value`. Anything else fails with `invalid_type` (expected `record`).\n\n- Parsing stops at the first failing value, and `issue.path` holds its key.\n\n- The output is a new object with a `null` prototype.\n\n- Throws `TypeError` when `value` is not a struct.\n\n`RecordStruct<S>` is not exported. It is a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.",
+    "description": "Struct that parses an object with string keys and one value struct.\n\n- Parses every own key of a plain object with `value`. Anything else fails with `invalid_type` (expected `record`).\n\n- Parsing stops at the first failing value, and `issue.path` holds its key.\n\n- The output is a new object with a `null` prototype.\n\n- Throws `TypeError` when `value` is not a struct.\n\nThe result is a {@link RecordStruct}, a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.",
     "signatures": [
       "function record<S extends StructLike>(\n  value: S,\n): RecordStruct<S>;"
     ],
@@ -3531,7 +3531,7 @@
     "slug": "core/struct-tuple",
     "source": "packages/core/src/struct/constructors.ts",
     "group": "struct",
-    "description": "Struct that parses a fixed-length array with one struct per position.\n\n`struct.tuple` takes **one array** of structs, not separate arguments:\n\n```ts\nconst Pair = struct.tuple([struct.string(), struct.number()]);\n```\n\n- Each position is parsed with the struct at the same index. The input must be an array of exactly the same length, otherwise it fails with `invalid_type` (expected `tuple of length N`).\n\n- Passing the structs as separate arguments, `struct.tuple(a, b)`, throws a `TypeError`.\n\n- Throws `TypeError` when an item is not a struct.\n\n`TupleStruct<T>` is not exported. It is a `Struct` whose input and output are tuples of the item types.",
+    "description": "Struct that parses a fixed-length array with one struct per position.\n\n`struct.tuple` takes **one array** of structs, not separate arguments:\n\n```ts\nconst Pair = struct.tuple([struct.string(), struct.number()]);\n```\n\n- Each position is parsed with the struct at the same index. The input must be an array of exactly the same length, otherwise it fails with `invalid_type` (expected `tuple of length N`).\n\n- Passing the structs as separate arguments, `struct.tuple(a, b)`, throws a `TypeError`.\n\n- Throws `TypeError` when an item is not a struct.\n\nThe result is a {@link TupleStruct}, a `Struct` whose input and output are tuples of the item types.",
     "signatures": [
       "function tuple<\n  const T extends readonly [StructLike, ...StructLike[]],\n>(items: T): TupleStruct<T>;"
     ],
@@ -3978,7 +3978,7 @@
     "slug": "core/objectstruct-type",
     "source": "packages/core/src/struct/types.ts",
     "group": "struct",
-    "description": "Object-shaped struct type produced by `struct.object(shape)`.\n\nFields are required by default. A field marked `optional()` or `nullish()` becomes an optional key, so field presence follows those modifiers. Unknown keys are stripped when parsing. Wire names can differ from TypeScript keys via `.alias()`. A failed parse returns `[StructError, undefined]`. `ObjectInput`, `ObjectOutput`, `ObjectStructTypes`, and `PreservedStruct` are internal helper types.",
+    "description": "Object-shaped struct type produced by `struct.object(shape)`.\n\nFields are required by default. A field marked `optional()` or `nullish()` becomes an optional key, so field presence follows those modifiers. Unknown keys are stripped when parsing. Wire names can differ from TypeScript keys via `.alias()`. A failed parse returns `[StructError, undefined]`. `ObjectInput`, `ObjectOutput`, and `ObjectStructTypes` are internal helper types. Its modifiers return a {@link PreservedStruct} that keeps this object struct.",
     "signatures": [
       "interface ObjectStruct<T extends ObjectShape>\n  extends\n    PreservingModifiers<ObjectStruct<T>, ObjectInput<T>, ObjectOutput<T>>,\n    StructLike<ObjectInput<T>, ObjectOutput<T>, false> {\n  readonly _struct: ObjectStructTypes<T>;\n}"
     ],
@@ -4056,6 +4056,636 @@
     "overloads": [
       {
         "signature": "interface ObjectStruct<T extends ObjectShape>\n  extends\n    PreservingModifiers<ObjectStruct<T>, ObjectInput<T>, ObjectOutput<T>>,\n    StructLike<ObjectInput<T>, ObjectOutput<T>, false> {\n  readonly _struct: ObjectStructTypes<T>;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ArrayStruct",
+    "kind": "type",
+    "slug": "core/arraystruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Array struct type produced by `struct.array(item)`.\n\nIts input is an array of the item's input type and its output is an array of the item's output type. Its modifiers return a {@link PreservedStruct} that keeps this array struct.",
+    "signatures": [
+      "interface ArrayStruct<S extends StructLike>\n  extends\n    PreservingModifiers<ArrayStruct<S>, ArrayInput<S>, ArrayOutput<S>>,\n    StructLike<ArrayInput<S>, ArrayOutput<S>, false> {\n  readonly _struct: ArrayStructTypes<S>;\n}"
+    ],
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "ArrayStructTypes<S>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => ArrayStruct<S>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null, ArrayOutput<S> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null, ArrayOutput<S> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null | undefined, ArrayOutput<S> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<ArrayStruct<S>, ArrayInput<S> | undefined, ArrayOutput<S> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface ArrayStruct<S extends StructLike>\n  extends\n    PreservingModifiers<ArrayStruct<S>, ArrayInput<S>, ArrayOutput<S>>,\n    StructLike<ArrayInput<S>, ArrayOutput<S>, false> {\n  readonly _struct: ArrayStructTypes<S>;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RecordStruct",
+    "kind": "type",
+    "slug": "core/recordstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Record struct type produced by `struct.record(value)`.\n\nIts input is an object with string keys and `value` inputs, and its output is the same object shape with `value` outputs. Its modifiers return a {@link PreservedStruct} that keeps this record struct.",
+    "signatures": [
+      "interface RecordStruct<S extends StructLike>\n  extends\n    PreservingModifiers<RecordStruct<S>, RecordInput<S>, RecordOutput<S>>,\n    StructLike<RecordInput<S>, RecordOutput<S>, false> {\n  readonly [recordValueStruct]: S;\n}"
+    ],
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<RecordInput<S>, RecordOutput<S>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => RecordStruct<S>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<RecordStruct<S>, RecordInput<S> | null, RecordOutput<S> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<RecordStruct<S>, RecordInput<S> | null, RecordOutput<S> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<RecordStruct<S>, RecordInput<S> | null | undefined, RecordOutput<S> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<RecordStruct<S>, RecordInput<S> | undefined, RecordOutput<S> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface RecordStruct<S extends StructLike>\n  extends\n    PreservingModifiers<RecordStruct<S>, RecordInput<S>, RecordOutput<S>>,\n    StructLike<RecordInput<S>, RecordOutput<S>, false> {\n  readonly [recordValueStruct]: S;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "TupleStruct",
+    "kind": "type",
+    "slug": "core/tuplestruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Tuple struct type produced by `struct.tuple(items)`.\n\nIts input and output are tuples of the item types, one per position. Its modifiers return a {@link PreservedStruct} that keeps this tuple struct.",
+    "signatures": [
+      "interface TupleStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<TupleStruct<T>, TupleInput<T>, TupleOutput<T>>,\n    StructLike<TupleInput<T>, TupleOutput<T>, false> {\n  readonly [tupleItemStructs]: T;\n}"
+    ],
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<TupleInput<T>, TupleOutput<T>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => TupleStruct<T>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<TupleStruct<T>, TupleInput<T> | null, TupleOutput<T> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<TupleStruct<T>, TupleInput<T> | null, TupleOutput<T> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<TupleStruct<T>, TupleInput<T> | null | undefined, TupleOutput<T> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<TupleStruct<T>, TupleInput<T> | undefined, TupleOutput<T> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface TupleStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<TupleStruct<T>, TupleInput<T>, TupleOutput<T>>,\n    StructLike<TupleInput<T>, TupleOutput<T>, false> {\n  readonly [tupleItemStructs]: T;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UnionStruct",
+    "kind": "type",
+    "slug": "core/unionstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Union struct type produced by `struct.or(...options)`.\n\nIts input and output are the unions of the option types, without `undefined`. Its modifiers return a {@link PreservedStruct} that keeps this union struct.",
+    "signatures": [
+      "interface UnionStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<UnionStruct<T>, UnionInput<T>, UnionOutput<T>>,\n    StructLike<UnionInput<T>, UnionOutput<T>, false> {\n  readonly [unionStructOptions]: T;\n}"
+    ],
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<Exclude<StructInput<T[number]>, undefined>, Exclude<StructOutput<T[number]>, undefined>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => UnionStruct<T>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<UnionStruct<T>, Exclude<StructInput<T[number]>, undefined> | null, Exclude<StructOutput<T[number]>, undefined> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<UnionStruct<T>, Exclude<StructInput<T[number]>, undefined> | null, Exclude<StructOutput<T[number]>, undefined> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<UnionStruct<T>, Exclude<StructInput<T[number]>, undefined> | null | undefined, Exclude<StructOutput<T[number]>, undefined> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<UnionStruct<T>, Exclude<StructInput<T[number]>, undefined> | undefined, Exclude<StructOutput<T[number]>, undefined> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface UnionStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<UnionStruct<T>, UnionInput<T>, UnionOutput<T>>,\n    StructLike<UnionInput<T>, UnionOutput<T>, false> {\n  readonly [unionStructOptions]: T;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DiscriminatedUnionStruct",
+    "kind": "type",
+    "slug": "core/discriminatedunionstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Discriminated-union struct type produced by `struct.discriminatedUnion(tag, options)`.\n\nIts input and output are the unions of the option object types. Its modifiers return a {@link PreservedStruct} that keeps this struct.",
+    "signatures": [
+      "interface DiscriminatedUnionStruct<\n  TOptions extends readonly ObjectStruct<ObjectShape>[],\n>\n  extends\n    PreservingModifiers<\n      DiscriminatedUnionStruct<TOptions>,\n      StructInput<TOptions[number]>,\n      StructOutput<TOptions[number]>\n    >,\n    StructLike<\n      StructInput<TOptions[number]>,\n      StructOutput<TOptions[number]>,\n      false\n    > {\n  readonly [discriminatedUnionOptions]: TOptions;\n}"
+    ],
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<StructInput<TOptions[number]>, StructOutput<TOptions[number]>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => DiscriminatedUnionStruct<TOptions>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<DiscriminatedUnionStruct<TOptions>, StructInput<TOptions[number]> | null, StructOutput<TOptions[number]> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<DiscriminatedUnionStruct<TOptions>, StructInput<TOptions[number]> | null, StructOutput<TOptions[number]> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<DiscriminatedUnionStruct<TOptions>, StructInput<TOptions[number]> | null | undefined, StructOutput<TOptions[number]> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<DiscriminatedUnionStruct<TOptions>, StructInput<TOptions[number]> | undefined, StructOutput<TOptions[number]> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface DiscriminatedUnionStruct<\n  TOptions extends readonly ObjectStruct<ObjectShape>[],\n>\n  extends\n    PreservingModifiers<\n      DiscriminatedUnionStruct<TOptions>,\n      StructInput<TOptions[number]>,\n      StructOutput<TOptions[number]>\n    >,\n    StructLike<\n      StructInput<TOptions[number]>,\n      StructOutput<TOptions[number]>,\n      false\n    > {\n  readonly [discriminatedUnionOptions]: TOptions;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "IntersectionStruct",
+    "kind": "type",
+    "slug": "core/intersectionstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Intersection struct type produced by `struct.intersection(...structs)` for two or more structs.\n\nIts input and output are the intersections of the member types. Its modifiers return a {@link PreservedStruct} that keeps this intersection struct.",
+    "signatures": [
+      "interface IntersectionStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<\n      IntersectionStruct<T>,\n      IntersectionInput<T>,\n      IntersectionOutput<T>\n    >,\n    StructLike<IntersectionInput<T>, IntersectionOutput<T>, false> {\n  readonly [intersectionStructOptions]: T;\n}"
+    ],
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<Exclude<IntersectionInputValue<T>, undefined>, Exclude<IntersectionOutputValue<T>, undefined>, false>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => IntersectionStruct<T>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      },
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<IntersectionStruct<T>, Exclude<IntersectionInputValue<T>, undefined> | null, Exclude<IntersectionOutputValue<T>, undefined> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<IntersectionStruct<T>, Exclude<IntersectionInputValue<T>, undefined> | null, Exclude<IntersectionOutputValue<T>, undefined> | null, false>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<IntersectionStruct<T>, Exclude<IntersectionInputValue<T>, undefined> | null | undefined, Exclude<IntersectionOutputValue<T>, undefined> | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<IntersectionStruct<T>, Exclude<IntersectionInputValue<T>, undefined> | undefined, Exclude<IntersectionOutputValue<T>, undefined> | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface IntersectionStruct<T extends readonly StructLike[]>\n  extends\n    PreservingModifiers<\n      IntersectionStruct<T>,\n      IntersectionInput<T>,\n      IntersectionOutput<T>\n    >,\n    StructLike<IntersectionInput<T>, IntersectionOutput<T>, false> {\n  readonly [intersectionStructOptions]: T;\n}",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreservedStruct",
+    "kind": "type",
+    "slug": "core/preservedstruct-type",
+    "source": "packages/core/src/struct/types.ts",
+    "group": "struct",
+    "description": "Struct a modifier of a composite struct returns.\n\n`.optional()`, `.nullable()`, `.null()`, and `.nullish()` on an array, object, record, tuple, union, discriminated-union, or intersection struct return a `PreservedStruct`. It is a {@link Struct} that also carries the composite it came from (`T`), and a later modifier keeps it, so request builders still see the fields of the original struct instead of a bare `Infer` type.\n\nDeclaration files of an SDK name this type when they export a modified composite struct.",
+    "signatures": [
+      "interface PreservedStruct<T, I, O, OO extends boolean>\n  extends Struct<I, O, OO>, CarriedStruct<T> {\n  null(): PreservedStruct<T, I | null, O | null, OO>;\n  nullable(): PreservedStruct<T, I | null, O | null, OO>;\n  nullish(): PreservedStruct<\n    T,\n    I | null | undefined,\n    O | null | undefined,\n    true\n  >;\n  optional(): PreservedStruct<T, I | undefined, O | undefined, true>;\n}"
+    ],
+    "related": [],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "null",
+        "description": "Allow `null` in addition to the current input and output types.",
+        "type": "() => PreservedStruct<T, I | null, O | null, OO>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullable",
+        "description": "Alias for StructMethods.null.",
+        "type": "() => PreservedStruct<T, I | null, O | null, OO>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "nullish",
+        "description": "Allow `null` or `undefined`, marking the field optional in object output.",
+        "type": "() => PreservedStruct<T, I | null | undefined, O | null | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "optional",
+        "description": "Allow `undefined`, marking the field optional in object shapes.",
+        "type": "() => PreservedStruct<T, I | undefined, O | undefined, true>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "_struct",
+        "description": "Phantom payload. `optionalOut` is `true` only when this struct's output fields may be absent.",
+        "type": "StructTypes<I, O, OO>",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "alias",
+        "description": "Override the external wire name for this field without changing the TypeScript property name.",
+        "type": "(name: string) => PreservedStruct<T, I, O, OO>",
+        "simplifiedType": "function",
+        "required": true,
+        "deprecated": false,
+        "tags": [
+          {
+            "name": "param",
+            "text": "name - Wire / protocol field name."
+          },
+          {
+            "name": "returns",
+            "text": "The same struct branded with the alias."
+          }
+        ]
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface PreservedStruct<T, I, O, OO extends boolean>\n  extends Struct<I, O, OO>, CarriedStruct<T> {\n  null(): PreservedStruct<T, I | null, O | null, OO>;\n  nullable(): PreservedStruct<T, I | null, O | null, OO>;\n  nullish(): PreservedStruct<\n    T,\n    I | null | undefined,\n    O | null | undefined,\n    true\n  >;\n  optional(): PreservedStruct<T, I | undefined, O | undefined, true>;\n}",
         "parameters": [],
         "returns": []
       }

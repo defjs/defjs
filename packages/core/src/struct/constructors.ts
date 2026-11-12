@@ -202,7 +202,7 @@ export function createObjectEnumStruct<
  *
  * - Throws `TypeError` when `item` is not a struct.
  *
- * `ArrayStruct<S>` is not exported. It is a `Struct<StructInput<S>[], Infer<S>[]>`.
+ * The result is an {@link ArrayStruct}, a `Struct<StructInput<S>[], Infer<S>[]>`.
  *
  * @group struct
  */
@@ -323,7 +323,7 @@ function createCodecObjectStruct<T extends ObjectShape>(
  *
  * - Throws `TypeError` when `value` is not a struct.
  *
- * `RecordStruct<S>` is not exported. It is a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.
+ * The result is a {@link RecordStruct}, a `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, where `Output` is `Infer<S>` without `undefined`. When `S` is an optional struct, a value that is `undefined` omits its key from the output.
  *
  * @group struct
  */
@@ -354,7 +354,7 @@ export function createRecordStruct<S extends StructLike>(
  *
  * - Throws `TypeError` when an item is not a struct.
  *
- * `TupleStruct<T>` is not exported. It is a `Struct` whose input and output are tuples of the item types.
+ * The result is a {@link TupleStruct}, a `Struct` whose input and output are tuples of the item types.
  *
  * @group struct
  */
@@ -382,7 +382,7 @@ export function createTupleStruct<
  *
  * - Throws `TypeError` when an option is not a struct.
  *
- * `UnionStruct<T>` is not exported. It is a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.
+ * The result is a {@link UnionStruct}, a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.
  *
  * @group struct
  */
@@ -447,7 +447,7 @@ type RequiredDiscriminatorOptions<
  *
  * - With `struct.parse(..., { aliases: true })` the tag is read from the field's alias.
  *
- * `RequiredDiscriminatorOptions` and `DiscriminatedUnionStruct` are not exported. The type check rejects an option whose tag field is missing or may be `undefined`.
+ * The result is a {@link DiscriminatedUnionStruct}. `RequiredDiscriminatorOptions` is not exported. The type check rejects an option whose tag field is missing or may be `undefined`.
  *
  * @group struct
  */
@@ -626,7 +626,7 @@ export function createDateStruct(): Struct<Date | number | string, Date> {
  *
  * - A nonempty variadic tuple must account for that singleton. Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.
  *
- * `IntersectionStruct<T>` is not exported. It is a `Struct` whose input and output are the intersections of the member types.
+ * The result is an {@link IntersectionStruct}, a `Struct` whose input and output are the intersections of the member types.
  *
  * @group struct
  */

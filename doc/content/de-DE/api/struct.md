@@ -89,6 +89,34 @@ Alles mit einem `_struct`-Typ-Payload. Siehe [`StructLike`](/de-DE/api/core/stru
 
 Objektförmiges Struct von `struct.object`.
 
+## ArrayStruct
+
+Array-Struct von `struct.array`.
+
+## RecordStruct
+
+Record-Struct von `struct.record`.
+
+## TupleStruct
+
+Tuple-Struct von `struct.tuple`.
+
+## UnionStruct
+
+Union-Struct von `struct.or`.
+
+## DiscriminatedUnionStruct
+
+Struct für diskriminierte Unions von `struct.discriminatedUnion`.
+
+## IntersectionStruct
+
+Intersection-Struct von `struct.intersection`.
+
+## PreservedStruct
+
+Das Struct, das ein Modifikator wie `.optional()` oder `.nullable()` für ein zusammengesetztes Struct zurückgibt; es behält den Typ des zusammengesetzten Structs.
+
 ## StructIssue
 
 `path`, `code`, `expected`, `received`, `message`. `code` ist `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` oder `missing_key`.

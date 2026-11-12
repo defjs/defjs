@@ -89,6 +89,34 @@ description: واجهة struct، وInfer، وStructError.
 
 struct بشكل كائن من `struct.object`.
 
+## ArrayStruct
+
+struct بشكل مصفوفة من `struct.array`.
+
+## RecordStruct
+
+struct بشكل سجل من `struct.record`.
+
+## TupleStruct
+
+struct بشكل صف ثابت (tuple) من `struct.tuple`.
+
+## UnionStruct
+
+struct بشكل اتحاد من `struct.or`.
+
+## DiscriminatedUnionStruct
+
+struct بشكل اتحاد مميَّز من `struct.discriminatedUnion`.
+
+## IntersectionStruct
+
+struct بشكل تقاطع من `struct.intersection`.
+
+## PreservedStruct
+
+الـ struct الذي يعيده مُعدِّل مثل `.optional()` أو `.nullable()` على struct مركّب؛ ويحتفظ بنوع المركّب.
+
 ## StructIssue
 
 `path`، `code`، `expected`، `received`، `message`. `code` هو `custom` أو `invalid_enum` أو `invalid_intersection` أو `invalid_literal` أو `invalid_type` أو `invalid_union` أو `missing_key`.
