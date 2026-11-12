@@ -33,7 +33,6 @@ import type {
   Node,
   VariableDeclaration,
 } from "typescript/ast";
-import { compareApiIdentity } from "./api-order";
 import { tableEntries, typeColumns } from "./type-tables";
 import { loadExample } from "./api-examples";
 import {
@@ -66,6 +65,7 @@ import { firstProse, paramDescription, storedTags, textsFor } from "./api-tags";
 import type { DocTag } from "./api-tags";
 import {
   identityIndex,
+  overviewGroups,
   resolveSee,
   singleGroup,
   validateReference,
@@ -486,6 +486,21 @@ async function readStructMembers(
   return { pages, descriptions };
 }
 
+const packageNames: readonly string[] = packages.map((pkg) => pkg.name);
+const groupNames: readonly string[] = overviewGroups;
+
+/** The index order: package, then the overview group, then the name by code unit. */
+function compareEntries(
+  left: ApiReferenceEntry,
+  right: ApiReferenceEntry,
+): number {
+  return (
+    packageNames.indexOf(left.package) - packageNames.indexOf(right.package) ||
+    groupNames.indexOf(left.group) - groupNames.indexOf(right.group) ||
+    Number(left.name > right.name) - Number(left.name < right.name)
+  );
+}
+
 export async function assemblePages(
   drafts: readonly PageDraft[],
 ): Promise<ApiReferenceEntry[]> {
@@ -530,12 +545,7 @@ export async function assemblePages(
     });
   }
   expandBindingParameters(entries);
-  entries.sort((left, right) =>
-    compareApiIdentity(
-      `${left.package}:${left.name}`,
-      `${right.package}:${right.name}`,
-    ),
-  );
+  entries.sort(compareEntries);
   validateReference(entries, identities);
   return entries;
 }
