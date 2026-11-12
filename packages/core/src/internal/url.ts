@@ -1,5 +1,5 @@
 import type { QuerySerializer } from "../client/config";
-import { isPlainObject } from "../struct/utils";
+import { isPlainObject } from "../struct/plain_object";
 import type { HttpRequest } from "../http/http_request";
 import { isURLSearchParams } from "./type_guards";
 

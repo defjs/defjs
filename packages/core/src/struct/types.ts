@@ -43,9 +43,6 @@ export interface StructLike<
   readonly _struct: StructTypes<I, O, OO>;
 }
 
-// Kept until web_socket/codec.ts names StructLike itself.
-export type AnyStructLike = StructLike;
-
 export type OptionalOutputStruct = {
   readonly _struct: {
     readonly optionalOut: true;
