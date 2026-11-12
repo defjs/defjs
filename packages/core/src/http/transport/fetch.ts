@@ -190,7 +190,7 @@ export function createFetchRequestInit(
   applyBodyContentType(request, headers);
   if (request.finalizeHeaders) {
     try {
-      request.finalizeHeaders(request, headers, url);
+      request.finalizeHeaders(request, headers, new URL(url));
     } catch (error) {
       throw isAbortCause(error) || isTimeoutCause(error)
         ? error

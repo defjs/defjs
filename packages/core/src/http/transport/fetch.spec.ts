@@ -232,6 +232,28 @@ describe("finalizeHeaders failure", () => {
   });
 });
 
+describe("finalizeHeaders URL", () => {
+  test("changes to the URL the hook receives do not reach the sent request or the response", async () => {
+    const request: HttpRequest = {
+      baseEndpoint: "https://example.com",
+      endpoint: "/v1/user",
+      finalizeHeaders: (_request, _headers, url) => {
+        url.searchParams.set("injected", "1");
+      },
+      method: "POST",
+    };
+    let sent: Request | undefined;
+    const response = await fetchHandler(request, (input) => {
+      if (!(input instanceof Request)) throw new Error("expected a Request");
+      sent = input;
+      return Promise.resolve(new Response());
+    });
+
+    expect(sent?.url).toBe("https://example.com/v1/user");
+    expect(response.url).toBe("https://example.com/v1/user");
+  });
+});
+
 describe("request construction failure", () => {
   const base: HttpRequest = {
     baseEndpoint: "https://example.com",
