@@ -6,18 +6,10 @@ import type {
   RetryOptions,
 } from "../client/config";
 import { DEFAULT_FETCH, ERR_FETCH_UNSUPPORTED } from "../client/config";
-import type {
-  DecodeFault,
-  Fault,
-  HttpStatusFaultOf,
-  PreflightFault,
-} from "../error";
-import {
-  createDecodeFault,
-  createNetworkFault,
-  createPreflightFault,
-} from "../error";
+import type { Fault, HttpStatusFaultOf } from "../error";
+import { createPreflightFault } from "../error";
 import type { SSEHandler } from "../interceptor/interceptor";
+import type { HttpRequest } from "../http/http_request";
 import { makeChain, resolveSSEInterceptors } from "../interceptor/interceptor";
 import {
   awaitWithSignal,
@@ -30,17 +22,15 @@ import {
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
 import { preflight } from "../internal/preflight";
-import { createTransportOrigin } from "../internal/transport_origin";
+import { rejectAs } from "../internal/chain_faults";
 import { resolveRetryPolicy } from "../internal/retry";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
-import type { DecodedResponse, HttpResponse } from "../http/http_response";
 import type {
   BuilderField,
   EventStreamRequestShape,
 } from "../internal/builder_types";
 import type { OutboundBuilder } from "../internal/outbound_request";
 import { resolveHttpBodyContentType } from "../http/transport/body";
-import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "../http/transport/fetch_init";
 import {
   materializeOutboundRequest,
   runOutboundBuilder,
@@ -51,18 +41,12 @@ import type { AnyStruct, Infer } from "../struct";
 import { decodeJson } from "../struct/codec/json";
 import { parseStructValue } from "../struct/introspection";
 import type {
-  EventStreamFailureInfo,
   EventStreamHandle,
   EventStreamOpenInfo,
+  EventStreamStartupFailure,
   HandshakeBody,
 } from "./transport/event_stream";
-import {
-  createHandshakeStatusFault,
-  fetchEventStream,
-  getEventStreamFatalCode,
-  isEventStreamPickFault,
-  toEventStreamMeta,
-} from "./transport/event_stream";
+import { fetchEventStream } from "./transport/event_stream";
 import type { EventStreamMessage } from "./transport/parser";
 
 /**
@@ -407,29 +391,23 @@ async function openEventStream<
     };
     let chainSettled = false;
     const ownedStreams = new Set<OwnedStream>();
-    const transportOrigin = createTransportOrigin();
-    // Headers an interceptor handed to next() and the platform refused; the interceptor is shown that error itself.
-    const refusedHeaders = new Set<unknown>();
-    const errorFailure = new Map<
+    // The fault behind each value the handler rejected with: interceptors are shown the plain cause. See chain_faults.ts.
+    const failures = new Map<
       unknown,
-      EventStreamFailureInfo<HandshakeBody<TError>>
+      Pick<EventStreamStartupFailure<HandshakeBody<TError>>, "fault" | "open">
     >();
     try {
       const sseInterceptors = resolveSSEInterceptors(clientConfig.interceptors);
-      const sseHandler: SSEHandler = (req) => {
+      const openStream = async (
+        req: HttpRequest,
+      ): Promise<EventStreamHandle<unknown>> => {
         if (chainSettled) {
-          const rejected = Promise.reject<EventStreamHandle<unknown>>(
-            new Error(
-              "SSE interceptor next() cannot be called after the chain has settled",
-            ),
+          throw new Error(
+            "SSE interceptor next() cannot be called after the chain has settled",
           );
-          void rejected.catch(() => undefined);
-          return rejected;
         }
         const attributed = !handedOff;
-        if (attributed) {
-          handedOff = true;
-        }
+        handedOff = true;
         // The wrapper `done` reports once, so a repeat is harmless.
         const settleUnattempted = (): void => {
           if (attributed) {
@@ -442,15 +420,18 @@ async function openEventStream<
           settleUnattempted();
         }
         const ownerController = new AbortController();
+        let headers: Headers;
         let streamAbort: AbortSignal;
         try {
           resolveRequestUrl(req);
           // Headers rejects an invalid name or value with a TypeError. Checking here makes that a request that cannot be
           // built, not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
           try {
-            void new Headers(req.headers);
+            headers = new Headers(req.headers);
           } catch (error) {
-            refusedHeaders.add(error);
+            failures.set(error, {
+              fault: createPreflightFault("REQ_BUILD_FAILED", error),
+            });
             throw error;
           }
           // The stream ends when its owner discards it, or when the call or the caller stops it. The caller's own
@@ -462,54 +443,47 @@ async function openEventStream<
           ]);
         } catch (error) {
           settleUnattempted();
-          const rejected = Promise.reject<EventStreamHandle<unknown>>(error);
-          void rejected.catch(() => undefined);
-          return rejected;
+          throw error;
         }
         const due = resolveAbortFault(streamAbort);
         if (due) {
           settleUnattempted();
-          // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
-          // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
-          const rejected = Promise.reject<EventStreamHandle<unknown>>(
-            transportOrigin.mark(resolveAbortedCause(streamAbort)),
-          );
           releaseAbortSignal(streamAbort);
-          void rejected.catch(() => undefined);
-          return rejected;
+          // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
+          return rejectAs(failures, resolveAbortedCause(streamAbort), {
+            fault: due,
+          });
         }
         if (
           clientConfig.sse.handle === DEFAULT_FETCH &&
           typeof globalThis.fetch !== "function"
         ) {
           settleUnattempted();
-          const rejected = Promise.reject<EventStreamHandle<unknown>>(
-            transportOrigin.mark(ERR_FETCH_UNSUPPORTED),
-          );
           releaseAbortSignal(streamAbort);
-          void rejected.catch(() => undefined);
-          return rejected;
+          return rejectAs(failures, ERR_FETCH_UNSUPPORTED, {
+            fault: createPreflightFault(
+              "ENV_UNSUPPORTED",
+              ERR_FETCH_UNSUPPORTED,
+            ),
+          });
         }
         const owned: OwnedStream = {
           controller: ownerController,
           release: () => releaseAbortSignal(streamAbort),
         };
         ownedStreams.add(owned);
-        const failure: EventStreamFailureInfo<HandshakeBody<TError>> = {};
-        const endpointAttempt = ownsEndpointAttempt
-          ? {
-              start: resolved.start,
-              end: resolved.end,
-              done: resolved.done,
-              pickNext: pick,
-            }
-          : undefined;
-        const promise = fetchEventStream(
-          { ...req, signal: streamAbort },
+        const [failure, stream] = await fetchEventStream(
+          { ...req, headers, signal: streamAbort },
           {
-            endpointAttempt,
+            endpointAttempt: ownsEndpointAttempt
+              ? {
+                  start: resolved.start,
+                  end: resolved.end,
+                  done: resolved.done,
+                  pickNext: pick,
+                }
+              : undefined,
             fetch: clientConfig.sse.handle,
-            failure,
             handshakeError: definition.error,
             transformMessage(message, signal) {
               return transformStreamMessage(
@@ -522,27 +496,21 @@ async function openEventStream<
             retry,
             maxBufferSize: definition.maxBufferSize,
           },
-        ).then(
-          (stream) => {
-            owned.stream = stream;
-            owned.initialOpen = stream.open;
-            void stream.closed.then(owned.release, owned.release);
-            return stream;
-          },
-          (cause: unknown) => {
-            // A no-op once the transport has reported; it only takes effect when fetchEventStream fails before its first attempt starts.
-            endpointAttempt?.done({ attempted: false });
-            owned.release();
-            errorFailure.set(cause, {
-              open: failure.open,
-              decoded: failure.decoded,
-              bodyFault: failure.bodyFault,
-            });
-            throw transportOrigin.mark(cause);
-          },
         );
-        void promise.catch(() => undefined);
-        return promise;
+        if (failure !== null) {
+          owned.release();
+          return rejectAs(failures, failure.cause, failure);
+        }
+        owned.stream = stream;
+        owned.initialOpen = stream.open;
+        void stream.closed.then(owned.release, owned.release);
+        return stream;
+      };
+      const sseHandler: SSEHandler = (req) => {
+        const opening = openStream(req);
+        // An interceptor may drop what next() returned; that must not become an unhandled rejection.
+        void opening.catch(() => undefined);
+        return opening;
       };
       const sseChain = makeChain(sseInterceptors);
       const stream = await awaitWithSignal(
@@ -580,25 +548,14 @@ async function openEventStream<
       chainSettled = true;
       discardOwnedStreams(error);
 
-      const fromTransport = transportOrigin.has(error);
-      const cause = error;
-      const {
-        open: openInfo,
-        decoded,
-        bodyFault,
-      } = errorFailure.get(cause) ?? {};
+      const failure = failures.get(error);
       const fault = requestSignal.aborted
         ? resolveAbortedFault(requestSignal)
-        : error instanceof RequestUrlError || refusedHeaders.has(error)
+        : error instanceof RequestUrlError
           ? createPreflightFault("REQ_BUILD_FAILED", error)
-          : createEventStreamFault(
-              cause,
-              fromTransport,
-              openInfo?.response,
-              decoded,
-              bodyFault,
-            );
-      return [fault, undefined, openInfo];
+          : (failure?.fault ??
+            createPreflightFault("EXT_INTERCEPTOR_FAILED", error));
+      return [fault, undefined, failure?.open];
     }
 
     function discardOwnedStreams(
@@ -726,51 +683,4 @@ function decodeSSEEventData(struct: AnyStruct, data: string): unknown {
   }
 
   return decodeJson(struct, JSON.parse(data));
-}
-
-function createEventStreamFault<TBody>(
-  cause: unknown,
-  fromTransport: boolean,
-  response?: HttpResponse<unknown>,
-  decoded?: DecodedResponse<TBody>,
-  bodyFault?: DecodeFault,
-):
-  | DecodeFault
-  | HttpStatusFaultOf<TBody>
-  | HttpStatusFaultOf<undefined>
-  | PreflightFault {
-  // Only a reconnect pick inside the transport produces these; an interceptor-thrown fault keeps its old mapping.
-  if (fromTransport && isEventStreamPickFault(cause)) {
-    return cause;
-  }
-
-  const fatal = getEventStreamFatalCode(cause);
-  if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
-    return createDecodeFault(fatal, cause, toEventStreamMeta(response));
-  }
-
-  // A hook the caller supplied threw, as in `defineRequest`: the code names the failing hook and the thrown value is the
-  // cause, even when the handshake it ran for answered with a status.
-  if (fatal === "EXT_HOOK_FAILED" && cause instanceof Error) {
-    return createPreflightFault("EXT_HOOK_FAILED", cause.cause);
-  }
-
-  // A non-2xx handshake is `HTTP_STATUS` for everything past the transport. Typed `data` exists only
-  // when the declared error body decoded, so one that did not is reported as its decode fault, as
-  // `defineRequest` does, with the status in its metadata.
-  if (response && !response.ok) {
-    return bodyFault ?? createHandshakeStatusFault(response, decoded);
-  }
-
-  if (
-    fromTransport &&
-    (cause === ERR_STREAMING_REQUEST_UNSUPPORTED ||
-      cause === ERR_FETCH_UNSUPPORTED)
-  ) {
-    return createPreflightFault("ENV_UNSUPPORTED", cause);
-  }
-
-  return fromTransport
-    ? createNetworkFault(cause)
-    : createPreflightFault("EXT_INTERCEPTOR_FAILED", cause);
 }

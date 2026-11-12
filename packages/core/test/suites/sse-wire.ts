@@ -1,7 +1,7 @@
 import { resolveRetryPolicy } from "../../src/internal/retry.ts";
 import { expect, inject, test } from "vitest";
 import { DEFAULT_FETCH } from "../../src/client/config.ts";
-import { fetchEventStream } from "../../src/sse/transport/event_stream.ts";
+import { startEventStream } from "../start-event-stream.ts";
 import type { EventStreamMessage } from "../../src/sse/transport/parser.ts";
 import { fixture } from "../fixture/client-auto.ts";
 
@@ -32,7 +32,7 @@ export function registerSseWireSuite(): void {
       const dropped = firstSeen.promise.then(() =>
         f.act("raw:utf8-last-event-id", "drop"),
       );
-      const stream = await fetchEventStream(
+      const stream = await startEventStream(
         {
           baseEndpoint,
           endpoint: `/events/${encodeURIComponent(id)}`,
@@ -78,7 +78,7 @@ export function registerSseWireSuite(): void {
     );
     const partial = "id: 1\ndata: first\n\nid: 2\n";
     let calls = 0;
-    const stream = await fetchEventStream(
+    const stream = await startEventStream(
       {
         baseEndpoint,
         endpoint: "/events",

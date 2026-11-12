@@ -15,16 +15,13 @@ import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
 import type { HttpRequest } from "../../http";
 import { struct } from "../../struct";
 import type {
-  EventStreamFailureInfo,
   EventStreamHandle,
   FetchEventStreamOptions,
 } from "./event_stream";
-import {
-  fetchEventStream as fetchEventStreamInternal,
-  getEventStreamFatalCode,
-} from "./event_stream";
+import { fetchEventStream as fetchEventStreamInternal } from "./event_stream";
 import type { EventStreamMessage } from "./parser";
 import { yieldMacrotask } from "../../../test/macrotask";
+import { startEventStream } from "../../../test/start-event-stream";
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
@@ -56,7 +53,7 @@ function fetchEventStream(
   request: HttpRequest,
   options: TestOptions<EventStreamMessage> = {},
 ) {
-  return fetchEventStreamInternal(request, {
+  return startEventStream(request, {
     fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     transformMessage: (message) => message,
@@ -70,7 +67,7 @@ function fetchTransformedEventStream<T>(
   options: TestOptions<T> &
     Pick<FetchEventStreamOptions<T>, "transformMessage">,
 ) {
-  return fetchEventStreamInternal(request, {
+  return startEventStream(request, {
     fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     ...options,
@@ -160,39 +157,6 @@ describe("fetchEventStream advanced", () => {
     await expect(
       fetchEventStream(createRequest("/sse/500-always")),
     ).rejects.toThrow();
-  });
-
-  test("should provide execution-owned failure open info", async () => {
-    let unexpectedHandle: EventStreamHandle<EventStreamMessage> | undefined;
-    onTestFinished(async () => {
-      await unexpectedHandle?.[Symbol.asyncDispose]();
-    });
-    const failure: EventStreamFailureInfo = {};
-    try {
-      unexpectedHandle = await fetchEventStream(
-        createRequest("/sse/500-always"),
-        { failure },
-      );
-    } catch {
-      // The invocation reports its own response snapshot alongside the unchanged rejection.
-    }
-    expect(failure.open?.response.status).toBe(500);
-  });
-
-  test("failure info stays empty for non-object errors before a response", async () => {
-    for (const cause of ["string error", null, 42]) {
-      const failure: EventStreamFailureInfo = {};
-      await expect(
-        fetchEventStream(createRequest("/events"), {
-          failure,
-          fetch: () => {
-            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the fetch under test rejects with a string, null or number, which must pass through unchanged
-            return Promise.reject(cause);
-          },
-        }),
-      ).rejects.toBe(cause);
-      expect(failure.open).toBeUndefined();
-    }
   });
 
   test("should throw when transformMessage throws", async () => {
@@ -432,7 +396,7 @@ describe("fetchEventStream advanced", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(thrownMessage(error)).toMatch(/Expected content-type/);
-    expect(getEventStreamFatalCode(error)).toBe("RES_MEDIA_TYPE_INVALID");
+    expect(error).toMatchObject({ code: "RES_MEDIA_TYPE_INVALID" });
     expect(fetch).toHaveBeenCalledOnce();
     expect(cancel).toHaveBeenCalledOnce();
     expect(shouldRetry).not.toHaveBeenCalled();
@@ -475,7 +439,7 @@ describe("fetchEventStream advanced", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(thrownMessage(error)).toMatch(/Expected content-type/);
-    expect(getEventStreamFatalCode(error)).toBe("RES_MEDIA_TYPE_INVALID");
+    expect(error).toMatchObject({ code: "RES_MEDIA_TYPE_INVALID" });
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -492,7 +456,7 @@ describe("fetchEventStream advanced", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(thrownMessage(error)).toBe("Retry policy failed");
-    expect(getEventStreamFatalCode(error)).toBe("EXT_HOOK_FAILED");
+    expect(error).toMatchObject({ code: "EXT_HOOK_FAILED" });
   });
 
   test.each([200, 204, 205])(
@@ -1207,7 +1171,7 @@ describe("fetchEventStream advanced", () => {
         }),
       },
     ).catch((rejection: unknown) => rejection);
-    expect(getEventStreamFatalCode(error)).toBe("EXT_HOOK_FAILED");
+    expect(error).toMatchObject({ code: "EXT_HOOK_FAILED" });
     expect(error).toHaveProperty("cause", cause);
     expect(fetch).toHaveBeenCalledOnce();
   });
@@ -1493,8 +1457,10 @@ describe("fetchEventStream message path", () => {
         .next()
         .catch((reason: unknown) => reason);
 
-      expect(getEventStreamFatalCode(error)).toBe("EXT_OBSERVER_FAILED");
-      expect(error).toMatchObject({ cause: failure });
+      expect(error).toMatchObject({
+        code: "EXT_OBSERVER_FAILED",
+        cause: failure,
+      });
       await expect(stream.closed).resolves.toMatchObject({
         cause: error,
         code: "EXT_OBSERVER_FAILED",
@@ -1793,32 +1759,32 @@ describe("raw transport handshake decoding", () => {
   ])(
     "decodes $contentType handshake bodies without an operation decoder",
     async ({ body, schema, contentType, expected }) => {
-      const failure: EventStreamFailureInfo = {};
-      await expect(
-        fetchEventStream(
-          {
-            baseEndpoint: "https://example.test",
-            endpoint: "/events",
-            method: "GET",
-          },
-          {
-            fetch: () =>
-              Promise.resolve(
-                new Response(body, {
-                  status: 403,
-                  headers: { "content-type": contentType },
-                }),
-              ),
-            handshakeError: schema,
-            failure,
-          },
-        ),
-      ).rejects.toMatchObject({
+      const [failure] = await fetchEventStreamInternal(
+        {
+          baseEndpoint: "https://example.test",
+          endpoint: "/events",
+          method: "GET",
+          headers: new Headers(),
+        },
+        {
+          fetch: () =>
+            Promise.resolve(
+              new Response(body, {
+                status: 403,
+                headers: { "content-type": contentType },
+              }),
+            ),
+          handshakeError: schema,
+          maxBufferSize: 1024,
+          transformMessage: (message) => message,
+        },
+      );
+      expect(failure?.cause).toMatchObject({
         code: "HTTP_STATUS",
         data: expected,
         status: 403,
       });
-      expect(failure.open?.response.body).toEqual(expected);
+      expect(failure?.open?.response.body).toEqual(expected);
     },
   );
 

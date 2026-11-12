@@ -213,18 +213,23 @@ describe("request-time default fetch", () => {
           createHttpInterceptor(() =>
             Promise.resolve(makeResponse({ body: "cached", status: 200 })),
           ),
-          createSSEInterceptor((request) =>
-            fetchEventStream(request, {
-              fetch: () =>
-                Promise.resolve(
-                  new Response("data: cached\n\n", {
-                    headers: { "content-type": "text/event-stream" },
-                  }),
-                ),
-              maxBufferSize: 1024,
-              transformMessage: (message) => message,
-            }),
-          ),
+          createSSEInterceptor(async (request) => {
+            const [failure, stream] = await fetchEventStream(
+              { ...request, headers: new Headers(request.headers) },
+              {
+                fetch: () =>
+                  Promise.resolve(
+                    new Response("data: cached\n\n", {
+                      headers: { "content-type": "text/event-stream" },
+                    }),
+                  ),
+                maxBufferSize: 1024,
+                transformMessage: (message) => message,
+              },
+            );
+            if (failure !== null) throw failure.cause;
+            return stream;
+          }),
         ),
       );
       if (transport === "HTTP") {

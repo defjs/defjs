@@ -4,11 +4,9 @@ import type { FetchHandle } from "../../src/client/config.ts";
 import { DEFAULT_FETCH } from "../../src/client/config.ts";
 import type { HttpRequest } from "../../src/http/index.ts";
 import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "../../src/http/transport/fetch_init.ts";
-import {
-  fetchEventStream as fetchEventStreamInternal,
-  type FetchEventStreamOptions,
-} from "../../src/sse/transport/event_stream.ts";
+import { type FetchEventStreamOptions } from "../../src/sse/transport/event_stream.ts";
 import type { EventStreamMessage } from "../../src/sse/transport/parser.ts";
+import { startEventStream } from "../start-event-stream.ts";
 import {
   uploadOutcome,
   type UploadCapability,
@@ -24,7 +22,7 @@ function fetchEventStream(
   > &
     Partial<Pick<FetchEventStreamOptions<EventStreamMessage>, "fetch">> = {},
 ) {
-  return fetchEventStreamInternal(request, {
+  return startEventStream(request, {
     fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     transformMessage: (message) => message,

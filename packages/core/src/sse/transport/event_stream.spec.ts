@@ -20,10 +20,8 @@ import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
 } from "../../http/transport/fetch_init";
 import { simulateUnsupportedStreaming } from "../../../test/streaming-support";
-import type {
-  EventStreamFailureInfo,
-  FetchEventStreamOptions,
-} from "./event_stream";
+import { startEventStream } from "../../../test/start-event-stream";
+import type { FetchEventStreamOptions } from "./event_stream";
 import { fetchEventStream as fetchEventStreamInternal } from "./event_stream";
 import type { EventStreamMessage } from "./parser";
 
@@ -40,7 +38,7 @@ function fetchEventStream(
   request: HttpRequest,
   options: TestOptions<EventStreamMessage> = {},
 ) {
-  return fetchEventStreamInternal(request, {
+  return startEventStream(request, {
     fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     transformMessage: (message) => message,
@@ -54,7 +52,7 @@ function fetchTransformedEventStream<T>(
   options: TestOptions<T> &
     Pick<FetchEventStreamOptions<T>, "transformMessage">,
 ) {
-  return fetchEventStreamInternal(request, {
+  return startEventStream(request, {
     fetch: DEFAULT_FETCH,
     maxBufferSize: 1024,
     ...options,
@@ -518,12 +516,9 @@ describe("fetchEventStream", () => {
       endpoint: "/events",
       method: "GET",
     };
-    let thrown: unknown;
-    const failure: EventStreamFailureInfo = {};
-
-    try {
-      await fetchEventStream(request, {
-        failure,
+    const [failure] = await fetchEventStreamInternal(
+      { ...request, headers: new Headers() },
+      {
         fetch: () =>
           Promise.resolve(
             new Response("data: ignored\n\n", {
@@ -532,14 +527,13 @@ describe("fetchEventStream", () => {
               statusText: "Service Unavailable",
             }),
           ),
-      });
-    } catch (error) {
-      thrown = error;
-    }
+        maxBufferSize: 1024,
+        transformMessage: (message) => message,
+      },
+    );
 
-    const open = failure.open;
-    expect(thrown).toBeInstanceOf(Error);
-    expect(open?.response.ok).toBe(false);
+    expect(failure?.cause).toBeInstanceOf(Error);
+    expect(failure?.open?.response.ok).toBe(false);
   });
 
   test("should reject with aborted error when aborted before open", async () => {

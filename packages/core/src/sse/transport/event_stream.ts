@@ -1,5 +1,6 @@
 import { statusOutcome } from "../../internal/attempt_outcome";
 import type { FetchHandle } from "../../client/config";
+import { ERR_FETCH_UNSUPPORTED } from "../../client/config";
 import type {
   DecodeFault,
   FaultCode,
@@ -20,6 +21,7 @@ import type { DoneInfo } from "../../balancer/balancer";
 import type { pickEndpoint, ResolvedEndpoint } from "../../balancer/runtime";
 import {
   createFetchInitBase,
+  ERR_STREAMING_REQUEST_UNSUPPORTED,
   isReadableStreamBody,
 } from "../../http/transport/fetch_init";
 import { concatChunks, parseBytesBody } from "../../internal/bytes";
@@ -149,8 +151,8 @@ export interface EventStreamHandle<TEvent = EventStreamMessage>
 export type HandshakeBody<TError extends AnyStruct | undefined> =
   HttpStatusFault<TError>["data"];
 
-/** Failure snapshot owned by one fetchEventStream invocation. */
-export interface EventStreamFailureInfo<TBody = unknown> {
+/** The latest handshake of a stream. */
+interface Handshake<TBody> {
   open?: EventStreamOpenInfo;
   /** The failed handshake with its decoded error body. Absent when the body was not decoded. */
   decoded?: DecodedResponse<TBody>;
@@ -161,13 +163,30 @@ export interface EventStreamFailureInfo<TBody = unknown> {
   bodyFault?: DecodeFault;
 }
 
+/**
+ * How a stream that never opened failed. `fault` is what the call reports, `cause` is what interceptors are
+ * shown, and `open` is the response of the failed handshake, when one arrived.
+ */
+export interface EventStreamStartupFailure<TBody = unknown> {
+  cause: unknown;
+  fault:
+    | DecodeFault
+    | HttpStatusFaultOf<TBody>
+    | HttpStatusFaultOf<undefined>
+    | PreflightFault;
+  open?: EventStreamOpenInfo;
+}
+
+/** What `fetchEventStream` resolves with. It never rejects. */
+export type EventStreamStart<TEvent, TBody> =
+  | readonly [null, EventStreamHandle<TEvent>]
+  | readonly [EventStreamStartupFailure<TBody>, undefined];
+
 export interface FetchEventStreamOptions<
   TEvent = EventStreamMessage,
   TError extends AnyStruct | undefined = AnyStruct | undefined,
 > {
   fetch: FetchHandle;
-  /** @internal Carries startup failure metadata without annotating shared cause values. */
-  failure?: EventStreamFailureInfo<HandshakeBody<TError>>;
   /** Optional struct for a non-2xx handshake body; fills the fault's `data` when declared. */
   handshakeError?: TError;
   transformMessage: (
@@ -211,13 +230,7 @@ class EventStreamFatalError extends Error {
   }
 }
 
-export function getEventStreamFatalCode(
-  error: unknown,
-): EventStreamFatalCode | undefined {
-  return error instanceof EventStreamFatalError ? error.code : undefined;
-}
-
-export function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
+function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
   return {
     headers: response.headers,
     ok: response.ok,
@@ -232,7 +245,7 @@ export function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
  * A body that could not be decoded leaves `data` undefined and its failure on `cause`. Interceptors,
  * the retry policy and a reconnect's `closed` all see this fault.
  */
-export function createHandshakeStatusFault<TBody>(
+function createHandshakeStatusFault<TBody>(
   response: HttpResponse<unknown>,
   decoded?: DecodedResponse<TBody>,
   bodyFault?: DecodeFault,
@@ -244,6 +257,40 @@ export function createHandshakeStatusFault<TBody>(
     fault.cause = bodyFault.cause;
   }
   return fault;
+}
+
+/**
+ * The fault a stream that never opened reports. Only a reconnect pick that fails during startup is a fault
+ * already; a failed handshake is `HTTP_STATUS`, or the decode fault when its declared error body could not be
+ * decoded, as `defineRequest` reports it. A hook the caller supplied that threw is named by the failing hook and
+ * the thrown value is the cause, even when the handshake it ran for answered with a status.
+ */
+function startupFault<TBody>(
+  cause: unknown,
+  { open, decoded, bodyFault }: Handshake<TBody>,
+): EventStreamStartupFailure<TBody>["fault"] {
+  if (isEventStreamPickFault(cause)) {
+    return cause;
+  }
+
+  const response = open?.response;
+  const fatal = cause instanceof EventStreamFatalError ? cause.code : undefined;
+  if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
+    return createDecodeFault(fatal, cause, toEventStreamMeta(response));
+  }
+  if (fatal === "EXT_HOOK_FAILED" && cause instanceof Error) {
+    return createPreflightFault("EXT_HOOK_FAILED", cause.cause);
+  }
+  if (response && !response.ok) {
+    return bodyFault ?? createHandshakeStatusFault(response, decoded);
+  }
+  if (
+    cause === ERR_STREAMING_REQUEST_UNSUPPORTED ||
+    cause === ERR_FETCH_UNSUPPORTED
+  ) {
+    return createPreflightFault("ENV_UNSUPPORTED", cause);
+  }
+  return createNetworkFault(cause);
 }
 
 /**
@@ -303,13 +350,18 @@ function faultCode(failure: AttemptFailure): EventStreamFaultCode {
   }
 }
 
+/**
+ * Opens an event stream and keeps it connected. Resolves once the first handshake is accepted, or with how the
+ * stream failed before that. `request.headers` belong to the stream from here on: it writes the event id and the
+ * default `Accept` into them.
+ */
 export async function fetchEventStream<
   TEvent = EventStreamMessage,
   TError extends AnyStruct | undefined = AnyStruct | undefined,
 >(
-  request: HttpRequest,
+  request: HttpRequest & { headers: Headers },
   options: FetchEventStreamOptions<TEvent, TError>,
-): Promise<EventStreamHandle<TEvent>> {
+): Promise<EventStreamStart<TEvent, HandshakeBody<TError>>> {
   const {
     fetch: fetchImpl,
     handshakeError,
@@ -317,12 +369,22 @@ export async function fetchEventStream<
     retry: policy,
     transformMessage,
   } = options;
-  let url = resolveAttemptUrl(request);
+  let url: URL;
+  try {
+    url = resolveAttemptUrl(request);
+  } catch (error) {
+    options.endpointAttempt?.done({ attempted: false });
+    return [
+      { cause: error, fault: createPreflightFault("REQ_BUILD_FAILED", error) },
+      undefined,
+    ];
+  }
+  const { headers } = request;
   const queue = new AsyncQueue<TEvent>({ maxSize: MAX_QUEUE_SIZE });
   const closedDeferred = Promise.withResolvers<EventStreamCloseInfo>();
-  const openDeferred = Promise.withResolvers<EventStreamHandle<TEvent>>();
+  const openDeferred =
+    Promise.withResolvers<EventStreamStart<TEvent, HandshakeBody<TError>>>();
   const closeController = new AbortController();
-  const headers = new Headers(request.headers);
 
   // `connecting` until the first handshake is accepted or the stream fails before it, then `open` until `closed` settles.
   let phase: "connecting" | "open" | "closed" = "connecting";
@@ -337,8 +399,7 @@ export async function fetchEventStream<
   let lastEventIdDirty = false;
   // The latest handshake. While connecting, only the current attempt's, so a startup failure never reports the
   // response of a retried 503.
-  const latest: EventStreamFailureInfo<HandshakeBody<TError>> =
-    options.failure ?? {};
+  const latest: Handshake<HandshakeBody<TError>> = {};
   let attempt: Attempt = {
     endpoint: options.endpointAttempt,
     fetchStarted: false,
@@ -683,7 +744,7 @@ export async function fetchEventStream<
       retried = 0;
       if (phase === "connecting") {
         phase = "open";
-        openDeferred.resolve(handle);
+        openDeferred.resolve([null, handle]);
       }
 
       // A 2xx event stream without a body (204, 205 on Node.js and Bun) is an empty stream that ends with eof.
@@ -788,7 +849,7 @@ export async function fetchEventStream<
     settleAttempt();
     const closeCause: unknown = signal.reason;
     if (phase === "connecting") {
-      openDeferred.reject(stopped);
+      failStartup(stopped);
     } else {
       // A stop by the caller drops the events nobody has read, the same as close().
       queue.discard();
@@ -805,7 +866,7 @@ export async function fetchEventStream<
   function finishError(error: unknown, code: EventStreamFaultCode): void {
     settleAttempt();
     if (phase === "connecting") {
-      openDeferred.reject(error);
+      failStartup(error);
     } else {
       queue.fail(error);
     }
@@ -816,6 +877,13 @@ export async function fetchEventStream<
       kind: "error",
       reason: toCloseReason(error),
     });
+  }
+
+  function failStartup(cause: unknown): void {
+    openDeferred.resolve([
+      { cause, fault: startupFault(cause, latest), open: latest.open },
+      undefined,
+    ]);
   }
 
   function settleClosed(info: EventStreamCloseInfo): void {
@@ -839,9 +907,7 @@ function toTransformFailure(error: unknown, signal: AbortSignal): unknown {
       );
 }
 
-export function isEventStreamPickFault(
-  error: unknown,
-): error is PreflightFault {
+function isEventStreamPickFault(error: unknown): error is PreflightFault {
   if (!(error instanceof Error) || !("code" in error)) {
     return false;
   }
