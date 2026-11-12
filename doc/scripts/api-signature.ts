@@ -251,17 +251,6 @@ export function facadeSignature(signature: string, member: string): string {
   return signature.replace(/^function\s+[A-Za-z0-9_]+/, `function ${member}`);
 }
 
-/** An unannotated `as const` object has no useful signature; its members do. */
-export function suppressObjectSignature(
-  annotated: boolean,
-  initializer: { kind: number } | undefined,
-  objectLiteralKind: number,
-): boolean {
-  if (annotated) return false;
-  if (!initializer) return false;
-  return initializer.kind === objectLiteralKind;
-}
-
 /** Append a short inferred type only when the declaration has no annotation. */
 export function withInferredType(
   signature: string,
@@ -273,18 +262,6 @@ export function withInferredType(
   const suffix = inferredTypeSuffix(inferred);
   if (!suffix) return cleaned;
   return `${cleaned.slice(0, -1)}${suffix};`;
-}
-
-export function typeParameterClause(
-  fileText: string,
-  params: { pos: number; end: number } | undefined,
-): string {
-  if (!params) return "";
-  const text = fileText.slice(params.pos, params.end);
-  const start = text.indexOf("<");
-  const end = text.lastIndexOf(">");
-  if (start < 0 || end <= start) return "";
-  return text.slice(start + 1, end).trim();
 }
 
 export function initializerEnd(node: {

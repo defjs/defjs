@@ -3,15 +3,11 @@ import {
   catalogKind,
   defined,
   expandParameterList,
-  implementationNode,
   isBindingPattern,
   lookupDescription,
   memberDescription,
   namedParameterType,
-  nestedExpression,
-  overloadNodes,
   parameterRequired,
-  parameterTypeText,
   requireNode,
   formatJsonDocument,
   preferredParameterType,
@@ -22,8 +18,6 @@ import {
   storedEntry,
   typeOnlyExport,
   visibleMembers,
-  zipOverloads,
-  zipParameters,
 } from "./api-model";
 import type { ApiReferenceEntry, StoredEntry } from "./api-model";
 
@@ -71,29 +65,11 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
   expect(typeOnlyExport([])).toBe(false);
   expect(typeOnlyExport([true, true])).toBe(true);
   expect(typeOnlyExport([true, false])).toBe(false);
-  expect(
-    overloadNodes(
-      [{ kind: 1, body: {} }, { kind: 2 }, { kind: 2, body: {} }],
-      2,
-    ),
-  ).toEqual([{ kind: 2 }]);
-  expect(overloadNodes([{ kind: 2, body: {} }], 2)).toEqual([
-    { kind: 2, body: {} },
-  ]);
-  expect(overloadNodes([], 2)).toEqual([]);
-  expect(
-    implementationNode([{ kind: 1 }, { kind: 3 }, { kind: 2 }], 1, 3).kind,
-  ).toBe(2);
-  expect(() => implementationNode([{ kind: 1 }], 1, 3)).toThrow(
-    "implementation declaration",
-  );
   const isNamed = (node: { name?: string }): node is { name: string } =>
     node.name !== undefined;
   const named = { name: "x" };
   expect(requireNode(named, isNamed, "not named")).toBe(named);
   expect(() => requireNode({}, isNamed, "not named")).toThrow("not named");
-  expect(parameterTypeText("  ")).toBe("unknown");
-  expect(parameterTypeText(" ClientOption[] ")).toBe("ClientOption[]");
   expect(() => stableMemberName("__@CLIENT@1")).toThrow("unstable member name");
   expect(() => stableMemberName("__#CLIENT")).toThrow("unstable member name");
   expect(stableMemberName("[CLIENT]")).toBe("[CLIENT]");
@@ -154,85 +130,10 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
       new Map([["Empty", []]]),
     ),
   ).toThrow("binding parameter type has no member table: Empty");
-  expect(nestedExpression(undefined, [1])).toBeUndefined();
-  expect(nestedExpression({ kind: 2 }, [1])).toEqual({ kind: 2 });
-  const wrapped = { kind: 1, expression: { kind: 2 } };
-  expect(nestedExpression(wrapped, [1])).toEqual({ kind: 2 });
-  expect(nestedExpression({ kind: 1 }, [1])).toBeUndefined();
   expect(
     storedEntry({ ...row("id"), typeHref: undefined }).typeHref,
   ).toBeUndefined();
   expect(storedEntry({ ...row("id"), typeHref: "#id" }).typeHref).toBe("#id");
-  expect(
-    zipParameters(
-      [
-        {
-          name: "...options",
-          required: false,
-          typeText: "T[]",
-          description: "opts",
-        },
-      ],
-      [],
-    ),
-  ).toEqual([
-    {
-      name: "...options",
-      description: "opts",
-      type: "T[]",
-      simplifiedType: "T[]",
-      required: false,
-      deprecated: false,
-      tags: [],
-    },
-  ]);
-  const generated = {
-    name: "p0",
-    description: "from fumadocs",
-    type: "T[]",
-    simplifiedType: "T[]",
-    required: true,
-    deprecated: false,
-    tags: [],
-  };
-  expect(
-    defined(
-      zipParameters(
-        [
-          {
-            name: "...options",
-            required: false,
-            typeText: "T[]",
-            description: "opts",
-          },
-        ],
-        [generated],
-      )[0],
-      "generated parameter",
-    ).description,
-  ).toBe("from fumadocs");
-  expect(
-    defined(
-      zipParameters(
-        [
-          {
-            name: "value",
-            required: true,
-            typeText: "unknown",
-            description: "raw",
-          },
-        ],
-        [{ ...generated, description: " " }],
-      )[0],
-      "raw parameter",
-    ).description,
-  ).toBe("raw");
-  expect(() => zipOverloads(["a"], [], [])).toThrow(
-    "signature/parameter mismatch",
-  );
-  expect(zipOverloads(["function f(): void;"], [[]], ["A value."])).toEqual([
-    { signature: "function f(): void;", parameters: [], returns: ["A value."] },
-  ]);
 });
 
 test("serialized reference JSON uses a fixed field order", () => {
@@ -323,31 +224,6 @@ test("parameter types prefer the declaration when the generated form is a helper
   expect(preferredParameterType("unknown", "string")).toBe("string");
   expect(preferredParameterType("", "string")).toBe("string");
   expect(preferredParameterType("string", "string")).toBe("string");
-  const generated = {
-    name: "p0",
-    description: "from fumadocs",
-    type: "{ output?: never }",
-    simplifiedType: "expanded",
-    required: true,
-    deprecated: false,
-    tags: [],
-  };
-  const expanded = defined(
-    zipParameters(
-      [
-        {
-          name: "definition",
-          required: true,
-          typeText: "Declared",
-          description: "",
-        },
-      ],
-      [generated],
-    )[0],
-    "expanded parameter",
-  );
-  expect(expanded.type).toBe("Declared");
-  expect(expanded.simplifiedType).toBe("Declared");
 });
 
 test("member tables drop tuple indexes, undocumented symbols and internal rows", () => {

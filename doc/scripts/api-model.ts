@@ -39,13 +39,6 @@ export interface ApiReferenceEntry {
   overloads: ApiOverload[];
 }
 
-export interface ParamDraft {
-  name: string;
-  required: boolean;
-  typeText: string;
-  description: string;
-}
-
 export function defined<T>(value: T | undefined, label: string): T {
   if (value === undefined) throw new Error(`missing ${label}`);
   return value;
@@ -75,35 +68,6 @@ export function typeOnlyExport(flags: readonly boolean[]): boolean {
   return flags.every((flag) => flag);
 }
 
-export function overloadNodes<T extends { kind: number; body?: unknown }>(
-  nodes: readonly T[],
-  functionKind: number,
-): T[] {
-  const functions = nodes.filter((node) => node.kind === functionKind);
-  const heads = functions.filter((node) => node.body === undefined);
-  if (heads.length > 0) return heads;
-  return functions.slice(0, 1);
-}
-
-export function implementationNode<T extends { kind: number }>(
-  nodes: readonly T[],
-  specifierKind: number,
-  assignmentKind: number,
-): T {
-  return defined(
-    nodes.find(
-      (node) => node.kind !== specifierKind && node.kind !== assignmentKind,
-    ),
-    "implementation declaration",
-  );
-}
-
-export function parameterTypeText(typeText: string | undefined): string {
-  const text = typeText?.trim();
-  if (!text) return "unknown";
-  return text;
-}
-
 export function stableMemberName(name: string): string {
   if (/^__[@#]/.test(name)) throw new Error(`unstable member name: ${name}`);
   return name;
@@ -124,25 +88,6 @@ export function memberDescription(
   const table = fromTable.trim();
   if (table) return table;
   return fromTarget.trim();
-}
-
-export interface WrappedNode {
-  kind: number;
-  expression?: WrappedNode | undefined;
-}
-
-/** Unwraps the listed wrapper kinds; wrapper nodes expose the node they wrap as `expression`. */
-export function nestedExpression(
-  node: WrappedNode | undefined,
-  wrappers: readonly number[],
-): WrappedNode | undefined {
-  let current = node;
-  while (current && wrappers.includes(current.kind)) {
-    const inner = current.expression;
-    if (!inner) return undefined;
-    current = inner;
-  }
-  return current;
 }
 
 /** Narrows a node with a type guard, failing with `label` when the guard rejects it. */
@@ -192,36 +137,6 @@ export function preferredParameterType(
   return generated;
 }
 
-export function zipParameters(
-  drafts: readonly ParamDraft[],
-  generated: readonly StoredEntry[],
-): StoredEntry[] {
-  if (drafts.length !== generated.length)
-    return drafts.map((draft) => ({
-      name: draft.name,
-      description: draft.description,
-      type: draft.typeText,
-      simplifiedType: draft.typeText,
-      required: draft.required,
-      deprecated: false,
-      tags: [],
-    }));
-  return drafts.map((draft, index) => {
-    const stored = storedEntry(defined(generated[index], "parameter entry"));
-    const type = preferredParameterType(draft.typeText, stored.type);
-    return {
-      ...stored,
-      name: draft.name,
-      type,
-      simplifiedType: type === stored.type ? stored.simplifiedType : type,
-      required: draft.required,
-      description: stored.description.trim()
-        ? stored.description
-        : draft.description,
-    };
-  });
-}
-
 export function isBindingPattern(name: string): boolean {
   return name.startsWith("{") || name.startsWith("[");
 }
@@ -268,22 +183,6 @@ export function expandBindingParameters(entries: ApiReferenceEntry[]): void {
     for (const overload of entry.overloads)
       overload.parameters = expandParameterList(overload.parameters, tables);
   }
-}
-
-export function zipOverloads(
-  signatures: readonly string[],
-  parameterSets: readonly StoredEntry[][],
-  returns: readonly string[],
-): ApiOverload[] {
-  if (signatures.length !== parameterSets.length)
-    throw new Error(
-      `signature/parameter mismatch ${signatures.length} vs ${parameterSets.length}`,
-    );
-  return signatures.map((signature, index) => ({
-    signature,
-    parameters: defined(parameterSets[index], "overload parameters"),
-    returns: [...returns],
-  }));
 }
 
 /** Fixed key order so two generations stringify to the same bytes. */

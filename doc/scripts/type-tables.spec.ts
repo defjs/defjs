@@ -58,6 +58,7 @@ async function fixtureProgram(): Promise<{
   api: API;
   file: string;
   directory: string;
+  packages: string;
   program: Awaited<ReturnType<API["createProgram"]>>;
 }> {
   const directory = tempDirectory("defjs-type-tables");
@@ -72,14 +73,20 @@ async function fixtureProgram(): Promise<{
     target: 9,
     types: [],
   });
-  return { api, directory, file, program };
+  return { api, directory, file, packages: `${directory}/packages/`, program };
 }
 
 test("type tables cover aliases, unions, tuples, arrays, functions, and tags", async () => {
-  const { api, directory, file, program } = await fixtureProgram();
+  const { api, directory, file, packages, program } = await fixtureProgram();
   try {
     const checker = program.getProject().checker;
-    const entries = await tableEntries(file, "Fixture", program, checker);
+    const entries = await tableEntries(
+      file,
+      "Fixture",
+      program,
+      checker,
+      packages,
+    );
     const byName = new Map(entries.map((entry) => [entry.name, entry]));
 
     expect([...byName.keys()]).toEqual([
@@ -127,17 +134,35 @@ test("type tables cover aliases, unions, tuples, arrays, functions, and tags", a
 });
 
 test("class tables skip private members and alias exports resolve", async () => {
-  const { api, directory, file, program } = await fixtureProgram();
+  const { api, directory, file, packages, program } = await fixtureProgram();
   try {
     const checker = program.getProject().checker;
-    const entries = await tableEntries(file, "Klass", program, checker);
+    const entries = await tableEntries(
+      file,
+      "Klass",
+      program,
+      checker,
+      packages,
+    );
     expect(entries.map((entry) => entry.name)).toEqual(["visible"]);
-    const renamed = await tableEntries(file, "Renamed", program, checker);
+    const renamed = await tableEntries(
+      file,
+      "Renamed",
+      program,
+      checker,
+      packages,
+    );
     expect(renamed.map((entry) => entry.name)).toContain("text");
-    const callable = await tableEntries(file, "Callable", program, checker);
+    const callable = await tableEntries(
+      file,
+      "Callable",
+      program,
+      checker,
+      packages,
+    );
     expect(callable[0]?.simplifiedType).toBe("function");
     await expect(
-      tableEntries(file, "Missing", program, checker),
+      tableEntries(file, "Missing", program, checker, packages),
     ).rejects.toThrow("no export Missing");
   } finally {
     await api.close();

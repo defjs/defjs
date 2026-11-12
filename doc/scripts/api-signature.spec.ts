@@ -6,7 +6,6 @@ import {
   parameterName,
   presentClass,
   readableBinding,
-  suppressObjectSignature,
   annotatedTypeText,
   inferredTypeSuffix,
   initializerEnd,
@@ -15,7 +14,6 @@ import {
   hideDefaultExpressions,
   omitInternalMembers,
   stripInnerDocs,
-  typeParameterClause,
   withInferredType,
 } from "./api-signature";
 
@@ -47,10 +45,6 @@ test("signature cleanup keeps the declaration and drops the body marker", () => 
       "enum",
     ),
   ).toBe("function enum<const T>(\n  value: T,\n): Struct<T, T>;");
-  expect(suppressObjectSignature(true, { kind: 1 }, 1)).toBe(false);
-  expect(suppressObjectSignature(false, undefined, 1)).toBe(false);
-  expect(suppressObjectSignature(false, { kind: 2 }, 1)).toBe(false);
-  expect(suppressObjectSignature(false, { kind: 1 }, 1)).toBe(true);
   expect(
     stripInnerDocs("type Foo = {\n  /** hidden */\n  id: string;\n}"),
   ).toBe("type Foo = {\n\n  id: string;\n}");
@@ -86,11 +80,6 @@ test("a short inferred type is appended only when the source has no annotation",
   expect(inferredTypeSuffix("a\nb")).toBe("");
   expect(inferredTypeSuffix("x".repeat(81))).toBe("");
   expect(inferredTypeSuffix("Error")).toBe(": Error");
-  expect(typeParameterClause("ignored", undefined)).toBe("");
-  expect(typeParameterClause("function f", { pos: 0, end: 10 })).toBe("");
-  expect(typeParameterClause(" < T extends Foo > ", { pos: 0, end: 18 })).toBe(
-    "T extends Foo",
-  );
   expect(initializerEnd({ initializer: { getStart: () => 8 }, end: 20 })).toBe(
     8,
   );

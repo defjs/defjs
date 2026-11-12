@@ -2971,7 +2971,7 @@
         "name": "options",
         "description": "",
         "type": "TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>",
-        "simplifiedType": "TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>",
+        "simplifiedType": "RequiredDiscriminatorOptions<TDiscriminator, TOptions> & TOptions",
         "required": true,
         "deprecated": false,
         "tags": []
@@ -2994,7 +2994,7 @@
             "name": "options",
             "description": "",
             "type": "TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>",
-            "simplifiedType": "TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>",
+            "simplifiedType": "RequiredDiscriminatorOptions<TDiscriminator, TOptions> & TOptions",
             "required": true,
             "deprecated": false,
             "tags": []
@@ -6730,8 +6730,8 @@
       {
         "name": "definition",
         "description": "SSE contract (path, events, optional input and limits).",
-        "type": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >",
-        "simplifiedType": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >",
+        "type": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> & EventStreamErrorField<TError> & { input?: TInput; method?: M; path: P; } & BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>>",
+        "simplifiedType": "BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>> & object & EventStreamErrorField<TError> & Omit<object, union>",
         "required": true,
         "deprecated": false,
         "tags": []
@@ -6744,8 +6744,8 @@
           {
             "name": "definition",
             "description": "SSE contract (path, events, optional input and limits).",
-            "type": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >",
-            "simplifiedType": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >",
+            "type": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> & EventStreamErrorField<TError> & { input?: TInput; method?: M; path: P; } & BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>>",
+            "simplifiedType": "BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>> & object & EventStreamErrorField<TError> & Omit<object, union>",
             "required": true,
             "deprecated": false,
             "tags": []
@@ -7230,8 +7230,8 @@
       {
         "name": "definition",
         "description": "WebSocket contract (path, structs, queue limits, optional input).",
-        "type": "Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, \"path\"> & { input?: TInput; path: P; } & { builder?: (() => WebSocketRequestShape<P>) | undefined; }",
-        "simplifiedType": "object & Omit<object, \"path\">",
+        "type": "Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, \"path\"> & { input?: TInput; path: P; } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>",
+        "simplifiedType": "BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>> & object & Omit<object, \"path\">",
         "required": true,
         "deprecated": false,
         "tags": []
@@ -7244,8 +7244,8 @@
           {
             "name": "definition",
             "description": "WebSocket contract (path, structs, queue limits, optional input).",
-            "type": "Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, \"path\"> & { input?: TInput; path: P; } & { builder?: (() => WebSocketRequestShape<P>) | undefined; }",
-            "simplifiedType": "object & Omit<object, \"path\">",
+            "type": "Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, \"path\"> & { input?: TInput; path: P; } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>",
+            "simplifiedType": "BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>> & object & Omit<object, \"path\">",
             "required": true,
             "deprecated": false,
             "tags": []
@@ -8113,7 +8113,7 @@
     "parameters": [
       {
         "name": "key",
-        "description": "Injection key; use the same object with `app.provide` or `provide`.\nDefaults to `HTTP_CLIENT`, as provided by createClientPlugin.",
+        "description": "Injection key; use the same object with `app.provide` or `provide`.\nDefaults to `HTTP_CLIENT`, as provided by {@link createClientPlugin}.",
         "type": "InjectionKey<DerivableClient>",
         "simplifiedType": "InjectionKey<function>",
         "required": false,
@@ -8127,7 +8127,7 @@
         "parameters": [
           {
             "name": "key",
-            "description": "Injection key; use the same object with `app.provide` or `provide`.\nDefaults to `HTTP_CLIENT`, as provided by createClientPlugin.",
+            "description": "Injection key; use the same object with `app.provide` or `provide`.\nDefaults to `HTTP_CLIENT`, as provided by {@link createClientPlugin}.",
             "type": "InjectionKey<DerivableClient>",
             "simplifiedType": "InjectionKey<function>",
             "required": false,

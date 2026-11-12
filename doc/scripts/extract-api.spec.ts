@@ -12,10 +12,7 @@ import {
   functionTypeOf,
   specifierIsTypeOnly,
   syntaxOffender,
-  resolveAlias,
-  syntheticQuery,
   typeAliasHasMembers,
-  typeTableQuery,
   writeExtractedApi,
 } from "./extract-api";
 import { SyntaxKind } from "typescript/ast";
@@ -119,24 +116,6 @@ test("function types unwrap parentheses and ignore other types", () => {
     kind: SyntaxKind.ConstructorType,
   });
   expect(functionTypeOf({ kind: SyntaxKind.TypeLiteral })).toBeUndefined();
-});
-
-test("empty parameter lists, hidden tables, and non-aliases stay inert", async () => {
-  const build = () => "built";
-  expect(syntheticQuery(0, build)).toBe("");
-  expect(syntheticQuery(1, build)).toBe("built");
-  expect(typeTableQuery(false, "a.ts", "Client")).toBeNull();
-  expect(typeTableQuery(true, "a.ts", "Client")).toEqual({
-    file: "a.ts",
-    query: "Client",
-  });
-  const plain = { flags: 0 };
-  const resolve = (symbol: { flags: number }) =>
-    Promise.resolve({
-      flags: symbol.flags + 1,
-    });
-  expect(await resolveAlias(plain, 1, resolve)).toBe(plain);
-  expect(await resolveAlias({ flags: 1 }, 1, resolve)).toEqual({ flags: 2 });
 });
 
 test("extracted JSON is written as catalog, reference and summary files", async () => {

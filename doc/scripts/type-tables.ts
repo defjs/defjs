@@ -6,8 +6,22 @@ import {
   TypeFormatFlags,
 } from "typescript/async";
 import type { Checker, Program, Symbol, Type } from "typescript/async";
-import type { Node } from "typescript/ast";
-import { defined, type StoredEntry } from "./api-model";
+import {
+  isMethodDeclaration,
+  isMethodSignatureDeclaration,
+  isPropertyAssignment,
+  isPropertyDeclaration,
+  isPropertySignatureDeclaration,
+} from "typescript/ast";
+import type {
+  MethodDeclaration,
+  MethodSignatureDeclaration,
+  Node,
+  PropertyAssignment,
+  PropertyDeclaration,
+  PropertySignatureDeclaration,
+} from "typescript/ast";
+import { defined, requireNode, type StoredEntry } from "./api-model";
 
 const PRINT_FLAGS =
   TypeFormatFlags.UseAliasDefinedOutsideCurrentScope |
@@ -75,47 +89,35 @@ function isPrivateName(name: string): boolean {
   return name.startsWith("#") || name.startsWith("__#");
 }
 
-function declarationHandle(symbol: Symbol) {
-  return symbol.valueDeclaration ?? symbol.declarations[0];
+/** The coarse and the printed type of a documented position, as the member and parameter tables show them. */
+export async function typeColumns(
+  type: Type,
+  checker: Checker,
+  location: Node,
+  optional: boolean,
+): Promise<{ type: string; simplifiedType: string }> {
+  return {
+    type: await checker.typeToString(type, location, PRINT_FLAGS),
+    simplifiedType: await simpleForm(type, checker, location, optional),
+  };
 }
 
-async function declarationName(symbol: Symbol): Promise<string> {
-  const handle = declarationHandle(symbol);
-  /* istanbul ignore if -- every resolved symbol has a declaration handle */
-  if (!handle) return symbol.name;
-  const declaration: unknown = await handle.resolve();
-  /* istanbul ignore if -- resolved TypeScript declarations are named objects */
-  if (
-    typeof declaration !== "object" ||
-    declaration === null ||
-    !("name" in declaration)
-  ) {
-    return symbol.name;
-  }
-  const name = declaration.name;
-  /* istanbul ignore if -- TypeScript names expose getText */
-  if (
-    typeof name !== "object" ||
-    name === null ||
-    !("getText" in name) ||
-    typeof name.getText !== "function"
-  ) {
-    return symbol.name;
-  }
-  return String(Reflect.apply(name.getText, name, []));
-}
-
-async function declaredInPackages(symbol: Symbol): Promise<boolean> {
-  const handle = declarationHandle(symbol);
-  /* istanbul ignore if -- every resolved symbol has a declaration handle */
-  if (!handle) return false;
-  const declaration = await handle.resolve();
-  /* istanbul ignore if -- checked declarations always resolve */
-  if (!declaration) return false;
-  return declaration
-    .getSourceFile()
-    .fileName.replaceAll("\\", "/")
-    .includes("/packages/");
+/** Declaration kinds that a documented member can have in the packages. */
+function isNamedMember(
+  node: Node,
+): node is
+  | PropertyAssignment
+  | PropertySignatureDeclaration
+  | PropertyDeclaration
+  | MethodSignatureDeclaration
+  | MethodDeclaration {
+  return (
+    isPropertyAssignment(node) ||
+    isPropertySignatureDeclaration(node) ||
+    isPropertyDeclaration(node) ||
+    isMethodSignatureDeclaration(node) ||
+    isMethodDeclaration(node)
+  );
 }
 
 async function docEntry(
@@ -123,7 +125,15 @@ async function docEntry(
   owner: Type,
   location: Node,
   checker: Checker,
+  packagesRoot: string,
 ): Promise<StoredEntry | undefined> {
+  const declaration = defined(
+    await (symbol.valueDeclaration ?? symbol.declarations[0])?.resolve(),
+    `${symbol.name} declaration`,
+  );
+  const file = declaration.getSourceFile().fileName.replaceAll("\\", "/");
+  if (!file.startsWith(packagesRoot) || file.includes("/node_modules/"))
+    return undefined;
   if (
     owner.isObjectType() &&
     (owner.objectFlags & ObjectFlags.Class) !== 0 &&
@@ -131,18 +141,25 @@ async function docEntry(
   ) {
     return undefined;
   }
-  const type = await checker.getTypeOfSymbolAtLocation(symbol, location);
-  const optional = (symbol.flags & SymbolFlags.Optional) !== 0;
   const tags: { name: string; text: string }[] = [];
   for (const tag of await checker.getJsDocTagsOfSymbol(symbol)) {
     if (tag.name === "internal") return undefined;
     tags.push({ name: tag.name, text: tag.text ?? "" });
   }
+  const optional = (symbol.flags & SymbolFlags.Optional) !== 0;
   const entry: StoredEntry = {
-    name: symbol.name,
+    name: requireNode(
+      declaration,
+      isNamedMember,
+      `unsupported member declaration of ${symbol.name}`,
+    ).name.getText(),
     description: await checker.getDocumentationCommentOfSymbol(symbol),
-    type: await checker.typeToString(type, location, PRINT_FLAGS),
-    simplifiedType: await simpleForm(type, checker, location, optional),
+    ...(await typeColumns(
+      await checker.getTypeOfSymbolAtLocation(symbol, location),
+      checker,
+      location,
+      optional,
+    )),
     required: !optional,
     deprecated: false,
     tags,
@@ -169,17 +186,19 @@ async function docEntry(
         break;
     }
   }
-  const name = await declarationName(symbol);
-  entry.name = (await declaredInPackages(symbol)) ? name : "";
   return entry;
 }
 
-/** Mirrors fumadocs-typescript's per-export entry generation for one file/name pair. */
+/**
+ * Mirrors fumadocs-typescript's per-export entry generation for one file/name pair.
+ * Only members declared under `packagesRoot` are listed.
+ */
 export async function tableEntries(
   file: string,
   name: string,
   program: Program,
   checker: Checker,
+  packagesRoot: string,
 ): Promise<StoredEntry[]> {
   const sourceFile = defined(await program.getSourceFile(file), file);
   const moduleSymbol = defined(
@@ -192,25 +211,22 @@ export async function tableEntries(
       (exported.flags & SymbolFlags.Alias) !== 0
         ? await checker.getAliasedSymbol(exported)
         : exported;
-    const handle = symbol.declarations[0];
-    /* istanbul ignore if -- exported symbols have declarations */
-    if (!handle) return [];
-    const declaration = await handle.resolve();
-    /* istanbul ignore if -- checked declarations always resolve */
-    if (!declaration) return [];
+    const declaration = defined(
+      await symbol.declarations[0]?.resolve(),
+      `${name} declaration`,
+    );
     const type = await checker.getTypeAtLocation(declaration);
     const entries: StoredEntry[] = [];
     for (const property of await checker.getPropertiesOfType(type)) {
-      const entry = await docEntry(property, type, declaration, checker);
-      if (entry?.name) entries.push(entry);
+      const entry = await docEntry(
+        property,
+        type,
+        declaration,
+        checker,
+        packagesRoot,
+      );
+      if (entry) entries.push(entry);
     }
-    entries.sort((left, right) => {
-      const leftIndex = /^p(\d+)$/.exec(left.name);
-      const rightIndex = /^p(\d+)$/.exec(right.name);
-      if (leftIndex && rightIndex)
-        return Number(leftIndex[1]) - Number(rightIndex[1]);
-      return 0;
-    });
     return entries;
   }
   throw new Error(`no export ${name} in ${file}`);
