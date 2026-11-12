@@ -36,27 +36,6 @@ interface CatalogCache {
 
 let catalogCache: CatalogCache | undefined;
 
-function isOverload(value: unknown): value is { signature: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "signature" in value &&
-    typeof value.signature === "string"
-  );
-}
-
-function isSignatureEntry(value: unknown): value is SignatureEntry {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "name" in value &&
-    typeof value.name === "string" &&
-    "overloads" in value &&
-    Array.isArray(value.overloads) &&
-    value.overloads.every(isOverload)
-  );
-}
-
 /** Names are unique. An empty signature list cannot be rendered. */
 export function signatureCatalog(
   entries: readonly SignatureEntry[],
@@ -84,24 +63,22 @@ export function apiReferenceFile(cwd = `${import.meta.dirname}/../..`): string {
 }
 
 async function loadSignatureCatalog(path: string): Promise<SignatureCatalog> {
-  let parsed: unknown;
+  let entries: SignatureEntry[];
   try {
-    parsed = await Bun.file(path).json();
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: extract-api writes this file from entries of this shape and exports.spec.ts regenerates and compares it, while Bun types `json()` as `Promise<any>`. A static JSON import is typed but is read once at config load, so a re-extracted file would not reach a running dev server.
+    entries = (await Bun.file(path).json()) as SignatureEntry[];
   } catch (error) {
     throw new Error(`Cannot read API signatures from ${path}`, {
       cause: error,
     });
   }
-  if (!Array.isArray(parsed))
-    throw new Error(`API reference is not a list: ${path}`);
-  if (!parsed.every(isSignatureEntry))
-    throw new Error(`API reference has a malformed entry: ${path}`);
-  return signatureCatalog(parsed);
+  return signatureCatalog(entries);
 }
 
 /**
  * Reads the catalog from disk so a rebuilt page sees a changed reference file.
  * The read is cached by modification time, so pages compiled together share it.
+ * A failed read is dropped from the cache, so the next page reads the file again.
  */
 export function readSignatureCatalog(path: string): Promise<SignatureCatalog> {
   const mtimeMs = Bun.file(path).lastModified;
@@ -109,6 +86,9 @@ export function readSignatureCatalog(path: string): Promise<SignatureCatalog> {
     return catalogCache.catalog;
   const catalog = loadSignatureCatalog(path);
   catalogCache = { path, mtimeMs, catalog };
+  catalog.catch(() => {
+    catalogCache = undefined;
+  });
   return catalog;
 }
 

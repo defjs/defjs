@@ -301,24 +301,21 @@ test("catalog lookup follows the documentation workspace or the repository root"
       "type FromDoc = 2;",
     ]);
     // One file per content, for the same reason.
-    const notList = `${workspace}/not-a-list.json`;
-    await Bun.write(notList, "{}");
-    await expect(readSignatureCatalog(notList)).rejects.toThrow(
-      "API reference is not a list",
-    );
-    const malformed = `${workspace}/malformed-entry.json`;
-    await Bun.write(
-      malformed,
-      JSON.stringify([{ name: "Broken", overloads: [{ signature: 1 }] }]),
-    );
-    await expect(readSignatureCatalog(malformed)).rejects.toThrow(
-      `API reference has a malformed entry: ${malformed}`,
-    );
     const notJson = `${workspace}/not-json.json`;
     await Bun.write(notJson, "not json");
     await expect(readSignatureCatalog(notJson)).rejects.toThrow(
       `Cannot read API signatures from ${notJson}`,
     );
+    // A failed read is not cached: the same file is read again once it is fixed.
+    await Bun.write(
+      notJson,
+      JSON.stringify([
+        { name: "Fixed", overloads: [{ signature: "type Fixed = 3;" }] },
+      ]),
+    );
+    expect((await readSignatureCatalog(notJson)).get("Fixed")).toEqual([
+      "type Fixed = 3;",
+    ]);
   } finally {
     Bun.spawnSync(["rm", "-rf", workspace]);
   }
