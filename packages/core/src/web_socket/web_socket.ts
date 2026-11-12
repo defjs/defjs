@@ -721,7 +721,8 @@ async function runWebSocketCommand<
           let generation = 0;
           let activeAttempt: ActiveSocketAttempt | undefined;
           let manualClose: ManualSocketCloseReason | undefined;
-          const messagePumpTasks = new Set<Promise<void>>();
+          // The Blob read that is still running when the latest attempt settles. Disposal waits for it.
+          let drainTask: Promise<void> | undefined;
           let disposeTask: Promise<void> | undefined;
           let disposeTimer: ReturnType<typeof setTimeout> | undefined;
           let disposeTimeout: DOMException | undefined;
@@ -1058,12 +1059,11 @@ async function runWebSocketCommand<
                 let closeOutcome: SocketLifecycleOutcome | undefined;
                 let closeObserved = false;
                 let errorCloseTimer: ReturnType<typeof setTimeout> | undefined;
-                let messagePumpRunning = false;
-                const messageController = new AbortController();
-                const messageSignal = mergeAbortSignals(sessionSignal, [
-                  messageController.signal,
-                ]);
-                const rawMessages: MessageEvent[] = [];
+                // Aborts the Blob read in flight. Every way an attempt ends passes through `cleanup`.
+                const readController = new AbortController();
+                // Frames that arrived behind a Blob read, in arrival order. Only their data is kept.
+                const backlog: unknown[] = [];
+                let draining = false;
                 let settled = false;
                 let cleanedUp = false;
 
@@ -1096,9 +1096,8 @@ async function runWebSocketCommand<
                   if (cleanedUp) return;
                   cleanedUp = true;
                   stopHeartbeat(sessionController);
-                  messageController.abort();
-                  releaseAbortSignal(messageSignal);
-                  rawMessages.length = 0;
+                  readController.abort();
+                  backlog.length = 0;
                   if (
                     !keepCurrentSocket &&
                     sessionController.currentSocket === socket
@@ -1208,42 +1207,22 @@ async function runWebSocketCommand<
                   }
                 };
 
-                const handleMessage = async (event: MessageEvent) => {
-                  /* istanbul ignore if -- @preserve defensive: stale physical listeners are removed before logical settlement */
-                  if (finished || sessionController.currentSocket !== socket) {
-                    return;
-                  }
-                  let transformed: WebSocketIncomingData<TIncoming> | undefined;
-                  try {
-                    messageSignal.throwIfAborted();
-                    // Text and byte frames decode synchronously. Only a Blob read waits, so only it races the signal.
-                    const decoded = decodeWebSocketMessage(
-                      endpoint.incoming,
-                      event.data,
-                    );
-                    transformed = isPromise(decoded)
-                      ? await awaitWithSignal(() => decoded, messageSignal)
-                      : decoded;
-                  } catch (error) {
-                    if (finished || messageController.signal.aborted) {
-                      return;
-                    }
-                    emitRuntimeError(state, error);
-                    return;
-                  }
+                const deliver = (
+                  decoded: WebSocketIncomingData<TIncoming> | undefined,
+                ) => {
                   // After close() the caller reads nothing more, so a frame that arrives during the closing handshake is dropped.
                   if (
                     finished ||
                     manualClose !== undefined ||
                     sessionController.currentSocket !== socket ||
-                    typeof transformed === "undefined"
+                    typeof decoded === "undefined"
                   ) {
                     return;
                   }
 
                   try {
                     const heartbeat = sessionController.heartbeat;
-                    const isAck = heartbeat?.isAck?.(transformed) ?? false;
+                    const isAck = heartbeat?.isAck?.(decoded) ?? false;
                     if (
                       finished ||
                       sessionController.currentSocket !== socket ||
@@ -1255,7 +1234,7 @@ async function runWebSocketCommand<
                       heartbeat.markAck();
                       return;
                     }
-                    incomingQueue.push(transformed);
+                    incomingQueue.push(decoded);
                   } catch (cause) {
                     if (!finished) {
                       finish({ cause, kind: "error" });
@@ -1263,32 +1242,59 @@ async function runWebSocketCommand<
                   }
                 };
 
-                const pumpMessages = async () => {
-                  if (messagePumpRunning) {
-                    return;
-                  }
-                  messagePumpRunning = true;
+                // Text and byte frames decode and deliver at once. Only a Blob has to be read first, so that read is returned.
+                const receiveFrame = (
+                  data: unknown,
+                ):
+                  | Promise<WebSocketIncomingData<TIncoming> | undefined>
+                  | undefined => {
+                  let decoded;
                   try {
+                    decoded = decodeWebSocketMessage(endpoint.incoming, data);
+                  } catch (error) {
+                    emitRuntimeError(state, error);
+                    return undefined;
+                  }
+                  if (isPromise(decoded)) {
+                    return decoded;
+                  }
+                  deliver(decoded);
+                  return undefined;
+                };
+
+                // Reads a Blob, then the frames that arrived behind it, in order. Only the Blob read races the signal.
+                const drain = async (
+                  blob: Promise<WebSocketIncomingData<TIncoming> | undefined>,
+                ): Promise<void> => {
+                  let reading: typeof blob | undefined = blob;
+                  while (reading !== undefined) {
+                    try {
+                      const read = reading;
+                      deliver(
+                        await awaitWithSignal(
+                          () => read,
+                          readController.signal,
+                        ),
+                      );
+                    } catch (error) {
+                      if (finished || readController.signal.aborted) {
+                        break;
+                      }
+                      emitRuntimeError(state, error);
+                    }
+                    reading = undefined;
                     // The length guard stays first: shifting an empty queue measured twice as slow.
-                    let event: MessageEvent | undefined;
                     while (
+                      reading === undefined &&
                       !finished &&
-                      rawMessages.length > 0 &&
-                      (event = rawMessages.shift()) !== undefined
+                      backlog.length > 0
                     ) {
-                      await handleMessage(event);
+                      reading = receiveFrame(backlog.shift());
                     }
-                    if (!finished && closeOutcome && rawMessages.length === 0) {
-                      settleAttempt(closeOutcome);
-                    }
-                  } catch (cause) {
-                    /* istanbul ignore next -- @preserve defensive: handleMessage and settleAttempt contain their own failure boundaries */
-                    finish({ cause, kind: "error" });
-                  } finally {
-                    messagePumpRunning = false;
-                    if (finished) {
-                      rawMessages.length = 0;
-                    }
+                  }
+                  draining = false;
+                  if (!finished && closeOutcome) {
+                    settleAttempt(closeOutcome);
                   }
                 };
 
@@ -1301,12 +1307,15 @@ async function runWebSocketCommand<
                   ) {
                     return;
                   }
-                  rawMessages.push(event);
-                  const messagePumpTask = pumpMessages();
-                  messagePumpTasks.add(messagePumpTask);
-                  void messagePumpTask.finally(() => {
-                    messagePumpTasks.delete(messagePumpTask);
-                  });
+                  if (draining) {
+                    backlog.push(event.data);
+                    return;
+                  }
+                  const blob = receiveFrame(event.data);
+                  if (blob !== undefined) {
+                    draining = true;
+                    drainTask = drain(blob);
+                  }
                 };
 
                 const handleError = () => {
@@ -1356,24 +1365,14 @@ async function runWebSocketCommand<
                     cause: closeCause,
                     opened,
                   };
-                  if (disposeTask) {
-                    activeAttempt?.abortMessagePumpForDisposal();
-                  }
-                  if (nativeErrorSeen) {
-                    rawMessages.length = 0;
-                    settleAttempt(closeOutcome);
-                    return;
-                  }
-                  if (!messagePumpRunning && rawMessages.length === 0) {
+                  if (nativeErrorSeen || !draining) {
                     settleAttempt(closeOutcome);
                   }
                 };
 
                 activeAttempt = {
-                  abortMessagePumpForDisposal() {
-                    if (closeObserved) {
-                      messageController.abort();
-                    }
+                  abortReads() {
+                    readController.abort();
                   },
                   cancel(keepCurrentSocket = false) {
                     // A locally failed message pump must not discard an already observed close.
@@ -1514,6 +1513,8 @@ async function runWebSocketCommand<
             }
 
             manualClose = { code, kind: "manual-web-socket-close", reason };
+            // The caller reads nothing more, so a Blob that is still being read is dropped with the frames behind it.
+            activeAttempt?.abortReads();
             sessionController.heartbeat?.stop();
             setSocketState(state, "closing");
             if (finished) {
@@ -1552,7 +1553,6 @@ async function runWebSocketCommand<
                 hasCloseError = true;
                 closeError = cause;
               }
-              activeAttempt?.abortMessagePumpForDisposal();
 
               if (!finished) {
                 disposeTimer = setTimeout(() => {
@@ -1571,7 +1571,7 @@ async function runWebSocketCommand<
               }
 
               await lifecycleTask;
-              await Promise.allSettled([...messagePumpTasks]);
+              await drainTask;
             } finally {
               clearTimeout(disposeTimer);
               disposeTimer = undefined;
@@ -1716,7 +1716,7 @@ export type SocketLifecycleOutcome = {
 };
 
 type ActiveSocketAttempt = {
-  abortMessagePumpForDisposal(): void;
+  abortReads(): void;
   cancel(keepCurrentSocket?: boolean): void;
   socket: WebSocketHandle;
 };
