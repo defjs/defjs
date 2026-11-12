@@ -306,6 +306,11 @@ function receiveFrame(
   attempt: Attempt,
   data: unknown,
 ): Promise<unknown> | undefined {
+  // After close() the caller reads nothing more, so a frame that arrives during the closing handshake is dropped
+  // before it is decoded: a Blob read that no drain awaits would reject with no handler.
+  if (isSettled(attempt) || session.manualClose !== undefined) {
+    return undefined;
+  }
   let decoded: unknown;
   try {
     decoded = decodeWebSocketMessage(session.incoming, data);
@@ -321,12 +326,7 @@ function receiveFrame(
 }
 
 function deliver(session: Session, attempt: Attempt, decoded: unknown): void {
-  // After close() the caller reads nothing more, so a frame that arrives during the closing handshake is dropped.
-  if (
-    isSettled(attempt) ||
-    session.manualClose !== undefined ||
-    typeof decoded === "undefined"
-  ) {
+  if (typeof decoded === "undefined") {
     return;
   }
 

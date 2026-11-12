@@ -773,6 +773,20 @@ describe("web socket incoming frame path", () => {
     return { native, socket };
   }
 
+  test("should not start reading a Blob frame that arrives during the closing handshake", async () => {
+    const { native, socket } = await openSession();
+    const blob = new Blob(["not json"]);
+    const read = vi.spyOn(blob, "arrayBuffer");
+
+    socket.close();
+    native.triggerMessage(blob);
+    await socket.closed;
+    await nextTurn();
+
+    // A read nobody awaits would reject with no handler, and the frame is dropped anyway.
+    expect(read).not.toHaveBeenCalled();
+  });
+
   test.each([
     ["text", (json: string) => json],
     ["ArrayBuffer", (json: string) => new TextEncoder().encode(json).buffer],
