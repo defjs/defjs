@@ -10,6 +10,7 @@
     "typecheck": "bun --bun react-router typegen && bun check --project tsconfig.json && bun check --project examples/tsconfig.json",
     "build": "bun scripts/build.ts",
     "extract-api": "bun scripts/extract-api.ts",
+    "sync-skill": "bun scripts/sync-skill.ts",
     "unit:bun": "vitest run --config vitest.config.bun.ts"
   },
   "dependencies": {

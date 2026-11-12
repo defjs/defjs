@@ -65,12 +65,12 @@ Specs live beside the source. `packages/core/test/` holds end-to-end specs and t
 
 ### `doc`
 
-| Path            | Contents                                                                         |
-| --------------- | -------------------------------------------------------------------------------- |
-| `doc/app/`      | site application, components, generated API data, routing, LLM output            |
-| `doc/content/`  | guides and the 11 API overview pages per locale; entry pages are not stored here |
-| `doc/examples/` | complete, typechecked examples embedded by content pages                         |
-| `doc/scripts/`  | API extraction, build, build fingerprint, link check, site URL check             |
+| Path            | Contents                                                                                   |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| `doc/app/`      | site application, components, generated API data, routing, LLM output                      |
+| `doc/content/`  | guides and the 11 API overview pages per locale; entry pages are not stored here           |
+| `doc/examples/` | complete, typechecked examples embedded by content pages                                   |
+| `doc/scripts/`  | API extraction, build, build fingerprint, link check, site URL check, skill reference sync |
 
 Documentation unit specs (`*.spec.ts`, run by the `doc-bun` project) sit beside the source in `app/`, `scripts/`, and `examples/`; there is no separate `doc/test/` directory. Specs are excluded from the build fingerprint, so editing one does not stale `doc/build`.
 
@@ -225,6 +225,10 @@ The build fails if its inputs change while it runs.
 - Extraction builds the program with `typescript/async` under Bun. Parameter and member tables come from `doc/scripts/type-tables.ts`, a Bun-native port of `fumadocs-typescript`'s entry generation. `fumadocs-typescript` is not a dependency, and no Node process is started.
 - Set the repository variable `SITE_URL` to the confirmed HTTPS origin before deploying. Local builds default to localhost; the release job rejects a missing or local origin.
 
+### Skill references
+
+`skills/defjs/SKILL.md` is the only hand-written skill file. Every file in `skills/defjs/references/` is the en-US processed Markdown of one guide page, copied byte for byte from `doc/build/client/llms.mdx/<slug>/content.md` by `doc/scripts/sync-skill.ts`; its `skillPages` list names the pages. `bun run --cwd doc build` ends with the script's `--check` mode and fails when a reference differs from the build output. After changing a listed guide, its examples, or the list, run `bun run --cwd doc sync-skill` against that fresh build, commit the result, and build again. `.prettierignore` keeps `bun fmt` away from the references. Guidance for agents that belongs to no guide goes into `SKILL.md`. Add a page to `skillPages` and a row to the routing table of `SKILL.md` together; `test/defjs-skill.bun.spec.ts` fails for a reference that is not routed.
+
 ## Release and packaging
 
 - The **Release** workflow is manual and pick-what-you-want. Versions come from the committed package manifests; nothing bumps them and no changesets are involved. Publishing invokes npm because it is the registry's OIDC trusted-publishing CLI; `bun publish` does not support npm trusted publishing (oven-sh/bun#22423). The packaging check (`bun test/assert-pack.ts <publish-dir>`) runs in the release workflow, where Node and Bun are both installed; it is not part of the unit gate.
@@ -238,7 +242,7 @@ The build fails if its inputs change while it runs.
 ## Do not
 
 - Run `bun run fmt`; the formatter is `bun fmt`.
-- Edit generated output: `dist/`, `coverage/`, `doc/build/`, `doc/.react-router/`, `test-out/`.
+- Edit generated output: `dist/`, `coverage/`, `doc/build/`, `doc/.react-router/`, `test-out/`, `skills/defjs/references/`.
 - Reintroduce removed APIs: global client, `client.execute`, command objects, `executeHttpCommand` and the other `execute*Command` exports, `withTimeout`, the `timeout` and `abort` request options, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, OpenAPI generation.
 - Add a `.js`, `.mjs`, or `.cjs` file anywhere in the repository.
 - Put authentication or tracing into `builder`, or infer request placement from `input` field names.

@@ -1,0 +1,193 @@
+# Core architecture [#core-architecture]
+
+Defjs is built around one foundational boundary: **an SDK defines the wire contract; the consuming application owns execution.** Every design rule in `@defjs/core` follows from that separation.
+
+## 1. Definition vs. execution [#1-definition-vs-execution]
+
+An SDK package exports operations (created with `defineRequest`, `defineEventStream`, and `defineWebSocket`) and data contracts (`struct`). It never calls `createClient`, stores a singleton client, or reads environment variables.
+
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
+<Tab>
+
+```typescript
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  operation: "orders.read",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+});
+```
+
+</Tab>
+<Tab>
+
+```typescript
+import type { Client } from "@defjs/core";
+import { getOrder } from "../sdk/orders.ts";
+
+async function loadOrder(client: Client) {
+  const [error, order] = await getOrder(client, { id: 7 });
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(order.status);
+}
+```
+
+</Tab>
+<Tab>
+
+```typescript
+import { defineRequest, struct, type Client } from "@defjs/core";
+
+const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+  error: struct.object({ message: struct.string() }),
+});
+
+async function loadOrder(client: Client) {
+  const [error, order] = await getOrder(client, { id: 7 });
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(order.status);
+}
+```
+
+</Tab>
+</Tabs>
+
+Because `getOrder` captures no client state:
+
+- A browser UI, a background job, an SSR request handler, and a unit test can call the same `getOrder` operation with different `Client` configurations.
+- Framework plugins (`@defjs/react`, `@defjs/vue`) and the observability middleware plugin (`@defjs/opentelemetry-server`) attach to the application's `Client`, keeping the published SDK package 100% dependency-free.
+
+## 2. Explicit input placement and bidirectional aliases [#2-explicit-input-placement-and-bidirectional-aliases]
+
+In Defjs, `input` declares what the caller passes, `struct` controls how values are encoded/decoded, and `builder` places each value onto the request (`path`, `query`, `headers`, `body`).
+
+- **No magic inference**: If an operation declares `input`, it must provide an explicit, synchronous, pure `builder`. Field placement is never guessed from parameter names.
+- **Bidirectional `.alias(wireName)`**: Declaring `.alias("customer_name")` on a struct field keeps `customerName` in TypeScript while automatically mapping to and from `"customer_name"` on the wire.
+
+```typescript
+import { defineRequest, struct, type Client } from "@defjs/core";
+
+const createBatch = defineRequest({
+  method: "POST",
+  path: "/accounts/:account_id/orders",
+  input: struct.object({
+    accountId: struct.number(),
+    draft: struct.boolean().optional(),
+    orders: struct.array(
+      struct.object({
+        customerName: struct.string().alias("customer_name"),
+        totalCents: struct.number().alias("total_cents"),
+      }),
+    ),
+  }),
+  builder: (input) => ({
+    path: { account_id: input.accountId },
+    query: { draft: input.draft ? 1 : undefined },
+    headers: { "x-api-version": "2" },
+    body: { orders: input.orders },
+  }),
+  output: struct.object({ accepted: struct.number() }),
+});
+
+async function submit(client: Client) {
+  const [error, result] = await createBatch(client, {
+    accountId: 42,
+    orders: [{ customerName: "Ada", totalCents: 4200 }],
+  });
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(result.accepted);
+}
+```
+
+When the builder hands a typed struct object to `body`, `query`, or `headers`, its field aliases and `Date` / `bigint` codecs apply automatically. Keys you write in an anonymous wrapper object (such as `account_id` or `x-api-version` above) stay literal.
+
+## 3. Declaration is an assertion [#declaration-is-an-assertion]
+
+Six strict rules govern how Defjs reads HTTP responses:
+
+### Rule 1: What you declare is what you assert [#rule-1-what-you-declare-is-what-you-assert]
+
+`output` asserts the shape of a `2xx` body. `error` asserts the shape of a non-`2xx` body. A declaration is a runtime guarantee, not a best-effort hint.
+
+### Rule 2: `ok` (`200..299`) is the only fork [#rule-2-ok-200299-is-the-only-fork]
+
+A `2xx` response is decoded only with `output`. Every other status (`3xx`, `4xx`, `5xx`) is decoded only with `error`. Defjs never falls back from one to the other.
+
+### Rule 3: Any deviation from the assertion is a loud fault [#rule-3-any-deviation-from-the-assertion-is-a-loud-fault]
+
+Defjs chooses the response side using `response.ok`: `output` for `2xx`, `error` for non-`2xx`. Only a JSON struct declared on that side triggers decoding and can produce `RES_MEDIA_TYPE_INVALID` or `RES_DECODE_FAILED`; its `Content-Type` is verified **first**, before the body is read or looked for. A response without content (`HEAD`, `204`, `205`, `304`) is held to the same check: a declared JSON representation without a JSON `Content-Type` fails with `RES_MEDIA_TYPE_INVALID`, and with one it parses the empty bytes and fails with `RES_DECODE_FAILED`. A non-`2xx` HTML gateway page produces `RES_MEDIA_TYPE_INVALID` only when a JSON `error` struct is declared. Without a declaration for the active side, the body is not read; a non-`2xx` response returns an undecoded `HTTP_STATUS`. An SSE handshake follows the same rules: a non-`2xx` handshake whose declared `error` body cannot be decoded returns that decode fault at startup, with the status in its metadata, while interceptors, reconnect policies and a reconnect's `closed` still see `HTTP_STATUS`.
+
+| What failed during response reading                    | Returned Fault                                                                                           |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Media type does not match declared JSON representation | `RES_MEDIA_TYPE_INVALID` (checked first; the body is never read, and content or not makes no difference) |
+| Bytes cannot be decoded as the declared representation | `RES_DECODE_FAILED` (empty JSON bytes included)                                                          |
+| Decoded value fails `struct` validation                | `RES_STRUCT_MISMATCH`                                                                                    |
+| Non-`2xx` status with decoded `error` struct           | `HTTP_STATUS` with typed `error.data`                                                                    |
+| Non-`2xx` status with `error` omitted                  | `HTTP_STATUS` with `error.data: undefined`                                                               |
+
+### Rule 4: A failed decode has no body [#rule-4-a-failed-decode-has-no-body]
+
+A body exists only after it passes decoding and validation. When decoding fails, the fault's `response` is typed as `HttpMeta` (which has no `body` property), and the parser/validation error is attached to `fault.cause`.
+
+### Rule 5: Omitting a side opts out of reading it [#rule-5-omitting-a-side-opts-out-of-reading-it]
+
+Omitting `output` means `2xx` bodies are never read. Omitting `error` means non-`2xx` bodies are never read—even if the server sent invalid JSON on a `500`.
+
+### Rule 6: `3xx` is not a success status [#rule-6-3xx-is-not-a-success-status]
+
+`ok` means `200 <= status < 300`. A `304 Not Modified` is non-`2xx`: leave `error` undeclared and handle `HTTP_STATUS` (see [ETag conditional requests](/recipes/etag-revalidate)), or declare `struct.string()` when expecting an empty text body.
+
+## 4. Transport-specific result tuples [#4-transport-specific-result-tuples]
+
+All three transports return a three-item error-first tuple instead of throwing at the call site:
+
+- **HTTP** → `[error, data, response]` — decoded payload + `DecodedResponse<T>` (`HttpMeta` when `output` is omitted).
+- **SSE** → `[error, stream, open]` — `EventStreamHandle` + initial handshake snapshot.
+- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + initial connection snapshot.
+
+Clients carry configuration, not active connections. The caller that starts an HTTP request, SSE stream, or WebSocket session owns canceling or closing it (`AbortSignal` for HTTP; `await using` or `.close()` + `await .closed` for SSE and WebSocket).
+
+## 5. What Defjs does not provide [#5-what-defjs-does-not-provide]
+
+Several patterns from other HTTP clients have no Defjs equivalent by design. Use the replacement in the right column.
+
+| Not provided                                                   | What to use instead                                                          |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| A global client singleton                                      | An application-owned `createClient(...)` passed to operations                |
+| A client method that executes an operation                     | Call the operation directly: `getOrder(client, input)`                       |
+| A client-level default timeout, or `timeout` / `abort` options | `client({ signal: AbortSignal.timeout(ms) })` or an `AbortController`        |
+| A `responseType` field on `defineRequest`                      | The struct kind of `output` (`string`, `blob`, `arrayBuffer`, or JSON)       |
+| `.parse()` on a struct instance, or `struct.encode`            | `struct.parse(schema, value)` and `builder` placement                        |
+| Custom WebSocket handshake headers                             | Cookies, short-lived query tickets, or `protocols`                           |
+| A WebSocket message map or type envelope                       | `struct.discriminatedUnion` and `session.onRuntimeError`                     |
+| OpenAPI code generation                                        | Keep OpenAPI as the external spec, or validate at the boundary with `struct` |
+
+## Related reading [#related-reading]
+
+- [Struct & schemas](/docs/struct)
+- [HTTP operations](/docs/http)
+- [Error handling](/docs/errors)
+- [Build and publish an SDK](/recipes/publish-http-sdk)

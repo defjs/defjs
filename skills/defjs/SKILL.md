@@ -70,24 +70,41 @@ async function main() {
 void main();
 ```
 
+## Review checklist
+
+When reviewing Defjs code, check each item:
+
+- [ ] Definition modules (`defineRequest`, `defineEventStream`, `defineWebSocket`) do not import or create a client.
+- [ ] Every definition with `input` has an explicit, synchronous, pure `builder`.
+- [ ] `builder` performs no I/O, reads no auth tokens, and passes typed struct objects (`body: input.order`) so `.alias(...)` applies.
+- [ ] Every call site checks `if (error)` and returns before reading the success value.
+- [ ] Call sites are not wrapped in `try/catch` expecting HTTP or network errors to throw; they resolve on the tuple.
+- [ ] Derived clients carrying a `signal` (`client({ signal })`) are created per call, not shared across unrelated calls.
+- [ ] Authentication, token refresh, and tracing live in interceptors (`withInterceptors`), not in `builder`.
+- [ ] Retries are enabled with `withRetry`; by default it replays `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, and `DELETE`, never a `ReadableStream` body, and stops when the caller's `signal` aborts.
+- [ ] Every opened SSE stream and WebSocket session is closed with `await using` or `finally { close(); await closed; }`.
+- [ ] React `useEffect` and Vue `watch` / `onScopeDispose` abort in-flight operations on cleanup and ignore late completions after abort.
+
 ## Reference routing table
 
-Load only the reference file needed for your current task. Each link is one level deep and self-contained.
+The files in `references/` are generated copies of the Defjs documentation pages; do not edit them. Load only the file needed for your current task. Each link is one level deep. A link inside a reference that starts with `/` points to a page of the documentation site, where `/api/...` pages hold the exact signatures; the installed `@defjs/*` types are the authority for your version.
 
-| Task or topic                                                                                                                     | Reference file                                                                       |
-| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Schemas, `.optional()`/`.nullable()`/`.nullish()`/`.alias()`, `struct.parse`, form/binary tags, recursive structs                 | [references/struct.md](references/struct.md)                                         |
-| `defineRequest`, `builder` placement (`path`/`query`/`headers`/`body`), query serializer, body Content-Type rules, cancellation   | [references/http.md](references/http.md)                                             |
-| `createClient`, `DerivableClient` vs `Client` value, `RequestOptions`, `with*` helpers, SSR vs browser scoping                    | [references/client.md](references/client.md)                                         |
-| Multiple endpoints, `withBalancer`, strategies, health filtering, `withRetry` defaults/budget, retry boundaries, custom lifecycle | [references/load-balancing.md](references/load-balancing.md)                         |
-| Error-first tuple shapes, `Fault` codes and variants, narrowing declared `HTTP_STATUS` `error.data`, fault triage                 | [references/errors.md](references/errors.md)                                         |
-| `createHttpInterceptor`, SSE/WebSocket interceptors, Bearer auth & 401 refresh, `Retry-After` handling, ETag                      | [references/interceptors.md](references/interceptors.md)                             |
-| `defineEventStream`, SSE `events` map, buffer limit, startup deadline, SSE retries, `withSSEOnInvalidEvent`                       | [references/sse.md](references/sse.md)                                               |
-| `defineWebSocket`, `incoming`/`outgoing` `discriminatedUnion`, `session.send`, `onRuntimeError`, heartbeat, retries, `protocols`  | [references/web-socket.md](references/web-socket.md)                                 |
-| `@defjs/react`: `ClientProvider`, `useClient`, `useEffect` abort cleanup, owning streams/sockets in components                    | [references/react.md](references/react.md)                                           |
-| `@defjs/vue`: `createClientPlugin`, `injectClient`, custom `InjectionKey`, `watch` `onCleanup`, `onScopeDispose`                  | [references/vue.md](references/vue.md)                                               |
-| `@defjs/opentelemetry-server`: `withOpenTelemetryServer`, low-cardinality `operation`, WebSocket query propagation                | [references/opentelemetry-server.md](references/opentelemetry-server.md)             |
-| Offline testing with `withHTTPHandle`, publishing a standalone SDK package, unsupported patterns, code review checklist           | [references/testing-and-sdk-publishing.md](references/testing-and-sdk-publishing.md) |
+| Task or topic                                                                                                | Reference file                                                           |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Schemas, `.optional()`/`.nullable()`/`.nullish()`/`.alias()`, `struct.parse`, form/binary tags, recursion    | [references/struct.md](references/struct.md)                             |
+| `defineRequest`, `builder` placement, query serializer, body Content-Type rules, cancellation, progress      | [references/http.md](references/http.md)                                 |
+| `createClient`, `DerivableClient` vs `Client` value, `RequestOptions`, `with*` helpers, SSR vs browser scope | [references/client.md](references/client.md)                             |
+| Multiple endpoints, `withBalancer`, strategies, health filtering, `withRetry` defaults and budget            | [references/load-balancing.md](references/load-balancing.md)             |
+| Error-first tuple shapes, `Fault` codes, narrowing declared `HTTP_STATUS` `error.data`, structured logging   | [references/errors.md](references/errors.md)                             |
+| `createHttpInterceptor`, short-circuiting, `Retry-After`, WebSocket session wrapping                         | [references/interceptors.md](references/interceptors.md)                 |
+| `defineEventStream`, SSE `events` map, buffer limit, startup deadline, retries, `withSSEOnInvalidEvent`      | [references/sse.md](references/sse.md)                                   |
+| `defineWebSocket`, `incoming`/`outgoing` `discriminatedUnion`, `session.send`, heartbeat, retries, protocols | [references/web-socket.md](references/web-socket.md)                     |
+| `@defjs/react`: `ClientProvider`, `useClient`, `useEffect` abort cleanup, owning streams and sockets         | [references/react.md](references/react.md)                               |
+| `@defjs/vue`: `createClientPlugin`, `injectClient`, custom `InjectionKey`, `watch` cleanup                   | [references/vue.md](references/vue.md)                                   |
+| `@defjs/opentelemetry-server`: `withOpenTelemetryServer`, low-cardinality `operation`, propagation, logs     | [references/opentelemetry-server.md](references/opentelemetry-server.md) |
+| Offline tests with `withHTTPHandle`, `withSSEHandle`, `withWebSocketHandle`, fake timers                     | [references/testing.md](references/testing.md)                           |
+| Publishing a standalone SDK package                                                                          | [references/publish-http-sdk.md](references/publish-http-sdk.md)         |
+| Definition vs execution, declaration is an assertion, what Defjs does not provide                            | [references/design-decisions.md](references/design-decisions.md)         |
 
 ## Verify
 

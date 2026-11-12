@@ -1,39 +1,143 @@
-# React integration (`@defjs/react`)
+# React [#react]
 
-Contents: [Boundary and exports](#boundary-and-exports) · [`ClientProvider` setup](#clientprovider-setup) · [Effect requests with cancellation](#effect-requests-with-cancellation) · [Event handlers and explicit client override](#event-handlers-and-explicit-client-override) · [Owning SSE or WebSocket work in React](#owning-sse-or-websocket-work-in-react)
+`@defjs/react` wires an application-owned `@defjs/core` client into a React 18+ component tree via React Context and `useClient()`. Your SDK definitions stay pure `@defjs/core` modules with zero React dependencies.
 
-## Boundary and exports
-
-`@defjs/react` exports `ClientProvider` and `useClient`.
-
-- It is a thin Context bridge, **not** a query, cache, or state management library.
-- `ClientProvider` accepts, and `useClient` returns, a root `DerivableClient` (created by `createClient`); a derived `client(options)` value is never accepted.
-- Do not pass the `client` returned by `useClient()` into `useState(client)` or `setState(client)`—because `DerivableClient` is a function, React would invoke it as a lazy initializer or state updater.
-
-## `ClientProvider` setup
-
-```tsx
-import { createClient, withEndpoint } from "@defjs/core";
-import { ClientProvider } from "@defjs/react";
-import type { ReactNode } from "react";
-
-const client = createClient(withEndpoint("https://api.example.com"));
-
-export function ApiProvider({ children }: { children: ReactNode }) {
-  return <ClientProvider client={client}>{children}</ClientProvider>;
-}
+```sh
+bun add @defjs/core @defjs/react react
 ```
 
-- For SSR, when headers, cookies, or credentials differ per request, create the client inside the request boundary and render `<ClientProvider client={requestClient}>`.
+## What `@defjs/react` owns vs. what you own [#what-defjsreact-owns-vs-what-you-own]
 
-## Effect requests with cancellation
+- **Provided by `@defjs/react`**: `ClientProvider` and `useClient(overrideClient?)`.
+- **Owned by your application**: creating the [`DerivableClient`](/api/core/derivableclient-type), canceling in-flight requests on unmount or dependency change (`AbortController`), closing SSE/WebSocket handles, and integrating query caches such as TanStack Query.
+- **Important**: `useClient()` returns the `DerivableClient` function-object. Call `client({ signal })` where the operation runs (`getOrder(client({ signal }), input)`). Never pass `client` directly to `setState(client)` because React treats a function argument to a state setter as an updater function.
 
-Always define operations (`defineRequest`, `defineEventStream`, `defineWebSocket`) at module scope, outside components. Inside `useEffect`, create an `AbortController`, derive `client({ signal: controller.signal })` at the call site, ignore results after abort, and abort in the cleanup function:
+---
+
+## 1. Provide the client and fetch in an effect [#1-provide-the-client-and-fetch-in-an-effect]
+
+Create the client at the application boundary, wrap your tree in `<ClientProvider client={client}>`, and abort in-flight work when the effect cleans up:
+
+<Tabs items={["sdk/orders.ts", "app/App.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+    ```ts
+    import { defineRequest, struct } from "@defjs/core";
+
+    export const Order = struct.object({
+      id: struct.number(),
+      status: struct.string(),
+    });
+
+    export const getOrder = defineRequest({
+      method: "GET",
+      path: "/orders/:id",
+      input: struct.object({ id: struct.number() }),
+      builder: (input) => ({ path: { id: input.id } }),
+      output: Order,
+    });
+    ```
+
+  </Tab>
+  <Tab>
+    ```tsx
+    import { createClient, withEndpoint } from "@defjs/core";
+    import { ClientProvider } from "@defjs/react";
+    import type { ReactNode } from "react";
+
+    const client = createClient(withEndpoint("https://api.example.com"));
+
+    export function ApiProvider({ children }: { children: ReactNode }) {
+      return <ClientProvider client={client}>{children}</ClientProvider>;
+    }
+    ```
+
+  </Tab>
+  <Tab>
+    ```tsx
+    import { useEffect, useState } from "react";
+    import { useClient } from "@defjs/react";
+    import { getOrder } from "../sdk/orders.ts";
+
+    export function OrderCard({ id }: { id: number }) {
+      const client = useClient();
+      const [status, setStatus] = useState<string>();
+
+      useEffect(() => {
+        const controller = new AbortController();
+
+        void getOrder(client({ signal: controller.signal }), { id }).then(
+          ([error, order]) => {
+            if (controller.signal.aborted) return;
+            if (error) {
+              console.error(error.code);
+              setStatus(undefined);
+              return;
+            }
+            setStatus(order.status);
+          },
+        );
+
+        return () => controller.abort();
+      }, [client, id]);
+
+      return <span>{status ?? "Loading..."}</span>;
+    }
+    ```
+
+  </Tab>
+</Tabs>
+
+- `ClientProvider` is a thin React Context provider. Passing a different `client` prop updates what descendants read without cloning or disposing the previous client.
+- In development (`StrictMode`), React mounts and cleans up effects more than once. Checking `controller.signal.aborted` prevents a stale response from overwriting current state.
+
+---
+
+## 2. Read and override with `useClient` [#2-read-and-override-with-useclient]
+
+`useClient(overrideClient)` returns `overrideClient` when provided, or reads the nearest `ClientProvider` when omitted or `undefined`. It throws an `Error` only if neither source supplies a client.
 
 ```tsx
 import { defineRequest, struct } from "@defjs/core";
 import { useClient } from "@defjs/react";
-import { useEffect, useState } from "react";
+
+const health = defineRequest({
+  method: "GET",
+  path: "/health",
+  output: struct.object({ ok: struct.boolean() }),
+});
+
+export function HealthCheck() {
+  const client = useClient();
+
+  const check = async () => {
+    const [error, result] = await health(client);
+    if (error) {
+      console.error(error.code);
+      return;
+    }
+    console.log(result.ok);
+  };
+
+  return (
+    <button type="button" onClick={() => void check()}>
+      Check service
+    </button>
+  );
+}
+```
+
+- Always call `useClient(explicitClient)` unconditionally at the top level of a component or custom Hook. Never write `explicitClient ?? useClient()`, which violates the Rules of Hooks.
+
+---
+
+## 3. Integrate with TanStack Query [#3-integrate-with-tanstack-query]
+
+`@defjs/react` is dependency injection only and does **not** ship a `useRequest` hook. When using a data-fetching library such as TanStack Query, forward the query function's `signal` via `client({ signal })` and convert the error-first tuple inside the query adapter:
+
+```tsx
+import { defineRequest, struct } from "@defjs/core";
+import { useCallback } from "react";
+import { useClient } from "@defjs/react";
 
 const getOrder = defineRequest({
   method: "GET",
@@ -43,39 +147,28 @@ const getOrder = defineRequest({
   output: struct.object({ status: struct.string() }),
 });
 
-export function OrderStatus({ id }: { id: number }) {
+export function useOrderQueryFn(id: number) {
   const client = useClient();
-  const [status, setStatus] = useState<string>();
 
-  useEffect(() => {
-    const controller = new AbortController();
-
-    void getOrder(client({ signal: controller.signal }), { id }).then(
-      ([error, order]) => {
-        if (controller.signal.aborted) return;
-        if (error) {
-          setStatus(undefined);
-          return;
-        }
-        setStatus(order.status);
-      },
-    );
-
-    return () => controller.abort();
-  }, [client, id]);
-
-  return <span>{status ?? "Loading..."}</span>;
+  return useCallback(
+    async ({ signal }: { signal: AbortSignal }) => {
+      const [error, order] = await getOrder(client({ signal }), { id });
+      // Query libraries record a failure when the query function rejects.
+      if (error) throw error;
+      return order;
+    },
+    [client, id],
+  );
 }
 ```
 
-## Event handlers and explicit client override
+Here `throw error` is an explicit adapter boundary required by TanStack Query's rejection contract—not the default Defjs calling style.
 
-- `useClient(overrideClient?)` must always be called unconditionally at the top level of a component or custom Hook. Never write `overrideClient ?? useClient()`.
-- If `overrideClient` is provided, `useClient(overrideClient)` returns it directly; if `undefined`, it reads the nearest `ClientProvider`.
+---
 
-## Owning SSE or WebSocket work in React
+## 4. Manage SSE & WebSocket lifetimes in effects [#4-manage-sse--websocket-lifetimes-in-effects]
 
-When opening a stream or WebSocket inside `useEffect`, pass an `AbortController` signal and abort it in the cleanup. The signal covers startup and the open session, so unmount needs nothing else; suppress the expected abort error:
+SSE and WebSocket handles outlive the initial `openStream(...)` or `connectChat(...)` call. Pass an `AbortController` signal into the operation and abort it in the cleanup: the signal covers startup and the open session. Own the session with `await using` and consume its single async iterator:
 
 ```tsx
 import { defineWebSocket, struct } from "@defjs/core";
@@ -111,6 +204,7 @@ export function QuoteTicker() {
           console.info(message.symbol, message.price);
         }
       } catch (cause) {
+        // Aborting `controller` ends the session and rejects `receive` with AbortError; only report real failures.
         if (!controller.signal.aborted) console.error("quotes failed", cause);
       }
     })();
@@ -121,3 +215,23 @@ export function QuoteTicker() {
   return null;
 }
 ```
+
+- Aborting the `signal` passed into a WebSocket operation ends the session as `aborted` and rejects `session.receive` with `AbortError`. Guard the `catch` block with `controller.signal.aborted` so only genuine runtime errors (such as a heartbeat timeout) surface.
+- Aborting an SSE stream ends `for await (const msg of stream)` cleanly without throwing.
+
+---
+
+## 5. SSR and provider scope [#5-ssr-and-provider-scope]
+
+- **Browser**: share a single module-scoped client when the endpoint and interceptors are request-independent.
+- **SSR**: create a fresh client inside each server request boundary whenever headers, cookies, tenants, or credentials differ per request.
+- Unmounting `<ClientProvider>` does **not** abort active HTTP calls, close SSE/WebSocket connections, or dispose the client.
+
+---
+
+## Public exports & related guides [#public-exports--related-guides]
+
+- `ClientProvider` — provides a `DerivableClient` (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
+- `useClient(overrideClient?)` — reads the explicit override or nearest provided client.
+- Related guides: [Client](/docs/client), [Error handling](/docs/errors), [SSE event streams](/docs/sse), [WebSocket sessions](/docs/web-socket).
+- Related recipes: [GET with a declared 404](/recipes/get-declared-404), [Cancel an HTTP call](/recipes/cancel-http), [Consume an SSE stream](/recipes/consume-sse), [Open a WebSocket session](/recipes/websocket-session).

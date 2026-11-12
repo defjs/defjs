@@ -1,20 +1,18 @@
-# WebSocket sessions (`defineWebSocket`)
+# WebSocket sessions [#websocket-sessions]
 
-Contents: [Define and run a session](#define-and-run-a-session) · [Messages (`incoming` and `outgoing`)](#messages-incoming-and-outgoing) · [Subprotocols and builder rules](#subprotocols-and-builder-rules) · [Heartbeat and retries](#heartbeat-and-retries) · [Session ownership and disposal](#session-ownership-and-disposal)
+`defineWebSocket` declares a bidirectional WebSocket contract in your SDK: the path template, optional `input` and `builder` (`path` and `query` only), `incoming` and `outgoing` message structs, queue bounds, and static subprotocols. The consuming application configures heartbeat, retries (`withRetry`), and lifecycle cleanup on its client.
 
-## Define and run a session
+## 1. Define the contract and run a session [#1-define-the-contract-and-run-a-session]
 
-`defineWebSocket` takes one `incoming` struct and an optional `outgoing` struct, with no incoming queue limit: every message waits until `session.receive` reads it.
+Model multiple frame types on `incoming` or `outgoing` using `struct.discriminatedUnion(...)`. Release the returned `WebSocketSession` with `await using` or explicit `session.close()` + `await session.closed`:
 
-```ts
-import {
-  createClient,
-  defineWebSocket,
-  struct,
-  withEndpoint,
-} from "@defjs/core";
+<Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
+<Tab>
 
-const IncomingFrame = struct.discriminatedUnion("type", [
+```typescript
+import { defineWebSocket, struct } from "@defjs/core";
+
+export const TickFrame = struct.discriminatedUnion("type", [
   struct.object({
     type: struct.literal("tick"),
     symbol: struct.string(),
@@ -26,72 +24,139 @@ const IncomingFrame = struct.discriminatedUnion("type", [
   }),
 ]);
 
-const OutgoingFrame = struct.discriminatedUnion("type", [
-  struct.object({
-    type: struct.literal("subscribe"),
-    symbol: struct.string(),
-  }),
-  struct.object({
-    type: struct.literal("unsubscribe"),
-    symbol: struct.string(),
-  }),
-]);
-
-export const quoteFeed = defineWebSocket({
-  operation: "quotes.stream",
-  path: "/quotes/:market",
-  protocols: ["quotes.v1"],
-  input: struct.object({ market: struct.string() }),
-  builder: (input) => ({ path: input }),
-  incoming: IncomingFrame,
-  outgoing: OutgoingFrame,
+export const SubscribeCommand = struct.object({
+  type: struct.literal("subscribe"),
+  symbol: struct.string(),
 });
 
-const client = createClient(withEndpoint("https://quotes.example.com"));
+export const openTicker = defineWebSocket({
+  path: "/market/ws",
+  operation: "market.ticker",
+  incoming: TickFrame,
+  outgoing: SubscribeCommand,
+});
+```
+
+</Tab>
+<Tab>
+
+```typescript
+import { createClient, withEndpoint } from "@defjs/core";
+import { openTicker } from "../sdk/ticks-socket.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, session, startupConnection] = await quoteFeed(client, {
-    market: "nasdaq",
-  });
+  const [error, session] = await openTicker(client);
   if (error) {
-    console.error(error.code, startupConnection?.generation);
+    console.error(error.code);
     return;
   }
-  await using ownedSession = session;
-  const unsubscribeError = ownedSession.onRuntimeError((cause) =>
-    console.error("runtime error", cause),
-  );
-  try {
-    ownedSession.send({ type: "subscribe", symbol: "ACME" });
-    for await (const message of ownedSession.receive) {
-      if (message.type === "tick") {
-        console.log(message.symbol, message.price);
-        break;
-      }
+
+  await using active = session;
+  active.send({ type: "subscribe", symbol: "ACME" });
+
+  for await (const message of active.receive) {
+    if (message.type === "tick") {
+      console.log(message.symbol, message.price);
+      break;
     }
-  } finally {
-    unsubscribeError();
   }
 }
 
 void main();
 ```
 
-## Messages (`incoming` and `outgoing`)
+</Tab>
+<Tab>
 
-- **One struct per direction:** model multiple message types with `struct.discriminatedUnion("type", [...])`. There is no message-map object and no automatic envelope wrapper.
-- **Inbound frames:** text, `ArrayBuffer`, TypedArray, and `Blob` frames are decoded as UTF-8, `JSON.parse`d, and validated against `incoming`. Frames that fail JSON parsing or struct validation are reported to `session.onRuntimeError(listener)` and not enqueued; the session stays open.
-- **Outbound frames (`session.send`):** validates and serializes **synchronously** (validation and alias encoding, then `JSON.stringify`). `session.send` throws synchronously if the payload fails `outgoing`, contains values JSON cannot represent (`NaN`, `±Infinity`, functions, symbols, `Map`, `Set`), or the session is not writable. It sends immediately only in `open` and queues only in `reconnecting`; every other state throws, and `reconnecting` also throws when the outgoing queue is disabled or full.
+```typescript
+import {
+  createClient,
+  defineWebSocket,
+  struct,
+  withEndpoint,
+} from "@defjs/core";
 
-## Subprotocols and builder rules
+const client = createClient(withEndpoint("https://quotes.example.com"));
+const quotes = defineWebSocket({
+  path: "/quotes",
+  incoming: struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+});
 
-- A WebSocket `builder` may return **`{ path?, query? }` only** (`headers` and `body` are forbidden because browser WebSockets do not support custom handshake headers).
-- Subprotocol precedence: `client({ protocols })` overrides `withWebSocketProtocols(...)`, which overrides `protocols` on `defineWebSocket`.
-- The chosen `protocols` array is snapshotted when the session starts and reused across automatic reconnections. To pass a short-lived auth token in a subprotocol, obtain the token before calling the operation and pass ``client({ protocols: [`auth.${token}`, "quotes.v1"] })``.
+async function main() {
+  const [error, session, startupConnection] = await quotes(client);
+  if (error) {
+    console.error(error.code, startupConnection?.generation);
+    return;
+  }
+  await using ownedSession = session;
+  const unsubscribe = ownedSession.onRuntimeError((cause) =>
+    console.error("runtime", cause),
+  );
+  try {
+    ownedSession.send({ type: "subscribe", symbol: "ACME" });
+    // wire: {"type":"subscribe","symbol":"ACME"}
+    for await (const message of ownedSession.receive) {
+      console.log(message.symbol, message.price);
+      break;
+    }
+  } finally {
+    unsubscribe();
+  }
+}
 
-## Heartbeat and retries
+void main();
+```
 
-Both are opt-in via client helpers (`withWebSocketHeartbeat`, `withRetry`) or per-call `RequestOptions` (`client({ heartbeat, retry })`). The retry policy is the one `withRetry` shared with HTTP and SSE:
+</Tab>
+</Tabs>
+
+## 2. Message validation and direction rules [#2-message-validation-and-direction-rules]
+
+- **Incoming frames (`session.receive`)**: Text, `ArrayBuffer`, typed arrays, and `Blob` frames are decoded as UTF-8, parsed as JSON, and validated against `incoming`. Malformed JSON or schema mismatches are reported to `session.onRuntimeError` and dropped without closing the session. `session.receive` is single-consumer; requesting a second iterator throws `TypeError`. When the transport fails, messages already received are delivered first, then `receive` rejects with `closed.cause`, and that includes a heartbeat timeout. Cancellation by the caller (an abort of `signal`), `session.close()` and disposal discard unread messages, whether or not the session had already ended. On an open session, `receive` then ends at once after `session.close()` or disposal, and rejects with the abort reason (an `AbortError` by default) after an abort; a frame that arrives after `session.close()` is dropped too. A `signal` that expires, as `AbortSignal.timeout(ms)` does, while the session is open is a timeout: the session ends as an error and delivers the queued messages first. One that expires after the session has ended is a stop and discards them.
+- **Outgoing frames (`session.send(payload)`)**: Synchronously validates against `outgoing`, applies `.alias()` and codecs, and serializes with `JSON.stringify`. Sends immediately in the `open` state, queues during `reconnecting` (if `maxOutgoingQueueSize > 0`), and throws synchronously if the payload is invalid, the queue is full/disabled, or the session is closed.
+
+## 3. Session state and observers [#3-session-state-and-observers]
+
+| Member               | Description                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `state`              | `'idle' \| 'connecting' \| 'open' \| 'reconnecting' \| 'closing' \| 'closed' \| 'aborted' \| 'error'` |
+| `connection`         | Live snapshot of the latest physical socket (`generation`, `url`, `protocol`, `extensions`)           |
+| `bufferedAmount`     | Unsent byte count on the active physical socket (`0` when disconnected)                               |
+| `receive`            | Single-consumer async iterable of validated `incoming` messages                                       |
+| `onStateChange(fn)`  | Subscribes to state transitions; returns an `unsubscribe` function                                    |
+| `onRuntimeError(fn)` | Subscribes to non-startup frame/parse errors; returns an `unsubscribe` function                       |
+| `closed`             | Promise resolving to the terminal outcome (`kind: 'closed' \| 'aborted' \| 'error'`)                  |
+
+```ts
+type SocketAwaitResult<TIncoming, TOutgoing = never> =
+  | [
+      error: null,
+      socket: WebSocketSession<TIncoming, TOutgoing>,
+      connection: WebSocketConnectionInfo,
+    ]
+  | [
+      error: Fault<undefined>,
+      socket: undefined,
+      connection: WebSocketConnectionInfo | undefined,
+    ];
+```
+
+## 4. Retries, heartbeat, and queues [#4-retries-heartbeat-and-queues]
+
+Both reconnection and heartbeat are opt-in via client options (`withRetry`, `withWebSocketHeartbeat`) or per-call derived client options (`client({ retry, heartbeat })`). Reconnection uses the same `withRetry` policy as HTTP and SSE:
+
+<Tabs items={["Retry policy", "Application heartbeat"]}>
+<Tab>
 
 ```ts
 import {
@@ -106,59 +171,126 @@ const client = createClient(
   withEndpoint("https://quotes.example.com"),
   withRetry({
     maxRetries: 3,
+    attemptTimeoutMs: 5_000,
     delayMs: 500,
     factor: 2,
     maxDelayMs: 10_000,
     jitter: 0.2,
     shouldRetry(context) {
       if (context.transport !== "websocket") return context.retryable;
-      // Every close that session.close() did not request is retryable by default; refuse a policy violation.
-      return context.code !== 1008;
+      // A server that closed normally (1000) or refused with a policy violation (1008) would only repeat itself.
+      return context.code !== 1000 && context.code !== 1008;
     },
   }),
 );
-
 const quotes = defineWebSocket({
   path: "/quotes",
   incoming: struct.object({
-    type: struct.literal("pong"),
+    type: struct.literal("ready"),
     ok: struct.boolean(),
   }),
+});
+async function main() {
+  const [error, session] = await quotes(client);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  await using ownedSession = session;
+  console.log(ownedSession.state);
+}
+
+void main();
+```
+
+</Tab>
+<Tab>
+
+```ts
+import {
+  createClient,
+  defineWebSocket,
+  struct,
+  withEndpoint,
+} from "@defjs/core";
+
+const client = createClient(withEndpoint("https://quotes.example.com"));
+const quotes = defineWebSocket({
+  path: "/quotes",
+  incoming: struct.discriminatedUnion("type", [
+    struct.object({ type: struct.literal("pong"), ok: struct.boolean() }),
+  ]),
   outgoing: struct.object({ type: struct.literal("ping") }),
 });
 
-async function runWithHeartbeat() {
+async function main() {
   const [error, session] = await quotes(
     client({
       heartbeat: {
         intervalMs: 30_000,
         timeoutMs: 10_000,
         message: () => ({ type: "ping" as const }),
-        isAck: (msg) =>
-          typeof msg === "object" &&
-          msg !== null &&
-          "type" in msg &&
-          msg.type === "pong",
+        isAck: (message) =>
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          message.type === "pong",
       },
     }),
   );
-  if (error) return;
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   await using ownedSession = session;
   console.log(ownedSession.state);
 }
 
-void runWithHeartbeat();
+void main();
 ```
 
-Defjs defines no heartbeat format: `message` and `isAck` are yours, `message` is required, and `timeoutMs` is allowed only together with `isAck` (types only, no runtime check). The payload is sent through the `outgoing` struct as JSON text, and an acknowledgement must decode through `incoming` before `isAck` sees it. An unanswered heartbeat closes the socket and enters the retry flow like any close that `session.close()` did not request; without a retry policy the session ends with an `error` (`Error("WebSocket heartbeat timeout")`). A heartbeat that cannot be sent ends the session and is not retried.
+</Tab>
+</Tabs>
 
-A server can complete a clean close handshake with application-error code `1011`, so `wasClean: true` does not mean the application succeeded; decide on `context.code`. Every close that `session.close()` did not request is retried by default, a connection that never opened included, and `shouldRetry` can overrule that. A constructor that throws is not retried and `shouldRetry` is not asked. Successful opens reset the retry count (default 3 per outage). `attemptTimeoutMs` (a field of the retry options) bounds construction to `open`; the policy keeps its default of 3 retries, so write `withRetry({ maxRetries: 0, attemptTimeoutMs })` for a handshake-only deadline. With multiple endpoints, a retry can re-pick; it does not restore application subscriptions or delivery acknowledgments.
+- **Retries**: When a retry policy is set, the defaults are `maxRetries: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0.2`. Every close that `session.close()` did not request is retried by default, including a connection that never opened. A constructor that throws is a local failure that a retry would only repeat, so it ends the call without asking `shouldRetry`. Each physical `open` resets the outage count. `shouldRetry` can overrule the default and may be async; it is not called for a manual close, a caller abort, or once `maxRetries` retries have been made. A declined or spent retry ends the session as it would end without a policy: a connection error is `closed.kind: "error"`, a close frame from the peer is `"closed"`. An `error` event that no `close` event follows within one second, or a native `close()` that throws on an errored socket, is a failed attempt like a missed heartbeat, so the retry policy decides what follows. After `session.close()`, the same situation ends the session as `closed.kind: "closed"`. `beforeConnect({ attempt, signal })` runs before the initial connect and every retry. The balancer attribution of an opened socket depends on the close code only, whatever `wasClean` reports: `1006` or `1015` (no close frame arrived) is `NET_UNREACHABLE`, `1012` or `1013` is `NET_UNAVAILABLE`, and every other code is not a failure.
+- **Attempt timeout (`attemptTimeoutMs`)**: When provided, it bounds construction to `open` and is cleared after the handshake. It is an option of `withRetry` (or the `retry` request option), so `withRetry({ attemptTimeoutMs })` also retries, with the default `maxRetries: 3`. For a handshake-only deadline write `withRetry({ maxRetries: 0, attemptTimeoutMs })`. Expiry reports `NET_UNREACHABLE` to the balancer, and exhausted retries end with `NET_TIMEOUT`.
+- **Heartbeat**: Defjs defines no heartbeat format, interval, or timeout: `message` and `isAck` are your functions, and the type requires `message` and allows `timeoutMs` only together with `isAck`. The browser `WebSocket` interface has no way to send a protocol-level ping, so an application-level message is the only portable heartbeat. Every `intervalMs` it sends `message()` through the `outgoing` struct as JSON text, so the endpoint declares an `outgoing` struct and a bare text or binary ping is not possible. It waits up to `timeoutMs` for a decoded frame matching `isAck(msg)`; a frame that fails the `incoming` struct is reported to `onRuntimeError` and never reaches `isAck`. Matching ack frames are consumed by the heartbeat monitor and not forwarded to `session.receive`. A missed ack counts as a connection failure: the socket is closed, the missed ack is reported to the balancer as `NET_UNREACHABLE` for the endpoint, and the attempt enters the retry flow like any other close. Without a retry policy, or once the retries are used up, `closed.kind` is `"error"` and `closed.cause` is the ordinary `Error("WebSocket heartbeat timeout")`. Heartbeat serialization failures, or a throwing `message()`, are local: they end the session with their original cause, are not retried, and are not attributed to the endpoint.
+- **Queue bounds**:
+  - Incoming messages: There is no option and no count limit. The library queues every message the platform delivers until `session.receive` reads it, so a consumer that never reads lets the queue grow without bound; consume `session.receive` while the session is open, or close the session.
+  - `maxOutgoingQueueSize` (optional, default `0`): Buffers `session.send()` calls only while `state === 'reconnecting'` and flushes them before publishing the next `open`.
 
-The input, builder output, and selected protocols are captured once for the logical session. Each attempt resolves its URL before `beforeConnect`; a retry can replace the base endpoint, not the captured path/query. `beforeConnect` runs per attempt but does not rebuild a query ticket or subprotocol token after a closure variable changes. Start a new operation with refreshed values when those credentials expire. See [load balancing](load-balancing.md) for endpoint and retry boundaries.
+`shouldRetry` receives the native close `code`, `reason`, and `wasClean` in its WebSocket context, and `retryable` is always `true` there. A server can complete a clean close handshake with application-error code `1011`, so `wasClean === true` does not mean the application succeeded. The example decides on `code`; choose application codes according to your protocol rather than relying on `!wasClean` alone.
 
-## Session ownership and disposal
+## 5. Subprotocols and authentication [#protocols-and-authentication]
 
-- Use `await using ownedSession = session;` or call `session.close(1000, "done")` and `await session.closed` in `finally`.
-- `session.receive` is single-consumer; requesting a second iterator throws `TypeError`.
-- When a session ends as `error`, messages already queued are still delivered and `session.receive` rejects with `closed.cause` after the last one; a close from the peer also delivers them before `receive` ends, while a caller stopping the session (`signal` abort, `session.close()`, disposal) discards unread messages, also when the session had already ended: on an open session `receive` then ends at once after `session.close()` or disposal, and rejects with the abort reason (an `AbortError` by default) after a `signal` abort; after an error ending, `receive` still rejects with `closed.cause` once nothing unread is left. An expired `AbortSignal.timeout(ms)` while the session is open is a timeout, not a stop: it ends the session as an error after the queued messages. One that expires after the session ended is a stop.
-- An open connection dropped without a close frame (code `1006`) always settles `closed` as `kind: "error"` with `cause` `Error("WebSocket connection error")`, on every runtime.
+Browser WebSockets do not support arbitrary handshake headers, so WebSocket `builder` functions return only `{ path?, query? }`.
+
+- **Subprotocol precedence**: `client({ protocols })` overrides `withWebSocketProtocols(...)`, which overrides `defineWebSocket({ protocols })`.
+- **URL conversion**: Defjs automatically converts `http:` → `ws:` and `https:` → `wss:` on the resolved endpoint.
+- **Credentials**: `withCredentials(true)` applies to Fetch (HTTP/SSE) only. Authenticate WebSockets using cookies/session policies, subprotocols, or short-lived connection tickets—avoid placing long-lived secrets in query strings.
+- **`beforeConnect` is not a request mutator**: Input parsing, the synchronous pure `builder`, and the interceptor chain run once per operation. For a request whose base endpoint is not replaced by an interceptor, each reconnect re-picks an endpoint and reconstructs the URL with that endpoint but reuses the built path/query and the captured protocol list. The URL is fixed before that attempt's `beforeConnect` runs, both on the same endpoint and after failover. Changing a closure variable, input, or protocol array in the hook cannot supply a fresh ticket to the current handshake. Rotating a URL/subprotocol credential within one session is unsupported; obtain the new credential first, pass it as input or client configuration to a new operation, then own that replacement session's cleanup.
+
+## 6. Closure and ownership [#6-closure-and-ownership]
+
+Call `session.close(code?, reason?)` (where `code` is `1000` or `3000..4999` and `reason` is ≤ 123 UTF-8 bytes) and `await session.closed`, or use `await using`:
+
+```typescript
+import type { WebSocketSession } from "@defjs/core";
+
+async function observeSession(
+  session: WebSocketSession<unknown, never>,
+): Promise<void> {
+  await using ownedSession = session;
+  console.log(ownedSession.state);
+}
+```
+
+A connection that was open and then dropped without a close frame (code `1006`, `wasClean: false`) always ends with `closed.kind: "error"` and `closed.cause` `Error("WebSocket connection error")`, whether or not the runtime fires a native `error` event.
+
+When a retry outage exhausts its `maxRetries`, the session ends with `closed.kind: "error"` and the ordinary transport error as `closed.cause`, alongside the native close snapshot (often code `1006` for a failed upgrade); it does not expose a separate stable exhaustion code. When a session ends with `closed.kind: "error"`, the messages already queued are still delivered and `session.receive` rejects with `closed.cause` after the last one; a close from the peer also delivers the queued messages before `session.receive` ends. When the caller stops the session, the unread messages are discarded: a caller abort (`closed.kind: "aborted"`), a manual `session.close()`, and disposal with `await using` all do this, also after the session has already ended. On an open session, `session.receive` then ends at once after `session.close()` or disposal, and rejects with `closed.cause`, the abort reason, after a caller abort. A stop after the session ended discards the unread messages and changes nothing else: `closed` keeps its value, and `session.receive` still rejects with `closed.cause` once nothing unread is left. Always unsubscribe `onStateChange` and `onRuntimeError` listeners when your component or worker finishes.
+
+## Related reading [#related-reading]
+
+- [Open a WebSocket session](/recipes/websocket-session)
+- [Consume an SSE stream](/recipes/consume-sse)
+- [Load balancing & failover](/docs/load-balancing)
