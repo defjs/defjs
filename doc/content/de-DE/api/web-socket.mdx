@@ -30,7 +30,7 @@ Nutze lieber `await using ownedSession = session` für die Bereinigung deines Sc
   examples/api/consume-web-socket.ts#consume
 </include>
 
-`closed` meldet den logischen Endzustand. Der Async-Disposer fordert den nativen Close an und wartet auf Defjs-eigenen Teardown, begrenzt ein fehlendes Close-Event aber auf eine Sekunde und kann mit einer `DOMException` namens `TimeoutError` abgelehnt werden. Er kann nicht beweisen, dass die physische TCP-Verbindung geschlossen ist.
+`closed` meldet den logischen Endzustand. Der Async-Disposer fordert den nativen Close an und wartet auf Defjs-eigenen Teardown, begrenzt ein fehlendes Close-Event aber auf eine Sekunde und kann mit einer `DOMException` namens `TimeoutError` abgelehnt werden. Er kann nicht beweisen, dass die physische TCP-Verbindung geschlossen ist. Wirft das native `close()` während `session.close()`, wirft `session.close()` diesen Fehler, und die Sitzung endet als `closed.kind: "error"` mit dieser Ursache.
 
 ### WebSocketState
 

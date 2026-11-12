@@ -30,7 +30,7 @@ description: defineWebSocket、工作階段與請求選項。
   examples/api/consume-web-socket.ts#consume
 </include>
 
-`closed` 回報邏輯上的終止狀態。非同步 disposer 會要求原生關閉，並等待 Defjs 擁有的 teardown；但若關閉事件遲遲不來，最多只等一秒，並可能以名為 `TimeoutError` 的 `DOMException` 拒絕。它無法證明實體 TCP 連線真的關閉了。
+`closed` 回報邏輯上的終止狀態。非同步 disposer 會要求原生關閉，並等待 Defjs 擁有的 teardown；但若關閉事件遲遲不來，最多只等一秒，並可能以名為 `TimeoutError` 的 `DOMException` 拒絕。它無法證明實體 TCP 連線真的關閉了。若 `session.close()` 執行時原生 `close()` 拋出，`session.close()` 會拋出該錯誤，工作階段以 `closed.kind: "error"` 與該原因結束。
 
 ### WebSocketState
 

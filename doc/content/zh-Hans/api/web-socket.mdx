@@ -30,7 +30,7 @@ description: defineWebSocket、会话与请求选项。
   examples/api/consume-web-socket.ts#consume
 </include>
 
-`closed` 报告逻辑终态。异步 disposer 会请求原生关闭并等待 Defjs 自有的清理；若一直没有 close 事件，则以 1 秒为界，并可能以名为 `TimeoutError` 的 `DOMException` reject。它无法证明物理 TCP 连接已经关闭。
+`closed` 报告逻辑终态。异步 disposer 会请求原生关闭并等待 Defjs 自有的清理；若一直没有 close 事件，则以 1 秒为界，并可能以名为 `TimeoutError` 的 `DOMException` reject。它无法证明物理 TCP 连接已经关闭。若 `session.close()` 运行时原生 `close()` 抛出，`session.close()` 会抛出该错误，会话以 `closed.kind: "error"` 和该原因结束。
 
 ### WebSocketState
 

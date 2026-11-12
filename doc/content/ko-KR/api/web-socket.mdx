@@ -30,7 +30,7 @@ description: defineWebSocket, 세션, 요청 옵션이에요.
   examples/api/consume-web-socket.ts#consume
 </include>
 
-`closed`는 논리적인 종료 상태를 보고해요. 비동기 디스포저는 네이티브 close를 요청하고 Defjs가 소유한 정리 작업을 기다리지만, close 이벤트가 없으면 1초에서 끊고 `TimeoutError`라는 이름의 `DOMException`으로 reject할 수 있어요. 물리 TCP 연결이 닫혔다는 증명까지는 못 해요.
+`closed`는 논리적인 종료 상태를 보고해요. 비동기 디스포저는 네이티브 close를 요청하고 Defjs가 소유한 정리 작업을 기다리지만, close 이벤트가 없으면 1초에서 끊고 `TimeoutError`라는 이름의 `DOMException`으로 reject할 수 있어요. 물리 TCP 연결이 닫혔다는 증명까지는 못 해요. `session.close()`가 실행되는 동안 네이티브 `close()`가 throw하면 `session.close()`가 그 오류를 throw하고, 세션은 그 원인과 함께 `closed.kind: "error"`로 끝나요.
 
 ### WebSocketState
 

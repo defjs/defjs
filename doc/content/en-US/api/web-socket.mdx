@@ -30,7 +30,7 @@ Prefer `await using ownedSession = session` for owned scope cleanup. Manual `ses
   examples/api/consume-web-socket.ts#consume
 </include>
 
-`closed` reports the logical terminal state. The async disposer requests native close and waits for Defjs-owned teardown, but bounds a missing close event at one second and may reject with a `DOMException` named `TimeoutError`. It cannot prove that the physical TCP connection closed.
+`closed` reports the logical terminal state. The async disposer requests native close and waits for Defjs-owned teardown, but bounds a missing close event at one second and may reject with a `DOMException` named `TimeoutError`. It cannot prove that the physical TCP connection closed. If the native `close()` throws while `session.close()` runs, `session.close()` throws that error and the session ends as `closed.kind: "error"` with that cause.
 
 ### WebSocketState
 

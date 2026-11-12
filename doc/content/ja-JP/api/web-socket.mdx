@@ -30,7 +30,7 @@ description: defineWebSocket、セッション、リクエストオプション�
   examples/api/consume-web-socket.ts#consume
 </include>
 
-`closed` は論理的な終端状態を報告します。非同期 disposer はネイティブ close を要求し、Defjs が所有する teardown を待ちますが、close イベントが無い場合は 1 秒で打ち切り、`TimeoutError` という名前の `DOMException` で reject することがあります。物理 TCP 接続が閉じたことは証明できません。
+`closed` は論理的な終端状態を報告します。非同期 disposer はネイティブ close を要求し、Defjs が所有する teardown を待ちますが、close イベントが無い場合は 1 秒で打ち切り、`TimeoutError` という名前の `DOMException` で reject することがあります。物理 TCP 接続が閉じたことは証明できません。`session.close()` の実行中にネイティブの `close()` が throw した場合、`session.close()` はそのエラーを throw し、セッションはその原因とともに `closed.kind: "error"` で終わります。
 
 ### WebSocketState
 

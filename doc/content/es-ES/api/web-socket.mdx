@@ -30,7 +30,7 @@ Prefiere `await using ownedSession = session` para la limpieza de un ámbito pro
   examples/api/consume-web-socket.ts#consume
 </include>
 
-`closed` informa del estado terminal lógico. El liberador asíncrono pide el cierre nativo y espera el desmontaje que posee Defjs, pero acota un evento de cierre ausente a un segundo y puede rechazar con un `DOMException` llamado `TimeoutError`. No puede demostrar que la conexión TCP física se cerró.
+`closed` informa del estado terminal lógico. El liberador asíncrono pide el cierre nativo y espera el desmontaje que posee Defjs, pero acota un evento de cierre ausente a un segundo y puede rechazar con un `DOMException` llamado `TimeoutError`. No puede demostrar que la conexión TCP física se cerró. Si el `close()` nativo lanza mientras se ejecuta `session.close()`, `session.close()` lanza ese error y la sesión termina como `closed.kind: "error"` con esa causa.
 
 ### WebSocketState
 
