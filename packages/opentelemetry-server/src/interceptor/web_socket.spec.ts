@@ -146,7 +146,7 @@ describe("WebSocket client diagnostic logs", () => {
       if (tracing) expect(trace.getSpan(record.context)).toBe(spans[0]);
       else expect(record.context).toBe(parent);
       expect(
-        metrics.activeConnections.add.mock.calls.map((call) => {
+        metrics.active.add.mock.calls.map((call) => {
           const value: unknown = call[0];
           return value;
         }),
@@ -210,7 +210,7 @@ describe("WebSocket client diagnostic logs", () => {
       expect(report).toHaveBeenCalledTimes(1);
       expect(spans[0]?.ended).toBe(true);
       expect(
-        metrics.activeConnections.add.mock.calls.map((call) => {
+        metrics.active.add.mock.calls.map((call) => {
           const value: unknown = call[0];
           return value;
         }),
@@ -255,7 +255,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
           "defjs.result": "success",
         },
       );
-      expect(metrics.activeConnections.add.mock.calls).toEqual([
+      expect(metrics.active.add.mock.calls).toEqual([
         [1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
       expect(metrics.connectionDuration.record).not.toHaveBeenCalled();
@@ -266,7 +266,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       else ws.close({ kind: close });
       await waitForSettledPromises();
 
-      expect(metrics.activeConnections.add.mock.calls).toEqual([
+      expect(metrics.active.add.mock.calls).toEqual([
         [1, { "server.address": "api.example.com", "server.port": 443 }],
         [-1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
@@ -303,7 +303,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
         "error.type": "TypeError",
       },
     );
-    expect(metrics.activeConnections.add).not.toHaveBeenCalled();
+    expect(metrics.active.add).not.toHaveBeenCalled();
     expect(metrics.connectionDuration.record).not.toHaveBeenCalled();
   });
 
@@ -641,10 +641,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       Promise.resolve(makeWsSession()),
     );
 
-    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
-      "websocket.connected",
-      undefined,
-    );
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("websocket.connected");
   });
 
   test("should keep span open until session.closed settles", async () => {
@@ -815,7 +812,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
         "error.type": "TypeError",
       }),
     );
-    expect(metrics.activeConnections.add).not.toHaveBeenCalled();
+    expect(metrics.active.add).not.toHaveBeenCalled();
   });
 
   test("should skip span creation when requireParentSpan and no active span", async () => {
@@ -1013,7 +1010,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
         "server.port": 443,
       }),
     );
-    expect(metrics.activeConnections.add).toHaveBeenCalledWith(
+    expect(metrics.active.add).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ "server.address": "api.example.com" }),
     );
@@ -1035,17 +1032,17 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.close();
     await waitForSettledPromises();
 
-    expect(metrics.activeConnections.add).toHaveBeenNthCalledWith(
+    expect(metrics.active.add).toHaveBeenNthCalledWith(
       1,
       1,
       expect.objectContaining({ "server.address": "api.example.com" }),
     );
-    expect(metrics.activeConnections.add).toHaveBeenNthCalledWith(
+    expect(metrics.active.add).toHaveBeenNthCalledWith(
       2,
       -1,
       expect.objectContaining({ "server.address": "api.example.com" }),
     );
-    expect(metrics.activeConnections.add).toHaveBeenCalledTimes(2);
+    expect(metrics.active.add).toHaveBeenCalledTimes(2);
   });
 
   test("should keep metric attributes low-cardinality", async () => {

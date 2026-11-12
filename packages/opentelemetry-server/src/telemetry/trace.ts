@@ -1,4 +1,4 @@
-import type { Attributes, Span } from "@opentelemetry/api";
+import type { Span } from "@opentelemetry/api";
 import { diag, SpanStatusCode } from "@opentelemetry/api";
 
 // Fetch writes only these six methods in upper case; every other method goes on the wire as given.
@@ -108,14 +108,6 @@ export function recordSpanHookError(
   } catch {
     // Telemetry hooks must not affect transport execution.
   }
-}
-
-export function addSpanEvent(
-  span: Span,
-  eventName: string,
-  attributes?: Attributes,
-): void {
-  span.addEvent(eventName, attributes);
 }
 
 export function getHttpResponseErrorType(status: number): string | undefined {

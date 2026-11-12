@@ -3,7 +3,6 @@ import { describe, expect, test, vi } from "vitest";
 import type { MockSpan } from "../../test/mocks";
 import { createMockTracer } from "../../test/mocks";
 import {
-  addSpanEvent,
   normalizeHttpMethod,
   runSpanHook,
   setSpanError,
@@ -259,23 +258,5 @@ describe("trace helpers", () => {
       "hook.name": "requestHook",
     });
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "number" });
-  });
-
-  test("addSpanEvent calls span.addEvent without attributes", () => {
-    const { tracer, spans } = createMockTracer();
-    const span = tracer.startSpan("test");
-    addSpanEvent(span, "custom.event");
-
-    expect(spans[0]?.addEvent).toHaveBeenCalledWith("custom.event", undefined);
-  });
-
-  test("addSpanEvent calls span.addEvent with attributes", () => {
-    const { tracer, spans } = createMockTracer();
-    const span = tracer.startSpan("test");
-    addSpanEvent(span, "custom.event", { "custom.key": "value" });
-
-    expect(spans[0]?.addEvent).toHaveBeenCalledWith("custom.event", {
-      "custom.key": "value",
-    });
   });
 });

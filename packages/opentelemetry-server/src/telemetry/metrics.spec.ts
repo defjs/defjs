@@ -43,7 +43,7 @@ describe("metrics helpers", () => {
     );
     expect(metrics.connectDuration).toBe(histogram);
     expect(metrics.connectionDuration).toBe(histogram);
-    expect(metrics.activeStreams).toBe(upDownCounter);
+    expect(metrics.active).toBe(upDownCounter);
   });
 
   test("createWebSocketClientMetrics creates WebSocket custom metrics", () => {
@@ -65,7 +65,7 @@ describe("metrics helpers", () => {
     );
     expect(metrics.connectDuration).toBe(histogram);
     expect(metrics.connectionDuration).toBe(histogram);
-    expect(metrics.activeConnections).toBe(upDownCounter);
+    expect(metrics.active).toBe(upDownCounter);
   });
 
   test("durationSeconds uses explicit end time", () => {
@@ -120,10 +120,10 @@ describe("histogram bucket isolation", () => {
     expect(http.requestDuration).toBe(histogram);
     expect(sse.connectDuration).toBe(histogram);
     expect(sse.connectionDuration).toBe(histogram);
-    expect(sse.activeStreams).toBe(upDownCounter);
+    expect(sse.active).toBe(upDownCounter);
     expect(webSocket.connectDuration).toBe(histogram);
     expect(webSocket.connectionDuration).toBe(histogram);
-    expect(webSocket.activeConnections).toBe(upDownCounter);
+    expect(webSocket.active).toBe(upDownCounter);
     expect(
       vi
         .mocked(method(meter, "createHistogram"))

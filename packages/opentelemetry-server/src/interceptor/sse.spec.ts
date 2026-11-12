@@ -98,7 +98,7 @@ describe("SSE client diagnostic logs", () => {
       if (tracing) expect(trace.getSpan(record.context)).toBe(spans[0]);
       else expect(record.context).toBe(parent);
       expect(
-        metrics.activeStreams.add.mock.calls.map((call) => {
+        metrics.active.add.mock.calls.map((call) => {
           const value: unknown = call[0];
           return value;
         }),
@@ -160,7 +160,7 @@ describe("SSE client diagnostic logs", () => {
       expect(logger.emit).toHaveBeenCalledTimes(1);
       expect(spans[0]?.ended).toBe(true);
       expect(
-        metrics.activeStreams.add.mock.calls.map((call) => {
+        metrics.active.add.mock.calls.map((call) => {
           const value: unknown = call[0];
           return value;
         }),
@@ -217,7 +217,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
           "defjs.result": "success",
         },
       );
-      expect(metrics.activeStreams.add.mock.calls).toEqual([
+      expect(metrics.active.add.mock.calls).toEqual([
         [1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
       expect(metrics.connectionDuration.record).not.toHaveBeenCalled();
@@ -231,7 +231,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
         );
       await waitForSettledPromises();
 
-      expect(metrics.activeStreams.add.mock.calls).toEqual([
+      expect(metrics.active.add.mock.calls).toEqual([
         [1, { "server.address": "api.example.com", "server.port": 443 }],
         [-1, { "server.address": "api.example.com", "server.port": 443 }],
       ]);
@@ -268,7 +268,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
         "error.type": "TypeError",
       },
     );
-    expect(metrics.activeStreams.add).not.toHaveBeenCalled();
+    expect(metrics.active.add).not.toHaveBeenCalled();
     expect(metrics.connectionDuration.record).not.toHaveBeenCalled();
   });
 
@@ -541,7 +541,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       Promise.resolve(makeSSEStream()),
     );
 
-    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.connected", undefined);
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.connected");
   });
 
   test("should keep span open until stream.closed settles", async () => {
@@ -717,7 +717,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
         "error.type": "TypeError",
       }),
     );
-    expect(metrics.activeStreams.add).not.toHaveBeenCalled();
+    expect(metrics.active.add).not.toHaveBeenCalled();
   });
 
   test("should skip span creation when requireParentSpan and no active span", async () => {
@@ -850,7 +850,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
         "server.port": 443,
       }),
     );
-    expect(metrics.activeStreams.add).toHaveBeenCalledWith(
+    expect(metrics.active.add).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ "server.address": "api.example.com" }),
     );
@@ -874,17 +874,17 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     stream.close();
     await waitForSettledPromises();
 
-    expect(metrics.activeStreams.add).toHaveBeenNthCalledWith(
+    expect(metrics.active.add).toHaveBeenNthCalledWith(
       1,
       1,
       expect.objectContaining({ "server.address": "api.example.com" }),
     );
-    expect(metrics.activeStreams.add).toHaveBeenNthCalledWith(
+    expect(metrics.active.add).toHaveBeenNthCalledWith(
       2,
       -1,
       expect.objectContaining({ "server.address": "api.example.com" }),
     );
-    expect(metrics.activeStreams.add).toHaveBeenCalledTimes(2);
+    expect(metrics.active.add).toHaveBeenCalledTimes(2);
   });
 
   test("should keep metric attributes low-cardinality", async () => {

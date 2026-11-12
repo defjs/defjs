@@ -191,8 +191,7 @@ export function createMockMetrics() {
     requestDuration: { record: vi.fn() },
     connectDuration: { record: vi.fn() },
     connectionDuration: { record: vi.fn() },
-    activeStreams: { add: vi.fn() },
-    activeConnections: { add: vi.fn() },
+    active: { add: vi.fn() },
   };
 }
 

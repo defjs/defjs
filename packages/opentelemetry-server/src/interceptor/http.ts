@@ -55,25 +55,9 @@ export function createOpenTelemetryHttpInterceptor(
 
     const startTime = performance.now();
 
+    let response: HttpResponse<unknown>;
     try {
-      const response = await next({ ...req, headers });
-      const durationS = durationSeconds(startTime);
-
-      if (span) {
-        if (responseHook) {
-          runSpanHook(span, "responseHook", () =>
-            responseHook(span, response, req),
-          );
-        }
-        setSpanHttpResponse(span, response.status);
-      }
-
-      metrics?.requestDuration.record(
-        durationS,
-        responseMetricAttributes(call, response.status),
-      );
-
-      return response;
+      response = await next({ ...req, headers });
     } catch (error) {
       const durationS = durationSeconds(startTime);
 
@@ -96,5 +80,22 @@ export function createOpenTelemetryHttpInterceptor(
 
       throw error;
     }
+    const durationS = durationSeconds(startTime);
+
+    if (span) {
+      if (responseHook) {
+        runSpanHook(span, "responseHook", () =>
+          responseHook(span, response, req),
+        );
+      }
+      setSpanHttpResponse(span, response.status);
+    }
+
+    metrics?.requestDuration.record(
+      durationS,
+      responseMetricAttributes(call, response.status),
+    );
+
+    return response;
   });
 }

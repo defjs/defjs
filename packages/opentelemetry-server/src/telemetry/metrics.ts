@@ -8,16 +8,11 @@ export interface HttpClientMetrics {
   requestDuration: Histogram;
 }
 
-export interface SSEClientMetrics {
+/** The instruments SSE and WebSocket share; `active` counts the open connections. */
+export interface ConnectionClientMetrics {
   connectDuration: Histogram;
   connectionDuration: Histogram;
-  activeStreams: UpDownCounter;
-}
-
-export interface WebSocketClientMetrics {
-  connectDuration: Histogram;
-  connectionDuration: Histogram;
-  activeConnections: UpDownCounter;
+  active: UpDownCounter;
 }
 
 export function createHttpClientMetrics(meter: Meter): HttpClientMetrics {
@@ -30,7 +25,7 @@ export function createHttpClientMetrics(meter: Meter): HttpClientMetrics {
   };
 }
 
-export function createSSEClientMetrics(meter: Meter): SSEClientMetrics {
+export function createSSEClientMetrics(meter: Meter): ConnectionClientMetrics {
   return {
     connectDuration: meter.createHistogram(
       "defjs.client.sse.connect.duration",
@@ -48,19 +43,16 @@ export function createSSEClientMetrics(meter: Meter): SSEClientMetrics {
         advice: { explicitBucketBoundaries: [...DURATION_BUCKETS] },
       },
     ),
-    activeStreams: meter.createUpDownCounter(
-      "defjs.client.sse.active_streams",
-      {
-        description: "Number of active SSE streams",
-        unit: "{stream}",
-      },
-    ),
+    active: meter.createUpDownCounter("defjs.client.sse.active_streams", {
+      description: "Number of active SSE streams",
+      unit: "{stream}",
+    }),
   };
 }
 
 export function createWebSocketClientMetrics(
   meter: Meter,
-): WebSocketClientMetrics {
+): ConnectionClientMetrics {
   return {
     connectDuration: meter.createHistogram(
       "defjs.client.websocket.connect.duration",
@@ -78,7 +70,7 @@ export function createWebSocketClientMetrics(
         advice: { explicitBucketBoundaries: [...DURATION_BUCKETS] },
       },
     ),
-    activeConnections: meter.createUpDownCounter(
+    active: meter.createUpDownCounter(
       "defjs.client.websocket.active_connections",
       {
         description: "Number of active WebSocket connections",
