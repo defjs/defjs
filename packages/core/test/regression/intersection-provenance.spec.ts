@@ -7,6 +7,7 @@ import {
   withHTTPHandle,
   type AnyStruct,
 } from "../../src";
+import { isPlainObject } from "../../src/struct/plain_object";
 import { encodeOutbound } from "../../src/struct/encode";
 import type { Guide } from "../../src/struct/guide";
 import { assertRecord, isRuntimeStruct, isUnknownArray } from "../narrow";
@@ -32,12 +33,16 @@ async function post(schema: AnyStruct, input: unknown) {
     }),
   );
   const endpoint = defineRequest({
-    // @ts-expect-error builder forwards AnyStruct input unchanged
     builder: (value) => {
       builderCalls += 1;
       const received: unknown = value;
       parsed = received;
-      return { body: received };
+      return {
+        body:
+          Array.isArray(received) || isPlainObject(received)
+            ? received
+            : undefined,
+      };
     },
     input: schema,
     method: "POST",

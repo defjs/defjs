@@ -423,7 +423,7 @@ describe("client option snapshots", () => {
     expect(reads).toBe(2);
   });
 
-  test("snapshots unknown interceptor kinds in the original getter order", () => {
+  test("snapshots an interceptor in the original getter order", () => {
     const reads: string[] = [];
     const fn = createHttpInterceptor(() =>
       Promise.resolve(makeResponse({ status: 204 })),
@@ -431,20 +431,19 @@ describe("client option snapshots", () => {
     const interceptor = {
       get kind() {
         reads.push("kind");
-        return "unknown-kind";
+        return "http" as const;
       },
       get fn() {
         reads.push("fn");
         return fn;
       },
     };
-    // @ts-expect-error Invalid runtime kinds must retain the original snapshot behavior.
     const option = withInterceptors(interceptor);
     const client = createClient(option);
 
     expect(reads).toEqual(["kind", "fn"]);
     expect(client[CLIENT].config.interceptors[0]).toEqual({
-      kind: "unknown-kind",
+      kind: "http",
       fn,
     });
     expect(client[CLIENT].config.interceptors[0]).not.toBe(interceptor);
@@ -472,8 +471,8 @@ describe("client option snapshots", () => {
     const client = createClient(withEndpoint("https://example.test"), option);
     const again = createClient(withEndpoint("https://example.test"), option);
     http.fn = () => Promise.resolve(makeResponse({ status: 503 }));
-    // @ts-expect-error kind is fixed; mutating it proves the snapshot copied it
-    http.kind = "sse";
+    const mutable: { kind: string } = http;
+    mutable.kind = "sse";
 
     const [error] = await defineRequest({
       method: "GET",

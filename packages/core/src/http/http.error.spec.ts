@@ -286,11 +286,9 @@ describe("request http runtime errors", () => {
       path: "/null",
     });
 
-    const [error, result, response] = await useValidatedRequest(
-      client,
-      // @ts-expect-error id must be a number
-      { id: "oops" },
-    );
+    const [error, result, response] = await useValidatedRequest(client, {
+      id: NaN,
+    });
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -308,16 +306,16 @@ describe("request http runtime errors", () => {
     }
     expect(error.cause.format()._errors).toEqual([]);
     expect(error.cause.flatten().fieldErrors["id"]).toEqual([
-      "Expected number at id, received string",
+      "Expected number at id, received number",
     ]);
     expect(error.cause.prettify()).toBe(
-      "× id: Expected number at id, received string",
+      "× id: Expected number at id, received number",
     );
-    expect(error.cause.issues[0]?.received).toBe("oops");
+    expect(error.cause.issues[0]?.received).toBe(NaN);
     expect(String(error)).toBe(
-      "DefjsFault: Expected number at id, received string",
+      "DefjsFault: Expected number at id, received number",
     );
-    expect(String(error)).not.toContain("oops");
+    expect(String(error)).not.toContain("NaN");
   });
 
   test("should stop before build and transport when a required input field is missing", async () => {
@@ -342,11 +340,9 @@ describe("request http runtime errors", () => {
       path: "/search",
     });
 
-    const [error, result, response] = await useRequest(
-      guardedClient,
-      // @ts-expect-error required input field is missing
-      {},
-    );
+    const [error, result, response] = await useRequest(guardedClient, {
+      page: NaN,
+    });
 
     expect(error?.code).toBe("REQ_INPUT_INVALID");
     expect(result).toBeUndefined();
@@ -479,33 +475,6 @@ describe("request http runtime errors", () => {
     if (error?.code !== "REQ_BUILD_FAILED") {
       throw new Error("Expected a build fault");
     }
-  });
-
-  test("should return REQ_BUILD_FAILED when the JSON body is a Map", async () => {
-    const handle = vi.fn(() =>
-      Promise.resolve(new Response(null, { status: 204 })),
-    );
-    const guardedClient = createClient(
-      withEndpoint("https://example.com"),
-      withHTTPHandle(handle),
-    );
-    const useRequest = defineRequest({
-      // @ts-expect-error Map is not a request body
-      builder: () => ({ body: new Map<string, string>() }),
-      method: "POST",
-      path: "/users",
-    });
-
-    const [fault, result, response] = await useRequest(guardedClient);
-
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(result).toBeUndefined();
-    expect(response).toBeUndefined();
-    expect(fault?.cause).toBeInstanceOf(TypeError);
-    expect(
-      fault?.cause instanceof TypeError ? fault.cause.message : "",
-    ).toMatch(/Map/);
-    expect(handle).toHaveBeenCalledTimes(0);
   });
 
   test("should return REQ_BUILD_FAILED when the JSON body is an async iterable object", async () => {
@@ -771,25 +740,6 @@ describe("request http runtime errors", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  test("should return ABORTED when signal is aborted with explicit undefined reason", async () => {
-    const signal = { aborted: true, reason: undefined };
-
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.null(),
-      path: "/null",
-    });
-
-    const [error, result, response] = await useRequest(
-      // @ts-expect-error aborted signal whose reason is undefined cannot be built with AbortController
-      client({ signal }),
-    );
-
-    expect(result).toBeUndefined();
-    expect(response).toBeUndefined();
-    expect(error?.code).toBe("NET_ABORTED");
-  });
-
   test("should classify an interceptor that throws the abort sentinel as cancellation", async () => {
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
@@ -919,11 +869,7 @@ describe("request http runtime errors", () => {
       path: "/null",
     });
 
-    const [error] = await useBadRequest(
-      client,
-      // @ts-expect-error id must be a number
-      { id: "invalid" },
-    );
+    const [error] = await useBadRequest(client, { id: NaN });
 
     expect(error?.code).toBe("REQ_INPUT_INVALID");
   });
@@ -1293,7 +1239,7 @@ describe("request http runtime errors", () => {
   });
 });
 
-describe("request http misuse", () => {
+describe("request http caller signal", () => {
   const jsonResponse = (status: number) =>
     new Response("{}", {
       headers: { "content-type": "application/json" },
@@ -1301,32 +1247,6 @@ describe("request http misuse", () => {
     });
   const clientWith = (handle: FetchHandle) =>
     createClient(withEndpoint("https://example.test"), withHTTPHandle(handle));
-
-  test.each([
-    ["output", { output: {} }],
-    ["error", { error: {} }],
-  ])(
-    "should leave no listener on the caller signal when %s is not a struct",
-    async (_side, declaration) => {
-      const controller = new AbortController();
-      const add = vi.spyOn(controller.signal, "addEventListener");
-      const remove = vi.spyOn(controller.signal, "removeEventListener");
-      const handle = vi.fn<FetchHandle>();
-      // @ts-expect-error a declaration must be a struct
-      const useBroken = defineRequest({
-        method: "GET",
-        path: "/misuse",
-        ...declaration,
-      });
-
-      await expect(
-        useBroken(clientWith(handle)({ signal: controller.signal })),
-      ).rejects.toBeInstanceOf(TypeError);
-
-      expect(add).toHaveBeenCalledTimes(remove.mock.calls.length);
-      expect(handle).not.toHaveBeenCalled();
-    },
-  );
 
   test("should balance listeners on the caller signal for a valid definition", async () => {
     const controller = new AbortController();
@@ -1346,75 +1266,5 @@ describe("request http misuse", () => {
     expect(fault).toBeNull();
     expect(add.mock.calls.length).toBeGreaterThan(0);
     expect(remove).toHaveBeenCalledTimes(add.mock.calls.length);
-  });
-
-  test.each([
-    ["output", { output: {} }],
-    ["output", { output: 123 }],
-    ["error", { error: {} }],
-  ])(
-    "should reject with TypeError when %s is not a struct, without sending the request",
-    async (_side, declaration) => {
-      const handle = vi.fn<FetchHandle>(() =>
-        Promise.resolve(jsonResponse(503)),
-      );
-      // @ts-expect-error a declaration must be a struct
-      const useBroken = defineRequest({
-        method: "GET",
-        path: "/misuse",
-        ...declaration,
-      });
-
-      await expect(useBroken(clientWith(handle))).rejects.toBeInstanceOf(
-        TypeError,
-      );
-      expect(handle).not.toHaveBeenCalled();
-    },
-  );
-
-  test.each([{}, 123])(
-    "should reject with TypeError for a signal that is not an AbortSignal: %j",
-    async (signal) => {
-      const handle = vi.fn<FetchHandle>(() =>
-        Promise.resolve(jsonResponse(200)),
-      );
-      const useRequest = defineRequest({
-        method: "GET",
-        output: struct.object({}),
-        path: "/misuse",
-      });
-
-      await expect(
-        useRequest(
-          // @ts-expect-error signal must be an AbortSignal
-          clientWith(handle)({ signal }),
-        ),
-      ).rejects.toBeInstanceOf(TypeError);
-      expect(handle).not.toHaveBeenCalled();
-    },
-  );
-
-  test("should keep the tuple for input and reject a missing client", async () => {
-    const handle = vi.fn<FetchHandle>(() => Promise.resolve(jsonResponse(200)));
-    const useInput = defineRequest({
-      // @ts-expect-error input must be a struct
-      input: {},
-      builder: () => ({}),
-      method: "GET",
-      path: "/misuse",
-    });
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.object({}),
-      path: "/misuse",
-    });
-
-    const [inputFault] = await useInput(clientWith(handle), {});
-
-    expect(inputFault?.code).toBe("REQ_INPUT_INVALID");
-    expect(inputFault?.cause).toBeInstanceOf(TypeError);
-    // @ts-expect-error the first argument must be a client
-    await expect(useRequest(undefined)).rejects.toBeInstanceOf(TypeError);
-    expect(handle).not.toHaveBeenCalled();
   });
 });

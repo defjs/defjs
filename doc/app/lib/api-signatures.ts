@@ -157,9 +157,7 @@ export function replaceApiSignatures(
 ): void {
   const children = tree.children;
   if (!children) return;
-  for (let index = 0; index < children.length; index++) {
-    const child = children[index];
-    if (!child) continue;
+  for (const [index, child] of children.entries()) {
     const attribute = signatureName(child, signatureFile(file));
     if (attribute === undefined) {
       replaceApiSignatures(child, file, catalog);

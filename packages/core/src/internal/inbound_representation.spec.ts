@@ -14,15 +14,6 @@ describe("inbound representation", () => {
   });
 
   test("rejects a value that is not a runtime struct", () => {
-    expect(() =>
-      // @ts-expect-error a plain object is not a struct
-      resolveInboundRepresentation({}),
-    ).toThrow(TypeError);
-  });
-
-  test("reads an inherited definition without requiring an own property", () => {
-    const inherited: unknown = Object.create(struct.string());
-    // @ts-expect-error Exercise the original lookup of a definition inherited through the prototype.
-    expect(resolveInboundRepresentation(inherited)).toBe("text");
+    expect(() => resolveInboundRepresentation({})).toThrow(TypeError);
   });
 });

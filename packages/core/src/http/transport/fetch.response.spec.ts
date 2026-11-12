@@ -89,21 +89,6 @@ describe("Fetch handler responses", () => {
     },
   );
 
-  test("should ignore an unsupported runtime response type", async () => {
-    const response = await fetchHandler(
-      {
-        baseEndpoint: "https://example.com",
-        endpoint: "/unsupported",
-        method: "GET",
-        // @ts-expect-error unsupported is not a declared response type
-        responseType: "unsupported",
-      },
-      () => Promise.resolve(new Response("ignored")),
-    );
-
-    expect(response.body).toBeNull();
-  });
-
   test("should ignore an unused response body cancellation failure", async () => {
     const body = new ReadableStream<Uint8Array>({
       cancel() {

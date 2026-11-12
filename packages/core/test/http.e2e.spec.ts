@@ -731,18 +731,14 @@ describe("request builder through the real server", () => {
     const create = defineRequest({
       builder: (input) => ({ body: { name: input.name } }),
       input: struct.object({
-        name: struct.string(),
+        name: struct.number(),
       }),
       method: "POST",
       output: EchoReport,
       path: missPath,
     });
 
-    const [error, result, response] = await create(
-      client,
-      // @ts-expect-error name must be a string to prove runtime rejection
-      { name: 1 },
-    );
+    const [error, result, response] = await create(client, { name: NaN });
     await pingMiss(controlPath);
 
     expect(error).toMatchObject({ code: "REQ_INPUT_INVALID" });

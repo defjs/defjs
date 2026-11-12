@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
   createClient,
   type DerivableClient,
@@ -37,45 +37,6 @@ function unreachableClient(
 ): DerivableClient {
   return createClient(withEndpoint("http://127.0.0.1:1"), ...options);
 }
-
-describe("web socket misuse", () => {
-  test.each([{}, 123])(
-    "should reject with TypeError for a signal that is not an AbortSignal: %j",
-    async (signal) => {
-      const constructed = vi.fn();
-      class Socket extends EventTarget {
-        static readonly OPEN = 1;
-        readyState = 0;
-        bufferedAmount = 0;
-        protocol = "";
-        extensions = "";
-        binaryType = "blob";
-        readonly url: string;
-        constructor(url: string | URL) {
-          super();
-          this.url = String(url);
-          constructed();
-        }
-        send(_data: string) {}
-        close() {
-          this.readyState = 3;
-        }
-      }
-      const client = createClient(
-        withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket),
-      );
-
-      await expect(
-        useRoom(
-          // @ts-expect-error signal must be an AbortSignal
-          client({ signal }),
-        ),
-      ).rejects.toBeInstanceOf(TypeError);
-      expect(constructed).not.toHaveBeenCalled();
-    },
-  );
-});
 
 describe("web socket startup faults", () => {
   test.each(["abort", "timeout"] as const)(
@@ -217,11 +178,7 @@ describe("web socket startup faults", () => {
       path: "/ws/:room",
     });
 
-    const [fault] = await useTyped(
-      unreachableClient(),
-      // @ts-expect-error room must be a number
-      { room: "nope" },
-    );
+    const [fault] = await useTyped(unreachableClient(), { room: NaN });
 
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
   });

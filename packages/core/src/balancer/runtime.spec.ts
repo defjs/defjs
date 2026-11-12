@@ -39,8 +39,7 @@ describe("pick outcome normalization", () => {
           {
             get endpoint(): string {
               if (++endpointReads === 1) return "https://a";
-              // @ts-expect-error a second read is intentionally not a string
-              return 42;
+              return "https://second-read";
             },
             get done() {
               return ++doneReads === 1 ? done : undefined;

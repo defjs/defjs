@@ -14,7 +14,7 @@ function build(
     "GET",
     "/headers",
     materializeOutboundRequest(
-      runOutboundBuilder(undefined, () => ({ headers }), false),
+      runOutboundBuilder(undefined, () => ({ headers })),
       transport,
     ),
     {

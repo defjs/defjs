@@ -89,7 +89,6 @@ describe("web socket startup with a mock handle", () => {
     vi.stubGlobal(
       "WebSocket",
       createMockWebSocketClass({
-        // @ts-expect-error testing runtime defensive behavior when constructor throws a non-Error value
         throwOnConstruct: "connection refused",
       }),
     );

@@ -132,8 +132,8 @@ describe("facade.ts", () => {
   test("object struct ignores later replacement of a declared field", () => {
     const shape = { name: struct.string() };
     const user = struct.object(shape);
-    // @ts-expect-error the declared field is replaced after the struct is built
-    shape.name = struct.number();
+    const fields: { [key: string]: unknown } = shape;
+    fields["name"] = struct.number();
 
     const [err, val] = parse(user, { name: "Miao" });
 

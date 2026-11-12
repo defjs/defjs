@@ -112,8 +112,7 @@ describe("operation diagnostic boundary", () => {
       builder: (input) => ({ body: input }),
     });
     const [fault] = await request(client, {
-      // @ts-expect-error count must be a number to prove input validation
-      count: "invalid",
+      count: NaN,
     });
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
     expect(handle).not.toHaveBeenCalled();

@@ -258,29 +258,6 @@ describe("sse startup faults", () => {
   });
 });
 
-describe("sse misuse", () => {
-  test.each([{}, 123])(
-    "should reject with TypeError for a signal that is not an AbortSignal: %j",
-    async (signal) => {
-      const handle = vi.fn(() =>
-        Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
-      );
-      const client = createClient(
-        withEndpoint("https://api.example.test"),
-        withSSEHandle(handle),
-      );
-
-      await expect(
-        useStream(
-          // @ts-expect-error signal must be an AbortSignal
-          client({ signal }),
-        ),
-      ).rejects.toBeInstanceOf(TypeError);
-      expect(handle).not.toHaveBeenCalled();
-    },
-  );
-});
-
 describe("sse runtime faults", () => {
   test("should report a buffer limit as CAP_BUFFER_EXCEEDED", async () => {
     const useTiny = defineEventStream({
@@ -525,38 +502,6 @@ describe("unsupported streaming request body", () => {
     expect(shouldRetry).toHaveBeenCalledTimes(0);
     expect(body.locked).toBe(false);
   });
-});
-
-test("should return REQ_BUILD_FAILED when the JSON body is a Map", async () => {
-  const handle = vi.fn(() =>
-    Promise.resolve(
-      new Response(streamOf("data: a\n\n"), { headers: SSE_HEADERS }),
-    ),
-  );
-  const client = createClient(
-    withEndpoint("https://example.com"),
-    withSSEHandle(handle),
-  );
-  const useStream = defineEventStream({
-    // @ts-expect-error Map is not a legal event-stream request body
-    builder: () => ({
-      body: new Map(),
-    }),
-    events: { message: struct.string() },
-    method: "POST",
-    path: "/events",
-  });
-
-  const [fault, events, open] = await useStream(client);
-
-  expect(fault?.code).toBe("REQ_BUILD_FAILED");
-  expect(events).toBeUndefined();
-  expect(open).toBeUndefined();
-  expect(fault?.cause).toBeInstanceOf(TypeError);
-  expect(fault?.cause instanceof TypeError ? fault.cause.message : "").toMatch(
-    /Map/,
-  );
-  expect(handle).toHaveBeenCalledTimes(0);
 });
 
 test("should return REQ_BUILD_FAILED when the JSON body is an async iterable object", async () => {

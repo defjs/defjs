@@ -202,7 +202,7 @@ test.each([
   },
 );
 
-test("SSE closes an opened stream and releases caller listeners when the interceptor drops the result", async () => {
+test("SSE closes an opened stream and releases caller listeners when the interceptor fails after opening", async () => {
   let opened: EventStreamHandle<unknown> | undefined;
   const client = createClient(
     withEndpoint("https://example.test"),
@@ -214,10 +214,9 @@ test("SSE closes an opened stream and releases caller listeners when the interce
       ),
     ),
     withInterceptors(
-      // @ts-expect-error dropping the stream result is the interceptor failure under test
       createSSEInterceptor(async (request, next) => {
         opened = await next(request);
-        return undefined;
+        throw new Error("the interceptor fails after opening");
       }),
     ),
   );
@@ -261,16 +260,15 @@ class TestSocket extends EventTarget {
   }
 }
 
-test("WebSocket closes an opened session and releases caller listeners when the interceptor drops the result", async () => {
+test("WebSocket closes an opened session and releases caller listeners when the interceptor fails after opening", async () => {
   let opened: WebSocketSessionLike | undefined;
   const client = createClient(
     withEndpoint("https://example.test"),
     withWebSocketHandle(TestSocket),
     withInterceptors(
-      // @ts-expect-error dropping the session result is the interceptor failure under test
       createWebSocketInterceptor(async (request, next) => {
         opened = await next(request);
-        return undefined;
+        throw new Error("the interceptor fails after opening");
       }),
     ),
   );

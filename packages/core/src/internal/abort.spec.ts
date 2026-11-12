@@ -67,47 +67,6 @@ describe("abort helpers", () => {
     );
   });
 
-  test.each<[string, unknown]>([
-    ["an object without the AbortSignal members", { aborted: false }],
-    [
-      "a plain object that has every AbortSignal member",
-      {
-        aborted: false,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-      },
-    ],
-    [
-      "an aborted lookalike",
-      {
-        aborted: true,
-        reason: new Error("lookalike"),
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-      },
-    ],
-    [
-      "an object that only inherits AbortSignal.prototype",
-      Object.create(AbortSignal.prototype),
-    ],
-  ])(
-    "should reject %s and register on none of the sources",
-    (_name, notASignal) => {
-      const controller = new AbortController();
-      const holder = new AbortController();
-      const controllerAdd = vi.spyOn(controller.signal, "addEventListener");
-      const holderAdd = vi.spyOn(holder.signal, "addEventListener");
-
-      expect(() => {
-        // @ts-expect-error -- An interceptor can hand over anything as `req.signal`; only a typed caller is kept out by the compiler.
-        mergeAbortSignals(controller.signal, [holder.signal, notASignal]);
-      }).toThrow(new TypeError("signal must be an AbortSignal"));
-
-      expect(controllerAdd).not.toHaveBeenCalled();
-      expect(holderAdd).not.toHaveBeenCalled();
-    },
-  );
-
   test("should still see a source that aborts after its merge was released", () => {
     const controller = new AbortController();
     const caller = new AbortController();

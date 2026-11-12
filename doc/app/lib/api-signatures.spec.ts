@@ -112,7 +112,6 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
   const tree = {
     type: "root",
     children: [
-      undefined,
       {
         type: "paragraph",
         children: [inlineTag("withEndpoint")],
@@ -127,12 +126,11 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     ],
   };
   replaceApiSignatures(
-    // @ts-expect-error the sparse fixture deliberately tests a missing child node
     tree,
     sourceFile("doc/content/en-US/api/http.mdx"),
     catalog,
   );
-  const paragraph = tree.children[1];
+  const paragraph = tree.children[0];
   expect(
     paragraph && "children" in paragraph && paragraph.children?.[0],
   ).toMatchObject({
@@ -140,7 +138,7 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     lang: "ts",
     value: "function withEndpoint(endpoint: string): ClientOption;",
   });
-  expect(tree.children[3]).toMatchObject({
+  expect(tree.children[2]).toMatchObject({
     type: "code",
     value: "const ERR_ABORTED: Error;",
   });

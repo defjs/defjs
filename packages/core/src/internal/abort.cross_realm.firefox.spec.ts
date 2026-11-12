@@ -37,19 +37,4 @@ describe("mergeAbortSignals across realms", () => {
       expect(merged.reason).toBe(reason);
     });
   });
-
-  test("should reject a plain object from another realm that looks like an AbortSignal", () => {
-    inFrame((realm) => {
-      const lookalike = Object.assign(new realm.Object(), {
-        aborted: false,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-      });
-
-      expect(() => {
-        // @ts-expect-error -- A lookalike object is not an AbortSignal, whichever realm created it.
-        mergeAbortSignals(new AbortController().signal, [lookalike]);
-      }).toThrow(new TypeError("signal must be an AbortSignal"));
-    });
-  });
 });

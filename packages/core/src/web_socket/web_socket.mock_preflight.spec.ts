@@ -173,8 +173,7 @@ describe("web socket preflight precedence", () => {
 
     const [error, session] = await endpoint(
       guardedClient(opened, controller.signal),
-      // @ts-expect-error id must be a number
-      { id: "nope" },
+      { id: NaN },
     );
 
     expect(opened.constructed()).toBe(0);

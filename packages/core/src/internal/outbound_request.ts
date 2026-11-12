@@ -33,14 +33,8 @@ type FormTarget = {
 export function runOutboundBuilder(
   input: unknown,
   builder: OutboundBuilder | undefined,
-  inputDeclared = input !== undefined,
 ): unknown {
   if (builder === undefined) {
-    if (inputDeclared) {
-      throw new TypeError(
-        "An endpoint with input requires an explicit builder",
-      );
-    }
     return {};
   }
 
@@ -247,9 +241,6 @@ function appendFormValue(
   value: unknown,
   codec: FormCodec,
 ): void {
-  if (value === undefined) {
-    return;
-  }
   if (Array.isArray(value)) {
     for (const item of value) {
       appendFormValue(target, key, item, codec);

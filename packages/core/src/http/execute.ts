@@ -254,7 +254,6 @@ function buildRequest(
         baseEndpoint: attempt.endpoint.endpoint,
         defaultHeaders: clientConfig.headers,
         downloadProgress: options?.onDownloadProgress,
-        inputDeclared: definition.input !== undefined,
         inputGuides: scope.guides,
         errorResponseType,
         operation: definition.operation,

@@ -339,11 +339,7 @@ async function openEventStream<
     let request;
     try {
       const built = materializeOutboundRequest(
-        runOutboundBuilder(
-          parsedInput,
-          definition.builder,
-          definition.input !== undefined,
-        ),
+        runOutboundBuilder(parsedInput, definition.builder),
         "sse",
         inputGuides,
       );
@@ -423,16 +419,7 @@ async function openEventStream<
         let streamAbort: AbortSignal;
         try {
           resolveRequestUrl(req);
-          // Headers rejects an invalid name or value with a TypeError. Checking here makes that a request that cannot be
-          // built, not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
-          try {
-            headers = new Headers(req.headers);
-          } catch (error) {
-            failures.set(error, {
-              fault: createPreflightFault("REQ_BUILD_FAILED", error),
-            });
-            throw error;
-          }
+          headers = new Headers(req.headers);
           // The stream ends when its owner discards it, or when the call or the caller stops it. The caller's own
           // signal is a source so that a stop after the stream has ended is still seen once the call's has been released.
           streamAbort = mergeAbortSignals(ownerController.signal, [

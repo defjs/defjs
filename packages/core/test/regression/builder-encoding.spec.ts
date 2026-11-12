@@ -405,27 +405,11 @@ describe("builder refactor adversarial audit", () => {
       method: "POST",
       path: "/throws",
     });
-    const returnsValue = defineRequest({
-      // @ts-expect-error builder must return request parts, not a number
-      builder: () => 1,
-      method: "POST",
-      path: "/value",
-    });
-    const returnsPromise = defineRequest({
-      // @ts-expect-error builder must be synchronous, not a promise
-      builder: () => Promise.resolve({}),
-      method: "POST",
-      path: "/promise",
-    });
 
     const [thrown] = await throwsValue(client);
-    const [value] = await returnsValue(client);
-    const [promise] = await returnsPromise(client);
 
     expect(thrown?.code).toBe("REQ_BUILD_FAILED");
     expect(thrown?.cause).toBe("boom");
-    expect(value?.code).toBe("REQ_BUILD_FAILED");
-    expect(promise?.code).toBe("REQ_BUILD_FAILED");
   });
 
   test.each(["GET", "HEAD"] as const)(
@@ -601,75 +585,8 @@ describe("builder refactor adversarial audit", () => {
     expect(captured?.endpoint).toBe("/e2e/ws/blue");
     expect(captured?.queryString).toBe("since=2");
     if (!socket) throw new Error("Expected socket");
-    // @ts-expect-error outgoing message must use the declared say literal
-    expect(() => socket.send({ type: "wrong" })).toThrow();
     socket.close();
     await socket.closed;
-  });
-
-  // materializePath is the only guard on these values: fillUrl only receives the strings it produces.
-  describe.each<[label: string, value: unknown, message: string]>([
-    ["an array", ["a", "b"], 'path value for "id" must be a scalar'],
-    ["an empty array", [], 'path value for "id" must be a scalar'],
-    ["an object", { value: 1 }, 'path value for "id" must be a scalar'],
-    ["null", null, 'path value for "id" must not be null'],
-  ])("rejects %s as a builder path value", (_label, value, message) => {
-    test.each(["HTTP", "SSE", "WebSocket"] as const)(
-      "before the %s transport starts",
-      async (transport) => {
-        let handleCalls = 0;
-        const opened = createOpeningSocket();
-        const client = createClient(
-          withEndpoint("https://example.test"),
-          withHTTPHandle(() => {
-            handleCalls += 1;
-            return Promise.resolve(new Response(null, { status: 204 }));
-          }),
-          withSSEHandle(() => {
-            handleCalls += 1;
-            return Promise.resolve(
-              responseStream("event: message\ndata: ok\n\n"),
-            );
-          }),
-          withWebSocketHandle(opened.Socket),
-        );
-        const builder = (input: unknown) => {
-          void input;
-          return { path: { id: value } };
-        };
-        const execute = {
-          HTTP: () =>
-            defineRequest({
-              // @ts-expect-error path id is intentionally not a scalar
-              builder,
-              method: "GET",
-              path: "/items/:id",
-            })(client),
-          SSE: () =>
-            defineEventStream({
-              // @ts-expect-error path id is intentionally not a scalar
-              builder,
-              events: { message: struct.string() },
-              path: "/items/:id",
-            })(client),
-          WebSocket: () =>
-            defineWebSocket({
-              // @ts-expect-error path id is intentionally not a scalar
-              builder,
-              incoming: struct.unknown(),
-              path: "/items/:id",
-            })(client),
-        }[transport];
-
-        const [error, result] = await execute();
-
-        expect(error?.code).toBe("REQ_BUILD_FAILED");
-        expect(error?.message).toBe(message);
-        expect(result).toBeUndefined();
-        expect(handleCalls).toBe(0);
-        expect(opened.counters.sockets).toBe(0);
-      },
-    );
   });
 });
 

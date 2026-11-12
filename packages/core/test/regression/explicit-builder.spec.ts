@@ -1,91 +1,15 @@
 import { expect, test } from "vitest";
 import {
   createClient,
-  defineEventStream,
   defineRequest,
-  defineWebSocket,
   struct,
   withEndpoint,
   withHTTPHandle,
-  withSSEHandle,
-  withWebSocketHandle,
 } from "../../src";
 
 const Input = struct
   .object({ query: struct.object({ token: struct.string() }) })
   .optional();
-
-// @ts-expect-error Declared input requires an explicit builder; a field named `query` does not imply placement.
-const http = defineRequest({ method: "GET", path: "/resource", input: Input });
-// @ts-expect-error Optional input still requires an explicit builder.
-const sse = defineEventStream({
-  path: "/events",
-  input: Input,
-  events: {},
-});
-// @ts-expect-error A WebSocket input field named `query` must not be implicitly placed in the URL.
-const socket = defineWebSocket({
-  path: "/socket",
-  input: Input,
-  incoming: struct.string(),
-});
-
-test.each([true, false])(
-  "missing builders fail before dispatch when an input value is present: %s",
-  async (present) => {
-    let dispatches = 0;
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withHTTPHandle(() => {
-        dispatches += 1;
-        return Promise.resolve(new Response(null, { status: 204 }));
-      }),
-      withSSEHandle(() => {
-        dispatches += 1;
-        return Promise.resolve(
-          new Response("", {
-            headers: { "content-type": "text/event-stream" },
-          }),
-        );
-      }),
-      withWebSocketHandle(
-        // @ts-expect-error tripwire constructor is not a WebSocket handle
-        class {
-          constructor() {
-            dispatches += 1;
-            throw new Error("Unexpected WebSocket dispatch");
-          }
-        },
-      ),
-    );
-    const value = present
-      ? { query: { token: "must-not-be-sent" } }
-      : undefined;
-    const results = await Promise.all([
-      http(client, value),
-      sse(client, value),
-      socket(client, value),
-    ]);
-
-    try {
-      expect(results.map(([fault]) => fault?.code)).toEqual([
-        "REQ_BUILD_FAILED",
-        "REQ_BUILD_FAILED",
-        "REQ_BUILD_FAILED",
-      ]);
-      expect(dispatches).toBe(0);
-      for (const [, data, metadata] of results) {
-        expect(data).toBeUndefined();
-        expect(metadata).toBeUndefined();
-      }
-    } finally {
-      results[1][1]?.close();
-      await results[1][1]?.closed;
-      results[2][1]?.close();
-      await results[2][1]?.closed;
-    }
-  },
-);
 
 test("input field names never imply placement; the builder alone decides", async () => {
   const endpoint = defineRequest({

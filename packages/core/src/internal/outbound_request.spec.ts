@@ -19,6 +19,7 @@ import { STRUCT } from "../struct/symbols";
 import { DEFINITION } from "../struct/symbols";
 import { decodeWebSocketMessage } from "../web_socket/codec";
 import { defineWebSocket } from "../web_socket/web_socket";
+import { stoppingSocket } from "../../test/stopping_socket";
 
 const birthday = new Date("1815-12-10T00:00:00.000Z");
 
@@ -1163,8 +1164,6 @@ describe("outbound request builder", () => {
       name: "Ada",
       note: null,
     });
-    // @ts-expect-error parsed file lists do not include undefined
-    input.files?.push(undefined);
     const request = buildHttp("POST", "/files", undefined, () => ({
       body: input,
     }));
@@ -1795,19 +1794,14 @@ describe("outbound request builder", () => {
     expect(seen?.url).toBe("https://example.com/rooms/blue/events");
   });
 
-  test("fills websocket path and query and rejects headers or body", async () => {
+  test("fills websocket path and query", async () => {
     let url = "";
     const client = createClient(
       withEndpoint("https://example.com"),
       withWebSocketHandle(
-        // @ts-expect-error socket double records the url and then throws
-        class {
-          static OPEN = 1;
-          constructor(nextUrl: string) {
-            url = nextUrl;
-            throw new Error("stop");
-          }
-        },
+        stoppingSocket((nextUrl) => {
+          url = nextUrl;
+        }),
       ),
     );
     const chat = defineWebSocket({
@@ -1820,35 +1814,11 @@ describe("outbound request builder", () => {
       path: "/ws/rooms/:room",
       protocols: ["chat.v1"],
     });
-    const rejected = defineWebSocket({
-      // @ts-expect-error websocket builders cannot set handshake headers
-      builder: () => ({
-        headers: { token: "secret" },
-      }),
-      incoming: struct.unknown(),
-      path: "/ws/basic",
-    });
-    const rejectedBody = defineWebSocket({
-      // @ts-expect-error websocket builders cannot set a body
-      builder: () => ({
-        body: "nope",
-      }),
-      incoming: struct.unknown(),
-      path: "/ws/basic",
-    });
 
     const [openError] = await chat(client, { room: "blue" });
-    const [buildError] = await rejected(client);
-    const [bodyError] = await rejectedBody(client);
 
     expect(openError?.code.startsWith("NET_")).toBe(true);
     expect(url).toContain("/ws/rooms/blue?since=1");
-    expect(buildError?.code).toBe("REQ_BUILD_FAILED");
-    expect(bodyError?.code).toBe("REQ_BUILD_FAILED");
-    if (!(bodyError?.cause instanceof Error)) {
-      throw new Error("expected builder cause");
-    }
-    expect(bodyError.cause.message).toContain("body");
   });
 
   test("keeps a configured query serializer on websocket objects and skips it for URLSearchParams", async () => {
@@ -1856,16 +1826,7 @@ describe("outbound request builder", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withQuerySerializer(() => "serialized=1"),
-      withWebSocketHandle(
-        // @ts-expect-error socket double records the url and then throws
-        class {
-          static OPEN = 1;
-          constructor(nextUrl: string) {
-            urls.push(nextUrl);
-            throw new Error("stop");
-          }
-        },
-      ),
+      withWebSocketHandle(stoppingSocket((nextUrl) => urls.push(nextUrl))),
     );
     const objectQuery = defineWebSocket({
       builder: () => ({ query: { room: "blue" } }),
@@ -2039,5 +2000,47 @@ describe("outbound passthrough groups", () => {
         "http",
       ).body,
     ).toBe('{"x":{"at":"1970-01-01T00:00:00.000Z"}}');
+  });
+});
+
+// What a builder returns reaches materializeOutboundRequest as `unknown`, so these checks narrow a value that is
+// really unknown at run time.
+describe("outbound request parts of unknown shape", () => {
+  test.each([
+    ["a number", 1],
+    ["a promise", Promise.resolve({})],
+  ])("rejects %s as the builder result", (_label, shape) => {
+    expect(() => materializeOutboundRequest(shape, "http")).toThrow(
+      "builder must return an object",
+    );
+  });
+
+  test("rejects headers and a body for a WebSocket", () => {
+    expect(() =>
+      materializeOutboundRequest(
+        { headers: { token: "secret" } },
+        "web-socket",
+      ),
+    ).toThrow("WebSocket request does not support headers");
+    expect(() =>
+      materializeOutboundRequest({ body: "nope" }, "web-socket"),
+    ).toThrow("WebSocket request does not support body");
+  });
+
+  test("rejects null in a query record", () => {
+    expect(() =>
+      materializeOutboundRequest({ query: { id: null } }, "http"),
+    ).toThrow('query value for "id" must not be null');
+  });
+
+  test.each([
+    ["an array", ["a", "b"], 'path value for "id" must be a scalar'],
+    ["an empty array", [], 'path value for "id" must be a scalar'],
+    ["an object", { value: 1 }, 'path value for "id" must be a scalar'],
+    ["null", null, 'path value for "id" must not be null'],
+  ])("rejects %s as a path value", (_label, value, message) => {
+    expect(() =>
+      materializeOutboundRequest({ path: { id: value } }, "http"),
+    ).toThrow(message);
   });
 });

@@ -510,11 +510,7 @@ describe("web socket runtime", () => {
     });
 
     const [error, socket, connection] = await run((client) =>
-      useSocket(
-        client,
-        // @ts-expect-error id must be a number
-        { id: "bad" },
-      ),
+      useSocket(client, { id: NaN }),
     );
 
     expect(socket).toBeUndefined();
@@ -1075,7 +1071,7 @@ describe("web socket runtime", () => {
         key: struct.string(),
         mode: struct.literal("throw"),
       }),
-      outgoing: struct.object({ method: struct.literal("command") }),
+      outgoing: struct.object({ count: struct.number() }),
       path: "/ws/provider-envelopes",
     });
     const key = `provider-throw-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1092,8 +1088,7 @@ describe("web socket runtime", () => {
     try {
       let thrown: unknown;
       try {
-        // @ts-expect-error method is not a declared outgoing literal
-        socket.send({ method: "nope" });
+        socket.send({ count: NaN });
       } catch (cause) {
         thrown = cause;
       }

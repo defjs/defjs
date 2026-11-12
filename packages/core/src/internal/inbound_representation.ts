@@ -1,4 +1,3 @@
-import type { AnyStruct } from "../struct";
 import { DEFINITION } from "../struct/symbols";
 import type { HttpResponseType } from "../http/http_request";
 
@@ -10,10 +9,8 @@ import type { HttpResponseType } from "../http/http_request";
  * SSE handshake error bodies. SSE event data keeps `string` raw and JSON-parses
  * every other kind. Optional and nullable are flags, so they keep the inner kind.
  */
-export function resolveInboundRepresentation(
-  struct: AnyStruct,
-): HttpResponseType {
-  // Definitions are not validated when declared, so a non-struct output or error fails here. An inherited definition counts.
+export function resolveInboundRepresentation(struct: object): HttpResponseType {
+  // Definitions are not validated when declared, so an output or error that is not a struct fails here.
   const definition: unknown = Reflect.get(struct, DEFINITION);
   if (typeof definition !== "object" || definition === null) {
     throw new TypeError("struct must be a struct");

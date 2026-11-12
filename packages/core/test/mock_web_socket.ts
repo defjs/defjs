@@ -67,7 +67,7 @@ export function createMockWebSocketClass(
     onListenerRegistered?: (type: string) => void;
     onSend?: (data: string) => void;
     sendError?: Error;
-    throwOnConstruct?: Error;
+    throwOnConstruct?: unknown;
   } = {},
 ) {
   const {
@@ -110,6 +110,7 @@ export function createMockWebSocketClass(
 
     constructor(url: string, protocols?: string | string[]) {
       if (throwOnConstruct) {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the mock throws the value a test gives it, and a test may give a non-Error
         throw throwOnConstruct;
       }
 

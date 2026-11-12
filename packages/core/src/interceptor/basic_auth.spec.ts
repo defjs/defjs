@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { HttpRequest } from "../http";
+import { fakeEventStream } from "../../test/fake_event_stream";
 import { makeFakeHandler } from "../../test/make_fake_handler";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
 import {
@@ -126,8 +127,7 @@ describe("Basic Auth Interceptor", () => {
       req: HttpRequest,
     ): Promise<EventStreamHandle<unknown>> => {
       capturedRequest = req;
-      // @ts-expect-error the returned handle is unused by this test
-      return Promise.resolve({});
+      return Promise.resolve(fakeEventStream());
     };
 
     await chain(hq, fakeSSEHandler);

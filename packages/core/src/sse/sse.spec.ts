@@ -2466,10 +2466,7 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream, open] = await useStream(
-      baseClient, // @ts-expect-error testing runtime defensive behavior with invalid input type
-      { id: "invalid" },
-    );
+    const [error, stream, open] = await useStream(baseClient, { id: NaN });
 
     expect(stream).toBeUndefined();
     expect(open).toBeUndefined();

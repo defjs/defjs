@@ -456,11 +456,7 @@ function buildSocketRequest(
   let built: MaterializedRequest;
   try {
     built = materializeOutboundRequest(
-      runOutboundBuilder(
-        scope.input,
-        endpoint.builder,
-        endpoint.input !== undefined,
-      ),
+      runOutboundBuilder(scope.input, endpoint.builder),
       "web-socket",
       scope.guides,
     );
@@ -640,12 +636,7 @@ function openSession(
     );
   }
   // Both the caller and an interceptor replacement stay live.
-  let signal: AbortSignal;
-  try {
-    signal = mergeAbortSignals(call.scope.signal, [req.signal]);
-  } catch (error) {
-    return rejected(error);
-  }
+  const signal = mergeAbortSignals(call.scope.signal, [req.signal]);
   const { clientConfig, endpoint, options, pick } = call;
   const attributable = req.baseEndpoint === pick.endpoint;
   if (!attributable) {

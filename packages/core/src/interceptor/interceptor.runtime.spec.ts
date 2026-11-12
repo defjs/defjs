@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { fakeEventStream } from "../../test/fake_event_stream";
 import type { HttpRequest } from "../http";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
 import type { SSEInterceptorFn } from "./interceptor";
@@ -33,8 +34,7 @@ describe("SSE interceptor chain", () => {
       req: HttpRequest,
     ): Promise<EventStreamHandle<unknown>> => {
       capturedRequest = req;
-      // @ts-expect-error the returned handle is unused by this test
-      return Promise.resolve({});
+      return Promise.resolve(fakeEventStream());
     };
 
     const chain = makeChain(interceptors);
@@ -46,7 +46,6 @@ describe("SSE interceptor chain", () => {
   });
 
   test("SSE interceptor can wrap the returned stream", async () => {
-    const fakeStream = { wrapped: false };
     const interceptor: SSEInterceptorFn = async (req, next) => {
       const stream = await next(req);
       return { ...stream, wrapped: true };
@@ -56,8 +55,7 @@ describe("SSE interceptor chain", () => {
     const result = await chain(
       { endpoint: "/events", method: "GET" },
       (): Promise<EventStreamHandle<unknown>> =>
-        // @ts-expect-error the fixture only carries the wrap probe
-        Promise.resolve(fakeStream),
+        Promise.resolve(fakeEventStream()),
     );
 
     expect("wrapped" in result && result.wrapped).toBe(true);

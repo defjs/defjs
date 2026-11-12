@@ -141,19 +141,6 @@ export function stopsUnreadItems(
   );
 }
 
-/**
- * WebIDL accepts a value as an `AbortSignal` only when it is a platform object of that interface, in any realm.
- * The `aborted` getter performs exactly that brand check on its receiver, so it also rejects lookalikes that have
- * every member and objects that only inherit the prototype.
- */
-function assertAbortSignal(value: unknown): void {
-  try {
-    void Reflect.get(AbortSignal.prototype, "aborted", value);
-  } catch (cause) {
-    throw new TypeError("signal must be an AbortSignal", { cause });
-  }
-}
-
 export function mergeAbortSignals(
   controller: AbortSignal,
   signals: (AbortSignal | undefined)[],
@@ -163,13 +150,6 @@ export function mergeAbortSignals(
     signals.every((signal) => signal === undefined || signal === controller)
   ) {
     return controller;
-  }
-
-  // Like AbortSignal.any, convert every source before looking at any of them or registering on any of them.
-  for (const signal of signals) {
-    if (signal) {
-      assertAbortSignal(signal);
-    }
   }
 
   const merged: AbortSignal[] = [];

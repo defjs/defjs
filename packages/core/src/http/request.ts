@@ -23,7 +23,6 @@ export function createHttpRequest(
     baseEndpoint: string;
     defaultHeaders?: Headers;
     downloadProgress?: HttpProgressFn;
-    inputDeclared?: boolean;
     inputGuides?: WeakMap<object, Guide>;
     operation?: string;
     errorResponseType?: HttpResponseType;
@@ -35,7 +34,7 @@ export function createHttpRequest(
   },
 ): HttpRequest {
   const built = materializeOutboundRequest(
-    runOutboundBuilder(input, builder, options.inputDeclared),
+    runOutboundBuilder(input, builder),
     "http",
     options.inputGuides,
   );

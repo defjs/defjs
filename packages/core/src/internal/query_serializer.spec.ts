@@ -16,6 +16,7 @@ import { defineEventStream } from "../sse/sse";
 import { struct } from "../struct";
 import { STRUCT } from "../struct/symbols";
 import { defineWebSocket } from "../web_socket/web_socket";
+import { stoppingSocket } from "../../test/stopping_socket";
 
 const birthday = new Date("1815-12-10T00:00:00.000Z");
 
@@ -28,17 +29,6 @@ const Query = struct.object({
   pageSize: struct.number().alias("page_size"),
   tags: struct.array(struct.string()),
 });
-
-function stoppingSocket(urls: string[]): typeof WebSocket {
-  // @ts-expect-error socket double records the url and then throws
-  return class {
-    static OPEN = 1;
-    constructor(url: string) {
-      urls.push(url);
-      throw new Error("stop");
-    }
-  };
-}
 
 describe("query serializer contract", () => {
   test("serializer receives the alias-applied encoded query object", async () => {
@@ -132,27 +122,6 @@ describe("query serializer contract", () => {
       throw new Error("expected nested query cause");
     }
     expect(error.cause.message).toContain("a query serializer is required");
-  });
-
-  test("null query fails with REQ_BUILD_FAILED", async () => {
-    const client = createClient(withEndpoint("https://example.com"));
-    const search = defineRequest({
-      // @ts-expect-error null is not a query value
-      builder: () => ({
-        query: { id: null },
-      }),
-      method: "GET",
-      path: "/items",
-    });
-
-    const [error] = await search(client);
-
-    expect(error?.code).toBe("REQ_BUILD_FAILED");
-    expect(error?.cause).toBeInstanceOf(TypeError);
-    if (!(error?.cause instanceof Error)) {
-      throw new Error("expected null query cause");
-    }
-    expect(error.cause.message).toContain("null");
   });
 
   test("URLSearchParams query bypasses the serializer", async () => {
@@ -292,7 +261,7 @@ describe("query serializer contract", () => {
         seen.push(query);
         return "from=ws";
       }),
-      withWebSocketHandle(stoppingSocket(urls)),
+      withWebSocketHandle(stoppingSocket((url) => urls.push(url))),
     );
     const encoded = defineWebSocket({
       builder: (input) => ({ query: input }),
@@ -324,7 +293,7 @@ describe("query serializer contract", () => {
     const urls: string[] = [];
     const client = createClient(
       withEndpoint("https://example.com"),
-      withWebSocketHandle(stoppingSocket(urls)),
+      withWebSocketHandle(stoppingSocket((url) => urls.push(url))),
     );
     const socket = defineWebSocket({
       builder: () => ({ query: { filter: { state: "open" } } }),
