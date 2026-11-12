@@ -5,28 +5,25 @@ import { listRepoFiles } from "./spec-naming.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const ciPath = resolve(root, ".github/workflows/ci.yml");
-const npmCi = "npm ci --ignore-scripts --workspaces=false";
 const setupNode = "actions/setup-node@v7";
 
-const jobOrder = [
-  "checks",
-  "build",
-  "unit-chrome",
-  "unit-firefox",
-  "unit-bun",
-  "unit-node",
-] as const;
-
-interface JobCommands {
+interface Job {
   uses: string[];
   runs: string[];
   nodeVersions: unknown[];
   needs: unknown;
 }
 
-// Every command of the build job and the four unit jobs, in order. A suffix such
-// as `|| true` changes the string and fails the comparison.
-const jobRuns: Record<string, string[]> = {
+// Every command of every job, in workflow order. A suffix such as `|| true`
+// changes the string and fails the comparison.
+const expectedRuns: Record<string, string[]> = {
+  checks: [
+    "bun ci",
+    "bun run --cwd doc typegen",
+    "bun run lint",
+    "bun fmt --check",
+    "bun run typecheck",
+  ],
   build: ["bun ci", "bun run build"],
   "unit-chrome": [
     "bun ci",
@@ -38,9 +35,9 @@ const jobRuns: Record<string, string[]> = {
     "bunx --bun playwright install --with-deps firefox",
     "bun run unit:firefox",
   ],
-  "unit-bun": ["bun ci", "bun run --cwd doc typegen", "bun run unit:bun"],
+  "unit-bun": ["bun ci", "bun run unit:bun"],
   "unit-node": [
-    `for lock in packages/*/package-lock.json; do\n  (cd "$(dirname "$lock")" && ${npmCi})\ndone`,
+    `for lock in packages/*/package-lock.json; do\n  (cd "$(dirname "$lock")" && npm ci --ignore-scripts --workspaces=false)\ndone`,
     "node --run unit:node",
   ],
 };
@@ -98,52 +95,31 @@ function bypassFindings(value: unknown, path = "workflow"): string[] {
   return found;
 }
 
-function readJobs(workflow: Record<string, unknown>): Map<string, JobCommands> {
-  const jobs = workflow["jobs"];
-  if (!isRecord(jobs)) throw new Error("workflow has no jobs");
-  const result = new Map<string, JobCommands>();
-  for (const [id, job] of Object.entries(jobs)) {
-    if (!isRecord(job)) throw new Error(`job ${id} is not a mapping`);
-    const uses: string[] = [];
-    const runs: string[] = [];
-    const nodeVersions: unknown[] = [];
-    collectSteps(job["steps"], uses, runs, nodeVersions);
-    result.set(id, { uses, runs, nodeVersions, needs: job["needs"] });
-  }
-  return result;
-}
-
-function collectSteps(
-  steps: unknown,
-  uses: string[],
-  runs: string[],
-  nodeVersions: unknown[],
-): void {
-  if (!Array.isArray(steps)) return;
-  for (const step of steps) {
-    if (!isRecord(step)) continue;
-    const use = step["uses"];
-    const run = step["run"];
-    const inputs = step["with"];
-    if (typeof use === "string") uses.push(use);
-    if (typeof run === "string") runs.push(run);
-    if (typeof use === "string" && use.includes(setupNode)) {
+function readJob(id: string, job: unknown): Job {
+  if (!isRecord(job)) throw new Error(`job ${id} is not a mapping`);
+  const steps: Record<string, unknown>[] = Array.isArray(job["steps"])
+    ? job["steps"].filter(isRecord)
+    : [];
+  const uses: string[] = [];
+  const runs: string[] = [];
+  const nodeVersions: unknown[] = [];
+  for (const { uses: use, run, with: inputs } of steps) {
+    if (typeof run === "string") runs.push(run.trim());
+    if (typeof use !== "string") continue;
+    uses.push(use);
+    if (use.includes(setupNode)) {
       nodeVersions.push(isRecord(inputs) ? inputs["node-version"] : undefined);
     }
   }
+  return { uses, runs, nodeVersions, needs: job["needs"] };
 }
 
-function workflowJobs(): Map<string, JobCommands> {
-  return readJobs(workflowDocument());
-}
-
-function requireJob(
-  jobs: Map<string, JobCommands>,
-  id: string,
-): JobCommands | undefined {
-  const job = jobs.get(id);
-  expect(job, id).toBeDefined();
-  return job;
+function workflowJobs(): Record<string, Job> {
+  const { jobs } = workflowDocument();
+  if (!isRecord(jobs)) throw new Error("workflow has no jobs");
+  return Object.fromEntries(
+    Object.entries(jobs).map(([id, job]) => [id, readJob(id, job)]),
+  );
 }
 
 function scriptValues(manifest: unknown): string[] {
@@ -168,44 +144,26 @@ function isVitestConfig(file: string): boolean {
 
 test("checks runs first and every other job waits for it", () => {
   const jobs = workflowJobs();
-  expect([...jobs.keys()]).toEqual([...jobOrder]);
-  for (const [id, job] of jobs) {
+  expect(Object.keys(jobs)).toEqual(Object.keys(expectedRuns));
+  for (const [id, job] of Object.entries(jobs)) {
     expect(job.needs, id).toBe(id === "checks" ? undefined : "checks");
   }
 });
 
-test("checks runs only the install and the static checks", () => {
-  const checks = requireJob(workflowJobs(), "checks");
-  if (!checks) return;
-  expect(checks.runs).toEqual([
-    "bun ci",
-    "bun run --cwd doc typegen",
-    "bun run lint",
-    "bun fmt --check",
-    "bun run typecheck",
-  ]);
-});
-
 test("bun jobs install bun, the node job does not", () => {
   const jobs = workflowJobs();
-  const node = requireJob(jobs, "unit-node");
-  if (!node) return;
-  expect(node.uses.some((use) => use.includes(setupNode))).toBe(true);
-  expect(node.uses.some((use) => use.includes("setup-bun"))).toBe(false);
-  for (const [id, job] of jobs) {
-    if (id === "unit-node") continue;
-    expect(job.uses.some((use) => use.includes("oven-sh/setup-bun@v2"))).toBe(
-      true,
+  for (const [id, job] of Object.entries(jobs)) {
+    expect(job.uses.includes("oven-sh/setup-bun@v2"), id).toBe(
+      id !== "unit-node",
     );
   }
+  expect(jobs["unit-node"]?.uses).toContain(setupNode);
 });
 
-test.each(Object.entries(jobRuns))(
+test.each(Object.entries(expectedRuns))(
   "%s runs exactly its commands",
   (id, commands) => {
-    const job = requireJob(workflowJobs(), id);
-    if (!job) return;
-    expect(job.runs.map((run) => run.trim())).toEqual(commands);
+    expect(workflowJobs()[id]?.runs).toEqual(commands);
   },
 );
 
@@ -254,19 +212,7 @@ test("bypassFindings reports every ignored-failure key with its path", () => {
 });
 
 test("unit-node tests on the LTS line", () => {
-  const node = requireJob(workflowJobs(), "unit-node");
-  if (!node) return;
-  expect(node.nodeVersions).toEqual(["lts/*"]);
-});
-
-test("npm ci runs once, only in unit-node", () => {
-  const hits: string[] = [];
-  for (const [id, job] of workflowJobs()) {
-    for (const run of job.runs) {
-      if (run.includes(npmCi)) hits.push(id);
-    }
-  }
-  expect(hits).toEqual(["unit-node"]);
+  expect(workflowJobs()["unit-node"]?.nodeVersions).toEqual(["lts/*"]);
 });
 
 test("no unit run passes --passWithNoTests", () => {

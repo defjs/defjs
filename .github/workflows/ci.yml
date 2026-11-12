@@ -66,10 +66,6 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun ci
-      # Type-aware lint reads the generated route types in doc/.react-router, which are not committed.
-      # root-bun's lint-plugin.bun.spec.ts runs oxlint.
-      - name: Generate route types
-        run: bun run --cwd doc typegen
       - name: Unit tests (Bun)
         run: bun run unit:bun
 
