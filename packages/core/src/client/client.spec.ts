@@ -21,6 +21,7 @@ import {
 } from "./index";
 import type { Client } from "./client";
 import type { ClientConfig, FetchHandle } from "./config";
+import { createFakeWebSocket } from "../../test/fake_web_socket";
 
 describe("Client", () => {
   let baseClient: Client;
@@ -261,26 +262,11 @@ describe("Client", () => {
   test("per-field SSE and WebSocket helpers are accepted by createClient", () => {
     const onInvalidEvent = vi.fn();
     const beforeConnect = vi.fn();
-    class MockWebSocket extends EventTarget {
-      static readonly OPEN = 1;
-      readonly bufferedAmount = 0;
-      readonly extensions = "";
-      readonly protocol = "";
-      readonly readyState = 0;
-      readonly url = "";
-      close() {
-        return undefined;
-      }
-      send() {
-        return undefined;
-      }
-    }
-
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEOnInvalidEvent(onInvalidEvent),
       withRetry({ maxRetries: 3, delayMs: 1_000 }),
-      withWebSocketHandle(MockWebSocket),
+      withWebSocketHandle(createFakeWebSocket().Socket),
       withWebSocketBeforeConnect(beforeConnect),
       withWebSocketProtocols(["json"]),
       withWebSocketHeartbeat({

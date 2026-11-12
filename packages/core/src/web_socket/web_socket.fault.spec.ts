@@ -13,6 +13,7 @@ import {
 } from "../error";
 import { createWebSocketInterceptor } from "../interceptor";
 import { struct } from "../struct";
+import { createFakeWebSocket, FakeWebSocket } from "../../test/fake_web_socket";
 import { defineWebSocket } from "./index";
 
 /**
@@ -42,28 +43,10 @@ describe("web socket startup faults", () => {
   test.each(["abort", "timeout"] as const)(
     "should classify a pre-cancelled interceptor signal as %s without constructing a socket",
     async (mode) => {
-      let constructed = 0;
-      class Socket extends EventTarget {
-        static readonly OPEN = 1;
-        readyState = 0;
-        bufferedAmount = 0;
-        protocol = "";
-        extensions = "";
-        binaryType = "blob";
-        readonly url: string;
-        constructor(url: string | URL) {
-          super();
-          this.url = String(url);
-          constructed += 1;
-        }
-        send(_data: string) {}
-        close() {
-          this.readyState = 3;
-        }
-      }
+      const fake = createFakeWebSocket();
       const client = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket),
+        withWebSocketHandle(fake.Socket),
         withInterceptors(
           createWebSocketInterceptor((request, next) =>
             next({
@@ -80,7 +63,7 @@ describe("web socket startup faults", () => {
 
       const [fault, session] = await useRoom(client);
 
-      expect(constructed).toBe(0);
+      expect(fake.sockets).toHaveLength(0);
       expect(session).toBeUndefined();
       expect(fault?.code).toBe(
         mode === "timeout" ? "NET_TIMEOUT" : "NET_ABORTED",
@@ -184,44 +167,17 @@ describe("web socket startup faults", () => {
   });
 
   test("should close the socket and not retry when binaryType is read-only", async () => {
-    const sockets: Array<{
-      closeCalls: number;
-      errorListenersAtClose: number;
-      readyState: number;
-    }> = [];
-    class ReadOnlyBinaryTypeSocket {
-      static readonly OPEN = 1;
-      bufferedAmount = 0;
-      closeCalls = 0;
-      errorListeners = 0;
-      errorListenersAtClose = 0;
-      extensions = "";
-      protocol = "";
-      readyState = 1;
-      readonly url: string;
-
-      constructor(url: string | URL) {
-        this.url = String(url);
-        sockets.push(this);
-      }
-
-      get binaryType(): string {
+    const fake = createFakeWebSocket();
+    const errorListenersAtClose: number[] = [];
+    class ReadOnlyBinaryTypeSocket extends fake.Socket {
+      override get binaryType(): "arraybuffer" | "blob" {
         return "blob";
       }
 
-      close(): void {
-        this.closeCalls += 1;
-        this.errorListenersAtClose = this.errorListeners;
-        this.readyState = 3;
+      override close(code?: number, reason?: string): void {
+        errorListenersAtClose.push(this.listenerCount("error"));
+        super.close(code, reason);
       }
-
-      send(_data: string): void {}
-
-      addEventListener(type: string): void {
-        if (type === "error") this.errorListeners += 1;
-      }
-
-      removeEventListener(): void {}
     }
 
     const client = createClient(
@@ -236,17 +192,15 @@ describe("web socket startup faults", () => {
     expect(fault?.code).toBe("NET_UNREACHABLE");
     expect(fault?.cause).toBeInstanceOf(TypeError);
     // The platform refused the socket: a local failure that a retry would only repeat.
-    expect(sockets).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     expect(
-      sockets.filter(
-        (socket) => socket.readyState === ReadOnlyBinaryTypeSocket.OPEN,
-      ),
+      fake.sockets.filter((socket) => socket.readyState === FakeWebSocket.OPEN),
     ).toHaveLength(0);
-    expect(sockets.every((socket) => socket.closeCalls === 1)).toBe(true);
-    // An EventEmitter-based handle (ws) throws a late `error` that has no listener, so the
-    // transport must already have an error listener installed when it closes the socket.
-    expect(sockets.every((socket) => socket.errorListenersAtClose >= 1)).toBe(
+    expect(fake.sockets.every((socket) => socket.closeCalls.length === 1)).toBe(
       true,
     );
+    // An EventEmitter-based handle (ws) throws a late `error` that has no listener, so the
+    // transport must already have an error listener installed when it closes the socket.
+    expect(errorListenersAtClose.every((count) => count >= 1)).toBe(true);
   });
 });

@@ -1,22 +1,20 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import { createClient, withEndpoint, withInterceptors } from "../client";
 import { ERR_ABORTED } from "../error";
 import { createWebSocketInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineWebSocket } from "./index";
 import {
-  useFakeClock,
-  lastMockInstance,
-  mockInstances,
-  createMockWebSocketClass,
-  createDeferred,
+  createFakeWebSocket,
   expectOnlyErrorSink,
-  run,
-} from "../../test/mock_web_socket";
+  openSession,
+  stubFakeWebSocket,
+} from "../../test/fake_web_socket";
+import { useFakeClock, run } from "../../test/web_socket_support";
 
 describe("web socket startup with a mock handle", () => {
   test("should preserve a pre-aborted timeout without constructing a physical socket", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     controller.abort(new DOMException("deadline expired", "TimeoutError"));
     const useSocket = defineWebSocket({
@@ -36,11 +34,11 @@ describe("web socket startup with a mock handle", () => {
     });
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
   });
 
   test("should treat a plain timeout-message Error abort reason as an abort", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     controller.abort(new Error("Request timed out"));
     const useSocket = defineWebSocket({
@@ -57,17 +55,21 @@ describe("web socket startup with a mock handle", () => {
     expect(error).toMatchObject({ code: "NET_ABORTED" });
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
   });
 
   test("should return transport error when WebSocket constructor throws", async () => {
     const refusal = new SyntaxError("Wrong protocol for WebSocket");
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({
-        throwOnConstruct: refusal,
-      }),
-    );
+    class RefusingSocket extends createFakeWebSocket().Socket {
+      constructor(url: string) {
+        super(url);
+        throw refusal;
+      }
+    }
+    vi.stubGlobal("WebSocket", RefusingSocket);
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
 
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -86,12 +88,17 @@ describe("web socket startup with a mock handle", () => {
   });
 
   test("should return transport error when WebSocket constructor throws non-Error", async () => {
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({
-        throwOnConstruct: "connection refused",
-      }),
-    );
+    class RefusingSocket extends createFakeWebSocket().Socket {
+      constructor(url: string) {
+        super(url);
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- a handle may refuse with a value that is not an Error
+        throw "connection refused";
+      }
+    }
+    vi.stubGlobal("WebSocket", RefusingSocket);
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
 
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -108,19 +115,7 @@ describe("web socket startup with a mock handle", () => {
   });
 
   test("should finish startup with aborted transport error when aborted before open", async () => {
-    const listening = createDeferred<void>();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({
-        autoOpen: false,
-        onListenerRegistered(type) {
-          if (type === "open") {
-            listening.resolve(undefined);
-          }
-        },
-      }),
-    );
-
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const controller = new AbortController();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -132,7 +127,9 @@ describe("web socket startup with a mock handle", () => {
       signal: controller.signal,
     });
 
-    await listening.promise;
+    await vi.waitFor(() =>
+      expect(fake.sockets[0]?.listenerCount("open")).toBe(1),
+    );
     controller.abort(ERR_ABORTED);
 
     const [error, socket, connection] = await executePromise;
@@ -144,7 +141,7 @@ describe("web socket startup with a mock handle", () => {
   });
 
   test("should snapshot configured protocols before beforeConnect mutates their source", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const protocols = ["snapshot-protocol"];
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -163,13 +160,13 @@ describe("web socket startup with a mock handle", () => {
     );
 
     expect(error).toBeNull();
-    expect(lastMockInstance?.protocol).toBe("snapshot-protocol");
+    expect(fake.last().requestedProtocols).toEqual(["snapshot-protocol"]);
     socket?.close(1000, "done");
     await socket?.closed;
   });
 
   test("should not construct a physical socket when abort follows transport handler invocation", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const abortingInterceptor = createWebSocketInterceptor((request, next) => {
       const pendingSession = next(request);
@@ -193,11 +190,11 @@ describe("web socket startup with a mock handle", () => {
     expect(error).toMatchObject({ code: "NET_ABORTED" });
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
   });
 
   test("should prefer an abort that follows a pre-open close in the same turn", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const controller = new AbortController();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -209,12 +206,8 @@ describe("web socket startup with a mock handle", () => {
       { signal: controller.signal },
     );
 
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerClose({
-      code: 1006,
-      reason: "early close",
-      wasClean: false,
-    });
+    await vi.waitFor(() => expect(fake.sockets.length).toBeGreaterThan(0));
+    fake.last().drop();
     controller.abort(ERR_ABORTED);
 
     const [error, socket, connection] = await executePromise;
@@ -224,7 +217,7 @@ describe("web socket startup with a mock handle", () => {
   });
 
   test("should report a transport error when the peer closes before open without a native cause", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
@@ -234,12 +227,14 @@ describe("web socket startup with a mock handle", () => {
       useSocket,
     );
 
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerClose({
-      code: 1006,
-      reason: "early close",
-      wasClean: false,
-    });
+    await vi.waitFor(() => expect(fake.sockets.length).toBeGreaterThan(0));
+    // The standard fires `error` before `close` for a connection that never opened. A handle that fires `close` alone
+    // ends the startup with this message.
+    fake
+      .last()
+      .dispatchEvent(
+        new CloseEvent("close", { code: 1006, reason: "", wasClean: false }),
+      );
 
     const [error, socket, connection] = await executePromise;
     expect(error).toMatchObject({
@@ -252,6 +247,9 @@ describe("web socket startup with a mock handle", () => {
 
   test("should report a missing WebSocket constructor as an environment fault", async () => {
     vi.stubGlobal("WebSocket", undefined);
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
 
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -267,7 +265,7 @@ describe("web socket startup with a mock handle", () => {
   });
 
   test("should set duplicate open state only once", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
 
     const states: string[] = [];
     const useSocket = defineWebSocket({
@@ -275,35 +273,29 @@ describe("web socket startup with a mock handle", () => {
       path: "/ws/test",
     });
 
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket, socket: nativeSocket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    const nativeSocket = lastMockInstance;
-    nativeSocket?.triggerOpen();
-    const [, socket] = await executePromise;
-
-    if (!socket || !nativeSocket) {
-      throw new Error("Expected socket");
-    }
 
     socket.onStateChange((state: string) => {
       states.push(state);
     });
-    nativeSocket.triggerOpen();
-    nativeSocket.triggerOpen();
+    // The standard fires `open` once. A handle that fires it again must not make the session announce it again.
+    nativeSocket.dispatchEvent(new Event("open"));
+    nativeSocket.dispatchEvent(new Event("open"));
 
     // The listener is attached after the session is already open, so the first open is not
     // observable. Duplicate open events on that live session must not emit more open states.
     expect(states.filter((state) => state === "open")).toHaveLength(0);
     socket.close(1000, "done");
+    nativeSocket.peerClose(1000, "done");
     await expect(socket.closed).resolves.toMatchObject({ code: 1000 });
   });
 
   test("should set binaryType to arraybuffer on socket creation", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
 
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -318,7 +310,7 @@ describe("web socket startup with a mock handle", () => {
     if (!socket) {
       throw new Error("Expected socket");
     }
-    expect(lastMockInstance?.binaryType).toBe("arraybuffer");
+    expect(fake.last().binaryType).toBe("arraybuffer");
     socket.close(1000, "done");
     await vi.advanceTimersByTimeAsync(0);
     await socket.closed;
@@ -327,14 +319,17 @@ describe("web socket startup with a mock handle", () => {
   test("cleans the physical socket when its constructor aborts before listener registration", async () => {
     useFakeClock();
     const controller = new AbortController();
-    const BaseSocket = createMockWebSocketClass({ autoOpen: false });
-    class AbortingSocket extends BaseSocket {
+    const fake = createFakeWebSocket({ handshake: "manual" });
+    class AbortingSocket extends fake.Socket {
       constructor(url: string, protocols?: string | string[]) {
         super(url, protocols);
         controller.abort(ERR_ABORTED);
       }
     }
     vi.stubGlobal("WebSocket", AbortingSocket);
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
@@ -345,11 +340,10 @@ describe("web socket startup with a mock handle", () => {
       endpoint,
       { signal: controller.signal },
     );
-    const nativeSocket = lastMockInstance;
-    if (!nativeSocket) throw new Error("Expected physical socket");
+    const nativeSocket = fake.last();
     expect(error?.code).toBe("NET_ABORTED");
     expect(session).toBeUndefined();
-    expect(nativeSocket.close).toHaveBeenCalledOnce();
+    expect(nativeSocket.closeCalls).toHaveLength(1);
     expectOnlyErrorSink(nativeSocket);
     await vi.runAllTimersAsync();
     expect(vi.getTimerCount()).toBe(0);
@@ -357,7 +351,7 @@ describe("web socket startup with a mock handle", () => {
 
   test("ignores a late error after a connecting attempt was cancelled", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const controller = new AbortController();
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
@@ -369,26 +363,25 @@ describe("web socket startup with a mock handle", () => {
       endpoint,
       { signal: controller.signal },
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    const nativeSocket = lastMockInstance;
-    if (!nativeSocket) throw new Error("Expected physical socket");
+    await vi.waitFor(() => expect(fake.sockets.length).toBeGreaterThan(0));
+    const nativeSocket = fake.last();
     controller.abort(ERR_ABORTED);
     const [error, session] = await pending;
 
     expect(error?.code).toBe("NET_ABORTED");
     expect(session).toBeUndefined();
-    expect(nativeSocket.close).toHaveBeenCalledOnce();
+    expect(nativeSocket.closeCalls).toHaveLength(1);
     // Closing a CONNECTING socket makes `ws` emit this error afterwards, and it throws when
     // the error has no listener.
-    expect(() => nativeSocket.triggerError()).not.toThrow();
+    expect(() => nativeSocket.drop()).not.toThrow();
     expectOnlyErrorSink(nativeSocket);
     await vi.runAllTimersAsync();
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(0);
   });
 
   test("should abort-race beforeConnect and consume its late rejection", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const contexts: Array<{ attempt: number; signal: AbortSignal }> = [];
     let rejectHook: ((reason: unknown) => void) | undefined;
@@ -417,7 +410,7 @@ describe("web socket startup with a mock handle", () => {
 
     expect(contexts[0]?.attempt).toBe(0);
     expect(contexts[0]?.signal.aborted).toBe(true);
-    expect(lastMockInstance).toBeUndefined();
+    expect(fake.sockets).toHaveLength(0);
     expect(result[0]).toMatchObject({ code: "NET_ABORTED" });
 
     rejectHook?.(new Error("late hook rejection"));

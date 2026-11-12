@@ -18,6 +18,7 @@ import {
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createWebSocketInterceptor } from "../interceptor";
 import { struct } from "../struct";
+import { createFakeWebSocket, FakeWebSocket } from "../../test/fake_web_socket";
 import { defineWebSocket } from "./index";
 
 const PRIMARY = "http://127.0.0.1:1";
@@ -88,113 +89,7 @@ function scriptedBalancer(script: readonly ScriptStep[]): {
   };
 }
 
-class ControllableSocket {
-  static readonly OPEN = 1;
-  bufferedAmount = 0;
-  extensions = "";
-  protocol = "";
-  readyState = 0;
-  readonly url: string;
-  private binary = "blob";
-  private readonly listeners: {
-    [type: string]: Array<(event: unknown) => void>;
-  } = {};
-
-  constructor(url: string | URL) {
-    this.url = String(url);
-    sockets.push(this);
-    const behavior =
-      behaviors[sockets.length - 1] ?? behaviors[behaviors.length - 1];
-    if (behavior === "close-before-open") {
-      queueMicrotask(() => {
-        this.emit("close", { code: 1006, reason: "", wasClean: false });
-      });
-    }
-  }
-
-  get binaryType(): string {
-    return this.binary;
-  }
-
-  set binaryType(value: string) {
-    if (binaryTypeError) {
-      throw binaryTypeError;
-    }
-    this.binary = value;
-  }
-
-  addEventListener(type: string, listener: (event: unknown) => void): void {
-    (this.listeners[type] ??= []).push(listener);
-  }
-
-  removeEventListener(type: string, listener: (event: unknown) => void): void {
-    this.listeners[type] = (this.listeners[type] ?? []).filter(
-      (item) => item !== listener,
-    );
-  }
-
-  send(_data: string): void {}
-
-  close(code?: number, reason?: string): void {
-    if (closeError) {
-      throw closeError;
-    }
-    this.readyState = 3;
-    this.emit("close", {
-      code: code ?? 1000,
-      reason: reason ?? "",
-      wasClean: true,
-    });
-  }
-
-  open(): void {
-    this.readyState = ControllableSocket.OPEN;
-    this.emit("open", {});
-  }
-
-  failConnect(): void {
-    this.emit("error", {});
-  }
-
-  disconnect(code: number, wasClean?: boolean): void {
-    this.readyState = 3;
-    this.emit("close", { code, reason: "peer closed", wasClean });
-  }
-
-  message(data: unknown): void {
-    this.emit("message", { data });
-  }
-
-  private emit(type: string, event: unknown): void {
-    for (const listener of [...(this.listeners[type] ?? [])]) {
-      listener(event);
-    }
-  }
-}
-
-class ThrowingSocket {
-  static readonly OPEN = 1;
-  bufferedAmount = 0;
-  extensions = "";
-  protocol = "";
-  readyState = 0;
-  url = "";
-
-  constructor(_url?: string | URL) {
-    constructCalls += 1;
-    throw constructError;
-  }
-
-  addEventListener(): void {}
-
-  close(): void {}
-
-  removeEventListener(): void {}
-
-  send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {}
-}
-
-let sockets: ControllableSocket[] = [];
+let fake = createFakeWebSocket({ handshake: "manual" });
 let behaviors: Array<"manual" | "close-before-open"> = ["manual"];
 let binaryTypeError: Error | undefined;
 let closeError: Error | undefined;
@@ -202,7 +97,7 @@ let constructCalls = 0;
 let constructError: Error = new Error("construct failed");
 
 function resetSockets(): void {
-  sockets = [];
+  fake = createFakeWebSocket({ handshake: "manual" });
   behaviors = ["manual"];
   binaryTypeError = undefined;
   closeError = undefined;
@@ -210,9 +105,55 @@ function resetSockets(): void {
   constructError = new Error("construct failed");
 }
 
+/** The current test's socket: it opens when the test says so, and answers a close at once. */
+function scriptedSocket(): typeof FakeWebSocket {
+  return class extends fake.Socket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, protocols);
+      this.autoReply = true;
+      const behavior =
+        behaviors[fake.sockets.length - 1] ?? behaviors[behaviors.length - 1];
+      if (behavior === "close-before-open") {
+        queueMicrotask(() => {
+          this.drop();
+        });
+      }
+    }
+
+    override get binaryType(): "arraybuffer" | "blob" {
+      return super.binaryType;
+    }
+
+    override set binaryType(value: "arraybuffer" | "blob") {
+      if (binaryTypeError) {
+        throw binaryTypeError;
+      }
+      super.binaryType = value;
+    }
+
+    override close(code?: number, reason?: string): void {
+      if (closeError) {
+        throw closeError;
+      }
+      super.close(code, reason);
+    }
+  };
+}
+
+/** A handle whose constructor always throws, after the platform has counted the attempt. */
+function throwingSocket(): typeof FakeWebSocket {
+  return class extends fake.Socket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, protocols);
+      constructCalls += 1;
+      throw constructError;
+    }
+  };
+}
+
 function clientFor(
   balancer: Balancer,
-  handle: WebSocketHandleConstructor = ControllableSocket,
+  handle: WebSocketHandleConstructor = scriptedSocket(),
 ) {
   return createClient(
     withEndpoint(PRIMARY, SECONDARY),
@@ -221,8 +162,8 @@ function clientFor(
   );
 }
 
-function socketAt(index: number): ControllableSocket {
-  const socket = sockets[index];
+function socketAt(index: number): FakeWebSocket {
+  const socket = fake.sockets[index];
   if (socket === undefined) {
     throw new Error(`missing socket ${index}`);
   }
@@ -275,7 +216,7 @@ describe("web socket endpoint balancer", () => {
     const switched = createClient(
       withEndpoint(PRIMARY),
       withBalancer(replaced.balancer),
-      withWebSocketHandle(ControllableSocket),
+      withWebSocketHandle(scriptedSocket()),
       withInterceptors(
         createWebSocketInterceptor((request, next) => {
           const pending = next({ ...request, baseEndpoint: REPLACED });
@@ -294,9 +235,9 @@ describe("web socket endpoint balancer", () => {
       throw new Error("expected session");
     }
     expect(replaced.dones).toEqual([{ attempted: false }]);
-    socketAt(0).close(1000, "done");
+    socketAt(0).peerClose(1000, "done");
     await flush();
-    expect(sockets).toHaveLength(2);
+    expect(fake.sockets).toHaveLength(2);
     expect(socketAt(1).url).toBe("ws://127.0.0.1:9/ws");
     expect(replaced.picks).toHaveLength(1);
     expect(replaced.dones).toEqual([{ attempted: false }]);
@@ -317,7 +258,7 @@ describe("web socket endpoint balancer", () => {
     }
     expect(record.dones).toEqual([]);
     expect(record.pending()).toBe(1);
-    socketAt(0).close(1000, "done");
+    socketAt(0).peerClose(1000, "done");
     await session.closed;
     expect(record.dones).toEqual([{ attempted: true }]);
     expect(record.pending()).toBe(0);
@@ -388,7 +329,7 @@ describe("web socket endpoint balancer", () => {
     expect(built.picks[0]?.operation).toBe("room.join");
     expect(built.dones).toEqual([{ attempted: false }]);
     expect(built.pending()).toBe(0);
-    expect(sockets).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
   });
 
   test("should done exactly once for a constructed-but-unopened timeout, a direct error finish, a reconnect that skips finish, and a socketless close", async () => {
@@ -397,7 +338,7 @@ describe("web socket endpoint balancer", () => {
       clientFor(timed.balancer)({ signal: AbortSignal.timeout(20) }),
     );
     await flush();
-    expect(sockets).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     expect(timed.dones).toEqual([]);
     const [fault] = await pending;
     expect(fault?.code).toBe("NET_TIMEOUT");
@@ -409,7 +350,7 @@ describe("web socket endpoint balancer", () => {
     const errored = scriptedBalancer([{ endpoint: PRIMARY }]);
     const errorPending = room(clientFor(errored.balancer));
     await flush();
-    socketAt(0).failConnect();
+    socketAt(0).dispatchEvent(new Event("error"));
     const [errorFault] = await errorPending;
     expect(errorFault?.code).toBe("NET_UNREACHABLE");
     expect(errored.dones).toEqual([
@@ -469,16 +410,16 @@ describe("web socket endpoint balancer", () => {
       throw new Error("expected session");
     }
     expect(closing.dones).toEqual([]);
-    socketAt(0).close(1000, "drop");
+    socketAt(0).peerClose(1000, "drop");
     await vi.waitFor(() => expect(closing.picks).toHaveLength(2));
     expect(closing.dones).toEqual([{ attempted: true }]);
     expect(closing.pending()).toBe(1);
-    expect(sockets).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     session.close(1000, "stop");
     await session.closed;
     expect(closing.dones).toEqual([{ attempted: true }, { attempted: false }]);
     expect(closing.pending()).toBe(0);
-    expect(sockets).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     gate.resolve();
   });
 
@@ -488,7 +429,7 @@ describe("web socket endpoint balancer", () => {
     const illegalClient = createClient(
       withEndpoint(PRIMARY),
       withBalancer(illegal.balancer),
-      withWebSocketHandle(ControllableSocket),
+      withWebSocketHandle(scriptedSocket()),
       withInterceptors(
         createWebSocketInterceptor((request, next) => {
           const pending = next({ ...request, baseEndpoint: "not a url" });
@@ -502,14 +443,14 @@ describe("web socket endpoint balancer", () => {
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(illegal.dones).toEqual([{ attempted: false }]);
     expect(illegal.pending()).toBe(0);
-    expect(sockets).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
 
     resetSockets();
     const clean = scriptedBalancer([{ endpoint: PRIMARY }]);
     const cleanClient = createClient(
       withEndpoint(PRIMARY),
       withBalancer(clean.balancer),
-      withWebSocketHandle(ControllableSocket),
+      withWebSocketHandle(scriptedSocket()),
       withInterceptors(
         createWebSocketInterceptor((request, next) =>
           next({ ...request, baseEndpoint: REPLACED }),
@@ -524,7 +465,7 @@ describe("web socket endpoint balancer", () => {
     if (!session) {
       throw new Error("expected session");
     }
-    socketAt(0).close(1000, "done");
+    socketAt(0).peerClose(1000, "done");
     await session.closed;
     expect(clean.dones).toEqual([{ attempted: false }]);
     expect(clean.picks).toHaveLength(1);
@@ -534,7 +475,7 @@ describe("web socket endpoint balancer", () => {
   test("should done once with NET_UNREACHABLE when construct or binaryType throws without reconnect", async () => {
     const constructed = scriptedBalancer([{ endpoint: PRIMARY }]);
     const [constructFault] = await room(
-      clientFor(constructed.balancer, ThrowingSocket),
+      clientFor(constructed.balancer, throwingSocket()),
     );
     expect(constructCalls).toBe(1);
     expect(constructFault?.code).toBe("NET_UNREACHABLE");
@@ -563,7 +504,7 @@ describe("web socket endpoint balancer", () => {
     const [fault] = await room(
       clientFor(
         record.balancer,
-        ThrowingSocket,
+        throwingSocket(),
       )({
         retry: { delayMs: 0, shouldRetry },
       }),
@@ -583,7 +524,7 @@ describe("web socket endpoint balancer", () => {
     constructError = new DOMException("deadline", "TimeoutError");
     const timed = scriptedBalancer([{ endpoint: PRIMARY }]);
     const [timeoutFault] = await room(
-      clientFor(timed.balancer, ThrowingSocket),
+      clientFor(timed.balancer, throwingSocket()),
     );
     expect(timeoutFault?.code).toBe("NET_TIMEOUT");
     expect(timed.dones).toEqual([{ attempted: true, code: "NET_TIMEOUT" }]);
@@ -592,7 +533,7 @@ describe("web socket endpoint balancer", () => {
     constructError = new DOMException("stop", "AbortError");
     const aborted = scriptedBalancer([{ endpoint: PRIMARY }]);
     const [abortFault] = await room(
-      clientFor(aborted.balancer, ThrowingSocket),
+      clientFor(aborted.balancer, throwingSocket()),
     );
     expect(abortFault?.code).toBe("NET_ABORTED");
     expect(aborted.dones).toEqual([{ attempted: false }]);
@@ -611,7 +552,7 @@ describe("web socket endpoint balancer", () => {
     expect(hookFault?.code).toBe("EXT_HOOK_FAILED");
     expect(hooked.dones).toEqual([{ attempted: false }]);
     expect(hooked.pending()).toBe(0);
-    expect(sockets).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
 
     behaviors = ["close-before-open"];
     const record = scriptedBalancer([
@@ -622,7 +563,7 @@ describe("web socket endpoint balancer", () => {
       createClient(
         withEndpoint(PRIMARY, SECONDARY, "not a url"),
         withBalancer(record.balancer),
-        withWebSocketHandle(ControllableSocket),
+        withWebSocketHandle(scriptedSocket()),
       )({ retry: { maxRetries: 1, delayMs: 0 } }),
     );
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
@@ -631,7 +572,7 @@ describe("web socket endpoint balancer", () => {
       { attempted: false },
     ]);
     expect(record.pending()).toBe(0);
-    expect(sockets).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
   });
 
   test("should surface a failed reconnect pick without calling done", async () => {
@@ -666,7 +607,7 @@ describe("web socket endpoint balancer", () => {
     if (!openedSession) {
       throw new Error("expected session");
     }
-    socketAt(0).close(1000, "drop");
+    socketAt(0).peerClose(1000, "drop");
     const openedClosed = await openedSession.closed;
     expect(openedClosed.kind).toBe("error");
     if (openedClosed.kind !== "error") {
@@ -738,8 +679,8 @@ describe("web socket endpoint balancer", () => {
       const runtimeError = vi.fn();
       session.onRuntimeError(runtimeError);
       try {
-        socketAt(0).disconnect(code, wasClean);
-        await vi.waitFor(() => expect(sockets).toHaveLength(2));
+        socketAt(0).peerClose(code, "peer closed", wasClean);
+        await vi.waitFor(() => expect(fake.sockets).toHaveLength(2));
         expect(dones).toEqual([{ attempted: true, code: failure }]);
         expect(ends).toEqual([{ attempted: true }]);
         expect(socketAt(1).url).toBe("ws://127.0.0.1:2/ws");
@@ -777,7 +718,7 @@ describe("web socket endpoint balancer", () => {
       socketAt(0).open();
       const [, session] = await pending;
       if (!session) throw new Error("expected session");
-      socketAt(0).disconnect(code, wasClean);
+      socketAt(0).peerClose(code, "peer closed", wasClean);
       expect(await session.closed).toMatchObject({ kind: "closed", code });
       expect(record.dones).toEqual([{ attempted: true }]);
       expect(record.ends).toEqual([{ attempted: true }]);
@@ -798,9 +739,16 @@ describe("web socket endpoint balancer", () => {
         clientFor(record.balancer)({ retry: { maxRetries: 1, delayMs: 0 } }),
       );
       await flush();
-      // Firefox can dispatch the peer's close frame without `open` when the server closes right after accepting.
-      socketAt(0).disconnect(code, false);
-      await vi.waitFor(() => expect(sockets).toHaveLength(2));
+      // Firefox can dispatch the peer's close frame without `open` when the server closes right after accepting. The
+      // standard orders `open` first, so only a raw event can say it.
+      socketAt(0).dispatchEvent(
+        new CloseEvent("close", {
+          code,
+          reason: "peer closed",
+          wasClean: false,
+        }),
+      );
+      await vi.waitFor(() => expect(fake.sockets).toHaveLength(2));
       expect(record.dones).toEqual([report]);
       expect(record.ends).toEqual([report]);
       socketAt(1).open();
@@ -823,9 +771,11 @@ describe("web socket endpoint balancer", () => {
   ] as const)(
     "%s takes priority over a late close-only %s snapshot",
     async (mode, code) => {
-      class AbnormalOnClose extends ControllableSocket {
+      class AbnormalOnClose extends scriptedSocket() {
         override close(): void {
-          this.disconnect(code, code !== 1006);
+          if (this.readyState !== FakeWebSocket.CLOSED) {
+            this.peerClose(code, "peer closed", code !== 1006);
+          }
         }
       }
       const record = scriptedBalancer([{ endpoint: PRIMARY }]);
@@ -852,13 +802,13 @@ describe("web socket endpoint balancer", () => {
           : { attempted: false },
       ]);
       expect(record.ends).toEqual([{ attempted: true }]);
-      expect(sockets).toHaveLength(1);
+      expect(fake.sockets).toHaveLength(1);
       expect(record.pending()).toBe(0);
     },
   );
 
   test("does not treat application termination without a native close snapshot as a network failure", async () => {
-    class SilentOnClose extends ControllableSocket {
+    class SilentOnClose extends scriptedSocket() {
       override close(): void {}
     }
     const record = scriptedBalancer([{ endpoint: PRIMARY }]);
@@ -880,7 +830,7 @@ describe("web socket endpoint balancer", () => {
     socketAt(0).open();
     const [, session] = await pending;
     if (!session) throw new Error("expected session");
-    socketAt(0).message("{}");
+    socketAt(0).receive("{}");
     expect(await session.closed).toMatchObject({ kind: "error" });
     expect(record.dones).toEqual([{ attempted: true }]);
     expect(record.ends).toEqual([{ attempted: true }]);
@@ -974,7 +924,11 @@ describe("web socket endpoint balancer", () => {
       const [error, session] = await pending;
       expect(error).toBeNull();
       if (!session) throw new Error("expected session");
-      socketAt(attempt).disconnect(attempt < 5 ? 1006 : 1000, attempt >= 5);
+      socketAt(attempt).peerClose(
+        attempt < 5 ? 1006 : 1000,
+        "peer closed",
+        attempt >= 5,
+      );
       await session.closed;
     }
     expect(picked).toEqual([
@@ -1018,7 +972,7 @@ describe("web socket endpoint balancer", () => {
       const [error, session] = await pending;
       expect(error).toBeNull();
       if (!session) throw new Error("expected session");
-      socketAt(index).disconnect(drop ? 1006 : 1000, !drop);
+      socketAt(index).peerClose(drop ? 1006 : 1000, "peer closed", !drop);
       index += 1;
       await session.closed;
     }
@@ -1045,7 +999,7 @@ describe("web socket endpoint balancer", () => {
       const client = createClient(
         withEndpoint(PRIMARY),
         withBalancer(record.balancer),
-        withWebSocketHandle(ControllableSocket),
+        withWebSocketHandle(scriptedSocket()),
         ...(mode === "replaced"
           ? [
               withInterceptors(
@@ -1062,7 +1016,7 @@ describe("web socket endpoint balancer", () => {
       const [error, session] = await pending;
       expect(error).toBeNull();
       if (!session) throw new Error("expected session");
-      socketAt(0).disconnect(1006, false);
+      socketAt(0).peerClose(1006, "peer closed", false);
       expect(await session.closed).toMatchObject({
         kind: "error",
         code: 1006,
@@ -1094,7 +1048,7 @@ describe("web socket endpoint balancer", () => {
       socketAt(0).open();
       const [, session] = await pending;
       if (!session) throw new Error("expected session");
-      socketAt(0).disconnect(1006, false);
+      socketAt(0).peerClose(1006, "peer closed", false);
       expect(await session.closed).toMatchObject(
         mode === "throw"
           ? { kind: "error", cause: policyError }
@@ -1105,14 +1059,16 @@ describe("web socket endpoint balancer", () => {
         { attempted: true, code: "NET_UNREACHABLE" },
       ]);
       expect(record.ends).toEqual([{ attempted: true }]);
-      expect(sockets).toHaveLength(1);
+      expect(fake.sockets).toHaveLength(1);
     },
   );
 
   test("should count an error after open as unreachable exactly once", async () => {
-    class AbnormalOnError extends ControllableSocket {
+    class AbnormalOnError extends scriptedSocket() {
       override close(): void {
-        this.disconnect(1006, false);
+        if (this.readyState !== FakeWebSocket.CLOSED) {
+          this.peerClose(1006, "peer closed", false);
+        }
       }
     }
     const record = scriptedBalancer([{ endpoint: PRIMARY }]);
@@ -1125,7 +1081,7 @@ describe("web socket endpoint balancer", () => {
     }
     const runtimeError = vi.fn();
     session.onRuntimeError(runtimeError);
-    socketAt(0).failConnect();
+    socketAt(0).dispatchEvent(new Event("error"));
     expect(await session.closed).toMatchObject({
       kind: "error",
       code: 1006,

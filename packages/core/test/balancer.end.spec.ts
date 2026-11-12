@@ -15,7 +15,7 @@ import {
   withRetry,
 } from "../src";
 import type { Balancer, DoneInfo } from "../src";
-import { createControllableSocketClass } from "./regression/controllable_socket";
+import { createFakeWebSocket } from "./fake_web_socket";
 import { makeResponse } from "../src/http/http_response";
 afterEach(() => {
   vi.useRealTimers();
@@ -278,13 +278,13 @@ test.each(["failure", "cancel", "caller-timeout", "handshake-timeout"])(
   "WebSocket pre-open %s emits its transport end once",
   async (mode) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const controller = new AbortController();
     const h = recorder();
     const client = createClient(
       withEndpoint("https://socket.test"),
       withBalancer(h.b),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
     const pending = defineWebSocket({
       path: "/",
@@ -295,9 +295,8 @@ test.each(["failure", "cancel", "caller-timeout", "handshake-timeout"])(
         retry: { maxRetries: 0, attemptTimeoutMs: 100 },
       }),
     );
-    await vi.waitFor(() => expect(latest()).toBeDefined());
-    if (mode === "failure")
-      latest()?.triggerClose({ code: 1006, reason: "", wasClean: false });
+    await vi.waitFor(() => expect(fake.sockets).toHaveLength(1));
+    if (mode === "failure") fake.last().drop();
     else if (mode === "handshake-timeout")
       await vi.advanceTimersByTimeAsync(100);
     else controller.abort(mode === "caller-timeout" ? ERR_TIMEOUT : undefined);

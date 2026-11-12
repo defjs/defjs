@@ -16,7 +16,7 @@ import { defineEventStream } from "../sse/sse";
 import { struct } from "../struct";
 import { STRUCT } from "../struct/symbols";
 import { defineWebSocket } from "../web_socket/web_socket";
-import { stoppingSocket } from "../../test/stopping_socket";
+import { createFakeWebSocket, refusing } from "../../test/fake_web_socket";
 
 const birthday = new Date("1815-12-10T00:00:00.000Z");
 
@@ -256,14 +256,14 @@ describe("query serializer contract", () => {
 
   test("WebSocket query uses the serializer and skips URLSearchParams", async () => {
     const seen: unknown[] = [];
-    const urls: string[] = [];
+    const fake = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.com"),
       withQuerySerializer((query) => {
         seen.push(query);
         return "from=ws";
       }),
-      withWebSocketHandle(stoppingSocket((url) => urls.push(url))),
+      withWebSocketHandle(refusing(fake.Socket)),
     );
     const encoded = defineWebSocket({
       builder: (input) => ({ query: input }),
@@ -286,16 +286,16 @@ describe("query serializer contract", () => {
     expect(seen).toEqual([
       { room_id: "blue", since: "1815-12-10T00:00:00.000Z" },
     ]);
-    expect(urls[0]).toContain("from=ws");
-    expect(urls[1]).toContain("room_id=blue");
-    expect(urls[1]).not.toContain("from=ws");
+    expect(fake.sockets[0]?.url).toContain("from=ws");
+    expect(fake.sockets[1]?.url).toContain("room_id=blue");
+    expect(fake.sockets[1]?.url).not.toContain("from=ws");
   });
 
   test("WebSocket nested query fails without a serializer", async () => {
-    const urls: string[] = [];
+    const fake = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.com"),
-      withWebSocketHandle(stoppingSocket((url) => urls.push(url))),
+      withWebSocketHandle(refusing(fake.Socket)),
     );
     const socket = defineWebSocket({
       builder: () => ({ query: { filter: { state: "open" } } }),
@@ -305,7 +305,7 @@ describe("query serializer contract", () => {
 
     const [error] = await socket(client);
 
-    expect(urls).toEqual([]);
+    expect(fake.sockets).toHaveLength(0);
     expect(error?.code).toBe("REQ_BUILD_FAILED");
     expect(error?.cause).toBeInstanceOf(TypeError);
     if (!(error?.cause instanceof Error)) {

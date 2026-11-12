@@ -6,7 +6,7 @@ import type { HeartbeatRuntime } from "./heartbeat";
 import { startHeartbeat } from "./heartbeat";
 import type { WebSocketHeartbeatConfig } from "./web_socket";
 import { method } from "../../test/method";
-import { useFakeClock } from "../../test/mock_web_socket";
+import { useFakeClock } from "../../test/web_socket_support";
 
 describe("heartbeat", () => {
   let runtimes: HeartbeatRuntime[];

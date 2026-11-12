@@ -3,18 +3,16 @@ import { createClient, withEndpoint } from "../client";
 import { ERR_ABORTED } from "../error";
 import { struct } from "../struct";
 import { defineWebSocket } from "./index";
+import { openSession, stubFakeWebSocket } from "../../test/fake_web_socket";
 import {
   useFakeClock,
-  lastMockInstance,
-  mockInstances,
-  createMockWebSocketClass,
   createDeferred,
   run,
-} from "../../test/mock_web_socket";
+} from "../../test/web_socket_support";
 
 describe("web socket send with a mock handle", () => {
   test("should not send on the captured open socket when outgoing serialization aborts the session", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -24,15 +22,13 @@ describe("web socket send with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      { signal: controller.signal },
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
+        signal: controller.signal,
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const nativeSocket = lastMockInstance;
+    const nativeSocket = fake.last();
     const message = {
       get text() {
         controller.abort(ERR_ABORTED);
@@ -50,15 +46,12 @@ describe("web socket send with a mock handle", () => {
       kind: "aborted",
     });
     expect(socket.state).toBe("aborted");
-    expect(nativeSocket.send).not.toHaveBeenCalled();
+    expect(nativeSocket.sent).toHaveLength(0);
   });
 
   test("should reject sends while manual close is pending before serializing or enqueueing", async () => {
     useFakeClock();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ closeEventDelayMs: 30 }),
-    );
+    stubFakeWebSocket();
     const useSocket = defineWebSocket({
       maxOutgoingQueueSize: 1,
       incoming: struct.unknown(),
@@ -87,7 +80,7 @@ describe("web socket send with a mock handle", () => {
   });
 
   test("should reject sends after remote close before its reconnect predicate settles", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       maxOutgoingQueueSize: 1,
       incoming: struct.unknown(),
@@ -97,22 +90,14 @@ describe("web socket send with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 0, shouldRetry: () => false },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     expect(() => socket.send({ text: "late", type: "message" })).toThrow(
       expect.objectContaining({ name: "InvalidStateError" }),
     );
@@ -121,7 +106,7 @@ describe("web socket send with a mock handle", () => {
 
   test("should flush a reconnect frame before an open observer can send", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       maxOutgoingQueueSize: 1,
       incoming: struct.unknown(),
@@ -131,19 +116,12 @@ describe("web socket send with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const pending = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 30 },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await pending;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     let queued = false;
     let overflowChecked = false;
     socket.onStateChange((state) => {
@@ -160,61 +138,49 @@ describe("web socket send with a mock handle", () => {
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     // Let the retry decision schedule its delay, then pass it: 30 ms plus at most 20% jitter.
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(40);
-    expect(mockInstances).toHaveLength(2);
-    lastMockInstance?.triggerOpen();
+    expect(fake.sockets).toHaveLength(2);
+    fake.last().open();
     expect(socket.connection.generation).toBe(2);
-    const replacement = lastMockInstance;
+    const replacement = fake.last();
     if (!replacement) {
       throw new Error("Expected replacement socket");
     }
 
     expect(queued).toBe(true);
     expect(overflowChecked).toBe(true);
-    expect(replacement.send).toHaveBeenNthCalledWith(
-      1,
+    expect(replacement.sent[0]).toBe(
       JSON.stringify({ type: "message", text: "queued first" }),
     );
-    expect(replacement.send).toHaveBeenNthCalledWith(
-      2,
+    expect(replacement.sent[1]).toBe(
       JSON.stringify({ type: "message", text: "observer second" }),
     );
     await Promise.resolve();
-    expect(replacement.send).toHaveBeenCalledTimes(2);
+    expect(replacement.sent).toHaveLength(2);
     socket.close(1000, "done");
+    fake.last().peerClose(1000, "done");
     await vi.advanceTimersByTimeAsync(0);
     await socket.closed;
   });
 
   test("should reject an undefined JSON message before it enters the reconnect queue", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       maxOutgoingQueueSize: 2,
       incoming: struct.unknown(),
       outgoing: struct.string().optional(),
       path: "/ws/test",
     });
-    const pending = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 30 },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await pending;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
 
     let sendError: unknown;
     socket.onStateChange((state) => {
@@ -227,18 +193,14 @@ describe("web socket send with a mock handle", () => {
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     // Let the retry decision schedule its delay, then pass it: 30 ms plus at most 20% jitter.
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(40);
-    expect(mockInstances).toHaveLength(2);
-    lastMockInstance?.triggerOpen();
+    expect(fake.sockets).toHaveLength(2);
+    fake.last().open();
     expect(socket.connection.generation).toBe(2);
-    const replacement = lastMockInstance;
+    const replacement = fake.last();
     if (!replacement) {
       throw new Error("Expected replacement socket");
     }
@@ -246,8 +208,9 @@ describe("web socket send with a mock handle", () => {
     expect(sendError).toEqual(
       new TypeError("Outgoing WebSocket message has no JSON representation"),
     );
-    expect(replacement.send).not.toHaveBeenCalled();
+    expect(replacement.sent).toHaveLength(0);
     socket.close(1000, "done");
+    fake.last().peerClose(1000, "done");
     await vi.advanceTimersByTimeAsync(0);
     await socket.closed;
   });
@@ -273,23 +236,20 @@ describe("web socket send with a mock handle", () => {
   ])(
     "should reject a %s send before the text frame is written",
     async (_label, outgoing, message, fragment) => {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
+      const fake = stubFakeWebSocket();
       const useSocket = defineWebSocket({
         incoming: struct.unknown(),
         outgoing,
         path: "/ws/test",
       });
-      const [, socket] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket,
+      const { session: socket } = await openSession(
+        run(createClient(withEndpoint("http://localhost")), useSocket),
+        fake,
       );
-      if (!socket || !lastMockInstance) {
-        throw new Error("Expected socket");
-      }
 
       expect(() => socket.send(message)).toThrow(TypeError);
       expect(() => socket.send(message)).toThrow(fragment);
-      expect(lastMockInstance.send).not.toHaveBeenCalled();
+      expect(fake.last().sent).toHaveLength(0);
 
       socket.close(1000, "done");
       await socket.closed;
@@ -298,26 +258,19 @@ describe("web socket send with a mock handle", () => {
 
   test("should reject a non-JSON message before it enters the reconnect queue", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       maxOutgoingQueueSize: 2,
       outgoing: struct.object({ n: struct.number() }),
       path: "/ws/test",
     });
-    const pending = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 30 },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await pending;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
 
     let sendError: unknown;
     socket.onStateChange((state) => {
@@ -330,18 +283,14 @@ describe("web socket send with a mock handle", () => {
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     // Let the retry decision schedule its delay, then pass it: 30 ms plus at most 20% jitter.
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(40);
-    expect(mockInstances).toHaveLength(2);
-    lastMockInstance?.triggerOpen();
+    expect(fake.sockets).toHaveLength(2);
+    fake.last().open();
     expect(socket.connection.generation).toBe(2);
-    const replacement = lastMockInstance;
+    const replacement = fake.last();
     if (!replacement) {
       throw new Error("Expected replacement socket");
     }
@@ -353,14 +302,15 @@ describe("web socket send with a mock handle", () => {
     expect(sendError.message).toContain(
       'Outgoing WebSocket message field "n" is not JSON data: -Infinity',
     );
-    expect(replacement.send).not.toHaveBeenCalled();
+    expect(replacement.sent).toHaveLength(0);
     socket.close(1000, "done");
+    fake.last().peerClose(1000, "done");
     await vi.advanceTimersByTimeAsync(0);
     await socket.closed;
   });
 
   test("should not enqueue a reconnect frame when outgoing serialization aborts the session", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const reconnecting = createDeferred<void>();
     const useSocket = defineWebSocket({
@@ -372,28 +322,20 @@ describe("web socket send with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 1_000 },
         signal: controller.signal,
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     socket.onStateChange((state) => {
       if (state === "reconnecting") {
         reconnecting.resolve(undefined);
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     await reconnecting.promise;
     const message = {
       get text() {
@@ -412,12 +354,12 @@ describe("web socket send with a mock handle", () => {
       kind: "aborted",
     });
     expect(socket.state).toBe("aborted");
-    expect(mockInstances).toHaveLength(1);
-    expect(mockInstances[0]?.send).not.toHaveBeenCalled();
+    expect(fake.sockets).toHaveLength(1);
+    expect(fake.sockets[0]?.sent).toHaveLength(0);
   });
 
   test("should disable outgoing buffering by default during reconnect preparation", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const attempts: number[] = [];
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -427,10 +369,8 @@ describe("web socket send with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         beforeConnect({ attempt }: { attempt: number }) {
           attempts.push(attempt);
           if (attempt === 1) {
@@ -438,17 +378,11 @@ describe("web socket send with a mock handle", () => {
           }
         },
         retry: { maxRetries: 1, delayMs: 0 },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     await vi.waitFor(() => expect(attempts).toEqual([0, 1]));
 
     expect(socket.state).toBe("reconnecting");
@@ -463,6 +397,6 @@ describe("web socket send with a mock handle", () => {
       kind: "closed",
       reason: "owner stopped reconnect",
     });
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
   });
 });

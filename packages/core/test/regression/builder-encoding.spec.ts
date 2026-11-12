@@ -43,10 +43,7 @@ import {
   serializeOutgoingWebSocketMessage,
   decodeWebSocketMessage,
 } from "../../src/web_socket/codec";
-import {
-  createControllableSocketClass,
-  openControllableSocket,
-} from "./controllable_socket";
+import { createFakeWebSocket, openSession } from "../fake_web_socket";
 
 const iso = new Date("1815-12-10T00:00:00.000Z");
 
@@ -625,69 +622,6 @@ async function closeIfOpened(
   await resource.closed;
 }
 
-function createOpeningSocket() {
-  const counters = { sockets: 0 };
-
-  class OpeningSocket {
-    static OPEN = 1;
-    static CONNECTING = 0;
-    static CLOSING = 2;
-    static CLOSED = 3;
-
-    bufferedAmount = 0;
-    binaryType = "blob";
-    extensions = "";
-    protocol = "";
-    readyState = OpeningSocket.CONNECTING;
-    url: string;
-    private readonly listeners = new Map<
-      string,
-      Array<(event: unknown) => void>
-    >();
-
-    constructor(url: string) {
-      counters.sockets += 1;
-      this.url = url;
-      queueMicrotask(() => {
-        this.readyState = OpeningSocket.OPEN;
-        this.emit("open", {});
-      });
-    }
-
-    addEventListener(type: string, listener: (event: unknown) => void): void {
-      const current = this.listeners.get(type);
-      if (current) current.push(listener);
-      else this.listeners.set(type, [listener]);
-    }
-
-    removeEventListener(
-      type: string,
-      listener: (event: unknown) => void,
-    ): void {
-      const current = this.listeners.get(type) ?? [];
-      this.listeners.set(
-        type,
-        current.filter((item) => item !== listener),
-      );
-    }
-
-    send(): void {}
-
-    close(): void {
-      this.readyState = OpeningSocket.CLOSED;
-      this.emit("close", { code: 1000, reason: "", wasClean: true });
-    }
-
-    emit(type: string, event: unknown): void {
-      for (const listener of this.listeners.get(type) ?? []) {
-        listener(event);
-      }
-    }
-  }
-
-  return { Socket: OpeningSocket, counters };
-}
-
 describe("builder fixes re-audit", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -969,7 +903,7 @@ describe("builder fixes re-audit", () => {
 
   test("does not run a WebSocket builder when input parsing aborts the signal", async () => {
     const controller = new AbortController();
-    const opened = createOpeningSocket();
+    const opened = createFakeWebSocket();
     let builderCalls = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
@@ -992,14 +926,14 @@ describe("builder fixes re-audit", () => {
     await closeIfOpened(session);
 
     expect(builderCalls).toBe(0);
-    expect(opened.counters.sockets).toBe(0);
+    expect(opened.sockets).toHaveLength(0);
     expect(session).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
   });
 
   test("returns NET_ABORTED when a WebSocket builder aborts and then throws", async () => {
     const controller = new AbortController();
-    const opened = createOpeningSocket();
+    const opened = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.test"),
       withWebSocketHandle(opened.Socket),
@@ -1017,7 +951,7 @@ describe("builder fixes re-audit", () => {
       client({ signal: controller.signal }),
     );
 
-    expect(opened.counters.sockets).toBe(0);
+    expect(opened.sockets).toHaveLength(0);
     expect(session).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
   });
@@ -1329,67 +1263,10 @@ describe("builder fixes re-audit", () => {
     );
     expect(decoded).toEqual({ code: "DENIED" });
 
-    const constructed: FakeSocket[] = [];
-    class FakeSocket {
-      static OPEN = 1;
-      static CONNECTING = 0;
-      static CLOSING = 2;
-      static CLOSED = 3;
-
-      bufferedAmount = 0;
-      binaryType = "blob";
-      extensions = "";
-      protocol = "";
-      readyState = FakeSocket.CONNECTING;
-      url: string;
-      private readonly listeners = new Map<
-        string,
-        Array<(event: unknown) => void>
-      >();
-
-      constructor(url: string) {
-        this.url = url;
-        constructed.push(this);
-        queueMicrotask(() => {
-          this.readyState = FakeSocket.OPEN;
-          this.emit("open", {});
-        });
-      }
-
-      addEventListener(type: string, listener: (event: unknown) => void): void {
-        const current = this.listeners.get(type);
-        if (current) current.push(listener);
-        else this.listeners.set(type, [listener]);
-      }
-
-      removeEventListener(
-        type: string,
-        listener: (event: unknown) => void,
-      ): void {
-        const current = this.listeners.get(type) ?? [];
-        this.listeners.set(
-          type,
-          current.filter((item) => item !== listener),
-        );
-      }
-
-      send(): void {}
-
-      close(code = 1000, reason = ""): void {
-        this.readyState = FakeSocket.CLOSED;
-        this.emit("close", { code, reason, wasClean: true });
-      }
-
-      emit(type: string, event: unknown): void {
-        for (const listener of this.listeners.get(type) ?? []) {
-          listener(event);
-        }
-      }
-    }
-
+    const fake = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(FakeSocket),
+      withWebSocketHandle(fake.Socket),
     );
     const endpoint = defineWebSocket({
       incoming: struct.object({ code: struct.string().alias("error_code") }),
@@ -1397,12 +1274,11 @@ describe("builder fixes re-audit", () => {
     });
     const [openError, session] = await endpoint(client);
     expect(openError).toBeNull();
-    const opened = constructed[0];
-    if (!session || !opened) {
+    if (!session) {
       throw new Error("Expected socket");
     }
     const pending = session.receive[Symbol.asyncIterator]().next();
-    opened.emit("message", { data: '{"error_code":"DENIED"}' });
+    fake.last().receive('{"error_code":"DENIED"}');
     await expect(pending).resolves.toEqual({
       done: false,
       value: { code: "DENIED" },
@@ -1413,12 +1289,12 @@ describe("builder fixes re-audit", () => {
 
   test("decodes aliased fields before heartbeat acknowledgement classification", async () => {
     vi.useFakeTimers();
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     try {
       const seen: unknown[] = [];
       const client = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket),
+        withWebSocketHandle(fake.Socket),
       );
       const endpoint = defineWebSocket({
         incoming: struct.object({
@@ -1455,21 +1331,19 @@ describe("builder fixes re-audit", () => {
           },
         }),
       );
-      const [error, session] = await openControllableSocket(pending, latest);
-      expect(error).toBeNull();
-      const socket = latest();
-      if (!session || !socket) {
-        throw new Error("Expected socket session");
-      }
+      const { session, socket: socket } = await openSession(pending, fake);
       const runtimeErrors: unknown[] = [];
       session.onRuntimeError((cause) => {
         runtimeErrors.push(cause);
       });
 
       await vi.advanceTimersByTimeAsync(10);
-      expect(JSON.parse(socket.sent[0] ?? "")).toEqual({ at: 1, type: "ping" });
+      expect(JSON.parse(socket.sentText(0))).toEqual({
+        at: 1,
+        type: "ping",
+      });
       // The wire key is `type`. Classification must see the decoded logical key `kind`.
-      socket.triggerMessage('{"ok":true,"type":"pong"}');
+      socket.receive('{"ok":true,"type":"pong"}');
       // Flush the message pump without moving the clock. vi.waitFor advances fake timers and
       // would let the next interval arm a fresh deadline inside this timeout window.
       await vi.advanceTimersByTimeAsync(0);
@@ -1479,11 +1353,7 @@ describe("builder fixes re-audit", () => {
       expect(runtimeErrors).toEqual([]);
       expect(session.state).toBe("open");
       session.close(1000, "heartbeat-ok");
-      socket.triggerClose({
-        code: 1000,
-        reason: "heartbeat-ok",
-        wasClean: true,
-      });
+      socket.peerClose(1000, "heartbeat-ok");
       await expect(session.closed).resolves.toMatchObject({
         code: 1000,
         reason: "heartbeat-ok",

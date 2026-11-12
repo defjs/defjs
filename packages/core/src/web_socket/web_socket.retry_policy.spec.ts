@@ -8,11 +8,7 @@ import {
   withWebSocketHeartbeat,
 } from "../client/option";
 import { struct } from "../struct";
-import {
-  createControllableSocketClass,
-  openControllableSocket,
-  type ControllableSocket,
-} from "../../test/regression/controllable_socket";
+import { createFakeWebSocket, openSession } from "../../test/fake_web_socket";
 import { defineWebSocket } from "./web_socket";
 
 afterEach(() => {
@@ -26,19 +22,11 @@ const useSocket = defineWebSocket({
 });
 
 function setup(options?: RetryOptions) {
-  const { Socket, latest } = createControllableSocketClass();
-  const sockets: ControllableSocket[] = [];
-  class Recording extends Socket {
-    constructor(url: string, protocols?: string | string[]) {
-      super(url, protocols);
-      const created = latest();
-      if (created) sockets.push(created);
-    }
-  }
+  const fake = createFakeWebSocket({ handshake: "manual" });
   return {
-    latest,
-    sockets,
-    handle: withWebSocketHandle(Recording),
+    fake,
+    sockets: fake.sockets,
+    handle: withWebSocketHandle(fake.Socket),
     options: options === undefined ? [] : [withRetry(options)],
   };
 }
@@ -59,19 +47,9 @@ async function opened(
   h: ReturnType<typeof setup>,
   client: Client = clientOf(h),
 ) {
-  const [error, session] = await openControllableSocket(
-    useSocket(client),
-    h.latest,
-  );
-  if (error || !session) throw new Error("expected a session");
+  const { session } = await openSession(useSocket(client), h.fake);
   return session;
 }
-
-const close = (code: number, reason = "") => ({
-  code,
-  reason,
-  wasClean: code === 1000,
-});
 
 test("a close the caller did not request is retried and the context carries the close event", async () => {
   const contexts: RetryContext[] = [];
@@ -83,9 +61,9 @@ test("a close the caller did not request is retried and the context carries the 
     },
   });
   const session = await opened(h);
-  h.sockets[0]?.triggerClose(close(1012, "restart"));
+  h.sockets[0]?.peerClose(1012, "restart");
   await vi.waitFor(() => expect(h.sockets).toHaveLength(2));
-  h.sockets[1]?.triggerOpen();
+  h.sockets[1]?.open();
   await vi.waitFor(() => expect(session.connection.generation).toBe(2));
   expect(contexts).toMatchObject([
     {
@@ -94,12 +72,12 @@ test("a close the caller did not request is retried and the context carries the 
       retryable: true,
       code: 1012,
       reason: "restart",
-      wasClean: false,
+      wasClean: true,
       cause: undefined,
     },
   ]);
   session.close(1000, "done");
-  h.sockets[1]?.triggerClose(close(1000, "done"));
+  h.sockets[1]?.peerClose(1000, "done");
   await session.closed;
 });
 
@@ -114,19 +92,19 @@ test("a connection that never opened is retried too, and the count restarts afte
   });
   const pending = useSocket(clientOf(h));
   await vi.waitFor(() => expect(h.sockets).toHaveLength(1));
-  h.sockets[0]?.triggerClose(close(1006));
+  h.sockets[0]?.drop();
   await vi.waitFor(() => expect(h.sockets).toHaveLength(2));
-  h.sockets[1]?.triggerClose(close(1006));
+  h.sockets[1]?.drop();
   await vi.waitFor(() => expect(h.sockets).toHaveLength(3));
-  h.sockets[2]?.triggerOpen();
+  h.sockets[2]?.open();
   const [error, session] = await pending;
   expect(error).toBeNull();
   expect(attempts).toEqual([1, 2]);
-  h.sockets[2]?.triggerClose(close(1012));
+  h.sockets[2]?.peerClose(1012);
   await vi.waitFor(() => expect(h.sockets).toHaveLength(4));
   expect(attempts).toEqual([1, 2, 1]);
   session?.close(1000, "done");
-  h.sockets[3]?.triggerClose(close(1000, "done"));
+  h.sockets[3]?.peerClose(1000, "done");
   await session?.closed;
 });
 
@@ -135,7 +113,7 @@ test("a manual close is not retried and does not ask the policy", async () => {
   const h = setup({ delayMs: 0, shouldRetry });
   const session = await opened(h);
   session.close(1000, "done");
-  h.sockets[0]?.triggerClose(close(1000, "done"));
+  h.sockets[0]?.peerClose(1000, "done");
   expect(await session.closed).toMatchObject({ kind: "closed", code: 1000 });
   expect(shouldRetry).not.toHaveBeenCalled();
   expect(h.sockets).toHaveLength(1);
@@ -145,9 +123,13 @@ test("the policy function is not asked once maxRetries retries are made", async 
   const shouldRetry = vi.fn((_context: RetryContext) => true);
   const h = setup({ delayMs: 0, maxRetries: 1, shouldRetry });
   const session = await opened(h);
-  h.sockets[0]?.triggerClose(close(1012));
+  h.sockets[0]?.peerClose(1012);
   await vi.waitFor(() => expect(h.sockets).toHaveLength(2));
-  h.sockets[1]?.triggerClose(close(1012));
+  // The replacement never opens: the count of retries is not restarted. The standard orders `open` before a close, so
+  // only a raw event can say that the peer's close frame came first.
+  h.sockets[1]?.dispatchEvent(
+    new CloseEvent("close", { code: 1012, reason: "", wasClean: false }),
+  );
   expect(await session.closed).toMatchObject({ kind: "closed", code: 1012 });
   expect(shouldRetry).toHaveBeenCalledOnce();
   expect(h.sockets).toHaveLength(2);
@@ -156,7 +138,7 @@ test("the policy function is not asked once maxRetries retries are made", async 
 test("a policy that declines ends the session as it would end without retries", async () => {
   const h = setup({ delayMs: 0, shouldRetry: () => false });
   const session = await opened(h);
-  h.sockets[0]?.triggerClose(close(1006));
+  h.sockets[0]?.drop();
   expect(await session.closed).toMatchObject({ kind: "error", code: 1006 });
   expect(h.sockets).toHaveLength(1);
 });
@@ -167,9 +149,13 @@ test("an asynchronous policy function is awaited and its rejection ends the sess
     shouldRetry: (context) => Promise.resolve(context.attempt < 2),
   });
   const session = await opened(h);
-  h.sockets[0]?.triggerClose(close(1012));
+  h.sockets[0]?.peerClose(1012);
   await vi.waitFor(() => expect(h.sockets).toHaveLength(2));
-  h.sockets[1]?.triggerClose(close(1012));
+  // The replacement never opens: the count of retries is not restarted. The standard orders `open` before a close, so
+  // only a raw event can say that the peer's close frame came first.
+  h.sockets[1]?.dispatchEvent(
+    new CloseEvent("close", { code: 1012, reason: "", wasClean: false }),
+  );
   expect(await session.closed).toMatchObject({ kind: "closed", code: 1012 });
   expect(h.sockets).toHaveLength(2);
 
@@ -179,7 +165,7 @@ test("an asynchronous policy function is awaited and its rejection ends the sess
     shouldRetry: () => Promise.reject(failure),
   });
   const second = await opened(failing);
-  failing.sockets[0]?.triggerClose(close(1012));
+  failing.sockets[0]?.peerClose(1012);
   expect(await second.closed).toMatchObject({ kind: "error", cause: failure });
 });
 
@@ -190,29 +176,29 @@ test("the caller signal cancels a pending policy function", async () => {
     shouldRetry: () => new Promise<boolean>(() => {}),
   });
   const client = clientOf(h);
-  const [, session] = await openControllableSocket(
+  const { session } = await openSession(
     useSocket(client({ signal: controller.signal })),
-    h.latest,
+    h.fake,
   );
-  h.sockets[0]?.triggerClose(close(1012));
+  h.sockets[0]?.peerClose(1012);
   controller.abort();
-  expect(await session?.closed).toMatchObject({ kind: "aborted" });
+  expect(await session.closed).toMatchObject({ kind: "aborted" });
 });
 
 test("request options replace the client policy and enable retries without one", async () => {
   const plain = setup();
   const noRetry = await opened(plain);
-  plain.sockets[0]?.triggerClose(close(1012));
+  plain.sockets[0]?.peerClose(1012);
   expect(await noRetry.closed).toMatchObject({ kind: "closed" });
   expect(plain.sockets).toHaveLength(1);
 
   const h = setup();
   const client = clientOf(h)({ retry: { delayMs: 0, maxRetries: 1 } });
   const session = await opened(h, client);
-  h.sockets[0]?.triggerClose(close(1012));
+  h.sockets[0]?.peerClose(1012);
   await vi.waitFor(() => expect(h.sockets).toHaveLength(2));
   session.close(1000, "done");
-  h.sockets[1]?.triggerClose(close(1000, "done"));
+  h.sockets[1]?.peerClose(1000, "done");
   await session.closed;
 
   const disabled = setup({ delayMs: 0 });
@@ -220,7 +206,7 @@ test("request options replace the client policy and enable retries without one",
     disabled,
     clientOf(disabled)({ retry: { maxRetries: 0 } }),
   );
-  disabled.sockets[0]?.triggerClose(close(1012));
+  disabled.sockets[0]?.peerClose(1012);
   expect(await stopped.closed).toMatchObject({ kind: "closed" });
   expect(disabled.sockets).toHaveLength(1);
 });
@@ -232,11 +218,11 @@ test("a request retry replaces the client policy as a whole, shouldRetry include
     h,
     clientOf(h)({ retry: { delayMs: 0, maxRetries: 1 } }),
   );
-  h.sockets[0]?.triggerClose(close(1012));
+  h.sockets[0]?.peerClose(1012);
   await vi.waitFor(() => expect(h.sockets).toHaveLength(2));
   expect(shouldRetry).not.toHaveBeenCalled();
   session.close(1000, "done");
-  h.sockets[1]?.triggerClose(close(1000, "done"));
+  h.sockets[1]?.peerClose(1000, "done");
   await session.closed;
 });
 
@@ -267,11 +253,7 @@ test("an unanswered heartbeat is a connection failure that enters the retry flow
       timeoutMs: 5,
     }),
   );
-  const [error, session] = await openControllableSocket(
-    useSocket(client),
-    h.latest,
-  );
-  expect(error).toBeNull();
+  const { session } = await openSession(useSocket(client), h.fake);
   await vi.advanceTimersByTimeAsync(15);
   await vi.waitFor(() => expect(h.sockets).toHaveLength(2));
   expect(contexts).toHaveLength(1);
@@ -282,9 +264,9 @@ test("an unanswered heartbeat is a connection failure that enters the retry flow
     code: undefined,
   });
   expect(contexts[0]?.cause).toEqual(new Error("WebSocket heartbeat timeout"));
-  session?.close(1000, "done");
-  h.sockets[1]?.triggerClose(close(1000, "done"));
-  await session?.closed;
+  session.close(1000, "done");
+  h.sockets[1]?.peerClose(1000, "done");
+  await session.closed;
 });
 
 test("an unanswered heartbeat without a retry policy still ends the session with an error", async () => {
@@ -307,9 +289,9 @@ test("an unanswered heartbeat without a retry policy still ends the session with
       timeoutMs: 5,
     }),
   );
-  const [, session] = await openControllableSocket(useSocket(client), h.latest);
+  const { session } = await openSession(useSocket(client), h.fake);
   await vi.advanceTimersByTimeAsync(15);
-  expect(await session?.closed).toMatchObject({
+  expect(await session.closed).toMatchObject({
     kind: "error",
     cause: new Error("WebSocket heartbeat timeout"),
   });
@@ -338,9 +320,9 @@ test("a heartbeat message that throws ends the session and is not retried", asyn
       },
     }),
   );
-  const [, session] = await openControllableSocket(useSocket(client), h.latest);
+  const { session } = await openSession(useSocket(client), h.fake);
   await vi.advanceTimersByTimeAsync(10);
-  expect(await session?.closed).toMatchObject({
+  expect(await session.closed).toMatchObject({
     kind: "error",
     cause: failure,
   });

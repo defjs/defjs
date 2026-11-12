@@ -11,10 +11,7 @@ import {
 import type { SSEInterceptorFn, WebSocketInterceptorFn } from "../interceptor";
 import { struct, type AnyStruct } from "../struct";
 import { defineEventStream } from "../sse";
-import {
-  createControllableSocketClass,
-  openControllableSocket,
-} from "../../test/regression/controllable_socket";
+import { createFakeWebSocket, openSession } from "../../test/fake_web_socket";
 import { defineWebSocket } from "../web_socket";
 import { CLIENT, createClient } from "./client";
 import {
@@ -54,30 +51,7 @@ function sseHandle(text: string) {
 }
 
 function recordingSocket() {
-  const { Socket, latest } = createControllableSocketClass();
-  const instances: NonNullable<ReturnType<typeof latest>>[] = [];
-  const protocols: Array<string | string[] | undefined> = [];
-  class RecordingSocket extends Socket {
-    constructor(url: string, list?: string | string[]) {
-      super(url, list);
-      instances.push(this);
-      protocols.push(list === undefined ? undefined : [...list]);
-    }
-  }
-  const handle: Parameters<typeof withWebSocketHandle>[0] = RecordingSocket;
-  return { Socket: handle, instances, latest, protocols };
-}
-
-async function openRecordedSocket<T>(
-  pending: Promise<T>,
-  opened: ReturnType<typeof recordingSocket>,
-  before: number,
-): Promise<T> {
-  await vi.waitFor(() =>
-    expect(opened.instances.length).toBeGreaterThan(before),
-  );
-  opened.instances[opened.instances.length - 1]?.triggerOpen();
-  return pending;
+  return createFakeWebSocket({ handshake: "manual" });
 }
 
 describe("optional request options", () => {
@@ -103,12 +77,11 @@ describe("optional request options", () => {
 
   test("runs HTTP, SSE, and WebSocket when request options are absent", async () => {
     const opened = recordingSocket();
-    const { Socket } = opened;
     const base = createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(() => Promise.resolve(Response.json({ ok: true }))),
       sseHandle("data: hi\n\n"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(opened.Socket),
     );
     const read = defineRequest({
       method: "GET",
@@ -136,20 +109,13 @@ describe("optional request options", () => {
         { data: "hi", event: "message", id: undefined },
       ]);
 
-      const before = opened.instances.length;
-      const [wsError, session] = await openRecordedSocket(
+      const { session, socket: native } = await openSession(
         socket(client),
         opened,
-        before,
       );
-      expect(wsError).toBeNull();
-      session?.close(1000, "done");
-      opened.latest()?.triggerClose({
-        code: 1000,
-        reason: "done",
-        wasClean: true,
-      });
-      await session?.closed;
+      session.close(1000, "done");
+      native.peerClose(1000, "done");
+      await session.closed;
     }
   });
 });
@@ -214,18 +180,16 @@ describe("request option snapshots", () => {
       path: "/room",
     });
     try {
-      const [error, session] = await openControllableSocket(
+      const { session, socket: native } = await openSession(
         endpoint(derived),
-        opened.latest,
+        opened,
       );
-      expect(error).toBeNull();
-      if (!session) throw new Error("Expected session");
-      const native = opened.latest();
-      if (!native) throw new Error("Expected socket");
 
-      expect(opened.protocols).toEqual([["v1"]]);
+      expect(opened.sockets.map((socket) => socket.requestedProtocols)).toEqual(
+        [["v1"]],
+      );
       await vi.advanceTimersByTimeAsync(10);
-      expect(JSON.parse(native.sent[0] ?? "")).toEqual({ type: "ping" });
+      expect(JSON.parse(native.sentText(0))).toEqual({ type: "ping" });
       await vi.advanceTimersByTimeAsync(30);
       const closed = await session.closed;
       expect(closed.kind).toBe("error");
@@ -233,7 +197,7 @@ describe("request option snapshots", () => {
       expect(closed.cause).toEqual(
         expect.objectContaining({ message: "WebSocket heartbeat timeout" }),
       );
-      expect(opened.protocols).toHaveLength(1);
+      expect(opened.sockets).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
@@ -252,21 +216,14 @@ describe("request option snapshots", () => {
       path: "/room",
     });
 
-    const [error, session] = await openControllableSocket(
+    const { session, socket: first } = await openSession(
       endpoint(derived),
-      opened.latest,
+      opened,
     );
-    expect(error).toBeNull();
-    if (!session) throw new Error("Expected session");
-    const first = opened.latest();
-    first?.triggerClose({ code: 1012, reason: "restart", wasClean: true });
-    await vi.waitFor(() => expect(opened.protocols).toHaveLength(2));
+    first.peerClose(1012, "restart");
+    await vi.waitFor(() => expect(opened.sockets).toHaveLength(2));
     session.close(1000, "done");
-    opened.latest()?.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
+    opened.last().peerClose(1000, "done");
     await session.closed;
   });
 
@@ -371,26 +328,14 @@ describe("client option snapshots", () => {
       incoming: struct.unknown(),
       path: "/room",
     });
-    const [error, session] = await openControllableSocket(
-      endpoint(live),
-      opened.latest,
-    );
-    expect(error).toBeNull();
-    opened.latest()?.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
-    await vi.waitFor(() => expect(opened.protocols).toHaveLength(2));
-    expect(opened.protocols[0]).toEqual(["one"]);
-    expect(opened.protocols[1]).toEqual(["one"]);
-    session?.close(1000, "done");
-    opened.latest()?.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
-    await session?.closed;
+    const { session } = await openSession(endpoint(live), opened);
+    opened.last().peerClose(1012, "restart");
+    await vi.waitFor(() => expect(opened.sockets).toHaveLength(2));
+    expect(opened.sockets[0]?.requestedProtocols).toEqual(["one"]);
+    expect(opened.sockets[1]?.requestedProtocols).toEqual(["one"]);
+    session.close(1000, "done");
+    opened.last().peerClose(1000, "done");
+    await session.closed;
   });
 
   test("clears optional nested settings with undefined and lets a later option replace an earlier one", () => {
@@ -660,25 +605,19 @@ describe("definition and request snapshots", () => {
     });
     protocols[0] = "changed";
     protocols.push("v2");
-    const [error, session] = await openControllableSocket(
+    const { session, socket } = await openSession(
       endpoint(
         createClient(
           withEndpoint("https://example.test"),
           withWebSocketHandle(opened.Socket),
         ),
       ),
-      opened.latest,
+      opened,
     );
-
-    expect(error).toBeNull();
-    expect(opened.protocols).toEqual([["v1"]]);
-    session?.close(1000, "done");
-    opened.latest()?.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
-    await session?.closed;
+    expect(socket.requestedProtocols).toEqual(["v1"]);
+    session.close(1000, "done");
+    socket.peerClose(1000, "done");
+    await session.closed;
   });
 
   test("keeps finalizeHeaders identity on the client and each request", async () => {

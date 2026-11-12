@@ -14,24 +14,28 @@ import {
 import { struct } from "../struct";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 import {
-  useFakeClock,
-  lastMockInstance,
-  mockInstances,
-  createMockWebSocketClass,
-  createDeferred,
+  type FakeWebSocket,
   expectOnlyErrorSink,
+  openSession,
+  stubFakeWebSocket,
+} from "../../test/fake_web_socket";
+import {
+  useFakeClock,
+  createDeferred,
   clientObservingAbortListeners,
   run,
-} from "../../test/mock_web_socket";
+} from "../../test/web_socket_support";
 
 describe("web socket reconnect with a mock handle", () => {
   test("should emit runtime error when send throws during queued flush", async () => {
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({
-        autoOpen: false,
-        sendError: new Error("send failed"),
-      }),
+    const fake = stubFakeWebSocket(
+      { handshake: "manual" },
+      (Socket) =>
+        class extends Socket {
+          override send(): void {
+            throw new Error("send failed");
+          }
+        },
     );
 
     const useSocket = defineWebSocket({
@@ -49,16 +53,10 @@ describe("web socket reconnect with a mock handle", () => {
       withWebSocketHandle(globalThis.WebSocket),
       withRetry({ maxRetries: 1, delayMs: 0 }),
     );
-    const executePromise = run(client, useSocket);
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    const firstSocket = lastMockInstance;
-    firstSocket?.triggerOpen();
-    const [error, socket] = await executePromise;
-
-    expect(error).toBeNull();
-    if (!socket || !firstSocket) {
-      throw new Error("Expected socket");
-    }
+    const { session: socket, socket: firstSocket } = await openSession(
+      run(client, useSocket),
+      fake,
+    );
 
     let runtimeError: unknown;
     socket.onRuntimeError((err: unknown) => {
@@ -76,14 +74,14 @@ describe("web socket reconnect with a mock handle", () => {
       reconnecting.resolve(undefined);
     });
 
-    firstSocket.triggerClose({ code: 1000, reason: "", wasClean: true });
+    firstSocket.peerClose(1000);
     await reconnecting.promise;
-    await vi.waitFor(() => expect(mockInstances).toHaveLength(2));
-    const replacement = mockInstances[1];
+    await vi.waitFor(() => expect(fake.sockets).toHaveLength(2));
+    const replacement = fake.sockets[1];
     if (!replacement) {
       throw new Error("Expected replacement socket");
     }
-    replacement.triggerOpen();
+    replacement.open();
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "error" });
     expect(runtimeError).toBeDefined();
@@ -95,136 +93,103 @@ describe("web socket reconnect with a mock handle", () => {
 
   test("reports a manual close, not the late error, when session.close() runs during a reconnect handshake", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const pending = run(
-      createClient(
-        withEndpoint("http://localhost"),
-        withRetry({ maxRetries: 1, delayMs: 0 }),
+    const { session: socket, socket: first } = await openSession(
+      run(
+        createClient(
+          withEndpoint("http://localhost"),
+          withRetry({ maxRetries: 1, delayMs: 0 }),
+        ),
+        endpoint,
       ),
-      endpoint,
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    const first = lastMockInstance;
-    first?.triggerOpen();
-    const [, socket] = await pending;
     if (!socket || !first) throw new Error("Expected socket");
     let runtimeError: unknown;
     socket.onRuntimeError((error: unknown) => {
       runtimeError = error;
     });
 
-    first.triggerClose({ code: 1006, reason: "", wasClean: false });
-    await vi.waitFor(() => expect(mockInstances).toHaveLength(2));
-    const replacement = mockInstances[1];
+    first.drop();
+    await vi.waitFor(() => expect(fake.sockets).toHaveLength(2));
+    const replacement = fake.sockets[1];
     if (!replacement) throw new Error("Expected replacement socket");
     expect(replacement.readyState).toBe(0);
 
     // `close()` on a CONNECTING socket fails the connection; `ws` then emits a late `error`.
     socket.close();
-    expect(replacement.close).toHaveBeenCalledOnce();
-    expect(() => replacement.triggerError()).not.toThrow();
+    expect(replacement.closeCalls).toHaveLength(1);
+    expect(() => replacement.drop()).not.toThrow();
     await vi.runAllTimersAsync();
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
     expect(socket.state).toBe("closed");
     expect(runtimeError).toBeUndefined();
-    expect(mockInstances).toHaveLength(2);
+    expect(fake.sockets).toHaveLength(2);
     expectOnlyErrorSink(replacement);
     expect(vi.getTimerCount()).toBe(0);
   });
 
   test("should wait for the errored physical socket close before constructing its replacement", async () => {
     useFakeClock();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
-    );
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 0 },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const firstSocket = lastMockInstance;
+    const firstSocket = fake.last();
 
-    firstSocket.triggerError();
+    // The standard fires `error` and `close` in one task. A handle that does not, such as `ws`, can fire `error` alone.
+    firstSocket.dispatchEvent(new Event("error"));
 
-    expect(mockInstances).toHaveLength(1);
-    expect(firstSocket.close).toHaveBeenCalledTimes(1);
+    expect(fake.sockets).toHaveLength(1);
+    expect(firstSocket.closeCalls).toHaveLength(1);
     // Close stays withheld. A premature replacement queued on a timer would appear on this turn,
     // which is still short of the close grace.
     await vi.advanceTimersByTimeAsync(0);
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
 
-    firstSocket.triggerClose({
-      code: 1006,
-      reason: "transport",
-      wasClean: false,
-    });
+    firstSocket.peerClose(1006, "transport", false);
     await vi.advanceTimersByTimeAsync(0);
-    expect(mockInstances).toHaveLength(2);
+    expect(fake.sockets).toHaveLength(2);
     // autoOpen is off, so the replacement stays connecting until this turn opens it.
-    mockInstances[1]?.triggerOpen();
+    fake.sockets[1]?.open();
     expect(socket.connection.generation).toBe(2);
 
     socket.close(1000, "done");
-    lastMockInstance?.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
+    fake.last().peerClose(1000, "done");
     await socket.closed;
   });
 
   test("should keep the replacement open after the errored socket close grace elapses", async () => {
     useFakeClock();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
-    );
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 0 },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const firstSocket = lastMockInstance;
+    const firstSocket = fake.last();
 
-    firstSocket.triggerError();
-    firstSocket.triggerClose({
-      code: 1006,
-      reason: "transport",
-      wasClean: false,
-    });
+    firstSocket.drop();
     await vi.advanceTimersByTimeAsync(0);
-    expect(mockInstances).toHaveLength(2);
-    mockInstances[1]?.triggerOpen();
+    expect(fake.sockets).toHaveLength(2);
+    fake.sockets[1]?.open();
     expect(socket.state).toBe("open");
     expect(socket.connection.generation).toBe(2);
 
@@ -233,16 +198,12 @@ describe("web socket reconnect with a mock handle", () => {
     expect(socket.connection.generation).toBe(2);
 
     socket.close(1000, "done");
-    lastMockInstance?.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
+    fake.last().peerClose(1000, "done");
     await socket.closed;
   });
 
   test("releases each reconnect generation's abort listeners before the next generation listens", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const { client, observed } = clientObservingAbortListeners();
     const useSocket = defineWebSocket({
       incoming: struct.object({
@@ -251,16 +212,15 @@ describe("web socket reconnect with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const executePromise = run(client, useSocket, {
-      retry: { maxRetries: 3, delayMs: 0 },
-    });
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [error, socket] = await executePromise;
-    expect(error).toBeNull();
+    const { session: socket } = await openSession(
+      run(client, useSocket, {
+        retry: { maxRetries: 3, delayMs: 0 },
+      }),
+      fake,
+    );
     const abortListeners = observed.current;
-    if (!socket || !abortListeners) {
-      throw new Error("Expected socket");
+    if (!abortListeners) {
+      throw new Error("Expected the interceptor to observe the signal");
     }
     const iterator = socket.receive[Symbol.asyncIterator]();
     let generation = abortListeners.listeners();
@@ -270,16 +230,12 @@ describe("web socket reconnect with a mock handle", () => {
 
     for (let drop = 0; drop < 3; drop += 1) {
       const previous = generation;
-      mockInstances[drop]?.triggerClose({
-        code: 1012,
-        reason: "drop",
-        wasClean: true,
-      });
-      await vi.waitFor(() => expect(mockInstances).toHaveLength(drop + 2));
+      fake.sockets[drop]?.peerClose(1012, "drop");
+      await vi.waitFor(() => expect(fake.sockets).toHaveLength(drop + 2));
       abortListeners.assertReleased(previous);
-      const replacement = mockInstances[drop + 1];
+      const replacement = fake.sockets[drop + 1];
       if (!replacement) throw new Error("Expected replacement socket");
-      replacement.triggerOpen();
+      replacement.open();
       await vi.waitFor(() =>
         expect(socket.connection.generation).toBe(drop + 2),
       );
@@ -287,21 +243,17 @@ describe("web socket reconnect with a mock handle", () => {
       generation = abortListeners.listeners();
       expect(generation.length).toBeGreaterThan(0);
       abortListeners.assertReleased(previous);
-      replacement.triggerMessage(JSON.stringify({ n: drop + 2, type: "tick" }));
+      replacement.receive(JSON.stringify({ n: drop + 2, type: "tick" }));
       await expect(iterator.next()).resolves.toEqual({
         done: false,
         value: { n: drop + 2, type: "tick" },
       });
     }
 
-    expect(mockInstances).toHaveLength(4);
+    expect(fake.sockets).toHaveLength(4);
     expect(socket.connection.generation).toBe(4);
     socket.close(1000, "done");
-    lastMockInstance?.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
+    fake.last().peerClose(1000, "done");
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,
       kind: "closed",
@@ -318,16 +270,14 @@ describe("web socket reconnect with a mock handle", () => {
 
   test("should reconnect after more recovered outages than the attempt budget", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const policyAttempts: number[] = [];
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: {
           maxRetries: 2,
           delayMs: 100,
@@ -338,26 +288,17 @@ describe("web socket reconnect with a mock handle", () => {
             return true;
           },
         },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket) {
-      throw new Error("Expected socket");
-    }
 
     for (let drop = 0; drop < 3; drop += 1) {
-      mockInstances[drop]?.triggerClose({
-        code: 1012,
-        reason: "drop",
-        wasClean: true,
-      });
+      fake.sockets[drop]?.peerClose(1012, "drop");
       // Longer than a compounded delay, so a lifetime budget fails by refusing the next socket.
       await vi.advanceTimersByTimeAsync(10_000);
       await vi.advanceTimersByTimeAsync(0);
-      expect(mockInstances).toHaveLength(drop + 2);
-      mockInstances[drop + 1]?.triggerOpen();
+      expect(fake.sockets).toHaveLength(drop + 2);
+      fake.sockets[drop + 1]?.open();
       expect(socket.state).toBe("open");
       expect(socket.connection.generation).toBe(drop + 2);
     }
@@ -366,88 +307,60 @@ describe("web socket reconnect with a mock handle", () => {
     expect(socket.state).toBe("open");
 
     socket.close(1000, "done");
-    lastMockInstance?.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
+    fake.last().peerClose(1000, "done");
     await socket.closed;
   });
 
   test("should use the base reconnect delay after each recovered outage", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 2, delayMs: 100, factor: 2, jitter: 0 },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket) {
-      throw new Error("Expected socket");
-    }
 
     for (let generation = 1; generation <= 2; generation += 1) {
-      mockInstances[generation - 1]?.triggerClose({
-        code: 1012,
-        reason: "drop",
-        wasClean: true,
-      });
+      fake.sockets[generation - 1]?.peerClose(1012, "drop");
       await vi.advanceTimersByTimeAsync(99);
-      expect(mockInstances).toHaveLength(generation);
+      expect(fake.sockets).toHaveLength(generation);
       await vi.advanceTimersByTimeAsync(1);
-      expect(mockInstances).toHaveLength(generation + 1);
-      mockInstances[generation]?.triggerOpen();
+      expect(fake.sockets).toHaveLength(generation + 1);
+      fake.sockets[generation]?.open();
       expect(socket.state).toBe("open");
       expect(socket.connection.generation).toBe(generation + 1);
     }
 
     socket.close(1000, "done");
-    lastMockInstance?.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
+    fake.last().peerClose(1000, "done");
     await socket.closed;
   });
 
   test("should fail after a bounded grace when an errored socket never emits close", async () => {
     useFakeClock();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
-    );
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const nativeSocket = lastMockInstance;
+    const nativeSocket = fake.last();
     const pendingReceive = socket.receive[Symbol.asyncIterator]()
       .next()
       .catch((error: unknown) => error);
 
-    nativeSocket.triggerError();
+    // An `error` that no `close` follows: see the reconnect that waits for the errored socket above.
+    nativeSocket.dispatchEvent(new Event("error"));
 
-    expect(nativeSocket.close).toHaveBeenCalledTimes(1);
+    expect(nativeSocket.closeCalls).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(1_000);
 
@@ -461,13 +374,13 @@ describe("web socket reconnect with a mock handle", () => {
       message: "WebSocket connection error",
     });
     expect(socket.state).toBe("error");
-    expect(mockInstances).toHaveLength(1);
-    expect(nativeSocket.close).toHaveBeenCalledTimes(1);
+    expect(fake.sockets).toHaveLength(1);
+    expect(nativeSocket.closeCalls).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(0);
   });
 
   test("should snapshot the reconnect predicate before beforeConnect can mutate it", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     let predicate = () => false;
     let predicateReads = 0;
     const retry = {
@@ -486,57 +399,52 @@ describe("web socket reconnect with a mock handle", () => {
       config.retry = retry;
     });
     expect(predicateReads).toBe(0);
-    const [, socket] = await run(client, useSocket, {
-      beforeConnect() {
-        predicate = () => true;
-      },
-    });
+    const { session: socket } = await openSession(
+      run(client, useSocket, {
+        beforeConnect() {
+          predicate = () => true;
+        },
+      }),
+      fake,
+    );
     expect(predicateReads).toBe(1);
-    if (!socket || !lastMockInstance) {
+    if (!socket || !fake.last()) {
       throw new Error("Expected socket");
     }
-    const firstSocket = lastMockInstance;
+    const firstSocket = fake.last();
 
-    firstSocket.triggerClose({ code: 1012, reason: "restart", wasClean: true });
+    firstSocket.peerClose(1012, "restart");
     await expect(socket.closed).resolves.toMatchObject({
       code: 1012,
       kind: "closed",
       reason: "restart",
     });
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
   });
 
   test.each(["error", "close"] as const)(
     "should end a native %s as the failure it is when the retry policy declines",
     async (eventKind) => {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
+      const fake = stubFakeWebSocket();
       const predicate = vi.fn(() => false);
       const useSocket = defineWebSocket({
         incoming: struct.unknown(),
         path: "/ws/test",
       });
-      const [, socket] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket,
-        {
+      const { session: socket } = await openSession(
+        run(createClient(withEndpoint("http://localhost")), useSocket, {
           retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
-        },
+        }),
+        fake,
       );
-      if (!socket || !lastMockInstance) {
-        throw new Error("Expected socket");
-      }
       const pendingReceive = socket.receive[Symbol.asyncIterator]()
         .next()
         .catch((error: unknown) => error);
 
       if (eventKind === "error") {
-        lastMockInstance.triggerError();
+        fake.last().drop();
       } else {
-        lastMockInstance.triggerClose({
-          code: 1012,
-          reason: "restart",
-          wasClean: true,
-        });
+        fake.last().peerClose(1012, "restart");
       }
 
       // A declined retry ends the session as it would end without a policy: a connection error is an
@@ -562,7 +470,7 @@ describe("web socket reconnect with a mock handle", () => {
   test.each(["return false", "throw"] as const)(
     "should prefer an abort when reconnect policy callbacks %s after aborting",
     async (policyOutcome) => {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
+      const fake = stubFakeWebSocket();
       const controller = new AbortController();
       const useSocket = defineWebSocket({
         incoming: struct.unknown(),
@@ -575,26 +483,18 @@ describe("web socket reconnect with a mock handle", () => {
         }
         return false;
       });
-      const [, socket] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket,
-        {
+      const { session: socket } = await openSession(
+        run(createClient(withEndpoint("http://localhost")), useSocket, {
           retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
           signal: controller.signal,
-        },
+        }),
+        fake,
       );
-      if (!socket || !lastMockInstance) {
-        throw new Error("Expected socket");
-      }
       const pendingReceive = socket.receive[Symbol.asyncIterator]()
         .next()
         .catch((error: unknown) => error);
 
-      lastMockInstance.triggerClose({
-        code: 1012,
-        reason: "restart",
-        wasClean: true,
-      });
+      fake.last().peerClose(1012, "restart");
 
       await expect(socket.closed).resolves.toMatchObject({
         cause: ERR_ABORTED,
@@ -603,12 +503,12 @@ describe("web socket reconnect with a mock handle", () => {
       await expect(pendingReceive).resolves.toBe(ERR_ABORTED);
       expect(socket.state).toBe("aborted");
       expect(predicate).toHaveBeenCalledTimes(1);
-      expect(mockInstances).toHaveLength(1);
+      expect(fake.sockets).toHaveLength(1);
     },
   );
 
   test("should preserve terminal state when reconnect predicate closes the session and returns true", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
@@ -618,34 +518,26 @@ describe("web socket reconnect with a mock handle", () => {
       exposedSocket?.close(1000, "owner declined");
       return true;
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     exposedSocket = socket;
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
     await Promise.resolve();
     await Promise.resolve();
     expect(socket.state).toBe("closed");
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     expect(predicate).toHaveBeenCalledTimes(1);
   });
 
   test("should preserve owner close when reconnect predicate throws after closing the session", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
@@ -655,23 +547,15 @@ describe("web socket reconnect with a mock handle", () => {
       exposedSocket?.close(1000, "owner declined");
       throw new Error("ignored after owner close");
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 0, shouldRetry: predicate },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     exposedSocket = socket;
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
 
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,
@@ -679,78 +563,62 @@ describe("web socket reconnect with a mock handle", () => {
       reason: "owner declined",
     });
     expect(socket.state).toBe("closed");
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     expect(predicate).toHaveBeenCalledTimes(1);
   });
 
   test("should preserve an abort triggered by an observer during replacement open", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 0 },
         signal: controller.signal,
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     socket.onStateChange((state) => {
       if (state === "open" && socket.connection.generation === 2) {
         controller.abort(ERR_ABORTED);
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "aborted" });
     expect(socket.state).toBe("aborted");
-    expect(mockInstances).toHaveLength(2);
+    expect(fake.sockets).toHaveLength(2);
   });
 
   test("should stop reconnect work when a reconnecting observer closes the logical session", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const random = vi.spyOn(Math, "random").mockReturnValue(1);
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: {
           maxRetries: 1,
           delayMs: Number.MAX_VALUE,
           jitter: 1,
           maxDelayMs: Number.MAX_VALUE,
         },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     socket.onStateChange((state) => {
       if (state === "reconnecting") {
         socket.close(1000, "observer stopped reconnect");
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     const closeInfo = await socket.closed;
 
     expect(closeInfo).toMatchObject({
@@ -760,22 +628,20 @@ describe("web socket reconnect with a mock handle", () => {
     });
     expect(socket.state).toBe("closed");
     expect(random).not.toHaveBeenCalled();
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     random.mockRestore();
   });
 
   test("should prefer observer abort over reconnect jitter overflow", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const random = vi.spyOn(Math, "random").mockReturnValue(1);
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: {
           maxRetries: 1,
           delayMs: Number.MAX_VALUE,
@@ -783,59 +649,45 @@ describe("web socket reconnect with a mock handle", () => {
           maxDelayMs: Number.MAX_VALUE,
         },
         signal: controller.signal,
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     socket.onStateChange((state) => {
       if (state === "reconnecting") {
         controller.abort(ERR_ABORTED);
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     const closeInfo = await socket.closed;
 
     expect(closeInfo).toMatchObject({ cause: ERR_ABORTED, kind: "aborted" });
     expect(socket.state).toBe("aborted");
     expect(random).not.toHaveBeenCalled();
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
     random.mockRestore();
   });
 
   test("should not settle twice when owner close interrupts an active reconnect delay", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const reconnecting = createDeferred<void>();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 1_000 },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     socket.onStateChange((state) => {
       if (state === "reconnecting") {
         reconnecting.resolve(undefined);
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     await reconnecting.promise;
     socket.close(1000, "owner stopped delay");
 
@@ -845,64 +697,46 @@ describe("web socket reconnect with a mock handle", () => {
       reason: "owner stopped delay",
     });
     expect(socket.state).toBe("closed");
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
   });
 
   test("should saturate finite reconnect jitter overflow at the timer limit and finish after reconnecting", async () => {
     useFakeClock();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
-    );
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const random = vi.spyOn(Math, "random").mockReturnValue(1);
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: {
           maxRetries: 1,
           delayMs: Number.MAX_VALUE,
           jitter: 1,
           maxDelayMs: Number.MAX_VALUE,
         },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     const pendingReceive = socket.receive[Symbol.asyncIterator]()
       .next()
       .catch((error: unknown) => error);
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
     await vi.advanceTimersByTimeAsync(2_147_483_646);
     expect(socket.state).toBe("reconnecting");
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(mockInstances).toHaveLength(2);
-    lastMockInstance.triggerOpen();
+    expect(fake.sockets).toHaveLength(2);
+    fake.last().open();
     expect(socket.state).toBe("open");
     expect(socket.connection.generation).toBe(2);
 
     // The open above restored the per-outage budget, so this close has to be the session's own.
     socket.close(1000, "done");
-    lastMockInstance.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
+    fake.last().peerClose(1000, "done");
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,
       kind: "closed",
@@ -915,32 +749,24 @@ describe("web socket reconnect with a mock handle", () => {
   });
 
   test("should skip post-open setup when an observer closes the replacement", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 0 },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     socket.onStateChange((state) => {
       if (state === "open" && socket.connection.generation === 2) {
         socket.close(1000, "observer stopped replacement");
       }
     });
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
 
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,
@@ -948,11 +774,11 @@ describe("web socket reconnect with a mock handle", () => {
       reason: "observer stopped replacement",
     });
     expect(socket.state).toBe("closed");
-    expect(mockInstances).toHaveLength(2);
+    expect(fake.sockets).toHaveLength(2);
   });
 
   test("should preserve the last opened connection snapshot when aborting a connecting replacement", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const controller = new AbortController();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
@@ -967,26 +793,24 @@ describe("web socket reconnect with a mock handle", () => {
       },
     );
 
-    await vi.waitFor(() => expect(mockInstances).toHaveLength(1));
-    const firstSocket = mockInstances[0];
+    await vi.waitFor(() => expect(fake.sockets).toHaveLength(1));
+    const firstSocket = fake.sockets[0];
     if (!firstSocket) {
       throw new Error("Expected first socket");
     }
-    firstSocket.protocol = "first";
-    firstSocket.triggerOpen();
+    firstSocket.open({ protocol: "first" });
     const [, socket] = await executePromise;
     if (!socket) {
       throw new Error("Expected logical session");
     }
     const openedConnection = socket.connection;
 
-    firstSocket.triggerClose({ code: 1012, reason: "restart", wasClean: true });
-    await vi.waitFor(() => expect(mockInstances).toHaveLength(2));
-    const replacement = mockInstances[1];
+    firstSocket.peerClose(1012, "restart");
+    await vi.waitFor(() => expect(fake.sockets).toHaveLength(2));
+    const replacement = fake.sockets[1];
     if (!replacement) {
       throw new Error("Expected replacement socket");
     }
-    replacement.protocol = "replacement";
     controller.abort(ERR_ABORTED);
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "aborted" });
@@ -1004,20 +828,22 @@ describe("web socket reconnect with a mock handle", () => {
     async (action) => {
       const controller = new AbortController();
       let exposedSocket: SocketAwaitResult<unknown, unknown>[1];
-      vi.stubGlobal(
-        "WebSocket",
-        createMockWebSocketClass({
-          onSend() {
-            if (mockInstances.length !== 2) {
-              return;
-            }
-            if (action === "abort") {
-              controller.abort(ERR_ABORTED);
-            } else {
-              exposedSocket?.close(1000, "flush owner close");
+      const fake = stubFakeWebSocket(
+        {},
+        (Socket) =>
+          class extends Socket {
+            override send(data: Parameters<FakeWebSocket["send"]>[0]): void {
+              super.send(data);
+              if (fake.sockets.length !== 2) {
+                return;
+              }
+              if (action === "abort") {
+                controller.abort(ERR_ABORTED);
+              } else {
+                exposedSocket?.close(1000, "flush owner close");
+              }
             }
           },
-        }),
       );
       const useSocket = defineWebSocket({
         maxOutgoingQueueSize: 1,
@@ -1028,17 +854,13 @@ describe("web socket reconnect with a mock handle", () => {
         }),
         path: "/ws/test",
       });
-      const [, socket] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket,
-        {
+      const { session: socket } = await openSession(
+        run(createClient(withEndpoint("http://localhost")), useSocket, {
           retry: { maxRetries: 1, delayMs: 0 },
           signal: controller.signal,
-        },
+        }),
+        fake,
       );
-      if (!socket || !lastMockInstance) {
-        throw new Error("Expected socket");
-      }
       exposedSocket = socket;
       const replacementStates: string[] = [];
       socket.onStateChange((state) => {
@@ -1050,11 +872,7 @@ describe("web socket reconnect with a mock handle", () => {
         }
       });
 
-      lastMockInstance.triggerClose({
-        code: 1012,
-        reason: "restart",
-        wasClean: true,
-      });
+      fake.last().peerClose(1012, "restart");
 
       await expect(socket.closed).resolves.toMatchObject(
         action === "abort"
@@ -1063,61 +881,48 @@ describe("web socket reconnect with a mock handle", () => {
       );
       expect(replacementStates).not.toContain("open");
       expect(socket.state).toBe(action === "abort" ? "aborted" : "closed");
-      expect(mockInstances).toHaveLength(2);
-      expect(mockInstances[1]?.send).toHaveBeenCalledTimes(1);
+      expect(fake.sockets).toHaveLength(2);
+      expect(fake.sockets[1]?.sent).toHaveLength(1);
     },
   );
 
   test("should not deliver a stale reconnecting state after a listener closes reentrantly", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const pending = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 30 },
-      },
+      }),
+      fake,
     );
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await pending;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     const laterListenerStates: string[] = [];
     socket.onStateChange((state) => {
       if (state === "reconnecting") socket.close(1000, "owner stopped");
     });
     socket.onStateChange((state) => laterListenerStates.push(state));
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
     expect(laterListenerStates).toEqual(["closing", "closed"]);
     expect(socket.state).toBe("closed");
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
   });
 
   test("should terminate after a reconnect beforeConnect failure and reject pending receive", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const attempts: number[] = [];
     const hookFailure = new Error("refresh failed");
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         beforeConnect({ attempt }: { attempt: number }) {
           attempts.push(attempt);
           if (attempt === 1) {
@@ -1125,37 +930,29 @@ describe("web socket reconnect with a mock handle", () => {
           }
         },
         retry: { maxRetries: 1, delayMs: 0 },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     const pending = socket.receive[Symbol.asyncIterator]().next();
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "error" });
     await expect(pending).rejects.toMatchObject({ code: "EXT_HOOK_FAILED" });
     expect(socket.state).toBe("error");
     expect(attempts).toEqual([0, 1]);
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
   });
 
   test("should terminate when reconnect policy throws and reject pending receive", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const policyFailure = new Error("policy failed");
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: {
           maxRetries: 1,
           delayMs: 0,
@@ -1163,18 +960,12 @@ describe("web socket reconnect with a mock handle", () => {
             throw policyFailure;
           },
         },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     const pending = socket.receive[Symbol.asyncIterator]().next();
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
 
     await expect(socket.closed).resolves.toMatchObject({
       cause: policyFailure,
@@ -1185,7 +976,7 @@ describe("web socket reconnect with a mock handle", () => {
   });
 
   test("should reject startup when reconnect policy throws after a pre-open close", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const policyFailure = new Error("pre-open policy failed");
     const predicate = vi.fn(() => {
       throw policyFailure;
@@ -1202,12 +993,8 @@ describe("web socket reconnect with a mock handle", () => {
       },
     );
 
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerClose({
-      code: 1006,
-      reason: "closed before open",
-      wasClean: false,
-    });
+    await vi.waitFor(() => expect(fake.last()).toBeDefined());
+    fake.last().drop();
 
     const [error, socket, connection] = await executePromise;
     expect(error).toMatchObject({
@@ -1217,19 +1004,17 @@ describe("web socket reconnect with a mock handle", () => {
     expect(socket).toBeUndefined();
     expect(connection).toMatchObject({ generation: 0 });
     expect(predicate).toHaveBeenCalledTimes(1);
-    expect(mockInstances).toHaveLength(1);
+    expect(fake.sockets).toHaveLength(1);
   });
 
   test("should fail receive with AbortError when a post-open reconnect policy throws undefined", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: {
           maxRetries: 1,
           delayMs: 0,
@@ -1238,20 +1023,14 @@ describe("web socket reconnect with a mock handle", () => {
             throw undefined;
           },
         },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
     const pendingReceive = socket.receive[Symbol.asyncIterator]()
       .next()
       .catch((error: unknown) => error);
 
-    lastMockInstance.triggerClose({
-      code: 1012,
-      reason: "restart",
-      wasClean: true,
-    });
+    fake.last().peerClose(1012, "restart");
 
     await expect(socket.closed).resolves.toEqual({
       cause: undefined,
@@ -1277,15 +1056,13 @@ describe("web socket reconnect with a mock handle", () => {
   ])(
     "should preserve a $code fault thrown by the reconnect policy",
     async (policyFailure) => {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
+      const fake = stubFakeWebSocket();
       const useSocket = defineWebSocket({
         incoming: struct.unknown(),
         path: "/ws/test",
       });
-      const [, socket] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket,
-        {
+      const { session: socket } = await openSession(
+        run(createClient(withEndpoint("http://localhost")), useSocket, {
           retry: {
             maxRetries: 1,
             delayMs: 0,
@@ -1293,18 +1070,12 @@ describe("web socket reconnect with a mock handle", () => {
               throw policyFailure;
             },
           },
-        },
+        }),
+        fake,
       );
-      if (!socket || !lastMockInstance) {
-        throw new Error("Expected socket");
-      }
       const pending = socket.receive[Symbol.asyncIterator]().next();
 
-      lastMockInstance.triggerClose({
-        code: 1012,
-        reason: "restart",
-        wasClean: true,
-      });
+      fake.last().peerClose(1012, "restart");
 
       await expect(socket.closed).resolves.toMatchObject({
         cause: policyFailure,
@@ -1316,7 +1087,7 @@ describe("web socket reconnect with a mock handle", () => {
   );
 
   test("should not replay a frame after a physical reconnect", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       outgoing: struct.object({
@@ -1325,30 +1096,26 @@ describe("web socket reconnect with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
         retry: { maxRetries: 1, delayMs: 0 },
-      },
+      }),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const firstSocket = lastMockInstance;
+    const firstSocket = fake.last();
 
     socket.send({ id: 1, type: "mutation" });
-    firstSocket.triggerClose({ code: 1012, reason: "restart", wasClean: true });
+    firstSocket.peerClose(1012, "restart");
     await vi.waitFor(() => expect(socket.connection.generation).toBe(2));
-    const secondSocket = lastMockInstance;
+    const secondSocket = fake.last();
     if (!secondSocket || secondSocket === firstSocket) {
       throw new Error("Expected a replacement socket");
     }
 
-    expect(firstSocket.send).toHaveBeenCalledTimes(1);
-    expect(secondSocket.send).not.toHaveBeenCalled();
+    expect(firstSocket.sent).toHaveLength(1);
+    expect(secondSocket.sent).toHaveLength(0);
     socket.send({ id: 2, type: "mutation" });
-    expect(secondSocket.send).toHaveBeenCalledTimes(1);
+    expect(secondSocket.sent).toHaveLength(1);
     socket.close(1000, "done");
     await socket.closed;
   });

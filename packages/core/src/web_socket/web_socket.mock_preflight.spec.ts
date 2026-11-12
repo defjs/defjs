@@ -8,11 +8,11 @@ import {
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { struct } from "../struct";
 import { defineWebSocket } from "./index";
+import { createFakeWebSocket } from "../../test/fake_web_socket";
 import {
-  countingSocket,
-  guardedClient,
   watchAbortListeners,
-} from "../../test/mock_web_socket";
+  guardedClient,
+} from "../../test/web_socket_support";
 
 describe("web socket preflight precedence", () => {
   test.each([
@@ -30,7 +30,7 @@ describe("web socket preflight precedence", () => {
       const listeners = watchAbortListeners(controller.signal);
       const failure = new Error("input exploded after abort");
       let builderCalls = 0;
-      const opened = countingSocket();
+      const fake = createFakeWebSocket();
       const endpoint = defineWebSocket({
         builder: () => {
           builderCalls += 1;
@@ -42,7 +42,7 @@ describe("web socket preflight precedence", () => {
       });
 
       const [error, session, connection] = await endpoint(
-        guardedClient(opened, controller.signal),
+        guardedClient(fake, controller.signal),
         {
           get id(): string {
             controller.abort(reason);
@@ -52,7 +52,7 @@ describe("web socket preflight precedence", () => {
       );
 
       expect(builderCalls).toBe(0);
-      expect(opened.constructed()).toBe(0);
+      expect(fake.sockets.length).toBe(0);
       expect(session).toBeUndefined();
       expect(connection).toBeUndefined();
       expect(error).toMatchObject({ cause, code });
@@ -64,7 +64,7 @@ describe("web socket preflight precedence", () => {
 
   test("should report an abort that lands after a successful input read and before endpoint selection", async () => {
     const controller = new AbortController();
-    const opened = countingSocket();
+    const fake = createFakeWebSocket();
     const endpoint = defineWebSocket({
       builder: () => ({}),
       incoming: struct.unknown(),
@@ -73,7 +73,7 @@ describe("web socket preflight precedence", () => {
     });
 
     const [error, session] = await endpoint(
-      guardedClient(opened, controller.signal),
+      guardedClient(fake, controller.signal),
       {
         get id(): string {
           controller.abort();
@@ -82,7 +82,7 @@ describe("web socket preflight precedence", () => {
       },
     );
 
-    expect(opened.constructed()).toBe(0);
+    expect(fake.sockets.length).toBe(0);
     expect(session).toBeUndefined();
     expect(error?.code).toBe("NET_ABORTED");
   });
@@ -102,7 +102,7 @@ describe("web socket preflight precedence", () => {
       const listeners = watchAbortListeners(controller.signal);
       const failure = new Error("query serializer failed after abort");
       let builderCalls = 0;
-      const opened = countingSocket();
+      const fake = createFakeWebSocket();
       const endpoint = defineWebSocket({
         builder: () => {
           builderCalls += 1;
@@ -117,7 +117,7 @@ describe("web socket preflight precedence", () => {
           controller.abort(reason);
           throw failure;
         }),
-        withWebSocketHandle(opened.handle),
+        withWebSocketHandle(fake.Socket),
       );
 
       const [error, session, connection] = await endpoint(
@@ -125,7 +125,7 @@ describe("web socket preflight precedence", () => {
       );
 
       expect(builderCalls).toBe(1);
-      expect(opened.constructed()).toBe(0);
+      expect(fake.sockets.length).toBe(0);
       expect(session).toBeUndefined();
       expect(connection).toBeUndefined();
       expect(error).toMatchObject({ cause, code });
@@ -139,7 +139,7 @@ describe("web socket preflight precedence", () => {
     const controller = new AbortController();
     const listeners = watchAbortListeners(controller.signal);
     const failure = new Error("build failed");
-    const opened = countingSocket();
+    const fake = createFakeWebSocket();
     const endpoint = defineWebSocket({
       builder: () => {
         throw failure;
@@ -149,10 +149,10 @@ describe("web socket preflight precedence", () => {
     });
 
     const [error, session, connection] = await endpoint(
-      guardedClient(opened, controller.signal),
+      guardedClient(fake, controller.signal),
     );
 
-    expect(opened.constructed()).toBe(0);
+    expect(fake.sockets.length).toBe(0);
     expect(session).toBeUndefined();
     expect(connection).toBeUndefined();
     expect(error).toMatchObject({ cause: failure, code: "REQ_BUILD_FAILED" });
@@ -163,7 +163,7 @@ describe("web socket preflight precedence", () => {
   test("should release caller abort listeners after invalid input", async () => {
     const controller = new AbortController();
     const listeners = watchAbortListeners(controller.signal);
-    const opened = countingSocket();
+    const fake = createFakeWebSocket();
     const endpoint = defineWebSocket({
       builder: () => ({}),
       incoming: struct.unknown(),
@@ -172,11 +172,11 @@ describe("web socket preflight precedence", () => {
     });
 
     const [error, session] = await endpoint(
-      guardedClient(opened, controller.signal),
+      guardedClient(fake, controller.signal),
       { id: NaN },
     );
 
-    expect(opened.constructed()).toBe(0);
+    expect(fake.sockets.length).toBe(0);
     expect(session).toBeUndefined();
     expect(error?.code).toBe("REQ_INPUT_INVALID");
     expect(listeners.added()).toBeGreaterThan(0);
@@ -208,7 +208,7 @@ describe("web socket preflight precedence", () => {
     const controller = new AbortController();
     controller.abort();
     let reads = 0;
-    const opened = countingSocket();
+    const fake = createFakeWebSocket();
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
       path: "/socket",
@@ -217,7 +217,7 @@ describe("web socket preflight precedence", () => {
     const [error, session] = await endpoint(
       createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(opened.handle),
+        withWebSocketHandle(fake.Socket),
         (config) => {
           config.webSocket.heartbeat = {
             get intervalMs(): number {
@@ -230,7 +230,7 @@ describe("web socket preflight precedence", () => {
       )({ signal: controller.signal }),
     );
 
-    expect(opened.constructed()).toBe(0);
+    expect(fake.sockets.length).toBe(0);
     expect(session).toBeUndefined();
     expect(error?.code).toBe("NET_ABORTED");
     expect(reads).toBe(0);

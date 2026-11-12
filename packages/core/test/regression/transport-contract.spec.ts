@@ -16,6 +16,7 @@ import {
   withSSEHandle,
   withWebSocketHandle,
 } from "../../src";
+import { createFakeWebSocket, FakeWebSocket } from "../fake_web_socket";
 
 const jsonHeaders = { "content-type": "application/json" };
 const nullEndpoint = defineRequest({
@@ -243,37 +244,12 @@ test.each(["abort", "timeout"] as const)(
 test.each(["caller", "replacement"])(
   "WebSocket keeps the %s signal active after delivery",
   async (source) => {
-    const instances: Socket[] = [];
-    class Socket extends EventTarget {
-      static readonly OPEN = 1;
-      readyState = 0;
-      bufferedAmount = 0;
-      protocol = "";
-      extensions = "";
-      binaryType = "blob";
-      readonly url: string;
-      constructor(url: string | URL) {
-        super();
-        this.url = String(url);
-        instances.push(this);
-        queueMicrotask(() => {
-          if (this.readyState !== 0) return;
-          this.readyState = 1;
-          this.dispatchEvent(new Event("open"));
-        });
-      }
-      send(_data: string) {}
-      close() {
-        if (this.readyState === 3) return;
-        this.readyState = 3;
-        this.dispatchEvent(new Event("close"));
-      }
-    }
+    const fake = createFakeWebSocket();
     const caller = new AbortController();
     const replacement = new AbortController();
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
       withInterceptors(
         createWebSocketInterceptor((request, next) =>
           next({ ...request, signal: replacement.signal }),
@@ -290,10 +266,10 @@ test.each(["caller", "replacement"])(
       if (!session) throw new Error("Expected an open session");
       (source === "caller" ? caller : replacement).abort("after delivery");
       expect((await session.closed).kind).toBe("aborted");
-      expect(instances[0]?.readyState).toBe(3);
+      expect(fake.sockets[0]?.readyState).toBe(FakeWebSocket.CLOSED);
     } finally {
       caller.abort("cleanup");
-      for (const socket of instances) socket.close();
+      for (const socket of fake.sockets) socket.close();
     }
   },
 );

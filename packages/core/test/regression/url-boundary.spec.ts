@@ -15,29 +15,13 @@ import {
   withWebSocketHandle,
   withRetry,
 } from "../../src";
+import { createFakeWebSocket } from "../fake_web_socket";
 
 function socketHandle(constructed: (url: string) => void) {
-  return class Socket extends EventTarget {
-    static readonly OPEN = 1;
-    readyState = 0;
-    bufferedAmount = 0;
-    protocol = "";
-    extensions = "";
-    readonly url: string;
-    constructor(url: string | URL) {
-      super();
-      this.url = String(url);
+  return class extends createFakeWebSocket().Socket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, protocols);
       constructed(this.url);
-      queueMicrotask(() => {
-        if (this.readyState !== 0) return;
-        this.readyState = 1;
-        this.dispatchEvent(new Event("open"));
-      });
-    }
-    send(_data: string) {}
-    close() {
-      this.readyState = 3;
-      this.dispatchEvent(new Event("close"));
     }
   };
 }

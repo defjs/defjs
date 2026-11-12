@@ -1,17 +1,14 @@
 import { describe, expect, test, vi } from "vitest";
 import { createClient, withEndpoint, withWebSocketHandle } from "../client";
 import { struct } from "../struct";
-import {
-  createControllableSocketClass,
-  openControllableSocket,
-} from "../../test/regression/controllable_socket";
+import { createFakeWebSocket, openSession } from "../../test/fake_web_socket";
 import { defineWebSocket } from "./index";
-import { useFakeClock } from "../../test/mock_web_socket";
+import { useFakeClock } from "../../test/web_socket_support";
 
 describe("web socket runtime heartbeat", () => {
   test("should send heartbeat messages automatically when heartbeat.message is provided", async () => {
     useFakeClock();
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const useHeartbeatSocket = defineWebSocket({
       incoming: struct.object({
         type: struct.literal("pong"),
@@ -26,53 +23,45 @@ describe("web socket runtime heartbeat", () => {
     let runtimeError: unknown;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
-    const pending = useHeartbeatSocket(
-      client({
-        heartbeat: {
-          intervalMs: 10,
-          isAck(message: unknown) {
-            return (
-              typeof message === "object" &&
-              message !== null &&
-              "type" in message &&
-              message.type === "pong"
-            );
+    const { session: socket, socket: native } = await openSession(
+      useHeartbeatSocket(
+        client({
+          heartbeat: {
+            intervalMs: 10,
+            isAck(message: unknown) {
+              return (
+                typeof message === "object" &&
+                message !== null &&
+                "type" in message &&
+                message.type === "pong"
+              );
+            },
+            message: () => ({
+              at: 1,
+              type: "ping" as const,
+            }),
+            timeoutMs: 100,
           },
-          message: () => ({
-            at: 1,
-            type: "ping" as const,
-          }),
-          timeoutMs: 100,
-        },
-      }),
+        }),
+      ),
+      fake,
     );
-    const [error, socket] = await openControllableSocket(pending, latest);
-    const native = latest();
-
-    expect(error).toBeNull();
-    if (!socket || !native) {
-      throw new Error("Expected socket session");
-    }
 
     socket.onRuntimeError((err: unknown) => {
       runtimeError = err;
     });
     await vi.advanceTimersByTimeAsync(10);
-    expect(JSON.parse(native.sent[0] ?? "")).toEqual({ at: 1, type: "ping" });
-    native.triggerMessage('{"ok":true,"type":"pong"}');
+    expect(JSON.parse(native.sentText(0))).toEqual({ at: 1, type: "ping" });
+    native.receive('{"ok":true,"type":"pong"}');
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(100);
 
     expect(runtimeError).toBeUndefined();
     expect(socket.state).toBe("open");
     socket.close(1000, "heartbeat-ok");
-    native.triggerClose({
-      code: 1000,
-      reason: "heartbeat-ok",
-      wasClean: true,
-    });
+    native.peerClose(1000, "heartbeat-ok");
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,
       reason: "heartbeat-ok",

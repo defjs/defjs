@@ -11,12 +11,9 @@ import {
   serializeOutgoingWebSocketMessage,
   decodeWebSocketMessage,
 } from "./codec";
-import {
-  createControllableSocketClass,
-  openControllableSocket,
-} from "../../test/regression/controllable_socket";
+import { createFakeWebSocket, openSession } from "../../test/fake_web_socket";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
-import { useFakeClock } from "../../test/mock_web_socket";
+import { useFakeClock } from "../../test/web_socket_support";
 
 const ChatIncoming = struct.discriminatedUnion("type", [
   struct.object({
@@ -188,7 +185,7 @@ describe("web socket single struct messages", () => {
 
   test("sends a heartbeat through the outgoing struct and classifies the decoded ack", async () => {
     useFakeClock();
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const useHeartbeat = defineWebSocket({
       incoming: HeartbeatIncoming,
       outgoing: HeartbeatOutgoing,
@@ -197,7 +194,7 @@ describe("web socket single struct messages", () => {
     const acks: Array<{ ok: boolean; type: "pong" }> = [];
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
     const pending = useHeartbeat(
       client({
@@ -222,24 +219,21 @@ describe("web socket single struct messages", () => {
         },
       }),
     );
-    const [error, socket] = await openControllableSocket(pending, latest);
-    const native = latest();
-
-    expect(error).toBeNull();
-    if (!socket || !native) {
-      throw new Error("Expected socket session");
-    }
+    const { session: socket, socket: native } = await openSession(
+      pending,
+      fake,
+    );
 
     const runtimeErrors: unknown[] = [];
     socket.onRuntimeError((runtimeError) => {
       runtimeErrors.push(runtimeError);
     });
     await vi.advanceTimersByTimeAsync(10);
-    expect(JSON.parse(native.sent[0] ?? "")).toEqual({
+    expect(JSON.parse(native.sentText(0))).toEqual({
       sent_at: 1,
       type: "ping",
     });
-    native.triggerMessage('{"ok":true,"type":"pong"}');
+    native.receive('{"ok":true,"type":"pong"}');
     await vi.advanceTimersByTimeAsync(0);
     expect(acks).toEqual([{ ok: true, type: "pong" }]);
     await vi.advanceTimersByTimeAsync(1_000);
@@ -248,11 +242,7 @@ describe("web socket single struct messages", () => {
     expect(socket.state).toBe("open");
     const iterator = socket.receive[Symbol.asyncIterator]();
     socket.close(1000, "heartbeat-ok");
-    native.triggerClose({
-      code: 1000,
-      reason: "heartbeat-ok",
-      wasClean: true,
-    });
+    native.peerClose(1000, "heartbeat-ok");
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,
       kind: "closed",
@@ -265,7 +255,7 @@ describe("web socket single struct messages", () => {
   });
 
   test("sends a nullable object field as JSON null", async () => {
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const profile = struct.object({
       name: struct.string().alias("display_name"),
     });
@@ -276,28 +266,22 @@ describe("web socket single struct messages", () => {
     });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
-    const [error, session] = await openControllableSocket(
+    const { session: session, socket: native } = await openSession(
       endpoint(client),
-      latest,
+      fake,
     );
-    const native = latest();
-
-    expect(error).toBeNull();
-    if (!session || !native) {
-      throw new Error("Expected socket session");
-    }
 
     session.send({ profile: null });
     expect(native.sent).toEqual(['{"profile":null}']);
     session.close(1000, "done");
-    native.triggerClose({ code: 1000, reason: "done", wasClean: true });
+    native.peerClose(1000, "done");
     await session.closed;
   });
 
   test("send rejects non-JSON fields with advice that applies to WebSocket messages", async () => {
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const endpoint = defineWebSocket({
       incoming: struct.string(),
       outgoing: struct.object({ n: struct.number() }),
@@ -305,18 +289,12 @@ describe("web socket single struct messages", () => {
     });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
-    const [error, session] = await openControllableSocket(
+    const { session: session, socket: native } = await openSession(
       endpoint(client),
-      latest,
+      fake,
     );
-    const native = latest();
-
-    expect(error).toBeNull();
-    if (!session || !native) {
-      throw new Error("Expected socket session");
-    }
 
     try {
       expect(() => session.send({ n: Infinity })).toThrow(
@@ -327,7 +305,7 @@ describe("web socket single struct messages", () => {
       expect(native.sent).toEqual([]);
     } finally {
       session.close(1000, "done");
-      native.triggerClose({ code: 1000, reason: "done", wasClean: true });
+      native.peerClose(1000, "done");
       await session.closed;
     }
   });

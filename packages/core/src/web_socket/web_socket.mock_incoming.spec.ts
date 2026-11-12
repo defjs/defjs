@@ -4,20 +4,23 @@ import { StructError, struct } from "../struct";
 import { yieldMacrotask } from "../../test/macrotask";
 import { defineWebSocket } from "./index";
 import {
-  useFakeClock,
-  lastMockInstance,
-  createMockWebSocketClass,
-  createDeferred,
+  type FakeWebSocket,
   expectInertErrorListener,
   expectOnlyErrorSink,
-  encodeMessage,
+  openSession,
+  stubFakeWebSocket,
+} from "../../test/fake_web_socket";
+import {
+  useFakeClock,
+  createDeferred,
   run,
+  encodeMessage,
   watchAbortListeners,
-} from "../../test/mock_web_socket";
+} from "../../test/web_socket_support";
 
 describe("web socket incoming messages with a mock handle", () => {
   test("should report invalid incoming frames without tearing down the session", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
 
     const useSocket = defineWebSocket({
       incoming: struct.object({
@@ -30,7 +33,7 @@ describe("web socket incoming messages with a mock handle", () => {
     const client = createClient(withEndpoint("http://localhost"));
     const [error, socket] = await run(client, useSocket);
     expect(error).toBeNull();
-    if (!socket || !lastMockInstance) {
+    if (!socket || !fake.last()) {
       throw new Error("Expected open session");
     }
 
@@ -39,13 +42,13 @@ describe("web socket incoming messages with a mock handle", () => {
       runtimeErrors.push(runtimeError);
     });
 
-    lastMockInstance.triggerMessage('{"ok":true}');
-    lastMockInstance.triggerMessage('{"type":"unknown","ok":true}');
+    fake.last().receive('{"ok":true}');
+    fake.last().receive('{"type":"unknown","ok":true}');
     await vi.waitFor(() => expect(runtimeErrors).toHaveLength(2));
     expect(runtimeErrors[0]).toBeInstanceOf(StructError);
     expect(runtimeErrors[1]).toBeInstanceOf(StructError);
 
-    lastMockInstance.triggerMessage('{"type":"known","ok":true}');
+    fake.last().receive('{"type":"known","ok":true}');
     const iterator = socket.receive[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
       done: false,
@@ -57,7 +60,7 @@ describe("web socket incoming messages with a mock handle", () => {
   });
 
   test("should ignore non-text frames without notifying runtime errors", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
 
     const useSocket = defineWebSocket({
       incoming: struct.object({
@@ -70,7 +73,7 @@ describe("web socket incoming messages with a mock handle", () => {
     const client = createClient(withEndpoint("http://localhost"));
     const [error, socket] = await run(client, useSocket);
     expect(error).toBeNull();
-    if (!socket || !lastMockInstance) {
+    if (!socket || !fake.last()) {
       throw new Error("Expected open session");
     }
 
@@ -79,9 +82,14 @@ describe("web socket incoming messages with a mock handle", () => {
       runtimeErrors.push(runtimeError);
     });
 
-    lastMockInstance.triggerMessage(123);
-    lastMockInstance.triggerMessage({ ok: true, type: "known" });
-    lastMockInstance.triggerMessage('{"type":"known","ok":true}');
+    // A platform socket delivers a string, an ArrayBuffer or a Blob. Anything else comes from a handle that is not one.
+    fake.last().dispatchEvent(new MessageEvent("message", { data: 123 }));
+    fake
+      .last()
+      .dispatchEvent(
+        new MessageEvent("message", { data: { ok: true, type: "known" } }),
+      );
+    fake.last().receive('{"type":"known","ok":true}');
 
     const iterator = socket.receive[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
@@ -95,7 +103,7 @@ describe("web socket incoming messages with a mock handle", () => {
   });
 
   test("should preserve physical message arrival order when Blob decodes finish out of order", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.object({
         type: struct.literal("message"),
@@ -103,13 +111,10 @@ describe("web socket incoming messages with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
 
     const firstData = createDeferred<ArrayBuffer>();
     const secondData = createDeferred<ArrayBuffer>();
@@ -119,8 +124,8 @@ describe("web socket incoming messages with a mock handle", () => {
     vi.spyOn(secondBlob, "arrayBuffer").mockReturnValue(secondData.promise);
     const iterator = socket.receive[Symbol.asyncIterator]();
 
-    lastMockInstance.triggerMessage(firstBlob);
-    lastMockInstance.triggerMessage(secondBlob);
+    fake.last().receive(firstBlob);
+    fake.last().receive(secondBlob);
     secondData.resolve(encodeMessage({ text: "second", type: "message" }));
     await Promise.resolve();
     firstData.resolve(encodeMessage({ text: "first", type: "message" }));
@@ -138,7 +143,7 @@ describe("web socket incoming messages with a mock handle", () => {
   });
 
   test("should deliver an arrived Blob frame before the following native close", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.object({
         type: struct.literal("message"),
@@ -146,30 +151,26 @@ describe("web socket incoming messages with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
 
     const data = createDeferred<ArrayBuffer>();
     const blob = new Blob();
     vi.spyOn(blob, "arrayBuffer").mockReturnValue(data.promise);
     const iterator = socket.receive[Symbol.asyncIterator]();
 
-    lastMockInstance.triggerMessage(blob);
-    lastMockInstance.triggerClose({
-      code: 1000,
-      reason: "done",
-      wasClean: true,
-    });
-    lastMockInstance.triggerClose({
-      code: 1000,
-      reason: "duplicate",
-      wasClean: true,
-    });
+    fake.last().receive(blob);
+    fake.last().peerClose(1000, "done");
+    // The standard fires `close` once. A handle that fires it again must not end the session twice.
+    fake.last().dispatchEvent(
+      new CloseEvent("close", {
+        code: 1000,
+        reason: "duplicate",
+        wasClean: true,
+      }),
+    );
     data.resolve(encodeMessage({ text: "before close", type: "message" }));
 
     await expect(iterator.next()).resolves.toEqual({
@@ -184,7 +185,7 @@ describe("web socket incoming messages with a mock handle", () => {
   });
 
   test("should not wait for a blocked Blob after a native error close", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.object({
         type: struct.literal("message"),
@@ -192,20 +193,17 @@ describe("web socket incoming messages with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
 
     const blockedBlob = new Blob();
     vi.spyOn(blockedBlob, "arrayBuffer").mockReturnValue(
       new Promise<ArrayBuffer>(() => undefined),
     );
-    lastMockInstance.triggerMessage(blockedBlob);
-    lastMockInstance.triggerError();
+    fake.last().receive(blockedBlob);
+    fake.last().drop();
 
     await expect(socket.closed).resolves.toMatchObject({ kind: "error" });
     expect(socket.state).toBe("error");
@@ -217,31 +215,25 @@ describe("web socket incoming messages with a mock handle", () => {
   ] as const)(
     "should deliver queued messages then reject receive after an abrupt drop (%s)",
     async (_name, withErrorEvent) => {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
+      const fake = stubFakeWebSocket();
       const useSocket = defineWebSocket({
         incoming: struct.object({ n: struct.number() }),
         path: "/ws/test",
       });
-      const [, socket] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket,
+      const { session: socket } = await openSession(
+        run(createClient(withEndpoint("http://localhost")), useSocket),
+        fake,
       );
-      if (!socket || !lastMockInstance) {
-        throw new Error("Expected socket");
-      }
       for (const n of [1, 2, 3]) {
-        lastMockInstance.triggerMessage(JSON.stringify({ n }));
+        fake.last().receive(JSON.stringify({ n }));
       }
       // The consumer is slow: the frames are decoded and queued before the peer vanishes.
       await new Promise((resolve) => setTimeout(resolve, 0));
       if (withErrorEvent) {
-        lastMockInstance.triggerError();
+        fake.last().drop();
+      } else {
+        fake.last().peerClose(1006, "", false);
       }
-      lastMockInstance.triggerClose({
-        code: 1006,
-        reason: "",
-        wasClean: false,
-      });
 
       await expect(socket.closed).resolves.toMatchObject({
         cause: new Error("WebSocket connection error"),
@@ -263,26 +255,25 @@ describe("web socket incoming messages with a mock handle", () => {
   );
 
   test("should deliver queued messages before rejecting after a runtime error", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.number(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-    const nativeSocket = lastMockInstance;
+    const nativeSocket = fake.last();
     if (!socket || !nativeSocket) {
       throw new Error("Expected socket");
     }
     for (const value of [1, 2, 3]) {
-      nativeSocket.triggerMessage(JSON.stringify(value));
+      nativeSocket.receive(JSON.stringify(value));
     }
     await yieldMacrotask();
 
-    nativeSocket.triggerError();
-    nativeSocket.triggerClose({ code: 1006, reason: "", wasClean: false });
+    nativeSocket.drop();
 
     const closed = await socket.closed;
     if (closed.kind !== "error") {
@@ -304,23 +295,24 @@ describe("web socket incoming messages with a mock handle", () => {
   });
 
   test("should discard queued messages when the caller aborts the session", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const useSocket = defineWebSocket({
       incoming: struct.number(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      { signal: controller.signal },
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket, {
+        signal: controller.signal,
+      }),
+      fake,
     );
-    const nativeSocket = lastMockInstance;
+    const nativeSocket = fake.last();
     if (!socket || !nativeSocket) {
       throw new Error("Expected socket");
     }
     for (const value of [1, 2, 3]) {
-      nativeSocket.triggerMessage(JSON.stringify(value));
+      nativeSocket.receive(JSON.stringify(value));
     }
     await yieldMacrotask();
 
@@ -344,17 +336,20 @@ describe("web socket incoming messages with a mock handle", () => {
 
   describe("incoming messages around a close", () => {
     async function openNumberSession(signal?: AbortSignal) {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
+      const fake = stubFakeWebSocket();
       const useSocket = defineWebSocket({
         incoming: struct.number(),
         path: "/ws/test",
       });
-      const [, socket] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket,
-        signal ? { signal } : undefined,
+      const { session: socket } = await openSession(
+        run(
+          createClient(withEndpoint("http://localhost")),
+          useSocket,
+          signal ? { signal } : undefined,
+        ),
+        fake,
       );
-      const nativeSocket = lastMockInstance;
+      const nativeSocket = fake.last();
       if (!socket || !nativeSocket) {
         throw new Error("Expected socket");
       }
@@ -376,14 +371,13 @@ describe("web socket incoming messages with a mock handle", () => {
         controller.signal,
       );
       for (const value of [1, 2, 3]) {
-        nativeSocket.triggerMessage(JSON.stringify(value));
+        nativeSocket.receive(JSON.stringify(value));
       }
       await yieldMacrotask();
       if (ending === "closed") {
-        nativeSocket.triggerClose({ code: 1000, reason: "", wasClean: true });
+        nativeSocket.peerClose(1000);
       } else {
-        nativeSocket.triggerError();
-        nativeSocket.triggerClose({ code: 1006, reason: "", wasClean: false });
+        nativeSocket.drop();
       }
       const closed = await socket.closed;
       expect(closed.kind).toBe(ending);
@@ -474,7 +468,7 @@ describe("web socket incoming messages with a mock handle", () => {
         controller.signal,
       );
       for (const value of [1, 2, 3]) {
-        nativeSocket.triggerMessage(JSON.stringify(value));
+        nativeSocket.receive(JSON.stringify(value));
       }
       await yieldMacrotask();
 
@@ -495,9 +489,9 @@ describe("web socket incoming messages with a mock handle", () => {
       const { nativeSocket, socket } = await openNumberSession(
         controller.signal,
       );
-      nativeSocket.triggerMessage(JSON.stringify(1));
+      nativeSocket.receive(JSON.stringify(1));
       await yieldMacrotask();
-      nativeSocket.triggerClose({ code: 1000, reason: "", wasClean: true });
+      nativeSocket.peerClose(1000);
       await socket.closed;
       expect(listeners.removed()).toBe(listeners.added());
       const added = listeners.added();
@@ -511,11 +505,11 @@ describe("web socket incoming messages with a mock handle", () => {
     test("should deliver queued messages and then end after a close from the peer", async () => {
       const { nativeSocket, socket } = await openNumberSession();
       for (const value of [1, 2, 3]) {
-        nativeSocket.triggerMessage(JSON.stringify(value));
+        nativeSocket.receive(JSON.stringify(value));
       }
       await yieldMacrotask();
 
-      nativeSocket.triggerClose({ code: 1000, reason: "", wasClean: true });
+      nativeSocket.peerClose(1000);
 
       await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
       await expect(drainReceive(socket)).resolves.toEqual([1, 2, 3]);
@@ -524,7 +518,7 @@ describe("web socket incoming messages with a mock handle", () => {
     test("should discard unread messages and end at once after the caller closes the session", async () => {
       const { nativeSocket, socket } = await openNumberSession();
       for (const value of [1, 2, 3]) {
-        nativeSocket.triggerMessage(JSON.stringify(value));
+        nativeSocket.receive(JSON.stringify(value));
       }
       await yieldMacrotask();
 
@@ -537,14 +531,14 @@ describe("web socket incoming messages with a mock handle", () => {
     test("should discard unread messages for a read made right after close() and drop frames that arrive during the closing handshake", async () => {
       const { nativeSocket, socket } = await openNumberSession();
       for (const value of [1, 2, 3]) {
-        nativeSocket.triggerMessage(JSON.stringify(value));
+        nativeSocket.receive(JSON.stringify(value));
       }
       await yieldMacrotask();
 
       socket.close();
-      nativeSocket.triggerMessage(JSON.stringify(4));
+      nativeSocket.receive(JSON.stringify(4));
       const read = drainReceive(socket);
-      nativeSocket.triggerMessage(JSON.stringify(5));
+      nativeSocket.receive(JSON.stringify(5));
 
       await expect(read).resolves.toEqual([]);
       await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
@@ -553,7 +547,7 @@ describe("web socket incoming messages with a mock handle", () => {
     test("should discard unread messages and end at once after the caller disposes the session", async () => {
       const { nativeSocket, socket } = await openNumberSession();
       for (const value of [1, 2, 3]) {
-        nativeSocket.triggerMessage(JSON.stringify(value));
+        nativeSocket.receive(JSON.stringify(value));
       }
       await yieldMacrotask();
 
@@ -565,7 +559,7 @@ describe("web socket incoming messages with a mock handle", () => {
   });
 
   test("should expose a single-consumer receive iterable and reject sends after terminal", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       outgoing: struct.object({
@@ -574,13 +568,10 @@ describe("web socket incoming messages with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-    if (!socket) {
-      throw new Error("Expected socket");
-    }
 
     socket.receive[Symbol.asyncIterator]();
     expect(() => socket.receive[Symbol.asyncIterator]()).toThrow(
@@ -594,7 +585,7 @@ describe("web socket incoming messages with a mock handle", () => {
   });
 
   test("should abort a blocked blob decode and wait for the message pump before disposal resolves", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const useSocket = defineWebSocket({
       incoming: struct.object({
         ok: struct.boolean(),
@@ -602,21 +593,18 @@ describe("web socket incoming messages with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const nativeSocket = lastMockInstance;
+    const nativeSocket = fake.last();
     const pendingReceive = socket.receive[Symbol.asyncIterator]().next();
     const blob = new Blob(['{"ok":true,"type":"known"}']);
     vi.spyOn(blob, "arrayBuffer").mockReturnValue(
       new Promise<ArrayBuffer>(() => undefined),
     );
 
-    nativeSocket.triggerMessage(blob);
+    nativeSocket.receive(blob);
 
     const disposed = Promise.resolve(socket[Symbol.asyncDispose]()).then(
       () => true,
@@ -633,7 +621,7 @@ describe("web socket incoming messages with a mock handle", () => {
 
   test("should preserve an observed remote close when disposal starts after a blocked message pump", async () => {
     useFakeClock();
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.object({
         ok: struct.boolean(),
@@ -641,30 +629,19 @@ describe("web socket incoming messages with a mock handle", () => {
       }),
       path: "/ws/test",
     });
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
+    const { session: socket } = await openSession(
+      run(createClient(withEndpoint("http://localhost")), useSocket),
+      fake,
     );
-
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const nativeSocket = lastMockInstance;
+    const nativeSocket = fake.last();
     const pendingReceive = socket.receive[Symbol.asyncIterator]().next();
     const blob = new Blob(['{"ok":true,"type":"known"}']);
     vi.spyOn(blob, "arrayBuffer").mockReturnValue(
       new Promise<ArrayBuffer>(() => undefined),
     );
 
-    nativeSocket.triggerMessage(blob);
-    nativeSocket.triggerClose({
-      code: 1000,
-      reason: "remote-finished",
-      wasClean: true,
-    });
+    nativeSocket.receive(blob);
+    nativeSocket.peerClose(1000, "remote-finished");
     // The blocked pump keeps the attempt unsettled, so only `handleClose` has detached `error` so far.
     expectInertErrorListener(nativeSocket);
 
@@ -760,26 +737,29 @@ describe("web socket incoming frame path", () => {
     return createView(buffer, padding, bytes.length);
   }
 
-  async function openSession(options?: { signal?: AbortSignal }) {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const [error, socket] = await useSocket(
-      createClient(withEndpoint("http://localhost"))(options),
+  async function openFrameSession(options?: { signal?: AbortSignal }) {
+    const fake = stubFakeWebSocket();
+    const { session, socket } = await openSession(
+      useSocket(createClient(withEndpoint("http://localhost"))(options)),
+      fake,
     );
-    expect(error).toBeNull();
-    const native = lastMockInstance;
-    if (!socket || !native) {
-      throw new Error("Expected an open session");
-    }
-    return { native, socket };
+    return { native: socket, socket: session };
+  }
+
+  /** A message event whose data a platform socket would not deliver, from a handle that is not one. */
+  function deliver(native: FakeWebSocket, data: unknown): void {
+    native.dispatchEvent(new MessageEvent("message", { data }));
   }
 
   test("should not start reading a Blob frame that arrives during the closing handshake", async () => {
-    const { native, socket } = await openSession();
+    const { native, socket } = await openFrameSession();
     const blob = new Blob(["not json"]);
     const read = vi.spyOn(blob, "arrayBuffer");
 
     socket.close();
-    native.triggerMessage(blob);
+    // The standard drops a message that arrives once the socket is no longer OPEN. A handle that dispatches it anyway
+    // must not make the session start a read.
+    deliver(native, blob);
     await socket.closed;
     await nextTurn();
 
@@ -794,11 +774,11 @@ describe("web socket incoming frame path", () => {
   ])(
     "should deliver %s frames within one microtask turn",
     async (_kind, createFrame) => {
-      const { native, socket } = await openSession();
+      const { native, socket } = await openFrameSession();
       const pending = socket.receive[Symbol.asyncIterator]().next();
       const delivered = watchSettled(pending);
 
-      native.triggerMessage(createFrame(frame("now")));
+      deliver(native, createFrame(frame("now")));
       await Promise.resolve();
 
       // A frame that needs no read is decoded and queued without waiting for another turn.
@@ -813,7 +793,7 @@ describe("web socket incoming frame path", () => {
   );
 
   test("should deliver frames in arrival order while a Blob frame is still being read", async () => {
-    const { native, socket } = await openSession();
+    const { native, socket } = await openFrameSession();
     const blobBytes = createDeferred<ArrayBuffer>();
     const received: string[] = [];
     const consumed = (async () => {
@@ -822,10 +802,10 @@ describe("web socket incoming frame path", () => {
       }
     })();
 
-    native.triggerMessage(frame("a"));
-    native.triggerMessage(blobOf(blobBytes.promise));
-    native.triggerMessage(frame("c"));
-    native.triggerMessage(new TextEncoder().encode(frame("d")).buffer);
+    native.receive(frame("a"));
+    native.receive(blobOf(blobBytes.promise));
+    native.receive(frame("c"));
+    native.receive(new TextEncoder().encode(frame("d")).buffer);
     await nextTurn();
 
     // "c" and "d" need no read, but they arrived after the Blob and must not overtake it.
@@ -858,7 +838,7 @@ describe("web socket incoming frame path", () => {
   ])(
     "should decode only the window of a %s frame",
     async (_kind, createView) => {
-      const { native, socket } = await openSession();
+      const { native, socket } = await openFrameSession();
       const runtimeErrors: unknown[] = [];
       socket.onRuntimeError((error) => {
         runtimeErrors.push(error);
@@ -867,7 +847,8 @@ describe("web socket incoming frame path", () => {
 
       // The two-byte view needs an even byte length. A trailing space pads it, and JSON ignores it.
       const json = frame("window");
-      native.triggerMessage(
+      deliver(
+        native,
         windowed(json.length % 2 === 0 ? json : `${json} `, createView),
       );
 
@@ -882,7 +863,7 @@ describe("web socket incoming frame path", () => {
   );
 
   test("should report each undecodable frame once and keep delivering the frames after it", async () => {
-    const { native, socket } = await openSession();
+    const { native, socket } = await openFrameSession();
     const runtimeErrors: unknown[] = [];
     socket.onRuntimeError((error) => {
       runtimeErrors.push(error);
@@ -894,15 +875,11 @@ describe("web socket incoming frame path", () => {
       }
     })();
 
-    native.triggerMessage(frame("first"));
-    native.triggerMessage("not json");
-    native.triggerMessage(
-      new TextEncoder().encode('{"text":1,"type":"message"}'),
-    );
-    native.triggerMessage(
-      blobOf(Promise.resolve(encodeMessage({ type: "other" }))),
-    );
-    native.triggerMessage(frame("last"));
+    native.receive(frame("first"));
+    native.receive("not json");
+    deliver(native, new TextEncoder().encode('{"text":1,"type":"message"}'));
+    native.receive(blobOf(Promise.resolve(encodeMessage({ type: "other" }))));
+    native.receive(frame("last"));
     await vi.waitFor(() => expect(received).toEqual(["first", "last"]));
 
     // Text and byte frames fail as soon as they arrive, a Blob frame after its read. Each failure is reported once, in order.
@@ -918,13 +895,15 @@ describe("web socket incoming frame path", () => {
 
   test("should settle promptly when the session is aborted while a Blob frame is being read", async () => {
     const controller = new AbortController();
-    const { native, socket } = await openSession({ signal: controller.signal });
+    const { native, socket } = await openFrameSession({
+      signal: controller.signal,
+    });
     const pendingReceive = socket.receive[Symbol.asyncIterator]()
       .next()
       .catch((error: unknown) => error);
 
-    native.triggerMessage(blobOf(new Promise<ArrayBuffer>(() => undefined)));
-    native.triggerMessage(frame("behind the Blob"));
+    native.receive(blobOf(new Promise<ArrayBuffer>(() => undefined)));
+    native.receive(frame("behind the Blob"));
     const abortCause = new Error("owner aborted");
     controller.abort(abortCause);
 
@@ -941,11 +920,11 @@ describe("web socket incoming frame path", () => {
   });
 
   test("should drop the frames queued behind a Blob read when the session is disposed", async () => {
-    const { native, socket } = await openSession();
+    const { native, socket } = await openFrameSession();
     const pendingReceive = socket.receive[Symbol.asyncIterator]().next();
 
-    native.triggerMessage(blobOf(new Promise<ArrayBuffer>(() => undefined)));
-    native.triggerMessage(frame("behind the Blob"));
+    native.receive(blobOf(new Promise<ArrayBuffer>(() => undefined)));
+    native.receive(frame("behind the Blob"));
     await expect(
       Promise.resolve(socket[Symbol.asyncDispose]()),
     ).resolves.toBeUndefined();
@@ -960,10 +939,7 @@ describe("web socket incoming frame path", () => {
 
   test("should reject only disposal with TimeoutError when native close never arrives", async () => {
     useFakeClock();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
-    );
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const useSocket = defineWebSocket({
       incoming: struct.unknown(),
       path: "/ws/test",
@@ -972,13 +948,13 @@ describe("web socket incoming frame path", () => {
       createClient(withEndpoint("http://localhost")),
     );
 
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
+    await vi.waitFor(() => expect(fake.last()).toBeDefined());
+    fake.last().open();
     const [, socket] = await executePromise;
-    if (!socket || !lastMockInstance) {
+    if (!socket || !fake.last()) {
       throw new Error("Expected socket");
     }
-    const nativeSocket = lastMockInstance;
+    const nativeSocket = fake.last();
     const pendingReceive = socket.receive[Symbol.asyncIterator]().next();
     const disposal = Promise.resolve(socket[Symbol.asyncDispose]()).then(
       () => ({ error: undefined, status: "resolved" as const }),
@@ -990,7 +966,7 @@ describe("web socket incoming frame path", () => {
     });
     await Promise.resolve();
 
-    expect(nativeSocket.close).toHaveBeenCalledTimes(1);
+    expect(nativeSocket.closeCalls).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(999);
     expect(outcome).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);

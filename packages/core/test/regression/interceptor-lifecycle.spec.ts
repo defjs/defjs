@@ -16,36 +16,7 @@ import {
   withSSEHandle,
   withWebSocketHandle,
 } from "../../src";
-
-function socketHarness() {
-  const instances: Socket[] = [];
-  class Socket extends EventTarget {
-    static readonly OPEN = 1;
-    readyState = 0;
-    bufferedAmount = 0;
-    protocol = "";
-    extensions = "";
-    binaryType = "blob";
-    readonly url: string;
-    constructor(url: string | URL) {
-      super();
-      this.url = String(url);
-      instances.push(this);
-      void Promise.resolve().then(() => {
-        if (this.readyState !== 0) return;
-        this.readyState = 1;
-        this.dispatchEvent(new Event("open"));
-      });
-    }
-    send(_data: string) {}
-    close() {
-      if (this.readyState === 3) return;
-      this.readyState = 3;
-      this.dispatchEvent(new Event("close"));
-    }
-  }
-  return { instances, Socket };
-}
+import { createFakeWebSocket } from "../fake_web_socket";
 
 const socketEndpoint = defineWebSocket({
   path: "/socket",
@@ -60,7 +31,7 @@ test.each([
 ])(
   "WebSocket tuple respects wrapper metadata with transformed=$transformed and reconnect=$reconnect",
   async ({ transformed, reconnect }) => {
-    const { instances, Socket } = socketHarness();
+    const fake = createFakeWebSocket();
     const readConnection = vi.fn((connection: WebSocketConnectionInfo) =>
       transformed
         ? { ...connection, url: "wss://public.example/socket" }
@@ -69,7 +40,7 @@ test.each([
     let inner: WebSocketSessionLike | undefined;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
       withInterceptors(
         createWebSocketInterceptor(async (request, next) => {
           const session = await next({
@@ -78,16 +49,9 @@ test.each([
           });
           inner = session;
           if (reconnect) {
-            const first = instances[0];
+            const first = fake.sockets[0];
             if (!first) throw new Error("Expected the first physical socket");
-            first.readyState = 3;
-            first.dispatchEvent(
-              new CloseEvent("close", {
-                code: 1012,
-                reason: "restart",
-                wasClean: true,
-              }),
-            );
+            first.peerClose(1012, "restart");
             await vi.waitFor(() =>
               expect(session.connection.generation).toBe(2),
             );
@@ -118,24 +82,24 @@ test.each([
       if (transformed)
         expect(snapshot).toBe(readConnection.mock.results[0]?.value);
       expect(session?.state).toBe("open");
-      expect(instances.at(-1)?.readyState).toBe(1);
+      expect(fake.sockets.at(-1)?.readyState).toBe(1);
     } finally {
       inner?.close();
       await inner?.closed;
-      for (const socket of instances) socket.close();
+      for (const socket of fake.sockets) socket.close();
     }
   },
 );
 
 test("WebSocket physical open does not cancel on its own while caller abort remains active", async () => {
   vi.useFakeTimers();
-  const { instances, Socket } = socketHarness();
+  const fake = createFakeWebSocket();
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const controller = new AbortController();
   const client = createClient(
     withEndpoint("https://example.test"),
-    withWebSocketHandle(Socket),
+    withWebSocketHandle(fake.Socket),
     withInterceptors(
       createWebSocketInterceptor(async (request, next) => {
         const session = await next(request);
@@ -161,21 +125,21 @@ test("WebSocket physical open does not cancel on its own while caller abort rema
     const [fault, session] = await pending;
     expect(fault?.code).toBe("NET_ABORTED");
     expect(session).toBeUndefined();
-    expect(instances[0]?.readyState).toBe(3);
+    expect(fake.sockets[0]?.readyState).toBe(3);
   } finally {
     controller.abort("cleanup");
     release.resolve();
     await pending;
-    for (const socket of instances) socket.close();
+    for (const socket of fake.sockets) socket.close();
     vi.useRealTimers();
   }
 });
 
 test("WebSocket respects an already-aborted signal supplied by an interceptor", async () => {
-  const { instances, Socket } = socketHarness();
+  const fake = createFakeWebSocket();
   const client = createClient(
     withEndpoint("https://example.test"),
-    withWebSocketHandle(Socket),
+    withWebSocketHandle(fake.Socket),
     withInterceptors(
       createWebSocketInterceptor((request, next) =>
         next({ ...request, signal: AbortSignal.abort("stop") }),
@@ -186,10 +150,10 @@ test("WebSocket respects an already-aborted signal supplied by an interceptor", 
   try {
     expect(fault?.code).toBe("NET_ABORTED");
     expect(session).toBeUndefined();
-    expect(instances).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
   } finally {
     session?.close();
-    for (const socket of instances) socket.close();
+    for (const socket of fake.sockets) socket.close();
   }
 });
 

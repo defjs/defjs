@@ -15,6 +15,7 @@ import {
   withRetry,
 } from "../../src";
 import type { EventStreamHandle, WebSocketSessionLike } from "../../src";
+import { createFakeWebSocket, refusing } from "../fake_web_socket";
 
 function watch(signal: AbortSignal) {
   const add = vi.spyOn(signal, "addEventListener");
@@ -230,41 +231,12 @@ test("SSE closes an opened stream and releases caller listeners when the interce
   signal.expectReleased();
 });
 
-class TestSocket extends EventTarget {
-  static readonly OPEN = 1;
-  static readonly CONNECTING = 0;
-  static readonly CLOSED = 3;
-  readonly url: string;
-  readyState = TestSocket.CONNECTING;
-  bufferedAmount = 0;
-  binaryType = "arraybuffer";
-  extensions = "";
-  protocol = "";
-
-  constructor(url: string | URL) {
-    super();
-    this.url = String(url);
-    queueMicrotask(() => {
-      if (this.readyState !== TestSocket.CONNECTING) return;
-      this.readyState = TestSocket.OPEN;
-      this.dispatchEvent(new Event("open"));
-    });
-  }
-
-  send(): void {}
-
-  close(): void {
-    if (this.readyState === TestSocket.CLOSED) return;
-    this.readyState = TestSocket.CLOSED;
-    this.dispatchEvent(new Event("close"));
-  }
-}
-
 test("WebSocket closes an opened session and releases caller listeners when the interceptor fails after opening", async () => {
   let opened: WebSocketSessionLike | undefined;
+  const fake = createFakeWebSocket();
   const client = createClient(
     withEndpoint("https://example.test"),
-    withWebSocketHandle(TestSocket),
+    withWebSocketHandle(fake.Socket),
     withInterceptors(
       createWebSocketInterceptor(async (request, next) => {
         opened = await next(request);
@@ -284,29 +256,14 @@ test("WebSocket closes an opened session and releases caller listeners when the 
   signal.expectReleased();
 });
 
-class FailingSocket extends TestSocket {
-  constructor(url: string | URL) {
-    super(url);
-    throw new Error("socket failed");
-  }
-}
-
-class HangingSocket extends TestSocket {
-  constructor(url: string | URL) {
-    super(url);
-    this.readyState = 99;
-  }
-}
-
 test.each(["success", "fault", "abort", "timeout"] as const)(
   "WebSocket releases caller abort listeners after %s",
   async (mode) => {
-    const Socket =
-      mode === "success"
-        ? TestSocket
-        : mode === "fault"
-          ? FailingSocket
-          : HangingSocket;
+    // An aborted call is one whose socket never opens.
+    const fake = createFakeWebSocket({
+      handshake: mode === "abort" || mode === "timeout" ? "manual" : "auto",
+    });
+    const Socket = mode === "fault" ? refusing(fake.Socket) : fake.Socket;
     const client = createClient(
       withEndpoint("https://example.test"),
       withWebSocketHandle(Socket),

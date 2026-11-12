@@ -11,10 +11,7 @@ import { defineRequest } from "../../src/http";
 import { defineEventStream } from "../../src/sse";
 import { StructError, struct, type StructLike } from "../../src/struct";
 import { defineWebSocket } from "../../src/web_socket";
-import {
-  createControllableSocketClass,
-  openControllableSocket,
-} from "./controllable_socket";
+import { createFakeWebSocket, openSession } from "../fake_web_socket";
 import { isRecord } from "../narrow";
 
 const Chain = struct.object({
@@ -52,7 +49,7 @@ describe("recursive structs at transport boundaries", () => {
       incoming: Chain,
       path: "/deep",
     });
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const handle = vi.fn(() =>
       Promise.resolve(new Response(null, { status: 204 })),
     );
@@ -60,7 +57,7 @@ describe("recursive structs at transport boundaries", () => {
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
       withSSEHandle(handle),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
 
     const results = [
@@ -75,7 +72,7 @@ describe("recursive structs at transport boundaries", () => {
     }
     expect(builder).not.toHaveBeenCalled();
     expect(handle).not.toHaveBeenCalled();
-    expect(latest()).toBeUndefined();
+    expect(fake.sockets).toHaveLength(0);
   });
 
   test("does not revisit an unbounded union candidate while tagging a parsed intersection", async () => {
@@ -150,31 +147,27 @@ describe("recursive structs at transport boundaries", () => {
   });
 
   test("bounds WebSocket receive and send recursion without closing a healthy session", async () => {
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
     const useSocket = defineWebSocket({
       incoming: Chain,
       outgoing: Chain,
       path: "/deep",
     });
-    const [error, session] = await openControllableSocket(
+    const { session, socket: socket } = await openSession(
       useSocket(client),
-      latest,
+      fake,
     );
-    expect(error).toBeNull();
-    if (!session) throw new Error("Expected session");
-    const socket = latest();
-    if (!socket) throw new Error("Expected socket");
     try {
       const invalid = new Promise<unknown>((resolve) =>
         session.onRuntimeError(resolve),
       );
-      socket.triggerMessage(deepJson);
+      socket.receive(deepJson);
       expect(await invalid).toBeInstanceOf(StructError);
-      socket.triggerMessage('{"child":null}');
+      socket.receive('{"child":null}');
       expect(
         (await session.receive[Symbol.asyncIterator]().next()).value,
       ).toEqual({ child: null });
@@ -184,7 +177,7 @@ describe("recursive structs at transport boundaries", () => {
       expect(socket.sent).toEqual(['{"child":null}']);
     } finally {
       session.close();
-      socket.triggerClose({ code: 1000, reason: "", wasClean: true });
+      socket.peerClose(1000);
       await session.closed;
     }
   });

@@ -7,17 +7,12 @@ import {
 } from "../interceptor";
 import { struct } from "../struct";
 import { defineWebSocket } from "./index";
-import {
-  lastMockInstance,
-  mockInstances,
-  createMockWebSocketClass,
-  createDeferred,
-  run,
-} from "../../test/mock_web_socket";
+import { openSession, stubFakeWebSocket } from "../../test/fake_web_socket";
+import { createDeferred, run } from "../../test/web_socket_support";
 
 describe("web socket interceptors with a mock handle", () => {
   test("should observe an abort issued by an interceptor before the transport handler starts", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const abortingInterceptor = createWebSocketInterceptor((request, next) => {
       controller.abort(ERR_ABORTED);
@@ -40,11 +35,11 @@ describe("web socket interceptors with a mock handle", () => {
     expect(error).toMatchObject({ code: "NET_ABORTED" });
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
   });
 
   test("should settle a hanging websocket interceptor when externally aborted", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const controller = new AbortController();
     const entered = createDeferred<void>();
     const hangingInterceptor = createWebSocketInterceptor(() => {
@@ -72,11 +67,11 @@ describe("web socket interceptors with a mock handle", () => {
     expect(error).toMatchObject({ code: "NET_ABORTED" });
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
   });
 
   test("should keep the success tuple on generation one when an interceptor returns after reconnect", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const gate = createDeferred<void>();
     let interceptedSession: WebSocketSessionLike | undefined;
     const delayedInterceptor = createWebSocketInterceptor(
@@ -104,11 +99,11 @@ describe("web socket interceptors with a mock handle", () => {
     await vi.waitFor(() =>
       expect(interceptedSession?.connection.generation).toBe(1),
     );
-    const firstSocket = lastMockInstance;
+    const firstSocket = fake.last();
     if (!firstSocket) {
       throw new Error("Expected first socket");
     }
-    firstSocket.triggerClose({ code: 1012, reason: "restart", wasClean: true });
+    firstSocket.peerClose(1012, "restart");
     await vi.waitFor(() =>
       expect(interceptedSession?.connection.generation).toBe(2),
     );
@@ -123,10 +118,7 @@ describe("web socket interceptors with a mock handle", () => {
   });
 
   test("should settle a discarded interceptor session when native close never arrives", async () => {
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ emitCloseEvent: false }),
-    );
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     let discardedSession: WebSocketSessionLike | undefined;
     const replacementSession: WebSocketSessionLike = {
       bufferedAmount: 0,
@@ -154,23 +146,25 @@ describe("web socket interceptors with a mock handle", () => {
       path: "/ws/test",
     });
 
-    const [error, socket] = await run(
-      createClient(
-        withEndpoint("http://localhost"),
-        withInterceptors(interceptor),
+    const { session: socket } = await openSession(
+      run(
+        createClient(
+          withEndpoint("http://localhost"),
+          withInterceptors(interceptor),
+        ),
+        useSocket,
       ),
-      useSocket,
+      fake,
     );
-    expect(error).toBeNull();
     expect(socket).toBe(replacementSession);
     await expect(discardedSession?.closed).resolves.toMatchObject({
       kind: "aborted",
     });
-    expect(lastMockInstance?.close).toHaveBeenCalledTimes(1);
+    expect(fake.last().closeCalls).toHaveLength(1);
   });
 
   test("should preserve an interceptor error after its created session already settled", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const interceptorFailure = new Error("interceptor failed after close");
     const interceptor = createWebSocketInterceptor(async (request, next) => {
       const createdSession = await next(request);
@@ -196,20 +190,11 @@ describe("web socket interceptors with a mock handle", () => {
       code: "EXT_INTERCEPTOR_FAILED",
     });
     expect(socket).toBeUndefined();
-    expect(lastMockInstance?.close).toHaveBeenCalledTimes(1);
+    expect(fake.last().closeCalls).toHaveLength(1);
   });
 
   test("should settle a pending fire-and-forget interceptor session after a successful short circuit", async () => {
-    const constructed = createDeferred<void>();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({
-        autoOpen: false,
-        onListenerRegistered() {
-          constructed.resolve(undefined);
-        },
-      }),
-    );
+    const fake = stubFakeWebSocket({ handshake: "manual" });
     const replacementSession: WebSocketSessionLike = {
       bufferedAmount: 0,
       close() {},
@@ -230,7 +215,7 @@ describe("web socket interceptors with a mock handle", () => {
     const interceptor = createWebSocketInterceptor(async (request, next) => {
       void next(request);
       // next() constructs the socket on a later turn. Return only after it exists.
-      await constructed.promise;
+      await vi.waitFor(() => expect(fake.sockets.length).toBeGreaterThan(0));
       return replacementSession;
     });
     const useSocket = defineWebSocket({
@@ -248,15 +233,16 @@ describe("web socket interceptors with a mock handle", () => {
 
     expect(error).toBeNull();
     expect(socket).toBe(replacementSession);
-    expect(lastMockInstance?.close).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(lastMockInstance?.readyState).toBe(3));
+    expect(fake.last().closeCalls).toHaveLength(1);
+    // Closing a connecting socket fails the connection.
+    fake.last().drop();
     await expect(replacementSession.closed).resolves.toMatchObject({
       kind: "closed",
     });
   });
 
   test("should reject next invoked after a successful interceptor chain settles without constructing a socket", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const fake = stubFakeWebSocket();
     const lateCall = createDeferred<unknown>();
     const replacementSession: WebSocketSessionLike = {
       bufferedAmount: 0,
@@ -306,7 +292,7 @@ describe("web socket interceptors with a mock handle", () => {
       message:
         "WebSocket interceptor next() may not be called after the chain settles",
     });
-    expect(mockInstances).toHaveLength(0);
+    expect(fake.sockets).toHaveLength(0);
     await expect(replacementSession.closed).resolves.toMatchObject({
       kind: "closed",
     });

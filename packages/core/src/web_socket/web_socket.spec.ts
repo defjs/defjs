@@ -15,11 +15,12 @@ import {
 } from "../interceptor";
 import { StructError, struct } from "../struct";
 import {
-  createControllableSocketClass,
-  openControllableSocket,
-} from "../../test/regression/controllable_socket";
+  createFakeWebSocket,
+  openSession,
+  type FakeWebSocket,
+} from "../../test/fake_web_socket";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
-import { useFakeClock } from "../../test/mock_web_socket";
+import { useFakeClock } from "../../test/web_socket_support";
 
 describe("web socket runtime", () => {
   let client: DerivableClient;
@@ -196,7 +197,7 @@ describe("web socket runtime", () => {
 
   test("should support heartbeat with timeout", async () => {
     useFakeClock();
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const useHeartbeatSocket = defineWebSocket({
       incoming: struct.object({
         type: struct.literal("pong"),
@@ -207,9 +208,9 @@ describe("web socket runtime", () => {
     });
     const handled = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
-    const [error, socket] = await openControllableSocket(
+    const { session: socket } = await openSession(
       useHeartbeatSocket(
         handled({
           heartbeat: {
@@ -220,13 +221,8 @@ describe("web socket runtime", () => {
           },
         }),
       ),
-      latest,
+      fake,
     );
-
-    expect(error).toBeNull();
-    if (!socket) {
-      throw new Error("Expected socket");
-    }
 
     let runtimeError: unknown;
     socket.onRuntimeError((err: unknown) => {
@@ -253,7 +249,7 @@ describe("web socket runtime", () => {
 
   test("should mark heartbeat ack when server responds with pong", async () => {
     useFakeClock();
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const useHeartbeatSocket = defineWebSocket({
       incoming: struct.object({
         type: struct.literal("pong"),
@@ -264,9 +260,9 @@ describe("web socket runtime", () => {
     });
     const handled = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
-    const [error, socket] = await openControllableSocket(
+    const { session: socket, socket: native } = await openSession(
       useHeartbeatSocket(
         handled({
           heartbeat: {
@@ -281,22 +277,16 @@ describe("web socket runtime", () => {
           },
         }),
       ),
-      latest,
+      fake,
     );
-    const native = latest();
-
-    expect(error).toBeNull();
-    if (!socket || !native) {
-      throw new Error("Expected socket");
-    }
 
     let runtimeError: unknown;
     socket.onRuntimeError((err: unknown) => {
       runtimeError = err;
     });
     await vi.advanceTimersByTimeAsync(10);
-    expect(JSON.parse(native.sent[0] ?? "")).toEqual({ type: "ping" });
-    native.triggerMessage('{"ok":true,"type":"pong"}');
+    expect(JSON.parse(native.sentText(0))).toEqual({ type: "ping" });
+    native.receive('{"ok":true,"type":"pong"}');
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(1_000);
 
@@ -304,11 +294,7 @@ describe("web socket runtime", () => {
     expect(socket.state).toBe("open");
     const iterator = socket.receive[Symbol.asyncIterator]();
     socket.close(1000, "heartbeat-ok");
-    native.triggerClose({
-      code: 1000,
-      reason: "heartbeat-ok",
-      wasClean: true,
-    });
+    native.peerClose(1000, "heartbeat-ok");
     await expect(socket.closed).resolves.toMatchObject({
       code: 1000,
       reason: "heartbeat-ok",
@@ -1094,7 +1080,7 @@ describe("web socket runtime", () => {
 
   test("encodes heartbeat commands with aliases and consumes the decoded pong as ack", async () => {
     useFakeClock();
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const useProviderSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
       incoming: struct.or(
@@ -1128,9 +1114,9 @@ describe("web socket runtime", () => {
     const acks: Array<{ method: "pong"; reqId: number }> = [];
     const handled = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     );
-    const [error, socket] = await openControllableSocket(
+    const { session: socket, socket: native } = await openSession(
       useProviderSocket(
         handled({
           heartbeat: {
@@ -1155,14 +1141,8 @@ describe("web socket runtime", () => {
         }),
         { key: "provider-heartbeat", mode: "heartbeat" },
       ),
-      latest,
+      fake,
     );
-    const native = latest();
-
-    expect(error).toBeNull();
-    if (!socket || !native) {
-      throw new Error("Expected provider socket");
-    }
 
     const runtimeErrors: unknown[] = [];
     const unsubscribe = socket.onRuntimeError((runtimeError) => {
@@ -1182,7 +1162,7 @@ describe("web socket runtime", () => {
     };
 
     try {
-      native.triggerMessage(JSON.stringify({ channel: "heartbeat" }));
+      native.receive(JSON.stringify({ channel: "heartbeat" }));
       await expect(iterator.next()).resolves.toEqual({
         done: false,
         value: { channel: "heartbeat" },
@@ -1190,7 +1170,7 @@ describe("web socket runtime", () => {
 
       await vi.advanceTimersByTimeAsync(20);
       expect(native.sent).toHaveLength(1);
-      echoProviderPing(native, native.sent[0] ?? "");
+      echoProviderPing(native, native.sentText(0));
       await vi.advanceTimersByTimeAsync(0);
       expect(acks).toEqual([{ method: "pong", reqId: 7 }]);
       await expect(iterator.next()).resolves.toEqual({
@@ -1201,7 +1181,7 @@ describe("web socket runtime", () => {
       // The second ping re-arms the ack deadline. Acknowledge it before advancing past timeoutMs.
       await vi.advanceTimersByTimeAsync(20);
       expect(native.sent).toHaveLength(2);
-      echoProviderPing(native, native.sent[1] ?? "");
+      echoProviderPing(native, native.sentText(1));
       await vi.advanceTimersByTimeAsync(0);
       expect(acks).toEqual([
         { method: "pong", reqId: 7 },
@@ -1218,7 +1198,7 @@ describe("web socket runtime", () => {
     } finally {
       unsubscribe();
       socket.close(1000, "done");
-      native.triggerClose({ code: 1000, reason: "done", wasClean: true });
+      native.peerClose(1000, "done");
       await socket.closed;
     }
   });
@@ -1254,11 +1234,11 @@ describe("web socket runtime", () => {
 });
 
 function echoProviderPing(
-  socket: { triggerMessage(data: unknown): void },
+  socket: Pick<FakeWebSocket, "receive">,
   payload: string,
 ): void {
   const decoded = jsonObject(payload);
-  socket.triggerMessage(
+  socket.receive(
     JSON.stringify({
       method: "wire",
       result: {
@@ -1271,9 +1251,7 @@ function echoProviderPing(
       success: true,
     }),
   );
-  socket.triggerMessage(
-    JSON.stringify({ method: "pong", req_id: decoded["req_id"] }),
-  );
+  socket.receive(JSON.stringify({ method: "pong", req_id: decoded["req_id"] }));
 }
 
 function jsonObject(payload: string): Record<string, unknown> {

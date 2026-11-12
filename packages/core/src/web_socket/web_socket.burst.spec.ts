@@ -7,10 +7,7 @@ import {
   withWebSocketHandle,
 } from "../index";
 import { yieldMacrotask } from "../../test/macrotask";
-import {
-  createControllableSocketClass,
-  openControllableSocket,
-} from "../../test/regression/controllable_socket";
+import { createFakeWebSocket, openSession } from "../../test/fake_web_socket";
 
 const BURST = 100;
 
@@ -22,21 +19,20 @@ describe("WebSocket incoming bursts", () => {
   ])(
     "delivers every message of one synchronous burst when the consumer %s",
     async (_name, microtasks) => {
-      const { Socket, latest } = createControllableSocketClass();
+      const fake = createFakeWebSocket({ handshake: "manual" });
       const open = defineWebSocket({
         incoming: struct.number(),
         path: "/socket",
       });
-      const pending = open(
-        createClient(
-          withEndpoint("https://example.test"),
-          withWebSocketHandle(Socket),
+      const { session, socket } = await openSession(
+        open(
+          createClient(
+            withEndpoint("https://example.test"),
+            withWebSocketHandle(fake.Socket),
+          ),
         ),
+        fake,
       );
-      const [error, session] = await openControllableSocket(pending, latest);
-      expect(error).toBeNull();
-      const socket = latest();
-      if (!session || !socket) throw new Error("Expected open socket");
       const received: number[] = [];
       const consumed = (async () => {
         for await (const value of session.receive) {
@@ -50,9 +46,9 @@ describe("WebSocket incoming bursts", () => {
       })();
       // The native handle delivers a whole read in one task, so the pump cannot run between messages.
       for (let value = 1; value <= BURST; value += 1) {
-        socket.triggerMessage(String(value));
+        socket.receive(String(value));
       }
-      socket.triggerClose({ code: 1000, reason: "done", wasClean: true });
+      socket.peerClose(1000, "done");
 
       await consumed;
       expect(received).toEqual(Array.from({ length: BURST }, (_, i) => i + 1));
@@ -61,21 +57,20 @@ describe("WebSocket incoming bursts", () => {
   );
 
   test("delivers every frame queued behind a Blob that is still being read", async () => {
-    const { Socket, latest } = createControllableSocketClass();
+    const fake = createFakeWebSocket({ handshake: "manual" });
     const open = defineWebSocket({
       incoming: struct.unknown(),
       path: "/socket",
     });
-    const pending = open(
-      createClient(
-        withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket),
+    const { session, socket } = await openSession(
+      open(
+        createClient(
+          withEndpoint("https://example.test"),
+          withWebSocketHandle(fake.Socket),
+        ),
       ),
+      fake,
     );
-    const [error, session] = await openControllableSocket(pending, latest);
-    expect(error).toBeNull();
-    const socket = latest();
-    if (!session || !socket) throw new Error("Expected open socket");
     class GatedBlob extends Blob {
       readonly gate = Promise.withResolvers<ArrayBuffer>();
       override arrayBuffer(): Promise<ArrayBuffer> {
@@ -83,16 +78,16 @@ describe("WebSocket incoming bursts", () => {
       }
     }
     const blob = new GatedBlob();
-    socket.triggerMessage(blob);
+    socket.receive(blob);
     for (let value = 1; value <= BURST; value += 1) {
-      socket.triggerMessage(String(value));
+      socket.receive(String(value));
     }
     // The pump is parked on the Blob while the raw frames pile up behind it.
     await yieldMacrotask();
     expect(session.state).toBe("open");
 
     blob.gate.resolve(new TextEncoder().encode("0").buffer);
-    socket.triggerClose({ code: 1000, reason: "done", wasClean: true });
+    socket.peerClose(1000, "done");
 
     const received: unknown[] = [];
     for await (const value of session.receive) {

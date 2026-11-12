@@ -19,7 +19,7 @@ import { STRUCT } from "../struct/symbols";
 import { DEFINITION } from "../struct/symbols";
 import { decodeWebSocketMessage } from "../web_socket/codec";
 import { defineWebSocket } from "../web_socket/web_socket";
-import { stoppingSocket } from "../../test/stopping_socket";
+import { createFakeWebSocket, refusing } from "../../test/fake_web_socket";
 
 const birthday = new Date("1815-12-10T00:00:00.000Z");
 
@@ -1795,14 +1795,10 @@ describe("outbound request builder", () => {
   });
 
   test("fills websocket path and query", async () => {
-    let url = "";
+    const fake = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.com"),
-      withWebSocketHandle(
-        stoppingSocket((nextUrl) => {
-          url = nextUrl;
-        }),
-      ),
+      withWebSocketHandle(refusing(fake.Socket)),
     );
     const chat = defineWebSocket({
       builder: (input) => ({ path: input, query: { since: "1" } }),
@@ -1818,15 +1814,15 @@ describe("outbound request builder", () => {
     const [openError] = await chat(client, { room: "blue" });
 
     expect(openError?.code.startsWith("NET_")).toBe(true);
-    expect(url).toContain("/ws/rooms/blue?since=1");
+    expect(fake.last().url).toContain("/ws/rooms/blue?since=1");
   });
 
   test("keeps a configured query serializer on websocket objects and skips it for URLSearchParams", async () => {
-    const urls: string[] = [];
+    const fake = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.com"),
       withQuerySerializer(() => "serialized=1"),
-      withWebSocketHandle(stoppingSocket((nextUrl) => urls.push(nextUrl))),
+      withWebSocketHandle(refusing(fake.Socket)),
     );
     const objectQuery = defineWebSocket({
       builder: () => ({ query: { room: "blue" } }),
@@ -1842,9 +1838,9 @@ describe("outbound request builder", () => {
     await objectQuery(client);
     await nativeQuery(client);
 
-    expect(urls[0]).toContain("serialized=1");
-    expect(urls[1]).toContain("room=blue");
-    expect(urls[1]).not.toContain("serialized=1");
+    expect(fake.sockets[0]?.url).toContain("serialized=1");
+    expect(fake.sockets[1]?.url).toContain("room=blue");
+    expect(fake.sockets[1]?.url).not.toContain("serialized=1");
   });
 
   test("fills a path param whose own key is __proto__", () => {
