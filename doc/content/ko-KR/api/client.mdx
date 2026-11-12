@@ -115,13 +115,13 @@ origin 검사는 라이브러리가 만드는 URL에 적용돼요. Fetch는 리�
 
 <ApiSignature name="DerivableClient" />
 
-`createClient`가 돌려주는 루트 클라이언트로, 두 가지 형태예요. 팩토리는 함수이면서 요청 옵션이 없는 `Client`이기도 해서 `getOrder(client, input)`을 바로 쓸 수 있어요. [`RequestOptions`](/ko-KR/api/core/requestoptions-type)를 넣어 호출하면 한 번의 호출에 쓸 평범한 `Client` 값이 나와요. 그 값은 호출할 수 없어서 `client()()`는 컴파일되지 않고 런타임에 `TypeError`를 던져요. 파생은 팩토리에서 한 번만 일어나며 체이닝은 없어요. 타입은 `ReturnType<typeof createClient>` 대신 `DerivableClient`로 쓰세요.
+`createClient`가 돌려주는 루트 클라이언트로, 두 가지 형태예요. 팩토리는 함수이면서 요청 옵션이 없는 `Client`이기도 해서 `getOrder(client, input)`을 바로 쓸 수 있어요. [`RequestOptions`](/ko-KR/api/core/requestoptions-type)를 넣어 호출하면 한 번의 호출에 쓸 평범한 `Client` 값이 나와요. 그 값은 호출할 수 없어서 `client()()`는 컴파일되지 않아요. 파생은 팩토리에서 한 번만 일어나며 체이닝은 없어요. 타입은 `ReturnType<typeof createClient>` 대신 `DerivableClient`로 쓰세요.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client`는 함수가 아니라 값이에요. [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)와 함께 호출하면 하나가 나와요. `client()`와 `client(undefined)`는 요청 옵션을 저장하지 않아요. `client({})`는 빈 스냅샷을 남겨요. 호출은 각 최상위 필드를 한 번 읽어요. `protocols` 배열은 복사돼요. `heartbeat`와 `retry`는 알려진 필드를 복사하고, `retry` 복사에는 `methods` 배열이 포함돼요. 빠진 중첩 블록은 빠진 채로 남아요. `signal`, `beforeConnect`, 콜백은 동일성을 유지해요. 캡처된 필드의 getter는 그 호출 동안 실행되고, throw하면 그 호출 밖으로 나가요. 파생은 I/O를 하지 않아요. 클라이언트 값은 호출할 수 없고, 호출하면 컴파일되지 않으며 런타임에 `TypeError`를 던져요. 호출마다 클라이언트 값을 만드세요. 같은 값을 여러 작업에 넘길 수 있지만, `signal`이 담긴 값을 재사용하면 그 신호를 공유해요. `signal`은 합치지 않아요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 팩토리의 기본 설정은 계속 공유되고, 얼려지지 않아요. 표준 `with*` 헬퍼는 적용될 때 자신이 가진 고정 레코드를 복사해요.
+`Client`는 함수가 아니라 값이에요. [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)와 함께 호출하면 하나가 나와요. `client()`와 `client(undefined)`는 요청 옵션을 저장하지 않아요. `client({})`는 빈 스냅샷을 남겨요. 호출은 각 최상위 필드를 한 번 읽어요. `protocols` 배열은 복사돼요. `heartbeat`와 `retry`는 알려진 필드를 복사하고, `retry` 복사에는 `methods` 배열이 포함돼요. 빠진 중첩 블록은 빠진 채로 남아요. `signal`, `beforeConnect`, 콜백은 동일성을 유지해요. 캡처된 필드의 getter는 그 호출 동안 실행되고, throw하면 그 호출 밖으로 나가요. 파생은 I/O를 하지 않아요. 클라이언트 값은 호출할 수 없고, 호출하면 컴파일되지 않아요. 호출마다 클라이언트 값을 만드세요. 같은 값을 여러 작업에 넘길 수 있지만, `signal`이 담긴 값을 재사용하면 그 신호를 공유해요. `signal`은 합치지 않아요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 팩토리의 기본 설정은 계속 공유되고, 얼려지지 않아요. 표준 `with*` 헬퍼는 적용될 때 자신이 가진 고정 레코드를 복사해요.
 
 팩토리를 React 상태 설정자에 넘기지 마세요 (`setState(factory)`는 업데이터로 호출해요). Vue `watch`나 `computed`의 소스로 쓰지 마세요 (그 API는 함수를 호출해요).
 

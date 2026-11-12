@@ -115,13 +115,13 @@ Fetch（HTTP/SSE）または WebSocket コンストラクタを差し替えま�
 
 <ApiSignature name="DerivableClient" />
 
-`createClient` が返すルートのクライアントで、2 つの形を持ちます。ファクトリは関数であり、リクエストオプションを持たない `Client` でもあるため、`getOrder(client, input)` をそのまま呼べます。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、1 回の呼び出し用のプレーンな `Client` 値が返ります。その値は呼び出せないため、`client()()` はコンパイルに失敗し、実行時には `TypeError` を投げます。派生はファクトリから 1 回だけ行い、連鎖はありません。型は `ReturnType<typeof createClient>` ではなく `DerivableClient` と書いてください。
+`createClient` が返すルートのクライアントで、2 つの形を持ちます。ファクトリは関数であり、リクエストオプションを持たない `Client` でもあるため、`getOrder(client, input)` をそのまま呼べます。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、1 回の呼び出し用のプレーンな `Client` 値が返ります。その値は呼び出せないため、`client()()` はコンパイルに失敗します。派生はファクトリから 1 回だけ行い、連鎖はありません。型は `ReturnType<typeof createClient>` ではなく `DerivableClient` と書いてください。
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。`client()` と `client(undefined)` はリクエストオプションを保存しません。`client({})` は空のスナップショットを残します。呼び出しは各トップレベルフィールドを一度だけ読みます。`protocols` 配列はコピーされます。`heartbeat` と `retry` は既知のフィールドをコピーし、`retry` のコピーには `methods` 配列が含まれます。欠けている入れ子ブロックは欠けたままです。`signal`、`beforeConnect`、コールバックは同一性を保ちます。キャプチャしたフィールドの getter はこの呼び出しの間に実行され、throw した場合はその呼び出しから外へ伝わります。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗し、実行時には `TypeError` を投げます。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`signal` を持つ値を再利用するとそのシグナルを共有します。`signal` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。ファクトリの基底設定は共有されたままで、凍結されません。標準の `with*` ヘルパーは、適用されるときに自分が持つ固定レコードをコピーします。
+`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。`client()` と `client(undefined)` はリクエストオプションを保存しません。`client({})` は空のスナップショットを残します。呼び出しは各トップレベルフィールドを一度だけ読みます。`protocols` 配列はコピーされます。`heartbeat` と `retry` は既知のフィールドをコピーし、`retry` のコピーには `methods` 配列が含まれます。欠けている入れ子ブロックは欠けたままです。`signal`、`beforeConnect`、コールバックは同一性を保ちます。キャプチャしたフィールドの getter はこの呼び出しの間に実行され、throw した場合はその呼び出しから外へ伝わります。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗します。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`signal` を持つ値を再利用するとそのシグナルを共有します。`signal` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。ファクトリの基底設定は共有されたままで、凍結されません。標準の `with*` ヘルパーは、適用されるときに自分が持つ固定レコードをコピーします。
 
 ファクトリを React の state setter に渡さないでください（`setState(factory)` は updater としてそれを呼びます）。Vue の `watch` や `computed` のソースにも使わないでください（それらは関数を呼びます）。
 

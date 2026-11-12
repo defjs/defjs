@@ -115,13 +115,13 @@ origin 檢查覆蓋函式庫建構出嚟嘅 URL。Fetch 自己跟住 redirect，
 
 <ApiSignature name="DerivableClient" />
 
-`createClient` 回傳嘅根 client，有兩種形態。factory 係一個函式，同時亦係一個冇 request options 嘅 `Client`，所以 `getOrder(client, input)` 可以直接用。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 呼叫佢，會回傳一個只供單次呼叫用嘅普通 `Client` 值。嗰個值唔可以呼叫，所以 `client()()` 無法編譯，runtime 亦會 throw `TypeError`。派生只喺 factory 做一次，冇鏈式。寫型別時用 `DerivableClient`，唔好寫 `ReturnType<typeof createClient>`。
+`createClient` 回傳嘅根 client，有兩種形態。factory 係一個函式，同時亦係一個冇 request options 嘅 `Client`，所以 `getOrder(client, input)` 可以直接用。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 呼叫佢，會回傳一個只供單次呼叫用嘅普通 `Client` 值。嗰個值唔可以呼叫，所以 `client()()` 無法編譯。派生只喺 factory 做一次，冇鏈式。寫型別時用 `DerivableClient`，唔好寫 `ReturnType<typeof createClient>`。
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` 係一個值，唔係函式。用 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 配 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 呼叫，就會得到一個。`client()` 同 `client(undefined)` 唔會保存 request options。`client({})` 保留一份空 snapshot。呢次呼叫每個頂層欄位只讀一次。`protocols` array 會被複製。`heartbeat` 同 `retry` 會複製各自嘅已知欄位，而 `retry` 嘅副本包括佢嘅 `methods` array。缺失嘅巢狀區塊仍然缺失。`signal`、`beforeConnect` 同 callback 保持原來嘅 identity。被捕獲欄位上面嘅 getter 喺呢次呼叫期間執行；如果 throw，異常會離開呢次呼叫。派生唔會做 I/O。Client 值唔可以呼叫，呼叫佢無法編譯，runtime 亦會 throw `TypeError`。每次呼叫建立一個 client 值。同一個值可以傳俾好多操作，但重用帶有 `signal` 嘅值會共用嗰個 signal。`signal` 唔會合併；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。factory 嘅 base 設定仍然共用，亦唔會 freeze。標準 `with*` 輔助函式喺套用時複製佢哋擁有嘅固定 record。
+`Client` 係一個值，唔係函式。用 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 配 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 呼叫，就會得到一個。`client()` 同 `client(undefined)` 唔會保存 request options。`client({})` 保留一份空 snapshot。呢次呼叫每個頂層欄位只讀一次。`protocols` array 會被複製。`heartbeat` 同 `retry` 會複製各自嘅已知欄位，而 `retry` 嘅副本包括佢嘅 `methods` array。缺失嘅巢狀區塊仍然缺失。`signal`、`beforeConnect` 同 callback 保持原來嘅 identity。被捕獲欄位上面嘅 getter 喺呢次呼叫期間執行；如果 throw，異常會離開呢次呼叫。派生唔會做 I/O。Client 值唔可以呼叫，呼叫佢無法編譯。每次呼叫建立一個 client 值。同一個值可以傳俾好多操作，但重用帶有 `signal` 嘅值會共用嗰個 signal。`signal` 唔會合併；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。factory 嘅 base 設定仍然共用，亦唔會 freeze。標準 `with*` 輔助函式喺套用時複製佢哋擁有嘅固定 record。
 
 唔好將 factory 傳俾 React state setter（`setState(factory)` 會將佢當 updater 嚟呼叫），亦唔好將佢做 Vue `watch` 或者 `computed` 嘅 source（嗰啲會呼叫函式）。
 

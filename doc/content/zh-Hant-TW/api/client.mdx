@@ -115,13 +115,13 @@ origin 檢查涵蓋函式庫所建立的 URL。Fetch 自己會跟隨重新導向
 
 <ApiSignature name="DerivableClient" />
 
-`createClient` 回傳的根 client，有兩種形態。factory 是一個函式，同時也是不帶 request options 的 `Client`，所以 `getOrder(client, input)` 可直接使用。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫它，會回傳供單次呼叫使用的一般 `Client` 值。該值不可呼叫，因此 `client()()` 無法編譯，執行時會拋出 `TypeError`。衍生只發生一次，起點是 factory，沒有鏈式呼叫。型別請寫成 `DerivableClient`，不要寫 `ReturnType<typeof createClient>`。
+`createClient` 回傳的根 client，有兩種形態。factory 是一個函式，同時也是不帶 request options 的 `Client`，所以 `getOrder(client, input)` 可直接使用。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫它，會回傳供單次呼叫使用的一般 `Client` 值。該值不可呼叫，因此 `client()()` 無法編譯。衍生只發生一次，起點是 factory，沒有鏈式呼叫。型別請寫成 `DerivableClient`，不要寫 `ReturnType<typeof createClient>`。
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` 是一個值，不是函式。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 就會得到一個。`client()` 與 `client(undefined)` 不儲存任何 request options。`client({})` 保留一份空快照。這次呼叫會把每個頂層欄位讀一次。`protocols` 陣列會被複製。`heartbeat` 與 `retry` 會複製各自已知的欄位，而且 `retry` 的複本包含它的 `methods` 陣列。缺少的巢狀區塊仍然保持缺少。`signal`、`beforeConnect` 與 callback 保持原本的身份。被複製欄位上的 getter 會在該次呼叫期間執行；若它拋出例外，例外會離開該次呼叫。衍生不會進行 I/O。Client 值不可呼叫，呼叫它會在編譯時失敗，並在執行時拋出 `TypeError`。請為每次呼叫建立一個 client 值。同一個值可以傳給許多操作，但重複使用帶有 `signal` 的值會共用該 signal。`signal` 不會合併；請在應用程式碼中用 `AbortSignal.any` 組合。factory 的基礎設定仍然共用，也不會凍結。標準的 `with*` 輔助函式會在套用時複製它們擁有的固定 record。
+`Client` 是一個值，不是函式。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 就會得到一個。`client()` 與 `client(undefined)` 不儲存任何 request options。`client({})` 保留一份空快照。這次呼叫會把每個頂層欄位讀一次。`protocols` 陣列會被複製。`heartbeat` 與 `retry` 會複製各自已知的欄位，而且 `retry` 的複本包含它的 `methods` 陣列。缺少的巢狀區塊仍然保持缺少。`signal`、`beforeConnect` 與 callback 保持原本的身份。被複製欄位上的 getter 會在該次呼叫期間執行；若它拋出例外，例外會離開該次呼叫。衍生不會進行 I/O。Client 值不可呼叫，呼叫它會在編譯時失敗。請為每次呼叫建立一個 client 值。同一個值可以傳給許多操作，但重複使用帶有 `signal` 的值會共用該 signal。`signal` 不會合併；請在應用程式碼中用 `AbortSignal.any` 組合。factory 的基礎設定仍然共用，也不會凍結。標準的 `with*` 輔助函式會在套用時複製它們擁有的固定 record。
 
 不要把 factory 傳給 React 的 state setter（`setState(factory)` 會把它當成 updater 呼叫），也不要當成 Vue 的 `watch` 或 `computed` 來源（它們會呼叫函式）。
 

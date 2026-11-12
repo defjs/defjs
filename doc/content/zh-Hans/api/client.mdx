@@ -115,13 +115,13 @@ description: createClient、选项辅助函数，以及 Client 类型。
 
 <ApiSignature name="DerivableClient" />
 
-`createClient` 返回的根 Client，有两种形态。工厂是一个函数，同时也是不带请求选项的 `Client`，所以 `getOrder(client, input)` 可以直接使用。用 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 调用它，会返回仅供单次调用的普通 `Client` 值。该值不可调用，因此 `client()()` 无法通过编译，运行时会抛出 `TypeError`。派生只从工厂发生一次，没有链式调用。类型请写成 `DerivableClient`，不要写 `ReturnType<typeof createClient>`。
+`createClient` 返回的根 Client，有两种形态。工厂是一个函数，同时也是不带请求选项的 `Client`，所以 `getOrder(client, input)` 可以直接使用。用 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 调用它，会返回仅供单次调用的普通 `Client` 值。该值不可调用，因此 `client()()` 无法通过编译。派生只从工厂发生一次，没有链式调用。类型请写成 `DerivableClient`，不要写 `ReturnType<typeof createClient>`。
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` 是一个值，不是函数。调用 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type) 并传入 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 会得到一个。`client()` 和 `client(undefined)` 不保存请求选项。`client({})` 保留空快照。该调用会把每个顶层字段读取一次。`protocols` 数组会被复制。`heartbeat` 和 `retry` 复制各自的已知字段，`retry` 的副本包含它的 `methods` 数组。缺失的嵌套块保持缺失。`signal`、`beforeConnect` 和回调保持自身身份。被捕获字段上的 getter 会在该调用期间运行；如果它抛出异常，异常会离开该调用。派生不执行 I/O。Client 值不可调用，调用它无法通过编译，运行时会抛出 `TypeError`。每次调用创建一个 Client 值。同一个值可以传给多个操作，但复用携带 `signal` 的值会共享该 signal。`signal` 不会自动组合；要组合 signal，请在应用代码中使用 `AbortSignal.any`。工厂的基础配置仍然共享，不会被冻结。标准 `with*` 辅助函数被应用时会复制它们拥有的固定记录。
+`Client` 是一个值，不是函数。调用 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type) 并传入 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 会得到一个。`client()` 和 `client(undefined)` 不保存请求选项。`client({})` 保留空快照。该调用会把每个顶层字段读取一次。`protocols` 数组会被复制。`heartbeat` 和 `retry` 复制各自的已知字段，`retry` 的副本包含它的 `methods` 数组。缺失的嵌套块保持缺失。`signal`、`beforeConnect` 和回调保持自身身份。被捕获字段上的 getter 会在该调用期间运行；如果它抛出异常，异常会离开该调用。派生不执行 I/O。Client 值不可调用，调用它无法通过编译。每次调用创建一个 Client 值。同一个值可以传给多个操作，但复用携带 `signal` 的值会共享该 signal。`signal` 不会自动组合；要组合 signal，请在应用代码中使用 `AbortSignal.any`。工厂的基础配置仍然共享，不会被冻结。标准 `with*` 辅助函数被应用时会复制它们拥有的固定记录。
 
 不要把工厂传给 React 状态设置函数（`setState(factory)` 会把它当作更新函数调用），也不要把它用作 Vue `watch` 或 `computed` 的来源（那些 API 会调用函数）。
 

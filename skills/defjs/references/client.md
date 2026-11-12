@@ -36,7 +36,7 @@ export const client = createClient(
 
 1. It **is** a `Client` with no per-call options, so you can pass it directly: `getOrder(client, { id: 1 })`.
 2. It is **callable** with `RequestOptions` to derive a single-call `Client` value: `getOrder(client({ signal }), { id: 1 })`.
-3. Calling `client(options)` performs **no I/O** and returns a plain, **non-callable** `Client` value (`client()()` fails to compile and throws a `TypeError` at runtime).
+3. Calling `client(options)` performs **no I/O** and returns a plain, **non-callable** `Client` value (`client()()` fails to compile).
 
 ```ts
 // Incorrect: sharing a derived client that holds a single-request signal
