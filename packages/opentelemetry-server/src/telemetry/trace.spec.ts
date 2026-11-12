@@ -61,7 +61,6 @@ describe("trace helpers", () => {
     expect(spans).toHaveLength(1);
     expect(spans[0]?.name).toBe("POST");
     expect(spans[0]?.kind).toBe(SpanKind.CLIENT);
-    expect(spans[0]?.attributes["http.request.method"]).toBe("POST");
     expect(spans[0]?.attributes["url.full"]).toBe(
       "https://api.example.com/test",
     );
@@ -129,11 +128,7 @@ describe("trace helpers", () => {
         .mocked(method(tracer, "startSpan"))
         .mock.calls.map((call) => call[1]?.attributes),
     ).toEqual([
-      {
-        "app.tenant": "http",
-        "http.request.method": "POST",
-        "url.full": "https://tenant.example/http",
-      },
+      { "app.tenant": "http", "url.full": "https://tenant.example/http" },
       { "app.tenant": "sse", "url.full": "https://tenant.example/sse" },
       { "app.tenant": "webSocket", "url.full": "wss://tenant.example/socket" },
     ]);
@@ -170,7 +165,7 @@ describe("trace helpers", () => {
 
     expect(
       vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
-    ).toEqual({ "http.request.method": "GET", "url.full": 5 });
+    ).toEqual({ "url.full": 5 });
   });
 
   test("resolveStartSpanHook returns synchronous application attributes", () => {

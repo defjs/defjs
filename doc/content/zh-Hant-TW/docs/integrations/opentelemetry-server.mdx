@@ -30,7 +30,7 @@ description: 為伺服器端應用程式 client 的 SDK 呼叫加上遙測，同
   </Tab>
 </Tabs>
 
-- **span 命名規範**：設定 `operation` 後，span 名稱會成為 `GET orders.read`、`SSE orders.watch` 與 `WebSocket orders.connect`，並帶有 `defjs.operation` 屬性。若未設定 `operation`，span 名稱會退回使用 HTTP 方法、`SSE` 或 `WebSocket`。
+- **span 命名規範**：設定 `operation` 後，span 名稱會成為 `GET orders.read`、`SSE orders.watch` 與 `WebSocket orders.connect`，並帶有 `defjs.operation` 屬性。若未設定 `operation`，span 名稱會退回使用 HTTP 方法、`SSE` 或 `WebSocket`。span 名稱中的 HTTP 方法是正規化後的 `http.request.method`；該值為 `_OTHER` 時使用 `HTTP`。
 - **獨立運作的訊號（Signals）**：`tracer`、`meter` 與 `logger` 皆為選用且彼此獨立運作：
   - 省略 `tracer` 可停用本機 span 建立與 span 鉤子，但仍可記錄 Metrics、日誌與出站脈絡傳播（Context propagation）。
   - 省略 `meter` 可停用套件內建的指標度量。
@@ -81,7 +81,7 @@ description: 為伺服器端應用程式 client 的 SDK 呼叫加上遙測，同
 - **SSE**：一個邏輯串流（包含自動重連）產生一個 span，直到 `stream.closed` 確定為止都保持開啟。記錄的事件：`sse.connected`，之後是 `sse.closed`、`sse.aborted`（`stream.close()` 或非逾時的呼叫端中止；span 狀態維持未設定），或 `sse.error`（以 `ERROR` 結束，包含逾時形式的呼叫端中止）。Span 屬性 `url.full`、`server.address` 與 `server.port` 描述的是第一次連線；重連到另一個端點不會改變它們。
 - **WebSocket**：一個邏輯工作階段（包含自動重連）產生一個 span，直到 `session.closed` 確定為止。記錄的事件：`websocket.connected`、`websocket.closed`、`websocket.error`。伺服器關閉訊框（任何代碼）都會記錄 `websocket.closed` 並結束 span，不設定其狀態；呼叫端中止則以 `ERROR` 結束 span 並記錄 `websocket.error`，不產生日誌，但中止原因為 `TimeoutError` 時例外，會輸出一條 `WARN`。沒有關閉訊框的突發斷線（`1006`）在每個執行環境都會以 `ERROR` 與一條日誌結束。與 SSE 一樣，`url.full`、`server.address` 與 `server.port` 描述第一次連線，重連到另一個端點時不會改變。`url.full` 使用連線 URL 的 `ws:` 或 `wss:` 形式。
 
-`server.address` 是解析後 URL 的主機；IPv6 字面值會保留方括號，與 `URL.hostname` 和 `Host` 標頭相同。`server.port` 是明確寫出的連接埠，URL 沒有連接埠時則是 scheme 的預設值：`http:` 與 `ws:` 為 80，`https:` 與 `wss:` 為 443。SSE 與 WebSocket 的 span 也帶有 `http.request.method`：SSE 是請求方法，WebSocket 是 `GET`（開啟交握的方法）。不屬於 RFC 9110 方法、`PATCH` 或 `QUERY` 的方法會記成 `_OTHER`，原方法則放在 `http.request.method_original`。
+`server.address` 是解析後 URL 的主機；IPv6 字面值會保留方括號，與 `URL.hostname` 和 `Host` 標頭相同。`server.port` 是明確寫出的連接埠，URL 沒有連接埠時則是 scheme 的預設值：`http:` 與 `ws:` 為 80，`https:` 與 `wss:` 為 443。每個 span 也帶有 `http.request.method`：HTTP 與 SSE 是請求方法，WebSocket 是 `GET`（開啟交握的方法）。不屬於 RFC 9110 方法、`PATCH` 或 `QUERY` 的方法會記成 `_OTHER`，原方法則放在 `http.request.method_original`。Fetch 以大寫送出的方法（`DELETE`、`GET`、`HEAD`、`OPTIONS`、`POST`、`PUT`）會以大寫記錄，兩者不同時原方法保留在 `http.request.method_original`。`http.client.request.duration` 指標與 HTTP 日誌紀錄帶有同一個正規化後的 `http.request.method`。
 
 ### 重試與重連邊界
 

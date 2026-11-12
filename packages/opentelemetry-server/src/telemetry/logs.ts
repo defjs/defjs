@@ -5,7 +5,7 @@ import { diag } from "@opentelemetry/api";
 import type { Logger, LogAttributes } from "@opentelemetry/api-logs";
 import { SeverityNumber } from "@opentelemetry/api-logs";
 import { createServerMetricAttributes } from "./metrics";
-import { getErrorType } from "./trace";
+import { getErrorType, normalizeHttpMethod } from "./trace";
 
 const CLIENT_EXCEPTIONS = {
   http: {
@@ -67,7 +67,7 @@ export function emitClientException(
       "exception.type": getErrorType(error),
     };
     if (transport === "http")
-      attributes["http.request.method"] = request.method;
+      attributes["http.request.method"] = normalizeHttpMethod(request.method);
     const closeCode = details.closeInfo?.code;
     if (transport === "sse" && typeof closeCode === "string")
       attributes["defjs.sse.fault.code"] = closeCode;

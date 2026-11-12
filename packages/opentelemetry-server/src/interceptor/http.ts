@@ -17,6 +17,8 @@ import {
 } from "../telemetry/metrics";
 import {
   createHttpSpan,
+  httpMethodAttributes,
+  normalizeHttpMethod,
   resolveStartSpanHook,
   runSpanHook,
   setSpanError,
@@ -64,16 +66,18 @@ export function createOpenTelemetryHttpInterceptor(
       headersGetter,
     );
     const resolved = resolveHttpUrl(req.endpoint, req.baseEndpoint);
+    const method = normalizeHttpMethod(req.method);
     let span: Span | undefined;
     if (tracer) {
       const startSpanHookResult = resolveStartSpanHook(startSpanHook, req);
       span = createHttpSpan(
         tracer,
-        req.method,
+        method,
         resolved.url,
         parentCtx,
         req.operation,
         {
+          ...httpMethodAttributes(req.method, method),
           ...serverAttributes(resolved),
           ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
         },
@@ -107,7 +111,7 @@ export function createOpenTelemetryHttpInterceptor(
 
       metrics?.requestDuration.record(
         durationS,
-        createHttpMetricAttributes(req, response),
+        createHttpMetricAttributes(req, method, response),
       );
 
       return response;
@@ -125,7 +129,7 @@ export function createOpenTelemetryHttpInterceptor(
       if (span) setSpanError(span, error);
       metrics?.requestDuration.record(
         durationS,
-        createHttpMetricAttributes(req, undefined, error),
+        createHttpMetricAttributes(req, method, undefined, error),
       );
 
       throw error;

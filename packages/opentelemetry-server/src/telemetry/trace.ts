@@ -47,19 +47,32 @@ const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * `http.request.method` for a span of a request sent through Fetch: the method as it goes on the wire,
- * or `_OTHER` when it is not a known method, with the method as given in `http.request.method_original`
- * whenever the two differ.
+ * `http.request.method` of a request sent through Fetch: the method as it goes on the wire, or
+ * `_OTHER` when that is not a known method.
  */
-export function httpMethodAttributes(method: string): Attributes {
+export function normalizeHttpMethod(method: string): string {
+  if (KNOWN_HTTP_METHODS.has(method)) return method;
   const upper = method.toUpperCase();
-  const sent = FETCH_NORMALIZED_METHODS.has(upper) ? upper : method;
-  const value = KNOWN_HTTP_METHODS.has(sent) ? sent : "_OTHER";
-  return value === method
-    ? { "http.request.method": value }
-    : { "http.request.method": value, "http.request.method_original": method };
+  return FETCH_NORMALIZED_METHODS.has(upper) ? upper : "_OTHER";
 }
 
+/**
+ * The span attributes for a request method: the normalized `http.request.method`, with the method
+ * as given in `http.request.method_original` whenever the two differ.
+ */
+export function httpMethodAttributes(
+  method: string,
+  normalized: string = normalizeHttpMethod(method),
+): Attributes {
+  return normalized === method
+    ? { "http.request.method": normalized }
+    : {
+        "http.request.method": normalized,
+        "http.request.method_original": method,
+      };
+}
+
+/** `method` is the normalized one; a span of an unknown method is named `HTTP`. */
 export function createHttpSpan(
   tracer: Tracer,
   method: string,
@@ -68,13 +81,13 @@ export function createHttpSpan(
   operation?: string,
   startAttributes?: Attributes,
 ): Span {
+  const name = method === "_OTHER" ? "HTTP" : method;
   return tracer.startSpan(
-    operation ? `${method} ${operation}` : method,
+    operation ? `${name} ${operation}` : name,
     {
       kind: SpanKind.CLIENT,
       attributes: withRedactedUrl({
         ...(operation ? { "defjs.operation": operation } : {}),
-        "http.request.method": method,
         "url.full": url,
         ...startAttributes,
       }),

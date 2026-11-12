@@ -326,6 +326,65 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     expect(spans[0]?.name).toBe("GET");
   });
 
+  test.each([
+    ["GET", "GET", { "http.request.method": "GET" }],
+    [
+      "get",
+      "GET",
+      { "http.request.method": "GET", "http.request.method_original": "get" },
+    ],
+    [
+      "PROPFIND",
+      "HTTP",
+      {
+        "http.request.method": "_OTHER",
+        "http.request.method_original": "PROPFIND",
+      },
+    ],
+  ])(
+    "normalizes http.request.method on the span, the metric and the log for method %s",
+    async (requestMethod, name, expected) => {
+      const { tracer, spans } = createMockTracer();
+      const { logger, records } = createMockLogger();
+      const metrics = createMockMetrics();
+      const interceptor = createOpenTelemetryHttpInterceptor({
+        tracer,
+        logger,
+        metrics,
+        propagator: mockPropagator,
+      });
+      const error = new TypeError("connection failed");
+
+      await expect(
+        interceptor.fn({ ...makeHttpRequest(), method: requestMethod }, () =>
+          Promise.reject(error),
+        ),
+      ).rejects.toBe(error);
+
+      expect(spans[0]?.name).toBe(name);
+      expect(
+        vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+      ).toEqual({
+        ...expected,
+        "server.address": "api.example.com",
+        "server.port": 443,
+        "url.full": "https://api.example.com/test",
+      });
+      expect(metrics.requestDuration.record).toHaveBeenCalledWith(
+        expect.any(Number),
+        {
+          "http.request.method": expected["http.request.method"],
+          "server.address": "api.example.com",
+          "server.port": 443,
+          "error.type": "TypeError",
+        },
+      );
+      expect(records[0]?.attributes?.["http.request.method"]).toBe(
+        expected["http.request.method"],
+      );
+    },
+  );
+
   test("should set span attributes", async () => {
     const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({

@@ -30,7 +30,7 @@ SDK 정의(`defineRequest`, `defineEventStream`, `defineWebSocket`)에 카디널
   </Tab>
 </Tabs>
 
-- **Span 이름 지정**: `operation`이 설정되면 span 이름은 `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`가 되며 `defjs.operation` 속성을 포함합니다. `operation`이 지정되지 않은 경우 HTTP 메서드, `SSE`, `WebSocket`으로 폴백됩니다.
+- **Span 이름 지정**: `operation`이 설정되면 span 이름은 `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`가 되며 `defjs.operation` 속성을 포함합니다. `operation`이 지정되지 않은 경우 HTTP 메서드, `SSE`, `WebSocket`으로 폴백됩니다. span 이름의 HTTP 메서드는 정규화된 `http.request.method`이며, 그 값이 `_OTHER`이면 `HTTP`가 됩니다.
 - **독립적인 신호(Signals)**: `tracer`, `meter`, `logger`는 모두 선택 사항이며 각각 독립적으로 동작합니다:
   - `tracer`를 생략하면 로컬 span 생성과 span 훅이 비활성화되지만, 메트릭, 로그, 아웃바운드 컨텍스트 전파는 계속 기록됩니다.
   - `meter`를 생략하면 패키지 메트릭이 비활성화됩니다.
@@ -81,7 +81,7 @@ SDK 정의(`defineRequest`, `defineEventStream`, `defineWebSocket`)에 카디널
 - **SSE**: 자동 재연결을 포함한 하나의 논리적 스트림이 `stream.closed`가 해결될 때까지 열려 있는 하나의 span을 생성합니다. 기록되는 이벤트: `sse.connected`, 이어서 `sse.closed`, `sse.aborted`(`stream.close()` 또는 타임아웃이 아닌 호출자 abort의 경우이며 span 상태는 설정되지 않은 채로 유지), 또는 `sse.error`(타임아웃 형태의 호출자 abort를 포함하여 `ERROR`로 종료). span 속성 `url.full`, `server.address`, `server.port`는 첫 번째 연결을 나타내며, 다른 엔드포인트로 재연결해도 바뀌지 않습니다.
 - **WebSocket**: 자동 재연결을 포함한 하나의 논리적 세션이 `session.closed`가 해결될 때까지 하나의 span을 유지합니다. 기록되는 이벤트: `websocket.connected`, `websocket.closed`, `websocket.error`. 서버의 종료 프레임(모든 코드)은 `websocket.closed`를 기록하고 상태를 설정하지 않은 채 span을 종료합니다. 호출자 abort는 span을 `ERROR`로 종료하고 `websocket.error`를 기록하며 로그를 남기지 않지만, abort 사유가 `TimeoutError`일 때는 예외로 `WARN` 하나를 남깁니다. 종료 프레임 없는 비정상 단절(`1006`)은 모든 런타임에서 로그 하나와 함께 `ERROR`로 종료됩니다. SSE와 마찬가지로 `url.full`, `server.address`, `server.port`는 첫 번째 연결을 나타내며 다른 엔드포인트로 재연결해도 바뀌지 않습니다. `url.full`은 연결 URL의 `ws:` 또는 `wss:` 형태를 사용합니다.
 
-`server.address`는 해석된 URL의 호스트입니다. IPv6 리터럴은 `URL.hostname`과 `Host` 헤더처럼 대괄호를 유지합니다. `server.port`는 명시된 포트이거나, URL에 포트가 없으면 스킴 기본값입니다. `http:`와 `ws:`는 80, `https:`와 `wss:`는 443입니다. SSE와 WebSocket span은 `http.request.method`도 담습니다. SSE는 요청 메서드이고, WebSocket은 여는 핸드셰이크의 메서드인 `GET`입니다. RFC 9110 메서드, `PATCH`, `QUERY` 중 하나가 아닌 메서드는 `_OTHER`로 기록되고, 주어진 메서드는 `http.request.method_original`에 담깁니다.
+`server.address`는 해석된 URL의 호스트입니다. IPv6 리터럴은 `URL.hostname`과 `Host` 헤더처럼 대괄호를 유지합니다. `server.port`는 명시된 포트이거나, URL에 포트가 없으면 스킴 기본값입니다. `http:`와 `ws:`는 80, `https:`와 `wss:`는 443입니다. 모든 span은 `http.request.method`도 담습니다. HTTP와 SSE는 요청 메서드이고, WebSocket은 여는 핸드셰이크의 메서드인 `GET`입니다. RFC 9110 메서드, `PATCH`, `QUERY` 중 하나가 아닌 메서드는 `_OTHER`로 기록되고, 주어진 메서드는 `http.request.method_original`에 담깁니다. Fetch가 대문자로 보내는 메서드(`DELETE`, `GET`, `HEAD`, `OPTIONS`, `POST`, `PUT`)는 대문자로 기록되고, 둘이 다르면 주어진 메서드는 `http.request.method_original`에 남습니다. `http.client.request.duration` 메트릭과 HTTP 로그 레코드도 동일하게 정규화된 `http.request.method`를 담습니다.
 
 ### 재시도 및 재연결 경계
 

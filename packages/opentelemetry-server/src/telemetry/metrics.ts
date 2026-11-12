@@ -105,12 +105,13 @@ export function durationSeconds(
 
 export function createHttpMetricAttributes(
   req: HttpRequest,
+  method: string,
   response?: HttpResponse<unknown>,
   error?: unknown,
 ): Attributes {
   const attributes: Attributes = {
     ...createServerMetricAttributes(req),
-    "http.request.method": req.method,
+    "http.request.method": method,
   };
 
   const errorType = response

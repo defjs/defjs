@@ -84,7 +84,7 @@ describe("metrics helpers", () => {
 
   test("createHttpMetricAttributes includes status when response is present", () => {
     expect(
-      createHttpMetricAttributes(makeHttpRequest(), makeHttpResponse()),
+      createHttpMetricAttributes(makeHttpRequest(), "GET", makeHttpResponse()),
     ).toEqual({
       "http.request.method": "GET",
       "http.response.status_code": 200,
@@ -97,7 +97,7 @@ describe("metrics helpers", () => {
     "createHttpMetricAttributes classifies client error status %i",
     (status) => {
       expect(
-        createHttpMetricAttributes(makeHttpRequest(), {
+        createHttpMetricAttributes(makeHttpRequest(), "GET", {
           ...makeHttpResponse(),
           status,
         }),
@@ -114,7 +114,7 @@ describe("metrics helpers", () => {
   test("createHttpMetricAttributes omits both status and error type for a status-0 response", () => {
     // Transport failures are faults now, so status 0 carries no failure to report.
     expect(
-      createHttpMetricAttributes(makeHttpRequest(), {
+      createHttpMetricAttributes(makeHttpRequest(), "GET", {
         ...makeHttpResponse(),
         status: 0,
       }),
@@ -129,6 +129,7 @@ describe("metrics helpers", () => {
     expect(
       createHttpMetricAttributes(
         makeHttpRequest(),
+        "GET",
         undefined,
         new TypeError("boom"),
       ),
