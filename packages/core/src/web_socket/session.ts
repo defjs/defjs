@@ -61,6 +61,8 @@ export interface SessionConfig {
   readonly callerSignal: AbortSignal | undefined;
   /** Aborted with the final result when the session ends. */
   readonly controller: AbortController;
+  /** Stops the call's scope following the caller's signal. The session calls it when it ends. */
+  readonly release: () => void;
   /** The call's signal combined with the interceptor's. The session ends when it aborts. */
   readonly signal: AbortSignal;
   /** The balancer's pick for the attempt about to start. `undefined` once it has been reported, or when not attributable. */
@@ -243,6 +245,7 @@ export function finish(session: Session, final: WebSocketCloseInfo): void {
 
   session.closed.resolve(final);
   releaseAbortSignal(session.signal);
+  session.release();
 }
 
 /** Ends a session whose signal has aborted: a timeout is an error, anything else an abort. */

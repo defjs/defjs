@@ -20,13 +20,10 @@ import {
 import {
   awaitWithSignal,
   mergeAbortSignals,
-  releaseAbortSignal,
-  resolveAbortedFault,
   resolveAbortFault,
 } from "../internal/abort";
 import { rejected } from "../internal/chain_faults";
 import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
-import { parseEndpointInput } from "../internal/endpoint_input";
 import type { HttpRequest } from "../http/http_request";
 import type {
   BuilderField,
@@ -41,7 +38,8 @@ import {
   runOutboundBuilder,
 } from "../internal/outbound_request";
 import type { AnyStruct, Infer, StructInput } from "../struct";
-import type { Guide } from "../struct/guide";
+import type { CallScope } from "../internal/preflight";
+import { preflight } from "../internal/preflight";
 import { createWebSocketRequest } from "./build";
 import type { WebSocketCloseSnapshot } from "./codec";
 import { startSession } from "./lifecycle";
@@ -421,9 +419,6 @@ export function defineWebSocket<
     );
 }
 
-type StageOutcome<T> =
-  [fault: PreflightFault, value: undefined] | [fault: undefined, value: T];
-
 type ResolvedCallOptions = {
   beforeConnect: ClientWebSocketOptions["beforeConnect"];
   heartbeat: ClientWebSocketOptions["heartbeat"];
@@ -446,81 +441,71 @@ function readCallOptions(
   };
 }
 
-function parseInput<TInput extends AnyStruct | undefined>(
-  inputStruct: TInput | undefined,
-  input: EndpointInput<TInput> | undefined,
-  guides: WeakMap<object, Guide>,
-  signal: AbortSignal,
-): StageOutcome<unknown> {
+/** The request the interceptors start from, or the fault that ends the call: a builder or URL failure, or a cancellation. */
+function buildSocketRequest(
+  scope: CallScope,
+  endpoint: WebSocketDefinition<
+    AnyStruct | undefined,
+    AnyStruct,
+    AnyStruct | undefined
+  >,
+  clientConfig: ClientConfig,
+  baseEndpoint: string,
+): HttpRequest | PreflightFault {
+  const { signal } = scope;
+  let built: MaterializedRequest;
   try {
-    return [
-      undefined,
-      inputStruct ? parseEndpointInput(inputStruct, input, guides) : input,
-    ];
-  } catch (error) {
-    return [
-      resolveAbortFault(signal) ??
-        createPreflightFault("REQ_INPUT_INVALID", error),
-      undefined,
-    ];
-  }
-}
-
-function buildOutbound(
-  parsedInput: unknown,
-  builder: OutboundBuilder | undefined,
-  inputDeclared: boolean,
-  guides: WeakMap<object, Guide>,
-  signal: AbortSignal,
-): StageOutcome<MaterializedRequest> {
-  try {
-    return [
-      undefined,
-      materializeOutboundRequest(
-        runOutboundBuilder(parsedInput, builder, inputDeclared),
-        "webSocket",
-        guides,
+    built = materializeOutboundRequest(
+      runOutboundBuilder(
+        scope.input,
+        endpoint.builder,
+        endpoint.input !== undefined,
       ),
-    ];
+      "webSocket",
+      scope.guides,
+    );
   } catch (error) {
-    return [
+    return (
       resolveAbortFault(signal) ??
-        createPreflightFault("REQ_BUILD_FAILED", error),
-      undefined,
-    ];
+      createPreflightFault("REQ_BUILD_FAILED", error)
+    );
   }
-}
-
-function createSocketRequest(
-  args: Parameters<typeof createWebSocketRequest>[0],
-): StageOutcome<HttpRequest> {
+  const cancelled = resolveAbortFault(signal);
+  if (cancelled) {
+    return cancelled;
+  }
   try {
-    return [undefined, createWebSocketRequest(args)];
+    return createWebSocketRequest({
+      signal,
+      baseEndpoint,
+      operation: endpoint.operation,
+      params: built.params,
+      path: endpoint.path,
+      query: built.query,
+      querySerializer: clientConfig.querySerializer,
+      withCredentials: clientConfig.withCredentials,
+    });
   } catch (error) {
-    return [
-      resolveAbortFault(args.signal) ??
-        createPreflightFault("REQ_BUILD_FAILED", error),
-      undefined,
-    ];
+    return (
+      resolveAbortFault(signal) ??
+      createPreflightFault("REQ_BUILD_FAILED", error)
+    );
   }
 }
 
 function resolveSocketConstructor(
   handle: ClientWebSocketOptions["handle"],
-): StageOutcome<
-  NonNullable<ClientWebSocketOptions["handle"] | typeof WebSocket>
-> {
+):
+  | NonNullable<ClientWebSocketOptions["handle"] | typeof WebSocket>
+  | PreflightFault {
   const candidate = handle ?? globalThis.WebSocket;
   if (typeof candidate !== "function") {
-    return [
-      createPreflightFault(
-        "ENV_UNSUPPORTED",
-        new Error("WebSocket is not supported in current runtime"),
-      ),
-      undefined,
-    ];
+    return createPreflightFault(
+      "ENV_UNSUPPORTED",
+      new Error("WebSocket is not supported in current runtime"),
+    );
   }
-  return [undefined, candidate];
+  return candidate;
 }
 
 async function runWebSocketCommand<
@@ -538,100 +523,47 @@ async function runWebSocketCommand<
     WebSocketOutgoingData<TOutgoing>
   >
 > {
-  const callerAbort = config?.signal;
-
-  // Same fast path as HTTP/SSE: an already aborted call does not parse, build, or validate the socket.
-  if (callerAbort?.aborted) {
-    return [resolveAbortedFault(callerAbort), undefined, undefined];
+  const scope = preflight(endpoint.input, input, config?.signal);
+  if (scope instanceof Error) {
+    return [scope, undefined, undefined];
   }
-
-  const callOptions = readCallOptions(config, clientConfig);
-  const beforeConnectOption = callOptions.beforeConnect;
-  const protocolsOption = callOptions.protocols;
-  const retry = callOptions.retry;
-  const heartbeatConfig = callOptions.heartbeat;
-
-  // `signal` stays in force after open and across reconnects. The session ending aborts it through `controller`.
-  const controller = new AbortController();
-  const signal = mergeAbortSignals(controller.signal, [callerAbort]);
-  const stopBeforeTransport = (
-    fault: PreflightFault,
-  ): SocketAwaitResult<
-    WebSocketIncomingData<TIncoming>,
-    WebSocketOutgoingData<TOutgoing>
-  > => {
-    releaseAbortSignal(signal);
-    return [fault, undefined, undefined];
-  };
-  const inputGuides = new WeakMap<object, Guide>();
-  const [inputFault, parsedInput] = parseInput(
-    endpoint.input,
-    input,
-    inputGuides,
-    signal,
-  );
-  if (inputFault) {
-    return stopBeforeTransport(inputFault);
-  }
-
-  const parsedCancellation = resolveAbortFault(signal);
-  if (parsedCancellation) {
-    return stopBeforeTransport(parsedCancellation);
-  }
-
   const [pickFault, initialPick] = pickEndpoint(clientConfig.balancer, {
     endpoints: clientConfig.endpoints,
-
     operation: endpoint.operation,
   });
   if (pickFault) {
-    return stopBeforeTransport(pickFault);
+    scope.release();
+    return [pickFault, undefined, undefined];
   }
 
+  // The session this call built. It releases the scope and settles the pick when it ends.
   let owned: Session | undefined;
   try {
-    const [buildFault, built] = buildOutbound(
-      parsedInput,
-      endpoint.builder,
-      endpoint.input !== undefined,
-      inputGuides,
-      signal,
+    const request = buildSocketRequest(
+      scope,
+      endpoint,
+      clientConfig,
+      initialPick.endpoint,
     );
-    if (buildFault) {
-      return stopBeforeTransport(buildFault);
+    if (request instanceof Error) {
+      return [request, undefined, undefined];
     }
 
-    const builtCancellation = resolveAbortFault(signal);
-    if (builtCancellation) {
-      return stopBeforeTransport(builtCancellation);
-    }
-
-    const [requestFault, wsRequest] = createSocketRequest({
-      signal,
-      baseEndpoint: initialPick.endpoint,
-      operation: endpoint.operation,
-      params: built.params,
-      path: endpoint.path,
-      query: built.query,
-      querySerializer: clientConfig.querySerializer,
-      withCredentials: clientConfig.withCredentials,
-    });
-    if (requestFault) {
-      return stopBeforeTransport(requestFault);
-    }
-
-    const constructorStage = resolveSocketConstructor(
+    const WebSocketCtor = resolveSocketConstructor(
       clientConfig.webSocket.handle,
     );
-    if (constructorStage[0]) {
-      return stopBeforeTransport(constructorStage[0]);
+    if (WebSocketCtor instanceof Error) {
+      return [WebSocketCtor, undefined, undefined];
     }
-    const WebSocketCtor = constructorStage[1];
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published WebSocketHandleConstructor is `{ readonly OPEN: number } & (new (...args: never[]) => WebSocketHandle)`, so its construct parameters are erased and `new` cannot pass the URL unasserted (TS2345, `string` is not assignable to `never`); giving it real parameters changes that published declaration
     const WebSocketImpl = WebSocketCtor as unknown as new (
       url: string | URL,
       protocols?: string | string[],
     ) => WebSocketHandle;
+    const { beforeConnect, heartbeat, protocols, retry } = readCallOptions(
+      config,
+      clientConfig,
+    );
 
     let chainSettled = false;
     const wsHandler = (req: HttpRequest): Promise<WebSocketSessionLike> => {
@@ -647,7 +579,7 @@ async function runWebSocketCommand<
       // Both the caller and an interceptor replacement stay live.
       let sessionSignal: AbortSignal;
       try {
-        sessionSignal = mergeAbortSignals(signal, [req.signal]);
+        sessionSignal = mergeAbortSignals(scope.signal, [req.signal]);
       } catch (error) {
         return rejected(error);
       }
@@ -664,19 +596,19 @@ async function runWebSocketCommand<
         Socket: WebSocketImpl,
         openState: WebSocketCtor.OPEN,
         retry,
-        heartbeat: heartbeatConfig,
-        beforeConnect:
-          beforeConnectOption ?? clientConfig.webSocket.beforeConnect,
+        heartbeat,
+        beforeConnect: beforeConnect ?? clientConfig.webSocket.beforeConnect,
         protocols: [
-          ...(protocolsOption ??
+          ...(protocols ??
             clientConfig.webSocket.protocols ??
             endpoint.protocols ??
             []),
         ],
         request: req,
         attributable,
-        callerSignal: callerAbort,
-        controller,
+        callerSignal: config?.signal,
+        controller: scope.controller,
+        release: scope.release,
         signal: sessionSignal,
         pick: attributable ? initialPick : undefined,
       });
@@ -691,11 +623,11 @@ async function runWebSocketCommand<
     );
     const wsChain = makeChain(wsInterceptors);
     // Only the caller's signal cuts the chain short. The session's own end does not.
-    const chainSignal = callerAbort ?? new AbortController().signal;
+    const chainSignal = config?.signal ?? new AbortController().signal;
 
     try {
       const session = await awaitWithSignal(
-        () => wsChain(wsRequest, wsHandler),
+        () => wsChain(request, wsHandler),
         chainSignal,
       );
       const publicConnection = session.connection;
@@ -709,7 +641,6 @@ async function runWebSocketCommand<
             new Error("WebSocket session was replaced by interceptor"),
           );
         }
-        releaseAbortSignal(signal);
       }
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published WebSocketInterceptor/WebSocketHandler types carry WebSocketSessionLike, and an interceptor may return its own session, which is delivered by identity, while the published SocketAwaitResult needs the endpoint's WebSocketSession types. Unasserted: TS2322, `WebSocketSessionLike` is not assignable to `WebSocketSession<StructOutput<TIncoming>, WebSocketOutgoingData<TOutgoing>>`. A validating adapter would replace the delivered session
       const typedSession = session as WebSocketSession<
@@ -735,11 +666,11 @@ async function runWebSocketCommand<
       if (owned !== undefined) {
         await discardOwned(owned, error);
       }
-      releaseAbortSignal(signal);
       return [requestError, undefined, owned?.connection];
     }
   } finally {
     if (owned === undefined) {
+      scope.release();
       initialPick.done({ attempted: false });
     }
   }

@@ -1,5 +1,5 @@
 import { pickEndpoint } from "../balancer/runtime";
-import type { AnyFault } from "../error";
+import type { PreflightFault } from "../error";
 import { createNetworkFault, createPreflightFault } from "../error";
 import type { WebSocketSessionLike } from "../interceptor/interceptor";
 import { awaitWithSignal } from "../internal/abort";
@@ -20,9 +20,6 @@ import {
   toErrorInfo,
 } from "./session";
 import { createWebSocketUrlFromRequest } from "./build";
-
-type StageOutcome<T> =
-  [fault: AnyFault, value: undefined] | [fault: undefined, value: T];
 
 /** Creates the session and starts its lifecycle. The promise settles with the session at its first open, or fails the call. */
 export function startSession(config: SessionConfig): {
@@ -86,15 +83,15 @@ async function nextUrl(session: Session): Promise<string | undefined> {
 
   setState(session, session.retried === 0 ? "connecting" : "reconnecting");
 
-  const [fault, url] = await prepareAttempt(session);
+  const url = await prepareAttempt(session);
   if (session.final !== undefined) {
     return undefined;
   }
-  if (fault !== undefined) {
+  if (url instanceof Error) {
     if (signal.aborted) {
       finishFromSignal(session);
     } else {
-      finishWithFault(session, { cause: fault, kind: "error" }, fault);
+      finishWithFault(session, { cause: url, kind: "error" }, url);
     }
     return undefined;
   }
@@ -216,7 +213,9 @@ async function backOff(
 }
 
 /** The URL of the next attempt, after the pick and the `beforeConnect` hook; or the fault that ends the session. */
-async function prepareAttempt(session: Session): Promise<StageOutcome<string>> {
+async function prepareAttempt(
+  session: Session,
+): Promise<string | PreflightFault> {
   let request = session.request;
   if (session.attributable && session.pick === undefined) {
     const [fault, picked] = pickEndpoint(session.clientConfig.balancer, {
@@ -224,7 +223,7 @@ async function prepareAttempt(session: Session): Promise<StageOutcome<string>> {
       operation: session.operation,
     });
     if (fault) {
-      return [fault, undefined];
+      return fault;
     }
     session.pick = picked;
     request = { ...request, baseEndpoint: picked.endpoint };
@@ -234,7 +233,7 @@ async function prepareAttempt(session: Session): Promise<StageOutcome<string>> {
   try {
     url = createWebSocketUrlFromRequest(request);
   } catch (error) {
-    return [createPreflightFault("REQ_BUILD_FAILED", error), undefined];
+    return createPreflightFault("REQ_BUILD_FAILED", error);
   }
 
   const { beforeConnect, signal } = session;
@@ -246,9 +245,9 @@ async function prepareAttempt(session: Session): Promise<StageOutcome<string>> {
       );
       signal.throwIfAborted();
     } catch (error) {
-      return [createPreflightFault("EXT_HOOK_FAILED", error), undefined];
+      return createPreflightFault("EXT_HOOK_FAILED", error);
     }
   }
 
-  return [undefined, url];
+  return url;
 }
