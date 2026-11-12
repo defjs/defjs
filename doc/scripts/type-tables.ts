@@ -6,22 +6,9 @@ import {
   TypeFormatFlags,
 } from "typescript/async";
 import type { Checker, Program, Symbol, Type } from "typescript/async";
-import {
-  isMethodDeclaration,
-  isMethodSignatureDeclaration,
-  isPropertyAssignment,
-  isPropertyDeclaration,
-  isPropertySignatureDeclaration,
-} from "typescript/ast";
-import type {
-  MethodDeclaration,
-  MethodSignatureDeclaration,
-  Node,
-  PropertyAssignment,
-  PropertyDeclaration,
-  PropertySignatureDeclaration,
-} from "typescript/ast";
-import { defined, requireNode, type StoredEntry } from "./api-model";
+import type { Node } from "typescript/ast";
+import { getNameOfDeclaration } from "typescript/ast/utils";
+import { defined, type StoredEntry } from "./api-model";
 
 const PRINT_FLAGS =
   TypeFormatFlags.UseAliasDefinedOutsideCurrentScope |
@@ -102,24 +89,6 @@ export async function typeColumns(
   };
 }
 
-/** Declaration kinds that a documented member can have in the packages. */
-function isNamedMember(
-  node: Node,
-): node is
-  | PropertyAssignment
-  | PropertySignatureDeclaration
-  | PropertyDeclaration
-  | MethodSignatureDeclaration
-  | MethodDeclaration {
-  return (
-    isPropertyAssignment(node) ||
-    isPropertySignatureDeclaration(node) ||
-    isPropertyDeclaration(node) ||
-    isMethodSignatureDeclaration(node) ||
-    isMethodDeclaration(node)
-  );
-}
-
 async function docEntry(
   symbol: Symbol,
   owner: Type,
@@ -148,11 +117,10 @@ async function docEntry(
   }
   const optional = (symbol.flags & SymbolFlags.Optional) !== 0;
   const entry: StoredEntry = {
-    name: requireNode(
-      declaration,
-      isNamedMember,
-      `unsupported member declaration of ${symbol.name}`,
-    ).name.getText(),
+    name: defined(
+      getNameOfDeclaration(declaration),
+      `${symbol.name} declaration name`,
+    ).getText(),
     description: await checker.getDocumentationCommentOfSymbol(symbol),
     ...(await typeColumns(
       await checker.getTypeOfSymbolAtLocation(symbol, location),
