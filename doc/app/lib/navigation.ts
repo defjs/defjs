@@ -157,17 +157,7 @@ export function getNavigationTree(
       };
     },
   );
-  const result = { ...tree, children };
-  const before = [...pages.keys()].sort();
-  const after = flattenTree(result.children)
-    .map((item) => item.url)
-    .sort();
-  if (
-    before.length !== after.length ||
-    before.some((url, i) => url !== after[i])
-  )
-    throw new Error(`Navigation dropped or duplicated content: ${locale}`);
-  return result;
+  return { ...tree, children };
 }
 
 /** Fixed reading-area destinations avoid native same-path projection between roots. */

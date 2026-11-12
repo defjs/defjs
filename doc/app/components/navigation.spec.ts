@@ -441,20 +441,6 @@ test("related reading resolves real localized articles and preserves every API d
   }
 });
 
-test("navigation rejects a page that the reading areas would drop", () => {
-  const tree = structuredClone(source.getPageTree("en-US"));
-  const docs = tree.children.find(
-    (node): node is Folder =>
-      node.type === "folder" &&
-      flattenTree(node.children).some((page) => page.url === "/docs/start"),
-  );
-  if (!docs) throw new Error("The guide folder is missing");
-  docs.children.push({ type: "page", name: "Extra", url: "/docs/extra" });
-  expect(() => getNavigationTree(tree, "en-US")).toThrow(
-    "Navigation dropped or duplicated content: en-US",
-  );
-});
-
 test("related reading rejects a destination that has no page", () => {
   expect(() =>
     getRelatedNavigation({ name: "Docs", children: [] }, "en-US", "/docs/http"),

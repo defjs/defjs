@@ -3,6 +3,8 @@ title: "Leitfaden"
 description: SDK-Verträge und Operationen entwerfen, sie veröffentlichen und die Ausführung in konsumierenden Anwendungen konfigurieren.
 ---
 
+# Leitfaden
+
 Defjs trennt den API-Vertrag, den ein SDK-Team veröffentlicht, von der Client-Konfiguration, die eine Anwendung zur Laufzeit verwendet. Folge den Abschnitten unten, um die Architektur kennenzulernen, Operationen zu definieren und die Ausführung durch Client-Optionen und Interceptors zu steuern.
 
 ## Erste Schritte [#getting-started]

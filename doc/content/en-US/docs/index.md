@@ -3,6 +3,8 @@ title: "Guide"
 description: Design SDK contracts and operations, publish them, and configure execution in consuming applications.
 ---
 
+# Guide
+
 Defjs separates the API contract an SDK team publishes from the client configuration an application uses at runtime. Follow the sections below to learn the architecture, define operations, and govern execution through client options and interceptors.
 
 ## Getting started [#getting-started]

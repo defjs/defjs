@@ -23,8 +23,6 @@ import {
 } from "../components/navigation";
 import { ApiEntryPage } from "../components/api-entry-page";
 import { getMDXComponents } from "../components/mdx";
-import { apiSlugOf } from "../lib/api-virtual";
-import { readPageTitle, readProcessedText } from "../lib/page-data";
 import type { RenderedApiEntry } from "../lib/api-html";
 import type { Route } from "./+types/page";
 
@@ -38,7 +36,7 @@ async function loadRenderedEntry(
   ]);
   const view = apiEntryView(slug, locale);
   const overview = source.getPage(["api", view.group], locale);
-  const overviewTitle = overview ? readPageTitle(overview.data) : view.group;
+  const overviewTitle = overview?.data.title ?? view.group;
   return {
     page: await renderApiEntry(
       view,
@@ -57,13 +55,12 @@ export async function loader({ params }: Route.LoaderArgs) {
   // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: React Router routes a thrown Response to the root ErrorBoundary's 404 page; its data() helper is not an Error either, and a thrown Error becomes a 500
   if (!page) throw new Response("Not Found", { status: 404 });
   const language = locale ?? "en-US";
-  const apiSlug = apiSlugOf(page.data);
   // Reference JSON and the Markdown renderer load only for a virtual entry, from this loader.
-  const rendered = apiSlug ? await loadRenderedEntry(apiSlug, language) : null;
+  const rendered =
+    "apiSlug" in page.data
+      ? await loadRenderedEntry(page.data.apiSlug, language)
+      : null;
   return {
-    hasContentTitle: rendered
-      ? false
-      : /^# /m.test(await readProcessedText(page.data)),
     path: page.path,
     home: parts.length === 0,
     slugs: parts,
@@ -93,7 +90,6 @@ function MdxDocument({
   home,
   slugs,
   canonical,
-  hasContentTitle,
   editHref,
 }: Route.ComponentProps["loaderData"]) {
   const page = docs.getPage(path);
@@ -105,8 +101,6 @@ function MdxDocument({
     <DocumentFrame
       canonical={canonical}
       editHref={editHref}
-      hasContentTitle={hasContentTitle}
-      heading={page.title}
       description={page.description}
       documentTitle={
         home ? page.title : `${apiTitle(page.title, slugs)} | Defjs`
@@ -128,7 +122,6 @@ function ApiDocument({
     <DocumentFrame
       canonical={canonical}
       editHref={editHref}
-      hasContentTitle={false}
       heading={view.name}
       description={view.summary}
       markEnglish={locale !== "en-US"}
@@ -142,7 +135,6 @@ function ApiDocument({
 function DocumentFrame({
   canonical,
   editHref,
-  hasContentTitle,
   heading,
   description,
   markEnglish = false,
@@ -152,8 +144,8 @@ function DocumentFrame({
 }: {
   canonical: string;
   editHref: string;
-  hasContentTitle: boolean;
-  heading: string;
+  /** Content pages write their own H1; an API entry page gets its title here. */
+  heading?: string;
   description: string | undefined;
   markEnglish?: boolean;
   documentTitle: string;
@@ -198,7 +190,7 @@ function DocumentFrame({
         <link rel="canonical" href={canonical} />
         <title>{documentTitle}</title>
         {description && <meta name="description" content={description} />}
-        {!hasContentTitle && <DocsTitle>{heading}</DocsTitle>}
+        {heading && <DocsTitle>{heading}</DocsTitle>}
         <DocsDescription>
           {description && markEnglish ? (
             <span lang="en" dir="ltr">

@@ -31,19 +31,18 @@ html {
 .navigation-item {
   padding-inline-start: calc(0.5rem + var(--navigation-depth, 0) * 0.75rem);
 }
-.navigation-group-heading ~ .navigation-item:not([data-navigation-standalone]),
+.navigation-group-heading ~ .navigation-item,
 .navigation-static-list
   > li:has(> .navigation-group-heading)
   ~ li
-  > .navigation-item:not([data-navigation-standalone]) {
+  > .navigation-item {
   padding-inline-start: 1.75rem;
 }
-.navigation-group-heading
-  ~ .navigation-item:not([data-navigation-standalone])::before,
+.navigation-group-heading ~ .navigation-item::before,
 .navigation-static-list
   > li:has(> .navigation-group-heading)
   ~ li
-  > .navigation-item:not([data-navigation-standalone])::before {
+  > .navigation-item::before {
   position: absolute;
   inset-block: 0;
   inset-inline-start: 0.625rem;

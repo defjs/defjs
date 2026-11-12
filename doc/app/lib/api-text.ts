@@ -28,14 +28,8 @@ export function firstParagraph(description: string): string {
     .trim();
 }
 
-export function localeHref(locale: string, path: string): string {
-  if (!path.startsWith("/"))
-    throw new Error(`API path must be absolute: ${path}`);
-  return `${localePrefix(locale)}${path}`;
-}
-
 export function apiPageHref(locale: string, slug: string): string {
-  return localeHref(locale, `/api/${slug}`);
+  return `${localePrefix(locale)}/api/${slug}`;
 }
 
 export function linkTargets(

@@ -3,6 +3,8 @@ title: "Praxisbeispiele"
 description: Ein wiederverwendbares SDK bauen und veröffentlichen, dann Authentifizierung, Aufrufe und Echtzeit in konsumierenden Anwendungen konfigurieren.
 ---
 
+# Praxisbeispiele
+
 Starte mit [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk) für den vollständigen Weg von der exportierten Definition zum npm-Paket und zur konsumierenden Anwendung. Jedes der folgenden Rezepte stellt einen Operationsvertrag der Anwendungsrichtlinie gegenüber, die ihn umgibt – mit Multi-File-Code-Tabs, die zeigen, wie SDK-Definition und Anwendungsausführung zusammenpassen.
 
 ## HTTP

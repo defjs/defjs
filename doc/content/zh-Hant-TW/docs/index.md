@@ -3,6 +3,8 @@ title: "指南"
 description: 設計並發布 SDK 契約與操作，並在取用端應用程式中設定執行方式。
 ---
 
+# 指南
+
 Defjs 把 SDK 開發團隊發布的 API 契約，與應用程式在執行時期使用的 Client 設定分開。以下各節將帶你了解整體架構、定義操作，並以 Client 選項與攔截器管理執行。
 
 ## 快速開始 [#getting-started]

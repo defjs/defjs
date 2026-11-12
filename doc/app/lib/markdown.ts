@@ -1,43 +1,6 @@
 import { apiEntries } from "../data/api-catalog";
 import { localePrefix } from "./i18n";
 import { tabItems } from "./tab-items";
-interface TableField {
-  type: string;
-  required?: boolean;
-}
-function isTableField(value: unknown): value is TableField {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    typeof value.type === "string" &&
-    (!("required" in value) || typeof value.required === "boolean")
-  );
-}
-function isTableFields(value: unknown): value is Record<string, TableField> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.values(value).every(isTableField)
-  );
-}
-function tableFields(data: string): Record<string, TableField> {
-  const parsed: unknown = JSON.parse(data);
-  if (!isTableFields(parsed))
-    throw new Error(`Invalid TypeTable data: ${data}`);
-  return parsed;
-}
-function table(fields: Record<string, TableField>): string {
-  return (
-    "| Name | Type | Required |\n| --- | --- | --- |\n" +
-    Object.entries(fields)
-      .map(
-        ([name, field]) =>
-          `| ${name} | \`${field.type}\` | ${field.required ? "required" : "optional"} |`,
-      )
-      .join("\n")
-  );
-}
 /** Applies `convert` to every line outside fenced code blocks. */
 export function mapOutsideFences(
   text: string,
@@ -79,9 +42,6 @@ export function readableMarkdown(text: string, locale: string): string {
               `- [${entry.name}](${prefix}/api/${entry.slug}) — ${entry.package}, ${entry.kind}`,
           )
           .join("\n"),
-      )
-      .replace(/<TypeTable type=\{(\{.*\})\}\s*\/>/g, (_match, data: string) =>
-        table(tableFields(data)),
       );
     // `\<Type>` is an escaped type argument, not an MDX component.
     if (

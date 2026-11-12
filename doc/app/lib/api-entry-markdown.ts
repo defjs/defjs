@@ -3,7 +3,6 @@ import type { ApiReferenceEntry, StoredEntry } from "../../scripts/api-model";
 import {
   apiPageHref,
   codeLanguage,
-  firstParagraph,
   parameterSections,
   resolveDocLinks,
   type ApiField,
@@ -62,10 +61,6 @@ export function renderApiEntryMarkdown(
     `[Overview](${apiPageHref(locale, entry.group)})`,
   );
   return `${lines.join("\n")}\n`;
-}
-
-export function entrySummary(entry: ApiReferenceEntry): string {
-  return firstParagraph(entry.description);
 }
 
 function fields(

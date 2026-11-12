@@ -3,6 +3,8 @@ title: "Guía"
 description: Diseña contratos y operaciones de SDK, publícalos y configura la ejecución en las aplicaciones que los consumen.
 ---
 
+# Guía
+
 Defjs separa el contrato de API que publica el equipo de autoría del SDK de la configuración del cliente que la aplicación utiliza en tiempo de ejecución. Sigue las secciones a continuación para conocer la arquitectura, definir operaciones y gestionar la ejecución mediante opciones de cliente e interceptores.
 
 ## Primeros pasos [#getting-started]

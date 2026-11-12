@@ -3,7 +3,6 @@ import type { ApiReferenceEntry } from "../../scripts/api-model";
 import { apiReference } from "../data/api-reference";
 import { readableMarkdown } from "./markdown";
 import {
-  entrySummary,
   renderApiEntryMarkdown,
   renderApiEntryMarkdownBySlug,
 } from "./api-entry-markdown";
@@ -78,7 +77,6 @@ test("markdown includes the signature, fields, prose, examples, related pages an
   expect(text).toContain("const n = 1;");
   expect(text).toContain("## See also");
   expect(text).toContain("[Overview](/api/client)");
-  expect(entrySummary(entry())).toBe("Creates a Client.");
 });
 
 test("members, a broken code fence and a deprecated field stay readable", () => {

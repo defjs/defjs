@@ -21,21 +21,3 @@ export function filterApiEntries(
       (!kind || entry.kind === kind),
   );
 }
-export function validateApiEntries(entries: readonly ApiEntry[]): void {
-  const identities = new Set<string>(),
-    slugs = new Set<string>();
-  for (const entry of entries) {
-    const identity = `${entry.package}:${entry.name}`;
-    if (identities.has(identity))
-      throw new Error(`Duplicate API identity: ${identity}`);
-    if (slugs.has(entry.slug) || !/^[a-z0-9/-]+$/.test(entry.slug))
-      throw new Error(`Invalid or duplicate API slug: ${entry.slug}`);
-    identities.add(identity);
-    slugs.add(entry.slug);
-  }
-  for (const entry of entries)
-    for (const target of entry.related)
-      if (!identities.has(target))
-        throw new Error(`Missing related API target: ${target}`);
-}
-validateApiEntries(apiEntries);

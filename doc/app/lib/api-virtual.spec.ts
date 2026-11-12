@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { apiSlugOf, apiVirtualFiles, apiVirtualPath } from "./api-virtual";
+import { apiVirtualFiles, apiVirtualPath } from "./api-virtual";
 
 const summaries = [
   { slug: "core/createclient", name: "createClient", description: "Creates." },
@@ -31,17 +31,4 @@ test("a content file at a generated entry path fails the build", async () => {
   });
   expect(await page.data.getText("processed")).toBe("en-US:core/createclient");
   expect(await page.data.getText("raw")).toBe("en-US:core/createclient");
-  await expect(page.data.getText("html")).rejects.toThrow(
-    "Unsupported API text",
-  );
-});
-
-test("only a non-empty api slug marks a virtual entry", () => {
-  expect(apiSlugOf(undefined)).toBeUndefined();
-  expect(apiSlugOf(null)).toBeUndefined();
-  expect(apiSlugOf(1)).toBeUndefined();
-  expect(apiSlugOf({})).toBeUndefined();
-  expect(apiSlugOf({ apiSlug: 1 })).toBeUndefined();
-  expect(apiSlugOf({ apiSlug: "" })).toBeUndefined();
-  expect(apiSlugOf({ apiSlug: "core/createclient" })).toBe("core/createclient");
 });

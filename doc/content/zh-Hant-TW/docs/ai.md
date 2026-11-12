@@ -3,6 +3,8 @@ title: "Skill"
 description: "安裝 Defjs skill，讓助手編寫具型別的 GET 操作，並依專案已安裝的 SDK 核對結果。"
 ---
 
+# Skill
+
 Defjs skill 讓助手掌握 SDK 定義與應用程式執行的契約。支援的助手可能會在相關任務中載入它；是否自動啟用取決於所用工具。
 
 ## 安裝 skill [#install]

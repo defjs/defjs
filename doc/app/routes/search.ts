@@ -1,7 +1,6 @@
 import { createFromSource } from "fumadocs-core/search/server";
 import { locales } from "../lib/i18n";
 import { readableMarkdown } from "../lib/markdown";
-import { readPageTitle, readProcessedText } from "../lib/page-data";
 import { source } from "../lib/source";
 import type { Route } from "./+types/search";
 
@@ -12,7 +11,7 @@ function createServer(locale: string) {
     {
       buildIndex: async (page) => ({
         id: page.url,
-        title: readPageTitle(page.data),
+        title: page.data.title,
         description: page.data.description,
         url: page.url,
         structuredData: {
@@ -21,7 +20,7 @@ function createServer(locale: string) {
             {
               heading: undefined,
               content: readableMarkdown(
-                await readProcessedText(page.data),
+                await page.data.getText("processed"),
                 locale,
               ),
             },

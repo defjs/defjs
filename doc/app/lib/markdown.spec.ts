@@ -3,25 +3,12 @@ import { readExampleRegion } from "../../scripts/api-examples";
 import { mapOutsideFences, readableMarkdown } from "./markdown";
 import { llmsMarkdownSlugs } from "./llms";
 
-test("processed Markdown keeps visible code and converts type tables into readable API text", () => {
+test("processed Markdown keeps visible code under its tab heading", () => {
   const input =
-    '<Tabs items={["Bun"]}>\n<Tab>\n\n```tsx\nconst view = <Button />\n```\n</Tab>\n</Tabs>\n<TypeTable type={{"count":{"type":"number","required":true},"note":{"type":"string","required":false}}} />';
+    '<Tabs items={["Bun"]}>\n<Tab>\n\n```tsx\nconst view = <Button />\n```\n</Tab>\n</Tabs>';
   const result = readableMarkdown(input, "en-US");
   expect(result).toContain("### Bun");
   expect(result).toContain("const view = <Button />");
-  expect(result).toContain("| count | `number` | required |");
-  expect(result).toContain("| note | `string` | optional |");
-  expect(result).not.toContain("type={{");
-});
-test("a type table whose data is not a record of typed fields is rejected", () => {
-  for (const data of [
-    '{"count":3}',
-    '{"count":{"required":true}}',
-    '{"count":{"type":"number","required":"yes"}}',
-  ])
-    expect(() =>
-      readableMarkdown(`<TypeTable type={${data}} />`, "en-US"),
-    ).toThrow("Invalid TypeTable data");
 });
 test("each Tab takes its heading from the enclosing items by position", () => {
   const input = [

@@ -3,6 +3,8 @@ title: "Skill"
 description: "Defjs skill を導入し、型付きの GET 操作をアシスタントに作成させ、導入済みの SDK と照合します。"
 ---
 
+# Skill
+
 Defjs skill は、SDK の定義とアプリケーション実行の契約をアシスタントに伝えます。対応するアシスタントは関連するタスクでこれを読み込めますが、自動的に有効になるかはツール次第です。
 
 ## skill を導入する [#install]

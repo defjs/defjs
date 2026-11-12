@@ -3,6 +3,8 @@ title: "Exemples pratiques"
 description: Construire et publier un SDK réutilisable, puis configurer l'authentification, les appels et le travail temps réel dans les applications consommatrices.
 ---
 
+# Exemples pratiques
+
 Commencez par [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk) pour découvrir le parcours complet, de la définition exportée jusqu'au paquet npm consommé par une application. Chaque recette ci-dessous associe un contrat d'opération aux politiques applicatives qui l'entourent, avec des onglets de code multi-fichiers montrant l'articulation entre définition du SDK et exécution applicative.
 
 ## HTTP

@@ -2,12 +2,8 @@
   "name": "doc",
   "version": "1.0.0",
   "private": true,
-  "description": "",
-  "keywords": [],
-  "license": "ISC",
-  "author": "",
+  "license": "MIT",
   "type": "module",
-  "main": "index.js",
   "scripts": {
     "dev": "bun --bun react-router dev",
     "typegen": "bun --bun react-router typegen",

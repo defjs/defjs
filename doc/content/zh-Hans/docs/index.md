@@ -3,6 +3,8 @@ title: "指南"
 description: 设计并发布 SDK 契约与操作，并在消费方应用中配置执行方式。
 ---
 
+# 指南
+
 Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时使用的 Client 配置分离开来。阅读以下各章节，了解整体架构、定义操作，并通过 Client 选项和拦截器管控执行。
 
 ## 快速起步 [#getting-started]

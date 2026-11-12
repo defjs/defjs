@@ -3,6 +3,8 @@ title: "Skill"
 description: "Defjs skill을 설치하고, 도우미에게 타입화된 GET 작업을 맡긴 뒤 설치된 SDK와 결과를 대조합니다."
 ---
 
+# Skill
+
 Defjs skill은 SDK 정의와 애플리케이션 실행 계약을 어시스턴트에게 알려 줍니다. 지원하는 어시스턴트는 관련 작업에서 이를 불러올 수 있으며, 자동 활성화 여부는 도구에 따라 다릅니다.
 
 ## skill 설치 [#install]

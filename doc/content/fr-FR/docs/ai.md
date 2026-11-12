@@ -3,6 +3,8 @@ title: "Skill"
 description: "Installe le skill Defjs, demande une opération GET typée et vérifie le résultat avec le SDK installé."
 ---
 
+# Skill
+
 Le skill Defjs transmet à un assistant le contrat entre la définition du SDK et l’exécution dans l’application. Un assistant compatible peut le charger pour une tâche pertinente ; l’activation automatique dépend de l’outil.
 
 ## Installer le skill [#install]

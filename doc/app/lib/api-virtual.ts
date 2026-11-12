@@ -10,23 +10,18 @@ export interface ApiPageData extends PageData {
   title: string;
   description: string;
   apiSlug: string;
-  getText: (type: string) => Promise<string>;
+  getText: (type: "raw" | "processed") => Promise<string>;
 }
 
-type ApiVirtualFile = VirtualFile<{
+export interface ApiSourceConfig {
   pageData: ApiPageData;
   metaData: MetaData;
-}>;
+}
+
+type ApiVirtualFile = VirtualFile<ApiSourceConfig>;
 
 export function apiVirtualPath(locale: string, slug: string): string {
   return `${locale}/api/${slug}.mdx`;
-}
-
-export function apiSlugOf(data: unknown): string | undefined {
-  if (!data || typeof data !== "object" || !("apiSlug" in data))
-    return undefined;
-  const slug = data.apiSlug;
-  return typeof slug === "string" && slug.length > 0 ? slug : undefined;
 }
 
 /**
@@ -52,11 +47,7 @@ export function apiVirtualFiles(
           title: summary.name,
           description: summary.description,
           apiSlug: summary.slug,
-          getText: (type: string) => {
-            if (type !== "raw" && type !== "processed")
-              return Promise.reject(new Error(`Unsupported API text: ${type}`));
-            return load(summary.slug, locale);
-          },
+          getText: () => load(summary.slug, locale),
         },
       });
     }
