@@ -122,16 +122,14 @@ function guideArea(nav: NavigationContext): Folder {
   return {
     ...folder,
     name: index.name,
-    children: [
-      index,
-      ...grouped(nav, guideGroups, {
-        "": nav.t("nav.home"),
-        "/docs/struct": nav.t("nav.guide.dataStructures"),
-        "/docs/client": nav.t("nav.guide.client"),
-        "/docs/interceptors": nav.t("nav.guide.middleware"),
-        "/docs/errors": nav.t("nav.guide.errors"),
-      }),
-    ],
+    index,
+    children: grouped(nav, guideGroups, {
+      "": nav.t("nav.home"),
+      "/docs/struct": nav.t("nav.guide.dataStructures"),
+      "/docs/client": nav.t("nav.guide.client"),
+      "/docs/interceptors": nav.t("nav.guide.middleware"),
+      "/docs/errors": nav.t("nav.guide.errors"),
+    }),
   };
 }
 
@@ -150,7 +148,8 @@ function exampleArea(nav: NavigationContext): Folder {
   return {
     ...folder,
     name: index.name,
-    children: [index, ...grouped(nav, exampleGroups)],
+    index,
+    children: grouped(nav, exampleGroups),
   };
 }
 
@@ -214,12 +213,12 @@ export function getNavigationTabs(tree: Root): LayoutTab[] {
   return tree.children
     .filter((node): node is Folder => node.type === "folder")
     .map((folder) => {
-      const pages = flattenTree(folder.children);
-      const index = pages[0];
-      if (!index) throw new Error("Reading area has no index page");
+      const pages = flattenTree([folder]);
+      const first = folder.index ?? pages[0];
+      if (!first) throw new Error("Reading area has no index page");
       return {
         title: folder.name,
-        url: index.url,
+        url: first.url,
         urls: new Set(pages.map((page) => page.url)),
       };
     });

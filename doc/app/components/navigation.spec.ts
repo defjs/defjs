@@ -203,14 +203,14 @@ test("actual eleven-language content trees preserve every unique URL and page re
       recipes.children.filter((n) => n.type === "separator" && Boolean(n.name))
         .length,
     ).toBe(4);
-    expect(flattenTree(guide.children).map((n) => n.url)).toEqual([
+    expect(flattenTree([guide]).map((n) => n.url)).toEqual([
       `${prefix}/docs`,
       ...guidePaths.map((path) => prefix + path || "/"),
     ]);
     expect(flattenTree(integrations.children).map((n) => n.url)).toEqual(
       integrationPaths.map((path) => prefix + path),
     );
-    expect(flattenTree(recipes.children).map((n) => n.url)).toEqual([
+    expect(flattenTree([recipes]).map((n) => n.url)).toEqual([
       `${prefix}/recipes`,
       ...recipePaths.map((path) => prefix + path),
     ]);
@@ -239,7 +239,7 @@ test("top tabs expose four areas and the AI guide sits inside Guide", () => {
       ),
     );
     const guide = guideFolder(tree.children);
-    const guideUrls = flattenTree(guide.children).map((node) => node.url);
+    const guideUrls = flattenTree([guide]).map((node) => node.url);
     expect(guideUrls.indexOf(`${prefix}/docs/design-decisions`)).toBe(
       guideUrls.indexOf(`${prefix}/docs/start`) + 1,
     );
@@ -283,7 +283,7 @@ test("every locale names the AI group and both of its pages", () => {
         .map((node) => node.name)
         .at(-1),
     ).toBe(group);
-    const names = flattenTree(guide.children);
+    const names = flattenTree([guide]);
     expect(names.find((node) => node.url === `${prefix}/docs/ai`)?.name).toBe(
       assistedTitle,
     );
@@ -353,7 +353,7 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
       .map((n) => n.name),
   ).toEqual(["概览", "官方插件"]);
   expect(
-    flattenTree(guide.children)
+    flattenTree([guide])
       .slice(1, 5)
       .map((n) => n.name),
   ).toEqual(["项目概览", "快速开始", "设计决策", "数据结构 / Struct"]);

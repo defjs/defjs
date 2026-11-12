@@ -121,13 +121,9 @@ function NavigationContainer({ children, ...props }: ComponentProps<"div">) {
     </Container>
   );
 }
-/** The Guide and Examples index pages are reached through their tabs, so the page lists leave them out. */
-const isAreaIndex = (url: string) => /\/(docs|recipes)$/.test(url);
-
 function NavigationItem({ item }: { item: Item }) {
   const { pathname } = useLocation();
   const depth = useFolderDepth();
-  if (isAreaIndex(item.url)) return null;
   const active = pathname.replace(/\/$/, "") === item.url.replace(/\/$/, "");
   const parts = typeof item.name === "string" ? item.name.split(" / ") : [];
   const style: CSSProperties & Record<`--${string}`, number> = {
@@ -182,33 +178,31 @@ export function StaticNavigation({ tree }: { tree: Root }) {
   const current = tree.children.find(
     (node) =>
       node.type === "folder" &&
-      flattenTree(node.children).some((page) => page.url === pathname),
+      flattenTree([node]).some((page) => page.url === pathname),
   );
   function list(nodes: Node[]): ReactNode {
     return (
       <ul className="navigation-static-list space-y-2">
-        {nodes
-          .filter((node) => node.type !== "page" || !isAreaIndex(node.url))
-          .map((node, i) => (
-            <li key={i}>
-              {node.type === "page" ? (
-                <a
-                  href={node.url}
-                  aria-current={node.url === pathname ? "page" : undefined}
-                  className="navigation-item relative block p-2"
-                >
-                  {node.name}
-                </a>
-              ) : node.type === "separator" ? (
-                <h2 className="navigation-group-heading">{node.name}</h2>
-              ) : (
-                <details>
-                  <summary>{node.name}</summary>
-                  {list(node.children)}
-                </details>
-              )}
-            </li>
-          ))}
+        {nodes.map((node, i) => (
+          <li key={i}>
+            {node.type === "page" ? (
+              <a
+                href={node.url}
+                aria-current={node.url === pathname ? "page" : undefined}
+                className="navigation-item relative block p-2"
+              >
+                {node.name}
+              </a>
+            ) : node.type === "separator" ? (
+              <h2 className="navigation-group-heading">{node.name}</h2>
+            ) : (
+              <details>
+                <summary>{node.name}</summary>
+                {list(node.children)}
+              </details>
+            )}
+          </li>
+        ))}
       </ul>
     );
   }
