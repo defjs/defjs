@@ -760,11 +760,13 @@ export type UnionDefinition = BaseDefinition & {
 export type DiscriminatedUnionDefinition = BaseDefinition & {
   kind: "discriminatedUnion";
   discriminator: string;
-  discriminatorWireKeys?: readonly string[];
+  /** Every wire name an option gives the tag field, in option order. */
+  discriminatorWireKeys: readonly string[];
   expected: string;
-  map: Map<unknown, RuntimeStruct>;
-  options: readonly RuntimeStruct[];
-  wireKeyByValue?: Map<unknown, string>;
+  map: Map<unknown, ObjectRuntimeStruct>;
+  options: readonly ObjectRuntimeStruct[];
+  /** The wire name of the tag field in the option a tag value selects. */
+  wireKeyByValue: Map<unknown, string>;
 };
 
 /** Set only when construction flattened every member to an object struct, so those options are typed as such. */

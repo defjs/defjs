@@ -24,14 +24,10 @@ export function matchesRuntimeValue(
 ): boolean {
   const definition = struct[DEFINITION];
   if (value === null) {
-    if (definition.kind === "null" || definition.flags.nullable) {
+    if (definition.flags.nullable) {
       return true;
     }
-    if (
-      (definition.kind !== "literal" || definition.value !== null) &&
-      definition.kind !== "intersection" &&
-      definition.kind !== "or"
-    ) {
+    if (definition.kind !== "intersection" && definition.kind !== "or") {
       return false;
     }
   }

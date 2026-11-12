@@ -562,37 +562,6 @@ describe("struct coverage boundary cases", () => {
       matchesRuntimeValue(runtime(missingDiscriminator), { type: "other" }),
     ).toBe(false);
 
-    const nonObjectDiscriminator = makeStruct({
-      discriminator: "type",
-      expected: '"text"',
-      flags: DEFAULT_FLAGS,
-      kind: "discriminatedUnion",
-      map: new Map<unknown, RuntimeStruct>([
-        ["text", runtime(struct.object({ type: struct.literal("text") }))],
-      ]),
-      options: [runtime(struct.string())],
-    });
-    expect(() => decodeJson(nonObjectDiscriminator, { type: "text" })).toThrow(
-      StructError,
-    );
-
-    const bodyAliasOption = struct.object({
-      payload: struct.string().alias("body"),
-    });
-    const rawDiscriminator = makeStruct({
-      discriminator: "type",
-      expected: '"text"',
-      flags: DEFAULT_FLAGS,
-      kind: "discriminatedUnion",
-      map: new Map<unknown, RuntimeStruct>([
-        ["text", runtime(bodyAliasOption)],
-      ]),
-      options: [runtime(bodyAliasOption)],
-    });
-    expect(() =>
-      decodeJson(rawDiscriminator, { body: "hello", type: "text" }),
-    ).toThrow(StructError);
-
     const missingWireDiscriminator = struct.discriminatedUnion("type", [
       struct.object({ type: struct.literal("text").alias("kind") }),
     ]);
@@ -604,41 +573,6 @@ describe("struct coverage boundary cases", () => {
     ).toThrow(StructError);
     expect(() => decodeJson(missingWireDiscriminator, "not-object")).toThrow(
       StructError,
-    );
-
-    let reads = 0;
-    const unstableObjectStruct = {
-      _struct: undefined,
-      get [DEFINITION]() {
-        reads += 1;
-        return {
-          flags: DEFAULT_FLAGS,
-          kind: reads < 3 ? "object" : "string",
-        };
-      },
-    };
-    expect(() => {
-      // @ts-expect-error the getter object is not a struct
-      decodeJson(unstableObjectStruct, {});
-    }).toThrow();
-  });
-});
-
-describe("struct guards for untyped definitions", () => {
-  test("a hand-built discriminator map that points at a non-object struct throws when parsed", () => {
-    const handBuilt = makeStruct({
-      discriminator: "type",
-      expected: '"text"',
-      flags: DEFAULT_FLAGS,
-      kind: "discriminatedUnion",
-      map: new Map<unknown, RuntimeStruct>([
-        ["text", runtime(struct.string())],
-      ]),
-      options: [runtime(struct.string())],
-    });
-
-    expect(() => parse(handBuilt, { type: "text" })).toThrow(
-      "discriminatedUnion options must be object structs",
     );
   });
 });

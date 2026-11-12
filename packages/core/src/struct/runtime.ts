@@ -40,6 +40,9 @@ export function createPrimitiveStruct<TInput, TOutput = TInput>(
 
 export const DEFAULT_FLAGS: StructFlags = { nullable: false, optional: false };
 
+/** A struct whose own value is null accepts null the same way `.nullable()` does: by this flag. */
+export const NULLABLE_FLAGS: StructFlags = { nullable: true, optional: false };
+
 /**
  * Builds the runtime object of a struct and gives it the struct type its constructor declares.
  *

@@ -261,14 +261,11 @@ function parseNode(
   }
 
   if (input === null) {
-    if (definition.kind === "null" || definition.flags.nullable) {
+    if (definition.flags.nullable) {
       return null;
     }
-    const delegatesNull =
-      (definition.kind === "literal" && definition.value === null) ||
-      definition.kind === "intersection" ||
-      definition.kind === "or";
-    if (!delegatesNull) {
+    // An intersection or a union accepts null when its members do, so only those two go on to ask them.
+    if (definition.kind !== "intersection" && definition.kind !== "or") {
       return report
         ? reject(state, true, "invalid_type", expectedType(definition), input)
         : FAILED;
@@ -590,76 +587,50 @@ function parseDiscriminatedUnionValue(
     return reject(state, report, "invalid_type", "object", input);
   }
 
-  if (!state.aliases) {
-    const value = hasOwnKey(input, definition.discriminator)
-      ? input[definition.discriminator]
+  // The tag is read once, here. With aliases every option may name it differently on the wire, so the first wire
+  // name the input has decides, and the option that tag selects has to be the one that uses that name.
+  const aliases = state.aliases;
+  const key = aliases
+    ? firstOwnKey(input, definition.discriminatorWireKeys)
+    : hasOwnKey(input, definition.discriminator)
+      ? definition.discriminator
       : undefined;
-    const target = definition.map.get(value);
-    if (value === undefined || !target) {
-      state.path.push(definition.discriminator);
-      return reject(
-        state,
-        report,
-        value === undefined ? "missing_key" : "invalid_union",
-        definition.expected,
-        value,
-      );
-    }
-    return parseObjectValue(
+  const tag = key === undefined ? undefined : input[key];
+  const target = definition.map.get(tag);
+  if (
+    target === undefined ||
+    (aliases && definition.wireKeyByValue.get(tag) !== key)
+  ) {
+    state.path.push(definition.discriminator);
+    return reject(
       state,
-      target,
-      discriminatorTargetDefinition(target),
-      input,
       report,
-      definition.discriminator,
-      value,
+      tag === undefined ? "missing_key" : "invalid_union",
+      definition.expected,
+      tag,
     );
   }
-
-  for (const wireKey of definition.discriminatorWireKeys ?? []) {
-    if (!hasOwnKey(input, wireKey)) {
-      continue;
-    }
-
-    const value = input[wireKey];
-    const target = definition.map.get(value);
-    if (
-      value === undefined ||
-      !target ||
-      definition.wireKeyByValue?.get(value) !== wireKey
-    ) {
-      state.path.push(definition.discriminator);
-      return reject(
-        state,
-        report,
-        value === undefined ? "missing_key" : "invalid_union",
-        definition.expected,
-        value,
-      );
-    }
-    return parseObjectValue(
-      state,
-      target,
-      discriminatorTargetDefinition(target),
-      input,
-      report,
-      wireKey,
-      value,
-    );
-  }
-  state.path.push(definition.discriminator);
-  return reject(state, report, "missing_key", definition.expected, undefined);
+  return parseObjectValue(
+    state,
+    target,
+    target[DEFINITION],
+    input,
+    report,
+    key,
+    tag,
+  );
 }
 
-// Construction maps tags only to object options. A definition built by hand can map one to anything else.
-function discriminatorTargetDefinition(
-  target: RuntimeStruct,
-): ObjectDefinition {
-  const definition = target[DEFINITION];
-  if (definition.kind !== "object") {
-    throw new TypeError("discriminatedUnion options must be object structs");
+function firstOwnKey(
+  input: { [key: string]: unknown },
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    if (hasOwnKey(input, key)) {
+      return key;
+    }
   }
-  return definition;
+  return undefined;
 }
 
 function parseIntersectionValue(

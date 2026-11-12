@@ -1,5 +1,10 @@
 import { isObjectRuntimeStruct, isStruct } from "./guards";
-import { createPrimitiveStruct, DEFAULT_FLAGS, makeStruct } from "./runtime";
+import {
+  createPrimitiveStruct,
+  DEFAULT_FLAGS,
+  makeStruct,
+  NULLABLE_FLAGS,
+} from "./runtime";
 import { assertStruct, assertStructs } from "./shape";
 import { DEFINITION } from "./symbols";
 import type {
@@ -84,8 +89,9 @@ export function createBooleanStruct(): Struct<boolean, boolean> {
  * @group struct
  */
 export function createNullStruct(): Struct<null, null> {
-  return createPrimitiveStruct({
+  return makeStruct<Struct<null, null>>({
     expected: "null",
+    flags: NULLABLE_FLAGS,
     is: (value): value is null => value === null,
     kind: "null",
   });
@@ -144,7 +150,7 @@ export function createLiteralStruct<const T extends LiteralValue>(
 ): Struct<T, T> {
   return makeStruct<Struct<T, T>>({
     expected: describeValue(value),
-    flags: DEFAULT_FLAGS,
+    flags: value === null ? NULLABLE_FLAGS : DEFAULT_FLAGS,
     kind: "literal",
     value,
   });
@@ -444,8 +450,8 @@ export function createDiscriminatedUnionStruct<
   options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
 ): DiscriminatedUnionStruct<TOptions> {
   const snapshot: readonly unknown[] = [...options];
-  const unionOptions: RuntimeStruct[] = [];
-  const map = new Map<unknown, RuntimeStruct>();
+  const unionOptions: ObjectRuntimeStruct[] = [];
+  const map = new Map<unknown, ObjectRuntimeStruct>();
   const wireKeyByValue = new Map<unknown, string>();
   const discriminatorWireKeys: string[] = [];
   const seenWireKeys = new Set<string>();
@@ -453,11 +459,11 @@ export function createDiscriminatedUnionStruct<
 
   for (const option of snapshot) {
     assertStruct(option, "discriminatedUnion option");
-    unionOptions.push(option);
-    const optionDef = option[DEFINITION];
-    if (optionDef.kind !== "object") {
+    if (!isObjectRuntimeStruct(option)) {
       throw new TypeError("discriminatedUnion options must be object structs");
     }
+    unionOptions.push(option);
+    const optionDef = option[DEFINITION];
     const descriptor = optionDef.cache.declaredDescriptors[discriminator];
     const fieldStruct: unknown =
       descriptor && typeof descriptor.get === "function"

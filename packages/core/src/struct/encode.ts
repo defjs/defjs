@@ -96,10 +96,7 @@ export function encodeValue(
   depth = 0,
 ): unknown {
   const definition = struct[DEFINITION];
-  if (
-    value === null &&
-    (definition.kind === "null" || definition.flags.nullable)
-  ) {
+  if (value === null && definition.flags.nullable) {
     return null;
   }
   if (typeof value === "undefined" && definition.flags.optional) {
