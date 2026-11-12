@@ -145,10 +145,15 @@ describe("pickFirstBalancer", () => {
   test("an empty pick leaves the sticky endpoint and the shuffle keys alone", () => {
     const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
     const balancer = pickFirstBalancer({ shuffle: true });
-    expect(balancer.pick({ endpoints: [], members: ["a", "b"] })[0]).toBe(
+    report(balancer, ["a", "b"], { attempted: true, code: "NET_UNREACHABLE" });
+    expect(endpointOf(balancer, ["a", "b"])).toBe("b");
+    const draws = random.mock.calls.length;
+
+    expect(balancer.pick({ endpoints: [], members: ["a", "c"] })[0]).toBe(
       ERR_NO_CANDIDATE,
     );
-    expect(random).not.toHaveBeenCalled();
+    expect(random).toHaveBeenCalledTimes(draws);
+    expect(endpointOf(balancer, ["a", "b"])).toBe("b");
   });
 
   test("returns ERR_NO_CANDIDATE when no member is a candidate", () => {
