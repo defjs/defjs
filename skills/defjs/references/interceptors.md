@@ -1,6 +1,6 @@
 # Interceptors (`createHttpInterceptor`, SSE, WebSocket)
 
-Contents: [Onion model and registration](#onion-model-and-registration) · [Auth header injection](#auth-header-injection) · [Refresh bearer token once on 401](#refresh-bearer-token-once-on-401) · [Retry safe reads with `Retry-After`](#retry-safe-reads-with-retry-after) · [Short-circuiting and ETag caching](#short-circuiting-and-etag-caching) · [SSE and WebSocket interceptors](#sse-and-websocket-interceptors)
+Contents: [Onion model and registration](#onion-model-and-registration) · [Auth header injection](#auth-header-injection) · [Refresh bearer token once on 401](#refresh-bearer-token-once-on-401) · [Honor `Retry-After` on 429](#honor-retry-after-on-429) · [Short-circuiting and ETag caching](#short-circuiting-and-etag-caching) · [SSE and WebSocket interceptors](#sse-and-websocket-interceptors)
 
 ## Onion model and registration
 
@@ -95,9 +95,9 @@ function refreshingBearer(
 
 A JSON POST is replayable at the byte level but may not be safe to execute twice. The 401-refresh interceptor delivers it twice (rejected, then accepted). Require authentication rejection before business handling and stable-key server-side deduplication, or do not automatically replay writes.
 
-## Retry safe reads with `Retry-After`
+## Honor `Retry-After` on 429
 
-Only retry idempotent methods (`GET`, `HEAD`, `OPTIONS`) whose body is replayable (not a `ReadableStream`). Always respect `request.signal` while waiting:
+Wait for `Retry-After` and resend on the same endpoint only for a `429` whose request body is replayable (not a `ReadableStream`). Always respect `request.signal` while waiting:
 
 `Retry-After` accepts seconds or an HTTP date; this application recipe caps waits at 30 seconds, with a 250 ms fallback. The cap can retry earlier than the server requested: wait the full delay or return the response if that is unacceptable. Core `withRetry` does not read this header. Abort signals cancel the wait without another attempt.
 
@@ -107,9 +107,6 @@ import {
   type HttpRequest,
   type HttpResponse,
 } from "@defjs/core";
-
-const retryableMethods = new Set(["GET", "HEAD", "OPTIONS"]);
-const retryableStatuses = new Set([429, 502, 503, 504]);
 
 function isReplayable(request: HttpRequest): boolean {
   return (
@@ -132,24 +129,17 @@ function retryAfterMs(response: HttpResponse<unknown>): number {
     : Math.min(Math.max(0, date - Date.now()), 30_000);
 }
 
-function waitForRetryAfter(
+async function waitForRetryAfter(
   response: HttpResponse<unknown>,
   signal?: AbortSignal,
 ): Promise<void> {
   const delay = retryAfterMs(response);
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
-      reject(signal.reason);
-      return;
-    }
-
+  signal?.throwIfAborted();
+  await new Promise<void>((resolve) => {
     const timer = setTimeout(done, delay);
     const onAbort = () => {
       clearTimeout(timer);
-      signal?.removeEventListener("abort", onAbort);
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
-      reject(signal?.reason);
+      done();
     };
 
     function done() {
@@ -158,27 +148,23 @@ function waitForRetryAfter(
     }
 
     signal?.addEventListener("abort", onAbort, { once: true });
-    if (signal?.aborted) onAbort();
   });
+  // An abort during the wait ends it early and rejects with the signal's reason.
+  signal?.throwIfAborted();
 }
 
-const retrySafeReads = createHttpInterceptor(async (request, next) => {
-  if (
-    !retryableMethods.has(request.method.toUpperCase()) ||
-    !isReplayable(request)
-  )
-    return next(request);
+const honorRetryAfter = createHttpInterceptor(async (request, next) => {
+  if (!isReplayable(request)) return next(request);
 
   for (let attempt = 0; ; attempt += 1) {
     const response = await next(request);
-    if (!retryableStatuses.has(response.status) || attempt >= 2)
-      return response;
+    if (response.status !== 429 || attempt >= 2) return response;
     await waitForRetryAfter(response, request.signal);
   }
 });
 ```
 
-This `next()` loop stays on the selected endpoint without rerunning the builder or outer auth. For failover to another endpoint, prefer `withRetry()`; stacking the layers can send three primary requests plus one backup request with `maxRetries: 1`. See [load balancing](load-balancing.md) before composing policies.
+This `next()` loop stays on the selected endpoint without rerunning the builder or outer interceptors. Connection failures and `502`/`503`/`504` belong to `withRetry()`; see [load balancing](load-balancing.md) before composing policies.
 
 ## Short-circuiting and ETag caching
 

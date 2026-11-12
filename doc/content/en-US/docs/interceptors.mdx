@@ -5,7 +5,7 @@ description: Apply authentication and transport policies to the application clie
 
 # Interceptors
 
-Interceptors attach cross-cutting execution policies—authentication headers, request signing, maintenance short-circuiting, or safe-read retries—to the application's `Client` without modifying SDK operation definitions.
+Interceptors attach cross-cutting execution policies—authentication headers, request signing, maintenance short-circuiting, or `Retry-After` handling—to the application's `Client` without modifying SDK operation definitions.
 
 Input validation and `builder` mapping run **before** the interceptor chain; HTTP status dispatch and `output` / `error` struct validation run **after** the chain.
 
@@ -53,17 +53,17 @@ An HTTP interceptor can return a synthetic response without calling `next(req)` 
 
 `makeResponse` is **not** a validation bypass: the synthetic response still goes through the operation's media-type check, status fork (`2xx` vs non-`2xx`), and `output` / `error` struct validation.
 
-## 3. Retry safe HTTP reads
+## 3. Retries and `Retry-After`
 
 HTTP retries are off by default. To retry a connection failure, a timeout, or a `502`, `503`, or `504` on another endpoint, use [`withRetry()`](/docs/load-balancing#retries). After the backoff delay it lets the balancer pick again, rebuilds the request, and reruns the complete interceptor chain.
 
-An application interceptor can instead implement same-endpoint status handling, such as `429` and `Retry-After`. This bounded safe-read recipe also handles `502`/`503`/`504`:
+An application interceptor can instead implement same-endpoint status handling, such as `429` and `Retry-After`:
 
 <include cwd lang="typescript">
-  examples/interceptors/retry-safe-reads.ts#example
+  examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **Two retry layers**: This `next(request)` loop stays on the selected endpoint and does not rerun outer authentication or the builder. Combining three inner sends with `withRetry({ maxRetries: 1 })` can send four HTTP requests (three to a failing primary, one to a healthy backup); `maxRetries` bounds outer attempts, not physical sends. Choose which layer owns each condition rather than accidentally stacking them.
+- **Two retry layers**: This `next(request)` loop stays on the selected endpoint and does not rerun the builder or outer interceptors. Connection failures and `502`/`503`/`504` belong to `withRetry`.
 - **`Retry-After` policy**: Core `withRetry` does not read this header. The recipe's 30-second cap and 250 ms fallback are application choices. Capping a longer server delay can retry earlier than requested; if that is unacceptable, wait for the full delay or return the response instead.
 - **401 writes**: The [Bearer-refresh recipe](/recipes/refresh-bearer-once) can deliver a JSON POST twice. Require authentication rejection before business processing and a stable idempotency key with server-side deduplication, or do not automatically replay writes. Stream request bodies are not replayed.
 - **Handling transport rejections**: `next(request)` rejects when a network error occurs (there is no status-0 response). Catching and rethrowing that rejection preserves the original `NET_*` fault code.

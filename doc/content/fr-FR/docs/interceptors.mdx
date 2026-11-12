@@ -5,7 +5,7 @@ description: Appliquez l'authentification et les politiques de transport au clie
 
 # Intercepteurs
 
-Les intercepteurs rattachent des politiques d'exécution transversales — en-têtes d'authentification, signature de requêtes, court-circuit de maintenance ou rejeu de lectures sûres — au `Client` de l'application sans modifier les définitions d'opérations du SDK.
+Les intercepteurs rattachent des politiques d'exécution transversales — en-têtes d'authentification, signature de requêtes, court-circuit de maintenance ou gestion de `Retry-After` — au `Client` de l'application sans modifier les définitions d'opérations du SDK.
 
 La validation de l'entrée et la projection par le `builder` s'exécutent **avant** la chaîne d'intercepteurs ; l'aiguillage par statut HTTP et la validation des structs `output` / `error` s'exécutent **après** la chaîne.
 
@@ -53,17 +53,17 @@ Un intercepteur HTTP peut renvoyer une réponse synthétique sans appeler `next(
 
 `makeResponse` ne constitue **pas** un contournement de validation : la réponse synthétique reste soumise à la vérification du media type de l'opération, à la bifurcation selon le statut (`2xx` vs non-`2xx`) et à la validation des structs `output` / `error`.
 
-## 3. Rejouer les lectures HTTP sûres
+## 3. Retries et `Retry-After`
 
 Les retries HTTP sont désactivés par défaut. Pour retenter un échec de connexion, un timeout, ou un `502`, `503` ou `504` sur un autre endpoint, utilisez [`withRetry()`](/fr-FR/docs/load-balancing#retries). Après le délai de backoff, il laisse le répartiteur sélectionner à nouveau, reconstruit la requête et réexécute toute la chaîne d’intercepteurs.
 
-Un intercepteur applicatif peut plutôt traiter les statuts sur le même endpoint, tels que `429` et `Retry-After`. Cette recette bornée de lectures sûres traite aussi `502`/`503`/`504` :
+Un intercepteur applicatif peut plutôt traiter les statuts sur le même endpoint, tels que `429` et `Retry-After` :
 
 <include cwd lang="typescript">
-  examples/interceptors/retry-safe-reads.ts#example
+  examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **Deux couches de retry** : Cette boucle `next(request)` reste sur l’endpoint sélectionné et ne réexécute ni l’authentification externe ni le builder. Combiner trois envois internes avec `withRetry({ maxRetries: 1 })` peut envoyer quatre requêtes HTTP (trois vers un primaire défaillant, une vers un secours sain) ; `maxRetries` borne les tentatives externes, pas les envois physiques. Décidez quelle couche possède chaque condition plutôt que de les empiler par inadvertance.
+- **Deux couches de retry** : Cette boucle `next(request)` reste sur l’endpoint sélectionné et ne réexécute ni le builder ni les intercepteurs externes. Les échecs de connexion et les `502`/`503`/`504` relèvent de `withRetry`.
 - **Politique `Retry-After`** : Le `withRetry` de Core ne lit pas cet en-tête. Le plafond de 30 secondes et le repli à 250 ms de la recette sont des choix applicatifs. Plafonner un délai serveur plus long peut relancer plus tôt que demandé ; si cela est inacceptable, attendez le délai complet ou renvoyez plutôt la réponse.
 - **Écritures après 401** : La [recette de renouvellement Bearer](/fr-FR/recipes/refresh-bearer-once) peut livrer deux fois un POST JSON. Exigez un rejet d’authentification avant le traitement métier et une clé d’idempotence stable avec déduplication côté serveur, ou ne rejouez pas automatiquement les écritures. Les corps de requête en flux ne sont pas rejoués.
 - **Gestion des rejets de transport** : `next(request)` rejette lorsqu'une erreur réseau survient (il n'existe aucune réponse de statut 0). Intercepter et relancer ce rejet préserve le code de fault `NET_*` initial.

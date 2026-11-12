@@ -5,7 +5,7 @@ description: 為應用程式嘅 client 套用認證同傳輸策略，唔使改�
 
 # 攔截器
 
-攔截器可以將橫切嘅執行策略——例如認證 headers、請求簽名、維護模式嘅快速短路（short-circuiting），或者安全讀取嘅重試機制——掛載到應用程式嘅 `Client`，完全唔使改動 SDK 嘅操作定義。
+攔截器可以將橫切嘅執行策略——例如認證 headers、請求簽名、維護模式嘅快速短路（short-circuiting），或者 `Retry-After` 處理——掛載到應用程式嘅 `Client`，完全唔使改動 SDK 嘅操作定義。
 
 呼叫流程中，input 驗證同 `builder` 映射會喺攔截器鏈**之前**執行；而 HTTP 狀態碼分發以及 `output` / `error` struct 驗證則會喺攔截器鏈**之後**執行。
 
@@ -53,17 +53,17 @@ HTTP 攔截器可以唔呼叫 `next(req)`，直接用 `makeResponse(...)` 構造
 
 `makeResponse` **並唔係**用嚟繞過驗證：合成回應依然要通過操作定義嘅 media-type 檢查、狀態碼分支判斷（`2xx` vs 非 `2xx`），以及 `output` / `error` struct 嘅嚴格驗證。
 
-## 3. 重試安全嘅 HTTP 讀取
+## 3. 重試同 `Retry-After`
 
 HTTP 重試預設關閉。要喺另一個端點重試連線失敗、逾時，或者 `502`、`503` 或 `504`，請用 [`withRetry()`](/zh-Hant-HK/docs/load-balancing#retries)。經過 backoff 延遲之後，佢會再俾 balancer 揀一次、重新建構 request，並重新執行完整嘅攔截器鏈。
 
-應用程式攔截器亦可以改為處理同一端點嘅狀態碼，例如 `429` 同 `Retry-After`。以下呢個有界嘅安全讀取配方亦會處理 `502`/`503`/`504`：
+應用程式攔截器亦可以改為處理同一端點嘅狀態碼，例如 `429` 同 `Retry-After`：
 
 <include cwd lang="typescript">
-  examples/interceptors/retry-safe-reads.ts#example
+  examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **兩層重試**：呢個 `next(request)` 迴圈會留喺選中嘅端點，唔會重新執行外層認證或 builder。將三次內層傳送同 `withRetry({ maxRetries: 1 })` 一齊用，可能發出四次 HTTP 請求（三次去故障主端點，一次去健康後備端點）；`maxRetries` 限制外層嘗試次數，唔係實際傳送次數。應該明確決定每項條件由邊一層負責，避免無意間疊加。
+- **兩層重試**：呢個 `next(request)` 迴圈會留喺選中嘅端點，唔會重新執行 builder 或外層攔截器。連線失敗同 `502`/`503`/`504` 交畀 `withRetry`。
 - **`Retry-After` 策略**：Core 嘅 `withRetry` 唔會讀取呢個 header。配方入面嘅 30 秒上限同 250 ms 後備值係應用程式嘅選擇。如果伺服器要求嘅延遲更長，設定上限可能會提早重試；如果唔可以接受，請等足完整延遲，或者直接回傳 response。
 - **401 寫入**：[Bearer 更新配方](/zh-Hant-HK/recipes/refresh-bearer-once) 可能傳遞同一個 JSON POST 兩次。必須確保認證喺業務處理前拒絕 request，並使用穩定嘅冪等鍵同伺服器端去重，否則唔好自動重播寫入。串流 request body 唔會重播。
 - **處理傳輸層拒絕**：當發生網絡錯誤時，`next(request)` 會直接 reject（絕唔存在狀態碼為 0 嘅 response 物件）。Catch 之後再重新 throw 該 rejection，可以完整保留原始嘅 `NET_*` fault code。

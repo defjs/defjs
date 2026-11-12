@@ -5,9 +5,6 @@ import {
   type HttpResponse,
 } from "@defjs/core";
 
-const retryableMethods = new Set(["GET", "HEAD", "OPTIONS"]);
-const retryableStatuses = new Set([429, 502, 503, 504]);
-
 function isReplayable(request: HttpRequest): boolean {
   return (
     typeof ReadableStream === "undefined" ||
@@ -53,17 +50,12 @@ async function waitForRetryAfter(
   signal?.throwIfAborted();
 }
 
-const retrySafeReads = createHttpInterceptor(async (request, next) => {
-  if (
-    !retryableMethods.has(request.method.toUpperCase()) ||
-    !isReplayable(request)
-  )
-    return next(request);
+const honorRetryAfter = createHttpInterceptor(async (request, next) => {
+  if (!isReplayable(request)) return next(request);
 
   for (let attempt = 0; ; attempt += 1) {
     const response = await next(request);
-    if (!retryableStatuses.has(response.status) || attempt >= 2)
-      return response;
+    if (response.status !== 429 || attempt >= 2) return response;
     await waitForRetryAfter(response, request.signal);
   }
 });

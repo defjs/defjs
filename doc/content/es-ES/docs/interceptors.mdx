@@ -5,7 +5,7 @@ description: Aplica autenticación y políticas de transporte al cliente de la a
 
 # Interceptores
 
-Los interceptores conectan políticas transversales de ejecución —cabeceras de autenticación, firma de peticiones, respuestas inmediatas por mantenimiento o reintentos en lecturas seguras— al `Client` de la aplicación sin modificar las definiciones de operación del SDK.
+Los interceptores conectan políticas transversales de ejecución —cabeceras de autenticación, firma de peticiones, respuestas inmediatas por mantenimiento o el tratamiento de `Retry-After`— al `Client` de la aplicación sin modificar las definiciones de operación del SDK.
 
 La validación de entrada y el mapeo en `builder` se ejecutan **antes** de la cadena de interceptores; el despacho de código HTTP y la validación de structs de `output` / `error` se ejecutan **después** de la cadena.
 
@@ -53,17 +53,17 @@ Un interceptor HTTP puede devolver una respuesta sintética sin llamar a `next(r
 
 `makeResponse` **no** es un atajo para eludir validaciones: la respuesta sintética sigue pasando por la comprobación de tipo de medio, la bifurcación de estado (`2xx` frente a no `2xx`) y la validación de structs `output` / `error` de la operación.
 
-## 3. Reintentar lecturas HTTP seguras
+## 3. Reintentos y `Retry-After`
 
 Los reintentos HTTP están desactivados por defecto. Para reintentar un fallo de conexión, un tiempo de espera o un `502`, `503` o `504` en otro endpoint, usa [`withRetry()`](/es-ES/docs/load-balancing#retries). Tras el retardo de backoff deja que el balanceador vuelva a elegir, reconstruye la petición y ejecuta de nuevo toda la cadena de interceptores.
 
-Un interceptor de la aplicación puede, en cambio, tratar estados en el mismo endpoint, como `429` y `Retry-After`. Esta receta acotada de lecturas seguras también trata `502`/`503`/`504`:
+Un interceptor de la aplicación puede, en cambio, tratar estados en el mismo endpoint, como `429` y `Retry-After`:
 
 <include cwd lang="typescript">
-  examples/interceptors/retry-safe-reads.ts#example
+  examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **Dos capas de reintentos**: Este bucle `next(request)` permanece en el endpoint seleccionado y no vuelve a ejecutar la autenticación externa ni el builder. Combinar tres envíos internos con `withRetry({ maxRetries: 1 })` puede enviar cuatro peticiones HTTP (tres a un primario fallido y una a un respaldo saludable); `maxRetries` limita los intentos externos, no los envíos físicos. Elige qué capa controla cada condición en lugar de acumularlas por accidente.
+- **Dos capas de reintentos**: Este bucle `next(request)` permanece en el endpoint seleccionado y no vuelve a ejecutar el builder ni los interceptores externos. Los fallos de conexión y los `502`/`503`/`504` corresponden a `withRetry`.
 - **Política de `Retry-After`**: El `withRetry` de Core no lee esta cabecera. El tope de 30 segundos y la alternativa de 250 ms de la receta son decisiones de la aplicación. Limitar un retardo mayor del servidor puede reintentar antes de lo solicitado; si no es aceptable, espera el retardo completo o devuelve la respuesta.
 - **Escrituras tras 401**: La [receta de renovación Bearer](/es-ES/recipes/refresh-bearer-once) puede entregar un POST JSON dos veces. Exige un rechazo de autenticación antes del procesamiento de negocio y una clave de idempotencia estable con desduplicación en el servidor, o no repitas automáticamente las escrituras. Los cuerpos de petición en streaming no se repiten.
 - **Tratamiento de rechazos de transporte**: `next(request)` rechaza cuando ocurre un error de red (no existe una respuesta con estado 0). Capturar y relanzar ese rechazo preserva el código de fallo original `NET_*`.

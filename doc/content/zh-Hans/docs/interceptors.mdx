@@ -5,7 +5,7 @@ description: 在应用 Client 上挂载认证与传输策略，无须改动 SDK 
 
 # 拦截器
 
-拦截器为应用的 `Client` 挂载跨切面执行策略——认证请求头、请求签名、维护期短路或安全读重试——而无需修改 SDK 操作定义。
+拦截器为应用的 `Client` 挂载跨切面执行策略——认证请求头、请求签名、维护期短路或 `Retry-After` 处理——而无需修改 SDK 操作定义。
 
 输入校验和 `builder` 映射在拦截器链**之前**运行；HTTP 状态码分发与 `output` / `error` struct 校验在链**之后**运行。
 
@@ -53,17 +53,17 @@ HTTP 拦截器可以用 `makeResponse(...)` 构造合成响应，而不调用 `n
 
 `makeResponse` **不是**校验旁路：合成响应仍会经过该操作的媒体类型检查、状态码分支（`2xx` vs 非 `2xx`）以及 `output` / `error` struct 校验。
 
-## 3. 对安全的读请求执行重试
+## 3. 重试与 `Retry-After`
 
 HTTP 重试默认关闭。要在另一个端点上重试连接失败、超时，或 `502`、`503`、`504`，请使用 [`withRetry()`](/zh-Hans/docs/load-balancing#retries)。退避延迟之后，它会让均衡器再次选择、重新构建请求，并重新运行完整的拦截器链。
 
-应用拦截器也可以自行处理同一端点的状态码，例如 `429` 和 `Retry-After`。下面这个有界的安全读取配方也处理 `502`/`503`/`504`：
+应用拦截器也可以自行处理同一端点的状态码，例如 `429` 和 `Retry-After`：
 
 <include cwd lang="typescript">
-  examples/interceptors/retry-safe-reads.ts#example
+  examples/interceptors/honor-retry-after.ts#example
 </include>
 
-- **两层重试**：这个 `next(request)` 循环始终使用选中的端点，不会重新运行外层认证或 builder。把三次内层发送与 `withRetry({ maxRetries: 1 })` 组合起来，可能发送四次 HTTP 请求（三次发给故障主端点，一次发给健康备用端点）；`maxRetries` 限制外层尝试次数，而不是物理发送次数。应明确每种条件由哪一层负责，避免无意间叠加。
+- **两层重试**：这个 `next(request)` 循环始终使用选中的端点，不会重新运行 builder 或外层拦截器。连接失败和 `502`/`503`/`504` 交给 `withRetry`。
 - **`Retry-After` 策略**：Core 的 `withRetry` 不读取这个响应头。配方中 30 秒的上限和 250 ms 的回退值是应用层的选择。对更长的服务器延迟设置上限，可能比服务器要求的时间更早重试；若不能接受，请等待完整延迟或直接返回响应。
 - **401 写操作**：[Bearer 刷新配方](/zh-Hans/recipes/refresh-bearer-once)可能投递同一个 JSON POST 两次。请要求认证在业务处理前拒绝请求，并使用稳定的幂等键与服务端去重；否则不要自动重放写操作。流式请求体不会重放。
 - **处理传输层 rejection**：网络错误发生时 `next(request)` 会 reject（不存在 status 为 0 的响应）。捕获后重新抛出可保留原始 `NET_*` Fault 代码。
