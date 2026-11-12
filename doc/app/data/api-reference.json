@@ -828,9 +828,9 @@
     "slug": "core/clientoptions-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure.\n\nThe user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint`. {@link ClientConfig} is the resolved counterpart. The HTTP members come from the non-exported `HttpClientOptions` base and are shown inline.",
+    "description": "Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure.\n\nThe user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint`. {@link ClientConfig} is the resolved counterpart.",
     "signatures": [
-      "interface ClientOptions extends HttpClientOptions {\n  retry?: RetryOptions;\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}"
+      "interface ClientOptions {\n  endpoints: readonly string[];\n  headers?: Headers;\n  http?: { handle?: FetchHandle };\n  interceptors?: Interceptor[];\n  querySerializer?: QuerySerializer;\n  withCredentials?: boolean;\n  retry?: RetryOptions;\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -838,33 +838,6 @@
     "throws": [],
     "tags": [],
     "typeTable": [
-      {
-        "name": "retry",
-        "description": "Opt-in retry policy shared by HTTP, SSE, and WebSocket.",
-        "type": "RetryOptions | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "sse",
-        "description": "SSE transport options.",
-        "type": "ClientSSEOptions | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "webSocket",
-        "description": "WebSocket transport and heartbeat options.",
-        "type": "ClientWebSocketOptions | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
       {
         "name": "endpoints",
         "description": "Candidate base URLs. `withEndpoint` copies them and drops later duplicates.\nAn empty list is legal and fails at execution with `REQ_BUILD_FAILED`.",
@@ -918,12 +891,39 @@
         "required": false,
         "deprecated": false,
         "tags": []
+      },
+      {
+        "name": "retry",
+        "description": "Opt-in retry policy shared by HTTP, SSE, and WebSocket.",
+        "type": "RetryOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "sse",
+        "description": "SSE transport options.",
+        "type": "ClientSSEOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "webSocket",
+        "description": "WebSocket transport and heartbeat options.",
+        "type": "ClientWebSocketOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientOptions extends HttpClientOptions {\n  retry?: RetryOptions;\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}",
+        "signature": "interface ClientOptions {\n  endpoints: readonly string[];\n  headers?: Headers;\n  http?: { handle?: FetchHandle };\n  interceptors?: Interceptor[];\n  querySerializer?: QuerySerializer;\n  withCredentials?: boolean;\n  retry?: RetryOptions;\n  sse?: ClientSSEOptions;\n  webSocket?: ClientWebSocketOptions;\n}",
         "parameters": [],
         "returns": []
       }
@@ -936,9 +936,9 @@
     "slug": "core/clientconfig-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.",
+    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.",
     "signatures": [
-      "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  retry?: RetryOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}"
+      "interface ClientConfig {\n  endpoints: readonly string[];\n  headers?: Headers;\n  http: { handle: FetchHandle };\n  interceptors: Interceptor[];\n  querySerializer?: QuerySerializer;\n  finalizeHeaders?: HttpRequest[\"finalizeHeaders\"];\n  withCredentials?: boolean;\n  balancer: Balancer;\n  retry?: RetryOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -946,42 +946,6 @@
     "throws": [],
     "tags": [],
     "typeTable": [
-      {
-        "name": "balancer",
-        "description": "Selects one candidate per call. Defaults to a fresh pickFirstBalancer.",
-        "type": "Balancer",
-        "simplifiedType": "object",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "retry",
-        "description": "Retry policy shared by HTTP, SSE, and WebSocket. Unset means every call makes one attempt.",
-        "type": "RetryOptions | undefined",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "sse",
-        "description": "Resolved SSE configuration.",
-        "type": "ClientSSEConfig",
-        "simplifiedType": "object",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "webSocket",
-        "description": "Resolved WebSocket configuration.",
-        "type": "ClientWebSocketOptions",
-        "simplifiedType": "object",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
       {
         "name": "endpoints",
         "description": "Candidate base URLs in first-seen order. Empty until `withEndpoint` runs.\nThe balancer picks one per call.",
@@ -1044,12 +1008,48 @@
         "required": false,
         "deprecated": false,
         "tags": []
+      },
+      {
+        "name": "balancer",
+        "description": "Selects one candidate per call. Defaults to a fresh pickFirstBalancer.",
+        "type": "Balancer",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "retry",
+        "description": "Retry policy shared by HTTP, SSE, and WebSocket. Unset means every call makes one attempt.",
+        "type": "RetryOptions | undefined",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "sse",
+        "description": "Resolved SSE configuration.",
+        "type": "ClientSSEConfig",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "webSocket",
+        "description": "Resolved WebSocket configuration.",
+        "type": "ClientWebSocketOptions",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
       }
     ],
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  retry?: RetryOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}",
+        "signature": "interface ClientConfig {\n  endpoints: readonly string[];\n  headers?: Headers;\n  http: { handle: FetchHandle };\n  interceptors: Interceptor[];\n  querySerializer?: QuerySerializer;\n  finalizeHeaders?: HttpRequest[\"finalizeHeaders\"];\n  withCredentials?: boolean;\n  balancer: Balancer;\n  retry?: RetryOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}",
         "parameters": [],
         "returns": []
       }
@@ -2009,7 +2009,7 @@
       },
       {
         "name": "queryParams",
-        "description": "",
+        "description": "The query as `URLSearchParams`. It is ignored while `queryString` is present: change `queryString` instead.",
         "type": "URLSearchParams | undefined",
         "simplifiedType": "object",
         "required": false,
@@ -2018,7 +2018,7 @@
       },
       {
         "name": "queryString",
-        "description": "",
+        "description": "The query as the URL carries it, without the `?`. When present it decides the query; `queryParams` is not read.",
         "type": "string | undefined",
         "simplifiedType": "string",
         "required": false,
@@ -5310,7 +5310,7 @@
     "group": "interceptors",
     "description": "HTTP interceptor that sets an `Authorization: Basic …` header from credentials.\n\nIt sets `Authorization: Basic <encoded>` on a copy of the request headers,\nreplacing any existing `Authorization` header. The default encoder is\n``btoa(`${username}:${password}`)``, so credentials must be Latin-1. Without\n`encode`, calling `basicAuthHttpInterceptor` throws\n`Error: BasicAuthInterceptor is not supported in this environment` when `btoa`\nis not available in the runtime. Use {@link basicAuthSSEInterceptor} for SSE\noperations.",
     "signatures": [
-      "function basicAuthHttpInterceptor(\n  fn: () => BasicCredential,\n  options?: BasicAuthInterceptorOptions,\n): HttpInterceptor;"
+      "function basicAuthHttpInterceptor(\n  fn: () => Credential,\n  options?: BasicAuthInterceptorOptions,\n): HttpInterceptor;"
     ],
     "related": [],
     "exampleFiles": [],
@@ -5322,7 +5322,7 @@
       {
         "name": "fn",
         "description": "Factory returning username/password for each request.",
-        "type": "() => BasicCredential",
+        "type": "() => Credential",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -5340,12 +5340,12 @@
     ],
     "overloads": [
       {
-        "signature": "function basicAuthHttpInterceptor(\n  fn: () => BasicCredential,\n  options?: BasicAuthInterceptorOptions,\n): HttpInterceptor;",
+        "signature": "function basicAuthHttpInterceptor(\n  fn: () => Credential,\n  options?: BasicAuthInterceptorOptions,\n): HttpInterceptor;",
         "parameters": [
           {
             "name": "fn",
             "description": "Factory returning username/password for each request.",
-            "type": "() => BasicCredential",
+            "type": "() => Credential",
             "simplifiedType": "function",
             "required": true,
             "deprecated": false,
@@ -5374,7 +5374,7 @@
     "group": "interceptors",
     "description": "SSE interceptor that sets an `Authorization: Basic …` header from credentials.\n\nIt sets `Authorization: Basic <encoded>` on a copy of the request headers,\nreplacing any existing `Authorization` header. Encoding and the `btoa`\nrequirement are the same as for {@link basicAuthHttpInterceptor}, including\nthe synchronous throw when `btoa` is missing.",
     "signatures": [
-      "function basicAuthSSEInterceptor(\n  fn: () => BasicCredential,\n  options?: BasicAuthInterceptorOptions,\n): SSEInterceptor;"
+      "function basicAuthSSEInterceptor(\n  fn: () => Credential,\n  options?: BasicAuthInterceptorOptions,\n): SSEInterceptor;"
     ],
     "related": [],
     "exampleFiles": [],
@@ -5386,7 +5386,7 @@
       {
         "name": "fn",
         "description": "Factory returning username/password for each request.",
-        "type": "() => BasicCredential",
+        "type": "() => Credential",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -5404,12 +5404,12 @@
     ],
     "overloads": [
       {
-        "signature": "function basicAuthSSEInterceptor(\n  fn: () => BasicCredential,\n  options?: BasicAuthInterceptorOptions,\n): SSEInterceptor;",
+        "signature": "function basicAuthSSEInterceptor(\n  fn: () => Credential,\n  options?: BasicAuthInterceptorOptions,\n): SSEInterceptor;",
         "parameters": [
           {
             "name": "fn",
             "description": "Factory returning username/password for each request.",
-            "type": "() => BasicCredential",
+            "type": "() => Credential",
             "simplifiedType": "function",
             "required": true,
             "deprecated": false,
@@ -5927,9 +5927,9 @@
     "slug": "core/websocketsessionlike-type",
     "source": "packages/core/src/interceptor/interceptor.ts",
     "group": "interceptors",
-    "description": "Minimal WebSocket session surface that interceptors see.\n\nStructurally compatible with {@link WebSocketSession} without importing that\ntype, which avoids a circular dependency between interceptors and WebSocket.\nMessages are typed `unknown`.\n\nA wrapper or short-circuit session must forward the same\n`[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle;\nreturning an unrelated resolved promise is not sufficient.",
+    "description": "WebSocket session surface that interceptors see: a {@link WebSocketSession} whose messages are typed `unknown`.\n\nA wrapper or short-circuit session must forward the same\n`[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle;\nreturning an unrelated resolved promise is not sufficient.",
     "signatures": [
-      "interface WebSocketSessionLike extends AsyncDisposable {\n  readonly bufferedAmount: number;\n  readonly connection: {\n    extensions?: string;\n    generation: number;\n    protocol?: string;\n    url?: string;\n  };\n  readonly closed: Promise<WebSocketCloseInfo>;\n  readonly receive: AsyncIterable<unknown>;\n  readonly state: WebSocketState;\n  close(code?: number, reason?: string): void;\n  [Symbol.asyncDispose](): PromiseLike<void>;\n  onRuntimeError(listener: (error: unknown) => void): () => void;\n  onStateChange(listener: (state: WebSocketState) => void): () => void;\n  send(message: unknown): void;\n}"
+      "interface WebSocketSessionLike extends WebSocketSession<\n  unknown,\n  unknown\n> {}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -5949,7 +5949,7 @@
       {
         "name": "connection",
         "description": "",
-        "type": "{ extensions?: string; generation: number; protocol?: string; url?: string; }",
+        "type": "WebSocketConnectionInfo",
         "simplifiedType": "object",
         "required": true,
         "deprecated": false,
@@ -6031,7 +6031,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface WebSocketSessionLike extends AsyncDisposable {\n  readonly bufferedAmount: number;\n  readonly connection: {\n    extensions?: string;\n    generation: number;\n    protocol?: string;\n    url?: string;\n  };\n  readonly closed: Promise<WebSocketCloseInfo>;\n  readonly receive: AsyncIterable<unknown>;\n  readonly state: WebSocketState;\n  close(code?: number, reason?: string): void;\n  [Symbol.asyncDispose](): PromiseLike<void>;\n  onRuntimeError(listener: (error: unknown) => void): () => void;\n  onStateChange(listener: (state: WebSocketState) => void): () => void;\n  send(message: unknown): void;\n}",
+        "signature": "interface WebSocketSessionLike extends WebSocketSession<\n  unknown,\n  unknown\n> {}",
         "parameters": [],
         "returns": []
       }
@@ -6046,7 +6046,7 @@
     "group": "interceptors",
     "description": "Options for basic-auth interceptors, including a custom credential encoder.\n\n`encode` replaces only the credential encoder. The default is\n``btoa(`${username}:${password}`)``. The interceptor always prefixes the\nreturned string with `Basic `, so return the credential part alone: returning\n`'Basic abc'` produces the header `Basic Basic abc`.\n\nAccepted by {@link basicAuthHttpInterceptor} and {@link basicAuthSSEInterceptor}.",
     "signatures": [
-      "type BasicAuthInterceptorOptions = {\n  encode?: (credential: BasicCredential) => string;\n};"
+      "type BasicAuthInterceptorOptions = {\n  encode?: (credential: Credential) => string;\n};"
     ],
     "related": [],
     "exampleFiles": [],
@@ -6057,7 +6057,7 @@
       {
         "name": "encode",
         "description": "",
-        "type": "((credential: BasicCredential) => string) | undefined",
+        "type": "((credential: Credential) => string) | undefined",
         "simplifiedType": "function",
         "required": false,
         "deprecated": false,
@@ -6067,7 +6067,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type BasicAuthInterceptorOptions = {\n  encode?: (credential: BasicCredential) => string;\n};",
+        "signature": "type BasicAuthInterceptorOptions = {\n  encode?: (credential: Credential) => string;\n};",
         "parameters": [],
         "returns": []
       }

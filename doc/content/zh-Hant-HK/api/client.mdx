@@ -175,7 +175,7 @@ SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 even
 
 <ApiSignature name="ClientOptions" />
 
-簽名入面見到嘅欄位係 `retry`、`sse` 同 `webSocket`。另外六個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer` 同 `withCredentials`——繼承自未匯出嘅 HTTP base。`endpoints` 係 `readonly string[]`。解析後嘅預設值係 `[]`。空 array 係合法值，該次呼叫會以 `REQ_BUILD_FAILED` 失敗。冇 client 層級嘅 `timeout`。`createClient` 唔接受呢個 object；佢接受選項輔助函式。
+`endpoints` 係 `readonly string[]`。解析後嘅預設值係 `[]`。空 array 係合法值，該次呼叫會以 `REQ_BUILD_FAILED` 失敗。冇 client 層級嘅 `timeout`。`createClient` 唔接受呢個 object；佢接受選項輔助函式。
 
 ### ClientConfig
 

@@ -127,8 +127,7 @@ async function importLibrary() {
   return {
     client,
     DEFAULT_FETCH: config.DEFAULT_FETCH,
-    DEFAULT_HTTP_OPTIONS: config.DEFAULT_HTTP_OPTIONS,
-    DEFAULT_SSE_OPTIONS: config.DEFAULT_SSE_OPTIONS,
+    createClientConfig: config.createClientConfig,
     ERR_ABORTED: error.ERR_ABORTED,
     ERR_TIMEOUT: error.ERR_TIMEOUT,
     fetchHandler: transport.fetchHandler,
@@ -253,15 +252,11 @@ export function defineNativeFetchSuite(): void {
         .fn<FetchHandle>()
         .mockResolvedValueOnce(httpResponse)
         .mockResolvedValueOnce(sseResponse);
-      const {
-        calls,
-        receivers,
-        DEFAULT_FETCH,
-        DEFAULT_HTTP_OPTIONS,
-        DEFAULT_SSE_OPTIONS,
-      } = await loadTransport(ORIGIN, platform);
-      const { handle: httpDetached } = DEFAULT_HTTP_OPTIONS;
-      const { handle: sseDetached } = DEFAULT_SSE_OPTIONS;
+      const { calls, receivers, DEFAULT_FETCH, createClientConfig } =
+        await loadTransport(ORIGIN, platform);
+      const { http, sse } = createClientConfig();
+      const { handle: httpDetached } = http;
+      const { handle: sseDetached } = sse;
 
       expect(httpDetached).toBe(DEFAULT_FETCH);
       expect(sseDetached).toBe(DEFAULT_FETCH);

@@ -270,8 +270,14 @@ export interface RetryOptions {
       };
 }
 
-/** User-facing HTTP client options before defaults are applied. */
-export interface HttpClientOptions {
+/**
+ * Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure.
+ *
+ * The user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint`. {@link ClientConfig} is the resolved counterpart.
+ *
+ * @group client
+ */
+export interface ClientOptions {
   /**
    * Candidate base URLs. `withEndpoint` copies them and drops later duplicates.
    * An empty list is legal and fails at execution with `REQ_BUILD_FAILED`.
@@ -287,16 +293,6 @@ export interface HttpClientOptions {
   querySerializer?: QuerySerializer;
   /** When `true`, credentials are included with requests. */
   withCredentials?: boolean;
-}
-
-/**
- * Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure.
- *
- * The user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint`. {@link ClientConfig} is the resolved counterpart. The HTTP members come from the non-exported `HttpClientOptions` base and are shown inline.
- *
- * @group client
- */
-export interface ClientOptions extends HttpClientOptions {
   /** Opt-in retry policy shared by HTTP, SSE, and WebSocket. */
   retry?: RetryOptions;
   /** SSE transport options. */
@@ -305,8 +301,16 @@ export interface ClientOptions extends HttpClientOptions {
   webSocket?: ClientWebSocketOptions;
 }
 
-/** Resolved HTTP client config after defaults and options are applied. */
-export interface HttpClientConfig {
+/**
+ * Resolved client configuration after option helpers have been applied.
+ *
+ * The snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold.
+ *
+ * Before any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.
+ *
+ * @group client
+ */
+export interface ClientConfig {
   /**
    * Candidate base URLs in first-seen order. Empty until `withEndpoint` runs.
    * The balancer picks one per call.
@@ -327,18 +331,6 @@ export interface HttpClientConfig {
   finalizeHeaders?: HttpRequest["finalizeHeaders"];
   /** When `true`, credentials are included with requests. */
   withCredentials?: boolean;
-}
-
-/**
- * Resolved client configuration after option helpers have been applied.
- *
- * The snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.
- *
- * Before any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `finalizeHeaders` stays unset; `@defjs/core/xsrf` assigns it for browser XSRF forwarding.
- *
- * @group client
- */
-export interface ClientConfig extends HttpClientConfig {
   /** Selects one candidate per call. Defaults to a fresh {@link pickFirstBalancer}. */
   balancer: Balancer;
   /** Retry policy shared by HTTP, SSE, and WebSocket. Unset means every call makes one attempt. */
@@ -374,42 +366,20 @@ export function resolveGlobalFetch(): FetchHandle {
     : globalThis.fetch.bind(globalThis);
 }
 
-export const DEFAULT_HTTP_OPTIONS: { handle: FetchHandle } = {
-  handle: DEFAULT_FETCH,
-};
-
-export const DEFAULT_SSE_OPTIONS: ClientSSEConfig = {
-  handle: DEFAULT_FETCH,
-  onInvalidEvent: undefined,
-};
-
-export function createHttpClientConfig(): HttpClientConfig {
+export function createClientConfig(): ClientConfig {
   return {
     endpoints: [],
+    balancer: pickFirstBalancer(),
+    retry: undefined,
     headers: undefined,
-    http: { handle: DEFAULT_HTTP_OPTIONS.handle },
+    http: { handle: DEFAULT_FETCH },
     interceptors: [],
     querySerializer: undefined,
     finalizeHeaders: undefined,
     withCredentials: undefined,
-  };
-}
-
-export function createClientConfig(): ClientConfig {
-  const http = createHttpClientConfig();
-  return {
-    endpoints: http.endpoints,
-    balancer: pickFirstBalancer(),
-    retry: undefined,
-    headers: http.headers,
-    http: http.http,
-    interceptors: http.interceptors,
-    querySerializer: http.querySerializer,
-    finalizeHeaders: http.finalizeHeaders,
-    withCredentials: http.withCredentials,
     sse: {
-      handle: DEFAULT_SSE_OPTIONS.handle,
-      onInvalidEvent: DEFAULT_SSE_OPTIONS.onInvalidEvent,
+      handle: DEFAULT_FETCH,
+      onInvalidEvent: undefined,
     },
     webSocket: {
       handle: globalThis.WebSocket,

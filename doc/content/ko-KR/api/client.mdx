@@ -175,7 +175,7 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`를 파생 클라이언트
 
 <ApiSignature name="ClientOptions" />
 
-보이는 필드는 `retry`, `sse`, `webSocket`이에요. 나머지 여섯 개——`endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `withCredentials`——는 내보내지 않는 HTTP 기반에서 상속돼요. `endpoints`는 `readonly string[]`예요. 해석된 기본값은 `[]`예요. 빈 배열은 유효한 값이고, 호출은 `REQ_BUILD_FAILED`로 실패해요. 클라이언트 수준의 `timeout`은 없어요. `createClient`는 이 객체를 받지 않고 옵션 헬퍼를 받아요.
+`endpoints`는 `readonly string[]`예요. 해석된 기본값은 `[]`예요. 빈 배열은 유효한 값이고, 호출은 `REQ_BUILD_FAILED`로 실패해요. 클라이언트 수준의 `timeout`은 없어요. `createClient`는 이 객체를 받지 않고 옵션 헬퍼를 받아요.
 
 ### ClientConfig
 

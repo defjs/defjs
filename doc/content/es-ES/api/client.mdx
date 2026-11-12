@@ -175,7 +175,7 @@ Para WebSocket, `beforeConnect`, `heartbeat` y `protocols` también pueden pasar
 
 <ApiSignature name="ClientOptions" />
 
-Los campos mostrados son `retry`, `sse` y `webSocket`. Los otros seis — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer` y `withCredentials` — se heredan de la base HTTP no exportada. `endpoints` es `readonly string[]`. El valor por defecto resuelto es `[]`. Un array vacío es un valor admitido y hace fallar la llamada con `REQ_BUILD_FAILED`. No hay un `timeout` a nivel de cliente. `createClient` no recibe este objeto; recibe helpers de opción.
+`endpoints` es `readonly string[]`. El valor por defecto resuelto es `[]`. Un array vacío es un valor admitido y hace fallar la llamada con `REQ_BUILD_FAILED`. No hay un `timeout` a nivel de cliente. `createClient` no recibe este objeto; recibe helpers de opción.
 
 ### ClientConfig
 

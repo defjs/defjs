@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { HttpRequest } from "../http";
 import { makeFakeHandler } from "../../test/make_fake_handler";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
-import type { BasicCredential } from "./basic_auth";
 import {
   basicAuthHttpInterceptor,
   basicAuthSSEInterceptor,
@@ -14,7 +13,7 @@ describe("Basic Auth Interceptor", () => {
     vi.unstubAllGlobals();
   });
 
-  const credential: BasicCredential = {
+  const credential: { username: string; password: string } = {
     username: "user",
     password: "123",
   };

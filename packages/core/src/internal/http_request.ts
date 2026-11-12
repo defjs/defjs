@@ -130,7 +130,9 @@ export interface HttpRequest {
   method: string;
   /** Static, low-cardinality endpoint identity for telemetry and diagnostics. */
   operation?: string;
+  /** The query as `URLSearchParams`. It is ignored while `queryString` is present: change `queryString` instead. */
   queryParams?: URLSearchParams;
+  /** The query as the URL carries it, without the `?`. When present it decides the query; `queryParams` is not read. */
   queryString?: string;
   /**
    * Representation for a 2xx body, derived from the endpoint `output` struct kind.

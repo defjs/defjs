@@ -175,7 +175,7 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols` を派生した�
 
 <ApiSignature name="ClientOptions" />
 
-表示されるフィールドは `retry`、`sse`、`webSocket` です。残りの 6 つ——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`withCredentials`——は export されない HTTP の基底から継承されます。`endpoints` は `readonly string[]` です。解決後のデフォルトは `[]` です。空の配列は正当な値で、呼び出しは `REQ_BUILD_FAILED` で失敗します。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、オプションヘルパーを受け取ります。
+`endpoints` は `readonly string[]` です。解決後のデフォルトは `[]` です。空の配列は正当な値で、呼び出しは `REQ_BUILD_FAILED` で失敗します。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、オプションヘルパーを受け取ります。
 
 ### ClientConfig
 

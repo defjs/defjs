@@ -577,7 +577,7 @@
   {
     "slug": "core/websocketsessionlike-type",
     "name": "WebSocketSessionLike",
-    "description": "Minimal WebSocket session surface that interceptors see."
+    "description": "WebSocket session surface that interceptors see: a WebSocketSession whose messages are typed unknown."
   },
   {
     "slug": "core/basicauthinterceptoroptions-type",
