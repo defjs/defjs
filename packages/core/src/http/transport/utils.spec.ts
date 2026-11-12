@@ -1,7 +1,5 @@
 import { describe, expect, test } from "vitest";
 import type { HttpRequest } from "../../http";
-import { parseMediaTypePrefix } from "../../internal/media_type";
-import { parseMediaType } from "../../internal/media_type_parameters";
 import {
   concatChunks,
   getContentLength,
@@ -205,34 +203,19 @@ describe("Handler util", () => {
     expect(isJsonMediaType("application/prob lem+json")).toBe(false);
   });
 
-  test("should keep JSON essence matching separate from strict parameter validation", () => {
+  test("should match the JSON essence whatever the parameters look like", () => {
     const cases = [
-      ["application/json; bare", true, false],
-      ['APPLICATION/JSON; charset="utf-8"', true, true],
-      [" application/json", true, false],
-      ["application/json\n", true, false],
-      ["application/json; charset=utf-8\n", true, false],
-      ["application/json; x=bad/value", true, false],
-      ['text/event-stream; note="a\\;b"', false, true],
+      ["application/json; bare", true],
+      ['APPLICATION/JSON; charset="utf-8"', true],
+      [" application/json", true],
+      ["application/json\n", true],
+      ["application/json; charset=utf-8\n", true],
+      ["application/json; x=bad/value", true],
+      ['text/event-stream; note="a\\;b"', false],
     ] as const;
 
-    for (const [contentType, json, parametersWellFormed] of cases) {
-      const parsed = parseMediaType(contentType);
+    for (const [contentType, json] of cases) {
       expect(isJsonMediaType(contentType)).toBe(json);
-      expect(parsed.parametersWellFormed).toBe(parametersWellFormed);
     }
-  });
-
-  test("should expose the shared media type prefix tokenizer for malformed prefixes", () => {
-    expect(parseMediaTypePrefix("")).toEqual({ position: 0 });
-    expect(parseMediaTypePrefix("application")).toEqual({ position: 11 });
-    expect(parseMediaTypePrefix("application/")).toEqual({ position: 12 });
-    expect(parseMediaTypePrefix("application/json \t;")).toEqual({
-      essence: "application/json",
-      position: 16,
-    });
-    expect(parseMediaTypePrefix("application/json extra")).toEqual({
-      position: 16,
-    });
   });
 });

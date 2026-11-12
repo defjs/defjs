@@ -423,63 +423,50 @@ describe("fetchEventStream advanced", () => {
     'text/event-stream; note="a\\;b"',
     'text/event-stream; note="a\\éb"',
     'text/event-stream; note="café"',
-  ])(
-    "should accept valid event-stream content type %s",
-    async (contentType) => {
-      const stream = await fetchEventStream(createRequest("/events"), {
-        fetch: () =>
-          Promise.resolve(
-            new Response("data: ok\n\n", {
-              headers: { "content-type": contentType },
-            }),
-          ),
-      });
+    "text/event-stream; charset",
+    'text/event-stream; note="unterminated',
+  ])("should accept event-stream content type %s", async (contentType) => {
+    const stream = await fetchEventStream(createRequest("/events"), {
+      fetch: () =>
+        Promise.resolve(
+          new Response("data: ok\n\n", {
+            headers: { "content-type": contentType },
+          }),
+        ),
+    });
 
-      await expect(
-        stream[Symbol.asyncIterator]().next(),
-      ).resolves.toMatchObject({ value: { data: "ok" } });
-    },
-  );
+    await expect(stream[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      value: { data: "ok" },
+    });
+  });
 
   test.each([
     undefined,
     "",
     "application/json",
     "text/event-streaming",
-    "text/event-stream; bare",
-    "text/event-stream; charset",
-    "text/event-stream; bad name=value",
-    'text/event-stream; note="unterminated',
     "text/",
     "text/event-stream nope",
-    "text/event-stream; =utf-8",
-    "text/event-stream; charset=",
-    'text/event-stream; note="\\',
-    'text/event-stream; note="\\\u0001"',
-    'text/event-stream; note="\u0001"',
-  ])(
-    "should reject invalid event-stream content type %s",
-    async (contentType) => {
-      const bytes = new TextEncoder().encode("data: ignored\n\n");
-      await expect(
-        fetchEventStream(createRequest("/events"), {
-          fetch: () =>
-            Promise.resolve(
-              new Response(bytes, {
-                headers:
-                  contentType === undefined
-                    ? undefined
-                    : { "content-type": contentType },
-              }),
-            ),
-        }),
-      ).rejects.toThrow(
-        contentType === undefined || contentType === ""
-          ? /Expected content-type.*\(empty\)/
-          : /Expected content-type/,
-      );
-    },
-  );
+  ])("should reject content type %s", async (contentType) => {
+    const bytes = new TextEncoder().encode("data: ignored\n\n");
+    await expect(
+      fetchEventStream(createRequest("/events"), {
+        fetch: () =>
+          Promise.resolve(
+            new Response(bytes, {
+              headers:
+                contentType === undefined
+                  ? undefined
+                  : { "content-type": contentType },
+            }),
+          ),
+      }),
+    ).rejects.toThrow(
+      contentType === undefined || contentType === ""
+        ? /Expected content-type.*\(empty\)/
+        : /Expected content-type/,
+    );
+  });
 
   test("should observe but never retry a fatal open-validation error", async () => {
     const cancel = vi.fn();

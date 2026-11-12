@@ -23,7 +23,6 @@ import {
 } from "../../http/transport/fetch_init";
 import { concatChunks, parseBytesBody } from "../../internal/bytes";
 import { parseMediaTypeEssence } from "../../internal/media_type";
-import { isMediaTypeParametersWellFormed } from "../../internal/media_type_parameters";
 import { getContentType, isJsonMediaType } from "../../http/transport/utils";
 import {
   awaitWithSignal,
@@ -1130,13 +1129,10 @@ function validateOpenResponse<TBody>(
   }
 
   const contentType = response.headers.get("content-type") || "";
-  if (
-    parseMediaTypeEssence(contentType) !== EVENT_STREAM_CONTENT_TYPE ||
-    !isMediaTypeParametersWellFormed(contentType)
-  ) {
+  if (parseMediaTypeEssence(contentType) !== EVENT_STREAM_CONTENT_TYPE) {
     throw new EventStreamFatalError(
       "RES_MEDIA_TYPE_INVALID",
-      `Expected content-type to start with ${EVENT_STREAM_CONTENT_TYPE}, got ${contentType || "(empty)"}`,
+      `Expected content-type ${EVENT_STREAM_CONTENT_TYPE}, got ${contentType || "(empty)"}`,
     );
   }
 }
