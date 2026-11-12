@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { encodeJson } from "./codec/json";
-import { encodeValue } from "./codec/common";
+import { encodeObjectByAlias } from "./encode_by_struct";
+import { encodeValue } from "./encode_by_struct";
 import { StructError, struct } from "./index";
 import { parseStructTuple as parse } from "./parse";
 import { assertStruct } from "./shape";
@@ -204,7 +204,7 @@ describe("constructors.ts intersection", () => {
         const outer = struct.intersection(inner()[modifier](), c.null());
 
         expect(parse(outer, null)).toEqual([null, null]);
-        expect(encodeJson(outer, null)).toBeNull();
+        expect(encodeObjectByAlias(outer, null)).toBeNull();
         expect(parse(outer, { a: "a", b: "b", c: "c" })).toEqual([
           null,
           { a: "a", b: "b", c: "c" },
@@ -266,7 +266,7 @@ describe("constructors.ts intersection", () => {
         code: "invalid_intersection",
         path: ["a"],
       });
-      expect(encodeJson(outer, { a: "v", b: "w" })).toEqual({
+      expect(encodeObjectByAlias(outer, { a: "v", b: "w" })).toEqual({
         b: "w",
         x: "v",
         y: "v",
@@ -297,7 +297,7 @@ describe("constructors.ts intersection", () => {
       struct.object({ a: struct.string().alias("y") }),
     );
     expect(parse(schema, { a: "v" })).toEqual([null, { a: "v" }]);
-    expect(encodeJson(schema, { a: "v" })).toEqual({ x: "v", y: "v" });
+    expect(encodeObjectByAlias(schema, { a: "v" })).toEqual({ x: "v", y: "v" });
     expect(parse(schema, { x: "v", y: "v" }, { aliases: true })).toEqual([
       null,
       { a: "v" },
@@ -325,7 +325,7 @@ describe("constructors.ts intersection", () => {
       null,
       { profile: { name: "Ada" } },
     ]);
-    expect(encodeJson(nested, { profile: { name: "Ada" } })).toEqual({
+    expect(encodeObjectByAlias(nested, { profile: { name: "Ada" } })).toEqual({
       profile: { display_name: "Ada", full_name: "Ada" },
     });
   });
@@ -339,7 +339,7 @@ describe("constructors.ts intersection", () => {
       ),
     );
     expect(parse(schema, { a: "v" })).toEqual([null, { a: "v" }]);
-    expect(encodeJson(schema, { a: "v" })).toEqual({ x: "v", y: "v" });
+    expect(encodeObjectByAlias(schema, { a: "v" })).toEqual({ x: "v", y: "v" });
 
     const discriminated = struct.intersection(
       struct.object({ a: struct.string().alias("x") }),
@@ -358,7 +358,9 @@ describe("constructors.ts intersection", () => {
       null,
       { a: "v", kind: "left" },
     ]);
-    expect(encodeJson(discriminated, { a: "v", kind: "left" })).toEqual({
+    expect(
+      encodeObjectByAlias(discriminated, { a: "v", kind: "left" }),
+    ).toEqual({
       kind: "left",
       x: "v",
       y: "v",
@@ -367,11 +369,16 @@ describe("constructors.ts intersection", () => {
       null,
       { a: "v", kind: "right" },
     ]);
-    expect(encodeJson(discriminated, { a: "v", kind: "right" })).toEqual({
+    expect(
+      encodeObjectByAlias(discriminated, { a: "v", kind: "right" }),
+    ).toEqual({
       kind: "right",
       x: "v",
     });
-    expect(encodeJson(discriminated, { a: "v" })).toEqual({ a: "v", x: "v" });
+    expect(encodeObjectByAlias(discriminated, { a: "v" })).toEqual({
+      a: "v",
+      x: "v",
+    });
   });
 
   test("an absent optional key is not a conflict when its aliases differ", () => {
@@ -380,12 +387,12 @@ describe("constructors.ts intersection", () => {
       struct.object({ a: struct.string().alias("y").optional() }),
     );
     expect(parse(schema, {})).toEqual([null, {}]);
-    expect(encodeJson(schema, {})).toEqual({});
+    expect(encodeObjectByAlias(schema, {})).toEqual({});
     expect(parse(schema, { x: "v", y: "v" }, { aliases: true })).toEqual([
       null,
       { a: "v" },
     ]);
-    expect(encodeJson(schema, { a: "v" })).toEqual({ x: "v", y: "v" });
+    expect(encodeObjectByAlias(schema, { a: "v" })).toEqual({ x: "v", y: "v" });
   });
 
   test("two aliases on one logical key are a successful union branch", () => {
@@ -405,7 +412,7 @@ describe("constructors.ts intersection", () => {
       struct.object({ b: struct.string().alias("y") }).nullable(),
     );
     expect(parse(schema, null)).toEqual([null, null]);
-    expect(encodeJson(schema, null)).toBeNull();
+    expect(encodeObjectByAlias(schema, null)).toBeNull();
   });
 
   test("a non-object intersection member does not invent a wire key for an object key", () => {
@@ -413,7 +420,7 @@ describe("constructors.ts intersection", () => {
       struct.string(),
       struct.object({ a: struct.string().alias("x") }),
     );
-    expect(encodeJson(schema, { a: "v" })).toEqual({ a: "v", x: "v" });
+    expect(encodeObjectByAlias(schema, { a: "v" })).toEqual({ a: "v", x: "v" });
   });
 
   test("intersection merges the same logical key when every reachable object uses the same wire key", () => {
@@ -432,7 +439,7 @@ describe("constructors.ts intersection", () => {
       null,
       { a: "same", name: "Ada" },
     ]);
-    expect(encodeJson(schema, { a: "same", name: "Ada" })).toEqual({
+    expect(encodeObjectByAlias(schema, { a: "same", name: "Ada" })).toEqual({
       name: "Ada",
       wire: "same",
     });
@@ -494,7 +501,7 @@ describe("constructors.ts intersection", () => {
       null,
       { rows: [{ name: "Ada" }] },
     ]);
-    expect(encodeJson(rows, { rows: [{ name: "Ada" }] })).toEqual({
+    expect(encodeObjectByAlias(rows, { rows: [{ name: "Ada" }] })).toEqual({
       rows: [both],
     });
 
@@ -510,7 +517,9 @@ describe("constructors.ts intersection", () => {
       null,
       { ada: { name: "Ada" } },
     ]);
-    expect(encodeJson(record, { ada: { name: "Ada" } })).toEqual({ ada: both });
+    expect(encodeObjectByAlias(record, { ada: { name: "Ada" } })).toEqual({
+      ada: both,
+    });
 
     const tuple = struct.intersection(
       struct.tuple([
@@ -521,7 +530,7 @@ describe("constructors.ts intersection", () => {
       ]),
     );
     expect(parse(tuple, [{ name: "Ada" }])).toEqual([null, [{ name: "Ada" }]]);
-    expect(encodeJson(tuple, [{ name: "Ada" }])).toEqual([both]);
+    expect(encodeObjectByAlias(tuple, [{ name: "Ada" }])).toEqual([both]);
 
     const agreed = struct.intersection(
       struct.array(struct.object({ name: struct.string().alias("full_name") })),
@@ -529,10 +538,9 @@ describe("constructors.ts intersection", () => {
         struct.object({ name: struct.string().alias("full_name") }),
       ]),
     );
-    expect(encodeJson(agreed, [{ name: "Ada" }, { name: "Bea" }])).toEqual([
-      { full_name: "Ada" },
-      { full_name: "Bea", name: "Bea" },
-    ]);
+    expect(
+      encodeObjectByAlias(agreed, [{ name: "Ada" }, { name: "Bea" }]),
+    ).toEqual([{ full_name: "Ada" }, { full_name: "Bea", name: "Bea" }]);
   });
 
   test("intersection rejects when either side fails", () => {

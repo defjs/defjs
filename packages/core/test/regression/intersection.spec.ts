@@ -8,7 +8,7 @@ import {
   withHTTPHandle,
   withSSEHandle,
 } from "../../src";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
 import { DEFINITION, STRUCT } from "../../src/struct/symbols";
@@ -88,7 +88,7 @@ test("unknown and any are intersection identities and an all-identity intersecti
   expect(struct.parse(identities, input)).toEqual([null, input]);
   expect(struct.parse(identities, input)[1]).toBe(input);
   expect(struct.parse(identities, input, { aliases: true })[1]).toBe(input);
-  expect(encodeJson(identities, input)).toBe(input);
+  expect(encodeObjectByAlias(identities, input)).toBe(input);
 
   const nested = struct.intersection(
     struct.intersection(struct.unknown(), struct.any()),
@@ -117,10 +117,12 @@ test("unknown and any are intersection identities and an all-identity intersecti
 });
 
 test("struct encode merges every structured member of a mixed intersection", () => {
-  expect(encodeJson(Person, logical)).toEqual(wire);
-  expect(Object.getPrototypeOf(encodeJson(Person, logical))).toBeNull();
+  expect(encodeObjectByAlias(Person, logical)).toEqual(wire);
+  expect(
+    Object.getPrototypeOf(encodeObjectByAlias(Person, logical)),
+  ).toBeNull();
   expect(() =>
-    encodeJson(SharedWire, {
+    encodeObjectByAlias(SharedWire, {
       firstName: "Ada",
       lastName: "Lovelace",
       left: "L",
@@ -128,7 +130,7 @@ test("struct encode merges every structured member of a mixed intersection", () 
     }),
   ).toThrow(new TypeError("invalid intersection encode at shared"));
   expect(
-    encodeJson(SharedWire, {
+    encodeObjectByAlias(SharedWire, {
       firstName: "Ada",
       lastName: "Lovelace",
       left: "same",
@@ -142,14 +144,17 @@ test("struct encode merges every structured member of a mixed intersection", () 
 });
 
 test("struct encode does not merge raw unknown keys into an aliased object", () => {
-  expect(encodeJson(Loose, { extra: true, name: "Miao" })).toEqual({
+  expect(encodeObjectByAlias(Loose, { extra: true, name: "Miao" })).toEqual({
     full_name: "Miao",
   });
   expect(
-    encodeJson(struct.intersection(struct.unknown(), struct.string()), "x"),
+    encodeObjectByAlias(
+      struct.intersection(struct.unknown(), struct.string()),
+      "x",
+    ),
   ).toBe("x");
   expect(
-    encodeJson(struct.intersection(struct.unknown(), struct.any()), {
+    encodeObjectByAlias(struct.intersection(struct.unknown(), struct.any()), {
       extra: 1,
     }),
   ).toEqual({ extra: 1 });
@@ -456,7 +461,7 @@ test("record intersections tag every record container and emit each wire key", (
   expect(rowsTag).toBeDefined();
   expect(Object.hasOwn(rowsTag, DEFINITION)).toBe(false);
   expect(JSON.parse(JSON.stringify(encodeOutbound(rows)))).toEqual(
-    encodeJson(Rows, { name: "Ada" }),
+    encodeObjectByAlias(Rows, { name: "Ada" }),
   );
 
   const Mixed = struct.intersection(
@@ -472,7 +477,7 @@ test("record intersections tag every record container and emit each wire key", (
   expect(mixedTag).toBeDefined();
   expect(Object.hasOwn(mixedTag, DEFINITION)).toBe(false);
   expect(JSON.parse(JSON.stringify(encodeOutbound(mixed)))).toEqual(
-    encodeJson(Mixed, { extra: "kept", name: "Ada" }),
+    encodeObjectByAlias(Mixed, { extra: "kept", name: "Ada" }),
   );
 });
 
@@ -508,7 +513,9 @@ test("object-side encode skips an explicit undefined alias and an omitted logica
     struct.object({ first: struct.string().alias("wire") }),
     struct.object({ second: struct.string().optional().alias("other") }),
   );
-  expect(encodeJson(Aliased, { first: "first", second: undefined })).toEqual({
+  expect(
+    encodeObjectByAlias(Aliased, { first: "first", second: undefined }),
+  ).toEqual({
     wire: "first",
   });
 
@@ -516,7 +523,7 @@ test("object-side encode skips an explicit undefined alias and an omitted logica
     struct.object({ id: struct.string() }),
     struct.object({ note: struct.string().optional() }),
   );
-  const encoded = encodeJson(Logical, { id: "1" });
+  const encoded = encodeObjectByAlias(Logical, { id: "1" });
   expect(encoded).toEqual({ id: "1" });
   expect(Object.getPrototypeOf(encoded)).toBeNull();
 });

@@ -9,7 +9,7 @@ import {
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { materializeOutboundRequest } from "../../src/internal/outbound_request";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
 import { DEFINITION, STRUCT } from "../../src/struct/symbols";
 
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
@@ -38,7 +38,7 @@ test("public parse and direct encode merge nested array members", () => {
     null,
     [logical],
   ]);
-  expect(plain(encodeJson(rows, [logical]))).toEqual([wire]);
+  expect(plain(encodeObjectByAlias(rows, [logical]))).toEqual([wire]);
 });
 
 test("shared object field preserves its agreed parent alias", () => {
@@ -47,7 +47,9 @@ test("shared object field preserves its agreed parent alias", () => {
     struct.object({ profile: Right.alias("wire_profile") }),
   );
   const input = { profile: logical };
-  expect(plain(encodeJson(schema, input))).toEqual({ wire_profile: wire });
+  expect(plain(encodeObjectByAlias(schema, input))).toEqual({
+    wire_profile: wire,
+  });
   const parsed = parseEndpointInput(schema, input);
   notAStruct(symbolValue(parsed, firstSymbol(parsed)));
   const actual: unknown = JSON.parse(
@@ -158,7 +160,7 @@ test("array and tuple aliases for one logical key encode under both wire keys", 
     null,
     [{ name: "Ada" }],
   ]);
-  expect(plain(encodeJson(schema, [{ name: "Ada" }]))).toEqual([
+  expect(plain(encodeObjectByAlias(schema, [{ name: "Ada" }]))).toEqual([
     { first: "Ada", second: "Ada" },
   ]);
   expect(
@@ -173,7 +175,7 @@ test("array and tuple aliases for one logical key encode under both wire keys", 
     struct.array(nameLeft),
     struct.tuple([nameLeft]),
   );
-  expect(plain(encodeJson(agreed, [{ name: "Ada" }]))).toEqual([
+  expect(plain(encodeObjectByAlias(agreed, [{ name: "Ada" }]))).toEqual([
     { first: "Ada" },
   ]);
   expect(struct.parse(agreed, [{ name: "Ada" }])[0]).toBeNull();
@@ -190,7 +192,7 @@ test("record and object aliases for one logical key encode under both wire keys"
     null,
     { row: { name: "Ada" } },
   ]);
-  expect(plain(encodeJson(schema, { row: { name: "Ada" } }))).toEqual({
+  expect(plain(encodeObjectByAlias(schema, { row: { name: "Ada" } }))).toEqual({
     row: { first: "Ada", second: "Ada" },
   });
   expect(
@@ -420,7 +422,7 @@ test("object then record tags both containers and emits every wire key", () => {
     JSON.parse(
       wireText(materializeOutboundRequest({ body: parsed }, "http").body),
     ),
-  ).toEqual(plain(encodeJson(schema, input)));
+  ).toEqual(plain(encodeObjectByAlias(schema, input)));
 });
 
 test("repeating one object struct keeps that struct as the tag", () => {
@@ -565,7 +567,7 @@ test("getter-recursive intersection constructs and parses", () => {
   );
   const input = { children: [], enabled: true, id: "root" };
   expect(plain(struct.parse(category, input))).toEqual([null, input]);
-  expect(encodeJson(category, input)).toEqual(input);
+  expect(encodeObjectByAlias(category, input)).toEqual(input);
 });
 
 function wireText(body: unknown): string {

@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
 import { StructError, struct } from "../../src/struct";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
 
 const Left = struct.object({ value: struct.any().alias("left") });
 const Right = struct.object({ value: struct.any().alias("right") });
@@ -139,13 +139,19 @@ describe("intersection merge depth", () => {
       ),
     });
     expect(() =>
-      encodeJson(Wire, { wrapper: { left: nest(254), right: nest(254) } }),
+      encodeObjectByAlias(Wire, {
+        wrapper: { left: nest(254), right: nest(254) },
+      }),
     ).not.toThrow();
     expect(() =>
-      encodeJson(Wire, { wrapper: { left: nest(255), right: nest(255) } }),
+      encodeObjectByAlias(Wire, {
+        wrapper: { left: nest(255), right: nest(255) },
+      }),
     ).toThrow(TypeError);
     expect(() =>
-      encodeJson(Wire, { wrapper: { left: nest(255), right: nest(255) } }),
+      encodeObjectByAlias(Wire, {
+        wrapper: { left: nest(255), right: nest(255) },
+      }),
     ).toThrow(/invalid intersection encode/);
   });
 

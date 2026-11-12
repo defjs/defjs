@@ -2,7 +2,7 @@ import type { AnyStruct, Infer } from "../struct";
 import type { StructLike } from "../struct/types";
 import { decodeBytes, readBytesText } from "../internal/bytes";
 import { rejectNonJson } from "../internal/outbound_request";
-import { encodeAliasedStruct } from "../struct/codec/common";
+import { encodeAliasedStruct } from "../struct/encode_by_struct";
 import { parseRuntimeValue, parseStructValue } from "../struct/parse";
 import { assertStruct } from "../struct/shape";
 

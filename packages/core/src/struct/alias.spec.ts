@@ -1,19 +1,22 @@
 import { describe, expect, test } from "vitest";
-import { struct } from "../index";
-import { decodeJson, encodeJson } from "./json";
+import { struct } from "./index";
+import { parseStructValue } from "./parse";
+import { encodeObjectByAlias } from "./encode_by_struct";
 
-describe("codec/json.ts", () => {
+describe("alias wire names", () => {
   test("maps API JSON field names through alias()", () => {
     const user = struct.object({
       id: struct.number().alias("id"),
       name: struct.string().alias("user_name"),
     });
 
-    expect(encodeJson(user, { id: 1, name: "Miao" })).toEqual({
+    expect(encodeObjectByAlias(user, { id: 1, name: "Miao" })).toEqual({
       id: 1,
       user_name: "Miao",
     });
-    expect(decodeJson(user, { id: 1, user_name: "Miao" })).toEqual({
+    expect(
+      parseStructValue(user, { id: 1, user_name: "Miao" }, { aliases: true }),
+    ).toEqual({
       id: 1,
       name: "Miao",
     });
@@ -25,11 +28,13 @@ describe("codec/json.ts", () => {
       pageSize: struct.number().alias("page_size"),
     });
 
-    expect(encodeJson(user, { pageSize: 50, page: 1 })).toEqual({
+    expect(encodeObjectByAlias(user, { pageSize: 50, page: 1 })).toEqual({
       page_size: 50,
       page: 1,
     });
-    expect(decodeJson(user, { page_size: 50, page: 1 })).toEqual({
+    expect(
+      parseStructValue(user, { page_size: 50, page: 1 }, { aliases: true }),
+    ).toEqual({
       pageSize: 50,
       page: 1,
     });
@@ -55,7 +60,7 @@ describe("codec/json.ts", () => {
       },
     );
 
-    expect(() => decodeJson(user, input)).toThrow(
+    expect(() => parseStructValue(user, input, { aliases: true })).toThrow(
       expect.objectContaining({
         issues: [expect.objectContaining({ path: ["id"] })],
       }),
@@ -68,7 +73,13 @@ describe("codec/json.ts", () => {
       pageSize: struct.number().alias("page_size"),
     });
 
-    expect(decodeJson(query, { page_size: 20, pageSize: 99 })).toEqual({
+    expect(
+      parseStructValue(
+        query,
+        { page_size: 20, pageSize: 99 },
+        { aliases: true },
+      ),
+    ).toEqual({
       pageSize: 20,
     });
   });
@@ -79,11 +90,19 @@ describe("codec/json.ts", () => {
       pageSize: struct.number().alias("page_size"),
     });
 
-    expect(decodeJson(query, { internal: "kept", page_size: 20 })).toEqual({
+    expect(
+      parseStructValue(
+        query,
+        { internal: "kept", page_size: 20 },
+        { aliases: true },
+      ),
+    ).toEqual({
       internal: "kept",
       pageSize: 20,
     });
-    expect(encodeJson(query, { internal: "kept", pageSize: 20 })).toEqual({
+    expect(
+      encodeObjectByAlias(query, { internal: "kept", pageSize: 20 }),
+    ).toEqual({
       internal: "kept",
       page_size: 20,
     });
@@ -101,7 +120,7 @@ describe("codec/json.ts", () => {
     });
 
     expect(
-      encodeJson(user, {
+      encodeObjectByAlias(user, {
         internalOnly: "visible",
         profile: { name: "Miao", secret: "local" },
         team: [{ name: "Core", secret: "local-team" }],
@@ -113,11 +132,15 @@ describe("codec/json.ts", () => {
     });
 
     expect(
-      decodeJson(user, {
-        internalOnly: "visible",
-        profile: { full_name: "Miao", secret: "local" },
-        team: [{ full_name: "Core", secret: "local-team" }],
-      }),
+      parseStructValue(
+        user,
+        {
+          internalOnly: "visible",
+          profile: { full_name: "Miao", secret: "local" },
+          team: [{ full_name: "Core", secret: "local-team" }],
+        },
+        { aliases: true },
+      ),
     ).toEqual({
       internalOnly: "visible",
       profile: { name: "Miao", secret: "local" },
@@ -132,11 +155,13 @@ describe("codec/json.ts", () => {
     });
     const profiles = struct.array(profile);
 
-    expect(encodeJson(profiles, [{ name: "Miao", secret: "local" }])).toEqual([
-      { full_name: "Miao", secret: "local" },
-    ]);
     expect(
-      decodeJson(profiles, [{ full_name: "Miao", secret: "local" }]),
+      encodeObjectByAlias(profiles, [{ name: "Miao", secret: "local" }]),
+    ).toEqual([{ full_name: "Miao", secret: "local" }]);
+    expect(
+      parseStructValue(profiles, [{ full_name: "Miao", secret: "local" }], {
+        aliases: true,
+      }),
     ).toEqual([{ name: "Miao", secret: "local" }]);
   });
 
@@ -152,23 +177,35 @@ describe("codec/json.ts", () => {
       }),
     );
 
-    expect(encodeJson(event, { payload: "hello", type: "message" })).toEqual({
+    expect(
+      encodeObjectByAlias(event, { payload: "hello", type: "message" }),
+    ).toEqual({
       body: "hello",
       kind: "message",
     });
-    expect(encodeJson(event, { count: 3, type: "count" })).toEqual({
+    expect(encodeObjectByAlias(event, { count: 3, type: "count" })).toEqual({
       count: 3,
       kind: "count",
     });
-    expect(decodeJson(event, { body: "hello", kind: "message" })).toEqual({
+    expect(
+      parseStructValue(
+        event,
+        { body: "hello", kind: "message" },
+        { aliases: true },
+      ),
+    ).toEqual({
       payload: "hello",
       type: "message",
     });
-    expect(decodeJson(event, { count: 3, kind: "count" })).toEqual({
+    expect(
+      parseStructValue(event, { count: 3, kind: "count" }, { aliases: true }),
+    ).toEqual({
       count: 3,
       type: "count",
     });
-    expect(() => decodeJson(event, { count: 1, kind: "message" })).toThrow(
+    expect(() =>
+      parseStructValue(event, { count: 1, kind: "message" }, { aliases: true }),
+    ).toThrow(
       expect.objectContaining({
         issues: [expect.objectContaining({ code: "invalid_union", path: [] })],
       }),
@@ -181,9 +218,13 @@ describe("codec/json.ts", () => {
       struct.object({ value: struct.number().alias("count") }),
     );
 
-    expect(encodeJson(event, { value: "hello" })).toEqual({ text: "hello" });
-    expect(encodeJson(event, { value: 3 })).toEqual({ count: 3 });
-    expect(decodeJson(event, { count: 3 })).toEqual({ value: 3 });
+    expect(encodeObjectByAlias(event, { value: "hello" })).toEqual({
+      text: "hello",
+    });
+    expect(encodeObjectByAlias(event, { value: 3 })).toEqual({ count: 3 });
+    expect(parseStructValue(event, { count: 3 }, { aliases: true })).toEqual({
+      value: 3,
+    });
   });
 
   test("selects object union branch when nullable primitive field is present as null", () => {
@@ -195,7 +236,7 @@ describe("codec/json.ts", () => {
       struct.object({ kind: struct.literal("text"), value: struct.string() }),
     );
 
-    expect(encodeJson(Payload, { kind: "date", at: null })).toEqual({
+    expect(encodeObjectByAlias(Payload, { kind: "date", at: null })).toEqual({
       kind: "date",
       created_at: null,
     });
@@ -213,7 +254,9 @@ describe("codec/json.ts", () => {
       }),
     );
 
-    expect(encodeJson(Payload, { kind: null, value: "hello" })).toEqual({
+    expect(
+      encodeObjectByAlias(Payload, { kind: null, value: "hello" }),
+    ).toEqual({
       event_type: null,
       body: "hello",
     });
@@ -231,7 +274,7 @@ describe("codec/json.ts", () => {
       }),
     );
 
-    expect(encodeJson(Payload, { kind: "date" })).toEqual({
+    expect(encodeObjectByAlias(Payload, { kind: "date" })).toEqual({
       kind: "date",
     });
   });
@@ -244,7 +287,7 @@ describe("codec/json.ts", () => {
       struct.object({ kind: struct.literal("fallback").alias("event_type") }),
     );
 
-    expect(encodeJson(Payload, { kind: "fallback" })).toEqual({
+    expect(encodeObjectByAlias(Payload, { kind: "fallback" })).toEqual({
       event_type: "fallback",
     });
   });
@@ -260,7 +303,7 @@ describe("codec/json.ts", () => {
       struct.object({ type: struct.literal("message").alias("fallback_kind") }),
     );
 
-    expect(encodeJson(Payload, { type: "message" })).toEqual({
+    expect(encodeObjectByAlias(Payload, { type: "message" })).toEqual({
       fallback_kind: "message",
     });
   });
@@ -272,7 +315,7 @@ describe("codec/json.ts", () => {
     );
 
     expect(
-      encodeJson(Payload, { value: new Date("2026-05-12T10:00:00Z") }),
+      encodeObjectByAlias(Payload, { value: new Date("2026-05-12T10:00:00Z") }),
     ).toEqual({
       created_at: "2026-05-12T10:00:00.000Z",
     });
@@ -284,7 +327,7 @@ describe("codec/json.ts", () => {
       struct.object({ value: struct.number().alias("count") }),
     );
 
-    expect(encodeJson(Payload, { value: 42n })).toEqual({ id: "42" });
+    expect(encodeObjectByAlias(Payload, { value: 42n })).toEqual({ id: "42" });
   });
 
   test("selects aliased union branches through collection field types", () => {
@@ -305,22 +348,32 @@ describe("codec/json.ts", () => {
       }),
     );
 
-    expect(encodeJson(arrayEvent, { value: [1, 2] })).toEqual({
+    expect(encodeObjectByAlias(arrayEvent, { value: [1, 2] })).toEqual({
       counts: [1, 2],
     });
-    expect(decodeJson(arrayEvent, { counts: [1, 2] })).toEqual({
+    expect(
+      parseStructValue(arrayEvent, { counts: [1, 2] }, { aliases: true }),
+    ).toEqual({
       value: [1, 2],
     });
-    expect(encodeJson(recordEvent, { value: { total: 3 } })).toEqual({
+    expect(encodeObjectByAlias(recordEvent, { value: { total: 3 } })).toEqual({
       totals: { total: 3 },
     });
-    expect(decodeJson(recordEvent, { totals: { total: 3 } })).toEqual({
+    expect(
+      parseStructValue(
+        recordEvent,
+        { totals: { total: 3 } },
+        { aliases: true },
+      ),
+    ).toEqual({
       value: { total: 3 },
     });
-    expect(encodeJson(tupleEvent, { value: [3] })).toEqual({
+    expect(encodeObjectByAlias(tupleEvent, { value: [3] })).toEqual({
       count_tuple: [3],
     });
-    expect(decodeJson(tupleEvent, { count_tuple: [3] })).toEqual({
+    expect(
+      parseStructValue(tupleEvent, { count_tuple: [3] }, { aliases: true }),
+    ).toEqual({
       value: [3],
     });
   });
@@ -331,7 +384,7 @@ describe("codec/json.ts", () => {
       struct.object({ value: struct.string().alias("label") }),
     );
 
-    expect(() => encodeJson(Payload, { value: "x" })).toThrow(
+    expect(() => encodeObjectByAlias(Payload, { value: "x" })).toThrow(
       "ambiguous union encode",
     );
   });
@@ -342,7 +395,9 @@ describe("codec/json.ts", () => {
       struct.array(struct.string()).alias("labels"),
     );
 
-    expect(() => encodeJson(Payload, [])).toThrow("ambiguous union encode");
+    expect(() => encodeObjectByAlias(Payload, [])).toThrow(
+      "ambiguous union encode",
+    );
   });
 
   test("decodes aliased discriminated union objects symmetrically", () => {
@@ -357,23 +412,35 @@ describe("codec/json.ts", () => {
       }),
     ]);
 
-    expect(encodeJson(event, { payload: "hello", type: "message" })).toEqual({
+    expect(
+      encodeObjectByAlias(event, { payload: "hello", type: "message" }),
+    ).toEqual({
       body: "hello",
       kind: "message",
     });
-    expect(encodeJson(event, { count: 3, type: "count" })).toEqual({
+    expect(encodeObjectByAlias(event, { count: 3, type: "count" })).toEqual({
       count: 3,
       kind: "count",
     });
-    expect(decodeJson(event, { body: "hello", kind: "message" })).toEqual({
+    expect(
+      parseStructValue(
+        event,
+        { body: "hello", kind: "message" },
+        { aliases: true },
+      ),
+    ).toEqual({
       payload: "hello",
       type: "message",
     });
-    expect(decodeJson(event, { count: 3, kind: "count" })).toEqual({
+    expect(
+      parseStructValue(event, { count: 3, kind: "count" }, { aliases: true }),
+    ).toEqual({
       count: 3,
       type: "count",
     });
-    expect(() => decodeJson(event, { count: 1, kind: "message" })).toThrow(
+    expect(() =>
+      parseStructValue(event, { count: 1, kind: "message" }, { aliases: true }),
+    ).toThrow(
       expect.objectContaining({
         issues: [
           expect.objectContaining({ code: "missing_key", path: ["payload"] }),
@@ -394,7 +461,13 @@ describe("codec/json.ts", () => {
       }),
     ]);
 
-    expect(decodeJson(Message, { kind: "count", total_count: 3 })).toEqual({
+    expect(
+      parseStructValue(
+        Message,
+        { kind: "count", total_count: 3 },
+        { aliases: true },
+      ),
+    ).toEqual({
       type: "count",
       count: 3,
     });
@@ -409,7 +482,11 @@ describe("codec/json.ts", () => {
     ]);
 
     expect(
-      decodeJson(Message, { type: "text", message_body: "hello" }),
+      parseStructValue(
+        Message,
+        { type: "text", message_body: "hello" },
+        { aliases: true },
+      ),
     ).toEqual({ type: "text", body: "hello" });
   });
 
@@ -444,10 +521,18 @@ describe("codec/json.ts", () => {
       type: "text",
     };
 
-    expect(decodeJson(Message, input)).toEqual(expected);
-    expect(decodeJson(Message, input)).toEqual(expected);
-    expect(decodeJson(OptionalMessage, input)).toEqual(expected);
-    expect(decodeJson(NullishMessage, input)).toEqual(expected);
+    expect(parseStructValue(Message, input, { aliases: true })).toEqual(
+      expected,
+    );
+    expect(parseStructValue(Message, input, { aliases: true })).toEqual(
+      expected,
+    );
+    expect(parseStructValue(OptionalMessage, input, { aliases: true })).toEqual(
+      expected,
+    );
+    expect(parseStructValue(NullishMessage, input, { aliases: true })).toEqual(
+      expected,
+    );
     expect(recursiveReads).toBe(1);
     expect(typeReads).toBe(2);
   });
@@ -473,7 +558,7 @@ describe("codec/json.ts", () => {
       },
     };
 
-    expect(() => decodeJson(Message, input)).toThrow(
+    expect(() => parseStructValue(Message, input, { aliases: true })).toThrow(
       expect.objectContaining({
         issues: [
           expect.objectContaining({ code: "invalid_type", path: ["body"] }),
@@ -481,7 +566,9 @@ describe("codec/json.ts", () => {
       }),
     );
     expect(laterReads).toBe(0);
-    expect(() => decodeJson(Message, { kind: "count", count: 1 })).toThrow(
+    expect(() =>
+      parseStructValue(Message, { kind: "count", count: 1 }, { aliases: true }),
+    ).toThrow(
       expect.objectContaining({
         issues: [
           expect.objectContaining({ code: "invalid_union", path: ["type"] }),
@@ -496,13 +583,21 @@ describe("codec/json.ts", () => {
     });
     const intersectionStruct = struct.intersection(struct.unknown(), profile);
 
-    expect(encodeJson(intersectionStruct, { name: "Miao" })).toEqual({
+    expect(encodeObjectByAlias(intersectionStruct, { name: "Miao" })).toEqual({
       full_name: "Miao",
     });
-    expect(decodeJson(intersectionStruct, { full_name: "Miao" })).toEqual({
+    expect(
+      parseStructValue(
+        intersectionStruct,
+        { full_name: "Miao" },
+        { aliases: true },
+      ),
+    ).toEqual({
       name: "Miao",
     });
-    expect(() => decodeJson(intersectionStruct, {})).toThrow(
+    expect(() =>
+      parseStructValue(intersectionStruct, {}, { aliases: true }),
+    ).toThrow(
       expect.objectContaining({
         issues: [
           expect.objectContaining({ code: "missing_key", path: ["name"] }),
@@ -520,14 +615,18 @@ describe("codec/json.ts", () => {
     });
     const intersectionStruct = struct.intersection(account, profile);
 
-    expect(encodeJson(intersectionStruct, { id: "u_1", name: "Miao" })).toEqual(
-      {
-        account_id: "u_1",
-        full_name: "Miao",
-      },
-    );
     expect(
-      decodeJson(intersectionStruct, { account_id: "u_1", full_name: "Miao" }),
+      encodeObjectByAlias(intersectionStruct, { id: "u_1", name: "Miao" }),
+    ).toEqual({
+      account_id: "u_1",
+      full_name: "Miao",
+    });
+    expect(
+      parseStructValue(
+        intersectionStruct,
+        { account_id: "u_1", full_name: "Miao" },
+        { aliases: true },
+      ),
     ).toEqual({
       id: "u_1",
       name: "Miao",
@@ -550,7 +649,7 @@ describe("codec/json.ts", () => {
     );
 
     expect(
-      encodeJson(intersectionStruct, {
+      encodeObjectByAlias(intersectionStruct, {
         id: "u_1",
         name: "Miao",
         when: new Date("2026-05-12T10:00:00Z"),
@@ -561,11 +660,15 @@ describe("codec/json.ts", () => {
       full_name: "Miao",
     });
     expect(
-      decodeJson(intersectionStruct, {
-        account_id: "u_1",
-        created_at: "2026-05-12T10:00:00.000Z",
-        full_name: "Miao",
-      }),
+      parseStructValue(
+        intersectionStruct,
+        {
+          account_id: "u_1",
+          created_at: "2026-05-12T10:00:00.000Z",
+          full_name: "Miao",
+        },
+        { aliases: true },
+      ),
     ).toEqual({
       id: "u_1",
       name: "Miao",
@@ -576,27 +679,32 @@ describe("codec/json.ts", () => {
 
 const Profile = struct.object({ name: struct.string().alias("display_name") });
 
-describe("encodeJson nullish objects", () => {
+describe("encodeObjectByAlias nullish objects", () => {
   test("encodes null for a nullable object field and omits an optional one", () => {
     const request = struct.object({
       extra: Profile.optional(),
       profile: Profile.nullable(),
     });
 
-    expect(encodeJson(request, { profile: null })).toEqual({ profile: null });
+    expect(encodeObjectByAlias(request, { profile: null })).toEqual({
+      profile: null,
+    });
     expect(
-      encodeJson(request, { extra: undefined, profile: { name: "N" } }),
+      encodeObjectByAlias(request, {
+        extra: undefined,
+        profile: { name: "N" },
+      }),
     ).toEqual({
       profile: { display_name: "N" },
     });
   });
 
   test("encodes a nullable object root as null and an optional root as undefined", () => {
-    expect(encodeJson(Profile.nullable(), null)).toBeNull();
-    expect(encodeJson(Profile.optional(), undefined)).toBeUndefined();
-    expect(encodeJson(Profile.nullish(), null)).toBeNull();
-    expect(encodeJson(Profile.nullish(), undefined)).toBeUndefined();
-    expect(encodeJson(Profile.nullable(), { name: "N" })).toEqual({
+    expect(encodeObjectByAlias(Profile.nullable(), null)).toBeNull();
+    expect(encodeObjectByAlias(Profile.optional(), undefined)).toBeUndefined();
+    expect(encodeObjectByAlias(Profile.nullish(), null)).toBeNull();
+    expect(encodeObjectByAlias(Profile.nullish(), undefined)).toBeUndefined();
+    expect(encodeObjectByAlias(Profile.nullable(), { name: "N" })).toEqual({
       display_name: "N",
     });
   });
@@ -608,7 +716,7 @@ describe("encodeJson nullish objects", () => {
     });
 
     expect(
-      encodeJson(nested, {
+      encodeObjectByAlias(nested, {
         bag: { a: null, b: { name: "M" } },
         rows: [null, { name: "N" }],
       }),
@@ -619,10 +727,10 @@ describe("encodeJson nullish objects", () => {
   });
 
   test("still rejects null and undefined for an object that does not allow them", () => {
-    expect(() => encodeJson(Profile, null)).toThrow(
+    expect(() => encodeObjectByAlias(Profile, null)).toThrow(
       "json encode expects object value",
     );
-    expect(() => encodeJson(Profile, undefined)).toThrow(
+    expect(() => encodeObjectByAlias(Profile, undefined)).toThrow(
       "json encode expects object value",
     );
   });

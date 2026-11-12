@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { encodeJson } from "./codec/json";
+import { encodeObjectByAlias } from "./encode_by_struct";
 import { struct } from "./index";
 import { parseStructTuple } from "./parse";
 import type { StructLike } from "./types";
@@ -18,7 +18,9 @@ describe("performance optimization contracts", () => {
         return reads <= 2 ? "match" : `encoded${reads}`;
       },
     };
-    expect(() => encodeJson(schema, input)).toThrow("ambiguous union encode");
+    expect(() => encodeObjectByAlias(schema, input)).toThrow(
+      "ambiguous union encode",
+    );
     expect(reads).toBe(4);
   });
 
@@ -26,12 +28,12 @@ describe("performance optimization contracts", () => {
     const field = struct.string().optional().alias("wire");
     const left = struct.object({ value: field });
     const right = struct.object({ value: field });
-    expect(encodeJson(struct.or(left, right), {})).toEqual({});
-    expect(encodeJson(struct.or(left, right), { value: undefined })).toEqual(
-      {},
-    );
+    expect(encodeObjectByAlias(struct.or(left, right), {})).toEqual({});
+    expect(
+      encodeObjectByAlias(struct.or(left, right), { value: undefined }),
+    ).toEqual({});
     expect(() =>
-      encodeJson(struct.or(left.alias("left"), right.alias("right")), {
+      encodeObjectByAlias(struct.or(left.alias("left"), right.alias("right")), {
         value: "x",
       }),
     ).toThrow("ambiguous union encode");
@@ -45,7 +47,7 @@ describe("performance optimization contracts", () => {
         value: struct.string().alias("duplicate"),
       }),
     );
-    expect(encodeJson(schema, { kind: "ok", value: "x" })).toEqual({
+    expect(encodeObjectByAlias(schema, { kind: "ok", value: "x" })).toEqual({
       kind: "ok",
       value: "x",
     });
@@ -61,17 +63,17 @@ describe("performance optimization contracts", () => {
       nested: struct.object({ x: struct.string() }),
     });
     expect(
-      encodeJson(struct.or(left, right), { nested: { x: "same" } }),
+      encodeObjectByAlias(struct.or(left, right), { nested: { x: "same" } }),
     ).toEqual({ nested: { x: "same" } });
     expect(() =>
-      encodeJson(struct.or(left, right), {
+      encodeObjectByAlias(struct.or(left, right), {
         a: "left",
         b: "right",
         nested: { x: "same" },
       }),
     ).toThrow("ambiguous union encode");
     expect(() =>
-      encodeJson(
+      encodeObjectByAlias(
         struct.or(
           struct.object({ nested: struct.object({ x: struct.string() }) }),
           struct.object({
@@ -152,7 +154,9 @@ describe("performance optimization contracts", () => {
     expect(struct.parse(optional(), undefined)).toEqual([null, undefined]);
     expect(struct.parse(nullish(), null)).toEqual([null, null]);
     expect(
-      encodeJson(struct.object({ value: alias("wire") }), { value: "x" }),
+      encodeObjectByAlias(struct.object({ value: alias("wire") }), {
+        value: "x",
+      }),
     ).toEqual({ wire: "x" });
     expect(struct.parse(source, undefined)[0]).not.toBeNull();
   });
@@ -162,12 +166,16 @@ describe("performance optimization contracts", () => {
       struct.object({ first: struct.string().alias("wire") }),
       struct.object({ second: struct.string().optional().alias("wire") }),
     );
-    expect(encodeJson(schema, { first: "first" })).toEqual({ wire: "first" });
-    expect(encodeJson(schema, { first: "same", second: "same" })).toEqual({
+    expect(encodeObjectByAlias(schema, { first: "first" })).toEqual({
+      wire: "first",
+    });
+    expect(
+      encodeObjectByAlias(schema, { first: "same", second: "same" }),
+    ).toEqual({
       wire: "same",
     });
     expect(() =>
-      encodeJson(schema, { first: "first", second: "last" }),
+      encodeObjectByAlias(schema, { first: "first", second: "last" }),
     ).toThrow(new TypeError("invalid intersection encode at wire"));
     expect(struct.parse(schema, { first: 1 })[0]?.issues[0]?.path).toEqual([
       "first",
@@ -177,7 +185,7 @@ describe("performance optimization contracts", () => {
       struct.object({ y: struct.string() }).nullable(),
     );
     expect(struct.parse(nullable, null)).toEqual([null, null]);
-    expect(encodeJson(nullable, null)).toBeNull();
+    expect(encodeObjectByAlias(nullable, null)).toBeNull();
   });
 
   test("discarded union candidates retain complete outer errors across container kinds", () => {
@@ -255,7 +263,7 @@ describe("performance optimization contracts", () => {
     expect(struct.parse(numeric, NaN)).toEqual([null, NaN]);
     expect(struct.parse(numeric, -0)).toEqual([null, -0]);
     expect(
-      encodeJson(
+      encodeObjectByAlias(
         struct.or(
           struct.object({ value: numeric }),
           struct.object({ value: struct.string() }),

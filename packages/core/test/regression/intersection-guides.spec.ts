@@ -9,7 +9,7 @@ import {
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
 import { serializeOutgoingWebSocketMessage } from "../../src/web_socket/codec";
 
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
@@ -35,7 +35,7 @@ test("nullable shared fields parse and encode null instead of walking aliases", 
     null,
     { name: null },
   ]);
-  expect(plain(encodeJson(Nullable, { name: null }))).toEqual({
+  expect(plain(encodeObjectByAlias(Nullable, { name: null }))).toEqual({
     wire_name: null,
   });
   expect(serializeOutgoingWebSocketMessage(Nullable, { name: null })).toBe(
@@ -55,7 +55,7 @@ test("nested nullable and explicit undefined containers stay leaves", () => {
     null,
     { row: null },
   ]);
-  expect(plain(encodeJson(schema, { row: undefined }))).toEqual({});
+  expect(plain(encodeObjectByAlias(schema, { row: undefined }))).toEqual({});
   const tagged = parseEndpointInput(schema, {});
   expect(plain(encodeOutbound({ ...tagged, row: undefined }))).toEqual({});
 
@@ -63,7 +63,9 @@ test("nested nullable and explicit undefined containers stay leaves", () => {
     struct.object({ row: Left.optional() }),
     struct.object({ row: Left.optional() }),
   );
-  expect(plain(encodeJson(optionalRow, { row: undefined }))).toEqual({});
+  expect(plain(encodeObjectByAlias(optionalRow, { row: undefined }))).toEqual(
+    {},
+  );
 });
 
 test("nullable intersection input reaches the HTTP handle", async () => {
@@ -88,7 +90,7 @@ test("nullable intersection input reaches the HTTP handle", async () => {
 
 test("a union inside a guide set encodes every match and rejects a difference", async () => {
   const value = { name: "N", lastName: "L" };
-  expect(() => encodeJson(UnionGuide, { row: value })).toThrow(
+  expect(() => encodeObjectByAlias(UnionGuide, { row: value })).toThrow(
     /ambiguous union encode/,
   );
   const tagged = parseEndpointInput(UnionGuide, { row: value });
@@ -178,7 +180,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ name: struct.null() }),
     struct.object({ name: struct.string().nullable().alias("wire_name") }),
   );
-  expect(plain(encodeJson(nullWire, { name: null }))).toEqual({
+  expect(plain(encodeObjectByAlias(nullWire, { name: null }))).toEqual({
     name: null,
     wire_name: null,
   });
@@ -300,7 +302,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
   });
 });
 
-test("outbound encoding of a parsed value matches encodeJson", () => {
+test("outbound encoding of a parsed value matches encodeObjectByAlias", () => {
   const shared = struct.intersection(
     struct.object({
       id: struct.string().alias("wire_id"),
@@ -373,7 +375,7 @@ test("outbound encoding of a parsed value matches encodeJson", () => {
   ];
   for (const { input, schema } of cases) {
     const tagged = parseEndpointInput(schema, input);
-    const encoded = plain(encodeJson(schema, input));
+    const encoded = plain(encodeObjectByAlias(schema, input));
     expectOutboundMatchesEncode(plain(encodeOutbound(tagged)), encoded);
   }
 });

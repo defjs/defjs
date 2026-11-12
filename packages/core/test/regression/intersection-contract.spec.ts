@@ -10,7 +10,7 @@ import {
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
 import { guideMembers, readOwnGuide } from "../../src/struct/guide";
 import { assertObject, isRecord } from "../narrow";
 import type { RuntimeStruct } from "../../src/struct/definition";
@@ -25,7 +25,7 @@ const plain = (input: unknown): unknown => JSON.parse(JSON.stringify(input));
 async function equivalent(schema: AnyStruct, input: unknown): Promise<void> {
   const parsed: unknown = await parseEndpointInput(schema, input);
   expect(plain(encodeOutbound(parsed))).toEqual(
-    plain(encodeJson(schema, parsed)),
+    plain(encodeObjectByAlias(schema, parsed)),
   );
 }
 
@@ -52,7 +52,7 @@ test("split parents keep the other group only as a literal extra", () => {
   const parsed = parseEndpointInput(schema, {
     profile: { firstName: "Ada", lastName: "Lovelace" },
   });
-  expect(plain(encodeJson(schema, parsed))).toEqual({
+  expect(plain(encodeObjectByAlias(schema, parsed))).toEqual({
     p1: { first_name: "Ada" },
     p2: { last_name: "Lovelace" },
   });
@@ -253,7 +253,7 @@ test("unequal values on one wire key still fail encoding", () => {
     struct.object({ left: struct.string().alias("key") }),
     struct.object({ right: struct.string().alias("key") }),
   );
-  expect(() => encodeJson(schema, { left: "L", right: "R" })).toThrow(
+  expect(() => encodeObjectByAlias(schema, { left: "L", right: "R" })).toThrow(
     /invalid intersection encode/,
   );
 });

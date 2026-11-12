@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { decodeJson, encodeJson } from "./codec/json";
+import { encodeObjectByAlias } from "./encode_by_struct";
+
 import { StructError, struct } from "./index";
 import type { StructLike } from "./index";
-import { parseStructTuple as parse } from "./parse";
+import { parseStructTuple as parse, parseStructValue } from "./parse";
 import { selectUnionOptions } from "./match";
 import { assertStruct } from "./shape";
 import type { RuntimeStruct } from "./definition";
@@ -112,13 +113,15 @@ describe("parse.ts prototype pollution defense", () => {
     }
   });
 
-  test("decodeJson ignores inherited wire keys", () => {
+  test("parseStructValue ignores inherited wire keys", () => {
     const s = struct.object({
       name: struct.string().alias("user_name"),
     });
     const wire: unknown = Object.create({ user_name: "admin" });
 
-    expect(() => decodeJson(s, wire)).toThrow(StructError);
+    expect(() => parseStructValue(s, wire, { aliases: true })).toThrow(
+      StructError,
+    );
   });
 
   test("JSON aliases for dangerous keys do not pollute prototypes", () => {
@@ -128,7 +131,7 @@ describe("parse.ts prototype pollution defense", () => {
     });
 
     const encoded = record(
-      encodeJson(dangerousStruct, {
+      encodeObjectByAlias(dangerousStruct, {
         constructorValue: "ctor",
         protoValue: "proto",
       }),
@@ -139,9 +142,10 @@ describe("parse.ts prototype pollution defense", () => {
     expect(encoded["constructor"]).toBe("ctor");
     expect(prototypeValue("proto")).toBeUndefined();
 
-    const decoded = decodeJson(
+    const decoded = parseStructValue(
       dangerousStruct,
       JSON.parse('{"__proto__":"proto","constructor":"ctor"}'),
+      { aliases: true },
     );
     expect(decoded).toEqual({ constructorValue: "ctor", protoValue: "proto" });
     expect(Object.getPrototypeOf(decoded)).toBeNull();
@@ -159,7 +163,7 @@ describe("parse.ts prototype pollution defense", () => {
     raw["__proto__"] = "safe";
     raw["constructor"] = "value";
 
-    const output = decodeJson(Payload, raw);
+    const output = parseStructValue(Payload, raw, { aliases: true });
 
     expect(output).toEqual({ proto: "safe", constructorValue: "value" });
     const fresh: { proto?: string } = {};
@@ -227,7 +231,7 @@ describe("parse.ts prototype pollution defense", () => {
         return "message" as const;
       },
     };
-    expect(decodeJson(WireEvent, wireInput)).toEqual({
+    expect(parseStructValue(WireEvent, wireInput, { aliases: true })).toEqual({
       payload: "hello",
       type: "message",
     });
@@ -385,15 +389,17 @@ describe("parse.ts nesting limit", () => {
     }
   });
 
-  test("decodeJson reports the logical path when aliased nesting exceeds the limit", () => {
+  test("parseStructValue reports the logical path when aliased nesting exceeds the limit", () => {
     const Aliased = struct.object({
       get child(): StructLike {
         return Aliased.null().alias("wire");
       },
     });
     const input = nest("wire", 100_000, null);
-    expect(() => decodeJson(Aliased, input)).toThrow(StructError);
-    expect(() => decodeJson(Aliased, input)).toThrow(
+    expect(() => parseStructValue(Aliased, input, { aliases: true })).toThrow(
+      StructError,
+    );
+    expect(() => parseStructValue(Aliased, input, { aliases: true })).toThrow(
       expect.objectContaining({
         issues: [
           expect.objectContaining({
@@ -448,8 +454,8 @@ describe("parse.ts nesting limit", () => {
     const operations = [
       () => struct.parse(Throwing, {}),
       () => struct.parse(Chain, input),
-      () => decodeJson(Chain, input),
-      () => encodeJson(Chain, input),
+      () => parseStructValue(Chain, input, { aliases: true }),
+      () => encodeObjectByAlias(Chain, input),
       () =>
         struct.parse(Chain, nest("child", 257, null), {
           errorMap: () => {

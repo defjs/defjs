@@ -1,6 +1,6 @@
 import type { AnyStruct } from "../struct";
 import type { Guide } from "../struct/guide";
-import { parseStructValue } from "../struct/introspection";
+import { parseStructValue } from "../struct/parse";
 import type { ParsedStructOutput, StructInput } from "../struct/types";
 
 export type EndpointInput<TInput extends AnyStruct | undefined> =

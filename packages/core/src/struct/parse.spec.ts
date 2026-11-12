@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { decodeJson } from "./codec/json";
+
 import { StructError, struct } from "./index";
-import { parseStructTuple as parse } from "./parse";
+import { parseStructTuple as parse, parseStructValue } from "./parse";
 
 describe("parse.ts object and composite values", () => {
   test("requires ordinary object fields and omits optional keys", () => {
@@ -221,7 +221,11 @@ describe("parse.ts object and composite values", () => {
       page: struct.number(),
     });
 
-    const val = decodeJson(queryStruct, { page: 1, page_size: 50 });
+    const val = parseStructValue(
+      queryStruct,
+      { page: 1, page_size: 50 },
+      { aliases: true },
+    );
     expect(val).toEqual({
       page: 1,
       pageSize: 50,

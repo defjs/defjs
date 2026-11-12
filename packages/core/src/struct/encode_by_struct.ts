@@ -2,20 +2,20 @@ import type {
   ObjectDefinition,
   ObjectRuntimeStruct,
   RuntimeStruct,
-} from "../definition";
-import { coerceWireLeaf, sameWireValue, writeWire } from "../encode";
+} from "./definition";
+import { coerceWireLeaf, sameWireValue, writeWire } from "./encode";
 import {
   intersectionEncodeError,
   isIntersectionIdentity,
   mergeIntersectionValues,
-} from "../intersection";
-import { selectUnionOptions } from "../match";
-import { isPlainObject, nullObject } from "../plain_object";
-import { assertStruct, resolveStructFields } from "../shape";
-import { DEFINITION } from "../symbols";
-import type { StructLike } from "../types";
+} from "./intersection";
+import { selectUnionOptions } from "./match";
+import { isPlainObject, nullObject } from "./plain_object";
+import { assertStruct, resolveStructFields } from "./shape";
+import { DEFINITION } from "./symbols";
+import type { StructLike } from "./types";
 
-// The struct-walking encoder. Only WebSocket sends go through it; HTTP and SSE use encodeOutbound in ../encode.
+// The struct-walking encoder. Only WebSocket sends go through it; HTTP and SSE use encodeOutbound in ./encode.
 
 export function encodeObjectByAlias(
   struct: StructLike,
@@ -164,7 +164,7 @@ export function encodeValue(
       if (!isPlainObject(value)) {
         return value;
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made encodeJson of a 1-key record 1.131x/1.140x/1.134x slower (Bun 1.4.4, 3 runs x 21 interleaved rounds x 3e5/4e5 encodes, medians, against an unchanged control copy within 1.3%)
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: Object.create(null) is typed `any`. The typed `{ __proto__: null }` literal made encodeObjectByAlias of a 1-key record 1.131x/1.140x/1.134x slower (Bun 1.4.4, 3 runs x 21 interleaved rounds x 3e5/4e5 encodes, medians, against an unchanged control copy within 1.3%)
       const output: { [key: string]: unknown } = Object.create(null);
       for (const [key, entry] of Object.entries(value)) {
         output[key] = encodeValue(definition.value, entry, depth + 1);

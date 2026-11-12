@@ -12,9 +12,8 @@ import { toHttpMeta } from "./http_response";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { isBlob } from "../internal/type_guards";
 import type { AnyStruct } from "../struct";
-import { decodeJson } from "../struct/codec/json";
 import { StructError } from "../struct/errors";
-import { parseStructValue } from "../struct/introspection";
+import { parseStructValue } from "../struct/parse";
 import type {
   DeclaredResponse,
   HttpExecuteAwaitResult,
@@ -120,6 +119,9 @@ export function failed<
   return [fault, undefined, undefined];
 }
 
+// A JSON body reads its wire names. One shared record saves an allocation per response: parsing only reads it.
+const WIRE_NAMES = { aliases: true };
+
 /**
  * The body as the declared struct reads it. An interceptor's body may already be text, bytes, or a parsed value;
  * the struct kind decides what it is read as.
@@ -151,10 +153,14 @@ function convertBody(
     case "json": {
       // A JSON string is a string root: the transport already parsed bytes, so do not parse again.
       if (typeof body === "string") {
-        return decodeJson(struct, body);
+        return parseStructValue(struct, body, WIRE_NAMES);
       }
       const text = readBytesText(body);
-      return decodeJson(struct, text === undefined ? body : JSON.parse(text));
+      return parseStructValue(
+        struct,
+        text === undefined ? body : JSON.parse(text),
+        WIRE_NAMES,
+      );
     }
     case "text":
       return parseStructValue(struct, readBytesText(body) ?? body);
@@ -170,7 +176,11 @@ async function convertBlob(
 ): Promise<unknown> {
   switch (representation) {
     case "json":
-      return decodeJson(struct, JSON.parse(await blob.text()));
+      return parseStructValue(
+        struct,
+        JSON.parse(await blob.text()),
+        WIRE_NAMES,
+      );
     case "text":
       return parseStructValue(struct, await blob.text());
     default:

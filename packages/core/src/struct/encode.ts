@@ -24,7 +24,7 @@ import { resolveStructFields } from "./shape";
 import { DEFINITION } from "./symbols";
 import type { Path } from "./types";
 
-// The outbound encoder of HTTP and SSE (WebSocket sends still use the struct-walking encoder in codec/). It walks the value, not a struct: what a struct knows about a node
+// The outbound encoder of HTTP and SSE. WebSocket sends keep the struct-walking encoder in encode_by_struct.ts, which is faster for one message. It walks the value, not a struct: what a struct knows about a node
 // arrives as the tag the parser left on it, or as the guide a parent passes down for a fresh value in its place.
 
 /** A Date leaves as its ISO 8601 string and a bigint as its decimal string. Every other leaf leaves as it is. */

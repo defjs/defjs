@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { encodeObjectByAlias, encodeValue } from "./common";
-import { struct } from "../index";
-import { parseStructTuple as parse } from "../parse";
-import { matchesRuntimeValue } from "../match";
-import { assertStruct } from "../shape";
-import type { RuntimeStruct } from "../definition";
-import { isPlainObject } from "../plain_object";
+import { encodeObjectByAlias, encodeValue } from "./encode_by_struct";
+import { struct } from "./index";
+import { parseStructTuple as parse } from "./parse";
+import { matchesRuntimeValue } from "./match";
+import { assertStruct } from "./shape";
+import type { RuntimeStruct } from "./definition";
+import { isPlainObject } from "./plain_object";
 
 function encode(struct: unknown, value: unknown): unknown {
   assertStruct(struct, "struct");

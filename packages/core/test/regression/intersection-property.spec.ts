@@ -3,7 +3,7 @@ import { isRecord, isUnknownArray } from "../narrow";
 import { struct, type AnyStruct } from "../../src/struct";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
 
 type Pair = {
   label: string;
@@ -268,7 +268,7 @@ function runAttempts(
     let actual: unknown;
     try {
       const parsed = parseEndpointInput(schema, input);
-      expected = plain(encodeJson(schema, parsed));
+      expected = plain(encodeObjectByAlias(schema, parsed));
       actual = plain(encodeOutbound(parsed));
       compare(actual, expected);
       passed += 1;
@@ -289,7 +289,7 @@ const seed = 0x13c0ffee;
 const attempts = 1_000;
 const maxDepth = 4;
 
-test("parsed outbound encoding matches encodeJson except literal extras", () => {
+test("parsed outbound encoding matches encodeObjectByAlias except literal extras", () => {
   const result = runAttempts(seed, attempts, maxDepth);
   const summary = {
     attempts,

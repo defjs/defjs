@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/struct/encode";
 import { struct, type AnyStruct } from "../../src/struct";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeObjectByAlias } from "../../src/struct/encode_by_struct";
 import type { Guide } from "../../src/struct/guide";
 
 const Profile = struct.object({ name: struct.string().alias("display_name") });
@@ -13,7 +13,7 @@ async function equivalent(schema: AnyStruct, input: unknown): Promise<void> {
   const guides = new WeakMap<object, Guide>();
   const parsed: unknown = await parseEndpointInput(schema, input, guides);
   expect(plain(encodeOutbound(parsed, guides))).toEqual(
-    plain(encodeJson(schema, parsed)),
+    plain(encodeObjectByAlias(schema, parsed)),
   );
 }
 
@@ -89,7 +89,9 @@ test("a parent array of objects still keeps passthrough keys beside aliases", as
 test("direct any stays an intersection identity and does not repeat the logical key", async () => {
   const schema = struct.intersection(Profile, struct.any());
   const parsed: unknown = await parseEndpointInput(schema, { name: "N" });
-  expect(plain(encodeJson(schema, parsed))).toEqual({ display_name: "N" });
+  expect(plain(encodeObjectByAlias(schema, parsed))).toEqual({
+    display_name: "N",
+  });
   expect(plain(encodeOutbound(parsed))).toEqual({ display_name: "N" });
 });
 
@@ -134,7 +136,7 @@ test("passthrough any conflicts with an encoded date on the same key", async () 
   const parsed: unknown = await parseEndpointInput(schema, {
     when: new Date("2026-01-02T00:00:00.000Z"),
   });
-  expect(() => encodeJson(schema, parsed)).toThrow(
+  expect(() => encodeObjectByAlias(schema, parsed)).toThrow(
     /invalid intersection encode/,
   );
   expect(() => encodeOutbound(parsed)).toThrow(/invalid intersection encode/);
@@ -150,7 +152,7 @@ test("a passthrough array item conflicts with an encoded date", () => {
   const parsed = parseEndpointInput(schema, {
     rows: [new Date("2026-01-02T00:00:00.000Z")],
   });
-  expect(() => encodeJson(schema, parsed)).toThrow(
+  expect(() => encodeObjectByAlias(schema, parsed)).toThrow(
     /invalid intersection encode/,
   );
   expect(() => encodeOutbound(parsed)).toThrow(/invalid intersection encode/);

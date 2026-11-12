@@ -57,7 +57,7 @@ Examples, READMEs, and guides follow the minimal example in `doc/examples/http/b
 | `xsrf/`        | browser-only `withXSRF` for `@defjs/core/xsrf`    |
 | `sse/`         | event-stream definitions and transports           |
 | `web_socket/`  | WebSocket definitions, codec, heartbeat           |
-| `struct/`      | schema constructors, codecs, parsing              |
+| `struct/`      | schema constructors, parsing                      |
 | `interceptor/` | interceptor types and built-ins                   |
 | `internal/`    | shared internals; never exported from the package |
 

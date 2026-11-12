@@ -29,7 +29,7 @@ import { createHttpRequest } from "../../src/http/request";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { materializeOutboundRequest } from "../../src/internal/outbound_request";
 import { fillUrl } from "../../src/internal/url";
-import { decodeJson } from "../../src/struct/codec/json";
+import { parseStructValue } from "../../src/struct/parse";
 import { STRUCT } from "../../src/struct/symbols";
 import {
   assertObject,
@@ -795,7 +795,7 @@ describe("builder fixes re-audit", () => {
     );
     const wireValue: unknown = JSON.parse(wire);
     const decoded = assertRecord(
-      decodeJson(Message, wireValue),
+      parseStructValue(Message, wireValue, { aliases: true }),
       "decoded message",
     );
     const decodedRecords = assertRecord(decoded["records"], "decoded records");
