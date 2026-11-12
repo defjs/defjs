@@ -1,63 +1,9 @@
-import { defineConfig, type UserConfig } from "tsdown";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function writeDistPackageJson(): Promise<void> {
-  const packageJson: unknown = await Bun.file(
-    new URL("./package.json", import.meta.url),
-  ).json();
-  if (!isRecord(packageJson)) {
-    throw new TypeError("package.json must contain a JSON object");
-  }
-
-  packageJson["main"] = "./index.js";
-  packageJson["module"] = "./index.js";
-  packageJson["types"] = "./index.d.ts";
-  packageJson["typings"] = "./index.d.ts";
-  packageJson["exports"] = {
-    "./package.json": "./package.json",
-    ".": {
-      types: "./index.d.ts",
-      default: "./index.js",
-    },
-  };
-  delete packageJson["scripts"];
-  delete packageJson["devDependencies"];
-
-  await Bun.write(
-    new URL("./dist/package.json", import.meta.url),
-    `${JSON.stringify(packageJson, undefined, 2)}\n`,
-  );
-}
+import { defineConfig } from "tsdown";
+import { libraryConfig } from "../../tsdown.shared.ts";
+import manifest from "./package.json" with { type: "json" };
 
 export default defineConfig({
-  format: "esm",
-  outDir: "dist",
-  platform: "neutral",
-  target: false,
-  tsconfig: "tsconfig.build.json",
-  clean: true,
-  dts: true,
-  entry: {
-    index: "src/index.ts",
-  },
-  banner: {
-    js: "'use client';",
-  },
-  inputOptions: {
-    resolve: {
-      mainFields: ["module", "main"],
-    },
-  },
-  deps: {
-    neverBundle: ["react", "@defjs/core"],
-  },
-  copy: ["../../LICENSE", "./README.md"],
-  hooks: {
-    async "build:done"() {
-      await writeDistPackageJson();
-    },
-  },
-} satisfies UserConfig);
+  ...libraryConfig(manifest, { index: "src/index.ts" }),
+  banner: { js: "'use client';" },
+  deps: { neverBundle: ["react", "@defjs/core"] },
+});

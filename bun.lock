@@ -12,6 +12,7 @@
         "oxlint": "catalog:",
         "oxlint-tsgolint": "catalog:",
         "playwright": "catalog:",
+        "tsdown": "catalog:",
         "typescript": "catalog:",
         "vitest": "catalog:",
       },
