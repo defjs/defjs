@@ -389,24 +389,37 @@ export interface RoundRobinOptions {
  * @see {@link RoundRobinOptions}
  */
 export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
-  const weights =
-    options?.weights === undefined ? undefined : new Map(options.weights);
-  let counter =
-    weights === undefined ? Math.floor(Math.random() * 0x100000000) >>> 0 : 0;
-  let current = new Map<string, number>();
-  let previousScale = 1;
+  const child =
+    options?.weights === undefined
+      ? counterRoundRobin()
+      : smoothWeightedRoundRobin(options.weights);
+  return withHealthFilter(child, options?.outlierDetection);
+}
 
-  const child: Balancer = {
+function counterRoundRobin(): Balancer {
+  let counter = Math.floor(Math.random() * 0x100000000) >>> 0;
+  return {
     pick(info) {
       const endpoints = info.endpoints;
-      if (weights === undefined) {
-        const endpoint = endpoints[counter % endpoints.length];
-        if (endpoint === undefined) {
-          return [ERR_NO_CANDIDATE, undefined];
-        }
-        counter = (counter + 1) >>> 0;
-        return [null, { endpoint }];
+      const endpoint = endpoints[counter % endpoints.length];
+      if (endpoint === undefined) {
+        return [ERR_NO_CANDIDATE, undefined];
       }
+      counter = (counter + 1) >>> 0;
+      return [null, { endpoint }];
+    },
+  };
+}
+
+function smoothWeightedRoundRobin(
+  configured: ReadonlyMap<string, number>,
+): Balancer {
+  const weights = new Map(configured);
+  let current = new Map<string, number>();
+  let previousScale = 1;
+  return {
+    pick(info) {
+      const endpoints = info.endpoints;
       const members = info.members ?? endpoints;
       const narrowed = members === endpoints ? undefined : new Set(endpoints);
       let scale = 0;
@@ -441,5 +454,4 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
       return [null, { endpoint: best }];
     },
   };
-  return withHealthFilter(child, options?.outlierDetection);
 }
