@@ -121,10 +121,13 @@ function NavigationContainer({ children, ...props }: ComponentProps<"div">) {
     </Container>
   );
 }
+/** The Guide and Examples index pages are reached through their tabs, so the page lists leave them out. */
+const isAreaIndex = (url: string) => /\/(docs|recipes)$/.test(url);
+
 function NavigationItem({ item }: { item: Item }) {
   const { pathname } = useLocation();
   const depth = useFolderDepth();
-  if (/\/(docs|recipes)$/.test(item.url)) return null;
+  if (isAreaIndex(item.url)) return null;
   const active = pathname.replace(/\/$/, "") === item.url.replace(/\/$/, "");
   const parts = typeof item.name === "string" ? item.name.split(" / ") : [];
   const style: CSSProperties & Record<`--${string}`, number> = {
@@ -185,10 +188,7 @@ export function StaticNavigation({ tree }: { tree: Root }) {
     return (
       <ul className="navigation-static-list space-y-2">
         {nodes
-          .filter(
-            (node) =>
-              node.type !== "page" || !/\/(docs|recipes)$/.test(node.url),
-          )
+          .filter((node) => node.type !== "page" || !isAreaIndex(node.url))
           .map((node, i) => (
             <li key={i}>
               {node.type === "page" ? (

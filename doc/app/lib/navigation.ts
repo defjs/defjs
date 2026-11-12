@@ -75,89 +75,138 @@ export const exampleGroups = [
   },
 ] as const satisfies readonly NavigationGroup[];
 
+const integrationApis = ["/api/react", "/api/vue", "/api/opentelemetry-server"];
+
+/** What the four reading areas are built from. */
+interface NavigationContext {
+  tree: Root;
+  /** Every page of the content tree by URL. */
+  pages: ReadonlyMap<string, Item>;
+  prefix: string;
+  t: Translator;
+}
+
+function page(nav: NavigationContext, path: string, name?: string): Item {
+  const url = nav.prefix + path || "/";
+  const item = nav.pages.get(url);
+  if (!item) throw new Error(`Missing navigation page: ${url}`);
+  return name ? { ...item, name } : item;
+}
+
+function grouped(
+  nav: NavigationContext,
+  groups: readonly NavigationGroup[],
+  names: Record<string, string> = {},
+): Node[] {
+  return groups.flatMap(({ titleKey, paths }): Node[] => [
+    { type: "separator", name: nav.t(titleKey) },
+    ...paths.map((path) => page(nav, path, names[path])),
+  ]);
+}
+
+/** The content folder that holds the page at `path`. */
+function areaFolder(nav: NavigationContext, path: string): Folder {
+  const url = nav.prefix + path;
+  const folder = nav.tree.children.find(
+    (node): node is Folder =>
+      node.type === "folder" &&
+      flattenTree(node.children).some((child) => child.url === url),
+  );
+  if (!folder) throw new Error(`Missing reading area: ${url}`);
+  return folder;
+}
+
+function guideArea(nav: NavigationContext): Folder {
+  const folder = areaFolder(nav, "/docs");
+  const index = page(nav, "/docs");
+  return {
+    ...folder,
+    name: index.name,
+    children: [
+      index,
+      ...grouped(nav, guideGroups, {
+        "": nav.t("nav.home"),
+        "/docs/struct": nav.t("nav.guide.dataStructures"),
+        "/docs/client": nav.t("nav.guide.client"),
+        "/docs/interceptors": nav.t("nav.guide.middleware"),
+        "/docs/errors": nav.t("nav.guide.errors"),
+      }),
+    ],
+  };
+}
+
+/** The integration guides live inside the guide folder; this area is a second view of it. */
+function integrationArea(nav: NavigationContext): Folder {
+  return {
+    ...areaFolder(nav, "/docs/integrations"),
+    name: nav.t("nav.integrations"),
+    children: grouped(nav, integrationGroups),
+  };
+}
+
+function exampleArea(nav: NavigationContext): Folder {
+  const folder = areaFolder(nav, "/recipes");
+  const index = page(nav, "/recipes");
+  return {
+    ...folder,
+    name: index.name,
+    children: [index, ...grouped(nav, exampleGroups)],
+  };
+}
+
+/** The generated order of the API folder, split into core modules and integration packages. */
+function apiArea(nav: NavigationContext): Folder {
+  const folder = areaFolder(nav, "/api");
+  const index = page(nav, "/api");
+  const targets = integrationApis.map((path) => nav.prefix + path);
+  function isIntegration(node: Node): boolean {
+    if (node.type === "page") return targets.includes(node.url);
+    return (
+      node.type === "folder" &&
+      flattenTree(node.children).every((item) =>
+        targets.some((target) => item.url.startsWith(`${target}/`)),
+      )
+    );
+  }
+  const core: Node[] = [];
+  const integrations: Node[] = [];
+  for (const node of folder.children) {
+    if (node.type === "page" && node.url === index.url) continue;
+    (isIntegration(node) ? integrations : core).push(node);
+  }
+  return {
+    ...folder,
+    name: index.name,
+    children: [
+      { ...index, name: nav.t("nav.apiIndex") },
+      { type: "separator", name: nav.t("nav.coreModules") },
+      ...core,
+      { type: "separator", name: nav.t("nav.integrations") },
+      ...integrations,
+    ],
+  };
+}
+
 export function getNavigationTree(
   tree: Root,
   locale: Locale,
   t: Translator = getTranslator(locale),
 ): Root {
-  const prefix = localePrefix(locale);
-  const pages = new Map(
-    flattenTree(tree.children).map((page) => [page.url, page]),
-  );
-  function page(path: string, name?: string): Item {
-    const url = prefix + path || "/";
-    const item = pages.get(url);
-    if (!item) throw new Error(`Missing navigation page: ${url}`);
-    return name ? { ...item, name } : item;
-  }
-  function grouped(
-    groups: readonly NavigationGroup[],
-    names: Record<string, string> = {},
-  ): Node[] {
-    return groups.flatMap(({ titleKey, paths }): Node[] => [
-      { type: "separator", name: t(titleKey) },
-      ...paths.map((path) => page(path, names[path])),
-    ]);
-  }
-  const children = (["docs", "integrations", "recipes", "api"] as const).map(
-    (area): Folder => {
-      const path = area === "integrations" ? "/docs/integrations" : `/${area}`;
-      const url = `${prefix}${path}`;
-      const folder = tree.children.find(
-        (node): node is Folder =>
-          node.type === "folder" &&
-          flattenTree(node.children).some((child) => child.url === url),
-      );
-      if (!folder) throw new Error(`Missing reading area: ${url}`);
-      const root = page(path);
-      const index =
-        area === "api" ? { ...root, name: t("nav.apiIndex") } : root;
-      const integrations = [
-        "/api/react",
-        "/api/vue",
-        "/api/opentelemetry-server",
-      ].map((item) => prefix + item);
-      const isIntegration = (node: Node) =>
-        node.type === "page"
-          ? integrations.includes(node.url)
-          : node.type === "folder" &&
-            flattenTree(node.children).every((item) =>
-              integrations.some((target) => item.url.startsWith(target + "/")),
-            );
-      const other = folder.children.filter(
-        (node) => node.type !== "page" || node.url !== url,
-      );
-      const chapters =
-        area === "docs"
-          ? [
-              index,
-              ...grouped(guideGroups, {
-                "": t("nav.home"),
-                "/docs/struct": t("nav.guide.dataStructures"),
-                "/docs/client": t("nav.guide.client"),
-                "/docs/interceptors": t("nav.guide.middleware"),
-                "/docs/errors": t("nav.guide.errors"),
-              }),
-            ]
-          : area === "integrations"
-            ? grouped(integrationGroups)
-            : area === "recipes"
-              ? [index, ...grouped(exampleGroups)]
-              : [
-                  index,
-                  { type: "separator" as const, name: t("nav.coreModules") },
-                  ...other.filter((node) => !isIntegration(node)),
-                  { type: "separator" as const, name: t("nav.integrations") },
-                  ...other.filter(isIntegration),
-                ];
-      return {
-        ...folder,
-        name: area === "integrations" ? t("nav.integrations") : root.name,
-        children: chapters,
-      };
-    },
-  );
-  return { ...tree, children };
+  const nav: NavigationContext = {
+    tree,
+    pages: new Map(flattenTree(tree.children).map((item) => [item.url, item])),
+    prefix: localePrefix(locale),
+    t,
+  };
+  return {
+    ...tree,
+    children: [
+      guideArea(nav),
+      integrationArea(nav),
+      exampleArea(nav),
+      apiArea(nav),
+    ],
+  };
 }
 
 /** Fixed reading-area destinations avoid native same-path projection between roots. */
