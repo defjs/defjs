@@ -3798,7 +3798,7 @@
     "slug": "core/socketlifecycleoutcome-type",
     "source": "packages/core/src/web_socket/web_socket.ts",
     "group": "web-socket",
-    "description": "The outcome of a **single connect attempt**, not the final result of the session.\n\nThe retry logic uses it to decide whether to try again.\n\n- `closeInfo` holds the close details of that attempt: `{ cause?, code?, reason?, wasClean? }`.\n\n- `connection` is the connection snapshot, when the attempt got one.\n\n- `cause` is the error that ended the attempt, if any.\n\n- `opened` tells whether the socket reached `open` before it ended.\n\n`shouldRetry` does not receive this object. Its context carries `attempt`, `cause`, `code`, `reason`, and `wasClean`, taken from it. The final result of the session is {@link WebSocketCloseInfo}.",
+    "description": "The outcome of a **single connect attempt**, not the final result of the session.\n\nThe retry logic uses it to decide whether to try again.\n\n- `closeInfo` holds the close details of that attempt: `{ code?, reason?, wasClean? }`.\n\n- `connection` is the connection snapshot, when the attempt got one.\n\n- `cause` is the error that ended the attempt, if any.\n\n- `opened` tells whether the socket reached `open` before it ended.\n\n`shouldRetry` does not receive this object. Its context carries `attempt`, `cause`, `code`, `reason`, and `wasClean`, taken from it. The final result of the session is {@link WebSocketCloseInfo}.",
     "related": [],
     "exampleFiles": [],
     "returns": [],
@@ -5100,7 +5100,7 @@
       {
         "name": "encode",
         "description": "",
-        "type": "((credential: Credential) => string) | undefined",
+        "type": "((credential: BasicCredential) => string) | undefined",
         "simplifiedType": "function",
         "required": false,
         "deprecated": false,
@@ -5109,7 +5109,7 @@
     ],
     "overloads": [
       {
-        "signature": "type BasicAuthInterceptorOptions = {\n  encode?: (credential: Credential) => string;\n};",
+        "signature": "type BasicAuthInterceptorOptions = {\n  encode?: (credential: BasicCredential) => string;\n};",
         "parameters": []
       }
     ]
@@ -5596,12 +5596,12 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function basicAuthHttpInterceptor(\n  fn: () => Credential,\n  options?: BasicAuthInterceptorOptions,\n): HttpInterceptor;",
+        "signature": "function basicAuthHttpInterceptor(\n  fn: () => BasicCredential,\n  options?: BasicAuthInterceptorOptions,\n): HttpInterceptor;",
         "parameters": [
           {
             "name": "fn",
             "description": "Factory returning username/password for each request.",
-            "type": "() => Credential",
+            "type": "() => BasicCredential",
             "simplifiedType": "function",
             "required": true,
             "deprecated": false,
@@ -5636,12 +5636,12 @@
     "typeTable": null,
     "overloads": [
       {
-        "signature": "function basicAuthSSEInterceptor(\n  fn: () => Credential,\n  options?: BasicAuthInterceptorOptions,\n): SSEInterceptor;",
+        "signature": "function basicAuthSSEInterceptor(\n  fn: () => BasicCredential,\n  options?: BasicAuthInterceptorOptions,\n): SSEInterceptor;",
         "parameters": [
           {
             "name": "fn",
             "description": "Factory returning username/password for each request.",
-            "type": "() => Credential",
+            "type": "() => BasicCredential",
             "simplifiedType": "function",
             "required": true,
             "deprecated": false,
