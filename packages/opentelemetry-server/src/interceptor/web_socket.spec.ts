@@ -173,29 +173,6 @@ describe("WebSocket client diagnostic logs", () => {
     },
   );
 
-  test("retains legacy close-cause diagnostics without manufacturing normal-close logs", async () => {
-    const { logger, records } = createMockLogger();
-    const interceptor = createOpenTelemetryWebSocketInterceptor({
-      logger,
-      propagator: createMockWsPropagator(),
-    });
-    for (const info of [
-      undefined,
-      {},
-      { cause: new Error("offline"), code: 1006 },
-    ]) {
-      const session = makeDeferredWsSession();
-      await interceptor.fn(makeWsRequest(), () =>
-        Promise.resolve(session.session),
-      );
-      // @ts-expect-error legacy close payloads are not WebSocketCloseInfo
-      session.close(info);
-      await waitForSettledPromises();
-    }
-    expect(records).toHaveLength(1);
-    expect(records[0]?.attributes?.["websocket.close.code"]).toBe(1006);
-  });
-
   test.each(["emit", "close-code", "rejected"] as const)(
     "preserves termination when logging fails in %s",
     async (failure) => {
@@ -723,92 +700,6 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
         "defjs.result": "success",
         "server.address": "api.example.com",
         "server.port": 443,
-      }),
-    );
-  });
-
-  test("should treat a legacy close info without kind or cause as closed", async () => {
-    const { tracer, spans } = createMockTracer();
-    const metrics = createMockMetrics();
-    const ws = makeDeferredWsSession();
-    const interceptor = createOpenTelemetryWebSocketInterceptor({
-      tracer,
-      propagator: mockPropagator,
-      metrics,
-    });
-
-    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
-    // @ts-expect-error legacy close info has no kind
-    ws.close({ code: 1000, reason: "legacy normal close", wasClean: true });
-    await waitForSettledPromises();
-
-    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
-      "websocket.closed",
-      undefined,
-    );
-    expect(spans[0]?.recordException).not.toHaveBeenCalled();
-    expect(spans[0]?.status?.code).toBe(1);
-    expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
-      expect.any(Number),
-      expect.objectContaining({ "defjs.result": "success" }),
-    );
-  });
-
-  test("should treat a non-object legacy close result as closed", async () => {
-    const { tracer, spans } = createMockTracer();
-    const metrics = createMockMetrics();
-    const ws = makeDeferredWsSession();
-    const interceptor = createOpenTelemetryWebSocketInterceptor({
-      tracer,
-      propagator: mockPropagator,
-      metrics,
-    });
-
-    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
-    // @ts-expect-error null is not a close info
-    ws.close(null);
-    await waitForSettledPromises();
-
-    expect(spans[0]?.addEvent).toHaveBeenCalledWith(
-      "websocket.closed",
-      undefined,
-    );
-    expect(spans[0]?.recordException).not.toHaveBeenCalled();
-    expect(spans[0]?.status?.code).toBe(1);
-    expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
-      expect.any(Number),
-      expect.objectContaining({ "defjs.result": "success" }),
-    );
-  });
-
-  test("should treat a legacy close info cause as an error", async () => {
-    const { tracer, spans } = createMockTracer();
-    const metrics = createMockMetrics();
-    const ws = makeDeferredWsSession();
-    const closeCause = new TypeError("legacy connection failure");
-    const interceptor = createOpenTelemetryWebSocketInterceptor({
-      tracer,
-      propagator: mockPropagator,
-      metrics,
-    });
-
-    await interceptor.fn(makeWsRequest(), () => Promise.resolve(ws.session));
-    // @ts-expect-error legacy close info is a cause without a kind
-    ws.close({ cause: closeCause, code: 1006, wasClean: false });
-    await waitForSettledPromises();
-
-    expect(spans[0]?.addEvent).toHaveBeenCalledWith("websocket.error", {
-      "error.type": "TypeError",
-    });
-    expect(spans[0]?.recordException).toHaveBeenCalledWith({
-      name: "TypeError",
-    });
-    expect(spans[0]?.status?.code).toBe(2);
-    expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
-      expect.any(Number),
-      expect.objectContaining({
-        "defjs.result": "error",
-        "error.type": "TypeError",
       }),
     );
   });

@@ -8,7 +8,7 @@ import type {
 } from "@opentelemetry/api";
 import { context, trace } from "@opentelemetry/api";
 import type { Logger } from "@opentelemetry/api-logs";
-import { headersGetter, queryStringSetter } from "../propagation/carrier";
+import { carrierSetter, headersGetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { WebSocketClientMetrics } from "../telemetry/metrics";
 import {
@@ -41,14 +41,6 @@ export interface WebSocketInterceptorOptions {
     session: WebSocketSessionLike,
     req: HttpRequest,
   ) => Promise<void> | void;
-}
-
-function isRuntimeCloseInfo(value: unknown): value is {
-  cause?: unknown;
-  kind?: unknown;
-  code?: unknown;
-} {
-  return typeof value === "object" && value !== null;
 }
 
 export function createOpenTelemetryWebSocketInterceptor(
@@ -105,11 +97,11 @@ export function createOpenTelemetryWebSocketInterceptor(
     let queryString = req.queryString;
 
     if (queryPropagation) {
-      const carrier = { params: new URLSearchParams() };
-      propagator.inject(spanCtx, carrier, queryStringSetter);
+      const injected = new URLSearchParams();
+      propagator.inject(spanCtx, injected, carrierSetter);
       queryString = replaceInjectedPairs(
         queryString ?? new URLSearchParams(queryParams).toString(),
-        carrier.params,
+        injected,
       );
       queryParams = new URLSearchParams(queryString);
     }
@@ -141,58 +133,47 @@ export function createOpenTelemetryWebSocketInterceptor(
       };
 
       session.closed.then(
-        (closeInfo: unknown) => {
+        (closeInfo) => {
           closeActiveConnection();
-          const runtimeCloseInfo = isRuntimeCloseInfo(closeInfo)
-            ? closeInfo
-            : {};
-          const closeKind = runtimeCloseInfo.kind;
-          const closeCause = runtimeCloseInfo.cause;
-          const failed =
-            typeof closeKind === "string"
-              ? closeKind !== "closed"
-              : typeof closeCause !== "undefined";
-          if (failed) {
-            const error =
-              typeof closeKind === "string"
-                ? closeKind === "error"
-                  ? closeCause
-                  : (closeCause ?? ERR_ABORTED)
-                : closeCause;
-            if (closeKind !== "aborted") {
-              emitClientException(logger, {
-                request: req,
-                context: spanCtx,
-                error,
-                transport: "websocket",
-                phase: "connection",
-                closeInfo: runtimeCloseInfo,
-              });
-            }
-            if (span)
-              addSpanEvent(
-                span,
-                "websocket.error",
-                createErrorMetricAttributes(error),
-              );
+          if (closeInfo.kind === "closed") {
+            if (span) addSpanEvent(span, "websocket.closed");
             metrics?.connectionDuration.record(
               durationSeconds(connectedAtMs),
-              createConnectionMetricAttributes(
-                req,
-                "error",
-                createErrorMetricAttributes(error),
-              ),
+              createConnectionMetricAttributes(req, "success"),
             );
-            if (span) setSpanError(span, error);
+            if (span) endSpan(span);
             return;
           }
 
-          if (span) addSpanEvent(span, "websocket.closed");
+          const error =
+            closeInfo.kind === "aborted"
+              ? (closeInfo.cause ?? ERR_ABORTED)
+              : closeInfo.cause;
+          if (closeInfo.kind === "error") {
+            emitClientException(logger, {
+              request: req,
+              context: spanCtx,
+              error,
+              transport: "websocket",
+              phase: "connection",
+              closeInfo,
+            });
+          }
+          if (span)
+            addSpanEvent(
+              span,
+              "websocket.error",
+              createErrorMetricAttributes(error),
+            );
           metrics?.connectionDuration.record(
             durationSeconds(connectedAtMs),
-            createConnectionMetricAttributes(req, "success"),
+            createConnectionMetricAttributes(
+              req,
+              "error",
+              createErrorMetricAttributes(error),
+            ),
           );
-          if (span) endSpan(span);
+          if (span) setSpanError(span, error);
         },
         (error: unknown) => {
           closeActiveConnection();

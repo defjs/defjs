@@ -12,7 +12,7 @@ import type {
 } from "@opentelemetry/api";
 import { context, trace } from "@opentelemetry/api";
 import type { Logger } from "@opentelemetry/api-logs";
-import { headersGetter, headersSetter } from "../propagation/carrier";
+import { carrierSetter, headersGetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { SSEClientMetrics } from "../telemetry/metrics";
 import {
@@ -91,7 +91,7 @@ export function createOpenTelemetrySSEInterceptor(
     if (span) runSpanHook(span, "requestHook", () => requestHook?.(span, req));
 
     const headers = new Headers(req.headers);
-    propagator.inject(spanCtx, headers, headersSetter);
+    propagator.inject(spanCtx, headers, carrierSetter);
 
     const connectStartMs = performance.now();
 

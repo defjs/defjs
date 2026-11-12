@@ -8,7 +8,7 @@ import type {
 } from "@opentelemetry/api";
 import { context, trace } from "@opentelemetry/api";
 import type { Logger } from "@opentelemetry/api-logs";
-import { headersGetter, headersSetter } from "../propagation/carrier";
+import { carrierSetter, headersGetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { HttpClientMetrics } from "../telemetry/metrics";
 import {
@@ -90,7 +90,7 @@ export function createOpenTelemetryHttpInterceptor(
 
     const spanCtx = span ? trace.setSpan(parentCtx, span) : parentCtx;
     const headers = new Headers(req.headers);
-    propagator.inject(spanCtx, headers, headersSetter);
+    propagator.inject(spanCtx, headers, carrierSetter);
 
     const startTime = performance.now();
 
