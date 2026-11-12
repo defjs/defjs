@@ -40,7 +40,7 @@
   },
   "type": "module",
   "scripts": {
-    "build": "bun run --workspaces --if-present build",
+    "build": "bun run --sequential --workspaces --if-present build",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "unit:chrome": "bun run --sequential --workspaces --if-present unit:chrome",

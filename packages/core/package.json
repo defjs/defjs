@@ -28,7 +28,7 @@
   "scripts": {
     "bench:balancer": "bun build src/balancer/balancer.bench.ts --target=bun --external=vitest --outdir=test-out/balancer-bench && vitest bench --config vitest.config.bench.ts test-out/balancer-bench --reporter=verbose --maxWorkers=1 --no-file-parallelism",
     "bench:struct": "bun build src/struct/struct.bench.ts --target=bun --external=vitest --outdir=test-out/struct-bench && vitest bench --config vitest.config.bench.ts test-out/struct-bench --maxWorkers=1 --no-file-parallelism",
-    "build": "bun --bun tsdown --config-loader native --config tsdown.config.ts",
+    "build": "bun check --project tsconfig.build.json && bun --bun tsdown --config-loader native --config tsdown.config.ts",
     "unit:bun": "vitest run --config vitest.config.bun.ts",
     "unit:chrome": "vitest run --config vitest.config.chrome.ts",
     "unit:firefox": "vitest run --config vitest.config.firefox.ts",

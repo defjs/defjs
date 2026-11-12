@@ -14,7 +14,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "bun --bun tsdown --config-loader native --config tsdown.config.ts",
+    "build": "bun check --project tsconfig.build.json && bun --bun tsdown --config-loader native --config tsdown.config.ts",
     "unit:chrome": "vitest run --config vitest.config.chrome.ts",
     "unit:firefox": "vitest run --config vitest.config.firefox.ts"
   },
