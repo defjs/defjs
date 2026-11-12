@@ -8,7 +8,6 @@ import type { HttpRequest } from "../http/http_request";
 import type { WebSocketSessionLike } from "../interceptor/interceptor";
 import {
   hasAborted,
-  releaseAbortSignal,
   resolveAbortedFault,
   stopsUnreadItems,
 } from "../internal/abort";
@@ -59,11 +58,11 @@ export interface SessionConfig {
   /** Whether the request still targets the endpoint the balancer picked, so the balancer can be told what happened. */
   readonly attributable: boolean;
   readonly callerSignal: AbortSignal | undefined;
-  /** Aborted with the final result when the session ends. */
+  /** The call's controller, which follows the caller's signal and an interceptor's. The session aborts it with the final result when it ends. */
   readonly controller: AbortController;
-  /** Stops the call's scope following the caller's signal. The session calls it when it ends. */
+  /** Stops following the caller's signal and an interceptor's. The session calls it once, when it ends. */
   readonly release: () => void;
-  /** The call's signal combined with the interceptor's. The session ends when it aborts. */
+  /** `controller.signal`. The session ends when it aborts. */
   readonly signal: AbortSignal;
 }
 
@@ -241,7 +240,6 @@ export function finish(session: Session, final: WebSocketCloseInfo): void {
   session.controller.abort(final);
 
   session.closed.resolve(final);
-  releaseAbortSignal(session.signal);
   session.release();
 }
 

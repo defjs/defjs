@@ -3,8 +3,6 @@ import {
   awaitWithSignal,
   followAbort,
   hasAborted,
-  mergeAbortSignals,
-  releaseAbortSignal,
   stopsUnreadItems,
 } from "./abort";
 import { yieldMacrotask } from "../../test/macrotask";
@@ -14,72 +12,46 @@ describe("abort helpers", () => {
     vi.useRealTimers();
   });
 
-  test("should merge abort signals and preserve single controller signal", () => {
+  test("followAbort follows two sources, and releasing both leaves nothing on either", () => {
     const controller = new AbortController();
-    expect(mergeAbortSignals(controller.signal, [])).toBe(controller.signal);
-    expect(
-      mergeAbortSignals(controller.signal, [
-        controller.signal,
-        controller.signal,
-      ]),
-    ).toBe(controller.signal);
+    const first = new AbortController();
+    const second = new AbortController();
+    const addFirst = vi.spyOn(first.signal, "addEventListener");
+    const removeFirst = vi.spyOn(first.signal, "removeEventListener");
+    const addSecond = vi.spyOn(second.signal, "addEventListener");
+    const removeSecond = vi.spyOn(second.signal, "removeEventListener");
+    const unfollowFirst = followAbort(controller, first.signal);
+    const unfollowSecond = followAbort(controller, second.signal);
 
-    const another = new AbortController();
-    const merged = mergeAbortSignals(controller.signal, [another.signal]);
-    another.abort("stop");
+    expect(addFirst).toHaveBeenCalledOnce();
+    expect(addSecond).toHaveBeenCalledOnce();
+    unfollowFirst();
+    unfollowSecond();
+    first.abort("late");
 
-    expect(merged.aborted).toBe(true);
-    expect(merged.reason).toBe("stop");
-  });
-
-  test("should skip undefined signals when another signal is present", () => {
-    const controller = new AbortController();
-    const another = new AbortController();
-    const merged = mergeAbortSignals(controller.signal, [
-      undefined,
-      another.signal,
-    ]);
-
-    another.abort("stop");
-
-    expect(merged).not.toBe(controller.signal);
-    expect(merged.aborted).toBe(true);
-    expect(merged.reason).toBe("stop");
-    releaseAbortSignal(merged);
-  });
-
-  test("should release forwarding listeners and deduplicate identical sources", () => {
-    const controller = new AbortController();
-    const another = new AbortController();
-    const add = vi.spyOn(controller.signal, "addEventListener");
-    const remove = vi.spyOn(controller.signal, "removeEventListener");
-    const merged = mergeAbortSignals(controller.signal, [
-      another.signal,
-      another.signal,
-    ]);
-
-    expect(add).toHaveBeenCalledOnce();
-    releaseAbortSignal(merged);
-
-    expect(remove).toHaveBeenCalledExactlyOnceWith(
+    expect(controller.signal.aborted).toBe(false);
+    expect(removeFirst).toHaveBeenCalledExactlyOnceWith(
       "abort",
-      add.mock.calls[0]?.[1],
+      addFirst.mock.calls[0]?.[1],
+    );
+    expect(removeSecond).toHaveBeenCalledExactlyOnceWith(
+      "abort",
+      addSecond.mock.calls[0]?.[1],
     );
   });
 
-  test("should still see a source that aborts after its merge was released", () => {
+  test("should still see the caller's signal abort after the follower was released", () => {
     const controller = new AbortController();
     const caller = new AbortController();
-    const merged = mergeAbortSignals(controller.signal, [caller.signal]);
-    expect(hasAborted(merged)).toBe(false);
+    const unfollow = followAbort(controller, caller.signal);
+    expect(hasAborted(caller.signal)).toBe(false);
     expect(hasAborted(undefined)).toBe(false);
-    releaseAbortSignal(merged);
+    unfollow();
 
     caller.abort("stop");
 
-    expect(merged.aborted).toBe(false);
-    expect(hasAborted(merged)).toBe(true);
-    expect(hasAborted(mergeAbortSignals(merged, []))).toBe(true);
+    expect(controller.signal.aborted).toBe(false);
+    expect(hasAborted(caller.signal)).toBe(true);
   });
 
   test("followAbort aborts the controller with the source's reason when the source aborts", () => {

@@ -2127,6 +2127,7 @@ describe("fetchEventStream failure delivery", () => {
     const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
+        callerSignal: controller.signal,
         fetch: respondOnce(bodyThen(THREE, "open")),
         transformMessage(message) {
           parsed.push(message.data);
@@ -2151,6 +2152,7 @@ describe("fetchEventStream failure delivery", () => {
     const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
+        callerSignal: controller.signal,
         fetch: respondOnce(bodyThen(THREE, "open")),
         transformMessage(message) {
           parsed.push(message.data);
@@ -2187,6 +2189,7 @@ describe("fetchEventStream failure delivery", () => {
       const stream = await fetchTransformedEventStream(
         { ...request, signal: controller.signal },
         {
+          callerSignal: controller.signal,
           fetch: respondOnce(bodyThen(THREE, ending)),
           transformMessage(message) {
             parsed.push(message.data);
@@ -2274,6 +2277,7 @@ describe("fetchEventStream failure delivery", () => {
     const stream = await fetchTransformedEventStream(
       { ...request, signal: controller.signal },
       {
+        callerSignal: controller.signal,
         fetch: respondOnce(bodyThen(THREE, "open")),
         transformMessage(message) {
           parsed.push(message.data);

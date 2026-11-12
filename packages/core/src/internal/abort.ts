@@ -70,9 +70,9 @@ function stopFollowingNothing(): void {}
  * - Otherwise one listener is added to `source`, and the returned function removes it. It may be called more than once.
  *
  * The caller releases on every exit, so that nothing stays attached to a signal the caller keeps. There is no
- * registry and no unwrapping: to follow two sources, call it twice. After the release an abort of `source` is no
- * longer seen through `controller.signal`; read `source.aborted` where that still matters. Do not pass
- * `controller.signal` as its own source.
+ * registry and no unwrapping: to follow two sources, call it twice and release both once. After the release an
+ * abort of `source` is no longer seen through `controller.signal`; read `source.aborted` where that still matters.
+ * Do not pass `controller.signal` as its own source.
  */
 export function followAbort(
   controller: AbortController,
@@ -90,39 +90,9 @@ export function followAbort(
   return () => source.removeEventListener("abort", onAbort);
 }
 
-type ForwardingSignalState = {
-  active: boolean;
-  release: () => void;
-  sources: readonly AbortSignal[];
-};
-
-const forwardingSignals = new WeakMap<AbortSignal, ForwardingSignalState>();
-
-/** Release listeners owned by a signal returned from `mergeAbortSignals`. */
-export function releaseAbortSignal(signal: AbortSignal): void {
-  forwardingSignals.get(signal)?.release();
-}
-
-/** `signal`, or a signal merged into it, once it has aborted. A released merge forwards nothing, but still names its sources. */
-function findAbortedSignal(signal: AbortSignal): AbortSignal | undefined {
-  if (signal.aborted) {
-    return signal;
-  }
-  const state = forwardingSignals.get(signal);
-  if (state) {
-    for (const source of state.sources) {
-      const aborted = findAbortedSignal(source);
-      if (aborted) {
-        return aborted;
-      }
-    }
-  }
-  return undefined;
-}
-
-/** Whether the caller's `signal`, or a signal merged into it, has aborted, even when it aborted after its merge was released. */
+/** Whether the caller's `signal` has aborted. A session reads it after it has released its own listener on it. */
 export function hasAborted(signal: AbortSignal | undefined): boolean {
-  return signal !== undefined && findAbortedSignal(signal) !== undefined;
+  return signal?.aborted === true;
 }
 
 /**
@@ -134,87 +104,8 @@ export function stopsUnreadItems(
   signal: AbortSignal | undefined,
   endedBeforeAbort: boolean,
 ): boolean {
-  const aborted = signal && findAbortedSignal(signal);
   return (
-    aborted !== undefined &&
-    (endedBeforeAbort || !isTimeoutCause(aborted.reason))
+    signal?.aborted === true &&
+    (endedBeforeAbort || !isTimeoutCause(signal.reason))
   );
-}
-
-export function mergeAbortSignals(
-  controller: AbortSignal,
-  signals: (AbortSignal | undefined)[],
-): AbortSignal {
-  if (
-    signals.length > 0 &&
-    signals.every((signal) => signal === undefined || signal === controller)
-  ) {
-    return controller;
-  }
-
-  const merged: AbortSignal[] = [];
-  const seen = new Set<AbortSignal>();
-  const append = (signal: AbortSignal) => {
-    const state = forwardingSignals.get(signal);
-    if (state?.active) {
-      for (const source of state.sources) {
-        append(source);
-      }
-      return;
-    }
-    if (!seen.has(signal)) {
-      seen.add(signal);
-      merged.push(signal);
-    }
-  };
-  append(controller);
-  for (const signal of signals) {
-    if (signal) {
-      append(signal);
-    }
-  }
-
-  const sole = merged[0];
-  if (merged.length === 1 && sole !== undefined) {
-    return sole;
-  }
-
-  const combinedController = new AbortController();
-  const listeners: Array<[AbortSignal, () => void]> = [];
-  const state: ForwardingSignalState = {
-    active: true,
-    release() {
-      if (!state.active) {
-        return;
-      }
-      state.active = false;
-      for (const [source, listener] of listeners) {
-        source.removeEventListener("abort", listener);
-      }
-    },
-    sources: merged,
-  };
-  forwardingSignals.set(combinedController.signal, state);
-
-  const abortWithReason = (reason: unknown) => {
-    if (combinedController.signal.aborted) {
-      return;
-    }
-    combinedController.abort(reason);
-    state.release();
-  };
-
-  const alreadyAborted = merged.find((signal) => signal.aborted);
-  if (alreadyAborted) {
-    abortWithReason(alreadyAborted.reason);
-    return combinedController.signal;
-  }
-
-  for (const source of merged) {
-    const listener = () => abortWithReason(source.reason);
-    listeners.push([source, listener]);
-    source.addEventListener("abort", listener, { once: true });
-  }
-
-  return combinedController.signal;
 }

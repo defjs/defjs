@@ -36,8 +36,6 @@ import {
   awaitWithSignal,
   followAbort,
   hasAborted,
-  mergeAbortSignals,
-  releaseAbortSignal,
   resolveAbortedCause,
   stopsUnreadItems,
 } from "../../internal/abort";
@@ -196,6 +194,11 @@ export interface FetchEventStreamOptions<
   /** The resolved retry policy. Absent means the stream is not retried. */
   retry?: RetryPolicy;
   maxBufferSize: number;
+  /**
+   * The caller's own signal. The stream reads it, without listening to it, to tell a stop by the caller from one by
+   * `close()` once the stream has ended and `request.signal` no longer follows it.
+   */
+  callerSignal?: AbortSignal;
   /**
    * @internal First-`next()` attribution. Absent when this stream must not
    * pick or call `done`. `done` runs once when the current attempt ends.
@@ -373,7 +376,10 @@ export async function fetchEventStream<
   const closedDeferred = Promise.withResolvers<EventStreamCloseInfo>();
   const openDeferred =
     Promise.withResolvers<EventStreamStart<TEvent, HandshakeBody<TError>>>();
-  const closeController = new AbortController();
+  // Every stop of the stream, `close()` and the request's signal, shared by all attempts and waits.
+  const stopController = new AbortController();
+  const stop = stopController.signal;
+  let closeRequested = false;
 
   // `connecting` until the first handshake is accepted or the stream fails before it, then `open` until `closed` settles.
   let phase: "connecting" | "open" | "closed" = "connecting";
@@ -419,7 +425,7 @@ export async function fetchEventStream<
           }
           // The stop reaches the transport only once its read fails, which can be after a reader comes back, and
           // not at all once the stream has ended, so check the caller's signal here.
-          if (stopsUnreadItems(request.signal, endedBeforeAbort)) {
+          if (stopsUnreadItems(options.callerSignal, endedBeforeAbort)) {
             queue.discard();
           }
           return iterator.next();
@@ -446,7 +452,7 @@ export async function fetchEventStream<
 
   /** What the balancer is told when the attempt ends. A stop is not a failure of the endpoint. */
   function attemptInfo(): DoneInfo {
-    if (closeController.signal.aborted) {
+    if (closeRequested) {
       return { attempted: false };
     }
     const caller = request.signal;
@@ -471,11 +477,12 @@ export async function fetchEventStream<
   }
 
   function close(reason?: unknown): void {
-    if (closeController.signal.aborted) {
+    if (closeRequested) {
       return;
     }
 
-    closeController.abort(reason);
+    closeRequested = true;
+    stopController.abort(reason);
     // EventSource.close() sets CLOSED, after which queued dispatch tasks are skipped, so unread events are discarded.
     queue.discard();
     queue.close();
@@ -487,11 +494,10 @@ export async function fetchEventStream<
   }
 
   async function run(): Promise<void> {
-    // Every stop of the stream, the caller's and close(), merged once for all attempts and waits.
-    const stop = mergeAbortSignals(closeController.signal, [request.signal]);
+    const unfollowRequest = followAbort(stopController, request.signal);
     try {
       for (;;) {
-        const result = await runAttempt(stop);
+        const result = await runAttempt();
         if (result.kind === "eof") {
           queue.close();
           settleAttempt();
@@ -499,7 +505,7 @@ export async function fetchEventStream<
           return;
         }
         if (result.kind === "stopped") {
-          finishStopped(stop);
+          finishStopped();
           return;
         }
 
@@ -547,7 +553,7 @@ export async function fetchEventStream<
               "EXT_HOOK_FAILED",
             );
           } else {
-            finishStopped(stop);
+            finishStopped();
           }
           return;
         }
@@ -567,11 +573,11 @@ export async function fetchEventStream<
           );
         } catch {
           // wait() rejects only when the stream is stopped.
-          finishStopped(stop);
+          finishStopped();
           return;
         }
         if (stop.aborted) {
-          finishStopped(stop);
+          finishStopped();
           return;
         }
 
@@ -600,12 +606,12 @@ export async function fetchEventStream<
         }
       }
     } finally {
-      releaseAbortSignal(stop);
+      unfollowRequest();
     }
   }
 
   /** One connection: the request, the handshake and the read of the body, up to what ends it. */
-  async function runAttempt(stop: AbortSignal): Promise<AttemptResult> {
+  async function runAttempt(): Promise<AttemptResult> {
     // Each request gets a signal of its own. The platform keeps a listener on the signal a request was built with
     // until the request is collected, which a signal shared by many reconnects would pile up.
     const attemptController = new AbortController();
@@ -819,14 +825,14 @@ export async function fetchEventStream<
     }
   }
 
-  function finishStopped(signal: AbortSignal): void {
-    const stopped = resolveAbortedCause(signal);
+  function finishStopped(): void {
+    const stopped = resolveAbortedCause(stop);
     if (stopped === ERR_TIMEOUT) {
       finishError(ERR_TIMEOUT, "NET_TIMEOUT");
       return;
     }
     settleAttempt();
-    const closeCause: unknown = signal.reason;
+    const closeCause: unknown = stop.reason;
     if (phase === "connecting") {
       failStartup(stopped);
     } else {
@@ -880,7 +886,7 @@ export async function fetchEventStream<
     }
 
     phase = "closed";
-    endedBeforeAbort = !hasAborted(request.signal);
+    endedBeforeAbort = !hasAborted(options.callerSignal);
     closedDeferred.resolve(info);
   }
 }

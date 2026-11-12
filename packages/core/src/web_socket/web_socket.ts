@@ -19,7 +19,7 @@ import {
 } from "../interceptor/interceptor";
 import {
   awaitWithSignal,
-  mergeAbortSignals,
+  followAbort,
   resolveAbortFault,
 } from "../internal/abort";
 import { rejected } from "../internal/chain_faults";
@@ -635,9 +635,12 @@ function openSession(
       ),
     );
   }
-  // Both the caller and an interceptor replacement stay live.
-  const signal = mergeAbortSignals(call.scope.signal, [req.signal]);
-  const { clientConfig, endpoint, options, pick } = call;
+  const { clientConfig, endpoint, options, pick, scope } = call;
+  // The scope follows the caller. An interceptor's own signal ends the session as well, until the session ends.
+  const unfollowRequest = followAbort(
+    scope.controller,
+    req.signal === scope.signal ? undefined : req.signal,
+  );
   const attributable = req.baseEndpoint === pick.endpoint;
   if (!attributable) {
     pick.done({ attempted: false });
@@ -664,9 +667,12 @@ function openSession(
       request: req,
       attributable,
       callerSignal: call.callerSignal,
-      controller: call.scope.controller,
-      release: call.scope.release,
-      signal,
+      controller: scope.controller,
+      release: () => {
+        scope.release();
+        unfollowRequest();
+      },
+      signal: scope.signal,
     },
     attributable ? pick : undefined,
   );

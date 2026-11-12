@@ -13,8 +13,7 @@ import type { HttpRequest } from "../http/http_request";
 import { makeChain, resolveSSEInterceptors } from "../interceptor/interceptor";
 import {
   awaitWithSignal,
-  mergeAbortSignals,
-  releaseAbortSignal,
+  followAbort,
   resolveAbortedCause,
   resolveAbortedFault,
   resolveAbortFault,
@@ -413,27 +412,31 @@ async function openEventStream<
         if (attributed && !ownsEndpointAttempt) {
           settleUnattempted();
         }
-        const ownerController = new AbortController();
         let headers: Headers;
-        let streamAbort: AbortSignal;
         try {
           resolveRequestUrl(req);
           headers = new Headers(req.headers);
-          // The stream ends when its owner discards it, or when the call or the caller stops it. The caller's own
-          // signal is a source so that a stop after the stream has ended is still seen once the call's has been released.
-          streamAbort = mergeAbortSignals(ownerController.signal, [
-            requestSignal,
-            callerSignal,
-            req.signal,
-          ]);
         } catch (error) {
           settleUnattempted();
           throw error;
         }
+        // The stream ends when its owner discards it, or when the call or an interceptor's own signal stops it. The
+        // caller's signal reaches it through the call, which follows it until the stream has ended.
+        const ownerController = new AbortController();
+        const unfollowCall = followAbort(ownerController, requestSignal);
+        const unfollowRequest = followAbort(
+          ownerController,
+          req.signal === requestSignal ? undefined : req.signal,
+        );
+        const releaseOwner = (): void => {
+          unfollowCall();
+          unfollowRequest();
+        };
+        const streamAbort = ownerController.signal;
         const due = resolveAbortFault(streamAbort);
         if (due) {
           settleUnattempted();
-          releaseAbortSignal(streamAbort);
+          releaseOwner();
           // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
           const cause = resolveAbortedCause(streamAbort);
           failures.set(cause, { fault: due });
@@ -444,7 +447,7 @@ async function openEventStream<
           typeof globalThis.fetch !== "function"
         ) {
           settleUnattempted();
-          releaseAbortSignal(streamAbort);
+          releaseOwner();
           failures.set(ERR_FETCH_UNSUPPORTED, {
             fault: createPreflightFault(
               "ENV_UNSUPPORTED",
@@ -455,12 +458,13 @@ async function openEventStream<
         }
         const owned: OwnedStream = {
           controller: ownerController,
-          release: () => releaseAbortSignal(streamAbort),
+          release: releaseOwner,
         };
         ownedStreams.add(owned);
         const [failure, stream] = await fetchEventStream(
           { ...req, headers, signal: streamAbort },
           {
+            callerSignal,
             endpointAttempt: ownsEndpointAttempt
               ? {
                   start: resolved.start,

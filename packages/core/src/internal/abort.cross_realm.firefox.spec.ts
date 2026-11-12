@@ -1,12 +1,12 @@
 import { describe, expect, test } from "vitest";
 
-import { mergeAbortSignals } from "./abort";
+import { followAbort } from "./abort";
 
 function hasGlobals(window: Window): window is Window & typeof globalThis {
   return "AbortController" in window && "Object" in window;
 }
 
-describe("mergeAbortSignals across realms", () => {
+describe("followAbort across realms", () => {
   function inFrame(run: (realm: Window & typeof globalThis) => void) {
     const frame = document.createElement("iframe");
     document.body.append(frame);
@@ -26,15 +26,14 @@ describe("mergeAbortSignals across realms", () => {
       const foreign = new realm.AbortController();
       expect(foreign.signal instanceof AbortSignal).toBe(false);
 
-      const merged = mergeAbortSignals(new AbortController().signal, [
-        foreign.signal,
-      ]);
-      expect(merged.aborted).toBe(false);
+      const follower = new AbortController();
+      followAbort(follower, foreign.signal);
+      expect(follower.signal.aborted).toBe(false);
 
       const reason = new Error("aborted in the other realm");
       foreign.abort(reason);
-      expect(merged.aborted).toBe(true);
-      expect(merged.reason).toBe(reason);
+      expect(follower.signal.aborted).toBe(true);
+      expect(follower.signal.reason).toBe(reason);
     });
   });
 });
