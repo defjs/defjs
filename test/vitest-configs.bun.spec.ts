@@ -14,11 +14,6 @@ interface RuntimeConfig {
 
 const loadable: readonly RuntimeConfig[] = [
   {
-    file: "packages/core/vitest.config.ts",
-    name: "core-plain",
-    thresholds: true,
-  },
-  {
     file: "packages/core/vitest.config.chrome.ts",
     name: "core-chrome",
     thresholds: true,
@@ -41,11 +36,6 @@ const loadable: readonly RuntimeConfig[] = [
     thresholds: true,
   },
   {
-    file: "packages/react/vitest.config.ts",
-    name: "",
-    thresholds: true,
-  },
-  {
     file: "packages/react/vitest.config.chrome.ts",
     name: "react-chrome",
     thresholds: true,
@@ -56,11 +46,6 @@ const loadable: readonly RuntimeConfig[] = [
     name: "react-firefox",
     thresholds: true,
     browser: "firefox",
-  },
-  {
-    file: "packages/vue/vitest.config.ts",
-    name: "",
-    thresholds: true,
   },
   {
     file: "packages/vue/vitest.config.chrome.ts",
@@ -75,11 +60,6 @@ const loadable: readonly RuntimeConfig[] = [
     browser: "firefox",
   },
   {
-    file: "packages/opentelemetry-server/vitest.config.ts",
-    name: "opentelemetry-server-plain",
-    thresholds: true,
-  },
-  {
     file: "packages/opentelemetry-server/vitest.config.node.ts",
     name: "opentelemetry-server-node",
     thresholds: true,
@@ -89,9 +69,7 @@ const loadable: readonly RuntimeConfig[] = [
     name: "opentelemetry-server-bun",
     thresholds: true,
   },
-  { file: "doc/vitest.config.ts", name: "doc-plain", thresholds: true },
   { file: "doc/vitest.config.bun.ts", name: "doc-bun", thresholds: true },
-  { file: "vitest.config.ts", name: "root-plain", thresholds: false },
   { file: "vitest.config.bun.ts", name: "root-bun", thresholds: false },
 ];
 

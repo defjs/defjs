@@ -46,12 +46,12 @@ function createUsersApp(): Hono {
 
 export function createBrowserApiSetup(
   selectStartup: () => Promise<StartupLayer>,
-  versions?: Parameters<typeof assertRuntime>[1],
+  onBun?: boolean,
 ): (project: {
   provide(key: "testServerHost", value: string): void;
 }) => Promise<() => Promise<void>> {
   return async function setup(project) {
-    assertRuntime("browser-main", versions);
+    assertRuntime("bun", onBun);
     const layer = await selectStartup();
     const server = await layer.startHttp(createUsersApp());
     project.provide("testServerHost", server.origin);

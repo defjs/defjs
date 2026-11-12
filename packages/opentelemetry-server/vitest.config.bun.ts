@@ -1,12 +1,7 @@
-import { defineConfig, mergeConfig } from "vitest/config";
+import { defineConfig } from "vitest/config";
+import { serverProject } from "../../test/vitest-shared.ts";
 import { baseConfig } from "./vitest.config.ts";
 
-export default mergeConfig(
-  baseConfig("bun"),
-  defineConfig({
-    test: {
-      name: "opentelemetry-server-bun",
-      pool: "threads",
-    },
-  }),
+export default defineConfig(
+  baseConfig(serverProject("opentelemetry-server", "bun")),
 );

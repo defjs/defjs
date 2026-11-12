@@ -7,7 +7,7 @@
 // Still needed as of 2026-10-09 against playwright-core@latest (1.64.0, Firefox 157) and the
 // newest alpha (1.65.0-alpha-2026-10-08, still Firefox 157).
 // When it's fixed upstream, also remove:
-//   - the `provider: playwright({ launchOptions: { env: browserLaunchEnv() } })` override (and the
+//   - the `launchOptions: { env: browserLaunchEnv() }` argument of `playwright()` (and the
 //     now-unused `browserLaunchEnv` import) in packages/{core,react,vue}/vitest.config.firefox.ts
 //   - packages/core/test/regression/firefox-app-data.bun.spec.ts (tests this function directly)
 

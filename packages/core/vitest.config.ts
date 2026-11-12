@@ -1,26 +1,24 @@
-import { defineConfig, type ViteUserConfig as UserConfig } from "vitest/config";
+import type { ViteUserConfig as UserConfig } from "vitest/config";
+import { specExclude, specInclude } from "../../test/spec-matrix.ts";
 import {
-  specExclude,
-  specInclude,
-  type Runtime,
-} from "../../test/spec-matrix.ts";
-import { coverageSettings, reporters } from "../../test/vitest-shared.ts";
+  coverageSettings,
+  reporters,
+  type RuntimeProject,
+} from "../../test/vitest-shared.ts";
 import { globalSetupPath, packageRoot } from "./test/shared.ts";
 
-export function baseConfig(runtime?: Runtime): UserConfig {
+export function baseConfig({ runtime, test }: RuntimeProject): UserConfig {
   return {
     root: packageRoot,
     test: {
-      name: "core-plain",
-      include: specInclude(runtime),
+      ...test,
+      include: specInclude(),
       exclude: specExclude(runtime),
       globalSetup: globalSetupPath,
       reporters,
       coverage: coverageSettings({
-        reportsDirectory: `${packageRoot}/coverage/${runtime ?? "plain"}`,
+        reportsDirectory: `${packageRoot}/coverage/${runtime}`,
       }),
     },
   };
 }
-
-export default defineConfig(baseConfig());

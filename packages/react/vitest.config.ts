@@ -1,13 +1,15 @@
-import { defineConfig, type ViteUserConfig as UserConfig } from "vitest/config";
+import type { ViteUserConfig as UserConfig } from "vitest/config";
+import "../../test/loopback-proxy-bypass.ts";
+import { specExclude, specInclude } from "../../test/spec-matrix.ts";
 import {
-  specExclude,
-  specInclude,
-  type Runtime,
-} from "../../test/spec-matrix.ts";
-import { coverageSettings, reporters } from "../../test/vitest-shared.ts";
-import { packageRoot } from "./test/shared.ts";
+  coverageSettings,
+  reporters,
+  type RuntimeProject,
+} from "../../test/vitest-shared.ts";
 
-export function baseConfig(runtime?: Runtime): UserConfig {
+const packageRoot = import.meta.dirname;
+
+export function baseConfig({ runtime, test }: RuntimeProject): UserConfig {
   return {
     root: packageRoot,
     resolve: {
@@ -20,15 +22,14 @@ export function baseConfig(runtime?: Runtime): UserConfig {
       include: ["react", "react-dom/client", "@testing-library/react"],
     },
     test: {
-      include: specInclude(runtime),
+      ...test,
+      include: specInclude(),
       exclude: specExclude(runtime),
       globalSetup: `${packageRoot}/../../test/browser-api-server-setup.ts`,
       reporters,
       coverage: coverageSettings({
-        reportsDirectory: `${packageRoot}/coverage/${runtime ?? "plain"}`,
+        reportsDirectory: `${packageRoot}/coverage/${runtime}`,
       }),
     },
   };
 }
-
-export default defineConfig(baseConfig());
