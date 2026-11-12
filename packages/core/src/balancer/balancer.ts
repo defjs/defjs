@@ -266,7 +266,8 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   const child: Balancer = {
     pick(info) {
       const candidates = info.endpoints;
-      const order = candidateOrder(info.members ?? candidates, shuffle, keys);
+      const members = info.members ?? candidates;
+      const order = shuffle ? shuffledOrder(members, keys) : members;
       const first = order[0];
       if (first === undefined) {
         return [ERR_NO_CANDIDATE, undefined];
@@ -318,28 +319,31 @@ function nextCandidate(
   offset: number,
   candidates: readonly string[],
 ): string | undefined {
-  return [...order.slice(offset), ...order.slice(0, offset)].find((endpoint) =>
-    candidates.includes(endpoint),
+  return (
+    order.find(
+      (endpoint, index) => index >= offset && candidates.includes(endpoint),
+    ) ?? order.find((endpoint) => candidates.includes(endpoint))
   );
 }
 
-function candidateOrder(
-  endpoints: readonly string[],
-  shuffle: boolean,
+/** Shuffle keys have no eviction priority: the least recently used one goes first. */
+function oldestFirst(): number {
+  return 0;
+}
+
+/** Members by their random sort key, drawn the first time an endpoint is seen. */
+function shuffledOrder(
+  members: readonly string[],
   keys: Map<string, number>,
 ): readonly string[] {
-  if (!shuffle) {
-    return endpoints.slice();
-  }
-  const ranked: { endpoint: string; index: number; key: number }[] = [];
-  for (const endpoint of endpoints) {
+  const ranked: { endpoint: string; key: number }[] = [];
+  for (const endpoint of members) {
     const key = keys.get(endpoint) ?? Math.random();
-    rememberEndpoint(keys, endpoint, key, () => 0, endpoints.length);
-    ranked.push({ endpoint, index: ranked.length, key });
+    rememberEndpoint(keys, endpoint, key, oldestFirst, members.length);
+    ranked.push({ endpoint, key });
   }
-  ranked.sort(
-    (left, right) => left.key - right.key || left.index - right.index,
-  );
+  // The sort is stable, so equal keys keep member order.
+  ranked.sort((left, right) => left.key - right.key);
   return ranked.map((item) => item.endpoint);
 }
 
