@@ -17,13 +17,13 @@ import { emitClientException } from "../telemetry/logs";
 import type { SSEClientMetrics } from "../telemetry/metrics";
 import {
   createConnectionMetricAttributes,
-  createErrorMetricAttributes,
   createServerMetricAttributes,
   durationSeconds,
 } from "../telemetry/metrics";
 import {
   addSpanEvent,
   createSSESpan,
+  getErrorType,
   httpMethodAttributes,
   resolveStartSpanHook,
   runSpanHook,
@@ -127,6 +127,10 @@ export function createOpenTelemetrySSEInterceptor(
           };
 
           if (closeInfo.kind === "error") {
+            const errorAttributes = {
+              ...closeAttributes,
+              "error.type": getErrorType(closeInfo.cause),
+            };
             emitClientException(logger, {
               request: req,
               context: spanCtx,
@@ -135,13 +139,10 @@ export function createOpenTelemetrySSEInterceptor(
               phase: "connection",
               closeInfo,
             });
-            if (span) addSpanEvent(span, "sse.error", closeAttributes);
+            if (span) addSpanEvent(span, "sse.error", errorAttributes);
             metrics?.connectionDuration.record(
               durationSeconds(connectedAtMs),
-              createConnectionMetricAttributes(req, "error", {
-                ...closeAttributes,
-                ...createErrorMetricAttributes(closeInfo.cause),
-              }),
+              createConnectionMetricAttributes(req, "error", errorAttributes),
             );
             if (span) setSpanError(span, closeInfo.cause);
             return;
@@ -168,15 +169,11 @@ export function createOpenTelemetrySSEInterceptor(
             transport: "sse",
             phase: "connection",
           });
-          if (span)
-            addSpanEvent(span, "sse.error", createErrorMetricAttributes(error));
+          const errorAttributes = { "error.type": getErrorType(error) };
+          if (span) addSpanEvent(span, "sse.error", errorAttributes);
           metrics?.connectionDuration.record(
             durationSeconds(connectedAtMs),
-            createConnectionMetricAttributes(
-              req,
-              "error",
-              createErrorMetricAttributes(error),
-            ),
+            createConnectionMetricAttributes(req, "error", errorAttributes),
           );
           if (span) setSpanError(span, error);
         },
@@ -193,11 +190,9 @@ export function createOpenTelemetrySSEInterceptor(
       });
       metrics?.connectDuration.record(
         durationSeconds(connectStartMs),
-        createConnectionMetricAttributes(
-          req,
-          "error",
-          createErrorMetricAttributes(error),
-        ),
+        createConnectionMetricAttributes(req, "error", {
+          "error.type": getErrorType(error),
+        }),
       );
       if (span) setSpanError(span, error);
       throw error;

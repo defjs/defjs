@@ -115,7 +115,7 @@ export function createHttpMetricAttributes(
 
   const errorType = response
     ? getHttpResponseErrorType(response.status)
-    : createErrorMetricAttributes(error)["error.type"];
+    : getErrorType(error);
   if (errorType) {
     attributes["error.type"] = errorType;
   }
@@ -157,11 +157,4 @@ export function createServerMetricAttributes(req: HttpRequest): Attributes {
   }
 
   return attributes;
-}
-
-export function createErrorMetricAttributes(error: unknown): Attributes {
-  if (error === undefined || error === null) {
-    return {};
-  }
-  return { "error.type": getErrorType(error) };
 }

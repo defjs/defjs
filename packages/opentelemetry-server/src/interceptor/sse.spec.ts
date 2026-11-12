@@ -644,6 +644,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
 
     expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.error", {
       "defjs.sse.fault.code": "CAP_BUFFER_EXCEEDED",
+      "error.type": "Error",
       "sse.close.kind": "error",
     });
     expect(spans[0]?.recordException).toHaveBeenCalled();

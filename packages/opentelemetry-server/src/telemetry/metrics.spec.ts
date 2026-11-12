@@ -3,7 +3,6 @@ import { describe, expect, test, vi } from "vitest";
 import { makeHttpRequest, makeHttpResponse } from "../../test/mocks";
 import {
   createConnectionMetricAttributes,
-  createErrorMetricAttributes,
   createHttpClientMetrics,
   createHttpMetricAttributes,
   createServerMetricAttributes,
@@ -194,32 +193,6 @@ describe("metrics helpers", () => {
         baseEndpoint: undefined,
       }),
     ).toEqual({});
-  });
-
-  test("createErrorMetricAttributes returns empty object for nullish errors", () => {
-    expect(createErrorMetricAttributes(undefined)).toEqual({});
-    expect(createErrorMetricAttributes(null)).toEqual({});
-  });
-
-  test("createErrorMetricAttributes falls back to Error when name is empty", () => {
-    const error = new Error("boom");
-    error.name = "";
-
-    expect(createErrorMetricAttributes(error)).toEqual({
-      "error.type": "Error",
-    });
-  });
-
-  test("createErrorMetricAttributes uses typeof for non-Error values", () => {
-    expect(createErrorMetricAttributes("user 123 failed")).toEqual({
-      "error.type": "string",
-    });
-    expect(createErrorMetricAttributes(123)).toEqual({
-      "error.type": "number",
-    });
-    expect(createErrorMetricAttributes({ message: "boom" })).toEqual({
-      "error.type": "object",
-    });
   });
 });
 

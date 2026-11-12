@@ -13,13 +13,13 @@ import { emitClientException } from "../telemetry/logs";
 import type { WebSocketClientMetrics } from "../telemetry/metrics";
 import {
   createConnectionMetricAttributes,
-  createErrorMetricAttributes,
   createServerMetricAttributes,
   durationSeconds,
 } from "../telemetry/metrics";
 import {
   addSpanEvent,
   createWebSocketSpan,
+  getErrorType,
   resolveStartSpanHook,
   runSpanHook,
   setSpanError,
@@ -158,19 +158,11 @@ export function createOpenTelemetryWebSocketInterceptor(
               closeInfo,
             });
           }
-          if (span)
-            addSpanEvent(
-              span,
-              "websocket.error",
-              createErrorMetricAttributes(error),
-            );
+          const errorAttributes = { "error.type": getErrorType(error) };
+          if (span) addSpanEvent(span, "websocket.error", errorAttributes);
           metrics?.connectionDuration.record(
             durationSeconds(connectedAtMs),
-            createConnectionMetricAttributes(
-              req,
-              "error",
-              createErrorMetricAttributes(error),
-            ),
+            createConnectionMetricAttributes(req, "error", errorAttributes),
           );
           if (span) setSpanError(span, error);
         },
@@ -183,19 +175,11 @@ export function createOpenTelemetryWebSocketInterceptor(
             transport: "websocket",
             phase: "connection",
           });
-          if (span)
-            addSpanEvent(
-              span,
-              "websocket.error",
-              createErrorMetricAttributes(error),
-            );
+          const errorAttributes = { "error.type": getErrorType(error) };
+          if (span) addSpanEvent(span, "websocket.error", errorAttributes);
           metrics?.connectionDuration.record(
             durationSeconds(connectedAtMs),
-            createConnectionMetricAttributes(
-              req,
-              "error",
-              createErrorMetricAttributes(error),
-            ),
+            createConnectionMetricAttributes(req, "error", errorAttributes),
           );
           if (span) setSpanError(span, error);
         },
@@ -212,11 +196,9 @@ export function createOpenTelemetryWebSocketInterceptor(
       });
       metrics?.connectDuration.record(
         durationSeconds(connectStartMs),
-        createConnectionMetricAttributes(
-          req,
-          "error",
-          createErrorMetricAttributes(error),
-        ),
+        createConnectionMetricAttributes(req, "error", {
+          "error.type": getErrorType(error),
+        }),
       );
       if (span) setSpanError(span, error);
       throw error;

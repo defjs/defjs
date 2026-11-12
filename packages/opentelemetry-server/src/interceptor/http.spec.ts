@@ -286,6 +286,31 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     );
   });
 
+  test("records error.type _OTHER on the duration sample when the rejection carries no error", async () => {
+    const metrics = createMockMetrics();
+    const interceptor = createOpenTelemetryHttpInterceptor({
+      propagator: mockPropagator,
+      metrics,
+    });
+
+    await expect(
+      interceptor.fn(makeHttpRequest(), () =>
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: the rejection must be undefined to prove a failed sample still carries error.type
+        Promise.reject(undefined),
+      ),
+    ).rejects.toBeUndefined();
+
+    expect(metrics.requestDuration.record).toHaveBeenCalledWith(
+      expect.any(Number),
+      {
+        "http.request.method": "GET",
+        "server.address": "api.example.com",
+        "server.port": 443,
+        "error.type": "_OTHER",
+      },
+    );
+  });
+
   test("should create span with correct name", async () => {
     const { tracer, spans } = createMockTracer();
     const interceptor = createOpenTelemetryHttpInterceptor({
