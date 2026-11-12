@@ -33,14 +33,13 @@ import {
   awaitWithSignal,
   mergeAbortSignals,
   releaseAbortSignal,
-  resolveAbortedCause,
   resolveAbortedFault,
   resolveAbortCause,
   resolveAbortFault,
 } from "../internal/abort";
 import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
-import { createTransportOrigin } from "../internal/transport_origin";
+import { rejectAs, rejected } from "../internal/chain_faults";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
 import type { EndpointInput } from "../internal/endpoint_input";
 import { preflight } from "../internal/preflight";
@@ -522,12 +521,8 @@ async function executeHttpAttempt<
         return fail(builtCancellation);
       }
 
-      const transportOrigin = createTransportOrigin();
-      // A failure found before the request is sent is shown to interceptors as the error that caused it, so they and
-      // any tracing around them never see a library class. This remembers which fault such an error stands for.
-      // An object matches by identity. A primitive a hook threw matches by value, so an interceptor that throws an
-      // equal primitive after next() rejected with it is given the hook's code, the same trade-off createTransportOrigin makes.
-      const localFailures = new Map<unknown, AnyBodyFailure>();
+      // The fault behind each value a send rejected with; see chain_faults.ts. Most attempts never need it.
+      let faults: Map<unknown, ChainFault> | undefined;
       // One controller per send, so stopping a live send never reaches one whose upload body already failed.
       const liveTransports = new Set<AbortController>();
       let chainSettled = false;
@@ -537,13 +532,11 @@ async function executeHttpAttempt<
         nextRequest: typeof request,
       ): Promise<HttpResponse<unknown>> => {
         if (chainSettled) {
-          const rejected = Promise.reject<HttpResponse<unknown>>(
+          return rejected(
             new Error(
               "HTTP interceptor next() cannot be called after the chain has settled",
             ),
           );
-          void rejected.catch(() => undefined);
-          return rejected;
         }
 
         const matches = nextRequest.baseEndpoint === resolved.endpoint;
@@ -552,11 +545,6 @@ async function executeHttpAttempt<
           if (matches) {
             remember(seq, next);
           }
-        };
-        const reject = (error: unknown): Promise<HttpResponse<unknown>> => {
-          const rejected = Promise.reject<HttpResponse<unknown>>(error);
-          void rejected.catch(() => undefined);
-          return rejected;
         };
 
         const transportController = new AbortController();
@@ -577,17 +565,20 @@ async function executeHttpAttempt<
                 ]);
         } catch (error) {
           note({ landed: false });
-          return reject(error);
+          return error instanceof RequestUrlError
+            ? rejectAs(
+                (faults ??= new Map()),
+                error,
+                createPreflightFault("REQ_BUILD_FAILED", error),
+              )
+            : rejected(error);
         }
-        const due = resolveAbortFault(transportAbort);
+        const due = resolveAbortCause(transportAbort);
         if (due) {
           // Already aborted: fetch never starts, so this next() did not reach the endpoint.
           note({ landed: false });
-          const rejected = reject(
-            transportOrigin.mark(resolveAbortedCause(transportAbort)),
-          );
           releaseAbortSignal(transportAbort);
-          return rejected;
+          return rejectAs((faults ??= new Map()), due, createNetworkFault(due));
         }
         liveTransports.add(transportController);
         if (isReadableStreamBody(nextRequest.body)) state.replayable = false;
@@ -671,15 +662,16 @@ async function executeHttpAttempt<
                   ),
                 );
               note(classified);
-              // Cancellation outranks whatever the transport was doing when it noticed. Tagging here is
-              // the only way to tell a dead server from an interceptor that threw the same value: both
-              // reach the chain's catch as one bare cause.
+              // Cancellation outranks whatever the transport was doing when it noticed. Recording the fault
+              // here is the only way to tell a dead server from an interceptor that threw the same value:
+              // both reach the chain's catch as one bare cause.
               const surfaced = resolveAbortCause(transportAbort) ?? error;
-              if (isLocalFailure(surfaced)) {
-                localFailures.set(surfaced.cause, surfaced);
-                throw transportOrigin.mark(surfaced.cause);
-              }
-              throw transportOrigin.mark(surfaced);
+              // A request refused before it was sent is shown as the hook or platform error behind it.
+              const shown = isLocalFailure(surfaced)
+                ? surfaced.cause
+                : surfaced;
+              (faults ??= new Map()).set(shown, transportFault(surfaced));
+              throw shown;
             },
           )
           .finally(() => {
@@ -722,7 +714,6 @@ async function executeHttpAttempt<
           );
           response = settled;
         } catch (error) {
-          const fromTransport = transportOrigin.has(error);
           const cancelled = resolveAbortFault(requestSignal);
           if (cancelled) {
             abortTransport();
@@ -732,40 +723,8 @@ async function executeHttpAttempt<
             finish(cancelled);
             return fail(cancelled);
           }
-          if (error instanceof RequestUrlError) {
-            const fault = createPreflightFault("REQ_BUILD_FAILED", error);
-            finish(fault);
-            return fail(fault);
-          }
-          // The transport only reads a side that declared a struct, so a tagged body failure belongs to that side.
-          // Failures before the request is sent (upload observer, finalizeHeaders, a used body stream) are also tagged, without response metadata.
-          const failure = isBodyFailure(error)
-            ? error
-            : localFailures.get(error);
-          if (failure) {
-            const fault = fromBodyFailure(failure);
-            finish(fault);
-            return fail(fault);
-          }
-          if (
-            fromTransport &&
-            (error === ERR_STREAMING_REQUEST_UNSUPPORTED ||
-              error === ERR_FETCH_UNSUPPORTED)
-          ) {
-            const fault = createPreflightFault("ENV_UNSUPPORTED", error);
-            finish(fault);
-            return fail(fault);
-          }
-          // Recognized cancellation shapes stay cancellation wherever they came from; anything else
-          // belongs to whoever produced it.
-          const networkFault = createNetworkFault(error);
-          if (networkFault.code !== "NET_UNREACHABLE") {
-            finish(networkFault);
-            return fail(networkFault);
-          }
-          const fault = fromTransport
-            ? networkFault
-            : createPreflightFault("EXT_INTERCEPTOR_FAILED", error);
+          // An interceptor that rethrows what next() rejected with keeps that send's fault.
+          const fault = faults?.get(error) ?? foreignFault(error);
           finish(fault);
           return fail(fault);
         }
@@ -876,6 +835,43 @@ function httpAttemptDone(
     return { attempted: true, code: "NET_TIMEOUT" };
   }
   return attempt?.info ?? { attempted: false };
+}
+
+/** What a send that failed, or an interceptor that threw, makes of the call. */
+type ChainFault = DecodeFault | PreflightFault;
+
+/** The fault for a value that carries its own code wherever it came from: an invalid URL or a tagged body failure. */
+function taggedFault(error: unknown): ChainFault | undefined {
+  if (error instanceof RequestUrlError) {
+    return createPreflightFault("REQ_BUILD_FAILED", error);
+  }
+  // The transport only reads a side that declared a struct, so a tagged body failure belongs to that side.
+  // Failures before the request is sent (upload observer, finalizeHeaders, a used body stream) are also tagged, without response metadata.
+  return isBodyFailure(error) ? fromBodyFailure(error) : undefined;
+}
+
+/** The fault a rejected send stands for: `surfaced` is what the transport rejected with, or the abort cause that outranks it. */
+function transportFault(surfaced: unknown): ChainFault {
+  return (
+    taggedFault(surfaced) ??
+    (surfaced === ERR_STREAMING_REQUEST_UNSUPPORTED ||
+    surfaced === ERR_FETCH_UNSUPPORTED
+      ? createPreflightFault("ENV_UNSUPPORTED", surfaced)
+      : createNetworkFault(surfaced))
+  );
+}
+
+/**
+ * The fault for a value no send rejected with: the interceptor's own throw. Recognized cancellation shapes stay
+ * cancellation wherever they came from; anything else belongs to the interceptor.
+ */
+function foreignFault(error: unknown): ChainFault {
+  return (
+    taggedFault(error) ??
+    (networkCauseCode(error) === "NET_UNREACHABLE"
+      ? createPreflightFault("EXT_INTERCEPTOR_FAILED", error)
+      : createNetworkFault(error))
+  );
 }
 
 /** A request refused before it was sent: the hook or platform error behind it is what interceptors are shown. */

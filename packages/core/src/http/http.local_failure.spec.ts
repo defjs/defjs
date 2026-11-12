@@ -8,6 +8,7 @@ import {
 } from "../client/option";
 import type { HttpRequest } from "../internal/http_request";
 import { createHttpInterceptor } from "../interceptor";
+import { createResolvedRequestUrl } from "../internal/url";
 import { defineRequest } from "./http";
 
 // A request that cannot be sent is found before the transport runs. What an interceptor sees from
@@ -118,6 +119,25 @@ test("an interceptor that rethrows what next() rejected with keeps the fault cod
   const [fault] = await send(client);
 
   expect(fault?.code).toBe("REQ_BUILD_FAILED");
+});
+
+test("an invalid URL that an interceptor resolves itself is a build failure too", async () => {
+  const handle = vi.fn(() => Promise.resolve(new Response("ok")));
+  const client = createClient(
+    withEndpoint("https://first.test"),
+    withHTTPHandle(handle),
+    withInterceptors(
+      createHttpInterceptor(async (request, next) => {
+        createResolvedRequestUrl("https://first.test", "//other.test/");
+        return next(request);
+      }),
+    ),
+  );
+
+  const [fault] = await send(client);
+
+  expect(fault?.code).toBe("REQ_BUILD_FAILED");
+  expect(handle).not.toHaveBeenCalled();
 });
 
 test("an interceptor that wraps what next() rejected with owns the failure", async () => {
