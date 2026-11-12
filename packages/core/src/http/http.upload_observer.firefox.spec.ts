@@ -1,4 +1,3 @@
-import { registerUploadObserverSuite } from "../../test/suites/upload-observer.ts";
-import { uploadCapabilities } from "../../test/upload-capability.ts";
+import { registerUnsupportedUploadCase } from "../../test/suites/upload-observer.ts";
 
-registerUploadObserverSuite(uploadCapabilities.firefox);
+registerUnsupportedUploadCase();

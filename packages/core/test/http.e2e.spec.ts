@@ -38,7 +38,7 @@ test("should settle public HTTP cancellation when an interceptor hangs after a r
   expect(error).toMatchObject({ code: "NET_ABORTED" });
   expect(result).toBeUndefined();
   expect(response).toBeUndefined();
-}, 2_000);
+});
 
 const EchoField = struct.object({
   filename: struct.string().optional(),

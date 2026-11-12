@@ -1,10 +1,13 @@
 import { expect, inject, test, vi } from "vitest";
-import { registerUploadObserverSuite } from "../../test/suites/upload-observer.ts";
-import { uploadCapabilities } from "../../test/upload-capability.ts";
+import {
+  registerCustomUploadObserverSuite,
+  registerUnreachableUploadCase,
+} from "../../test/suites/upload-observer.ts";
 import { createClient, withEndpoint } from "../client/index.ts";
 import { defineRequest } from "./index.ts";
 
-registerUploadObserverSuite(uploadCapabilities.chrome);
+registerCustomUploadObserverSuite();
+registerUnreachableUploadCase();
 
 async function collectUnhandledRejections<T>(
   run: () => Promise<T>,

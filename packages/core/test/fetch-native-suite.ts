@@ -116,9 +116,8 @@ async function importLibrary() {
   // Browsers run native modules that no registry reset can reach, but each spec file gets its own page, so the first
   // import here is the library's first load. Server workers may share a registry, hence the reset.
   vi.resetModules();
-  const [transport, init, config, error, client, http] = await Promise.all([
+  const [transport, config, error, client, http] = await Promise.all([
     import("../src/http/transport/fetch"),
-    import("../src/http/transport/fetch_init"),
     import("../src/client/config"),
     import("../src/error"),
     import("../src/client"),
@@ -132,7 +131,6 @@ async function importLibrary() {
     ERR_TIMEOUT: error.ERR_TIMEOUT,
     fetchHandler: transport.fetchHandler,
     http,
-    supportsStreamingRequestBody: init.supportsStreamingRequestBody,
   };
 }
 
@@ -233,7 +231,7 @@ async function stallState(
 }
 
 /** Registers the platform fast-path cases; shared by the server (Bun) and browser (Chromium, Firefox) projects. */
-export function defineNativeFetchSuite(): void {
+function useNativeLibrary(): void {
   // Loading and instrumenting the library can outlast a single test's budget, so it is not charged to the first test.
   beforeAll(async () => {
     await ensureLibrary();
@@ -243,6 +241,10 @@ export function defineNativeFetchSuite(): void {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
+}
+
+export function defineNativeFetchSuite(): void {
+  useNativeLibrary();
 
   describe("default handle", () => {
     test("binds both default option handles to globalThis and returns platform responses when detached", async () => {
@@ -348,115 +350,6 @@ export function defineNativeFetchSuite(): void {
         const response = await fetchHandler(input, DEFAULT_FETCH);
         expect(response.url).toBe(new Request(resolveRequestUrl(input)).url);
       }
-    });
-
-    test("passes a streaming upload body wrapped for progress, with duplex half", async () => {
-      const {
-        calls,
-        DEFAULT_FETCH,
-        fetchHandler,
-        supportsStreamingRequestBody,
-      } = await loadTransport(ORIGIN, () =>
-        Promise.resolve(new Response("ok")),
-      );
-      if (!supportsStreamingRequestBody()) {
-        return;
-      }
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.close();
-        },
-      });
-
-      await fetchHandler(
-        request({ body: stream, method: "POST", uploadProgress: vi.fn() }),
-        DEFAULT_FETCH,
-      );
-
-      const init = calls[0]?.[1];
-      const duplex =
-        init !== undefined && "duplex" in init ? init.duplex : undefined;
-      expect(duplex).toBe("half");
-      expect(init?.body).toBeInstanceOf(ReadableStream);
-      expect(init?.body).not.toBe(stream);
-    });
-
-    test("passes an unobserved stream body through untouched when called directly", async () => {
-      const {
-        calls,
-        DEFAULT_FETCH,
-        fetchHandler,
-        supportsStreamingRequestBody,
-      } = await loadTransport(ORIGIN, () =>
-        Promise.resolve(new Response("ok")),
-      );
-      if (!supportsStreamingRequestBody()) {
-        return;
-      }
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.close();
-        },
-      });
-
-      await fetchHandler(
-        request({ body: stream, method: "POST" }),
-        DEFAULT_FETCH,
-      );
-
-      expect(calls[0]?.[1]?.body).toBe(stream);
-      expect(stream.locked).toBe(false);
-    });
-
-    test("cancels the wrapped upload body with the failure when the platform fetch rejects", async () => {
-      const networkError = new Error("network failed");
-      const { DEFAULT_FETCH, fetchHandler, supportsStreamingRequestBody } =
-        await loadTransport(ORIGIN, () => Promise.reject(networkError));
-      if (!supportsStreamingRequestBody()) {
-        return;
-      }
-      const onCancel = vi.fn();
-      const stream = openSource(onCancel);
-
-      const failure = await settleWithin(
-        fetchHandler(
-          request({ body: stream, method: "POST", uploadProgress: vi.fn() }),
-          DEFAULT_FETCH,
-        ).catch((cause: unknown) => cause),
-      );
-
-      expect(failure).toBe(networkError);
-      expect(onCancel).toHaveBeenCalledExactlyOnceWith(networkError);
-      expect(stream.locked).toBe(false);
-    });
-
-    test("rejects a request Fetch cannot construct as a build failure and leaves the upload body untouched", async () => {
-      const host = inject("testServerHost");
-      const { DEFAULT_FETCH, fetchHandler, supportsStreamingRequestBody } =
-        await loadTransport(host);
-      if (!supportsStreamingRequestBody()) {
-        return;
-      }
-      const onCancel = vi.fn();
-      const stream = openSource(onCancel);
-
-      const failure = await settleWithin(
-        fetchHandler(
-          request({
-            baseEndpoint: host,
-            body: stream,
-            endpoint: "/json",
-            method: "GET",
-            uploadProgress: vi.fn(),
-          }),
-          DEFAULT_FETCH,
-        ).catch((cause: unknown) => cause),
-      );
-
-      expect(failure).toHaveProperty("code", "REQ_BUILD_FAILED");
-      expect(failure).toHaveProperty("cause", expect.any(TypeError));
-      expect(onCancel).not.toHaveBeenCalled();
-      expect(stream.locked).toBe(false);
     });
 
     test("does not start the platform fetch for an already aborted signal", async () => {
@@ -1014,5 +907,104 @@ export function defineNativeFetchSuite(): void {
         await serverSees(realFetch, key, { closed: 1, opened: 1 });
       },
     );
+  });
+}
+
+/**
+ * The upload cases that need a runtime whose Request takes a stream body: Chromium, Node.js and Bun. Firefox answers
+ * `ENV_UNSUPPORTED`, which the upload suite asserts there.
+ */
+export function defineNativeFetchStreamingSuite(): void {
+  useNativeLibrary();
+
+  describe("default handle", () => {
+    test("passes a streaming upload body wrapped for progress, with duplex half", async () => {
+      const { calls, DEFAULT_FETCH, fetchHandler } = await loadTransport(
+        ORIGIN,
+        () => Promise.resolve(new Response("ok")),
+      );
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      });
+
+      await fetchHandler(
+        request({ body: stream, method: "POST", uploadProgress: vi.fn() }),
+        DEFAULT_FETCH,
+      );
+
+      const init = calls[0]?.[1];
+      const duplex =
+        init !== undefined && "duplex" in init ? init.duplex : undefined;
+      expect(duplex).toBe("half");
+      expect(init?.body).toBeInstanceOf(ReadableStream);
+      expect(init?.body).not.toBe(stream);
+    });
+
+    test("passes an unobserved stream body through untouched when called directly", async () => {
+      const { calls, DEFAULT_FETCH, fetchHandler } = await loadTransport(
+        ORIGIN,
+        () => Promise.resolve(new Response("ok")),
+      );
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      });
+
+      await fetchHandler(
+        request({ body: stream, method: "POST" }),
+        DEFAULT_FETCH,
+      );
+
+      expect(calls[0]?.[1]?.body).toBe(stream);
+      expect(stream.locked).toBe(false);
+    });
+
+    test("cancels the wrapped upload body with the failure when the platform fetch rejects", async () => {
+      const networkError = new Error("network failed");
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.reject(networkError),
+      );
+      const onCancel = vi.fn();
+      const stream = openSource(onCancel);
+
+      const failure = await settleWithin(
+        fetchHandler(
+          request({ body: stream, method: "POST", uploadProgress: vi.fn() }),
+          DEFAULT_FETCH,
+        ).catch((cause: unknown) => cause),
+      );
+
+      expect(failure).toBe(networkError);
+      expect(onCancel).toHaveBeenCalledExactlyOnceWith(networkError);
+      expect(stream.locked).toBe(false);
+    });
+
+    test("rejects a request Fetch cannot construct as a build failure and leaves the upload body untouched", async () => {
+      const host = inject("testServerHost");
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(host);
+      const onCancel = vi.fn();
+      const stream = openSource(onCancel);
+
+      const failure = await settleWithin(
+        fetchHandler(
+          request({
+            baseEndpoint: host,
+            body: stream,
+            endpoint: "/json",
+            method: "GET",
+            uploadProgress: vi.fn(),
+          }),
+          DEFAULT_FETCH,
+        ).catch((cause: unknown) => cause),
+      );
+
+      expect(failure).toHaveProperty("code", "REQ_BUILD_FAILED");
+      expect(failure).toHaveProperty("cause", expect.any(TypeError));
+      expect(onCancel).not.toHaveBeenCalled();
+      expect(stream.locked).toBe(false);
+    });
   });
 }
