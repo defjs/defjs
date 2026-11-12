@@ -1,10 +1,10 @@
 import { getSlugs, createGetUrl } from "fumadocs-core/source";
 import { apiEntries } from "../data/api-catalog";
 import { apiVirtualPath } from "./api-virtual";
-import { defaultLocale, i18n, locales } from "./i18n";
+import { defaultLocale, i18n, locales, type Locale } from "./i18n";
 
 export interface ContentRoute {
-  locale: string;
+  locale: Locale;
   slugs: string[];
   url: string;
 }
@@ -27,7 +27,7 @@ export function assertUniqueRoutes(paths: string[]): ContentRoute[] {
 }
 export function apiEntryContentPaths(
   slugs: readonly string[] = apiEntries.map((entry) => entry.slug),
-  localeList: readonly string[] = locales,
+  localeList: readonly Locale[] = locales,
 ): string[] {
   return localeList.flatMap((locale) =>
     slugs.map((slug) => apiVirtualPath(locale, slug)),

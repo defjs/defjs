@@ -272,7 +272,7 @@ const relatedTopics = [
 
 export function getRelatedNavigation(
   tree: Root,
-  locale: string,
+  locale: Locale,
   url: string,
 ): Folder[] {
   const prefix = localePrefix(locale);

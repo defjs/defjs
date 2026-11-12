@@ -1,5 +1,5 @@
 import { mapOutsideFences } from "./markdown";
-import { localePrefix } from "./i18n";
+import { localePrefix, type Locale } from "./i18n";
 
 export interface ApiField {
   name: string;
@@ -28,7 +28,7 @@ export function firstParagraph(description: string): string {
     .trim();
 }
 
-export function apiPageHref(locale: string, slug: string): string {
+export function apiPageHref(locale: Locale, slug: string): string {
   return `${localePrefix(locale)}/api/${slug}`;
 }
 
@@ -47,7 +47,7 @@ export function linkTargets(
 /** `{@link Name}` and `{@link Name | label}` become locale-prefixed Markdown links. */
 export function resolveDocLinks(
   text: string,
-  locale: string,
+  locale: Locale,
   targets: ReadonlyMap<string, string>,
 ): string {
   return mapOutsideFences(text, (line) =>

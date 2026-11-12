@@ -1,9 +1,10 @@
+import type { Locale } from "./i18n";
 import { apiEntryView, type ApiEntryView } from "./api-entry-view";
 import type { ApiField } from "./api-text";
 
 export function renderApiEntryMarkdownBySlug(
   slug: string,
-  locale: string,
+  locale: Locale,
 ): string {
   return renderApiEntryMarkdown(apiEntryView(slug, locale));
 }

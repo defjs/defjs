@@ -1,5 +1,5 @@
 import { apiEntries } from "../data/api-catalog";
-import { localePrefix } from "./i18n";
+import { localePrefix, type Locale } from "./i18n";
 import { tabItems } from "./tab-items";
 /** Applies `convert` to every line outside fenced code blocks. */
 export function mapOutsideFences(
@@ -21,7 +21,7 @@ export function mapOutsideFences(
     })
     .join("\n");
 }
-export function readableMarkdown(text: string, locale: string): string {
+export function readableMarkdown(text: string, locale: Locale): string {
   const prefix = localePrefix(locale);
   // A `<Tab>` takes its heading from the enclosing `<Tabs items>` by position.
   let items: string[] = [];

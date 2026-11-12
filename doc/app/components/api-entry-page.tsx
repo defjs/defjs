@@ -5,6 +5,7 @@ import {
   englishAttributes,
 } from "../lib/api-entry-actions";
 import type { RenderedApiEntry } from "../lib/api-html";
+import type { Locale } from "../lib/i18n";
 import { useAppTranslations, useLocale } from "../lib/use-app-translations";
 
 export function ApiEntryPage({ view }: { view: RenderedApiEntry }) {
@@ -158,7 +159,7 @@ function injectedLinkPath(
   });
 }
 
-function EnglishHtml({ locale, html }: { locale: string; html: string }) {
+function EnglishHtml({ locale, html }: { locale: Locale; html: string }) {
   const prose = englishAttributes(locale);
   if (!prose) return <Injected html={html} />;
   return (
@@ -178,7 +179,7 @@ function ProseList({
   parts,
 }: {
   heading: string;
-  locale: string;
+  locale: Locale;
   parts: string[];
 }) {
   if (parts.length === 0) return null;

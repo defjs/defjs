@@ -1,3 +1,4 @@
+import type { Locale } from "./i18n";
 import type { ApiReferenceEntry, StoredEntry } from "../../scripts/api-model";
 import { apiTargets, requireApiReference } from "../data/api-reference";
 import {
@@ -37,13 +38,13 @@ export interface ApiEntryView {
   overviewHref: string;
 }
 
-export function apiEntryView(slug: string, locale: string): ApiEntryView {
+export function apiEntryView(slug: string, locale: Locale): ApiEntryView {
   return buildApiEntryView(requireApiReference(slug), locale, apiTargets());
 }
 
 export function buildApiEntryView(
   entry: ApiReferenceEntry,
-  locale: string,
+  locale: Locale,
   targets: ReadonlyMap<string, string>,
 ): ApiEntryView {
   const resolve = (text: string) => resolveDocLinks(text, locale, targets);

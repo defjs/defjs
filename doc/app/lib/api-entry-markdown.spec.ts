@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import type { ApiReferenceEntry } from "../../scripts/api-model";
 import { apiReference } from "../data/api-reference";
 import { buildApiEntryView } from "./api-entry-view";
+import type { Locale } from "./i18n";
 import { readableMarkdown } from "./markdown";
 import {
   renderApiEntryMarkdown,
@@ -58,7 +59,7 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
   };
 }
 
-function markdown(item: ApiReferenceEntry, locale: string): string {
+function markdown(item: ApiReferenceEntry, locale: Locale): string {
   return renderApiEntryMarkdown(buildApiEntryView(item, locale, targets));
 }
 

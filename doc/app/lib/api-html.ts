@@ -1,3 +1,4 @@
+import type { Locale } from "./i18n";
 import { createElement, type ComponentProps, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { highlight } from "fumadocs-core/highlight";
@@ -112,7 +113,7 @@ export async function renderMarkdown(
 export async function renderFieldTable(
   rows: readonly ApiField[],
   t: Translator,
-  locale: string,
+  locale: Locale,
 ): Promise<string> {
   if (rows.length === 0) return "";
   const labels = copyLabels(t);
@@ -135,7 +136,7 @@ export async function renderApiEntry(
   view: ApiEntryView,
   t: Translator,
   overviewTitle: string,
-  locale: string,
+  locale: Locale,
 ): Promise<RenderedApiEntry> {
   const labels = copyLabels(t);
   const parameterSections: RenderedParameterSection[] = [];

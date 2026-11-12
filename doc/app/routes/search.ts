@@ -1,11 +1,11 @@
 import { createFromSource } from "fumadocs-core/search/server";
-import { locales } from "../lib/i18n";
+import { locales, type Locale } from "../lib/i18n";
 import { readableMarkdown } from "../lib/markdown";
 import { source } from "../lib/source";
 import type { Route } from "./+types/search";
 
 // One static index per locale, so readers only download the language they are reading.
-function createServer(locale: string) {
+function createServer(locale: Locale) {
   return createFromSource(
     { ...source, getPages: () => source.getPages(locale) },
     {

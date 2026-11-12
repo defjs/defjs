@@ -1,3 +1,4 @@
+import type { Locale } from "./i18n";
 import type { MetaData, PageData, VirtualFile } from "fumadocs-core/source";
 import type { ApiEntry } from "../data/api-catalog";
 
@@ -15,7 +16,7 @@ export interface ApiSourceConfig {
 
 type ApiVirtualFile = VirtualFile<ApiSourceConfig>;
 
-export function apiVirtualPath(locale: string, slug: string): string {
+export function apiVirtualPath(locale: Locale, slug: string): string {
   return `${locale}/api/${slug}.mdx`;
 }
 
@@ -25,9 +26,9 @@ export function apiVirtualPath(locale: string, slug: string): string {
  */
 export function apiVirtualFiles(
   entries: readonly ApiEntry[],
-  localeList: readonly string[],
+  localeList: readonly Locale[],
   existing: ReadonlySet<string>,
-  load: (slug: string, locale: string) => Promise<string>,
+  load: (slug: string, locale: Locale) => Promise<string>,
 ): ApiVirtualFile[] {
   const files: ApiVirtualFile[] = [];
   for (const locale of localeList) {

@@ -33,5 +33,5 @@ export function splitLocale(segments: readonly string[]): {
     : { locale: defaultLocale, rest: [...segments] };
 }
 /** URL prefix of a locale's pages; the default locale is served from the root. */
-export const localePrefix = (locale: string) =>
+export const localePrefix = (locale: Locale) =>
   locale === defaultLocale ? "" : `/${locale}`;

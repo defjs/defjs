@@ -1,14 +1,14 @@
-import { defaultLocale } from "./i18n";
+import { defaultLocale, type Locale } from "./i18n";
 
 /** English API prose on a translated page. The default locale stays unmarked. */
 export function englishAttributes(
-  locale: string,
+  locale: Locale,
 ): { lang: "en"; dir: "ltr" } | null {
   if (locale === defaultLocale) return null;
   return { lang: "en", dir: "ltr" };
 }
 
-export function wrapEnglishHtml(html: string, locale: string): string {
+export function wrapEnglishHtml(html: string, locale: Locale): string {
   if (!html) return "";
   const attributes = englishAttributes(locale);
   if (!attributes) return html;
