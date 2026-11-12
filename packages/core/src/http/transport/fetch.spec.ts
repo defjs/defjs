@@ -263,32 +263,6 @@ describe("request construction failure", () => {
     },
   );
 
-  test("an omitted method is read as GET, so a body is rejected before a custom handle is called", async () => {
-    const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
-
-    expectBuildFailure(
-      await rejection(
-        // @ts-expect-error JavaScript callers may omit the required method
-        { ...base, method: undefined, body: "payload" },
-        handle,
-      ),
-    );
-    expect(handle).not.toHaveBeenCalled();
-  });
-
-  test("an omitted method without a body is still sent as GET", async () => {
-    const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
-
-    const response = await fetchHandler(
-      // @ts-expect-error JavaScript callers may omit the required method
-      { ...base, method: undefined },
-      handle,
-    );
-
-    expect(response.status).toBe(200);
-    expect(handle.mock.calls[0]?.[0]).toMatchObject({ method: "GET" });
-  });
-
   test.each(["BAD METHOD", ""])(
     "the method %j is rejected before a custom handle is called",
     async (method) => {

@@ -764,24 +764,6 @@ test.each([
   },
 );
 
-test("an interceptor that omits the method on a request with a body fails as a build failure before any request", async () => {
-  // The platform reads a missing method as GET, and a GET cannot carry a body.
-  const { client, requests, reports, start } = localFailureFixture(
-    withInterceptors(
-      createHttpInterceptor((request, next) =>
-        // @ts-expect-error JavaScript interceptors may omit the required method
-        next({ ...request, method: undefined, body: "payload" }),
-      ),
-    ),
-  );
-  const [fault] = await defineRequest({ method: "POST", path: "/" })(client);
-  expect(fault?.code).toBe("REQ_BUILD_FAILED");
-  expect(fault?.cause).toBeInstanceOf(TypeError);
-  expect(reports).toEqual([{ attempted: false }]);
-  expect(start).not.toHaveBeenCalled();
-  expect(requests).toHaveLength(0);
-});
-
 test("a lowercase transported method remains eligible for retry", async () => {
   const { client, requests } = fixture(
     withInterceptors({

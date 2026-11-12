@@ -143,15 +143,12 @@ const METHOD_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
  * here keeps these apart from a network failure. Bun's Request accepts all of them, so the answer does not depend on the runtime.
  */
 function assertRequestShape(request: HttpRequest, url: URL): void {
-  // A JavaScript interceptor can omit the method, which the platform then reads as GET.
-  const rawMethod =
-    request.method === undefined ? "GET" : String(request.method);
-  const method = rawMethod.toUpperCase();
+  const method = request.method.toUpperCase();
   let reason: string | undefined;
-  if (!METHOD_TOKEN.test(rawMethod)) {
-    reason = `${JSON.stringify(rawMethod)} is not a valid method`;
+  if (!METHOD_TOKEN.test(request.method)) {
+    reason = `${JSON.stringify(request.method)} is not a valid method`;
   } else if (FORBIDDEN_METHODS.has(method)) {
-    reason = `${rawMethod} is a forbidden method`;
+    reason = `${request.method} is a forbidden method`;
   } else if (
     (method === "GET" || method === "HEAD") &&
     request.body !== undefined
@@ -282,11 +279,9 @@ async function parseFetchResponse(
 
   // The platform defines these responses as having no body, so they are never read, whether the
   // runtime exposes null or an empty stream. The decoder still checks the declared media type
-  // against the absent body. Names are not normalized on `HttpRequest`, and fetch normalizes
-  // `head`. A JavaScript caller may omit the method, which the platform treats as GET, so it is
-  // stringified before it is compared.
+  // against the absent body. Names are not normalized on `HttpRequest`, and fetch normalizes `head`.
   const noContent =
-    String(httpRequest.method).toUpperCase() === "HEAD" ||
+    httpRequest.method.toUpperCase() === "HEAD" ||
     NULL_BODY_STATUSES.has(status);
   const stream = noContent ? null : response.body;
   if (noContent && response.body) {

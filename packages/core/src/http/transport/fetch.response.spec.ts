@@ -624,22 +624,6 @@ describe("Fetch handler responses", () => {
       },
     );
 
-    test("should treat a request without a method as GET when the response has no body", async () => {
-      const result = await fetchHandler(
-        {
-          baseEndpoint: "https://example.com",
-          endpoint: "/no-content",
-          // @ts-expect-error JavaScript callers and interceptors may omit the required method
-          method: undefined,
-          responseType: "text",
-        },
-        () => Promise.resolve(new Response(null, { status: 204 })),
-      );
-
-      expect(result.status).toBe(204);
-      expect(result.body).toBeUndefined();
-    });
-
     test("should keep a body stream on a status that is not a null body status", async () => {
       const result = await fetchHandler(
         {

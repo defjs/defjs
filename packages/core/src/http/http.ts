@@ -65,7 +65,8 @@ import { parseStructValue } from "../struct/introspection";
 import type { Guide } from "../struct/guide";
 import { createHttpRequest } from "./request";
 import type { AnyBodyFailure } from "./transport/body_failure";
-import { BodyFailure, isBodyFailure } from "./transport/body_failure";
+import type { BodyFailure } from "./transport/body_failure";
+import { isBodyFailure } from "./transport/body_failure";
 import { fetchHandlerWithLifecycle } from "./transport/fetch";
 import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
@@ -604,17 +605,6 @@ async function executeHttpAttempt<
       let transportAbort: AbortSignal;
       try {
         resolveRequestUrl(nextRequest);
-        // Headers rejects an invalid name or value with a TypeError. Checking here makes that a request that cannot be
-        // built, not a NET_UNREACHABLE that only surfaces once the transport builds its own Headers.
-        try {
-          void new Headers(nextRequest.headers);
-        } catch (error) {
-          localFailures.set(
-            error,
-            new BodyFailure("REQ_BUILD_FAILED", error, undefined),
-          );
-          throw error;
-        }
         // transportController already follows requestSignal through abortTransport. Only an interceptor that
         // swapped the signal needs a composite, which is expensive to build and to listen on.
         transportAbort =

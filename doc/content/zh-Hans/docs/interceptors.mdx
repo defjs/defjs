@@ -67,7 +67,7 @@ HTTP 重试默认关闭。要在另一个端点上重试连接失败、超时，
 - **`Retry-After` 策略**：Core 的 `withRetry` 不读取这个响应头。配方中 30 秒的上限和 250 ms 的回退值是应用层的选择。对更长的服务器延迟设置上限，可能比服务器要求的时间更早重试；若不能接受，请等待完整延迟或直接返回响应。
 - **401 写操作**：[Bearer 刷新配方](/zh-Hans/recipes/refresh-bearer-once)可能投递同一个 JSON POST 两次。请要求认证在业务处理前拒绝请求，并使用稳定的幂等键与服务端去重；否则不要自动重放写操作。流式请求体不会重放。
 - **处理传输层 rejection**：网络错误发生时 `next(request)` 会 reject（不存在 status 为 0 的响应）。捕获后重新抛出可保留原始 `NET_*` Fault 代码。
-- **无法发送的请求**：在 HTTP 拦截器中，当平台拒绝该请求（无效或被禁止的方法、GET 或 HEAD 的 body、带凭据的 URL、平台拒绝的请求头值），或 `finalizeHeaders` hook 抛出时，`next(request)` 会以平台自己的错误（`TypeError`）或 hook 抛出的值 reject，而不是库的 `BodyFailure` 包装。重新抛出可保留 Fault 代码（`REQ_BUILD_FAILED` 或 `EXT_HOOK_FAILED`）；抛出另一个错误则使这次失败归你所有（`EXT_INTERCEPTOR_FAILED`）。传输周围发现的其他失败仍以 `BodyFailure` 到达 `next(request)`：无法读取、解码或与媒体类型匹配的响应 body、被截断的 body，以及抛出异常的上传进度观察者（`EXT_OBSERVER_FAILED`），后者可能发生在请求发出之前。
+- **无法发送的请求**：在 HTTP 拦截器中，当平台拒绝该请求（无效或被禁止的方法、GET 或 HEAD 的 body、带凭据的 URL、无效的 `Content-Type`），或 `finalizeHeaders` hook 抛出时，`next(request)` 会以平台自己的错误（`TypeError`）或 hook 抛出的值 reject，而不是库的 `BodyFailure` 包装。重新抛出可保留 Fault 代码（`REQ_BUILD_FAILED` 或 `EXT_HOOK_FAILED`）；抛出另一个错误则使这次失败归你所有（`EXT_INTERCEPTOR_FAILED`）。传输周围发现的其他失败仍以 `BodyFailure` 到达 `next(request)`：无法读取、解码或与媒体类型匹配的响应 body、被截断的 body，以及抛出异常的上传进度观察者（`EXT_OBSERVER_FAILED`），后者可能发生在请求发出之前。
 - **在拦截器内抛出异常**：拦截器自身未处理的抛出（或向 `next()` 传入不是 `AbortSignal` 的 `signal`）会让操作元组以 `EXT_INTERCEPTOR_FAILED` 结算，并设置 `fault.cause`。抛出 `ERR_ABORTED` 或 `ERR_TIMEOUT` 会结算为 `NET_ABORTED` 或 `NET_TIMEOUT`。
 
 对于 SSE，优先使用 `withRetry`，而不是反复调用 `next()` 的拦截器。多次调用拦截器的 `next()` 会禁用这些替换流的端点归因和重新选择；这与通过迭代器的 `next()` 消费事件无关。

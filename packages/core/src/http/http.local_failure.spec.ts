@@ -87,22 +87,6 @@ test("a client endpoint with credentials is shown to an interceptor as a platfor
   expect(handle).not.toHaveBeenCalled();
 });
 
-test("a header the interceptor hands to next() is shown back to it as the platform TypeError", async () => {
-  const { client, handle, seen } = fixture((request) => ({
-    ...request,
-    // @ts-expect-error -- A plain record is not a Headers; only an untyped interceptor can hand it over.
-    headers: { "x-name": "\u4e2d" },
-  }));
-
-  const [fault] = await send(client);
-
-  expect(fault?.code).toBe("REQ_BUILD_FAILED");
-  expect(seen).toHaveLength(1);
-  expectPlatformTypeError(seen[0]);
-  expect(fault?.cause).toBe(seen[0]);
-  expect(handle).not.toHaveBeenCalled();
-});
-
 test.each([
   ["an Error", new RangeError("token store down")],
   ["a string", "token store down"],

@@ -724,36 +724,6 @@ describe("HTTP endpoint balancer", () => {
     expect(watched.dones).toEqual([{ attempted: false }]);
   });
 
-  test("reports REQ_BUILD_FAILED when an interceptor passes a header value Headers rejects", async () => {
-    const live = await serve("respond", { status: 204 });
-    const watched = watch(pickFirstBalancer());
-    let thrownSynchronously = false;
-    const client = createClient(
-      withEndpoint(live.url),
-      withBalancer(watched.balancer),
-      withInterceptors(
-        createHttpInterceptor((request, next) => {
-          // @ts-expect-error -- A plain record is not a Headers; only an untyped interceptor can hand it over.
-          request.headers = { "x-name": "\u4e2d" };
-          try {
-            return next(request);
-          } catch (cause) {
-            thrownSynchronously = true;
-            throw cause;
-          }
-        }),
-      ),
-    );
-
-    const [fault] = await get(client);
-
-    expect(thrownSynchronously).toBe(false);
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toBeInstanceOf(TypeError);
-    expect(await live.hits()).toEqual([]);
-    expect(watched.dones).toEqual([{ attempted: false }]);
-  });
-
   test("returns a build-failure tuple when the picked endpoint getter throws", async () => {
     const cause = new Error("endpoint getter");
     const client = createClient(
