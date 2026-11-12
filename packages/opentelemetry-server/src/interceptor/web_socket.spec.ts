@@ -692,7 +692,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
       "websocket.closed",
       undefined,
     );
-    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.status).toBeUndefined();
     expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
@@ -967,7 +967,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
     ws.close();
     await waitForSettledPromises();
-    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.status).toBeUndefined();
     expect(spans[0]?.ended).toBe(true);
   });
 
@@ -998,7 +998,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
     ws.close();
     await waitForSettledPromises();
-    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.status).toBeUndefined();
     expect(spans[0]?.ended).toBe(true);
   });
 

@@ -7,7 +7,6 @@ import {
   createHttpSpan,
   createSSESpan,
   createWebSocketSpan,
-  endSpan,
   httpMethodAttributes,
   resolveStartSpanHook,
   runSpanHook,
@@ -363,15 +362,6 @@ describe("trace helpers", () => {
     });
   });
 
-  test("endSpan", () => {
-    const { tracer, spans } = createMockTracer();
-    const span = tracer.startSpan("test");
-    endSpan(span);
-
-    expect(spans[0]?.status?.code).toBe(SpanStatusCode.OK);
-    expect(spans[0]?.ended).toBe(true);
-  });
-
   test("runSpanHook returns without calling missing hook", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
@@ -488,16 +478,6 @@ describe("trace helpers", () => {
       "hook.name": "requestHook",
     });
     expect(spans[0]?.recordException).toHaveBeenCalledWith({ name: "number" });
-  });
-
-  test("endSpan does not overwrite already set status", () => {
-    const { tracer, spans } = createMockTracer();
-    const span = tracer.startSpan("test");
-    setSpanError(span, new Error("boom"));
-    endSpan(span);
-
-    expect(spans[0]?.status?.code).toBe(SpanStatusCode.ERROR);
-    expect(spans[0]?.ended).toBe(true);
   });
 
   test("addSpanEvent calls span.addEvent without attributes", () => {

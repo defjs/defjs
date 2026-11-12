@@ -4,12 +4,6 @@ import type { Span, Tracer } from "@opentelemetry/api";
 import { diag, SpanKind, SpanStatusCode } from "@opentelemetry/api";
 import { redactEndpoint } from "./url";
 
-const spanStatusSet = new WeakMap<Span, boolean>();
-
-function markSpanStatusSet(span: Span): void {
-  spanStatusSet.set(span, true);
-}
-
 // `startSpanHook` attributes are merged over the built-in ones, so a hook that sets `url.full` would
 // otherwise bypass the redaction `resolveUrl` applies; the merged value goes through it again.
 function withRedactedUrl(attributes: Attributes): Attributes {
@@ -142,7 +136,6 @@ export function setSpanHttpResponse(span: Span, status: number): void {
     span.setStatus({ code: SpanStatusCode.ERROR });
   }
 
-  markSpanStatusSet(span);
   span.end();
 }
 
@@ -157,14 +150,6 @@ export function setSpanError(span: Span, error: unknown): void {
   recordSpanException(span, error);
   span.setAttribute("error.type", getErrorType(error));
   span.setStatus({ code: SpanStatusCode.ERROR });
-  markSpanStatusSet(span);
-  span.end();
-}
-
-export function endSpan(span: Span): void {
-  if (!spanStatusSet.has(span)) {
-    span.setStatus({ code: SpanStatusCode.OK });
-  }
   span.end();
 }
 

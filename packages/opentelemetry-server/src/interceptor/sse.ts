@@ -24,7 +24,6 @@ import {
 import {
   addSpanEvent,
   createSSESpan,
-  endSpan,
   httpMethodAttributes,
   resolveStartSpanHook,
   runSpanHook,
@@ -158,7 +157,7 @@ export function createOpenTelemetrySSEInterceptor(
             durationSeconds(connectedAtMs),
             createConnectionMetricAttributes(req, "success", closeAttributes),
           );
-          if (span) endSpan(span);
+          span?.end();
         },
         (error: unknown) => {
           closeActiveStream();

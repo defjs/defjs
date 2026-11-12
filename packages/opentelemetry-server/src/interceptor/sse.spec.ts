@@ -583,7 +583,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
     expect(spans[0]?.addEvent).toHaveBeenCalledWith("sse.closed", {
       "sse.close.kind": "eof",
     });
-    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.status).toBeUndefined();
     expect(spans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
@@ -616,7 +616,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
       "sse.close.kind": "aborted",
     });
     expect(spans[0]?.recordException).not.toHaveBeenCalled();
-    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.status).toBeUndefined();
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({
@@ -792,7 +792,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
 
     stream.close();
     await waitForSettledPromises();
-    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.status).toBeUndefined();
     expect(spans[0]?.ended).toBe(true);
   });
 
@@ -823,7 +823,7 @@ describe("createOpenTelemetrySSEInterceptor", () => {
 
     stream.close();
     await waitForSettledPromises();
-    expect(spans[0]?.status?.code).toBe(1);
+    expect(spans[0]?.status).toBeUndefined();
     expect(spans[0]?.ended).toBe(true);
   });
 

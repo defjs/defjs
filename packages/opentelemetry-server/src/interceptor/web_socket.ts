@@ -20,7 +20,6 @@ import {
 import {
   addSpanEvent,
   createWebSocketSpan,
-  endSpan,
   resolveStartSpanHook,
   runSpanHook,
   setSpanError,
@@ -141,7 +140,7 @@ export function createOpenTelemetryWebSocketInterceptor(
               durationSeconds(connectedAtMs),
               createConnectionMetricAttributes(req, "success"),
             );
-            if (span) endSpan(span);
+            span?.end();
             return;
           }
 
