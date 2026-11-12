@@ -121,6 +121,19 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
 | `struct.intersection(members)`                             | 同時滿足所有成員嘅值               | 深度合併嘅 Intersection                               |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`    | 二進制表示                                            |
 
+### 遞迴 struct
+
+自我參照嘅型別透過 shape 上面嘅 getter 屬性讀取自己。getter 喺解析到該欄位先會執行，所以常數可以引用自己。請用 `Struct<T>` 標註該常數：TypeScript 推斷唔到參照自己嘅型別。
+
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
+
+### `struct` 唔做嘅嘢
+
+- `struct` 只係宣告結構。字串長度、正規表示式、數值範圍同業務規則應該喺解析之後由應用程式碼處理。
+- 解析會喺第一個無效欄位停低。佢從來唔會用零值填補缺少嘅欄位，亦從來唔會回傳部分輸出。
+
 ## 延伸閱讀
 
 - [HTTP 操作](/zh-Hant-HK/docs/http)

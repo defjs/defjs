@@ -121,6 +121,19 @@ Defjs 区分**字段是否存在**（`undefined`）与**是否可为 null**（`n
 | `struct.intersection(members)`                             | 同时满足所有成员条件的值                    | 深度合并的交叉类型                                   |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`             | 二进制对应类型                                       |
 
+### 递归 struct
+
+自引用类型通过 shape 上的 getter 属性读取自身。getter 在解析到该字段时才运行，因此常量可以引用自己。请用 `Struct<T>` 标注该常量：TypeScript 无法推断引用自身的类型。
+
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
+
+### `struct` 不做的事
+
+- `struct` 只声明结构。字符串长度、正则、数值范围和业务规则应在解析之后由应用代码处理。
+- 解析在第一个无效字段处停止。它从不用零值填充缺失字段，也从不返回部分输出。
+
 ## 相关阅读
 
 - [HTTP 请求](/zh-Hans/docs/http)

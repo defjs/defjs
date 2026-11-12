@@ -99,6 +99,21 @@ description: كيف يجعل الفصل بين تعريفات API وتنفيذ �
 
 تحمل كائنات Client الإعدادات ولا تحمل اتصالات نشطة. فالمستدعي الذي يبدأ طلب HTTP أو تدفق SSE أو جلسة WebSocket هو المسؤول عن إلغائها أو إغلاقها (`AbortSignal` لـ HTTP، و`await using` أو `.close()` مع `await .closed` لـ SSE وWebSocket).
 
+## 5. ما لا يوفره Defjs
+
+عدة أنماط من عملاء HTTP الأخرى ليس لها مقابل في Defjs عن قصد. استخدم البديل في العمود الأيمن.
+
+| غير متوفر                                                    | البديل المستخدم                                                            |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| كائن Client عام وحيد (singleton)                             | `createClient(...)` مملوك للتطبيق ويُمرَّر إلى العمليات                    |
+| دالة في Client تنفذ العملية                                  | استدعاء العملية مباشرة: `getOrder(client, input)`                          |
+| مهلة افتراضية على مستوى Client، أو خيارا `timeout` / `abort` | `client({ signal: AbortSignal.timeout(ms) })` أو `AbortController`         |
+| حقل `responseType` في `defineRequest`                        | نوع struct الخاص بـ `output` (`string` أو `blob` أو `arrayBuffer` أو JSON) |
+| `.parse()` على نسخة struct، أو `struct.encode`               | `struct.parse(schema, value)` وتحديد الموضع عبر `builder`                  |
+| ترويسات مصافحة WebSocket مخصصة                               | ملفات تعريف الارتباط، أو تذاكر استعلام قصيرة العمر، أو `protocols`         |
+| خريطة رسائل WebSocket أو غلاف نوع                            | `struct.discriminatedUnion` و`session.onRuntimeError`                      |
+| توليد شيفرة OpenAPI                                          | إبقاء OpenAPI مواصفة خارجية، أو التحقق عند الحدود باستخدام `struct`        |
+
 ## قراءات ذات صلة
 
 - [Struct والمخططات](/ar/docs/struct)

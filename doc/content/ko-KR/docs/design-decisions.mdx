@@ -99,6 +99,21 @@ Defjs는 `response.ok`로 응답 쪽을 고릅니다. `2xx`는 `output`, `2xx`�
 
 클라이언트는 활성 연결이 아닌 설정 정보를 보관합니다. HTTP 요청, SSE 스트림, WebSocket 세션을 시작한 호출자가 직접 취소하거나 닫는 책임을 갖습니다(HTTP는 `AbortSignal`, SSE와 WebSocket은 `await using` 또는 `.close()` + `await .closed`).
 
+## 5. Defjs가 제공하지 않는 것
+
+다른 HTTP 클라이언트에 있는 몇 가지 패턴은 Defjs가 의도적으로 제공하지 않습니다. 오른쪽 열의 대안을 사용하세요.
+
+| 제공하지 않는 것                                               | 대신 사용할 것                                                       |
+| -------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 전역 클라이언트 싱글턴                                         | 애플리케이션이 소유하고 작업에 전달하는 `createClient(...)`          |
+| 작업을 실행하는 클라이언트 메서드                              | 작업을 직접 호출: `getOrder(client, input)`                          |
+| 클라이언트 수준의 기본 타임아웃, 또는 `timeout` / `abort` 옵션 | `client({ signal: AbortSignal.timeout(ms) })` 또는 `AbortController` |
+| `defineRequest`의 `responseType` 필드                          | `output`의 struct 종류(`string`, `blob`, `arrayBuffer` 또는 JSON)    |
+| struct 인스턴스의 `.parse()` 또는 `struct.encode`              | `struct.parse(schema, value)`와 `builder` 배치                       |
+| 사용자 지정 WebSocket 핸드셰이크 헤더                          | 쿠키, 수명이 짧은 쿼리 티켓 또는 `protocols`                         |
+| WebSocket 메시지 맵 또는 타입 엔벨로프                         | `struct.discriminatedUnion`과 `session.onRuntimeError`               |
+| OpenAPI 코드 생성                                              | OpenAPI를 외부 사양으로 유지하거나 경계에서 `struct`로 검증          |
+
 ## 관련 문서
 
 - [Struct 및 스키마](/ko-KR/docs/struct)

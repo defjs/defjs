@@ -99,6 +99,21 @@ Alle drei Transporte geben ein dreiteiliges Error-first-Tupel zurück, statt an 
 
 Clients verwalten Konfiguration, keine aktiven Verbindungen. Der Aufrufer, der einen HTTP-Request, einen SSE-Stream oder eine WebSocket-Sitzung startet, ist auch für den Abbruch oder das Schließen verantwortlich (`AbortSignal` bei HTTP; `await using` oder `.close()` + `await .closed` bei SSE und WebSocket).
 
+## 5. Was Defjs nicht bietet
+
+Mehrere Muster anderer HTTP-Clients haben in Defjs bewusst keine Entsprechung. Verwenden Sie den Ersatz in der rechten Spalte.
+
+| Nicht vorhanden                                                             | Stattdessen verwenden                                                                    |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Ein globaler Client-Singleton                                               | Ein anwendungseigenes `createClient(...)`, das an Operationen übergeben wird             |
+| Eine Client-Methode, die eine Operation ausführt                            | Die Operation direkt aufrufen: `getOrder(client, input)`                                 |
+| Ein Standard-Timeout auf Client-Ebene oder die Optionen `timeout` / `abort` | `client({ signal: AbortSignal.timeout(ms) })` oder ein `AbortController`                 |
+| Ein Feld `responseType` an `defineRequest`                                  | Die Struct-Art von `output` (`string`, `blob`, `arrayBuffer` oder JSON)                  |
+| `.parse()` auf einer Struct-Instanz oder `struct.encode`                    | `struct.parse(schema, value)` und die Platzierung durch `builder`                        |
+| Eigene WebSocket-Handshake-Header                                           | Cookies, kurzlebige Query-Tickets oder `protocols`                                       |
+| Eine WebSocket-Nachrichtenzuordnung oder ein Typ-Envelope                   | `struct.discriminatedUnion` und `session.onRuntimeError`                                 |
+| OpenAPI-Codegenerierung                                                     | OpenAPI als externe Spezifikation beibehalten oder an der Grenze mit `struct` validieren |
+
 ## Weiterführende Links
 
 - [Struct & Schemas](/de-DE/docs/struct)

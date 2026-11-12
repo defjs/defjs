@@ -99,6 +99,21 @@ Defjs は `response.ok` で応答の側を選びます。`2xx` は `output`、�
 
 クライアントは設定を保持するだけであり、アクティブな接続を抱え込むことはありません。HTTP リクエスト、SSE ストリーム、または WebSocket セッションを開始した呼び出し元が、キャンセルやクローズの責任を負います（HTTP の場合は `AbortSignal`、SSE や WebSocket の場合は `await using` または `.close()` + `await .closed`）。
 
+## 5. Defjs が提供しないもの
+
+他の HTTP クライアントにある一部のパターンは、Defjs では意図的に提供していません。右の列の代替手段を使ってください。
+
+| 提供しないもの                                                            | 代わりに使うもの                                                          |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| グローバルなクライアントのシングルトン                                    | アプリケーションが所有し、操作に渡す `createClient(...)`                  |
+| 操作を実行するクライアントメソッド                                        | 操作を直接呼び出す: `getOrder(client, input)`                             |
+| クライアント単位の既定タイムアウト、または `timeout` / `abort` オプション | `client({ signal: AbortSignal.timeout(ms) })` または `AbortController`    |
+| `defineRequest` の `responseType` フィールド                              | `output` の struct の種類（`string`、`blob`、`arrayBuffer`、または JSON） |
+| struct インスタンスの `.parse()`、または `struct.encode`                  | `struct.parse(schema, value)` と `builder` による配置                     |
+| WebSocket ハンドシェイクのカスタムヘッダー                                | Cookie、短命なクエリチケット、または `protocols`                          |
+| WebSocket のメッセージマップや型エンベロープ                              | `struct.discriminatedUnion` と `session.onRuntimeError`                   |
+| OpenAPI のコード生成                                                      | OpenAPI は外部仕様として維持するか、境界で `struct` により検証する        |
+
 ## 関連ドキュメント
 
 - [Struct とスキーマ](/ja-JP/docs/struct)

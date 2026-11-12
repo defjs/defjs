@@ -99,6 +99,21 @@ Les trois transports renvoient un tuple error-first de trois éléments plutôt 
 
 Les clients portent la configuration, pas les connexions actives. L'appelant qui initie une requête HTTP, un flux SSE ou une session WebSocket en possède l'annulation ou la fermeture (`AbortSignal` pour HTTP ; `await using` ou `.close()` + `await .closed` pour SSE et WebSocket).
 
+## 5. Ce que Defjs ne fournit pas
+
+Plusieurs motifs d'autres clients HTTP n'ont volontairement aucun équivalent dans Defjs. Utilisez le remplacement de la colonne de droite.
+
+| Non fourni                                                                               | À utiliser à la place                                                               |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Un singleton de client global                                                            | Un `createClient(...)` propre à l'application, passé aux opérations                 |
+| Une méthode de client qui exécute une opération                                          | Appeler directement l'opération : `getOrder(client, input)`                         |
+| Un délai d'expiration par défaut au niveau du client, ou les options `timeout` / `abort` | `client({ signal: AbortSignal.timeout(ms) })` ou un `AbortController`               |
+| Un champ `responseType` sur `defineRequest`                                              | Le type de struct de `output` (`string`, `blob`, `arrayBuffer` ou JSON)             |
+| `.parse()` sur une instance de struct, ou `struct.encode`                                | `struct.parse(schema, value)` et le placement par `builder`                         |
+| Des en-têtes de handshake WebSocket personnalisés                                        | Des cookies, des tickets de requête de courte durée ou `protocols`                  |
+| Une table de messages ou une enveloppe de type WebSocket                                 | `struct.discriminatedUnion` et `session.onRuntimeError`                             |
+| La génération de code OpenAPI                                                            | Garder OpenAPI comme spécification externe, ou valider à la frontière avec `struct` |
+
 ## Lectures connexes
 
 - [Struct & schémas](/fr-FR/docs/struct)

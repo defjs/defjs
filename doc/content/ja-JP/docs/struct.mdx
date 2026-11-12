@@ -121,6 +121,19 @@ Defjs では、**フィールドの存在有無**（`undefined`）と **値の n
 | `struct.intersection(members)`                             | すべての構成要素を満たす値                       | ディープマージされた交差型（intersection）                   |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`                  | バイナリ表現                                                 |
 
+### 再帰的な struct
+
+自己参照する型は、shape 上の getter プロパティで自分自身を読み取ります。getter は解析がそのフィールドに到達したときに実行されるため、定数が自分自身を参照できます。この定数には `Struct<T>` を注釈してください。TypeScript は自分自身を参照する型を推論できません。
+
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
+
+### `struct` が行わないこと
+
+- `struct` は構造の宣言のみを行います。文字列の長さ、パターン、数値の範囲、ビジネスルールは、解析後にアプリケーションコードで扱います。
+- 解析は最初の無効なフィールドで停止します。欠けたフィールドをゼロ値で埋めることはなく、部分的な出力を返すこともありません。
+
 ## 関連ドキュメント
 
 - [HTTP 操作](/ja-JP/docs/http)

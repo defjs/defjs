@@ -99,6 +99,21 @@ Los tres transportes devuelven una tupla de tres elementos con el error en prime
 
 Los clientes almacenan configuración, no conexiones activas. Quien inicia una petición HTTP, flujo SSE o sesión WebSocket es responsable de cancelarla o cerrarla (`AbortSignal` para HTTP; `await using` o `.close()` + `await .closed` para SSE y WebSocket).
 
+## 5. Lo que Defjs no ofrece
+
+Varios patrones de otros clientes HTTP no tienen equivalente en Defjs a propósito. Usa el reemplazo de la columna derecha.
+
+| No se ofrece                                                                              | Qué usar en su lugar                                                              |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Un singleton de cliente global                                                            | Un `createClient(...)` propio de la aplicación, pasado a las operaciones          |
+| Un método del cliente que ejecute una operación                                           | Llamar directamente a la operación: `getOrder(client, input)`                     |
+| Un tiempo de espera predeterminado a nivel de cliente, o las opciones `timeout` / `abort` | `client({ signal: AbortSignal.timeout(ms) })` o un `AbortController`              |
+| Un campo `responseType` en `defineRequest`                                                | El tipo de struct de `output` (`string`, `blob`, `arrayBuffer` o JSON)            |
+| `.parse()` en una instancia de struct, o `struct.encode`                                  | `struct.parse(schema, value)` y la ubicación mediante `builder`                   |
+| Cabeceras de handshake de WebSocket personalizadas                                        | Cookies, tickets de consulta de corta duración o `protocols`                      |
+| Un mapa de mensajes o un sobre de tipo de WebSocket                                       | `struct.discriminatedUnion` y `session.onRuntimeError`                            |
+| Generación de código OpenAPI                                                              | Mantener OpenAPI como especificación externa, o validar en el límite con `struct` |
+
 ## Lecturas relacionadas
 
 - [Struct y esquemas](/es-ES/docs/struct)

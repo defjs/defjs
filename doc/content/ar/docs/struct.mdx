@@ -121,6 +121,19 @@ description: حدّد عقود المدخلات والاستجابات التي 
 | `struct.intersection(members)`                             | قيمة تستوفي شروط جميع الأعضاء             | تقاطع مدمج بعمق (Deep-merged intersection)               |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`           | تمثيل ثنائي (Binary representation)                      |
 
+### هياكل struct العودية
+
+يقرأ النوع المرجعي الذاتي نفسه عبر خاصية getter في الـ shape. يعمل الـ getter عندما يصل التحليل إلى ذلك الحقل، لذا يمكن للثابت أن يشير إلى نفسه. أضف التعليق النوعي `Struct<T>` إلى الثابت: لا يستطيع TypeScript استنتاج نوع يشير إلى نفسه.
+
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
+
+### ما لا يفعله `struct`
+
+- يعلن `struct` البنية فقط. طول السلاسل والأنماط ونطاقات الأرقام وقواعد العمل تنتمي إلى شيفرة التطبيق بعد التحليل.
+- يتوقف التحليل عند أول حقل غير صالح. ولا يملأ أبدًا حقلًا مفقودًا بقيمة صفرية ولا يُرجع مخرجات جزئية.
+
 ## قراءات ذات صلة
 
 - [عمليات HTTP](/ar/docs/http)

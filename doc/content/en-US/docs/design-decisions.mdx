@@ -99,6 +99,21 @@ All three transports return a three-item error-first tuple instead of throwing a
 
 Clients carry configuration, not active connections. The caller that starts an HTTP request, SSE stream, or WebSocket session owns canceling or closing it (`AbortSignal` for HTTP; `await using` or `.close()` + `await .closed` for SSE and WebSocket).
 
+## 5. What Defjs does not provide
+
+Several patterns from other HTTP clients have no Defjs equivalent by design. Use the replacement in the right column.
+
+| Not provided                                                   | What to use instead                                                          |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| A global client singleton                                      | An application-owned `createClient(...)` passed to operations                |
+| A client method that executes an operation                     | Call the operation directly: `getOrder(client, input)`                       |
+| A client-level default timeout, or `timeout` / `abort` options | `client({ signal: AbortSignal.timeout(ms) })` or an `AbortController`        |
+| A `responseType` field on `defineRequest`                      | The struct kind of `output` (`string`, `blob`, `arrayBuffer`, or JSON)       |
+| `.parse()` on a struct instance, or `struct.encode`            | `struct.parse(schema, value)` and `builder` placement                        |
+| Custom WebSocket handshake headers                             | Cookies, short-lived query tickets, or `protocols`                           |
+| A WebSocket message map or type envelope                       | `struct.discriminatedUnion` and `session.onRuntimeError`                     |
+| OpenAPI code generation                                        | Keep OpenAPI as the external spec, or validate at the boundary with `struct` |
+
 ## Related reading
 
 - [Struct & schemas](/docs/struct)

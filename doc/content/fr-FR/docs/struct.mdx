@@ -121,6 +121,19 @@ Chaque `StructIssue` contient `code` (`invalid_type`, `missing_key`, `invalid_li
 | `struct.intersection(members)`                             | Valeur satisfaisant tous les membres   | Intersection fusionnée en profondeur                             |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`        | Représentation binaire                                           |
 
+### Structs récursifs
+
+Un type auto-référent se lit lui-même par une propriété getter de la shape. Le getter s'exécute quand l'analyse atteint ce champ, si bien que la constante peut se nommer elle-même. Annotez la constante avec `Struct<T>` : TypeScript ne peut pas inférer un type qui se référence lui-même.
+
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
+
+### Ce que `struct` ne fait pas
+
+- `struct` ne déclare que la structure. La longueur des chaînes, les motifs, les plages numériques et les règles métier relèvent du code applicatif, après l'analyse.
+- L'analyse s'arrête au premier champ invalide. Elle ne remplit jamais un champ manquant par une valeur zéro et ne renvoie jamais de sortie partielle.
+
 ## Lectures connexes
 
 - [Opérations HTTP](/fr-FR/docs/http)

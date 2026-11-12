@@ -121,6 +121,19 @@ Jedes `StructIssue` enthält `code` (`invalid_type`, `missing_key`, `invalid_lit
 | `struct.intersection(members)`                             | Wert, der alle Mitglieder erfüllt          | Tief zusammengeführte Schnittmenge (Intersection)                 |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`            | Binäre Repräsentation                                             |
 
+### Rekursive Structs
+
+Ein selbstbezüglicher Typ liest sich über eine Getter-Eigenschaft der Shape selbst. Der Getter läuft, sobald das Parsen dieses Feld erreicht, daher kann die Konstante sich selbst nennen. Annotieren Sie die Konstante mit `Struct<T>`: TypeScript kann einen Typ, der auf sich selbst verweist, nicht ableiten.
+
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
+
+### Was `struct` nicht tut
+
+- `struct` deklariert nur Struktur. Stringlänge, Muster, Zahlenbereiche und Geschäftsregeln gehören nach dem Parsen in den Anwendungscode.
+- Das Parsen stoppt beim ersten ungültigen Feld. Es füllt nie ein fehlendes Feld mit einem Nullwert und gibt nie eine Teilausgabe zurück.
+
 ## Weiterführende Links
 
 - [HTTP-Operationen](/de-DE/docs/http)

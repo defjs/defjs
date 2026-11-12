@@ -121,6 +121,19 @@ Each `StructIssue` contains `code` (`invalid_type`, `missing_key`, `invalid_lite
 | `struct.intersection(members)`                             | Value satisfying all members            | Deep-merged intersection                                       |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`         | Binary representation                                          |
 
+### Recursive structs
+
+A self-referential type reads itself through a getter property on the shape. The getter runs when parsing reaches that field, so the constant can name itself. Annotate the constant with `Struct<T>`: TypeScript cannot infer a type that refers to itself.
+
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
+
+### What `struct` does not do
+
+- `struct` declares structure only. String length, patterns, numeric ranges, and business rules belong in application code after parsing.
+- Parsing stops at the first invalid field. It never fills a missing field with a zero value and never returns partial output.
+
 ## Related reading
 
 - [HTTP operations](/docs/http)

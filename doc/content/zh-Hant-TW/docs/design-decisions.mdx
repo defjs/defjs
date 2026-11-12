@@ -99,6 +99,21 @@ Defjs 用 `response.ok` 選擇回應的一側：`2xx` 用 `output`，非 `2xx` �
 
 Client 只保存設定，不持有進行中的連線。發起 HTTP 請求、SSE 串流或 WebSocket 工作階段的呼叫端，負責取消或關閉它（HTTP 使用 `AbortSignal`；SSE 與 WebSocket 使用 `await using` 或 `.close()` + `await .closed`）。
 
+## 5. Defjs 不提供的功能
+
+其他 HTTP 用戶端中的幾種模式在 Defjs 中被刻意省略。請使用右欄的替代做法。
+
+| 不提供                                             | 替代做法                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| 全域 Client 單例                                   | 由應用程式擁有、並傳給操作的 `createClient(...)`                   |
+| 由 Client 方法執行操作                             | 直接呼叫操作：`getOrder(client, input)`                            |
+| Client 層級的預設逾時，或 `timeout` / `abort` 選項 | `client({ signal: AbortSignal.timeout(ms) })` 或 `AbortController` |
+| `defineRequest` 上的 `responseType` 欄位           | `output` 的 struct 種類（`string`、`blob`、`arrayBuffer` 或 JSON） |
+| struct 實例上的 `.parse()`，或 `struct.encode`     | `struct.parse(schema, value)` 與 `builder` 放置                    |
+| 自訂 WebSocket 交握標頭                            | Cookie、短期查詢票證或 `protocols`                                 |
+| WebSocket 訊息對映或型別信封                       | `struct.discriminatedUnion` 與 `session.onRuntimeError`            |
+| OpenAPI 程式碼產生                                 | 將 OpenAPI 保留為外部規格，或在邊界處以 `struct` 驗證              |
+
 ## 相關閱讀
 
 - [Struct 與 schema](/zh-Hant-TW/docs/struct)

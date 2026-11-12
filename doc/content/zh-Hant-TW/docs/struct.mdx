@@ -121,6 +121,19 @@ Defjs 嚴格區分**欄位是否存在**（`undefined`）與**值是否可為 nu
 | `struct.intersection(members)`                             | 符合所有成員條件的值               | 深度合併的交集                                      |
 | `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`    | 二進位表示                                          |
 
+### 遞迴 struct
+
+自我參照的型別透過 shape 上的 getter 屬性讀取自身。getter 在解析到該欄位時才執行，因此常數可以引用自己。請以 `Struct<T>` 標註該常數：TypeScript 無法推斷參照自身的型別。
+
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
+
+### `struct` 不做的事
+
+- `struct` 只宣告結構。字串長度、正規表示式、數值範圍與業務規則應在解析之後由應用程式碼處理。
+- 解析會在第一個無效欄位處停止。它絕不以零值填補缺漏欄位，也絕不回傳部分輸出。
+
 ## 相關閱讀
 
 - [HTTP 操作](/zh-Hant-TW/docs/http)
