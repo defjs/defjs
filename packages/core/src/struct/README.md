@@ -415,7 +415,7 @@ The following sources describe the current public API and actual usage:
 
 - [`index.ts`](./index.ts) and [`facade.ts`](./facade.ts): public exports and the `struct` constructors.
 - [`parse.ts`](./parse.ts): strict Struct parsing, `struct.parse`, and the internal throwing adapters.
-- [`encode.ts`](./encode.ts): the one outbound encoder that HTTP, SSE, and WebSocket share.
+- [`encode.ts`](./encode.ts): the outbound encoder that HTTP and SSE use. WebSocket sends still go through the struct-walking encoder in `codec/` until they move to it.
 - [`definition.ts`](./definition.ts): the runtime data of every struct kind.
 - [`errors.ts`](./errors.ts): `StructError`, issue messages, and error views.
 - [`doc/content/en-US/docs/struct.mdx`](../../../../doc/content/en-US/docs/struct.mdx): Struct documentation for users.
