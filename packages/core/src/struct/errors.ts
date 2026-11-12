@@ -1,4 +1,3 @@
-import { FAILED } from "./symbols";
 import type {
   FlattenedStructError,
   FormattedStructError,
@@ -133,49 +132,6 @@ function createFormattedError(): FormattedStructError {
 function formatErrorTreeKey(segment: number | string): string {
   const key = String(segment);
   return key === "_errors" ? "\\_errors" : key;
-}
-
-let activeErrorMap: ErrorMap | undefined;
-
-// Holds the issue of the failure a parse is handing back. `failure()` applies the active error map, then writes the
-// issue right before `FAILED` travels up to the parse entry point, which reads it. No user code runs after that write
-// (a union that goes on to its next candidate just drops the issue). The entry point puts back what it found, so a
-// parse started from an error map, a decode hook or a getter cannot disturb a pending failure, and the slot is empty
-// between top-level parses. The map runs here, on the parser's copy, so a hook built by another copy still uses it.
-let parkedIssue: StructIssue | undefined;
-
-export function hasErrorMap(): boolean {
-  return activeErrorMap !== undefined;
-}
-
-export function runWithErrorMap<T>(map: ErrorMap | undefined, run: () => T): T {
-  const previous = activeErrorMap;
-  activeErrorMap = map;
-  try {
-    return run();
-  } finally {
-    activeErrorMap = previous;
-  }
-}
-
-/** Parks the issue for the parse entry point and returns FAILED. A decode hook receives it as `fail`. */
-export function failure(candidate: StructIssue): typeof FAILED {
-  if (activeErrorMap) {
-    const override = activeErrorMap(candidate);
-    if (override !== undefined) {
-      candidate.message = override;
-    }
-  }
-  parkedIssue = candidate;
-  return FAILED;
-}
-
-export function parkedFailure(): StructIssue | undefined {
-  return parkedIssue;
-}
-
-export function restoreFailure(issue: StructIssue | undefined): void {
-  parkedIssue = issue;
 }
 
 export function issue(

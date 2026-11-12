@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { decodeJson } from "./codec/json";
 import { StructError, struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 
 describe("parse.ts object and composite values", () => {
   test("requires ordinary object fields and omits optional keys", () => {

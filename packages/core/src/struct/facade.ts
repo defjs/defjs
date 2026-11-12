@@ -23,7 +23,7 @@ import {
   createUnknownStruct,
   createUrlencodedBodyStruct,
 } from "./constructors";
-import { parseStructTuple } from "./introspection";
+import { parseStructTuple } from "./parse";
 import type { Struct, StructLike, UnionStruct } from "./types";
 
 type EnumValue<T> = T extends readonly (infer U extends string)[]

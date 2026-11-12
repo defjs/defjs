@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { encodeValue } from "./encode";
 import { struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 import { matchesRuntimeValue } from "./match";
 import { assertStruct } from "./shape";
 import type { RuntimeStruct } from "./types";

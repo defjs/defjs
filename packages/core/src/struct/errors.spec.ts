@@ -5,7 +5,7 @@ function parsed(text: string): unknown {
 }
 import type { ErrorMap } from "./index";
 import { StructError, struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 import { method } from "../../test/method";
 
 describe("StructError format / flatten / prettify", () => {

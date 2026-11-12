@@ -1,9 +1,6 @@
-import { issue } from "./errors";
 import { DEFINITION } from "./symbols";
 import type { FAILED } from "./symbols";
 import type {
-  DecodeFailure,
-  Path,
   PrimitiveKind,
   RuntimeStruct,
   Struct,
@@ -17,11 +14,8 @@ export interface PrimitiveDefinitionInput<
   TInput,
   TOutput = TInput,
 > {
-  decode?: (
-    value: TInput,
-    path: Path,
-    fail: DecodeFailure,
-  ) => TOutput | typeof FAILED;
+  /** Converts a value `is` accepted. Returns the output, or `invalid` for a value it cannot convert. */
+  decode?: (value: TInput, invalid: typeof FAILED) => TOutput | typeof FAILED;
   expected: string;
   is: (value: unknown) => value is TInput;
   kind: K;
@@ -32,16 +26,14 @@ export interface PrimitiveDefinitionInput<
 export function createPrimitiveStruct<TInput, TOutput = TInput>(
   definition: PrimitiveDefinitionInput<PrimitiveKind, TInput, TOutput>,
 ): Struct<TInput, TOutput> {
-  const { decode, expected, is } = definition;
+  const { decode, is } = definition;
   return makeStruct({
     ...definition,
-    // The stored hook takes any value. It is called after `is` accepted the value, and checks it again itself.
+    // The stored hook takes any value, so it is the one check a parse makes for a struct that converts.
     decode:
       decode &&
-      ((value: unknown, path: Path, fail: DecodeFailure) =>
-        is(value)
-          ? decode(value, path, fail)
-          : fail(issue(path, "invalid_type", expected, value))),
+      ((value: unknown, invalid: typeof FAILED) =>
+        is(value) ? decode(value, invalid) : invalid),
     flags: DEFAULT_FLAGS,
   });
 }

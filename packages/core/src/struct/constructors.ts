@@ -1,4 +1,3 @@
-import { issue } from "./errors";
 import { isObjectRuntimeStruct, isStruct } from "./guards";
 import { createPrimitiveStruct, DEFAULT_FLAGS, makeStruct } from "./runtime";
 import { assertStruct, assertStructs } from "./shape";
@@ -23,7 +22,7 @@ import type {
   UnionStruct,
   UnknownStruct,
 } from "./types";
-import { describeValue, expectedType, isPlainObject, success } from "./utils";
+import { describeValue, expectedType, isPlainObject } from "./utils";
 
 /**
  * Struct that accepts string values.
@@ -546,14 +545,14 @@ export function createBlobStruct(): Struct<Blob, Blob> {
  */
 export function createBigIntStruct(): Struct<bigint | string, bigint> {
   return createPrimitiveStruct({
-    decode: (input, path, fail) => {
+    decode: (input, invalid) => {
       if (typeof input === "bigint") {
-        return success(input);
+        return input;
       }
       try {
-        return success(BigInt(input));
+        return BigInt(input);
       } catch {
-        return fail(issue(path, "invalid_type", "bigint", input));
+        return invalid;
       }
     },
     expected: "bigint",
@@ -577,12 +576,9 @@ export function createBigIntStruct(): Struct<bigint | string, bigint> {
  */
 export function createDateStruct(): Struct<Date | number | string, Date> {
   return createPrimitiveStruct({
-    decode: (input, path, fail) => {
+    decode: (input, invalid) => {
       const date = input instanceof Date ? input : new Date(input);
-      if (Number.isNaN(date.getTime())) {
-        return fail(issue(path, "invalid_type", "Date", input));
-      }
-      return success(date);
+      return Number.isNaN(date.getTime()) ? invalid : date;
     },
     expected: "Date",
     is: (value): value is Date | number | string =>

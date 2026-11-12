@@ -1,10 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { isStruct } from "./guards";
 import { StructError, struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 import { assertStruct, resolveObjectShape } from "./shape";
-import { DEFINITION, FAILED } from "./symbols";
-import { createPrimitiveStruct } from "./runtime";
+import { DEFINITION } from "./symbols";
 import type { RuntimeStruct } from "./types";
 
 function runtimeOf(value: unknown): RuntimeStruct {
@@ -169,31 +168,6 @@ describe("runtime.ts chain methods", () => {
     expect(isStruct({ [DEFINITION]: { kind: "string", flags } })).toBe(false);
   });
 
-  test("an unreported decoder failure still returns an error-first tuple with a generic issue", () => {
-    const Malformed = createPrimitiveStruct({
-      kind: "string",
-      expected: "string",
-      is: (value): value is string => typeof value === "string",
-      decode: () => FAILED,
-    });
-    const [error, value] = parse(Malformed, "value");
-    expect(error).toBeInstanceOf(StructError);
-    expect(error?.message).toBe(
-      "Expected a decodable value at <root>, received string",
-    );
-    expect(error?.issues).toEqual([
-      {
-        code: "custom",
-        expected: "a decodable value",
-        message: "Expected a decodable value at <root>, received string",
-        path: [],
-        received: "value",
-      },
-    ]);
-    expect(value).toBeUndefined();
-    expect(parse(struct.string(), "next")).toEqual([null, "next"]);
-  });
-
   test("invalid primitive parse returns StructError and undefined", () => {
     const [err, val] = parse(struct.string(), 42);
 
@@ -225,30 +199,5 @@ describe("runtime.ts chain methods", () => {
     expect("_struct" in value).toBe(false);
     expect(isStruct(value)).toBe(true);
     expect(Object.getOwnPropertySymbols(value)).toEqual([DEFINITION]);
-  });
-});
-
-describe("primitive decode hooks", () => {
-  test("a stored decode hook reports a value its struct does not accept", () => {
-    const definition = runtimeOf(struct.date())[DEFINITION];
-    if (definition.kind !== "date" || !definition.decode) {
-      throw new Error("expected a date decode hook");
-    }
-    const reported: unknown[] = [];
-    const result = definition.decode(true, ["at"], (issue) => {
-      reported.push(issue);
-      return FAILED;
-    });
-
-    expect(result).toBe(FAILED);
-    expect(reported).toEqual([
-      {
-        code: "invalid_type",
-        expected: "Date",
-        message: "Expected Date at at, received boolean",
-        path: ["at"],
-        received: true,
-      },
-    ]);
   });
 });

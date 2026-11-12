@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { encodeJson } from "./codec/json";
 import { struct } from "./index";
-import { parseStructTuple } from "./introspection";
+import { parseStructTuple } from "./parse";
 import type { StructLike } from "./types";
 import { method } from "../../test/method";
 

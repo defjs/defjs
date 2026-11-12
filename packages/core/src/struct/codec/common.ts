@@ -1,9 +1,8 @@
 import { encodeValue } from "../encode";
 import { mapAliasedObjectFields } from "../fields";
-import { parseStructValue } from "../introspection";
 import { assertStruct } from "../shape";
 import { DEFINITION } from "../symbols";
-import type { AnyStructLike, Infer, RuntimeStruct } from "../types";
+import type { AnyStructLike, RuntimeStruct } from "../types";
 
 export function encodeObjectByAlias(
   struct: AnyStructLike,
@@ -44,13 +43,6 @@ export function encodeAliasedStruct(
     (fieldStruct, fieldValue) =>
       encodeAliasedStruct(fieldStruct, fieldValue, label, depth + 1),
   );
-}
-
-export function decodeObjectByAlias<S extends AnyStructLike>(
-  struct: S,
-  value: unknown,
-): Infer<S> {
-  return parseStructValue(struct, value, { useAliases: true });
 }
 
 export function assertPlainObject(

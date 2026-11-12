@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import type { ErrorMap } from "../../src/struct/index.ts";
-import { parseStructTuple as parse } from "../../src/struct/introspection.ts";
+import { parseStructTuple as parse } from "../../src/struct/parse.ts";
 import { struct } from "../../src/struct/index.ts";
 import type {
   ParseResult,

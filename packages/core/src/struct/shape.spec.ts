@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 import type { StructLike } from "./types";
 
 describe("shape.ts getter-recursive structures", () => {

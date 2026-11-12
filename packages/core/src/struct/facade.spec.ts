@@ -3,7 +3,7 @@ import { StructError, struct } from "./index";
 import { isStruct } from "./guards";
 import { assertStruct } from "./shape";
 import { DEFINITION } from "./symbols";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 import {
   createAnyStruct,
   createArrayBufferStruct,

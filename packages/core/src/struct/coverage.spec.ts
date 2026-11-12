@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { decodeObjectByAlias, encodeObjectByAlias } from "./codec/common";
+import { encodeObjectByAlias } from "./codec/common";
 import { decodeJson, encodeJson } from "./codec/json";
 import { encodeValue } from "./encode";
 import { StructError } from "./errors";
@@ -7,7 +7,7 @@ import { struct as directStruct } from "./facade";
 import { isStruct } from "./guards";
 import { struct } from "./index";
 import { resolveStructFields } from "./fields";
-import { parseStructTuple as parse, parseStructValue } from "./introspection";
+import { parseStructTuple as parse, parseStructValue } from "./parse";
 import { matchesRuntimeValue } from "./match";
 import { DEFAULT_FLAGS, makeStruct } from "./runtime";
 import { assertStruct, resolveObjectShape } from "./shape";
@@ -309,7 +309,7 @@ describe("struct coverage boundary cases", () => {
       parseStructValue(
         User,
         { user_profile: { display_name: "Miao" } },
-        { useAliases: true },
+        { aliases: true },
       ),
     ).toEqual({
       profile: { displayName: "Miao" },
@@ -329,7 +329,7 @@ describe("struct coverage boundary cases", () => {
         }),
         input,
         {
-          useAliases: true,
+          aliases: true,
         },
       ),
     ).toThrow(StructError);
@@ -348,14 +348,14 @@ describe("struct coverage boundary cases", () => {
       parseStructValue(
         Event,
         { body: "hello", kind_a: "a" },
-        { useAliases: true },
+        { aliases: true },
       ),
     ).toEqual({ payload: "hello", type: "a" });
     expect(
       parseStructValue(
         Event,
         { body: "hello", kind_a: "a", kind_b: "b" },
-        { useAliases: true },
+        { aliases: true },
       ),
     ).toEqual({
       payload: "hello",
@@ -423,28 +423,26 @@ describe("struct coverage boundary cases", () => {
       encodeObjectByAlias(profiles, [{ name: "Miao", omitted: undefined }]),
     ).toEqual([{ full_name: "Miao" }]);
 
-    expect(decodeObjectByAlias(struct.string(), "x")).toBe("x");
-    expect(decodeObjectByAlias(profile, { full_name: "Miao" })).toEqual({
+    expect(decodeJson(struct.string(), "x")).toBe("x");
+    expect(decodeJson(profile, { full_name: "Miao" })).toEqual({
       name: "Miao",
     });
-    expect(() => decodeObjectByAlias(profile, "bad")).toThrow(StructError);
+    expect(() => decodeJson(profile, "bad")).toThrow(StructError);
 
-    expect(() => decodeObjectByAlias(struct.array(profile), "bad")).toThrow(
-      StructError,
-    );
-    expect(() => decodeObjectByAlias(struct.tuple([profile]), "bad")).toThrow(
+    expect(() => decodeJson(struct.array(profile), "bad")).toThrow(StructError);
+    expect(() => decodeJson(struct.tuple([profile]), "bad")).toThrow(
       StructError,
     );
     expect(
-      decodeObjectByAlias(struct.tuple([profile]), [{ full_name: "Miao" }]),
+      decodeJson(struct.tuple([profile]), [{ full_name: "Miao" }]),
     ).toEqual([{ name: "Miao" }]);
     expect(() =>
-      decodeObjectByAlias(struct.tuple([profile]), [
+      decodeJson(struct.tuple([profile]), [
         { full_name: "Miao" },
         { untouched: true },
       ]),
     ).toThrow(StructError);
-    expect(() => decodeObjectByAlias(struct.record(profile), "bad")).toThrow(
+    expect(() => decodeJson(struct.record(profile), "bad")).toThrow(
       StructError,
     );
 
@@ -458,7 +456,7 @@ describe("struct coverage boundary cases", () => {
         type: struct.literal("count").alias("kind"),
       }),
     );
-    expect(() => decodeObjectByAlias(event, "bad")).toThrow(StructError);
+    expect(() => decodeJson(event, "bad")).toThrow(StructError);
 
     const discriminated = struct.discriminatedUnion("type", [
       struct.object({
@@ -466,9 +464,9 @@ describe("struct coverage boundary cases", () => {
         type: struct.literal("message").alias("kind"),
       }),
     ]);
-    expect(() =>
-      decodeObjectByAlias(discriminated, { kind: "unknown" }),
-    ).toThrow(StructError);
+    expect(() => decodeJson(discriminated, { kind: "unknown" })).toThrow(
+      StructError,
+    );
   });
 
   test("guard helpers reject malformed struct metadata", () => {
@@ -516,9 +514,9 @@ describe("struct coverage boundary cases", () => {
       struct.object({ type: struct.literal("a").alias("kind_a") }),
       struct.object({ type: struct.literal("b").alias("kind_b") }),
     ]);
-    expect(
-      decodeObjectByAlias(ambiguous, { kind_a: "a", kind_b: "b" }),
-    ).toEqual({ type: "a" });
+    expect(decodeJson(ambiguous, { kind_a: "a", kind_b: "b" })).toEqual({
+      type: "a",
+    });
   });
 
   test("coverage guards cover defensive branches without changing public semantics", () => {
@@ -574,9 +572,9 @@ describe("struct coverage boundary cases", () => {
       ]),
       options: [runtime(struct.string())],
     });
-    expect(() =>
-      decodeObjectByAlias(nonObjectDiscriminator, { type: "text" }),
-    ).toThrow(StructError);
+    expect(() => decodeJson(nonObjectDiscriminator, { type: "text" })).toThrow(
+      StructError,
+    );
 
     const bodyAliasOption = struct.object({
       payload: struct.string().alias("body"),
@@ -592,21 +590,21 @@ describe("struct coverage boundary cases", () => {
       options: [runtime(bodyAliasOption)],
     });
     expect(() =>
-      decodeObjectByAlias(rawDiscriminator, { body: "hello", type: "text" }),
+      decodeJson(rawDiscriminator, { body: "hello", type: "text" }),
     ).toThrow(StructError);
 
     const missingWireDiscriminator = struct.discriminatedUnion("type", [
       struct.object({ type: struct.literal("text").alias("kind") }),
     ]);
     expect(() =>
-      decodeObjectByAlias(missingWireDiscriminator, { other: "text" }),
+      decodeJson(missingWireDiscriminator, { other: "text" }),
     ).toThrow(StructError);
     expect(() =>
-      decodeObjectByAlias(missingWireDiscriminator, { kind: undefined }),
+      decodeJson(missingWireDiscriminator, { kind: undefined }),
     ).toThrow(StructError);
-    expect(() =>
-      decodeObjectByAlias(missingWireDiscriminator, "not-object"),
-    ).toThrow(StructError);
+    expect(() => decodeJson(missingWireDiscriminator, "not-object")).toThrow(
+      StructError,
+    );
 
     let reads = 0;
     const unstableObjectStruct = {
@@ -621,7 +619,7 @@ describe("struct coverage boundary cases", () => {
     };
     expect(() => {
       // @ts-expect-error the getter object is not a struct
-      decodeObjectByAlias(unstableObjectStruct, {});
+      decodeJson(unstableObjectStruct, {});
     }).toThrow();
   });
 });

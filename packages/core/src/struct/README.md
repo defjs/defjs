@@ -386,7 +386,7 @@ Success: [null, parsedValue]
 Failure: [StructError, undefined]
 ```
 
-Objects, arrays, records, tuples, and the like stop at the first error; a partially successful output is not exposed to the caller. For compatibility with the error-display API, `StructError.issues` is still an array, but a normal parse failure contains only the current first issue. The internal `parseStructValue` is a throwing adapter; applications should use `struct.parse` from the root entry and not depend on internal paths such as `./introspection`.
+Objects, arrays, records, tuples, and the like stop at the first error; a partially successful output is not exposed to the caller. For compatibility with the error-display API, `StructError.issues` is still an array, but a normal parse failure contains only the current first issue. The internal `parseStructValue` is a throwing adapter; applications should use `struct.parse` from the root entry and not depend on internal paths such as `./parse`.
 
 When an operation executes, the corresponding transport wraps Struct errors again. For example, a structural failure of an HTTP input becomes `REQ_INPUT_INVALID`, and a response body that does not match the declaration becomes `RES_STRUCT_MISMATCH`. The branching conditions are in the HTTP matrix below; this step belongs to the transport layer, not to Struct itself.
 
@@ -437,7 +437,7 @@ For HTTP result details and response availability, see the [HTTP documentation](
 The following sources describe the current public API and actual usage:
 
 - [`index.ts`](./index.ts) and [`facade.ts`](./facade.ts): public exports and the `struct` constructors.
-- [`parse.ts`](./parse.ts) and [`introspection.ts`](./introspection.ts): strict Struct parsing and the internal adapter implementation.
+- [`parse.ts`](./parse.ts): strict Struct parsing, `struct.parse`, and the internal throwing adapters.
 - [`errors.ts`](./errors.ts): `StructError`, issue messages, and error views.
 - [`doc/content/en-US/docs/struct.mdx`](../../../../doc/content/en-US/docs/struct.mdx): Struct documentation for users.
 - [`doc/content/en-US/docs/http.mdx`](../../../../doc/content/en-US/docs/http.mdx): request input, the explicit builder, and transport constraints.

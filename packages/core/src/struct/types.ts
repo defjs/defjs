@@ -682,29 +682,17 @@ export type PrimitiveKind =
   | "number"
   | "string";
 
-/**
- * What a decode hook returns for a value it rejects.
- *
- * The parser passes its own `failure`. That function parks the issue and applies the error map of the parse in
- * progress, including when the hook was built by another copy of this package.
- */
-export type DecodeFailure = (issue: StructIssue) => typeof FAILED;
-
 export type PrimitiveDefinition<
   K extends PrimitiveKind,
   TInput,
   TOutput = TInput,
 > = BaseDefinition & {
   /**
-   * Returns the decoded value, or what `fail` returns for a value it rejects. `path` is a copy the hook may keep or change.
-   * `fail` comes from the parser, not from the module that defined the hook, so a struct built by another copy of this
-   * package reports its failures to the copy that is parsing. That same `fail` applies the parsing copy's error map.
+   * Returns the decoded value, or `invalid` for a value this struct does not accept or cannot convert. `invalid` is the
+   * sentinel of the parser that is running, not of the module that defined the hook, so a struct built by another copy
+   * of this package fails on the copy that is parsing. That copy builds the issue and applies its error map.
    */
-  decode?: (
-    value: TInput,
-    path: Path,
-    fail: DecodeFailure,
-  ) => TOutput | typeof FAILED;
+  decode?: (value: TInput, invalid: typeof FAILED) => TOutput | typeof FAILED;
   expected: string;
   is: (value: unknown) => value is TInput;
   kind: K;
@@ -803,18 +791,6 @@ export type StructDefinition =
   | TupleDefinition
   | UnknownDefinition
   | UnionDefinition;
-
-export type ParseFailure = {
-  issue: StructIssue;
-  ok: false;
-};
-
-export type ParseSuccess<T> = {
-  ok: true;
-  value: T;
-};
-
-export type InternalParseResult<T> = ParseFailure | ParseSuccess<T>;
 
 export type ObjectRuntimeStruct = RuntimeStruct<ObjectDefinition>;
 

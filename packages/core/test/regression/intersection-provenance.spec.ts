@@ -10,7 +10,7 @@ import {
 import { encodeOutbound } from "../../src/internal/outbound_request";
 import type { Guide } from "../../src/struct/guide";
 import { assertRecord, isRuntimeStruct, isUnknownArray } from "../narrow";
-import { parseStructValue } from "../../src/struct/introspection";
+import { parseStructValue } from "../../src/struct/parse";
 
 const ISO = "2026-01-02T00:00:00.000Z";
 const opaque = [

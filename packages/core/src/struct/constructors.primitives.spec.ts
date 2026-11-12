@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { encodeJson } from "./codec/json";
 import { encodeValue } from "./encode";
 import { StructError, struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 import { assertStruct } from "./shape";
 
 function encode(struct: unknown, value: unknown): unknown {

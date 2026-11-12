@@ -2,13 +2,12 @@ import { describe, expect, test, vi } from "vitest";
 
 vi.mock("./errors", { spy: true });
 
-import { failure, issue, parkedFailure } from "./errors";
+import { issue } from "./errors";
 import type { ErrorMap } from "./index";
 import { struct } from "./index";
-import { parseStructTuple as parse, parseStructValue } from "./introspection";
+import { parseStructTuple as parse, parseStructValue } from "./parse";
 import { createPrimitiveStruct } from "./runtime";
 import type { ParseResult, Path, StructIssue, StructLike } from "./types";
-import { success } from "./utils";
 
 function nestedResult(
   results: readonly ParseResult<unknown>[],
@@ -795,44 +794,6 @@ describe("parse re-entrancy", () => {
     });
   });
 
-  test("a decode hook can build its failure first and still report it after re-entering parse", () => {
-    const nested: ParseResult<unknown>[] = [];
-    const Checked = createPrimitiveStruct<string, string>({
-      decode: (value, path) => {
-        const own =
-          value === "bad"
-            ? failure(issue(path, "custom", "good value", value))
-            : undefined;
-        nested.push(
-          parse(struct.object({ n: struct.number() }), { n: "nested" }),
-        );
-        nested.push(parse(struct.string(), "fine"));
-        return own ?? success(value.toUpperCase());
-      },
-      expected: "string",
-      is: (value): value is string => typeof value === "string",
-      kind: "string",
-    });
-    const Schema = struct.object({ names: struct.array(Checked) });
-
-    expect(parse(Schema, { names: ["a", "b"] })).toEqual([
-      null,
-      { names: ["A", "B"] },
-    ]);
-    expect(firstIssue(parse(Schema, { names: ["a", "bad", "never"] }))).toEqual(
-      {
-        code: "custom",
-        expected: "good value",
-        message: "Expected good value at names[1], received string",
-        path: ["names", 1],
-        received: "bad",
-      },
-    );
-    // Two hook calls per parse of the valid input and two for the failing one, two nested parses each.
-    expect(nested).toHaveLength(8);
-    expect(firstIssue(nestedResult(nested, 0)).path).toEqual(["n"]);
-  });
-
   test("an exception from errorMap, a getter, or a hook leaves nothing behind for the next parse", () => {
     const Schema = struct.object({ list: struct.array(struct.number()) });
     const Exploding = createPrimitiveStruct<string, string>({
@@ -1145,36 +1106,5 @@ describe("parse outputs and quiet candidates", () => {
       "missing_key@rows.0.a:number",
       "invalid_type@rows.0.b.1:string",
     ]);
-  });
-});
-
-describe("the parked failure", () => {
-  test("is empty after every parse: failed, succeeded after discarded candidates, or threw", () => {
-    const Schema = struct.object({
-      value: struct.or(
-        struct.object({ a: struct.number() }),
-        struct.object({ b: struct.string() }),
-      ),
-    });
-    // With an errorMap the discarded candidates report, so their issues pass through the slot.
-    const errorMap: ErrorMap = () => undefined;
-    expect(parkedFailure()).toBeUndefined();
-
-    expect(parse(Schema, { value: { b: "x" } }, { errorMap })[0]).toBeNull();
-    expect(parkedFailure()).toBeUndefined();
-
-    expect(parse(Schema, { value: 1 }, { errorMap })[0]).not.toBeNull();
-    expect(parkedFailure()).toBeUndefined();
-
-    expect(parse(Schema, { value: 1 })[0]).not.toBeNull();
-    expect(parkedFailure()).toBeUndefined();
-
-    const explode: ErrorMap = () => {
-      throw new Error("errorMap exploded");
-    };
-    expect(() => parse(Schema, { value: 1 }, { errorMap: explode })).toThrow(
-      "errorMap exploded",
-    );
-    expect(parkedFailure()).toBeUndefined();
   });
 });

@@ -511,9 +511,7 @@ export type Cases = [
 ];
 
 // Internal adapters retain the same decoded type as struct.parse, without exporting codecs publicly.
-import { decodeJson as decodeWireJson } from "./codec/json";
-import { decodeObjectByAlias } from "./codec/common";
-import { parseStructValue } from "./introspection";
+import { parseStructValue } from "./parse";
 import { guideTag, type Guide } from "./guide";
 import { assertStruct } from "./shape";
 
@@ -522,18 +520,15 @@ const InternalPayload = struct.object({
   total: struct.bigint(),
   nickname: struct.string().optional(),
 });
-expectTypeOf(decodeWireJson(InternalPayload, {})).toEqualTypeOf<
-  Infer<typeof InternalPayload>
->();
-expectTypeOf(decodeObjectByAlias(InternalPayload, {})).toEqualTypeOf<
-  Infer<typeof InternalPayload>
->();
 expectTypeOf(parseStructValue(InternalPayload, {})).toEqualTypeOf<
   Infer<typeof InternalPayload>
 >();
-expectTypeOf(decodeWireJson(InternalPayload.nullish(), null)).toEqualTypeOf<
-  Infer<typeof InternalPayload> | null | undefined
->();
+expectTypeOf(
+  parseStructValue(InternalPayload, {}, { aliases: true }),
+).toEqualTypeOf<Infer<typeof InternalPayload>>();
+expectTypeOf(
+  parseStructValue(InternalPayload.nullish(), null, { aliases: true }),
+).toEqualTypeOf<Infer<typeof InternalPayload> | null | undefined>();
 assertStruct(InternalPayload, "internal type test");
 expectTypeOf(guideTag([InternalPayload])).toEqualTypeOf<Guide>();
 expectTypeOf(guideTag([])).toEqualTypeOf<Guide | undefined>();
@@ -542,7 +537,7 @@ export function genericInternalDecode<S extends StructLike>(
   schema: S,
   value: unknown,
 ): Infer<S> {
-  return decodeWireJson(schema, value);
+  return parseStructValue(schema, value, { aliases: true });
 }
 
 type PreviousOutputContract<T> = T extends {

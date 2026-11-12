@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { StructError, struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 
 describe("constructors.ts discriminatedUnion", () => {
   const event = struct.discriminatedUnion("type", [

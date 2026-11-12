@@ -2,7 +2,7 @@ export const DEFINITION: unique symbol = Symbol.for("defjs.struct.definition");
 export const OMIT: unique symbol = Symbol("defjs.struct.omit");
 
 /**
- * Stands in for a parsed value when parsing fails; the issue waits in the slot that `failure()` fills.
+ * Stands in for a parsed value when parsing fails; the issue is in the state of that parse.
  * Not in the symbol registry, so no input value can ever equal it.
  */
 export const FAILED: unique symbol = Symbol("defjs.struct.failed");

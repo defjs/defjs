@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { decodeJson, encodeJson } from "./codec/json";
 import { StructError, struct } from "./index";
 import type { StructLike } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 import { selectUnionOptions } from "./match";
 import { assertStruct } from "./shape";
 import type { RuntimeStruct } from "./types";

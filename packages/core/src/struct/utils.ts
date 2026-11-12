@@ -164,11 +164,6 @@ export function matchesEnum(
   return valueSet.has(value);
 }
 
-/** What a decode hook returns for a value it accepts: the decoded value itself. */
-export function success<T>(value: T): T {
-  return value;
-}
-
 export function expectedType(definition: StructDefinition): string {
   switch (definition.kind) {
     case "any":
