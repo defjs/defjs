@@ -2,7 +2,7 @@ import type { HttpRequest } from "../http/http_request";
 import type { HttpInterceptor, SSEInterceptor } from "./interceptor";
 import { createHttpInterceptor, createSSEInterceptor } from "./interceptor";
 
-type Credential = { username: string; password: string };
+type BasicCredential = { username: string; password: string };
 
 /**
  * Options for basic-auth interceptors, including a custom credential encoder.
@@ -17,11 +17,11 @@ type Credential = { username: string; password: string };
  * @group interceptors
  */
 export type BasicAuthInterceptorOptions = {
-  encode?: (credential: Credential) => string;
+  encode?: (credential: BasicCredential) => string;
 };
 
 function createBasicAuthModifier(
-  fn: () => Credential,
+  fn: () => BasicCredential,
   options?: BasicAuthInterceptorOptions,
 ): (req: HttpRequest) => HttpRequest {
   let encode = options?.encode;
@@ -33,7 +33,8 @@ function createBasicAuthModifier(
         "BasicAuthInterceptor is not supported in this environment",
       );
     }
-    encode = (data: Credential) => btoa(`${data.username}:${data.password}`);
+    encode = (data: BasicCredential) =>
+      btoa(`${data.username}:${data.password}`);
   }
 
   return (req: HttpRequest): HttpRequest => {
@@ -60,7 +61,7 @@ function createBasicAuthModifier(
  * @group interceptors
  */
 export function basicAuthHttpInterceptor(
-  fn: () => Credential,
+  fn: () => BasicCredential,
   options?: BasicAuthInterceptorOptions,
 ): HttpInterceptor {
   const modify = createBasicAuthModifier(fn, options);
@@ -81,7 +82,7 @@ export function basicAuthHttpInterceptor(
  * @group interceptors
  */
 export function basicAuthSSEInterceptor(
-  fn: () => Credential,
+  fn: () => BasicCredential,
   options?: BasicAuthInterceptorOptions,
 ): SSEInterceptor {
   const modify = createBasicAuthModifier(fn, options);

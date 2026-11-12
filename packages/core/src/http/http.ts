@@ -1,7 +1,6 @@
 import type { Client } from "../client/client";
 import type { RetryOptions } from "../client/config";
-import type { FaultOf } from "../error";
-import type { Fault } from "../error";
+import type { Fault, FaultOf } from "../error";
 import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
 import type { HttpProgressFn } from "./http_request";
 import type { DecodedResponse, HttpMeta } from "./http_response";

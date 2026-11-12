@@ -8,7 +8,7 @@ import { awaitWithSignal, resolveAbortFault } from "../internal/abort";
 import { parseBytesBody, readBytesText } from "../internal/bytes";
 import type { HttpResponseType } from "./http_request";
 import type { DecodedResponse, HttpResponse } from "./http_response";
-import { toHttpMeta } from "./http_response";
+import { failed, toHttpMeta } from "./http_response";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { isBlob } from "../internal/type_guards";
 import type { AnyStruct } from "../struct";
@@ -109,14 +109,6 @@ export async function decodeResponse<
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: `data` was decoded with definition.error, but the published Fault<TError> types it as ErrorBody<TError>, a conditional on the caller's generic TError. Unasserted: TS2345, `unknown` is not assignable to `ErrorBody<TError>`. Typing this internal result as AnyFault instead fails at defineRequest's published RequestEndpoint return (TS2322)
     createHttpStatusFault(decodedResponse) as Fault<TError>,
   );
-}
-
-/** Faults carry their own response metadata, so the tuple's third slot belongs to success only. */
-export function failed<
-  TOutput extends AnyStruct | undefined,
-  TError extends AnyStruct | undefined,
->(fault: Fault<TError>): HttpExecuteAwaitResult<TOutput, TError> {
-  return [fault, undefined, undefined];
 }
 
 // A JSON body reads its wire names. One shared record saves an allocation per response: parsing only reads it.

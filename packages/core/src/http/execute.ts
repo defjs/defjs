@@ -15,6 +15,7 @@ import { computeReconnectDelay, wait } from "../internal/backoff";
 import type { EndpointInput } from "../internal/endpoint_input";
 import type { HttpRequest, HttpResponseType } from "./http_request";
 import type { HttpResponse } from "./http_response";
+import { failed } from "./http_response";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { preflight } from "../internal/preflight";
 import type { RetryPolicy } from "../internal/retry";
@@ -25,9 +26,12 @@ import {
 } from "../internal/retry";
 import { RequestUrlError } from "../internal/url";
 import type { AnyStruct } from "../struct";
-import { decodeResponse, failed } from "./decode";
-import type { HttpExecuteAwaitResult, RequestDefinition } from "./http";
-import type { HttpExecuteOptions } from "./http";
+import { decodeResponse } from "./decode";
+import type {
+  HttpExecuteAwaitResult,
+  HttpExecuteOptions,
+  RequestDefinition,
+} from "./http";
 import { createHttpRequest } from "./request";
 import type { Attempt } from "./send";
 import {
@@ -162,7 +166,6 @@ async function attemptHttp<
     return { result: failed(scope), unselected: false, retry: undefined };
   }
   try {
-    // A declaration that is not a struct throws here, and the finally below releases the caller's signal.
     // Read a status class only when that side declared a struct, using that side's kind.
     // The other side is cancelled unread. A transport fault while reading a declared side still surfaces.
     const responseType = definition.output

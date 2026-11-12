@@ -159,8 +159,7 @@ export function send(
   const pending = fetchHandlerWithLifecycle(
     { ...request, signal: sendSignal },
     attempt.handle,
-    lifecycle(attempt, record, request.method),
-    url,
+    lifecycle(attempt, record, request.method, url),
   ).then(
     (settled) => {
       record.pending = undefined;
@@ -204,8 +203,10 @@ function lifecycle(
   attempt: Attempt,
   record: Send,
   method: string,
+  url: URL,
 ): FetchLifecycle {
   return {
+    url,
     start(streamed) {
       record.started = true;
       record.streamed = streamed;

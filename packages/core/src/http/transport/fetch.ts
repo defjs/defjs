@@ -432,6 +432,8 @@ export async function fetchHandler(
 }
 
 export type FetchLifecycle = {
+  /** The request URL, resolved once by the caller. */
+  url: URL;
   /** `streamedBody` is true when `fetch` is handed a caller-supplied `ReadableStream`. */
   start: (streamedBody: boolean) => void;
   response: (response: Response) => void;
@@ -444,14 +446,13 @@ export async function fetchHandlerWithLifecycle(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
   lifecycle?: FetchLifecycle,
-  url?: URL,
 ): Promise<HttpResponse<unknown>> {
   if (fetchImpl === DEFAULT_FETCH) {
     fetchImpl = resolveGlobalFetch();
   }
   const uploadProgress = httpRequest.uploadProgress;
   if (!uploadProgress) {
-    return sendFetchRequest(httpRequest, fetchImpl, lifecycle, url);
+    return sendFetchRequest(httpRequest, fetchImpl, lifecycle);
   }
 
   let observerFailure: BodyFailure<"EXT_OBSERVER_FAILED"> | undefined;
@@ -473,7 +474,7 @@ export async function fetchHandlerWithLifecycle(
 
   let response: HttpResponse<unknown>;
   try {
-    response = await sendFetchRequest(observed, fetchImpl, lifecycle, url);
+    response = await sendFetchRequest(observed, fetchImpl, lifecycle);
   } catch (error) {
     // sendFetchRequest already turned cancellation into the abort cause, and cancellation outranks the observer.
     throw observerFailure !== undefined && !httpRequest.signal?.aborted
@@ -491,7 +492,6 @@ async function sendFetchRequest(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
   lifecycle: FetchLifecycle | undefined,
-  resolved: URL | undefined,
 ): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.signal;
   const platform = fetchImpl === PLATFORM_FETCH_HANDLE;
@@ -502,7 +502,7 @@ async function sendFetchRequest(
 
   try {
     const streamedBody = isReadableStreamBody(httpRequest.body);
-    url = resolved ?? resolveRequestUrl(httpRequest);
+    url = lifecycle?.url ?? resolveRequestUrl(httpRequest);
     assertRequestShape(httpRequest, url);
     init = createFetchRequestInit(httpRequest, url, lifecycle?.bodyFailed);
     // PERF: fetch(url, init) builds the Request itself, so building one here would only do that work twice.

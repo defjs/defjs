@@ -1,3 +1,6 @@
+import type { Fault } from "../error";
+import type { AnyStruct } from "../struct";
+import type { HttpExecuteAwaitResult } from "./http";
 import type { HttpRequest } from "./http_request";
 import { resolveRequestUrl } from "../internal/url";
 
@@ -126,4 +129,12 @@ function requestUrl(request: HttpRequest | undefined): string {
     return request.endpoint;
   }
   return resolveRequestUrl(request).href;
+}
+
+/** Faults carry their own response metadata, so the tuple's third slot belongs to success only. */
+export function failed<
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(fault: Fault<TError>): HttpExecuteAwaitResult<TOutput, TError> {
+  return [fault, undefined, undefined];
 }
