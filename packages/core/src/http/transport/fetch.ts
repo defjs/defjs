@@ -435,7 +435,7 @@ export async function fetchHandler(
   return fetchHandlerWithLifecycle(httpRequest, fetchImpl);
 }
 
-type FetchLifecycle = {
+export type FetchLifecycle = {
   /** `streamedBody` is true when `fetch` is handed a caller-supplied `ReadableStream`. */
   start: (streamedBody: boolean) => void;
   response: (response: Response) => void;

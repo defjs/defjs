@@ -113,7 +113,7 @@ export async function decodeResponse<
 }
 
 /** Faults carry their own response metadata, so the tuple's third slot belongs to success only. */
-function failed<
+export function failed<
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined,
 >(fault: Fault<TError>): HttpExecuteAwaitResult<TOutput, TError> {
