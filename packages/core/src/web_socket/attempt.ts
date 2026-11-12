@@ -370,12 +370,8 @@ async function drain(
       emitRuntimeError(session, error);
     }
     reading = undefined;
-    // The length guard stays first: shifting an empty queue measured twice as slow.
-    while (
-      reading === undefined &&
-      !isSettled(attempt) &&
-      attempt.backlog.length > 0
-    ) {
+    // The length guard stays first: shifting an empty queue measured twice as slow. A settled attempt has an empty backlog.
+    while (attempt.backlog.length > 0 && reading === undefined) {
       reading = receiveFrame(session, attempt, attempt.backlog.shift());
     }
   }
