@@ -1,5 +1,32 @@
-import type { ESLint, Rule } from "eslint";
+import type { ESLint, Rule, Scope } from "eslint";
 import type { Expression } from "estree";
+
+// `declare` is a TypeScript flag that the ESTree node types do not list. A
+// definition's node is typed `any` and its parent may be missing.
+function isAmbient(node: unknown): boolean {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    "declare" in node &&
+    node.declare === true
+  );
+}
+
+// The binding of `name` in the nearest scope that declares it, with that scope.
+function findVariable(
+  scope: Scope.Scope,
+  name: string,
+): { scope: Scope.Scope; variable: Scope.Variable } | undefined {
+  for (
+    let current: Scope.Scope | null = scope;
+    current;
+    current = current.upper
+  ) {
+    const variable = current.set.get(name);
+    if (variable) return { scope: current, variable };
+  }
+  return undefined;
+}
 
 const preferTypeofSwitch: Rule.RuleModule = {
   meta: {
@@ -17,31 +44,15 @@ const preferTypeofSwitch: Rule.RuleModule = {
   create(context) {
     const { sourceCode } = context;
 
-    // Unresolved and global identifiers can read host accessors, unlike lexical bindings.
-    const isStableSubject = (node: Expression): boolean => {
-      if (node.type === "ThisExpression") return true;
-      if (node.type !== "Identifier") return false;
-      let scope = sourceCode.getScope(node);
-      for (;;) {
-        const variable = scope.set.get(node.name);
-        if (variable) {
-          return (
-            scope.type !== "global" &&
-            variable.defs.some(({ node, parent }) => {
-              const declared: unknown = Object.getOwnPropertyDescriptor(
-                node,
-                "declare",
-              )?.value;
-              const parentDeclared: unknown =
-                parent &&
-                Object.getOwnPropertyDescriptor(parent, "declare")?.value;
-              return declared !== true && parentDeclared !== true;
-            })
-          );
-        }
-        if (!scope.upper) return false;
-        scope = scope.upper;
-      }
+    // Unresolved, global and ambient identifiers can read host accessors, unlike lexical bindings.
+    const isStableSubject = (subject: Expression): boolean => {
+      if (subject.type === "ThisExpression") return true;
+      if (subject.type !== "Identifier") return false;
+      const found = findVariable(sourceCode.getScope(subject), subject.name);
+      if (!found || found.scope.type === "global") return false;
+      return found.variable.defs.some(
+        (def) => !isAmbient(def.node) && !isAmbient(def.parent),
+      );
     };
 
     const argumentOf = (node: Expression): Expression | undefined => {
