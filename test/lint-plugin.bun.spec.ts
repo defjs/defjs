@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { run } from "./spawn.ts";
 
 const plugin = `${import.meta.dirname}/../lint/plugin.ts`;
 const oxlint = `${import.meta.dirname}/../node_modules/oxlint/bin/oxlint`;
@@ -61,12 +62,11 @@ test(
       }),
     );
     await Bun.write(`${dir}/a.ts`, source);
-    const run = Bun.spawn(
+    const { code, stdout } = await run(
       ["bun", oxlint, "--config", "oxlintrc.json", "--format", "json", "a.ts"],
-      { cwd: dir, stdout: "pipe", stderr: "pipe" },
+      { cwd: dir },
     );
-    const stdout = await new Response(run.stdout).text();
-    expect(await run.exited).toBe(1);
+    expect(code).toBe(1);
 
     const report: unknown = JSON.parse(stdout);
     const diagnostics = lintDiagnostics(report);

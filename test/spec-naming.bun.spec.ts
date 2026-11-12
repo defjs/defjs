@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -9,7 +9,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
 import { beforeAll, describe, expect, onTestFinished, test } from "vitest";
 import {
   expectedProjects,
@@ -21,6 +20,7 @@ import {
   type ListEntry,
 } from "./spec-naming.ts";
 import { projects, workspaces, type Workspace } from "./runtime-matrix.ts";
+import { run } from "./spawn.ts";
 
 const mismatch =
   "name does not match <stem>[.chrome|.firefox|.node|.bun|.type].spec.ts(x)";
@@ -216,9 +216,9 @@ describe("vitest selection", () => {
   // Sequentially starts the 12 Vitest list processes, one config at a time.
   beforeAll(async () => {
     for (const { cwd, config, name } of projects) {
-      const { stdout } = await promisify(execFile)(
-        process.execPath,
+      const { code, stdout, stderr } = await run(
         [
+          process.execPath,
           "--bun",
           "vitest",
           "list",
@@ -227,12 +227,10 @@ describe("vitest selection", () => {
           "--config",
           config,
         ],
-        {
-          cwd: resolve(root, cwd),
-          encoding: "utf8",
-          maxBuffer: 64 * 1024 * 1024,
-        },
+        { cwd: resolve(root, cwd) },
       );
+      if (code !== 0)
+        throw new Error(`vitest list failed in ${name}: ${stderr}`);
       selection.set(name, parseListOutput(stdout, root));
     }
   }, 600_000);

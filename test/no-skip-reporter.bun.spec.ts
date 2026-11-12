@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { expect, test } from "vitest";
 import { collectNotRun } from "./no-skip-reporter.ts";
+import { envWithoutVitest, run } from "./spawn.ts";
 
 const repoRoot = `${import.meta.dirname}/..`;
 
@@ -52,17 +53,6 @@ test("passes", () => {
   expect(result.code).toBe(0);
 });
 
-function childEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined || key.startsWith("VITEST") || key === "CI") {
-      continue;
-    }
-    env[key] = value;
-  }
-  return env;
-}
-
 async function runIsolated(specSource: string): Promise<{
   code: number;
   output: string;
@@ -82,24 +72,13 @@ export default defineConfig({
 });
 `,
     );
-    const child = Bun.spawn(
+    // The nested run sees neither the outer Vitest variables nor CI.
+    const { CI, ...env } = envWithoutVitest();
+    const { code, stdout, stderr } = await run(
       [process.execPath, "run", "vitest", "run", "--root", dir],
-      {
-        cwd: repoRoot,
-        env: childEnv(),
-        stdout: "pipe",
-        stderr: "pipe",
-      },
+      { cwd: repoRoot, env },
     );
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return {
-      code,
-      output: `${stdout}\n${stderr}`,
-    };
+    return { code, output: `${stdout}\n${stderr}` };
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
