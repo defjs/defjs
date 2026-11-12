@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { encodeJson } from "./codec/json";
-import { encodeValue } from "./encode";
+import { encodeValue } from "./codec/common";
 import { StructError, struct } from "./index";
 import { parseStructTuple as parse } from "./parse";
 import { assertStruct } from "./shape";

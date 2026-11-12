@@ -9,7 +9,7 @@ import {
   type Struct,
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
-import { encodeOutbound } from "../../src/internal/outbound_request";
+import { encodeOutbound } from "../../src/struct/encode";
 import { encodeJson } from "../../src/struct/codec/json";
 import { guideMembers, readOwnGuide } from "../../src/struct/guide";
 import { assertObject, isRecord } from "../narrow";

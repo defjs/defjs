@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { struct } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
-import { encodeOutbound } from "../../src/internal/outbound_request";
+import { encodeOutbound } from "../../src/struct/encode";
 import { STRUCT } from "../../src/struct/symbols";
 
 // Three parse+encode passes of 100_000 nodes have exceeded vitest's 5s default once under full-suite load.

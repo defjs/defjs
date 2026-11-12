@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
-import { encodeOutbound } from "../../src/internal/outbound_request";
+import { encodeOutbound } from "../../src/struct/encode";
 import { StructError, struct } from "../../src/struct";
 import { encodeJson } from "../../src/struct/codec/json";
 

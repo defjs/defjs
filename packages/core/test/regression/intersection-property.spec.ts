@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { isRecord, isUnknownArray } from "../narrow";
 import { struct, type AnyStruct } from "../../src/struct";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
-import { encodeOutbound } from "../../src/internal/outbound_request";
+import { encodeOutbound } from "../../src/struct/encode";
 import { encodeJson } from "../../src/struct/codec/json";
 
 type Pair = {

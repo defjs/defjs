@@ -1,9 +1,7 @@
 import { afterAll, describe, test, type BenchRunOptions } from "vitest";
 import { parseEndpointInput } from "../internal/endpoint_input";
-import {
-  encodeOutbound,
-  materializeOutboundRequest,
-} from "../internal/outbound_request";
+import { materializeOutboundRequest } from "../internal/outbound_request";
+import { encodeOutbound } from "./encode";
 import type { Guide } from "./guide";
 import { StructError, struct } from "./index";
 import type { AnyStruct, StructLike } from "./types";

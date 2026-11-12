@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { encodeValue } from "./encode";
-import { struct } from "./index";
-import { parseStructTuple as parse } from "./parse";
-import { matchesRuntimeValue } from "./match";
-import { assertStruct } from "./shape";
-import type { RuntimeStruct } from "./types";
-import { isPlainObject } from "./utils";
+import { encodeValue } from "./common";
+import { struct } from "../index";
+import { parseStructTuple as parse } from "../parse";
+import { matchesRuntimeValue } from "../match";
+import { assertStruct } from "../shape";
+import type { RuntimeStruct } from "../types";
+import { isPlainObject } from "../utils";
 
 function encode(struct: unknown, value: unknown): unknown {
   assertStruct(struct, "struct");
@@ -24,7 +24,7 @@ function record(value: unknown): { [key: string]: unknown } {
   return value;
 }
 
-describe("encode.ts", () => {
+describe("struct-walking encoder", () => {
   test("encode is identity for primitives", () => {
     expect(encode(struct.string(), "hello")).toBe("hello");
     expect(encode(struct.number(), 42)).toBe(42);

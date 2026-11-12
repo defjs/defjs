@@ -7,7 +7,7 @@ import {
   withHTTPHandle,
   type AnyStruct,
 } from "../../src";
-import { encodeOutbound } from "../../src/internal/outbound_request";
+import { encodeOutbound } from "../../src/struct/encode";
 import type { Guide } from "../../src/struct/guide";
 import { assertRecord, isRuntimeStruct, isUnknownArray } from "../narrow";
 import { parseStructValue } from "../../src/struct/parse";

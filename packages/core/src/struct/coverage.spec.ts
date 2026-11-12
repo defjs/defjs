@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { encodeObjectByAlias } from "./codec/common";
 import { decodeJson, encodeJson } from "./codec/json";
-import { encodeValue } from "./encode";
+import { encodeValue } from "./codec/common";
 import { StructError } from "./errors";
 import { struct as directStruct } from "./facade";
 import { isStruct } from "./guards";

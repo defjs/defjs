@@ -8,7 +8,7 @@ import {
   withHTTPHandle,
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
-import { encodeOutbound } from "../../src/internal/outbound_request";
+import { encodeOutbound } from "../../src/struct/encode";
 import { encodeJson } from "../../src/struct/codec/json";
 import { serializeOutgoingWebSocketMessage } from "../../src/web_socket/codec";
 
