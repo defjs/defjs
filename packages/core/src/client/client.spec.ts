@@ -20,7 +20,7 @@ import {
   withWebSocketProtocols,
 } from "./index";
 import type { Client } from "./client";
-import type { FetchHandle } from "./config";
+import type { ClientConfig, FetchHandle } from "./config";
 
 describe("Client", () => {
   let baseClient: Client;
@@ -55,56 +55,74 @@ describe("Client", () => {
     expect(seen[0]?.headers.get("X-Override")).toBe("command");
   });
 
-  test.each(["HTTP", "SSE"] as const)(
-    "%s array command headers override defaults at the fetch boundary",
-    async (transport) => {
+  test.each<{
+    transport: string;
+    withHandle: (handle: FetchHandle) => (config: ClientConfig) => void;
+    answer: () => Response;
+    open: (client: Client) => Promise<{
+      fault: { code: string } | null;
+      stream: { close(): void; closed: Promise<unknown> } | undefined;
+    }>;
+    scope: string;
+  }>([
+    {
+      transport: "HTTP",
+      withHandle: withHTTPHandle,
+      answer: () => new Response(null, { status: 204 }),
+      open: async (client) => {
+        const [fault] = await defineRequest({
+          builder: () => ({
+            headers: [
+              ["X-Scope", "first"],
+              ["x-scope", "second"],
+            ],
+          }),
+          method: "GET",
+          path: "/headers",
+        })(client);
+        return { fault, stream: undefined };
+      },
+      // Two pair entries are combined by Headers.
+      scope: "first, second",
+    },
+    {
+      transport: "SSE",
+      withHandle: withSSEHandle,
+      answer: () =>
+        new Response(": done\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      open: async (client) => {
+        const [fault, stream] = await defineEventStream({
+          builder: () => ({ headers: { "x-scope": ["first", "second"] } }),
+          events: { message: struct.unknown() },
+          path: "/headers",
+        })(client);
+        return { fault, stream };
+      },
+      // A record array is one value that JavaScript joins with a comma.
+      scope: "first,second",
+    },
+  ])(
+    "$transport array command headers override defaults at the fetch boundary",
+    async ({ withHandle, answer, open, scope }) => {
       let sent: Headers | undefined;
       const defaults = { "X-Scope": "default", "X-Keep": "keep" };
       const client = createClient(
         withEndpoint("https://example.test"),
         withHeaders(defaults),
-        (transport === "HTTP" ? withHTTPHandle : withSSEHandle)(
-          (input, init) => {
-            sent = new Request(input, init).headers;
-            return Promise.resolve(
-              transport === "HTTP"
-                ? new Response(null, { status: 204 })
-                : new Response(": done\n\n", {
-                    headers: { "content-type": "text/event-stream" },
-                  }),
-            );
-          },
-        ),
+        withHandle((input, init) => {
+          sent = new Request(input, init).headers;
+          return Promise.resolve(answer());
+        }),
       );
-      const pending =
-        transport === "HTTP"
-          ? defineRequest({
-              builder: () => ({
-                headers: [
-                  ["X-Scope", "first"],
-                  ["x-scope", "second"],
-                ],
-              }),
-              method: "GET",
-              path: "/headers",
-            })(client)
-          : defineEventStream({
-              builder: () => ({
-                headers: { "x-scope": ["first", "second"] },
-              }),
-              events: { message: struct.unknown() },
-              path: "/headers",
-            })(client);
 
-      const [fault, stream] = await pending;
+      const { fault, stream } = await open(client);
       stream?.close();
       await stream?.closed;
 
       expect(fault).toBeNull();
-      // Two pair entries are combined by Headers; a record array is one value that JavaScript joins with a comma.
-      expect(sent?.get("x-scope")).toBe(
-        transport === "HTTP" ? "first, second" : "first,second",
-      );
+      expect(sent?.get("x-scope")).toBe(scope);
       expect(sent?.get("x-keep")).toBe("keep");
       expect(defaults["X-Scope"]).toBe("default");
     },

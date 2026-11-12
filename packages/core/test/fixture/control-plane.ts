@@ -1,4 +1,5 @@
 import type { Context, Hono, MiddlewareHandler } from "hono";
+import { isRecord, own } from "./records.ts";
 import type { FixtureRegistry, FixtureState } from "./state.ts";
 import type { ActionBody, ActionKind } from "./types.ts";
 
@@ -70,16 +71,6 @@ function loopbackOrigin(origin: string | undefined): string | undefined {
 function isJsonContentType(header: string | undefined): boolean {
   const media = header?.split(";")[0]?.trim().toLowerCase();
   return media === "application/json";
-}
-
-function isRecord(value: unknown): value is { [key: string]: unknown } {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function own(record: { [key: string]: unknown }, key: string): unknown {
-  if (!Object.hasOwn(record, key)) return undefined;
-  const value: unknown = Reflect.get(record, key);
-  return value;
 }
 
 function isActionKind(value: unknown): value is ActionKind {

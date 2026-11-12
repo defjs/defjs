@@ -38,52 +38,92 @@ describe("HTTP transport boundary regressions", () => {
     },
   );
 
-  test.each([
-    "header",
-    "sameHeader",
-    "mutatedHeader",
-    "bodyContentType",
-    "none",
-    "remove",
-    "null",
-  ] as const)(
-    "should apply interceptor body replacement with %s content type metadata",
-    async (declaration) => {
-      let contentType: string | null = null;
-      let sent = "";
+  const REPLACED = '{"next":true}';
+
+  test.each<{
+    declaration: string;
+    replace: (request: HttpRequest) => HttpRequest;
+    sent: string;
+    contentType: string | null;
+  }>([
+    {
+      declaration: "header",
+      replace: (request) => ({
+        ...request,
+        body: REPLACED,
+        headers: new Headers({
+          "content-type": "application/merge-patch+json",
+        }),
+      }),
+      sent: REPLACED,
+      contentType: "application/merge-patch+json",
+    },
+    {
+      declaration: "sameHeader",
+      replace: (request) => ({
+        ...request,
+        body: REPLACED,
+        headers: new Headers({ "content-type": "application/json" }),
+      }),
+      sent: REPLACED,
+      contentType: "application/json",
+    },
+    {
+      declaration: "mutatedHeader",
+      replace: (request) => {
+        const replaced: HttpRequest = { ...request, body: REPLACED };
+        replaced.headers?.set("content-type", "application/json");
+        return replaced;
+      },
+      sent: REPLACED,
+      contentType: "application/json",
+    },
+    {
+      declaration: "bodyContentType",
+      replace: (request) => ({
+        ...request,
+        body: REPLACED,
+        bodyContentType: "application/json",
+      }),
+      // The replaced body is detected again, so the type the builder's body had does not follow it.
+      sent: REPLACED,
+      contentType: "text/plain;charset=UTF-8",
+    },
+    {
+      declaration: "none",
+      replace: (request) => ({ ...request, body: REPLACED }),
+      sent: REPLACED,
+      contentType: "text/plain;charset=UTF-8",
+    },
+    {
+      declaration: "remove",
+      replace: (request) => ({ ...request, body: undefined }),
+      sent: "",
+      contentType: null,
+    },
+    {
+      declaration: "null",
+      replace: (request) => ({
+        ...request,
+        body: REPLACED,
+        bodyContentType: null,
+      }),
+      sent: REPLACED,
+      contentType: "text/plain;charset=UTF-8",
+    },
+  ])(
+    "should apply interceptor body replacement with $declaration content type metadata",
+    async ({ replace, sent, contentType }) => {
+      let sentContentType: string | null = null;
+      let sentBody = "";
       const client = createClient(
         withEndpoint("https://example.com"),
         withInterceptors(
-          createHttpInterceptor((request, next) => {
-            const replaced: HttpRequest = {
-              ...request,
-              body: declaration === "remove" ? undefined : '{"next":true}',
-            };
-            if (declaration === "header") {
-              replaced.headers = new Headers({
-                "content-type": "application/merge-patch+json",
-              });
-            }
-            if (declaration === "sameHeader") {
-              replaced.headers = new Headers({
-                "content-type": "application/json",
-              });
-            }
-            if (declaration === "mutatedHeader") {
-              replaced.headers?.set("content-type", "application/json");
-            }
-            if (declaration === "bodyContentType") {
-              replaced.bodyContentType = "application/json";
-            }
-            if (declaration === "null") {
-              replaced.bodyContentType = null;
-            }
-            return next(replaced);
-          }),
+          createHttpInterceptor((request, next) => next(replace(request))),
         ),
         withHTTPHandle(async (input) => {
-          contentType = requireRequest(input).headers.get("content-type");
-          sent = await requireRequest(input).text();
+          sentContentType = requireRequest(input).headers.get("content-type");
+          sentBody = await requireRequest(input).text();
           return new Response(null, { status: 204 });
         }),
       );
@@ -94,16 +134,8 @@ describe("HTTP transport boundary regressions", () => {
       });
       const [fault] = await endpoint(client);
       expect(fault).toBeNull();
-      expect(sent).toBe(declaration === "remove" ? "" : '{"next":true}');
-      expect(contentType).toBe(
-        declaration === "header"
-          ? "application/merge-patch+json"
-          : declaration === "sameHeader" || declaration === "mutatedHeader"
-            ? "application/json"
-            : declaration === "remove"
-              ? null
-              : "text/plain;charset=UTF-8",
-      );
+      expect(sentBody).toBe(sent);
+      expect(sentContentType).toBe(contentType);
     },
   );
 

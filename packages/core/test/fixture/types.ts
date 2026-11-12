@@ -26,11 +26,14 @@ export interface ScenarioParams {
   script: { plan: readonly ScriptStep[] }; // 第 n 个请求（0 起）用 plan[Math.min(n, plan.length - 1)]
   ws: { send: readonly string[]; closeWith?: { code: number; reason: string } };
 }
-export interface EndpointRegistration {
-  readonly name: string;
-  readonly scenario: ScenarioName;
-  readonly params: ScenarioParams[ScenarioName];
-}
+/** A registered endpoint. The scenario decides the shape of `params`, which is checked once, when it is registered. */
+export type EndpointRegistration = {
+  [S in ScenarioName]: {
+    readonly name: string;
+    readonly scenario: S;
+    readonly params: ScenarioParams[S];
+  };
+}[ScenarioName];
 export interface ActionBody {
   target: string;
   request?: number;

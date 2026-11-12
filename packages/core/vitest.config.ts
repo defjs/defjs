@@ -6,7 +6,6 @@ import {
 } from "../../test/spec-matrix.ts";
 import { coverageSettings, reporters } from "../../test/vitest-shared.ts";
 import { globalSetupPath, packageRoot } from "./test/shared.ts";
-import { readRound13Settings } from "./test/round13-settings.ts";
 
 export function baseConfig(runtime?: Runtime): UserConfig {
   return {
@@ -17,7 +16,6 @@ export function baseConfig(runtime?: Runtime): UserConfig {
       exclude: specExclude(runtime),
       globalSetup: globalSetupPath,
       reporters,
-      provide: { round13: readRound13Settings(process.env) },
       coverage: coverageSettings({
         reportsDirectory: `${packageRoot}/coverage/${runtime ?? "plain"}`,
       }),

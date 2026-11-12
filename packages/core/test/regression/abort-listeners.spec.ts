@@ -48,50 +48,72 @@ const socketEndpoint = defineWebSocket({
   path: "/",
 });
 
-test.each(["success", "fault", "abort", "timeout"] as const)(
-  "HTTP releases caller abort listeners after %s",
-  async (mode) => {
-    let release: () => void = () => undefined;
+/** A response that is answered when `release` is called, so that the caller can stop the call first. */
+function heldResponse(answer: () => Response): {
+  response: Promise<Response>;
+  release: () => void;
+} {
+  let release: () => void = () => undefined;
+  const response = new Promise<Response>((resolve) => {
+    release = () => resolve(answer());
+  });
+  return { response, release };
+}
+
+const answered = (response: Response) => ({
+  response: Promise.resolve(response),
+  release: () => undefined,
+});
+
+const jsonNull = () =>
+  new Response("null", { headers: { "content-type": "application/json" } });
+const eventStream = () =>
+  new Response("data: hi\n\n", {
+    headers: { "content-type": "text/event-stream" },
+  });
+
+const deadline = () => new DOMException("deadline", "TimeoutError");
+
+test.each([
+  {
+    outcome: "success",
+    serve: () => answered(jsonNull()),
+    stop: undefined,
+    code: null,
+  },
+  {
+    outcome: "fault",
+    serve: () => answered(new Response(null, { status: 500 })),
+    stop: undefined,
+    code: "HTTP_STATUS",
+  },
+  {
+    outcome: "abort",
+    serve: () => heldResponse(jsonNull),
+    stop: "stop",
+    code: "NET_ABORTED",
+  },
+  {
+    outcome: "timeout",
+    serve: () => heldResponse(jsonNull),
+    stop: deadline(),
+    code: "NET_TIMEOUT",
+  },
+])(
+  "HTTP releases caller abort listeners after $outcome",
+  async ({ serve, stop, code }) => {
+    const served = serve();
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
-        if (mode === "success")
-          return new Response("null", {
-            headers: { "content-type": "application/json" },
-          });
-        if (mode === "fault") return new Response(null, { status: 500 });
-        return new Promise<Response>((resolve) => {
-          release = () =>
-            resolve(
-              new Response("null", {
-                headers: { "content-type": "application/json" },
-              }),
-            );
-        });
-      }),
+      withHTTPHandle(() => served.response),
     );
     const caller = new AbortController();
     const signal = watch(caller.signal);
-    const pending = httpEndpoint(
-      client({
-        signal: caller.signal,
-      }),
-    );
-    if (mode === "abort") caller.abort("stop");
-    if (mode === "timeout") {
-      caller.abort(new DOMException("deadline", "TimeoutError"));
-    }
+    const pending = httpEndpoint(client({ signal: caller.signal }));
+    if (stop !== undefined) caller.abort(stop);
     const [fault] = await pending;
-    release();
-    expect(fault?.code ?? null).toBe(
-      mode === "success"
-        ? null
-        : mode === "fault"
-          ? "HTTP_STATUS"
-          : mode === "abort"
-            ? "NET_ABORTED"
-            : "NET_TIMEOUT",
-    );
+    served.release();
+    expect(fault?.code ?? null).toBe(code);
     signal.expectReleased();
   },
 );
@@ -142,44 +164,40 @@ test("SSE releases caller abort listeners after a reconnecting stream closes", a
   signal.expectReleased();
 });
 
-test.each(["fault", "abort", "timeout"] as const)(
-  "SSE releases caller abort listeners after %s",
-  async (mode) => {
-    let release: () => void = () => undefined;
+test.each([
+  {
+    outcome: "fault",
+    serve: () => answered(new Response(null, { status: 500 })),
+    stop: undefined,
+    code: "HTTP_STATUS",
+  },
+  {
+    outcome: "abort",
+    serve: () => heldResponse(eventStream),
+    stop: "stop",
+    code: "NET_ABORTED",
+  },
+  {
+    outcome: "timeout",
+    serve: () => heldResponse(eventStream),
+    stop: deadline(),
+    code: "NET_TIMEOUT",
+  },
+])(
+  "SSE releases caller abort listeners after $outcome",
+  async ({ serve, stop, code }) => {
+    const served = serve();
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
-        if (mode === "fault") return new Response(null, { status: 500 });
-        return new Promise<Response>((resolve) => {
-          release = () =>
-            resolve(
-              new Response("data: hi\n\n", {
-                headers: { "content-type": "text/event-stream" },
-              }),
-            );
-        });
-      }),
+      withSSEHandle(() => served.response),
     );
     const caller = new AbortController();
     const signal = watch(caller.signal);
-    const pending = sseEndpoint(
-      client({
-        signal: caller.signal,
-      }),
-    );
-    if (mode === "abort") caller.abort("stop");
-    if (mode === "timeout") {
-      caller.abort(new DOMException("deadline", "TimeoutError"));
-    }
+    const pending = sseEndpoint(client({ signal: caller.signal }));
+    if (stop !== undefined) caller.abort(stop);
     const [fault] = await pending;
-    release();
-    expect(fault?.code).toBe(
-      mode === "fault"
-        ? "HTTP_STATUS"
-        : mode === "abort"
-          ? "NET_ABORTED"
-          : "NET_TIMEOUT",
-    );
+    served.release();
+    expect(fault?.code).toBe(code);
     signal.expectReleased();
   },
 );

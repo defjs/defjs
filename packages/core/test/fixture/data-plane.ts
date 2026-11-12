@@ -2,8 +2,10 @@ import type { Context, Hono } from "hono";
 import type { UpgradeWebSocket, WSContext } from "hono/ws";
 import { yieldMacrotask } from "../macrotask.ts";
 import { controlCors, controlGuard } from "./control-plane.ts";
+import { isRecord, isStringRecord, isUnknownArray, own } from "./records.ts";
 import type { FixtureRegistry, FixtureState, LiveConnection } from "./state.ts";
 import type {
+  ActionKind,
   EndpointRegistration,
   FixtureHeaders,
   ScenarioParams,
@@ -67,16 +69,6 @@ export function registerDataPlane(app: Hono, deps: DataPlaneDeps): void {
   app.all("/__fixture/:id/e/:name/*", (c) => serveEndpoint(c, deps));
 }
 
-function isRecord(value: unknown): value is { [key: string]: unknown } {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function own(record: { [key: string]: unknown }, key: string): unknown {
-  if (!Object.hasOwn(record, key)) return undefined;
-  const value: unknown = Reflect.get(record, key);
-  return value;
-}
-
 function isHttpStatus(value: unknown): value is number {
   return (
     typeof value === "number" &&
@@ -88,14 +80,6 @@ function isHttpStatus(value: unknown): value is number {
 
 function isNullBodyStatus(status: number): boolean {
   return status === 204 || status === 205 || status === 304;
-}
-
-function isStringRecord(value: unknown): value is FixtureHeaders {
-  if (!isRecord(value)) return false;
-  for (const entry of Object.entries(value)) {
-    if (typeof entry[1] !== "string") return false;
-  }
-  return true;
 }
 
 function parseRespond(value: unknown): ScenarioParams["respond"] | undefined {
@@ -232,51 +216,40 @@ function serveEndpoint(
   }
   switch (registration.scenario) {
     case "hang":
-      return hangResponse(state, name, request, cors, c.req.raw.signal);
-    case "respond": {
-      const params = parseRespond(registration.params);
-      if (params === undefined) {
-        return applyCors(new Response(null, { status: 400 }), cors);
-      }
-      return respondResponse(params, cors);
-    }
-    case "gzip": {
-      const params = parseGzip(registration.params);
-      if (params === undefined) {
-        return applyCors(new Response(null, { status: 400 }), cors);
-      }
-      return gzipResponse(params, cors);
-    }
-    case "script": {
-      const params = parseScript(registration.params);
-      if (params === undefined) {
-        return applyCors(new Response(null, { status: 400 }), cors);
-      }
-      const current = deps.registry.get(id);
-      if (current === undefined) {
-        return applyCors(new Response(null, { status: 404 }), cors);
-      }
-      return scriptResponse(
-        params.plan,
+      return withheldScript(
+        HANG,
         request,
-        (connection) => current.track(name, connection),
+        (connection) => state.track(name, connection),
         c.req.raw.signal,
       ).then((response) => applyCors(response, cors));
-    }
-    case "ws": {
-      const params = parseWs(registration.params);
-      if (params === undefined) {
-        return applyCors(new Response(null, { status: 400 }), cors);
-      }
+    case "respond":
+      return respondResponse(registration.params, cors);
+    case "gzip":
+      return gzipResponse(registration.params, cors);
+    case "script":
+      return scriptResponse(
+        registration.params.plan,
+        request,
+        (connection) => state.track(name, connection),
+        c.req.raw.signal,
+      ).then((response) => applyCors(response, cors));
+    case "ws":
       if (!isWebSocketUpgrade(c)) {
         return applyCors(new Response(null, { status: 426 }), cors);
       }
-      return acceptWebSocket(c, deps, id, name, request, params, cors);
-    }
-    default:
-      return applyCors(new Response(null, { status: 400 }), cors);
+      return acceptWebSocket(
+        c,
+        deps.upgradeWebSocket,
+        state,
+        name,
+        request,
+        registration.params,
+      );
   }
 }
+
+/** A hung request is a held script step: it answers 204 when it is ended, and 499 when the client goes away. */
+const HANG: ScriptStep = { status: 204, chunks: [], then: "hold" };
 
 function isWebSocketUpgrade(c: Context): boolean {
   const upgrade = c.req.header("upgrade");
@@ -385,59 +358,14 @@ async function gzipEncode(text: string): Promise<Uint8Array> {
   return new Uint8Array(await new Response(compressed).arrayBuffer());
 }
 
-function hangResponse(
+function acceptWebSocket(
+  c: Context,
+  upgradeWebSocket: UpgradeWebSocket,
   state: FixtureState,
   name: string,
   request: number,
-  cors: DataCors,
-  signal: AbortSignal,
-): Promise<Response> {
-  let settled = false;
-  let resolveResponse: (response: Response) => void = () => undefined;
-  const pending = new Promise<Response>((resolve) => {
-    resolveResponse = resolve;
-  });
-  let untrack = (): void => undefined;
-  const finish = (status: number): void => {
-    if (settled) return;
-    settled = true;
-    signal.removeEventListener("abort", onAbort);
-    untrack();
-    resolveResponse(applyCors(new Response(null, { status }), cors));
-  };
-  const onAbort = (): void => {
-    finish(499);
-  };
-  untrack = state.track(name, {
-    request,
-    apply(action) {
-      if (action !== "end") return Promise.resolve(false);
-      finish(204);
-      return Promise.resolve(true);
-    },
-    release() {
-      finish(204);
-      return Promise.resolve();
-    },
-  });
-  if (signal.aborted) finish(499);
-  else signal.addEventListener("abort", onAbort);
-  return pending;
-}
-
-function acceptWebSocket(
-  c: Context,
-  deps: DataPlaneDeps,
-  id: string,
-  name: string,
-  request: number,
   params: ScenarioParams["ws"],
-  cors: DataCors,
 ): Response | Promise<Response> {
-  const state = deps.registry.get(id);
-  if (state === undefined) {
-    return applyCors(new Response(null, { status: 404 }), cors);
-  }
   let opened: WSContext | undefined;
   let settled = false;
   let resolveClosed: () => void = () => undefined;
@@ -478,7 +406,7 @@ function acceptWebSocket(
       return closed.then(() => undefined);
     },
   });
-  return deps.upgradeWebSocket(c, {
+  return upgradeWebSocket(c, {
     onOpen(_event, ws) {
       opened = ws;
       for (const message of params.send) ws.send(message);
@@ -506,10 +434,6 @@ function terminateSocket(raw: unknown): void {
   const terminate: unknown = Reflect.get(raw, "terminate");
   if (typeof terminate !== "function") return;
   Reflect.apply(terminate, raw, []);
-}
-
-function isUnknownArray(value: unknown): value is readonly unknown[] {
-  return Array.isArray(value);
 }
 
 function isStepThen(value: unknown): value is StepThen {
@@ -639,6 +563,16 @@ interface PullWaiter {
   readonly resolve: () => void;
 }
 
+/** How a streamed step ends. An abort outranks an interruption, and an interruption outranks a requested end. */
+type StreamEnd = "ended" | "drop" | "terminate" | "aborted";
+
+const STREAM_END_RANK: Readonly<Record<StreamEnd, number>> = {
+  ended: 1,
+  drop: 2,
+  terminate: 2,
+  aborted: 3,
+};
+
 function streamedScript(
   step: ScriptStep,
   index: number,
@@ -647,70 +581,68 @@ function streamedScript(
 ): Promise<Response> {
   const encoder = new TextEncoder();
   let cursor = 0;
-  let ended = false;
-  let aborted = false;
-  let interrupt: "drop" | "terminate" | undefined;
+  let outcome: StreamEnd | undefined;
   let settled = false;
   let untrack = (): void => undefined;
   let waiter: PullWaiter | undefined;
 
+  const decide = (next: StreamEnd): StreamEnd => {
+    if (
+      outcome === undefined ||
+      STREAM_END_RANK[next] >= STREAM_END_RANK[outcome]
+    ) {
+      outcome = next;
+    }
+    return outcome;
+  };
   const finish = (): void => {
     if (settled) return;
     settled = true;
     signal.removeEventListener("abort", onAbort);
     untrack();
   };
-  const fail = (
+  const conclude = (
     controller: ReadableStreamDefaultController<Uint8Array>,
-    kind: "drop" | "terminate",
+    how: StreamEnd,
   ): void => {
     finish();
-    controller.error(new Error(`fixture ${kind}`));
+    switch (how) {
+      case "ended":
+        controller.close();
+        return;
+      case "aborted":
+        controller.error(
+          new DOMException("The operation was aborted.", "AbortError"),
+        );
+        return;
+      default:
+        controller.error(new Error(`fixture ${how}`));
+    }
   };
-  const close = (
-    controller: ReadableStreamDefaultController<Uint8Array>,
-  ): void => {
-    finish();
-    controller.close();
-  };
-  const abortStream = (
-    controller: ReadableStreamDefaultController<Uint8Array>,
-  ): void => {
-    finish();
-    controller.error(
-      new DOMException("The operation was aborted.", "AbortError"),
-    );
+  /** Ends the pull that is waiting, if there is one, the way `how` says. */
+  const wake = (how: StreamEnd): boolean => {
+    if (waiter === undefined) return false;
+    const pending = waiter;
+    waiter = undefined;
+    conclude(pending.controller, how);
+    pending.resolve();
+    return true;
   };
   const onAbort = (): void => {
-    aborted = true;
-    if (waiter !== undefined) {
-      const pending = waiter;
-      waiter = undefined;
-      abortStream(pending.controller);
-      pending.resolve();
-      return;
-    }
-    finish();
+    decide("aborted");
+    if (!wake("aborted")) finish();
   };
   const stream = new ReadableStream<Uint8Array>(
     {
       pull(controller) {
-        if (aborted) {
-          abortStream(controller);
-          return;
-        }
-        if (interrupt !== undefined) {
-          fail(controller, interrupt);
-          return;
-        }
-        if (ended) {
-          close(controller);
+        if (outcome !== undefined) {
+          conclude(controller, outcome);
           return;
         }
         if (cursor < step.chunks.length) {
           const chunk = step.chunks[cursor];
           if (chunk === undefined) {
-            fail(controller, "drop");
+            conclude(controller, "drop");
             return;
           }
           controller.enqueue(encoder.encode(chunk));
@@ -722,23 +654,11 @@ function streamedScript(
           // which resets the socket before the client sees the response.
           const kind = step.then;
           return yieldMacrotask().then(() => {
-            if (aborted) {
-              abortStream(controller);
-              return;
-            }
-            if (interrupt !== undefined) {
-              fail(controller, interrupt);
-              return;
-            }
-            if (ended) {
-              close(controller);
-              return;
-            }
-            fail(controller, kind);
+            conclude(controller, outcome ?? kind);
           });
         }
         if (step.then === "end") {
-          close(controller);
+          conclude(controller, "ended");
           return;
         }
         return new Promise<void>((resolve) => {
@@ -751,47 +671,17 @@ function streamedScript(
     },
     { highWaterMark: 0 },
   );
+  const apply = (action: ActionKind): Promise<boolean> => {
+    if (settled) return Promise.resolve(false);
+    const how = decide(action === "end" ? "ended" : action);
+    // A requested end with nothing waiting stops the connection from being live; an interruption waits for the next pull.
+    if (!wake(how) && action === "end") finish();
+    return Promise.resolve(true);
+  };
   untrack = track({
     request: index,
-    apply(action) {
-      if (settled) return Promise.resolve(false);
-      if (action === "end") {
-        ended = true;
-        if (waiter !== undefined) {
-          const pending = waiter;
-          waiter = undefined;
-          close(pending.controller);
-          pending.resolve();
-        } else {
-          finish();
-        }
-        return Promise.resolve(true);
-      }
-      if (action === "drop" || action === "terminate") {
-        interrupt = action;
-        if (waiter !== undefined) {
-          const pending = waiter;
-          waiter = undefined;
-          fail(pending.controller, action);
-          pending.resolve();
-        }
-        return Promise.resolve(true);
-      }
-      return Promise.resolve(false);
-    },
-    release() {
-      if (settled) return Promise.resolve();
-      ended = true;
-      if (waiter !== undefined) {
-        const pending = waiter;
-        waiter = undefined;
-        close(pending.controller);
-        pending.resolve();
-      } else {
-        finish();
-      }
-      return Promise.resolve();
-    },
+    apply,
+    release: () => apply("end").then(() => undefined),
   });
   if (signal.aborted) onAbort();
   else signal.addEventListener("abort", onAbort);

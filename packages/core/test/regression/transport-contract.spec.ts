@@ -114,76 +114,86 @@ test.each([200, 403])(
   },
 );
 
-test.each([200, 403])(
-  "zero-byte JSON is a representation failure at status %s",
-  async (status) => {
-    const observations = [];
-    for (const mode of ["native", "synthetic"]) {
-      const client = createClient(
-        withEndpoint("https://example.test"),
-        ...(mode === "native"
-          ? [
-              withHTTPHandle(() =>
-                Promise.resolve(
-                  new Response("", { status, headers: jsonHeaders }),
-                ),
-              ),
-            ]
-          : [
-              withInterceptors(
-                createHttpInterceptor(() =>
-                  Promise.resolve(
-                    makeResponse({
-                      status,
-                      headers: new Headers(jsonHeaders),
-                      body: new Uint8Array(),
-                    }),
-                  ),
-                ),
-              ),
-            ]),
-      );
-      const [fault, data] = await nullEndpoint(client);
-      observations.push({
-        mode,
-        code: fault?.code ?? null,
-        data: fault?.code === "HTTP_STATUS" ? fault.data : data,
-      });
-    }
-    expect(observations).toEqual(
-      ["native", "synthetic"].map((mode) => ({
-        mode,
-        code: "RES_DECODE_FAILED",
-        data: undefined,
-      })),
-    );
+test.each(
+  [200, 403].flatMap((status) => [
+    {
+      status,
+      response: "native",
+      option: withHTTPHandle(() =>
+        Promise.resolve(new Response("", { status, headers: jsonHeaders })),
+      ),
+    },
+    {
+      status,
+      response: "synthetic",
+      option: withInterceptors(
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              status,
+              headers: new Headers(jsonHeaders),
+              body: new Uint8Array(),
+            }),
+          ),
+        ),
+      ),
+    },
+  ]),
+)(
+  "zero-byte JSON is a representation failure at status $status of a $response response",
+  async ({ option }) => {
+    const client = createClient(withEndpoint("https://example.test"), option);
+
+    const [fault, data] = await nullEndpoint(client);
+
+    expect(fault?.code).toBe("RES_DECODE_FAILED");
+    expect(data).toBeUndefined();
   },
 );
 
-test("SSE rejects empty JSON but accepts encoded null and empty raw text", async () => {
-  for (const mode of ["empty-json", "null-json", "absent-text", "empty-text"]) {
-    const text =
-      mode === "null-json" ? "null" : mode === "absent-text" ? null : "";
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withSSEHandle(() =>
-        Promise.resolve(
-          new Response(text, { status: 403, headers: jsonHeaders }),
-        ),
+test.each([
+  {
+    label: "empty JSON",
+    body: "",
+    error: struct.null(),
+    expected: { code: "RES_DECODE_FAILED" },
+  },
+  {
+    label: "encoded null JSON",
+    body: "null",
+    error: struct.null(),
+    expected: { code: "HTTP_STATUS", data: null },
+  },
+  {
+    label: "absent raw text",
+    body: null,
+    error: struct.string(),
+    expected: { code: "HTTP_STATUS", data: "" },
+  },
+  {
+    label: "empty raw text",
+    body: "",
+    error: struct.string(),
+    expected: { code: "HTTP_STATUS", data: "" },
+  },
+])("SSE reads $label as an error body", async ({ body, error, expected }) => {
+  const client = createClient(
+    withEndpoint("https://example.test"),
+    withSSEHandle(() =>
+      Promise.resolve(
+        new Response(body, { status: 403, headers: jsonHeaders }),
       ),
-    );
-    const endpoint = defineEventStream({
-      path: "/events",
-      events: { message: struct.string() },
-      error: mode.endsWith("json") ? struct.null() : struct.string(),
-    });
-    const [fault] = await endpoint(client);
-    expect(fault?.code).toBe(
-      mode === "empty-json" ? "RES_DECODE_FAILED" : "HTTP_STATUS",
-    );
-    if (fault?.code === "HTTP_STATUS")
-      expect(fault.data).toBe(mode === "null-json" ? null : "");
-  }
+    ),
+  );
+  const endpoint = defineEventStream({
+    path: "/events",
+    events: { message: struct.string() },
+    error,
+  });
+
+  const [fault] = await endpoint(client);
+
+  expect(fault).toMatchObject(expected);
 });
 
 test.each(["abort", "timeout"] as const)(

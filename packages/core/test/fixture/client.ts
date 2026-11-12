@@ -1,6 +1,6 @@
+import { isRecord, isStringRecord, isUnknownArray, own } from "./records.ts";
 import type {
   ActionKind,
-  FixtureHeaders,
   LoggedRequest,
   LogResponse,
   RawScenarioName,
@@ -147,26 +147,4 @@ function parseLogged(value: unknown): LoggedRequest | undefined {
     return { endpoint, method, path, headers, rawHead };
   }
   return { endpoint, method, path, headers };
-}
-
-function isUnknownArray(value: unknown): value is readonly unknown[] {
-  return Array.isArray(value);
-}
-
-function isRecord(value: unknown): value is { [key: string]: unknown } {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function own(record: { [key: string]: unknown }, key: string): unknown {
-  if (!Object.hasOwn(record, key)) return undefined;
-  const value: unknown = Reflect.get(record, key);
-  return value;
-}
-
-function isStringRecord(value: unknown): value is FixtureHeaders {
-  if (!isRecord(value)) return false;
-  for (const entry of Object.entries(value)) {
-    if (typeof entry[1] !== "string") return false;
-  }
-  return true;
 }

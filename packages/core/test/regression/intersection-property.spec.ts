@@ -1,4 +1,4 @@
-import { expect, inject, test } from "vitest";
+import { expect, test } from "vitest";
 import { isRecord, isUnknownArray } from "../narrow";
 import { struct, type AnyStruct } from "../../src/struct";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
@@ -42,7 +42,7 @@ function pair(
     };
   }
   const child = pair(pick, depth - 1, exotic);
-  // ROUND13_EXOTIC=1 adds any/unknown unions and passthrough containers. The regular suite leaves it unset.
+  // `exotic` adds any/unknown unions and passthrough containers. The suite runs without it.
   switch (pick(exotic ? 19 : 15)) {
     case 0:
       return {
@@ -285,9 +285,12 @@ function runAttempts(
   return { failed, passed, rejectedInput };
 }
 
+const seed = 0x13c0ffee;
+const attempts = 1_000;
+const maxDepth = 4;
+
 test("parsed outbound encoding matches encodeJson except literal extras", () => {
-  const { seed, attempts, depth: maxDepth, exotic } = inject("round13");
-  const result = runAttempts(seed, attempts, maxDepth, exotic);
+  const result = runAttempts(seed, attempts, maxDepth);
   const summary = {
     attempts,
     examples: result.failed.slice(0, 5).map((failure) => ({
