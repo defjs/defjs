@@ -2,9 +2,9 @@ import { describe, expect, test } from "vitest";
 import { isStruct } from "./guards";
 import { StructError, struct } from "./index";
 import { parseStructTuple as parse } from "./parse";
-import { assertStruct, resolveObjectShape } from "./shape";
+import { assertStruct } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { RuntimeStruct } from "./types";
+import type { RuntimeStruct } from "./definition";
 
 function runtimeOf(value: unknown): RuntimeStruct {
   assertStruct(value, "struct");
@@ -131,15 +131,6 @@ describe("runtime.ts chain methods", () => {
       firstName: struct.string().alias("name"),
       displayName: struct.string().alias("name"),
     });
-    const runtime = runtimeOf(User);
-    const definition = runtime[DEFINITION];
-
-    if (definition.kind !== "object") {
-      throw new Error("expected object definition");
-    }
-
-    const shape = resolveObjectShape(runtime, definition);
-    expect(resolveObjectShape(runtime, definition)).toBe(shape);
     expect(() => parse(User, {})).toThrow('duplicate wire key "name"');
     expect(() => parse(User, {})).toThrow('duplicate wire key "name"');
   });
@@ -153,6 +144,18 @@ describe("runtime.ts chain methods", () => {
     const fake = { [DEFINITION]: { kind: "object" } };
 
     expect(isStruct(fake)).toBe(false);
+  });
+
+  test("does not accept a definition that is null or of an unknown kind", () => {
+    expect(isStruct({ [DEFINITION]: null })).toBe(false);
+    expect(
+      isStruct({
+        [DEFINITION]: {
+          flags: { nullable: false, optional: false },
+          kind: "not-real",
+        },
+      }),
+    ).toBe(false);
   });
 
   test.each([

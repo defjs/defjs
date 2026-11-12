@@ -2,8 +2,8 @@ import { encodeOutbound, encodeTaggedObject } from "../struct/encode";
 import { isObjectRuntimeStruct } from "../struct/guards";
 import { isGuideSet, readOwnGuide, type Guide } from "../struct/guide";
 import { DEFINITION } from "../struct/symbols";
-import type { ObjectRuntimeStruct } from "../struct/types";
-import { isPlainObject, isPrimitive } from "../struct/utils";
+import type { ObjectRuntimeStruct } from "../struct/definition";
+import { isPlainObject } from "../struct/plain_object";
 import {
   isBlob,
   isFormData,
@@ -322,4 +322,16 @@ function codecBodyOf(
   return codec === undefined
     ? undefined
     : { body: value, codec, struct: guide };
+}
+
+/** A value that is neither null, undefined, an object nor a function. */
+function isPrimitive(
+  value: unknown,
+): value is bigint | boolean | number | string | symbol {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof value !== "object" &&
+    typeof value !== "function"
+  );
 }

@@ -1,5 +1,5 @@
 import { DEFINITION } from "../src/struct/symbols";
-import type { RuntimeStruct } from "../src/struct/types";
+import type { RuntimeStruct } from "../src/struct/definition";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

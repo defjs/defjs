@@ -5,7 +5,7 @@ import { encodeOutbound } from "./encode";
 import type { Guide } from "./guide";
 import { StructError, struct } from "./index";
 import type { AnyStruct, StructLike } from "./types";
-import { isPlainObject } from "./utils";
+import { isPlainObject } from "./plain_object";
 
 function fail(message: string): never {
   throw new Error(message);

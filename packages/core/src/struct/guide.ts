@@ -1,6 +1,6 @@
 import { isStruct } from "./guards";
 import { DEFINITION, STRUCT } from "./symbols";
-import type { RuntimeStruct } from "./types";
+import type { RuntimeStruct } from "./definition";
 
 const GUIDE_SET = Symbol.for("defjs.struct.guideSet");
 

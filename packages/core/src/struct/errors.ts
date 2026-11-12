@@ -1,10 +1,11 @@
+import type { StructDefinition } from "./definition";
+import { DEFINITION } from "./symbols";
 import type {
   FlattenedStructError,
   FormattedStructError,
   Path,
   StructIssue,
 } from "./types";
-import { describeKind, formatPath } from "./utils";
 
 /**
  * Optional callback that rewrites a {@link StructIssue} message before it is stored.
@@ -150,4 +151,104 @@ export function issue(
     path,
     received,
   };
+}
+
+export function formatPath(path: Path): string {
+  if (path.length === 0) {
+    return "<root>";
+  }
+
+  let output = "";
+  for (const item of path) {
+    if (typeof item === "number") {
+      output += `[${item}]`;
+      continue;
+    }
+
+    output += output ? `.${item}` : item;
+  }
+  return output;
+}
+
+/**
+ * Kind of a received value, safe to put in a log line.
+ *
+ * Names the kind and never the value. `File` is checked before `Blob` because a file is a blob.
+ */
+export function describeKind(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+
+  if (Array.isArray(value)) {
+    return "array";
+  }
+
+  if (typeof value !== "object") {
+    return typeof value;
+  }
+
+  if (value instanceof File) {
+    return "File";
+  }
+
+  if (value instanceof Blob) {
+    return "Blob";
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return "ArrayBuffer";
+  }
+
+  if (value instanceof Date) {
+    return "Date";
+  }
+
+  return "object";
+}
+
+export function describeValue(value: unknown): string {
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
+
+export function expectedType(definition: StructDefinition): string {
+  switch (definition.kind) {
+    case "any":
+      return "any";
+
+    case "array":
+      return `array<${expectedType(definition.item[DEFINITION])}>`;
+
+    case "arrayBuffer":
+      return "ArrayBuffer";
+
+    case "blob":
+      return "Blob";
+
+    case "object":
+      return "object";
+
+    case "record":
+      return `record<${expectedType(definition.value[DEFINITION])}>`;
+
+    case "tuple":
+      return "tuple";
+
+    case "unknown":
+      return "unknown";
+
+    case "bigint":
+    case "boolean":
+    case "date":
+    case "discriminatedUnion":
+    case "enum":
+    case "file":
+    case "intersection":
+    case "literal":
+    case "null":
+    case "number":
+    case "or":
+    case "string":
+      return definition.expected;
+  }
 }

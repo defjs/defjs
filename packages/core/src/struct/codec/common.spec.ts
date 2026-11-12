@@ -1,11 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { encodeValue } from "./common";
+import { encodeObjectByAlias, encodeValue } from "./common";
 import { struct } from "../index";
 import { parseStructTuple as parse } from "../parse";
 import { matchesRuntimeValue } from "../match";
 import { assertStruct } from "../shape";
-import type { RuntimeStruct } from "../types";
-import { isPlainObject } from "../utils";
+import type { RuntimeStruct } from "../definition";
+import { isPlainObject } from "../plain_object";
 
 function encode(struct: unknown, value: unknown): unknown {
   assertStruct(struct, "struct");
@@ -452,5 +452,20 @@ describe("struct-walking encoder", () => {
   test("struct.enum in or falls through when value does not match", () => {
     const s = struct.or(struct.enum(["a", "b"]), struct.number());
     expect(encode(s, "c")).toBe("c");
+  });
+
+  test("a value of another kind passes through an array or tuple struct", () => {
+    expect(encode(struct.array(struct.string()), "not-array")).toBe(
+      "not-array",
+    );
+    expect(encode(struct.tuple([struct.string()]), "not-tuple")).toBe(
+      "not-tuple",
+    );
+  });
+
+  test("encodeObjectByAlias labels its object error json by default", () => {
+    expect(() =>
+      encodeObjectByAlias(struct.object({ name: struct.string() }), "bad"),
+    ).toThrow("json encode expects object value");
   });
 });

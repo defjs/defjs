@@ -3,7 +3,7 @@ import type {
   ObjectRuntimeStruct,
   RuntimeStruct,
   StructDefinition,
-} from "./types";
+} from "./definition";
 
 const KNOWN_KINDS: ReadonlySet<unknown> = new Set(
   Object.keys({

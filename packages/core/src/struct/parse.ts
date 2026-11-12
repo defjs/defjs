@@ -1,5 +1,20 @@
-import { issue, StructError, type ErrorMap } from "./errors";
-import { resolveStructFields, type ResolvedStructField } from "./fields";
+import {
+  MAX_DEPTH,
+  type ArrayDefinition,
+  type DiscriminatedUnionDefinition,
+  type EnumDefinition,
+  type IntersectionDefinition,
+  type LiteralDefinition,
+  type ObjectDefinition,
+  type PrimitiveDefinition,
+  type PrimitiveKind,
+  type RecordDefinition,
+  type ResolvedStructField,
+  type RuntimeStruct,
+  type TupleDefinition,
+  type UnionDefinition,
+} from "./definition";
+import { expectedType, issue, StructError, type ErrorMap } from "./errors";
 import {
   guideMembers,
   guideTag,
@@ -7,39 +22,23 @@ import {
   tagOwnNode,
   type Guide,
 } from "./guide";
-import { assertStruct } from "./shape";
+import {
+  isIntersectionIdentity,
+  mergeIntersectionValues,
+} from "./intersection";
+import { matchesEnum } from "./match";
+import { isPlainObject, nullObject } from "./plain_object";
+import { assertStruct, resolveStructFields } from "./shape";
 import { DEFINITION, FAILED, OMIT } from "./symbols";
 import type {
-  ArrayDefinition,
-  DiscriminatedUnionDefinition,
-  EnumDefinition,
-  IntersectionDefinition,
-  LiteralDefinition,
   LiteralValue,
-  ObjectDefinition,
   ParsedStructOutput,
   ParseMode,
   ParseResult,
   Path,
-  PrimitiveDefinition,
-  PrimitiveKind,
-  RecordDefinition,
-  RuntimeStruct,
   StructIssue,
   StructLike,
-  TupleDefinition,
-  UnionDefinition,
 } from "./types";
-import {
-  expectedType,
-  hasOwnKey,
-  isIntersectionIdentity,
-  isPlainObject,
-  matchesEnum,
-  MAX_DEPTH,
-  mergeIntersectionValues,
-  nullObject,
-} from "./utils";
 
 // Every parser below returns the parsed value itself, or FAILED after `reject()` put the issue in the parse state. A
 // value that parses costs no result object, and FAILED cannot be mistaken for one: it is private, so any other symbol
@@ -420,7 +419,7 @@ function parseObjectValue(
   const aliases = state.aliases;
   const context = state.context;
   const output: { [key: string]: unknown } = target ?? nullObject();
-  const fields = resolveStructFields(struct, definition);
+  const fields = resolveStructFields(definition);
   for (let index = 0; index < fields.length; index += 1) {
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: `index < fields.length` bounds this read. `for (const field of fields)` over the frozen cached field list made struct.parse 2.066-2.096x slower for an 8-field object and 2.123-2.225x for 6 nested objects (Bun 1.4.4, two copies of each variant, 3 runs x 15 interleaved rounds x 2e5/1.5e5 parses, medians; the two indexed copies differed by at most 1.057x)
     const field = fields[index] as ResolvedStructField;
@@ -428,7 +427,7 @@ function parseObjectValue(
     const inputValue =
       cachedKey === inputKey
         ? cachedValue
-        : hasOwnKey(input, inputKey)
+        : Object.hasOwn(input, inputKey)
           ? input[inputKey]
           : undefined;
     path.push(field.key);
@@ -439,11 +438,10 @@ function parseObjectValue(
     path.pop();
     if (value !== OMIT) {
       // A shared intersection target already has this logical key. Merge it; do not let the later side win.
-      if (target !== undefined && hasOwnKey(output, field.key)) {
+      if (target !== undefined && Object.hasOwn(output, field.key)) {
         const merged = mergeIntersectionValues(
           output[field.key],
           value,
-          context !== undefined,
           path.length + 1,
           context,
         );
@@ -592,7 +590,7 @@ function parseDiscriminatedUnionValue(
   const aliases = state.aliases;
   const key = aliases
     ? firstOwnKey(input, definition.discriminatorWireKeys)
-    : hasOwnKey(input, definition.discriminator)
+    : Object.hasOwn(input, definition.discriminator)
       ? definition.discriminator
       : undefined;
   const tag = key === undefined ? undefined : input[key];
@@ -626,7 +624,7 @@ function firstOwnKey(
   keys: readonly string[],
 ): string | undefined {
   for (const key of keys) {
-    if (hasOwnKey(input, key)) {
+    if (Object.hasOwn(input, key)) {
       return key;
     }
   }
@@ -694,7 +692,6 @@ function parseIntersectionValue(
     const mergedValue = mergeIntersectionValues(
       merged,
       contributed[index],
-      context !== undefined,
       state.path.length,
       context,
     );

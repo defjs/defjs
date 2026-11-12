@@ -1,16 +1,20 @@
+import {
+  MAX_DEPTH,
+  type EnumDefinition,
+  type ObjectDefinition,
+  type RuntimeStruct,
+} from "./definition";
+import { isPlainObject } from "./plain_object";
 import { resolveObjectShapeEntries } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { ObjectDefinition, RuntimeStruct } from "./types";
-import { hasOwnKey, isPlainObject, matchesEnum, MAX_DEPTH } from "./utils";
 
 export function selectUnionOptions(
   options: readonly RuntimeStruct[],
   value: unknown,
-  depth = 0,
 ): RuntimeStruct[] {
   const matches: RuntimeStruct[] = [];
   for (const option of options) {
-    if (matchesRuntimeValue(option, value, depth)) {
+    if (matchesRuntimeValue(option, value)) {
       matches.push(option);
     }
   }
@@ -74,7 +78,7 @@ export function matchesRuntimeValue(
       return (
         depth < MAX_DEPTH &&
         isPlainObject(value) &&
-        matchesObjectValue(struct, definition, value, depth)
+        matchesObjectValue(definition, value, depth)
       );
     case "record":
       return (
@@ -91,7 +95,7 @@ export function matchesRuntimeValue(
     case "discriminatedUnion": {
       if (
         !isPlainObject(value) ||
-        !hasOwnKey(value, definition.discriminator)
+        !Object.hasOwn(value, definition.discriminator)
       ) {
         return false;
       }
@@ -106,13 +110,12 @@ export function matchesRuntimeValue(
 }
 
 function matchesObjectValue(
-  struct: RuntimeStruct,
   definition: ObjectDefinition,
   value: { [key: string]: unknown },
   depth: number,
 ): boolean {
-  for (const [key, field] of resolveObjectShapeEntries(struct, definition)) {
-    if (!hasOwnKey(value, key)) {
+  for (const [key, field] of resolveObjectShapeEntries(definition)) {
+    if (!Object.hasOwn(value, key)) {
       if (!field[DEFINITION].flags.optional) {
         return false;
       }
@@ -125,4 +128,20 @@ function matchesObjectValue(
   }
 
   return true;
+}
+
+export function matchesEnum(
+  definition: EnumDefinition<string | number>,
+  value: unknown,
+): boolean {
+  // One-shot schemas avoid allocating a Set. A second lookup pays for the reusable index.
+  if (definition.valueSet === undefined) {
+    definition.valueSet = null;
+    const values: readonly unknown[] = definition.values;
+    return values.includes(value);
+  }
+  const valueSet: ReadonlySet<unknown> = (definition.valueSet ??= new Set(
+    definition.values,
+  ));
+  return valueSet.has(value);
 }

@@ -1,13 +1,12 @@
 import { DEFINITION } from "./symbols";
 import type { FAILED } from "./symbols";
+import type { Struct, StructLike } from "./types";
 import type {
   PrimitiveKind,
   RuntimeStruct,
-  Struct,
   StructDefinition,
   StructFlags,
-  StructLike,
-} from "./types";
+} from "./definition";
 
 export interface PrimitiveDefinitionInput<
   K extends PrimitiveKind,

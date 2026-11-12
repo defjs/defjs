@@ -5,8 +5,8 @@ import type { StructLike } from "./index";
 import { parseStructTuple as parse } from "./parse";
 import { selectUnionOptions } from "./match";
 import { assertStruct } from "./shape";
-import type { RuntimeStruct } from "./types";
-import { isPlainObject } from "./utils";
+import type { RuntimeStruct } from "./definition";
+import { isPlainObject } from "./plain_object";
 
 function runtime(value: unknown): RuntimeStruct {
   assertStruct(value, "struct");

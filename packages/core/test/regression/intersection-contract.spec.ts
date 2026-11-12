@@ -13,8 +13,8 @@ import { encodeOutbound } from "../../src/struct/encode";
 import { encodeJson } from "../../src/struct/codec/json";
 import { guideMembers, readOwnGuide } from "../../src/struct/guide";
 import { assertObject, isRecord } from "../narrow";
-import type { RuntimeStruct } from "../../src/struct/types";
-import { mergeIntersectionValues } from "../../src/struct/utils";
+import type { RuntimeStruct } from "../../src/struct/definition";
+import { mergeIntersectionValues } from "../../src/struct/intersection";
 import { serializeOutgoingWebSocketMessage } from "../../src/web_socket/codec";
 
 const A = struct.object({ name: struct.string().alias("a_name") });
@@ -418,8 +418,8 @@ test("merging two untagged objects does not invent a parse tag", () => {
   const merged = mergeIntersectionValues(
     { left: 1, shared: { n: 1 } },
     { right: 2, shared: { extra: true, n: 1 } },
-    true,
     0,
+    { guides: new WeakMap(), owned: new WeakSet() },
   );
   expect(merged.ok).toBe(true);
   if (!merged.ok) {

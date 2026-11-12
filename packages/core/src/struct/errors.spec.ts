@@ -206,6 +206,28 @@ describe("StructError format / flatten / prettify", () => {
     );
   });
 
+  test("format nests an issue under the node an earlier issue created", () => {
+    const issue = (message: string, path: string[]) => ({
+      code: "custom" as const,
+      expected: "valid value",
+      message,
+      path,
+      received: undefined,
+    });
+    const error = new StructError([
+      issue("profile failed", ["profile"]),
+      issue("name failed", ["profile", "name"]),
+    ]);
+
+    expect(error.format()).toEqual({
+      _errors: [],
+      profile: {
+        _errors: ["profile failed"],
+        name: { _errors: ["name failed"] },
+      },
+    });
+  });
+
   test("prettify on empty issues falls back to a sane string", () => {
     const error = new StructError([]);
     expect(error.prettify()).toBe("Struct parse failed");

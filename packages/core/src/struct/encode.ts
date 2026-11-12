@@ -1,4 +1,10 @@
-import { resolveStructFields, type ResolvedStructField } from "./fields";
+import type {
+  IntersectionDefinition,
+  ObjectDefinition,
+  ObjectRuntimeStruct,
+  ResolvedStructField,
+  RuntimeStruct,
+} from "./definition";
 import {
   guideMembers,
   guideTag,
@@ -6,24 +12,17 @@ import {
   readOwnGuide,
   type Guide,
 } from "./guide";
-import { selectUnionOptions } from "./match";
-import { DEFINITION } from "./symbols";
-import type {
-  IntersectionDefinition,
-  ObjectDefinition,
-  ObjectRuntimeStruct,
-  Path,
-  RuntimeStruct,
-} from "./types";
 import {
   intersectionEncodeError,
   isIntersectionIdentity,
-  isPlainObject,
   mergeIntersectionValues,
   mergePlainObjects,
-  nullObject,
-  sameWireValue,
-} from "./utils";
+} from "./intersection";
+import { selectUnionOptions } from "./match";
+import { isPlainObject, nullObject } from "./plain_object";
+import { resolveStructFields } from "./shape";
+import { DEFINITION } from "./symbols";
+import type { Path } from "./types";
 
 // One encoder for HTTP, SSE and WebSocket. It walks the value, not a struct: what a struct knows about a node
 // arrives as the tag the parser left on it, or as the guide a parent passes down for a fresh value in its place.
@@ -72,12 +71,7 @@ export function encodeTaggedObject(
   struct: ObjectRuntimeStruct,
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
-  return encodeSingleObject(
-    { guides, path: [] },
-    value,
-    struct,
-    struct[DEFINITION],
-  );
+  return encodeSingleObject({ guides, path: [] }, value, struct[DEFINITION]);
 }
 
 function encodeGuided(
@@ -172,7 +166,7 @@ function encodeOwnGuide(
   }
   const definition = guide[DEFINITION];
   return definition.kind === "object"
-    ? encodeSingleObject(context, value, guide, definition)
+    ? encodeSingleObject(context, value, definition)
     : encodeObjectNode(context, value, [guide]);
 }
 
@@ -315,10 +309,9 @@ function keySetsOf(fields: readonly ResolvedStructField[]): ObjectKeySets {
 function encodeSingleObject(
   context: EncodeContext,
   value: { [key: string]: unknown },
-  struct: RuntimeStruct,
   definition: ObjectDefinition,
 ): { [key: string]: unknown } {
-  const fields = resolveStructFields(struct, definition);
+  const fields = resolveStructFields(definition);
   const output = nullObject();
   const path = context.path;
   for (let index = 0; index < fields.length; index += 1) {
@@ -375,7 +368,7 @@ function encodeObjectNode(
   const sole = members.length === 1 ? members[0] : undefined;
   const soleDefinition = sole?.[DEFINITION];
   if (sole !== undefined && soleDefinition?.kind === "object") {
-    return encodeSingleObject(context, value, sole, soleDefinition);
+    return encodeSingleObject(context, value, soleDefinition);
   }
 
   const output = nullObject();
@@ -390,7 +383,7 @@ function encodeObjectNode(
   for (const member of members) {
     const definition = member[DEFINITION];
     if (definition.kind === "object") {
-      const fields = resolveStructFields(member, definition);
+      const fields = resolveStructFields(definition);
       for (let index = 0; index < fields.length; index += 1) {
         // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: `index < fields.length` bounds this read. `for (const field of fields)` over the frozen cached field list made encodeOutbound of an object intersection 2.013x slower for 2 members and 1.792x for 16 (Bun 1.4.4, 5 process rounds per variant, interleaved, 61 batches each, medians)
         const field = fields[index] as ResolvedStructField;
@@ -453,7 +446,7 @@ function mergePassthrough(
   const passed = readOwnGuide(value, context.guides)
     ? value
     : encodeAnonymousObject(context, value);
-  const result = mergePlainObjects(output, passed, false, context.path.length);
+  const result = mergePlainObjects(output, passed, context.path.length);
   if (!result.ok) {
     throw intersectionEncodeError([...context.path, ...result.path]);
   }
@@ -536,12 +529,7 @@ export function writeWire(
     output[wireKey] = encoded;
     return;
   }
-  const merged = mergeIntersectionValues(
-    output[wireKey],
-    encoded,
-    false,
-    depth,
-  );
+  const merged = mergeIntersectionValues(output[wireKey], encoded, depth);
   if (!merged.ok) {
     throw intersectionEncodeError([wireKey, ...merged.path]);
   }
@@ -607,7 +595,6 @@ function encodeArrayMembers(
       const merged = mergeIntersectionValues(
         encoded,
         encodeGuided(context, entry, guide),
-        false,
         path.length,
       );
       if (!merged.ok) {
@@ -635,7 +622,7 @@ function encodeGuidedObject(
       : guide;
   const structDefinition = struct?.[DEFINITION];
   return struct !== undefined && structDefinition?.kind === "object"
-    ? encodeSingleObject(context, value, struct, structDefinition)
+    ? encodeSingleObject(context, value, structDefinition)
     : encodeAnonymousObject(context, value);
 }
 
@@ -709,4 +696,37 @@ function encodeAnonymousObject(
     path.pop();
   }
   return output;
+}
+
+/**
+ * Structural equality for encoded wire values.
+ *
+ * Leaves use `Object.is`, so infinities and signed zeroes stay distinct. Plain objects ignore key
+ * order. Arrays compare element by element. This never calls a user serializer.
+ */
+export function sameWireValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((item, index) => sameWireValue(item, right[index]))
+    );
+  }
+  if (!isPlainObject(left) || !isPlainObject(right)) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) =>
+        Object.hasOwn(right, key) && sameWireValue(left[key], right[key]),
+    )
+  );
 }

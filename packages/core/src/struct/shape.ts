@@ -1,63 +1,69 @@
-import { isStruct } from "./guards";
 import type {
   ObjectDefinition,
-  ObjectShape,
+  ResolvedStructField,
   RuntimeStruct,
-  RuntimeObjectShape,
-} from "./types";
+} from "./definition";
+import { isStruct } from "./guards";
+import { DEFINITION } from "./symbols";
 
-export function resolveObjectShape(
-  _struct: RuntimeStruct,
+/** The fields as `[key, struct]` pairs in key order. Getters run once, on the first call for this object struct. */
+export function resolveObjectShapeEntries(
   definition: ObjectDefinition,
-): RuntimeObjectShape {
-  const cached = definition.cache.resolvedShape;
+): readonly (readonly [key: string, struct: RuntimeStruct])[] {
+  const cached = definition.cache.entries;
   if (cached) {
     return cached;
   }
 
-  const shape = readObjectShape(
-    definition.shape,
+  const entries: (readonly [key: string, struct: RuntimeStruct])[] = [];
+  for (const [key, descriptor] of Object.entries(
     definition.cache.declaredDescriptors,
-  );
-  assertShapeFields(shape);
-
-  definition.cache.resolvedShape = shape;
-  return shape;
-}
-
-/** The resolved shape as `[key, struct]` pairs in key order, built once per object struct. */
-export function resolveObjectShapeEntries(
-  struct: RuntimeStruct,
-  definition: ObjectDefinition,
-): readonly (readonly [key: string, struct: RuntimeStruct])[] {
-  return (definition.cache.shapeEntries ??= Object.entries(
-    resolveObjectShape(struct, definition),
-  ));
-}
-
-function assertShapeFields(shape: {
-  [key: string]: unknown;
-}): asserts shape is RuntimeObjectShape {
-  for (const [key, value] of Object.entries(shape)) {
-    assertStruct(value, `object field "${key}"`);
-  }
-}
-
-export function readObjectShape(
-  shape: ObjectShape,
-  descriptors: PropertyDescriptorMap,
-): { [key: string]: unknown } {
-  const output: { [key: string]: unknown } = { __proto__: null };
-
-  for (const [key, descriptor] of Object.entries(descriptors)) {
+  )) {
     const value: unknown =
       typeof descriptor.get === "function"
-        ? descriptor.get.call(shape)
+        ? descriptor.get.call(definition.shape)
         : descriptor.value;
-    output[key] = value;
+    assertStruct(value, `object field "${key}"`);
+    entries.push([key, value]);
+  }
+  definition.cache.entries = entries;
+  return entries;
+}
+
+export function resolveStructFields(
+  definition: ObjectDefinition,
+): readonly ResolvedStructField[] {
+  const cached = definition.cache.fields;
+  if (cached) {
+    return cached;
   }
 
-  return output;
+  const fields = Object.freeze(
+    resolveObjectShapeEntries(definition).map(([key, struct]) =>
+      Object.freeze({
+        key,
+        struct,
+        wireKey: struct[DEFINITION].alias ?? key,
+      }),
+    ),
+  );
+
+  assertUniqueWireKeys(fields);
+  definition.cache.fields = fields;
+  return fields;
+}
+
+function assertUniqueWireKeys(fields: readonly ResolvedStructField[]): void {
+  const seen = new Map<string, string>();
+  for (const field of fields) {
+    if (seen.has(field.wireKey)) {
+      const previous = seen.get(field.wireKey);
+      throw new TypeError(
+        `duplicate wire key "${field.wireKey}" for object fields "${previous}" and "${field.key}"`,
+      );
+    }
+    seen.set(field.wireKey, field.key);
+  }
 }
 
 export function assertStruct(

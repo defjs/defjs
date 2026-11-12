@@ -13,13 +13,10 @@ import type {
   IntersectionStruct,
   LiteralValue,
   NumberStruct,
-  ObjectDefinition,
-  ObjectRuntimeStruct,
   ObjectStruct,
   ObjectShape,
   PresentValue,
   RecordStruct,
-  RuntimeStruct,
   Struct,
   StructLike,
   StringStruct,
@@ -27,7 +24,13 @@ import type {
   UnionStruct,
   UnknownStruct,
 } from "./types";
-import { describeValue, expectedType, isPlainObject } from "./utils";
+import type {
+  ObjectDefinition,
+  ObjectRuntimeStruct,
+  RuntimeStruct,
+} from "./definition";
+import { describeValue, expectedType } from "./errors";
+import { isPlainObject } from "./plain_object";
 
 /**
  * Struct that accepts string values.
