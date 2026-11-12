@@ -92,23 +92,20 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
   }
   const child: Balancer = {
     pick(info) {
-      if (info.endpoints.length === 0) return [ERR_NO_CANDIDATE, undefined];
-      const members = Math.max(
-        info.members?.length ?? 0,
-        info.endpoints.length,
-      );
+      const members = (info.members ?? info.endpoints).length;
       const remaining = info.endpoints.slice();
       const now = monotonicNow();
       let chosen:
         { endpoint: string; state: LoadState; cost: number } | undefined;
-      const count = Math.min(choiceCount, remaining.length);
-      for (let i = 0; i < count; i += 1) {
+      for (let draws = 0; draws < choiceCount; draws += 1) {
         const index =
-          remaining.length === 1
+          remaining.length <= 1
             ? 0
             : Math.floor(Math.random() * remaining.length);
-        const endpoint = remaining.splice(index, 1)[0];
-        if (endpoint === undefined) continue;
+        const endpoint = remaining[index];
+        // Fewer candidates than choices: every one of them has been drawn.
+        if (endpoint === undefined) break;
+        remaining.splice(index, 1);
         const state = stateFor(endpoint, now, members);
         const value = cost(state, now);
         if (chosen === undefined || value < chosen.cost)

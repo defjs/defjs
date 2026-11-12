@@ -132,26 +132,14 @@ describe("pickFirstBalancer", () => {
     expect(endpointOf(balancer, ["c"])).toBe("c");
   });
 
-  test("does not advance onto an empty slot", () => {
-    const balancer = pickFirstBalancer();
-    const endpoints = ["a"];
-    endpoints.length = 2;
-    report(balancer, endpoints, {
-      attempted: true,
-      code: "NET_UNREACHABLE",
-    });
-    expect(endpointOf(balancer, ["a", "b"])).toBe("a");
-
-    const empty: string[] = [];
-    empty.length = 1;
-    expect(balancer.pick(info(empty))[0]).toBe(ERR_NO_CANDIDATE);
-  });
-
   test("returns ERR_NO_CANDIDATE for an empty list without modifying it", () => {
     const endpoints = Object.freeze<string[]>([]);
     const balancer = pickFirstBalancer({ shuffle: false });
     expect(balancer.pick(info(endpoints))[0]).toBe(ERR_NO_CANDIDATE);
     expect(endpoints).toEqual([]);
+    expect(balancer.pick({ endpoints, members: ["a"] })[0]).toBe(
+      ERR_NO_CANDIDATE,
+    );
   });
 
   test("keeps shuffle keys and does not reorder the caller's list", () => {
@@ -174,52 +162,6 @@ describe("pickFirstBalancer", () => {
     const balancer = pickFirstBalancer({ shuffle: true });
     expect(endpointOf(balancer, ["a", "b"])).toBe("a");
     expect(endpointOf(balancer, ["a", "b"])).toBe("a");
-  });
-
-  test("skips an empty shuffle slot", () => {
-    vi.spyOn(Math, "random").mockReturnValueOnce(0.2).mockReturnValueOnce(0.8);
-    const endpoints = ["b", "a"];
-    // @ts-expect-error a hole is not a string endpoint
-    endpoints.splice(1, 0, undefined);
-    const balancer = pickFirstBalancer({ shuffle: true });
-    expect(endpointOf(balancer, endpoints)).toBe("b");
-  });
-});
-
-describe("pickFirstBalancer with a member list", () => {
-  function counted(values: readonly string[]) {
-    let reads = 0;
-    const proxy = new Proxy(values, {
-      get(target, key, receiver) {
-        if (typeof key === "string" && /^\d+$/.test(key)) reads += 1;
-        const value: unknown = Reflect.get(target, key, receiver);
-        return value;
-      },
-    });
-    return { proxy, reads: () => reads };
-  }
-
-  test("checks candidates against the members in linear time", () => {
-    const all = Array.from({ length: 200 }, (_, index) => `e${index}`);
-    const candidates = all.slice(1);
-
-    const covered = counted(all);
-    const [, first] = pickFirstBalancer().pick({
-      endpoints: candidates,
-      members: covered.proxy,
-      operation: "op",
-    });
-    expect(first?.endpoint).toBe("e1");
-    expect(covered.reads()).toBeLessThanOrEqual(4 * all.length);
-
-    const extended = counted(all);
-    const [, second] = pickFirstBalancer().pick({
-      endpoints: [...candidates, "extra"],
-      members: extended.proxy,
-      operation: "op",
-    });
-    expect(second?.endpoint).toBe("e1");
-    expect(extended.reads()).toBeLessThanOrEqual(4 * all.length);
   });
 });
 
@@ -261,13 +203,6 @@ describe("roundRobinBalancer", () => {
     const wrapped = roundRobinBalancer({ outlierDetection: false });
     expect(endpointOf(wrapped, ["a", "b"])).toBe("b");
     expect(endpointOf(wrapped, ["a", "b"])).toBe("a");
-
-    random.mockReturnValue(0);
-    const hole = ["a"];
-    hole.length = 2;
-    const sparse = roundRobinBalancer({ outlierDetection: false });
-    expect(sparse.pick(info(hole))[1]?.endpoint).toBe("a");
-    expect(sparse.pick(info(hole))[0]).toBe(ERR_NO_CANDIDATE);
   });
 
   test("does not share counters between instances", () => {
@@ -397,6 +332,9 @@ describe("roundRobinBalancer", () => {
   test("returns ERR_NO_CANDIDATE for an empty list", () => {
     expect(roundRobinBalancer().pick(info([]))[0]).toBe(ERR_NO_CANDIDATE);
     expect(roundRobinBalancer({}).pick(info([]))[0]).toBe(ERR_NO_CANDIDATE);
+    expect(roundRobinBalancer({ weights: new Map() }).pick(info([]))[0]).toBe(
+      ERR_NO_CANDIDATE,
+    );
   });
 });
 

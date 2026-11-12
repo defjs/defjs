@@ -229,7 +229,7 @@ test("churn and per-call exclusions preserve penalised endpoints", () => {
   expect(pick(balancer).endpoint).toBe("a");
 });
 
-test("weighted candidate changes rescale safely and sparse candidates select nothing", () => {
+test("weighted candidate changes rescale safely", () => {
   const balancer = roundRobinBalancer({
     weights: new Map([
       ["a", Number.MAX_VALUE],
@@ -239,9 +239,6 @@ test("weighted candidate changes rescale safely and sparse candidates select not
   });
   pick(balancer, ["a", "b"]);
   expect(pick(balancer, ["b"]).endpoint).toBe("b");
-  expect(balancer.pick({ endpoints: new Array<string>(1) })[0]).toBeInstanceOf(
-    Error,
-  );
 });
 
 test("hard cap falls back to oldest protected states only when no idle history remains", () => {

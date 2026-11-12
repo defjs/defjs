@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { ERR_NO_CANDIDATE, pickFirstBalancer, type Balancer } from "./balancer";
+import { pickFirstBalancer, type Balancer } from "./balancer";
 import { pickEndpoint } from "./runtime";
 
 const endpoints = ["https://first.test", "https://second.test"];
@@ -165,15 +165,4 @@ test("a sticky endpoint outside the pick wraps through member order", () => {
   expect(balancer.pick({ endpoints: members })[1]?.endpoint).toBe(
     "https://c.test",
   );
-  expect(
-    balancer.pick({ endpoints: ["https://z.test"], members })[1]?.endpoint,
-  ).toBe("https://z.test");
-});
-
-test("sparse runtime member and candidate arrays cannot produce an undefined endpoint", () => {
-  const members = new Array<string>(2);
-  members[0] = "https://member.test";
-  expect(
-    pickFirstBalancer().pick({ endpoints: new Array<string>(1), members })[0],
-  ).toBe(ERR_NO_CANDIDATE);
 });

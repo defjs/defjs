@@ -1,7 +1,6 @@
 import { rememberEndpoint } from "./retention";
 import { monotonicNow } from "./clock";
 import type { Balancer, DoneInfo } from "./balancer";
-import { memberList } from "./balancer";
 
 /**
  * Failure counting that ejects an endpoint for a while, and an optional
@@ -164,7 +163,7 @@ export function outlierDetection(
   return {
     pick(info) {
       const now = monotonicNow();
-      const members = memberList(info.members, info.endpoints);
+      const members = info.members ?? info.endpoints;
       const available = info.endpoints.filter((endpoint) => {
         const state = states.get(endpoint);
         if (state === undefined) return true;

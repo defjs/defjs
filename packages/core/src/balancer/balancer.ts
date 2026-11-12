@@ -266,14 +266,7 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   const child: Balancer = {
     pick(info) {
       const candidates = info.endpoints;
-      if (candidates.length === 0) {
-        return [ERR_NO_CANDIDATE, undefined];
-      }
-      const order = candidateOrder(
-        memberList(info.members, candidates),
-        shuffle,
-        keys,
-      );
+      const order = candidateOrder(info.members ?? candidates, shuffle, keys);
       const first = order[0];
       if (first === undefined) {
         return [ERR_NO_CANDIDATE, undefined];
@@ -301,11 +294,9 @@ export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
           done(report) {
             if (!advancesSticky(report) || sticky !== chosen) return;
             const next = order[(order.indexOf(chosen) + 1) % order.length];
-            if (next !== undefined) {
-              if (chosen === first && next !== first)
-                leftFirstAt = monotonicNow();
-              sticky = next;
-            }
+            if (chosen === first && next !== first)
+              leftFirstAt = monotonicNow();
+            sticky = next;
           },
         },
       ];
@@ -332,20 +323,6 @@ function nextCandidate(
   );
 }
 
-/**
- * Members in their own order, plus any candidate a caller left out of them, so
- * every candidate stays selectable.
- */
-export function memberList(
-  members: readonly string[] | undefined,
-  candidates: readonly string[],
-): readonly string[] {
-  if (members === undefined || members === candidates) return candidates;
-  const known = new Set(members);
-  const missing = candidates.filter((endpoint) => !known.has(endpoint));
-  return missing.length === 0 ? members : [...members, ...missing];
-}
-
 function candidateOrder(
   endpoints: readonly string[],
   shuffle: boolean,
@@ -355,17 +332,10 @@ function candidateOrder(
     return endpoints.slice();
   }
   const ranked: { endpoint: string; index: number; key: number }[] = [];
-  for (let index = 0; index < endpoints.length; index += 1) {
-    const endpoint = endpoints[index];
-    if (endpoint === undefined) {
-      continue;
-    }
-    let key = keys.get(endpoint);
-    if (key === undefined) {
-      key = Math.random();
-    }
+  for (const endpoint of endpoints) {
+    const key = keys.get(endpoint) ?? Math.random();
     rememberEndpoint(keys, endpoint, key, () => 0, endpoints.length);
-    ranked.push({ endpoint, index, key });
+    ranked.push({ endpoint, index: ranked.length, key });
   }
   ranked.sort(
     (left, right) => left.key - right.key || left.index - right.index,
@@ -429,18 +399,15 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
   const child: Balancer = {
     pick(info) {
       const endpoints = info.endpoints;
-      if (endpoints.length === 0) {
-        return [ERR_NO_CANDIDATE, undefined];
-      }
       if (weights === undefined) {
         const endpoint = endpoints[counter % endpoints.length];
-        counter = (counter + 1) >>> 0;
         if (endpoint === undefined) {
           return [ERR_NO_CANDIDATE, undefined];
         }
+        counter = (counter + 1) >>> 0;
         return [null, { endpoint }];
       }
-      const members = memberList(info.members, endpoints);
+      const members = info.members ?? endpoints;
       const narrowed = members === endpoints ? undefined : new Set(endpoints);
       let scale = 0;
       for (const endpoint of members)
@@ -467,9 +434,9 @@ export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
           bestValue = value;
         }
       }
+      if (best === undefined) return [ERR_NO_CANDIDATE, undefined];
       current = next;
       previousScale = scale;
-      if (best === undefined) return [ERR_NO_CANDIDATE, undefined];
       current.set(best, bestValue - total);
       return [null, { endpoint: best }];
     },

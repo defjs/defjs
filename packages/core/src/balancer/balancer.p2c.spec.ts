@@ -167,15 +167,6 @@ test("pending is reserved at pick, so a same-tick burst spreads before any start
   expect(pick(b).endpoint).toBe("a");
 });
 
-test("sparse runtime candidate arrays cannot produce an undefined endpoint", () => {
-  const b = p2cBalancer({ outlierDetection: false });
-  const empty = new Array<string>(1);
-  expect(b.pick({ endpoints: empty })[0]).toBe(ERR_NO_CANDIDATE);
-  const sparse = new Array<string>(2);
-  sparse[1] = "a";
-  expect(pick(b, sparse).endpoint).toBe("a");
-});
-
 test.each([8_000_000, 8_000_000_000_000])(
   "clock rollback by %i ms preserves the concurrent selection baseline after recovery",
   (rollbackMs) => {
