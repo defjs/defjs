@@ -229,7 +229,7 @@ test("churn and per-call exclusions preserve penalised endpoints", () => {
   expect(pick(balancer).endpoint).toBe("a");
 });
 
-test("weighted candidate changes rescale safely", () => {
+test("extreme weights still select the only candidate after the list changes", () => {
   const balancer = roundRobinBalancer({
     weights: new Map([
       ["a", Number.MAX_VALUE],

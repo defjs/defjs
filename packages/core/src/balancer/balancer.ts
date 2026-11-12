@@ -415,31 +415,32 @@ function smoothWeightedRoundRobin(
   configured: ReadonlyMap<string, number>,
 ): Balancer {
   const weights = new Map(configured);
+  let heaviest = 1;
+  for (const weight of weights.values()) heaviest = Math.max(heaviest, weight);
+  // Scaled once so that sums cannot overflow. A power of two preserves the
+  // ordinary smooth-RR sequence without rounding its weights.
+  const scale = 2 ** Math.min(1023, Math.floor(Math.log2(heaviest)));
+  for (const [endpoint, weight] of weights)
+    weights.set(endpoint, weight / scale);
+  const unlisted = 1 / scale;
   let current = new Map<string, number>();
-  let previousScale = 1;
   return {
     pick(info) {
       const endpoints = info.endpoints;
       const members = info.members ?? endpoints;
       const narrowed = members === endpoints ? undefined : new Set(endpoints);
-      let scale = 0;
-      for (const endpoint of members)
-        scale = Math.max(scale, weights.get(endpoint) ?? 1);
-      // Powers of two preserve the ordinary smooth-RR sequence without rounding its weights.
-      scale = 2 ** Math.min(1023, Math.floor(Math.log2(scale)));
       const next = new Map<string, number>();
       let best: string | undefined;
       let bestValue = Number.NEGATIVE_INFINITY;
       let total = 0;
       for (const endpoint of members) {
-        const carried = (current.get(endpoint) ?? 0) * (previousScale / scale);
-        const kept = Number.isFinite(carried) ? carried : 0;
+        const carried = current.get(endpoint) ?? 0;
         if (narrowed !== undefined && !narrowed.has(endpoint)) {
-          next.set(endpoint, kept);
+          next.set(endpoint, carried);
           continue;
         }
-        const weight = (weights.get(endpoint) ?? 1) / scale;
-        const value = kept + weight;
+        const weight = weights.get(endpoint) ?? unlisted;
+        const value = carried + weight;
         next.set(endpoint, value);
         total += weight;
         if (value > bestValue) {
@@ -449,7 +450,6 @@ function smoothWeightedRoundRobin(
       }
       if (best === undefined) return [ERR_NO_CANDIDATE, undefined];
       current = next;
-      previousScale = scale;
       current.set(best, bestValue - total);
       return [null, { endpoint: best }];
     },
