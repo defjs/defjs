@@ -1,4 +1,3 @@
-export { concatChunks, parseBytesBody } from "../../internal/bytes";
 import { parseMediaTypeEssence } from "../../internal/media_type";
 
 export function getContentLength(headers: Headers): number {

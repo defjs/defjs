@@ -1,5 +1,4 @@
 import type { ClientOption } from "../client/option";
-import type { HttpRequest } from "../internal/http_request";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
 
@@ -18,15 +17,6 @@ export interface XSRFOptions {
   cookieName?: string;
   /** Request header name that receives the token. Must be a valid HTTP header name (an RFC 9110 token). A browser silently drops a name that Fetch forbids, such as `Cookie`, `Origin`, or a `Sec-` or `Proxy-` name, so the token is not sent. Defaults to `X-XSRF-TOKEN`. */
   headerName?: string;
-}
-
-interface ResolvedXsrf {
-  cookieName: string;
-  headerName: string;
-}
-
-function isSafeMethod(method: string): boolean {
-  return SAFE_METHODS.has(method.toUpperCase());
 }
 
 // A Worker can have `location` and still has no `document`.
@@ -48,11 +38,7 @@ export function assertXsrfRuntime(scope: {
 
 function readCookie(name: string): string | undefined {
   try {
-    const cookie = document.cookie;
-    if (cookie === "") {
-      return undefined;
-    }
-    for (const part of cookie.split(";")) {
+    for (const part of document.cookie.split(";")) {
       const [rawName, ...rawValue] = part.trim().split("=");
       if (rawName === name) {
         return decodeURIComponent(rawValue.join("="));
@@ -62,28 +48,6 @@ function readCookie(name: string): string | undefined {
     return undefined;
   }
   return undefined;
-}
-
-function applyXsrfHeader(
-  request: HttpRequest,
-  headers: Headers,
-  url: URL,
-  xsrf: ResolvedXsrf,
-): void {
-  if (isSafeMethod(request.method)) {
-    return;
-  }
-  if (headers.has(xsrf.headerName)) {
-    return;
-  }
-  if (url.origin !== location.origin) {
-    return;
-  }
-  const token = readCookie(xsrf.cookieName);
-  if (token === undefined || token === "") {
-    return;
-  }
-  headers.set(xsrf.headerName, token);
 }
 
 /**
@@ -116,10 +80,17 @@ export function withXSRF(options: XSRFOptions = {}): ClientOption {
     const cookieName = options.cookieName ?? "XSRF-TOKEN";
     const headerName = options.headerName ?? "X-XSRF-TOKEN";
     config.finalizeHeaders = (request, headers, url) => {
-      applyXsrfHeader(request, headers, url, {
-        cookieName,
-        headerName,
-      });
+      if (
+        SAFE_METHODS.has(request.method.toUpperCase()) ||
+        headers.has(headerName) ||
+        url.origin !== location.origin
+      ) {
+        return;
+      }
+      const token = readCookie(cookieName);
+      if (token) {
+        headers.set(headerName, token);
+      }
     };
   };
 }

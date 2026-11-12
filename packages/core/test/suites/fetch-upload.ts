@@ -1,11 +1,13 @@
 import { describe, expect, test, vi } from "vitest";
 import type { HttpRequest } from "../../src/http/index.ts";
-import { isReadableStreamBody } from "../../src/http/transport/fetch_init.ts";
+import {
+  ERR_STREAMING_REQUEST_UNSUPPORTED,
+  isReadableStreamBody,
+  supportsStreamingRequestBody,
+} from "../../src/http/transport/fetch_init.ts";
 import {
   createFetchRequest,
   createFetchRequestInit,
-  ERR_STREAMING_REQUEST_UNSUPPORTED,
-  supportsStreamingRequestBody,
 } from "../../src/http/transport/fetch.ts";
 import {
   uploadOutcome,

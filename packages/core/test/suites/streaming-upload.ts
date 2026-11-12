@@ -2,13 +2,15 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { FetchHandle } from "../../src/client/index.ts";
 import { ERR_ABORTED } from "../../src/error/index.ts";
 import { isBodyFailure } from "../../src/http/transport/body_failure.ts";
-import { isReadableStreamBody } from "../../src/http/transport/fetch_init.ts";
 import {
   __resetStreamingRequestBodySupportForTests,
-  createFetchRequestInit,
   ERR_STREAMING_REQUEST_UNSUPPORTED,
-  fetchHandler,
+  isReadableStreamBody,
   supportsStreamingRequestBody,
+} from "../../src/http/transport/fetch_init.ts";
+import {
+  createFetchRequestInit,
+  fetchHandler,
 } from "../../src/http/transport/fetch.ts";
 import { createNotesForm, notesFormBody } from "../multipart-fixture.ts";
 import { uploadOutcome, type UploadCapability } from "../upload-capability.ts";

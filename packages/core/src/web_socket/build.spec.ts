@@ -1,13 +1,12 @@
 import { describe, expect, test } from "vitest";
 import type { QuerySerializer } from "../client/config";
-import type { RequestBuildValue } from "../internal/request_values";
 import { createWebSocketRequest, createWebSocketUrlFromRequest } from "./build";
 
 function createWebSocketUrl(
   baseEndpoint: string,
   path: string,
   params: { [key: string]: string } | undefined,
-  query: { [key: string]: RequestBuildValue } | undefined,
+  query: { [key: string]: unknown } | undefined,
   querySerializer?: QuerySerializer,
 ): string {
   const request = createWebSocketRequest({
@@ -109,12 +108,6 @@ describe("web socket build helpers", () => {
         data: { key: "val" },
       }),
     ).toThrow('a query serializer is required for nested query value "data"');
-  });
-
-  test("should reject null query values", () => {
-    expect(() =>
-      createWebSocketUrl("http://localhost", "/ws", undefined, { data: null }),
-    ).toThrow('query value for "data" must not be null');
   });
 
   test("createWebSocketUrl serializes bigint query param", () => {

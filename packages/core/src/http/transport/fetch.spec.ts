@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { HttpRequest } from "../../http";
 import {
-  __resetStreamingRequestBodySupportForTests,
   createFetchRequest,
   createFetchRequestInit,
   fetchHandler,
-  supportsStreamingRequestBody,
 } from "./fetch";
+import {
+  __resetStreamingRequestBodySupportForTests,
+  supportsStreamingRequestBody,
+} from "./fetch_init";
 import { isBodyFailure } from "./body_failure";
 import { PLATFORM_FETCH_HANDLE } from "../../client/config";
 import type { FetchHandle } from "../../client/config";

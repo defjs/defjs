@@ -115,8 +115,9 @@ async function importLibrary() {
   // Browsers run native modules that no registry reset can reach, but each spec file gets its own page, so the first
   // import here is the library's first load. Server workers may share a registry, hence the reset.
   vi.resetModules();
-  const [transport, config, error, client, http] = await Promise.all([
+  const [transport, init, config, error, client, http] = await Promise.all([
     import("../src/http/transport/fetch"),
+    import("../src/http/transport/fetch_init"),
     import("../src/client/config"),
     import("../src/error"),
     import("../src/client"),
@@ -132,7 +133,7 @@ async function importLibrary() {
     ERR_TIMEOUT: error.ERR_TIMEOUT,
     fetchHandler: transport.fetchHandler,
     http,
-    supportsStreamingRequestBody: transport.supportsStreamingRequestBody,
+    supportsStreamingRequestBody: init.supportsStreamingRequestBody,
   };
 }
 

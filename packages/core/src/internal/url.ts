@@ -1,10 +1,7 @@
 import type { QuerySerializer } from "../client/config";
 import { isPlainObject } from "../struct/utils";
 import type { HttpRequest } from "./http_request";
-import {
-  isRequestScalarValue,
-  serializeRequestScalarValue,
-} from "./request_values";
+import { isURLSearchParams } from "./type_guards";
 
 export class RequestUrlError extends TypeError {}
 
@@ -21,7 +18,7 @@ export function fillUrl(
 
   return path.replace(/:([^/]+)/g, (_, part: string) => {
     const value = paramMap.get(part);
-    if (typeof value === "undefined") {
+    if (value === undefined) {
       throw new TypeError(`Missing path param: ${part}`);
     }
     return value;
@@ -59,10 +56,7 @@ export function resolveTransportQuery(
   query: URLSearchParams | { [key: string]: unknown } | undefined,
   serializer?: QuerySerializer,
 ): { queryParams: URLSearchParams; queryString: string } {
-  if (
-    typeof URLSearchParams !== "undefined" &&
-    query instanceof URLSearchParams
-  ) {
+  if (isURLSearchParams(query)) {
     return { queryParams: query, queryString: query.toString() };
   }
 
@@ -141,8 +135,7 @@ export function createResolvedRequestUrl(
   return url;
 }
 
-// HttpRequest-flavored convenience: resolve endpoint + base + query string in one go.
-// Replaces the near-identical `createRequestUrl` helpers previously duplicated in fetch/sse/test_handler.
+/** The URL of `request`: its endpoint under its base endpoint, with its query string. */
 export function resolveRequestUrl(request: HttpRequest): URL {
   if (!request.baseEndpoint) {
     throw new RequestUrlError("Client endpoint is required");
@@ -165,16 +158,15 @@ function appendToSearchParams(
   key: string,
   value: unknown,
 ): void {
-  if (typeof value === "undefined") {
+  if (value === undefined) {
     return;
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (typeof item === "undefined") {
-        continue;
+      if (item !== undefined) {
+        appendQueryLeaf(searchParams, key, item);
       }
-      appendQueryLeaf(searchParams, key, item);
     }
     return;
   }
@@ -187,16 +179,18 @@ function appendQueryLeaf(
   key: string,
   value: unknown,
 ): void {
-  if (value === null) {
-    throw new TypeError(`query value for "${key}" must not be null`);
+  switch (typeof value) {
+    case "string":
+    case "number":
+    case "boolean":
+    case "bigint":
+      searchParams.append(key, String(value));
+      return;
+    default:
+      throw new TypeError(
+        `a query serializer is required for nested query value "${key}"`,
+      );
   }
-  if (isRequestScalarValue(value)) {
-    searchParams.append(key, serializeRequestScalarValue(value));
-    return;
-  }
-  throw new TypeError(
-    `a query serializer is required for nested query value "${key}"`,
-  );
 }
 
 // One client usually talks to one endpoint. `new URL(path, base)` only reads the base, so it is shared.

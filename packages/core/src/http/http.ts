@@ -45,7 +45,10 @@ import { createTransportOrigin } from "../internal/transport_origin";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
 import type { EndpointInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
-import type { HttpProgressFn } from "../internal/http_request";
+import type {
+  HttpProgressFn,
+  HttpResponseType,
+} from "../internal/http_request";
 import type {
   DecodedResponse,
   HttpMeta,
@@ -61,11 +64,11 @@ import type { Guide } from "../struct/guide";
 import { createHttpRequest } from "./request";
 import type { AnyBodyFailure } from "./transport/body_failure";
 import { BodyFailure, isBodyFailure } from "./transport/body_failure";
+import { fetchHandlerWithLifecycle } from "./transport/fetch";
 import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
-  fetchHandlerWithLifecycle,
-} from "./transport/fetch";
-import { isReadableStreamBody } from "./transport/fetch_init";
+  isReadableStreamBody,
+} from "./transport/fetch_init";
 import { getContentType, isJsonMediaType } from "./transport/utils";
 
 /**
@@ -434,14 +437,12 @@ async function executeHttpAttempt<
   state: RetryAttempt,
   attemptTimeoutMs: number | undefined,
 ): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
-  const config = options;
-
   // Faults carry their own response metadata, so the tuple's third slot belongs to success only.
   const fail = (
     fault: Fault<TError>,
   ): HttpExecuteAwaitResult<TOutput, TError> => [fault, undefined, undefined];
 
-  const callerAbort = config?.signal;
+  const callerAbort = options?.signal;
 
   // Fast path: caller already aborted before we did any struct work — skip parseEndpointInput.
   if (callerAbort?.aborted) {
@@ -529,14 +530,14 @@ async function executeHttpAttempt<
           signal: requestSignal,
           baseEndpoint: resolved.endpoint,
           defaultHeaders: clientConfig.headers,
-          downloadProgress: config?.onDownloadProgress,
+          downloadProgress: options?.onDownloadProgress,
           inputDeclared: definition.input !== undefined,
           inputGuides,
           errorResponseType,
           operation: definition.operation,
           querySerializer: clientConfig.querySerializer,
           responseType,
-          uploadProgress: config?.onUploadProgress,
+          uploadProgress: options?.onUploadProgress,
           withCredentials: clientConfig.withCredentials,
           finalizeHeaders: clientConfig.finalizeHeaders,
         },
@@ -930,19 +931,6 @@ function classifyHttpAttempt(
         },
       };
     }
-    if (
-      error.code === "RES_DECODE_FAILED" ||
-      error.code === "RES_MEDIA_TYPE_INVALID"
-    ) {
-      return {
-        landed: true,
-        info: {
-          attempted: true,
-          status: error.meta.status,
-          code: statusOutcome(error.meta.status),
-        },
-      };
-    }
     if (error.meta === undefined) {
       return { landed: false };
     }
@@ -1015,10 +1003,6 @@ class JsonMediaTypeError extends TypeError {
   }
 }
 
-function isAbsentDeclaredBody(response: HttpResponse<unknown>): boolean {
-  return response.body === undefined;
-}
-
 async function decodeDeclaredBody<S extends AnyStruct>(
   struct: S,
   response: HttpResponse<unknown>,
@@ -1031,7 +1015,7 @@ async function decodeDeclaredBody<S extends AnyStruct>(
   if (representation === "json" && !isJsonMediaType(contentType)) {
     throw new JsonMediaTypeError(contentType);
   }
-  if (isAbsentDeclaredBody(response)) {
+  if (response.body === undefined) {
     // Fetch reads an absent body as zero bytes. JSON parses them like any other bytes and fails.
     return parseStructValue(
       struct,
@@ -1042,12 +1026,12 @@ async function decodeDeclaredBody<S extends AnyStruct>(
   // Every other body converts synchronously, and the caller checks cancellation right after.
   if (typeof Blob !== "undefined" && response.body instanceof Blob) {
     return await awaitWithSignal(
-      () => parseStructResponse(struct, response.body),
+      () => parseStructResponse(struct, representation, response.body),
       signal,
     );
   }
   signal.throwIfAborted();
-  return await parseStructResponse(struct, response.body);
+  return await parseStructResponse(struct, representation, response.body);
 }
 
 /** A request refused before it was sent: the hook or platform error behind it is what interceptors are shown. */
@@ -1075,11 +1059,11 @@ function fromBodyFailure(
 
 async function parseStructResponse<S extends AnyStruct>(
   struct: S,
+  responseType: HttpResponseType,
   body: unknown,
 ): Promise<Infer<S>> {
   // Interceptor bodies may already be text, bytes, or a parsed value. The struct kind decides.
   // A JSON string is a string root: the transport already parsed bytes, so do not parse again.
-  const responseType = resolveInboundRepresentation(struct);
   if (responseType === "json") {
     if (typeof body === "string") {
       return decodeJson(struct, body);

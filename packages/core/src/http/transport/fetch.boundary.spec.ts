@@ -13,11 +13,8 @@ import {
 } from "../../interceptor";
 import { struct } from "../../struct";
 import { createHttpRequest } from "../request";
-import {
-  __resetStreamingRequestBodySupportForTests,
-  createFetchRequestInit,
-  fetchHandler,
-} from "./fetch";
+import { createFetchRequestInit, fetchHandler } from "./fetch";
+import { __resetStreamingRequestBodySupportForTests } from "./fetch_init";
 import { fixture } from "../../../test/fixture/client-auto";
 
 function requireRequest(input: RequestInfo | URL): Request {

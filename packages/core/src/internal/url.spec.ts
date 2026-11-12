@@ -126,17 +126,6 @@ describe("url helpers", () => {
 
     expect(params.toString()).toBe("include=true&page=1&tags=a&tags=b");
 
-    expect(() =>
-      createSearchParams({
-        empty: null,
-      }),
-    ).toThrow('query value for "empty" must not be null');
-    expect(() =>
-      createSearchParams({
-        tags: ["a", null],
-      }),
-    ).toThrow('query value for "tags" must not be null');
-
     const paramsWithUndefinedArray = createSearchParams({
       tags: [undefined],
     });

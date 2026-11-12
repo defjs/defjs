@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { isReadableStreamBody } from "./fetch_init";
+import {
+  __resetStreamingRequestBodySupportForTests,
+  ERR_STREAMING_REQUEST_UNSUPPORTED,
+  isReadableStreamBody,
+  supportsStreamingRequestBody,
+} from "./fetch_init";
 import {
   createClient,
   withEndpoint,
@@ -13,13 +18,7 @@ import {
   installProbeRequest,
   simulateUnsupportedStreaming,
 } from "../../../test/streaming-support";
-import {
-  __resetStreamingRequestBodySupportForTests,
-  createFetchRequest,
-  ERR_STREAMING_REQUEST_UNSUPPORTED,
-  fetchHandler,
-  supportsStreamingRequestBody,
-} from "./fetch";
+import { createFetchRequest, fetchHandler } from "./fetch";
 
 function streamBody(body: unknown): ReadableStream<Uint8Array> {
   if (isReadableStreamBody(body)) return body;

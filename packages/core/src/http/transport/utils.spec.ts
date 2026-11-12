@@ -1,12 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { HttpRequest } from "../../http";
-import {
-  concatChunks,
-  getContentLength,
-  getContentType,
-  isJsonMediaType,
-  parseBytesBody,
-} from "./utils";
+import { concatChunks, parseBytesBody } from "../../internal/bytes";
+import { getContentLength, getContentType, isJsonMediaType } from "./utils";
 
 describe("Handler util", () => {
   test("should concatenate chunks", () => {

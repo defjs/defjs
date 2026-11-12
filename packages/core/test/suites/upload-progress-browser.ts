@@ -9,7 +9,7 @@ import { struct } from "../../src/struct/index.ts";
 import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
   supportsStreamingRequestBody,
-} from "../../src/http/transport/fetch.ts";
+} from "../../src/http/transport/fetch_init.ts";
 import { missHits } from "../miss-log.ts";
 import {
   createNotesForm,

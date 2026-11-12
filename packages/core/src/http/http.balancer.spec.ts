@@ -14,7 +14,7 @@ import { createHttpInterceptor } from "../interceptor";
 import { makeResponse } from "../internal/http_response";
 import { struct } from "../struct";
 import { defineRequest } from "./index";
-import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "./transport/fetch";
+import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "./transport/fetch_init";
 import type { FixtureClient } from "../../test/fixture/client";
 import { fixture } from "../../test/fixture/client-auto";
 import type { ScenarioName, ScenarioParams } from "../../test/fixture/types";

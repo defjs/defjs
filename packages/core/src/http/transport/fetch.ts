@@ -6,6 +6,7 @@ import {
 } from "../../client/config";
 import { isAbortCause, isTimeoutCause } from "../../error/cause";
 import { awaitWithSignal, resolveAbortCause } from "../../internal/abort";
+import { concatChunks, parseBytesBody } from "../../internal/bytes";
 import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
 import type { HttpProgressFn, HttpRequest } from "../../internal/http_request";
 import type { HttpMeta, HttpResponse } from "../../internal/http_response";
@@ -13,27 +14,8 @@ import { makeResponse } from "../../internal/http_response";
 import { resolveRequestUrl } from "../../internal/url";
 import { applyRequestContentType } from "./body";
 import { BodyFailure, isBodyFailure } from "./body_failure";
-import {
-  __resetStreamingRequestBodySupportForTests,
-  createFetchInitBase,
-  ERR_STREAMING_REQUEST_UNSUPPORTED,
-  isReadableStreamBody,
-  supportsStreamingRequestBody,
-} from "./fetch_init";
-import {
-  concatChunks,
-  getContentLength,
-  getContentType,
-  isJsonMediaType,
-  parseBytesBody,
-} from "./utils";
-
-export {
-  __resetStreamingRequestBodySupportForTests,
-  ERR_STREAMING_REQUEST_UNSUPPORTED,
-  isReadableStreamBody,
-  supportsStreamingRequestBody,
-};
+import { createFetchInitBase, isReadableStreamBody } from "./fetch_init";
+import { getContentLength, getContentType, isJsonMediaType } from "./utils";
 
 /**
  * Relays a caller's stream so its bytes can be counted and its failure seen: a stream `fetch` holds
