@@ -29,31 +29,4 @@ const StringValue = struct.string();
 const Tuple = struct.tuple([struct.string(), struct.number()]);
 const Unknown = struct.unknown();
 const FormUrlEncoded = struct.urlencoded({ name: struct.string() });
-
-void [
-  Any,
-  ArrayOfStrings,
-  Bytes,
-  BigIntValue,
-  BlobValue,
-  BooleanValue,
-  DateValue,
-  Discriminated,
-  Status,
-  FileValue,
-  Form,
-  Combined,
-];
-void [
-  Literal,
-  NullValue,
-  NumberValue,
-  ObjectValue,
-  Union,
-  RecordValue,
-  StringValue,
-  Tuple,
-  Unknown,
-  FormUrlEncoded,
-];
 // #endregion

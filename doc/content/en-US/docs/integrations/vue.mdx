@@ -56,7 +56,7 @@ You can override the client for a component subtree using Vue's native `provide(
 
 ## 3. Clean up SSE & WebSocket streams on scope disposal
 
-For work started inside a composable or component outside a watcher, pair `AbortController` with `onScopeDispose`. Abort startup, close any handle that resolves after disposal, consume the single async iterator, and await `.closed`:
+For work started inside a composable or component outside a watcher, pair `AbortController` with `onScopeDispose`. The signal covers startup and the open stream, so aborting it is the whole cleanup. Consume the single async iterator, then close the handle and await `.closed` in `finally`:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

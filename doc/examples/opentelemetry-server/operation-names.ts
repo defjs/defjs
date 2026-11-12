@@ -21,8 +21,4 @@ const orderSocket = defineWebSocket({
   path: "/orders/socket",
   incoming: struct.object({ id: struct.number() }),
 });
-
-void readOrders;
-void orderEvents;
-void orderSocket;
 // #endregion

@@ -18,5 +18,4 @@ const second = createHttpInterceptor(async (request, next) => {
 
 // Request: first:before → second:before → transport
 // Return: second:after → first:after
-void [first, second, order];
 // #endregion

@@ -34,5 +34,4 @@ function readOrder() {
 }
 
 readOrder();
-void createOrder;
 // #endregion

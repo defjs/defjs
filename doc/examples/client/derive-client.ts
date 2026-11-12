@@ -24,6 +24,4 @@ async function main(signal: AbortSignal) {
   }
   console.log(order.status);
 }
-
-void main;
 // #endregion

@@ -56,7 +56,7 @@ bun add @defjs/core @defjs/vue vue
 
 ## 3. تنظيف تدفقات SSE وWebSocket عند التخلص من النطاق
 
-للعمليات التي تبدأ داخل composable أو مكون خارج المراقبين، اجمع بين `AbortController` و`onScopeDispose`. ألغِ بدء التشغيل، وأغلق أي مقبض يُحل بعد التخلص من النطاق، واستهلك مكرره غير المتزامن المفرد، وانتظر `.closed`:
+للعمليات التي تبدأ داخل composable أو مكون خارج المراقبين، اجمع بين `AbortController` و`onScopeDispose`. الإشارة تغطي بدء التشغيل والتدفق المفتوح، فإلغاؤها هو التنظيف كله. استهلك المكرر غير المتزامن المفرد، ثم أغلق المقبض وانتظر `.closed` داخل `finally`:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

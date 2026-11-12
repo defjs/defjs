@@ -75,7 +75,7 @@ export function OrderStatus({ id }: { id: number }) {
 
 ## Owning SSE or WebSocket work in React
 
-When opening a stream or WebSocket inside `useEffect`, track disposal so that unmount aborts startup, closes an already-open session, and suppresses expected abort errors:
+When opening a stream or WebSocket inside `useEffect`, pass an `AbortController` signal and abort it in the cleanup. The signal covers startup and the open session, so unmount needs nothing else; suppress the expected abort error:
 
 ```tsx
 import { defineWebSocket, struct } from "@defjs/core";
@@ -95,40 +95,27 @@ export function QuoteTicker() {
 
   useEffect(() => {
     const controller = new AbortController();
-    let disposed = false;
-    let closeActive: (() => void) | undefined;
 
     void (async () => {
       const [error, session] = await quotes(
         client({ signal: controller.signal }),
       );
-      if (error) return;
-
-      const close = () => session.close(1000, "effect-disposed");
-      closeActive = close;
-      if (disposed) {
-        close();
-        await session.closed;
+      if (error) {
+        if (error.code !== "NET_ABORTED") console.error(error.code);
         return;
       }
+      await using owned = session;
 
       try {
-        for await (const message of session.receive) {
+        for await (const message of owned.receive) {
           console.info(message.symbol, message.price);
         }
       } catch (cause) {
-        if (!disposed) console.error("quotes failed", cause);
-      } finally {
-        close();
-        await session.closed;
+        if (!controller.signal.aborted) console.error("quotes failed", cause);
       }
     })();
 
-    return () => {
-      disposed = true;
-      controller.abort();
-      closeActive?.();
-    };
+    return () => controller.abort();
   }, [client]);
 
   return null;

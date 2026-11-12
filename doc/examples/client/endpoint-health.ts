@@ -43,31 +43,29 @@ const timedEjection = roundRobinBalancer({
 // #endregion
 
 // #region active
-async function withHealthChecks() {
+async function probe(endpoint: string, signal: AbortSignal): Promise<boolean> {
+  try {
+    const response = await fetch(new URL("/healthz", endpoint), {
+      signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
+    });
+    await response.body?.cancel();
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function callWithHealthChecks() {
   const healthy = new Map<string, boolean>();
   const controller = new AbortController();
   let checking = false;
   async function check() {
     if (checking) return;
     checking = true;
-    try {
-      for (const endpoint of endpoints) {
-        try {
-          const response = await fetch(new URL("/healthz", endpoint), {
-            signal: AbortSignal.any([
-              controller.signal,
-              AbortSignal.timeout(2000),
-            ]),
-          });
-          await response.body?.cancel();
-          healthy.set(endpoint, response.ok);
-        } catch {
-          healthy.set(endpoint, false);
-        }
-      }
-    } finally {
-      checking = false;
+    for (const endpoint of endpoints) {
+      healthy.set(endpoint, await probe(endpoint, controller.signal));
     }
+    checking = false;
   }
   const activeClient = createClient(
     withEndpoint(...endpoints),
@@ -81,11 +79,7 @@ async function withHealthChecks() {
     ),
   );
   // The application owns the check lifecycle, not the client or balancer.
-  const timer = setInterval(() => {
-    void check().catch((cause: unknown) => {
-      console.error("Health check failed", cause);
-    });
-  }, 5000);
+  const timer = setInterval(() => void check(), 5000);
   try {
     await check();
     const [error] = await getStatus(activeClient);

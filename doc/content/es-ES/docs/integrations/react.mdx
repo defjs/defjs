@@ -61,11 +61,11 @@ En este caso, `throw error` constituye una frontera explícita de adaptación ex
 
 ## 4. Gestionar el ciclo de vida de SSE y WebSocket en efectos
 
-Los handles de SSE y WebSocket sobreviven a la llamada inicial a `openStream(...)` o `connectChat(...)`. Registra la limpieza antes de esperar al arranque, cierra cualquier handle que se resuelva tras el desmontaje, consume su iterador asíncrono único y espera `.closed`:
+Los handles de SSE y WebSocket sobreviven a la llamada inicial a `openStream(...)` o `connectChat(...)`. Pasa la señal de un `AbortController` a la operación y abórtala en la limpieza: la señal cubre el arranque y la sesión abierta. Toma posesión de la sesión con `await using` y consume su iterador asíncrono único:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Abortar la señal `signal` pasada a una operación WebSocket finaliza la sesión como `aborted` y rechaza `session.receive` con `AbortError`. Protege el bloque `catch` al desmontar para que solo emerjan errores auténticos de tiempo de ejecución (como un tiempo de espera de latidos).
+- Abortar la señal `signal` pasada a una operación WebSocket finaliza la sesión como `aborted` y rechaza `session.receive` con `AbortError`. Protege el bloque `catch` con `controller.signal.aborted` para que solo emerjan errores auténticos de tiempo de ejecución (como un tiempo de espera de latidos).
 - Abortar un flujo SSE finaliza el bucle `for await (const msg of stream)` de forma limpia sin lanzar excepciones.
 
 ---

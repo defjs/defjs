@@ -23,5 +23,4 @@ const client = createClient(
   withInterceptors(audit),
   withCredentials(true),
 );
-void client;
 // #endregion

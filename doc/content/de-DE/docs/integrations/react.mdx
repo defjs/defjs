@@ -63,11 +63,11 @@ Hier ist `throw error` eine explizite Adaptergrenze, die vom Rejection-Vertrag v
 
 ## 4. SSE- und WebSocket-Lebenszyklen in Effects verwalten
 
-SSE- und WebSocket-Handles überdauern den ursprünglichen `openStream(...)`- oder `connectChat(...)`-Aufruf. Registriere das Cleanup vor dem Warten auf den Verbindungsaufbau, schließe Handles, die erst nach dem Unmounten auflösen, konsumiere ihren einzelnen asynchronen Iterator und warte auf `.closed`:
+SSE- und WebSocket-Handles überdauern den ursprünglichen `openStream(...)`- oder `connectChat(...)`-Aufruf. Übergib der Operation das Signal eines `AbortController` und brich es im Cleanup ab: Das Signal deckt den Verbindungsaufbau und die offene Sitzung ab. Besitze die Sitzung mit `await using` und konsumiere ihren einzelnen asynchronen Iterator:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Das Abbrechen des an eine WebSocket-Operation übergebenen `signal` beendet die Sitzung als `aborted` und lässt `session.receive` mit `AbortError` fehlschlagen. Schütze den `catch`-Block nach dem Disposal, sodass nur echte Laufzeitfehler (wie ein Heartbeat-Timeout) sichtbar werden.
+- Das Abbrechen des an eine WebSocket-Operation übergebenen `signal` beendet die Sitzung als `aborted` und lässt `session.receive` mit `AbortError` fehlschlagen. Schütze den `catch`-Block mit `controller.signal.aborted`, sodass nur echte Laufzeitfehler (wie ein Heartbeat-Timeout) sichtbar werden.
 - Das Abbrechen eines SSE-Streams beendet `for await (const msg of stream)` sauber ohne Exception.
 
 ---

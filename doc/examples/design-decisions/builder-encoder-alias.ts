@@ -28,9 +28,10 @@ async function submit(client: Client) {
     accountId: 42,
     orders: [{ customerName: "Ada", totalCents: 4200 }],
   });
-  if (error) return;
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   console.log(result.accepted);
 }
-
-void submit;
 // #endregion

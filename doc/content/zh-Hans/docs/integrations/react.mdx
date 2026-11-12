@@ -61,11 +61,11 @@ bun add @defjs/core @defjs/react react
 
 ## 4. 在 Effect 中管理 SSE 与 WebSocket 生命周期
 
-SSE 与 WebSocket 句柄的存活时间长于最初的 `openStream(...)` 或 `connectChat(...)` 调用。在 await 启动之前注册清理逻辑，关闭在卸载后才 resolve 的句柄，消费其唯一的异步迭代器，并等待 `.closed`：
+SSE 与 WebSocket 句柄的存活时间长于最初的 `openStream(...)` 或 `connectChat(...)` 调用。把 `AbortController` 的 signal 传入操作，并在清理逻辑中中止它：该 signal 覆盖启动阶段和已打开的会话。用 `await using` 持有会话，并消费其唯一的异步迭代器：
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- 中止传入 WebSocket 操作的 `signal` 会让会话以 `aborted` 结束，并使 `session.receive` 以 `AbortError` reject。在已销毁时保护 `catch` 块，只让真正的运行时错误（例如心跳超时）暴露出来。
+- 中止传入 WebSocket 操作的 `signal` 会让会话以 `aborted` 结束，并使 `session.receive` 以 `AbortError` reject。用 `controller.signal.aborted` 保护 `catch` 块，只让真正的运行时错误（例如心跳超时）暴露出来。
 - 中止 SSE 流会让 `for await (const msg of stream)` 正常结束，不抛出异常。
 
 ---

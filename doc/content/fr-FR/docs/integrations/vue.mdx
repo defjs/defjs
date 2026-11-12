@@ -56,7 +56,7 @@ Vous pouvez surcharger le client pour un sous-arbre de composants en utilisant l
 
 ## 3. Nettoyer les flux SSE & WebSocket lors de la destruction de portée
 
-Pour un travail initié dans un composable ou un composant hors d'un watcher, associez `AbortController` à `onScopeDispose`. Annulez le démarrage, fermez tout handle résolu après la destruction, consommez l'unique itérateur asynchrone et attendez `.closed` :
+Pour un travail initié dans un composable ou un composant hors d'un watcher, associez `AbortController` à `onScopeDispose`. Le signal couvre le démarrage et le flux ouvert : l'annuler constitue tout le nettoyage. Consommez l'unique itérateur asynchrone, puis fermez le handle et attendez `.closed` dans `finally` :
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

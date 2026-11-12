@@ -56,7 +56,7 @@ Vue의 네이티브 `provide(HTTP_CLIENT, childClient)`를 사용하여 특정 �
 
 ## 3. 스코프 해제 시 SSE 및 WebSocket 스트림 정리
 
-watcher 외부의 composable이나 컴포넌트 내부에서 시작된 작업의 경우, `AbortController`를 `onScopeDispose`와 함께 사용하세요. 시작 단계를 abort하고, 스코프 해제 후에 resolve되는 핸들은 닫아주며, 단일 비동기 이터레이터를 소비하고 `.closed`를 await하세요:
+watcher 외부의 composable이나 컴포넌트 내부에서 시작된 작업의 경우, `AbortController`를 `onScopeDispose`와 함께 사용하세요. 이 signal은 시작 단계와 열린 스트림을 모두 포괄하므로 abort하는 것이 정리의 전부입니다. 단일 비동기 이터레이터를 소비한 뒤 `finally`에서 핸들을 닫고 `.closed`를 await하세요:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

@@ -12,9 +12,10 @@ const getOrder = defineRequest({
 
 async function loadOrder(client: Client) {
   const [error, order] = await getOrder(client, { id: 7 });
-  if (error) return;
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   console.log(order.status);
 }
-
-void loadOrder;
 // #endregion

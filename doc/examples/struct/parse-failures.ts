@@ -2,7 +2,7 @@
 import { struct, StructError } from "@defjs/core";
 
 const Order = struct.object({ id: struct.number(), status: struct.string() });
-const [error, value] = struct.parse(Order, { id: "not-a-number" });
+const [error] = struct.parse(Order, { id: "not-a-number" });
 
 if (error) {
   console.log(error instanceof StructError);
@@ -10,5 +10,4 @@ if (error) {
   console.log(error.flatten().fieldErrors);
   console.log(error.format(), error.prettify());
 }
-void value;
 // #endregion

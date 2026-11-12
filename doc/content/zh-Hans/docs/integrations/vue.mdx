@@ -56,7 +56,7 @@ bun add @defjs/core @defjs/vue vue
 
 ## 3. 在作用域销毁时清理 SSE 与 WebSocket 流
 
-对于在 watcher 之外（组合式函数或组件中）启动的工作，把 `AbortController` 与 `onScopeDispose` 配合使用。中止启动、关闭在销毁后才 resolve 的句柄、消费唯一的异步迭代器，并等待 `.closed`：
+对于在 watcher 之外（组合式函数或组件中）启动的工作，把 `AbortController` 与 `onScopeDispose` 配合使用。该 signal 覆盖启动阶段和已打开的流，因此中止它就是全部的清理。消费唯一的异步迭代器，然后在 `finally` 中关闭句柄并等待 `.closed`：
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

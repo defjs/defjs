@@ -56,7 +56,7 @@ Puedes sobreescribir el cliente para un subárbol de componentes mediante el mé
 
 ## 3. Limpiar flujos SSE y WebSocket al desechar el ámbito (scope)
 
-Para el trabajo iniciado dentro de un composable o componente fuera de un observador, combina `AbortController` con `onScopeDispose`. Aborta el inicio, cierra cualquier handle que se resuelva tras la liberación, consume su iterador asíncrono único y espera con `await .closed`:
+Para el trabajo iniciado dentro de un composable o componente fuera de un observador, combina `AbortController` con `onScopeDispose`. La señal cubre el inicio y el stream abierto, así que abortarla es toda la limpieza. Consume su iterador asíncrono único, luego cierra el handle y espera `.closed` en `finally`:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

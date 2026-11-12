@@ -27,8 +27,6 @@ async function submit(client: Client) {
     requestId: "request-42",
     order: { customerName: "Ada" },
   });
-  if (error) return;
+  if (error) console.error(error.code);
 }
-
-void submit;
 // #endregion

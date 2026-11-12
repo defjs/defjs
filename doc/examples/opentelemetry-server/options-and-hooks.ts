@@ -37,6 +37,4 @@ const client = createClient(
     webSocket: { enabled: false },
   }),
 );
-
-void client;
 // #endregion

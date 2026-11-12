@@ -61,11 +61,11 @@ Here `throw error` is an explicit adapter boundary required by TanStack Query's 
 
 ## 4. Manage SSE & WebSocket lifetimes in effects
 
-SSE and WebSocket handles outlive the initial `openStream(...)` or `connectChat(...)` call. Register cleanup before awaiting startup, close any handle that resolves after unmount, consume its single async iterator, and await `.closed`:
+SSE and WebSocket handles outlive the initial `openStream(...)` or `connectChat(...)` call. Pass an `AbortController` signal into the operation and abort it in the cleanup: the signal covers startup and the open session. Own the session with `await using` and consume its single async iterator:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- Aborting the `signal` passed into a WebSocket operation ends the session as `aborted` and rejects `session.receive` with `AbortError`. Guard the `catch` block when disposed so only genuine runtime errors (such as a heartbeat timeout) surface.
+- Aborting the `signal` passed into a WebSocket operation ends the session as `aborted` and rejects `session.receive` with `AbortError`. Guard the `catch` block with `controller.signal.aborted` so only genuine runtime errors (such as a heartbeat timeout) surface.
 - Aborting an SSE stream ends `for await (const msg of stream)` cleanly without throwing.
 
 ---

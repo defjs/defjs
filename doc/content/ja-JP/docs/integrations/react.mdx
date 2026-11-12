@@ -61,11 +61,11 @@ bun add @defjs/core @defjs/react react
 
 ## 4. Effect 内での SSE と WebSocket のライフサイクル管理
 
-SSE や WebSocket のハンドルは、初回の `openStream(...)` や `connectChat(...)` 呼び出し完了後も長く存続します。起動を await する前にクリーンアップ処理を登録し、アンマウント後に解決されたハンドルも確実にクローズし、単一の非同期イテレーターを消費して `.closed` を await します。
+SSE や WebSocket のハンドルは、初回の `openStream(...)` や `connectChat(...)` 呼び出し完了後も長く存続します。`AbortController` の signal を操作に渡し、クリーンアップで abort します。この signal は起動と開いているセッションの両方をカバーします。セッションを `await using` で所有し、単一の非同期イテレーターを消費します。
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- WebSocket 操作に渡した `signal` を abort すると、セッションは `aborted` として終了し、`session.receive` は `AbortError` で reject されます。クリーンアップ済みの場合は `catch` ブロックでエラーをガードし、ハートビートタイムアウトなどの実際の実行時エラーのみが通知されるようにします。
+- WebSocket 操作に渡した `signal` を abort すると、セッションは `aborted` として終了し、`session.receive` は `AbortError` で reject されます。`catch` ブロックを `controller.signal.aborted` でガードし、ハートビートタイムアウトなどの実際の実行時エラーのみが通知されるようにします。
 - SSE ストリームを abort した場合、例外を throw することなく `for await (const msg of stream)` が安全に終了します。
 
 ---

@@ -20,23 +20,22 @@ const getOrder = defineRequest({
 const fixed: Balancer = {
   pick({ endpoints }) {
     const endpoint = endpoints[0];
-    return endpoint === undefined
-      ? [ERR_NO_CANDIDATE, undefined]
-      : [
-          null,
-          {
-            endpoint,
-            start() {
-              console.log("Attempt started", endpoint);
-            },
-            end(info) {
-              console.log("Peer responded", endpoint, info.code);
-            },
-            done(info) {
-              console.log("Attempt finished", endpoint, info.attempted);
-            },
-          },
-        ];
+    if (endpoint === undefined) return [ERR_NO_CANDIDATE, undefined];
+    return [
+      null,
+      {
+        endpoint,
+        start() {
+          console.log("Attempt started", endpoint);
+        },
+        end(info) {
+          console.log("Peer responded", endpoint, info.code);
+        },
+        done(info) {
+          console.log("Attempt finished", endpoint, info.attempted);
+        },
+      },
+    ];
   },
 };
 

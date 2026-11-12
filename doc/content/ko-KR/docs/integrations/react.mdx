@@ -61,11 +61,11 @@ bun add @defjs/core @defjs/react react
 
 ## 4. effect 내부에서 SSE 및 WebSocket 수명 주기 관리
 
-SSE 및 WebSocket 핸들은 최초 `openStream(...)`이나 `connectChat(...)` 호출 이후에도 계속 유지됩니다. 연결을 기다리기 전에 정리 로직을 등록하고, 언마운트된 후에 연결이 완료된 핸들을 닫아주며, 단일 비동기 이터레이터를 소비하고 `.closed`를 await하세요:
+SSE 및 WebSocket 핸들은 최초 `openStream(...)`이나 `connectChat(...)` 호출 이후에도 계속 유지됩니다. `AbortController`의 signal을 작업에 전달하고 정리 로직에서 abort하세요. 이 signal은 연결 시작과 열린 세션을 모두 포괄합니다. 세션을 `await using`으로 소유하고 단일 비동기 이터레이터를 소비하세요:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- WebSocket 작업에 전달된 `signal`을 abort하면 세션이 `aborted` 상태로 종료되고 `session.receive`가 `AbortError`로 reject됩니다. 정리된 후에는 `catch` 블록에서 정리 상태를 걸러내어 하트비트 타임아웃 등 실제 런타임 오류만 표출되도록 하세요.
+- WebSocket 작업에 전달된 `signal`을 abort하면 세션이 `aborted` 상태로 종료되고 `session.receive`가 `AbortError`로 reject됩니다. `catch` 블록을 `controller.signal.aborted`로 보호하여 하트비트 타임아웃 등 실제 런타임 오류만 표출되도록 하세요.
 - SSE 스트림을 abort하면 예외를 던지지 않고 `for await (const msg of stream)` 루프가 깔끔하게 종료됩니다.
 
 ---

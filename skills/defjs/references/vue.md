@@ -85,7 +85,7 @@ Tie long-lived streams and sessions to `onScopeDispose` so they close automatica
 
 ```vue
 <script setup lang="ts">
-import { defineEventStream, struct, type EventStreamHandle } from "@defjs/core";
+import { defineEventStream, struct } from "@defjs/core";
 import { injectClient } from "@defjs/vue";
 import { onScopeDispose, ref } from "vue";
 
@@ -99,36 +99,26 @@ const deployEvents = defineEventStream({
 });
 
 const controller = new AbortController();
-let disposed = false;
-let stream: EventStreamHandle<unknown> | undefined;
-
-onScopeDispose(() => {
-  disposed = true;
-  controller.abort();
-  stream?.close("scope-disposed");
-});
+onScopeDispose(() => controller.abort());
 
 void (async () => {
-  const [error, nextStream] = await deployEvents(
+  const [error, stream] = await deployEvents(
     client({ signal: controller.signal }),
   );
-  if (error) return;
-  stream = nextStream;
-  if (disposed) {
-    nextStream.close("scope-disposed");
-    await nextStream.closed;
+  if (error) {
+    if (error.code !== "NET_ABORTED") console.error(error.code);
     return;
   }
   try {
-    for await (const event of nextStream) {
+    for await (const event of stream) {
       lines.value.push({ id: nextId++, text: event.data });
       if (lines.value.length > 100) lines.value.shift();
     }
   } catch (cause) {
-    if (!disposed) console.error("deployEvents failed", cause);
+    if (!controller.signal.aborted) console.error("deployEvents failed", cause);
   } finally {
-    nextStream.close("scope-finished");
-    await nextStream.closed;
+    stream.close("scope-finished");
+    await stream.closed;
   }
 })();
 </script>

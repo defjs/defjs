@@ -56,7 +56,7 @@ bun add @defjs/core @defjs/vue vue
 
 ## 3. 在 Scope 銷毀時清理 SSE 與 WebSocket 串流
 
-若工作是在 composable 內、或 watcher 以外的元件邏輯中啟動，請把 `AbortController` 與 `onScopeDispose` 搭配使用。先中止啟動、關閉在處置後才完成的 handle、消費它唯一的非同步迭代器，並等待 `.closed`：
+若工作是在 composable 內、或 watcher 以外的元件邏輯中啟動，請把 `AbortController` 與 `onScopeDispose` 搭配使用。這個 signal 涵蓋啟動階段與已開啟的串流，因此中止它就是全部的清理。消費它唯一的非同步迭代器，然後在 `finally` 中關閉 handle 並等待 `.closed`：
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

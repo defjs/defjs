@@ -56,7 +56,7 @@ Vue ネイティブの `provide(HTTP_CLIENT, childClient)` を使用して、特
 
 ## 3. スコープ破棄時における SSE と WebSocket のクリーンアップ
 
-ウォッチャーの外側のコンポーザブルやコンポーネント内で処理を開始する場合、`AbortController` と `onScopeDispose` を組み合わせます。接続開始処理を中断し、破棄後に解決されたハンドルも確実にクローズし、単一の非同期イテレーターを消費して `.closed` を await します。
+ウォッチャーの外側のコンポーザブルやコンポーネント内で処理を開始する場合、`AbortController` と `onScopeDispose` を組み合わせます。この signal は接続開始と開いているストリームの両方をカバーするので、abort するだけでクリーンアップは完了します。単一の非同期イテレーターを消費し、`finally` でハンドルをクローズして `.closed` を await します。
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

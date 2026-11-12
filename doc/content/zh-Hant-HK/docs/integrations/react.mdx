@@ -61,11 +61,11 @@ bun add @defjs/core @defjs/react react
 
 ## 4. 喺 effect 入面管理 SSE 與 WebSocket 生命週期
 
-SSE 同 WebSocket handle 嘅生命週期遠長於最初嗰次 `openStream(...)` 或 `connectChat(...)` 呼叫。請喺 await 啟動之前註冊好清理邏輯、關閉喺卸載之後先 resolve 出嚟嘅 handle、消費佢唯一嘅 async iterator，並等待 `.closed`：
+SSE 同 WebSocket handle 嘅生命週期遠長於最初嗰次 `openStream(...)` 或 `connectChat(...)` 呼叫。請將 `AbortController` 嘅 signal 傳入操作，並喺清理邏輯入面 abort 佢：呢個 signal 涵蓋啟動階段同已開啟嘅會話。用 `await using` 持有會話，並消費佢唯一嘅 async iterator：
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-- 中斷傳入 WebSocket 操作嘅 `signal` 會將會話狀態置為 `aborted`，並以 `AbortError` reject `session.receive`。喺元件已清理嘅情況下，請喺 `catch` 區塊加以保護，確保淨係向上拋出真正嘅執行時嚴重錯誤（例如心跳逾時）。
+- 中斷傳入 WebSocket 操作嘅 `signal` 會將會話狀態置為 `aborted`，並以 `AbortError` reject `session.receive`。請用 `controller.signal.aborted` 保護 `catch` 區塊，確保淨係向上拋出真正嘅執行時嚴重錯誤（例如心跳逾時）。
 - 中斷 SSE 串流則會令 `for await (const msg of stream)` 乾淨優雅地退出，唔會拋出例外。
 
 ---

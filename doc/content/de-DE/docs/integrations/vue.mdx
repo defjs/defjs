@@ -56,7 +56,7 @@ Du kannst den Client für einen Teilbaum mit Vues nativem `provide(HTTP_CLIENT, 
 
 ## 3. SSE- und WebSocket-Streams bei Scope-Disposal bereinigen
 
-Für asynchrone Arbeiten innerhalb eines Composables oder einer Komponente außerhalb eines Watchers kombiniere `AbortController` mit `onScopeDispose`. Brich den Start ab, schließe Handles, die erst nach dem Disposal auflösen, konsumiere den einzelnen asynchronen Iterator und warte auf `.closed`:
+Für asynchrone Arbeiten innerhalb eines Composables oder einer Komponente außerhalb eines Watchers kombiniere `AbortController` mit `onScopeDispose`. Das Signal deckt den Start und den offenen Stream ab, sein Abbruch ist also das gesamte Cleanup. Konsumiere den einzelnen asynchronen Iterator, schließe dann das Handle und warte in `finally` auf `.closed`:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 

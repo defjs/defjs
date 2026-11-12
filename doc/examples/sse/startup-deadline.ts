@@ -28,6 +28,4 @@ async function openDuringStartup(abortAfterMs: number) {
   stream.close("opened");
   await stream.closed;
 }
-
-void openDuringStartup;
 // #endregion
