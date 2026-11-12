@@ -327,7 +327,7 @@ function summarize(event: Event): string {
 }
 ```
 
-Every option must be an object Struct that contains a discriminator field of the same name, and that field must be a required `struct.literal(...)`; except for a pure `literal(null)`, a modifier must not widen the discriminator's accepted values. Discriminator values must be unique. These are definition-time constraints; violating them throws `TypeError`. During parsing:
+Every option must be an object Struct that contains a discriminator field of the same name, and that field must be a required `struct.literal(...)`; except for a pure `literal(null)`, a modifier must not widen the discriminator's accepted values. Discriminator values must be unique. The type check rejects an option that is not an object Struct, has no such field, or has an optional or nullable one. Two violations that the types cannot express throw `TypeError` when the union is created, and the message names the option index: a discriminator field that is not a literal Struct (for example `struct.string()`), and a discriminator value that two options share. During parsing:
 
 - A known discriminator routes only to the matching option, then that branch is parsed; it does not fall back across other options.
 - A missing or unknown discriminator cannot be routed and produces a `StructError`, with the issue path pointing at the discriminator.
@@ -375,7 +375,7 @@ The builder is not responsible for application-level validation, and it does not
 
 ## StructError and parse failure
 
-Passing wrong constructor arguments at definition time, for example an illegal discriminated union option, throws `TypeError`. Parsing a wrongly typed value against an already defined Struct produces a `StructError`, in which each `StructIssue` contains `code`, `expected`, `message`, `path`, and `received`.
+Constructor arguments are checked by their TypeScript types, and a value the types reject has no specified runtime behavior. The checks that the types cannot express throw `TypeError`: an object field that is not a Struct and two fields with the same wire key, both on the first use of the object Struct, and a discriminated union option whose discriminator is not a literal Struct or repeats a value, when the union is created. Parsing a wrongly typed value against an already defined Struct produces a `StructError`, in which each `StructIssue` contains `code`, `expected`, `message`, `path`, and `received`.
 
 The public `struct.parse` uses the following result shape:
 

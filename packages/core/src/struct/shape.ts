@@ -81,13 +81,3 @@ export function assertStruct(
     throw new TypeError(`${label} must be a struct`);
   }
 }
-
-/** Asserts every element in order, throwing for the first one that is not a struct. */
-export function assertStructs(
-  values: readonly unknown[],
-  label: string,
-): asserts values is readonly RuntimeStruct[] {
-  for (const value of values) {
-    assertStruct(value, label);
-  }
-}

@@ -117,11 +117,4 @@ describe("constructors.ts argument contracts", () => {
       "enum struct requires at least one string or number value",
     );
   });
-
-  test("struct.object needs a plain object for its shape", () => {
-    expect(() => {
-      // @ts-expect-error object structs are built from a plain object
-      struct.object(null);
-    }).toThrow("object struct requires a plain object");
-  });
 });
