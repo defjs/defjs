@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, onTestFinished, test, vi } from "vitest";
 import {
   createClient,
   withEndpoint,
@@ -191,6 +191,9 @@ describe("web socket preflight precedence", () => {
       path: "/socket",
     });
     vi.stubGlobal("WebSocket", undefined);
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
     const client = createClient(withEndpoint("https://example.test"));
 
     const [error, session, connection] = await endpoint(

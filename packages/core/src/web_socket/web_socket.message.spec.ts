@@ -302,7 +302,7 @@ describe("web socket single struct messages", () => {
           'Outgoing WebSocket message field "n" is not JSON data: Infinity. Send JSON data.',
         ),
       );
-      expect(native.sent).toEqual([]);
+      expect(native.sendCalls).toEqual([]);
     } finally {
       session.close(1000, "done");
       native.peerClose(1000, "done");

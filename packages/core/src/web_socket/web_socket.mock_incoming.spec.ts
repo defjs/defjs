@@ -541,9 +541,14 @@ describe("web socket incoming messages with a mock handle", () => {
       await yieldMacrotask();
 
       socket.close();
-      nativeSocket.receive(JSON.stringify(4));
+      // The standard drops these once the socket is CLOSING, so they are dispatched raw to reach the session itself.
+      nativeSocket.dispatchEvent(
+        new MessageEvent("message", { data: JSON.stringify(4) }),
+      );
       const read = drainReceive(socket);
-      nativeSocket.receive(JSON.stringify(5));
+      nativeSocket.dispatchEvent(
+        new MessageEvent("message", { data: JSON.stringify(5) }),
+      );
 
       await expect(read).resolves.toEqual([]);
       await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });

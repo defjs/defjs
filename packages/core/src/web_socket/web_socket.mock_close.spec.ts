@@ -249,7 +249,12 @@ describe("web socket close and disposal with a mock handle", () => {
         nativeSocket.peerClose(1012, how);
       }
       expect(nativeSocket.listenerCount("message")).toBe(0);
-      nativeSocket.receive(JSON.stringify({ n: 99, type: "tick" }));
+      // A closed socket delivers nothing, so the late frame is dispatched raw: only a leaked listener would see it.
+      nativeSocket.dispatchEvent(
+        new MessageEvent("message", {
+          data: JSON.stringify({ n: 99, type: "tick" }),
+        }),
+      );
       await vi.waitFor(() => expect(fake.sockets).toHaveLength(index + 2));
       const replacement = fake.sockets[index + 1];
       if (!replacement) throw new Error("Expected replacement socket");

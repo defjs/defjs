@@ -1118,7 +1118,7 @@ describe("web socket reconnect with a mock handle", () => {
     }
 
     expect(firstSocket.sent).toHaveLength(1);
-    expect(secondSocket.sent).toHaveLength(0);
+    expect(secondSocket.sendCalls).toHaveLength(0);
     socket.send({ id: 2, type: "mutation" });
     expect(secondSocket.sent).toHaveLength(1);
     socket.close(1000, "done");

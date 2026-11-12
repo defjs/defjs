@@ -57,6 +57,8 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
   readonly requestedProtocols: readonly string[];
   /** The frames that `send` accepted while OPEN. */
   readonly sent: Frame[] = [];
+  /** Every `send()` call, the ones the socket refused or discarded included. */
+  readonly sendCalls: Frame[] = [];
   /** Every `close()` call, the ones that did nothing included. */
   readonly closeCalls: Array<{ code?: number; reason?: string }> = [];
   bufferedAmount = 0;
@@ -131,6 +133,7 @@ export class FakeWebSocket extends EventTarget implements WebSocketHandle {
   }
 
   send(data: Frame): void {
+    this.sendCalls.push(data);
     if (this.readyState === CONNECTING) {
       throw new DOMException(
         "The socket is still connecting",

@@ -148,7 +148,7 @@ describe("heartbeat", () => {
     ));
 
     vi.advanceTimersByTime(100);
-    expect(socket.sent).toEqual([]);
+    expect(socket.sendCalls).toEqual([]);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -250,8 +250,8 @@ describe("heartbeat", () => {
     start(open, { intervalMs: 100, message: () => undefined });
 
     vi.advanceTimersByTime(100);
-    expect(connecting.sent).toEqual([]);
-    expect(open.sent).toEqual([]);
+    expect(connecting.sendCalls).toEqual([]);
+    expect(open.sendCalls).toEqual([]);
   });
 
   test("should report message factory, serialization, and native send failures as local errors", () => {
@@ -302,7 +302,7 @@ describe("heartbeat", () => {
     );
 
     vi.advanceTimersByTime(100);
-    expect(socket.sent).toEqual([]);
+    expect(socket.sendCalls).toEqual([]);
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(TypeError);
     const messageMatcher: unknown = expect.stringContaining(
@@ -424,7 +424,7 @@ describe("heartbeat", () => {
     runtime.stop();
 
     vi.advanceTimersByTime(100);
-    expect(socket.sent).toEqual([]);
+    expect(socket.sendCalls).toEqual([]);
   });
 
   test("should use the injected constructor open state when global WebSocket is unavailable", () => {

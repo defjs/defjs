@@ -46,7 +46,7 @@ describe("web socket send with a mock handle", () => {
       kind: "aborted",
     });
     expect(socket.state).toBe("aborted");
-    expect(nativeSocket.sent).toHaveLength(0);
+    expect(nativeSocket.sendCalls).toHaveLength(0);
   });
 
   test("should reject sends while manual close is pending before serializing or enqueueing", async () => {
@@ -208,7 +208,7 @@ describe("web socket send with a mock handle", () => {
     expect(sendError).toEqual(
       new TypeError("Outgoing WebSocket message has no JSON representation"),
     );
-    expect(replacement.sent).toHaveLength(0);
+    expect(replacement.sendCalls).toHaveLength(0);
     socket.close(1000, "done");
     fake.last().peerClose(1000, "done");
     await vi.advanceTimersByTimeAsync(0);
@@ -249,7 +249,7 @@ describe("web socket send with a mock handle", () => {
 
       expect(() => socket.send(message)).toThrow(TypeError);
       expect(() => socket.send(message)).toThrow(fragment);
-      expect(fake.last().sent).toHaveLength(0);
+      expect(fake.last().sendCalls).toHaveLength(0);
 
       socket.close(1000, "done");
       await socket.closed;
@@ -302,7 +302,7 @@ describe("web socket send with a mock handle", () => {
     expect(sendError.message).toContain(
       'Outgoing WebSocket message field "n" is not JSON data: -Infinity',
     );
-    expect(replacement.sent).toHaveLength(0);
+    expect(replacement.sendCalls).toHaveLength(0);
     socket.close(1000, "done");
     fake.last().peerClose(1000, "done");
     await vi.advanceTimersByTimeAsync(0);
@@ -355,7 +355,7 @@ describe("web socket send with a mock handle", () => {
     });
     expect(socket.state).toBe("aborted");
     expect(fake.sockets).toHaveLength(1);
-    expect(fake.sockets[0]?.sent).toHaveLength(0);
+    expect(fake.sockets[0]?.sendCalls).toHaveLength(0);
   });
 
   test("should disable outgoing buffering by default during reconnect preparation", async () => {

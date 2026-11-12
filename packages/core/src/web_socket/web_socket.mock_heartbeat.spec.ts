@@ -191,7 +191,7 @@ describe("web socket heartbeat with a mock handle", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
     expect(socket.state).toBe("aborted");
-    expect(nativeSocket.sent).toHaveLength(0);
+    expect(nativeSocket.sendCalls).toHaveLength(0);
     expect(vi.getTimerCount()).toBe(0);
   });
 
