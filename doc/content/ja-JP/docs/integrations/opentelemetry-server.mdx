@@ -81,6 +81,8 @@ SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静�
 - **SSE**: 自動再接続を含む 1 つの論理ストリームが 1 つのスパンを生成し、`stream.closed` が解決されるまでオープン状態を維持します。記録されるイベント: `sse.connected`、それに続く `sse.closed`、`sse.aborted`（`stream.close()` またはタイムアウト以外の呼び出し元中止時。スパンのステータスは未設定のまま）、または `sse.error`（タイムアウトに起因する中止を含め `ERROR` で終了）。スパン属性 `url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。
 - **WebSocket**: 自動再接続を含む 1 つの論理セッションが 1 つのスパンを生成し、`session.closed` が解決されるまで維持されます。記録されるイベント: `websocket.connected`、`websocket.closed`、`websocket.error`。サーバーからのクローズフレーム（コード不問）は `websocket.closed` を記録し、ステータスを未設定のままスパンを終了します。呼び出し元による中止は `ERROR` でスパンを終了し、`websocket.error` を記録します。ログは出力されませんが、中止理由が `TimeoutError` の場合だけは `WARN` を 1 件出力します。クローズフレームを伴わない突然の切断（`1006`）は、どのランタイムでも 1 件のログとともに `ERROR` で終了します。SSE と同様、`url.full`、`server.address`、`server.port` は最初の接続を表し、別のエンドポイントへ再接続しても変わりません。`url.full` は接続 URL の `ws:` または `wss:` の形を使います。
 
+インターセプターチェーンの残りの部分とトランスポート自体は、クライアントスパンをアクティブにした状態で実行されます。そのため、そこでの `trace.getActiveSpan()` はこのスパンを返し、それらが作成するスパン（Fetch の自動計装スパンなど）はこのスパンの子になります。コンテキストマネージャーが登録されていなければ、何も変わりません。
+
 `server.address` は解決された URL のホストです。IPv6 リテラルは、`URL.hostname` と `Host` ヘッダーと同じく、角括弧を残します。`server.port` は明示されたポートか、URL にポートがないときはスキームのデフォルトです。`http:` と `ws:` は 80、`https:` と `wss:` は 443 です。すべてのスパンは `http.request.method` も持ちます。HTTP と SSE ではリクエストのメソッド、WebSocket では `GET`（開始ハンドシェイクのメソッド）です。RFC 9110 のメソッド、`PATCH`、`QUERY` のいずれでもないメソッドは `_OTHER` として記録され、渡されたメソッドは `http.request.method_original` に入ります。Fetch が大文字で送信するメソッド（`DELETE`、`GET`、`HEAD`、`OPTIONS`、`POST`、`PUT`）は大文字で記録され、両者が異なるときは渡されたメソッドが `http.request.method_original` に残ります。`http.client.request.duration` メトリクスと HTTP のログレコードも、同じ正規化された `http.request.method` を持ちます。
 
 ### リトライと再接続の境界

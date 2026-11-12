@@ -622,3 +622,61 @@ describe("span hook recording lifecycle", () => {
     },
   );
 });
+
+describe("active context", () => {
+  type Run = (
+    tracer: ReturnType<typeof createMockTracer>["tracer"],
+    onNext: () => void,
+  ) => Promise<unknown>;
+  const runs: [string, Run][] = [
+    [
+      "HTTP",
+      (tracer, onNext) =>
+        createOpenTelemetryHttpInterceptor({ tracer, propagator }).fn(
+          makeHttpRequest(),
+          () => {
+            onNext();
+            return Promise.resolve(makeHttpResponse());
+          },
+        ),
+    ],
+    [
+      "SSE",
+      (tracer, onNext) =>
+        createOpenTelemetrySSEInterceptor({ tracer, propagator }).fn(
+          makeSSERequest(),
+          () => {
+            onNext();
+            return Promise.resolve(makeDeferredSSEStream().stream);
+          },
+        ),
+    ],
+    [
+      "WebSocket",
+      (tracer, onNext) =>
+        createOpenTelemetryWebSocketInterceptor({ tracer, propagator }).fn(
+          makeWsRequest(),
+          () => {
+            onNext();
+            return Promise.resolve(makeDeferredWsSession().session);
+          },
+        ),
+    ],
+  ];
+
+  test.each(runs)(
+    "%s runs the rest of the chain with the client span active",
+    async (_name, run) => {
+      const { tracer, spans } = createMockTracer();
+      const withContext = vi.spyOn(context, "with");
+      let entered: number | undefined;
+      await run(tracer, () => {
+        entered = withContext.mock.calls.length;
+      });
+
+      expect(entered).toBe(1);
+      const [ctx] = withContext.mock.calls[0] ?? [];
+      expect(ctx && trace.getSpan(ctx)).toBe(spans[0]);
+    },
+  );
+});

@@ -1,5 +1,6 @@
 import type { HttpRequest } from "@defjs/core";
 import type { Attributes } from "@opentelemetry/api";
+import { context } from "@opentelemetry/api";
 import type { Logger } from "@opentelemetry/api-logs";
 import { emitClientException } from "../telemetry/logs";
 import type { ConnectionClientMetrics } from "../telemetry/metrics";
@@ -90,7 +91,10 @@ export function observeConnection<
   const { logger, metrics, responseHook } = options;
   const connectStartMs = performance.now();
 
-  return next(nextReq).then(
+  // With a client span, the rest of the chain runs with it active.
+  return (
+    span ? context.with(call.context, next, undefined, nextReq) : next(nextReq)
+  ).then(
     (connection) => {
       const connectedAtMs = performance.now();
 

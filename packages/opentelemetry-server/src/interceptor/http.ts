@@ -1,7 +1,7 @@
 import type { HttpResponse } from "@defjs/core";
 import { createHttpInterceptor } from "@defjs/core";
 import type { Attributes } from "@opentelemetry/api";
-import { trace } from "@opentelemetry/api";
+import { context, trace } from "@opentelemetry/api";
 import { carrierSetter } from "../propagation/carrier";
 import { emitClientException } from "../telemetry/logs";
 import type { HttpClientMetrics } from "../telemetry/metrics";
@@ -57,7 +57,11 @@ export function createOpenTelemetryHttpInterceptor(
 
     let response: HttpResponse<unknown>;
     try {
-      response = await next({ ...req, headers });
+      const outgoing = { ...req, headers };
+      // With a client span, the rest of the chain runs with it active.
+      response = await (span
+        ? context.with(call.context, next, undefined, outgoing)
+        : next(outgoing));
     } catch (error) {
       const durationS = durationSeconds(startTime);
 

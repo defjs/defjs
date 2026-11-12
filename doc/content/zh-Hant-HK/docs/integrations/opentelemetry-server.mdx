@@ -81,6 +81,8 @@ description: 喺伺服器應用程式嘅 client 上觀測 SDK 呼叫，tracer、
 - **SSE**：一條邏輯串流（包括自動重新連線）對應一個 span，保持開啟直到 `stream.closed` 結算。記錄嘅事件包括：`sse.connected`，隨後為 `sse.closed`、`sse.aborted`（主動呼叫 `stream.close()` 或非逾時中斷；span 狀態保持未設定），或 `sse.error`（以 `ERROR` 結束，包括呼叫端逾時類別嘅中斷）。span 屬性 `url.full`、`server.address` 同 `server.port` 描述嘅係第一次連線；重連去另一個端點唔會改變佢哋。
 - **WebSocket**：一個邏輯會話（包括自動重新連線）對應一個 span，直到 `session.closed` 結算。記錄嘅事件包括：`websocket.connected`、`websocket.closed`、`websocket.error`。伺服器主動送出關閉 frame（任何代碼）都會記錄 `websocket.closed` 並結束 span，唔設定佢嘅狀態；呼叫端主動中斷會以 `ERROR` 結束 span 並記錄 `websocket.error`，唔出 log，但中斷原因係 `TimeoutError` 時例外，會發出一條 `WARN`。冇關閉 frame 嘅異常斷線（`1006`）喺每個 runtime 都會以 `ERROR` 結束並記錄一條日誌。同 SSE 一樣，`url.full`、`server.address` 同 `server.port` 描述第一次連線，重連去另一個端點時唔會改變。`url.full` 用連線 URL 嘅 `ws:` 或 `wss:` 形式。
 
+攔截器鏈的其餘部分與傳輸本身會在客戶端 span 處於作用中的狀態下執行，因此該處的 `trace.getActiveSpan()` 會回傳該 span，它們建立的 span（例如 Fetch 自動插裝產生的 span）是它的子 span。未註冊 context manager 時，不會有任何變化。
+
 `server.address` 係已解析 URL 嘅 host；IPv6 字面值會保留方括號，同 `URL.hostname` 同 `Host` header 一樣。`server.port` 係明確寫出嘅 port，或者 URL 冇 port 時用 scheme 預設值：`http:` 同 `ws:` 係 80，`https:` 同 `wss:` 係 443。每個 span 亦帶 `http.request.method`：HTTP 同 SSE 係 request method，WebSocket 係 `GET`（開啟握手嘅 method）。唔屬於 RFC 9110 method、`PATCH` 或 `QUERY` 嘅 method 會記錄為 `_OTHER`，並將原本嘅 method 放喺 `http.request.method_original`。Fetch 用大寫送出嘅 method（`DELETE`、`GET`、`HEAD`、`OPTIONS`、`POST`、`PUT`）會用大寫記錄，兩者唔同時原本嘅 method 會保留喺 `http.request.method_original`。`http.client.request.duration` 指標同 HTTP 日誌記錄帶有同一個正規化之後嘅 `http.request.method`。
 
 ### 重試與重連邊界
