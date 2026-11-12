@@ -29,7 +29,7 @@ import {
 } from "../internal/abort";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
-import { parseEndpointInput } from "../internal/endpoint_input";
+import { preflight } from "../internal/preflight";
 import { createTransportOrigin } from "../internal/transport_origin";
 import { resolveRetryPolicy } from "../internal/retry";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
@@ -50,7 +50,6 @@ import { pickEndpoint } from "../balancer/runtime";
 import type { AnyStruct, Infer } from "../struct";
 import { decodeJson } from "../struct/codec/json";
 import { parseStructValue } from "../struct/introspection";
-import type { Guide } from "../struct/guide";
 import type {
   EventStreamFailureInfo,
   EventStreamHandle,
@@ -291,7 +290,7 @@ export function defineEventStream<
   const declaredMethod = definition.method;
   const operation = definition.operation;
   const path = definition.path;
-  const endpoint = {
+  const copy = {
     builder,
     error,
     events,
@@ -303,74 +302,53 @@ export function defineEventStream<
   };
 
   return async (client: Client, input?: EndpointInput<TInput>) =>
-    runEventStreamCommand<TInput, TEvents, TError>(
+    openEventStream<TInput, TEvents, TError>(
       client[CLIENT].config,
-      endpoint,
+      copy,
       input,
       client[CLIENT].options,
-      new AbortController(),
     );
 }
 
-async function runEventStreamCommand<
+async function openEventStream<
   TInput extends AnyStruct | undefined,
   TEvents extends EventStructs,
   TError extends AnyStruct | undefined = undefined,
 >(
   clientConfig: ClientConfig,
-  endpoint: ResolvedEventStreamDefinition<TInput, TError>,
+  definition: ResolvedEventStreamDefinition<TInput, TError>,
   input: EndpointInput<TInput> | undefined,
-  config: EventStreamExecuteOptions | undefined,
-  controller: AbortController,
+  options: EventStreamExecuteOptions | undefined,
 ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>> {
-  const callerAbort = config?.signal;
-
-  // Fast path: caller already aborted before we did any struct work.
-  if (callerAbort?.aborted) {
-    return [resolveAbortedFault(callerAbort), undefined, undefined];
+  const callerSignal = options?.signal;
+  const scope = preflight(definition.input, input, callerSignal);
+  if (scope instanceof Error) {
+    return [scope, undefined, undefined];
   }
+  // The scope's signal follows the caller's until the stream has ended or never delivered.
+  const {
+    guides: inputGuides,
+    input: parsedInput,
+    release,
+    signal: requestSignal,
+  } = scope;
 
   // Resolve the retry policy at preflight so an interceptor cannot change it.
-  const retry = resolveRetryPolicy(config?.retry ?? clientConfig.retry);
-
-  // `signal` stays in force after open. Listeners stay off the caller's signal.
-  const requestSignal = mergeAbortSignals(controller.signal, [callerAbort]);
-  const stopBeforeTransport = (
-    fault: PreflightFault,
-  ): StreamAwaitResult<EventStreamData<TEvents>, TError> => {
-    releaseAbortSignal(requestSignal);
-    return [fault, undefined, undefined];
-  };
-
-  const inputGuides = new WeakMap<object, Guide>();
-  let parsedInput: unknown;
-  try {
-    parsedInput = endpoint.input
-      ? parseEndpointInput(endpoint.input, input, inputGuides)
-      : input;
-  } catch (error) {
-    return stopBeforeTransport(
-      resolveAbortFault(requestSignal) ??
-        createPreflightFault("REQ_INPUT_INVALID", error),
-    );
-  }
-
-  const parsedCancellation = resolveAbortFault(requestSignal);
-  if (parsedCancellation) {
-    return stopBeforeTransport(parsedCancellation);
-  }
-
+  const retry = resolveRetryPolicy(options?.retry ?? clientConfig.retry);
   const pick = () =>
     pickEndpoint(clientConfig.balancer, {
       endpoints: clientConfig.endpoints,
-      operation: endpoint.operation,
+      operation: definition.operation,
     });
+
   const picked = pick();
   if (picked[0] !== null) {
-    return stopBeforeTransport(picked[0]);
+    release();
+    return [picked[0], undefined, undefined];
   }
   const resolved = picked[1];
 
+  let streamDelivered = false;
   // Exits before the first sseHandler entry belong to this call. The handler
   // takes the one `done` as soon as it is entered.
   let handedOff = false;
@@ -380,21 +358,21 @@ async function runEventStreamCommand<
       const built = materializeOutboundRequest(
         runOutboundBuilder(
           parsedInput,
-          endpoint.builder,
-          endpoint.input !== undefined,
+          definition.builder,
+          definition.input !== undefined,
         ),
         "sse",
         inputGuides,
       );
       request = createBaseTransportRequest(
-        endpoint.method,
-        endpoint.path,
+        definition.method,
+        definition.path,
         built,
         {
           signal: requestSignal,
           baseEndpoint: resolved.endpoint,
           defaultHeaders: clientConfig.headers,
-          operation: endpoint.operation,
+          operation: definition.operation,
           querySerializer: clientConfig.querySerializer,
           withCredentials: clientConfig.withCredentials,
         },
@@ -408,25 +386,26 @@ async function runEventStreamCommand<
         }
       }
     } catch (error) {
-      return stopBeforeTransport(
+      return [
         resolveAbortFault(requestSignal) ??
           createPreflightFault("REQ_BUILD_FAILED", error),
-      );
+        undefined,
+        undefined,
+      ];
     }
 
     const builtCancellation = resolveAbortFault(requestSignal);
     if (builtCancellation) {
-      return stopBeforeTransport(builtCancellation);
+      return [builtCancellation, undefined, undefined];
     }
 
     type OwnedStream = {
       controller: AbortController;
       initialOpen?: EventStreamOpenInfo;
-      release?: () => void;
+      release: () => void;
       stream?: EventStreamHandle<unknown>;
     };
     let chainSettled = false;
-    let streamDelivered = false;
     const ownedStreams = new Set<OwnedStream>();
     const transportOrigin = createTransportOrigin();
     // Headers an interceptor handed to next() and the platform refused; the interceptor is shown that error itself.
@@ -462,7 +441,8 @@ async function runEventStreamCommand<
         if (attributed && !ownsEndpointAttempt) {
           settleUnattempted();
         }
-        let transportAbort: AbortSignal;
+        const ownerController = new AbortController();
+        let streamAbort: AbortSignal;
         try {
           resolveRequestUrl(req);
           // Headers rejects an invalid name or value with a TypeError. Checking here makes that a request that cannot be
@@ -473,22 +453,28 @@ async function runEventStreamCommand<
             refusedHeaders.add(error);
             throw error;
           }
-          transportAbort = mergeAbortSignals(requestSignal, [req.signal]);
+          // The stream ends when its owner discards it, or when the call or the caller stops it. The caller's own
+          // signal is a source so that a stop after the stream has ended is still seen once the call's has been released.
+          streamAbort = mergeAbortSignals(ownerController.signal, [
+            requestSignal,
+            callerSignal,
+            req.signal,
+          ]);
         } catch (error) {
           settleUnattempted();
           const rejected = Promise.reject<EventStreamHandle<unknown>>(error);
           void rejected.catch(() => undefined);
           return rejected;
         }
-        const due = resolveAbortFault(transportAbort);
+        const due = resolveAbortFault(streamAbort);
         if (due) {
           settleUnattempted();
           // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
           // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
           const rejected = Promise.reject<EventStreamHandle<unknown>>(
-            transportOrigin.mark(resolveAbortedCause(transportAbort)),
+            transportOrigin.mark(resolveAbortedCause(streamAbort)),
           );
-          releaseAbortSignal(transportAbort);
+          releaseAbortSignal(streamAbort);
           void rejected.catch(() => undefined);
           return rejected;
         }
@@ -500,22 +486,15 @@ async function runEventStreamCommand<
           const rejected = Promise.reject<EventStreamHandle<unknown>>(
             transportOrigin.mark(ERR_FETCH_UNSUPPORTED),
           );
-          releaseAbortSignal(transportAbort);
+          releaseAbortSignal(streamAbort);
           void rejected.catch(() => undefined);
           return rejected;
         }
-        const ownerController = new AbortController();
         const owned: OwnedStream = {
           controller: ownerController,
+          release: () => releaseAbortSignal(streamAbort),
         };
         ownedStreams.add(owned);
-        const streamAbort = mergeAbortSignals(ownerController.signal, [
-          transportAbort,
-        ]);
-        owned.release = () => {
-          releaseAbortSignal(streamAbort);
-          releaseAbortSignal(transportAbort);
-        };
         const failure: EventStreamFailureInfo<HandshakeBody<TError>> = {};
         const endpointAttempt = ownsEndpointAttempt
           ? {
@@ -531,17 +510,17 @@ async function runEventStreamCommand<
             endpointAttempt,
             fetch: clientConfig.sse.handle,
             failure,
-            handshakeError: endpoint.error,
+            handshakeError: definition.error,
             transformMessage(message, signal) {
               return transformStreamMessage(
-                endpoint.events,
+                definition.events,
                 message,
                 clientConfig.sse.onInvalidEvent,
                 signal,
               );
             },
             retry,
-            maxBufferSize: endpoint.maxBufferSize,
+            maxBufferSize: definition.maxBufferSize,
           },
         ).then(
           (stream) => {
@@ -553,7 +532,7 @@ async function runEventStreamCommand<
           (cause: unknown) => {
             // A no-op once the transport has reported; it only takes effect when fetchEventStream fails before its first attempt starts.
             endpointAttempt?.done({ attempted: false });
-            owned.release?.();
+            owned.release();
             errorFailure.set(cause, {
               open: failure.open,
               decoded: failure.decoded,
@@ -572,7 +551,6 @@ async function runEventStreamCommand<
       );
       const publicOpen = stream.open;
       chainSettled = true;
-      const release = () => releaseAbortSignal(requestSignal);
       void stream.closed.then(release, release);
 
       let open: EventStreamOpenInfo | undefined;
@@ -621,10 +599,6 @@ async function runEventStreamCommand<
               bodyFault,
             );
       return [fault, undefined, openInfo];
-    } finally {
-      if (!streamDelivered) {
-        releaseAbortSignal(requestSignal);
-      }
     }
 
     function discardOwnedStreams(
@@ -642,11 +616,14 @@ async function runEventStreamCommand<
         }
         owned.controller.abort(reason);
         owned.stream?.close(reason);
-        owned.release?.();
+        owned.release();
       }
       ownedStreams.clear();
     }
   } finally {
+    if (!streamDelivered) {
+      release();
+    }
     if (!handedOff) {
       resolved.done({ attempted: false });
     }
