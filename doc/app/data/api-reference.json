@@ -8172,7 +8172,7 @@
     "group": "react",
     "description": "Provide a Defjs client to React descendants via context.\n\nPass the client returned by `createClient` as `client`; descendants read it with `useClient`. The component does not create, cache, or dispose the client. A nested `ClientProvider` overrides the client for its own subtree, and a different `client` prop changes the context value for descendants.",
     "signatures": [
-      "function ClientProvider(props: ClientProviderProps): React.FunctionComponentElement<React.ProviderProps<DerivableClient | null>>;"
+      "function ClientProvider(props: ClientProviderProps): ReactElement;"
     ],
     "related": [
       "@defjs/core:DerivableClient",
@@ -8211,7 +8211,7 @@
     ],
     "overloads": [
       {
-        "signature": "function ClientProvider(props: ClientProviderProps): React.FunctionComponentElement<React.ProviderProps<DerivableClient | null>>;",
+        "signature": "function ClientProvider(props: ClientProviderProps): ReactElement;",
         "parameters": [
           {
             "name": "client",

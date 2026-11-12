@@ -5,6 +5,7 @@ import {
   createContext,
   createElement,
   useContext,
+  type ReactElement,
   type ReactNode,
 } from "react";
 
@@ -38,9 +39,7 @@ export interface ClientProviderProps {
 export function ClientProvider({
   client,
   children,
-}: ClientProviderProps): React.FunctionComponentElement<
-  React.ProviderProps<DerivableClient | null>
-> {
+}: ClientProviderProps): ReactElement {
   return createElement(HttpClientContext.Provider, { value: client }, children);
 }
 
