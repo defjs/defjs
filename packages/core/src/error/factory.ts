@@ -4,6 +4,7 @@ import {
   describeCause,
   ERR_ABORTED,
   ERR_TIMEOUT,
+  FAULT_NAME,
   isAbortCause,
   isTimeoutCause,
 } from "./cause";
@@ -21,8 +22,6 @@ import type {
   PreflightFault,
   PreflightFaultCode,
 } from "./types";
-
-const FAULT_NAME = "DefjsFault";
 
 /** The fields a fault variant adds to Error, before the factory has written them. */
 type Unwritten<TFault extends Error> = Error &

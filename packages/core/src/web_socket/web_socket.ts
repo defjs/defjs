@@ -17,6 +17,7 @@ import {
   ERR_ABORTED,
   ERR_TIMEOUT,
 } from "../error";
+import { isDefjsFault } from "../error/cause";
 import type { WebSocketSessionLike } from "../interceptor/interceptor";
 import {
   makeChain,
@@ -2071,19 +2072,9 @@ function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
 }
 
 function caughtRequestFault(error: unknown): Fault<undefined> {
-  if (!isFault(error)) {
+  if (!isDefjsFault(error)) {
     return createPreflightFault("EXT_INTERCEPTOR_FAILED", error);
   }
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: an interceptor may throw any Defjs fault, which is returned unchanged, but the published SocketAwaitResult error slot is `Fault<undefined>`. Unasserted: TS2322, `AnyFault` is not assignable to `Fault<undefined>`; narrowing would rewrap a thrown HTTP_STATUS fault whose data is not undefined, and widening the slot changes that published declaration
   return error as Fault<undefined>;
-}
-
-function isFault(value: unknown): value is AnyFault {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "code" in value &&
-    typeof value.code === "string" &&
-    value instanceof Error
-  );
 }

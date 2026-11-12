@@ -169,6 +169,20 @@ describe("web socket startup faults", () => {
     expect(fault?.cause).toBe(cause);
   });
 
+  test("should report an interceptor's foreign Error with a string code as EXT_INTERCEPTOR_FAILED", async () => {
+    const cause = Object.assign(new Error("x"), { code: "ECONNREFUSED" });
+    const client = createClient(
+      withEndpoint("http://127.0.0.1:1"),
+      withInterceptors(createWebSocketInterceptor(() => Promise.reject(cause))),
+    );
+
+    const [fault, session] = await useRoom(client);
+
+    expect(session).toBeUndefined();
+    expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
+    expect(fault?.cause).toBe(cause);
+  });
+
   test("should report a refused connection as a transport fault, not an interceptor fault", async () => {
     // The startup catch is the funnel for every failure, so it must not relabel this one.
     const [fault, session] = await useRoom(unreachableClient());
