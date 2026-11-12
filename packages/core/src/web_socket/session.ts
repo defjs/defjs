@@ -202,11 +202,6 @@ export function finishWithFault(
 }
 
 export function finish(session: Session, final: WebSocketCloseInfo): void {
-  /* istanbul ignore if -- @preserve defensive once-only gate: terminal callers and reentrant state transitions check the final result before invoking finish */
-  if (session.final !== undefined) {
-    return;
-  }
-
   session.final = final;
   session.endedBeforeAbort = !hasAborted(session.callerSignal);
 
@@ -312,13 +307,8 @@ async function disposeOnce(session: Session): Promise<void> {
     failure = { reason: cause };
   }
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
   if (session.final === undefined) {
-    timer = setTimeout(() => {
-      /* istanbul ignore if -- @preserve defensive: lifecycle completion clears this timer before a later timer task can run */
-      if (session.final !== undefined) {
-        return;
-      }
+    const timer = setTimeout(() => {
       failure ??= {
         reason: new DOMException(
           "WebSocket close event was not observed before teardown timeout",
@@ -327,14 +317,12 @@ async function disposeOnce(session: Session): Promise<void> {
       };
       finish(session, toClosedInfo({}, session.manualClose));
     }, SOCKET_CLOSE_GRACE_MS);
+    // The timer goes with the end of the session, so it never finds a session that has already ended.
+    void session.closed.promise.then(() => clearTimeout(timer));
   }
 
-  try {
-    await session.lifecycle;
-    await session.drain;
-  } finally {
-    clearTimeout(timer);
-  }
+  await session.lifecycle;
+  await session.drain;
 
   if (failure) {
     throw failure.reason;
