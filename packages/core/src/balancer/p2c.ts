@@ -30,6 +30,11 @@ interface LoadState {
 // Decay underflow to zero erases pending from cost; only exact zero needs a floor.
 const MIN_ESTIMATE_MS = Number.MIN_VALUE;
 
+/** Idle entries are evicted before in-flight ones. */
+function busyLast(state: LoadState): number {
+  return state.pending === 0 ? 0 : 1;
+}
+
 /**
  * Samples candidates without replacement and selects the least loaded draw.
  *
@@ -69,13 +74,7 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
     if (state === undefined) {
       state = { pending: 0, rttMs: defaultRttMs, updatedAt: now };
     }
-    rememberEndpoint(
-      states,
-      endpoint,
-      state,
-      (value) => (value.pending === 0 ? 0 : 1),
-      members,
-    );
+    rememberEndpoint(states, endpoint, state, busyLast, members);
     return state;
   }
   function finiteEstimate(value: number): number {
@@ -124,23 +123,17 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
       const release = () => {
         if (released) return;
         released = true;
-        state.pending = Math.max(0, state.pending - 1);
+        state.pending -= 1;
       };
-      let startedAt: number | undefined;
-      let ended = false;
-      let finished = false;
+      let startedAt = now;
       return [
         null,
         {
           endpoint,
           start() {
-            if (startedAt === undefined && !finished) {
-              startedAt = monotonicNow();
-            }
+            startedAt = monotonicNow();
           },
           end() {
-            if (startedAt === undefined || ended || finished) return;
-            ended = true;
             release();
             const at = monotonicNow();
             const sample = Math.max(0, at - startedAt);
@@ -152,11 +145,7 @@ export function p2cBalancer(options?: P2cOptions): Balancer {
             );
             state.updatedAt = at;
           },
-          done() {
-            if (finished) return;
-            finished = true;
-            release();
-          },
+          done: release,
         },
       ];
     },

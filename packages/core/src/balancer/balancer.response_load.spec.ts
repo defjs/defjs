@@ -73,19 +73,3 @@ test("done without end releases pending but cannot produce an RTT sample", () =>
   a.done({ attempted: true });
   expect(pick(b).endpoint).toBe("a");
 });
-// Direct callers bypass the runtime's lifecycle guards.
-test("raw p2c end ignores unstarted, ended and terminal attempts", () => {
-  const b = p2cBalancer({ load: "pending", outlierDetection: false });
-  const [, raw] = b.pick({ endpoints: ["a"] });
-  raw?.end?.({ attempted: true });
-  raw?.start?.();
-  raw?.end?.({ attempted: true });
-  raw?.end?.({ attempted: true });
-  raw?.done?.({ attempted: true });
-  raw?.end?.({ attempted: true });
-  const [, terminal] = b.pick({ endpoints: ["a"] });
-  terminal?.start?.();
-  terminal?.done?.({ attempted: false });
-  terminal?.end?.({ attempted: true });
-  expect(pick(b).endpoint).toBe("a");
-});

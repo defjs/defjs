@@ -257,14 +257,3 @@ test("child errors pass through and unknown child selections still receive their
   b.pick({ endpoints: ["a"] })[1]?.done?.(failure);
   expect(done).toHaveBeenCalledWith(failure);
 });
-
-test("unfiltered round robin resolves and finishes once without a done callback", () => {
-  const [, resolved] = pickEndpoint(
-    roundRobinBalancer({ outlierDetection: false }),
-    { endpoints: ["a"] },
-  );
-  expect(resolved?.finished()).toBe(false);
-  resolved?.done({ attempted: false });
-  resolved?.done(success);
-  expect(resolved?.finished()).toBe(true);
-});

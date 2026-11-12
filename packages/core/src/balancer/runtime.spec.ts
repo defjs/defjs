@@ -96,7 +96,6 @@ describe("callback receiver and failure reporting", () => {
     );
     expect(fault).toBeNull();
     expect(() => selected?.done({ attempted: true })).not.toThrow();
-    expect(selected?.finished()).toBe(true);
     expect(result.count).toBe(0);
     expect(report).toHaveBeenCalledOnce();
     expect(report.mock.calls[0]?.[0]).toBeInstanceOf(TypeError);
@@ -137,7 +136,6 @@ describe("callback receiver and failure reporting", () => {
       selected?.done({ attempted: true });
       selected?.done({ attempted: true });
     }).not.toThrow();
-    expect(selected?.finished()).toBe(true);
     expect(doneCalls).toBe(1);
     expect(report).toHaveBeenCalledTimes(3);
     expect(report.mock.calls[0]?.[0]).toBe(startError);

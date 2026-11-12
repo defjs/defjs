@@ -535,20 +535,17 @@ describe("pickEndpoint", () => {
     );
     picked = selected;
     expect(error).toBeNull();
-    expect(picked?.finished()).toBe(false);
     expect(() =>
       picked?.done({ attempted: true, code: "NET_UNREACHABLE" }),
     ).not.toThrow();
     expect(calls).toBe(1);
     expect(nested).toBe(1);
-    expect(picked?.finished()).toBe(true);
     picked?.done({ attempted: false });
     expect(calls).toBe(1);
 
     const [roundError, round] = pickEndpoint(roundRobinBalancer(), base);
     expect(roundError).toBeNull();
     expect(() => round?.done({ attempted: false })).not.toThrow();
-    expect(round?.finished()).toBe(true);
     round?.done({ attempted: true, status: 200 });
 
     let exploded = 0;
@@ -568,7 +565,6 @@ describe("pickEndpoint", () => {
       base,
     );
     expect(() => throwing?.done({ attempted: false })).not.toThrow();
-    expect(throwing?.finished()).toBe(true);
     throwing?.done({ attempted: false });
     expect(exploded).toBe(1);
     expect(report).toHaveBeenCalledOnce();

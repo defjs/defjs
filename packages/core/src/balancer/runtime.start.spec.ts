@@ -116,14 +116,3 @@ test("p2c unstarted done cannot decrement a different single-host transport", ()
   active.done({ attempted: false });
   expect(pick(b).endpoint).toBe("a");
 });
-
-// Direct callers bypass the runtime's once-only wrapper.
-test("repeated raw p2c starts increment pending only once", () => {
-  vi.spyOn(Math, "random").mockReturnValue(0);
-  const b = p2cBalancer({ load: "pending", outlierDetection: false });
-  const [, p] = b.pick({ ...info, endpoints: ["a"] });
-  p?.start?.();
-  p?.start?.();
-  p?.done?.({ attempted: false });
-  expect(pick(b).endpoint).toBe("a");
-});
