@@ -5,7 +5,7 @@ description: 애플리케이션이 제공하는 Vue 클라이언트와 호출자
 
 # Vue
 
-`@defjs/vue`는 `createClientPlugin(client)`, `HTTP_CLIENT`, `injectClient()`를 통해 애플리케이션이 소유하는 `@defjs/core` 클라이언트를 Vue 3.2+ 애플리케이션에 연결합니다. 여러분의 SDK 정의는 Vue에 대한 의존성이 전혀 없는 순수한 `@defjs/core` 모듈로 유지됩니다.
+`@defjs/vue`는 `createClientPlugin(client)`, `HTTP_CLIENT`, `injectClient()`를 통해 애플리케이션이 소유하는 `@defjs/core` 클라이언트를 Vue 3 이상 애플리케이션에 연결합니다. 여러분의 SDK 정의는 Vue에 대한 의존성이 전혀 없는 순수한 `@defjs/core` 모듈로 유지됩니다. 플러그인 자체에는 `provide` / `inject`만 필요합니다. 아래 예제는 `<script setup>`과 `onScopeDispose`를 사용하며, 둘 다 Vue 3.2 이상이 필요합니다.
 
 ```sh
 bun add @defjs/core @defjs/vue vue

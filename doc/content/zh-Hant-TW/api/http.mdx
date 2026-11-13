@@ -18,7 +18,7 @@ description: defineRequest、請求選項，以及 HTTP 請求／回應型別。
 
 `output` 是 2xx 本文的單一 struct；`error` 是所有非 2xx 本文的單一 struct。兩者都不依狀態碼分鍵。省略任一側，該側本文就永遠不會被讀取——見[宣告即斷言](/zh-Hant-TW/docs/design-decisions#declaration-is-an-assertion)。
 
-呼叫操作會回傳一個 promise，其值為 [`HttpAwaitResult`](/zh-Hant-TW/api/core/httpawaitresult-type) 所描述的 tuple。單次呼叫的選項，請從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。HTTP 只讀 `signal` 與進度回呼，並忽略其他欄位。
+呼叫操作會回傳一個 promise，其值為 [`HttpAwaitResult`](/zh-Hant-TW/api/core/httpawaitresult-type) 所描述的 tuple。單次呼叫的選項，請從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。HTTP 只讀 `signal`、`retry` 與進度回呼，並忽略其他欄位。
 
 沒有宣告 `error` struct，或已宣告的 `error` 本文解碼成功時，非 2xx 狀態才是 `HTTP_STATUS`。有宣告 `error` 時，fault 的 `data` 是解碼後的錯誤本文，否則為 `undefined`。若已宣告的 `error` 本文無法讀取（媒體型別不符、JSON 無效），或與其 struct 不符，fault 會改成 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，而回應狀態仍會記錄在中繼資料中。失敗時 tuple 第三項是 `undefined`；回應中繼資料由 fault 帶著。
 

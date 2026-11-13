@@ -5,7 +5,7 @@ description: استهلك حزمة SDK مستقلة عن أطر العمل با�
 
 # Vue
 
-تربط حزمة `@defjs/vue` عميل `@defjs/core` المملوك للتطبيق بتطبيق Vue 3.2+ عبر `createClientPlugin(client)` والرمز `HTTP_CLIENT` ودالة `injectClient()`. تبقى تعريفات SDK لديك وحدات `@defjs/core` نقية دون أي اعتمادية على Vue.
+تربط حزمة `@defjs/vue` عميل `@defjs/core` المملوك للتطبيق بتطبيق Vue 3 أو أحدث عبر `createClientPlugin(client)` والرمز `HTTP_CLIENT` ودالة `injectClient()`. تبقى تعريفات SDK لديك وحدات `@defjs/core` نقية دون أي اعتمادية على Vue. تحتاج الحزمة نفسها إلى `provide` / `inject` فقط؛ أما الأمثلة أدناه فتستخدم `<script setup>` و`onScopeDispose` اللذين يتطلبان Vue 3.2 أو أحدث.
 
 ```sh
 bun add @defjs/core @defjs/vue vue

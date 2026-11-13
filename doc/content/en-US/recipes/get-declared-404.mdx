@@ -28,7 +28,7 @@ With a server that answers `GET /orders/7` with `200` and `{ "id": 7, "status": 
 Loaded paid from 200
 ```
 
-- Every non-2xx status produces `HTTP_STATUS`. Declaring `error` decodes and validates the error body into `error.data`; omitting `error` leaves `error.data` as `undefined` without reading the body.
+- A non-2xx status produces `HTTP_STATUS` when `error` is omitted or the declared `error` body decodes. Declaring `error` decodes and validates the error body into `error.data`; omitting `error` leaves `error.data` as `undefined` without reading the body.
 - If a declared `error` body has the wrong media type, invalid JSON, or fails Struct validation, the operation returns a `RES_*` fault instead. Because a single `error` Struct covers all non-2xx statuses, use `struct.or(...)` when different error statuses return different shapes.
 
 See [HTTP operations](/docs/http) and [Error handling](/docs/errors).

@@ -20,7 +20,7 @@ Déclarez une requête typée, puis appelez l'opération avec un client et son e
 indexé par statut. En omettre un veut dire que ce corps n’est jamais lu — voir
 [Une déclaration est une affirmation](/fr-FR/docs/design-decisions#declaration-is-an-assertion).
 
-Appeler l’opération renvoie une promesse du tuple décrit sous [`HttpAwaitResult`](/fr-FR/api/core/httpawaitresult-type). Passez les options par appel en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). HTTP lit `signal` et les callbacks de progression et ignore les autres champs.
+Appeler l’opération renvoie une promesse du tuple décrit sous [`HttpAwaitResult`](/fr-FR/api/core/httpawaitresult-type). Passez les options par appel en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). HTTP lit `signal`, `retry` et les callbacks de progression et ignore les autres champs.
 
 Un statut non-2xx est `HTTP_STATUS` quand aucun struct `error` n’est déclaré ou que le corps `error` déclaré décode. Le `data` du fault est le corps
 `error` décodé quand un a été déclaré, et `undefined` sinon. Quand un corps `error` déclaré ne peut pas être lu (mauvais media type, JSON invalide) ou

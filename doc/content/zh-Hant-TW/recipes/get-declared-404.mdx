@@ -28,7 +28,7 @@ description: 呼叫一次 GET，並依具型別的 200 與已宣告的 404 分�
 Loaded paid from 200
 ```
 
-- 任何非 2xx 狀態碼都會產生 `HTTP_STATUS`。宣告 `error` 會把錯誤本文解碼並驗證進 `error.data`；省略 `error` 則讓 `error.data` 維持 `undefined`，且完全不讀取本文。
+- 沒有宣告 `error`，或已宣告的 `error` 本文解碼成功時，非 2xx 狀態碼才會產生 `HTTP_STATUS`。宣告 `error` 會把錯誤本文解碼並驗證進 `error.data`；省略 `error` 則讓 `error.data` 維持 `undefined`，且完全不讀取本文。
 - 若宣告的 `error` 本文媒體型別不符、JSON 無效，或未通過 struct 驗證，該操作會回傳 `RES_*` fault。由於單一 `error` struct 涵蓋所有非 2xx 狀態碼，當不同錯誤狀態回傳不同結構時，請使用 `struct.or(...)`。
 
 請參閱 [HTTP 操作](/zh-Hant-TW/docs/http) 與 [錯誤處理](/zh-Hant-TW/docs/errors)。

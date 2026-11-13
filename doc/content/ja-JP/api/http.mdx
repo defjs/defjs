@@ -18,7 +18,7 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 `output` は 2xx ボディ用の struct 1 つ、`error` は 2xx 以外すべてのボディ用の struct 1 つです。どちらも status でキー分けされません。省いた側のボディは読まれません — [宣言はアサーション（保証）である](/ja-JP/docs/design-decisions#declaration-is-an-assertion) を参照してください。
 
-操作を呼ぶと、[`HttpAwaitResult`](/ja-JP/api/core/httpawaitresult-type) に書かれたタプルの promise が返ります。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。HTTP が読むのは `signal` と進捗コールバックで、他のフィールドは無視します。
+操作を呼ぶと、[`HttpAwaitResult`](/ja-JP/api/core/httpawaitresult-type) に書かれたタプルの promise が返ります。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。HTTP が読むのは `signal`、`retry`、進捗コールバックで、他のフィールドは無視します。
 
 2xx 以外の status は、`error` struct を宣言していないか、宣言した `error` ボディがデコードできる場合に `HTTP_STATUS` になります。Fault の `data` は、`error` を宣言していればデコード済みのエラーボディ、していなければ `undefined` です。宣言した `error` ボディを読めない場合（メディアタイプが違う、JSON が不正）や struct に一致しない場合、Fault は代わりに `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH` のいずれかになり、レスポンスの status はそのメタデータに引き続き含まれます。失敗時のタプルの 3 番目の要素は `undefined` で、レスポンスのメタデータは Fault が持ちます。
 

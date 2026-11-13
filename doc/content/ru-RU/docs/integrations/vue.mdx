@@ -5,7 +5,7 @@ description: Вызывайте независимый от фреймворко
 
 # Vue
 
-Пакет `@defjs/vue` подключает клиент `@defjs/core`, принадлежащий приложению, к приложению Vue 3.2+ с помощью `createClientPlugin(client)`, константы `HTTP_CLIENT` и функции `injectClient()`. При этом определения вашего SDK остаются чистыми модулями `@defjs/core` без каких-либо зависимостей от Vue.
+Пакет `@defjs/vue` подключает клиент `@defjs/core`, принадлежащий приложению, к приложению Vue 3 или новее с помощью `createClientPlugin(client)`, константы `HTTP_CLIENT` и функции `injectClient()`. При этом определения вашего SDK остаются чистыми модулями `@defjs/core` без каких-либо зависимостей от Vue. Самому плагину нужны только `provide` / `inject`; в примерах ниже используются `<script setup>` и `onScopeDispose`, для которых нужен Vue 3.2 или новее.
 
 ```sh
 bun add @defjs/core @defjs/vue vue

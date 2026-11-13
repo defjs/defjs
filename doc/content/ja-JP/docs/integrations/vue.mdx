@@ -5,7 +5,7 @@ description: フレームワーク非依存の SDK を、アプリケーショ�
 
 # Vue
 
-`@defjs/vue` は、アプリケーションが所有する `@defjs/core` のクライアントを、`createClientPlugin(client)`、`HTTP_CLIENT`、および `injectClient()` を通じて Vue 3.2+ アプリケーションに組み込みます。SDK 定義は Vue に一切依存しない純粋な `@defjs/core` モジュールのまま保たれます。
+`@defjs/vue` は、アプリケーションが所有する `@defjs/core` のクライアントを、`createClientPlugin(client)`、`HTTP_CLIENT`、および `injectClient()` を通じて Vue 3 以降のアプリケーションに組み込みます。SDK 定義は Vue に一切依存しない純粋な `@defjs/core` モジュールのまま保たれます。プラグイン自体に必要なのは `provide` / `inject` だけです。以下の例では `<script setup>` と `onScopeDispose` を使っており、どちらも Vue 3.2 以降が必要です。
 
 ```sh
 bun add @defjs/core @defjs/vue vue

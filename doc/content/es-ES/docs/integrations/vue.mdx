@@ -5,7 +5,7 @@ description: Consume un SDK independiente del framework con un cliente Vue que a
 
 # Vue
 
-`@defjs/vue` integra un cliente `@defjs/core` propiedad de la aplicación en una app de Vue 3.2+ mediante `createClientPlugin(client)`, `HTTP_CLIENT` e `injectClient()`. Tus definiciones de SDK se mantienen como módulos puros de `@defjs/core` sin dependencias de Vue.
+`@defjs/vue` integra un cliente `@defjs/core` propiedad de la aplicación en una app de Vue 3 o posterior mediante `createClientPlugin(client)`, `HTTP_CLIENT` e `injectClient()`. Tus definiciones de SDK se mantienen como módulos puros de `@defjs/core` sin dependencias de Vue. El plugin en sí solo necesita `provide` / `inject`; los ejemplos de abajo usan `<script setup>` y `onScopeDispose`, que requieren Vue 3.2 o posterior.
 
 ```sh
 bun add @defjs/core @defjs/vue vue

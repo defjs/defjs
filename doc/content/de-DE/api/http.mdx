@@ -20,7 +20,7 @@ Deklariere einen typisierten Request und rufe die Operation dann mit einem Clien
 ist nach Status gegliedert. Lässt du eines weg, wird dieser Body nie gelesen — siehe
 [Deklaration ist eine Zusicherung](/de-DE/docs/design-decisions#declaration-is-an-assertion).
 
-Der Aufruf der Operation gibt ein Promise auf das Tupel zurück, das unter [`HttpAwaitResult`](/de-DE/api/core/httpawaitresult-type) beschrieben ist. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. HTTP liest `signal` und die Progress-Callbacks und ignoriert die anderen Felder.
+Der Aufruf der Operation gibt ein Promise auf das Tupel zurück, das unter [`HttpAwaitResult`](/de-DE/api/core/httpawaitresult-type) beschrieben ist. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. HTTP liest `signal`, `retry` und die Progress-Callbacks und ignoriert die anderen Felder.
 
 Ein Nicht-2xx-Status ist `HTTP_STATUS`, wenn kein `error`-Struct deklariert ist oder der deklarierte `error`-Body dekodiert wird. Das `data` des Faults ist der dekodierte
 `error`-Body, wenn einer deklariert war, sonst `undefined`. Lässt sich ein deklarierter `error`-Body nicht lesen (falscher Media-Type, ungültiges JSON) oder

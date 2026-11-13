@@ -19,7 +19,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 `output` هو struct واحد لجسم 2xx؛ و`error` هو struct واحد لكل جسم غير-2xx. ولا يُربط أي منهما بالحالة. حذف أحدهما يعني أن ذلك الجسم لا يُقرأ أبدًا — انظر
 [الإعلان تأكيد](/ar/docs/design-decisions#declaration-is-an-assertion).
 
-يُرجع استدعاء العملية وعدًا بالمصفوفة الموصوفة تحت [`HttpAwaitResult`](/ar/api/core/httpawaitresult-type). مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ HTTP الحقل `signal` وردود نداء التقدّم ويتجاهل الحقول الأخرى.
+يُرجع استدعاء العملية وعدًا بالمصفوفة الموصوفة تحت [`HttpAwaitResult`](/ar/api/core/httpawaitresult-type). مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ HTTP الحقلين `signal` و`retry` وردود نداء التقدّم ويتجاهل الحقول الأخرى.
 
 الحالة غير-2xx هي `HTTP_STATUS` عندما لا يُعلَن struct `error` أو يُفك جسم `error` المعلَن. `data` في الخطأ هو جسم
 `error` المفكوك عندما أُعلن واحد، و`undefined` فيما عدا ذلك. عندما يتعذّر قراءة جسم `error` معلَن (نوع وسائط خاطئ، أو JSON غير صالح) أو

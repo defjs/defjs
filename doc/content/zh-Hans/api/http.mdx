@@ -19,7 +19,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 `output` 是 2xx body 的单一 struct；`error` 是每个非 2xx body 的单一 struct。两者都不按状态码分键。省略哪个，那个 body 就根本不会被读——见
 [声明即断言](/zh-Hans/docs/design-decisions#declaration-is-an-assertion)。
 
-调用该操作会返回一个 promise，其值是 [`HttpAwaitResult`](/zh-Hans/api/core/httpawaitresult-type) 描述的元组。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。HTTP 读取 `signal` 和进度回调，忽略其他字段。
+调用该操作会返回一个 promise，其值是 [`HttpAwaitResult`](/zh-Hans/api/core/httpawaitresult-type) 描述的元组。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。HTTP 读取 `signal`、`retry` 和进度回调，忽略其他字段。
 
 未声明 `error` struct，或声明的 `error` body 能解码时，非 2xx 状态为 `HTTP_STATUS`。声明过 `error` 时，Fault 的 `data` 是解码后的错误 body，否则为 `undefined`。如果声明的 `error` body 无法读取（媒体类型错误、JSON 无效）或与 struct 不匹配，Fault 改为 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，响应状态仍记录在其元数据中。失败时元组第三项为 `undefined`；响应元数据由 Fault 携带。
 

@@ -20,7 +20,7 @@ description: defineRequest, опции запроса и типы запроса
 привязано к статусу. Пропустить одну сторону значит, что это тело не читают — см.
 [Объявление — это утверждение](/ru-RU/docs/design-decisions#declaration-is-an-assertion).
 
-Вызов операции возвращает promise кортежа, описанного в [`HttpAwaitResult`](/ru-RU/api/core/httpawaitresult-type). Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). HTTP читает `signal` и колбэки прогресса и игнорирует остальные поля.
+Вызов операции возвращает promise кортежа, описанного в [`HttpAwaitResult`](/ru-RU/api/core/httpawaitresult-type). Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). HTTP читает `signal`, `retry` и колбэки прогресса и игнорирует остальные поля.
 
 Статус вне 2xx — это `HTTP_STATUS`, если struct `error` не объявлен или объявленное тело `error` декодируется. У сбоя поле `data` — декодированное
 тело `error`, если оно было объявлено, иначе `undefined`. Если объявленное тело `error` не удаётся прочитать (неверный тип медиа, невалидный JSON) или

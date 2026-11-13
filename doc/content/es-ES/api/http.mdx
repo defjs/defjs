@@ -20,7 +20,7 @@ Declara una solicitud tipada y llama a la operación con un cliente y su entrada
 indexa por estado. Omitir uno significa que ese cuerpo nunca se lee — consulta
 [Declarar es afirmar](/es-ES/docs/design-decisions#declaration-is-an-assertion).
 
-Llamar a la operación devuelve una promesa de la tupla descrita en [`HttpAwaitResult`](/es-ES/api/core/httpawaitresult-type). Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). HTTP lee `signal` y los callbacks de progreso e ignora los demás campos.
+Llamar a la operación devuelve una promesa de la tupla descrita en [`HttpAwaitResult`](/es-ES/api/core/httpawaitresult-type). Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). HTTP lee `signal`, `retry` y los callbacks de progreso e ignora los demás campos.
 
 Un estado no-2xx es `HTTP_STATUS` cuando no se declara un struct `error` o el cuerpo `error` declarado decodifica. El `data` del fault es el cuerpo
 `error` decodificado cuando se declaró uno, y `undefined` en caso contrario. Cuando un cuerpo `error` declarado no se puede leer (media type incorrecto, JSON inválido) o

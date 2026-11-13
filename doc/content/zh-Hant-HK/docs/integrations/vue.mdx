@@ -5,7 +5,7 @@ description: 喺 Vue 入面提供應用程式自己嘅 Client，並執行 SDK �
 
 # Vue
 
-`@defjs/vue` 透過 `createClientPlugin(client)`、`HTTP_CLIENT` 同 `injectClient()`，將應用程式自設嘅 `@defjs/core` client 接駁到 Vue 3.2+ 應用程式入面。你嘅 SDK 定義依然保持純粹嘅 `@defjs/core` 模組，完全零 Vue 依賴。
+`@defjs/vue` 透過 `createClientPlugin(client)`、`HTTP_CLIENT` 同 `injectClient()`，將應用程式自設嘅 `@defjs/core` client 接駁到 Vue 3 或以上嘅應用程式入面。你嘅 SDK 定義依然保持純粹嘅 `@defjs/core` 模組，完全零 Vue 依賴。外掛本身淨係需要 `provide` / `inject`；下面嘅範例用咗 `<script setup>` 同 `onScopeDispose`，呢兩樣需要 Vue 3.2 或以上。
 
 ```sh
 bun add @defjs/core @defjs/vue vue

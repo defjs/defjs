@@ -5,7 +5,7 @@ description: 用应用提供的 Vue Client 使用与框架无关的 SDK，并由
 
 # Vue
 
-`@defjs/vue` 通过 `createClientPlugin(client)`、`HTTP_CLIENT` 与 `injectClient()`，把应用自有的 `@defjs/core` Client 接入 Vue 3.2+ 应用。SDK 定义保持为纯 `@defjs/core` 模块，不依赖 Vue。
+`@defjs/vue` 通过 `createClientPlugin(client)`、`HTTP_CLIENT` 与 `injectClient()`，把应用自有的 `@defjs/core` Client 接入 Vue 3 或更高版本的应用。SDK 定义保持为纯 `@defjs/core` 模块，不依赖 Vue。插件本身只需要 `provide` / `inject`；下面的示例使用了 `<script setup>` 和 `onScopeDispose`，它们需要 Vue 3.2 或更高版本。
 
 ```sh
 bun add @defjs/core @defjs/vue vue

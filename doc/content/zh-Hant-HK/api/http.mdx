@@ -18,7 +18,7 @@ description: defineRequest、request options，同 HTTP request/response 型別�
 
 `output` 係 2xx body 嘅單一 struct；`error` 係每個非 2xx body 嘅單一 struct。兩者都唔會按狀態碼分鍵。唔寫邊個，嗰個 body 就根本唔會被讀——睇[宣告即斷言](/zh-Hant-HK/docs/design-decisions#declaration-is-an-assertion)。
 
-呼叫操作會回傳一個 promise，內容係 [`HttpAwaitResult`](/zh-Hant-HK/api/core/httpawaitresult-type) 描述嘅 tuple。逐次呼叫嘅選項要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。HTTP 只讀 `signal` 同 progress callback，其餘欄位忽略。
+呼叫操作會回傳一個 promise，內容係 [`HttpAwaitResult`](/zh-Hant-HK/api/core/httpawaitresult-type) 描述嘅 tuple。逐次呼叫嘅選項要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。HTTP 只讀 `signal`、`retry` 同 progress callback，其餘欄位忽略。
 
 非 2xx 狀態碼喺冇宣告 `error` struct，或者已宣告嘅 `error` body 解碼成功嘅時候，就係 `HTTP_STATUS`。宣告過 `error` 嘅時候，fault 嘅 `data` 係解碼之後嘅 error body，否則就係 `undefined`。如果已宣告嘅 `error` body 讀唔到（media type 錯、JSON 無效），或者同佢嘅 struct 唔匹配，fault 就會改為 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，而 response 狀態碼仍然會記喺 metadata 入面。失敗時 tuple 第三項係 `undefined`；response metadata 由 fault 帶住。
 

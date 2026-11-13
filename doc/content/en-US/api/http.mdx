@@ -20,7 +20,7 @@ Declare a typed request, then call the operation with a client and its input.
 keyed by status. Omitting one means that body is never read — see
 [Declaration is an assertion](/docs/design-decisions#declaration-is-an-assertion).
 
-Calling the operation returns a promise of the tuple described under [`HttpAwaitResult`](/api/core/httpawaitresult-type). Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). HTTP reads `signal` and the progress callbacks and ignores the other fields.
+Calling the operation returns a promise of the tuple described under [`HttpAwaitResult`](/api/core/httpawaitresult-type). Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). HTTP reads `signal`, `retry`, and the progress callbacks and ignores the other fields.
 
 A non-2xx status is `HTTP_STATUS` when no `error` struct is declared or the declared `error` body decodes. The fault's `data` is the decoded
 `error` body when one was declared, and `undefined` otherwise. When a declared `error` body cannot be read (wrong media type, invalid JSON) or
