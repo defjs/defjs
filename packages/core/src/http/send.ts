@@ -195,6 +195,8 @@ export function send(
     },
   );
   record.pending = pending;
+  // An interceptor may drop what next() returned; that must not become an unhandled rejection.
+  void pending.catch(() => undefined);
   return pending;
 }
 
