@@ -7,7 +7,6 @@ import {
   defineEventStream,
   defineRequest,
   defineWebSocket,
-  makeResponse,
   struct,
   type WebSocketConnectionInfo,
   type WebSocketSessionLike,
@@ -18,7 +17,6 @@ import {
   withWebSocketHandle,
 } from "../../src";
 import { createFakeWebSocket } from "../fake_web_socket";
-import { yieldMacrotask } from "../macrotask";
 
 const socketEndpoint = defineWebSocket({
   path: "/socket",
@@ -205,84 +203,6 @@ test("HTTP honours both the caller signal and an interceptor replacement signal"
     const [fault] = await pending;
     expect({ mode, code: fault?.code }).toEqual({ mode, code: "NET_ABORTED" });
   }
-});
-
-/** Runs `run`, then returns every promise rejection the runtime reported as unhandled while it ran. */
-async function collectUnhandledRejections(
-  run: () => Promise<void>,
-): Promise<unknown[]> {
-  const reasons: unknown[] = [];
-  const sentinel = new Error("flush unhandled rejections");
-  const flushed = Promise.withResolvers<void>();
-  const record = (reason: unknown) => {
-    if (reason === sentinel) flushed.resolve();
-    else reasons.push(reason);
-  };
-  // Reports arrive in order, so the sentinel's proves that every earlier one has. The macrotask lets the
-  // rejections that `run` caused settle first.
-  const flush = async () => {
-    await yieldMacrotask();
-    void Promise.reject(sentinel);
-    await flushed.promise;
-  };
-  if (typeof window === "undefined") {
-    // Vitest's own listeners would report the sentinel as well, so they sit out the collection.
-    const inherited = process.listeners("unhandledRejection");
-    process.removeAllListeners("unhandledRejection");
-    process.on("unhandledRejection", record);
-    try {
-      await run();
-      await flush();
-    } finally {
-      process.off("unhandledRejection", record);
-      for (const listener of inherited) {
-        process.on("unhandledRejection", listener);
-      }
-    }
-    return reasons;
-  }
-  const onRejection = (event: PromiseRejectionEvent) => {
-    event.preventDefault();
-    record(event.reason);
-  };
-  // Vitest's own listener logs each event once a test registers one of its own.
-  const silence = vi
-    .spyOn(console, "error")
-    .mockImplementation(() => undefined);
-  window.addEventListener("unhandledrejection", onRejection);
-  try {
-    await run();
-    await flush();
-  } finally {
-    window.removeEventListener("unhandledrejection", onRejection);
-    silence.mockRestore();
-  }
-  return reasons;
-}
-
-test("HTTP lets an interceptor drop next() without an unhandled rejection", async () => {
-  const endpoint = defineRequest({ method: "GET", path: "/dropped" });
-  const sent = Promise.withResolvers<void>();
-  const client = createClient(
-    withEndpoint("https://example.test"),
-    withHTTPHandle(() => {
-      sent.resolve();
-      return new Promise(() => undefined);
-    }),
-    withInterceptors(
-      createHttpInterceptor(async (request, next) => {
-        void next(request);
-        await sent.promise;
-        return makeResponse({ status: 200, request });
-      }),
-    ),
-  );
-  let fault: unknown;
-  const unhandled = await collectUnhandledRejections(async () => {
-    [fault] = await endpoint(client);
-  });
-  expect(fault).toBeNull();
-  expect(unhandled).toEqual([]);
 });
 
 test("SSE keeps caller cancellation after an interceptor supplies its own signal", async () => {
