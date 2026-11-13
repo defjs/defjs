@@ -1,0 +1,88 @@
+---
+title: "엔지니어링 컨벤션"
+description: Defjs를 사용해 애플리케이션 내부 API 요청 계층과 독립형 퍼블릭 SDK 패키지를 구조화하기 위한 아키텍처 컨벤션입니다.
+---
+
+# 엔지니어링 컨벤션 [#engineering-conventions]
+
+프론트엔드/백엔드 애플리케이션 내부에서 HTTP 요청 계층을 직접 작성하든, 회사의 퍼블릭 API를 위한 공식 TypeScript SDK를 배포하든, Defjs 프로젝트는 동일한 모듈형 아키텍처를 따릅니다. 즉, **공유 `struct` 데이터 모델(`models/`)과 순수 작업 정의(`services/`)의 조합**입니다.
+
+---
+
+## 1. Defjs를 사용하는 두 가지 방식
+
+대부분의 팀은 두 가지 시나리오 중 하나로 Defjs를 도입합니다. 두 방식 모두 계약을 `models/`와 `services/`로 구성하며, `createClient(...)`가 어디에 위치하는지만 다릅니다:
+
+| 시나리오                                                                                  | 디렉터리 구조                                                     | `createClient(...)` 소유 주체                                                               | 가이드                                               |
+| :---------------------------------------------------------------------------------------- | :---------------------------------------------------------------- | :------------------------------------------------------------------------------------------ | :--------------------------------------------------- |
+| **[애플리케이션 API 계층](/ko-KR/docs/application-api)** (프로젝트 내부 HTTP/실시간 요청) | `src/api/models/` + `src/api/services/` + `src/api/client.ts`     | 애플리케이션 자체 (`src/api/client.ts`에서 브라우저 싱글턴 또는 SSR 요청별 팩토리를 export) | [애플리케이션 API 계층](/ko-KR/docs/application-api) |
+| **[퍼블릭 SDK 설계](/ko-KR/docs/public-sdk)** (퍼블릭 API용 외부 npm 패키지)              | `src/models/` + `src/services/` + `src/index.ts` (`package.json`) | 외부 소비자의 애플리케이션 (배포된 SDK는 절대 `Client`를 생성하거나 캡처하지 않음)          | [퍼블릭 SDK 설계](/ko-KR/docs/public-sdk)            |
+
+---
+
+## 2. 네 가지 핵심 엔지니어링 컨벤션
+
+### 컨벤션 1: `Service` 클래스가 아닌 순수 작업 함수를 export하세요
+
+레거시 OpenAPI 생성기는 엔드포인트를 상태를 가지거나 정적인 `Service` 클래스(`OrdersService.getOrder(id)` 또는 `new S3Client().send(...)`)로 감쌉니다. Defjs에서는 `defineRequest`, `defineEventStream`, `defineWebSocket`으로 생성된 모든 작업이 이미 **독립적으로 호출 가능한 함수**입니다:
+
+```ts
+// 피해야 할 방식: 정의를 클래스나 네임스페이스 객체로 감싸기
+export class OrdersService {
+  // 호출별 client(options) 파생을 숨기고 번들러의 트리쉐이킹을 방해합니다
+}
+
+// 권장 방식: services/*.ts에서 독립형 작업 정의를 export하기
+export const getOrder = defineRequest({
+  operation: "orders.get",
+  method: "GET",
+  path: "/orders/:id",
+  input: GetOrderInput,
+  builder: (input) => ({ path: { id: input.id } }),
+  output: Order,
+  error: ApiError,
+});
+```
+
+export된 작업을 직접 호출하면(`await getOrder(client, { id: 42 })` 또는 `await getOrder(client({ signal }), { id: 42 })`) 코드베이스 전체에서 호출 규약이 일관되게 유지되며, `"sideEffects": false`가 설정된 경우 번들러가 사용하지 않는 작업을 트리쉐이킹할 수 있습니다.
+
+### 컨벤션 2: `models/`에서 동일한 이름으로 `struct`와 `Infer`를 함께 export하세요
+
+`models/*.ts`에서는 런타임 `struct` 스키마와 추론된 TypeScript 타입을 **동일한 식별자**로 export하세요. TypeScript는 같은 스코프 내의 값 선언과 타입 선언을 병합하므로, 호출자는 런타임 검증과 정적 타입 표기 모두를 위해 단일 심볼만 import하면 됩니다:
+
+```ts
+import { struct, type Infer } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  customerName: struct.string().alias("customer_name"),
+  totalCents: struct.number().alias("total_cents"),
+});
+export type Order = Infer<typeof Order>;
+```
+
+### 컨벤션 3: `services/*.ts`에는 클라이언트 인스턴스를 두지 마세요
+
+단일 저장소 내부(`src/api/`)에서 [애플리케이션 API 계층](/ko-KR/docs/application-api)을 작성할 때도 정의를 감싸기 위해 `src/api/services/*.ts` 안에서 `apiClient`를 import하지 **마세요**. `services/*.ts`를 순수 정의로 유지하면 세 가지 즉각적인 이점을 얻을 수 있습니다:
+
+1. **결정론적 오프라인 테스트**: 단위 테스트에서 모듈 모킹 없이 로컬 `createClient(withEndpoint(...), withHTTPHandle(...))`을 어떤 작업에나 직접 전달할 수 있습니다.
+2. **SSR 및 멀티테넌트 안전성**: 서버 로더는 현재 사용자의 쿠키나 테넌트 토큰을 담은 요청 범위의 `Client`를 브라우저 컴포넌트가 사용하는 것과 완전히 동일한 작업 정의에 전달할 수 있습니다.
+3. **비용 없는 공유 패키지 전환**: 나중에 팀에서 `src/api/models/`와 `src/api/services/`를 모노레포 워크스페이스 패키지나 퍼블릭 npm SDK로 분리하더라도 작업 파일을 수정할 필요가 없습니다.
+
+### 컨벤션 4: `builder` 배치와 인터셉터 정책을 분리하세요
+
+각 관심사를 지정된 계층에 배치하세요:
+
+| 관심사                                                                 | 속해야 할 위치                                              | 이유                                                    |
+| :--------------------------------------------------------------------- | :---------------------------------------------------------- | :------------------------------------------------------ |
+| 호출자 매개변수를 `path`, `query`, `headers`, `body`로 라우팅          | `services/*.ts`의 작업 `builder`                            | 현재 `input`에 대한 동기 순수 함수                      |
+| 정적 저카디널리티 작업 식별자 (`"orders.create"`, `"s3.objects.put"`)  | `services/*.ts`의 작업 `operation` 필드                     | OpenTelemetry 스팬, 메트릭, 로깅 인터셉터에서 사용      |
+| 기본 URL, 인증 헤더 (`Authorization`, 서명, XSRF), 재시도, 로드 밸런싱 | `client.ts`의 `createClient(...)`                           | 환경 및 세션별 실행 정책                                |
+| 호출별 데드라인, 취소 (`signal`), 전송 진행률 콜백                     | 호출 지점의 인라인 `client({ signal, onDownloadProgress })` | 공유 클라이언트를 변경하지 않고 단일 호출로만 범위 제한 |
+
+---
+
+## 다음 단계
+
+- 앱 내부에 HTTP/실시간 계층을 구축하고 계신가요? [애플리케이션 API 계층](/ko-KR/docs/application-api)을 읽어보세요.
+- 회사의 퍼블릭 API를 위한 외부 SDK 패키지를 배포하시나요? [퍼블릭 SDK 설계](/ko-KR/docs/public-sdk)를 읽어보세요.

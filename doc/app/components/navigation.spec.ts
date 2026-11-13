@@ -135,6 +135,9 @@ const guidePaths = [
   "/docs/interceptors",
   "/docs/load-balancing",
   "/docs/testing",
+  "/docs/best-practices",
+  "/docs/application-api",
+  "/docs/public-sdk",
   "/docs/ai",
   "/docs/ai-api",
 ];
@@ -170,7 +173,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
         .map((p) => p.url)
         .sort(),
     );
-    expect(new Set(pages.map((p) => p.url)).size).toBe(238);
+    expect(new Set(pages.map((p) => p.url)).size).toBe(241);
     for (const page of pages) {
       expect(source.getPageByUrl(page.url, locale)?.path).toBe(
         `${locale}/${page.$ref}`,
@@ -193,7 +196,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
     expect(
       guide.children.filter((n) => n.type === "separator" && Boolean(n.name))
         .length,
-    ).toBe(4);
+    ).toBe(5);
     expect(
       integrations.children.filter(
         (n) => n.type === "separator" && Boolean(n.name),
@@ -246,7 +249,7 @@ test("top tabs expose four areas and the AI guide sits inside Guide", () => {
     const ai = `${prefix}/docs/ai`;
     const aiApi = `${prefix}/docs/ai-api`;
     expect(guideUrls.indexOf(ai)).toBe(
-      guideUrls.indexOf(`${prefix}/docs/testing`) + 1,
+      guideUrls.indexOf(`${prefix}/docs/public-sdk`) + 1,
     );
     expect(guideUrls.indexOf(aiApi)).toBe(guideUrls.indexOf(ai) + 1);
     expect(
@@ -345,7 +348,7 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     guide.children
       .filter((n) => n.type === "separator" && Boolean(n.name))
       .map((n) => n.name),
-  ).toEqual(["前言", "定义 SDK", "客户端与执行", "AI"]);
+  ).toEqual(["前言", "定义 SDK", "客户端与执行", "最佳实践", "AI"]);
   const integrations = integrationsFolder(tree.children);
   expect(
     integrations.children

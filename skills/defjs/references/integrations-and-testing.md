@@ -1,8 +1,8 @@
 # Framework Integrations (`@defjs/react`, `@defjs/vue`), OpenTelemetry (`@defjs/opentelemetry-server`), Testing, and SDK Packaging
 
-Contents: [React integration (`@defjs/react`)](#1-react-integration-defjsreact) · [Vue integration (`@defjs/vue`)](#2-vue-integration-defjsvue) · [Server-side OpenTelemetry (`@defjs/opentelemetry-server`)](#3-server-side-opentelemetry-defjsopentelemetry-server) · [Deterministic offline testing (`with*Handle`)](#4-deterministic-offline-testing-withhandle) · [Publishing a standalone Defjs SDK package](#5-publishing-a-standalone-defjs-sdk-package) · [What Defjs intentionally does not provide](#6-what-defjs-intentionally-does-not-provide)
+Contents: [React integration (`@defjs/react`)](#1-react-integration-defjsreact) · [Vue integration (`@defjs/vue`)](#2-vue-integration-defjsvue) · [Server-side OpenTelemetry (`@defjs/opentelemetry-server`)](#3-server-side-opentelemetry-defjsopentelemetry-server) · [Deterministic offline testing (`with*Handle`)](#4-deterministic-offline-testing-withhandle) · [In-app API layer & public SDK architecture](#5-in-app-api-layer--public-sdk-architecture) · [What Defjs intentionally does not provide](#6-what-defjs-intentionally-does-not-provide)
 
-For full English guide pages on the official site (no locale prefix), fetch `https://defjs.lyz.cloud/llms.mdx/docs/integrations/react/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/integrations/vue/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/integrations/opentelemetry-server/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/testing/content.md`, and `https://defjs.lyz.cloud/llms.mdx/recipes/publish-http-sdk/content.md`.
+For full English guide pages on the official site (no locale prefix), fetch `https://defjs.lyz.cloud/llms.mdx/docs/integrations/react/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/integrations/vue/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/integrations/opentelemetry-server/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/testing/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/best-practices/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/application-api/content.md`, `https://defjs.lyz.cloud/llms.mdx/docs/public-sdk/content.md`, and `https://defjs.lyz.cloud/llms.mdx/recipes/publish-http-sdk/content.md`.
 
 ---
 
@@ -297,12 +297,17 @@ test("postOrder encodes wire aliases and decodes 201 and 400 responses", async (
 
 ---
 
-## 5. Publishing a standalone Defjs SDK package
+## 5. In-app API layer & public SDK architecture
 
-When authoring a reusable SDK package (or an in-repo `src/sdk/` module) such as an Amazon S3-compatible SDK (`@company/s3-sdk`), organize the codebase into `src/models/` and `src/services/`, and export **only standalone pure operation functions**:
+Defjs supports two primary project layouts that share the same `models/` + `services/` (pure operation functions) structure:
+
+| Scenario                                                                                                                                   | Layout                                                            | Who owns `createClient(...)`?                                                                        |
+| :----------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------- |
+| **Application API layer (`src/api/`)** — Hand-writing HTTP/realtime requests inside an app repository (replacing `axios`/`fetch` wrappers) | `src/api/models/` + `src/api/services/` + `src/api/client.ts`     | Your app (`src/api/client.ts` exports a browser singleton `apiClient` or an SSR per-request factory) |
+| **Public SDK package (`@company/s3-sdk`)** — Publishing an external npm SDK for a company's public API                                     | `src/models/` + `src/services/` + `src/index.ts` (`package.json`) | External consumer applications (the SDK package never creates or captures a `Client`)                |
 
 ```text
-@company/s3-sdk/
+@company/s3-sdk/ (or src/api/ inside an app repo)
 ├── src/
 │   ├── models/           # Shared struct schemas + Infer<typeof ...> same-name types
 │   │   ├── common.ts     # S3Error, StorageClass
@@ -311,16 +316,16 @@ When authoring a reusable SDK package (or an in-repo `src/sdk/` module) such as 
 │   ├── services/         # Domain modules grouped by resource tag
 │   │   ├── buckets.ts    # listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts    # listObjectsV2, headObject, getObject, putObject, deleteObject
-│   └── index.ts          # Flat barrel re-exports
+│   └── index.ts          # Flat barrel re-exports (or client.ts in an in-app src/api/ layer)
 ├── package.json          # "type": "module", "sideEffects": false, peerDependencies: { "@defjs/core": "^0.7.0" }
 └── tsconfig.json
 ```
 
 - **Architecture rules**:
   1. **Pure functions, never `Service` classes**: Unlike legacy OpenAPI generators that wrap endpoints in stateful classes (`ObjectsService.putObject(...)` or `new S3Client()`), every operation in `src/services/*.ts` is exported directly as a standalone `defineRequest` / `defineEventStream` / `defineWebSocket` value and called as `await putObject(client, input)` or `await getObject(client({ signal }), input)`. Never wrap operations in a `class` or a namespace object—standalone exports preserve per-call `client(options)` derivation and allow bundlers to tree-shake unused operations when `"sideEffects": false` is set.
-  2. **Same-name `struct` + `Infer` exports in `src/models/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
-  3. **Zero client state in the SDK**: Never call `createClient`, never hardcode environment URLs, and never read credentials inside the SDK package. The consuming application owns endpoints (AWS S3, Cloudflare R2, MinIO), auth interceptors, and retry policies.
-  4. **Package metadata**: Declare `"@defjs/core": "^0.7.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
+  2. **Same-name `struct` + `Infer` exports in `models/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
+  3. **Keep `services/*.ts` client-free in both scenarios**: Even inside an application's `src/api/`, never import `apiClient` inside `src/api/services/*.ts`. Keep `createClient(...)` in `src/api/client.ts` so operations remain directly testable with `withHTTPHandle` and reusable across browser singletons and SSR per-request clients.
+  4. **Public SDK package metadata**: When publishing an external SDK package, declare `"@defjs/core": "^0.7.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
 
 ### Best practice: hand-written S3 SDK (`models/` + `services/` + application consumer)
 

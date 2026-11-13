@@ -113,12 +113,12 @@ void main();
 
 Load only the reference file that matches your current task:
 
-| Task domain                                                                                                                                           | Reference file                                                                     |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Schemas (`struct.*`, `.alias()`, `struct.parse`, recursive structs), `defineRequest`, `builder` placement, query/body codecs, cancellation, `Fault`   | [references/http-and-struct.md](references/http-and-struct.md)                     |
-| `createClient`, `RequestOptions`, XSRF, multi-endpoint load balancing (`withBalancer`), `withRetry`, HTTP interceptors (auth, 401 refresh, 429, ETag) | [references/client-retry-interceptors.md](references/client-retry-interceptors.md) |
-| SSE (`defineEventStream`) and WebSocket (`defineWebSocket`), `await using` / `closed` ownership, heartbeats, reconnects, subprotocols                 | [references/realtime-sse-ws.md](references/realtime-sse-ws.md)                     |
-| `@defjs/react`, `@defjs/vue`, `@defjs/opentelemetry-server`, deterministic offline testing (`with*Handle`), standalone SDK packaging                  | [references/integrations-and-testing.md](references/integrations-and-testing.md)   |
+| Task domain                                                                                                                                                         | Reference file                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Schemas (`struct.*`, `.alias()`, `struct.parse`, recursive structs), `defineRequest`, `builder` placement, query/body codecs, cancellation, `Fault`                 | [references/http-and-struct.md](references/http-and-struct.md)                     |
+| `createClient`, `RequestOptions`, XSRF, multi-endpoint load balancing (`withBalancer`), `withRetry`, HTTP interceptors (auth, 401 refresh, 429, ETag)               | [references/client-retry-interceptors.md](references/client-retry-interceptors.md) |
+| SSE (`defineEventStream`) and WebSocket (`defineWebSocket`), `await using` / `closed` ownership, heartbeats, reconnects, subprotocols                               | [references/realtime-sse-ws.md](references/realtime-sse-ws.md)                     |
+| `@defjs/react`, `@defjs/vue`, `@defjs/opentelemetry-server`, deterministic offline testing (`with*Handle`), in-app API layers (`src/api/`) and public SDK packaging | [references/integrations-and-testing.md](references/integrations-and-testing.md)   |
 
 ## Official documentation lookup (English, no locale slug)
 
@@ -126,7 +126,7 @@ Load only the reference file that matches your current task:
 2. **Search or fetch official English docs when needed:** When you need deeper edge-case behavior, full API reference tables, or additional examples, fetch the English documentation on `https://defjs.lyz.cloud` directly. Always use the root paths **without** a locale prefix (do not add `/en-US/` or `/zh-Hans/`):
    - **LLM page index (start here to discover slugs):** `https://defjs.lyz.cloud/llms.txt`
    - **Single page as clean Markdown:** `https://defjs.lyz.cloud/llms.mdx/<slug>/content.md`
-     - Guides: `docs/start`, `docs/struct`, `docs/http`, `docs/client`, `docs/load-balancing`, `docs/interceptors`, `docs/errors`, `docs/sse`, `docs/web-socket`, `docs/testing`, `docs/design-decisions`, `docs/integrations/react`, `docs/integrations/vue`, `docs/integrations/opentelemetry-server`
+     - Guides: `docs/start`, `docs/struct`, `docs/http`, `docs/client`, `docs/load-balancing`, `docs/interceptors`, `docs/errors`, `docs/sse`, `docs/web-socket`, `docs/testing`, `docs/design-decisions`, `docs/best-practices`, `docs/application-api`, `docs/public-sdk`, `docs/integrations/react`, `docs/integrations/vue`, `docs/integrations/opentelemetry-server`
      - Recipes: `recipes/post-json`, `recipes/get-declared-404`, `recipes/cancel-http`, `recipes/refresh-bearer-once`, `recipes/etag-revalidate`, `recipes/consume-sse`, `recipes/websocket-session`, `recipes/test-with-handle`, `recipes/publish-http-sdk`
      - API overviews: `api/client`, `api/http`, `api/struct`, `api/errors`, `api/interceptors`, `api/sse`, `api/web-socket`, `api/react`, `api/vue`, `api/opentelemetry-server`
    - **All English guides in one file:** `https://defjs.lyz.cloud/llms-full.txt`

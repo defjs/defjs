@@ -28,6 +28,12 @@ Defjs는 SDK 팀이 배포하는 API 계약과 애플리케이션이 런타임�
 - [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)
 - [테스트](/ko-KR/docs/testing)
 
+## 모범 사례 [#best-practices]
+
+- [엔지니어링 컨벤션](/ko-KR/docs/best-practices)
+- [애플리케이션 API 계층](/ko-KR/docs/application-api)
+- [퍼블릭 SDK 설계](/ko-KR/docs/public-sdk)
+
 ## 통합 및 AI [#integrations-and-ai]
 
 - [통합 개요](/ko-KR/docs/integrations)

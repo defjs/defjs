@@ -67,6 +67,7 @@ export default {
   "nav.guide.middleware": "インターセプター",
   "nav.guide.errors": "エラーハンドリング",
   "nav.guide.preface": "はじめに",
+  "nav.guide.bestPractices": "ベストプラクティス",
   "nav.guide.ai": "AI",
   "nav.integrations.overview": "概要",
   "nav.integrations.official": "公式プラグイン",

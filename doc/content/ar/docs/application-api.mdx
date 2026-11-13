@@ -1,0 +1,86 @@
+---
+title: "طبقة API داخل التطبيق"
+description: نظّم طلبات HTTP المكتوبة يدوياً والنماذج وسياسات العميل داخل مستودع التطبيق دون الحاجة إلى نشر حزمة SDK منفصلة.
+---
+
+# طبقة API داخل التطبيق [#application-api-layer]
+
+تستخدم معظم المشاريع Defjs مباشرةً داخل مستودع التطبيق (`src/api/`) لاستبدال أغلفة `fetch` أو `axios` المتناثرة. حتى عندما لا تخطط لنشر حزمة npm خارجية، فإن الفصل بين `src/api/models/` و`src/api/services/` و`src/api/client.ts` يبقي طبقة الطلبات لديك ذات أنواع صارمة، وقابلة للاختبار في الذاكرة، وآمنة عبر بيئات المتصفح وSSR.
+
+---
+
+## 1. هيكل المجلدات الموصى به داخل `src/api/`
+
+نظّم طبقة الطلبات في مشروعك إلى ثلاثة أجزاء مركّزة تحت `src/api/`:
+
+```text
+src/
+├── api/
+│   ├── models/           # 1. مخططات struct المشتركة + أنواع Infer<typeof ...>
+│   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
+│   ├── services/         # 2. تعريفات عمليات نقية مجمّعة حسب النطاق
+│   │   └── orders.ts     #    getOrder, listOrders, createOrder
+│   └── client.ts         # 3. العميل المملوك للتطبيق (نقطة النهاية، معترض المصادقة، إعادة المحاولة)
+└── checkout.ts           # 4. منطق الأعمال / مكوّنات الواجهة التي تستدعي العمليات
+```
+
+---
+
+## 2. مثال كامل داخل التطبيق
+
+<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+  <Tab>
+<include cwd meta='title="src/api/models/order.ts"'>
+  examples/best-practices/application-api/src/api/models/order.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/services/orders.ts"'>
+  examples/best-practices/application-api/src/api/services/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/client.ts"'>
+  examples/best-practices/application-api/src/api/client.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/checkout.ts"'>
+  examples/best-practices/application-api/src/checkout.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+---
+
+## 3. أنماط أساسية لمشاريع التطبيقات
+
+### نسخة المتصفح المفردة مقابل عميل SSR لكل طلب
+
+- **المتصفح / تطبيقات الصفحة الواحدة SPA (`apiClient`)**: صدِّر نسخة `createClient(...)` واحدة على مستوى الوحدة لكل أصل خلفي (origin). تضمن مشاركة هذه النسخة الحفاظ على حالة صحة موزّع الحمل وميزانية إعادة محاولة طلبات HTTP على مستوى العميل عبر تفاعلات الصفحة. وفي تطبيقات React أو Vue، وفِّر `apiClient` عند الجذر عبر [`@defjs/react`](/ar/docs/integrations/react) (`ClientProvider` / `useClient`) أو [`@defjs/vue`](/ar/docs/integrations/vue) (`createClientPlugin` / `injectClient`).
+- **SSR / BFF (`createServerApiClient(accessToken)`)**: كلما اختلفت بيانات الاعتماد أو ملفات تعريف الارتباط أو ترويسات المستأجر لكل طلب HTTP وارد، استدعِ دالة مصنع داخل معالج طلبات الخادم لإنشاء `Client` معزول. وبما أن `getOrder` و`listOrders` و`createOrder` دوال نقية، فإن تعريفات `services/orders.ts` ذاتها تعمل مع كلٍّ من `apiClient` و`createServerApiClient(token)`.
+
+### المهل الزمنية والإلغاء لكل استدعاء
+
+لا تنشئ عميلاً جديداً عبر `createClient(...)` لمجرد تمرير مهلة زمنية أو `AbortSignal`. بدلاً من ذلك، اشتق عميلاً لاستدعاء واحد مباشرةً من عميلك المشترك:
+
+```ts
+const [error, created] = await createOrder(
+  apiClient({ signal: AbortSignal.timeout(5_000) }),
+  {
+    customerName: "Ada Lovelace",
+    totalCents: 4200,
+    idempotencyKey: "idem-2026-101",
+  },
+);
+```
+
+### غلاف الأخطاء المشترك (`ApiError`)
+
+صرح عن غلاف الخطأ القياسي لواجهتك الخلفية مرة واحدة (`export const ApiError = struct.object(...)`) في `src/api/models/` ومرّر `error: ApiError` في كل استدعاء `defineRequest` داخل `src/api/services/`. عندما يعيد الطلب رمز حالة غير `2xx`، يمنحك تضييق النوع عبر `if (error.code === "HTTP_STATUS")` وصولاً ذا أنواع صارمة إلى `error.data.code` و`error.data.message` و`error.data.requestId`.
+
+راجع [الاتفاقيات الهندسية](/ar/docs/best-practices)، و[تصميم حزم SDK العامة](/ar/docs/public-sdk)، و[العميل (Client)](/ar/docs/client)، و[المعترضات (Interceptors)](/ar/docs/interceptors).

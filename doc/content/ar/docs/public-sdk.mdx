@@ -1,0 +1,152 @@
+---
+title: "تصميم حزم SDK العامة"
+description: صمّم وانشر حزمة TypeScript SDK خالية من العميل وقابلة للتقليم الشجري لواجهات API العامة بالاعتماد على معمارية Amazon S3 SDK.
+---
+
+# تصميم حزم SDK العامة [#public-sdk-design]
+
+عندما تنشر شركتك أو فريق المنصة حزمة TypeScript SDK رسمية للمطورين الخارجيين (على سبيل المثال: حزمة SDK لتخزين الكائنات، أو لبوابة دفع، أو لمنصة SaaS)، يجب أن **تعرّف حزمة SDK عقد الشبكة دون فرض بيئة التشغيل**.
+
+باستخدام **حزمة SDK متوافقة مع Amazon S3 (`@company/s3-sdk`)** كمخطط عملي، يوضّح هذا الدليل كيفية تصميم حزمة SDK عامة متعددة الوحدات تضم `models/` وعمليات كدوال نقية في `services/`.
+
+---
+
+## 1. لماذا تستفيد حزم SDK العامة من الفصل في Defjs
+
+تحزم أدوات SDK التقليدية صنف عميل ثقيل (`new S3Client({ region, credentials })`) مرتبطاً بإحكام بأصناف الأوامر أو أصناف الخدمات الثابتة. إن بناء حزمة SDK العامة باستخدام `@defjs/core` يحل أربع مشكلات متكررة لمستخدميك الخارجيين:
+
+1. **مرونة تعدد البيئات وصناديق الاختبار (Sandboxes)**: لأن `@company/s3-sdk` لا يربط أي نقطة نهاية أو عميل، يمكن للعميل توجيه تعريفات العمليات ذاتها إلى بيئة الإنتاج (`https://s3.us-east-1.amazonaws.com`)، أو بيئة الاختبار المرحلي، أو Cloudflare R2، أو حاوية MinIO محلية أثناء اختبارات التكامل المستمر (CI).
+2. **تقليم شجري (Tree-shaking) بنسبة 100% في أدوات الحزم**: يضمن تصدير دوال نقية مستقلة (`listBuckets` و`listObjectsV2` و`getObject` و`putObject` و`deleteObject`) مع `"sideEffects": false` أن حزمة المتصفح التي تستدعي `getObject` و`putObject` فقط تستبعد كل نقطة نهاية ونموذج آخر.
+3. **تحقق وقت التشغيل + أنواع ثابتة من مصدر واحد**: يحصل المستهلكون الخارجيون على كلٍّ من أنواع TypeScript وقت الترجمة (`Infer<typeof ...>`) والتحقق من الاستجابات والأخطاء وقت التشغيل (`struct`)، مما يحميهم من حمولات الشبكة غير المتوقعة ويحوّل حقول `snake_case` أو سلاسل تواريخ ISO تلقائياً.
+4. **تحكم كامل في المصادقة وإعادة المحاولة والقياسات عن بُعد**: يربط العملاء معترضات تدوير بيانات الاعتماد الخاصة بهم، أو سياسات `withRetry(...)`، أو موزّعات الحمل متعددة المناطق (`withBalancer(...)`)، أو تتبّع OpenTelemetry على الخادم (`@defjs/opentelemetry-server`) على نسخة `Client` الخاصة بهم.
+
+---
+
+## 2. هيكل مجلدات الحزمة
+
+قسّم حزمة SDK إلى `src/models/` (هياكل البيانات) و`src/services/` (تعريفات عمليات نقية مجمّعة حسب المورد)، مع ملف تصدير مسطح `src/index.ts`:
+
+```text
+@company/s3-sdk/
+├── src/
+│   ├── models/                 # 1. مخططات struct المشتركة + أنواع Infer<typeof ...>
+│   │   ├── common.ts           #    StorageClass, S3Error
+│   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
+│   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
+│   ├── services/               # 2. دوال defineRequest نقية حسب نطاق المورد
+│   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
+│   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
+│   └── index.ts                # 3. تصديرات مجمّعة للاستيراد الجذري والقابل للتقليم الشجري
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+└── tsconfig.json
+```
+
+---
+
+## 3. التنفيذ الكامل لحزمة S3 SDK
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+  <Tab>
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+```json
+{
+  "name": "@company/s3-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown --platform neutral"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.7.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.7.0",
+    "tsdown": "^0.23.3",
+    "typescript": "^7.0.2"
+  }
+}
+```
+  </Tab>
+  <Tab>
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+  </Tab>
+</Tabs>
+
+### تصميم عقود عمليات مريحة للاستخدام
+
+- **سطِّح مدخلات المستدعي ووزِّعها داخل `builder`**: في `putObject`، يمرّر المستدعون كائناً واحداً مريحاً (`{ bucket, key, body, contentType, storageClass }`). يقسّم `builder` المتزامن هذا المدخل إلى `path` (`:bucket/:key`) و`headers` (`content-type` و`x-amz-storage-class`) و`body` الثنائي (`Blob`). وفي `listObjectsV2`، يربط `builder` كلاً من `continuationToken` و`maxKeys` بمعاملات استعلام S3 المسماة `continuation-token` و`max-keys` إلى جانب `list-type: 2`.
+- **طابق `output` مع حمولة الشبكة**:
+  - **بيانات JSON مهيكلة (`listBuckets` و`listObjectsV2`)**: صرّح عن `struct.object(...)` مع تعيينات `.alias()` وحقول `struct.date()`.
+  - **حمولة ثنائية (`getObject`)**: صرّح عن `output: struct.blob()` (أو `struct.arrayBuffer()`).
+  - **متن فارغ (`headBucket` و`headObject` و`putObject` و`deleteObject`)**: احذف `output` حتى تنجح استجابات `HEAD` و`200` و`204` الخالية من البايتات دون محاولة فك ترميز JSON، بينما يظل بإمكان المستدعين قراءة ترويسات الاستجابة (`response.headers.get("etag")`) من الخانة الثالثة في الصف (tuple).
+
+---
+
+## 4. كيف يستهلك المطورون الخارجيون حزمة SDK الخاصة بك
+
+تثبّت التطبيقات الخارجية `@company/s3-sdk` إلى جانب `@defjs/core`، وتضبط `Client` الخاص بها مع نقطة النهاية ومعترض التوقيع، وتستدعي العمليات المصدَّرة مباشرةً كدوال نقية:
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+"etag-report-v1" 1 hello-s3-pdf
+```
+
+للحصول على تعليمات التحزيم والنشر عبر `bun publish` خطوة بخطوة، راجع وصفة [بناء SDK ونشره](/ar/recipes/publish-http-sdk)، و[الاتفاقيات الهندسية](/ar/docs/best-practices)، و[الاختبارات](/ar/docs/testing).

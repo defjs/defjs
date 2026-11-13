@@ -1,0 +1,86 @@
+---
+title: "應用程式 API 層"
+description: 喺應用程式程式碼庫入面組織手寫 HTTP 請求、資料模型同 Client 策略，無需發佈獨立 SDK 套件。
+---
+
+# 應用程式 API 層 [#application-api-layer]
+
+大多數項目都係直接喺應用程式程式碼庫入面（`src/api/`）使用 Defjs，用嚟取代散落各處嘅 `fetch` 或者 `axios` 封裝。就算你冇打算發佈外部 npm 套件，將 `src/api/models/`、`src/api/services/` 同 `src/api/client.ts` 分開，依然可以令你嘅請求層保持強型別、支援記憶體內單元測試，而且喺瀏覽器同 SSR runtime 之間安全重用。
+
+---
+
+## 1. 建議嘅 `src/api/` 目錄結構
+
+喺項目嘅 `src/api/` 下面將請求層分成三個職責清晰嘅部分：
+
+```text
+src/
+├── api/
+│   ├── models/           # 1. 共用 struct schema 同 Infer<typeof ...> 型別
+│   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
+│   ├── services/         # 2. 按業務領域分組嘅純函數操作定義
+│   │   └── orders.ts     #    getOrder, listOrders, createOrder
+│   └── client.ts         # 3. 應用程式擁有嘅 Client（端點、認證攔截器、重試策略）
+└── checkout.ts           # 4. 呼叫操作嘅業務邏輯／UI 元件
+```
+
+---
+
+## 2. 完整應用程式內範例
+
+<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+  <Tab>
+<include cwd meta='title="src/api/models/order.ts"'>
+  examples/best-practices/application-api/src/api/models/order.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/services/orders.ts"'>
+  examples/best-practices/application-api/src/api/services/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/client.ts"'>
+  examples/best-practices/application-api/src/api/client.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/checkout.ts"'>
+  examples/best-practices/application-api/src/checkout.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+---
+
+## 3. 應用程式項目嘅關鍵模式
+
+### 瀏覽器單例 vs. SSR 逐個請求 Client
+
+- **瀏覽器／SPA（`apiClient`）**：每個後端 origin 匯出一個模組級嘅 `createClient(...)` 實例。共用呢個實例可以喺頁面互動期間保留負載平衡器嘅健康狀態同 client 層級嘅 HTTP 重試預算。喺 React 或 Vue 應用程式入面，可以透過 [`@defjs/react`](/zh-Hant-HK/docs/integrations/react)（`ClientProvider`／`useClient`）或者 [`@defjs/vue`](/zh-Hant-HK/docs/integrations/vue)（`createClientPlugin`／`injectClient`）喺根元件提供 `apiClient`。
+- **SSR／BFF（`createServerApiClient(accessToken)`）**：只要憑證、cookie 或租戶 header 會跟住每個入站 HTTP 請求而變，就要喺伺服器請求處理常式入面呼叫工廠函數建立隔離嘅 `Client`。因為 `getOrder`、`listOrders` 同 `createOrder` 都係純函數，同一份 `services/orders.ts` 定義可以同時配搭 `apiClient` 同 `createServerApiClient(token)` 使用。
+
+### 單次呼叫嘅超時同取消
+
+千祈唔好為咗傳入超時或者 `AbortSignal` 而重新呼叫 `createClient(...)` 開個新 `Client`。直接由共用嘅 client 內聯派生出單次呼叫專用嘅 client 就得：
+
+```ts
+const [error, created] = await createOrder(
+  apiClient({ signal: AbortSignal.timeout(5_000) }),
+  {
+    customerName: "Ada Lovelace",
+    totalCents: 4200,
+    idempotencyKey: "idem-2026-101",
+  },
+);
+```
+
+### 共用錯誤外層結構（`ApiError`）
+
+喺 `src/api/models/` 入面統一宣告一次後端嘅標準錯誤結構（`export const ApiError = struct.object(...)`），並喺 `src/api/services/` 嘅每個 `defineRequest` 傳入 `error: ApiError`。當請求回傳非 `2xx` 狀態碼時，只要用 `if (error.code === "HTTP_STATUS")` 收窄型別，就可以用強型別安全讀取 `error.data.code`、`error.data.message` 同 `error.data.requestId`。
+
+另見 [工程規範](/zh-Hant-HK/docs/best-practices)、[公開 SDK 設計](/zh-Hant-HK/docs/public-sdk)、[Client](/zh-Hant-HK/docs/client) 同 [攔截器](/zh-Hant-HK/docs/interceptors)。

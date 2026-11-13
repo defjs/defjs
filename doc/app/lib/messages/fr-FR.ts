@@ -67,6 +67,7 @@ export default {
   "nav.guide.middleware": "Intercepteurs",
   "nav.guide.errors": "Gestion des erreurs",
   "nav.guide.preface": "Préface",
+  "nav.guide.bestPractices": "Bonnes pratiques",
   "nav.guide.ai": "IA",
   "nav.integrations.overview": "Aperçu",
   "nav.integrations.official": "Plugins officiels",

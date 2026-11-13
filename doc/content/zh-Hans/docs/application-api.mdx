@@ -1,0 +1,86 @@
+---
+title: "应用接口层"
+description: 在业务项目内部组织手写 HTTP 请求、数据模型与 Client 策略，无需发布独立 SDK 包。
+---
+
+# 应用接口层 [#application-api-layer]
+
+大多数前端与全栈项目并不是为了对外发布 npm 包，而是在业务代码库内部（`src/api/`）直接手写 HTTP 请求，用来替代散落在各处的 `fetch` 或 `axios` 封装。即便不发布独立包，在项目内将 `src/api/models/`、`src/api/services/` 与 `src/api/client.ts` 分离，依然能让业务接口层具备完整的运行时结构校验、内存级可测试性，以及浏览器与 SSR 双端复用能力。
+
+---
+
+## 1. 推荐的 `src/api/` 目录结构
+
+在业务仓库的 `src/api/` 目录下划分为三个清晰的模块层：
+
+```text
+src/
+├── api/
+│   ├── models/           # 1. 共享数据模型与通用错误契约（struct + Infer 同名导出）
+│   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
+│   ├── services/         # 2. 按业务域划分的纯函数操作定义
+│   │   └── orders.ts     #    getOrder, listOrders, createOrder
+│   └── client.ts         # 3. 应用实例配置（基地址、鉴权/XSRF 拦截器、重试策略）
+└── checkout.ts           # 4. 业务页面、组件或服务调用操作定义
+```
+
+---
+
+## 2. 完整应用接口层代码示例
+
+<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+  <Tab>
+<include cwd meta='title="src/api/models/order.ts"'>
+  examples/best-practices/application-api/src/api/models/order.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/services/orders.ts"'>
+  examples/best-practices/application-api/src/api/services/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/client.ts"'>
+  examples/best-practices/application-api/src/api/client.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/checkout.ts"'>
+  examples/best-practices/application-api/src/checkout.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+---
+
+## 3. 业务项目中的关键实践
+
+### 浏览器模块单例 vs. SSR 请求级隔离
+
+- **浏览器 / SPA 单页应用（`apiClient`）**：每个后端服务源创建一个模块级 `createClient(...)` 实例并在全局复用，从而在页面交互过程中保留负载均衡器健康状态与客户端 HTTP 重试预算。在 React 或 Vue 项目中，可通过 [`@defjs/react`](/zh-Hans/docs/integrations/react)（`ClientProvider` / `useClient`）或 [`@defjs/vue`](/zh-Hans/docs/integrations/vue)（`createClientPlugin` / `injectClient`）在组件树中注入。
+- **服务端渲染（SSR）与多租户服务（`createServerApiClient(accessToken)`）**：只要认证 Token、Cookie 或租户标识随每个入站请求变化，就在服务端请求处理函数内部调用工厂函数创建隔离的 `Client`。由于 `getOrder`、`listOrders`、`createOrder` 都是纯函数，同一套 `services/orders.ts` 定义可以无缝同时服务于浏览器单例 `apiClient` 和服务端请求级 `Client`。
+
+### 单次调用的超时与取消派生
+
+需要为某个具体请求设置超时或传入 `AbortSignal` 时，不需要重新调用 `createClient(...)`，直接对共享的 `apiClient` 进行内联单次派生即可：
+
+```ts
+const [error, created] = await createOrder(
+  apiClient({ signal: AbortSignal.timeout(5_000) }),
+  {
+    customerName: "Ada Lovelace",
+    totalCents: 4200,
+    idempotencyKey: "idem-2026-101",
+  },
+);
+```
+
+### 复用统一业务错误体（`ApiError`）
+
+在 `src/api/models/` 中统一声明后端标准错误响应结构（`export const ApiError = struct.object(...)`），并在所有业务操作的 `defineRequest` 中指定 `error: ApiError`。当接口返回非 `2xx` 状态码时，只需判断 `if (error.code === "HTTP_STATUS")`，即可安全读取强类型的 `error.data.code`、`error.data.message` 与 `error.data.requestId`。
+
+另见 [工程规范](/zh-Hans/docs/best-practices)、[公共 SDK 设计](/zh-Hans/docs/public-sdk)、[Client](/zh-Hans/docs/client) 与 [拦截器](/zh-Hans/docs/interceptors)。

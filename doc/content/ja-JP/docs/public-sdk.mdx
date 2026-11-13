@@ -1,0 +1,152 @@
+---
+title: "公開 SDK 設計"
+description: Amazon S3 SDK のアーキテクチャをモデルに、クライアント非依存で tree-shaking 可能な公開 API 向け TypeScript SDK を設計・公開する方法。
+---
+
+# 公開 SDK 設計 [#public-sdk-design]
+
+企業やプラットフォームチームが外部の開発者向けに公式 TypeScript SDK（オブジェクトストレージ SDK、決済ゲートウェイ SDK、SaaS プラットフォーム SDK など）を公開する場合、SDK パッケージは**実行環境を縛ることなく通信契約（wire contract）を定義する**必要があります。
+
+このガイドでは、**Amazon S3 互換の SDK（`@company/s3-sdk`）**を具体例として、`models/` と純粋関数の `services/` を用いたマルチモジュール公開 SDK の設計方法を解説します。
+
+---
+
+## 1. 公開 SDK が Defjs の分離設計から得られるメリット
+
+従来の SDK は、重厚なクライアントクラス（`new S3Client({ region, credentials })`）をコマンドクラスや静的なサービスクラスと密結合してバンドルしていました。`@defjs/core` で公開 SDK を作成すると、外部ユーザーにとって繰り返し発生する 4 つの課題を解決できます。
+
+1. **マルチ環境およびサンドボックスへの柔軟な対応**：`@company/s3-sdk` はエンドポイントやクライアントを束縛しないため、利用者は本番環境（`https://s3.us-east-1.amazonaws.com`）、ステージングのサンドボックス、Cloudflare R2、あるいは CI テスト中のローカル MinIO コンテナに対して、まったく同じ操作定義を向けることができます。
+2. **バンドラーによる 100% の tree-shaking**：独立した純粋関数（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）を export し、`"sideEffects": false` を指定することで、`getObject` と `putObject` しか呼び出さないブラウザバンドルから他のすべてのエンドポイントとモデルが自動的に除去されます。
+3. **単一ソースからの実行時バリデーションと静的型**：外部の利用者は、コンパイル時の TypeScript 型（`Infer<typeof ...>`）と実行時のレスポンス／エラー検証（`struct`）の両方を同時に得られます。予期しないワイヤーペイロードからアプリケーションを保護し、ワイヤー上の `snake_case` フィールドや ISO 日付文字列も自動的に変換されます。
+4. **認証、リトライ、テレメトリの完全な制御**：利用者は自身の `Client` に対して、認証情報ローテーション用のインターセプター、`withRetry(...)` ポリシー、マルチリージョンのロードバランサー（`withBalancer(...)`）、またはサーバーサイド OpenTelemetry（`@defjs/opentelemetry-server`）を自由に組み込めます。
+
+---
+
+## 2. パッケージのディレクトリ構成
+
+SDK パッケージを `src/models/`（データ構造）と `src/services/`（リソース領域ごとに整理された純粋な操作定義）に分割し、フラットなバレルファイル `src/index.ts` から再 export します。
+
+```text
+@company/s3-sdk/
+├── src/
+│   ├── models/                 # 1. 共有される struct スキーマと Infer<typeof ...> 型
+│   │   ├── common.ts           #    StorageClass, S3Error
+│   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
+│   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
+│   ├── services/               # 2. リソース領域ごとの純粋な defineRequest 関数
+│   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
+│   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
+│   └── index.ts                # 3. ルート import と tree-shaking のためのバレル export
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+└── tsconfig.json
+```
+
+---
+
+## 3. S3 SDK の完全な実装
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+  <Tab>
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+```json
+{
+  "name": "@company/s3-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown --platform neutral"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.7.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.7.0",
+    "tsdown": "^0.23.3",
+    "typescript": "^7.0.2"
+  }
+}
+```
+  </Tab>
+  <Tab>
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+  </Tab>
+</Tabs>
+
+### 使いやすい操作契約の設計ポイント
+
+- **呼び出し元の入力をフラットにし、`builder` で振り分ける**：`putObject` では、呼び出し元は直感的な 1 つのオブジェクト（`{ bucket, key, body, contentType, storageClass }`）を渡すだけでよく、同期的な `builder` がその入力を `path`（`:bucket/:key`）、`headers`（`content-type`、`x-amz-storage-class`）、バイナリの `body`（`Blob`）へと分割します。`listObjectsV2` では、`builder` が `continuationToken` と `maxKeys` を S3 のクエリパラメータ `continuation-token` と `max-keys` にマッピングし、`list-type: 2` を自動的に付与します。
+- **ワイヤーペイロードに合わせて `output` を宣言する**：
+  - **構造化 JSON（`listBuckets`、`listObjectsV2`）**：`.alias()` マッピングや `struct.date()` フィールドを備えた `struct.object(...)` を宣言します。
+  - **バイナリペイロード（`getObject`）**：`output: struct.blob()`（または `struct.arrayBuffer()`）を宣言します。
+  - **空ボディ（`headBucket`、`headObject`、`putObject`、`deleteObject`）**：`output` を省略することで、ゼロバイトの `HEAD`、`200`、`204` レスポンスが JSON デコードを試みることなく成功し、呼び出し元はタプルの 3 番目の要素からレスポンスヘッダー（`response.headers.get("etag")`）を読み取れます。
+
+---
+
+## 4. 外部の開発者が SDK を利用する方法
+
+外部のアプリケーションは、`@company/s3-sdk` と `@defjs/core` をインストールし、自身のエンドポイントと署名インターセプターで `Client` を構成するだけで、export された操作を純粋関数として直接呼び出せます。
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+"etag-report-v1" 1 hello-s3-pdf
+```
+
+パッケージングの手順や `bun publish` の詳細については、[SDK のビルドと公開レシピ](/ja-JP/recipes/publish-http-sdk)、[エンジニアリング規約](/ja-JP/docs/best-practices)、および [テスト](/ja-JP/docs/testing) を参照してください。

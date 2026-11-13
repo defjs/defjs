@@ -28,6 +28,12 @@ Defjs отделяет контракт API, который публикует �
 - [Балансировка нагрузки и отказоустойчивость](/ru-RU/docs/load-balancing)
 - [Тестирование](/ru-RU/docs/testing)
 
+## Лучшие практики [#best-practices]
+
+- [Инженерные соглашения](/ru-RU/docs/best-practices)
+- [API-слой приложения](/ru-RU/docs/application-api)
+- [Проектирование публичного SDK](/ru-RU/docs/public-sdk)
+
 ## Интеграции и ИИ [#integrations-and-ai]
 
 - [Обзор интеграций](/ru-RU/docs/integrations)

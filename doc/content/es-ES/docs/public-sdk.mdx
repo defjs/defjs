@@ -1,0 +1,152 @@
+---
+title: "Diseño de SDK público"
+description: Diseña y publica un SDK en TypeScript sin cliente acoplado y compatible con tree-shaking para APIs públicas utilizando la arquitectura de un SDK de Amazon S3.
+---
+
+# Diseño de SDK público [#public-sdk-design]
+
+Cuando tu empresa o equipo de plataforma publica un SDK oficial en TypeScript para desarrolladores externos (por ejemplo, un SDK de almacenamiento de objetos, un SDK de pasarela de pagos o un SDK de plataforma SaaS), el paquete del SDK debe **definir el contrato de red sin imponer el entorno de ejecución**.
+
+Tomando como plano concreto un **SDK compatible con Amazon S3 (`@company/s3-sdk`)**, esta guía muestra cómo diseñar un SDK público multimódulo con `models/` y `services/` basados en funciones puras.
+
+---
+
+## 1. Por qué los SDK públicos se benefician de la separación de Defjs
+
+Los SDK tradicionales empaquetan una clase de cliente pesada (`new S3Client({ region, credentials })`) estrechamente acoplada a clases de comandos o clases de servicio estáticas. Crear tu SDK público con `@defjs/core` resuelve cuatro problemas recurrentes para tus usuarios externos:
+
+1. **Flexibilidad multi-entorno y de sandbox**: Dado que `@company/s3-sdk` no vincula ningún endpoint ni cliente, un cliente puede apuntar exactamente las mismas definiciones de operaciones a producción (`https://s3.us-east-1.amazonaws.com`), a un entorno sandbox de pruebas, a Cloudflare R2 o a un contenedor MinIO local durante las pruebas de CI.
+2. **100 % de _tree-shaking_ en el empaquetador**: Exportar funciones puras independientes (`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`) con `"sideEffects": false` garantiza que un paquete de navegador que solo invoque `getObject` y `putObject` descarte todos los demás endpoints y modelos.
+3. **Validación en tiempo de ejecución + tipos estáticos desde una única fuente**: Los consumidores externos obtienen tanto tipos de TypeScript en tiempo de compilación (`Infer<typeof ...>`) como validación de respuestas y errores en tiempo de ejecución (`struct`), protegiéndolos frente a cargas útiles inesperadas en la red y convirtiendo automáticamente campos `snake_case` o cadenas de fecha ISO.
+4. **Control total sobre autenticación, reintentos y telemetría**: Los clientes conectan sus propios interceptores de rotación de credenciales, políticas `withRetry(...)`, balanceadores de carga multirregión (`withBalancer(...)`) u OpenTelemetry en el servidor (`@defjs/opentelemetry-server`) en su propio `Client`.
+
+---
+
+## 2. Estructura de directorios del paquete
+
+Divide el paquete del SDK en `src/models/` (estructuras de datos) y `src/services/` (definiciones de operaciones puras agrupadas por recurso), con un archivo barril plano `src/index.ts`:
+
+```text
+@company/s3-sdk/
+├── src/
+│   ├── models/                 # 1. Esquemas struct compartidos + tipos Infer<typeof ...>
+│   │   ├── common.ts           #    StorageClass, S3Error
+│   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
+│   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
+│   ├── services/               # 2. Funciones defineRequest puras por dominio de recurso
+│   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
+│   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
+│   └── index.ts                # 3. Exportaciones barril para importaciones raíz y compatibles con tree-shaking
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+└── tsconfig.json
+```
+
+---
+
+## 3. Implementación completa del SDK de S3
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+  <Tab>
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+```json
+{
+  "name": "@company/s3-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown --platform neutral"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.7.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.7.0",
+    "tsdown": "^0.23.3",
+    "typescript": "^7.0.2"
+  }
+}
+```
+  </Tab>
+  <Tab>
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+  </Tab>
+</Tabs>
+
+### Diseño de contratos de operación ergonómicos
+
+- **Aplana las entradas del llamador y enrútalas en `builder`**: En `putObject`, los llamadores pasan un único objeto ergonómico (`{ bucket, key, body, contentType, storageClass }`). El `builder` síncrono divide esa entrada en `path` (`:bucket/:key`), `headers` (`content-type`, `x-amz-storage-class`) y `body` binario (`Blob`). En `listObjectsV2`, `builder` asigna `continuationToken` y `maxKeys` a los parámetros de consulta `continuation-token` y `max-keys` de S3 junto con `list-type: 2`.
+- **Adapta `output` a la carga útil de red**:
+  - **JSON estructurado (`listBuckets`, `listObjectsV2`)**: Declara un `struct.object(...)` con mapeos `.alias()` y campos `struct.date()`.
+  - **Carga útil binaria (`getObject`)**: Declara `output: struct.blob()` (o `struct.arrayBuffer()`).
+  - **Cuerpo vacío (`headBucket`, `headObject`, `putObject`, `deleteObject`)**: Omite `output` para que las respuestas `HEAD`, `200` y `204` con cero bytes tengan éxito sin intentar decodificar JSON, mientras que los llamadores siguen leyendo las cabeceras de respuesta (`response.headers.get("etag")`) desde la tercera posición de la tupla.
+
+---
+
+## 4. Cómo consumen tu SDK los desarrolladores externos
+
+Las aplicaciones externas instalan `@company/s3-sdk` junto con `@defjs/core`, configuran su propio `Client` con su endpoint e interceptor de firma, e invocan directamente tus operaciones exportadas como funciones puras:
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+"etag-report-v1" 1 hello-s3-pdf
+```
+
+Para obtener instrucciones paso a paso sobre el empaquetado y `bun publish`, consulta la receta [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk), [Convenciones de ingeniería](/es-ES/docs/best-practices) y [Pruebas](/es-ES/docs/testing).

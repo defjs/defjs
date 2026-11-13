@@ -66,6 +66,7 @@ export default {
   "nav.guide.middleware": "인터셉터",
   "nav.guide.errors": "오류 처리",
   "nav.guide.preface": "머리말",
+  "nav.guide.bestPractices": "모범 사례",
   "nav.guide.ai": "AI",
   "nav.integrations.overview": "개요",
   "nav.integrations.official": "공식 플러그인",

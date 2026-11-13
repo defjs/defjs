@@ -28,6 +28,12 @@ Defjs 將 SDK 團隊發佈嘅 API 契約，同應用程式喺 runtime 使用嘅 
 - [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)
 - [測試](/zh-Hant-HK/docs/testing)
 
+## 最佳實踐 [#best-practices]
+
+- [工程規範](/zh-Hant-HK/docs/best-practices)
+- [應用程式 API 層](/zh-Hant-HK/docs/application-api)
+- [公開 SDK 設計](/zh-Hant-HK/docs/public-sdk)
+
 ## 整合與 AI [#integrations-and-ai]
 
 - [整合概覽](/zh-Hant-HK/docs/integrations)

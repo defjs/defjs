@@ -28,6 +28,12 @@ description: صمّم عقود حزم SDK وعملياتها، وانشرها، 
 - [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing)
 - [الاختبارات](/ar/docs/testing)
 
+## أفضل الممارسات [#best-practices]
+
+- [الاتفاقيات الهندسية](/ar/docs/best-practices)
+- [طبقة API داخل التطبيق](/ar/docs/application-api)
+- [تصميم حزم SDK العامة](/ar/docs/public-sdk)
+
 ## التكاملات والذكاء الاصطناعي [#integrations-and-ai]
 
 - [نظرة عامة على التكاملات](/ar/docs/integrations)

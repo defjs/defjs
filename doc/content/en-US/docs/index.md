@@ -28,6 +28,12 @@ Defjs separates the API contract an SDK team publishes from the client configura
 - [Load balancing & failover](/docs/load-balancing)
 - [Testing](/docs/testing)
 
+## Best practices [#best-practices]
+
+- [Engineering conventions](/docs/best-practices)
+- [Application API layer](/docs/application-api)
+- [Public SDK design](/docs/public-sdk)
+
 ## Integrations & AI [#integrations-and-ai]
 
 - [Integrations overview](/docs/integrations)

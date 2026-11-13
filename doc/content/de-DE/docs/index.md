@@ -28,6 +28,12 @@ Defjs trennt den API-Vertrag, den ein SDK-Team veröffentlicht, von der Client-K
 - [Lastverteilung & Failover](/de-DE/docs/load-balancing)
 - [Tests](/de-DE/docs/testing)
 
+## Best Practices [#best-practices]
+
+- [Engineering-Konventionen](/de-DE/docs/best-practices)
+- [Anwendungs-API-Schicht](/de-DE/docs/application-api)
+- [Design öffentlicher SDKs](/de-DE/docs/public-sdk)
+
 ## Integrationen & KI [#integrations-and-ai]
 
 - [Integrationsübersicht](/de-DE/docs/integrations)

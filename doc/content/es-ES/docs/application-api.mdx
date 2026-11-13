@@ -1,0 +1,86 @@
+---
+title: "Capa de API de aplicación"
+description: Organiza solicitudes HTTP escritas a mano, modelos y políticas de cliente dentro del repositorio de una aplicación sin necesidad de publicar un paquete SDK separado.
+---
+
+# Capa de API de aplicación [#application-api-layer]
+
+La mayoría de los proyectos utilizan Defjs directamente dentro del repositorio de una aplicación (`src/api/`) para sustituir envoltorios dispersos de `fetch` o `axios`. Incluso cuando no tienes previsto publicar un paquete npm externo, separar `src/api/models/`, `src/api/services/` y `src/api/client.ts` mantiene tu capa de solicitudes fuertemente tipada, verificable en memoria y segura tanto en el navegador como en entornos SSR.
+
+---
+
+## 1. Estructura de directorios recomendada para `src/api/`
+
+Organiza la capa de solicitudes de tu proyecto en tres partes bien definidas bajo `src/api/`:
+
+```text
+src/
+├── api/
+│   ├── models/           # 1. Esquemas struct compartidos + tipos Infer<typeof ...>
+│   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
+│   ├── services/         # 2. Definiciones de operaciones puras agrupadas por dominio
+│   │   └── orders.ts     #    getOrder, listOrders, createOrder
+│   └── client.ts         # 3. Client propiedad de la app (endpoint, interceptor de auth, reintentos)
+└── checkout.ts           # 4. Lógica de negocio / componentes de UI que invocan operaciones
+```
+
+---
+
+## 2. Ejemplo completo dentro de la aplicación
+
+<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+  <Tab>
+<include cwd meta='title="src/api/models/order.ts"'>
+  examples/best-practices/application-api/src/api/models/order.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/services/orders.ts"'>
+  examples/best-practices/application-api/src/api/services/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/client.ts"'>
+  examples/best-practices/application-api/src/api/client.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/checkout.ts"'>
+  examples/best-practices/application-api/src/checkout.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+---
+
+## 3. Patrones clave para proyectos de aplicación
+
+### Singleton en el navegador frente a cliente por solicitud en SSR
+
+- **Navegador / SPA (`apiClient`)**: Exporta una única instancia `createClient(...)` con ámbito de módulo por cada origen de backend. Compartir esa instancia conserva el estado de salud del balanceador de carga y el presupuesto de reintentos HTTP a nivel de cliente entre las distintas interacciones de la página. En aplicaciones React o Vue, proporciona `apiClient` en la raíz mediante [`@defjs/react`](/es-ES/docs/integrations/react) (`ClientProvider` / `useClient`) o [`@defjs/vue`](/es-ES/docs/integrations/vue) (`createClientPlugin` / `injectClient`).
+- **SSR / BFF (`createServerApiClient(accessToken)`)**: Siempre que las credenciales, las cookies o las cabeceras de inquilino varíen según la solicitud HTTP entrante, invoca una función factoría dentro del manejador de solicitudes del servidor para crear un `Client` aislado. Como `getOrder`, `listOrders` y `createOrder` son funciones puras, exactamente las mismas definiciones de `services/orders.ts` funcionan tanto con `apiClient` como con `createServerApiClient(token)`.
+
+### Tiempos de espera y cancelación por llamada
+
+Nunca crees un nuevo `Client` mediante `createClient(...)` solo para pasar un tiempo de espera o un `AbortSignal`. En su lugar, deriva en línea un cliente para una sola llamada a partir de tu cliente compartido:
+
+```ts
+const [error, created] = await createOrder(
+  apiClient({ signal: AbortSignal.timeout(5_000) }),
+  {
+    customerName: "Ada Lovelace",
+    totalCents: 4200,
+    idempotencyKey: "idem-2026-101",
+  },
+);
+```
+
+### Envoltorio de error compartido (`ApiError`)
+
+Declara una sola vez la estructura estándar de error de tu backend (`export const ApiError = struct.object(...)`) en `src/api/models/` y pasa `error: ApiError` en cada `defineRequest` de `src/api/services/`. Cuando una solicitud devuelve un estado distinto de `2xx`, acotar con `if (error.code === "HTTP_STATUS")` te proporciona acceso fuertemente tipado a `error.data.code`, `error.data.message` y `error.data.requestId`.
+
+Consulta [Convenciones de ingeniería](/es-ES/docs/best-practices), [Diseño de SDK público](/es-ES/docs/public-sdk), [Cliente](/es-ES/docs/client) e [Interceptores](/es-ES/docs/interceptors).

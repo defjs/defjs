@@ -1,0 +1,88 @@
+---
+title: "Engineering-Konventionen"
+description: Architekturkonventionen zur Strukturierung anwendungsinterner API-Request-Schichten und eigenständiger öffentlicher SDK-Pakete mit Defjs.
+---
+
+# Engineering-Konventionen [#engineering-conventions]
+
+Ganz gleich, ob du eine HTTP-Request-Schicht innerhalb einer Frontend-/Backend-Anwendung von Hand schreibst oder ein offizielles TypeScript-SDK für die öffentliche API deines Unternehmens veröffentlichst: Defjs-Projekte folgen derselben modularen Architektur – **gemeinsame `struct`-Datenmodelle (`models/`) gepaart mit reinen Operationsdefinitionen (`services/`)**.
+
+---
+
+## 1. Zwei Einsatzszenarien für Defjs
+
+Die meisten Teams setzen Defjs in einem von zwei Szenarien ein. Beide organisieren Verträge in `models/` und `services/` und unterscheiden sich nur darin, wo `createClient(...)` angesiedelt ist:
+
+| Szenario                                                                                           | Verzeichnisstruktur                                               | Wer besitzt `createClient(...)`?                                                                              | Leitfaden                                             |
+| :------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------- |
+| **[Anwendungs-API-Schicht](/de-DE/docs/application-api)** (projektinterne HTTP-/Echtzeit-Anfragen) | `src/api/models/` + `src/api/services/` + `src/api/client.ts`     | Deine Anwendung (`src/api/client.ts` exportiert ein Browser-Singleton oder eine SSR-Factory pro Anfrage)      | [Anwendungs-API-Schicht](/de-DE/docs/application-api) |
+| **[Design öffentlicher SDKs](/de-DE/docs/public-sdk)** (externes npm-Paket für öffentliche APIs)   | `src/models/` + `src/services/` + `src/index.ts` (`package.json`) | Die Anwendung des externen Konsumenten (das veröffentlichte SDK erstellt oder kapselt niemals einen `Client`) | [Design öffentlicher SDKs](/de-DE/docs/public-sdk)    |
+
+---
+
+## 2. Vier zentrale Engineering-Konventionen
+
+### Konvention 1: Reine Operationsfunktionen exportieren, niemals `Service`-Klassen
+
+Klassische OpenAPI-Generatoren kapseln Endpunkte in zustandsbehaftete oder statische `Service`-Klassen (`OrdersService.getOrder(id)` oder `new S3Client().send(...)`). In Defjs ist jede mit `defineRequest`, `defineEventStream` oder `defineWebSocket` erstellte Operation bereits eine **eigenständige aufrufbare Funktion**:
+
+```ts
+// Vermeiden: Definitionen in einer Klasse oder einem Namespace-Objekt kapseln
+export class OrdersService {
+  // Verdeckt die aufrufbezogene Ableitung client(options) und verhindert Bundler-Tree-Shaking
+}
+
+// Empfohlen: Eigenständige Operationsdefinitionen aus services/*.ts exportieren
+export const getOrder = defineRequest({
+  operation: "orders.get",
+  method: "GET",
+  path: "/orders/:id",
+  input: GetOrderInput,
+  builder: (input) => ({ path: { id: input.id } }),
+  output: Order,
+  error: ApiError,
+});
+```
+
+Der direkte Aufruf der exportierten Operation (`await getOrder(client, { id: 42 })` oder `await getOrder(client({ signal }), { id: 42 })`) hält die Aufrufkonvention in deiner gesamten Codebasis einheitlich und ermöglicht Bundlern, ungenutzte Operationen per Tree-Shaking zu entfernen, wenn `"sideEffects": false` gesetzt ist.
+
+### Konvention 2: Gleichnamige `struct`- und `Infer`-Exporte in `models/`
+
+Exportiere in `models/*.ts` sowohl das `struct`-Laufzeit-Schema als auch seinen abgeleiteten TypeScript-Typ unter **demselben Bezeichner**. TypeScript führt Wert- und Typdeklarationen im selben Gültigkeitsbereich zusammen, sodass Aufrufer ein einziges Symbol sowohl für die Laufzeitvalidierung als auch für statische Typannotationen importieren:
+
+```ts
+import { struct, type Infer } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  customerName: struct.string().alias("customer_name"),
+  totalCents: struct.number().alias("total_cents"),
+});
+export type Order = Infer<typeof Order>;
+```
+
+### Konvention 3: `services/*.ts` frei von Client-Instanzen halten
+
+Selbst wenn du eine [Anwendungs-API-Schicht](/de-DE/docs/application-api) innerhalb eines einzelnen Repositorys (`src/api/`) schreibst, importiere `apiClient` **nicht** in `src/api/services/*.ts`, um deine Definitionen zu umschließen. Wenn `services/*.ts` reine Definitionen bleiben, erhältst du drei unmittelbare Vorteile:
+
+1. **Deterministische Offline-Tests**: Unit-Tests können einen lokalen `createClient(withEndpoint(...), withHTTPHandle(...))` direkt ohne Modul-Mocking an jede Operation übergeben.
+2. **SSR- und Mandantenfähigkeit**: Server-Loader können einen anfragebezogenen `Client` mit den Cookies des aktuellen Benutzers oder einem Mandanten-Token an exakt dieselbe Operationsdefinition übergeben, die auch von Browser-Komponenten verwendet wird.
+3. **Aufwandfreie Auslagerung in ein gemeinsames Paket**: Wenn dein Team `src/api/models/` und `src/api/services/` später in ein Monorepo-Workspace-Paket oder ein öffentliches npm-SDK verschiebt, muss keine einzige Operationsdatei geändert werden.
+
+### Konvention 4: `builder`-Platzierung von Interceptor-Richtlinien trennen
+
+Halte jede Zuständigkeit in ihrer vorgesehenen Schicht:
+
+| Zuständigkeit                                                                                    | Wo sie hingehört                                                           | Warum                                                                         |
+| :----------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
+| Verteilung von Aufrufer-Parametern auf `path`, `query`, `headers` und `body`                     | Operations-`builder` in `services/*.ts`                                    | Synchrone reine Funktion des aktuellen `input`                                |
+| Statische Operationsidentität mit niedriger Kardinalität (`"orders.create"`, `"s3.objects.put"`) | Feld `operation` der Operation in `services/*.ts`                          | Wird von OpenTelemetry-Spans, Metriken und Logging-Interceptors genutzt       |
+| Basis-URLs, Auth-Header (`Authorization`, Signaturen, XSRF), Retries, Lastverteilung             | `createClient(...)` in `client.ts`                                         | Umgebungs- und sitzungsspezifische Ausführungsrichtlinie                      |
+| Aufrufbezogene Fristen, Abbruch (`signal`) und Fortschritts-Callbacks                            | Inline-Aufruf `client({ signal, onDownloadProgress })` an der Aufrufstelle | Auf einen einzelnen Aufruf begrenzt, ohne den gemeinsamen Client zu verändern |
+
+---
+
+## Nächste Schritte
+
+- Du baust eine HTTP-/Echtzeit-Schicht innerhalb deiner App? Lies [Anwendungs-API-Schicht](/de-DE/docs/application-api).
+- Du veröffentlichst ein externes SDK-Paket für die öffentliche API deines Unternehmens? Lies [Design öffentlicher SDKs](/de-DE/docs/public-sdk).

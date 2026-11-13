@@ -68,6 +68,7 @@ export default {
   "nav.guide.middleware": "Перехватчики",
   "nav.guide.errors": "Обработка ошибок",
   "nav.guide.preface": "Предисловие",
+  "nav.guide.bestPractices": "Лучшие практики",
   "nav.guide.ai": "ИИ",
   "nav.integrations.overview": "Обзор",
   "nav.integrations.official": "Официальные плагины",

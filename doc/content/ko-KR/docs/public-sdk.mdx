@@ -1,0 +1,152 @@
+---
+title: "퍼블릭 SDK 설계"
+description: Amazon S3 SDK 아키텍처를 바탕으로 퍼블릭 API를 위한 무클라이언트(zero-client), 트리쉐이킹 가능 TypeScript SDK를 설계하고 배포합니다.
+---
+
+# 퍼블릭 SDK 설계 [#public-sdk-design]
+
+회사나 플랫폼 팀이 외부 개발자를 위한 공식 TypeScript SDK(예: 오브젝트 스토리지 SDK, 결제 게이트웨이 SDK, SaaS 플랫폼 SDK)를 배포할 때, SDK 패키지는 **런타임 환경을 강제하지 않으면서 와이어 계약을 정의**해야 합니다.
+
+이 가이드에서는 **Amazon S3 호환 SDK(`@company/s3-sdk`)**를 구체적인 청사진으로 삼아 `models/`와 순수 함수 기반 `services/`로 구성된 다중 모듈 퍼블릭 SDK를 설계하는 방법을 보여줍니다.
+
+---
+
+## 1. 퍼블릭 SDK에 Defjs의 분리가 유리한 이유
+
+기존 SDK들은 커맨드 클래스나 정적 서비스 클래스에 강하게 결합된 무거운 클라이언트 클래스(`new S3Client({ region, credentials })`)를 번들에 포함합니다. `@defjs/core`로 퍼블릭 SDK를 작성하면 외부 사용자가 반복적으로 겪는 네 가지 문제를 해결할 수 있습니다:
+
+1. **다중 환경 및 샌드박스 유연성**: `@company/s3-sdk`는 엔드포인트나 클라이언트를 바인딩하지 않으므로, 고객은 완전히 동일한 작업 정의를 프로덕션(`https://s3.us-east-1.amazonaws.com`), 스테이징 샌드박스, Cloudflare R2 또는 CI 테스트 중 로컬 MinIO 컨테이너로 지정할 수 있습니다.
+2. **100% 번들러 트리쉐이킹**: `"sideEffects": false`와 함께 독립형 순수 함수(`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`)를 export하면 `getObject`와 `putObject`만 호출하는 브라우저 번들에서 나머지 모든 엔드포인트와 모델이 제거됩니다.
+3. **단일 소스에서 제공되는 런타임 검증 + 정적 타입**: 외부 소비자는 컴파일 타임 TypeScript 타입(`Infer<typeof ...>`)과 런타임 응답/오류 검증(`struct`)을 모두 얻어 예상치 못한 와이어 페이로드로부터 보호받고, 와이어의 `snake_case` 필드나 ISO 날짜 문자열을 자동으로 변환할 수 있습니다.
+4. **인증, 재시도, 텔레메트리에 대한 완전한 제어권**: 고객은 자신이 소유한 `Client`에 자체 자격 증명 순환 인터셉터, `withRetry(...)` 정책, 다중 리전 로드 밸런서(`withBalancer(...)`), 서버 사이드 OpenTelemetry(`@defjs/opentelemetry-server`)를 자유롭게 연결할 수 있습니다.
+
+---
+
+## 2. 패키지 디렉터리 구조
+
+SDK 패키지를 `src/models/`(데이터 구조)와 `src/services/`(리소스별로 그룹화된 순수 작업 정의)로 나누고, 평탄한 배럴 파일인 `src/index.ts`를 둡니다:
+
+```text
+@company/s3-sdk/
+├── src/
+│   ├── models/                 # 1. 공유 struct 스키마 + Infer<typeof ...> 타입
+│   │   ├── common.ts           #    StorageClass, S3Error
+│   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
+│   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
+│   ├── services/               # 2. 리소스 도메인별 순수 defineRequest 함수
+│   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
+│   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
+│   └── index.ts                # 3. 루트 및 트리쉐이킹 가능 import를 위한 배럴 export
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+└── tsconfig.json
+```
+
+---
+
+## 3. 전체 S3 SDK 구현
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+  <Tab>
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+```json
+{
+  "name": "@company/s3-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown --platform neutral"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.7.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.7.0",
+    "tsdown": "^0.23.3",
+    "typescript": "^7.0.2"
+  }
+}
+```
+  </Tab>
+  <Tab>
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+  </Tab>
+</Tabs>
+
+### 인체공학적인 작업 계약 설계하기
+
+- **호출자 입력을 평탄화하고 `builder`에서 라우팅하기**: `putObject`에서 호출자는 사용하기 편한 단일 객체(`{ bucket, key, body, contentType, storageClass }`)를 전달합니다. 동기 `builder`는 해당 입력을 `path`(`:bucket/:key`), `headers`(`content-type`, `x-amz-storage-class`), 바이너리 `body`(`Blob`)로 분배합니다. `listObjectsV2`에서는 `builder`가 `continuationToken`과 `maxKeys`를 `list-type: 2`와 함께 S3의 `continuation-token` 및 `max-keys` 쿼리 매개변수로 매핑합니다.
+- **`output`을 와이어 페이로드에 맞추기**:
+  - **구조화된 JSON (`listBuckets`, `listObjectsV2`)**: `.alias()` 매핑과 `struct.date()` 필드를 가진 `struct.object(...)`를 선언합니다.
+  - **바이너리 페이로드 (`getObject`)**: `output: struct.blob()`(또는 `struct.arrayBuffer()`)을 선언합니다.
+  - **빈 본문 (`headBucket`, `headObject`, `putObject`, `deleteObject`)**: `output`을 생략하여 바이트가 없는 `HEAD`, `200`, `204` 응답이 JSON 디코딩을 시도하지 않고 성공 처리되도록 하면서, 호출자는 세 번째 튜플 슬롯에서 응답 헤더(`response.headers.get("etag")`)를 계속 읽을 수 있도록 합니다.
+
+---
+
+## 4. 외부 개발자가 SDK를 소비하는 방법
+
+외부 애플리케이션은 `@defjs/core`와 함께 `@company/s3-sdk`를 설치하고, 자체 엔드포인트 및 서명 인터셉터로 자신의 `Client`를 구성한 뒤, export된 작업들을 순수 함수로 직접 호출합니다:
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+"etag-report-v1" 1 hello-s3-pdf
+```
+
+단계별 패키징 및 `bun publish` 안내는 [SDK 작성과 배포 레시피](/ko-KR/recipes/publish-http-sdk), [엔지니어링 컨벤션](/ko-KR/docs/best-practices), [테스트](/ko-KR/docs/testing) 문서를 참조하세요.

@@ -1,0 +1,86 @@
+---
+title: "アプリケーション API 層"
+description: 個別の SDK パッケージを公開せずに、アプリケーションリポジトリ内で手書きの HTTP リクエスト、データモデル、クライアントポリシーを整理する方法。
+---
+
+# アプリケーション API 層 [#application-api-layer]
+
+多くのプロジェクトでは、外部向けの npm パッケージを公開するのではなく、アプリケーションリポジトリの内部（`src/api/`）で散在する `fetch` や `axios` のラッパーを置き換えるために Defjs を直接使用します。独立したパッケージとして公開する予定がない場合でも、`src/api/models/`、`src/api/services/`、`src/api/client.ts` を分離することで、リクエスト層を強い型付けに保ち、インメモリでテスト可能にし、ブラウザと SSR の両ランタイムで安全に共有できます。
+
+---
+
+## 1. 推奨される `src/api/` ディレクトリ構成
+
+プロジェクトのリクエスト層を `src/api/` 配下の 3 つの役割に整理します。
+
+```text
+src/
+├── api/
+│   ├── models/           # 1. 共有される struct スキーマと Infer<typeof ...> 型
+│   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
+│   ├── services/         # 2. ドメインごとに整理された純粋な操作定義
+│   │   └── orders.ts     #    getOrder, listOrders, createOrder
+│   └── client.ts         # 3. アプリケーションが所有する Client（エンドポイント、認証インターセプター、リトライ）
+└── checkout.ts           # 4. 操作を呼び出すビジネスロジック／UI コンポーネント
+```
+
+---
+
+## 2. アプリケーション内の完全な実装例
+
+<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+  <Tab>
+<include cwd meta='title="src/api/models/order.ts"'>
+  examples/best-practices/application-api/src/api/models/order.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/services/orders.ts"'>
+  examples/best-practices/application-api/src/api/services/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/client.ts"'>
+  examples/best-practices/application-api/src/api/client.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/checkout.ts"'>
+  examples/best-practices/application-api/src/checkout.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+---
+
+## 3. アプリケーションプロジェクトにおける主要パターン
+
+### ブラウザのシングルトン vs. SSR のリクエスト単位クライアント
+
+- **ブラウザ／SPA（`apiClient`）**：バックエンドのオリジンごとに、モジュールスコープの `createClient(...)` インスタンスを 1 つ export します。そのインスタンスを共有することで、ページ操作をまたいでロードバランサーのヘルス状態やクライアントレベルの HTTP リトライバジェットが維持されます。React や Vue アプリケーションでは、[`@defjs/react`](/ja-JP/docs/integrations/react)（`ClientProvider`／`useClient`）や [`@defjs/vue`](/ja-JP/docs/integrations/vue)（`createClientPlugin`／`injectClient`）を使ってルートで `apiClient` を提供します。
+- **SSR／BFF（`createServerApiClient(accessToken)`）**：認証情報、Cookie、テナントヘッダーが受信 HTTP リクエストごとに異なる場合は、サーバーのリクエストハンドラー内でファクトリ関数を呼び出し、分離された `Client` を作成します。`getOrder`、`listOrders`、`createOrder` は純粋関数であるため、まったく同じ `services/orders.ts` の定義を `apiClient` と `createServerApiClient(token)` の両方でそのまま利用できます。
+
+### 呼び出し単位のタイムアウトとキャンセル
+
+タイムアウトや `AbortSignal` を渡すためだけに `createClient(...)` で新しい `Client` を作成しないでください。代わりに、共有クライアントから 1 回限りのクライアントをインラインで派生させます。
+
+```ts
+const [error, created] = await createOrder(
+  apiClient({ signal: AbortSignal.timeout(5_000) }),
+  {
+    customerName: "Ada Lovelace",
+    totalCents: 4200,
+    idempotencyKey: "idem-2026-101",
+  },
+);
+```
+
+### 共通エラーエンベロープ（`ApiError`）
+
+バックエンドの標準エラーエンベロープ（`export const ApiError = struct.object(...)`）を `src/api/models/` で一度宣言し、`src/api/services/` 内のすべての `defineRequest` に `error: ApiError` を指定します。リクエストが非 `2xx` ステータスを返した際、`if (error.code === "HTTP_STATUS")` で型を絞り込むことで、`error.data.code`、`error.data.message`、`error.data.requestId` に強い型付けで安全にアクセスできます。
+
+あわせて [エンジニアリング規約](/ja-JP/docs/best-practices)、[公開 SDK 設計](/ja-JP/docs/public-sdk)、[Client](/ja-JP/docs/client)、[インターセプター](/ja-JP/docs/interceptors) も参照してください。

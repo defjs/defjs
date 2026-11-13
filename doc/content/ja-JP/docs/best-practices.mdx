@@ -1,0 +1,88 @@
+---
+title: "エンジニアリング規約"
+description: Defjs を用いてアプリケーション内の API リクエスト層および外部公開用 SDK パッケージを構築するためのアーキテクチャ規約。
+---
+
+# エンジニアリング規約 [#engineering-conventions]
+
+フロントエンド／バックエンドのアプリケーション内部で手書きの HTTP リクエスト層を構築する場合でも、自社の公開 API 向けに公式 TypeScript SDK を配布する場合でも、Defjs プロジェクトは同じモジュラーアーキテクチャに従います。すなわち、**共有される `struct` データモデル（`models/`）と、純粋関数としての操作定義（`services/`）の組み合わせ**です。
+
+---
+
+## 1. Defjs の 2 つの主な利用シナリオ
+
+多くのチームは、次の 2 つのシナリオのいずれかで Defjs を採用します。どちらも契約を `models/` と `services/` に整理する点は共通しており、違いは `createClient(...)` をどこに配置するかだけです。
+
+| シナリオ                                                                                              | ディレクトリ構成                                                          | `createClient(...)` の所有者                                                                                         | ガイド                                                 |
+| :---------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------- |
+| **[アプリケーション API 層](/ja-JP/docs/application-api)**（プロジェクト内の HTTP／リアルタイム通信） | `src/api/models/` + `src/api/services/` + `src/api/client.ts`             | アプリケーション自身（`src/api/client.ts` からブラウザ用シングルトンまたは SSR リクエスト単位のファクトリを export） | [アプリケーション API 層](/ja-JP/docs/application-api) |
+| **[公開 SDK 設計](/ja-JP/docs/public-sdk)**（公開 API 向けの外部 npm パッケージ）                     | `src/models/` + `src/services/` + `src/index.ts`（`package.json` を含む） | 外部利用者のアプリケーション（公開される SDK パッケージは `Client` を一切作成・保持しない）                          | [公開 SDK 設計](/ja-JP/docs/public-sdk)                |
+
+---
+
+## 2. 4 つのコア・エンジニアリング規約
+
+### 規約 1：`Service` クラスではなく、純粋な操作関数を export する
+
+従来の OpenAPI ジェネレーターは、状態を持つクラスや静的メソッドを持つ `Service` クラス（`OrdersService.getOrder(id)` や `new S3Client().send(...)` など）でエンドポイントをラップしがちです。Defjs では、`defineRequest`、`defineEventStream`、`defineWebSocket` で作成された各操作は、それ自体が**単独で呼び出し可能な関数**です。
+
+```ts
+// 非推奨：定義をクラスや名前空間オブジェクトでラップする
+export class OrdersService {
+  // 呼び出しごとの client(options) 派生が隠蔽され、バンドラーの tree-shaking も阻害される
+}
+
+// 推奨：services/*.ts から独立した操作定義を直接 export する
+export const getOrder = defineRequest({
+  operation: "orders.get",
+  method: "GET",
+  path: "/orders/:id",
+  input: GetOrderInput,
+  builder: (input) => ({ path: { id: input.id } }),
+  output: Order,
+  error: ApiError,
+});
+```
+
+エクスポートされた操作を直接呼び出す（`await getOrder(client, { id: 42 })` または `await getOrder(client({ signal }), { id: 42 })`）ことで、コードベース全体の呼び出し規約が統一され、`"sideEffects": false` を指定した際にバンドラーが未使用の操作を確実に tree-shake できるようになります。
+
+### 規約 2：`models/` では `struct` と `Infer` を同じ識別子で export する
+
+`models/*.ts` では、実行時の `struct` スキーマと、そこから推論される TypeScript の型を**同じ識別子**で export します。TypeScript は同一スコープ内の値宣言と型宣言を自動的にマージするため、呼び出し側は 1 つのシンボルを import するだけで実行時バリデーションと静的な型注釈の両方に利用できます。
+
+```ts
+import { struct, type Infer } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  customerName: struct.string().alias("customer_name"),
+  totalCents: struct.number().alias("total_cents"),
+});
+export type Order = Infer<typeof Order>;
+```
+
+### 規約 3：`services/*.ts` をクライアントインスタンスから完全に切り離す
+
+単一リポジトリ内で[アプリケーション API 層](/ja-JP/docs/application-api)（`src/api/`）を記述する場合でも、`src/api/services/*.ts` の中で `apiClient` を import して定義をラップしないでください。`services/*.ts` を純粋な定義のまま保つことで、3 つの大きなメリットが得られます。
+
+1. **決定論的なオフラインテスト**：ユニットテストでモジュールモックを使うことなく、ローカルの `createClient(withEndpoint(...), withHTTPHandle(...))` を任意の操作関数へ直接渡せます。
+2. **SSR およびマルチテナントでの安全性**：サーバー側のローダーで現在のユーザーの Cookie やテナントトークンを持つリクエストスコープの `Client` を作成し、ブラウザコンポーネントとまったく同じ操作定義に渡すことができます。
+3. **共有パッケージへのゼロコストな移行**：将来的に `src/api/models/` と `src/api/services/` をモノレポのワークスペースパッケージや公開 npm SDK に切り出す際も、操作定義ファイルを一切変更する必要がありません。
+
+### 規約 4：`builder` のパラメータ配置とインターセプターのポリシーを分離する
+
+それぞれの関心事を適切なレイヤーに配置します。
+
+| 関心事                                                                                | 配置場所                                                                | 理由                                                                             |
+| :------------------------------------------------------------------------------------ | :---------------------------------------------------------------------- | :------------------------------------------------------------------------------- |
+| 呼び出し元のパラメータを `path`、`query`、`headers`、`body` に振り分ける              | `services/*.ts` 内の操作の `builder`                                    | 現在の `input` のみに依存する同期的な純粋関数であるため                          |
+| 静的で低カーディナリティな操作識別子（`"orders.create"`、`"s3.objects.put"`）         | `services/*.ts` 内の操作の `operation` フィールド                       | OpenTelemetry のスパン、メトリクス、ロギングインターセプターが操作を識別するため |
+| ベース URL、認証ヘッダー（`Authorization`、署名、XSRF）、リトライ、ロードバランシング | `client.ts` 内の `createClient(...)`                                    | 実行環境やセッションに依存する横断的な実行ポリシーであるため                     |
+| 呼び出し単位のタイムアウト、キャンセル（`signal`）、転送進捗コールバック              | 呼び出し箇所でのインライン派生 `client({ signal, onDownloadProgress })` | 共有クライアントを変更せず、1 回の呼び出しにのみ適用するため                     |
+
+---
+
+## 次のステップ
+
+- アプリケーション内部の HTTP／リアルタイム通信層を構築する場合は、[アプリケーション API 層](/ja-JP/docs/application-api) を参照してください。
+- 自社の公開 API 向けに外部 SDK パッケージを公開する場合は、[公開 SDK 設計](/ja-JP/docs/public-sdk) を参照してください。

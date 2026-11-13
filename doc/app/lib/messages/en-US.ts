@@ -65,6 +65,7 @@ const messages = {
   "nav.guide.middleware": "Interceptors",
   "nav.guide.errors": "Error handling",
   "nav.guide.preface": "Getting started",
+  "nav.guide.bestPractices": "Best practices",
   "nav.guide.ai": "AI",
   "nav.integrations.overview": "Overview",
   "nav.integrations.official": "Official plugins",

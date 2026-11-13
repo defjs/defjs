@@ -1,0 +1,86 @@
+---
+title: "Anwendungs-API-Schicht"
+description: Organisiere handgeschriebene HTTP-Anfragen, Modelle und Client-Richtlinien innerhalb eines Anwendungs-Repositorys, ohne ein separates SDK-Paket zu veröffentlichen.
+---
+
+# Anwendungs-API-Schicht [#application-api-layer]
+
+Die meisten Projekte setzen Defjs direkt innerhalb eines Anwendungs-Repositorys (`src/api/`) ein, um verstreute `fetch`- oder `axios`-Wrapper zu ersetzen. Selbst wenn du nicht planst, ein externes npm-Paket zu veröffentlichen, hält die Trennung von `src/api/models/`, `src/api/services/` und `src/api/client.ts` deine Request-Schicht streng typisiert, im Speicher testbar und sicher über Browser- und SSR-Laufzeiten hinweg.
+
+---
+
+## 1. Empfohlene Verzeichnisstruktur unter `src/api/`
+
+Gliedere die Request-Schicht deines Projekts unter `src/api/` in drei klar abgegrenzte Bereiche:
+
+```text
+src/
+├── api/
+│   ├── models/           # 1. Gemeinsame struct-Schemas + Infer<typeof ...>-Typen
+│   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
+│   ├── services/         # 2. Reine Operationsdefinitionen gruppiert nach Domäne
+│   │   └── orders.ts     #    getOrder, listOrders, createOrder
+│   └── client.ts         # 3. App-eigener Client (Endpunkt, Auth-Interceptor, Retry)
+└── checkout.ts           # 4. Geschäftslogik / UI-Komponenten, die Operationen aufrufen
+```
+
+---
+
+## 2. Vollständiges Beispiel in einer Anwendung
+
+<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+  <Tab>
+<include cwd meta='title="src/api/models/order.ts"'>
+  examples/best-practices/application-api/src/api/models/order.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/services/orders.ts"'>
+  examples/best-practices/application-api/src/api/services/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/api/client.ts"'>
+  examples/best-practices/application-api/src/api/client.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/checkout.ts"'>
+  examples/best-practices/application-api/src/checkout.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+---
+
+## 3. Zentrale Muster für Anwendungsprojekte
+
+### Browser-Singleton vs. anfragebezogener SSR-Client
+
+- **Browser / SPA (`apiClient`)**: Exportiere eine einzige modulweite `createClient(...)`-Instanz pro Backend-Origin. Durch die gemeinsame Nutzung dieser Instanz bleiben der Gesundheitszustand des Load-Balancers und das HTTP-Retry-Budget auf Client-Ebene über Seiteninteraktionen hinweg erhalten. In React- oder Vue-Anwendungen stellst du `apiClient` an der Wurzel über [`@defjs/react`](/de-DE/docs/integrations/react) (`ClientProvider` / `useClient`) oder [`@defjs/vue`](/de-DE/docs/integrations/vue) (`createClientPlugin` / `injectClient`) bereit.
+- **SSR / BFF (`createServerApiClient(accessToken)`)**: Wann immer Zugangsdaten, Cookies oder Mandanten-Header pro eingehender HTTP-Anfrage variieren, rufst du innerhalb deines Server-Request-Handlers eine Factory-Funktion auf, um einen isolierten `Client` zu erstellen. Da `getOrder`, `listOrders` und `createOrder` reine Funktionen sind, funktionieren exakt dieselben Definitionen aus `services/orders.ts` sowohl mit `apiClient` als auch mit `createServerApiClient(token)`.
+
+### Aufrufbezogene Timeouts und Abbruch
+
+Erstelle niemals über `createClient(...)` einen neuen `Client`, nur um ein Timeout oder ein `AbortSignal` zu übergeben. Leite stattdessen direkt an der Aufrufstelle einen Client für einen einzelnen Aufruf von deinem gemeinsamen Client ab:
+
+```ts
+const [error, created] = await createOrder(
+  apiClient({ signal: AbortSignal.timeout(5_000) }),
+  {
+    customerName: "Ada Lovelace",
+    totalCents: 4200,
+    idempotencyKey: "idem-2026-101",
+  },
+);
+```
+
+### Gemeinsames Fehler-Envelope (`ApiError`)
+
+Deklariere das Standard-Fehler-Envelope deines Backends einmalig (`export const ApiError = struct.object(...)`) in `src/api/models/` und übergib `error: ApiError` bei jedem `defineRequest` in `src/api/services/`. Wenn eine Anfrage einen Status außerhalb von `2xx` zurückgibt, erhältst du durch die Eingrenzung `if (error.code === "HTTP_STATUS")` streng typisierten Zugriff auf `error.data.code`, `error.data.message` und `error.data.requestId`.
+
+Siehe auch [Engineering-Konventionen](/de-DE/docs/best-practices), [Design öffentlicher SDKs](/de-DE/docs/public-sdk), [Client](/de-DE/docs/client) und [Interceptors](/de-DE/docs/interceptors).

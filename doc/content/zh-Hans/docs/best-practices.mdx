@@ -1,0 +1,88 @@
+---
+title: "工程规范"
+description: 使用 Defjs 构建应用内接口请求层与对外公共 SDK 包的通用架构规范。
+---
+
+# 工程规范 [#engineering-conventions]
+
+无论是日常在业务项目内部手写 HTTP 请求层，还是代表公司对外发布公共 API 的官方 TypeScript SDK，基于 Defjs 的工程都遵循同一套模块化架构：**共享的数据模型层（`models/`）配合纯函数操作定义层（`services/`）**。
+
+---
+
+## 1. 两大核心使用场景
+
+在实际工程中，团队通常在以下两种场景中使用 Defjs。两者的 `models/` 与 `services/` 组织方式完全一致，唯一的区别在于 `createClient(...)` 放在哪里：
+
+| 使用场景                                                                          | 推荐目录结构                                                          | 谁持有 `createClient(...)`？                                               | 专题指南                                    |
+| :-------------------------------------------------------------------------------- | :-------------------------------------------------------------------- | :------------------------------------------------------------------------- | :------------------------------------------ |
+| **[应用接口层](/zh-Hans/docs/application-api)**（业务项目内手写 HTTP / 实时请求） | `src/api/models/` + `src/api/services/` + `src/api/client.ts`         | 当前业务项目自身（由 `src/api/client.ts` 导出浏览器单例或 SSR 请求级工厂） | [应用接口层](/zh-Hans/docs/application-api) |
+| **[公共 SDK 设计](/zh-Hans/docs/public-sdk)**（公司对外发布的公共 API npm 包）    | `src/models/` + `src/services/` + `src/index.ts`（含 `package.json`） | 外部消费方应用（发布的 SDK 包内绝不创建或捕获任何 `Client`）               | [公共 SDK 设计](/zh-Hans/docs/public-sdk)   |
+
+---
+
+## 2. 四条核心工程规范
+
+### 规范一：始终导出纯函数操作，摒弃 `Service` 类
+
+传统 OpenAPI 生成器习惯把接口包装在带状态或静态方法的 `Service` 类中（如 `OrdersService.getOrder(id)` 或 `new S3Client().send(...)`）。而在 Defjs 中，通过 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 创建的每个定义本身就是**可直接调用的独立纯函数**：
+
+```ts
+// 反模式：把操作定义包装进 class 或命名空间对象中
+export class OrdersService {
+  // 掩盖了单次调用 client(options) 派生能力，且阻碍打包器按接口粒度 tree-shake
+}
+
+// 最佳实践：在 services/*.ts 中直接导出独立的操作定义纯函数
+export const getOrder = defineRequest({
+  operation: "orders.get",
+  method: "GET",
+  path: "/orders/:id",
+  input: GetOrderInput,
+  builder: (input) => ({ path: { id: input.id } }),
+  output: Order,
+  error: ApiError,
+});
+```
+
+直接调用导出的操作纯函数（`await getOrder(client, { id: 42 })` 或 `await getOrder(client({ signal }), { id: 42 })`），能让全项目的调用心智与 `@defjs/core` 原生风格保持一致，并在开启 `"sideEffects": false` 时实现 100% 按需 Tree-shaking。
+
+### 规范二：在 `models/` 中同名合并导出 `struct` 与 `Infer`
+
+在 `models/*.ts` 中，使用**相同的标识符**同时导出运行时 `struct` schema 与 `Infer<typeof ...>` 静态类型。TypeScript 会自动合并同一作用域内的值声明与类型声明，调用方只需导入一个名字即可同时用于运行时解析和类型标注：
+
+```ts
+import { struct, type Infer } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  customerName: struct.string().alias("customer_name"),
+  totalCents: struct.number().alias("total_cents"),
+});
+export type Order = Infer<typeof Order>;
+```
+
+### 规范三：保持 `services/*.ts` 与 Client 实例解耦
+
+即便是在单个业务仓库内部编写[应用接口层](/zh-Hans/docs/application-api)（`src/api/`），也**不要**在 `src/api/services/*.ts` 里导入 `apiClient` 去二次包装请求函数。让 `services/*.ts` 保持为纯粹的操作定义有三大工程收益：
+
+1. **零 Mock 内存单测**：在单元测试中可直接向任何操作函数传入 `createClient(withEndpoint(...), withHTTPHandle(...))`，无需劫持模块或打补丁。
+2. **天然兼容 SSR 与多租户**：服务端渲染（SSR）或 BFF 路由处理器可以为每个入站请求创建携带当前用户 Cookie/Token 的独立 `Client`，与浏览器组件复用同一份操作定义。
+3. **零成本演进为共享包**：未来若需将 `src/api/models/` 与 `src/api/services/` 抽离为 Monorepo 子包或对外公共 SDK，定义层代码无需任何改动。
+
+### 规范四：严格区分 `builder` 参数映射与拦截器策略
+
+将不同维度的逻辑放在各自归属的层次中：
+
+| 职责维度                                                           | 归属位置                                                  | 原因                                                |
+| :----------------------------------------------------------------- | :-------------------------------------------------------- | :-------------------------------------------------- |
+| 将调用入参分发到 `path`、`query`、`headers`、`body`                | `services/*.ts` 中的 `builder`                            | 仅依赖当前 `input` 的同步纯函数                     |
+| 静态低基数操作标识（如 `"orders.create"`、`"s3.objects.put"`）     | `services/*.ts` 中的 `operation` 字段                     | 供 OpenTelemetry 链路追踪、指标与日志拦截器识别接口 |
+| 基地址、认证请求头（Bearer Token、签名、XSRF）、重试策略、负载均衡 | `client.ts` 中的 `createClient(...)`                      | 与运行环境、会话状态相关的横切执行策略              |
+| 单次调用超时、手动取消（`signal`）与上传/下载进度回调              | 调用处的内联派生 `client({ signal, onDownloadProgress })` | 仅作用于当次请求，不污染共享 Client                 |
+
+---
+
+## 延伸阅读
+
+- 在业务项目内部组织 HTTP 请求层？请阅读 [应用接口层](/zh-Hans/docs/application-api)。
+- 为公司开放平台设计并发布外部 SDK？请阅读 [公共 SDK 设计](/zh-Hans/docs/public-sdk)。

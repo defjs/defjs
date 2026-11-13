@@ -66,6 +66,7 @@ export default {
   "nav.guide.middleware": "المعترضات (Interceptors)",
   "nav.guide.errors": "الأخطاء",
   "nav.guide.preface": "مقدمة",
+  "nav.guide.bestPractices": "أفضل الممارسات",
   "nav.guide.ai": "الذكاء الاصطناعي",
   "nav.integrations.overview": "نظرة عامة",
   "nav.integrations.official": "الإضافات الرسمية",

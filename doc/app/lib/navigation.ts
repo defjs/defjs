@@ -34,6 +34,14 @@ const guideGroups = [
       "/docs/testing",
     ],
   },
+  {
+    titleKey: "nav.guide.bestPractices",
+    paths: [
+      "/docs/best-practices",
+      "/docs/application-api",
+      "/docs/public-sdk",
+    ],
+  },
   { titleKey: "nav.guide.ai", paths: ["/docs/ai", "/docs/ai-api"] },
 ] as const satisfies readonly NavigationGroup[];
 export const integrationGroups = [
@@ -245,6 +253,9 @@ const relatedTopics = [
     "/docs/client",
     "/docs/load-balancing",
     "/docs/testing",
+    "/docs/best-practices",
+    "/docs/application-api",
+    "/docs/public-sdk",
     "/api/client",
     "/recipes/cancel-http",
     "/recipes/publish-http-sdk",

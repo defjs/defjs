@@ -66,6 +66,7 @@ export default {
   "nav.guide.middleware": "拦截器",
   "nav.guide.errors": "错误",
   "nav.guide.preface": "前言",
+  "nav.guide.bestPractices": "最佳实践",
   "nav.guide.ai": "AI",
   "nav.integrations.overview": "概览",
   "nav.integrations.official": "官方插件",
