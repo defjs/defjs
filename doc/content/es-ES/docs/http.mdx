@@ -38,7 +38,7 @@ Asigna a cada operación su propio export mediante `defineRequest` en el módulo
 ### Buenas prácticas en el diseño de SDKs
 
 - **Una operación por definición**: mantén cada método, ruta y contrato en su propia definición para que las aplicaciones puedan aplicar _tree-shaking_ a las operaciones que no usen.
-- **Asigna un nombre estático a `operation`**: utiliza un identificador de baja cardinalidad como `"orders.read"`. Los plugins de telemetría (`@defjs/opentelemetry-server`) y los interceptores de registro lo usarán sin filtrar URLs ni identificadores de usuario.
+- **Adjunta `meta` cuando los interceptores necesiten contexto**: `meta` es `{ [key: string]: unknown }` y lo define la aplicación, por ejemplo `{ operation: "orders.read" }`. Fluye solo por interceptores y balanceadores (`request.meta`, `PickInfo.meta`); Defjs nunca lo lee, lo copia ni lo envía por la red.
 - **Nunca incrustes un cliente en el SDK**: exporta únicamente definiciones, esquemas `struct` y tipos.
 
 ## 2. Resolución de URLs y parámetros de ruta

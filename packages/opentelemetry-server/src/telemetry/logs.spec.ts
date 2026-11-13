@@ -40,7 +40,6 @@ describe("client exception logs", () => {
         context: ROOT_CONTEXT,
         error: new TypeError("password=secret"),
         attributes: {
-          "defjs.operation": "orders.create",
           "server.address": "api.example.com",
           "server.port": 8443,
         },
@@ -54,7 +53,6 @@ describe("client exception logs", () => {
           severityNumber: 13,
           severityText: "WARN",
           attributes: {
-            "defjs.operation": "orders.create",
             "server.address": "api.example.com",
             "server.port": 8443,
             "defjs.phase": "connect",

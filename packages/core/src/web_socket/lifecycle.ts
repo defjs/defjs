@@ -224,7 +224,7 @@ async function prepareAttempt(
   if (session.attributable && session.pick === undefined) {
     const [fault, picked] = pickEndpoint(session.clientConfig.balancer, {
       endpoints: session.clientConfig.endpoints,
-      operation: session.operation,
+      meta: session.meta,
     });
     if (fault) {
       return fault;

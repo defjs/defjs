@@ -809,8 +809,8 @@ test("a retried pick sees the same candidates as the first pick", async () => {
   const { client, picks } = fixture();
   await defineRequest({ method: "GET", path: "/" })(client);
   expect(picks).toEqual([
-    { endpoints, operation: undefined },
-    { endpoints, operation: undefined },
+    { endpoints, meta: undefined },
+    { endpoints, meta: undefined },
   ]);
 });
 

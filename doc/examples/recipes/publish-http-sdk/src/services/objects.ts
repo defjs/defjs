@@ -12,7 +12,7 @@ export const ListObjectsInput = struct.object({
 export type ListObjectsInput = Infer<typeof ListObjectsInput>;
 
 export const listObjectsV2 = defineRequest({
-  operation: "s3.objects.listV2",
+  meta: { operation: "s3.objects.listV2" },
   method: "GET",
   path: "/:bucket",
   input: ListObjectsInput,
@@ -36,7 +36,7 @@ export const ObjectKeyInput = struct.object({
 export type ObjectKeyInput = Infer<typeof ObjectKeyInput>;
 
 export const headObject = defineRequest({
-  operation: "s3.objects.head",
+  meta: { operation: "s3.objects.head" },
   method: "HEAD",
   path: "/:bucket/:key",
   input: ObjectKeyInput,
@@ -53,7 +53,7 @@ export const GetObjectInput = struct.object({
 export type GetObjectInput = Infer<typeof GetObjectInput>;
 
 export const getObject = defineRequest({
-  operation: "s3.objects.get",
+  meta: { operation: "s3.objects.get" },
   method: "GET",
   path: "/:bucket/:key",
   input: GetObjectInput,
@@ -75,7 +75,7 @@ export const PutObjectInput = struct.object({
 export type PutObjectInput = Infer<typeof PutObjectInput>;
 
 export const putObject = defineRequest({
-  operation: "s3.objects.put",
+  meta: { operation: "s3.objects.put" },
   method: "PUT",
   path: "/:bucket/:key",
   input: PutObjectInput,
@@ -91,7 +91,7 @@ export const putObject = defineRequest({
 });
 
 export const deleteObject = defineRequest({
-  operation: "s3.objects.delete",
+  meta: { operation: "s3.objects.delete" },
   method: "DELETE",
   path: "/:bucket/:key",
   input: ObjectKeyInput,

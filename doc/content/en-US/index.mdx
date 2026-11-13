@@ -35,11 +35,11 @@ Calling `getHealth(client)` performs I/O and resolves an error-first tuple. Chec
 
 ## Why separate definitions from clients?
 
-| Responsibility | SDK Author (Definition)                                                                                     | Application (Execution)                                                                   |
-| -------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| **Owns**       | Method, path template, `input` / `output` / `error` schemas, `builder` mapping, and static `operation` name | Base URLs, credentials, auth interceptors, load balancing, timeouts, and resource cleanup |
-| **Ships**      | Reusable ESM modules and `.d.ts` declarations                                                               | Browser, server, or test runtime configuration                                            |
-| **Benefit**    | Zero environment coupling; works across browser, SSR, and tests                                             | Full control over retries, failover, telemetry, and lifecycles                            |
+| Responsibility | SDK Author (Definition)                                                                                                 | Application (Execution)                                                                   |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Owns**       | Method, path template, `input` / `output` / `error` schemas, `builder` mapping, and optional application-defined `meta` | Base URLs, credentials, auth interceptors, load balancing, timeouts, and resource cleanup |
+| **Ships**      | Reusable ESM modules and `.d.ts` declarations                                                                           | Browser, server, or test runtime configuration                                            |
+| **Benefit**    | Zero environment coupling; works across browser, SSR, and tests                                                         | Full control over retries, failover, telemetry, and lifecycles                            |
 
 ## Choose your path
 

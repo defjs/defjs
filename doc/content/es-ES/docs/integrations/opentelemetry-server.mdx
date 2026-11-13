@@ -11,26 +11,15 @@ description: Instrumenta las llamadas del SDK en el cliente de la aplicación se
 
 ---
 
-## 1. Configuración básica e identidad de operaciones
+## 1. Configuración básica
 
-Establece una cadena `operation` estática y de baja cardinalidad en tus definiciones de SDK (`defineRequest`, `defineEventStream`, `defineWebSocket`), y luego pasa tu `tracer`, `meter`, `logger` o `propagator` de OpenTelemetry a `withOpenTelemetryServer(...)` al construir el cliente:
+Pasa tu `tracer`, `meter`, `logger` o `propagator` de OpenTelemetry a `withOpenTelemetryServer(...)` al construir el cliente:
 
-<Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/operation-names.ts#example
-    </include>
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
 
-  </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/basic-setup.ts#example
-    </include>
-
-  </Tab>
-</Tabs>
-
-- **Nomenclatura de spans**: al configurar `operation`, los nombres de span se convierten en `GET orders.read`, `SSE orders.watch` y `WebSocket orders.connect`, e incluyen el atributo `defjs.operation`. Sin `operation`, los nombres de span recurren al método HTTP, `SSE` o `WebSocket`. El método HTTP de un nombre de span es el `http.request.method` normalizado, o `HTTP` cuando ese valor es `_OTHER`.
+- **Nomenclatura de spans**: los nombres de span son el método HTTP, `SSE` o `WebSocket`. El plugin nunca lee el `meta` de una definición; usa `startSpanHook(request)` para copiar lo que necesites de `request.meta` a atributos del span. El método HTTP de un nombre de span es el `http.request.method` normalizado, o `HTTP` cuando ese valor es `_OTHER`.
 - **Señales independientes**: `tracer`, `meter` y `logger` son todos opcionales y funcionan de forma independiente:
   - Omite `tracer` para deshabilitar la creación local de spans y sus hooks mientras se siguen registrando métricas, logs y la propagación de contexto saliente.
   - Omite `meter` para deshabilitar las métricas del paquete.
@@ -135,7 +124,7 @@ Cada petición o conexión lógica emite como máximo un `LogRecord` terminal de
 | Error terminal en SSE o WebSocket o `closed` rechazado (incluida una caída `1006` sin trama de cierre, timeout de latido)                                      | Un `WARN` con el nombre de evento del transporte, fase `connection`                          |
 | Finalización normal, mensajes, EOF, tramas de cierre de servidor WebSocket (incluyendo `1011`) o cancelación activa sin timeout                                | Ninguno                                                                                      |
 
-Los diagnósticos registran un mensaje fijo, `exception.type` (nombre de clase de plataforma o transporte como `BodyFailure`, `EventStreamFatalError` (handshake SSE sin `text/event-stream`), `DefjsFault` (incluido un handshake SSE con estado no 2xx), `TypeError` o `Error`), fase, `operation` estática, dirección/puerto del servidor y campos de protocolo; nunca URLs sin procesar, query strings, cabeceras, cuerpos ni trazas de pila. El evento `exception` de un span sigue la misma regla y lleva solo `exception.type`; `url.full` sustituye cualquier userinfo del endpoint por `REDACTED:REDACTED` y los valores de las claves de query sensibles por defecto de las convenciones semánticas (como `sig` y `X-Amz-Signature`) por `REDACTED`.
+Los diagnósticos registran un mensaje fijo, `exception.type` (nombre de clase de plataforma o transporte como `BodyFailure`, `EventStreamFatalError` (handshake SSE sin `text/event-stream`), `DefjsFault` (incluido un handshake SSE con estado no 2xx), `TypeError` o `Error`), fase, dirección/puerto del servidor y campos de protocolo; nunca URLs sin procesar, query strings, cabeceras, cuerpos ni trazas de pila. El evento `exception` de un span sigue la misma regla y lleva solo `exception.type`; `url.full` sustituye cualquier userinfo del endpoint por `REDACTED:REDACTED` y los valores de las claves de query sensibles por defecto de las convenciones semánticas (como `sig` y `X-Amz-Signature`) por `REDACTED`.
 
 ---
 

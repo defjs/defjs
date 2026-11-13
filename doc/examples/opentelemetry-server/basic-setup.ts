@@ -9,7 +9,7 @@ const meter = metrics.getMeter("orders-service");
 const logger = logs.getLogger("@defjs/opentelemetry-server");
 const readOrders = defineRequest({
   method: "GET",
-  operation: "orders.read",
+  meta: { operation: "orders.read" },
   path: "/orders",
 });
 

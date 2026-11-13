@@ -73,10 +73,10 @@ En prenant pour exemple un SDK de stockage d'objets compatible Amazon S3 (`@comp
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,7 +126,7 @@ Vérifiez que `dist/index.js` et `dist/index.d.ts` figurent bien dans la tarball
 Installez votre SDK aux côtés de `@defjs/core` :
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
 Comme le SDK ne lie aucun client, l'application consommatrice est propriétaire de l'endpoint (AWS S3, Cloudflare R2 ou MinIO), de l'intercepteur de signature et de la politique de réessai, et appelle directement chaque opération importée comme une fonction pure :

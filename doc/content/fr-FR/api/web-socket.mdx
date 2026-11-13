@@ -11,7 +11,7 @@ Déclarez un socket, appelez l'opération avec un client, envoyez et recevez des
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`, et un struct `incoming` ; structs `outgoing` et `input`, `operation`, `protocols` statiques et `maxOutgoingQueueSize` facultatifs. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`WebSocketDefinition`](/fr-FR/api/core/websocketdefinition-type). `builder` est obligatoire exactement quand `input` est déclaré.
+- **definition** — `path`, et un struct `incoming` ; structs `outgoing` et `input`, `meta`, `protocols` statiques et `maxOutgoingQueueSize` facultatifs. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`WebSocketDefinition`](/fr-FR/api/core/websocketdefinition-type). `builder` est obligatoire exactement quand `input` est déclaré.
 - **Renvoie** une opération. Le premier argument est un [`Client`](/fr-FR/api/core/client-type). Les arguments suivants sont seulement l’entrée. L’appeler ouvre la session.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
@@ -72,7 +72,7 @@ Voir le [guide WebSocket](/fr-FR/docs/web-socket) et [Ouvrir une session WebSock
 
 ## WebSocketDefinition
 
-`path`, `incoming`, `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` facultatifs. Le builder ne peut renvoyer que `path` et `query`. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
+`path`, `incoming`, `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize` facultatifs. Le builder ne peut renvoyer que `path` et `query`. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
 
 ## WebSocketEndpoint
 

@@ -38,7 +38,7 @@ description: 为 SDK 设计 HTTP 操作，并用应用自有的配置与取消�
 ### SDK 设计最佳实践
 
 - **一个定义对应一个操作**：让每个方法、路径和契约各自成为独立的定义，应用才能对未使用的操作做 tree-shaking。
-- **设置静态 `operation` 名称**：使用低基数标识，例如 `"orders.read"`。遥测插件（`@defjs/opentelemetry-server`）和日志拦截器会使用它，而不会泄露 URL 或用户 ID。
+- **需要给拦截器提供上下文时附加 `meta`**：`meta` 是 `{ [key: string]: unknown }`，由应用自行定义，例如 `{ operation: "orders.read" }`。它只会流向拦截器和均衡器（`request.meta`、`PickInfo.meta`）；Defjs 从不读取、复制它，也不会通过网络发送它。
 - **绝不在 SDK 内嵌 Client**：只导出定义、`struct` schema 和类型。
 
 ## 2. URL 解析与路径占位符

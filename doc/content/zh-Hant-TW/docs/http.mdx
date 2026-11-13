@@ -38,7 +38,7 @@ SDK 開發者用 `defineRequest` 定義每項 HTTP 操作：HTTP 方法、路徑
 ### SDK 設計最佳實務
 
 - **每項定義只對應一項操作**：讓每個方法、路徑與契約各自成為一份定義，應用程式才能對未使用的操作進行 Tree-shaking。
-- **設定靜態的 `operation` 名稱**：使用低基數（low-cardinality）的識別碼，例如 `"orders.read"`。遙測外掛（`@defjs/opentelemetry-server`）與日誌攔截器會使用它，而不會洩漏 URL 或使用者 ID。
+- **攔截器需要脈絡時附加 `meta`**：`meta` 是 `{ [key: string]: unknown }`，由應用程式自行定義，例如 `{ operation: "orders.read" }`。它只會流向攔截器與負載平衡器（`request.meta`、`PickInfo.meta`）；Defjs 從不讀取、複製它，也不會透過網路傳送它。
 - **絕不把 Client 嵌進 SDK**：只匯出定義、`struct` schema 與型別。
 
 ## 2. URL 解析與路徑參數

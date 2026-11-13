@@ -73,10 +73,10 @@ Defjs SDK 將共用的 `struct` 資料模型（`src/models/`）與依業務領�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,7 +126,7 @@ bun pm pack
 將你的 SDK 與 `@defjs/core` 一併安裝至應用程式：
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
 由於 SDK 不綁定任何 client，取用端應用程式自行掌控服務端點（AWS S3、Cloudflare R2 或 MinIO）、簽章攔截器與重試策略，並以純函式方式直接呼叫匯入的操作定義：

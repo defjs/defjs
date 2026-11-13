@@ -11,7 +11,7 @@ Deklariere einen Socket, rufe die Operation mit einem Client auf, sende und empf
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path` und ein `incoming`-Struct; optional `outgoing`- und `input`-Structs, `operation`, statische `protocols` und `maxOutgoingQueueSize`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`WebSocketDefinition`](/de-DE/api/core/websocketdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
+- **definition** — `path` und ein `incoming`-Struct; optional `outgoing`- und `input`-Structs, `meta`, statische `protocols` und `maxOutgoingQueueSize`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`WebSocketDefinition`](/de-DE/api/core/websocketdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
 - **Returns** eine Operation. Das erste Argument ist ein [`Client`](/de-DE/api/core/client-type). Weitere Argumente sind nur der Input. Der Aufruf öffnet die Session.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
@@ -72,7 +72,7 @@ Siehe [WebSocket-Leitfaden](/de-DE/docs/web-socket) und [WebSocket-Session öffn
 
 ## WebSocketDefinition
 
-`path`, `incoming`, optional `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. Der Builder darf nur `path` und `query` zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+`path`, `incoming`, optional `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize`. Der Builder darf nur `path` und `query` zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ## WebSocketEndpoint
 

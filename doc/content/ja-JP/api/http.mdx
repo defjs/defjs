@@ -11,7 +11,7 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`、`path`、任意の `input` struct、任意の `output` と `error` struct、任意の `operation`。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`RequestDefinition`](/ja-JP/api/core/requestdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
+- **definition** — `method`、`path`、任意の `input` struct、任意の `output` と `error` struct、任意の `meta`。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`RequestDefinition`](/ja-JP/api/core/requestdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
 - **戻り値** 操作です。`getOrder(client, input)` のように呼び、入力を宣言していなければ `health(client)` です。入力 struct 全体が任意なら、入力引数は省略できます。呼ぶとリクエストが始まります。3 番目のオプション引数はありません。
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -44,7 +44,7 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 ### RequestDefinition
 
-`method`、`path`、任意の `input`、`output`、`error`、`operation`、`builder` です。宣言したボディの読み方は struct の種類が決めます。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+`method`、`path`、任意の `input`、`output`、`error`、`meta`、`builder` です。宣言したボディの読み方は struct の種類が決めます。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
 
 ### HttpAwaitResult
 
@@ -54,7 +54,7 @@ description: defineRequest、リクエストオプション、HTTP のリクエ�
 
 ### HttpRequest
 
-正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`finalizeHeaders`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`query` です。インターセプターが見る時点で `body` はすでにワイヤ上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。`query` はリクエストが送る唯一のクエリで、`URLSearchParams` です。インターセプターはそれをその場で変更するか、置き換えを `next()` に渡します。`builder` が `URLSearchParams` を返すと、そのインスタンスはコピーされ、`withQuerySerializer` の関数が返した文字列はそこへパースされます。ワイヤ上の形式は `query.toString()`、つまり URL Standard の application/x-www-form-urlencoded シリアライズなので、空白は `+` になり、空の `query` では `?` は付きません。`responseType` と `errorResponseType` は readonly です。宣言された `output` と `error` の struct の種類から導出され、変更してはいけません。
+正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`meta`、`withCredentials`、`finalizeHeaders`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`query` です。インターセプターが見る時点で `body` はすでにワイヤ上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。`query` はリクエストが送る唯一のクエリで、`URLSearchParams` です。インターセプターはそれをその場で変更するか、置き換えを `next()` に渡します。`builder` が `URLSearchParams` を返すと、そのインスタンスはコピーされ、`withQuerySerializer` の関数が返した文字列はそこへパースされます。ワイヤ上の形式は `query.toString()`、つまり URL Standard の application/x-www-form-urlencoded シリアライズなので、空白は `+` になり、空の `query` では `?` は付きません。`responseType` と `errorResponseType` は readonly です。宣言された `output` と `error` の struct の種類から導出され、変更してはいけません。
 
 ### HttpMeta
 

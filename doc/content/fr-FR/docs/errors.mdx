@@ -123,7 +123,7 @@ Tout `Fault` est une instance d'`Error` native (`instanceof Error === true`) dot
 </Tabs>
 
 > [!CAUTION]
-> Considérez `fault.cause`, `fault.data`, les en-têtes de réponse, les URL complètes et `StructIssue.received` comme potentiellement sensibles. Ne journalisez par défaut qu'une liste blanche de champs de faible cardinalité (`operation`, `code`, `status`, durée).
+> Considérez `fault.cause`, `fault.data`, les en-têtes de réponse, les URL complètes et `StructIssue.received` comme potentiellement sensibles. Ne journalisez par défaut qu'une liste blanche de champs de faible cardinalité (votre propre libellé `meta`, `code`, `status`, durée).
 
 ## Lectures connexes
 

@@ -10,7 +10,7 @@ It is a middleware plugin — the plugin form of an interceptor chain. Your appl
 bun add @defjs/core @defjs/opentelemetry-server @opentelemetry/api @opentelemetry/core
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.7.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.8.0` range.
 
 ## Quick start
 
@@ -43,19 +43,18 @@ const client = createClient(
 );
 ```
 
-## Operation identity
+## Definition `meta`
 
-Set `operation` statically on the definition. It is the low-cardinality transport identity: spans are named `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`, and `defjs.operation` is recorded on spans and metrics.
+The plugin never reads a definition's `meta`, which is application-defined and stays inside the process. Spans are named after the HTTP method (`HTTP` for `_OTHER`), `SSE`, or `WebSocket`. To record something from `meta`, copy it in a start hook:
 
 ```typescript
-const readOrder = defineRequest({
-  method: "GET",
-  operation: "orders.read",
-  path: "/orders/:id",
+withOpenTelemetryServer({
+  tracer,
+  http: {
+    startSpanHook: (request) => ({ "app.meta": JSON.stringify(request.meta) }),
+  },
 });
 ```
-
-Without it, HTTP spans use the normalized method (`HTTP` for `_OTHER`) and SSE/WebSocket use their transport name. Never derive an operation from a resolved URL or a path containing identifiers.
 
 ## Configuration
 
@@ -97,7 +96,7 @@ HTTP, SSE, and WebSocket follow one rule. A caller cancellation (an abort that i
 
 - `webSocket.queryPropagation` defaults to `false`: trace context and baggage do not ride on the WebSocket URL. Enable it only after reviewing how your proxies, browsers, and access logs record query strings.
 - No bodies, full headers, baggage values, or message payloads are added as telemetry fields, and no built-in redactor exists beyond `url.full`, whose endpoint userinfo is replaced with `REDACTED:REDACTED` and whose default sensitive query values (`sig`, `X-Amz-Signature`, and the other keys in the semantic conventions) are replaced with `REDACTED`. Prefer allowlists and low-cardinality attributes in hooks.
-- Diagnostics carry a fixed message, phase, operation, server address/port, and exception type — not raw URLs, headers, bodies, or stacks. Span `exception` events carry only `exception.type` for the same reason.
+- Diagnostics carry a fixed message, phase, server address/port, and exception type — not raw URLs, headers, bodies, or stacks. Span `exception` events carry only `exception.type` for the same reason.
 - SSE and WebSocket are traced per logical connection, not per event or message.
 
 ## Documentation

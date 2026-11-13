@@ -34,7 +34,7 @@ export class OrdersService {
 
 // Recommandé : exporter des définitions d'opérations autonomes depuis services/*.ts
 export const getOrder = defineRequest({
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   method: "GET",
   path: "/orders/:id",
   input: GetOrderInput,
@@ -73,12 +73,12 @@ Même lorsque vous écrivez une [couche API d'application](/fr-FR/docs/applicati
 
 Gardez chaque préoccupation dans la couche qui lui est dédiée :
 
-| Préoccupation                                                                                                 | Où elle doit se trouver                                               | Pourquoi                                                                                   |
-| :------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------- | :----------------------------------------------------------------------------------------- |
-| Répartir les paramètres de l'appelant dans `path`, `query`, `headers` et `body`                               | `builder` de l'opération dans `services/*.ts`                         | Fonction pure et synchrone de l'`input` courant                                            |
-| Identité d'opération statique à faible cardinalité (`"orders.create"`, `"s3.objects.put"`)                    | Champ `operation` de l'opération dans `services/*.ts`                 | Utilisée par les spans OpenTelemetry, les métriques et les intercepteurs de journalisation |
-| URL de base, en-têtes d'authentification (`Authorization`, signatures, XSRF), réessais, répartition de charge | `createClient(...)` dans `client.ts`                                  | Politique d'exécution propre à l'environnement et à la session                             |
-| Délais d'expiration par appel, annulation (`signal`) et callbacks de progression de transfert                 | `client({ signal, onDownloadProgress })` en ligne sur le site d'appel | Limité à une seule invocation sans muter le client partagé                                 |
+| Préoccupation                                                                                                 | Où elle doit se trouver                                               | Pourquoi                                                                        |
+| :------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
+| Répartir les paramètres de l'appelant dans `path`, `query`, `headers` et `body`                               | `builder` de l'opération dans `services/*.ts`                         | Fonction pure et synchrone de l'`input` courant                                 |
+| Contexte défini par l'application pour les intercepteurs (`{ operation: "orders.create" }`)                   | Champ `meta` de l'opération dans `services/*.ts`                      | `{ [key: string]: unknown }` ; strictement interne, jamais envoyé sur le réseau |
+| URL de base, en-têtes d'authentification (`Authorization`, signatures, XSRF), réessais, répartition de charge | `createClient(...)` dans `client.ts`                                  | Politique d'exécution propre à l'environnement et à la session                  |
+| Délais d'expiration par appel, annulation (`signal`) et callbacks de progression de transfert                 | `client({ signal, onDownloadProgress })` en ligne sur le site d'appel | Limité à une seule invocation sans muter le client partagé                      |
 
 ---
 

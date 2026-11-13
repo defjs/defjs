@@ -11,26 +11,15 @@ description: Instrumentez les appels du SDK sur le client applicatif serveur tou
 
 ---
 
-## 1. Configuration de base & identité des opérations
+## 1. Configuration de base
 
-Définissez une chaîne `operation` statique et de faible cardinalité sur vos définitions de SDK (`defineRequest`, `defineEventStream`, `defineWebSocket`), puis transmettez votre `tracer`, `meter`, `logger` ou `propagator` OpenTelemetry à `withOpenTelemetryServer(...)` lors de la construction du client :
+Transmettez votre `tracer`, `meter`, `logger` ou `propagator` OpenTelemetry à `withOpenTelemetryServer(...)` lors de la construction du client :
 
-<Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/operation-names.ts#example
-    </include>
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
 
-  </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/basic-setup.ts#example
-    </include>
-
-  </Tab>
-</Tabs>
-
-- **Nommage des spans** : Avec `operation` défini, les noms de spans deviennent `GET orders.read`, `SSE orders.watch` et `WebSocket orders.connect`, et portent l'attribut `defjs.operation`. En l'absence d'`operation`, les noms de spans se replient sur la méthode HTTP, `SSE` ou `WebSocket`. La méthode HTTP d'un nom de span est le `http.request.method` normalisé, ou `HTTP` lorsque cette valeur est `_OTHER`.
+- **Nommage des spans** : Les noms de spans sont la méthode HTTP, `SSE` ou `WebSocket`. Le plugin ne lit jamais le `meta` d'une définition ; utilisez `startSpanHook(request)` pour copier ce dont vous avez besoin de `request.meta` vers des attributs de span. La méthode HTTP d'un nom de span est le `http.request.method` normalisé, ou `HTTP` lorsque cette valeur est `_OTHER`.
 - **Signaux indépendants** : `tracer`, `meter` et `logger` sont tous facultatifs et fonctionnent de manière autonome :
   - Omettez `tracer` pour désactiver la création de spans locaux et leurs hooks tout en continuant d'enregistrer les métriques, les logs et la propagation sortante de contexte.
   - Omettez `meter` pour désactiver les métriques du paquet.
@@ -135,7 +124,7 @@ Chaque requête ou connexion logique émet au maximum un `LogRecord` terminal de
 | Erreur terminale SSE ou WebSocket ou `closed` rejeté (y compris une chute `1006` sans trame de fermeture, expiration de heartbeat)                                              | Un `WARN` avec le nom d'événement du transport, phase `connection`                             |
 | Clôture normale, messages, EOF, trames de fermeture WebSocket serveur (y compris `1011`) ou annulation active sans timeout                                                      | Aucun                                                                                          |
 
-Les diagnostics enregistrent un message immuable, `exception.type` (nom de classe plateforme/transport comme `BodyFailure`, `EventStreamFatalError` (handshake SSE sans `text/event-stream`), `DefjsFault` (y compris un handshake SSE avec statut non 2xx), `TypeError` ou `Error`), la phase, la chaîne `operation` statique, l'adresse/port du serveur et les champs de protocole — sans jamais inclure d'URL brutes, query strings, en-têtes, corps ou piles d'erreurs. Un événement `exception` de span suit la même règle et ne porte que `exception.type` ; `url.full` remplace tout userinfo de l'endpoint par `REDACTED:REDACTED` et les valeurs des clés de query sensibles par défaut des conventions sémantiques (comme `sig` et `X-Amz-Signature`) par `REDACTED`.
+Les diagnostics enregistrent un message immuable, `exception.type` (nom de classe plateforme/transport comme `BodyFailure`, `EventStreamFatalError` (handshake SSE sans `text/event-stream`), `DefjsFault` (y compris un handshake SSE avec statut non 2xx), `TypeError` ou `Error`), la phase, l'adresse/port du serveur et les champs de protocole — sans jamais inclure d'URL brutes, query strings, en-têtes, corps ou piles d'erreurs. Un événement `exception` de span suit la même règle et ne porte que `exception.type` ; `url.full` remplace tout userinfo de l'endpoint par `REDACTED:REDACTED` et les valeurs des clés de query sensibles par défaut des conventions sémantiques (comme `sig` et `X-Amz-Signature`) par `REDACTED`.
 
 ---
 

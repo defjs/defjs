@@ -11,7 +11,7 @@ Déclarez un flux d'événements, appelez l'opération avec un client, itérez l
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` et map `events` ; `method` (défaut `'GET'`), `operation`, `input`, `error` et `maxBufferSize` (défaut `64 * 1024`) facultatifs. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`EventStreamDefinition`](/fr-FR/api/core/eventstreamdefinition-type). `error` n’est obligatoire que lorsqu’un type de struct d’erreur est donné, et `builder` est obligatoire exactement quand `input` est déclaré.
+- **definition** — `path` et map `events` ; `method` (défaut `'GET'`), `meta`, `input`, `error` et `maxBufferSize` (défaut `64 * 1024`) facultatifs. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`EventStreamDefinition`](/fr-FR/api/core/eventstreamdefinition-type). `error` n’est obligatoire que lorsqu’un type de struct d’erreur est donné, et `builder` est obligatoire exactement quand `input` est déclaré.
 - **Renvoie** une opération. Le premier argument est un [`Client`](/fr-FR/api/core/client-type). Les arguments suivants sont seulement l’entrée. L’appeler démarre le flux.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -62,7 +62,7 @@ Voir le [guide SSE](/fr-FR/docs/sse) et [Consommer un flux SSE](/fr-FR/recipes/c
 
 ## EventStreamDefinition
 
-`path`, `events`, `method` / `operation` / `input` / `error` / `maxBufferSize` facultatifs. La forme de requête correspond à HTTP, y compris `body`. `GET` et `HEAD` ne peuvent pas transporter de corps. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
+`path`, `events`, `method` / `meta` / `input` / `error` / `maxBufferSize` facultatifs. La forme de requête correspond à HTTP, y compris `body`. `GET` et `HEAD` ne peuvent pas transporter de corps. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
 
 ## EventStreamEndpoint
 

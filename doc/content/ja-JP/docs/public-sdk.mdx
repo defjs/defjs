@@ -37,7 +37,7 @@ SDK パッケージを `src/models/`（データ構造）と `src/services/`（�
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. ルート import と tree-shaking のためのバレル export
-├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.8.0" }
 └── tsconfig.json
 ```
 
@@ -100,10 +100,10 @@ SDK パッケージを `src/models/`（データ構造）と `src/services/`（�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }

@@ -20,7 +20,7 @@ export type BaseTransportRequestOptions = {
   signal: AbortSignal;
   baseEndpoint: string;
   defaultHeaders?: Headers;
-  operation?: string;
+  meta?: { [key: string]: unknown };
   querySerializer?: QuerySerializer;
   withCredentials?: boolean;
 };
@@ -66,7 +66,7 @@ export function createBaseTransportRequest(
     endpoint: fillUrl(path, built.params),
     headers,
     method,
-    operation: options.operation,
+    meta: options.meta,
     query,
     withCredentials: options.withCredentials ?? false,
   };

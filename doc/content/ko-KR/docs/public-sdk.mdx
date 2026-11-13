@@ -37,7 +37,7 @@ SDK 패키지를 `src/models/`(데이터 구조)와 `src/services/`(리소스별
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. 루트 및 트리쉐이킹 가능 import를 위한 배럴 export
-├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.8.0" }
 └── tsconfig.json
 ```
 
@@ -100,10 +100,10 @@ SDK 패키지를 `src/models/`(데이터 구조)와 `src/services/`(리소스별
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }

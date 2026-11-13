@@ -36,7 +36,7 @@ export interface ClientCall {
   span: Span | undefined;
   /** The extracted parent context, carrying the client span when there is one. */
   context: Context;
-  /** `defjs.operation`, `server.address` and `server.port`: what the span, metrics and logs share. */
+  /** `server.address` and `server.port`: what the span, metrics and logs share. */
   attributes: Attributes;
   /** The normalized `http.request.method`; as given when nothing observes the call, because nothing reads it then. */
   method: string;
@@ -57,8 +57,7 @@ export function requiresActiveSpan(options: AnyClientCallOptions): boolean {
  * and `requestHook`.
  *
  * `method` is the request method as given. The span is named `name`, or by the HTTP convention
- * when `name` is omitted: the normalized method, and `HTTP` when that is `_OTHER`. The operation
- * follows the name when the request has one.
+ * when `name` is omitted: the normalized method, and `HTTP` when that is `_OTHER`.
  */
 export function startClientCall(
   options: AnyClientCallOptions,
@@ -86,7 +85,6 @@ export function startClientCall(
 
   const resolved = resolve(req.endpoint, req.baseEndpoint);
   const attributes = serverAttributes(resolved);
-  if (req.operation) attributes["defjs.operation"] = req.operation;
   const normalized = normalizeHttpMethod(method);
   if (!tracer) {
     return { span: undefined, context: parent, attributes, method: normalized };
@@ -118,7 +116,7 @@ export function startClientCall(
   }
   const spanName = name ?? (normalized === "_OTHER" ? "HTTP" : normalized);
   const span = tracer.startSpan(
-    req.operation ? `${spanName} ${req.operation}` : spanName,
+    spanName,
     { kind: SpanKind.CLIENT, attributes: spanAttributes },
     parent,
   );

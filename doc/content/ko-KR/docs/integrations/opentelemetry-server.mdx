@@ -11,26 +11,15 @@ description: SDK 정의를 텔레메트리 설정과 완전히 분리한 상태�
 
 ---
 
-## 1. 기본 설정 및 작업 식별자
+## 1. 기본 설정
 
-SDK 정의(`defineRequest`, `defineEventStream`, `defineWebSocket`)에 카디널리티가 낮은 고정 `operation` 문자열을 지정하세요. 그런 다음 클라이언트를 생성할 때 OpenTelemetry의 `tracer`, `meter`, `logger`, 또는 `propagator`를 `withOpenTelemetryServer(...)`에 전달합니다:
+클라이언트를 생성할 때 OpenTelemetry의 `tracer`, `meter`, `logger`, 또는 `propagator`를 `withOpenTelemetryServer(...)`에 전달합니다:
 
-<Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/operation-names.ts#example
-    </include>
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
 
-  </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/basic-setup.ts#example
-    </include>
-
-  </Tab>
-</Tabs>
-
-- **Span 이름 지정**: `operation`이 설정되면 span 이름은 `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`가 되며 `defjs.operation` 속성을 포함합니다. `operation`이 지정되지 않은 경우 HTTP 메서드, `SSE`, `WebSocket`으로 폴백됩니다. span 이름의 HTTP 메서드는 정규화된 `http.request.method`이며, 그 값이 `_OTHER`이면 `HTTP`가 됩니다.
+- **Span 이름 지정**: span 이름은 HTTP 메서드, `SSE`, `WebSocket`입니다. 플러그인은 정의의 `meta`를 읽지 않으므로, 필요한 값은 `startSpanHook(request)`에서 `request.meta`로부터 span 속성으로 복사하세요. span 이름의 HTTP 메서드는 정규화된 `http.request.method`이며, 그 값이 `_OTHER`이면 `HTTP`가 됩니다.
 - **독립적인 신호(Signals)**: `tracer`, `meter`, `logger`는 모두 선택 사항이며 각각 독립적으로 동작합니다:
   - `tracer`를 생략하면 로컬 span 생성과 span 훅이 비활성화되지만, 메트릭, 로그, 아웃바운드 컨텍스트 전파는 계속 기록됩니다.
   - `meter`를 생략하면 패키지 메트릭이 비활성화됩니다.
@@ -135,7 +124,7 @@ SSE와 WebSocket의 연결 수립 시간 및 연결 지속 시간 샘플에는 `
 | SSE 또는 WebSocket 최종 오류 또는 reject된 `closed` (종료 프레임 없는 `1006` 단절, 하트비트 타임아웃 포함)                          | 전송 이벤트 이름을 가진 단일 `WARN`, 단계 `connection`                                            |
 | 정상 완료, 메시지, EOF, 서버 WebSocket 종료 프레임(`1011` 포함), 또는 타임아웃이 아닌 활성 취소                                     | 없음                                                                                              |
 
-진단 기록에는 고정 메시지, `exception.type`(플랫폼/전송 클래스 이름인 `BodyFailure`, `EventStreamFatalError`(응답이 `text/event-stream`이 아닌 SSE 핸드셰이크), `DefjsFault`(비 2xx SSE 핸드셰이크 포함), `TypeError`, `Error` 등), 단계(phase), 고정 `operation`, 서버 주소/포트, 프로토콜 필드만이 기록되며, 원시 URL, 쿼리 스트링, 헤더, 본문, 오류 스택은 절대 기록되지 않습니다. span의 `exception` 이벤트도 같은 규칙을 따르며 `exception.type`만 담습니다. `url.full`은 엔드포인트의 userinfo를 `REDACTED:REDACTED`로 바꾸고, 시맨틱 컨벤션의 기본 민감 쿼리 키(예: `sig`, `X-Amz-Signature`)의 값을 `REDACTED`로 바꿉니다.
+진단 기록에는 고정 메시지, `exception.type`(플랫폼/전송 클래스 이름인 `BodyFailure`, `EventStreamFatalError`(응답이 `text/event-stream`이 아닌 SSE 핸드셰이크), `DefjsFault`(비 2xx SSE 핸드셰이크 포함), `TypeError`, `Error` 등), 단계(phase), 서버 주소/포트, 프로토콜 필드만이 기록되며, 원시 URL, 쿼리 스트링, 헤더, 본문, 오류 스택은 절대 기록되지 않습니다. span의 `exception` 이벤트도 같은 규칙을 따르며 `exception.type`만 담습니다. `url.full`은 엔드포인트의 userinfo를 `REDACTED:REDACTED`로 바꾸고, 시맨틱 컨벤션의 기본 민감 쿼리 키(예: `sig`, `X-Amz-Signature`)의 값을 `REDACTED`로 바꿉니다.
 
 ---
 

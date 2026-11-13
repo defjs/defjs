@@ -11,26 +11,15 @@ description: API 定義をテレメトリ設定から完全に独立させたま
 
 ---
 
-## 1. 基本セットアップと操作の識別
+## 1. 基本セットアップ
 
-SDK 定義（`defineRequest`、`defineEventStream`、`defineWebSocket`）に静的でカーディナリティの低い `operation` 文字列を設定し、クライアント構築時に OpenTelemetry の `tracer`、`meter`、`logger`、`propagator` を `withOpenTelemetryServer(...)` に渡します。
+クライアント構築時に OpenTelemetry の `tracer`、`meter`、`logger`、`propagator` を `withOpenTelemetryServer(...)` に渡します。
 
-<Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/operation-names.ts#example
-    </include>
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
 
-  </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/basic-setup.ts#example
-    </include>
-
-  </Tab>
-</Tabs>
-
-- **スパンの名前付け**: `operation` を設定すると、スパン名は `GET orders.read`、`SSE orders.watch`、`WebSocket orders.connect` となり、`defjs.operation` 属性が付与されます。`operation` が未設定の場合、スパン名は HTTP メソッド名、`SSE`、または `WebSocket` にフォールバックします。スパン名の HTTP メソッドは正規化された `http.request.method` で、その値が `_OTHER` のときは `HTTP` になります。
+- **スパンの名前付け**: スパン名は HTTP メソッド名、`SSE`、または `WebSocket` です。プラグインは定義の `meta` を読み取りません。必要な内容は `startSpanHook(request)` で `request.meta` からスパン属性へコピーしてください。スパン名の HTTP メソッドは正規化された `http.request.method` で、その値が `_OTHER` のときは `HTTP` になります。
 - **独立したシグナル**: `tracer`、`meter`、`logger` はすべて任意であり、それぞれ独立して機能します。
   - `tracer` を省略すると、メトリクス、ログ、アウトバウンドコンテキスト伝播を記録しつつ、ローカルスパンの生成やスパンフックを無効化できます。
   - `meter` を省略すると、パッケージメトリクスの記録が無効化されます。
@@ -135,7 +124,7 @@ SSE と WebSocket の接続確立時間および接続継続時間のサンプ�
 | SSE または WebSocket の致命的エラーや `closed` の reject（クローズフレームのない `1006` の切断、ハートビートタイムアウトを含む）                                       | トランスポートイベント名を含む `WARN` 1 件、phase `connection`                                       |
 | 正常終了、メッセージ受信、EOF、サーバーからの WebSocket クローズフレーム（`1011` を含む）、またはタイムアウト以外の呼び出し元キャンセル                                | 出力なし                                                                                             |
 
-診断ログには、固定メッセージ、`exception.type`（`BodyFailure`、`EventStreamFatalError`（応答が `text/event-stream` でない SSE ハンドシェイク）、`DefjsFault`（非 2xx の SSE ハンドシェイクを含む）、`TypeError`、`Error` などのプラットフォーム／トランスポートのクラス名）、phase、静的な `operation`、サーバーアドレス／ポート、プロトコルフィールドのみが記録され、生の URL、クエリ文字列、ヘッダー、ボディ、エラースタックトレースが出力されることは決してありません。スパンの `exception` イベントも同じ規則に従い、`exception.type` だけを持ちます。`url.full` はエンドポイントの userinfo を `REDACTED:REDACTED` に置き換え、セマンティック規約のデフォルトの機密クエリキー（`sig` や `X-Amz-Signature` など）の値を `REDACTED` に置き換えます。
+診断ログには、固定メッセージ、`exception.type`（`BodyFailure`、`EventStreamFatalError`（応答が `text/event-stream` でない SSE ハンドシェイク）、`DefjsFault`（非 2xx の SSE ハンドシェイクを含む）、`TypeError`、`Error` などのプラットフォーム／トランスポートのクラス名）、phase、サーバーアドレス／ポート、プロトコルフィールドのみが記録され、生の URL、クエリ文字列、ヘッダー、ボディ、エラースタックトレースが出力されることは決してありません。スパンの `exception` イベントも同じ規則に従い、`exception.type` だけを持ちます。`url.full` はエンドポイントの userinfo を `REDACTED:REDACTED` に置き換え、セマンティック規約のデフォルトの機密クエリキー（`sig` や `X-Amz-Signature` など）の値を `REDACTED` に置き換えます。
 
 ---
 

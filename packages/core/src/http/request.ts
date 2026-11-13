@@ -24,7 +24,7 @@ export function createHttpRequest(
     defaultHeaders?: Headers;
     downloadProgress?: HttpProgressFn;
     inputGuides?: WeakMap<object, Guide>;
-    operation?: string;
+    meta?: { [key: string]: unknown };
     errorResponseType?: HttpResponseType;
     querySerializer?: QuerySerializer;
     responseType?: HttpResponseType;
@@ -42,7 +42,7 @@ export function createHttpRequest(
     signal: options.signal,
     baseEndpoint: options.baseEndpoint,
     defaultHeaders: options.defaultHeaders,
-    operation: options.operation,
+    meta: options.meta,
     querySerializer: options.querySerializer,
     withCredentials: options.withCredentials,
   });

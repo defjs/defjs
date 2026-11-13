@@ -522,12 +522,12 @@ describe("HTTP endpoint balancer", () => {
     expect(watched.dones).toEqual([{ attempted: false }]);
   });
 
-  test("passes candidates and the definition operation without transport metadata to every pick", async () => {
+  test("passes candidates and the definition meta without transport metadata to every pick", async () => {
     const live = await serve("respond", { status: 204 });
     const watched = watch(pickFirstBalancer());
     const named = defineRequest({
       method: "GET",
-      operation: "loadOrder",
+      meta: { operation: "loadOrder" },
       path: "/orders",
     });
     const plain = defineRequest({ method: "GET", path: "/health" });
@@ -543,10 +543,10 @@ describe("HTTP endpoint balancer", () => {
 
     expect(watched.picks[0]).toMatchObject({
       endpoints: [live.url, "https://backup.example"],
-      operation: "loadOrder",
+      meta: { operation: "loadOrder" },
     });
     expect(watched.picks[1]).toMatchObject({
-      operation: undefined,
+      meta: undefined,
     });
   });
 

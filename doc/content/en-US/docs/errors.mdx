@@ -123,7 +123,7 @@ Every `Fault` is a native `Error` (`instanceof Error === true`) with an enumerab
 </Tabs>
 
 > [!CAUTION]
-> Treat `fault.cause`, `fault.data`, response headers, full URLs, and `StructIssue.received` as potentially sensitive. Log an allowlist of low-cardinality fields (`operation`, `code`, `status`, duration) by default.
+> Treat `fault.cause`, `fault.data`, response headers, full URLs, and `StructIssue.received` as potentially sensitive. Log an allowlist of low-cardinality fields (your own `meta` label, `code`, `status`, duration) by default.
 
 ## Related reading
 

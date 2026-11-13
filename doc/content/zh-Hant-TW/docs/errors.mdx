@@ -123,7 +123,7 @@ HTTP 失敗時，tuple 是 `[error, undefined, undefined]`。收到的回應中�
 </Tabs>
 
 > [!CAUTION]
-> `fault.cause`、`fault.data`、回應標頭、完整 URL 與 `StructIssue.received` 都可能含有機敏資訊。預設請只記錄低基數欄位的允許清單（`operation`、`code`、`status`、耗時）。
+> `fault.cause`、`fault.data`、回應標頭、完整 URL 與 `StructIssue.received` 都可能含有機敏資訊。預設請只記錄低基數欄位的允許清單（你自己的 `meta` 標籤、`code`、`status`、耗時）。
 
 ## 相關閱讀
 

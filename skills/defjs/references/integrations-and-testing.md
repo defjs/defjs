@@ -31,7 +31,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
 
 const getOrder = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -73,7 +73,7 @@ import { useClient } from "@defjs/react";
 import { useEffect } from "react";
 
 const quotes = defineWebSocket({
-  operation: "quotes.stream",
+  meta: { operation: "quotes.stream" },
   path: "/quotes",
   incoming: struct.object({ symbol: struct.string(), price: struct.number() }),
 });
@@ -144,7 +144,7 @@ const status = ref("Loading...");
 
 const getOrder = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -169,7 +169,7 @@ watch(
 
 // For SSE or WebSocket in Vue setup, tie abort + close to onScopeDispose:
 const deployEvents = defineEventStream({
-  operation: "deployments.events",
+  meta: { operation: "deployments.events" },
   path: "/deployments/events",
   events: { line: struct.string() },
 });
@@ -203,7 +203,7 @@ void (async () => {
 `@defjs/opentelemetry-server` instruments outbound HTTP, SSE, and WebSocket operations on a `@defjs/core` client via `withOpenTelemetryServer({ tracer?, meter?, logger?, ... })`.
 
 - **Boundary**: The plugin does **not** initialize the OpenTelemetry SDK—configure your `TracerProvider`, `MeterProvider`, and `LoggerProvider` in application bootstrap code.
-- **Low-cardinality `operation`**: Always set a static `operation` name (`"orders.read"`, `"orders.watch"`, `"orders.connect"`) on every definition. Spans are named `<METHOD> <operation>`, `SSE <operation>`, and `WebSocket <operation>`, and `defjs.operation` is recorded on spans and metrics. Never put dynamic IDs or URLs in `operation`.
+- **Application-defined `meta`**: Attach `meta` (`{ [key: string]: unknown }`, for example `{ operation: "orders.read" }`) when interceptors need context. `@defjs/opentelemetry-server` never reads it; copy what you need through `startSpanHook(request)`. It never leaves the process.
 - **WebSocket trace propagation**: Browser/standard WebSockets cannot set handshake headers. Enable `webSocket: { queryPropagation: true }` only when the server explicitly reads W3C `traceparent` / `tracestate` from query parameters (it replaces any existing same-name query pairs).
 - **Attempts vs logical sessions**: HTTP retries emit one span per attempt as siblings under the active parent. SSE and WebSocket reconnects retain one logical-session span across reconnects. Caller aborts (`NET_ABORTED`) leave span status unset and emit no error log; timeouts (`NET_TIMEOUT`) mark the span `ERROR` with `error.type: "timeout"`.
 - **Privacy defaults**: Request/response bodies, full headers, and `request.query` on `url.full` are never captured by default.
@@ -218,7 +218,7 @@ import { logs } from "@opentelemetry/api-logs";
 
 export const listOrders = defineRequest({
   method: "GET",
-  operation: "orders.list",
+  meta: { operation: "orders.list" },
   path: "/orders",
 });
 
@@ -253,7 +253,7 @@ import { expect, test } from "vitest";
 
 const postOrder = defineRequest({
   method: "POST",
-  operation: "orders.create",
+  meta: { operation: "orders.create" },
   path: "/orders/:region",
   input: struct.object({
     region: struct.string(),
@@ -317,7 +317,7 @@ Defjs supports two primary project layouts that share the same `models/` + `serv
 │   │   ├── buckets.ts    # listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts    # listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts          # Flat barrel re-exports (or client.ts in an in-app src/api/ layer)
-├── package.json          # "type": "module", "sideEffects": false, peerDependencies: { "@defjs/core": "^0.7.0" }
+├── package.json          # "type": "module", "sideEffects": false, peerDependencies: { "@defjs/core": "^0.8.0" }
 └── tsconfig.json
 ```
 
@@ -325,7 +325,7 @@ Defjs supports two primary project layouts that share the same `models/` + `serv
   1. **Pure functions, never `Service` classes**: Unlike legacy OpenAPI generators that wrap endpoints in stateful classes (`ObjectsService.putObject(...)` or `new S3Client()`), every operation in `src/services/*.ts` is exported directly as a standalone `defineRequest` / `defineEventStream` / `defineWebSocket` value and called as `await putObject(client, input)` or `await getObject(client({ signal }), input)`. Never wrap operations in a `class` or a namespace object—standalone exports preserve per-call `client(options)` derivation and allow bundlers to tree-shake unused operations when `"sideEffects": false` is set.
   2. **Same-name `struct` + `Infer` exports in `models/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
   3. **Keep `services/*.ts` client-free in both scenarios**: Even inside an application's `src/api/`, never import `apiClient` inside `src/api/services/*.ts`. Keep `createClient(...)` in `src/api/client.ts` so operations remain directly testable with `withHTTPHandle` and reusable across browser singletons and SSR per-request clients.
-  4. **Public SDK package metadata**: When publishing an external SDK package, declare `"@defjs/core": "^0.7.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
+  4. **Public SDK package metadata**: When publishing an external SDK package, declare `"@defjs/core": "^0.8.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
 
 ### Best practice: hand-written S3 SDK (`models/` + `services/` + application consumer)
 
@@ -398,7 +398,7 @@ export const ListObjectsInput = struct.object({
 export type ListObjectsInput = Infer<typeof ListObjectsInput>;
 
 export const listObjectsV2 = defineRequest({
-  operation: "s3.objects.listV2",
+  meta: { operation: "s3.objects.listV2" },
   method: "GET",
   path: "/:bucket",
   input: ListObjectsInput,
@@ -423,7 +423,7 @@ export const GetObjectInput = struct.object({
 export type GetObjectInput = Infer<typeof GetObjectInput>;
 
 export const getObject = defineRequest({
-  operation: "s3.objects.get",
+  meta: { operation: "s3.objects.get" },
   method: "GET",
   path: "/:bucket/:key",
   input: GetObjectInput,
@@ -445,7 +445,7 @@ export const PutObjectInput = struct.object({
 export type PutObjectInput = Infer<typeof PutObjectInput>;
 
 export const putObject = defineRequest({
-  operation: "s3.objects.put",
+  meta: { operation: "s3.objects.put" },
   method: "PUT",
   path: "/:bucket/:key",
   input: PutObjectInput,

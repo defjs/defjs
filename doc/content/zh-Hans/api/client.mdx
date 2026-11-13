@@ -257,6 +257,6 @@ HTTP 预算归 Client 所有，采用 Finagle 风格。它默认为 20%，外加
 
 `pick` 返回错误优先元组。可选的 `start` 在所选传输开始前至多同步运行一次；可选的 `end` 在 `start` 之后、对端响应开始（或响应前发生失败）时运行一次；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有 Hook 的抛出都会被接住，并在运行时定义了 `reportError` 时用它报告（未处理的报告可以结束一个没有错误处理程序的 Bun 或 Deno 进程）；返回的 promise 不会被等待。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能跨 Core 副本识别它。
 
-均衡器只看到中立结果；每种传输把自己的事实转换成 `DoneInfo.code`。默认离群检测把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。原始 `DoneInfo.status` 只保留给自定义均衡器，内置策略从不读取。`PickInfo` 包含一次 pick 的候选 `endpoints`、`members`（client 的完整端点列表，每次尝试都相同）和可选的 `operation`，没有传输类型判别字段。
+均衡器只看到中立结果；每种传输把自己的事实转换成 `DoneInfo.code`。默认离群检测把每个带 code 的结果都计为失败，包括 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE`。原始 `DoneInfo.status` 只保留给自定义均衡器，内置策略从不读取。`PickInfo` 包含一次 pick 的候选 `endpoints`、`members`（client 的完整端点列表，每次尝试都相同）和可选的 `meta`，没有传输类型判别字段。
 
 见 [Client 指南](/zh-Hans/docs/client)。

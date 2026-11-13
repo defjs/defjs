@@ -1,4 +1,3 @@
-import { SpanKind } from "@opentelemetry/api";
 import { describe, expect, test, vi } from "vitest";
 import {
   createMockPropagator,
@@ -53,36 +52,29 @@ describe("startClientCall", () => {
     ).toEqual({ "http.request.method": "GET", "url.full": 5 });
   });
 
-  test("uses an explicit static operation without deriving identity from the URL", () => {
+  test("never reads application meta into span names or attributes", () => {
     const { tracer, spans } = createMockTracer();
     const options = { tracer, propagator: createMockPropagator() };
 
-    for (const [name, operation] of [
-      [undefined, "users.read"],
-      ["SSE", "users.watch"],
-      ["WebSocket", "users.connect"],
+    for (const [name, meta] of [
+      [undefined, { operation: "zz-meta-read" }],
+      ["SSE", { id: "zz-meta-watch" }],
+      ["WebSocket", { tag: 42 }],
     ] as const) {
       startClientCall(
         options,
-        { ...makeHttpRequest(), endpoint: "/users/42", operation },
+        { ...makeHttpRequest(), endpoint: "/users/42", meta },
         resolveHttpUrl,
         "GET",
         name,
       );
     }
 
-    expect(spans.map(({ name }) => name)).toEqual([
-      "GET users.read",
-      "SSE users.watch",
-      "WebSocket users.connect",
-    ]);
-    expect(spans.map(({ kind }) => kind)).toEqual([
-      SpanKind.CLIENT,
-      SpanKind.CLIENT,
-      SpanKind.CLIENT,
-    ]);
+    expect(spans.map(({ name }) => name)).toEqual(["GET", "SSE", "WebSocket"]);
     expect(
-      spans.map(({ attributes }) => attributes["defjs.operation"]),
-    ).toEqual(["users.read", "users.watch", "users.connect"]);
+      spans.every(
+        ({ attributes }) => !JSON.stringify(attributes).includes("zz-meta"),
+      ),
+    ).toBe(true);
   });
 });

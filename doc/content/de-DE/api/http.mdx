@@ -11,7 +11,7 @@ Deklariere einen typisierten Request und rufe die Operation dann mit einem Clien
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`, `path`, optionaler `input`-Struct, optionale `output`- und `error`-Structs, optionales `operation`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`RequestDefinition`](/de-DE/api/core/requestdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
+- **definition** — `method`, `path`, optionaler `input`-Struct, optionale `output`- und `error`-Structs, optionales `meta`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`RequestDefinition`](/de-DE/api/core/requestdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
 - **Returns** eine Operation. Ruf sie als `getOrder(client, input)` auf, oder als `health(client)`, wenn kein Input deklariert ist. Ist der ganze Input-Struct optional, darf das Input-Argument wegfallen. Der Aufruf startet den Request. Es gibt kein drittes Options-Argument.
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -52,7 +52,7 @@ Struct wie eine Response über die Leitung; es gibt keinen vertrauenswürdigen S
 
 ### RequestDefinition
 
-`method`, `path`, optional `input`, `output`, `error`, `operation` und `builder`. Die Art des Structs entscheidet, wie ein deklarierter Body gelesen wird. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+`method`, `path`, optional `input`, `output`, `error`, `meta` und `builder`. Die Art des Structs entscheidet, wie ein deklarierter Body gelesen wird. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ### HttpAwaitResult
 
@@ -63,7 +63,7 @@ Im Erfolgsfall trägt der dritte Slot nur dann `body`, wenn `output` deklariert 
 
 ### HttpRequest
 
-Normalisierter Outgoing-Request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` und `query`. Wenn Interceptors ihn sehen, ist `body` bereits der Wire-Wert — bei JSON ein JSON-Text-String —, signiere HMACs und Digests also über diesen Wert, nicht über die Struct-Eingabe. `query` ist die eine Query, die der Request sendet, ein `URLSearchParams`: Ein Interceptor ändert sie an Ort und Stelle oder übergibt `next()` einen Ersatz. Gibt ein Builder `URLSearchParams` zurück, wird die Instanz kopiert, und der String einer `withQuerySerializer`-Funktion wird in `query` geparst. Die Wire-Form ist `query.toString()`, die application/x-www-form-urlencoded-Serialisierung des URL Standard, ein Leerzeichen ist also `+`, und eine leere `query` fügt kein `?` an. `responseType` und `errorResponseType` sind readonly: Sie werden aus den Struct-Arten von `output` und `error` der Definition abgeleitet und dürfen nicht geändert werden.
+Normalisierter Outgoing-Request: `method`, `endpoint`, `headers`, `body`, `signal`, `meta`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` und `query`. Wenn Interceptors ihn sehen, ist `body` bereits der Wire-Wert — bei JSON ein JSON-Text-String —, signiere HMACs und Digests also über diesen Wert, nicht über die Struct-Eingabe. `query` ist die eine Query, die der Request sendet, ein `URLSearchParams`: Ein Interceptor ändert sie an Ort und Stelle oder übergibt `next()` einen Ersatz. Gibt ein Builder `URLSearchParams` zurück, wird die Instanz kopiert, und der String einer `withQuerySerializer`-Funktion wird in `query` geparst. Die Wire-Form ist `query.toString()`, die application/x-www-form-urlencoded-Serialisierung des URL Standard, ein Leerzeichen ist also `+`, und eine leere `query` fügt kein `?` an. `responseType` und `errorResponseType` sind readonly: Sie werden aus den Struct-Arten von `output` und `error` der Definition abgeleitet und dürfen nicht geändert werden.
 
 ### HttpMeta
 

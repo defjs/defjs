@@ -114,7 +114,7 @@ export type RequestDefinition<
   builder?: OutboundBuilder;
   input?: TInput;
   method: string;
-  operation?: string;
+  meta?: { [key: string]: unknown };
   path: string;
 };
 
@@ -153,7 +153,7 @@ export type HttpExecuteAwaitResult<
  * `error` structs. Call the returned operation with a client and, when declared, the input.
  *
  * The contract is `method`, `path`, an optional `input` struct, optional
- * `output` and `error` structs, and an optional `operation`. A declared `input`
+ * `output` and `error` structs, and an optional `meta`. A declared `input`
  * always requires an explicit `builder`. `input` only defines the parameters;
  * the builder alone decides where each value goes. Only definitions without
  * `input` may omit `builder`. `ResponseDeclaration` and `BuilderField` are
@@ -165,9 +165,9 @@ export type HttpExecuteAwaitResult<
  * non-2xx body. Neither is keyed by status. A declaration is an assertion:
  * omitting one means that body is never read.
  *
- * Known fields are copied when the definition is created. `builder`, `input`, `output`, and `error` keep their identity. A getter on one of those fields runs during `defineRequest` and its exception escapes the call. Other properties on the definition object are not read.
+ * Known fields are copied when the definition is created. `builder`, `input`, `output`, `error`, and `meta` keep their identity. A getter on one of those fields runs during `defineRequest` and its exception escapes the call. Other properties on the definition object are not read.
  *
- * @param definition - Request contract (method, path, input, builder, output).
+ * @param definition - Request contract (method, path, input, builder, output, error, meta).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
  *
  * The checked example file passes the whole input object as `path`. This snippet maps individual fields into `path` and `query` instead:
@@ -195,7 +195,7 @@ export function defineRequest<
   definition: ResponseDeclaration<TOutput, TError> & {
     input?: TInput;
     method: M;
-    operation?: string;
+    meta?: { [key: string]: unknown };
     path: P;
   } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
 ): RequestEndpoint<
@@ -208,7 +208,7 @@ export function defineRequest<
   const builder = definition.builder;
   const input = definition.input;
   const method = definition.method;
-  const operation = definition.operation;
+  const meta = definition.meta;
   const path = definition.path;
   const output = definition.output;
   const error = definition.error;
@@ -217,7 +217,7 @@ export function defineRequest<
     error,
     input,
     method,
-    operation,
+    meta,
     output,
     path,
   };

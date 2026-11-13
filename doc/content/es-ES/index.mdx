@@ -35,11 +35,11 @@ Al llamar a `getHealth(client)` se realiza la E/S y se resuelve una tupla con el
 
 ## ¿Por qué separar las definiciones de los clientes?
 
-| Responsabilidad | Autor del SDK (Definición)                                                                                               | Aplicación (Ejecución)                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| **Controla**    | Método, plantilla de ruta, esquemas de `input` / `output` / `error`, mapeo en `builder` y nombre estático de `operation` | URLs base, credenciales, interceptores de autenticación, balanceo de carga, tiempos de espera y liberación de recursos |
-| **Distribuye**  | Módulos ESM reutilizables y declaraciones `.d.ts`                                                                        | Configuración para el runtime de navegador, servidor o entornos de prueba                                              |
-| **Ventaja**     | Cero acoplamiento al entorno; funciona en navegador, SSR y tests                                                         | Control total sobre reintentos, failover, telemetría y ciclo de vida                                                   |
+| Responsabilidad | Autor del SDK (Definición)                                                                                                           | Aplicación (Ejecución)                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| **Controla**    | Método, plantilla de ruta, esquemas de `input` / `output` / `error`, mapeo en `builder` y `meta` opcional definido por la aplicación | URLs base, credenciales, interceptores de autenticación, balanceo de carga, tiempos de espera y liberación de recursos |
+| **Distribuye**  | Módulos ESM reutilizables y declaraciones `.d.ts`                                                                                    | Configuración para el runtime de navegador, servidor o entornos de prueba                                              |
+| **Ventaja**     | Cero acoplamiento al entorno; funciona en navegador, SSR y tests                                                                     | Control total sobre reintentos, failover, telemetría y ciclo de vida                                                   |
 
 ## Elige tu camino
 

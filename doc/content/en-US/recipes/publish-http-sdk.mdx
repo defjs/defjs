@@ -73,10 +73,10 @@ Using an Amazon S3-compatible object storage SDK (`@company/s3-sdk`) as an examp
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,7 +126,7 @@ Verify that `dist/index.js` and `dist/index.d.ts` are included in the tarball.
 Install your SDK alongside `@defjs/core`:
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
 Because the SDK binds no client, the consuming application owns the endpoint (AWS S3, Cloudflare R2, or MinIO), signing interceptor, and retry policy, and calls each imported operation directly as a pure function:

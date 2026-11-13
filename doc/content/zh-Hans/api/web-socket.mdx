@@ -11,7 +11,7 @@ description: defineWebSocket、会话与请求选项。
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`，以及一个 `incoming` struct；可选 `outgoing` 和 `input` struct、`operation`、静态 `protocols` 和 `maxOutgoingQueueSize`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明 `input` 时必填。
+- **definition** — `path`，以及一个 `incoming` struct；可选 `outgoing` 和 `input` struct、`meta`、静态 `protocols` 和 `maxOutgoingQueueSize`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明 `input` 时必填。
 - **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即打开会话。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
@@ -72,7 +72,7 @@ description: defineWebSocket、会话与请求选项。
 
 ## WebSocketDefinition
 
-`path`、`incoming`，可选 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。`builder` 只能返回 `path` 和 `query`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
+`path`、`incoming`，可选 `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize`。`builder` 只能返回 `path` 和 `query`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ## WebSocketEndpoint
 

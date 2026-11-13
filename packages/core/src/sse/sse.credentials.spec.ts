@@ -14,7 +14,7 @@ import { defineEventStream } from "./index";
 
 const orders = defineEventStream({
   events: { message: struct.string() },
-  operation: "orders",
+  meta: { operation: "orders" },
   path: "/events",
 });
 

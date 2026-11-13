@@ -10,7 +10,7 @@ const client = createClient(
 );
 const readOrders = defineRequest({
   method: "GET",
-  operation: "orders.read",
+  meta: { operation: "orders.read" },
   path: "/orders",
 });
 

@@ -11,7 +11,7 @@ description: defineEventStream, опции запроса и stream handle.
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` и карта `events`; необязательные `method` (по умолчанию `'GET'`), `operation`, `input`, `error` и `maxBufferSize` (по умолчанию `64 * 1024`). При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`EventStreamDefinition`](/ru-RU/api/core/eventstreamdefinition-type). `error` обязателен только когда задан тип error-struct, а `builder` — ровно тогда, когда объявлен `input`.
+- **definition** — `path` и карта `events`; необязательные `method` (по умолчанию `'GET'`), `meta`, `input`, `error` и `maxBufferSize` (по умолчанию `64 * 1024`). При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`EventStreamDefinition`](/ru-RU/api/core/eventstreamdefinition-type). `error` обязателен только когда задан тип error-struct, а `builder` — ровно тогда, когда объявлен `input`.
 - **Возвращает** операцию. Первый аргумент — [`Client`](/ru-RU/api/core/client-type). Дальше идёт только input. Вызов начинает поток.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -62,7 +62,7 @@ description: defineEventStream, опции запроса и stream handle.
 
 ## EventStreamDefinition
 
-`path`, `events`, необязательные `method` / `operation` / `input` / `error` / `maxBufferSize`. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут нести тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
+`path`, `events`, необязательные `method` / `meta` / `input` / `error` / `maxBufferSize`. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут нести тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
 
 ## EventStreamEndpoint
 

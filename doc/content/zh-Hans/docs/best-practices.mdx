@@ -34,7 +34,7 @@ export class OrdersService {
 
 // 最佳实践：在 services/*.ts 中直接导出独立的操作定义纯函数
 export const getOrder = defineRequest({
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   method: "GET",
   path: "/orders/:id",
   input: GetOrderInput,
@@ -73,12 +73,12 @@ export type Order = Infer<typeof Order>;
 
 将不同维度的逻辑放在各自归属的层次中：
 
-| 职责维度                                                           | 归属位置                                                  | 原因                                                |
-| :----------------------------------------------------------------- | :-------------------------------------------------------- | :-------------------------------------------------- |
-| 将调用入参分发到 `path`、`query`、`headers`、`body`                | `services/*.ts` 中的 `builder`                            | 仅依赖当前 `input` 的同步纯函数                     |
-| 静态低基数操作标识（如 `"orders.create"`、`"s3.objects.put"`）     | `services/*.ts` 中的 `operation` 字段                     | 供 OpenTelemetry 链路追踪、指标与日志拦截器识别接口 |
-| 基地址、认证请求头（Bearer Token、签名、XSRF）、重试策略、负载均衡 | `client.ts` 中的 `createClient(...)`                      | 与运行环境、会话状态相关的横切执行策略              |
-| 单次调用超时、手动取消（`signal`）与上传/下载进度回调              | 调用处的内联派生 `client({ signal, onDownloadProgress })` | 仅作用于当次请求，不污染共享 Client                 |
+| 职责维度                                                           | 归属位置                                                  | 原因                                                       |
+| :----------------------------------------------------------------- | :-------------------------------------------------------- | :--------------------------------------------------------- |
+| 将调用入参分发到 `path`、`query`、`headers`、`body`                | `services/*.ts` 中的 `builder`                            | 仅依赖当前 `input` 的同步纯函数                            |
+| 应用为拦截器定义的上下文（`{ operation: "orders.create" }`）       | `services/*.ts` 中的 `meta` 字段                          | `{ [key: string]: unknown }`；仅内部使用，从不通过网络发送 |
+| 基地址、认证请求头（Bearer Token、签名、XSRF）、重试策略、负载均衡 | `client.ts` 中的 `createClient(...)`                      | 与运行环境、会话状态相关的横切执行策略                     |
+| 单次调用超时、手动取消（`signal`）与上传/下载进度回调              | 调用处的内联派生 `client({ signal, onDownloadProgress })` | 仅作用于当次请求，不污染共享 Client                        |
 
 ---
 

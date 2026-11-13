@@ -20,7 +20,7 @@ export const SubscribeCommand = struct.object({
 
 export const openTicker = defineWebSocket({
   path: "/market/ws",
-  operation: "market.ticker",
+  meta: { operation: "market.ticker" },
   incoming: TickFrame,
   outgoing: SubscribeCommand,
 });

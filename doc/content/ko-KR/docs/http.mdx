@@ -38,7 +38,7 @@ SDK 모듈에서 각 작업마다 별도의 `defineRequest`를 export하고, `cr
 ### SDK 설계 모범 사례
 
 - **정의당 하나의 작업**: 사용되지 않는 작업을 애플리케이션에서 트리쉐이킹할 수 있도록 각 메서드, 경로, 계약을 개별 정의로 분리하세요.
-- **고정된 `operation` 식별자 지정**: `"orders.read"`와 같이 카디널리티가 낮은 식별자를 사용하세요. 텔레메트리 플러그인(`@defjs/opentelemetry-server`)이나 로깅 인터셉터가 URL이나 사용자 ID를 유출하지 않고 안전하게 활용할 수 있습니다.
+- **인터셉터에 맥락이 필요하면 `meta` 지정**: `meta`는 `{ [key: string]: unknown }`이며 애플리케이션이 정의합니다(예: `{ operation: "orders.read" }`). 인터셉터와 밸런서(`request.meta`, `PickInfo.meta`)로만 전달되며, Defjs는 이를 읽거나 복사하거나 네트워크로 전송하지 않습니다.
 - **SDK 내부에 클라이언트를 포함하지 마세요**: 오직 정의, `struct` 스키마, 타입만을 export해야 합니다.
 
 ## 2. URL 해석 및 경로 매개변수

@@ -345,7 +345,7 @@ import { defineRequest, makeResponse, struct, type Client } from "@defjs/core";
 
 const getOrderWithEtag = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({
     id: struct.number(),

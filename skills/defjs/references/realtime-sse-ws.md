@@ -26,7 +26,7 @@ import {
 
 export const followDeployLog = defineEventStream({
   method: "GET",
-  operation: "deployments.followLog",
+  meta: { operation: "deployments.followLog" },
   path: "/deployments/:id/log",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -81,7 +81,7 @@ import {
 const client = createClient(withEndpoint("https://api.example.com"));
 
 const deployEvents = defineEventStream({
-  operation: "deployments.events",
+  meta: { operation: "deployments.events" },
   path: "/deployments/events",
   events: { line: struct.string() },
 });
@@ -170,7 +170,7 @@ const OutgoingFrame = struct.discriminatedUnion("type", [
 ]);
 
 export const quoteFeed = defineWebSocket({
-  operation: "quotes.stream",
+  meta: { operation: "quotes.stream" },
   path: "/quotes/:market",
   protocols: ["quotes.v1"],
   input: struct.object({ market: struct.string() }),
@@ -241,7 +241,7 @@ import {
 } from "@defjs/core";
 
 const PingPongSocket = defineWebSocket({
-  operation: "quotes.heartbeat",
+  meta: { operation: "quotes.heartbeat" },
   path: "/quotes",
   incoming: struct.discriminatedUnion("type", [
     struct.object({ type: struct.literal("pong") }),

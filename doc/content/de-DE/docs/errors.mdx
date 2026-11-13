@@ -123,7 +123,7 @@ Jeder `Fault` ist ein nativer `Error` (`instanceof Error === true`) mit einer au
 </Tabs>
 
 > [!CAUTION]
-> Behandle `fault.cause`, `fault.data`, Response-Header, vollständige URLs und `StructIssue.received` als potenziell sensibel. Protokolliere standardmäßig nur eine Allowlist von Feldern mit geringer Kardinalität (`operation`, `code`, `status`, Dauer).
+> Behandle `fault.cause`, `fault.data`, Response-Header, vollständige URLs und `StructIssue.received` als potenziell sensibel. Protokolliere standardmäßig nur eine Allowlist von Feldern mit geringer Kardinalität (dein eigenes `meta`-Label, `code`, `status`, Dauer).
 
 ## Weiterführende Links
 

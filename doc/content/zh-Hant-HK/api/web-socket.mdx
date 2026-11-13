@@ -11,7 +11,7 @@ description: defineWebSocket、會話，同 request options。
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`，同埋一個 `incoming` struct；可選 `outgoing` 同 `input` struct、`operation`、靜態 `protocols`，以及 `maxOutgoingQueueSize`。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` 成員記錄喺 [`WebSocketDefinition`](/zh-Hant-HK/api/core/websocketdefinition-type)。`builder` 只有喺宣告咗 `input` 嗰陣先必填。
+- **definition** — `path`，同埋一個 `incoming` struct；可選 `outgoing` 同 `input` struct、`meta`、靜態 `protocols`，以及 `maxOutgoingQueueSize`。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` 成員記錄喺 [`WebSocketDefinition`](/zh-Hant-HK/api/core/websocketdefinition-type)。`builder` 只有喺宣告咗 `input` 嗰陣先必填。
 - **Returns** 一個操作。第一個參數係 [`Client`](/zh-Hant-HK/api/core/client-type)。之後嘅參數只係 input。呼叫就會開啟 session。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
@@ -72,7 +72,7 @@ builder 同攔截器鏈每次操作只會執行一次。重連會重用已建構
 
 ## WebSocketDefinition
 
-`path`、`incoming`，可選 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。builder 只可以回傳 `path` 同 `query`。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
+`path`、`incoming`，可選 `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize`。builder 只可以回傳 `path` 同 `query`。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ## WebSocketEndpoint
 

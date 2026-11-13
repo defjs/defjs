@@ -123,7 +123,7 @@ API 응답에 리터럴 태그(`kind`, `type`, 또는 본문 내부의 `status` 
 </Tabs>
 
 > [!CAUTION]
-> `fault.cause`, `fault.data`, 응답 헤더, 전체 URL, `StructIssue.received`에는 민감한 정보가 포함될 수 있습니다. 로그에는 기본적으로 카디널리티가 낮은 필드(`operation`, `code`, `status`, 소요 시간)의 허용 목록만 남기세요.
+> `fault.cause`, `fault.data`, 응답 헤더, 전체 URL, `StructIssue.received`에는 민감한 정보가 포함될 수 있습니다. 로그에는 기본적으로 카디널리티가 낮은 필드(직접 정한 `meta` 레이블, `code`, `status`, 소요 시간)의 허용 목록만 남기세요.
 
 ## 관련 문서
 

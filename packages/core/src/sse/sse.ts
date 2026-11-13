@@ -100,7 +100,7 @@ interface EventStreamDefinitionBase<
   events: TEvents;
   maxBufferSize?: number;
   method?: string;
-  operation?: string;
+  meta?: { [key: string]: unknown };
   path: string;
 }
 
@@ -116,7 +116,7 @@ type EventStreamErrorField<TError extends AnyStruct | undefined> = [
  *
  * The composed members are:
  *
- * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. The library holds at most 1024 events waiting for the `for await` consumer; when they are full, reading the response pauses until the consumer takes one. No event is dropped for lack of room and the stream does not fail.
+ * - `path` and `events`, plus optional `method` (default `'GET'`), `meta`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. The library holds at most 1024 events waiting for the `for await` consumer; when they are full, reading the response pauses until the consumer takes one. No event is dropped for lack of room and the stream does not fail.
  *
  * - `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.
  *
@@ -233,11 +233,11 @@ function snapshotEventDictionary(events: EventStructs): EventStructs {
  * Pass path and event structs. Call the returned operation
  * with a client and, when declared, the input.
  *
- * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; the library holds at most 1024 unread events, and a full queue pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `meta`, `input`, `error`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; the library holds at most 1024 unread events, and a full queue pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * `EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.
  *
- * Known fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A getter on a fixed definition field runs during `defineEventStream`.
+ * Known fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values, `builder`, `input`, `error`, and `meta` keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A getter on a fixed definition field runs during `defineEventStream`.
  *
  * @param definition - SSE contract (path, events, optional input and limits).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
@@ -269,7 +269,7 @@ export function defineEventStream<
   const input = definition.input;
   const { maxBufferSize = DEFAULT_MAX_BUFFER_SIZE } = definition;
   const declaredMethod = definition.method;
-  const operation = definition.operation;
+  const meta = definition.meta;
   const path = definition.path;
   const copy = {
     builder,
@@ -278,7 +278,7 @@ export function defineEventStream<
     input,
     maxBufferSize,
     method: declaredMethod ?? "GET",
-    operation,
+    meta,
     path,
   };
 
@@ -319,7 +319,7 @@ async function openEventStream<
   const pick = () =>
     pickEndpoint(clientConfig.balancer, {
       endpoints: clientConfig.endpoints,
-      operation: definition.operation,
+      meta: definition.meta,
     });
 
   const picked = pick();
@@ -349,7 +349,7 @@ async function openEventStream<
           signal: requestSignal,
           baseEndpoint: resolved.endpoint,
           defaultHeaders: clientConfig.headers,
-          operation: definition.operation,
+          meta: definition.meta,
           querySerializer: clientConfig.querySerializer,
           withCredentials: clientConfig.withCredentials,
         },

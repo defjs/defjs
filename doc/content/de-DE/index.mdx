@@ -35,11 +35,11 @@ Der Aufruf `getHealth(client)` führt I/O aus und liefert ein Error-first-Tupel 
 
 ## Warum Definitionen von Clients trennen?
 
-| Verantwortung | SDK-Autor (Definition)                                                                                           | Anwendung (Ausführung)                                                                           |
-| ------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **Besitzt**   | Methode, Pfadvorlage, `input`- / `output`- / `error`-Schemas, `builder`-Mapping und statischen `operation`-Namen | Basis-URLs, Zugangsdaten, Auth-Interceptors, Load-Balancing, Timeouts und Ressourcen-Bereinigung |
-| **Liefert**   | Wiederverwendbare ESM-Module und `.d.ts`-Deklarationen                                                           | Laufzeitkonfiguration für Browser, Server oder Testumgebung                                      |
-| **Vorteil**   | Keinerlei Bindung an die Laufzeitumgebung; funktioniert im Browser, bei SSR und in Tests                         | Volle Kontrolle über Wiederholungsversuche (Retries), Failover, Telemetrie und Lifecycles        |
+| Verantwortung | SDK-Autor (Definition)                                                                                                      | Anwendung (Ausführung)                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Besitzt**   | Methode, Pfadvorlage, `input`- / `output`- / `error`-Schemas, `builder`-Mapping und optionalen anwendungsdefinierten `meta` | Basis-URLs, Zugangsdaten, Auth-Interceptors, Load-Balancing, Timeouts und Ressourcen-Bereinigung |
+| **Liefert**   | Wiederverwendbare ESM-Module und `.d.ts`-Deklarationen                                                                      | Laufzeitkonfiguration für Browser, Server oder Testumgebung                                      |
+| **Vorteil**   | Keinerlei Bindung an die Laufzeitumgebung; funktioniert im Browser, bei SSR und in Tests                                    | Volle Kontrolle über Wiederholungsversuche (Retries), Failover, Telemetrie und Lifecycles        |
 
 ## Wähle deinen Einstieg
 

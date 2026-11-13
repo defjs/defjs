@@ -177,7 +177,7 @@ async function attemptHttp<
 
     const picked = pickEndpoint(clientConfig.balancer, {
       endpoints: clientConfig.endpoints,
-      operation: definition.operation,
+      meta: definition.meta,
     });
     if (picked[0] !== null) {
       return { result: failed(picked[0]), unselected: true, retry: undefined };
@@ -259,7 +259,7 @@ function buildRequest(
         downloadProgress: options?.onDownloadProgress,
         inputGuides: scope.guides,
         errorResponseType,
-        operation: definition.operation,
+        meta: definition.meta,
         querySerializer: clientConfig.querySerializer,
         responseType,
         uploadProgress: options?.onUploadProgress,

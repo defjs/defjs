@@ -3,7 +3,7 @@ import { defineEventStream, struct } from "@defjs/core";
 
 export const watchOrders = defineEventStream({
   path: "/orders/events",
-  operation: "orders.watch",
+  meta: { operation: "orders.watch" },
   events: {
     updated: struct.object({
       id: struct.number(),

@@ -11,7 +11,7 @@ Declare an event stream, call the operation with a client, iterate events, then 
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` and `events` map; optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024`). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`EventStreamDefinition`](/api/core/eventstreamdefinition-type). `error` is required only when an error struct type is given, and `builder` is required exactly when `input` is declared.
+- **definition** — `path` and `events` map; optional `method` (default `'GET'`), `meta`, `input`, `error`, and `maxBufferSize` (default `64 * 1024`). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`EventStreamDefinition`](/api/core/eventstreamdefinition-type). `error` is required only when an error struct type is given, and `builder` is required exactly when `input` is declared.
 - **Returns** an operation. The first argument is a [`Client`](/api/core/client-type). Further arguments are the input only. Calling it starts the stream.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -62,7 +62,7 @@ See [SSE guide](/docs/sse) and [Consume an SSE stream](/recipes/consume-sse).
 
 ## EventStreamDefinition
 
-`path`, `events`, optional `method` / `operation` / `input` / `error` / `maxBufferSize`. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot carry a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+`path`, `events`, optional `method` / `meta` / `input` / `error` / `maxBufferSize`. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot carry a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
 
 ## EventStreamEndpoint
 

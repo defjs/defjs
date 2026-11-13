@@ -35,11 +35,11 @@ L'appel `getHealth(client)` effectue les E/S et résout un tuple error-first. V�
 
 ## Pourquoi séparer les définitions des clients ?
 
-| Responsabilité | Auteur du SDK (Définition)                                                                               | Application (Exécution)                                                                                                          |
-| -------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Possède**    | Méthode, patron de chemin, schémas `input` / `output` / `error`, projection `builder` et nom d'opération | URL de base, identifiants, intercepteurs d'authentification, répartition de charge, délais d'attente et nettoyage des ressources |
-| **Livre**      | Modules ESM réutilisables et déclarations `.d.ts`                                                        | Configuration du runtime navigateur, serveur ou environnement de test                                                            |
-| **Bénéfice**   | Aucun couplage avec l'environnement ; fonctionne dans le navigateur, en SSR et dans les tests            | Maîtrise totale des retries, du basculement, de la télémétrie et des cycles de vie                                               |
+| Responsabilité | Auteur du SDK (Définition)                                                                                                          | Application (Exécution)                                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Possède**    | Méthode, patron de chemin, schémas `input` / `output` / `error`, projection `builder` et `meta` facultatif défini par l'application | URL de base, identifiants, intercepteurs d'authentification, répartition de charge, délais d'attente et nettoyage des ressources |
+| **Livre**      | Modules ESM réutilisables et déclarations `.d.ts`                                                                                   | Configuration du runtime navigateur, serveur ou environnement de test                                                            |
+| **Bénéfice**   | Aucun couplage avec l'environnement ; fonctionne dans le navigateur, en SSR et dans les tests                                       | Maîtrise totale des retries, du basculement, de la télémétrie et des cycles de vie                                               |
 
 ## Choisissez votre parcours
 

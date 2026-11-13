@@ -73,10 +73,10 @@ description: هيكل حزمة S3 SDK متعددة الوحدات مع النم�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,7 +126,7 @@ bun pm pack
 ثبّت حزمة SDK الخاصة بك إلى جانب `@defjs/core`:
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
 نظرًا لأن حزمة SDK لا تربط أي عميل، يمتلك التطبيق المستهلك نقطة النهاية (AWS S3 أو Cloudflare R2 أو MinIO)، ومعترض التوقيع، وسياسة إعادة المحاولة، ويستدعي كل عملية مستوردة مباشرةً كدالة نقية:

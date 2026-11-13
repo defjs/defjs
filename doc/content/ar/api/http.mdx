@@ -11,7 +11,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method` و`path` وstruct `input` اختياري وstructا `output` و`error` اختياريان و`operation` اختياري. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`RequestDefinition`](/ar/api/core/requestdefinition-type). `builder` مطلوب تمامًا عندما يُعلَن `input`.
+- **definition** — `method` و`path` وstruct `input` اختياري وstructا `output` و`error` اختياريان و`meta` اختياري. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`RequestDefinition`](/ar/api/core/requestdefinition-type). `builder` مطلوب تمامًا عندما يُعلَن `input`.
 - **يُرجع** عملية. استدعها كـ `getOrder(client, input)`، أو `health(client)` عندما لا يُعلَن مدخل. عندما يكون struct المدخل كاملًا اختياريًا، يجوز حذف وسيط المدخل. استدعاؤها يبدأ الطلب. لا وسيط ثالث للخيارات.
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -50,7 +50,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 ### RequestDefinition
 
-`method` و`path` و`input` و`output` و`error` و`operation` و`builder` الاختيارية. يختار نوع struct كيف يُقرأ الجسم المعلَن. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
+`method` و`path` و`input` و`output` و`error` و`meta` و`builder` الاختيارية. يختار نوع struct كيف يُقرأ الجسم المعلَن. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
 
 ### HttpAwaitResult
 
@@ -61,7 +61,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 ### HttpRequest
 
-طلب صادر موحّد: `method` و`endpoint` و`headers` و`body` و`signal` و`operation` و`withCredentials` و`finalizeHeaders` و`downloadProgress` / `uploadProgress` و`baseEndpoint` و`query`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات على ذلك، لا على مدخل struct. `query` هو الاستعلام الوحيد الذي يرسله الطلب، وهو `URLSearchParams`: يغيّره المعترض في مكانه أو يمرّر بديلًا إلى `next()`. عندما تُرجع دالة `builder` كائن `URLSearchParams` يُنسخ ذلك الكائن، وتُحلَّل في `query` السلسلة التي تُرجعها دالة `withQuerySerializer`. الصيغة السلكية هي `query.toString()`، أي تسلسل application/x-www-form-urlencoded في URL Standard، فالمسافة تصبح `+`، والاستعلام `query` الفارغ لا يضيف `?`. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من نوع struct لـ `output` و`error` في التعريف ولا يجوز تغييرهما.
+طلب صادر موحّد: `method` و`endpoint` و`headers` و`body` و`signal` و`meta` و`withCredentials` و`finalizeHeaders` و`downloadProgress` / `uploadProgress` و`baseEndpoint` و`query`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات على ذلك، لا على مدخل struct. `query` هو الاستعلام الوحيد الذي يرسله الطلب، وهو `URLSearchParams`: يغيّره المعترض في مكانه أو يمرّر بديلًا إلى `next()`. عندما تُرجع دالة `builder` كائن `URLSearchParams` يُنسخ ذلك الكائن، وتُحلَّل في `query` السلسلة التي تُرجعها دالة `withQuerySerializer`. الصيغة السلكية هي `query.toString()`، أي تسلسل application/x-www-form-urlencoded في URL Standard، فالمسافة تصبح `+`، والاستعلام `query` الفارغ لا يضيف `?`. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من نوع struct لـ `output` و`error` في التعريف ولا يجوز تغييرهما.
 
 ### HttpMeta
 

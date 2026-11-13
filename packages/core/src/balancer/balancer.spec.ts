@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 function info(endpoints: readonly string[]): PickInfo {
-  return { endpoints, operation: "getOrder" };
+  return { endpoints, meta: { operation: "getOrder" } };
 }
 
 function endpointOf(balancer: Balancer, endpoints: readonly string[]): string {
@@ -196,13 +196,16 @@ describe("roundRobinBalancer", () => {
     const members = ["a", "b"];
     const firstAttempts: string[] = [];
     for (let call = 0; call < 4; call += 1) {
-      const [, first] = balancer.pick({ endpoints: members, operation: "op" });
+      const [, first] = balancer.pick({
+        endpoints: members,
+        meta: { operation: "op" },
+      });
       const tried = first?.endpoint ?? "";
       firstAttempts.push(tried);
       balancer.pick({
         endpoints: members.filter((endpoint) => endpoint !== tried),
         members,
-        operation: "op",
+        meta: { operation: "op" },
       });
     }
     expect(firstAttempts).toEqual(["a", "a", "a", "a"]);

@@ -11,7 +11,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`, `path`, 선택 `input` struct, 선택 `output`과 `error` struct, 선택 `operation`이에요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 `builder`만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. 이 `definition` 멤버는 [`RequestDefinition`](/ko-KR/api/core/requestdefinition-type)에 적혀 있어요. `builder`는 `input`을 선언했을 때만 필요해요.
+- **definition** — `method`, `path`, 선택 `input` struct, 선택 `output`과 `error` struct, 선택 `meta`예요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 `builder`만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. 이 `definition` 멤버는 [`RequestDefinition`](/ko-KR/api/core/requestdefinition-type)에 적혀 있어요. `builder`는 `input`을 선언했을 때만 필요해요.
 - **반환** 작업이에요. 입력이 없으면 `health(client)`처럼, 있으면 `getOrder(client, input)`처럼 호출해요. 입력 struct 전체가 선택이면 입력 인자를 생략할 수 있어요. 호출하면 요청이 시작돼요. 세 번째 옵션 인자는 없어요.
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -44,7 +44,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ### RequestDefinition
 
-`method`, `path`, 선택 `input`, `output`, `error`, `operation`, `builder`예요. struct kind가 선언된 본문을 어떻게 읽을지 골라요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 `builder`만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+`method`, `path`, 선택 `input`, `output`, `error`, `meta`, `builder`예요. struct kind가 선언된 본문을 어떻게 읽을지 골라요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 `builder`만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 ### HttpAwaitResult
 
@@ -54,7 +54,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ### HttpRequest
 
-정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `query`예요. 인터셉터가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. `query`는 요청이 보내는 유일한 쿼리이고 `URLSearchParams`예요. 인터셉터는 이를 그 자리에서 바꾸거나 대체 값을 `next()`에 넘겨요. `builder`가 `URLSearchParams`를 돌려주면 그 인스턴스는 복사되고, `withQuerySerializer` 함수가 돌려준 문자열은 그 안으로 파싱돼요. 와이어 형태는 `query.toString()`, 즉 URL Standard의 application/x-www-form-urlencoded 직렬화라서 공백은 `+`이고, 비어 있는 `query`는 `?`를 붙이지 않아요. `responseType`과 `errorResponseType`은 readonly예요. 선언된 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
+정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `signal`, `meta`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `query`예요. 인터셉터가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. `query`는 요청이 보내는 유일한 쿼리이고 `URLSearchParams`예요. 인터셉터는 이를 그 자리에서 바꾸거나 대체 값을 `next()`에 넘겨요. `builder`가 `URLSearchParams`를 돌려주면 그 인스턴스는 복사되고, `withQuerySerializer` 함수가 돌려준 문자열은 그 안으로 파싱돼요. 와이어 형태는 `query.toString()`, 즉 URL Standard의 application/x-www-form-urlencoded 직렬화라서 공백은 `+`이고, 비어 있는 `query`는 `?`를 붙이지 않아요. `responseType`과 `errorResponseType`은 readonly예요. 선언된 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
 
 ### HttpMeta
 

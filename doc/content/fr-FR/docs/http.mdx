@@ -38,7 +38,7 @@ Attribuez à chaque opération son propre export `defineRequest` dans votre modu
 ### Bonnes pratiques de conception d'un SDK
 
 - **Une opération par définition** : Isolez chaque méthode, chemin et contrat dans sa propre définition pour permettre aux applications de tree-shaker les opérations non utilisées.
-- **Définissez un nom d'opération statique (`operation`)** : Choisissez un identifiant de faible cardinalité tel que `"orders.read"`. Les plugins de télémétrie (`@defjs/opentelemetry-server`) et les intercepteurs de journalisation l'utilisent sans exposer d'URL ou d'identifiants utilisateur.
+- **Joignez `meta` quand les intercepteurs ont besoin de contexte** : `meta` est `{ [key: string]: unknown }` et défini par l'application, par exemple `{ operation: "orders.read" }`. Il ne circule que dans les intercepteurs et les répartiteurs (`request.meta`, `PickInfo.meta`) ; Defjs ne le lit, ne le copie ni ne l'envoie jamais sur le réseau.
 - **N'embarquez jamais de client dans le SDK** : N'exportez que des définitions, des schémas `struct` et des types.
 
 ## 2. Résolution d'URL et paramètres de chemin

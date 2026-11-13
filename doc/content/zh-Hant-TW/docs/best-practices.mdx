@@ -34,7 +34,7 @@ export class OrdersService {
 
 // 建議做法：在 services/*.ts 中直接匯出獨立的操作定義純函式
 export const getOrder = defineRequest({
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   method: "GET",
   path: "/orders/:id",
   input: GetOrderInput,
@@ -73,12 +73,12 @@ export type Order = Infer<typeof Order>;
 
 將不同層面的職責放在各自歸屬的層級中：
 
-| 職責層面                                                          | 歸屬位置                                                  | 原因                                                 |
-| :---------------------------------------------------------------- | :-------------------------------------------------------- | :--------------------------------------------------- |
-| 將呼叫端參數路由至 `path`、`query`、`headers` 與 `body`           | `services/*.ts` 中的操作 `builder`                        | 僅依賴當前 `input` 的同步純函式                      |
-| 靜態低基數操作識別（如 `"orders.create"`、`"s3.objects.put"`）    | `services/*.ts` 中的操作 `operation` 欄位                 | 供 OpenTelemetry 追蹤 span、指標與日誌攔截器識別操作 |
-| 基底 URL、驗證標頭（`Authorization`、簽章、XSRF）、重試、負載平衡 | `client.ts` 中的 `createClient(...)`                      | 與執行環境及工作階段相關的執行策略                   |
-| 單次呼叫逾時、取消（`signal`）與傳輸進度回呼                      | 呼叫處的內聯衍生 `client({ signal, onDownloadProgress })` | 僅作用於單次呼叫，不會變更共用 Client                |
+| 職責層面                                                          | 歸屬位置                                                  | 原因                                                         |
+| :---------------------------------------------------------------- | :-------------------------------------------------------- | :----------------------------------------------------------- |
+| 將呼叫端參數路由至 `path`、`query`、`headers` 與 `body`           | `services/*.ts` 中的操作 `builder`                        | 僅依賴當前 `input` 的同步純函式                              |
+| 應用程式為攔截器定義的脈絡（`{ operation: "orders.create" }`）    | `services/*.ts` 中的 `meta` 欄位                          | `{ [key: string]: unknown }`；僅供內部使用，絕不透過網路傳送 |
+| 基底 URL、驗證標頭（`Authorization`、簽章、XSRF）、重試、負載平衡 | `client.ts` 中的 `createClient(...)`                      | 與執行環境及工作階段相關的執行策略                           |
+| 單次呼叫逾時、取消（`signal`）與傳輸進度回呼                      | 呼叫處的內聯衍生 `client({ signal, onDownloadProgress })` | 僅作用於單次呼叫，不會變更共用 Client                        |
 
 ---
 

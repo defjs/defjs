@@ -11,26 +11,15 @@ description: Инструментируйте вызовы SDK на клиент
 
 ---
 
-## 1. Базовая настройка и идентификация операций
+## 1. Базовая настройка
 
-Укажите статическую строку `operation` с низкой кардинальностью в ваших определениях SDK (`defineRequest`, `defineEventStream`, `defineWebSocket`), затем передайте `tracer`, `meter`, `logger` или `propagator` из OpenTelemetry в `withOpenTelemetryServer(...)` при создании клиента:
+Передайте `tracer`, `meter`, `logger` или `propagator` из OpenTelemetry в `withOpenTelemetryServer(...)` при создании клиента:
 
-<Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/operation-names.ts#example
-    </include>
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
 
-  </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/basic-setup.ts#example
-    </include>
-
-  </Tab>
-</Tabs>
-
-- **Именование спанов**: если поле `operation` задано, имена спанов формируются как `GET orders.read`, `SSE orders.watch` и `WebSocket orders.connect` и содержат атрибут `defjs.operation`. Без `operation` имена спанов откатываются к названию HTTP-метода, `SSE` или `WebSocket`. HTTP-метод в имени спана — это нормализованный `http.request.method`, а при значении `_OTHER` — `HTTP`.
+- **Именование спанов**: имена спанов — это название HTTP-метода, `SSE` или `WebSocket`. Плагин никогда не читает `meta` определения; используйте `startSpanHook(request)`, чтобы скопировать нужное из `request.meta` в атрибуты спана. HTTP-метод в имени спана — это нормализованный `http.request.method`, а при значении `_OTHER` — `HTTP`.
 - **Независимые сигналы**: `tracer`, `meter` и `logger` являются опциональными и работают независимо друг от друга:
   - Пропуск `tracer` отключает создание локальных спанов и спан-хуков, сохраняя при этом сбор метрик, логирование и исходящее распространение контекста (propagation).
   - Пропуск `meter` отключает метрики пакета.
@@ -135,7 +124,7 @@ description: Инструментируйте вызовы SDK на клиент
 | Терминальная ошибка SSE или WebSocket либо отклонённый `closed` (включая обрыв `1006` без кадра закрытия, таймаут heartbeat)                             | Один `WARN` с именем события транспорта, фаза `connection`                                       |
 | Штатное завершение, сообщения, EOF, серверные кадры закрытия WebSocket (включая `1011`) или активная отмена не по таймауту                               | Не формируется                                                                                   |
 
-Диагностика фиксирует постоянное текстовое сообщение, поле `exception.type` (имя класса транспорта/платформы, такое как `BodyFailure`, `EventStreamFatalError` (хэндшейк SSE без `text/event-stream`), `DefjsFault` (включая хэндшейк SSE со статусом не 2xx), `TypeError` или `Error`), фазу, статическое имя `operation`, адрес/порт сервера и поля протокола — и никогда не включает сырые URL, query-строки, заголовки, тела или стеки ошибок. Событие `exception` спана следует тому же правилу и несёт только `exception.type`; `url.full` заменяет любые userinfo в эндпоинте на `REDACTED:REDACTED`, а значения чувствительных query-ключей по умолчанию из семантических соглашений (например, `sig` и `X-Amz-Signature`) — на `REDACTED`.
+Диагностика фиксирует постоянное текстовое сообщение, поле `exception.type` (имя класса транспорта/платформы, такое как `BodyFailure`, `EventStreamFatalError` (хэндшейк SSE без `text/event-stream`), `DefjsFault` (включая хэндшейк SSE со статусом не 2xx), `TypeError` или `Error`), фазу, адрес/порт сервера и поля протокола — и никогда не включает сырые URL, query-строки, заголовки, тела или стеки ошибок. Событие `exception` спана следует тому же правилу и несёт только `exception.type`; `url.full` заменяет любые userinfo в эндпоинте на `REDACTED:REDACTED`, а значения чувствительных query-ключей по умолчанию из семантических соглашений (например, `sig` и `X-Amz-Signature`) — на `REDACTED`.
 
 ---
 

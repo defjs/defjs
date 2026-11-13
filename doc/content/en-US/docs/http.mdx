@@ -38,7 +38,7 @@ Give each operation its own `defineRequest` export in your SDK module, and keep 
 ### SDK design best practices
 
 - **One operation per definition**: Keep each method, path, and contract in its own definition so applications can tree-shake unused operations.
-- **Set a static `operation` name**: Use a low-cardinality identifier such as `"orders.read"`. Telemetry plugins (`@defjs/opentelemetry-server`) and logging interceptors use it without leaking URLs or user IDs.
+- **Attach `meta` when interceptors need context**: `meta` is `{ [key: string]: unknown }` and application-defined, for example `{ operation: "orders.read" }`. It flows only through interceptors and balancers (`request.meta`, `PickInfo.meta`); Defjs never reads it, copies it, or sends it over the network.
 - **Never embed a client in the SDK**: Export only definitions, `struct` schemas, and types.
 
 ## 2. URL resolution and path parameters

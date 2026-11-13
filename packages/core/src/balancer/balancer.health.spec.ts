@@ -41,7 +41,7 @@ function setup(options?: OutlierDetectionOptions) {
   function pick(endpoints: readonly string[] = ["a", "b", "c"]) {
     const result = balancer.pick({
       endpoints,
-      operation: "read",
+      meta: { operation: "read" },
     });
     expect(result[0]).toBeNull();
     return result[1];
@@ -163,11 +163,11 @@ test("active filtering calls once, preserves full-list identity and forwards met
   );
   const info: PickInfo = {
     endpoints: list,
-    operation: "read",
+    meta: { operation: "read" },
   };
   expect(h.pick(info)[0]).toBeNull();
   expect(received?.endpoints).toBe(list);
-  expect(received?.operation).toBe("read");
+  expect(received?.meta).toEqual({ operation: "read" });
   expect(received).not.toHaveProperty("transport");
   expect(active).toHaveBeenCalledTimes(2);
 });

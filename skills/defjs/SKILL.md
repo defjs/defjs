@@ -22,7 +22,7 @@ Defjs separates the two sides of an SDK so operation contracts can be shared or 
 3. **Declare schemas and explicit placement.** Define `input`, `output`, and `error` with `struct`. Whenever `input` is declared, provide a synchronous pure `builder: (input) => ({ path?, query?, headers?, body? })`.
 4. **Call the operation and guard the error slot first.** Pass `client` (or `client({ signal })` per call), check `if (error)` and return before reading the success value.
 5. **Own realtime lifecycles.** Bind every opened SSE stream or WebSocket session with `await using` or close it and `await closed` in `finally`.
-6. **Put cross-cutting policies in client options and interceptors.** Use `withRetry` for retries and reconnects, `withInterceptors` for auth/refresh/`Retry-After`/logging, and a static low-cardinality `operation` string on every definition.
+6. **Put cross-cutting policies in client options and interceptors.** Use `withRetry` for retries and reconnects, `withInterceptors` for auth/refresh/`Retry-After`/logging, and optional application-defined `meta` on definitions when interceptors need context.
 7. **Verify** with the project's typecheck and deterministic `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle` tests.
 
 ## The six rules
@@ -31,7 +31,7 @@ Defjs separates the two sides of an SDK so operation contracts can be shared or 
 2. **Calling an operation runs it.** Call `getOrder(client, input)` or `getOrder(client(options), input)`. Calling `client(options)` performs no I/O and returns a single-call, non-callable `Client` value (`client()()` is a compile error). There is no global client.
 3. **Results are error-first tuples.** Operations resolve to `[error, data, response]` (HTTP), `[error, stream, startupOpen]` (SSE), or `[error, session, startupConnection]` (WebSocket). Request, validation, HTTP status, decode, and network failures never throw at the call site.
 4. **`struct` only declares structure.** Struct instances have no `.parse()` method; call `struct.parse(schema, value, options?)`. There is no `struct.encode`, no regex/length validation DSL, and no zero-filling.
-5. **Auth, token refresh, `Retry-After`, and tracing belong in interceptors**, never in `builder`. Use `withRetry` for HTTP, SSE, and WebSocket retries. Set a static low-cardinality `operation` name (such as `"orders.get"`).
+5. **Auth, token refresh, `Retry-After`, and tracing belong in interceptors**, never in `builder`. Use `withRetry` for HTTP, SSE, and WebSocket retries. Attach optional `meta` (such as `{ operation: "orders.get" }`) for interceptor context.
 6. **The caller owns streams and sessions.** After a successful SSE or WebSocket startup, handle runtime errors, close the handle/session, and `await closed` (or use `await using`).
 
 ## Common habits vs Defjs best practices
@@ -71,7 +71,7 @@ export const OrderError = struct.object({
 
 export const getOrder = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),

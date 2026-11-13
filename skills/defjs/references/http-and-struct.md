@@ -101,7 +101,7 @@ export const badPostOrder = defineRequest({
 // Right: pass the typed struct value directly so Defjs encodes aliases across the tree
 export const postOrder = defineRequest({
   method: "POST",
-  operation: "orders.create",
+  meta: { operation: "orders.create" },
   path: "/orders",
   input: struct.object({ order: NewOrder }),
   builder: (input) => ({ body: input.order }),
@@ -138,7 +138,7 @@ export const CategoryStruct: Struct<Category> = struct.object({
 
 `defineRequest` declares a single HTTP operation. Keep one operation per definition so consumers can tree-shake unused endpoints.
 
-- **`operation`**: Set a static, low-cardinality identifier such as `"orders.update"`. Interceptors and `@defjs/opentelemetry-server` use it for span and metric identity without leaking dynamic URLs or user IDs.
+- **`meta`**: Optional `{ [key: string]: unknown }`, application-defined context such as `{ operation: "orders.update" }`. It reaches interceptors (`request.meta`) and balancers (`PickInfo.meta`) only; Defjs never reads it or sends it over the network.
 - **`output` and `error`**: `output` decodes `2xx` responses; `error` decodes non-`2xx` responses. Only one side is ever read. If `output` or `error` is omitted, that side's response body is not read at all.
 - **Empty responses (`HEAD`, `204`, `205`, `304`)**: Read as zero bytes. `struct.string()` yields `""`, `struct.arrayBuffer()` yields an empty `ArrayBuffer`, and `struct.blob()` yields an empty `Blob`. A JSON struct still checks for a JSON `Content-Type` first (`RES_MEDIA_TYPE_INVALID` if missing) and then fails on empty bytes with `RES_DECODE_FAILED`—omit `output` on a `204 No Content` endpoint instead of declaring a JSON object.
 
@@ -155,7 +155,7 @@ const Order = struct.object({
 
 export const updateOrder = defineRequest({
   method: "PATCH",
-  operation: "orders.update",
+  meta: { operation: "orders.update" },
   path: "/orders/:id",
   input: struct.object({
     id: struct.number(),
@@ -216,7 +216,7 @@ defineRequest({
 // Right: pure synchronous placement; put auth in createHttpInterceptor
 defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -277,7 +277,7 @@ import { defineRequest, struct } from "@defjs/core";
 
 export const uploadInvoice = defineRequest({
   method: "POST",
-  operation: "invoices.upload",
+  meta: { operation: "invoices.upload" },
   path: "/invoices",
   input: struct.formData({
     orderId: struct.string().alias("order_id"),
@@ -304,7 +304,7 @@ import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
 
 const getReport = defineRequest({
   method: "GET",
-  operation: "reports.get",
+  meta: { operation: "reports.get" },
   path: "/reports/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -386,7 +386,7 @@ const OrderError = struct.discriminatedUnion("kind", [
 
 const getOrder = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),

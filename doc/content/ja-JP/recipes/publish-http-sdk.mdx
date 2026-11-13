@@ -73,10 +73,10 @@ Amazon S3 互換のオブジェクトストレージ SDK（`@company/s3-sdk`）�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,7 +126,7 @@ tarball に `dist/index.js` と `dist/index.d.ts` が正しく含まれている
 作成した SDK を `@defjs/core` と共にインストールします。
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
 SDK はクライアントを束縛しないため、エンドポイント（AWS S3、Cloudflare R2、MinIO など）、署名インターセプター、リトライポリシーは利用側アプリケーションが所有し、import した各操作を純粋関数として直接呼び出します。
