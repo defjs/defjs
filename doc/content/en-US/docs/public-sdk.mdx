@@ -7,7 +7,7 @@ description: Design and publish a zero-client, tree-shakable TypeScript SDK for 
 
 When your company or platform team publishes an official TypeScript SDK for external developers (for example, an object storage SDK, a payment gateway SDK, or a SaaS platform SDK), the SDK package must **define the wire contract without dictating the runtime environment**.
 
-Using an **Amazon S3-compatible SDK (`@company/s3-sdk`)** as a concrete blueprint, this guide shows how to design a multi-module public SDK with `models/` and pure-function `services/`.
+Using an **Amazon S3-compatible SDK (`@company/s3-sdk`)** as a concrete blueprint, this guide shows how to design a multi-module public SDK with `schema/` and pure-function `request/`.
 
 ---
 
@@ -16,7 +16,7 @@ Using an **Amazon S3-compatible SDK (`@company/s3-sdk`)** as a concrete blueprin
 Traditional SDKs bundle a heavyweight client class (`new S3Client({ region, credentials })`) tightly coupled to command classes or static service classes. Authoring your public SDK with `@defjs/core` solves four recurring problems for your external users:
 
 1. **Multi-environment & sandbox flexibility**: Because `@company/s3-sdk` binds no endpoint or client, a customer can point the exact same operation definitions at production (`https://s3.us-east-1.amazonaws.com`), a staging sandbox, Cloudflare R2, or a local MinIO container during CI tests.
-2. **100% bundler tree-shaking**: Exporting standalone pure functions (`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`) with `"sideEffects": false` ensures a browser bundle that only calls `getObject` and `putObject` drops every other endpoint and model.
+2. **100% bundler tree-shaking**: Exporting standalone pure functions (`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`) with `"sideEffects": false` ensures a browser bundle that only calls `getObject` and `putObject` drops every other endpoint and schema.
 3. **Runtime validation + static types from one source**: External consumers get both compile-time TypeScript types (`Infer<typeof ...>`) and runtime response/error validation (`struct`), protecting them against unexpected wire payloads and converting wire `snake_case` fields or ISO date strings automatically.
 4. **Full control over auth, retries, and telemetry**: Customers attach their own credential rotation interceptors, `withRetry(...)` policies, multi-region load balancers (`withBalancer(...)`), or server-side OpenTelemetry (`@defjs/opentelemetry-server`) on their own `Client`.
 
@@ -24,16 +24,16 @@ Traditional SDKs bundle a heavyweight client class (`new S3Client({ region, cred
 
 ## 2. Package directory layout
 
-Split the SDK package into `src/models/` (data structures) and `src/services/` (resource-grouped pure operation definitions), with a flat barrel `src/index.ts`:
+Split the SDK package into `src/schema/` (data structures) and `src/request/` (resource-grouped pure operation definitions), with a flat barrel `src/index.ts`:
 
 ```text
 @company/s3-sdk/
 ├── src/
-│   ├── models/                 # 1. Shared struct schemas + Infer<typeof ...> types
+│   ├── schema/                 # 1. Shared struct schemas + Infer<typeof ...> types
 │   │   ├── common.ts           #    StorageClass, S3Error
 │   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
 │   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
-│   ├── services/               # 2. Pure defineRequest functions by resource domain
+│   ├── request/               # 2. Pure defineRequest functions by resource domain
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. Barrel exports for root and tree-shakable imports
@@ -45,34 +45,34 @@ Split the SDK package into `src/models/` (data structures) and `src/services/` (
 
 ## 3. Complete S3 SDK implementation
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>

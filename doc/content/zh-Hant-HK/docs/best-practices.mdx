@@ -5,18 +5,18 @@ description: 用 Defjs 建立應用程式內部 API 請求層同對外公開 SDK
 
 # 工程規範 [#engineering-conventions]
 
-無論你係喺應用程式入面親手寫 HTTP 請求層，定係代表公司對外發佈公開 API 嘅官方 TypeScript SDK，用 Defjs 開發嘅項目都遵循同一套模組化架構：**共用嘅 `struct` 資料模型層（`models/`）配搭純函數操作定義層（`services/`）**。
+無論你係喺應用程式入面親手寫 HTTP 請求層，定係代表公司對外發佈公開 API 嘅官方 TypeScript SDK，用 Defjs 開發嘅項目都遵循同一套模組化架構：**共用嘅 `struct` schema層（`schema/`）配搭純函數操作定義層（`request/`）**。
 
 ---
 
 ## 1. 兩種主要使用場景
 
-大多數團隊會喺以下兩種場景採用 Defjs。兩者都將契約組織成 `models/` 同 `services/`，唯一分別只係 `createClient(...)` 放喺邊度：
+大多數團隊會喺以下兩種場景採用 Defjs。兩者都將契約組織成 `schema/` 同 `request/`，唯一分別只係 `createClient(...)` 放喺邊度：
 
-| 使用場景                                                                         | 目錄結構                                                              | 邊個擁有 `createClient(...)`？                                                     | 指南                                                |
-| :------------------------------------------------------------------------------- | :-------------------------------------------------------------------- | :--------------------------------------------------------------------------------- | :-------------------------------------------------- |
-| **[應用程式 API 層](/zh-Hant-HK/docs/application-api)**（項目內 HTTP／實時請求） | `src/api/models/` + `src/api/services/` + `src/api/client.ts`         | 你嘅應用程式本身（由 `src/api/client.ts` 匯出瀏覽器單例或 SSR 逐個請求嘅工廠函數） | [應用程式 API 層](/zh-Hant-HK/docs/application-api) |
-| **[公開 SDK 設計](/zh-Hant-HK/docs/public-sdk)**（對外公開 API 嘅外部 npm 套件） | `src/models/` + `src/services/` + `src/index.ts`（含 `package.json`） | 外部使用方嘅應用程式（發佈出去嘅 SDK 永遠唔會建立或捕獲任何 `Client`）             | [公開 SDK 設計](/zh-Hant-HK/docs/public-sdk)        |
+| 使用場景                                                                         | 目錄結構                                                             | 邊個擁有 `createClient(...)`？                                                     | 指南                                                |
+| :------------------------------------------------------------------------------- | :------------------------------------------------------------------- | :--------------------------------------------------------------------------------- | :-------------------------------------------------- |
+| **[應用程式 API 層](/zh-Hant-HK/docs/application-api)**（項目內 HTTP／實時請求） | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`         | 你嘅應用程式本身（由 `src/api/client.ts` 匯出瀏覽器單例或 SSR 逐個請求嘅工廠函數） | [應用程式 API 層](/zh-Hant-HK/docs/application-api) |
+| **[公開 SDK 設計](/zh-Hant-HK/docs/public-sdk)**（對外公開 API 嘅外部 npm 套件） | `src/schema/` + `src/request/` + `src/index.ts`（含 `package.json`） | 外部使用方嘅應用程式（發佈出去嘅 SDK 永遠唔會建立或捕獲任何 `Client`）             | [公開 SDK 設計](/zh-Hant-HK/docs/public-sdk)        |
 
 ---
 
@@ -32,7 +32,7 @@ export class OrdersService {
   // 隱藏咗逐次呼叫嘅 client(options) 派生能力，而且阻礙打包工具做 tree-shaking
 }
 
-// 建議做法：喺 services/*.ts 直接匯出獨立嘅操作定義函數
+// 建議做法：喺 request/*.ts 直接匯出獨立嘅操作定義函數
 export const getOrder = defineRequest({
   meta: { operation: "orders.get" },
   method: "GET",
@@ -46,9 +46,9 @@ export const getOrder = defineRequest({
 
 直接呼叫匯出嘅操作函數（`await getOrder(client, { id: 42 })` 或 `await getOrder(client({ signal }), { id: 42 })`），可以令成個 codebase 嘅呼叫方式保持一致，並喺設定 `"sideEffects": false` 之後，令打包工具100% 剔除未用到嘅操作。
 
-### 規範二：喺 `models/` 入面同名匯出 `struct` 同 `Infer`
+### 規範二：喺 `schema/` 入面同名匯出 `struct` 同 `Infer`
 
-喺 `models/*.ts` 入面，用**同一個識別字**同時匯出 runtime `struct` schema 同埋佢推導出嚟嘅 TypeScript 型別。TypeScript 會自動合併同一個作用域入面嘅值宣告同型別宣告，呼叫端只需要 import 一個符號，就可以同時用喺 runtime 驗證同靜態型別標註：
+喺 `schema/*.ts` 入面，用**同一個識別字**同時匯出 runtime `struct` schema 同埋佢推導出嚟嘅 TypeScript 型別。TypeScript 會自動合併同一個作用域入面嘅值宣告同型別宣告，呼叫端只需要 import 一個符號，就可以同時用喺 runtime 驗證同靜態型別標註：
 
 ```ts
 import { struct, type Infer } from "@defjs/core";
@@ -61,13 +61,13 @@ export const Order = struct.object({
 export type Order = Infer<typeof Order>;
 ```
 
-### 規範三：保持 `services/*.ts` 唔依賴任何 Client 實例
+### 規範三：保持 `request/*.ts` 唔依賴任何 Client 實例
 
-就算你係喺單一程式碼庫入面寫緊[應用程式 API 層](/zh-Hant-HK/docs/application-api)（`src/api/`），都**唔好**喺 `src/api/services/*.ts` 入面 import `apiClient` 嚟包住你嘅操作定義。保持 `services/*.ts` 為純定義有三個即時好處：
+就算你係喺單一程式碼庫入面寫緊[應用程式 API 層](/zh-Hant-HK/docs/application-api)（`src/api/`），都**唔好**喺 `src/api/request/*.ts` 入面 import `apiClient` 嚟包住你嘅操作定義。保持 `request/*.ts` 為純定義有三個即時好處：
 
 1. **確定性嘅離線測試**：單元測試可以直接將本地嘅 `createClient(withEndpoint(...), withHTTPHandle(...))` 傳入任何操作，完全唔需要 mock 模組。
 2. **SSR 同多租戶安全**：伺服器 loader 可以將帶住當前用戶 cookie 或租戶 token 嘅請求級 `Client`，傳入同瀏覽器元件完全一樣嘅操作定義入面。
-3. **零成本升級做共用套件**：如果團隊之後決定將 `src/api/models/` 同 `src/api/services/` 抽離做 monorepo workspace 套件或者公開 npm SDK，所有操作定義檔案都唔使改任何一行 code。
+3. **零成本升級做共用套件**：如果團隊之後決定將 `src/api/schema/` 同 `src/api/request/` 抽離做 monorepo workspace 套件或者公開 npm SDK，所有操作定義檔案都唔使改任何一行 code。
 
 ### 規範四：將 `builder` 參數放置同攔截器策略分開
 
@@ -75,8 +75,8 @@ export type Order = Infer<typeof Order>;
 
 | 職責範疇                                                             | 所屬位置                                                    | 原因                                                                                     |
 | :------------------------------------------------------------------- | :---------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
-| 將呼叫端參數路由去 `path`、`query`、`headers` 同 `body`              | `services/*.ts` 入面嘅操作 `builder`                        | 只依賴當前 `input` 嘅同步純函數                                                          |
-| 應用程式為攔截器定義嘅上下文（`{ operation: "orders.create" }`）     | `services/*.ts` 入面嘅 `meta` 欄位                          | `{ [key: string]: unknown }`；唯讀，每個定義共用；絕不隨請求送出；以 `defjs.meta.*` 上報 |
+| 將呼叫端參數路由去 `path`、`query`、`headers` 同 `body`              | `request/*.ts` 入面嘅操作 `builder`                         | 只依賴當前 `input` 嘅同步純函數                                                          |
+| 應用程式為攔截器定義嘅上下文（`{ operation: "orders.create" }`）     | `request/*.ts` 入面嘅 `meta` 欄位                           | `{ [key: string]: unknown }`；唯讀，每個定義共用；絕不隨請求送出；以 `defjs.meta.*` 上報 |
 | Base URL、認證 header（`Authorization`、簽名、XSRF）、重試、負載平衡 | `client.ts` 入面嘅 `createClient(...)`                      | 與執行環境同工作階段相關嘅執行策略                                                       |
 | 單次呼叫超時、取消（`signal`）同傳輸進度回呼                         | 呼叫位置內聯派生嘅 `client({ signal, onDownloadProgress })` | 只作用於單次呼叫，唔會改動共用嘅 client                                                  |
 

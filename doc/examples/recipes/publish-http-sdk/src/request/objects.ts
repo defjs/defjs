@@ -1,7 +1,7 @@
 // #region example
 import { defineRequest, struct, type Infer } from "@defjs/core";
-import { S3Error, StorageClass } from "../models/common.ts";
-import { ListObjectsOutput } from "../models/object.ts";
+import { S3Error, StorageClass } from "../schema/common.ts";
+import { ListObjectsOutput } from "../schema/object.ts";
 
 export const ListObjectsInput = struct.object({
   bucket: struct.string(),

@@ -1,11 +1,11 @@
 ---
 title: "Build and publish an SDK"
-description: Structure a multi-module S3 SDK with models and pure-function operation definitions, publish it as an npm package, and let each application configure its own client.
+description: Structure a multi-module S3 SDK with schemas and pure-function operation definitions, publish it as an npm package, and let each application configure its own client.
 ---
 
 # Build and publish an SDK [#publish-an-http-sdk-without-hiding-execute]
 
-A Defjs SDK organizes shared `struct` models (`src/models/`) and domain operation modules (`src/services/`) into a tree-shakable npm package while leaving `createClient(...)`, endpoints, credentials, and interceptors in the consuming application.
+A Defjs SDK organizes shared `struct` schemas (`src/schema/`) and domain operation modules (`src/request/`) into a tree-shakable npm package while leaving `createClient(...)`, endpoints, credentials, and interceptors in the consuming application.
 
 Unlike legacy OpenAPI generators that wrap endpoints in stateful `Service` classes (`ObjectsService.putObject(...)`), a Defjs SDK exports **standalone pure operation functions** (`putObject`, `getObject`, `listObjectsV2`) that are called directly with the application's client.
 
@@ -15,37 +15,37 @@ Unlike legacy OpenAPI generators that wrap endpoints in stateful `Service` class
 
 Using an Amazon S3-compatible object storage SDK (`@company/s3-sdk`) as an example, split the package into two layers:
 
-- **`src/models/`**: Shared `struct` schemas and `Infer<typeof ...>` TypeScript types (using same-name value + type exports so consumers can import a single identifier for both runtime schemas and static types).
-- **`src/services/`**: Domain modules grouped by resource (`buckets.ts`, `objects.ts`). Each module exports standalone `defineRequest` functions whose synchronous `builder` routes a flat caller input across `path`, `query`, `headers`, and binary `body`.
+- **`src/schema/`**: Shared `struct` schemas and `Infer<typeof ...>` TypeScript types (using same-name value + type exports so consumers can import a single identifier for both runtime schemas and static types).
+- **`src/request/`**: Domain modules grouped by resource (`buckets.ts`, `objects.ts`). Each module exports standalone `defineRequest` functions whose synchronous `builder` routes a flat caller input across `path`, `query`, `headers`, and binary `body`.
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>

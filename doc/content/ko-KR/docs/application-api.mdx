@@ -5,7 +5,7 @@ description: 별도의 SDK 패키지를 배포하지 않고 애플리케이션 �
 
 # 애플리케이션 API 계층 [#application-api-layer]
 
-대부분의 프로젝트는 흩어져 있는 `fetch`나 `axios` 래퍼를 대체하기 위해 애플리케이션 저장소 내부(`src/api/`)에서 Defjs를 직접 사용합니다. 외부 npm 패키지를 배포할 계획이 없더라도 `src/api/models/`, `src/api/services/`, `src/api/client.ts`를 분리하면 요청 계층의 강력한 타입 안전성을 유지하고, 인메모리에서 테스트할 수 있으며, 브라우저와 SSR 런타임 전반에서 안전하게 사용할 수 있습니다.
+대부분의 프로젝트는 흩어져 있는 `fetch`나 `axios` 래퍼를 대체하기 위해 애플리케이션 저장소 내부(`src/api/`)에서 Defjs를 직접 사용합니다. 외부 npm 패키지를 배포할 계획이 없더라도 `src/api/schema/`, `src/api/request/`, `src/api/client.ts`를 분리하면 요청 계층의 강력한 타입 안전성을 유지하고, 인메모리에서 테스트할 수 있으며, 브라우저와 SSR 런타임 전반에서 안전하게 사용할 수 있습니다.
 
 ---
 
@@ -16,9 +16,9 @@ description: 별도의 SDK 패키지를 배포하지 않고 애플리케이션 �
 ```text
 src/
 ├── api/
-│   ├── models/           # 1. 공유 struct 스키마 + Infer<typeof ...> 타입
+│   ├── schema/           # 1. 공유 struct 스키마 + Infer<typeof ...> 타입
 │   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
-│   ├── services/         # 2. 도메인별로 그룹화된 순수 작업 정의
+│   ├── request/         # 2. 도메인별로 그룹화된 순수 작업 정의
 │   │   └── orders.ts     #    getOrder, listOrders, createOrder
 │   └── client.ts         # 3. 앱이 소유하는 Client (엔드포인트, 인증 인터셉터, 재시도)
 └── checkout.ts           # 4. 작업을 호출하는 비즈니스 로직 / UI 컴포넌트
@@ -28,16 +28,16 @@ src/
 
 ## 2. 애플리케이션 내부 전체 예제
 
-<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+<Tabs items={["src/api/schema/order.ts", "src/api/request/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
   <Tab>
-<include cwd meta='title="src/api/models/order.ts"'>
-  examples/best-practices/application-api/src/api/models/order.ts#example
+<include cwd meta='title="src/api/schema/order.ts"'>
+  examples/best-practices/application-api/src/api/schema/order.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/api/services/orders.ts"'>
-  examples/best-practices/application-api/src/api/services/orders.ts#example
+<include cwd meta='title="src/api/request/orders.ts"'>
+  examples/best-practices/application-api/src/api/request/orders.ts#example
 </include>
 
   </Tab>
@@ -64,7 +64,7 @@ src/
 ### 브라우저 싱글턴 vs. SSR 요청별 클라이언트
 
 - **브라우저 / SPA (`apiClient`)**: 백엔드 오리진당 모듈 범위의 단일 `createClient(...)` 인스턴스를 export하세요. 이 인스턴스를 공유하면 페이지 상호작용 전반에서 로드 밸런서 상태와 클라이언트 수준 HTTP 재시도 예산이 유지됩니다. React나 Vue 앱에서는 [`@defjs/react`](/ko-KR/docs/integrations/react)(`ClientProvider` / `useClient`) 또는 [`@defjs/vue`](/ko-KR/docs/integrations/vue)(`createClientPlugin` / `injectClient`)를 통해 루트에서 `apiClient`를 제공하세요.
-- **SSR / BFF (`createServerApiClient(accessToken)`)**: 들어오는 HTTP 요청마다 자격 증명, 쿠키 또는 테넌트 헤더가 달라지는 경우 서버 요청 핸들러 내부에서 팩토리 함수를 호출해 격리된 `Client`를 생성하세요. `getOrder`, `listOrders`, `createOrder`는 순수 함수이므로 동일한 `services/orders.ts` 정의가 `apiClient`와 `createServerApiClient(token)` 모두에서 그대로 동작합니다.
+- **SSR / BFF (`createServerApiClient(accessToken)`)**: 들어오는 HTTP 요청마다 자격 증명, 쿠키 또는 테넌트 헤더가 달라지는 경우 서버 요청 핸들러 내부에서 팩토리 함수를 호출해 격리된 `Client`를 생성하세요. `getOrder`, `listOrders`, `createOrder`는 순수 함수이므로 동일한 `request/orders.ts` 정의가 `apiClient`와 `createServerApiClient(token)` 모두에서 그대로 동작합니다.
 
 ### 호출별 타임아웃 및 취소
 
@@ -83,6 +83,6 @@ const [err, created] = await createOrder(
 
 ### 공유 오류 엔벨로프 (`ApiError`)
 
-백엔드의 표준 오류 엔벨로프를 `src/api/models/`에 한 번 선언하고(`export const ApiError = struct.object(...)`), `src/api/services/`의 모든 `defineRequest`에 `error: ApiError`를 전달하세요. 요청이 비 `2xx` 상태를 반환할 때 `if (err)` 안에서 `if (err.code === "HTTP_STATUS")`로 타입을 좁히면 `err.data.code`, `err.data.message`, `err.data.requestId`에 강타입으로 접근할 수 있습니다.
+백엔드의 표준 오류 엔벨로프를 `src/api/schema/`에 한 번 선언하고(`export const ApiError = struct.object(...)`), `src/api/request/`의 모든 `defineRequest`에 `error: ApiError`를 전달하세요. 요청이 비 `2xx` 상태를 반환할 때 `if (err)` 안에서 `if (err.code === "HTTP_STATUS")`로 타입을 좁히면 `err.data.code`, `err.data.message`, `err.data.requestId`에 강타입으로 접근할 수 있습니다.
 
 자세한 내용은 [엔지니어링 컨벤션](/ko-KR/docs/best-practices), [퍼블릭 SDK 설계](/ko-KR/docs/public-sdk), [클라이언트](/ko-KR/docs/client), [인터셉터](/ko-KR/docs/interceptors)를 참조하세요.

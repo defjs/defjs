@@ -1,7 +1,7 @@
 // #region example
 import { apiClient } from "./api/client.ts";
-import type { OrderStatus } from "./api/models/order.ts";
-import { createOrder, getOrder, listOrders } from "./api/services/orders.ts";
+import type { OrderStatus } from "./api/schema/order.ts";
+import { createOrder, getOrder, listOrders } from "./api/request/orders.ts";
 
 type Checkout = { id: number; status: OrderStatus; totalOrders: number };
 

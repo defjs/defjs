@@ -7,7 +7,7 @@ description: Amazon S3 SDK 아키텍처를 바탕으로 퍼블릭 API를 위한 
 
 회사나 플랫폼 팀이 외부 개발자를 위한 공식 TypeScript SDK(예: 오브젝트 스토리지 SDK, 결제 게이트웨이 SDK, SaaS 플랫폼 SDK)를 배포할 때, SDK 패키지는 **런타임 환경을 강제하지 않으면서 와이어 계약을 정의**해야 합니다.
 
-이 가이드에서는 **Amazon S3 호환 SDK(`@company/s3-sdk`)**를 구체적인 청사진으로 삼아 `models/`와 순수 함수 기반 `services/`로 구성된 다중 모듈 퍼블릭 SDK를 설계하는 방법을 보여줍니다.
+이 가이드에서는 **Amazon S3 호환 SDK(`@company/s3-sdk`)**를 구체적인 청사진으로 삼아 `schema/`와 순수 함수 기반 `request/`로 구성된 다중 모듈 퍼블릭 SDK를 설계하는 방법을 보여줍니다.
 
 ---
 
@@ -24,16 +24,16 @@ description: Amazon S3 SDK 아키텍처를 바탕으로 퍼블릭 API를 위한 
 
 ## 2. 패키지 디렉터리 구조
 
-SDK 패키지를 `src/models/`(데이터 구조)와 `src/services/`(리소스별로 그룹화된 순수 작업 정의)로 나누고, 평탄한 배럴 파일인 `src/index.ts`를 둡니다:
+SDK 패키지를 `src/schema/`(데이터 구조)와 `src/request/`(리소스별로 그룹화된 순수 작업 정의)로 나누고, 평탄한 배럴 파일인 `src/index.ts`를 둡니다:
 
 ```text
 @company/s3-sdk/
 ├── src/
-│   ├── models/                 # 1. 공유 struct 스키마 + Infer<typeof ...> 타입
+│   ├── schema/                 # 1. 공유 struct 스키마 + Infer<typeof ...> 타입
 │   │   ├── common.ts           #    StorageClass, S3Error
 │   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
 │   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
-│   ├── services/               # 2. 리소스 도메인별 순수 defineRequest 함수
+│   ├── request/               # 2. 리소스 도메인별 순수 defineRequest 함수
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. 루트 및 트리쉐이킹 가능 import를 위한 배럴 export
@@ -45,34 +45,34 @@ SDK 패키지를 `src/models/`(데이터 구조)와 `src/services/`(리소스별
 
 ## 3. 전체 S3 SDK 구현
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>

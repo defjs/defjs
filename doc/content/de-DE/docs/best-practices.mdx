@@ -5,18 +5,18 @@ description: Architekturkonventionen zur Strukturierung anwendungsinterner API-R
 
 # Engineering-Konventionen [#engineering-conventions]
 
-Ganz gleich, ob du eine HTTP-Request-Schicht innerhalb einer Frontend-/Backend-Anwendung von Hand schreibst oder ein offizielles TypeScript-SDK für die öffentliche API deines Unternehmens veröffentlichst: Defjs-Projekte folgen derselben modularen Architektur – **gemeinsame `struct`-Datenmodelle (`models/`) gepaart mit reinen Operationsdefinitionen (`services/`)**.
+Ganz gleich, ob du eine HTTP-Request-Schicht innerhalb einer Frontend-/Backend-Anwendung von Hand schreibst oder ein offizielles TypeScript-SDK für die öffentliche API deines Unternehmens veröffentlichst: Defjs-Projekte folgen derselben modularen Architektur – **gemeinsame `struct`-Schemas (`schema/`) gepaart mit reinen Operationsdefinitionen (`request/`)**.
 
 ---
 
 ## 1. Zwei Einsatzszenarien für Defjs
 
-Die meisten Teams setzen Defjs in einem von zwei Szenarien ein. Beide organisieren Verträge in `models/` und `services/` und unterscheiden sich nur darin, wo `createClient(...)` angesiedelt ist:
+Die meisten Teams setzen Defjs in einem von zwei Szenarien ein. Beide organisieren Verträge in `schema/` und `request/` und unterscheiden sich nur darin, wo `createClient(...)` angesiedelt ist:
 
-| Szenario                                                                                           | Verzeichnisstruktur                                               | Wer besitzt `createClient(...)`?                                                                              | Leitfaden                                             |
-| :------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------- |
-| **[Anwendungs-API-Schicht](/de-DE/docs/application-api)** (projektinterne HTTP-/Echtzeit-Anfragen) | `src/api/models/` + `src/api/services/` + `src/api/client.ts`     | Deine Anwendung (`src/api/client.ts` exportiert ein Browser-Singleton oder eine SSR-Factory pro Anfrage)      | [Anwendungs-API-Schicht](/de-DE/docs/application-api) |
-| **[Design öffentlicher SDKs](/de-DE/docs/public-sdk)** (externes npm-Paket für öffentliche APIs)   | `src/models/` + `src/services/` + `src/index.ts` (`package.json`) | Die Anwendung des externen Konsumenten (das veröffentlichte SDK erstellt oder kapselt niemals einen `Client`) | [Design öffentlicher SDKs](/de-DE/docs/public-sdk)    |
+| Szenario                                                                                           | Verzeichnisstruktur                                              | Wer besitzt `createClient(...)`?                                                                              | Leitfaden                                             |
+| :------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------ | :---------------------------------------------------- |
+| **[Anwendungs-API-Schicht](/de-DE/docs/application-api)** (projektinterne HTTP-/Echtzeit-Anfragen) | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`     | Deine Anwendung (`src/api/client.ts` exportiert ein Browser-Singleton oder eine SSR-Factory pro Anfrage)      | [Anwendungs-API-Schicht](/de-DE/docs/application-api) |
+| **[Design öffentlicher SDKs](/de-DE/docs/public-sdk)** (externes npm-Paket für öffentliche APIs)   | `src/schema/` + `src/request/` + `src/index.ts` (`package.json`) | Die Anwendung des externen Konsumenten (das veröffentlichte SDK erstellt oder kapselt niemals einen `Client`) | [Design öffentlicher SDKs](/de-DE/docs/public-sdk)    |
 
 ---
 
@@ -32,7 +32,7 @@ export class OrdersService {
   // Verdeckt die aufrufbezogene Ableitung client(options) und verhindert Bundler-Tree-Shaking
 }
 
-// Empfohlen: Eigenständige Operationsdefinitionen aus services/*.ts exportieren
+// Empfohlen: Eigenständige Operationsdefinitionen aus request/*.ts exportieren
 export const getOrder = defineRequest({
   meta: { operation: "orders.get" },
   method: "GET",
@@ -46,9 +46,9 @@ export const getOrder = defineRequest({
 
 Der direkte Aufruf der exportierten Operation (`await getOrder(client, { id: 42 })` oder `await getOrder(client({ signal }), { id: 42 })`) hält die Aufrufkonvention in deiner gesamten Codebasis einheitlich und ermöglicht Bundlern, ungenutzte Operationen per Tree-Shaking zu entfernen, wenn `"sideEffects": false` gesetzt ist.
 
-### Konvention 2: Gleichnamige `struct`- und `Infer`-Exporte in `models/`
+### Konvention 2: Gleichnamige `struct`- und `Infer`-Exporte in `schema/`
 
-Exportiere in `models/*.ts` sowohl das `struct`-Laufzeit-Schema als auch seinen abgeleiteten TypeScript-Typ unter **demselben Bezeichner**. TypeScript führt Wert- und Typdeklarationen im selben Gültigkeitsbereich zusammen, sodass Aufrufer ein einziges Symbol sowohl für die Laufzeitvalidierung als auch für statische Typannotationen importieren:
+Exportiere in `schema/*.ts` sowohl das `struct`-Laufzeit-Schema als auch seinen abgeleiteten TypeScript-Typ unter **demselben Bezeichner**. TypeScript führt Wert- und Typdeklarationen im selben Gültigkeitsbereich zusammen, sodass Aufrufer ein einziges Symbol sowohl für die Laufzeitvalidierung als auch für statische Typannotationen importieren:
 
 ```ts
 import { struct, type Infer } from "@defjs/core";
@@ -61,13 +61,13 @@ export const Order = struct.object({
 export type Order = Infer<typeof Order>;
 ```
 
-### Konvention 3: `services/*.ts` frei von Client-Instanzen halten
+### Konvention 3: `request/*.ts` frei von Client-Instanzen halten
 
-Selbst wenn du eine [Anwendungs-API-Schicht](/de-DE/docs/application-api) innerhalb eines einzelnen Repositorys (`src/api/`) schreibst, importiere `apiClient` **nicht** in `src/api/services/*.ts`, um deine Definitionen zu umschließen. Wenn `services/*.ts` reine Definitionen bleiben, erhältst du drei unmittelbare Vorteile:
+Selbst wenn du eine [Anwendungs-API-Schicht](/de-DE/docs/application-api) innerhalb eines einzelnen Repositorys (`src/api/`) schreibst, importiere `apiClient` **nicht** in `src/api/request/*.ts`, um deine Definitionen zu umschließen. Wenn `request/*.ts` reine Definitionen bleiben, erhältst du drei unmittelbare Vorteile:
 
 1. **Deterministische Offline-Tests**: Unit-Tests können einen lokalen `createClient(withEndpoint(...), withHTTPHandle(...))` direkt ohne Modul-Mocking an jede Operation übergeben.
 2. **SSR- und Mandantenfähigkeit**: Server-Loader können einen anfragebezogenen `Client` mit den Cookies des aktuellen Benutzers oder einem Mandanten-Token an exakt dieselbe Operationsdefinition übergeben, die auch von Browser-Komponenten verwendet wird.
-3. **Aufwandfreie Auslagerung in ein gemeinsames Paket**: Wenn dein Team `src/api/models/` und `src/api/services/` später in ein Monorepo-Workspace-Paket oder ein öffentliches npm-SDK verschiebt, muss keine einzige Operationsdatei geändert werden.
+3. **Aufwandfreie Auslagerung in ein gemeinsames Paket**: Wenn dein Team `src/api/schema/` und `src/api/request/` später in ein Monorepo-Workspace-Paket oder ein öffentliches npm-SDK verschiebt, muss keine einzige Operationsdatei geändert werden.
 
 ### Konvention 4: `builder`-Platzierung von Interceptor-Richtlinien trennen
 
@@ -75,8 +75,8 @@ Halte jede Zuständigkeit in ihrer vorgesehenen Schicht:
 
 | Zuständigkeit                                                                        | Wo sie hingehört                                                           | Warum                                                                                                                                     |
 | :----------------------------------------------------------------------------------- | :------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
-| Verteilung von Aufrufer-Parametern auf `path`, `query`, `headers` und `body`         | Operations-`builder` in `services/*.ts`                                    | Synchrone reine Funktion des aktuellen `input`                                                                                            |
-| Anwendungsdefinierter Kontext für Interceptors (`{ operation: "orders.create" }`)    | Feld `meta` der Operation in `services/*.ts`                               | `{ [key: string]: unknown }`; schreibgeschützt und pro Definition geteilt; wird nie mit dem Request gesendet; gemeldet als `defjs.meta.*` |
+| Verteilung von Aufrufer-Parametern auf `path`, `query`, `headers` und `body`         | Operations-`builder` in `request/*.ts`                                     | Synchrone reine Funktion des aktuellen `input`                                                                                            |
+| Anwendungsdefinierter Kontext für Interceptors (`{ operation: "orders.create" }`)    | Feld `meta` der Operation in `request/*.ts`                                | `{ [key: string]: unknown }`; schreibgeschützt und pro Definition geteilt; wird nie mit dem Request gesendet; gemeldet als `defjs.meta.*` |
 | Basis-URLs, Auth-Header (`Authorization`, Signaturen, XSRF), Retries, Lastverteilung | `createClient(...)` in `client.ts`                                         | Umgebungs- und sitzungsspezifische Ausführungsrichtlinie                                                                                  |
 | Aufrufbezogene Fristen, Abbruch (`signal`) und Fortschritts-Callbacks                | Inline-Aufruf `client({ signal, onDownloadProgress })` an der Aufrufstelle | Auf einen einzelnen Aufruf begrenzt, ohne den gemeinsamen Client zu verändern                                                             |
 

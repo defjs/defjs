@@ -1,6 +1,6 @@
 // #region example
 import { defineRequest, struct, type Infer } from "@defjs/core";
-import { ApiError, Order, OrderPage, OrderStatus } from "../models/order.ts";
+import { ApiError, Order, OrderPage, OrderStatus } from "../schema/order.ts";
 
 export const GetOrderInput = struct.object({
   id: struct.number(),

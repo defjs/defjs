@@ -5,7 +5,7 @@ description: Организуйте рукописные HTTP-запросы, м
 
 # API-слой приложения [#application-api-layer]
 
-В большинстве проектов Defjs используется непосредственно внутри репозитория приложения (`src/api/`) взамен разрозненных обёрток вокруг `fetch` или `axios`. Даже если вы не планируете публиковать внешний npm-пакет, разделение на `src/api/models/`, `src/api/services/` и `src/api/client.ts` делает слой запросов строго типизированным, тестируемым в памяти и безопасным как в браузере, так и в SSR-окружении.
+В большинстве проектов Defjs используется непосредственно внутри репозитория приложения (`src/api/`) взамен разрозненных обёрток вокруг `fetch` или `axios`. Даже если вы не планируете публиковать внешний npm-пакет, разделение на `src/api/schema/`, `src/api/request/` и `src/api/client.ts` делает слой запросов строго типизированным, тестируемым в памяти и безопасным как в браузере, так и в SSR-окружении.
 
 ---
 
@@ -16,9 +16,9 @@ description: Организуйте рукописные HTTP-запросы, м
 ```text
 src/
 ├── api/
-│   ├── models/           # 1. Общие схемы struct + типы Infer<typeof ...>
+│   ├── schema/           # 1. Общие схемы struct + типы Infer<typeof ...>
 │   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
-│   ├── services/         # 2. Чистые определения операций, сгруппированные по доменам
+│   ├── request/         # 2. Чистые определения операций, сгруппированные по доменам
 │   │   └── orders.ts     #    getOrder, listOrders, createOrder
 │   └── client.ts         # 3. Клиент приложения (эндпоинт, перехватчик авторизации, retry)
 └── checkout.ts           # 4. Бизнес-логика / UI-компоненты, вызывающие операции
@@ -28,16 +28,16 @@ src/
 
 ## 2. Полный пример внутри приложения
 
-<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+<Tabs items={["src/api/schema/order.ts", "src/api/request/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
   <Tab>
-<include cwd meta='title="src/api/models/order.ts"'>
-  examples/best-practices/application-api/src/api/models/order.ts#example
+<include cwd meta='title="src/api/schema/order.ts"'>
+  examples/best-practices/application-api/src/api/schema/order.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/api/services/orders.ts"'>
-  examples/best-practices/application-api/src/api/services/orders.ts#example
+<include cwd meta='title="src/api/request/orders.ts"'>
+  examples/best-practices/application-api/src/api/request/orders.ts#example
 </include>
 
   </Tab>
@@ -64,7 +64,7 @@ src/
 ### Браузерный синглтон и SSR-клиент на каждый запрос
 
 - **Браузер / SPA (`apiClient`)**: Экспортируйте один экземпляр `createClient(...)` на уровне модуля для каждого источника бэкенда. Совместное использование этого экземпляра сохраняет состояние здоровья балансировщика нагрузки и клиентский бюджет повторных попыток HTTP между взаимодействиями со страницей. В приложениях на React или Vue передавайте `apiClient` на корневом уровне через [`@defjs/react`](/ru-RU/docs/integrations/react) (`ClientProvider` / `useClient`) или [`@defjs/vue`](/ru-RU/docs/integrations/vue) (`createClientPlugin` / `injectClient`).
-- **SSR / BFF (`createServerApiClient(accessToken)`)**: Когда учётные данные, cookie или заголовки тенанта различаются для каждого входящего HTTP-запроса, вызывайте фабричную функцию внутри серверного обработчика запросов для создания изолированного `Client`. Поскольку `getOrder`, `listOrders` и `createOrder` являются чистыми функциями, одни и те же определения из `services/orders.ts` работают как с `apiClient`, так и с `createServerApiClient(token)`.
+- **SSR / BFF (`createServerApiClient(accessToken)`)**: Когда учётные данные, cookie или заголовки тенанта различаются для каждого входящего HTTP-запроса, вызывайте фабричную функцию внутри серверного обработчика запросов для создания изолированного `Client`. Поскольку `getOrder`, `listOrders` и `createOrder` являются чистыми функциями, одни и те же определения из `request/orders.ts` работают как с `apiClient`, так и с `createServerApiClient(token)`.
 
 ### Тайм-ауты и отмена для отдельного вызова
 
@@ -83,6 +83,6 @@ const [err, created] = await createOrder(
 
 ### Единый конверт ошибок (`ApiError`)
 
-Объявите стандартную структуру ошибки вашего бэкенда один раз (`export const ApiError = struct.object(...)`) в `src/api/models/` и передавайте `error: ApiError` в каждый вызов `defineRequest` в `src/api/services/`. Когда запрос возвращает статус, отличный от `2xx`, сужение типа `if (err.code === "HTTP_STATUS")` внутри `if (err)` даёт строго типизированный доступ к `err.data.code`, `err.data.message` и `err.data.requestId`.
+Объявите стандартную структуру ошибки вашего бэкенда один раз (`export const ApiError = struct.object(...)`) в `src/api/schema/` и передавайте `error: ApiError` в каждый вызов `defineRequest` в `src/api/request/`. Когда запрос возвращает статус, отличный от `2xx`, сужение типа `if (err.code === "HTTP_STATUS")` внутри `if (err)` даёт строго типизированный доступ к `err.data.code`, `err.data.message` и `err.data.requestId`.
 
 См. также разделы [Инженерные соглашения](/ru-RU/docs/best-practices), [Проектирование публичного SDK](/ru-RU/docs/public-sdk), [Клиент](/ru-RU/docs/client) и [Перехватчики](/ru-RU/docs/interceptors).

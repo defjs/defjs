@@ -5,7 +5,7 @@ description: Organisez vos requêtes HTTP écrites à la main, vos modèles et v
 
 # Couche API d'application [#application-api-layer]
 
-La plupart des projets utilisent Defjs directement au sein du dépôt d'une application (`src/api/`) pour remplacer des wrappers `fetch` ou `axios` dispersés. Même lorsque vous n'avez pas l'intention de publier un paquet npm externe, séparer `src/api/models/`, `src/api/services/` et `src/api/client.ts` permet de garder votre couche de requêtes fortement typée, testable en mémoire et sûre aussi bien dans le navigateur qu'en SSR.
+La plupart des projets utilisent Defjs directement au sein du dépôt d'une application (`src/api/`) pour remplacer des wrappers `fetch` ou `axios` dispersés. Même lorsque vous n'avez pas l'intention de publier un paquet npm externe, séparer `src/api/schema/`, `src/api/request/` et `src/api/client.ts` permet de garder votre couche de requêtes fortement typée, testable en mémoire et sûre aussi bien dans le navigateur qu'en SSR.
 
 ---
 
@@ -16,9 +16,9 @@ Organisez la couche de requêtes de votre projet en trois parties ciblées sous 
 ```text
 src/
 ├── api/
-│   ├── models/           # 1. Schémas struct partagés + types Infer<typeof ...>
+│   ├── schema/           # 1. Schémas struct partagés + types Infer<typeof ...>
 │   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
-│   ├── services/         # 2. Définitions d'opérations pures regroupées par domaine
+│   ├── request/         # 2. Définitions d'opérations pures regroupées par domaine
 │   │   └── orders.ts     #    getOrder, listOrders, createOrder
 │   └── client.ts         # 3. Client détenu par l'application (endpoint, intercepteur d'auth, réessai)
 └── checkout.ts           # 4. Logique métier / composants UI appelant les opérations
@@ -28,16 +28,16 @@ src/
 
 ## 2. Exemple complet au sein d'une application
 
-<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+<Tabs items={["src/api/schema/order.ts", "src/api/request/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
   <Tab>
-<include cwd meta='title="src/api/models/order.ts"'>
-  examples/best-practices/application-api/src/api/models/order.ts#example
+<include cwd meta='title="src/api/schema/order.ts"'>
+  examples/best-practices/application-api/src/api/schema/order.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/api/services/orders.ts"'>
-  examples/best-practices/application-api/src/api/services/orders.ts#example
+<include cwd meta='title="src/api/request/orders.ts"'>
+  examples/best-practices/application-api/src/api/request/orders.ts#example
 </include>
 
   </Tab>
@@ -64,7 +64,7 @@ src/
 ### Singleton navigateur vs client par requête en SSR
 
 - **Navigateur / SPA (`apiClient`)** : Exportez une unique instance `createClient(...)` à portée de module par origine backend. Partager cette instance préserve l'état de santé du répartiteur de charge ainsi que le budget de réessais HTTP au niveau du client au fil des interactions sur la page. Dans les applications React ou Vue, fournissez `apiClient` à la racine via [`@defjs/react`](/fr-FR/docs/integrations/react) (`ClientProvider` / `useClient`) ou [`@defjs/vue`](/fr-FR/docs/integrations/vue) (`createClientPlugin` / `injectClient`).
-- **SSR / BFF (`createServerApiClient(accessToken)`)** : Chaque fois que les identifiants, les cookies ou les en-têtes de locataire varient selon la requête HTTP entrante, appelez une fonction de fabrique dans votre gestionnaire de requêtes serveur afin de créer un `Client` isolé. Comme `getOrder`, `listOrders` et `createOrder` sont des fonctions pures, exactement les mêmes définitions de `services/orders.ts` fonctionnent à la fois avec `apiClient` et `createServerApiClient(token)`.
+- **SSR / BFF (`createServerApiClient(accessToken)`)** : Chaque fois que les identifiants, les cookies ou les en-têtes de locataire varient selon la requête HTTP entrante, appelez une fonction de fabrique dans votre gestionnaire de requêtes serveur afin de créer un `Client` isolé. Comme `getOrder`, `listOrders` et `createOrder` sont des fonctions pures, exactement les mêmes définitions de `request/orders.ts` fonctionnent à la fois avec `apiClient` et `createServerApiClient(token)`.
 
 ### Délais d'expiration et annulation par appel
 
@@ -83,6 +83,6 @@ const [err, created] = await createOrder(
 
 ### Enveloppe d'erreur partagée (`ApiError`)
 
-Déclarez une seule fois l'enveloppe d'erreur standard de votre backend (`export const ApiError = struct.object(...)`) dans `src/api/models/` et passez `error: ApiError` sur chaque `defineRequest` de `src/api/services/`. Lorsqu'une requête renvoie un statut autre que `2xx`, l'affinement de type `if (err.code === "HTTP_STATUS")` dans `if (err)` vous donne un accès fortement typé à `err.data.code`, `err.data.message` et `err.data.requestId`.
+Déclarez une seule fois l'enveloppe d'erreur standard de votre backend (`export const ApiError = struct.object(...)`) dans `src/api/schema/` et passez `error: ApiError` sur chaque `defineRequest` de `src/api/request/`. Lorsqu'une requête renvoie un statut autre que `2xx`, l'affinement de type `if (err.code === "HTTP_STATUS")` dans `if (err)` vous donne un accès fortement typé à `err.data.code`, `err.data.message` et `err.data.requestId`.
 
 Consultez [Conventions d'ingénierie](/fr-FR/docs/best-practices), [Conception de SDK public](/fr-FR/docs/public-sdk), [Client](/fr-FR/docs/client) et [Intercepteurs](/fr-FR/docs/interceptors).

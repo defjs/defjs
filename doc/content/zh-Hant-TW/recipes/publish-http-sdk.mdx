@@ -1,11 +1,11 @@
 ---
 title: "建置並發布 SDK"
-description: 以 models 與純函式操作定義建構多模組 S3 SDK，發布為 npm 套件，並讓每個應用程式自行設定 Client。
+description: 以 schema 與純函式操作定義建構多模組 S3 SDK，發布為 npm 套件，並讓每個應用程式自行設定 Client。
 ---
 
 # 建置並發布 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs SDK 將共用的 `struct` 資料模型（`src/models/`）與依業務領域劃分的操作定義模組（`src/services/`）組織為可按需 tree-shake 的 npm 套件，同時把 `createClient(...)`、端點、憑證與攔截器全都留給取用端應用程式。
+Defjs SDK 將共用的 `struct` schema（`src/schema/`）與依業務領域劃分的操作定義模組（`src/request/`）組織為可按需 tree-shake 的 npm 套件，同時把 `createClient(...)`、端點、憑證與攔截器全都留給取用端應用程式。
 
 不同於傳統 OpenAPI 產生器將端點封裝在帶狀態的 `Service` 類別（例如 `ObjectsService.putObject(...)`）中，Defjs SDK **只匯出獨立的純函式操作定義**（`putObject`、`getObject`、`listObjectsV2`），在應用程式端直接傳入 `client` 呼叫。
 
@@ -15,37 +15,37 @@ Defjs SDK 將共用的 `struct` 資料模型（`src/models/`）與依業務領�
 
 以相容 Amazon S3 協定的物件儲存 SDK（`@company/s3-sdk`）為例，將套件拆分為兩層：
 
-- **`src/models/`**：跨端點重用的 `struct` schema 與 `Infer<typeof ...>` TypeScript 型別（利用相同名稱同時匯出值與型別，讓取用端只匯入單一識別字即可同時用作執行時期 schema 與靜態型別）。
-- **`src/services/`**：依資源領域劃分的操作模組（`buckets.ts`、`objects.ts`）。每個模組只匯出獨立的 `defineRequest` 純函式，透過同步純函式 `builder` 將呼叫端的扁平輸入分發至 `path`、`query`、`headers` 與二進位 `body`。
+- **`src/schema/`**：跨端點重用的 `struct` schema 與 `Infer<typeof ...>` TypeScript 型別（利用相同名稱同時匯出值與型別，讓取用端只匯入單一識別字即可同時用作執行時期 schema 與靜態型別）。
+- **`src/request/`**：依資源領域劃分的操作模組（`buckets.ts`、`objects.ts`）。每個模組只匯出獨立的 `defineRequest` 純函式，透過同步純函式 `builder` 將呼叫端的扁平輸入分發至 `path`、`query`、`headers` 與二進位 `body`。
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>

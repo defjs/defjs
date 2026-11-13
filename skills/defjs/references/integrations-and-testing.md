@@ -306,21 +306,21 @@ test("postOrder encodes wire aliases and decodes 201 and 400 responses", async (
 
 ## 5. In-app API layer & public SDK architecture
 
-Defjs supports two primary project layouts that share the same `models/` + `services/` (pure operation functions) structure:
+Defjs supports two primary project layouts that share the same `schema/` + `request/` (pure operation functions) structure:
 
-| Scenario                                                                                                                                   | Layout                                                            | Who owns `createClient(...)`?                                                                        |
-| :----------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------- |
-| **Application API layer (`src/api/`)** — Hand-writing HTTP/realtime requests inside an app repository (replacing `axios`/`fetch` wrappers) | `src/api/models/` + `src/api/services/` + `src/api/client.ts`     | Your app (`src/api/client.ts` exports a browser singleton `apiClient` or an SSR per-request factory) |
-| **Public SDK package (`@company/s3-sdk`)** — Publishing an external npm SDK for a company's public API                                     | `src/models/` + `src/services/` + `src/index.ts` (`package.json`) | External consumer applications (the SDK package never creates or captures a `Client`)                |
+| Scenario                                                                                                                                   | Layout                                                           | Who owns `createClient(...)`?                                                                        |
+| :----------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------- |
+| **Application API layer (`src/api/`)** — Hand-writing HTTP/realtime requests inside an app repository (replacing `axios`/`fetch` wrappers) | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`     | Your app (`src/api/client.ts` exports a browser singleton `apiClient` or an SSR per-request factory) |
+| **Public SDK package (`@company/s3-sdk`)** — Publishing an external npm SDK for a company's public API                                     | `src/schema/` + `src/request/` + `src/index.ts` (`package.json`) | External consumer applications (the SDK package never creates or captures a `Client`)                |
 
 ```text
 @company/s3-sdk/ (or src/api/ inside an app repo)
 ├── src/
-│   ├── models/           # Shared struct schemas + Infer<typeof ...> same-name types
+│   ├── schema/           # Shared struct schemas + Infer<typeof ...> same-name types
 │   │   ├── common.ts     # S3Error, StorageClass
 │   │   ├── bucket.ts     # Bucket, ListBucketsOutput
 │   │   └── object.ts     # ObjectSummary, ListObjectsOutput
-│   ├── services/         # Domain modules grouped by resource tag
+│   ├── request/         # Domain modules grouped by resource tag
 │   │   ├── buckets.ts    # listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts    # listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts          # Flat barrel re-exports (or client.ts in an in-app src/api/ layer)
@@ -329,15 +329,15 @@ Defjs supports two primary project layouts that share the same `models/` + `serv
 ```
 
 - **Architecture rules**:
-  1. **Pure functions, never `Service` classes**: Unlike legacy OpenAPI generators that wrap endpoints in stateful classes (`ObjectsService.putObject(...)` or `new S3Client()`), every operation in `src/services/*.ts` is exported directly as a standalone `defineRequest` / `defineEventStream` / `defineWebSocket` value and called as `await putObject(client, input)` or `await getObject(client({ signal }), input)`. Never wrap operations in a `class` or a namespace object—standalone exports preserve per-call `client(options)` derivation and allow bundlers to tree-shake unused operations when `"sideEffects": false` is set.
-  2. **Same-name `struct` + `Infer` exports in `models/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
-  3. **Keep `services/*.ts` client-free in both scenarios**: Even inside an application's `src/api/`, never import `apiClient` inside `src/api/services/*.ts`. Keep `createClient(...)` in `src/api/client.ts` so operations remain directly testable with `withHTTPHandle` and reusable across browser singletons and SSR per-request clients.
+  1. **Pure functions, never `Service` classes**: Unlike legacy OpenAPI generators that wrap endpoints in stateful classes (`ObjectsService.putObject(...)` or `new S3Client()`), every operation in `src/request/*.ts` is exported directly as a standalone `defineRequest` / `defineEventStream` / `defineWebSocket` value and called as `await putObject(client, input)` or `await getObject(client({ signal }), input)`. Never wrap operations in a `class` or a namespace object—standalone exports preserve per-call `client(options)` derivation and allow bundlers to tree-shake unused operations when `"sideEffects": false` is set.
+  2. **Same-name `struct` + `Infer` exports in `schema/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
+  3. **Keep `request/*.ts` client-free in both scenarios**: Even inside an application's `src/api/`, never import `apiClient` inside `src/api/request/*.ts`. Keep `createClient(...)` in `src/api/client.ts` so operations remain directly testable with `withHTTPHandle` and reusable across browser singletons and SSR per-request clients.
   4. **Public SDK package metadata**: When publishing an external SDK package, declare `"@defjs/core": "^0.8.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
 
-### Best practice: hand-written S3 SDK (`models/` + `services/` + application consumer)
+### Best practice: hand-written S3 SDK (`schema/` + `request/` + application consumer)
 
 ```ts
-// src/models/common.ts
+// src/schema/common.ts
 import { struct, type Infer } from "@defjs/core";
 
 export const StorageClass = struct.enum([
@@ -357,7 +357,7 @@ export type S3Error = Infer<typeof S3Error>;
 ```
 
 ```ts
-// src/models/object.ts
+// src/schema/object.ts
 import { struct, type Infer } from "@defjs/core";
 import { StorageClass } from "./common.ts";
 
@@ -384,10 +384,10 @@ export type ListObjectsOutput = Infer<typeof ListObjectsOutput>;
 ```
 
 ```ts
-// src/services/objects.ts
+// src/request/objects.ts
 import { defineRequest, struct, type Infer } from "@defjs/core";
-import { S3Error, StorageClass } from "../models/common.ts";
-import { ListObjectsOutput } from "../models/object.ts";
+import { S3Error, StorageClass } from "../schema/common.ts";
+import { ListObjectsOutput } from "../schema/object.ts";
 
 // Wrong: wrapping operations in a Service class or capturing a client
 // export class ObjectsService {

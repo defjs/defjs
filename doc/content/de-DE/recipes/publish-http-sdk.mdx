@@ -1,11 +1,11 @@
 ---
 title: "SDK entwickeln und veröffentlichen"
-description: Strukturiere ein mehrmoduliges S3-SDK mit Modellen und reinen Funktions-Operationsdefinitionen, veröffentliche es als npm-Paket und lasse jede Anwendung ihren eigenen Client konfigurieren.
+description: Strukturiere ein mehrmoduliges S3-SDK mit Schemas und reinen Funktions-Operationsdefinitionen, veröffentliche es als npm-Paket und lasse jede Anwendung ihren eigenen Client konfigurieren.
 ---
 
 # SDK entwickeln und veröffentlichen [#publish-an-http-sdk-without-hiding-execute]
 
-Ein Defjs-SDK organisiert gemeinsame `struct`-Modelle (`src/models/`) und Domänen-Operationsmodule (`src/services/`) in einem per Tree-Shaking optimierbaren npm-Paket, während `createClient(...)`, Endpunkte, Zugangsdaten und Interceptors vollständig in der konsumierenden Anwendung verbleiben.
+Ein Defjs-SDK organisiert gemeinsame `struct`-Schemas (`src/schema/`) und Domänen-Operationsmodule (`src/request/`) in einem per Tree-Shaking optimierbaren npm-Paket, während `createClient(...)`, Endpunkte, Zugangsdaten und Interceptors vollständig in der konsumierenden Anwendung verbleiben.
 
 Im Gegensatz zu klassischen OpenAPI-Generatoren, die Endpunkte in zustandsbehaftete `Service`-Klassen kapseln (`ObjectsService.putObject(...)`), exportiert ein Defjs-SDK **eigenständige reine Operationsfunktionen** (`putObject`, `getObject`, `listObjectsV2`), die direkt mit dem Client der Anwendung aufgerufen werden.
 
@@ -15,37 +15,37 @@ Im Gegensatz zu klassischen OpenAPI-Generatoren, die Endpunkte in zustandsbehaft
 
 Am Beispiel eines zu Amazon S3 kompatiblen Objektspeicher-SDKs (`@company/s3-sdk`) teilen wir das Paket in zwei Schichten auf:
 
-- **`src/models/`**: Gemeinsame `struct`-Schemas und `Infer<typeof ...>`-TypeScript-Typen (mit gleichnamigen Wert- und Typ-Exporten, sodass Konsumenten einen einzigen Bezeichner sowohl für Laufzeit-Schemas als auch für statische Typen importieren können).
-- **`src/services/`**: Nach Ressource gruppierte Domänenmodule (`buckets.ts`, `objects.ts`). Jedes Modul exportiert eigenständige `defineRequest`-Funktionen, deren synchroner `builder` eine flache Aufrufer-Eingabe auf `path`, `query`, `headers` und einen binären `body` verteilt.
+- **`src/schema/`**: Gemeinsame `struct`-Schemas und `Infer<typeof ...>`-TypeScript-Typen (mit gleichnamigen Wert- und Typ-Exporten, sodass Konsumenten einen einzigen Bezeichner sowohl für Laufzeit-Schemas als auch für statische Typen importieren können).
+- **`src/request/`**: Nach Ressource gruppierte Domänenmodule (`buckets.ts`, `objects.ts`). Jedes Modul exportiert eigenständige `defineRequest`-Funktionen, deren synchroner `builder` eine flache Aufrufer-Eingabe auf `path`, `query`, `headers` und einen binären `body` verteilt.
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>

@@ -7,7 +7,7 @@ description: Concevez et publiez un SDK TypeScript sans client intégré et opti
 
 Lorsque votre entreprise ou votre équipe plateforme publie un SDK TypeScript officiel destiné à des développeurs externes (par exemple un SDK de stockage d'objets, un SDK de passerelle de paiement ou un SDK de plateforme SaaS), le paquet du SDK doit **définir le contrat réseau sans imposer l'environnement d'exécution**.
 
-En prenant pour modèle concret un **SDK compatible Amazon S3 (`@company/s3-sdk`)**, ce guide montre comment concevoir un SDK public multi-modules articulé autour de `models/` et de `services/` composés de fonctions pures.
+En prenant pour modèle concret un **SDK compatible Amazon S3 (`@company/s3-sdk`)**, ce guide montre comment concevoir un SDK public multi-modules articulé autour de `schema/` et de `request/` composés de fonctions pures.
 
 ---
 
@@ -24,16 +24,16 @@ Les SDK traditionnels embarquent une classe de client lourde (`new S3Client({ re
 
 ## 2. Structure de répertoires du paquet
 
-Découpez le paquet du SDK en `src/models/` (structures de données) et `src/services/` (définitions d'opérations pures regroupées par ressource), avec un fichier barrel à plat `src/index.ts` :
+Découpez le paquet du SDK en `src/schema/` (structures de données) et `src/request/` (définitions d'opérations pures regroupées par ressource), avec un fichier barrel à plat `src/index.ts` :
 
 ```text
 @company/s3-sdk/
 ├── src/
-│   ├── models/                 # 1. Schémas struct partagés + types Infer<typeof ...>
+│   ├── schema/                 # 1. Schémas struct partagés + types Infer<typeof ...>
 │   │   ├── common.ts           #    StorageClass, S3Error
 │   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
 │   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
-│   ├── services/               # 2. Fonctions defineRequest pures par domaine de ressource
+│   ├── request/               # 2. Fonctions defineRequest pures par domaine de ressource
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. Exports barrel pour les imports racine et compatibles tree-shaking
@@ -45,34 +45,34 @@ Découpez le paquet du SDK en `src/models/` (structures de données) et `src/ser
 
 ## 3. Implémentation complète du SDK S3
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
