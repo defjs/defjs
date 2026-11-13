@@ -5,77 +5,86 @@ description: Consume un SDK independiente del framework con un cliente que aport
 
 # React
 
-Importa operaciones de tu SDK o de un módulo de definición compartido. La aplicación React es dueña del cliente y lo proporciona a través de este plugin de framework; el paquete del SDK puede seguir siendo independiente de React y reutilizarlo otras aplicaciones.
+`@defjs/react` conecta un cliente `@defjs/core` propiedad de la aplicación en un árbol de componentes de React 18+ mediante React Context y `useClient()`. Tus definiciones de SDK se mantienen como módulos puros de `@defjs/core` con cero dependencias de React.
 
-Estos plugins son ayudas opcionales para proporcionar y leer un `Client` existente. Importa un cliente fijo que posee la aplicación, pasa un `Client` de forma explícita a la lógica reutilizable, usa la inyección del framework para valores por defecto y sustituciones a nivel de árbol, o elige tu propia organización. Las definiciones del SDK no requieren estos plugins.
+```sh
+bun add @defjs/core @defjs/react react
+```
 
-Conecta un cliente `@defjs/core` existente a un árbol React. Obtienes Context y `useClient()`. El paquete **no** crea un cliente, no añade caché, no reintenta operaciones ni libera recursos de transporte. El componente, effect o librería de datos que arranca el trabajo es su dueño. El cliente de `useClient()` se pasa a la operación. El hook devuelve el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que se proporcionó. Para opciones por llamada como `signal`, llámalo donde se ejecuta la operación: `getUser(client({ signal }), input)`. No lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater. `ClientProvider` y `useClient` no aceptan un valor `Client` derivado.
+## Lo que aporta `@defjs/react` frente a lo que controlas tú
 
-## Configuración básica
+- **Aportado por `@defjs/react`**: `ClientProvider` y `useClient(overrideClient?)`.
+- **Bajo el control de tu aplicación**: crear el [`DerivableClient`](/es-ES/api/core/derivableclient-type), cancelar peticiones en curso al desmontar o ante cambios de dependencias (`AbortController`), cerrar handles de SSE/WebSocket e integrar cachés de consultas como TanStack Query.
+- **Importante**: `useClient()` devuelve la función-objeto `DerivableClient`. Llama a `client({ signal })` donde se ejecuta la operación (`getOrder(client({ signal }), input)`). Nunca pases `client` directamente a `setState(client)` porque React trata cualquier argumento de función pasado a un setter de estado como una función de actualización.
 
-Instala `@defjs/core`, `@defjs/react` y React 18+. ESM:
+---
 
-`bun add @defjs/core @defjs/react react`
+## 1. Proveer el cliente y realizar peticiones en un efecto
 
-Proporciona el cliente, luego carga un usuario y aborta al cambiar:
+Crea el cliente en el límite de la aplicación, envuelve tu árbol con `<ClientProvider client={client}>` y aborta el trabajo en curso cuando el efecto se limpie:
 
-<include cwd>examples/react/client-provider.tsx#example</include>
+<Tabs items={["sdk/orders.ts", "app/App.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+    <include cwd>examples/integrations/react/sdk/orders.ts#example</include>
 
-<include cwd>examples/react/basic-setup.tsx#example</include>
+  </Tab>
+  <Tab>
+    <include cwd>examples/react/client-provider.tsx#example</include>
 
-`ClientProvider` es un provider de Context normal. Una prop `client` distinta cambia lo que ven los descendientes — sin clone, replace ni dispose. Los providers anidados crean límites explícitos.
+  </Tab>
+  <Tab>
+    <include cwd>examples/integrations/react/app/OrderCard.tsx#example</include>
 
-React puede montar y limpiar un effect más de una vez en desarrollo. La comprobación del signal evita que una promesa obsoleta escriba en el render actual. El error de la tupla sigue siendo data.
+  </Tab>
+</Tabs>
 
-## Leer con `useClient`
+- `ClientProvider` es un proveedor ligero de React Context. Pasar una prop `client` diferente actualiza lo que leen sus descendientes sin clonar ni destruir el cliente anterior.
+- En desarrollo (`StrictMode`), React monta y limpia los efectos más de una vez. Comprobar `controller.signal.aborted` evita que una respuesta desfasada sobreescriba el estado actual.
 
-`useClient(overrideClient)` da prioridad al cliente explícito; sin argumento o con `undefined`, lee el `ClientProvider` más cercano. Solo lanza un `Error` cuando ninguna de las dos fuentes proporciona un cliente. La llamada sin argumento `useClient()` sigue siendo válida.
+---
 
-Llama siempre a `useClient(explicitClient)` en el nivel superior de un componente o custom Hook, incluso con un cliente explícito; no en funciones normales ni callbacks de eventos. `explicitClient ?? useClient()` llama condicionalmente a un Hook y no es válido. La sustitución no escribe en Context ni crea un provider; el Hook sigue suscrito a Context.
+## 2. Leer y sobrescribir el cliente con `useClient`
+
+`useClient(overrideClient)` devuelve `overrideClient` cuando se proporciona, o lee el `ClientProvider` más cercano cuando se omite o es `undefined`. Solo lanza un `Error` si ninguna de las dos fuentes suministra un cliente.
 
 <include cwd>examples/react/read-with-use-client.tsx#example</include>
 
-El hook solo suministra el cliente. No arranca trabajo, no se suscribe a un transporte ni convierte la tupla error-first en una excepción.
+- Llama siempre a `useClient(explicitClient)` de forma incondicional en el nivel superior de un componente o custom Hook. Nunca escribas `explicitClient ?? useClient()`, ya que viola las Reglas de los Hooks.
 
-## Ser dueño del trabajo de query
+---
 
-Una librería de queries puede ser dueña de la caché, los reintentos, la supresión de resultados obsoletos y la cancelación. Pasa el signal que ella proporciona como `signal` en un cliente derivado. Para páginas de listas, llama a la operación desde TanStack Query (o similar): `@defjs/react` se queda solo en DI y **no** incluye `useRequest`.
+## 3. Integración con TanStack Query
+
+`@defjs/react` se limita a la inyección de dependencias y **no** incluye un hook `useRequest`. Al utilizar una biblioteca de obtención de datos como TanStack Query, reenvía la señal `signal` de la función de consulta mediante `client({ signal })` y convierte la tupla con error por delante dentro del adaptador de la consulta:
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
-`throw error` aquí es el canal de rechazo de la función de query, no la llamada Defjs por defecto. La tupla se inspecciona primero; solo este adaptador rechaza, para que la librería de queries registre el fallo.
+En este caso, `throw error` constituye una frontera explícita de adaptación exigida por el contrato de rechazo de TanStack Query, no el estilo de llamada predeterminado de Defjs.
 
-No arranques la misma operación en un segundo effect — dos dueños hacen ambigua la cancelación y el manejo de resultados obsoletos.
+---
 
-## Ser dueño del trabajo realtime
+## 4. Gestionar el ciclo de vida de SSE y WebSocket en efectos
 
-Los handles SSE y WebSocket sobreviven a la llamada a la operación. Registra la limpieza antes de esperar el arranque, cierra un handle que llega tras la liberación, consume su único iterador, espera su promesa terminal:
+Los handles de SSE y WebSocket sobreviven a la llamada inicial a `openStream(...)` o `connectChat(...)`. Pasa la señal de un `AbortController` a la operación y abórtala en la limpieza: la señal cubre el arranque y la sesión abierta. Toma posesión de la sesión con `await using` y consume su iterador asíncrono único:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-El `signal` pasado a la operación sigue gobernando una sesión abierta. Abortarlo en la limpieza termina la sesión como `aborted` y rechaza `receive` con `AbortError`, así que el `catch` de arriba ignora los errores una vez que el effect se libera y solo reporta fallos reales (desbordamiento de cola, timeout del acuse del heartbeat). Un stream SSE abortado, en cambio, termina su iterador con normalidad. Sin el `catch`, un rechazo del bucle sería un rechazo de promesa no manejado.
+- Abortar la señal `signal` pasada a una operación WebSocket finaliza la sesión como `aborted` y rechaza `session.receive` con `AbortError`. Protege el bloque `catch` con `controller.signal.aborted` para que solo emerjan errores auténticos de tiempo de ejecución (como un tiempo de espera de latidos).
+- Abortar un flujo SSE finaliza el bucle `for await (const msg of stream)` de forma limpia sin lanzar excepciones.
 
-Misma regla para `EventStreamHandle`: cierra en `finally`, await `stream.closed`. Los consumidores WebSocket también deben hacer unsubscribe de listeners de estado/runtime-error y seguir leyendo `session.receive` — una cola acotada sin leer puede hacer overflow.
+---
 
-## SSR y ámbito del cliente
+## 5. SSR y ámbito del proveedor
 
-La entrada del paquete es un límite de Client Component. Una app de navegador puede compartir un cliente a nivel de módulo cuando endpoint, interceptores y estado capturado son seguros para el navegador e independientes de la solicitud. Para SSR, crea un cliente separado dentro de cada límite de solicitud cuando cabeceras, cookies, usuarios, tenants o credenciales difieren.
+- **Navegador**: comparte un único cliente con ámbito de módulo cuando el endpoint y los interceptores sean independientes de la petición.
+- **SSR**: crea un cliente nuevo dentro del límite de cada petición del servidor siempre que las cabeceras, cookies, datos de tenant o credenciales varíen por petición.
+- Desmontar `<ClientProvider>` **no** cancela llamadas HTTP activas, no cierra conexiones SSE/WebSocket ni libera el cliente.
 
-El unmount del provider **no** aborta HTTP, no cierra SSE/WebSocket, no hace unsubscribe de listeners ni llama a `dispose`. `@defjs/react` no tiene esa API de ciclo de vida. El código que arranca cada operación debe terminarla o cancelarla.
+---
 
-## Referencia
+## Exportaciones públicas y guías relacionadas
 
-Exports públicos de `@defjs/react`:
-
-- `ClientProvider` — acepta `ClientProviderProps`, proporciona el cliente suministrado
-- `useClient` — cliente explícito primero; si no, el proporcionado más cercano; lanza si faltan ambos
-- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
-
-Crea clientes y opciones en `@defjs/core`. Ver [Cliente](/es-ES/docs/client), [Errores](/es-ES/docs/errors), [SSE](/es-ES/docs/sse) y [WebSocket](/es-ES/docs/web-socket).
-
-## Recetas relacionadas
-
-- [GET con un 404 declarado](/es-ES/recipes/get-declared-404)
-- [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)
-- [Consumir un stream SSE](/es-ES/recipes/consume-sse)
-- [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session)
+- `ClientProvider` — provee un `DerivableClient` (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
+- `useClient(overrideClient?)` — lee la sobreescritura explícita o el cliente provisto más cercano.
+- Guías relacionadas: [Cliente](/es-ES/docs/client), [Tratamiento de errores](/es-ES/docs/errors), [Flujos de eventos SSE](/es-ES/docs/sse), [Sesiones WebSocket](/es-ES/docs/web-socket).
+- Recetas relacionadas: [GET con una 404 declarada](/es-ES/recipes/get-declared-404), [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http), [Consumir eventos SSE](/es-ES/recipes/consume-sse), [Gestionar sesiones WebSocket](/es-ES/recipes/websocket-session).

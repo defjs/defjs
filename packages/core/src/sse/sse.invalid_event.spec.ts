@@ -1,12 +1,14 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   createClient,
   withEndpoint,
   withSSEHandle,
   withSSEOnInvalidEvent,
+  withRetry,
 } from "../client";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
+import { yieldMacrotask } from "../../test/macrotask";
 
 type InvalidEventObserver = Parameters<typeof withSSEOnInvalidEvent>[0];
 
@@ -15,21 +17,17 @@ const encoder = new TextEncoder();
 // `message` carries text, `count` a JSON number, and any other event name has no struct at all.
 const useStream = defineEventStream({
   events: { count: struct.number(), message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/events",
 });
 
-function nextTurn(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
+// Liveness guard, not a timing assertion: the awaited promise must settle while the test holds a dependency pending. The budget does not depend on machine speed.
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
-      100,
+      10_000,
     );
+    timeout.unref?.();
     promise.then(
       (value) => {
         clearTimeout(timeout);
@@ -78,19 +76,16 @@ async function openStream(options: {
 }) {
   const client = createClient(
     withEndpoint("https://api.example.com"),
-    withSSEHandle(
-      (async () =>
+    withSSEHandle(() =>
+      Promise.resolve(
         new Response(options.body, {
           headers: { "content-type": "text/event-stream" },
-        })) as unknown as typeof fetch,
+        }),
+      ),
     ),
-    ...(options.onInvalidEvent
-      ? [withSSEOnInvalidEvent(options.onInvalidEvent)]
-      : []),
+    withSSEOnInvalidEvent(options.onInvalidEvent),
   );
-  const [error, stream] = await useStream(
-    options.signal ? client({ signal: options.signal }) : client,
-  );
+  const [error, stream] = await useStream(client({ signal: options.signal }));
   expect(error).toBeNull();
   if (!stream) {
     throw new Error("Expected stream");
@@ -119,6 +114,50 @@ describe("event stream invalid events", () => {
     await stream.closed;
   });
 
+  test("should report the last committed event id for an invalid event after a reconnect", async () => {
+    let connections = 0;
+    const ids: string[] = [];
+    const client = createClient(
+      withEndpoint("https://api.example.com"),
+      withSSEHandle(() => {
+        connections += 1;
+        return Promise.resolve(
+          new Response(
+            connections === 1
+              ? new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(encoder.encode("id: 7\ndata: one\n\n"));
+                  },
+                  pull(controller) {
+                    controller.error(new TypeError("network down"));
+                  },
+                })
+              : "event: unknown\ndata: two\n\n",
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+        );
+      }),
+      withRetry({ maxRetries: 2, delayMs: 0 }),
+      withSSEOnInvalidEvent(({ message }) => {
+        ids.push(message.id);
+      }),
+    );
+    const [error, stream] = await useStream(client());
+    expect(error).toBeNull();
+    if (!stream) {
+      throw new Error("Expected stream");
+    }
+
+    const received: Array<string | undefined> = [];
+    for await (const event of stream) {
+      received.push(event.id);
+    }
+
+    expect(connections).toBe(2);
+    expect(received).toEqual(["7"]);
+    expect(ids).toEqual(["7"]);
+  });
+
   test("should finish an invalid event before the next event of the same chunk is delivered", async () => {
     const feed = createFeed();
     const log: string[] = [];
@@ -126,7 +165,7 @@ describe("event stream invalid events", () => {
       body: feed.body,
       async onInvalidEvent({ message, reason }) {
         // Work that takes real time: an event delivered meanwhile would reach the log before this one.
-        await nextTurn();
+        await yieldMacrotask();
         log.push(`${reason} ${message.data} done`);
       },
     });
@@ -166,7 +205,12 @@ describe("event stream invalid events", () => {
         received.push(String(event.data));
       }
     })();
-    await nextTurn();
+    // The body takes an unknown number of turns to arrive. The extra turn lets an out-of-order event show up.
+    await vi.waitFor(() => {
+      expect(received).toEqual(["one"]);
+      expect(observed).toEqual(["two"]);
+    });
+    await yieldMacrotask();
 
     // "one" comes before the invalid events and is out. While "two" is pending, nothing behind it is observed or delivered.
     expect(received).toEqual(["one"]);
@@ -236,7 +280,7 @@ describe("event stream invalid events", () => {
 
     // The observer failing afterwards changes nothing.
     gate.reject(new Error("observer failed late"));
-    await nextTurn();
+    await yieldMacrotask();
     await expect(stream.closed).resolves.toMatchObject({
       cause: reason,
       kind: "aborted",

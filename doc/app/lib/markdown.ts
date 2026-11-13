@@ -1,20 +1,6 @@
 import { apiEntries } from "../data/api-catalog";
-import { localePrefix } from "./i18n";
-interface TableField {
-  type: string;
-  required?: boolean;
-}
-function table(fields: Record<string, TableField>): string {
-  return (
-    "| Name | Type | Required |\n| --- | --- | --- |\n" +
-    Object.entries(fields)
-      .map(
-        ([name, field]) =>
-          `| ${name} | \`${field.type}\` | ${field.required ? "required" : "optional"} |`,
-      )
-      .join("\n")
-  );
-}
+import { localePrefix, type Locale } from "./i18n";
+import { tabItems } from "./tab-items";
 /** Applies `convert` to every line outside fenced code blocks. */
 export function mapOutsideFences(
   text: string,
@@ -35,13 +21,20 @@ export function mapOutsideFences(
     })
     .join("\n");
 }
-export function readableMarkdown(text: string, locale: string): string {
+export function readableMarkdown(text: string, locale: Locale): string {
   const prefix = localePrefix(locale);
+  // A `<Tab>` takes its heading from the enclosing `<Tabs items>` by position.
+  let items: string[] = [];
+  let tab = 0;
   return mapOutsideFences(text, (line) => {
+    if (/^\s*<Tabs\b/.test(line)) {
+      items = tabItems(line) ?? [];
+      tab = 0;
+    }
     const converted = line
       .replace(/^(#{1,6} .*?)\s*\[#[^\]]+\]$/, "$1")
       .replace(/<Tabs\b[^>]*>|<\/Tabs>|<\/Tab>/g, "")
-      .replace(/<Tab value="([^"]+)"\s*>/g, "### $1")
+      .replace(/^\s*<Tab>/g, () => `### ${items[tab++] ?? ""}`)
       .replace(/<ApiIndex\s*\/>/g, () =>
         apiEntries
           .map(
@@ -49,9 +42,6 @@ export function readableMarkdown(text: string, locale: string): string {
               `- [${entry.name}](${prefix}/api/${entry.slug}) — ${entry.package}, ${entry.kind}`,
           )
           .join("\n"),
-      )
-      .replace(/<TypeTable type=\{(\{.*\})\}\s*\/>/g, (_match, data: string) =>
-        table(JSON.parse(data)),
       );
     // `\<Type>` is an escaped type argument, not an MDX component.
     if (

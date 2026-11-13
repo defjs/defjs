@@ -13,7 +13,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
     source: "packages/core/src/client/client.ts",
     group: "client",
     description: "Creates a {@link Client}.\n\nSee {@link Client} again.",
-    signatures: ["function createClient(): Client;"],
     related: ["@defjs/core:Client"],
     exampleFiles: [
       {
@@ -29,7 +28,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
       { name: "internal", text: "hidden" },
     ],
     typeTable: [],
-    parameters: [],
     overloads: [
       {
         signature: "function createClient(): Client;",
@@ -44,7 +42,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
             tags: [],
           },
         ],
-        returns: [],
       },
     ],
     ...overrides,
@@ -56,15 +53,9 @@ test("the page view resolves links, examples and the owning overview", () => {
   expect(view.summary).toBe("Creates a Client.");
   expect(view.source).toBe("packages/core/src/client/client.ts");
   expect(view.group).toBe("client");
-  expect(view.description).toContain("[Client](/api/core/client-type)");
-  expect(view.description).not.toContain("Creates a");
-  expect(
-    buildApiEntryView(
-      entry({ description: "Only {@link Client}." }),
-      "en-US",
-      targets,
-    ).description,
-  ).toBe("");
+  expect(view.description).toBe(
+    "Creates a [Client](/api/core/client-type).\n\nSee [Client](/api/core/client-type) again.",
+  );
   expect(view.parameterTables).toEqual([
     {
       rows: [

@@ -5,6 +5,7 @@ import {
   createContext,
   createElement,
   useContext,
+  type ReactElement,
   type ReactNode,
 } from "react";
 
@@ -38,9 +39,7 @@ export interface ClientProviderProps {
 export function ClientProvider({
   client,
   children,
-}: ClientProviderProps): React.FunctionComponentElement<
-  React.ProviderProps<DerivableClient | null>
-> {
+}: ClientProviderProps): ReactElement {
   return createElement(HttpClientContext.Provider, { value: client }, children);
 }
 
@@ -51,7 +50,7 @@ export function ClientProvider({
  *
  * Always call `useClient(explicitClient)` at the top level of a component or custom Hook, even with an explicit client; not in an ordinary function or event callback. Do not write `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context or create a provider, and the Hook still subscribes to Context.
  *
- * The returned value is the exact `DerivableClient` that was supplied. Call it with request options at the call site to derive a `Client` value for one call: `getUser(client({ signal }), input)`. It is a function, so do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater. The provider holds only a root client; a derived `Client` value is not accepted, so create it where the operation is called.
+ * The returned value is the exact `DerivableClient` that was supplied. Call it with request options at the call site to derive a `Client` value for one call: `getOrder(client({ signal }), input)`. It is a function, so do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater. The provider holds only a root client; a derived `Client` value is not accepted, so create it where the operation is called.
  *
  * @param overrideClient - Derivable client to use before context; `undefined` uses the provider.
  * @returns The selected derivable client.

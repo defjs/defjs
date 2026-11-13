@@ -7,11 +7,9 @@ import {
 } from "@defjs/core";
 
 const client = createClient(withEndpoint("https://api.example.com"));
-const notifications = defineEventStream({
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 100,
-  path: "/notifications",
-  events: { message: struct.string() },
+const deployEvents = defineEventStream({
+  path: "/deployments/events",
+  events: { line: struct.string() },
 });
 
 async function openDuringStartup(abortAfterMs: number) {
@@ -19,7 +17,7 @@ async function openDuringStartup(abortAfterMs: number) {
   const timer = setTimeout(() => {
     controller.abort(new DOMException("startup deadline", "TimeoutError"));
   }, abortAfterMs);
-  const [error, stream] = await notifications(
+  const [error, stream] = await deployEvents(
     client({ signal: controller.signal }),
   );
   clearTimeout(timer);
@@ -30,6 +28,4 @@ async function openDuringStartup(abortAfterMs: number) {
   stream.close("opened");
   await stream.closed;
 }
-
-void openDuringStartup;
 // #endregion

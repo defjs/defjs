@@ -9,13 +9,15 @@ function triage(fault: AnyFault): string {
     case "RES_DECODE_FAILED":
     case "RES_STRUCT_MISMATCH":
       return "the contract did not hold";
-    case "NET_TIMEOUT":
     case "NET_ABORTED":
+      return "the caller canceled";
+    case "NET_TIMEOUT":
+      return "the deadline expired";
     case "NET_UNREACHABLE":
+      return "no response arrived";
     case "NET_BODY_INCOMPLETE":
-      return "retryable";
+      return "the response was cut short";
     case "REQ_INPUT_INVALID":
-    case "REQ_OPTIONS_INVALID":
     case "REQ_BUILD_FAILED":
       return "fix the call";
     case "EXT_INTERCEPTOR_FAILED":
@@ -23,8 +25,7 @@ function triage(fault: AnyFault): string {
     case "EXT_OBSERVER_FAILED":
       return "fix the code you attached";
     case "CAP_BUFFER_EXCEEDED":
-    case "CAP_QUEUE_OVERFLOW":
-      return "raise a declared limit or read faster";
+      return "raise the declared limit";
     case "ENV_UNSUPPORTED":
       return "the host runtime is missing something";
   }

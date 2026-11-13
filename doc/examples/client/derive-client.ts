@@ -2,12 +2,12 @@
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
 
 const client = createClient(withEndpoint("https://api.example.com"));
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
 });
 
 async function main(signal: AbortSignal) {
@@ -17,13 +17,11 @@ async function main(signal: AbortSignal) {
       console.log(event.loaded);
     },
   });
-  const [error, user] = await getUser(requestClient, { id: 1 });
+  const [error, order] = await getOrder(requestClient, { id: 1 });
   if (error) {
     console.error(error.code);
     return;
   }
-  console.log(user.name);
+  console.log(order.status);
 }
-
-void main;
 // #endregion

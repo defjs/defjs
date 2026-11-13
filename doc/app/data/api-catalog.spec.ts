@@ -1,9 +1,5 @@
 import { expect, test, vi } from "vitest";
-import {
-  apiEntries,
-  filterApiEntries,
-  validateApiEntries,
-} from "./api-catalog";
+import { apiEntries, filterApiEntries } from "./api-catalog";
 import type { ApiEntry } from "./api-catalog";
 const entries: ApiEntry[] = [
   {
@@ -11,21 +7,21 @@ const entries: ApiEntry[] = [
     name: "createClient",
     kind: "function",
     slug: "core/create-client",
-    related: [],
+    description: "Creates.",
   },
   {
     package: "@defjs/react",
     name: "createClient",
     kind: "function",
     slug: "react/create-client",
-    related: [],
+    description: "Creates.",
   },
   {
     package: "@defjs/core",
     name: "ClientOption",
     kind: "type",
     slug: "core/client-option",
-    related: [],
+    description: "Creates.",
   },
 ];
 test("API search ignores case and combines package and category filters", () => {
@@ -36,16 +32,16 @@ test("API search ignores case and combines package and category filters", () => 
   ).toEqual(["core/create-client"]);
   expect(filterApiEntries(entries, "", "", "function")).toHaveLength(2);
   expect(filterApiEntries(entries, "missing", "", "")).toEqual([]);
-  expect(() => validateApiEntries(entries)).not.toThrow();
 });
 test("API search matches ASCII identifiers independently of Turkish locale folding", () => {
-  const localeLowerCase = String.prototype.toLocaleLowerCase;
+  const localeLowerCase = Reflect.get(String.prototype, "toLocaleLowerCase");
   const turkishFold = vi
     .spyOn(String.prototype, "toLocaleLowerCase")
     .mockImplementation(function (this: string) {
-      return localeLowerCase.call(this, "tr-TR");
+      return Reflect.apply(localeLowerCase, this, ["tr-TR"]);
     });
   try {
+    expect("I".toLocaleLowerCase()).toBe("ı");
     expect(
       filterApiEntries(
         apiEntries,
@@ -70,21 +66,4 @@ test("API search matches ASCII identifiers independently of Turkish locale foldi
   } finally {
     turkishFold.mockRestore();
   }
-});
-test("API identities, slugs and related targets are validated before rendering", () => {
-  const first = entries[0],
-    second = entries[1];
-  if (!first || !second) throw new Error("Missing fixture entries");
-  expect(() =>
-    validateApiEntries([...entries, { ...first, slug: "unique" }]),
-  ).toThrow("identity");
-  expect(() =>
-    validateApiEntries([{ ...first, related: ["@defjs/core:Missing"] }]),
-  ).toThrow("related");
-  expect(() =>
-    validateApiEntries([
-      { ...first },
-      { ...second, slug: "core/create-client" },
-    ]),
-  ).toThrow("slug");
 });

@@ -5,18 +5,28 @@ description: Open a typed event stream, iterate once, then close and await close
 
 # Consume an SSE stream
 
-One async iterator per stream. Put `close` + `await stream.closed` in `finally` so early exits don’t leak the Fetch attempt.
+Each `EventStreamHandle` exposes a single async iterator. Always place `stream.close(...)` and `await stream.closed` inside a `finally` block so early `break` or `return` statements never leak the underlying Fetch stream:
 
-See [SSE](/docs/sse) for details.
-
-<include cwd meta="notifications.ts">
-  examples/recipes/consume-sse.ts#example
+<Tabs items={["sdk/deployments.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
 </include>
 
-`api.example.com` is a placeholder. With a server whose first event is `message` with the data `{ "text": "hello from the server" }`, the snippet prints:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+With a server whose first event is `line` with data `{ "text": "build started" }`, the script prints:
 
 ```txt
-hello from the server
+build started
 ```
 
-SSE does not retry network/read failures unless you enable `withSSEReconnect(...)`. With a reconnect object, `attempts` defaults to `3` per outage; a successful handshake resets the budget and backoff exponent. `attempts: 0` disables retry. Invalid numeric reconnect options fail before any request with `REQ_OPTIONS_INVALID`; see [validation rules](/api/core/withssereconnect). Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests reconnect, and a `ReadableStream` request body never does.
+- SSE does not automatically reconnect on network or read failures unless you configure [`withRetry(...)`](/api/core/withretry) on the client.
+- When `withRetry(...)` is set, `maxRetries` defaults to `3` per outage and resets on a successful handshake (`maxRetries: 0` disables retries). Without a custom `shouldRetry`, only `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, and `DELETE` requests are retried. A request with a `ReadableStream` body never is. See [SSE event streams](/docs/sse).

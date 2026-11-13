@@ -1,92 +1,81 @@
 ---
 title: Defjs
-description: Diseña y publica SDK de TypeScript con definiciones de API reutilizables y clientes que posee la aplicación.
+description: Diseña y publica SDKs de TypeScript con definiciones de API reutilizables y clientes bajo el control de la aplicación.
 ---
 
 # Defjs
 
-**Diseñado para mejores SDK.**
+**Define el contrato de la API una sola vez. Configura la ejecución en cada aplicación.**
 
-Defjs ayuda a los equipos a convertir sus API en SDK de TypeScript reutilizables. `def` significa `define`: describe las operaciones que ofrece tu servicio, expórtalas desde un módulo o un paquete npm y deja que cada aplicación configure su propio cliente para llamarlas.
+Defjs separa los dos lados de un SDK de TypeScript:
 
-## Define el SDK, configura la aplicación
+- **Definición del SDK (`@defjs/core`)** — Quienes crean el SDK declaran operaciones tipadas de HTTP, SSE y WebSocket junto con sus esquemas `struct`. Una definición es solo dato puro: importarla no inicia ninguna petición de red ni la enlaza a un cliente global.
+- **Ejecución en la aplicación** — Las aplicaciones consumidoras crean su propio `Client` (`createClient(withEndpoint(...))`), configuran credenciales, interceptores y balanceadores de carga, y pasan ese cliente al llamar a cada operación.
 
-| Autor del SDK                                                             | Consumidor del SDK                                                                    |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Definir operaciones, entrada, mapeo de la solicitud, respuestas y errores | Elegir la dirección del servicio, las credenciales, los interceptores y el transporte |
-| Exportar endpoints tipados de HTTP, SSE y WebSocket                       | Importar esos endpoints y llamarlos con un cliente Defjs                              |
-| Mantener y publicar el contrato de la API                                 | Tratar resultados y ser dueño de la cancelación, los streams y las sesiones           |
+## Vistazo rápido: definición del SDK frente a ejecución en la aplicación
 
-Una definición de SDK no captura un cliente de aplicación. El mismo endpoint exportado puede servir a una aplicación de navegador, a un servidor o a una prueba local con configuraciones de cliente distintas. Los dos lados siguen usando el contrato de ejecución de Defjs y versiones compatibles de Core.
-
-El SDK exporta una operación:
+<Tabs items={["get-health.ts", "app.ts"]}>
+<Tab>
 
 <include cwd meta="get-health.ts">
   examples/home/get-health.ts#example
 </include>
 
-La aplicación la importa y es dueña de la ejecución:
+</Tab>
+<Tab>
 
 <include cwd meta="app.ts">
   examples/home/app.ts#example
 </include>
 
-Llamar a `getHealth(client)` arranca la solicitud. Cuando publiques la definición, los consumidores la importan desde tu paquete de SDK en lugar del archivo local.
+</Tab>
+</Tabs>
 
-## Práctica recomendada
+Al llamar a `getHealth(client)` se realiza la E/S y se resuelve una tupla con el error por delante (_error-first_). Comprueba `if (error)` y sal de la función antes de leer el resultado decodificado.
 
-Una definición permanece independiente del cliente. Pasa el cliente de la aplicación como primer argumento, como en `getHealth(client)`. La aplicación también es dueña de la dirección del servicio y de las credenciales. Inspecciona primero la tupla error-first. Si `error` está presente, informa `error.code` y sal de la función antes de leer el valor de éxito.
+## ¿Por qué separar las definiciones de los clientes?
 
-## Construye tu SDK
+| Responsabilidad | Autor del SDK (Definición)                                                                                               | Aplicación (Ejecución)                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| **Controla**    | Método, plantilla de ruta, esquemas de `input` / `output` / `error`, mapeo en `builder` y nombre estático de `operation` | URLs base, credenciales, interceptores de autenticación, balanceo de carga, tiempos de espera y liberación de recursos |
+| **Distribuye**  | Módulos ESM reutilizables y declaraciones `.d.ts`                                                                        | Configuración para el runtime de navegador, servidor o entornos de prueba                                              |
+| **Ventaja**     | Cero acoplamiento al entorno; funciona en navegador, SSR y tests                                                         | Control total sobre reintentos, failover, telemetría y ciclo de vida                                                   |
 
-1. [Define y ejecuta tu primera operación](/es-ES/docs/start) en archivos separados de SDK y de aplicación.
-2. Describe los [contratos de datos](/es-ES/docs/struct) y las [operaciones HTTP](/es-ES/docs/http) que exporta tu SDK.
-3. [Prueba y publica un paquete de SDK](/es-ES/recipes/publish-http-sdk) con JavaScript, declaraciones y una dependencia de Core compatible.
-4. Configura el [Client](/es-ES/docs/client) de la aplicación consumidora y añade después la integración de framework u observabilidad donde haga falta.
+## Elige tu camino
 
-Las [decisiones de diseño](/es-ES/docs/design-decisions) explican por qué las definiciones de API y la ejecución tienen dueños distintos. Puedes usar esta misma estructura dentro de una sola aplicación antes de publicar un paquete.
+1. **[Inicio rápido](/es-ES/docs/start)** — Define una operación, pruébala sin conexión con un handle Fetch local y conéctala a un servicio real.
+2. **[Arquitectura central](/es-ES/docs/design-decisions)** — Comprende las seis reglas de decodificación de respuestas, las tuplas de error por delante y la propiedad de los recursos.
+3. **[Definir SDKs](/es-ES/docs/struct)** — Declara contratos de red con [Struct](/es-ES/docs/struct) y exporta operaciones [HTTP](/es-ES/docs/http), [SSE](/es-ES/docs/sse) y [WebSocket](/es-ES/docs/web-socket).
+4. **[Cliente y ejecución](/es-ES/docs/client)** — Configura [Clientes](/es-ES/docs/client), gestiona [Errores](/es-ES/docs/errors) tipados, añade [Interceptores](/es-ES/docs/interceptors), configura el [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing) y ejecuta [Pruebas](/es-ES/docs/testing) deterministas.
 
-## Elige un transporte
+## Transportes compatibles y tuplas de resultado
 
-| Necesitas                                      | Empieza por                         | Resultado correcto                                                               |
-| ---------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
-| Solicitud + respuesta según el estado          | [HTTP](/es-ES/docs/http)            | Datos decodificados + `DecodedResponse` (`HttpMeta` cuando no se declara output) |
-| Feed de eventos del servidor de larga duración | [SSE](/es-ES/docs/sse)              | Un stream + snapshot de arranque `open`                                          |
-| Sesión bidireccional                           | [WebSocket](/es-ES/docs/web-socket) | Una sesión + snapshot de arranque `connection`                                   |
+Cada operación devuelve una tupla de tres elementos con el error en la primera posición, adaptada al ciclo de vida de su transporte:
 
-Los tres transportes siguen la misma secuencia: define una operación y llámala con el cliente de la aplicación y la entrada de quien llama.
+| Transporte                              | Punto de entrada    | Forma de la tupla              | Control del ciclo de vida                                                      |
+| --------------------------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------------ |
+| **[HTTP](/es-ES/docs/http)**            | `defineRequest`     | `[error, data, response]`      | Cancela el trabajo en curso mediante `client({ signal })`                      |
+| **[SSE](/es-ES/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | Libera recursos con `await using` o `stream.close()` + `await stream.closed`   |
+| **[WebSocket](/es-ES/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | Libera recursos con `await using` o `session.close()` + `await session.closed` |
 
-## Elige un paquete
+Si una petición HTTP falla, la tupla es `[error, undefined, undefined]` porque `error` ya incluye los metadatos de respuesta `HttpMeta`. Para SSE y WebSocket, la tercera posición contiene la instantánea de conexión siempre que se haya capturado una antes del fallo.
 
-| Paquete                       | Cuándo                                                                                                       |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `@defjs/core`                 | Definir operaciones y contratos del SDK; crear clientes y llamar a operaciones HTTP, SSE y WebSocket         |
-| `@defjs/react`                | `ClientProvider` / `useClient` — ver [React](/es-ES/docs/integrations/react)                                 |
-| `@defjs/vue`                  | Plugin + `injectClient` — ver [Vue](/es-ES/docs/integrations/vue)                                            |
-| `@defjs/opentelemetry-server` | Spans, métricas y logs salientes — ver [OpenTelemetry Server](/es-ES/docs/integrations/opentelemetry-server) |
+## Paquetes oficiales
 
-## Formas del resultado
+| Paquete                       | Rol                                                                           | Guía                                                                          |
+| ----------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `@defjs/core`                 | Definiciones de SDK sin dependencias, `struct`, cliente e interceptores       | [Inicio rápido](/es-ES/docs/start)                                            |
+| `@defjs/react`                | Inyección de contexto con `ClientProvider` y `useClient()` para React 18+     | [Integración con React](/es-ES/docs/integrations/react)                       |
+| `@defjs/vue`                  | `createClientPlugin`, `HTTP_CLIENT` e `injectClient()` para Vue 3 o posterior | [Integración con Vue](/es-ES/docs/integrations/vue)                           |
+| `@defjs/opentelemetry-server` | Spans salientes del lado del servidor, métricas y registros de diagnóstico    | [OpenTelemetry en el servidor](/es-ES/docs/integrations/opentelemetry-server) |
 
-Los tres transportes devuelven una tupla de tres elementos con el error primero. Las posiciones coinciden; los significados no:
-
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`
-- WebSocket → `[error, session, connection]`
-
-Si falla, el segundo elemento es `undefined`. En HTTP el tercero también es `undefined`, porque el fault ya lleva los metadatos de la respuesta. En SSE y WebSocket el tercero es la instantánea de arranque cuando se capturó una antes del fallo. Ver [Errores](/es-ES/docs/errors).
-
-## Responsabilidad en una frase
-
-Aborta HTTP cuando ya no sirve. Cierra SSE y `await stream.closed`. Cierra WebSocket y `await session.closed`. En un servidor, crea el cliente dentro del límite de la solicitud cuando las opciones capturan cookies, auth o datos de tenant. Redacta URL, cabeceras y cuerpos antes de registrarlos.
-
-Defjs aporta definiciones, validación y ejecución. Las aplicaciones eligen las políticas de caché y de reintento; la reconexión de streams es opt-in. Hoy se admiten paquetes de SDK escritos a mano. El tooling de CLI y la generación OpenAPI/SDK siguen planeados.
-
-## Recetas relacionadas
+## Recetas populares
 
 - [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)
-- [GET con un 404 declarado](/es-ES/recipes/get-declared-404)
-- [POST JSON](/es-ES/recipes/post-json)
+- [Enviar y validar JSON](/es-ES/recipes/post-json)
+- [Manejar una 404 declarada](/es-ES/recipes/get-declared-404)
 - [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)
-- [Consumir un stream SSE](/es-ES/recipes/consume-sse)
+- [Renovar un token Bearer una sola vez tras un 401](/es-ES/recipes/refresh-bearer-once)
+- [Consumir un flujo SSE](/es-ES/recipes/consume-sse)
 - [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session)
 - [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)

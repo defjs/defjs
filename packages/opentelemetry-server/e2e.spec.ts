@@ -1,5 +1,3 @@
-import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import {
   createClient,
   defineEventStream,
@@ -16,11 +14,23 @@ import {
   W3CBaggagePropagator,
   W3CTraceContextPropagator,
 } from "@opentelemetry/core";
-import { afterEach, describe, expect, inject, test, vi } from "vitest";
-import { WebSocketServer } from "ws";
+import {
+  afterEach,
+  describe,
+  expect,
+  inject,
+  onTestFinished,
+  test,
+  vi,
+} from "vitest";
+import { createFixtureClient } from "../core/test/fixture/client.ts";
 import { withOpenTelemetryServer } from "./src/option";
-import type { MockSpan } from "./src/test-utils";
-import { createMockLogger, createMockTracer } from "./src/test-utils";
+import type { MockSpan } from "./test/mocks";
+import {
+  createMockLogger,
+  createMockTracer,
+  waitForSettledPromises,
+} from "./test/mocks";
 
 interface EchoHeadersResponse {
   headers: { [key: string]: string };
@@ -56,14 +66,6 @@ function onlySpan(spans: readonly MockSpan[]): MockSpan {
   return span;
 }
 
-async function closedPort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
-  await new Promise((resolve) => server.close(resolve));
-  return port;
-}
-
 const TRACE_PARENT_REGEX = /^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/;
 
 describe("operation diagnostic boundary", () => {
@@ -81,9 +83,7 @@ describe("operation diagnostic boundary", () => {
       const cause = new TypeError("local transport unavailable");
       const client = createClient(
         withEndpoint("https://example.invalid"),
-        withHTTPHandle(async () => {
-          throw cause;
-        }),
+        withHTTPHandle(() => Promise.reject(cause)),
         withOpenTelemetryServer({ logger }),
       );
       const request = defineRequest({ method: "GET", path: "/inventory" });
@@ -103,7 +103,7 @@ describe("operation diagnostic boundary", () => {
 
   test("does not log input validation faults that never reach an interceptor", async () => {
     const { logger, records } = createMockLogger();
-    const handle = vi.fn(async () => new Response());
+    const handle = vi.fn(() => Promise.resolve(new Response()));
     const client = createClient(
       withEndpoint("https://example.invalid"),
       withHTTPHandle(handle),
@@ -115,7 +115,9 @@ describe("operation diagnostic boundary", () => {
       input: struct.object({ count: struct.number() }),
       builder: (input) => ({ body: input }),
     });
-    const [fault] = await request(client, { count: "invalid" } as never);
+    const [fault] = await request(client, {
+      count: NaN,
+    });
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
     expect(handle).not.toHaveBeenCalled();
     expect(records).toEqual([]);
@@ -136,12 +138,13 @@ describe("operation diagnostic boundary", () => {
       const { logger, records } = createMockLogger();
       const client = createClient(
         withEndpoint("https://example.invalid"),
-        withHTTPHandle(
-          async () =>
+        withHTTPHandle(() =>
+          Promise.resolve(
             new Response(body, {
               status,
               headers: { "content-type": "application/json" },
             }),
+          ),
         ),
         withOpenTelemetryServer({ logger }),
       );
@@ -211,12 +214,13 @@ describe("operation diagnostic boundary", () => {
       const { logger, records } = createMockLogger();
       const client = createClient(
         withEndpoint("https://example.invalid"),
-        withHTTPHandle(
-          async () =>
+        withHTTPHandle(() =>
+          Promise.resolve(
             new Response(body, {
               status,
               headers: { "content-type": contentType },
             }),
+          ),
         ),
         withOpenTelemetryServer({ logger }),
       );
@@ -242,7 +246,7 @@ describe("operation diagnostic boundary", () => {
     },
   );
 
-  test("SSE non-2xx handshake logs one connect failure before core converts it to HTTP_STATUS", async () => {
+  test("SSE non-2xx handshake logs one connect failure as the HTTP_STATUS fault", async () => {
     const { logger, records } = createMockLogger();
     const client = createClient(
       withEndpoint(inject("testServerHost")),
@@ -250,8 +254,6 @@ describe("operation diagnostic boundary", () => {
     );
     const [fault] = await defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/sse/500",
     })(client);
     expect(fault?.code).toBe("HTTP_STATUS");
@@ -261,7 +263,7 @@ describe("operation diagnostic boundary", () => {
       severityNumber: 13,
       attributes: {
         "defjs.phase": "connect",
-        "exception.type": "EventStreamFatalError",
+        "exception.type": "DefjsFault",
       },
     });
   });
@@ -270,15 +272,13 @@ describe("operation diagnostic boundary", () => {
     const { logger, records } = createMockLogger();
     const client = createClient(
       withEndpoint("https://example.invalid"),
-      withSSEHandle(async () => {
-        throw new TypeError("local transport unavailable");
-      }),
+      withSSEHandle(() =>
+        Promise.reject(new TypeError("local transport unavailable")),
+      ),
       withOpenTelemetryServer({ logger }),
     );
     const [fault] = await defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/stream",
     })(client);
     expect(fault?.code).toBe("NET_UNREACHABLE");
@@ -289,25 +289,70 @@ describe("operation diagnostic boundary", () => {
     });
   });
 
-  test("SSE caller abort during the handshake does not log", async () => {
+  test("HTTP caller abort is not a failure", async () => {
     const { logger, records } = createMockLogger();
+    const { tracer, spans } = createMockTracer();
     let markStarted: () => void = () => undefined;
     const started = new Promise<void>((resolve) => {
       markStarted = resolve;
     });
     const client = createClient(
       withEndpoint("https://example.invalid"),
-      withSSEHandle(() => {
+      withHTTPHandle((_input, init) => {
         markStarted();
-        return new Promise<Response>(() => undefined);
+        return new Promise<Response>((_resolve, reject) => {
+          // Fetch rejects with the signal's reason, an `AbortError` by default.
+          init?.signal?.addEventListener("abort", () =>
+            reject(
+              new DOMException("The operation was aborted.", "AbortError"),
+            ),
+          );
+        });
       }),
-      withOpenTelemetryServer({ logger }),
+      withOpenTelemetryServer({ logger, tracer }),
+    );
+    const abort = new AbortController();
+    const pending = defineRequest({ method: "GET", path: "/inventory" })(
+      client({ signal: abort.signal }),
+    );
+    await started;
+    abort.abort();
+    const [fault] = await pending;
+    expect(fault?.code).toBe("NET_ABORTED");
+    expect(records).toEqual([]);
+    const span = onlySpan(spans);
+    expect(span.addEvent).toHaveBeenCalledWith("http.aborted");
+    expect(span.status).toBeUndefined();
+    expect(span.recordException).not.toHaveBeenCalled();
+    expect(span.attributes["error.type"]).toBeUndefined();
+    expect(span.ended).toBe(true);
+  });
+
+  test("SSE caller abort during the handshake is not a failure", async () => {
+    const { logger, records } = createMockLogger();
+    const { tracer, spans } = createMockTracer();
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const client = createClient(
+      withEndpoint("https://example.invalid"),
+      withSSEHandle((_input, init) => {
+        markStarted();
+        return new Promise<Response>((_resolve, reject) => {
+          // Fetch rejects with the signal's reason, an `AbortError` by default.
+          init?.signal?.addEventListener("abort", () =>
+            reject(
+              new DOMException("The operation was aborted.", "AbortError"),
+            ),
+          );
+        });
+      }),
+      withOpenTelemetryServer({ logger, tracer }),
     );
     const abort = new AbortController();
     const openStream = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/stream",
     });
     const pending = openStream(client({ signal: abort.signal }));
@@ -315,7 +360,13 @@ describe("operation diagnostic boundary", () => {
     abort.abort();
     const [fault] = await pending;
     expect(fault?.code).toBe("NET_ABORTED");
+    await waitForSettledPromises();
     expect(records).toEqual([]);
+    const span = onlySpan(spans);
+    expect(span.addEvent).toHaveBeenCalledWith("sse.aborted");
+    expect(span.status).toBeUndefined();
+    expect(span.recordException).not.toHaveBeenCalled();
+    expect(span.ended).toBe(true);
   });
 
   test("SSE end of stream does not log", async () => {
@@ -326,8 +377,6 @@ describe("operation diagnostic boundary", () => {
     );
     const [fault, stream] = await defineEventStream({
       events: { traceparent: struct.string() },
-      maxBufferSize: 64 * 1024,
-      maxQueueSize: 16,
       path: "/sse",
     })(client);
     expect(fault).toBeNull();
@@ -344,14 +393,13 @@ describe("operation diagnostic boundary", () => {
     async ({ path, wrongPort }) => {
       const { logger, records } = createMockLogger();
       const host = wrongPort
-        ? `ws://127.0.0.1:${await closedPort()}`
+        ? inject("refusedOrigin").replace(/^http:/, "ws:")
         : inject("testServerHost").replace(/^http:/, "ws:");
       const client = createClient(
         withEndpoint(host),
         withOpenTelemetryServer({ logger }),
       );
       const [fault] = await defineWebSocket({
-        maxIncomingQueueSize: 4,
         incoming: struct.unknown(),
         path,
       })(client);
@@ -368,15 +416,15 @@ describe("operation diagnostic boundary", () => {
     },
   );
 
-  test("WebSocket caller abort after open does not log", async () => {
+  test("WebSocket caller abort after open is not a failure", async () => {
     const { logger, records } = createMockLogger();
+    const { tracer, spans } = createMockTracer();
     const client = createClient(
       withEndpoint(inject("testServerHost").replace(/^http:/, "ws:")),
-      withOpenTelemetryServer({ logger }),
+      withOpenTelemetryServer({ logger, tracer }),
     );
     const abort = new AbortController();
     const [fault, socket] = await defineWebSocket({
-      maxIncomingQueueSize: 4,
       incoming: struct.unknown(),
       path: "/ws",
     })(client({ signal: abort.signal }));
@@ -384,6 +432,12 @@ describe("operation diagnostic boundary", () => {
     abort.abort();
     await expect(socket?.closed).resolves.toMatchObject({ kind: "aborted" });
     expect(records).toEqual([]);
+    const span = onlySpan(spans);
+    expect(span.addEvent).toHaveBeenCalledWith("websocket.aborted", undefined);
+    expect(span.status).toBeUndefined();
+    expect(span.recordException).not.toHaveBeenCalled();
+    expect(span.attributes["error.type"]).toBeUndefined();
+    expect(span.ended).toBe(true);
   });
 
   test.each([
@@ -396,7 +450,6 @@ describe("operation diagnostic boundary", () => {
       withOpenTelemetryServer({ logger }),
     );
     const [fault, socket] = await defineWebSocket({
-      maxIncomingQueueSize: 4,
       incoming: struct.unknown(),
       path,
     })(client);
@@ -408,52 +461,41 @@ describe("operation diagnostic boundary", () => {
     expect(records).toEqual([]);
   });
 
-  // An abrupt drop (1006) has no close frame. Whether the platform WebSocket fires `error` before `close` depends on the
-  // runtime (Node/undici does, Bun does not), and the session ends in `error` and logs once only when it does.
-  test("WebSocket abrupt drop 1006 logs once only when the runtime reports an error first", async () => {
-    const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
-    wss.on("connection", (socket) => setTimeout(() => socket.terminate(), 20));
-    await new Promise((resolve) => wss.once("listening", resolve));
-    try {
-      const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}`;
-      const reportsErrorFirst = await new Promise<boolean>((resolve) => {
-        const events: string[] = [];
-        const probe = new WebSocket(url);
-        probe.addEventListener("error", () => events.push("error"));
-        probe.addEventListener("close", () =>
-          resolve(events.includes("error")),
-        );
-      });
+  // An abrupt drop (1006) has no close frame. The session ends in `error` and logs once, whether or not the platform
+  // WebSocket fires `error` before `close`.
+  test("WebSocket abrupt drop 1006 ends in error and logs once on every runtime", async () => {
+    const f = createFixtureClient(
+      inject("testServerHost"),
+      inject("fixtureToken"),
+    );
+    onTestFinished(() => f.delete());
+    const url = (await f.endpoint("abrupt", "ws", { send: [] })).replace(
+      /^http:/,
+      "ws:",
+    );
 
-      const { logger, records } = createMockLogger();
-      const client = createClient(
-        withEndpoint(url),
-        withOpenTelemetryServer({ logger }),
-      );
-      const [fault, socket] = await defineWebSocket({
-        maxIncomingQueueSize: 4,
-        incoming: struct.unknown(),
-        path: "/",
-      })(client);
-      expect(fault).toBeNull();
-      await expect(socket?.closed).resolves.toMatchObject({
-        kind: reportsErrorFirst ? "error" : "closed",
-        code: 1006,
-        wasClean: false,
-      });
-      expect(records.map((record) => record.attributes)).toEqual(
-        reportsErrorFirst
-          ? [
-              expect.objectContaining({
-                "defjs.phase": "connection",
-                "websocket.close.code": 1006,
-              }),
-            ]
-          : [],
-      );
-    } finally {
-      wss.close();
-    }
+    const { logger, records } = createMockLogger();
+    const client = createClient(
+      withEndpoint(url),
+      withOpenTelemetryServer({ logger }),
+    );
+    const [fault, socket] = await defineWebSocket({
+      incoming: struct.unknown(),
+      path: "/",
+    })(client);
+    expect(fault).toBeNull();
+    await f.act("abrupt", "terminate", { request: 0 });
+    await expect(socket?.closed).resolves.toMatchObject({
+      kind: "error",
+      code: 1006,
+      wasClean: false,
+    });
+    expect(records.map((record) => record.attributes)).toEqual([
+      expect.objectContaining({
+        "defjs.phase": "connection",
+        "websocket.close.code": 1006,
+      }),
+    ]);
   });
 });
 
@@ -546,6 +588,80 @@ describe("e2e: opentelemetry-server with real test server", () => {
     expect(span.ended).toBe(true);
   });
 
+  test("a URL with credentials is rejected before it is sent and leaves no credentials or query values in the span", async () => {
+    const { tracer, spans } = createMockTracer();
+    const host = inject("testServerHost");
+    const client = createClient(
+      withEndpoint(host.replace("http://", "http://svc-user:S3cretPassw0rd@")),
+      withOpenTelemetryServer({ tracer, propagator: createPropagator() }),
+    );
+    const useEcho = defineRequest({
+      method: "GET",
+      path: "/echo-headers",
+      input: struct.object({ token: struct.string() }),
+      builder: (input) => ({ query: { token: input.token } }),
+    });
+
+    const [error] = await useEcho(client, { token: "SECRET-QUERY-TOKEN" });
+
+    expect(error).toMatchObject({ code: "REQ_BUILD_FAILED" });
+    const span = onlySpan(spans);
+    expect(span.attributes["url.full"]).toBe(
+      `${host.replace("http://", "http://REDACTED:REDACTED@")}/echo-headers`,
+    );
+    // An Error keeps `message` and `stack` non-enumerable, so serialising it would hide a leak:
+    // the recorded exception must be a plain `{ name }` object instead.
+    const exceptions: unknown[] = [];
+    for (const [exception] of span.recordException.mock.calls) {
+      exceptions.push(exception);
+    }
+    expect(exceptions).toHaveLength(1);
+    expect(exceptions[0]).not.toBeInstanceOf(Error);
+    expect(Object.getOwnPropertyNames(exceptions[0])).toEqual(["name"]);
+    // The interceptor sees the platform's TypeError, not a library class.
+    expect(exceptions[0]).toEqual({ name: "TypeError" });
+    expect(span.attributes["error.type"]).toBe("TypeError");
+    const recorded = JSON.stringify({
+      attributes: span.attributes,
+      events: span.addEvent.mock.calls,
+      exceptions,
+    });
+    expect(recorded).not.toContain("S3cretPassw0rd");
+    expect(recorded).not.toContain("svc-user");
+    expect(recorded).not.toContain("SECRET-QUERY-TOKEN");
+  });
+
+  test("a response body that fails JSON decoding is not copied into the span exception", async () => {
+    const { tracer, spans } = createMockTracer();
+    const client = createClient(
+      withEndpoint("https://example.invalid"),
+      withHTTPHandle(() =>
+        Promise.resolve(
+          new Response("secret-api-key-ABCDEF123456 is the value", {
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      ),
+      withOpenTelemetryServer({ tracer, propagator: createPropagator() }),
+    );
+    const useJson = defineRequest({
+      method: "GET",
+      path: "/json",
+      output: struct.object({ ok: struct.boolean() }),
+    });
+
+    const [error] = await useJson(client);
+
+    expect(error).toMatchObject({ code: "RES_DECODE_FAILED" });
+    const span = onlySpan(spans);
+    expect(span.recordException.mock.calls).toEqual([
+      [{ name: "BodyFailure" }],
+    ]);
+    expect(JSON.stringify(span.recordException.mock.calls)).not.toContain(
+      "secret",
+    );
+  });
+
   test("SSE request carries traceparent header", async () => {
     const { tracer, spans } = createMockTracer();
     const propagator = createPropagator();
@@ -560,8 +676,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
       events: {
         traceparent: struct.string(),
       },
-      maxBufferSize: 64 * 1024,
-      maxQueueSize: 16,
       path: "/sse",
     });
 
@@ -602,8 +716,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
       events: {
         traceparent: struct.string(),
       },
-      maxBufferSize: 64 * 1024,
-      maxQueueSize: 16,
       path: "/sse/500",
     });
 
@@ -634,7 +746,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
     );
 
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("traceparent"),
         value: struct.string(),
@@ -684,7 +795,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
     );
     const useSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("traceparent"),
         value: struct.string(),
@@ -731,7 +841,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
     );
 
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("traceparent"),
         value: struct.string(),

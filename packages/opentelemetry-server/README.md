@@ -10,11 +10,11 @@ It is a middleware plugin — the plugin form of an interceptor chain. Your appl
 bun add @defjs/core @defjs/opentelemetry-server @opentelemetry/api @opentelemetry/core
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.7.0` range.
 
 ## Quick start
 
-It never initializes a provider or looks one up implicitly: pass the `tracer`, `meter`, and `logger` you want, and each signal works independently. Without a `tracer` no spans are created — interceptors still wrap requests, but `trace.getTracer()` returns a no-op until your SDK registers a provider.
+It never initializes a provider or looks one up implicitly: pass the `tracer`, `meter`, and `logger` you want, and each signal works independently. Without a `tracer` the plugin creates no spans and never calls `trace.getTracer(...)`; propagation still forwards the extracted parent context.
 
 ```typescript
 import { createClient, withEndpoint } from "@defjs/core";
@@ -30,7 +30,7 @@ const client = createClient(
 );
 ```
 
-Omit `tracer` to record metrics only; the plugin then never calls `trace.getTracer(...)` or the span hooks. `logger` accepts the native `Logger` from `@opentelemetry/api-logs`, not a Winston or Pino business logger.
+Omit `tracer` to disable local spans and span hooks while still recording metrics, emitting logs, and propagating context. `logger` accepts the native `Logger` from `@opentelemetry/api-logs`, not a Winston or Pino business logger.
 
 ```typescript
 import { metrics } from "@opentelemetry/api";
@@ -55,7 +55,7 @@ const readOrder = defineRequest({
 });
 ```
 
-Without it, HTTP spans use the method alone and SSE/WebSocket use their transport name. Never derive an operation from a resolved URL or a path containing identifiers.
+Without it, HTTP spans use the normalized method (`HTTP` for `_OTHER`) and SSE/WebSocket use their transport name. Never derive an operation from a resolved URL or a path containing identifiers.
 
 ## Configuration
 
@@ -74,23 +74,31 @@ withOpenTelemetryServer({
 
 | Option              | Type                                    | Default                    | Description                                                                 |
 | ------------------- | --------------------------------------- | -------------------------- | --------------------------------------------------------------------------- |
-| `tracer`            | `Tracer`                                | `undefined`                | External tracer; omitting disables local spans and hooks                    |
+| `tracer`            | `Tracer`                                | `undefined`                | External tracer; omitting disables local spans and span hooks               |
 | `meter`             | `Meter`                                 | `undefined`                | External meter; omitting disables metrics                                   |
 | `logger`            | `Logger` from `@opentelemetry/api-logs` | `undefined`                | External native Logger; omitting disables diagnostic LogRecords             |
 | `propagator`        | `TextMapPropagator`                     | W3C TraceContext + Baggage | Custom context propagator                                                   |
 | `requireParentSpan` | `boolean`                               | `false`                    | With a tracer, bypass all instrumentation when no active parent span exists |
-| `http`              | `OpenTelemetryServerHttpOptions`        | `{}`                       | HTTP transport options                                                      |
-| `sse`               | `OpenTelemetryServerSSEOptions`         | `{}`                       | SSE transport options                                                       |
-| `webSocket`         | `OpenTelemetryServerWebSocketOptions`   | `{}`                       | WebSocket transport options                                                 |
+| `http`              | `OpenTelemetryServerHttpOptions`        | omitted                    | HTTP transport options; omitting leaves the transport enabled               |
+| `sse`               | `OpenTelemetryServerSSEOptions`         | omitted                    | SSE transport options; omitting leaves the transport enabled                |
+| `webSocket`         | `OpenTelemetryServerWebSocketOptions`   | omitted                    | WebSocket transport options; omitting leaves the transport enabled          |
 
-Span hooks run only with a `tracer`. `startSpanHook(request)` is synchronous and runs before span creation; a throw leaves the built-in attributes and the operation continues. `requestHook` and `responseHook` are not awaited, and their failures never block or fail the operation. Configure `diag.setLogger(...)` to see hook diagnostics.
+`withOpenTelemetryServer` reads `http`, `sse`, and `webSocket` once and keeps a field copy (`enabled`, the three span hooks, and WebSocket `queryPropagation`). A missing block stays missing, which leaves that transport enabled. Only `enabled: false` disables a transport, and that branch does not read the block's hooks or `queryPropagation`. Getters for the copied fields run during this call; a throw leaves the call and is not retried when the option is applied. Later changes to those blocks are ignored. `tracer`, `meter`, `logger`, `propagator`, and hook functions keep their identity.
+
+The plugin calls the supplied Meter's instrument creation methods each time the option is applied to a client, not when the option is built. Instrument identity and aggregation remain under Meter/SDK control. Each duration histogram receives its own copy of the default bucket boundaries.
+
+Span hooks run only with a `tracer`. `startSpanHook(request)` is synchronous and runs before span creation; a throw still creates the span with only its built-in attributes, and the operation continues. `requestHook` and `responseHook` are not awaited, and their failures never block or fail the operation. Configure `diag.setLogger(...)` to see hook diagnostics.
+
+## Cancellation and timeouts
+
+HTTP, SSE, and WebSocket follow one rule. A caller cancellation (an abort that is not a timeout) is not a failure: the span status stays unset, with no exception and no `error.type`, and the span records `http.aborted`, `sse.aborted`, or `websocket.aborted`. Duration metrics are still recorded, without `error.type`; the connection metrics carry `defjs.result` `aborted`. No log is emitted. A timeout, including `AbortSignal.timeout()`, stays a failure: the span ends `ERROR` and `error.type` is `timeout`.
 
 ## Privacy defaults
 
 - `webSocket.queryPropagation` defaults to `false`: trace context and baggage do not ride on the WebSocket URL. Enable it only after reviewing how your proxies, browsers, and access logs record query strings.
-- No bodies, full headers, baggage values, or message payloads are added as telemetry fields, and no built-in redactor exists. Prefer allowlists and low-cardinality attributes in hooks.
-- Diagnostics carry a fixed message, phase, operation, server address/port, and exception type — not raw URLs, headers, bodies, or stacks.
-- SSE and WebSocket are traced per connection, not per event or message.
+- No bodies, full headers, baggage values, or message payloads are added as telemetry fields, and no built-in redactor exists beyond `url.full`, whose endpoint userinfo is replaced with `REDACTED:REDACTED` and whose default sensitive query values (`sig`, `X-Amz-Signature`, and the other keys in the semantic conventions) are replaced with `REDACTED`. Prefer allowlists and low-cardinality attributes in hooks.
+- Diagnostics carry a fixed message, phase, operation, server address/port, and exception type — not raw URLs, headers, bodies, or stacks. Span `exception` events carry only `exception.type` for the same reason.
+- SSE and WebSocket are traced per logical connection, not per event or message.
 
 ## Documentation
 

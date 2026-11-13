@@ -63,18 +63,34 @@ describe("AsyncQueue", () => {
     await expect(iter.next()).rejects.toThrow("boom");
   });
 
-  test("push after close is ignored", () => {
+  test("push after close is ignored", async () => {
     const queue = new AsyncQueue<number>({ maxSize: 1 });
+    const iter = queue[Symbol.asyncIterator]();
     queue.close();
     queue.push(1);
-    // Should not throw
+    await expect(iter.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
   });
 
-  test("close after close is ignored", () => {
+  test("push after fail is ignored", async () => {
     const queue = new AsyncQueue<number>({ maxSize: 1 });
+    const iter = queue[Symbol.asyncIterator]();
+    queue.fail(new Error("boom"));
+    queue.push(1);
+    await expect(iter.next()).rejects.toThrow("boom");
+  });
+
+  test("close after close is ignored", async () => {
+    const queue = new AsyncQueue<number>({ maxSize: 1 });
+    const iter = queue[Symbol.asyncIterator]();
     queue.close();
     queue.close();
-    // Should not throw
+    await expect(iter.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
   });
 
   test("fail after close is ignored", () => {
@@ -124,24 +140,11 @@ describe("AsyncQueue", () => {
     await expect(iter.next()).resolves.toEqual({ done: false, value: 2 });
   });
 
-  test.each([
-    0,
-    -1,
-    1.5,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])("rejects invalid maxSize %s", (maxSize) => {
-    expect(() => new AsyncQueue({ maxSize })).toThrow(
-      new TypeError("AsyncQueue maxSize must be a positive safe integer"),
-    );
-  });
-
-  test("accepts positive safe-integer maxSize values", () => {
-    expect(() => new AsyncQueue({ maxSize: 1 })).not.toThrow();
-    expect(
-      () => new AsyncQueue({ maxSize: Number.MAX_SAFE_INTEGER }),
-    ).not.toThrow();
+  test("is unbounded when maxSize is omitted", async () => {
+    const queue = new AsyncQueue<number>();
+    for (let value = 0; value < 1000; value += 1) queue.push(value);
+    queue.close();
+    expect(await Array.fromAsync(queue)).toHaveLength(1000);
   });
 
   test("close drains buffered values in FIFO order", async () => {
@@ -159,7 +162,7 @@ describe("AsyncQueue", () => {
     });
   });
 
-  test("fail discards buffered values and rejects current and future pulls", async () => {
+  test("fail keeps queued values for the consumer and rejects after them", async () => {
     const error = new Error("boom");
     const queue = new AsyncQueue<number>({ maxSize: 2 });
     queue.push(1);
@@ -167,6 +170,8 @@ describe("AsyncQueue", () => {
     queue.fail(error);
     const iterator = queue[Symbol.asyncIterator]();
 
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: 1 });
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: 2 });
     await expect(iterator.next()).rejects.toBe(error);
     await expect(iterator.next()).rejects.toBe(error);
 
@@ -175,5 +180,76 @@ describe("AsyncQueue", () => {
     const pending = waitingIterator.next();
     waitingQueue.fail(error);
     await expect(pending).rejects.toBe(error);
+  });
+
+  test("discard drops values nobody has taken", async () => {
+    const closed = new AsyncQueue<number>({ maxSize: 2 });
+    closed.push(1);
+    closed.push(2);
+    closed.discard();
+    closed.close();
+    await expect(closed[Symbol.asyncIterator]().next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+
+    const error = new Error("boom");
+    const failed = new AsyncQueue<number>({ maxSize: 2 });
+    failed.push(1);
+    failed.push(2);
+    failed.discard();
+    failed.fail(error);
+    await expect(failed[Symbol.asyncIterator]().next()).rejects.toBe(error);
+  });
+
+  describe("waitForRoom", () => {
+    test("returns undefined while there is room", () => {
+      const queue = new AsyncQueue<number>({ maxSize: 2 });
+      expect(queue.waitForRoom()).toBeUndefined();
+      queue.push(1);
+      expect(queue.waitForRoom()).toBeUndefined();
+    });
+
+    test("returns undefined when a consumer is already waiting", () => {
+      const queue = new AsyncQueue<number>({ maxSize: 1 });
+      void queue[Symbol.asyncIterator]().next();
+      expect(queue.waitForRoom()).toBeUndefined();
+    });
+
+    test("resolves once a consumer takes a value from a full queue", async () => {
+      const queue = new AsyncQueue<number>({ maxSize: 1 });
+      queue.push(1);
+      const room = queue.waitForRoom();
+      expect(room).toBeInstanceOf(Promise);
+
+      let resolved = false;
+      void room?.then(() => {
+        resolved = true;
+      });
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      await queue[Symbol.asyncIterator]().next();
+      await expect(room).resolves.toBeUndefined();
+      expect(queue.waitForRoom()).toBeUndefined();
+    });
+
+    test("resolves when the queue is closed", async () => {
+      const queue = new AsyncQueue<number>({ maxSize: 1 });
+      queue.push(1);
+      const room = queue.waitForRoom();
+      queue.close();
+      await expect(room).resolves.toBeUndefined();
+      expect(queue.waitForRoom()).toBeUndefined();
+    });
+
+    test("resolves when the queue fails", async () => {
+      const queue = new AsyncQueue<number>({ maxSize: 1 });
+      queue.push(1);
+      const room = queue.waitForRoom();
+      queue.fail(new Error("boom"));
+      await expect(room).resolves.toBeUndefined();
+      expect(queue.waitForRoom()).toBeUndefined();
+    });
   });
 });

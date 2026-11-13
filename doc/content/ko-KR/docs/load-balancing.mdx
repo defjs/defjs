@@ -1,0 +1,182 @@
+---
+title: "로드 밸런싱 및 장애 조치"
+description: 여러 엔드포인트로 트래픽을 분산하고, 계속 실패하는 레플리카를 한동안 방출하며, 직접 작성한 헬스 체크가 거부하는 레플리카를 건너뛰고, HTTP, SSE, WebSocket 호출을 백오프로 재시도합니다.
+---
+
+# 로드 밸런싱 및 장애 조치
+
+애플리케이션이 `withEndpoint(...urls)`를 호출해 여러 기본 URL을 구성하면, Defjs는 여러 레플리카에 요청을 분산하고, 한동안 계속 실패하는 호스트를 방출하며, 직접 작성한 헬스 함수가 거부하는 호스트를 건너뛰고, 실패한 호출을 다른 엔드포인트에서 선택적으로 재시도할 수 있습니다. Defjs는 건강함의 의미를 정하지 않습니다. 직접 제공한 함수만 엔드포인트를 비정상으로 표시할 수 있습니다.
+
+## 1. 로드 밸런서 전략 선택
+
+| 전략                                                                          | 적합한 환경                                                           | 기본 헬스 필터링                            |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/ko-KR/api/core/pickfirstbalancer) _(기본값)_ | 순서가 지정된 기본/백업 리전 목록을 사용하는 브라우저 앱              | 꺼짐 (`outlierDetection: {}`로 선택 활성화) |
+| [`roundRobinBalancer(options?)`](/ko-KR/api/core/roundrobinbalancer)          | 동일한 사양의 레플리카 간 서버 간 호출 (선택적 `weights` 가중치 지원) | 꺼짐 (`outlierDetection: {}`로 선택 활성화) |
+| [`p2cBalancer(options?)`](/ko-KR/api/core/p2cbalancer)                        | 레플리카별 레이턴시나 진행 중인 부하 차이가 큰 서버 환경              | 꺼짐 (`outlierDetection: {}`로 선택 활성화) |
+
+<Tabs items={["기본·백업 (Pick-first)", "동등한 서버 (Round-robin 및 P2C)", "사용자 정의 밸런서"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### `pickFirstBalancer`와 `p2cBalancer`의 동작 방식
+
+- **`pickFirstBalancer`**: 첫 번째 URL을 유지하고, `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 또는 504)에서 다음으로 진행합니다. 순서와 고정된 엔드포인트는 클라이언트의 전체 엔드포인트 목록(`members`)을 따릅니다. 재시도는 모든 엔드포인트에서 다시 고르므로 같은 규칙을 따릅니다. 연결 거부나 502, 503, 504 뒤에는 다음 엔드포인트에 닿고, pick-first를 진행시키지 않는 타임아웃 뒤에는 같은 엔드포인트를 다시 시도합니다. `failbackMs: 30_000`을 설정하면 시간만으로 첫 엔드포인트로 돌아갑니다. 고정된 엔드포인트가 첫 엔드포인트에서 그 시간만큼 벗어나 있으면, 후보에 첫 엔드포인트가 포함된 다음 pick이 그것을 고르고 다시 고정합니다. 첫 엔드포인트가 회복했는지는 아무것도 판단하지 않습니다. 다시 실패하면 위의 진행 규칙이 그것을 떠나고 시간은 처음부터 다시 시작합니다. pick 사이의 시간, 예를 들어 SSE나 WebSocket 재연결 지연보다 긴 `failbackMs`를 고르세요. 그렇지 않으면 모든 pick이 첫 엔드포인트로 돌아갑니다.
+- **가중치 없는 `roundRobinBalancer`**: 카운터는 무작위 `uint32`에서 시작하고, 재시도나 스트림 재연결을 위한 pick을 포함해 모든 `pick`이 그것을 진행시킵니다. `outlierDetection`이 없고 호출이 하나씩 이어지면, 계속 실패하는 엔드포인트는 따라서 첫 시도의 1/n보다 많이 받습니다. 엔드포인트가 정확히 두 개이고 재시도가 켜져 있으면 그 엔드포인트가 첫 시도를 모두 받으므로, 모든 호출에 재시도가 한 번 필요합니다. 동시에 일어나는 호출은 pick이 섞여 이 패턴이 깨집니다. `outlierDetection: {}`이면 실패하는 엔드포인트는 한동안 방출됩니다.
+- **`roundRobinBalancer` 가중치**: 생략한 가중치는 `1`이며, 설정한 가중치는 유한한 양수입니다. 부드러운 가중 라운드 로빈은 비례 선택을 유지합니다(예: `3:1`이면 가중치가 큰 피어가 네 번 중 세 번 선택됩니다). 극단적인 크기는 오버플로를 막기 위해 스케일링하며, 부동 소수점 정밀도보다 작은 비율은 0으로 반올림될 수 있습니다. 선택과 오래된 current 값 정리는 선택마다 O(멤버 수 + 후보 수)의 작업이 필요합니다.
+- **`p2cBalancer` (Power of Two Choices)**: 복원 추출 없이 무작위로 두 개의 후보를 뽑아 더 낮은 점수를 가진 엔드포인트를 선택합니다: `PeakEwma RTT × (pending + 1)` (또는 `load: "pending"`인 경우 진행 중인 `pending` 수). 기본값(`defaultRttMs: 30`, `decayMs: 10000`)은 Linkerd/tower 관례를 따릅니다. pending은 `pick`이 엔드포인트를 선택하는 순간 예약되므로 같은 틱의 연속 호출도 여러 엔드포인트로 분산되고, 피어 응답이 시작될 때(HTTP 응답 헤더, SSE 핸드셰이크, WebSocket open) 해제되며 응답이 시작되지 않았다면 시도가 완료될 때 해제됩니다. 따라서 SSE와 WebSocket에서 p2c는 열려 있는 연결 수가 아니라 핸드셰이크를 분산합니다.
+
+밸런서 상태(고정된 엔드포인트, 방출, p2c 부하)와 재시도 예산은 클라이언트에 속합니다. 클라이언트는 애플리케이션당 한 번만 만들고, 호출별 클라이언트는 `client(options)`로 파생하세요. 파생된 클라이언트는 밸런서 상태와 재시도 예산을 모두 유지합니다. 하나의 밸런서 값을 `withBalancer`로 여러 클라이언트에 전달하면 밸런서 상태만 공유되며, 각 클라이언트는 자신의 재시도 예산을 가집니다. 요청마다 새 `createClient`를 만들면 둘 다 처음부터 다시 시작합니다.
+
+## 2. 재시도 [#retries]
+
+재시도는 세 가지 결정으로 나뉩니다. **다시 시도할지**(`withRetry`), **어디로 보낼지**(런타임이 모든 엔드포인트에서 밸런서에게 다시 고르라고 합니다), **얼마나 기다릴지**(백오프)입니다. `withRetry(options)` 하나가 HTTP, SSE, WebSocket을 덮고 `config.retry`에 저장됩니다. 요청 옵션 `retry`는 한 호출에 한해 그것을 대체합니다. 세 전송은 옵션, 결정 순서, 백오프 계산을 공유하고, 기본으로 어떤 실패를 재시도하는지만 다릅니다. 밸런서는 재시도 정책을 알지 못하며, 커스텀 밸런서에 특별한 협조가 필요하지 않습니다.
+
+재시도는 **기본적으로 꺼져 있습니다**. `withRetry`를 생략하면 호출당 시도는 한 번이고 백오프가 없으며, HTTP는 재시도 예산이 만들어지지도 적립되지도 않습니다. 이후 호출의 선택은 바뀌지 않습니다. `pickFirstBalancer`는 실패한 호출 뒤에도 여전히 다음으로 진행할 수 있습니다. `withRetry()`는 `withRetry({})`와 같으며, 첫 시도 뒤 최대 `maxRetries: 3`회의 재시도, 재시도마다 두 배가 되어 `30000` ms까지 가는 `1000` ms 지연, ±20% 지터를 켭니다.
+
+이것은 Go 생태계를 따릅니다. [gRPC는 `retryPolicy`를 서비스 설정에 둡니다](https://grpc.io/docs/guides/retry/). 로드 밸런싱 설정과 나란히 두며, [go-kit `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry)는 밸런서를 명시적으로 감쌉니다. 어느 쪽도 애플리케이션 재시도 정책을 기본으로 적용하지 않습니다. gRPC의 재시도 정책은 백오프 설정이 필요하며 ±0.2 지터를 씁니다. 첫 시도를 제외한 재시도 횟수(`maxRetries`)는 ky, got, undici, Go의 `go-retryablehttp`와 같습니다. gRPC의 `maxAttempts`는 최초 시도를 셉니다. gRPC는 저수준 경합에 대해 투명 재시도를 할 수 있지만, Defjs는 그것을 흉내 내지 않습니다.
+
+<include cwd lang="typescript">
+  examples/client/http-retry.ts#example
+</include>
+
+실패한 시도마다 흐름은 모든 전송에서 같고, 순서는 다음과 같습니다:
+
+1. 호출자 abort, 수동 `close()`, 치명적 오류, `ReadableStream` 요청 본문은 호출을 끝냅니다. `shouldRetry`는 호출되지 않습니다.
+2. `maxRetries`번의 재시도를 했으면 호출이 끝납니다. `shouldRetry`는 호출되지 않습니다.
+3. `shouldRetry(context)`가 결정하고, 그것이 없으면 `context.retryable`이 결정합니다. 함수는 비동기일 수 있으며 `transport`로 좁혀진 [`RetryContext`](/ko-KR/api/core/retrycontext-type)를 받습니다. 기본을 유지하고 그 위에 규칙을 더하려면 `context.retryable`을 반환하세요.
+4. HTTP만: 예산이 그 재시도를 감당하거나, 호출이 끝납니다.
+5. 호출은 백오프 지연을 기다린 뒤 밸런서가 다시 고릅니다.
+
+- **재시도 횟수 (`maxRetries`)**: 첫 시도 뒤의 재시도이며, 기본값은 `3`이고 `0`은 재시도하지 않습니다. `maxRetries: 0`과 `attemptTimeoutMs`가 있는 호출은 각 시도의 시간만 제한합니다. SSE와 WebSocket에서는 연결이 다시 성립하면(성공한 핸드셰이크 또는 `open`) 횟수가 다시 시작되므로, 세션이 아니라 각 단절을 제한합니다. 연결을 받은 즉시 끊는 서버는 따라서 계속 재시도됩니다. `shouldRetry`로 멈추세요. 설정된 상한은 없습니다. 이는 바깥 시도 횟수를 세는 것이며 애플리케이션 인터셉터 내부의 실제 전송 횟수가 아닙니다. `next()`를 반복 호출하는 인터셉터는 같은 엔드포인트로 여러 번 전송할 수 있습니다. 예를 들어 `maxRetries: 1`에서 인터셉터가 실패한 기본 엔드포인트로 3회 전송하고 외부 재시도가 정상 백업으로 1회 전송하면 네트워크 요청은 4회입니다. builder와 인터셉터 체인의 외부 인증 계층은 4회가 아니라 2회 실행됩니다.
+- **기본으로 재시도하는 실패**: HTTP는 `methods`에 있는 메서드를, 응답이 없을 때(`NET_UNREACHABLE`), `502`, `503`, `504`일 때(`NET_UNAVAILABLE`), 또는 `attemptTimeoutMs`를 다 썼을 때 재시도합니다. SSE는 `methods`에 있는 메서드를, 핸드셰이크 네트워크 실패, `502`/`503`/`504` 핸드셰이크, 시도 타임아웃, 또는 열린 스트림의 네트워크 오류 뒤에 재시도합니다. 스트림의 정상 종료는 호출을 끝냅니다. WebSocket은 `session.close()`가 요청하지 않은 모든 종료를 재시도하며, 한 번도 열리지 않은 연결과 응답 없는 하트비트를 포함하고 throw하는 생성자는 포함하지 않습니다. `429`나 `500` 같은 상태는 기본적으로 재시도되지 않습니다. `shouldRetry`는 `retryable: false`와 `status`와 함께 그것을 받고 `true`를 반환할 수 있습니다. `methods` 기본값은 `GET`, `HEAD`, `OPTIONS`, `TRACE`, `PUT`, `DELETE`이며 대소문자를 가리지 않고 비교합니다. HTTP는 인터셉터 재작성 뒤에 시도가 보낸 모든 메서드가 그 안에 있어야 합니다. POST는 `methods`에 더하거나 `shouldRetry`가 `true`를 반환할 때만 재시도되며, 여기에는 복제본 간 애플리케이션 수준의 멱등성이 필요합니다. 자격이 있는 HTTP 재시도는 요청을 다시 만들고 인터셉터 체인 전체를 가장 바깥 계층부터 다시 실행합니다. SSE는 만든 요청을 재사용하고 URL만 바꾸며, WebSocket은 `beforeConnect`를 다시 실행합니다.
+- **백오프 (`delayMs`, `factor`, `jitter`, `maxDelayMs`)**: n번째 재시도 전에는 `delayMs × factor^(n−1)`만큼 기다리며, 곱셈 지터를 적용하고 지터와 반올림 뒤에 상한을 둡니다. 기본값은 `1000`, `2`, `0.2`, `30000`입니다. `delayMs: 0`은 기다리지 않고, `maxDelayMs: Infinity`는 상한을 없앱니다. 플랫폼 타이머 상한은 그대로 적용됩니다. SSE에서는 숫자만 있는 서버 `retry:` 필드가 이후 시도의 `delayMs`를 대체합니다. Core는 `Retry-After`를 읽지 않습니다. 지연 상한을 포함한 이 헤더의 처리는 [애플리케이션 인터셉터 정책](/ko-KR/docs/interceptors)이며 이 백오프의 일부가 아닙니다.
+- **단일 엔드포인트**: 재시도는 방금 실패한 엔드포인트를 포함해 모든 엔드포인트에서 고르므로, 엔드포인트가 하나면 백오프 지연 뒤에 다시 시도합니다. 재시도 예산과 `maxRetries`가 폭주를 제한합니다.
+- **시도별 vs. 전체 호출 타임아웃**: `attemptTimeoutMs`는 시도 하나를 제한합니다. HTTP는 선택된 엔드포인트로 보낸 각 Fetch를 호출 시점부터 응답 본문을 모두 읽을 때까지 재고, SSE는 응답 헤더에서, WebSocket은 `open`에서 멈춥니다. HTTP 전송 앞뒤의 인터셉터 작업(예: `401` 뒤의 토큰 갱신)과 struct 디코딩은 시간에 포함되지 않으며 엔드포인트에 불리하게 집계되지 않습니다. 전송이 끝난 뒤 인터셉터 작업 중에 호출자 데드라인이 만료되어도 밸런서에는 `NET_TIMEOUT`이 아니라 엔드포인트 자신의 결과가 보고됩니다. 호출자의 `client({ signal: AbortSignal.timeout(ms) })`는 모든 시도와 **백오프 대기**를 아우릅니다. 대기 중 취소는 밸런서에서 다시 선택하지 않고 호출자의 취소 결함을 반환합니다. 옵션은 런타임에 검증되지 않습니다.
+- **재시도에 쓸 수 있는 엔드포인트가 없는 경우**: 재시도 라운드에서 쓸 수 있는 엔드포인트가 하나도 없으면(밸런서의 pick이 실패하거나 다음 엔드포인트의 URL을 해석할 수 없는 경우) HTTP 호출은 `REQ_BUILD_FAILED` 대신 직전 시도의 결함(예: `NET_UNREACHABLE`)을 반환합니다.
+- **Finagle / Linkerd 재시도 예산 (`budget`)**: HTTP 전용입니다. 각 클라이언트 설정이 예산을 소유하며, 그 설정을 쓰는 파생 클라이언트만 공유합니다. 밸런서를 공유하는 클라이언트끼리는 공유하지 않습니다. 기본값은 `percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`이며, 원래 트래픽의 20%에 예비분을 더한 값입니다. 크레딧과 데빗은 TTL/10 단위의 슬라이스 10개에서 지연 만료됩니다. 재시도는 기다리기 전에 인출하고, 예산이 소진되면 기다리지도 재시도하지도 않습니다. 상한을 없애려면 `budget: false`로 설정하세요. SSE와 WebSocket에는 예산이 없습니다. SSE와 WebSocket이 HTTP 예산을 공유하면 HTTP 재시도의 폭주가 재연결을 막을 수 있습니다.
+- **브라우저 오프라인 힌트**: `navigator.onLine === false`인 경우 연결 실패는 `{ attempted: false }`로 보고되며, 밸런서를 진행시키거나 HTTP 재시도를 트리거하지 않습니다.
+
+이후 `withRetry`는 정책을 대체합니다. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같이 동작합니다. 재시도를 켠 뒤 끄려면 `withRetry({ maxRetries: 0 })`를 전달합니다.
+
+### `withSSEReconnect`와 `withWebSocketReconnect`에서 옮기기
+
+`withSSEReconnect`와 `withWebSocketReconnect`는 별칭 없이 사라졌습니다. `withRetry`가 SSE와 WebSocket을 덮고, 요청 옵션 `reconnect`는 이제 `retry`입니다.
+
+- `attempts: N`은 `maxRetries: N`이 됩니다.
+- `shouldReconnect`는 `shouldRetry`가 됩니다. 컨텍스트에 `transport`와 `retryable`이 생기고, 재시도가 남아 있는 동안에만 호출됩니다. `shouldReconnect`와 같이 기본 규칙(메서드 규칙 포함)을 대체하므로, `true`를 반환하는 함수는 여전히 `POST` 스트림을 재시도합니다.
+- 기본값이 바뀌었습니다. SSE `factor`는 `1`에서 `2`로, SSE `maxDelayMs`는 무제한에서 `30000`으로, 두 전송의 `jitter`는 `0`에서 `0.2`로 바뀝니다.
+- SSE 핸드셰이크: 0.6에서는 2xx가 아닌 모든 핸드셰이크가 `shouldReconnect`에 묻지 않고 스트림을 끝냈습니다. 이제는 `502`, `503`, `504` 핸드셰이크가 연결 거부와 같이 재시도되고, 그 외 2xx가 아닌 핸드셰이크는 `retryable: false`와 함께 `shouldRetry`에 닿습니다.
+- 결함 코드: 2xx가 아닌 상태로 SSE 스트림을 끝내는 재연결 핸드셰이크는 이제 `closed.code`에 `HTTP_STATUS`를 보고합니다. 0.6은 `RES_DECODE_FAILED`를 보고했고, `EventStreamFaultCode`에는 더 이상 그것이 없습니다. throw하는 `shouldRetry`는 모든 전송에서 던진 값을 `cause`로 담아 호출을 `EXT_HOOK_FAILED`로 끝냅니다. throw하는 `shouldReconnect`는 SSE 스트림을 `NET_UNREACHABLE`로 끝냈습니다.
+- WebSocket 하트비트: 0.6에서 응답 없는 하트비트는 세션을 오류로 끝내고 `shouldReconnect`에 닿지 않았습니다. 이제는 다른 단절과 같습니다. `shouldRetry`는 `retryable: true`, `cause`, 그리고 close `code` 없이 그것을 받고, `false`를 반환하면 예전처럼 그 오류로 세션을 끝냅니다.
+- `withRetry`는 HTTP도 재시도합니다. HTTP 호출을 시도 한 번으로 유지하려면 `context.transport === "http"`일 때 `false`를 반환하세요.
+
+```ts
+// Before
+createClient(
+  withEndpoint(url),
+  withSSEReconnect({ attempts: 3, delayMs: 1000 }),
+  withWebSocketReconnect({
+    attempts: 3,
+    shouldReconnect: ({ code }) => code !== 1008,
+  }),
+);
+// After
+createClient(
+  withEndpoint(url),
+  withRetry({
+    maxRetries: 3,
+    shouldRetry: (context) => {
+      if (context.transport === "http") return false;
+      if (context.transport === "websocket" && context.code === 1008)
+        return false;
+      return context.retryable;
+    },
+  }),
+);
+```
+
+### 브라우저 배포 경계
+
+- 브라우저 CORS 실패는 Fetch에 연결 실패로 전달되어 `NET_UNREACHABLE`로 보고되며, 호스트 중단과 구분할 수 없습니다. 엔드포인트 선택을 진행시키고 명시적으로 켠 안전 메서드 재시도를 트리거할 수 있으므로, 성공한 재시도가 기본 리전의 CORS 설정 오류를 감출 수 있습니다.
+- 응답에 필요한 CORS 헤더가 없어도 서버가 POST를 이미 처리했을 수 있습니다. 그러면 애플리케이션은 쓰기가 성공했는지 모른 채 `NET_UNREACHABLE`을 받습니다. POST는 기본적으로 재전송하지 않습니다. 쓰기 재시도를 명시적으로 켜려면 복제본 간 애플리케이션 수준의 멱등성이 필요합니다.
+- 브라우저에서는 서버가 거부한 WebSocket 업그레이드(예: `401`)를 도달할 수 없는 엔드포인트와 구분할 수 없으며 `NET_UNREACHABLE`로 보고됩니다. 따라서 만료된 자격 증명 때문에 엔드포인트가 방출될 수 있습니다.
+- 쿠키 범위는 포트가 아니라 호스트 기준입니다. 서로 다른 포트의 두 `localhost` 엔드포인트는 쿠키를 공유할 수 있지만 `localhost`와 `127.0.0.1`은 공유하지 않습니다. 다중 오리진 엔드포인트 집합에는 신중한 쿠키/토큰 및 CORS 자격 증명 정책이 필요합니다. `withCredentials(true)`는 쿠키 범위를 바꾸지 않습니다.
+- 명시적 오프라인 힌트(`navigator.onLine === false`)는 엔드포인트 귀속과 연결 실패 재시도를 억제합니다. 이는 브라우저 힌트일 뿐 신뢰할 수 있는 도달 가능성 검사가 아닙니다.
+
+## 3. 실패 방출과 직접 작성한 헬스 함수 (`outlierDetection`)
+
+Defjs에는 건강한 엔드포인트라는 내장 개념이 없습니다. [`outlierDetection`](/ko-KR/api/core/outlierdetection)은 선택적인 두 가지를 하며, 모든 내장 밸런서가 `outlierDetection` 옵션으로 그것을 받습니다(`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`는 객체를 넘기지 않으면 꺼져 있고, `{}`를 넘기면 기본 설정입니다). 분류된 실패를 세어 엔드포인트를 한동안 방출하고, `isHealthy` 함수가 거부하는 엔드포인트를 건너뜁니다:
+
+<Tabs items={["시간으로 방출", "직접 작성한 헬스 함수"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#ejection
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **실패 세기**: 기본 `isFailure` 규칙은 코드가 있는 모든 결과를 실패로 셉니다: `NET_UNREACHABLE`, `NET_UNAVAILABLE`, `NET_SERVER_ERROR`, `NET_TIMEOUT`, `NET_BODY_INCOMPLETE`. 그것은 어떤 결과가 방출로 세어지는지만 정하며, 건강함의 판단이 아니고, `isFailure`를 넘겨 바꿀 수 있습니다. 코드 없이 시도된 결과는 연속 횟수를 초기화하고, 귀속되지 않은 시도는 연속 횟수를 바꾸지 않습니다. 그렇게 센 결과가 `consecutiveFailures`(기본값 `5`)만큼 연속되면 엔드포인트가 방출됩니다. 세기를 끄려면 `consecutiveFailures: 0`으로 설정하세요.
+2. **시간으로 방출**: 엔드포인트는 `min(minPenaltyMs × level, maxPenaltyMs)`(`1000ms`에서 `60000ms`)에 최대 `50%`의 균등 양수 지터를 더한 시간 동안 방출됩니다. 기본 시간과 지터의 합은 `maxPenaltyMs`를 넘지 않습니다. `level`은 gRPC outlier detection(gRFC A50)의 방출 배수입니다. 방출마다 하나가 더해지고, 성공은 그것을 지우지 않으며, 방출이 없는 `10`초마다 하나가 빠집니다. 그 시간은 방출이 끝난 순간부터 셉니다. 시간이 끝나면 엔드포인트를 다시 고를 수 있습니다. 그것을 프로브하거나 회복했다고 판단하는 것은 없습니다. 여전히 실패하면 `consecutiveFailures`만큼의 센 결과가 더 긴 시간 동안 다시 방출하므로, 연결을 받은 뒤 끊는 엔드포인트는 실패가 레벨 하나가 줄어드는 것보다 빨리 돌아오는 동안 1초, 2초, 3초, 이런 식으로 `maxPenaltyMs`까지 방출됩니다. 방출 전에 시작된 시도, 또는 엔드포인트가 방출된 동안의 시도의 결과는, 엔드포인트를 다시 고를 수 있게 된 뒤에 도착해도 무시되므로, 늦은 결과가 그 엔드포인트를 새로 방출하지 않습니다. 방출의 끝은 다음 pick에서 시계와 비교해 평가되며, 타이머는 돌지 않습니다.
+3. **`isHealthy`**: 유일한 건강 판단입니다. 동기이며, 현재 방출되지 않은 각 엔드포인트에 대해 모든 pick에서 실행됩니다(방출된 엔드포인트는 묻지 않습니다). 따라서 두 번째 탭처럼 애플리케이션이 유지하는 상태를 싸게 읽는 함수로 두세요. `false`를 반환하는 엔드포인트는 선택되지 않습니다. `true`를 반환해도 방출은 끝나지 않습니다. 엔드포인트는 방출되지 않았고 `isHealthy`가 거부하지 않을 때만 고를 수 있습니다. throw는 Defjs가 잡지 않습니다. pick은 `REQ_BUILD_FAILED`로 실패하고, 던진 값이 `cause`입니다.
+4. **제한된 이력**: 상태 이력은 파생 클라이언트를 걸쳐 최소 256개, 그리고 현재 멤버 수 이상의 엔드포인트를 유지합니다. 최근 사용 시점이 가장 오래된 정상 또는 만료 항목을 먼저 제거하고, 다음으로 부분 실패 시퀀스를 제거합니다. 만료되지 않은 방출은 보관된 모든 항목이 방출된 경우에만 제거되며, 이때 가장 오래된 항목을 없앱니다. 한 호출에서 엔드포인트를 생략하는 것만으로는 패널티가 초기화되지 않습니다. P2C 부하 이력도 최소 256개, 그리고 현재 멤버 수 이상을 유지하므로 256개를 넘는 목록도 모든 추정값을 보존하며, 사용 중인 항목보다 유휴 항목을 먼저 제거합니다. 잊힌 엔드포인트는 `defaultRttMs`부터 다시 시작합니다. Pick-first의 셔플 키는 최소 256개, 그리고 현재 멤버 수 이상을 LRU 캐시로 유지하므로 잊힌 엔드포인트가 돌아오면 새 키를 받습니다. 가중 라운드 로빈은 클라이언트 멤버의 current 값을 유지합니다. 한 번의 pick에서 빠진 엔드포인트(헬스로 걸러진 pick)도 nginx가 중단된 피어를 건너뛰는 것처럼 값을 유지하며, 멤버에서 빠진 엔드포인트의 값만 버립니다. 복사한 가중치 설정은 생성 시 고정됩니다. 시간 측정은 사용 가능하면 플랫폼의 단조 Performance 시계를 사용하고, `Date.now()`는 대체 수단으로만 사용합니다.
+5. **패닉 모드 페일오픈(fail-open)**: `isHealthy`가 방출되지 않은 모든 엔드포인트를 거부하면 밸런서는 `isHealthy`를 무시하고 방출되지 않은 엔드포인트 중에서 고릅니다. 설정된 모든 엔드포인트가 방출된 경우에만, 로컬에서 모든 트래픽을 버리는 대신 클라이언트의 전체 후보 목록으로 페일오픈합니다.
+
+## 4. 전송 통계 수명 주기 (`pick` → `start` → `end` → `done`)
+
+커스텀 밸런서는 `info.endpoints`에 있는 정확한 문자열 중 하나를 선택해야 하며, 이 규칙은 헬스 필터링을 유지합니다.
+
+커스텀 밸런서는 동기 `pick(info)`와 선택적 `start()`, `end(info)`, `done(info)` 콜백을 구현합니다. 런타임은 이 콜백을 수신자 없이 호출하므로 `this`는 `undefined`입니다. 상태는 클로저, 화살표 함수, 또는 바인딩된 함수에 두세요. 동기 throw는 시도를 바꾸지 않으며, 런타임이 `reportError`를 정의하면 그것으로 보고되고, 처리되지 않은 보고는 오류 핸들러가 없는 Bun이나 Deno 프로세스를 끝낼 수 있습니다. Node.js는 `reportError`를 정의하지 않으므로 그 throw는 거기에 가둬집니다. `PickInfo`에는 한 번의 pick에 대한 후보 `endpoints`(래퍼가 필터링하면 목록이 줄어듭니다), `members`(클라이언트의 전체 엔드포인트 목록으로 모든 시도에서 같으며, 상태를 가진 밸런서는 이것을 기준으로 순서와 상태를 관리합니다), 정의의 선택적 `operation`이 있으며, 전송 구분자는 없습니다. 전송은 자신의 사실을 중립적인 `DoneInfo.code` 결과로 옮깁니다. 내장 밸런서는 `status`를 읽지 않으며, 이 원시 응답 정보는 커스텀 밸런서만을 위해 남깁니다. `start`는 시도 전에, `end`는 피어 응답이 시작되거나 응답 전 실패가 있을 때, `done`은 완료 때 실행됩니다. 따라서 이후의 본문 실패는 앞선 `end` 표본을 바꾸지 않은 채 최종 코드를 바꿀 수 있습니다.
+
+| 물리적 전송 결과                                                             | 최종 `done(info)` 샘플                                     |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE 응답 상태 502, 503 또는 504                                         | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| HTTP/SSE의 그 외 500 이상 응답 상태                                          | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE 응답 상태 2xx, 3xx 또는 4xx(429 포함)                               | `{ attempted: true, status }`                              |
+| HTTP 응답 본문이 스트림 도중 끊김                                            | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE 핸드셰이크 성공 후 스트림 `reader.read()`가 거부                         | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE 정상 EOF, 이벤트 스트림이 아닌 2xx 핸드셰이크, 또는 버퍼 한도            | `{ attempted: true, status }`                              |
+| 열린 WebSocket이 코드 `1006` 또는 `1015`로 종료(종료 프레임이 도착하지 않음) | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 열린 WebSocket이 코드 `1012` 또는 `1013`으로 종료                            | `{ attempted: true, code: "NET_UNAVAILABLE" }`             |
+| WebSocket 하트비트 확인(ack) 시간 초과                                       | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 열린 WebSocket이 그 밖의 코드로 닫힘(`wasClean` 값과 무관)                   | `{ attempted: true }`                                      |
+| 호출자 취소 또는 수동 스트림/소켓 종료                                       | `{ attempted: false }`                                     |
+| `fetch`가 네트워크 오류로 스트리밍 HTTP 요청 본문을 거부                     | `{ attempted: false }`                                     |
+| 시도 시작 후 호출자 마감 시간 만료                                           | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+스트리밍 HTTP 요청 본문은 호출자가 제공한 `ReadableStream`입니다. `fetch`는 연결이 거부된 경우든 HTTP/1.1이든, 리다이렉트가 스트림을 다시 보낼 수 없든, CORS preflight가 실패하든, 원본 스트림이 throw하든 같은 네트워크 오류로 그것을 거부합니다. 따라서 그 오류는 엔드포인트가 다운됐다는 것을 신뢰할 수 있게 보여 주지 않습니다. 호출은 여전히 `NET_UNREACHABLE`로 실패하지만, 밸런서는 throw하는 진행률 콜백(`EXT_OBSERVER_FAILED`)과 같이 `{ attempted: false }`를 받습니다. 그 대가는 스트리밍 업로드만으로는 다운된 엔드포인트를 감지할 수 없다는 것입니다. `pickFirst`를 그 엔드포인트에서 옮기지 않고 `outlierDetection`에 세지 않으며, 거부된 스트리밍 업로드는 재시도되지 않습니다. `ReadableStream` 본문은 `shouldRetry`에 묻기 전에 재시도 흐름을 끝냅니다. 핸드셰이크 디코딩 실패는 핸드셰이크 상태에서 나온 중립 결과를 유지합니다(예를 들어 status `503`의 `NET_UNAVAILABLE`). 불완전한 HTTP 본문은 게이트웨이 응답이어도 `NET_BODY_INCOMPLETE`와 원시 status를 유지하며, 기본 이상치 감지(outlier detection)는 코드가 있는 다른 결과와 마찬가지로 이를 실패로 셉니다. 보낼 수 없는 하트비트(`message()`가 throw하거나 직렬화에 실패한 경우)는 로컬 문제이며 중립입니다.
+
+## 관련 문서
+
+- [클라이언트 구성](/ko-KR/docs/client)
+- [SSE 재시도](/ko-KR/docs/sse#reconnect)
+- [WebSocket 재시도](/ko-KR/docs/web-socket)

@@ -1,20 +1,29 @@
 ---
 title: "キャンセルとタイムアウト"
-description: 呼び出しを abort またはタイムアウトさせ、NET_ABORTED / NET_TIMEOUT を読み取ります。
+description: 呼び出しを中断またはタイムアウトさせ、NET_ABORTED / NET_TIMEOUT を読み取ります。
 ---
 
-# HTTP 呼び出しをキャンセルする
+# HTTP 呼び出しのキャンセル
 
-呼び出し側のシグナルと期限を `signal` に合成します。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` は一つのシグナルです。手動の abort は `NET_ABORTED` に分類されます。期限は `NET_TIMEOUT` に分類されます。
+呼び出し元の `AbortController` と期限を `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` で結合し、`client({ signal })` 経由で渡します。Defjs は、呼び出し元による手動の中断を `NET_ABORTED`、タイムアウトによる中断を `NET_TIMEOUT` として分類します。
 
-詳細は [HTTP](/ja-JP/docs/http#cancel-the-work) を見てください。
-
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
 ```
 
-キャンセルは呼び出し側が観測したことを伝えます。サーバー側の書き込みがロールバックされたことの証明にはなりません — ミューテーションのリトライは冪等性の契約の後ろに置いてください。
+キャンセルの通知は「クライアント側が待機を中止した」ことを表すのみであり、サーバー側で更新処理がロールバックされたことまで保証するものではありません。書き込み操作のリトライを行う場合は、冪等性キーで保護してください。詳細は [HTTP のキャンセルとタイムアウト](/ja-JP/docs/http#cancel-the-work) を参照してください。

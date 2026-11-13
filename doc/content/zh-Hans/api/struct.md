@@ -5,29 +5,15 @@ description: struct 门面、Infer，以及 StructError。
 
 # Struct
 
-建传输边界的形状，parse 值，推断 TypeScript 类型。
+构建网络边界上的形状、解析值，并推断 TypeScript 类型。
 
 ## struct
 
-门面。用这个，别直接碰内部构造函数。
+门面。优先使用它，而不是内部构造函数。
 
-```ts
-const User = struct.object({
-  id: struct.number(),
-  displayName: struct.string().alias("display_name"),
-});
-
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(user.displayName);
-}
-
-readUser();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### 原语和容器
 
@@ -54,10 +40,10 @@ readUser();
 
 <ApiSignature name="struct.parse" />
 
-- **返回** `[null, value]` 或 `[StructError, undefined]`。错误只带一个 issue。对象字段停在第一个坏字段。`struct.or` 会试完每个分支，然后报告 `invalid_union`，不保留第一个分支的失败。
-- 对象字段默认必填，除非标了 `.optional()` 或 `.nullish()`。shape 没有声明的 key 会从结果中丢弃。
-- 可选 `options.errorMap` 只改这一次 parse 的 issue 文案。
-- 默认读**逻辑** key（`displayName`）。传 `{ aliases: true }` 则读传输 key（`display_name`），和 HTTP/JSON codec 一样。
+- **返回** `[null, value]` 或 `[StructError, undefined]`。错误携带一个 issue。对象字段在第一个错误字段处停止。`struct.or` 会尝试每个分支，然后报告 `invalid_union`，不保留第一个分支的失败。
+- 对象字段默认必填，除非标记了 `.optional()` 或 `.nullish()`。shape 未声明的键会从结果中丢弃。
+- 可选 `options.errorMap` 只改写本次解析的 issue 消息。
+- 默认读取**逻辑**键（`customerName`）。传入 `{ aliases: true }` 会像 HTTP/JSON 编解码器一样读取网络键（`customer_name`）。
 
 ## ErrorMap
 
@@ -85,11 +71,11 @@ readUser();
 
 ## STRUCT
 
-一个 `unique symbol`，用来标记由 endpoint input 解析出来的对象。它属于出站编码器的内部实现，只作为类型导出。不要读取或设置它。
+一个 `unique symbol`，用于标记由操作 input 解析出的对象。它属于出站编码器的内部实现，只作为类型导出。不要读取或设置它。
 
 ## Struct
 
-能 parse 的形状：input/output 类型，加上 `.optional()`、`.null()` / `.nullable()`、`.nullish()`、`.alias()`。
+可解析的形状：input/output 类型，加上 `.optional()`、`.null()` / `.nullable()`、`.nullish()`、`.alias()`。
 
 ## StructLike
 
@@ -99,9 +85,49 @@ readUser();
 
 `.alias()`、`.null()` / `.nullable()`、`.nullish()`、`.optional()`。
 
+## StringStruct
+
+由 `struct.string` 构造的字符串 struct。
+
+## NumberStruct
+
+由 `struct.number` 构造的数字 struct。
+
+## UnknownStruct
+
+由 `struct.unknown` 构造的 unknown struct。
+
 ## ObjectStruct
 
-`struct.object` 造出来的对象形状。
+由 `struct.object` 构造的对象 struct。
+
+## ArrayStruct
+
+由 `struct.array` 构造的数组 struct。
+
+## RecordStruct
+
+由 `struct.record` 构造的 record struct。
+
+## TupleStruct
+
+由 `struct.tuple` 构造的元组 struct。
+
+## UnionStruct
+
+由 `struct.or` 构造的联合 struct。
+
+## DiscriminatedUnionStruct
+
+由 `struct.discriminatedUnion` 构造的可辨识联合 struct。
+
+## IntersectionStruct
+
+由 `struct.intersection` 构造的交叉 struct。
+
+## PreservedStruct
+
+对复合 struct 调用 `.optional()`、`.nullable()` 等修饰符时返回的 struct，保留该复合 struct 的类型。
 
 ## StructIssue
 

@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no React depend
 bun add @defjs/core @defjs/react react
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.7.0` range.
 
 ## Quick start
 
@@ -18,12 +18,12 @@ The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
 // api.ts — reusable definition
 import { defineRequest, struct } from "@defjs/core";
 
-export const getUser = defineRequest({
+export const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
 });
 ```
 
@@ -31,14 +31,14 @@ export const getUser = defineRequest({
 // app.tsx
 import { createClient, withEndpoint } from "@defjs/core";
 import { ClientProvider } from "@defjs/react";
-import { UserProfile } from "./user-profile";
+import { OrderProfile } from "./order-profile";
 
 const client = createClient(withEndpoint("https://api.example.com"));
 
 export function App() {
   return (
     <ClientProvider client={client}>
-      <UserProfile id={1} />
+      <OrderProfile id={1} />
     </ClientProvider>
   );
 }
@@ -49,23 +49,23 @@ Read the client with `useClient()` and own request cleanup where the work starts
 ```tsx
 import { useEffect, useState } from "react";
 import { useClient } from "@defjs/react";
-import { getUser } from "./api";
+import { getOrder } from "./api";
 
-export function UserProfile({ id }: { id: number }) {
+export function OrderProfile({ id }: { id: number }) {
   const client = useClient();
   const [name, setName] = useState("loading...");
 
   useEffect(() => {
     const abort = new AbortController();
 
-    void getUser(client({ signal: abort.signal }), { id }).then(
-      ([error, user]) => {
+    void getOrder(client({ signal: abort.signal }), { id }).then(
+      ([error, order]) => {
         if (abort.signal.aborted) return;
         if (error) {
           setName(error.message);
           return;
         }
-        setName(user.name);
+        setName(order.status);
       },
     );
 
@@ -89,7 +89,7 @@ Returns `overrideClient` when supplied, otherwise the nearest provided client. T
 ## Notes
 
 - `useClient()` returns the `DerivableClient` that was supplied, a function. Call it with request options where the operation runs to derive a `Client` value. Do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater and will invoke it. A derived `Client` value is not accepted by `ClientProvider` or `useClient`.
-- Create request-specific clients (SSR data with credentials, cookies, or tenant state) at the application boundary.
+- Create request-specific clients (SSR with per-request credentials, cookies, or tenant state) at the application boundary.
 - The owner that creates a client also owns its requests, SSE streams, and WebSocket sessions. Provider unmount does not clean them up.
 - Import `createClient`, `withEndpoint`, `withInterceptors`, and other client options from `@defjs/core`.
 

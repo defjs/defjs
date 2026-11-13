@@ -1,46 +1,64 @@
 ---
 title: "Build and publish an SDK"
-description: Export API definitions as an npm package with types, and let each application configure its own client.
+description: Structure a multi-module S3 SDK with models and pure-function operation definitions, publish it as an npm package, and let each application configure its own client.
 ---
 
 # Build and publish an SDK [#publish-an-http-sdk-without-hiding-execute]
 
-An SDK packages the API your team offers. With Defjs, export endpoint definitions and their data contracts; consuming applications supply the client configuration and decide when to call them. This recipe uses HTTP, and the same package boundary works for SSE and WebSocket definitions.
+A Defjs SDK organizes shared `struct` models (`src/models/`) and domain operation modules (`src/services/`) into a tree-shakable npm package while leaving `createClient(...)`, endpoints, credentials, and interceptors in the consuming application.
 
-## 1. Define the SDK's operations
+Unlike legacy OpenAPI generators that wrap endpoints in stateful `Service` classes (`ObjectsService.putObject(...)`), a Defjs SDK exports **standalone pure operation functions** (`putObject`, `getObject`, `listObjectsV2`) that are called directly with the application's client.
 
-Create `src/users.ts` in your SDK project. Keep paths, input mapping, responses, and service errors here. No client instance, deployment address, or current credential is needed to define this operation.
+---
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+## 1. Structure and define the SDK package
+
+Using an Amazon S3-compatible object storage SDK (`@company/s3-sdk`) as an example, split the package into two layers:
+
+- **`src/models/`**: Shared `struct` schemas and `Infer<typeof ...>` TypeScript types (using same-name value + type exports so consumers can import a single identifier for both runtime schemas and static types).
+- **`src/services/`**: Domain modules grouped by resource (`buckets.ts`, `objects.ts`). Each module exports standalone `defineRequest` functions whose synchronous `builder` routes a flat caller input across `path`, `query`, `headers`, and binary `body`.
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+  <Tab>
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
 </include>
 
-Expose it from `src/index.ts`:
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
 
-```ts
-export { getUser } from "./users";
-```
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
 
-Add other operation modules and re-export their endpoints as your SDK grows.
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
 
-## 2. Package JavaScript and declarations
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+</include>
 
-The SDK project has its own package boundary:
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
 
-```txt
-users-sdk/
-  package.json
-  tsconfig.json
-  src/
-    index.ts
-    users.ts
-```
-
-Use this `package.json`, replacing the example name with a package scope you own:
-
+  </Tab>
+  <Tab>
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -55,20 +73,17 @@ Use this `package.json`, replacing the example name with a package scope you own
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.6.0"
+    "@defjs/core": "^0.7.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.6.0",
+    "@defjs/core": "^0.7.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
 }
 ```
-
-Core remains an external runtime dependency shared with the application. The peer range states which Core releases your SDK supports; the development dependency lets you build and test against that range. This example matches the current `0.4.x` contract. Choose and test the range for your SDK before publishing; declarations and runtime behavior both depend on it.
-
-Add `tsconfig.json`:
-
+  </Tab>
+  <Tab>
 ```json
 {
   "compilerOptions": {
@@ -82,12 +97,18 @@ Add `tsconfig.json`:
   "include": ["src/**/*.ts"]
 }
 ```
+  </Tab>
+</Tabs>
 
-These library declarations provide types, not runtime polyfills. The application still needs the Web APIs used by its chosen transports.
+- **Pure functions, never `Service` classes**: Every operation (`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`) is exported as an independent `defineRequest` value. Do not wrap them in a `class` or a namespace object—standalone functions keep the calling convention identical to `@defjs/core` (`await putObject(client, input)`) and let bundlers tree-shake unused endpoints when `"sideEffects": false` is set.
+- **Empty vs binary vs structured responses**: `listBuckets` and `listObjectsV2` decode JSON structs with `.alias()` wire mappings; `getObject` decodes a binary `Blob` (`output: struct.blob()`); `putObject`, `headObject`, and `deleteObject` omit `output` for empty response bodies while still exposing `response.headers` (such as `etag`) in the third tuple slot.
+- **External runtime peer**: `@defjs/core` stays a `peerDependency` shared with the consuming application.
 
-`tsdown` bundles the entry into `dist/index.js` and emits `dist/index.d.ts`.
+---
 
-Build and inspect the package:
+## 2. Build and verify the tarball
+
+Bundle `dist/index.js` and `dist/index.d.ts` with `tsdown`, then inspect the package contents before publishing:
 
 ```sh
 bun install
@@ -96,46 +117,38 @@ bun pm pack --dry-run
 bun pm pack
 ```
 
-Check that the tarball contains `dist/index.js` and `dist/index.d.ts`. Install that tarball into a separate application and verify both its types and execution before publishing. The SDK's README should document the service API, compatible Core versions, expected authentication, and any optional defaults.
+Verify that `dist/index.js` and `dist/index.d.ts` are included in the tarball.
 
-## 3. Call it from the consuming application
+---
 
-The local example keeps the definition in `users-sdk.ts` beside `app.ts` so it can run offline. Its import creates no client; the application configures a local Fetch handle and calls the imported operation:
+## 3. Consume the SDK in an application
+
+Install your SDK alongside `@defjs/core`:
+
+```sh
+bun add @company/s3-sdk @defjs/core@^0.7.0
+```
+
+Because the SDK binds no client, the consuming application owns the endpoint (AWS S3, Cloudflare R2, or MinIO), signing interceptor, and retry policy, and calls each imported operation directly as a pure function:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-For the packaged SDK, install it together with a compatible Core release:
+In production code, replace the relative import `./src/index.ts` with `@company/s3-sdk` and remove `withHTTPHandle(...)` to use the platform `fetch`.
 
-```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
-```
+---
 
-Replace the example's relative import with:
+## 4. Test and publish
 
-```ts
-import { getUser } from "@company/users-sdk";
-```
-
-Configure your service address and authentication on the application client. Keep `withHTTPHandle(...)` for local tests; remove it to use the platform Fetch implementation. A second application can import the same endpoint and choose different client settings without changing the SDK definition.
-
-## 4. Verify and publish
-
-Use [client-local tests](/recipes/test-with-handle) to exercise the exported definition, request mapping, response validation, and declared errors. Verify the same endpoint with two clients configured for different service addresses and credentials. Keep typed `HTTP_STATUS` handling available at the call site, and test cancellation and stream cleanup for the transports your SDK exports.
-
-When the package has passed your checks, publish from the SDK directory with your npm account:
+Exercise your exported definitions with [in-memory handle tests](/recipes/test-with-handle) covering path/query/header/binary-body mapping, `output` decoding, `ETag` response headers, declared `HTTP_STATUS` (`S3Error`) faults, and cancellation. Once verified, publish the package:
 
 ```sh
 bun publish --access public
 ```
 
-This command publishes a public package. Use your organization's registry and access policy for a private SDK. Defjs does not generate or publish the package for you.
-
-Client factories and convenience methods are optional additions. They can provide service defaults or domain behavior while accepting caller configuration and preserving direct endpoint exports. Document any error mapping or lifecycle policy they introduce. Neither is required for a reusable SDK.
-
-See [HTTP](/docs/http), [Client](/docs/client), and [Design decisions](/docs/design-decisions) for the underlying contracts.
+See [HTTP operations](/docs/http), [Client](/docs/client), [Testing](/docs/testing), and [Core architecture](/docs/design-decisions).

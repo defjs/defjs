@@ -1,22 +1,36 @@
 ---
 title: "GraphQL 요청"
-description: GraphQL은 HTTP 200과 애플리케이션 unwrap로 두고, Core는 GraphQL 프로토콜을 제공하지 않아요.
+description: GraphQL을 HTTP 200 + 애플리케이션 언래핑으로 처리합니다. Core는 별도의 GraphQL 프로토콜을 포함하지 않습니다.
 ---
 
-# GraphQL HTTP envelope 풀기
+# GraphQL HTTP 엔벨로프 언래핑
 
-Defjs는 GraphQL `errorPolicy`를 구현하지 않아요. 와이어는 builder가 query 문서와 변수를 배치하는 HTTP POST로 두세요. envelope `data`를 `.nullish()`로 선언하면 빠진 `data`와 `data: null`이 모두 헬퍼에 닿아요. 그다음 `data`를 보기 전에 `errors[]`를 푸세요.
+Defjs는 별도의 GraphQL 클라이언트나 `errorPolicy`를 내장하지 않습니다. HTTP 상의 GraphQL은 `builder`가 `{ query, operationName, variables }`를 전송하는 표준 `POST` 작업으로 모델링하세요. 엔벨로프 Struct에서 `data`를 `.nullish()`로 선언하면 생략된 `data`와 `data: null` 모두 구조적 유효성 검증을 통과하며, `errors[]`는 애플리케이션 헬퍼 함수에서 언래핑합니다:
 
-[설계 결정](/ko-KR/docs/design-decisions)을 보세요.
-
-<include cwd meta="graphql-viewer.ts">
-  examples/recipes/graphql-http-envelope.ts#example
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 ada viewer unavailable viewer unavailable
 ```
 
-HTTP 성공은 envelope가 도착했다는 뜻일 뿐이에요. 애플리케이션 오류는 unwrap이 throw하거나 돌려줄 때까지 `errors[]`에 남아요. `data: null`인 응답도 그래요. 예제는 빠진 `data`와 `data: null`을 `errors[]`와 함께 Struct 불일치가 아니라 애플리케이션 오류로 다뤄요.
-
-`if (error) throw error`는 Defjs fault를 이 헬퍼의 예외로 맞추는 경계예요. HTTP 200의 GraphQL 실패는 `errors[]`의 애플리케이션 오류로 남고, 따로 throw 해요.
+- HTTP `200`은 GraphQL 엔벨로프가 손상 없이 온전히 수신되었음을 의미할 뿐입니다. `errors[]` 내부의 비즈니스 도메인 오류(`data: null`과 함께 오는 경우 포함)는 `RES_STRUCT_MISMATCH` 결함이 아니라 애플리케이션 수준의 결과값입니다.
+- 프로토콜별 엔벨로프 처리를 애플리케이션 헬퍼에 유지하는 이유에 대해서는 [핵심 아키텍처](/ko-KR/docs/design-decisions)를 참조하세요.

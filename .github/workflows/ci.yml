@@ -15,37 +15,77 @@ jobs:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - run: bun ci
-      - name: Install Playwright browsers
-        run: bunx --bun playwright install --with-deps chromium firefox
+      # Type-aware lint reads the generated route types in doc/.react-router, which are not committed.
+      - name: Generate route types
+        run: bun run --cwd doc typegen
       - name: Lint
         run: bun run lint
       - name: Format check
         run: bun fmt --check
       - name: Typecheck
         run: bun run typecheck
-      - name: Unit tests
-        run: bun run test:unit
+
+  build:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
       - name: Build
         run: bun run build
-      - name: E2E tests
-        run: bun run test:e2e
 
-  # Vitest's bin is `#!/usr/bin/env node`. `bunx` (without `--bun`) runs that bin on Node.
-  # `bun run` follows bunfig `[run] bun = true` and would stay on Bun, which is the `checks` job.
-  # Node 26 is the LTS baseline and matches Vitest's `>=26.0.0` engine range.
-  node-tests:
+  unit-chrome:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - name: Install Playwright browsers
+        run: bunx --bun playwright install --with-deps chromium
+      - name: Unit tests (Chrome)
+        run: bun run unit:chrome
+
+  unit-firefox:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - name: Install Playwright browsers
+        run: bunx --bun playwright install --with-deps firefox
+      - name: Unit tests (Firefox)
+        run: bun run unit:firefox
+
+  unit-bun:
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - name: Unit tests (Bun)
+        run: bun run unit:bun
+
+  unit-node:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 26
-          package-manager-cache: false
-      - uses: oven-sh/setup-bun@v2
-      - run: bun ci
-      - name: core-server on Node
-        working-directory: packages/core
-        run: bunx --no-install vitest run --config vitest.config.ts --project core-server --coverage.enabled=false
-      - name: opentelemetry-server on Node
-        working-directory: packages/opentelemetry-server
-        run: bunx --no-install vitest run --config vitest.config.ts --coverage.enabled=false
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: |
+            packages/core/package-lock.json
+            packages/opentelemetry-server/package-lock.json
+      - name: Install packages that run on Node
+        shell: bash
+        run: |
+          for lock in packages/*/package-lock.json; do
+            (cd "$(dirname "$lock")" && npm ci --ignore-scripts --workspaces=false)
+          done
+      - name: Unit tests (Node)
+        run: node --run unit:node

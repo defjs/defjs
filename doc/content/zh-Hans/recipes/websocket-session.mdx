@@ -1,22 +1,32 @@
 ---
 title: "管理 WebSocket 会话"
-description: 连上、发一个类型化信封、收一次，再 close 并 await closed。
+description: 连接，发送一个带类型的信封，接收一次，然后关闭并等待 closed。
 ---
 
 # 打开 WebSocket 会话
 
-每个方向一个 struct。退订、`close`、`await session.closed` 都归你。非法 frame 进 `onRuntimeError`。
+在 `defineWebSocket` 上声明 `incoming` 和 `outgoing` struct。在应用中订阅 `session.onRuntimeError(...)`，消费 `session.receive`，并始终在 `finally` 中退订、调用 `session.close(...)` 和 `await session.closed`：
 
-细节见 [WebSocket](/zh-Hans/docs/web-socket)。
-
-<include cwd meta="chat.ts">
-  examples/recipes/websocket-session.ts#example
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
 </include>
 
-`chat.example.com` 是占位地址。假设服务器用 `{ "type": "message", "text": "Hello" }` 回应 `{ "type": "send", "text": "Hello" }`，这段代码会输出：
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+当服务端对 `{ "type": "subscribe", "symbol": "ACME" }` 回复 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` 时，脚本会打印：
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-重连是可选的（`withWebSocketReconnect`）。Heartbeat 也是可选的。浏览器 WebSocket 不能随意设置握手 headers——用 cookie、子协议或短命 ticket。
+- 重连（`withRetry`）和心跳（`withWebSocketHeartbeat`）在 Client 上都需要显式开启（opt-in）。
+- 浏览器 WebSocket 无法在升级握手时发送任意 HTTP 请求头；请改用 cookie、子协议或短期 ticket。见 [WebSocket 会话](/zh-Hans/docs/web-socket)。

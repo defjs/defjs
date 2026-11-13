@@ -1,6 +1,6 @@
 {
   "name": "@defjs/opentelemetry-server",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Append OpenTelemetry interceptors to an application-owned Defjs client.",
   "bugs": {
     "url": "https://github.com/defjs/defjs/issues"
@@ -13,33 +13,26 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "publishConfig": {
-    "directory": "dist",
-    "linkDirectory": false
-  },
   "scripts": {
-    "build": "bun --bun tsdown --config-loader native --config tsdown.config.ts",
-    "test:unit": "vitest run --coverage"
+    "build": "bun check --project tsconfig.build.json && bun --bun tsdown --config-loader native --config tsdown.config.ts",
+    "unit:bun": "vitest run --config vitest.config.bun.ts",
+    "unit:node": "vitest run --config vitest.config.node.ts"
   },
   "dependencies": {
     "@opentelemetry/api-logs": "^0.223.0"
   },
   "devDependencies": {
-    "@defjs/core": "workspace:^",
-    "@hono/node-server": "catalog:",
     "@opentelemetry/api": "1.10.0",
-    "@opentelemetry/core": "3.0.0",
-    "@types/ws": "catalog:",
-    "@vitest/coverage-istanbul": "catalog:",
-    "hono": "catalog:",
-    "tsdown": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:",
-    "ws": "catalog:"
+    "@opentelemetry/core": "3.1.1",
+    "@vitest/coverage-istanbul": "^5.1.0",
+    "hono": "^4.13.17",
+    "tsdown": "^0.23.7",
+    "typescript": "7.1.0-beta",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.6.0",
+    "@defjs/core": "^0.7.0",
     "@opentelemetry/api": "^1.0.0",
     "@opentelemetry/core": "^2.0.0 || ^3.0.0"
   }

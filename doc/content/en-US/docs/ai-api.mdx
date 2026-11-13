@@ -1,36 +1,24 @@
 ---
-title: "Calling AI APIs"
-description: "Call an AI service from an application without exposing provider credentials, and read a fictional offline event stream."
+title: "llms.txt"
+description: "Point an assistant at the English Markdown index and per-page sources generated for large language models."
 ---
 
-Calling an AI service from an application is separate from asking an assistant to write Defjs. [AI-assisted development](/docs/ai) is that assistant workflow. API and SSE event formats are specific to each provider. The stream on this page is a fictional backend, not a provider protocol.
+# llms.txt
 
-## Call an AI API from an application [#call-an-api]
+The documentation site publishes English Markdown generated for assistants. These addresses have no locale prefix and are not translations of the localized guides.
 
-Define the call with the HTTP or SSE contract you already use, then call the operation on a client the application owns. Start with [HTTP requests](/docs/http) and [SSE event streams](/docs/sse). [Send JSON](/recipes/post-json) is the usual JSON body. [Consume SSE events](/recipes/consume-sse) shows how to read and close a stream, but stops after the first event. That recipe is not a complete AI response. For a complete AI response, keep reading until the provider's completion signal or EOF, handle stream errors, and close the stream; adapt event names and payload schemas to the provider. [Cancellation and timeouts](/recipes/cancel-http) is how the caller stops an HTTP call.
+## Page index [#llms-txt]
 
-Keep the provider secret on a server that is allowed to spend it. Do not put that secret in a browser bundle, a public build variable, or a client shipped to the browser. Credentials belong to the application: set them on the server client, or attach them in an interceptor that runs only inside that server boundary. [Client configuration](/docs/client) and [Interceptors](/docs/interceptors) are where that configuration goes. `withCredentials` only selects Fetch cookie mode. It does not hold a provider secret.
+[llms.txt](/llms.txt) lists the English pages and links to their website URLs. It is the entry point when an assistant needs to find a page first.
 
-After the operation returns, the application owns the stream. For SSE, read the events, close the handle, and wait until it is closed. For HTTP, abort the call when the answer is no longer needed. An abort does not prove the service undid work it had already accepted.
+## Compiled guides [#llms-full]
 
-Do not retry a streaming POST only because the attempt failed. Defjs does not retry HTTP on its own. SSE reconnect stays off until the application opts in, and a method such as POST is not sent again unless that policy explicitly allows it. A failed attempt can already have started work the service bills for. Sending the same POST again can start that work a second time. Read the replay rules in [HTTP requests](/docs/http) and the reconnect rules in [SSE event streams](/docs/sse) before adding a retry.
+[llms-full.txt](/llms-full.txt) joins the English guides into one file. Use it when the assistant needs broad context in a single document and the token budget allows it.
 
-## Fictional offline stream [#fictional-stream]
+## One page as Markdown [#page-markdown]
 
-The wire format below is fictional. It is not the event format of a specific provider. `withSSEHandle` supplies the response, so the example needs no network and no real credentials. The body is two `delta` events and then a completion event. The loop keeps both pieces of text. It does not stop after the first event.
+Every English page is also available as Markdown at `/llms.mdx/<path>/content.md`. For example, [Quick start as Markdown](/llms.mdx/docs/start/content.md) is the English text of the Quick start page.
 
-<include cwd lang="typescript">
-  examples/ai/fictional-completion.ts#example
-</include>
+## Check the version [#version]
 
-In a project with `@defjs/core` installed, save the example as `fictional-completion.ts`, then run:
-
-```sh
-bun fictional-completion.ts
-```
-
-Expected output:
-
-```txt
-Hello there
-```
+The site documents the default branch; the project may install a different `@defjs/core` version. Verify APIs against the installed package before applying a suggestion. Remove secrets and check the project's policies before sharing code or context with an AI tool.

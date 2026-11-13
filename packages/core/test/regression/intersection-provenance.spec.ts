@@ -7,9 +7,11 @@ import {
   withHTTPHandle,
   type AnyStruct,
 } from "../../src";
-import { encodeOutbound } from "../../src/internal/outbound_request";
+import { isPlainObject } from "../../src/struct/plain_object";
+import { encodeOutbound } from "../../src/struct/encode";
 import type { Guide } from "../../src/struct/guide";
-import { parseStructValue } from "../../src/struct/introspection";
+import { assertRecord, isRuntimeStruct, isUnknownArray } from "../narrow";
+import { parseStructValue } from "../../src/struct/parse";
 
 const ISO = "2026-01-02T00:00:00.000Z";
 const opaque = [
@@ -33,14 +35,20 @@ async function post(schema: AnyStruct, input: unknown) {
   const endpoint = defineRequest({
     builder: (value) => {
       builderCalls += 1;
-      parsed = value;
-      return { body: value };
+      const received: unknown = value;
+      parsed = received;
+      return {
+        body:
+          Array.isArray(received) || isPlainObject(received)
+            ? received
+            : undefined,
+      };
     },
     input: schema,
     method: "POST",
     path: "/",
   });
-  const [fault] = await endpoint(client, input as never);
+  const [fault] = await endpoint(client, input);
   return { body, builderCalls, fault, handleCalls, parsed };
 }
 
@@ -160,7 +168,8 @@ for (const [kind, protect] of integrity) {
     expect(result.fault).toBeNull();
     expect(result.builderCalls).toBe(1);
     expect(result.handleCalls).toBe(1);
-    expect((result.parsed as unknown[])[0]).toBe(child);
+    if (!isUnknownArray(result.parsed)) throw new Error("Expected an array");
+    expect(result.parsed[0]).toBe(child);
     expect(result.body).toBe('[{"value":"kept"}]');
     expect(Object.getOwnPropertyDescriptors(child)).toEqual(before);
   });
@@ -185,9 +194,8 @@ test.each([false, true])(
     expect(result.fault).toBeNull();
     expect(Object.getOwnPropertyDescriptors(input)).toEqual(descriptors);
     expect(Object.getOwnPropertySymbols(input)).toEqual(symbols);
-    expect(inArray ? (result.parsed as unknown[])[0] : result.parsed).toBe(
-      input,
-    );
+    const parsed = inArray ? firstItem(result.parsed) : result.parsed;
+    expect(parsed).toBe(input);
     expect(result.body).toBe(
       inArray ? '[{"value":"kept"}]' : '{"value":"kept"}',
     );
@@ -216,9 +224,8 @@ test.each([
       inArray ? [input] : input,
     );
     expect(result.fault).toBeNull();
-    expect(inArray ? (result.parsed as unknown[])[0] : result.parsed).toBe(
-      input,
-    );
+    const parsed = inArray ? firstItem(result.parsed) : result.parsed;
+    expect(parsed).toBe(input);
     expect(result.body).toBe(
       inArray ? '[{"row":{"name":"N"}}]' : '{"row":{"name":"N"}}',
     );
@@ -241,7 +248,7 @@ test("a discarded union candidate cannot leave opaque guides on the selected bra
   const result = await post(schema, { payload });
   expect(result.fault).toBeNull();
   expect(result.body).toBe('{"payload":{"row":{"display_name":"N"}}}');
-  expect((result.parsed as { payload: unknown }).payload).toBe(payload);
+  expect(assertRecord(result.parsed, "parsed")["payload"]).toBe(payload);
   expect(Object.getOwnPropertyDescriptors(payload)).toEqual(before);
 });
 
@@ -252,9 +259,7 @@ test.each([false, true])(
       name: struct.string().alias("display_name"),
     });
     const value = { name: "N" };
-    const guides = new WeakMap<object, Guide>([
-      [value, profile as unknown as Guide],
-    ]);
+    const guides = new WeakMap<object, Guide>([[value, runtimeGuide(profile)]]);
     const schema = struct.object({ payload: root, missing: struct.string() });
     const original = new RangeError("caller getter");
     const input = {
@@ -283,3 +288,13 @@ test("a single opaque union member remains borrowed beside an intersection ident
   expect(result.parsed).toBe(input);
   expect(result.body).toBe('{"value":"kept"}');
 });
+
+function firstItem(value: unknown): unknown {
+  if (!isUnknownArray(value)) throw new Error("Expected an array");
+  return value[0];
+}
+
+function runtimeGuide(value: unknown): Guide {
+  if (!isRuntimeStruct(value)) throw new Error("Expected a struct guide");
+  return value;
+}

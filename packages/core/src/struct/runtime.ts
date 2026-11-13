@@ -1,27 +1,20 @@
 import { DEFINITION } from "./symbols";
 import type { FAILED } from "./symbols";
+import type { Struct, StructLike } from "./types";
 import type {
-  DecodeFailure,
-  Path,
   PrimitiveKind,
   RuntimeStruct,
-  Struct,
   StructDefinition,
   StructFlags,
-  StructLike,
-} from "./types";
+} from "./definition";
 
 export interface PrimitiveDefinitionInput<
   K extends PrimitiveKind,
   TInput,
   TOutput = TInput,
 > {
-  decode?: (
-    value: TInput,
-    path: Path,
-    fail: DecodeFailure,
-  ) => TOutput | typeof FAILED;
-  encode?: (value: TOutput) => unknown;
+  /** Converts a value `is` accepted. Returns the output, or `invalid` for a value it cannot convert. */
+  decode?: (value: TInput, invalid: typeof FAILED) => TOutput | typeof FAILED;
   expected: string;
   is: (value: unknown) => value is TInput;
   kind: K;
@@ -32,25 +25,32 @@ export interface PrimitiveDefinitionInput<
 export function createPrimitiveStruct<TInput, TOutput = TInput>(
   definition: PrimitiveDefinitionInput<PrimitiveKind, TInput, TOutput>,
 ): Struct<TInput, TOutput> {
-  return castStruct<Struct<TInput, TOutput>>(
-    makeStruct({
-      ...definition,
-      flags: DEFAULT_FLAGS,
-    } as StructDefinition),
-  );
+  const { decode, is } = definition;
+  return makeStruct({
+    ...definition,
+    // The stored hook takes any value, so it is the one check a parse makes for a struct that converts.
+    decode:
+      decode &&
+      ((value: unknown, invalid: typeof FAILED) =>
+        is(value) ? decode(value, invalid) : invalid),
+    flags: DEFAULT_FLAGS,
+  });
 }
 
 export const DEFAULT_FLAGS: StructFlags = { nullable: false, optional: false };
 
-export function castStruct<TStruct extends StructLike>(
-  struct: StructLike,
-): TStruct {
-  // Type boundary: all struct runtime objects are created by makeStruct/createPrimitiveStruct; the branded generic surface
-  // exists only for compile-time input/output inference and has no distinct runtime representation.
-  return struct as TStruct;
-}
+/** A struct whose own value is null accepts null the same way `.nullable()` does: by this flag. */
+export const NULLABLE_FLAGS: StructFlags = { nullable: true, optional: false };
 
-export function makeStruct(definition: StructDefinition): RuntimeStruct {
+/**
+ * Builds the runtime object of a struct and gives it the struct type its constructor declares.
+ *
+ * `TStruct` is chosen by the constructor, not checked: its `_struct` input and output types are a compile-time-only
+ * brand with no runtime value to inspect.
+ */
+export function makeStruct<TStruct extends StructLike = RuntimeStruct>(
+  definition: StructDefinition,
+): TStruct & RuntimeStruct {
   const withFlags = (flags: Partial<StructFlags>): RuntimeStruct =>
     makeStruct({
       ...definition,
@@ -60,13 +60,10 @@ export function makeStruct(definition: StructDefinition): RuntimeStruct {
       },
     });
 
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: every constructor returns a published struct type (Struct<I, O>, ObjectStruct<T>, RecordStruct<S>, …) whose `_struct` brand and phantom members exist only in the type system, so no runtime object can be checked into one, and this is the one place a struct object is given that type. Tried: an optional `_struct` in the published StructLike (`readonly _struct?: StructTypes<I, O, OO>`) breaks inference, 385 errors in 55 files; a class with `declare readonly _struct` still cannot declare each constructor's phantom members and moves the methods off Object.prototype; a real `_struct` property adds an own key to every struct
   return {
     [DEFINITION]: definition,
     alias(name: string) {
-      if (typeof name !== "string") {
-        throw new TypeError("alias() requires a string name");
-      }
-
       return makeStruct({
         ...definition,
         alias: name,
@@ -84,5 +81,5 @@ export function makeStruct(definition: StructDefinition): RuntimeStruct {
     optional() {
       return withFlags({ optional: true });
     },
-  } as RuntimeStruct;
+  } as TStruct & RuntimeStruct;
 }

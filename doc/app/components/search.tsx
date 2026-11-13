@@ -10,9 +10,9 @@ import {
   type SharedProps,
 } from "fumadocs-ui/components/dialog/search";
 import { useStaticSearch } from "fumadocs-core/search/client";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
+import { useLocale } from "../lib/use-app-translations";
 export default function StaticSearch(props: SharedProps) {
-  const { locale } = useI18n();
+  const locale = useLocale();
   const search = useStaticSearch({
     locale,
     from: `/api/search/${locale}.json`,

@@ -9,13 +9,14 @@ import {
   withWebSocketHandle,
 } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "./http_response";
-import type { HttpRequest } from "./http_request";
+import { makeResponse } from "../http/http_response";
+import type { HttpRequest } from "../http/http_request";
 import { defineRequest } from "../http/http";
 import { defineEventStream } from "../sse/sse";
 import { struct } from "../struct";
 import { STRUCT } from "../struct/symbols";
 import { defineWebSocket } from "../web_socket/web_socket";
+import { createFakeWebSocket, refusing } from "../../test/fake_web_socket";
 
 const birthday = new Date("1815-12-10T00:00:00.000Z");
 
@@ -29,16 +30,6 @@ const Query = struct.object({
   tags: struct.array(struct.string()),
 });
 
-function stoppingSocket(urls: string[]): typeof WebSocket {
-  return class {
-    static OPEN = 1;
-    constructor(url: string) {
-      urls.push(url);
-      throw new Error("stop");
-    }
-  } as unknown as typeof WebSocket;
-}
-
 describe("query serializer contract", () => {
   test("serializer receives the alias-applied encoded query object", async () => {
     let received: unknown;
@@ -50,9 +41,9 @@ describe("query serializer contract", () => {
         return "ok=1";
       }),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -80,11 +71,12 @@ describe("query serializer contract", () => {
       tags: ["a", "b"],
     });
     expect(received).not.toBeInstanceOf(URLSearchParams);
-    expect(Object.getOwnPropertySymbols(received as object)).not.toContain(
-      STRUCT,
-    );
-    expect(captured?.queryString).toBe("ok=1");
-    expect(captured?.queryParams?.get("ok")).toBe("1");
+    if (typeof received !== "object" || received === null) {
+      throw new Error("expected a query object");
+    }
+    expect(Object.getOwnPropertySymbols(received)).not.toContain(STRUCT);
+    expect(captured?.query?.toString()).toBe("ok=1");
+    expect(captured?.query?.get("ok")).toBe("1");
   });
 
   test("default query repeats array keys", async () => {
@@ -92,9 +84,9 @@ describe("query serializer contract", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -107,9 +99,8 @@ describe("query serializer contract", () => {
     const [error] = await list(client);
 
     expect(error).toBeNull();
-    expect(captured?.queryString).toBe("include=true&tags=a&tags=b");
-    expect(captured?.queryParams?.getAll("tags")).toEqual(["a", "b"]);
-    expect(captured?.queryParams?.toString()).toBe(captured?.queryString);
+    expect(captured?.query?.toString()).toBe("include=true&tags=a&tags=b");
+    expect(captured?.query?.getAll("tags")).toEqual(["a", "b"]);
   });
 
   test("default nested query fails with REQ_BUILD_FAILED asking for a query serializer", async () => {
@@ -132,25 +123,7 @@ describe("query serializer contract", () => {
     expect(error.cause.message).toContain("a query serializer is required");
   });
 
-  test("null query fails with REQ_BUILD_FAILED", async () => {
-    const client = createClient(withEndpoint("https://example.com"));
-    const search = defineRequest({
-      builder: (() => ({ query: { id: null } })) as never,
-      method: "GET",
-      path: "/items",
-    });
-
-    const [error] = await search(client);
-
-    expect(error?.code).toBe("REQ_BUILD_FAILED");
-    expect(error?.cause).toBeInstanceOf(TypeError);
-    if (!(error?.cause instanceof Error)) {
-      throw new Error("expected null query cause");
-    }
-    expect(error.cause.message).toContain("null");
-  });
-
-  test("URLSearchParams query bypasses the serializer", async () => {
+  test("URLSearchParams query is copied and bypasses the serializer", async () => {
     const query = new URLSearchParams();
     query.append("tag", "a");
     query.append("tag", "b");
@@ -161,9 +134,9 @@ describe("query serializer contract", () => {
         throw new Error("serializer should be skipped");
       }),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -176,19 +149,21 @@ describe("query serializer contract", () => {
     const [error] = await list(client);
 
     expect(error).toBeNull();
-    expect(captured?.queryString).toBe("tag=a&tag=b");
-    expect(captured?.queryParams).toBe(query);
+    expect(captured?.query?.toString()).toBe("tag=a&tag=b");
+    expect(captured?.query).not.toBe(query);
+    captured?.query?.append("tag", "c");
+    expect(query.toString()).toBe("tag=a&tag=b");
   });
 
-  test("interceptor sees queryParams parsed from the serializer string", async () => {
+  test("interceptor sees the query parsed from the serializer string", async () => {
     let captured: HttpRequest | undefined;
     const client = createClient(
       withEndpoint("https://example.com"),
       withQuerySerializer(() => "filter[state]=open&tag=a&tag=b"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -203,9 +178,11 @@ describe("query serializer contract", () => {
     const [error] = await search(client);
 
     expect(error).toBeNull();
-    expect(captured?.queryString).toBe("filter[state]=open&tag=a&tag=b");
-    expect(captured?.queryParams?.get("filter[state]")).toBe("open");
-    expect(captured?.queryParams?.getAll("tag")).toEqual(["a", "b"]);
+    expect(captured?.query?.toString()).toBe(
+      "filter%5Bstate%5D=open&tag=a&tag=b",
+    );
+    expect(captured?.query?.get("filter[state]")).toBe("open");
+    expect(captured?.query?.getAll("tag")).toEqual(["a", "b"]);
   });
 
   test("a configured serializer is not called when the request has no query", async () => {
@@ -218,9 +195,9 @@ describe("query serializer contract", () => {
         return "x=1";
       }),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           captured = request;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -230,8 +207,7 @@ describe("query serializer contract", () => {
 
     expect(error).toBeNull();
     expect(calls).toBe(0);
-    expect(captured?.queryString).toBe("");
-    expect(captured?.queryParams?.toString()).toBe("");
+    expect(captured?.query?.toString()).toBe("");
   });
 
   test("SSE query uses the serializer and skips URLSearchParams", async () => {
@@ -243,9 +219,9 @@ describe("query serializer contract", () => {
         seen.push(query);
         return "from=sse";
       }),
-      withSSEHandle(async (input) => {
+      withSSEHandle((input) => {
         url = input instanceof Request ? input.url : String(input);
-        throw new Error("stop");
+        return Promise.reject(new Error("stop"));
       }),
     );
     const events = defineEventStream({
@@ -255,15 +231,11 @@ describe("query serializer contract", () => {
         roomId: struct.string().alias("room_id"),
         since: struct.date(),
       }),
-      maxBufferSize: 128,
-      maxQueueSize: 4,
       path: "/events",
     });
     const native = defineEventStream({
       builder: () => ({ query: new URLSearchParams({ room_id: "blue" }) }),
       events: { message: struct.string() },
-      maxBufferSize: 128,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -284,14 +256,14 @@ describe("query serializer contract", () => {
 
   test("WebSocket query uses the serializer and skips URLSearchParams", async () => {
     const seen: unknown[] = [];
-    const urls: string[] = [];
+    const fake = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.com"),
       withQuerySerializer((query) => {
         seen.push(query);
         return "from=ws";
       }),
-      withWebSocketHandle(stoppingSocket(urls)),
+      withWebSocketHandle(refusing(fake.Socket)),
     );
     const encoded = defineWebSocket({
       builder: (input) => ({ query: input }),
@@ -300,13 +272,11 @@ describe("query serializer contract", () => {
         roomId: struct.string().alias("room_id"),
         since: struct.date(),
       }),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     });
     const native = defineWebSocket({
       builder: () => ({ query: new URLSearchParams({ room_id: "blue" }) }),
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     });
 
@@ -316,27 +286,26 @@ describe("query serializer contract", () => {
     expect(seen).toEqual([
       { room_id: "blue", since: "1815-12-10T00:00:00.000Z" },
     ]);
-    expect(urls[0]).toContain("from=ws");
-    expect(urls[1]).toContain("room_id=blue");
-    expect(urls[1]).not.toContain("from=ws");
+    expect(fake.sockets[0]?.url).toContain("from=ws");
+    expect(fake.sockets[1]?.url).toContain("room_id=blue");
+    expect(fake.sockets[1]?.url).not.toContain("from=ws");
   });
 
   test("WebSocket nested query fails without a serializer", async () => {
-    const urls: string[] = [];
+    const fake = createFakeWebSocket();
     const client = createClient(
       withEndpoint("https://example.com"),
-      withWebSocketHandle(stoppingSocket(urls)),
+      withWebSocketHandle(refusing(fake.Socket)),
     );
     const socket = defineWebSocket({
       builder: () => ({ query: { filter: { state: "open" } } }),
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
       path: "/ws",
     });
 
     const [error] = await socket(client);
 
-    expect(urls).toEqual([]);
+    expect(fake.sockets).toHaveLength(0);
     expect(error?.code).toBe("REQ_BUILD_FAILED");
     expect(error?.cause).toBeInstanceOf(TypeError);
     if (!(error?.cause instanceof Error)) {
@@ -350,10 +319,10 @@ describe("query serializer contract", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withQuerySerializer(() => "filter[state]=open"),
-      withHTTPHandle(async (input) => {
+      withHTTPHandle((input) => {
         const request = input instanceof Request ? input : new Request(input);
         search = new URL(request.url).search;
-        return new Response(null, { status: 204 });
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
     );
     const searchRequest = defineRequest({

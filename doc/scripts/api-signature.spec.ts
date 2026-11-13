@@ -6,9 +6,6 @@ import {
   parameterName,
   presentClass,
   readableBinding,
-  returnTypeSuffix,
-  suppressObjectSignature,
-  cutEnd,
   annotatedTypeText,
   inferredTypeSuffix,
   initializerEnd,
@@ -17,9 +14,7 @@ import {
   hideDefaultExpressions,
   omitInternalMembers,
   stripInnerDocs,
-  typeParameterClause,
   withInferredType,
-  withReturnType,
 } from "./api-signature";
 
 test("signature cleanup keeps the declaration and drops the body marker", () => {
@@ -50,13 +45,14 @@ test("signature cleanup keeps the declaration and drops the body marker", () => 
       "enum",
     ),
   ).toBe("function enum<const T>(\n  value: T,\n): Struct<T, T>;");
-  expect(suppressObjectSignature(true, { kind: 1 }, 1)).toBe(false);
-  expect(suppressObjectSignature(false, undefined, 1)).toBe(false);
-  expect(suppressObjectSignature(false, { kind: 2 }, 1)).toBe(false);
-  expect(suppressObjectSignature(false, { kind: 1 }, 1)).toBe(true);
   expect(
     stripInnerDocs("type Foo = {\n  /** hidden */\n  id: string;\n}"),
   ).toBe("type Foo = {\n\n  id: string;\n}");
+  expect(
+    stripInnerDocs(
+      "type Foo = {\n  // eslint-disable-next-line rule -- why\n  id: string;\n  // keep\n}",
+    ),
+  ).toBe("type Foo = {\n  id: string;\n  // keep\n}");
 });
 
 test("a short inferred type is appended only when the source has no annotation", () => {
@@ -84,14 +80,6 @@ test("a short inferred type is appended only when the source has no annotation",
   expect(inferredTypeSuffix("a\nb")).toBe("");
   expect(inferredTypeSuffix("x".repeat(81))).toBe("");
   expect(inferredTypeSuffix("Error")).toBe(": Error");
-  expect(typeParameterClause("ignored", undefined)).toBe("");
-  expect(typeParameterClause("function f", { pos: 0, end: 10 })).toBe("");
-  expect(typeParameterClause(" < T extends Foo > ", { pos: 0, end: 18 })).toBe(
-    "T extends Foo",
-  );
-  expect(cutEnd("members", 12, 40)).toBe(12);
-  expect(cutEnd("body", undefined, 40)).toBe(40);
-  expect(cutEnd("node", 12, 40)).toBe(40);
   expect(initializerEnd({ initializer: { getStart: () => 8 }, end: 20 })).toBe(
     8,
   );
@@ -134,9 +122,9 @@ test("public signatures hide internal members, defaults and blank member lines",
   ).toBe("function fetchHandler(\n  fetchImpl?: FetchHandle,\n): void");
   expect(
     hideDefaultExpressions(
-      'function createResolvedRequestUrl(queryString = ""): URL',
+      'function createResolvedRequestUrl(search = ""): URL',
     ),
-  ).toBe("function createResolvedRequestUrl(queryString?: string): URL");
+  ).toBe("function createResolvedRequestUrl(search?: string): URL");
   expect(
     hideDefaultExpressions(
       "function f<T = string>(value = 1, flag = false, name = 'a', raw = `b`): void",
@@ -160,11 +148,9 @@ test("public signatures hide internal members, defaults and blank member lines",
   ).toBe("function f(value?: Foo<Bar, Baz>): void");
   expect(
     hideDefaultExpressions(
-      'function f<const M extends string = "GET">(queryString = ""): void',
+      'function f<const M extends string = "GET">(search = ""): void',
     ),
-  ).toBe(
-    'function f<const M extends string = "GET">(queryString?: string): void',
-  );
+  ).toBe('function f<const M extends string = "GET">(search?: string): void');
   expect(collapseMemberGaps("a\n\n\n  \nb")).toBe("a\nb");
   expect(declaredParameterType(" string ", undefined)).toBe("string");
   expect(declaredParameterType(undefined, '""')).toBe("string");
@@ -318,25 +304,4 @@ test("leading async is removed and declarations end consistently", () => {
     "interface Foo {\n  id: string;\n}",
   );
   expect(finishSignature("function f(): void;;")).toBe("function f(): void;");
-  expect(withReturnType("function f(props: ClientProviderProps);", "any")).toBe(
-    "function f(props: ClientProviderProps);",
-  );
-  expect(
-    withReturnType(
-      "function ClientProvider(props: ClientProviderProps);",
-      "FunctionComponentElement<ProviderProps<Client | null>>",
-    ),
-  ).toBe(
-    "function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>;",
-  );
-  expect(withReturnType("function f(x: string): void;", "number")).toBe(
-    "function f(x: string): void;",
-  );
-  expect(returnTypeSuffix(undefined)).toBe("");
-  expect(returnTypeSuffix("")).toBe("");
-  expect(returnTypeSuffix("x".repeat(201))).toBe("");
-  expect(returnTypeSuffix("x".repeat(200))).toBe(`: ${"x".repeat(200)};`);
-  expect(returnTypeSuffix("Array<...>")).toBe("");
-  expect(returnTypeSuffix("a\nb")).toBe("");
-  expect(returnTypeSuffix("any")).toBe("");
 });

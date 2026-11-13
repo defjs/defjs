@@ -1,20 +1,29 @@
 ---
 title: "取消與逾時"
-description: Abort 或為一次呼叫設定期限，並讀取 NET_ABORTED / NET_TIMEOUT。
+description: 中止或逾時 HTTP 呼叫，並判讀 NET_ABORTED 與 NET_TIMEOUT。
 ---
 
 # 取消 HTTP 呼叫
 
-把呼叫端的 signal 與期限組合在 `signal` 上。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 是一個 signal。手動取消歸類為 `NET_ABORTED`。期限歸類為 `NET_TIMEOUT`。
+用 `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 把呼叫端的 `AbortController` 與期限結合，再透過 `client({ signal })` 傳入合併後的 signal。Defjs 會把呼叫端手動中止歸類為 `NET_ABORTED`，把逾時中止歸類為 `NET_TIMEOUT`。
 
-細節見 [HTTP](/zh-Hant-TW/docs/http#cancel-the-work)。
-
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
 ```
 
-取消告訴你的是呼叫端觀察到的結果。它不能證明伺服器端寫入已回滾 — mutation 重試請放在 idempotency 契約後面。
+取消只回報 client 觀察到的狀況——不保證伺服器端的寫入已回滾。變更型請求若要重試，請加上 idempotency key。詳見 [HTTP 取消與期限](/zh-Hant-TW/docs/http#cancel-the-work)。

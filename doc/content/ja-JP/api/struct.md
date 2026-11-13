@@ -11,23 +11,9 @@ description: struct ファサード、Infer、StructError です。
 
 ファサードです。内部コンストラクタよりこちらを使ってください。
 
-```ts
-const User = struct.object({
-  id: struct.number(),
-  displayName: struct.string().alias("display_name"),
-});
-
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(user.displayName);
-}
-
-readUser();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### プリミティブとコンテナ
 
@@ -57,7 +43,7 @@ readUser();
 - **戻り値** `[null, value]`、または `[StructError, undefined]` です。エラーが持つ issue は 1 つです。オブジェクトのフィールドは最初の不正なフィールドで止まります。`struct.or` はすべての分岐を試したあと `invalid_union` を報告し、最初の分岐の失敗は残しません。
 - オブジェクトのフィールドは、`.optional()` か `.nullish()` を付けない限り必須です。shape が宣言していないキーは、結果から落とされます。
 - 任意の `options.errorMap` は、このパースだけの issue メッセージを書き換えます。
-- デフォルトは**論理**キー（`displayName`）を読みます。HTTP/JSON コーデックと同じようにワイヤキー（`display_name`）を読むには `{ aliases: true }` を渡します。
+- デフォルトは**論理**キー（`customerName`）を読みます。HTTP/JSON コーデックと同じようにワイヤキー（`customer_name`）を読むには `{ aliases: true }` を渡します。
 
 ## ErrorMap
 
@@ -85,7 +71,7 @@ readUser();
 
 ## STRUCT
 
-エンドポイントの入力からパースされたオブジェクトに付く `unique symbol` です。アウトバウンドのエンコーダー内部のものであり、型としてのみ export されています。読んだり設定したりしないでください。
+操作の入力からパースされたオブジェクトに付く `unique symbol` です。アウトバウンドのエンコーダー内部のものであり、型としてのみ export されています。読んだり設定したりしないでください。
 
 ## Struct
 
@@ -99,9 +85,49 @@ readUser();
 
 `.alias()`、`.null()` / `.nullable()`、`.nullish()`、`.optional()` です。
 
+## StringStruct
+
+`struct.string` が作る、文字列の struct です。
+
+## NumberStruct
+
+`struct.number` が作る、数値の struct です。
+
+## UnknownStruct
+
+`struct.unknown` が作る、unknown の struct です。
+
 ## ObjectStruct
 
 `struct.object` が作る、オブジェクト形の struct です。
+
+## ArrayStruct
+
+`struct.array` が作る、配列の struct です。
+
+## RecordStruct
+
+`struct.record` が作る、レコードの struct です。
+
+## TupleStruct
+
+`struct.tuple` が作る、タプルの struct です。
+
+## UnionStruct
+
+`struct.or` が作る、ユニオンの struct です。
+
+## DiscriminatedUnionStruct
+
+`struct.discriminatedUnion` が作る、判別ユニオンの struct です。
+
+## IntersectionStruct
+
+`struct.intersection` が作る、交差の struct です。
+
+## PreservedStruct
+
+複合 struct に `.optional()` や `.nullable()` などの修飾子を使ったときに返る struct です。元の複合 struct の型を保ちます。
 
 ## StructIssue
 
@@ -109,7 +135,7 @@ readUser();
 
 ## FormattedStructError
 
-`StructError.format()` が出す、入れ子の `{ _errors, [key]: … }` の木です。
+`StructError.format()` が出す、入れ子の `{ _errors, [key]: … }` ツリーです。
 
 ## FlattenedStructError
 

@@ -12,32 +12,16 @@ import {
   withHTTPHandle,
   withInterceptors,
   withSSEHandle,
-  withSSEReconnect,
   withWebSocketHandle,
+  withRetry,
 } from "../../src";
+import { createFakeWebSocket } from "../fake_web_socket";
 
 function socketHandle(constructed: (url: string) => void) {
-  return class Socket extends EventTarget {
-    static readonly OPEN = 1;
-    readyState = 0;
-    bufferedAmount = 0;
-    protocol = "";
-    extensions = "";
-    readonly url: string;
-    constructor(url: string | URL) {
-      super();
-      this.url = String(url);
+  return class extends createFakeWebSocket().Socket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, protocols);
       constructed(this.url);
-      queueMicrotask(() => {
-        if (this.readyState !== 0) return;
-        this.readyState = 1;
-        this.dispatchEvent(new Event("open"));
-      });
-    }
-    send(_data: string) {}
-    close() {
-      this.readyState = 3;
-      this.dispatchEvent(new Event("close"));
     }
   };
 }
@@ -72,13 +56,10 @@ function commands(path: string) {
     sse: defineEventStream({
       path,
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
     }),
     ws: defineWebSocket({
       path,
       incoming: struct.string(),
-      maxIncomingQueueSize: 4,
     }),
   };
 }
@@ -89,19 +70,21 @@ describe.each(["http", "sse", "ws"] as const)(
     test.each(invalidPaths)(
       "rejects definition path %j before interceptors or transport",
       async (path) => {
-        const handle = vi.fn(async () => new Response(null, { status: 204 }));
+        const handle = vi.fn(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
         const interceptor = vi.fn(() => {
           throw new Error("Must not run");
         });
-        const shouldReconnect = vi.fn(() => true);
+        const shouldRetry = vi.fn(() => true);
         const client = createClient(
           withEndpoint("https://trusted.example/api"),
           withHTTPHandle(handle),
           withSSEHandle(handle),
           withWebSocketHandle(Socket),
-          withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+          withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
           withInterceptors(
             createHttpInterceptor(interceptor),
             createSSEInterceptor(interceptor),
@@ -119,23 +102,25 @@ describe.each(["http", "sse", "ws"] as const)(
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
         expect(interceptor).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
       },
     );
 
     test.each(["", "/api", "not a url"])(
       "rejects client endpoint %j as a build failure",
       async (endpoint) => {
-        const handle = vi.fn(async () => new Response(null, { status: 204 }));
+        const handle = vi.fn(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
-        const shouldReconnect = vi.fn(() => true);
+        const shouldRetry = vi.fn(() => true);
         const client = createClient(
           withEndpoint(endpoint),
           withHTTPHandle(handle),
           withSSEHandle(handle),
           withWebSocketHandle(Socket),
-          withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+          withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
         );
         const command = commands("/events");
         const [fault, delivered] = await (transport === "http"
@@ -147,23 +132,25 @@ describe.each(["http", "sse", "ws"] as const)(
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
       },
     );
 
     test.each(invalidPaths)(
       "rejects interceptor path %j before transport or reconnect",
       async (path) => {
-        const handle = vi.fn(async () => new Response(null, { status: 204 }));
+        const handle = vi.fn(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
-        const shouldReconnect = vi.fn(() => true);
+        const shouldRetry = vi.fn(() => true);
         const client = createClient(
           withEndpoint("https://trusted.example/api"),
           withHTTPHandle(handle),
           withSSEHandle(handle),
           withWebSocketHandle(Socket),
-          withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+          withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
           withInterceptors(
             createHttpInterceptor((request, next) =>
               next({ ...request, endpoint: path }),
@@ -186,23 +173,25 @@ describe.each(["http", "sse", "ws"] as const)(
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
       },
     );
 
     test.each(["", "/api", "not a url"])(
       "rejects interceptor base %j as a build failure",
       async (baseEndpoint) => {
-        const handle = vi.fn(async () => new Response(null, { status: 204 }));
+        const handle = vi.fn(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
-        const shouldReconnect = vi.fn(() => true);
+        const shouldRetry = vi.fn(() => true);
         const client = createClient(
           withEndpoint("https://trusted.example/api"),
           withHTTPHandle(handle),
           withSSEHandle(handle),
           withWebSocketHandle(Socket),
-          withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+          withRetry({ maxRetries: 2, delayMs: 0, shouldRetry }),
           withInterceptors(
             createHttpInterceptor((request, next) =>
               next({ ...request, baseEndpoint }),
@@ -224,7 +213,7 @@ describe.each(["http", "sse", "ws"] as const)(
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
-        expect(shouldReconnect).not.toHaveBeenCalled();
+        expect(shouldRetry).not.toHaveBeenCalled();
       },
     );
   },
@@ -236,12 +225,15 @@ describe.each(["http", "sse"] as const)(
     test("allows an invalid next promise to be discarded without an unhandled rejection", async () => {
       const client = createClient(
         withEndpoint("https://trusted.example/api"),
-        withHTTPHandle(async () => new Response(null, { status: 204 })),
-        withSSEHandle(
-          async () =>
+        withHTTPHandle(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        ),
+        withSSEHandle(() =>
+          Promise.resolve(
             new Response("data: hi\n\n", {
               headers: { "content-type": "text/event-stream" },
             }),
+          ),
         ),
         withInterceptors(
           createHttpInterceptor((request, next) => {
@@ -268,12 +260,15 @@ describe.each(["http", "sse"] as const)(
         let recovered = false;
         const client = createClient(
           withEndpoint("https://trusted.example/api"),
-          withHTTPHandle(async () => new Response(null, { status: 204 })),
-          withSSEHandle(
-            async () =>
+          withHTTPHandle(() =>
+            Promise.resolve(new Response(null, { status: 204 })),
+          ),
+          withSSEHandle(() =>
+            Promise.resolve(
               new Response("data: hi\n\n", {
                 headers: { "content-type": "text/event-stream" },
               }),
+            ),
           ),
           withInterceptors(
             createHttpInterceptor((request, next) => {
@@ -332,15 +327,17 @@ test.each([
     const urls: string[] = [];
     const client = createClient(
       withEndpoint("https://trusted.example/api"),
-      withHTTPHandle(async (request) => {
+      withHTTPHandle((request) => {
         urls.push(new Request(request).url);
-        return new Response(null, { status: 204 });
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
-      withSSEHandle(async (request) => {
+      withSSEHandle((request) => {
         urls.push(new Request(request).url);
-        return new Response("data: hi\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        });
+        return Promise.resolve(
+          new Response("data: hi\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
       withWebSocketHandle(socketHandle((url) => urls.push(url))),
     );
@@ -368,15 +365,17 @@ test("relative interceptor rewrites share HTTP, SSE and WebSocket URL rules", as
   const Socket = socketHandle((url) => urls.push(url));
   const client = createClient(
     withEndpoint("https://trusted.example/api?discard=1#discard"),
-    withHTTPHandle(async (request) => {
+    withHTTPHandle((request) => {
       urls.push(new Request(request).url);
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
-    withSSEHandle(async (request) => {
+    withSSEHandle((request) => {
       urls.push(new Request(request).url);
-      return new Response("data: hi\n\n", {
-        headers: { "content-type": "text/event-stream" },
-      });
+      return Promise.resolve(
+        new Response("data: hi\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     }),
     withWebSocketHandle(Socket),
     withInterceptors(

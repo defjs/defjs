@@ -1,22 +1,24 @@
-import { defineConfig } from "vitest/config";
-import { coverageConfig, globalSetupPath } from "./test/shared.ts";
+import type { ViteUserConfig as UserConfig } from "vitest/config";
+import { specExclude, specInclude } from "../../test/spec-matrix.ts";
+import {
+  coverageSettings,
+  reporters,
+  type RuntimeProject,
+} from "../../test/vitest-shared.ts";
+import { globalSetupPath, packageRoot } from "./test/shared.ts";
 
-/**
- * Package-level workspace aggregator.
- *
- * Runs all Vitest projects defined for @defjs/core:
- * - Server tests (Bun process, Vitest default environment)
- * - Browser runtime tests (Chromium + Firefox)
- *
- * Coverage configuration is centralized here so it applies across all projects
- * when running via the package test script.
- */
-export default defineConfig({
-  test: {
-    globalSetup: globalSetupPath,
-    coverage: {
-      ...coverageConfig,
+export function baseConfig({ runtime, test }: RuntimeProject): UserConfig {
+  return {
+    root: packageRoot,
+    test: {
+      ...test,
+      include: specInclude(),
+      exclude: specExclude(runtime),
+      globalSetup: globalSetupPath,
+      reporters,
+      coverage: coverageSettings({
+        reportsDirectory: `${packageRoot}/coverage/${runtime}`,
+      }),
     },
-    projects: ["./vitest.config.server.ts", "./vitest.config.browser.ts"],
-  },
-});
+  };
+}

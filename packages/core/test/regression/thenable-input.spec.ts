@@ -11,6 +11,7 @@ import {
   withSSEHandle,
   withWebSocketHandle,
 } from "../../src";
+import { createFakeWebSocket } from "../fake_web_socket";
 import type { AnyStruct, HttpExecuteOptions } from "../../src";
 
 type Transport = "HTTP" | "SSE" | "WebSocket";
@@ -34,14 +35,11 @@ function executeInput(
     return defineEventStream({
       ...definition,
       events: { message: struct.unknown() },
-      maxBufferSize: 1024,
-      maxQueueSize: 1,
     })(client(options), input);
   }
   return defineWebSocket({
     ...definition,
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 1,
   })(client(options), input);
 }
 
@@ -50,9 +48,14 @@ function transportHarness(transport: Transport, pending = false) {
     if (pending) {
       return new Promise<Response>((_resolve, reject) => {
         const signal = new Request(_input, init).signal;
-        signal.addEventListener("abort", () => reject(signal.reason), {
-          once: true,
-        });
+        signal.addEventListener(
+          "abort",
+          () => {
+            const reason: unknown = signal.reason;
+            reject(reason);
+          },
+          { once: true },
+        );
       });
     }
     return transport === "SSE"
@@ -61,40 +64,16 @@ function transportHarness(transport: Transport, pending = false) {
         })
       : new Response(null, { status: 204 });
   });
-  const sockets: Socket[] = [];
-  class Socket extends EventTarget {
-    static OPEN = 1;
-    readonly url: string;
-    readyState = 0;
-    bufferedAmount = 0;
-    extensions = "";
-    protocol = "";
-    constructor(url: string | URL) {
-      super();
-      this.url = String(url);
-      sockets.push(this);
-      if (!pending)
-        queueMicrotask(() => {
-          if (this.readyState !== 0) return;
-          this.readyState = Socket.OPEN;
-          this.dispatchEvent(new Event("open"));
-        });
-    }
-    send(): void {}
-    close = vi.fn(() => {
-      this.readyState = 3;
-      this.dispatchEvent(new Event("close"));
-    });
-  }
+  const fake = createFakeWebSocket({ handshake: pending ? "manual" : "auto" });
   return {
     client: createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(fetch),
       withSSEHandle(fetch),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
     ),
     fetch,
-    sockets,
+    sockets: fake.sockets,
   };
 }
 
@@ -205,7 +184,7 @@ describe.each(["HTTP", "SSE", "WebSocket"] as const)(
             expect(then).not.toHaveBeenCalled();
             if (transport === "WebSocket") {
               expect(sockets).toHaveLength(1);
-              expect(sockets[0]?.close).toHaveBeenCalledTimes(1);
+              expect(sockets[0]?.closeCalls).toHaveLength(1);
             } else {
               expect(fetch).toHaveBeenCalledTimes(1);
             }

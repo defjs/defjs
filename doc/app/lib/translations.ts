@@ -1,12 +1,16 @@
 import { fromTranslations } from "@fuma-translate/react";
 import { i18nProvider, uiTranslations } from "fumadocs-ui/i18n";
-import { i18n } from "./i18n";
+import { defaultLocale, i18n, type Locale } from "./i18n";
 import { messages, type MessageKey, type Messages } from "./messages";
+
+function isMessageKey(key: string): key is MessageKey {
+  return Object.hasOwn(messages[defaultLocale], key);
+}
 
 const registry = i18n
   .translations()
   .extend(uiTranslations())
-  .extend({ keys: Object.keys(messages["en-US"]) as MessageKey[] })
+  .extend({ keys: Object.keys(messages[defaultLocale]).filter(isMessageKey) })
   .add(messages);
 
 export type Translator = (
@@ -14,18 +18,18 @@ export type Translator = (
   options?: { variables?: Record<string, string> },
 ) => string;
 
-export function getMessages(locale = "en-US"): Messages {
-  return { ...messages["en-US"], ...registry.get(locale) };
+/** A copy, so a caller cannot change the shared resource. */
+export function getMessages(locale: Locale): Messages {
+  return { ...messages[locale] };
 }
 
-export function getTranslator(locale?: string): Translator {
+export function getTranslator(locale: Locale): Translator {
   return fromTranslations(getMessages(locale));
 }
 
-export function getI18nProps(locale = "en-US") {
-  const language = Object.hasOwn(messages, locale) ? locale : "en-US";
+export function getI18nProps(locale: Locale) {
   return {
-    ...i18nProvider(registry, language),
-    translations: getMessages(language),
+    ...i18nProvider(registry, locale),
+    translations: getMessages(locale),
   };
 }

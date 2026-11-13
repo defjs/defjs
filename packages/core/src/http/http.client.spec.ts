@@ -1,13 +1,14 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   createClient,
+  type FetchHandle,
   withEndpoint,
   withHTTPHandle,
   withInterceptors,
   withQuerySerializer,
 } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "./http_response";
 import { struct } from "../struct";
 import { defineRequest } from "./index";
 
@@ -18,12 +19,14 @@ describe("request http runtime with client config", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
-          capturedRequestUrl = `${request.endpoint}?${request.queryString ?? ""}`;
-          return makeResponse({
-            body: null,
-            status: 200,
-          });
+        createHttpInterceptor((request) => {
+          capturedRequestUrl = `${request.endpoint}?${request.query?.toString() ?? ""}`;
+          return Promise.resolve(
+            makeResponse({
+              body: null,
+              status: 200,
+            }),
+          );
         }),
       ),
       withQuerySerializer((query) => {
@@ -48,12 +51,17 @@ describe("request http runtime with client config", () => {
   });
 
   test("should use client http handle after interceptors", async () => {
-    const fetchMock = vi.fn(async (request: Request) => {
+    const fetchMock = vi.fn<FetchHandle>((input) => {
+      if (!(input instanceof Request))
+        return Promise.reject(new Error("expected Request"));
+      const request = input;
       expect(request.url).toBe("https://example.com/query?A=1&B=2");
-      return new Response(null, {
-        status: 200,
-      });
-    }) as unknown as typeof fetch;
+      return Promise.resolve(
+        new Response(null, {
+          status: 200,
+        }),
+      );
+    });
     let interceptorCalls = 0;
 
     const client = createClient(
@@ -99,9 +107,9 @@ describe("request http runtime with client config", () => {
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           paths.push(request.endpoint);
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );

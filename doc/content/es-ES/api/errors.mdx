@@ -1,11 +1,11 @@
 ---
 title: Errores
-description: Variantes de fault y helpers de fábrica.
+description: Variantes de Fault y helpers de fábrica.
 ---
 
 # Errores
 
-Execute devuelve un `Fault` discriminado en el primer hueco de la tupla, no una excepción lanzada para los fallos declarados.
+Una operación devuelve un `Fault` discriminado en el primer hueco de la tupla, no una excepción lanzada para los fallos declarados.
 
 ## FaultCode
 
@@ -23,7 +23,7 @@ Un conjunto cerrado. El segmento antes del primer `_` es la clase; no hay un cam
 
 <ApiSignature name="Fault" />
 
-Haz switch sobre `fault.code`.
+Usa un switch sobre `fault.code`.
 
 ### FaultOf
 
@@ -43,7 +43,7 @@ Llama a `format()`, `flatten()` o `prettify()` solo después de estrechar `fault
 
 <ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
 
-Cualquier estado no-2xx. Si el endpoint declaró `error` y el cuerpo decodificó, `data` es ese cuerpo y `response` lo lleva. Si `error` se omitió, el cuerpo nunca se lee, lo que deja `data` en `undefined` y `response` como metadatos a secas.
+Cualquier estado no-2xx. Si la definición declaró `error` y el cuerpo decodificó, `data` es ese cuerpo y `response` lo lleva. Si `error` se omitió, el cuerpo nunca se lee, lo que deja `data` en `undefined` y `response` como metadatos a secas.
 
 ### DecodeFault
 
@@ -55,13 +55,15 @@ Llegó una respuesta, pero no se pudo leer como se declaró. `response` son solo
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-Todo lo que pudo fallar antes de que existiera una respuesta: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` está presente solo donde el transporte ya tenía metadatos que reportar, como un cuerpo que se truncó a mitad de la descarga.
+Todo lo que pudo fallar antes de que existiera una respuesta: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` es `undefined` hasta que el transporte tiene metadatos que reportar, como un cuerpo que se truncó a mitad de la descarga.
+
+Las opciones de reintento no se validan en tiempo de ejecución. Omitir `withRetry` desactiva los reintentos. `withRetry()` y `withRetry(undefined)` se comportan como `withRetry({})`. `withRetry({ maxRetries: 0 })` desactiva los reintentos después de haberlos habilitado. Una función `shouldRetry` que lanza termina la llamada con `EXT_HOOK_FAILED` y el valor lanzado como `cause`, por igual en HTTP, SSE y WebSocket; para un flujo o una sesión que ya estaba abierta, consulta [Cliente](/es-ES/api/client#withretry).
 
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
 
-Cualquier fault, sea cual sea el tipo de su cuerpo de error decodificado. Úsalo para handlers que clasifican faults sin importarles qué endpoint los produjo; prefiere `Fault<typeof yourErrorStruct>` donde el tipo del cuerpo importe.
+Cualquier fallo, sea cual sea el tipo de su cuerpo de error decodificado. Úsalo para handlers que clasifican fallos sin importarles qué operación los produjo; prefiere `Fault<typeof yourErrorStruct>` donde el tipo del cuerpo importe.
 
 ## Fábricas
 
@@ -77,9 +79,9 @@ Cualquier fault, sea cual sea el tipo de su cuerpo de error decodificado. Úsalo
 
 <ApiSignature name="createHttpStatusFault, createUndecodedHttpStatusFault, createDecodeFault, createNetworkFault, createPreflightFault" />
 
-`createHttpStatusFault` toma una respuesta que ya lleva el cuerpo decodificado; `createUndecodedHttpStatusFault` toma solo metadatos, para un endpoint que no declaró `error`.
+`createHttpStatusFault` toma una respuesta que ya lleva el cuerpo decodificado; `createUndecodedHttpStatusFault` toma solo metadatos, para una definición que no declaró `error`.
 
-`createNetworkFault` usa [`isAbortCause`](/es-ES/api/core/isabortcause) para `NET_ABORTED` y [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) para `NET_TIMEOUT`: reconocen centinelas con marca de cualquier copia de Core, un `DOMException` llamado `AbortError` y un `DOMException` o `Error` llamado `TimeoutError`, respectivamente. Todo lo demás se mapea a `NET_UNREACHABLE`. `createPreflightFault` toma el código directamente; sin `cause`, el código pasa a ser el mensaje.
+`createNetworkFault` usa [`isAbortCause`](/es-ES/api/core/isabortcause) para `NET_ABORTED` y [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) para `NET_TIMEOUT`: ambos reconocen centinelas con marca de cualquier copia de Core; `isAbortCause` reconoce además un `DOMException` llamado `AbortError`, y `isTimeoutCause` reconoce un `DOMException` o `Error` llamado `TimeoutError`. Todo lo demás se mapea a `NET_UNREACHABLE`. `createPreflightFault` toma el código directamente; sin `cause`, el código pasa a ser el mensaje.
 
 Todas las fábricas devuelven instancias de `Error` nativo con los campos estructurados de arriba; no crean errores de objeto plano y no necesitan adaptador para `String(fault)`.
 
@@ -100,5 +102,13 @@ Los centinelas llevan marcas no enumerables `Symbol.for('defjs.cause.aborted')` 
 <ApiSignature name="isAbortCause, isTimeoutCause" />
 
 [`isAbortCause`](/es-ES/api/core/isabortcause) reconoce un `Error` con marca de aborto o un `DOMException` llamado `AbortError`. [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) reconoce un `Error` con marca de timeout o un `DOMException` / `Error` llamado `TimeoutError`. Pasa `fault.cause` para clasificar el valor subyacente; estas funciones no desenvuelven un fault. Funcionan con centinelas de otra copia de Core.
+
+## ERR_NO_CANDIDATE
+
+## isNoCandidateCause
+
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`ERR_NO_CANDIDATE` aparece solo como `cause` de `REQ_BUILD_FAILED`, cuando no se puede seleccionar ningún endpoint candidato. No añade un `FaultCode`. El centinela lleva una marca no enumerable `Symbol.for('defjs.cause.no-endpoint')`. [`isNoCandidateCause`](/es-ES/api/core/isnocandidatecause) reconoce esa marca de otra copia de Core, del mismo modo que [`isAbortCause`](/es-ES/api/core/isabortcause) reconoce un aborto. Pasa `fault.cause`. No desenvuelve un fault.
 
 Mira la [guía de Errores](/es-ES/docs/errors).

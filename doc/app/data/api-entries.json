@@ -1,1187 +1,1381 @@
 [
   {
     "package": "@defjs/core",
-    "name": "createClient",
-    "kind": "function",
-    "slug": "core/createclient",
-    "related": [
-      "@defjs/core:DerivableClient",
-      "@defjs/core:Client",
-      "@defjs/core:ClientOption",
-      "@defjs/core:RequestOptions"
-    ]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withEndpoint",
-    "kind": "function",
-    "slug": "core/withendpoint",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withInterceptors",
-    "kind": "function",
-    "slug": "core/withinterceptors",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withQuerySerializer",
-    "kind": "function",
-    "slug": "core/withqueryserializer",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withHTTPHandle",
-    "kind": "function",
-    "slug": "core/withhttphandle",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withSSEHandle",
-    "kind": "function",
-    "slug": "core/withssehandle",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withWebSocketHandle",
-    "kind": "function",
-    "slug": "core/withwebsockethandle",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withCredentials",
-    "kind": "function",
-    "slug": "core/withcredentials",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withXSRF",
-    "kind": "function",
-    "slug": "core/withxsrf",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withSSEReconnect",
-    "kind": "function",
-    "slug": "core/withssereconnect",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withSSEOnInvalidEvent",
-    "kind": "function",
-    "slug": "core/withsseoninvalidevent",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withWebSocketBeforeConnect",
-    "kind": "function",
-    "slug": "core/withwebsocketbeforeconnect",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withWebSocketProtocols",
-    "kind": "function",
-    "slug": "core/withwebsocketprotocols",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withWebSocketHeartbeat",
-    "kind": "function",
-    "slug": "core/withwebsocketheartbeat",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withWebSocketReconnect",
-    "kind": "function",
-    "slug": "core/withwebsocketreconnect",
-    "related": []
+    "name": "Balancer",
+    "kind": "type",
+    "slug": "core/balancer-type",
+    "description": "Chooses one endpoint for a call."
   },
   {
     "package": "@defjs/core",
     "name": "Client",
     "kind": "type",
     "slug": "core/client-type",
-    "related": ["@defjs/core:createClient", "@defjs/core:RequestOptions"]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "RequestOptions",
-    "kind": "type",
-    "slug": "core/requestoptions-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ClientOption",
-    "kind": "type",
-    "slug": "core/clientoption-type",
-    "related": ["@defjs/core:ClientConfig"]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ClientOptions",
-    "kind": "type",
-    "slug": "core/clientoptions-type",
-    "related": []
+    "description": "Client value that operations accept."
   },
   {
     "package": "@defjs/core",
     "name": "ClientConfig",
     "kind": "type",
     "slug": "core/clientconfig-type",
-    "related": []
+    "description": "Resolved client configuration after option helpers have been applied."
   },
   {
     "package": "@defjs/core",
-    "name": "ClientSSEOptions",
+    "name": "ClientOption",
     "kind": "type",
-    "slug": "core/clientsseoptions-type",
-    "related": []
+    "slug": "core/clientoption-type",
+    "description": "Function type of the option helpers accepted by createClient."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ClientOptions",
+    "kind": "type",
+    "slug": "core/clientoptions-type",
+    "description": "Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure."
   },
   {
     "package": "@defjs/core",
     "name": "ClientSSEConfig",
     "kind": "type",
     "slug": "core/clientsseconfig-type",
-    "related": []
+    "description": "Resolved SSE configuration with a required fetch handle."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ClientSSEOptions",
+    "kind": "type",
+    "slug": "core/clientsseoptions-type",
+    "description": "Optional SSE settings applied when creating a client: fetch handle and invalid-event hook."
   },
   {
     "package": "@defjs/core",
     "name": "ClientWebSocketOptions",
     "kind": "type",
     "slug": "core/clientwebsocketoptions-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "QuerySerializer",
-    "kind": "type",
-    "slug": "core/queryserializer-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketHandle",
-    "kind": "type",
-    "slug": "core/websockethandle-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketHandleConstructor",
-    "kind": "type",
-    "slug": "core/websockethandleconstructor-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "defineRequest",
-    "kind": "function",
-    "slug": "core/definerequest",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "fetchHandler",
-    "kind": "function",
-    "slug": "core/fetchhandler",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "makeResponse",
-    "kind": "function",
-    "slug": "core/makeresponse",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "RequestDefinition",
-    "kind": "type",
-    "slug": "core/requestdefinition-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "RequestEndpoint",
-    "kind": "type",
-    "slug": "core/requestendpoint-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "BuilderInput",
-    "kind": "type",
-    "slug": "core/builderinput-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpRequestShape",
-    "kind": "type",
-    "slug": "core/httprequestshape-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpExecuteOptions",
-    "kind": "type",
-    "slug": "core/httpexecuteoptions-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "UseRequestConfig",
-    "kind": "type",
-    "slug": "core/userequestconfig-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpAwaitResult",
-    "kind": "type",
-    "slug": "core/httpawaitresult-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "RequestSuccessData",
-    "kind": "type",
-    "slug": "core/requestsuccessdata-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "RequestErrorData",
-    "kind": "type",
-    "slug": "core/requesterrordata-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpRequest",
-    "kind": "type",
-    "slug": "core/httprequest-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpMeta",
-    "kind": "type",
-    "slug": "core/httpmeta-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "DecodedResponse",
-    "kind": "type",
-    "slug": "core/decodedresponse-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpResponse",
-    "kind": "type",
-    "slug": "core/httpresponse-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpResponseType",
-    "kind": "type",
-    "slug": "core/httpresponsetype-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpProgressEvent",
-    "kind": "type",
-    "slug": "core/httpprogressevent-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpProgressFn",
-    "kind": "type",
-    "slug": "core/httpprogressfn-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "MakeResponseOptions",
-    "kind": "type",
-    "slug": "core/makeresponseoptions-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct",
-    "kind": "constant",
-    "slug": "core/struct",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.any",
-    "kind": "function",
-    "slug": "core/struct-any",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.array",
-    "kind": "function",
-    "slug": "core/struct-array",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.arrayBuffer",
-    "kind": "function",
-    "slug": "core/struct-arraybuffer",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.bigint",
-    "kind": "function",
-    "slug": "core/struct-bigint",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.blob",
-    "kind": "function",
-    "slug": "core/struct-blob",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.boolean",
-    "kind": "function",
-    "slug": "core/struct-boolean",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.date",
-    "kind": "function",
-    "slug": "core/struct-date",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.discriminatedUnion",
-    "kind": "function",
-    "slug": "core/struct-discriminatedunion",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.enum",
-    "kind": "function",
-    "slug": "core/struct-enum",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.file",
-    "kind": "function",
-    "slug": "core/struct-file",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.formData",
-    "kind": "function",
-    "slug": "core/struct-formdata",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.intersection",
-    "kind": "function",
-    "slug": "core/struct-intersection",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.literal",
-    "kind": "function",
-    "slug": "core/struct-literal",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.null",
-    "kind": "function",
-    "slug": "core/struct-null",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.number",
-    "kind": "function",
-    "slug": "core/struct-number",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.object",
-    "kind": "function",
-    "slug": "core/struct-object",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.or",
-    "kind": "function",
-    "slug": "core/struct-or",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.parse",
-    "kind": "function",
-    "slug": "core/struct-parse",
-    "related": ["@defjs/core:Struct", "@defjs/core:ParseResult"]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.record",
-    "kind": "function",
-    "slug": "core/struct-record",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.string",
-    "kind": "function",
-    "slug": "core/struct-string",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.tuple",
-    "kind": "function",
-    "slug": "core/struct-tuple",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.unknown",
-    "kind": "function",
-    "slug": "core/struct-unknown",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "struct.urlencoded",
-    "kind": "function",
-    "slug": "core/struct-urlencoded",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "Infer",
-    "kind": "type",
-    "slug": "core/infer-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "StructInput",
-    "kind": "type",
-    "slug": "core/structinput-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "AnyStruct",
-    "kind": "type",
-    "slug": "core/anystruct-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "Struct",
-    "kind": "type",
-    "slug": "core/struct-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "StructLike",
-    "kind": "type",
-    "slug": "core/structlike-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "StructMethods",
-    "kind": "type",
-    "slug": "core/structmethods-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ObjectStruct",
-    "kind": "type",
-    "slug": "core/objectstruct-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ParseResult",
-    "kind": "type",
-    "slug": "core/parseresult-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ErrorMap",
-    "kind": "type",
-    "slug": "core/errormap-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "StructError",
-    "kind": "type",
-    "slug": "core/structerror-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "StructIssue",
-    "kind": "type",
-    "slug": "core/structissue-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "FormattedStructError",
-    "kind": "type",
-    "slug": "core/formattedstructerror-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "FlattenedStructError",
-    "kind": "type",
-    "slug": "core/flattenedstructerror-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "FaultCode",
-    "kind": "type",
-    "slug": "core/faultcode-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "FaultClass",
-    "kind": "type",
-    "slug": "core/faultclass-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "Fault",
-    "kind": "type",
-    "slug": "core/fault-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "FaultOf",
-    "kind": "type",
-    "slug": "core/faultof-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpStatusFault",
-    "kind": "type",
-    "slug": "core/httpstatusfault-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpStatusFaultOf",
-    "kind": "type",
-    "slug": "core/httpstatusfaultof-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "DecodeFault",
-    "kind": "type",
-    "slug": "core/decodefault-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "PreflightFault",
-    "kind": "type",
-    "slug": "core/preflightfault-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "AnyFault",
-    "kind": "type",
-    "slug": "core/anyfault-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createHttpStatusFault",
-    "kind": "function",
-    "slug": "core/createhttpstatusfault",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createUndecodedHttpStatusFault",
-    "kind": "function",
-    "slug": "core/createundecodedhttpstatusfault",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createDecodeFault",
-    "kind": "function",
-    "slug": "core/createdecodefault",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createNetworkFault",
-    "kind": "function",
-    "slug": "core/createnetworkfault",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createPreflightFault",
-    "kind": "function",
-    "slug": "core/createpreflightfault",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ERR_ABORTED",
-    "kind": "constant",
-    "slug": "core/err-aborted-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ERR_TIMEOUT",
-    "kind": "constant",
-    "slug": "core/err-timeout-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "isAbortCause",
-    "kind": "function",
-    "slug": "core/isabortcause",
-    "related": ["@defjs/core:ERR_ABORTED", "@defjs/core:isTimeoutCause"]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "isTimeoutCause",
-    "kind": "function",
-    "slug": "core/istimeoutcause",
-    "related": ["@defjs/core:ERR_TIMEOUT", "@defjs/core:isAbortCause"]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createHttpInterceptor",
-    "kind": "function",
-    "slug": "core/createhttpinterceptor",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createSSEInterceptor",
-    "kind": "function",
-    "slug": "core/createsseinterceptor",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createWebSocketInterceptor",
-    "kind": "function",
-    "slug": "core/createwebsocketinterceptor",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "basicAuthHttpInterceptor",
-    "kind": "function",
-    "slug": "core/basicauthhttpinterceptor",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "basicAuthSSEInterceptor",
-    "kind": "function",
-    "slug": "core/basicauthsseinterceptor",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "Interceptor",
-    "kind": "type",
-    "slug": "core/interceptor-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "InterceptorFn",
-    "kind": "type",
-    "slug": "core/interceptorfn-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpInterceptor",
-    "kind": "type",
-    "slug": "core/httpinterceptor-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpInterceptorNext",
-    "kind": "type",
-    "slug": "core/httpinterceptornext-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "SSEInterceptor",
-    "kind": "type",
-    "slug": "core/sseinterceptor-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "SSEInterceptorFn",
-    "kind": "type",
-    "slug": "core/sseinterceptorfn-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "SSEHandler",
-    "kind": "type",
-    "slug": "core/ssehandler-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketInterceptor",
-    "kind": "type",
-    "slug": "core/websocketinterceptor-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketInterceptorFn",
-    "kind": "type",
-    "slug": "core/websocketinterceptorfn-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketHandler",
-    "kind": "type",
-    "slug": "core/websockethandler-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketSessionLike",
-    "kind": "type",
-    "slug": "core/websocketsessionlike-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "BasicAuthInterceptorOptions",
-    "kind": "type",
-    "slug": "core/basicauthinterceptoroptions-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "defineEventStream",
-    "kind": "function",
-    "slug": "core/defineeventstream",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamDefinition",
-    "kind": "type",
-    "slug": "core/eventstreamdefinition-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamEndpoint",
-    "kind": "type",
-    "slug": "core/eventstreamendpoint-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamRequestShape",
-    "kind": "type",
-    "slug": "core/eventstreamrequestshape-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamExecuteOptions",
-    "kind": "type",
-    "slug": "core/eventstreamexecuteoptions-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "StreamAwaitResult",
-    "kind": "type",
-    "slug": "core/streamawaitresult-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamHandle",
-    "kind": "type",
-    "slug": "core/eventstreamhandle-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamOpenInfo",
-    "kind": "type",
-    "slug": "core/eventstreamopeninfo-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamCloseInfo",
-    "kind": "type",
-    "slug": "core/eventstreamcloseinfo-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStructs",
-    "kind": "type",
-    "slug": "core/eventstructs-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamData",
-    "kind": "type",
-    "slug": "core/eventstreamdata-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "defineWebSocket",
-    "kind": "function",
-    "slug": "core/definewebsocket",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketDefinition",
-    "kind": "type",
-    "slug": "core/websocketdefinition-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketEndpoint",
-    "kind": "type",
-    "slug": "core/websocketendpoint-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketRequestShape",
-    "kind": "type",
-    "slug": "core/websocketrequestshape-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketExecuteOptions",
-    "kind": "type",
-    "slug": "core/websocketexecuteoptions-type",
-    "related": ["@defjs/core:WebSocketHeartbeatConfig"]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "UseWebSocketConfig",
-    "kind": "type",
-    "slug": "core/usewebsocketconfig-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "SocketAwaitResult",
-    "kind": "type",
-    "slug": "core/socketawaitresult-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketSession",
-    "kind": "type",
-    "slug": "core/websocketsession-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketState",
-    "kind": "type",
-    "slug": "core/websocketstate-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketConnectionInfo",
-    "kind": "type",
-    "slug": "core/websocketconnectioninfo-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketCloseInfo",
-    "kind": "type",
-    "slug": "core/websocketcloseinfo-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ManualSocketCloseReason",
-    "kind": "type",
-    "slug": "core/manualsocketclosereason-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketHeartbeatConfig",
-    "kind": "type",
-    "slug": "core/websocketheartbeatconfig-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketIncomingData",
-    "kind": "type",
-    "slug": "core/websocketincomingdata-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "WebSocketOutgoingData",
-    "kind": "type",
-    "slug": "core/websocketoutgoingdata-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "SocketLifecycleOutcome",
-    "kind": "type",
-    "slug": "core/socketlifecycleoutcome-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/vue",
-    "name": "createClientPlugin",
-    "kind": "function",
-    "slug": "vue/createclientplugin",
-    "related": ["@defjs/core:DerivableClient"]
-  },
-  {
-    "package": "@defjs/vue",
-    "name": "injectClient",
-    "kind": "function",
-    "slug": "vue/injectclient",
-    "related": ["@defjs/core:DerivableClient"]
-  },
-  {
-    "package": "@defjs/vue",
-    "name": "HTTP_CLIENT",
-    "kind": "constant",
-    "slug": "vue/http-client",
-    "related": ["@defjs/core:DerivableClient", "@defjs/vue:injectClient"]
-  },
-  {
-    "package": "@defjs/react",
-    "name": "ClientProvider",
-    "kind": "function",
-    "slug": "react/clientprovider-type",
-    "related": [
-      "@defjs/core:DerivableClient",
-      "@defjs/react:ClientProviderProps"
-    ]
-  },
-  {
-    "package": "@defjs/react",
-    "name": "useClient",
-    "kind": "function",
-    "slug": "react/useclient",
-    "related": ["@defjs/core:DerivableClient"]
-  },
-  {
-    "package": "@defjs/react",
-    "name": "ClientProviderProps",
-    "kind": "type",
-    "slug": "react/clientproviderprops-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/opentelemetry-server",
-    "name": "withOpenTelemetryServer",
-    "kind": "function",
-    "slug": "opentelemetry-server/withopentelemetryserver",
-    "related": [
-      "@defjs/core:ClientOption",
-      "@defjs/opentelemetry-server:OpenTelemetryServerOptions"
-    ]
-  },
-  {
-    "package": "@defjs/opentelemetry-server",
-    "name": "OpenTelemetryServerOptions",
-    "kind": "type",
-    "slug": "opentelemetry-server/opentelemetryserveroptions-type",
-    "related": [
-      "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",
-      "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions",
-      "@defjs/opentelemetry-server:OpenTelemetryServerWebSocketOptions",
-      "@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"
-    ]
-  },
-  {
-    "package": "@defjs/opentelemetry-server",
-    "name": "OpenTelemetryServerTransportOptions",
-    "kind": "type",
-    "slug": "opentelemetry-server/opentelemetryservertransportoptions-type",
-    "related": [
-      "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",
-      "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions",
-      "@defjs/opentelemetry-server:OpenTelemetryServerWebSocketOptions"
-    ]
-  },
-  {
-    "package": "@defjs/opentelemetry-server",
-    "name": "OpenTelemetryServerHttpOptions",
-    "kind": "type",
-    "slug": "opentelemetry-server/opentelemetryserverhttpoptions-type",
-    "related": [
-      "@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"
-    ]
-  },
-  {
-    "package": "@defjs/opentelemetry-server",
-    "name": "OpenTelemetryServerSSEOptions",
-    "kind": "type",
-    "slug": "opentelemetry-server/opentelemetryserversseoptions-type",
-    "related": [
-      "@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"
-    ]
-  },
-  {
-    "package": "@defjs/opentelemetry-server",
-    "name": "OpenTelemetryServerWebSocketOptions",
-    "kind": "type",
-    "slug": "opentelemetry-server/opentelemetryserverwebsocketoptions-type",
-    "related": [
-      "@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"
-    ]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "FetchHandle",
-    "kind": "type",
-    "slug": "core/fetchhandle-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withHeaders",
-    "kind": "function",
-    "slug": "core/withheaders",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "DecodeFaultCode",
-    "kind": "type",
-    "slug": "core/decodefaultcode-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "PreflightFaultCode",
-    "kind": "type",
-    "slug": "core/preflightfaultcode-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "createResolvedRequestUrl",
-    "kind": "function",
-    "slug": "core/createresolvedrequesturl",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamFaultCode",
-    "kind": "type",
-    "slug": "core/eventstreamfaultcode-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "STRUCT",
-    "kind": "type",
-    "slug": "core/struct-symbol-type",
-    "related": []
+    "description": "Optional WebSocket settings applied when creating a client: constructor, beforeConnect hook, heartbeat, and protocols."
   },
   {
     "package": "@defjs/core",
     "name": "DerivableClient",
     "kind": "type",
     "slug": "core/derivableclient-type",
-    "related": [
-      "@defjs/core:createClient",
-      "@defjs/core:Client",
-      "@defjs/core:RequestOptions"
-    ]
+    "description": "Callable root client returned by createClient."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DoneInfo",
+    "kind": "type",
+    "slug": "core/doneinfo-type",
+    "description": "Outcome of the attempt that used the selected endpoint."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ERR_NO_CANDIDATE",
+    "kind": "constant",
+    "slug": "core/err-no-candidate",
+    "description": "Sentinel for an empty candidate list."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FetchHandle",
+    "kind": "type",
+    "slug": "core/fetchhandle-type",
+    "description": "Fetch-compatible function used as an HTTP or SSE handle."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpRetryContext",
+    "kind": "type",
+    "slug": "core/httpretrycontext-type",
+    "description": "What shouldRetry receives after a failed HTTP attempt."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OutlierDetectionOptions",
+    "kind": "type",
+    "slug": "core/outlierdetectionoptions-type",
+    "description": "Failure counting that ejects an endpoint for a while, and an optional application-defined health check. The library does not know what healthy means. It counts classified failures, ejects an endpoint by time, and puts it back when the time is up; only isHealthy can say that an endpoint is unfit, and only the application supplies it. No timers, ejection quotas, settlement grid, or slow start are used."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "P2cOptions",
+    "kind": "type",
+    "slug": "core/p2coptions-type",
+    "description": "Options for p2cBalancer."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickFaultCode",
+    "kind": "type",
+    "slug": "core/pickfaultcode-type",
+    "description": "Neutral attempt outcome codes observed through end and done."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickFirstOptions",
+    "kind": "type",
+    "slug": "core/pickfirstoptions-type",
+    "description": "Options for pickFirstBalancer."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickInfo",
+    "kind": "type",
+    "slug": "core/pickinfo-type",
+    "description": "What the runtime tells pick about this call."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickOutcome",
+    "kind": "type",
+    "slug": "core/pickoutcome-type",
+    "description": "Error-first result of Balancer.pick."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PickResult",
+    "kind": "type",
+    "slug": "core/pickresult-type",
+    "description": "Endpoint selected for one call."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "QuerySerializer",
+    "kind": "type",
+    "slug": "core/queryserializer-type",
+    "description": "Serializes an encoded query object into a query string."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestOptions",
+    "kind": "type",
+    "slug": "core/requestoptions-type",
+    "description": "Flat per-call options. Each protocol reads the fields it understands and ignores the rest."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryContext",
+    "kind": "type",
+    "slug": "core/retrycontext-type",
+    "description": "Failure description passed to shouldRetry. Narrow it with transport."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryOptions",
+    "kind": "type",
+    "slug": "core/retryoptions-type",
+    "description": "Opt-in retry policy for HTTP, SSE, and WebSocket."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RoundRobinOptions",
+    "kind": "type",
+    "slug": "core/roundrobinoptions-type",
+    "description": "Options for roundRobinBalancer."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSERetryContext",
+    "kind": "type",
+    "slug": "core/sseretrycontext-type",
+    "description": "What shouldRetry receives after an SSE handshake or stream failed."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketHandle",
+    "kind": "type",
+    "slug": "core/websockethandle-type",
+    "description": "Minimal WebSocket instance surface used by the client transport."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketHandleConstructor",
+    "kind": "type",
+    "slug": "core/websockethandleconstructor-type",
+    "description": "Constructor type accepted by withWebSocketHandle."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketRetryContext",
+    "kind": "type",
+    "slug": "core/websocketretrycontext-type",
+    "description": "What shouldRetry receives after a WebSocket closed without session.close()."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createClient",
+    "kind": "function",
+    "slug": "core/createclient",
+    "description": "Creates a Defjs DerivableClient from option helpers."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "isNoCandidateCause",
+    "kind": "function",
+    "slug": "core/isnocandidatecause",
+    "description": "Whether cause is ERR_NO_CANDIDATE, including a copy from another Core build."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "outlierDetection",
+    "kind": "function",
+    "slug": "core/outlierdetection",
+    "description": "Wraps a strategy with consecutive-failure ejection by time. Five attributed failures eject an endpoint by default. The penalty is the minimum penalty (1s by default) times the penalty level, so successive ejections last 1s, 2s, 3s and so on; uniform positive jitter of up to 0.5 times the base is added, and the total caps at 60s. When the time is up the endpoint is selectable again; nothing probes it or decides that it has recovered. As in gRPC outlier detection (gRFC A50) a success never clears the penalty level: every ejection raises it by one and every ten seconds without one lowers it by one, evaluated when the endpoint is next used. An endpoint that accepts a connection and then drops it is therefore ejected for longer each time, as long as its failures return faster than one level decays. Every classified failure code fails by default, including NET_TIMEOUT and NET_BODY_INCOMPLETE, as Envoy's consecutive 5xx and gRPC outlier detection count timeouts and resets; isFailure replaces that rule. An attempted outcome without a code resets the streak; unattributed attempts leave it unchanged. The outcome of an attempt that began before an ejection, or while the endpoint was ejected, is ignored even if it arrives after the endpoint is selectable again, so late results do not eject it anew. The child receives the filtered candidates as endpoints and the unfiltered members, so ejection does not look like a membership change to it. isHealthy, when supplied, is the only health judgement and combines with ejection by AND: it can keep an endpoint out, and true cannot let an ejected endpoint in. If it rejects every endpoint that is not ejected, it is ignored for that pick. If every endpoint is ejected, the original current list is used (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer is created. Configuration is captured at construction. History holds at least 256 endpoints, and at least the current list, shared across endpoint lists. LRU clean or expired states are evicted first, then partial failure sequences, then the oldest protected state only if every retained endpoint is ejected. Temporary candidate exclusion does not itself erase a penalty."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "p2cBalancer",
+    "kind": "function",
+    "slug": "core/p2cbalancer",
+    "description": "Samples candidates without replacement and selects the least loaded draw."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "pickFirstBalancer",
+    "kind": "function",
+    "slug": "core/pickfirstbalancer",
+    "description": "Sticky failover balancer. The default when a client sets no balancer."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "roundRobinBalancer",
+    "kind": "function",
+    "slug": "core/roundrobinbalancer",
+    "description": "Round-robin balancer, with nginx smooth weighting when weights is set."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withBalancer",
+    "kind": "function",
+    "slug": "core/withbalancer",
+    "description": "Replaces the balancer that selects one candidate per call."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withCredentials",
+    "kind": "function",
+    "slug": "core/withcredentials",
+    "description": "Sets whether HTTP and SSE requests include credentials."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withEndpoint",
+    "kind": "function",
+    "slug": "core/withendpoint",
+    "description": "Replaces the candidate base URLs prepended to relative request paths."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withHTTPHandle",
+    "kind": "function",
+    "slug": "core/withhttphandle",
+    "description": "Replaces the Fetch-compatible function used for HTTP requests."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withHeaders",
+    "kind": "function",
+    "slug": "core/withheaders",
+    "description": "Sets static default headers for HTTP and SSE requests built by this client."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withInterceptors",
+    "kind": "function",
+    "slug": "core/withinterceptors",
+    "description": "Appends interceptors to the client interceptor chain."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withQuerySerializer",
+    "kind": "function",
+    "slug": "core/withqueryserializer",
+    "description": "Replaces query encoding for HTTP, SSE, and WebSocket requests."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withRetry",
+    "kind": "function",
+    "slug": "core/withretry",
+    "description": "Enables retries for HTTP, SSE, and WebSocket, with backoff and an optional policy function."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withSSEHandle",
+    "kind": "function",
+    "slug": "core/withssehandle",
+    "description": "Replaces the Fetch-compatible function used to open SSE event streams."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withSSEOnInvalidEvent",
+    "kind": "function",
+    "slug": "core/withsseoninvalidevent",
+    "description": "Observes SSE events that have no matching event struct or fail validation."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketBeforeConnect",
+    "kind": "function",
+    "slug": "core/withwebsocketbeforeconnect",
+    "description": "Runs a hook before the initial WebSocket connect and before every reconnect."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketHandle",
+    "kind": "function",
+    "slug": "core/withwebsockethandle",
+    "description": "Replaces the WebSocket constructor used for socket connections."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketHeartbeat",
+    "kind": "function",
+    "slug": "core/withwebsocketheartbeat",
+    "description": "Enables WebSocket heartbeat messages with optional acknowledgement detection."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketProtocols",
+    "kind": "function",
+    "slug": "core/withwebsocketprotocols",
+    "description": "Sets the WebSocket subprotocols offered during the handshake."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "BuilderInput",
+    "kind": "type",
+    "slug": "core/builderinput-type",
+    "description": "Parsed endpoint input that a request builder receives."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DecodedResponse",
+    "kind": "type",
+    "slug": "core/decodedresponse-type",
+    "description": "Response metadata plus a body that decoded against a declared struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpAwaitResult",
+    "kind": "type",
+    "slug": "core/httpawaitresult-type",
+    "description": "Await-result tuple for an HTTP call: success is [null, data, response], and failure is [fault, undefined, undefined]."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpExecuteOptions",
+    "kind": "type",
+    "slug": "core/httpexecuteoptions-type",
+    "description": "HTTP fields read from RequestOptions for one call."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpMeta",
+    "kind": "type",
+    "slug": "core/httpmeta-type",
+    "description": "Response metadata, available whenever a response reached the client."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpProgressEvent",
+    "kind": "type",
+    "slug": "core/httpprogressevent-type",
+    "description": "Progress snapshot passed to upload and download callbacks."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpProgressFn",
+    "kind": "type",
+    "slug": "core/httpprogressfn-type",
+    "description": "Callback invoked as request bytes are uploaded or response bytes are downloaded."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpRequest",
+    "kind": "type",
+    "slug": "core/httprequest-type",
+    "description": "Normalized outgoing HTTP request seen by transports, handlers, interceptors, and fetchHandler after the builder runs."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpRequestShape",
+    "kind": "type",
+    "slug": "core/httprequestshape-type",
+    "description": "Request shape an HTTP builder returns: path, query, headers, and body."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpResponse",
+    "kind": "type",
+    "slug": "core/httpresponse-type",
+    "description": "Wire-shape HTTP response that transports produce and interceptors accept."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpResponseType",
+    "kind": "type",
+    "slug": "core/httpresponsetype-type",
+    "description": "Representation used to read an HTTP body before struct validation."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "MakeResponseOptions",
+    "kind": "type",
+    "slug": "core/makeresponseoptions-type",
+    "description": "Fields accepted by makeResponse when building a synthetic HttpResponse, for example in interceptors."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestDefinition",
+    "kind": "type",
+    "slug": "core/requestdefinition-type",
+    "description": "Contract for an HTTP endpoint: method, path, optional input, and the structs that decode its bodies."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestEndpoint",
+    "kind": "type",
+    "slug": "core/requestendpoint-type",
+    "description": "Operation returned by defineRequest."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestErrorData",
+    "kind": "type",
+    "slug": "core/requesterrordata-type",
+    "description": "Decoded error body for the declared error struct, or undefined when none is declared."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestSuccessData",
+    "kind": "type",
+    "slug": "core/requestsuccessdata-type",
+    "description": "Decoded success body for the declared output struct, or undefined when none is declared."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UseRequestConfig",
+    "kind": "type",
+    "slug": "core/userequestconfig-type",
+    "description": "HTTP fields of RequestOptions: progress callbacks, retry, and signal."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createResolvedRequestUrl",
+    "kind": "function",
+    "slug": "core/createresolvedrequesturl",
+    "description": "Resolves a relative definition path under the base endpoint's origin and directory into a URL."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "defineRequest",
+    "kind": "function",
+    "slug": "core/definerequest",
+    "description": "Declares a typed HTTP request endpoint."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "fetchHandler",
+    "kind": "function",
+    "slug": "core/fetchhandler",
+    "description": "Default HTTP transport: perform httpRequest with fetch and return an HttpResponse."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "makeResponse",
+    "kind": "function",
+    "slug": "core/makeresponse",
+    "description": "Builds an HttpResponse without a network call, for interceptors that short-circuit next and for tests."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamCloseInfo",
+    "kind": "type",
+    "slug": "core/eventstreamcloseinfo-type",
+    "description": "How an SSE stream ended: clean EOF, abort, or an error carrying its fault code."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamData",
+    "kind": "type",
+    "slug": "core/eventstreamdata-type",
+    "description": "Union of parsed SSE events inferred from an EventStructs map."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamDefinition",
+    "kind": "type",
+    "slug": "core/eventstreamdefinition-type",
+    "description": "Contract that describes an SSE endpoint for defineEventStream."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamEndpoint",
+    "kind": "type",
+    "slug": "core/eventstreamendpoint-type",
+    "description": "Operation returned by defineEventStream."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamExecuteOptions",
+    "kind": "type",
+    "slug": "core/eventstreamexecuteoptions-type",
+    "description": "SSE fields of RequestOptions. HTTP progress and WebSocket fields are ignored."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamFaultCode",
+    "kind": "type",
+    "slug": "core/eventstreamfaultcode-type",
+    "description": "Fault codes an event stream can end with, drawn from the one shared FaultCode namespace."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamHandle",
+    "kind": "type",
+    "slug": "core/eventstreamhandle-type",
+    "description": "Open SSE stream: iterate events, read open metadata, and close early."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamOpenInfo",
+    "kind": "type",
+    "slug": "core/eventstreamopeninfo-type",
+    "description": "Metadata available once an SSE response has opened."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamRequestShape",
+    "kind": "type",
+    "slug": "core/eventstreamrequestshape-type",
+    "description": "Request shape an SSE builder returns: the same fields as HttpRequestShape for method M and path P."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStructs",
+    "kind": "type",
+    "slug": "core/eventstructs-type",
+    "description": "Map from SSE event names to the structs that decode their data."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StreamAwaitResult",
+    "kind": "type",
+    "slug": "core/streamawaitresult-type",
+    "description": "Await-result tuple from opening an SSE stream."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "defineEventStream",
+    "kind": "function",
+    "slug": "core/defineeventstream",
+    "description": "Declare a typed Server-Sent Events endpoint."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ManualSocketCloseReason",
+    "kind": "type",
+    "slug": "core/manualsocketclosereason-type",
+    "description": "Close code and reason recorded when a session is closed with session.close."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SocketAwaitResult",
+    "kind": "type",
+    "slug": "core/socketawaitresult-type",
+    "description": "Await-result tuple from opening a WebSocket."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SocketLifecycleOutcome",
+    "kind": "type",
+    "slug": "core/socketlifecycleoutcome-type",
+    "description": "The outcome of a single connect attempt, not the final result of the session."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UseWebSocketConfig",
+    "kind": "type",
+    "slug": "core/usewebsocketconfig-type",
+    "description": "WebSocket fields of RequestOptions, plus signal."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketCloseInfo",
+    "kind": "type",
+    "slug": "core/websocketcloseinfo-type",
+    "description": "Logical terminal outcome of a WebSocket session."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketConnectionInfo",
+    "kind": "type",
+    "slug": "core/websocketconnectioninfo-type",
+    "description": "Connection metadata for the current WebSocket generation."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketDefinition",
+    "kind": "type",
+    "slug": "core/websocketdefinition-type",
+    "description": "Contract object passed to defineWebSocket."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketEndpoint",
+    "kind": "type",
+    "slug": "core/websocketendpoint-type",
+    "description": "Operation returned by defineWebSocket."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketExecuteOptions",
+    "kind": "type",
+    "slug": "core/websocketexecuteoptions-type",
+    "description": "WebSocket fields read from RequestOptions for one call."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketHeartbeatConfig",
+    "kind": "type",
+    "slug": "core/websocketheartbeatconfig-type",
+    "description": "Heartbeat settings for a live WebSocket session: what to send, how often, and how to recognize the answer."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketIncomingData",
+    "kind": "type",
+    "slug": "core/websocketincomingdata-type",
+    "description": "Decoded type of a received WebSocket message."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketOutgoingData",
+    "kind": "type",
+    "slug": "core/websocketoutgoingdata-type",
+    "description": "Type accepted by WebSocket session send."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketRequestShape",
+    "kind": "type",
+    "slug": "core/websocketrequestshape-type",
+    "description": "Request shape the builder of a WebSocketDefinition may return, where P is the endpoint path."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketSession",
+    "kind": "type",
+    "slug": "core/websocketsession-type",
+    "description": "Typed WebSocket session: send and receive messages, observe state, and close."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketState",
+    "kind": "type",
+    "slug": "core/websocketstate-type",
+    "description": "Lifecycle state of a managed WebSocket session."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "defineWebSocket",
+    "kind": "function",
+    "slug": "core/definewebsocket",
+    "description": "Declare a typed WebSocket endpoint."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "AnyFault",
+    "kind": "type",
+    "slug": "core/anyfault-type",
+    "description": "Any fault at all, whatever its decoded error-body type."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DecodeFault",
+    "kind": "type",
+    "slug": "core/decodefault-type",
+    "description": "A response arrived but could not be read as declared."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DecodeFaultCode",
+    "kind": "type",
+    "slug": "core/decodefaultcode-type",
+    "description": "Codes whose fault carries response metadata but no body."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ERR_ABORTED",
+    "kind": "constant",
+    "slug": "core/err-aborted-type",
+    "description": "Shared Error sentinel that marks a request as aborted."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ERR_TIMEOUT",
+    "kind": "constant",
+    "slug": "core/err-timeout-type",
+    "description": "Shared Error sentinel that marks a request as timed out."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Fault",
+    "kind": "type",
+    "slug": "core/fault-type",
+    "description": "Union of every failure an operation can return, discriminated by code."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FaultClass",
+    "kind": "type",
+    "slug": "core/faultclass-type",
+    "description": "Extracts the class prefix from a fault code: the segment before its first _."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FaultCode",
+    "kind": "type",
+    "slug": "core/faultcode-type",
+    "description": "Every failure Defjs reports, as one closed set of codes."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FaultOf",
+    "kind": "type",
+    "slug": "core/faultof-type",
+    "description": "Any failure returned by an operation, expressed by its decoded error-body type."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpStatusFault",
+    "kind": "type",
+    "slug": "core/httpstatusfault-type",
+    "description": "Fault for a non-2xx response, typed by the declared error struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpStatusFaultOf",
+    "kind": "type",
+    "slug": "core/httpstatusfaultof-type",
+    "description": "Non-2xx fault expressed by its decoded body type instead of the struct that produced it."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreflightFault",
+    "kind": "type",
+    "slug": "core/preflightfault-type",
+    "description": "A failure that may have happened before any response existed."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreflightFaultCode",
+    "kind": "type",
+    "slug": "core/preflightfaultcode-type",
+    "description": "Codes whose fault may never have reached a response."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createDecodeFault",
+    "kind": "function",
+    "slug": "core/createdecodefault",
+    "description": "Builds a decode fault for a response that arrived but could not be read as declared."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createHttpStatusFault",
+    "kind": "function",
+    "slug": "core/createhttpstatusfault",
+    "description": "Builds an HTTP_STATUS fault for a non-2xx response whose body decoded against the declared error struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createNetworkFault",
+    "kind": "function",
+    "slug": "core/createnetworkfault",
+    "description": "Builds a NET_* PreflightFault, choosing the code from the shape of cause."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createPreflightFault",
+    "kind": "function",
+    "slug": "core/createpreflightfault",
+    "description": "Builds a fault for a failure that may have happened before any response existed."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createUndecodedHttpStatusFault",
+    "kind": "function",
+    "slug": "core/createundecodedhttpstatusfault",
+    "description": "Builds an HTTP_STATUS fault for a non-2xx response that was never decoded, because the endpoint declared no error struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "isAbortCause",
+    "kind": "function",
+    "slug": "core/isabortcause",
+    "description": "Whether cause is caller cancellation, across Core copies and platform abort errors."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "isTimeoutCause",
+    "kind": "function",
+    "slug": "core/istimeoutcause",
+    "description": "Whether cause is a timeout, across Core copies and platform timeout errors."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "BasicAuthInterceptorOptions",
+    "kind": "type",
+    "slug": "core/basicauthinterceptoroptions-type",
+    "description": "Options for basic-auth interceptors, including a custom credential encoder."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpInterceptor",
+    "kind": "type",
+    "slug": "core/httpinterceptor-type",
+    "description": "Tagged HTTP interceptor accepted by client interceptor options."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpInterceptorNext",
+    "kind": "type",
+    "slug": "core/httpinterceptornext-type",
+    "description": "Continuation that runs the rest of the HTTP interceptor chain, or the handler."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Interceptor",
+    "kind": "type",
+    "slug": "core/interceptor-type",
+    "description": "Any tagged interceptor accepted by client interceptor options."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "InterceptorFn",
+    "kind": "type",
+    "slug": "core/interceptorfn-type",
+    "description": "HTTP interceptor function: may inspect or modify the request, then call next."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSEHandler",
+    "kind": "type",
+    "slug": "core/ssehandler-type",
+    "description": "Terminal next function an SSE interceptor receives; it opens an event stream for the request."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSEInterceptor",
+    "kind": "type",
+    "slug": "core/sseinterceptor-type",
+    "description": "Tagged SSE interceptor for client option lists, accepted by withInterceptors."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSEInterceptorFn",
+    "kind": "type",
+    "slug": "core/sseinterceptorfn-type",
+    "description": "SSE interceptor function: may inspect, modify, or replace the request, then call next."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketHandler",
+    "kind": "type",
+    "slug": "core/websockethandler-type",
+    "description": "Terminal next function a WebSocket interceptor receives; it opens a session for the request."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketInterceptor",
+    "kind": "type",
+    "slug": "core/websocketinterceptor-type",
+    "description": "Tagged WebSocket interceptor for client option lists, accepted by withInterceptors."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketInterceptorFn",
+    "kind": "type",
+    "slug": "core/websocketinterceptorfn-type",
+    "description": "WebSocket interceptor function: may inspect, modify, or replace the request, then call next."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketSessionLike",
+    "kind": "type",
+    "slug": "core/websocketsessionlike-type",
+    "description": "WebSocket session surface that interceptors see: a WebSocketSession whose messages are typed unknown."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "basicAuthHttpInterceptor",
+    "kind": "function",
+    "slug": "core/basicauthhttpinterceptor",
+    "description": "HTTP interceptor that sets an Authorization: Basic … header from credentials."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "basicAuthSSEInterceptor",
+    "kind": "function",
+    "slug": "core/basicauthsseinterceptor",
+    "description": "SSE interceptor that sets an Authorization: Basic … header from credentials."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createHttpInterceptor",
+    "kind": "function",
+    "slug": "core/createhttpinterceptor",
+    "description": "Wraps an InterceptorFn as a tagged HttpInterceptor."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createSSEInterceptor",
+    "kind": "function",
+    "slug": "core/createsseinterceptor",
+    "description": "Wraps an SSEInterceptorFn as a tagged SSEInterceptor."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createWebSocketInterceptor",
+    "kind": "function",
+    "slug": "core/createwebsocketinterceptor",
+    "description": "Wraps a WebSocketInterceptorFn as a tagged WebSocketInterceptor."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "AnyStruct",
+    "kind": "type",
+    "slug": "core/anystruct-type",
+    "description": "Broad struct constraint that accepts any struct, for endpoint and client generics."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ArrayStruct",
+    "kind": "type",
+    "slug": "core/arraystruct-type",
+    "description": "Array struct type produced by struct.array(item)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DiscriminatedUnionStruct",
+    "kind": "type",
+    "slug": "core/discriminatedunionstruct-type",
+    "description": "Discriminated-union struct type produced by struct.discriminatedUnion(tag, options)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ErrorMap",
+    "kind": "type",
+    "slug": "core/errormap-type",
+    "description": "Optional callback that rewrites a StructIssue message before it is stored."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FlattenedStructError",
+    "kind": "type",
+    "slug": "core/flattenedstructerror-type",
+    "description": "Flat field and form error bags returned by StructError.flatten()."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FormattedStructError",
+    "kind": "type",
+    "slug": "core/formattedstructerror-type",
+    "description": "Nested error tree returned by StructError.format()."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Infer",
+    "kind": "type",
+    "slug": "core/infer-type",
+    "description": "Infers the parsed output type of a struct, as an alias of the internal output brand."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "IntersectionStruct",
+    "kind": "type",
+    "slug": "core/intersectionstruct-type",
+    "description": "Intersection struct type produced by struct.intersection(...structs) for two or more structs."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "NumberStruct",
+    "kind": "type",
+    "slug": "core/numberstruct-type",
+    "description": "Number struct type produced by struct.number()."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ObjectStruct",
+    "kind": "type",
+    "slug": "core/objectstruct-type",
+    "description": "Object-shaped struct type produced by struct.object(shape)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ParseResult",
+    "kind": "type",
+    "slug": "core/parseresult-type",
+    "description": "Error-first tuple returned by struct.parse."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreservedStruct",
+    "kind": "type",
+    "slug": "core/preservedstruct-type",
+    "description": "Struct a modifier of a composite struct returns."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RecordStruct",
+    "kind": "type",
+    "slug": "core/recordstruct-type",
+    "description": "Record struct type produced by struct.record(value)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "STRUCT",
+    "kind": "type",
+    "slug": "core/struct-symbol-type",
+    "description": "Type-only export of the internal enumerable tag key on objects produced while parsing endpoint input, used by the outbound encoder."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StringStruct",
+    "kind": "type",
+    "slug": "core/stringstruct-type",
+    "description": "String struct type produced by struct.string()."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Struct",
+    "kind": "type",
+    "slug": "core/struct-type",
+    "description": "Public struct contract: input and output types, modifier methods, and the _struct type brand."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructError",
+    "kind": "type",
+    "slug": "core/structerror-type",
+    "description": "Error returned by a failed struct parse, aggregating one or more StructIssues and their formatters."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructInput",
+    "kind": "type",
+    "slug": "core/structinput-type",
+    "description": "Type helper that extracts the accepted input type of a struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructIssue",
+    "kind": "type",
+    "slug": "core/structissue-type",
+    "description": "A single validation failure produced while parsing a struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructLike",
+    "kind": "type",
+    "slug": "core/structlike-type",
+    "description": "Minimal structural brand carried by every struct instance."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructMethods",
+    "kind": "type",
+    "slug": "core/structmethods-type",
+    "description": "Chainable modifiers available on every Struct instance."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "TupleStruct",
+    "kind": "type",
+    "slug": "core/tuplestruct-type",
+    "description": "Tuple struct type produced by struct.tuple(items)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UnionStruct",
+    "kind": "type",
+    "slug": "core/unionstruct-type",
+    "description": "Union struct type produced by struct.or(...options)."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UnknownStruct",
+    "kind": "type",
+    "slug": "core/unknownstruct-type",
+    "description": "Unknown struct type produced by struct.unknown()."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct",
+    "kind": "constant",
+    "slug": "core/struct",
+    "description": "Facade object for building protocol-boundary structs and parsing values with its constructors and struct.parse."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.any",
+    "kind": "function",
+    "slug": "core/struct-any",
+    "description": "Struct that accepts any value except null and undefined, without validation."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.array",
+    "kind": "function",
+    "slug": "core/struct-array",
+    "description": "Struct that parses an array with one item struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.arrayBuffer",
+    "kind": "function",
+    "slug": "core/struct-arraybuffer",
+    "description": "Struct that accepts an ArrayBuffer."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.bigint",
+    "kind": "function",
+    "slug": "core/struct-bigint",
+    "description": "Struct that accepts a bigint or a bigint string and outputs a bigint."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.blob",
+    "kind": "function",
+    "slug": "core/struct-blob",
+    "description": "Struct that accepts a Blob."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.boolean",
+    "kind": "function",
+    "slug": "core/struct-boolean",
+    "description": "Struct that accepts boolean values."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.date",
+    "kind": "function",
+    "slug": "core/struct-date",
+    "description": "Struct that accepts a Date, timestamp, or date string and outputs a Date."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.discriminatedUnion",
+    "kind": "function",
+    "slug": "core/struct-discriminatedunion",
+    "description": "Struct that picks one object struct by the value of a tag field."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.enum",
+    "kind": "function",
+    "slug": "core/struct-enum",
+    "description": "Struct that accepts one value from a list of strings or from the values of an object."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.file",
+    "kind": "function",
+    "slug": "core/struct-file",
+    "description": "Struct that accepts a File."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.formData",
+    "kind": "function",
+    "slug": "core/struct-formdata",
+    "description": "Object struct that is encoded as multipart FormData when it is the request body."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.intersection",
+    "kind": "function",
+    "slug": "core/struct-intersection",
+    "description": "Struct that requires a value to satisfy every given struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.literal",
+    "kind": "function",
+    "slug": "core/struct-literal",
+    "description": "Struct that accepts exactly one boolean, null, number, or string value."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.null",
+    "kind": "function",
+    "slug": "core/struct-null",
+    "description": "Struct that accepts only null."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.number",
+    "kind": "function",
+    "slug": "core/struct-number",
+    "description": "Struct that accepts number values except NaN."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.object",
+    "kind": "function",
+    "slug": "core/struct-object",
+    "description": "Struct that parses a plain object with a fixed set of fields."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.or",
+    "kind": "function",
+    "slug": "core/struct-or",
+    "description": "Struct that accepts a value matching any one of several structs."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.parse",
+    "kind": "function",
+    "slug": "core/struct-parse",
+    "description": "Parses an unknown value with a struct and returns an error-first tuple."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.record",
+    "kind": "function",
+    "slug": "core/struct-record",
+    "description": "Struct that parses an object with string keys and one value struct."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.string",
+    "kind": "function",
+    "slug": "core/struct-string",
+    "description": "Struct that accepts string values."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.tuple",
+    "kind": "function",
+    "slug": "core/struct-tuple",
+    "description": "Struct that parses a fixed-length array with one struct per position."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.unknown",
+    "kind": "function",
+    "slug": "core/struct-unknown",
+    "description": "Struct that accepts any value except null and undefined, typed as unknown."
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.urlencoded",
+    "kind": "function",
+    "slug": "core/struct-urlencoded",
+    "description": "Object struct that is encoded as an URL-encoded form when it is the request body."
+  },
+  {
+    "package": "@defjs/core/xsrf",
+    "name": "XSRFOptions",
+    "kind": "type",
+    "slug": "core/xsrf/xsrfoptions-type",
+    "description": "Cookie and header names for withXSRF."
+  },
+  {
+    "package": "@defjs/core/xsrf",
+    "name": "withXSRF",
+    "kind": "function",
+    "slug": "core/withxsrf",
+    "description": "Enables XSRF cookie-to-header forwarding for browser HTTP requests."
+  },
+  {
+    "package": "@defjs/react",
+    "name": "ClientProvider",
+    "kind": "function",
+    "slug": "react/clientprovider-type",
+    "description": "Provide a Defjs client to React descendants via context."
+  },
+  {
+    "package": "@defjs/react",
+    "name": "ClientProviderProps",
+    "kind": "type",
+    "slug": "react/clientproviderprops-type",
+    "description": "Props of ClientProvider: the required client and optional children."
+  },
+  {
+    "package": "@defjs/react",
+    "name": "useClient",
+    "kind": "function",
+    "slug": "react/useclient",
+    "description": "React Hook that returns an explicit Defjs client or the nearest ClientProvider."
+  },
+  {
+    "package": "@defjs/vue",
+    "name": "HTTP_CLIENT",
+    "kind": "constant",
+    "slug": "vue/http-client",
+    "description": "Vue injection key for the Defjs DerivableClient provided by createClientPlugin."
+  },
+  {
+    "package": "@defjs/vue",
+    "name": "createClientPlugin",
+    "kind": "function",
+    "slug": "vue/createclientplugin",
+    "description": "Create a Vue plugin that provides an existing Defjs client via HTTP_CLIENT."
+  },
+  {
+    "package": "@defjs/vue",
+    "name": "injectClient",
+    "kind": "function",
+    "slug": "vue/injectclient",
+    "description": "Vue composable that injects the Defjs client for a key, defaulting to HTTP_CLIENT."
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerHttpOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryserverhttpoptions-type",
+    "description": "Options for the HTTP transport — the shared options with an HttpResponse in responseHook."
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryserveroptions-type",
+    "description": "Options for withOpenTelemetryServer: tracer, meter, logger, propagator, and per-transport settings."
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerSSEOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryserversseoptions-type",
+    "description": "Options for the SSE transport — the shared options with the stream handle in responseHook."
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerTransportOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryservertransportoptions-type",
+    "description": "Shared per-transport OpenTelemetry client options: whether the transport is enabled and its span hooks, generic over the response type."
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerWebSocketOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryserverwebsocketoptions-type",
+    "description": "Options for the WebSocket transport — the shared options plus queryPropagation."
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "withOpenTelemetryServer",
+    "kind": "function",
+    "slug": "opentelemetry-server/withopentelemetryserver",
+    "description": "Client option that installs outbound OpenTelemetry interceptors for HTTP, SSE, and WebSocket."
   }
 ]

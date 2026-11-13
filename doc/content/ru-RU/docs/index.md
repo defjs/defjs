@@ -1,47 +1,38 @@
 ---
 title: "Руководство"
-description: Проектируй контракты и операции SDK, публикуй их и настраивай выполнение в приложениях-потребителях.
+description: Проектируйте контракты и операции SDK, публикуйте их и настраивайте выполнение в использующих приложениях.
 ---
 
-Defjs отделяет API, который публикует группа, от клиента, которым пользуется приложение. Иди путём автора SDK, чтобы описать и упаковать операции; иди путём приложения, чтобы настроить выполнение и обработать результаты.
+# Руководство
 
-## Разработка SDK [#getting-started]
+Defjs отделяет контракт API, который публикует команда SDK, от конфигурации клиента, которую приложение использует во время выполнения. Следуйте разделам ниже, чтобы изучить архитектуру, объявить операции и настроить выполнение с помощью опций клиента и перехватчиков.
+
+## Первые шаги [#getting-started]
 
 - [Обзор проекта](/ru-RU)
 - [Быстрый старт](/ru-RU/docs/start)
-- [Создание и публикация SDK](/ru-RU/recipes/publish-http-sdk)
-- [Почему определения и выполнение разделены](/ru-RU/docs/design-decisions)
+- [Архитектура ядра](/ru-RU/docs/design-decisions)
 
-## Контракты и выполнение [#calls-and-contracts]
+## Определение SDK [#defining-sdks]
 
-Авторы SDK владеют Struct и определениями эндпоинтов. Приложения дают Client и вызывают с ним операции.
-
-- [Контракты данных / Struct](/ru-RU/docs/struct)
-- [Настройка клиента / Client](/ru-RU/docs/client)
-
-## Запросы и реальное время
-
-- [HTTP-запросы](/ru-RU/docs/http)
+- [Struct и схемы](/ru-RU/docs/struct)
+- [HTTP-операции](/ru-RU/docs/http)
 - [Потоки событий SSE](/ru-RU/docs/sse)
 - [Сессии WebSocket](/ru-RU/docs/web-socket)
 
-## Ошибки и перехват
+## Клиент и выполнение [#client-execution]
 
+- [Клиент](/ru-RU/docs/client)
 - [Обработка ошибок](/ru-RU/docs/errors)
 - [Перехватчики](/ru-RU/docs/interceptors)
+- [Балансировка нагрузки и отказоустойчивость](/ru-RU/docs/load-balancing)
+- [Тестирование](/ru-RU/docs/testing)
 
-## Плагины
+## Интеграции и ИИ [#integrations-and-ai]
 
-Необязательные пакеты для клиента приложения-потребителя. Определения SDK от них не зависят.
-
-- [Плагины](/ru-RU/docs/integrations)
+- [Обзор интеграций](/ru-RU/docs/integrations)
 - [React](/ru-RU/docs/integrations/react)
 - [Vue](/ru-RU/docs/integrations/vue)
-- [OpenTelemetry на сервере](/ru-RU/docs/integrations/opentelemetry-server)
-
-## ИИ
-
-- [Разработка с помощью ИИ](/ru-RU/docs/ai)
-- [Вызов API ИИ](/ru-RU/docs/ai-api)
-
-[Проектные решения](/ru-RU/docs/design-decisions)
+- [OpenTelemetry Server](/ru-RU/docs/integrations/opentelemetry-server)
+- [Skill](/ru-RU/docs/ai)
+- [llms.txt](/ru-RU/docs/ai-api)

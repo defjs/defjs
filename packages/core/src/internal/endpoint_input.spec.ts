@@ -7,7 +7,6 @@ describe("endpoint input helpers", () => {
   describe.each([
     { name: "unknown", schema: struct.unknown() },
     { name: "any", schema: struct.any() },
-    { name: "omitted struct", schema: undefined },
   ])("$name root input", ({ schema }) => {
     test.each(["pending", "resolving", "throwing getter", "Promise"] as const)(
       "returns %s data without reading or invoking then",
@@ -25,7 +24,7 @@ describe("endpoint input helpers", () => {
             ? Promise.resolve("replacement")
             : Object.defineProperty({}, "then", { get: getter });
 
-        const parsed = parseEndpointInput(schema, input);
+        const parsed: unknown = parseEndpointInput(schema, input);
         // Observe a rejected wrapper from the broken async implementation without awaiting input data.
         if (parsed !== input && parsed instanceof Promise)
           void parsed.catch(() => undefined);
@@ -37,18 +36,14 @@ describe("endpoint input helpers", () => {
     );
   });
 
-  test("should parse endpoint input and keep raw input when struct is omitted", async () => {
-    const input = {
-      id: "1",
-    };
+  test("should parse endpoint input and tag the parsed object with its struct", () => {
     const User = struct.object({
       id: struct.number(),
     });
 
-    expect(await parseEndpointInput(undefined, input)).toBe(input);
-    const parsed = await parseEndpointInput(User, { id: 1 });
+    const parsed = parseEndpointInput(User, { id: 1 });
     expect(parsed.id).toBe(1);
     expect(Object.keys(parsed)).toEqual(["id"]);
-    expect((parsed as { [STRUCT]?: unknown })[STRUCT]).toBe(User);
+    expect(STRUCT in parsed ? parsed[STRUCT] : undefined).toBe(User);
   });
 });

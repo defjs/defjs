@@ -1,22 +1,29 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { localePrefix } from "../lib/i18n";
-import { useAppTranslations } from "../lib/use-app-translations";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
+import { useAppTranslations, useLocale } from "../lib/use-app-translations";
 import type { MessageKey } from "../lib/messages";
 import { apiEntries, filterApiEntries } from "../data/api-catalog";
 
 const packages = [...new Set(apiEntries.map((entry) => entry.package))];
 const kinds = [...new Set(apiEntries.map((entry) => entry.kind))];
+const kindKeys = new Map<string, MessageKey>([
+  ["function", "api.kind.function"],
+  ["type", "api.kind.type"],
+  ["constant", "api.kind.constant"],
+]);
 
 export function ApiIndex() {
-  const { locale } = useI18n();
+  const locale = useLocale();
   const [query, setQuery] = useState(""),
     [packageName, setPackageName] = useState(""),
     [kind, setKind] = useState("");
   const t = useAppTranslations();
-  const kindLabel = (name: string) =>
-    t(`api.kind.${name}` as Extract<MessageKey, `api.kind.${string}`>);
+  const kindLabel = (name: string) => {
+    const key = kindKeys.get(name);
+    // An unknown kind falls back to its raw key, which is what `t` returns for a missing message.
+    return key ? t(key) : `api.kind.${name}`;
+  };
   const entries = filterApiEntries(apiEntries, query, packageName, kind);
   const prefix = localePrefix(locale);
   return (

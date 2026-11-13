@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
+import { assertStruct } from "./shape";
 import type { StructLike } from "./types";
 
 describe("shape.ts getter-recursive structures", () => {
@@ -10,12 +11,12 @@ describe("shape.ts getter-recursive structures", () => {
       id: string;
     };
 
-    const category = struct.object({
+    const category: StructLike = struct.object({
       get children() {
         return struct.array(category);
       },
       id: struct.string(),
-    }) as unknown as StructLike<unknown, unknown, boolean>;
+    });
 
     const [err, value] = parse(category, {
       children: [{ children: [], id: "child" }],
@@ -32,12 +33,12 @@ describe("shape.ts getter-recursive structures", () => {
   });
 
   test("reports getter-recursive errors with nested paths", () => {
-    const comment = struct.object({
+    const comment: StructLike = struct.object({
       id: struct.string(),
       get replies() {
         return struct.array(comment);
       },
-    }) as unknown as StructLike<unknown, unknown, boolean>;
+    });
 
     const [err] = parse(comment, {
       id: "root",
@@ -45,5 +46,14 @@ describe("shape.ts getter-recursive structures", () => {
     });
 
     expect(err?.issues[0]?.path).toEqual(["replies", 0, "id"]);
+  });
+});
+
+describe("shape.ts assertStruct", () => {
+  test("narrows a value that is not known to be a struct, or throws a TypeError", () => {
+    expect(() => assertStruct(struct.string(), "value")).not.toThrow();
+    expect(() => assertStruct({}, "value")).toThrow(
+      new TypeError("value must be a struct"),
+    );
   });
 });

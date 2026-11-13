@@ -1,21 +1,21 @@
 // #region example
 import { defineRequest, struct } from "@defjs/core";
 
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  name: struct.string(),
+  status: struct.string(),
 });
 
 const NotFound = struct.object({
   message: struct.string(),
 });
 
-export const getUser = defineRequest({
+export const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
-  output: User,
+  output: Order,
   error: NotFound,
 });
 

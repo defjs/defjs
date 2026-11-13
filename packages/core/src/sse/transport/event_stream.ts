@@ -1,35 +1,57 @@
-import type { ClientSSEOptions, FetchHandle } from "../../client/config";
-import type { FaultCode } from "../../error";
-import { ERR_TIMEOUT } from "../../error";
+import { statusOutcome } from "../../internal/attempt_outcome";
+import type { FetchHandle } from "../../client/config";
+import { ERR_FETCH_UNSUPPORTED } from "../../client/config";
+import type {
+  DecodeFault,
+  FaultCode,
+  HttpStatusFault,
+  HttpStatusFaultOf,
+  PreflightFault,
+} from "../../error";
+import {
+  createDecodeFault,
+  createHttpStatusFault,
+  createNetworkFault,
+  createPreflightFault,
+  createUndecodedHttpStatusFault,
+  ERR_TIMEOUT,
+  isTimeoutCause,
+} from "../../error";
+import { networkCauseCode } from "../../error/cause";
+import type { DoneInfo } from "../../balancer/balancer";
+import type { pickEndpoint, ResolvedEndpoint } from "../../balancer/runtime";
 import {
   createFetchInitBase,
+  ERR_STREAMING_REQUEST_UNSUPPORTED,
   isReadableStreamBody,
 } from "../../http/transport/fetch_init";
 import { concatChunks, parseBytesBody } from "../../internal/bytes";
 import { parseMediaTypeEssence } from "../../internal/media_type";
-import { isMediaTypeParametersWellFormed } from "../../internal/media_type_parameters";
-import { getContentType, isJsonMediaType } from "../../http/transport/utils";
+import {
+  getContentType,
+  isJsonMediaType,
+  jsonMediaTypeError,
+} from "../../http/transport/utils";
 import {
   awaitWithSignal,
-  mergeAbortSignals,
-  releaseAbortSignal,
+  followAbort,
+  hasAborted,
   resolveAbortedCause,
+  stopsUnreadItems,
 } from "../../internal/abort";
 import { AsyncQueue } from "../../internal/async_queue";
 import { computeReconnectDelay, wait } from "../../internal/backoff";
-import { normalizeReconnectOptions } from "../../internal/reconnect_options";
-import { fetchWithSignal } from "../../internal/fetch";
-import type {
-  HttpRequest,
-  HttpResponseType,
-} from "../../internal/http_request";
-import type { HttpResponse } from "../../internal/http_response";
-import { makeResponse } from "../../internal/http_response";
+import type { RetryPolicy } from "../../internal/retry";
+import { isRetryMethod, retryStep } from "../../internal/retry";
+import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
+import type { HttpRequest, HttpResponseType } from "../../http/http_request";
+import type { DecodedResponse, HttpResponse } from "../../http/http_response";
+import { makeResponse, toHttpMeta } from "../../http/http_response";
 import { resolveInboundRepresentation } from "../../internal/inbound_representation";
-import { resolveRequestUrl } from "../../internal/url";
+import { RequestUrlError, resolveRequestUrl } from "../../internal/url";
 import type { AnyStruct } from "../../struct";
-import { decodeJson } from "../../struct/codec/json";
-import { parseStructValue } from "../../struct/introspection";
+import { StructError } from "../../struct/errors";
+import { parseStructValue } from "../../struct/parse";
 import type { EventStreamMessage } from "./parser";
 import {
   createLineParser,
@@ -40,21 +62,8 @@ import {
 
 export const EVENT_STREAM_CONTENT_TYPE = "text/event-stream";
 export const LAST_EVENT_ID_HEADER = "last-event-id";
-const DEFAULT_RETRY_INTERVAL = 1000;
-export const SSE_RECONNECT_DEFAULTS = {
-  delayMs: DEFAULT_RETRY_INTERVAL,
-  factor: 1,
-  jitter: 0,
-  maxDelayMs: Number.POSITIVE_INFINITY,
-};
-// RFC 9110 §9.2.2 idempotent methods that Fetch can send (it forbids TRACE).
-const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set([
-  "DELETE",
-  "GET",
-  "HEAD",
-  "OPTIONS",
-  "PUT",
-]);
+// Events waiting for the consumer. A full queue pauses reading the response; nothing is dropped.
+const MAX_QUEUE_SIZE = 1024;
 
 /**
  * Metadata available once an SSE response has opened.
@@ -72,18 +81,20 @@ export interface EventStreamOpenInfo {
  * Fault codes an event stream can end with, drawn from the one shared `FaultCode` namespace.
  *
  * A subset of the shared `FaultCode` set. It is the `code` of an `EventStreamCloseInfo` with `kind: 'error'`.
+ * `REQ_BUILD_FAILED` means a reconnect pick failed after the stream opened, or the picked endpoint gave an invalid URL or a URL with credentials. It stays that code; it is not rewritten to `NET_UNREACHABLE`.
+ * `HTTP_STATUS` means a reconnect handshake answered with a non-2xx status; `cause` is then the same `HTTP_STATUS` fault a failed first handshake returns.
  *
  * @group sse
  */
 export type EventStreamFaultCode = Extract<
   FaultCode,
   | "CAP_BUFFER_EXCEEDED"
-  | "CAP_QUEUE_OVERFLOW"
   | "EXT_HOOK_FAILED"
   | "EXT_OBSERVER_FAILED"
+  | "HTTP_STATUS"
   | "NET_TIMEOUT"
   | "NET_UNREACHABLE"
-  | "RES_DECODE_FAILED"
+  | "REQ_BUILD_FAILED"
   | "RES_MEDIA_TYPE_INVALID"
 >;
 
@@ -97,7 +108,7 @@ interface EventStreamCloseInfoBase {
  *
  * The discriminant is `kind` so that `code` can mean the same thing it means on a fault.
  *
- * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`.
+ * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. `close()`, disposal and a caller signal abort all discard the events nobody has read yet, as `EventSource.close()` does, whether or not the stream had already ended (the response ended, or it failed), and the iterator ends at once. A stop after the stream ended discards the unread events and changes nothing else: `closed` keeps its value, and an iterator that rejects with the `cause` of an `error` end still rejects with it once no unread event is left. If the caller signal aborts after open and before the stream has ended with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`; a deadline that expires after the stream has ended is a stop and discards the unread events. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open, or that gives a URL the request cannot use (invalid, or with credentials), uses `REQ_BUILD_FAILED`. A reconnect handshake that ends the stream with a non-2xx status uses `HTTP_STATUS`, and its `cause` is the `HTTP_STATUS` fault, as for a failed first handshake. `closed` resolves when the connection ends, which can be before the iterator has read every event. After an `error` end, including a timeout, the events already queued are still delivered and the iterator rejects after the last one, unless the caller stops the stream first.
  *
  * @group sse
  */
@@ -134,154 +145,295 @@ export interface EventStreamHandle<TEvent = EventStreamMessage>
   [Symbol.asyncDispose](): PromiseLike<void>;
 }
 
-/** Failure snapshot owned by one fetchEventStream invocation. */
-export interface EventStreamFailureInfo {
+/** The decoded body of a non-2xx handshake, typed by the declared `error` struct. */
+export type HandshakeBody<TError extends AnyStruct | undefined> =
+  HttpStatusFault<TError>["data"];
+
+/** The latest handshake of a stream. */
+interface Handshake<TBody> {
+  open?: EventStreamOpenInfo;
+  /** The failed handshake with its decoded error body. Absent when the body was not decoded. */
+  decoded?: DecodedResponse<TBody>;
+  /**
+   * Why a declared error body was not decoded. A failed first handshake reports it, as `defineRequest`
+   * does, because only a decoded body can fill the typed `data` of the status fault.
+   */
+  bodyFault?: DecodeFault;
+}
+
+/**
+ * How a stream that never opened failed. `fault` is what the call reports, `cause` is what interceptors are
+ * shown, and `open` is the response of the failed handshake, when one arrived.
+ */
+export interface EventStreamStartupFailure<TBody = unknown> {
+  cause: unknown;
+  fault:
+    | DecodeFault
+    | HttpStatusFaultOf<TBody>
+    | HttpStatusFaultOf<undefined>
+    | PreflightFault;
   open?: EventStreamOpenInfo;
 }
 
-export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
-  fetch?: FetchHandle;
-  /** @internal Carries startup failure metadata without annotating shared cause values. */
-  failure?: EventStreamFailureInfo;
+/** What `fetchEventStream` resolves with. It never rejects. */
+export type EventStreamStart<TEvent, TBody> =
+  | readonly [null, EventStreamHandle<TEvent>]
+  | readonly [EventStreamStartupFailure<TBody>, undefined];
+
+export interface FetchEventStreamOptions<
+  TEvent = EventStreamMessage,
+  TError extends AnyStruct | undefined = AnyStruct | undefined,
+> {
+  fetch: FetchHandle;
   /** Optional struct for a non-2xx handshake body; fills the fault's `data` when declared. */
-  handshakeError?: AnyStruct;
-  onopen?: (open: EventStreamOpenInfo) => void | Promise<void>;
-  onclose?: (open: EventStreamOpenInfo) => void | Promise<void>;
-  onerror?: (
-    error: unknown,
-    context: FetchEventStreamErrorContext,
-  ) => number | null | undefined | Promise<number | null | undefined>;
-  transformMessage?: (
+  handshakeError?: TError;
+  transformMessage: (
     message: EventStreamMessage,
     signal: AbortSignal,
   ) => Promise<TEvent | undefined> | TEvent | undefined;
-  retryInterval?: number;
-  reconnect?: ClientSSEOptions["reconnect"];
+  /** The resolved retry policy. Absent means the stream is not retried. */
+  retry?: RetryPolicy;
   maxBufferSize: number;
-  maxQueueSize: number;
+  /**
+   * The caller's own signal. The stream reads it, without listening to it, to tell a stop by the caller from one by
+   * `close()` once the stream has ended and `request.signal` no longer follows it.
+   */
+  callerSignal?: AbortSignal;
+  /**
+   * @internal First-`next()` attribution. Absent when this stream must not
+   * pick or call `done`. `done` runs once when the current attempt ends.
+   * `pickNext` runs after a reconnect wait, before the next `Request`.
+   */
+  endpointAttempt?: AttemptEndpoint & {
+    pickNext: () => ReturnType<typeof pickEndpoint>;
+  };
 }
 
-export interface FetchEventStreamErrorContext {
-  lastEventId: string;
-  retryCount: number;
-  retryInterval: number;
-  open?: EventStreamOpenInfo;
-}
+/** The part of a picked endpoint that a connection reports to. */
+type AttemptEndpoint = Pick<ResolvedEndpoint, "done" | "end" | "start">;
 
 type EventStreamFatalCode = Exclude<
   EventStreamFaultCode,
-  "NET_TIMEOUT" | "NET_UNREACHABLE"
+  "HTTP_STATUS" | "NET_TIMEOUT" | "NET_UNREACHABLE" | "REQ_BUILD_FAILED"
 >;
 
 class EventStreamFatalError extends Error {
   readonly code: EventStreamFatalCode;
-  readonly statusSignal: boolean;
   cause?: unknown;
 
   constructor(
     code: EventStreamFatalCode,
     message: string,
-    options?: { cause?: unknown; statusSignal?: boolean },
+    options?: { cause?: unknown },
   ) {
     super(message);
     this.name = "EventStreamFatalError";
     this.code = code;
     this.cause = options?.cause;
-    // A non-2xx status is not itself a decode failure. Real body failures leave this unset.
-    this.statusSignal = options?.statusSignal === true;
   }
 }
 
-export function getEventStreamFatalCode(
-  error: unknown,
-): EventStreamFatalCode | undefined {
-  return error instanceof EventStreamFatalError ? error.code : undefined;
-}
-
-export function isHandshakeStatusSignal(error: unknown): boolean {
-  return error instanceof EventStreamFatalError && error.statusSignal;
-}
-
-export function handshakeDecodeCause(error: unknown): unknown {
-  if (error instanceof EventStreamFatalError && error.cause !== undefined) {
-    return error.cause;
+/**
+ * The `HTTP_STATUS` fault for a non-2xx handshake, with `data` when the declared error body decoded.
+ * A body that could not be decoded leaves `data` undefined and its failure on `cause`. Interceptors,
+ * the retry policy and a reconnect's `closed` all see this fault.
+ */
+function createHandshakeStatusFault<TBody>(
+  response: HttpResponse<unknown>,
+  decoded?: DecodedResponse<TBody>,
+  bodyFault?: DecodeFault,
+): HttpStatusFaultOf<TBody> | HttpStatusFaultOf<undefined> {
+  const fault = decoded
+    ? createHttpStatusFault(decoded)
+    : createUndecodedHttpStatusFault(toHttpMeta(response));
+  if (bodyFault) {
+    fault.cause = bodyFault.cause;
   }
-  return error;
+  return fault;
 }
 
-function toEventStreamFatalError(
-  error: unknown,
-): EventStreamFatalError | undefined {
-  if (error instanceof EventStreamFatalError) {
-    return error;
+/**
+ * The fault a stream that never opened reports. A failed handshake is `HTTP_STATUS`, or the decode fault when its declared error body could not be
+ * decoded, as `defineRequest` reports it. A hook the caller supplied that threw is named by the failing hook and
+ * the thrown value is the cause, even when the handshake it ran for answered with a status.
+ */
+function startupFault<TBody>(
+  cause: unknown,
+  { open, decoded, bodyFault }: Handshake<TBody>,
+): EventStreamStartupFailure<TBody>["fault"] {
+  const response = open?.response;
+  const fatal = cause instanceof EventStreamFatalError ? cause.code : undefined;
+  if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
+    return createDecodeFault(fatal, cause, toHttpMeta(response));
   }
-  if (error instanceof SSEParserLimitError) {
-    return new EventStreamFatalError("CAP_BUFFER_EXCEEDED", error.message, {
-      cause: error,
-    });
+  if (fatal === "EXT_HOOK_FAILED" && cause instanceof Error) {
+    return createPreflightFault("EXT_HOOK_FAILED", cause.cause);
   }
-  return undefined;
+  if (response && !response.ok) {
+    return bodyFault ?? createHandshakeStatusFault(response, decoded);
+  }
+  if (
+    cause === ERR_STREAMING_REQUEST_UNSUPPORTED ||
+    cause === ERR_FETCH_UNSUPPORTED
+  ) {
+    return createPreflightFault("ENV_UNSUPPORTED", cause);
+  }
+  return createNetworkFault(cause);
 }
 
-export async function fetchEventStream<TEvent = EventStreamMessage>(
-  request: HttpRequest,
-  options: FetchEventStreamOptions<TEvent>,
-): Promise<EventStreamHandle<TEvent>> {
-  const reconnect = normalizeReconnectOptions(
-    options.reconnect,
-    SSE_RECONNECT_DEFAULTS,
-    "SSE",
-  );
+/**
+ * The Request constructor refuses a URL with credentials with a TypeError (Fetch, "new Request"), but Bun accepts it and
+ * sends the request. Refusing here makes the outcome the same on every runtime and keeps it a build failure, not a
+ * network failure. The message leaves the URL out, so the credentials never reach a log.
+ */
+function resolveAttemptUrl(request: HttpRequest): URL {
   const url = resolveRequestUrl(request);
-  const failure: EventStreamFailureInfo = options.failure ?? {};
-  const queue = new AsyncQueue<TEvent>({ maxSize: options.maxQueueSize });
-  const closedDeferred = Promise.withResolvers<EventStreamCloseInfo>();
-  const openDeferred = Promise.withResolvers<EventStreamHandle<TEvent>>();
-  const closeController = new AbortController();
-  const fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
-  const headers = new Headers(request.headers);
-
-  if (!headers.has("Accept")) {
-    headers.set("Accept", EVENT_STREAM_CONTENT_TYPE);
+  if (url.username !== "" || url.password !== "") {
+    throw new RequestUrlError("The URL must not include credentials");
   }
+  return url;
+}
 
-  let settledClosed = false;
-  let settledOpen = false;
-  let retryInterval =
-    options.retryInterval ?? reconnect?.delayMs ?? DEFAULT_RETRY_INTERVAL;
-  let retryCount = 0;
+/** What one connection ends with. A failure carries the error that ended it and the response, when one arrived. */
+type AttemptResult =
+  | { kind: "eof" }
+  | { kind: "stopped" }
+  | { kind: "fatal"; error: EventStreamFatalError }
+  | { kind: "status"; error: Error; response: Response }
+  | { kind: "network"; error: unknown; response?: Response };
+
+type AttemptFailure = Exclude<AttemptResult, { kind: "eof" | "stopped" }>;
+
+const EOF: AttemptResult = { kind: "eof" };
+const STOPPED = { kind: "stopped" } as const satisfies AttemptResult;
+
+/** The balancer's view of one connection. `outcome` is what the connection showed, `endpoint` is until it reports `done`. */
+interface Attempt {
+  endpoint: AttemptEndpoint | undefined;
+  fetchStarted: boolean;
+  outcome: DoneInfo | undefined;
+}
+
+function newAttempt(endpoint: AttemptEndpoint | undefined): Attempt {
+  return { endpoint, fetchStarted: false, outcome: undefined };
+}
+
+/** What a failed fetch or read tells the balancer about the endpoint. */
+function networkOutcome(error: unknown): DoneInfo {
+  switch (networkCauseCode(error)) {
+    case "NET_TIMEOUT":
+      return { attempted: true, code: "NET_TIMEOUT" };
+    case "NET_ABORTED":
+      return { attempted: false };
+    default:
+      return { attempted: true, code: "NET_UNREACHABLE" };
+  }
+}
+
+/** The code the stream's `closed` carries for a failed connection. */
+function faultCode(failure: AttemptFailure): EventStreamFaultCode {
+  switch (failure.kind) {
+    case "fatal":
+      return failure.error.code;
+    case "status":
+      return "HTTP_STATUS";
+    case "network":
+      return failure.error === ERR_TIMEOUT ? "NET_TIMEOUT" : "NET_UNREACHABLE";
+  }
+}
+
+/**
+ * Opens an event stream and keeps it connected. Resolves once the first handshake is accepted, or with how the
+ * stream failed before that. `request.headers` belong to the stream from here on: it writes the event id and the
+ * default `Accept` into them.
+ */
+export async function fetchEventStream<
+  TEvent = EventStreamMessage,
+  TError extends AnyStruct | undefined = AnyStruct | undefined,
+>(
+  request: HttpRequest & { headers: Headers },
+  options: FetchEventStreamOptions<TEvent, TError>,
+): Promise<EventStreamStart<TEvent, HandshakeBody<TError>>> {
+  const {
+    fetch: fetchImpl,
+    handshakeError,
+    maxBufferSize,
+    retry: policy,
+    transformMessage,
+  } = options;
+  let url: URL;
+  try {
+    url = resolveAttemptUrl(request);
+  } catch (error) {
+    options.endpointAttempt?.done({ attempted: false });
+    return [
+      { cause: error, fault: createPreflightFault("REQ_BUILD_FAILED", error) },
+      undefined,
+    ];
+  }
+  const { headers } = request;
+  const queue = new AsyncQueue<TEvent>({ maxSize: MAX_QUEUE_SIZE });
+  const closedDeferred = Promise.withResolvers<EventStreamCloseInfo>();
+  const openDeferred =
+    Promise.withResolvers<EventStreamStart<TEvent, HandshakeBody<TError>>>();
+  // Every stop of the stream, `close()` and the request's signal, shared by all attempts and waits.
+  const stopController = new AbortController();
+  const stop = stopController.signal;
+  let closeRequested = false;
+
+  // `connecting` until the first handshake is accepted or the stream fails before it, then `open` until `closed` settles.
+  let phase: "connecting" | "open" | "closed" = "connecting";
+  // Whether the stream ended before the caller's signal aborted. Set once, when `closed` settles.
+  let endedBeforeAbort = false;
+  // A server `retry:` field replaces the policy's base delay for the reconnects that follow.
+  let serverRetryMs: number | undefined;
+  // Retries since the last established connection.
+  let retried = 0;
   let lastEventId = "";
   // Headers validate every write. The id only matters to the next attempt, so it is applied there.
   let lastEventIdDirty = false;
-  let latestOpen: EventStreamOpenInfo | undefined;
+  // The latest handshake. While connecting, only the current attempt's, so a startup failure never reports the
+  // response of a retried 503.
+  const latest: Handshake<HandshakeBody<TError>> = {};
+  let attempt = newAttempt(options.endpointAttempt);
   let disposeTask: Promise<void> | undefined;
 
   const handle: EventStreamHandle<TEvent> = {
     get open() {
       /* istanbul ignore if -- unreachable: handle is only returned after open resolves */
-      if (!latestOpen) {
+      if (!latest.open) {
         throw new Error("Event stream has not been opened yet");
       }
-      return latestOpen;
+      return latest.open;
     },
     closed: closedDeferred.promise,
     close,
     [Symbol.asyncDispose]() {
-      return disposeHandle();
+      close();
+      return (disposeTask ??= Promise.all([
+        closedDeferred.promise,
+        lifecycleTask,
+      ]).then(() => undefined));
     },
     [Symbol.asyncIterator]() {
       const iterator = queue[Symbol.asyncIterator]();
       let returned = false;
       return {
         next() {
-          return returned
-            ? Promise.resolve({ done: true, value: undefined })
-            : iterator.next();
+          if (returned) {
+            return Promise.resolve({ done: true, value: undefined });
+          }
+          // The stop reaches the transport only once its read fails, which can be after a reader comes back, and
+          // not at all once the stream has ended, so check the caller's signal here.
+          if (stopsUnreadItems(options.callerSignal, endedBeforeAbort)) {
+            queue.discard();
+          }
+          return iterator.next();
         },
         return() {
           if (!returned) {
             returned = true;
-            handle.close("iterator-return");
+            close("iterator-return");
           }
           return Promise.resolve({ done: true, value: undefined });
         },
@@ -289,42 +441,50 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     },
   };
 
-  // start() contains its terminal catch; this fallback only guards a type-invariant failure outside that catch.
-  const lifecycleTask = start().catch(
+  // run() contains its terminal failures; this fallback only guards a type-invariant failure outside them.
+  const lifecycleTask = run().catch(
     /* istanbul ignore next -- @preserve */
     (error: unknown) => {
-      finishError(error);
+      finishError(error, "NET_UNREACHABLE");
     },
   );
   return openDeferred.promise;
 
-  function disposeHandle(): Promise<void> {
-    return (disposeTask ??= Promise.resolve().then(disposeOnce));
+  /** What the balancer is told when the attempt ends. A stop is not a failure of the endpoint. */
+  function attemptInfo(): DoneInfo {
+    if (closeRequested) {
+      return { attempted: false };
+    }
+    const caller = request.signal;
+    if (caller?.aborted) {
+      if (attempt.fetchStarted && isTimeoutCause(caller.reason)) {
+        return { attempted: true, code: "NET_TIMEOUT" };
+      }
+      return { attempted: false };
+    }
+    return attempt.outcome ?? { attempted: false };
   }
 
-  async function disposeOnce(): Promise<void> {
-    let closeError: unknown;
-    let hasCloseError = false;
-    try {
-      handle.close();
-    } catch (error) {
-      hasCloseError = true;
-      closeError = error;
-      close();
-    }
+  /** Reports the attempt to the balancer once, then it is no longer in flight. */
+  function settleAttempt(): void {
+    const endpoint = attempt.endpoint;
+    attempt.endpoint = undefined;
+    endpoint?.done(attemptInfo());
+  }
 
-    await Promise.all([closedDeferred.promise, lifecycleTask]);
-    if (hasCloseError) {
-      throw closeError;
-    }
+  function noteReadFailure(error: unknown): void {
+    attempt.outcome = networkOutcome(error);
   }
 
   function close(reason?: unknown): void {
-    if (closeController.signal.aborted) {
+    if (closeRequested) {
       return;
     }
 
-    closeController.abort(reason);
+    closeRequested = true;
+    stopController.abort(reason);
+    // EventSource.close() sets CLOSED, after which queued dispatch tasks are skipped, so unread events are discarded.
+    queue.discard();
     queue.close();
     settleClosed({
       kind: "aborted",
@@ -333,148 +493,261 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     });
   }
 
-  async function start(): Promise<void> {
-    while (!closeController.signal.aborted) {
-      const attemptAbort = mergeAbortSignals(closeController.signal, [
-        request.signal,
-      ]);
-      let response: Response | undefined;
-      let readerStarted = false;
-
-      try {
-        if (lastEventIdDirty) {
-          if (lastEventId) {
-            const bytes = new TextEncoder().encode(lastEventId);
-            let value = "";
-            for (const byte of bytes) value += String.fromCharCode(byte);
-            headers.set(LAST_EVENT_ID_HEADER, value);
-          } else {
-            headers.delete(LAST_EVENT_ID_HEADER);
-          }
-          lastEventIdDirty = false;
+  async function run(): Promise<void> {
+    const unfollowRequest = followAbort(stopController, request.signal);
+    try {
+      for (;;) {
+        const result = await runAttempt();
+        if (result.kind === "eof") {
+          queue.close();
+          settleAttempt();
+          settleClosed({ kind: "eof" });
+          return;
         }
-        const eventRequest = new Request(
-          url,
-          createEventStreamRequestInit(request, headers, attemptAbort),
-        );
-        response = await fetchWithSignal(
-          () => fetchImpl(eventRequest),
-          attemptAbort,
-          cancelLateResponseBody,
-        );
-        // The JSON media-type precheck throws before an open info exists. Attach the response
-        // first so the startup fault can still report that status.
-        const handshakeResponse = response;
-        const open = await createOpenInfo(
-          handshakeResponse,
-          options.handshakeError,
-          attemptAbort,
-        ).catch((error: unknown) => {
-          latestOpen = toOpenInfo(handshakeResponse, null, false);
-          throw error;
-        });
-        latestOpen = open;
+        if (result.kind === "stopped") {
+          finishStopped();
+          return;
+        }
 
-        validateOpenResponse(open);
+        // A fatal error is final. A non-2xx handshake is not: the retry policy decides, and only 502, 503 and 504
+        // retry by default. A stream body is spent by the first attempt and the request is built once per execute,
+        // so nothing can be retried and the caller gets the real failure. Keyed on the body type, not `locked`:
+        // when a failed attempt locks the stream differs by runtime.
+        const { error } = result;
+        if (
+          result.kind === "fatal" ||
+          policy === undefined ||
+          isReadableStreamBody(request.body)
+        ) {
+          finishError(error, faultCode(result));
+          return;
+        }
+        const step = await retryStep(policy, retried, stop, (number) => ({
+          transport: "sse",
+          attempt: number,
+          cause: error,
+          retryable:
+            isRetryMethod(policy, request.method) &&
+            (result.kind !== "status" ||
+              statusOutcome(result.response.status) === "NET_UNAVAILABLE"),
+          method: request.method,
+          lastEventId,
+          open: latest.open,
+          status: result.response?.status,
+        }));
+        if (step === "stop") {
+          finishError(error, faultCode(result));
+          return;
+        }
+        if (step !== "retry") {
+          if (step.code === "EXT_HOOK_FAILED") {
+            const failure: unknown = step.cause;
+            finishError(
+              new EventStreamFatalError(
+                "EXT_HOOK_FAILED",
+                failure instanceof Error
+                  ? failure.message
+                  : "Retry policy failed",
+                { cause: failure },
+              ),
+              "EXT_HOOK_FAILED",
+            );
+          } else {
+            finishStopped();
+          }
+          return;
+        }
 
-        if (!response.body) {
-          throw new EventStreamFatalError(
-            "RES_DECODE_FAILED",
-            "Missing response body for event stream",
+        retried += 1;
+        // Release this attempt before the backoff so it is not in flight while waiting.
+        settleAttempt();
+        try {
+          await wait(
+            computeReconnectDelay(
+              serverRetryMs === undefined
+                ? policy
+                : { ...policy, delayMs: serverRetryMs },
+              retried,
+            ),
+            stop,
           );
+        } catch {
+          // wait() rejects only when the stream is stopped.
+          finishStopped();
+          return;
         }
-
-        await runFatalHook(
-          () => options.onopen?.(open),
-          attemptAbort,
-          "Event stream onopen callback failed",
-        );
-        retryCount = 0;
-
-        if (!settledOpen) {
-          settledOpen = true;
-          openDeferred.resolve(handle);
-        }
-
-        readerStarted = true;
-        await consumeEventStream(response.body, attemptAbort);
-        await runFatalHook(
-          () => options.onclose?.(open),
-          attemptAbort,
-          "Event stream onclose callback failed",
-        );
-
-        queue.close();
-        settleClosed({ kind: "eof" });
-        return;
-      } catch (error) {
-        if (response?.body && !readerStarted) {
-          void response.body.cancel(error).catch(() => undefined);
-        }
-
-        const normalizedError = normalizeAbortError(
-          error,
-          request.signal,
-          closeController.signal,
-        );
-
-        if (closeController.signal.aborted || request.signal?.aborted) {
-          finishAborted(attemptAbort);
+        if (stop.aborted) {
+          finishStopped();
           return;
         }
 
-        const retryError = normalizedError ?? error;
-        const fatalError = toEventStreamFatalError(retryError);
-        if (fatalError) {
-          await observeFatalError(fatalError, attemptAbort);
-          if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(attemptAbort);
-          } else {
-            finishError(fatalError);
+        const pickNext = options.endpointAttempt?.pickNext;
+        if (pickNext) {
+          const picked = pickNext();
+          if (picked[0] !== null) {
+            finishError(picked[0], "REQ_BUILD_FAILED", picked[0]);
+            return;
           }
-          return;
-        }
-
-        // A stream body is spent by the first attempt and the request is built once per execute, so nothing can be
-        // retried: no observer, reconnect policy or delay, and the caller gets the real failure. Keyed on the body
-        // type, not `locked`: when a failed attempt locks the stream differs by runtime.
-        if (isReadableStreamBody(request.body)) {
-          finishError(retryError);
-          return;
-        }
-
-        let retryDelay: number | null;
-        try {
-          retryDelay = await resolveRetryDelay(retryError, attemptAbort);
-        } catch (policyError) {
-          if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(attemptAbort);
-          } else {
-            finishError(policyError);
+          const next = picked[1];
+          try {
+            url = resolveAttemptUrl({
+              ...request,
+              baseEndpoint: next.endpoint,
+            });
+          } catch (error) {
+            next.done({ attempted: false });
+            const fault = createPreflightFault("REQ_BUILD_FAILED", error);
+            finishError(fault, "REQ_BUILD_FAILED", fault);
+            return;
           }
-          return;
+          attempt = newAttempt(next);
+        } else {
+          attempt = newAttempt(undefined);
         }
-
-        if (typeof retryDelay !== "number" || retryDelay < 0) {
-          finishError(retryError);
-          return;
-        }
-
-        try {
-          await wait(retryDelay, attemptAbort);
-        } catch (waitError) {
-          // wait() rejects only from the merged close/request abort signal.
-          /* istanbul ignore else -- @preserve */
-          if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(attemptAbort);
-          } else {
-            finishError(waitError);
-          }
-          return;
-        }
-      } finally {
-        releaseAbortSignal(attemptAbort);
       }
+    } finally {
+      unfollowRequest();
+    }
+  }
+
+  /** One connection: the request, the handshake and the read of the body, up to what ends it. */
+  async function runAttempt(): Promise<AttemptResult> {
+    // Each request gets a signal of its own. The platform keeps a listener on the signal a request was built with
+    // until the request is collected, which a signal shared by many reconnects would pile up.
+    const attemptController = new AbortController();
+    const signal = attemptController.signal;
+    const unfollow = followAbort(attemptController, stop);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    let response: Response | undefined;
+    let reading = false;
+    // A startup failure reports this attempt's response only, not one left by a retried 503.
+    if (phase === "connecting") {
+      latest.open = undefined;
+      latest.decoded = undefined;
+      latest.bodyFault = undefined;
+    }
+
+    // A failure ends the attempt here: the endpoint is told and the unread body is released. A stop outranks the
+    // failure, so then it returns `STOPPED` for the caller to return in its place, and `undefined` otherwise.
+    const endFailedAttempt = (error: unknown): typeof STOPPED | undefined => {
+      if (response?.body && !reading) {
+        void response.body.cancel(error).catch(() => undefined);
+      }
+      if (
+        attempt.outcome === undefined &&
+        attempt.fetchStarted &&
+        !stop.aborted
+      ) {
+        attempt.outcome = timedOut
+          ? { attempted: true, code: "NET_UNREACHABLE" }
+          : networkOutcome(error);
+      }
+      attempt.endpoint?.end(attemptInfo());
+      if (stop.aborted) {
+        // The call races its signal against the stream's startup, and the balancer is told before it returns.
+        settleAttempt();
+        return STOPPED;
+      }
+      return undefined;
+    };
+
+    try {
+      if (lastEventIdDirty) {
+        if (lastEventId) {
+          const bytes = new TextEncoder().encode(lastEventId);
+          let value = "";
+          for (const byte of bytes) value += String.fromCharCode(byte);
+          headers.set(LAST_EVENT_ID_HEADER, value);
+        } else {
+          headers.delete(LAST_EVENT_ID_HEADER);
+        }
+        lastEventIdDirty = false;
+      }
+      const eventRequest = new Request(
+        url,
+        createFetchInitBase(request, {
+          defaultAccept: EVENT_STREAM_CONTENT_TYPE,
+          headers,
+          signal,
+        }),
+      );
+      response = await fetchWithSignal(
+        () => {
+          attempt.endpoint?.start();
+          attempt.fetchStarted = true;
+          if (policy?.attemptTimeoutMs !== undefined) {
+            timer = setTimeout(() => {
+              timedOut = true;
+              attemptController.abort(ERR_TIMEOUT);
+            }, policy.attemptTimeoutMs);
+          }
+          return fetchImpl(eventRequest);
+        },
+        signal,
+        cancelLateResponseBody,
+      );
+      clearTimeout(timer);
+      const outcome: DoneInfo = {
+        attempted: true,
+        status: response.status,
+        code: statusOutcome(response.status),
+      };
+      attempt.outcome = outcome;
+      attempt.endpoint?.end(outcome);
+      // Reading a declared error body can be cut short by an abort before an open info exists, so the
+      // unread handshake is recorded first and the startup fault can still report that status.
+      const unread = toOpenInfo(response);
+      latest.open = unread;
+      const { open, decoded, bodyFault } = await createOpenInfo(
+        response,
+        unread,
+        handshakeError,
+        signal,
+      );
+      latest.open = open;
+      latest.decoded = decoded;
+      latest.bodyFault = bodyFault;
+
+      if (!response.ok) {
+        const error = createHandshakeStatusFault(
+          open.response,
+          decoded,
+          bodyFault,
+        );
+        return endFailedAttempt(error) ?? { kind: "status", error, response };
+      }
+      const contentType = response.headers.get("content-type") || "";
+      if (parseMediaTypeEssence(contentType) !== EVENT_STREAM_CONTENT_TYPE) {
+        const error = new EventStreamFatalError(
+          "RES_MEDIA_TYPE_INVALID",
+          `Expected content-type ${EVENT_STREAM_CONTENT_TYPE}, got ${contentType || "(empty)"}`,
+        );
+        return endFailedAttempt(error) ?? { kind: "fatal", error };
+      }
+
+      retried = 0;
+      if (phase === "connecting") {
+        phase = "open";
+        openDeferred.resolve([null, handle]);
+      }
+
+      // A 2xx event stream without a body (204, 205 on Node.js and Bun) is an empty stream that ends with eof.
+      if (response.body) {
+        reading = true;
+        await consumeEventStream(response.body, signal);
+      }
+      return EOF;
+    } catch (error) {
+      return (
+        endFailedAttempt(error) ??
+        (error instanceof EventStreamFatalError
+          ? { kind: "fatal", error }
+          : { kind: "network", error, response })
+      );
+    } finally {
+      clearTimeout(timer);
+      unfollow();
     }
   }
 
@@ -488,15 +761,17 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         lastEventIdDirty = true;
       },
       (retry) => {
-        retryInterval = retry;
+        serverRetryMs = retry;
       },
       (message) => {
+        // The parser reports a block's id before its message, so the stream's last event id
+        // is the id this event carries, whether or not the block had its own id field.
+        const { event, data } = message;
+        const id = lastEventId;
         let result: Promise<TEvent | undefined> | TEvent | undefined;
         try {
           signal.throwIfAborted();
-          result = options.transformMessage
-            ? options.transformMessage(message, signal)
-            : (message as TEvent);
+          result = transformMessage({ id, event, data }, signal);
         } catch (error) {
           throw toTransformFailure(error, signal);
         }
@@ -515,34 +790,31 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
           );
         }
         signal.throwIfAborted();
-        enqueue(result);
-        return undefined;
+        return enqueue(result);
       },
-      { maxBufferSize: options.maxBufferSize },
+      { maxBufferSize },
     );
 
-    function enqueue(transformed: TEvent | undefined): void {
-      if (typeof transformed !== "undefined") {
-        try {
-          queue.push(transformed);
-        } catch (error) {
-          // AsyncQueue.push has one failure mode: exceeding its configured bound.
-          throw new EventStreamFatalError(
-            "CAP_QUEUE_OVERFLOW",
-            "Event stream queue exceeded maxQueueSize",
-            {
-              cause: error,
-            },
-          );
-        }
+    // A full queue pauses parsing, and with it the response reads, until the consumer takes an event.
+    function enqueue(
+      transformed: TEvent | undefined,
+    ): Promise<void> | undefined {
+      if (typeof transformed === "undefined") {
+        return undefined;
       }
+      const room = queue.waitForRoom();
+      if (!room) {
+        queue.push(transformed);
+        return undefined;
+      }
+      return awaitWithSignal(() => room, signal).then(() => {
+        queue.push(transformed);
+      });
     }
-    const parseLine = createLineParser(parseMessage, {
-      maxBufferSize: options.maxBufferSize,
-    });
+    const parseLine = createLineParser(parseMessage, { maxBufferSize });
 
     try {
-      await readStreamBytes(stream, parseLine, signal);
+      await readStreamBytes(stream, parseLine, signal, noteReadFailure);
     } catch (error) {
       if (error instanceof SSEParserLimitError) {
         throw new EventStreamFatalError("CAP_BUFFER_EXCEEDED", error.message, {
@@ -553,120 +825,20 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     }
   }
 
-  async function resolveRetryDelay(
-    error: unknown,
-    signal: AbortSignal,
-  ): Promise<number | null> {
-    retryCount += 1;
-
-    const next = options.onerror
-      ? await awaitWithSignal(
-          () =>
-            options.onerror?.(error, {
-              lastEventId,
-              retryCount,
-              retryInterval,
-              open: latestOpen,
-            }),
-          signal,
-        )
-      : undefined;
-
-    if (next === null) {
-      return null;
-    }
-
-    // Opt-in reconnect (match WebSocket): no reconnect object → do not retry.
-    if (!reconnect) {
-      return null;
-    }
-
-    // 2. The caller's policy decides; without one, only an idempotent request is sent again.
-    if (options.reconnect?.shouldReconnect) {
-      const should = await awaitWithSignal(
-        () =>
-          options.reconnect?.shouldReconnect?.({
-            attempt: retryCount,
-            cause: error,
-            lastEventId,
-            method: request.method,
-            open: latestOpen,
-          }),
-        signal,
-      );
-      if (!should) {
-        return null;
-      }
-    } else if (!IDEMPOTENT_METHODS.has(request.method.toUpperCase())) {
-      return null;
-    }
-
-    // 3. Check attempts limit (default 3 when reconnect is configured, like WebSocket)
-    if (retryCount > reconnect.attempts) {
-      return null;
-    }
-
-    const delayMs = typeof next === "number" ? next : retryInterval;
-    return computeReconnectDelay({ ...reconnect, delayMs }, retryCount);
-  }
-
-  async function observeFatalError(
-    error: EventStreamFatalError,
-    signal: AbortSignal,
-  ): Promise<void> {
-    if (!options.onerror) {
+  function finishStopped(): void {
+    const stopped = resolveAbortedCause(stop);
+    if (stopped === ERR_TIMEOUT) {
+      finishError(ERR_TIMEOUT, "NET_TIMEOUT");
       return;
     }
-
-    try {
-      await awaitWithSignal(
-        () =>
-          options.onerror?.(error, {
-            lastEventId,
-            retryCount,
-            retryInterval,
-            open: latestOpen,
-          }),
-        signal,
-      );
-    } catch {
-      // Fatal errors own the terminal outcome; observers cannot replace them.
-    }
-  }
-
-  async function runFatalHook(
-    run: () => void | Promise<void> | undefined,
-    signal: AbortSignal,
-    fallback: string,
-  ): Promise<void> {
-    try {
-      await awaitWithSignal(run, signal);
-    } catch (error) {
-      if (signal.aborted) {
-        throw error;
-      }
-      throw new EventStreamFatalError(
-        "EXT_HOOK_FAILED",
-        error instanceof Error ? error.message : fallback,
-        { cause: error },
-      );
-    }
-  }
-
-  function finishAborted(signal: AbortSignal): void {
-    const abortedError = normalizeAbortReason(signal);
-    if (abortedError === ERR_TIMEOUT) {
-      finishError(ERR_TIMEOUT);
-      return;
-    }
-    const closeCause = signal.reason;
-    failure.open = latestOpen;
-
-    if (settledOpen) {
-      queue.close();
+    settleAttempt();
+    const closeCause: unknown = stop.reason;
+    if (phase === "connecting") {
+      failStartup(stopped);
     } else {
-      settledOpen = true;
-      openDeferred.reject(abortedError);
+      // A stop by the caller drops the events nobody has read, the same as close().
+      queue.discard();
+      queue.close();
     }
 
     settleClosed({
@@ -676,29 +848,45 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     });
   }
 
-  function finishError(error: unknown): void {
-    failure.open = latestOpen;
-    if (settledOpen) {
-      queue.fail(error);
+  function finishError(
+    error: unknown,
+    code: EventStreamFaultCode,
+    fault?: PreflightFault,
+  ): void {
+    settleAttempt();
+    if (phase === "connecting") {
+      failStartup(error, fault);
     } else {
-      settledOpen = true;
-      openDeferred.reject(error);
+      queue.fail(error);
     }
 
     settleClosed({
       cause: error,
-      code: getEventStreamFaultCode(error),
+      code,
       kind: "error",
       reason: toCloseReason(error),
     });
   }
 
+  /** `fault` is given when the cause is one already: a pick or a URL that failed before a connection. */
+  function failStartup(cause: unknown, fault?: PreflightFault): void {
+    openDeferred.resolve([
+      {
+        cause,
+        fault: fault ?? startupFault(cause, latest),
+        open: latest.open,
+      },
+      undefined,
+    ]);
+  }
+
   function settleClosed(info: EventStreamCloseInfo): void {
-    if (settledClosed) {
+    if (phase === "closed") {
       return;
     }
 
-    settledClosed = true;
+    phase = "closed";
+    endedBeforeAbort = !hasAborted(options.callerSignal);
     closedDeferred.resolve(info);
   }
 }
@@ -711,13 +899,6 @@ function toTransformFailure(error: unknown, signal: AbortSignal): unknown {
         "Failed to process event stream message",
         { cause: error },
       );
-}
-
-function getEventStreamFaultCode(error: unknown): EventStreamFaultCode {
-  return (
-    getEventStreamFatalCode(error) ??
-    (error === ERR_TIMEOUT ? "NET_TIMEOUT" : "NET_UNREACHABLE")
-  );
 }
 
 function cancelLateResponseBody(
@@ -735,60 +916,69 @@ function discardStreamBody(
   void body.cancel(reason).catch(() => undefined);
 }
 
-async function createOpenInfo(
+async function createOpenInfo<TError extends AnyStruct | undefined>(
   response: Response,
-  handshakeError: AnyStruct | undefined,
+  unread: EventStreamOpenInfo,
+  handshakeError: TError | undefined,
   signal: AbortSignal,
-): Promise<EventStreamOpenInfo> {
+): Promise<{
+  open: EventStreamOpenInfo;
+  decoded?: DecodedResponse<HandshakeBody<TError>>;
+  bodyFault?: DecodeFault;
+}> {
   if (!response.ok && handshakeError) {
     const representation = resolveInboundRepresentation(handshakeError);
-    // No bytes arrived. Text is the empty string; every other representation failed to decode.
-    // A decoded JSON null still requires a body, so null stays reserved for that value.
-    if (!response.body && representation !== "text") {
-      throw new EventStreamFatalError(
-        "RES_DECODE_FAILED",
-        "Failed to decode event stream handshake body",
-      );
+    const contentType = getContentType(response.headers);
+    const meta = toHttpMeta(unread.response);
+    // A null body status has no body, though Chromium and Firefox expose an empty stream for some.
+    let stream = response.body;
+    if (stream && NULL_BODY_STATUSES.has(response.status)) {
+      discardStreamBody(stream);
+      stream = null;
     }
 
-    // Philosophy 3, same as HTTP: a JSON declaration is an assertion about the media type.
-    // A mismatch is a decode fault, not an undecoded status, and the body stays unread.
-    if (response.body && representation === "json") {
-      const contentType = getContentType(response.headers);
-      if (!isJsonMediaType(contentType)) {
-        discardStreamBody(response.body);
-        throw new EventStreamFatalError(
-          "RES_MEDIA_TYPE_INVALID",
-          `Expected a JSON media type, received ${contentType || "<none>"}`,
-        );
+    // Same as HTTP: a JSON declaration asserts the media type, and it is checked before anything
+    // else, an absent body included. A mismatch leaves the body unread.
+    if (representation === "json" && !isJsonMediaType(contentType)) {
+      if (stream) {
+        discardStreamBody(stream);
       }
+      return {
+        open: unread,
+        bodyFault: createDecodeFault(
+          "RES_MEDIA_TYPE_INVALID",
+          jsonMediaTypeError(contentType),
+          meta,
+        ),
+      };
     }
 
     try {
-      const raw = response.body
-        ? await readHandshakeBody(
-            response.body,
-            representation,
-            signal,
-            getContentType(response.headers),
-          )
-        : "";
+      // No bytes arrived: every representation reads them as zero bytes, like Fetch. JSON cannot parse them.
+      const raw = stream
+        ? await readHandshakeBody(stream, representation, signal, contentType)
+        : parseBytesBody(representation, new Uint8Array(0), contentType);
       // JSON uses the same alias-aware decoder as HTTP. Other kinds stay raw values.
       const body =
         representation === "json"
-          ? decodeJson(handshakeError, raw)
+          ? parseStructValue(handshakeError, raw, { aliases: true })
           : parseStructValue(handshakeError, raw);
-      return toOpenInfo(response, body, true);
+      const open = toOpenInfo(response, body);
+      return { open, decoded: { ...toHttpMeta(open.response), body } };
     } catch (error) {
       if (signal.aborted) {
         throw error;
       }
-      // The published contract: a declared handshake body that cannot be read is RES_DECODE_FAILED.
-      throw new EventStreamFatalError(
-        "RES_DECODE_FAILED",
-        "Failed to decode event stream handshake body",
-        { cause: error },
-      );
+      return {
+        open: unread,
+        bodyFault: createDecodeFault(
+          error instanceof StructError
+            ? "RES_STRUCT_MISMATCH"
+            : "RES_DECODE_FAILED",
+          error,
+          meta,
+        ),
+      };
     }
   }
 
@@ -796,21 +986,17 @@ async function createOpenInfo(
     discardStreamBody(response.body);
   }
 
-  return toOpenInfo(response, null, false);
+  return { open: unread };
 }
 
-function toOpenInfo(
-  response: Response,
-  body: unknown,
-  decoded: boolean,
-): EventStreamOpenInfo {
+/** `body` is the decoded handshake body. It stays absent for a handshake nobody read; a decoded JSON `null` stays `null`. */
+function toOpenInfo(response: Response, body?: unknown): EventStreamOpenInfo {
   const http = makeResponse<unknown>({
     status: response.status,
     statusText: response.statusText,
     headers: response.headers,
     url: response.url,
-    // An unread handshake stays absent. A decoded JSON null stays null.
-    body: decoded ? body : undefined,
+    body,
   });
   return {
     response: http,
@@ -836,63 +1022,6 @@ async function readHandshakeBody(
   );
   const bytes = concatChunks(chunks, totalLength);
   return parseBytesBody(representation, bytes, contentType);
-}
-
-function createEventStreamRequestInit(
-  request: HttpRequest,
-  headers: Headers,
-  abort?: AbortSignal,
-): RequestInit & { duplex?: "half" } {
-  return createFetchInitBase(request, {
-    defaultAccept: EVENT_STREAM_CONTENT_TYPE,
-    headers,
-    signal: abort,
-  });
-}
-
-function validateOpenResponse(open: EventStreamOpenInfo): void {
-  const { response } = open;
-  // A non-2xx handshake is a status fault, which the event-stream operation builds from the open
-  // info; the code here is only the fallback for a response that never carried a status.
-  if (!response.ok) {
-    throw new EventStreamFatalError(
-      "RES_DECODE_FAILED",
-      "Event stream request failed",
-      { statusSignal: true },
-    );
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-  if (
-    parseMediaTypeEssence(contentType) !== EVENT_STREAM_CONTENT_TYPE ||
-    !isMediaTypeParametersWellFormed(contentType)
-  ) {
-    throw new EventStreamFatalError(
-      "RES_MEDIA_TYPE_INVALID",
-      `Expected content-type to start with ${EVENT_STREAM_CONTENT_TYPE}, got ${contentType || "(empty)"}`,
-    );
-  }
-}
-
-function normalizeAbortError(
-  error: unknown,
-  requestAbort?: AbortSignal,
-  closeAbort?: AbortSignal,
-): unknown {
-  const signal = closeAbort?.aborted
-    ? closeAbort
-    : requestAbort?.aborted
-      ? requestAbort
-      : undefined;
-  if (!signal?.aborted) {
-    return error;
-  }
-
-  return normalizeAbortReason(signal);
-}
-
-function normalizeAbortReason(signal: AbortSignal): Error {
-  return resolveAbortedCause(signal);
 }
 
 function toCloseReason(reason: unknown): string | undefined {

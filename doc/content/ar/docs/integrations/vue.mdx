@@ -1,89 +1,83 @@
 ---
 title: "Vue"
-description: استهلك SDK مستقلًا عن الإطار بعميل Vue يوفّره التطبيق وتنظيف يملكه المستدعي.
+description: استهلك حزمة SDK مستقلة عن أطر العمل باستخدام عميل Vue يوفره التطبيق وتنظيف يملكه المستدعي بالكامل.
 ---
 
 # Vue
 
-استورد العمليات من SDK أو من وحدة تعريف مشتركة. يضبط تطبيق Vue العميل ويوفّره؛ ويمكن أن تبقى حزمة SDK مستقلة عن Vue. تستدعي المكوّنات والـ composables تلك العمليات وتملك العمل الذي تبدأه. يُمرَّر العميل من `injectClient()` إلى العملية.
+تربط حزمة `@defjs/vue` عميل `@defjs/core` المملوك للتطبيق بتطبيق Vue 3 أو أحدث عبر `createClientPlugin(client)` والرمز `HTTP_CLIENT` ودالة `injectClient()`. تبقى تعريفات SDK لديك وحدات `@defjs/core` نقية دون أي اعتمادية على Vue. تحتاج الحزمة نفسها إلى `provide` / `inject` فقط؛ أما الأمثلة أدناه فتستخدم `<script setup>` و`onScopeDispose` اللذين يتطلبان Vue 3.2 أو أحدث.
 
-هذه الإضافات مساعدات اختيارية لتوفير عميل موجود وقراءته. استورد عميلًا ثابتًا يملكه التطبيق، أو مرّر `Client` صراحة إلى المنطق القابل لإعادة الاستخدام، أو استخدم حقن الإطار للافتراضيات والتجاوزات على مستوى الشجرة، أو اختر تنظيمك. تعريفات SDK لا تتطلب هذه الإضافات.
+```sh
+bun add @defjs/core @defjs/vue vue
+```
 
-اربط عميل `@defjs/core` موجودًا في Vue. تحصل على إضافة ومفتاح حقن و`injectClient()`. الحزمة **لا** تنشئ عملاء، ولا تخزّن نتائج، ولا تعيد محاولة العمليات، ولا تغلق موارد النقل عند إلغاء التركيب. القيمة المحقونة هي [`DerivableClient`](/ar/api/core/derivableclient-type) الذي جرى توفيره؛ استدعِها بخيارات الطلب حيث تعمل العملية لاشتقاق قيمة `Client`. لا تستخدمها مصدرًا لـ `watch` أو `computed`، لأنهما يستدعيان الدالة. قيمة `Client` المشتقة لا تقبلها الإضافة ولا `injectClient`.
+## ما توفره `@defjs/vue` مقابل ما يملكه تطبيقك
 
-## الإعداد الأساسي
+- **ما توفره `@defjs/vue`**: الدالة `createClientPlugin(client)`، والرمز `HTTP_CLIENT` (من نوع `InjectionKey<DerivableClient>`)، ودالة `injectClient(key?)`.
+- **ما يملكه تطبيقك**: إنشاء عميل [`DerivableClient`](/ar/api/core/derivableclient-type)، وإلغاء العمل الجاري في المراقبين عبر (`onCleanup`) أو في دوال Composables عبر (`onScopeDispose`)، وإغلاق مقابض SSE/WebSocket، ودمج مكتبات الاستعلام (مثل Vue Query).
+- **تنبيه هام**: تُرجع `injectClient()` كائن-دالة `DerivableClient`. استدعِ `client({ signal })` حيث تُشغّل العملية (`getOrder(client({ signal }), input)`). ولا تمرر `client` أبداً كمعامل أول لـ `watch(client, ...)` أو `computed(client)` لأن Vue يعامل وسيط الدالة كدالة جلب تفاعلية (reactive getter).
 
-ثبّت `@defjs/core` و`@defjs/vue` وVue 3.2+ (تحتاج الإضافة فقط إلى `provide` / `inject`، لكن الأمثلة تستخدم `<script setup>` و`onScopeDispose`، اللذين وصلا في 3.2). ESM:
+---
 
-`bun add @defjs/core @defjs/vue vue`
+## 1. تثبيت الإضافة وجلب البيانات داخل مراقب (Watcher)
 
-أنشئ العميل، وثبّت الإضافة، ثم اجلب مع الإجهاض عند التغيّر:
+أنشئ العميل في نقطة إدخال تطبيقك، وثبّت الإضافة `createClientPlugin(client)`، وسجّل `onCleanup` قبل بدء العمليات غير المتزامنة داخل المراقب:
 
-<include cwd lang="typescript">
-  examples/vue/main.ts#example
-</include>
+<Tabs items={["src/main.ts", "src/basic-setup.vue"]}>
+  <Tab>
+    <include cwd lang="typescript">
+      examples/vue/main.ts#example
+    </include>
 
-<include cwd>examples/vue/basic-setup.vue#example</include>
+  </Tab>
+  <Tab>
+    <include cwd>examples/vue/basic-setup.vue#example</include>
 
-يوفّر `createClientPlugin(client)` الكائن الذي تمرّره تمامًا. بلا نسخ، وبلا خطاف تخلص. اضبط خيارات النواة والمعترضات عند إنشاء العميل.
+  </Tab>
+</Tabs>
 
-يعمل `onCleanup` قبل إعادة تشغيل المراقب وعندما يتوقف. سجّله قبل بدء العمل غير المتزامن. يبقى الـ tuple الذي يضع الخطأ أولًا بيانات تطبيق.
+- يوفر `createClientPlugin(client)` نفس نسخة `DerivableClient` تماماً تحت الرمز `HTTP_CLIENT` دون استنساخها ودون تسجيل خطافات للتخلص منها عند التفكيك.
+- تعمل الدالة `onCleanup` قبل إعادة تشغيل المراقب وعند تفكيك المكون أيضاً.
 
-## احقن وغلّب
+---
 
-يقرأ `injectClient(key)` أقرب موفّر لذلك المفتاح؛ والقيمة المحذوفة أو `undefined` تستخدم `HTTP_CLIENT`. استدعها في سياق حقن Vue صالح: `setup()` متزامن أو `app.runWithContext()` (Vue 3.3+). يوفّر الأخير سياق التطبيق المتزامن فقط، لا تجاوزات الشجرة الفرعية ولا السياق عبر `await` عادي. تبقى السياقات التي يستعيدها المترجم بعد `await` في المستوى الأعلى داخل `<script setup>` صالحة.
+## 2. الحقن والتجاوز في الأشجار الفرعية
 
-لمفتاح `InjectionKey<Client>` مخصص، استخدم `app.provide(key, client)` أو `provide(key, client)` من سلف. شارك كائن `Symbol` نفسه؛ والأوصاف المتطابقة لا تجعل المفاتيح متساوية. ما زال `createClientPlugin(client)` يأخذ العميل فقط ويوفّر `HTTP_CLIENT`.
+تبحث الدالة `injectClient(key?)` عن أقرب موفر للمفتاح `key` (افتراضياً `HTTP_CLIENT`) وتلقي خطأ `Error` إذا استُدعيت خارج سياق حقن Vue نشط (`setup()` أو `app.runWithContext()`) أو إذا لم يتوفر أي عميل لهذا المفتاح.
 
-يرمي `Error` دون سياق حقن نشط أو عميل للمفتاح المختار. المفتاح المخصص الغائب لا يعود أبدًا إلى `HTTP_CLIENT`؛ وتثبيت الإضافة وحدها لا ينشئ سياق حقن.
-
-يجوز لدالة تطبيق تسترجع عميلًا فقط أن تستخدم `explicitClient ?? injectClient()`: فرع الاحتياط وحده يحتاج سياق حقن. تحتفظ واجهات دورة الحياة الأخرى في الـ composable نفسه بمتطلبات سياقها. اقرأ العميل في سياق صالح قبل العمل غير المتزامن وأعد استخدام الكائن.
-
-غلّب شجرة فرعية بـ `provide(HTTP_CLIENT, childClient)` من Vue:
+يمكنك تجاوز العميل لشجرة مكونات فرعية باستخدام دالة Vue الأصلية `provide(HTTP_CLIENT, childClient)`:
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 
-أقرب موفّر يغلب. يحصل الأحفاد على `childClient`؛ ويُبقي الأشقاء خارج الشجرة الفرعية عميل مستوى التطبيق. المكوّن الموفِّر نفسه ما زال يقرأ من أسلافه.
+- تستلم المكونات التابعة العميل `childClient`، بينما تحتفظ الأشجار الفرعية الشقيقة بالعميل الجذري.
+- إذا كانت هناك دالة مساعدة تقبل عميلاً صريحاً اختيارياً (`explicitClient ?? injectClient()`)، فإن الفرع الاحتياطي فقط هو الذي يتطلب سياق حقن Vue نشطاً. التقط العميل تزامناً أثناء تنفيذ `setup()` قبل أي `await`.
 
-## املِك عمل HTTP خارج مراقب
+---
 
-للعمل الذي يبدأه composable أو مكوّن خارج مراقب، استخدم `AbortController` + `onScopeDispose`. أجهض البدء والعمل النشط؛ وافحص الإشارة قبل تعيين الحالة التفاعلية. إضافة أو نطاق حقن لا يستنتج من يملك عملية. لصفحات القوائم، استدعِ العملية من Vue Query (أو ما يشبهها) — يبقى `@defjs/vue` حقن اعتماد فقط و**لا** يُشحن مع `useRequest`.
+## 3. تنظيف تدفقات SSE وWebSocket عند التخلص من النطاق
 
-عندما يملك نطاق عميلًا، أبقِه مستقلًا عن الطلب لإعادة الاستخدام على نطاق المتصفح. إذا التقط رؤوسًا أو ملفات تعريف ارتباط أو مستخدمين أو مستأجرين أو بيانات اعتماد، فأنشئه في حد طلب التطبيق/SSR المناسب ووفّر تلك النسخة هناك.
-
-## نظّف نطاق الزمن الحقيقي
-
-أغلق تدفقًا أو جلسة حتى عندما يختفي النطاق في منتصف الاتصال. أجهض البدء، وأغلق مقبضًا يصل متأخرًا، واستهلك المكرّر الواحد، وانتظر الوعد النهائي:
+للعمليات التي تبدأ داخل composable أو مكون خارج المراقبين، اجمع بين `AbortController` و`onScopeDispose`. الإشارة تغطي بدء التشغيل والتدفق المفتوح، فإلغاؤها هو التنظيف كله. استهلك المكرر غير المتزامن المفرد، ثم أغلق المقبض وانتظر `.closed` داخل `finally`:
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
-ترفض أخطاء التدفق القاتلة وفيض الطابور المكرّر، فللحلقة `catch`؛ وإلا كان ذلك الرفض غير معالَج. يُبقي المثال آخر 100 رسالة فقط ويفهرس الصفوف بمعرّف، لأن الحمولات المتطابقة كانت ستعطي مفاتيح مكررة. إنهاء النطاق ينهي التكرار انتهاءً عاديًا لـ SSE؛ أما جلسة WebSocket المُجهَضة فترفض `receive` بـ `AbortError`، فاحمِ `catch` بالطريقة نفسها.
+- يعرض فرع الخطأ في مصفوفة النتائج إخفاقات المصافحة الأولية (بما فيها HTTP 503). وتعرض كتلة `catch` في المكرر الإخفاقات التي تحدث بعد بدء التشغيل؛ وتظل كتلة `finally` تُغلق التدفق وتنتظر اكتمال إغلاقه.
+- يؤدي إيقاف النطاق إلى إنهاء حلقة `for await` لتدفق SSE بشكل طبيعي.
+- يؤدي إلغاء جلسة WebSocket إلى إنهائها كـ `aborted` ورفض `session.receive` بخطأ `AbortError`، لذا احرص على حماية كتلة `catch` بعد التخلص من النطاق وإلغاء اشتراك مستمعي `onStateChange` و`onRuntimeError` داخل كتلة `finally`.
 
-WebSocket: التسلسل نفسه — أجهض التحضير، وأغلق جلسة متأخرة، واستهلك `session.receive`، وألغِ اشتراك `onStateChange` / `onRuntimeError`، وأغلق، وانتظر `session.closed`. أبقِ التنظيف متماثلًا؛ فقد يلتقي التخلص واكتمال المكرّر.
+---
 
-## نطاق SSR
+## 4. العرض من الخادم (SSR) ونطاق التطبيق
 
-يوفّر `createClientPlugin(client)` نسخة واحدة لتطبيق Vue واحد. في المتصفح، شاركها عندما تكون نقطة النهاية والمعترضات والحالة الملتقطة آمنة للمشاركة. أثناء SSR، أنشئ وثبّت عميلًا منفصلًا لكل طلب عندما تختلف الرؤوس أو ملفات تعريف الارتباط أو المستخدمون أو المستأجرون أو بيانات الاعتماد.
+- **المتصفح**: شارك عميلاً واحداً لكل تطبيق Vue عندما تكون نقطة النهاية والمعترضات مستقلة عن الطلب.
+- **الخادم (SSR)**: أنشئ عميلاً جديداً وثبّته لكل طلب SSR كلما اختلفت الترويسات أو ملفات تعريف الارتباط أو المستأجرون أو بيانات الاعتماد.
+- تفكيك تطبيق Vue أو التخلص من نطاق المكون **لا** يُلغي تلقائياً طلبات HTTP، ولا يُغلق تدفقات SSE/WebSocket، ولا يتخلص من عميل Core الأساسي.
 
-إلغاء تركيب التطبيق وإزالة الإضافة والتخلص من نطاق المكوّن **لا** تجهض HTTP، ولا تغلق SSE/WebSocket، ولا تلغي اشتراك المستمعين، ولا تتخلص من عميل النواة. المالك الذي يبدأ العمل يجب أن ينهيه.
+---
 
-## مرجع
+## الصادرات العامة والأدلة ذات الصلة
 
-التصديرات العامة من `@defjs/vue`:
-
-<include cwd lang="typescript">
-  examples/vue/exports.ts#example
-</include>
-
-- `HTTP_CLIENT` — `InjectionKey<Client>` لـ `provide` / `inject` الأصليين
-- `createClientPlugin(client)` — `Plugin` من Vue يوفّر ذلك العميل
-- `injectClient` — أقرب عميل للمفتاح المختار (الافتراضي `HTTP_CLIENT`)؛ يرمي إذا غاب
-
-أنشئ العملاء والخيارات في `@defjs/core`. انظر [العميل](/ar/docs/client) و[HTTP](/ar/docs/http) و[المعترضات](/ar/docs/interceptors) و[SSE](/ar/docs/sse) و[WebSocket](/ar/docs/web-socket).
-
-## وصفات ذات صلة
-
-- [GET مع 404 معلَن](/ar/recipes/get-declared-404)
-- [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)
-- [استهلاك تدفق SSE](/ar/recipes/consume-sse)
-- [فتح جلسة WebSocket](/ar/recipes/websocket-session)
+- `HTTP_CLIENT` — رمز `InjectionKey<DerivableClient>` لدوال `provide` و`inject` الأصلية.
+- `createClientPlugin(client)` — إضافة Vue `Plugin` توفر `client` تحت الرمز `HTTP_CLIENT`.
+- `injectClient(key?)` — يحل أقرب عميل للمفتاح `key` (افتراضياً `HTTP_CLIENT`).
+- أدلة ذات صلة: [العميل](/ar/docs/client)، [عمليات HTTP](/ar/docs/http)، [المعترضات (Interceptors)](/ar/docs/interceptors)، [تدفقات أحداث SSE](/ar/docs/sse)، [جلسات WebSocket](/ar/docs/web-socket).
+- أمثلة عملية ذات صلة: [GET مع 404 معلَن](/ar/recipes/get-declared-404)، [إلغاء طلب HTTP وإدارته بالمهلة الزمنية](/ar/recipes/cancel-http)، [استهلاك تدفق أحداث SSE](/ar/recipes/consume-sse)، [إدارة جلسات WebSocket](/ar/recipes/websocket-session).

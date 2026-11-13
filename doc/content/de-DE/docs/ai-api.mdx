@@ -1,36 +1,24 @@
 ---
-title: "KI-APIs aufrufen"
-description: "Rufe einen KI-Dienst aus der Anwendung auf, ohne Zugangsdaten im Browser offenzulegen, und lies einen fiktiven Offline-Ereignisstrom."
+title: "llms.txt"
+description: "Verweist Assistenten auf den englischen Markdown-Index und die pro Seite erzeugten Quellen für große Sprachmodelle."
 ---
 
-Einen KI-Dienst aus der Anwendung aufzurufen ist etwas anderes, als einen Assistenten Defjs schreiben zu lassen. [KI-gestützte Entwicklung](/de-DE/docs/ai) ist dieser Assistentenablauf. API- und SSE-Ereignisformate sind anbieterspezifisch. Der Strom auf dieser Seite ist ein fiktives Backend, kein Protokoll eines bestimmten Anbieters.
+# llms.txt
 
-## Eine KI-API aus der Anwendung aufrufen [#call-an-api]
+Diese Site veröffentlicht für Assistenten erzeugte englische Markdown-Dateien. Die folgenden Adressen haben kein Locale-Präfix und sind keine Übersetzungen der lokalisierten Leitfäden.
 
-Definiere den Aufruf mit dem HTTP- oder SSE-Vertrag, den du schon benutzt, und rufe die Operation an einem Client auf, den die Anwendung besitzt. Der Einstieg ist [HTTP-Anfragen](/de-DE/docs/http) und [SSE-Ereignisströme](/de-DE/docs/sse). [JSON senden](/de-DE/recipes/post-json) zeigt einen JSON-Body. [SSE-Ereignisse verarbeiten](/de-DE/recipes/consume-sse) zeigt das Lesen und Schließen eines Stroms, endet aber nach dem ersten Ereignis. Dieses Beispiel ist keine vollständige KI-Antwort. Für eine vollständige KI-Antwort lies bis zum Abschlusssignal des Anbieters oder bis EOF weiter, behandle Lesefehler und schließe den Strom; passe Ereignisnamen und Datenstrukturen an das Anbieterformat an. [Abbruch und Zeitlimits](/de-DE/recipes/cancel-http) zeigt, wie der Aufrufer einen HTTP-Aufruf beendet.
+## Seitenindex [#llms-txt]
 
-Lass das Anbietergeheimnis auf einem Server, der es ausgeben darf. Lege es nicht in ein Browser-Bundle, eine öffentliche Build-Variable oder einen Client, der zum Browser ausgeliefert wird. Zugangsdaten gehören der Anwendung: Setze sie am Server-Client oder in einem Interceptor, der nur innerhalb dieser Servergrenze läuft. Dafür sind [Client-Konfiguration](/de-DE/docs/client) und [Interceptors](/de-DE/docs/interceptors) da. `withCredentials` wählt nur den Cookie-Modus von Fetch. Es speichert kein Anbietergeheimnis.
+[llms.txt](/llms.txt) listet die englischen Seiten und verlinkt ihre Webadressen. Das ist der Einstieg, wenn ein Assistent zuerst eine Seite finden muss.
 
-Nachdem die Operation zurückgekehrt ist, gehört der Strom der Anwendung. Lies bei SSE die Ereignisse, schließe das Handle und warte, bis es geschlossen ist. Brich einen HTTP-Aufruf ab, wenn die Antwort nicht mehr gebraucht wird. Ein Abbruch beweist nicht, dass der Dienst bereits angenommene Arbeit rückgängig gemacht hat.
+## Zusammengestellte Leitfäden [#llms-full]
 
-Wiederhole einen Streaming-POST nicht nur deshalb, weil der Versuch fehlschlug. Defjs wiederholt HTTP nicht von selbst. SSE-Reconnect bleibt aus, bis die Anwendung ihn einschaltet, und eine Methode wie POST wird auch dann nicht erneut gesendet, außer die Richtlinie erlaubt es ausdrücklich. Ein fehlgeschlagener Versuch kann Arbeit schon angestoßen haben, die der Dienst berechnet. Denselben POST noch einmal zu senden, kann diese Arbeit ein zweites Mal starten. Lies die Replay-Regeln in [HTTP-Anfragen](/de-DE/docs/http) und die Reconnect-Regeln in [SSE-Ereignisströme](/de-DE/docs/sse), bevor du einen Retry einbaust.
+[llms-full.txt](/llms-full.txt) führt die englischen Leitfäden in einer Datei zusammen. Verwende es, wenn ein Assistent breiten Kontext in einem einzigen Dokument braucht und das Token-Budget es zulässt.
 
-## Fiktiver Offline-Strom [#fictional-stream]
+## Eine Seite als Markdown [#page-markdown]
 
-Das unten gezeigte Ereignisformat ist fiktiv. Es ist nicht das Ereignisformat eines bestimmten Anbieters. `withSSEHandle` liefert die Antwort, deshalb braucht das Beispiel kein Netzwerk und keine echten Zugangsdaten. Der Rumpf besteht aus zwei `delta`-Ereignissen und danach einem Abschlussereignis. Die Schleife behält beide Textstücke. Sie stoppt nicht nach dem ersten Ereignis.
+Jede englische Seite ist auch unter `/llms.mdx/<path>/content.md` als Markdown verfügbar. Zum Beispiel ist [Quick start als Markdown](/llms.mdx/docs/start/content.md) der englische Text der Quick-Start-Seite.
 
-<include cwd lang="typescript">
-  examples/ai/fictional-completion.ts#example
-</include>
+## Version prüfen [#version]
 
-Speichere das Beispiel in einem Projekt mit installiertem `@defjs/core` als `fictional-completion.ts` und führe es aus:
-
-```sh
-bun fictional-completion.ts
-```
-
-Erwartete Ausgabe:
-
-```txt
-Hello there
-```
+Diese Site dokumentiert den Standardbranch; das Projekt kann eine andere `@defjs/core`-Version installiert haben. Prüfe APIs gegen das installierte Paket, bevor du einen Vorschlag übernimmst. Entferne Geheimnisse und prüfe die Projektrichtlinien, bevor du Code oder Kontext an ein KI-Tool gibst.

@@ -1,6 +1,7 @@
-import { upgradeWebSocket } from "@hono/node-server";
 import type { Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import type { UpgradeWebSocket } from "hono/ws";
+import { toBase64 } from "./base64";
 
 type EchoField = {
   filename?: string;
@@ -22,7 +23,10 @@ export function registerE2eProbe(app: Hono): void {
   });
 }
 
-export function registerE2eRoutes(app: Hono): void {
+export function registerE2eRoutes(
+  app: Hono,
+  deps: { upgradeWebSocket: UpgradeWebSocket },
+): void {
   app.get("/e2e/miss-log", (c) => c.json({ hits: missHits }));
 
   app.all("/e2e/echo", echoReceived);
@@ -30,7 +34,7 @@ export function registerE2eRoutes(app: Hono): void {
   app.post("/e2e/echo-raw", async (c) => {
     const bytes = new Uint8Array(await c.req.arrayBuffer());
     return c.json({
-      bodyBase64: Buffer.from(bytes).toString("base64"),
+      bodyBase64: toBase64(bytes),
       contentType: c.req.header("content-type") ?? "",
     });
   });
@@ -92,7 +96,7 @@ export function registerE2eRoutes(app: Hono): void {
 
   app.get(
     "/e2e/ws/:room",
-    upgradeWebSocket((c) => {
+    deps.upgradeWebSocket((c) => {
       const room = c.req.param("room");
       const rawQuery = new URL(c.req.url).search.replace(/^\?/, "");
       return {
@@ -101,9 +105,7 @@ export function registerE2eRoutes(app: Hono): void {
             JSON.stringify({ raw: frameText(event.data), type: "observed" }),
           );
           setTimeout(() => {
-            if (ws.readyState === 1) {
-              ws.close(1000, "done");
-            }
+            ws.close(1000, "done");
           }, 20);
         },
         onOpen(_event, ws) {
@@ -134,7 +136,7 @@ async function echoReceived(c: Context): Promise<Response> {
     }
   } else if (c.req.method !== "GET" && c.req.method !== "HEAD") {
     const bytes = new Uint8Array(await c.req.arrayBuffer());
-    bodyBase64 = Buffer.from(bytes).toString("base64");
+    bodyBase64 = toBase64(bytes);
     bodyText = new TextDecoder().decode(bytes);
   }
 

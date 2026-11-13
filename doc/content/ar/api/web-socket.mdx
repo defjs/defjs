@@ -11,14 +11,14 @@ description: defineWebSocket، والجلسة، وخيارات الطلب.
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path` وstruct `incoming` واحد والعدد الصحيح الموجب المطلوب `maxIncomingQueueSize`؛ وstructا `outgoing` و`input` اختياريان و`operation` و`protocols` ثابتة و`maxOutgoingQueueSize` غير سالب. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`WebSocketDefinition`](/ar/api/core/websocketdefinition-type). `builder` مطلوب تمامًا عندما يُعلَن `input`.
+- **definition** — `path` وstruct `incoming` واحد؛ وstructا `outgoing` و`input` اختياريان و`operation` و`protocols` ثابتة و`maxOutgoingQueueSize`. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`WebSocketDefinition`](/ar/api/core/websocketdefinition-type). `builder` مطلوب تمامًا عندما يُعلَن `input`.
 - **يُرجع** عملية. الوسيط الأول هو [`Client`](/ar/api/core/client-type). الوسائط التالية هي المدخل فقط. استدعاؤها يفتح الجلسة.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-يُرجع الاستدعاء `[null, session, connection]` أو `[error, undefined, connection?]`. مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ WebSocket الحقول `signal` و`beforeConnect` و`heartbeat` و`protocols` و`reconnect`، ويتجاهل حقول تقدّم HTTP.
+يُرجع الاستدعاء `[null, session, connection]` أو `[error, undefined, connection?]`. مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ WebSocket الحقول `signal` و`beforeConnect` و`heartbeat` و`protocols` و`retry`، ويتجاهل حقول تقدّم HTTP.
 
-يستبدل كل من `beforeConnect` و`heartbeat` و`protocols` و`reconnect` قيمة العميل لذلك الاستدعاء كاملة. أسبقية البروتوكول هي العميل المشتق، ثم `withWebSocketProtocols`، ثم `protocols` في التعريف. `heartbeat.timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.
+يستبدل كل من `beforeConnect` و`heartbeat` و`protocols` و`retry` قيمة العميل لذلك الاستدعاء كاملة. أسبقية البروتوكول هي العميل المشتق، ثم `withWebSocketProtocols`، ثم `protocols` في التعريف. `heartbeat.timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.
 
 ## WebSocketSession
 
@@ -26,16 +26,11 @@ description: defineWebSocket، والجلسة، وخيارات الطلب.
 
 فضّل `await using ownedSession = session` لتنظيف النطاق المملوك. يبقى `session.close()` اليدوي و`await session.closed` متاحين.
 
-```ts
-async function consume(
-  session: WebSocketSession<unknown, never>,
-): Promise<void> {
-  await using ownedSession = session;
-  for await (const message of ownedSession.receive) console.log(message);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#consume
+</include>
 
-يبلّغ `closed` عن الحالة النهائية المنطقية. يطلب المتخلّص غير المتزامن إغلاقًا أصليًا وينتظر تفكيك ما يملكه Defjs، لكنه يحدّ حدث الإغلاق الغائب بثانية واحدة وقد يرفض بـ `DOMException` باسم `TimeoutError`. وهو لا يستطيع إثبات أن اتصال TCP الفيزيائي أُغلق.
+يبلّغ `closed` عن الحالة النهائية المنطقية. يطلب المتخلّص غير المتزامن إغلاقًا أصليًا وينتظر تفكيك ما يملكه Defjs، لكنه يحدّ انتظار حدث إغلاق غائب بثانية واحدة وقد يرفض بـ `DOMException` باسم `TimeoutError`. وهو لا يستطيع إثبات أن اتصال TCP الفيزيائي أُغلق. إذا رمى `close()` الأصلي أثناء تنفيذ `session.close()`، فإن `session.close()` ترمي هذا الخطأ وتنتهي الجلسة بالقيمة `closed.kind: "error"` مع هذا السبب.
 
 ### WebSocketState
 
@@ -43,39 +38,41 @@ async function consume(
 
 ### WebSocketConnectionInfo
 
-`generation` (يزيد عند إعادة الاتصال)، وعند المعرفة `url` و`protocol` و`extensions`.
+`generation` (يزيد عند كل فتح)، وعند معرفتها `url` و`protocol` و`extensions`.
 
 ### WebSocketCloseInfo
 
 <ApiSignature name="WebSocketCloseInfo" />
 
-`kind` هو `closed` أو `aborted` أو `error`. `cause` غائب في `closed`، واختياري في `aborted`، ومطلوب في `error`. قد تظهر `code` و`reason` و`wasClean` في كل صيغة. يملأ `session.close()` اليدوي `code` و`reason` على `{ kind: "closed" }` عندما لا يحمل حدث الإغلاق أيًا منهما.
+`kind` هو `closed` أو `aborted` أو `error`. `cause` غائب في `closed`، واختياري في `aborted`، ومطلوب في `error`. في `error`، يرفض السبب نفسه `receive` بعد الرسائل التي كانت في الطابور أصلًا، ويصل إلى `onRuntimeError`. تُهمَل الرسائل غير المقروءة عندما تنتهي الجلسة كـ `aborted`، وعندما ينهيها المستدعي بـ `session.close()` أو بالتخلّص. إيقاف من المستدعي (`session.close()` أو التخلّص أو إلغاء `signal`) يهملها أيضًا بعد أن تكون الجلسة قد انتهت، من دون تغيير `closed` أو رفض `receive`. تحتفظ مهلة النبض وإعادات المحاولة المستنفدة بأسباب `Error` عادية وقت التشغيل دون رمز ثابت منفصل. الاتصال الذي كان مفتوحًا ثم انقطع بلا إطار إغلاق (الرمز `1006`) هو `error` على كل بيئة تشغيل. قد تظهر `code` و`reason` و`wasClean` في كل صيغة. يملأ `session.close()` اليدوي `code` و`reason` على `{ kind: "closed" }` عندما لا يحمل حدث الإغلاق أيًا منهما.
 
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` هو [`UseWebSocketConfig`](/ar/api/core/usewebsocketconfig-type): `beforeConnect` و`heartbeat` و`protocols` و`reconnect` و`signal`. `WebSocketHeartbeatConfig`: `intervalMs`، و`message` و`isAck` و`timeoutMs` الاختيارية. لا يوجد حقل `timeout` أو `abort`.
+`WebSocketExecuteOptions` هو [`UseWebSocketConfig`](/ar/api/core/usewebsocketconfig-type): `beforeConnect` و`heartbeat` و`protocols` و`retry` و`signal`. `WebSocketHeartbeatConfig`: `intervalMs` و`message` مطلوبان؛ ولا يُسمح بـ `timeoutMs` إلا مع `isAck`. لا يوجد حقل `timeout` أو `abort`.
 
-يغطي `signal` الجلسة كاملة، بما فيها ما بعد فتحها. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة للبدء فقط ولا مهلة افتراضية على مستوى العميل. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. يُستبدل `heartbeat` كاملًا؛ وينتظر `timeoutMs` فيه إقرارًا وليس مهلة للطلب.
+يغطي `signal` الجلسة كاملة، بما فيها ما بعد فتحها. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإلغاء اليدوي هو `NET_ABORTED`. لا توجد مهلة افتراضية على مستوى العميل. المهلة على الاتصال وحده هي `retry: { maxRetries: 0, attemptTimeoutMs }`، وتنتهي عند `open`. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. يُستبدل `heartbeat` كاملًا؛ وينتظر `timeoutMs` فيه إقرارًا وليس مهلة للطلب.
 
-عندما يُضبط `reconnect`، تكون `attempts` افتراضيًا 3 لكل انقطاع؛ و`0` يعطّل. يعيد `open` الناجح ضبط الميزانية وأُس التراجع، فيبدأ كل انقطاع جديد عند إعادة المحاولة 1. حذف `attempts` لا يمنح محاولات غير محدودة داخل انقطاع واحد. انظر [العميل](/ar/api/client) للافتراضيات وقواعد التحقق.
+تعمل دالة `builder` وسلسلة المعترضات مرة واحدة لكل عملية. تعيد إعادة الاتصال استخدام المسار والاستعلام المبنيين والبروتوكولات الملتقطة، وتُنشئ عنوان URL قبل `beforeConnect`. إذا لم يستبدل معترض نقطة النهاية الأساسية للطلب، تستبدل إعادة الاتصال أيضًا نقطة النهاية بأخرى مختارة حديثًا. لا يستطيع الخطاف تبديل بيانات اعتماد عنوان URL أو البروتوكول الفرعي داخل الجلسة؛ ابدأ عملية جديدة بمدخلات أو إعدادات عميل حديثة.
+
+عندما تُضبط سياسة إعادة محاولة (`withRetry`)، تكون `maxRetries` افتراضيًا 3 لكل انقطاع؛ و`0` يعطّل. يُعاد افتراضيًا كل إغلاق لم يطلبه `session.close()`، بما فيه اتصال لم يُفتح أبدًا ونبض بلا رد، ويمكن لـ `shouldRetry` أن تنقض ذلك. بنّاء WebSocket يرمي (بروتوكول فرعي ترفضه المنصة، مثلًا) هو إخفاق محلي لا تفعل إعادة المحاولة سوى تكراره: ينهي الاستدعاء دون سؤال `shouldRetry`. يعيد `open` الناجح ضبط العدد وأُس التراجع، فيبدأ كل انقطاع جديد عند إعادة المحاولة 1. انظر [العميل](/ar/api/client#withretry) للافتراضيات وترتيب القرار.
 
 ## الرسائل
 
-`incoming` هو struct واحد. تُقرأ إطارات النص و`ArrayBuffer` والمصفوفة محدَّدة النوع و`Blob` كـ UTF-8، ثم تُحلَّل JSON، ثم تُفحص مقابل ذلك الـ struct. الإطار الذي يفشل في تحليل JSON أو الـ struct يُبلَّغ إلى `session.onRuntimeError` ولا يُوضَع في الطابور. لا يوجد خيار إطار غير صالح على العميل.
+`incoming` هو struct واحد. تُقرأ إطارات النص و`ArrayBuffer` والمصفوفة محدَّدة النوع و`Blob` كـ UTF-8، ثم تُحلَّل JSON، ثم تُفحص مقابل ذلك struct. الإطار الذي يفشل في تحليل JSON أو في التحقق مقابل struct يُبلَّغ إلى `session.onRuntimeError` ولا يُوضَع في الطابور. لا يوجد خيار إطار غير صالح على العميل.
 
-`outgoing` هو struct واحد. يقبل `session.send` القيمة `StructInput` لذلك الـ struct، ويرمّز الأسماء المستعارة، ثم `JSON.stringify`. القيم التي لا يستطيع JSON تمثيلها بأمانة بعد الترميز ترمي `TypeError` قبل الإرسال أو دخول طابور إعادة الاتصال، بما فيها الأعداد غير المحدودة والدوال والرموز و`Map` و`Set` والتدفقات ونسخ الأصناف بلا تمثيل JSON. تستخدم القيم المتداخلة الحارس نفسه لأجسام JSON في HTTP. يستخدم النبض ذلك الحارس أيضًا؛ وفشل تسلسل النبض ينهي الجلسة. عدة أنواع رسائل هي `struct.discriminatedUnion`.
+`outgoing` هو struct واحد. يقبل `session.send` القيمة `StructInput` لذلك struct، ويرمّز الأسماء المستعارة، ثم `JSON.stringify`. القيم التي لا يستطيع JSON تمثيلها بأمانة بعد الترميز تُلقي `TypeError` قبل الإرسال أو دخول طابور إعادة الاتصال، بما فيها الأعداد غير المحدودة والدوال والرموز و`Map` و`Set` والتدفقات ونسخ الأصناف بلا تمثيل JSON. تستخدم القيم المتداخلة الحارس نفسه لأجسام JSON في HTTP. يستخدم النبض ذلك الحارس أيضًا؛ وفشل تسلسل النبض ينهي الجلسة. عدة أنواع رسائل هي `struct.discriminatedUnion`.
 
-```ts
-session.send({ type: "message", text: "Hello" });
-```
+<include cwd lang="typescript">
+  examples/api/consume-web-socket.ts#send
+</include>
 
 انظر [دليل WebSocket](/ar/docs/web-socket) و[فتح جلسة WebSocket](/ar/recipes/websocket-session).
 
 ## WebSocketDefinition
 
-`path` و`incoming` و`maxIncomingQueueSize` المطلوب، و`outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` الاختيارية. يجوز للـ builder إرجاع `path` و`query` فقط. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
+`path` و`incoming`، و`outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` الاختيارية. يجوز لدالة `builder` إرجاع `path` و`query` فقط. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
 
 ## WebSocketEndpoint
 
@@ -87,7 +84,7 @@ session.send({ type: "message", text: "Hello" });
 
 ## UseWebSocketConfig
 
-`beforeConnect` و`heartbeat` و`protocols` و`reconnect` و`signal`. `WebSocketExecuteOptions` هو هذه الشريحة. لا يوجد حقل `abort`.
+`beforeConnect` و`heartbeat` و`protocols` و`retry` و`signal`. `WebSocketExecuteOptions` هو هذه الشريحة. لا يوجد حقل `abort`.
 
 ## SocketAwaitResult
 
@@ -99,7 +96,7 @@ session.send({ type: "message", text: "Hello" });
 
 ## WebSocketHeartbeatConfig
 
-`intervalMs`، و`message` و`isAck` و`timeoutMs` الاختيارية.
+`intervalMs` و`message` مطلوبان. تتعرّف `isAck` على الإقرار، ولا يُسمح بـ `timeoutMs` إلا مع `isAck`؛ ويفرض نوع الاتحاد ذلك ولا يفحصه شيء في وقت التشغيل. لا يعرّف Defjs صيغة نبض: كل قيمة تأتي من دوالك. تُرسَل الحمولة عبر struct `outgoing` كنص JSON. النبض بلا رد يغلق المقبس ويدخل مسار إعادة المحاولة في `withRetry`؛ ومن دون سياسة إعادة محاولة تنتهي الجلسة بـ `error`.
 
 ## WebSocketIncomingData
 
@@ -111,4 +108,4 @@ session.send({ type: "message", text: "Hello" });
 
 ## SocketLifecycleOutcome
 
-نتيجة محاولة اتصال واحدة (`closeInfo` و`connection` و`cause` و`opened`)، يستخدمها منطق إعادة الاتصال. وهي ليست النتيجة النهائية للجلسة؛ انظر `WebSocketCloseInfo` لذلك.
+نتيجة محاولة اتصال واحدة (`closeInfo` و`connection` و`cause` و`opened`)، يستخدمها منطق إعادة المحاولة. وهي ليست النتيجة النهائية للجلسة؛ انظر `WebSocketCloseInfo` لذلك.

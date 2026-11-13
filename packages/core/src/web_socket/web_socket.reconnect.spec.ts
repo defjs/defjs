@@ -23,14 +23,12 @@ describe("web socket runtime reconnect", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("should reconnect and flush queued messages", async () => {
     const useReconnectSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       maxOutgoingQueueSize: 2,
       incoming: struct.discriminatedUnion("type", [
         struct.object({
@@ -53,11 +51,6 @@ describe("web socket runtime reconnect", () => {
     });
 
     const states: string[] = [];
-    let session:
-      | {
-          send(message: { text: string; type: "message" }): void;
-        }
-      | undefined;
 
     const executePromise = run(
       (client) =>
@@ -65,7 +58,7 @@ describe("web socket runtime reconnect", () => {
           key: `queue-case-${crypto.randomUUID()}`,
         }),
       {
-        reconnect: { attempts: 1, delayMs: 0 },
+        retry: { maxRetries: 1, delayMs: 0 },
       },
     );
 
@@ -76,17 +69,16 @@ describe("web socket runtime reconnect", () => {
       throw new Error("Expected socket session");
     }
 
-    session = socket;
-
     socket.onStateChange((state: string) => {
       states.push(state);
-      if (state === "reconnecting" && session) {
-        session.send({
+      if (state === "reconnecting") {
+        socket.send({
           text: "after-reconnect",
           type: "message",
         });
       }
     });
+    socket.send({ text: "seen-open", type: "message" });
 
     const iterator = socket.receive[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toEqual({
@@ -103,11 +95,10 @@ describe("web socket runtime reconnect", () => {
     expect(states).toContain("reconnecting");
   });
 
-  test("should pass actual reconnect attempt count to shouldReconnect", async () => {
+  test("should pass actual reconnect attempt count to shouldRetry", async () => {
     const retryClient = createClient(withEndpoint("http://127.0.0.1:1"));
 
     const useRetrySocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.unknown(),
       path: "/ws/reconnect",
     });
@@ -116,10 +107,10 @@ describe("web socket runtime reconnect", () => {
 
     const [error, socket, connection] = await useRetrySocket(
       retryClient({
-        reconnect: {
-          attempts: 2,
+        retry: {
+          maxRetries: 2,
           delayMs: 0,
-          shouldReconnect(context: { attempt: number }) {
+          shouldRetry(context: { attempt: number }) {
             attempts.push(context.attempt);
             return context.attempt < 2;
           },
@@ -135,7 +126,6 @@ describe("web socket runtime reconnect", () => {
 
   test("should not consider manual session close for reconnect", async () => {
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("ready"),
         ok: struct.boolean(),
@@ -145,10 +135,10 @@ describe("web socket runtime reconnect", () => {
 
     const attempts: number[] = [];
     const [error, socket] = await run(useSocket, {
-      reconnect: {
-        attempts: 1,
+      retry: {
+        maxRetries: 1,
         delayMs: 0,
-        shouldReconnect(context: { attempt: number }) {
+        shouldRetry(context: { attempt: number }) {
           attempts.push(context.attempt);
           return false;
         },

@@ -1,5 +1,5 @@
 import { describe, expect, inject, test } from "vitest";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "../http/http_response";
 import { createHttpInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineRequest } from "../http";
@@ -19,12 +19,14 @@ describe("operation dispatch", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: { ok: true },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: { ok: true },
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          ),
         ),
       ),
     );
@@ -37,8 +39,6 @@ describe("operation dispatch", () => {
 
   test("an event-stream operation runs against the client", async () => {
     const useBasicSse = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -68,7 +68,6 @@ describe("operation dispatch", () => {
 
   test("a web-socket operation runs against the client", async () => {
     const useChatSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("joined"),
         roomId: struct.string(),

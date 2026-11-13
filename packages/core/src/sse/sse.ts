@@ -1,57 +1,49 @@
 import type { Client } from "../client/client";
 import { CLIENT } from "../client/client";
-import type { ClientConfig, ClientSSEOptions } from "../client/config";
+import type {
+  ClientConfig,
+  ClientSSEOptions,
+  RetryOptions,
+} from "../client/config";
 import { DEFAULT_FETCH, ERR_FETCH_UNSUPPORTED } from "../client/config";
-import type { AnyFault, Fault, PreflightFault } from "../error";
-import {
-  createDecodeFault,
-  createHttpStatusFault,
-  createNetworkFault,
-  createPreflightFault,
-  createUndecodedHttpStatusFault,
-} from "../error";
+import type { Fault, HttpStatusFaultOf } from "../error";
+import { createPreflightFault } from "../error";
 import type { SSEHandler } from "../interceptor/interceptor";
+import type { HttpRequest } from "../http/http_request";
 import { makeChain, resolveSSEInterceptors } from "../interceptor/interceptor";
 import {
   awaitWithSignal,
-  mergeAbortSignals,
-  releaseAbortSignal,
-  resolveAbortCause,
+  followAbort,
+  resolveAbortedCause,
   resolveAbortedFault,
   resolveAbortFault,
 } from "../internal/abort";
-import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
-import type { EndpointInput, ParsedInput } from "../internal/endpoint_input";
-import { parseEndpointInput } from "../internal/endpoint_input";
-import { createTransportOrigin } from "../internal/transport_origin";
-import { normalizeReconnectOptions } from "../internal/reconnect_options";
+import type { EndpointArgs, EndpointInput } from "../internal/endpoint_input";
+import { preflight } from "../internal/preflight";
+import { resolveRetryPolicy } from "../internal/retry";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
-import type { HttpMeta, HttpResponse } from "../internal/http_response";
 import type {
   BuilderField,
   EventStreamRequestShape,
 } from "../internal/builder_types";
 import type { OutboundBuilder } from "../internal/outbound_request";
-import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "../http/transport/fetch_init";
-import { createBaseTransportRequest } from "../internal/transport_request";
+import { resolveHttpBodyContentType } from "../http/transport/body";
+import {
+  materializeOutboundRequest,
+  runOutboundBuilder,
+} from "../internal/outbound_request";
+import { createBaseTransportRequest } from "../http/transport_request";
+import { pickEndpoint } from "../balancer/runtime";
 import type { AnyStruct, Infer } from "../struct";
-import { decodeJson } from "../struct/codec/json";
-import { parseStructValue } from "../struct/introspection";
-import type { Guide } from "../struct/guide";
+import { parseStructValue } from "../struct/parse";
 import type {
-  EventStreamFailureInfo,
   EventStreamHandle,
   EventStreamOpenInfo,
-  FetchEventStreamOptions,
+  EventStreamStartupFailure,
+  HandshakeBody,
 } from "./transport/event_stream";
-import { SSE_RECONNECT_DEFAULTS } from "./transport/event_stream";
-import {
-  fetchEventStream,
-  getEventStreamFatalCode,
-  handshakeDecodeCause,
-  isHandshakeStatusSignal,
-} from "./transport/event_stream";
+import { fetchEventStream } from "./transport/event_stream";
 import type { EventStreamMessage } from "./transport/parser";
 
 /**
@@ -61,7 +53,7 @@ import type { EventStreamMessage } from "./transport/parser";
  *
  * A `string` event struct keeps the raw `data` text. Every other kind is JSON text: `JSON.parse`, then the struct. A bare `struct.literal` therefore needs JSON text, not an unquoted token.
  *
- * Reconnect lives on the client (`withSSEReconnect`). SSE `jitter` is a **0-1 multiplicative factor**, same as WebSocket.
+ * Retries live on the client (`withRetry`).
  *
  * @group sse
  */
@@ -100,12 +92,13 @@ export type EventStreamData<TEvents extends EventStructs> =
     ? KnownEventUnion<TEvents> | DefaultEventUnion<TEvents>
     : never;
 
+const DEFAULT_MAX_BUFFER_SIZE = 64 * 1024;
+
 interface EventStreamDefinitionBase<
   TEvents extends EventStructs = EventStructs,
 > {
   events: TEvents;
-  maxBufferSize: number;
-  maxQueueSize: number;
+  maxBufferSize?: number;
   method?: string;
   operation?: string;
   path: string;
@@ -123,7 +116,7 @@ type EventStreamErrorField<TError extends AnyStruct | undefined> = [
  *
  * The composed members are:
  *
- * - `events`, `maxBufferSize`, and `maxQueueSize` (both limits are required positive safe integers), optional `method`, `operation`, and a required `path`.
+ * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`. The library holds at most 1024 events waiting for the `for await` consumer; when they are full, reading the response pauses until the consumer takes one. No event is dropped for lack of room and the stream does not fail.
  *
  * - `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.
  *
@@ -154,6 +147,10 @@ export type { EventStreamRequestShape } from "../internal/builder_types";
  *
  * - `TError` is the declared `error` struct. It types the decoded error body on the fault.
  *
+ * - A non-2xx handshake is an `HTTP_STATUS` fault whose `data` is the decoded `error` body. When the declared `error` body could not be decoded, startup returns the decode fault instead, as `defineRequest` does: `RES_MEDIA_TYPE_INVALID` for a JSON declaration that meets another media type, `RES_DECODE_FAILED` for an unreadable or unparsable body, `RES_STRUCT_MISMATCH` for a body that does not match the struct. Its `status` and `response` carry the handshake status as metadata and `cause` holds the reason. Interceptors, `shouldRetry` and a reconnect's `closed` still receive `HTTP_STATUS`, with the same `cause`, so a gateway `503` is retried however its body looks.
+ *
+ * - A 2xx handshake whose media type is not `text/event-stream` is `RES_MEDIA_TYPE_INVALID`. One with that media type and no body (a `204` or `205` on Node.js and Bun) is an empty stream: the call succeeds and `closed` settles `{ kind: 'eof' }` at once.
+ *
  * @group sse
  */
 export type StreamAwaitResult<
@@ -162,21 +159,23 @@ export type StreamAwaitResult<
 > =
   | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
   | [
-      error: Fault<TError>,
+      error: Fault<TError> | HttpStatusFaultOf<undefined>,
       stream: undefined,
       open: EventStreamOpenInfo | undefined,
     ];
 
 /**
- * SSE field of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.
+ * SSE fields of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.
  *
- * `signal` covers the whole stream, including after it opens. There is no startup-only deadline.
+ * `signal` covers the whole stream, including after it opens. For a deadline on the connection handshake alone, pass `retry: { maxRetries: 0, attemptTimeoutMs }`. `retry` replaces the client's retry policy for this call.
  *
  * @group sse
  */
 export type EventStreamExecuteOptions = {
   /** Aborts the stream, including after it is open. */
   signal?: AbortSignal;
+  /** Retry policy for this call. Replaces the client policy as a whole value; the `budget` is HTTP only. */
+  retry?: Omit<RetryOptions, "budget">;
 };
 
 /**
@@ -197,23 +196,50 @@ export type EventStreamEndpoint<
 
 type ResolvedEventStreamDefinition<
   TInput extends AnyStruct | undefined = undefined,
-  TEvents extends EventStructs = EventStructs,
   TError extends AnyStruct | undefined = undefined,
-> = EventStreamDefinition<TInput, TEvents, TError> & {
+> = Omit<EventStreamDefinitionBase, "events" | "maxBufferSize"> & {
+  builder?: OutboundBuilder;
+  /** The copied dictionary. Its event types live in the operation's own type, not in this copy. */
+  events: EventStructs;
+  input?: TInput;
+  error?: TError;
+  readonly maxBufferSize: number;
   readonly method: string;
 };
+
+// A descriptor's getter is a plain function value here, so it is typed as a property, not a method.
+type SnapshotDescriptor = Omit<PropertyDescriptor, "get"> & {
+  get?: (this: unknown) => unknown;
+};
+
+function snapshotEventDictionary(events: EventStructs): EventStructs {
+  const descriptors: { [key: string]: SnapshotDescriptor } =
+    Object.getOwnPropertyDescriptors(events);
+  for (const descriptor of Object.values(descriptors)) {
+    const get = descriptor.get;
+    if (get) {
+      descriptor.get = () => get.call(events);
+    }
+  }
+  // Runs once per definition. The copy has no prototype, so only own declarations name events.
+  const snapshot: EventStructs = {};
+  Object.setPrototypeOf(snapshot, null);
+  return Object.defineProperties(snapshot, descriptors);
+}
 
 /**
  * Declare a typed Server-Sent Events endpoint.
  *
- * Pass path, event structs, and buffer/queue limits. Call the returned operation
+ * Pass path and event structs. Call the returned operation
  * with a client and, when declared, the input.
  *
- * - **definition** — `path`, an `events` map, and the required `maxBufferSize` and `maxQueueSize` limits (positive safe integers). Optional `method` (default `'GET'`), `operation`, `input`, and `error`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024` bytes). A frame larger than `maxBufferSize` ends the stream with `CAP_BUFFER_EXCEEDED`; the library holds at most 1024 unread events, and a full queue pauses reading the response until the consumer takes an event. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * `EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.
  *
- * @param definition - SSE contract (path, events, buffer limits, optional input).
+ * Known fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A getter on a fixed definition field runs during `defineEventStream`.
+ *
+ * @param definition - SSE contract (path, events, optional input and limits).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
  *
  * @group sse
@@ -236,318 +262,336 @@ export function defineEventStream<
       EventStreamRequestShape<NoInfer<P>, NoInfer<M>>
     >,
 ): EventStreamEndpoint<EndpointArgs<TInput>, EventStreamData<TEvents>, TError> {
-  // EventStreamErrorField is conditional, so this parameter is not directly the resolved endpoint.
-  const endpoint = {
-    ...definition,
-    method: definition.method ?? "GET",
-  } as unknown as ResolvedEventStreamDefinition<TInput, TEvents, TError>;
+  // Copy known fields. The events container is copied; struct values and accessors stay lazy.
+  const builder = definition.builder;
+  const error = definition.error;
+  const events = snapshotEventDictionary(definition.events);
+  const input = definition.input;
+  const { maxBufferSize = DEFAULT_MAX_BUFFER_SIZE } = definition;
+  const declaredMethod = definition.method;
+  const operation = definition.operation;
+  const path = definition.path;
+  const copy = {
+    builder,
+    error,
+    events,
+    input,
+    maxBufferSize,
+    method: declaredMethod ?? "GET",
+    operation,
+    path,
+  };
 
-  return (async (client: Client, input?: EndpointInput<TInput>) =>
-    runEventStreamCommand(
+  return async (client: Client, input?: EndpointInput<TInput>) =>
+    openEventStream<TInput, TEvents, TError>(
       client[CLIENT].config,
-      endpoint,
+      copy,
       input,
       client[CLIENT].options,
-      new AbortController(),
-    )) as EventStreamEndpoint<
-    EndpointArgs<TInput>,
-    EventStreamData<TEvents>,
-    TError
-  >;
+    );
 }
 
-async function runEventStreamCommand<
+async function openEventStream<
   TInput extends AnyStruct | undefined,
   TEvents extends EventStructs,
   TError extends AnyStruct | undefined = undefined,
 >(
   clientConfig: ClientConfig,
-  endpoint: ResolvedEventStreamDefinition<TInput, TEvents, TError>,
+  definition: ResolvedEventStreamDefinition<TInput, TError>,
   input: EndpointInput<TInput> | undefined,
-  config: EventStreamExecuteOptions,
-  controller: AbortController,
+  options: EventStreamExecuteOptions | undefined,
 ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>> {
-  const callerAbort = config.signal;
-
-  // Fast path: caller already aborted before we did any struct work.
-  if (callerAbort?.aborted) {
-    return [resolveAbortedFault(callerAbort), undefined, undefined];
+  const callerSignal = options?.signal;
+  const scope = preflight(definition.input, input, callerSignal);
+  if (scope instanceof Error) {
+    return [scope, undefined, undefined];
   }
+  // The scope's signal follows the caller's until the stream has ended or never delivered.
+  const {
+    guides: inputGuides,
+    input: parsedInput,
+    release,
+    signal: requestSignal,
+  } = scope;
 
-  // Snapshot the validated reconnect policy at preflight so an interceptor cannot change it.
-  let reconnect: FetchEventStreamOptions<unknown>["reconnect"];
-  try {
-    validateEventStreamLimits(endpoint);
-    const configured = clientConfig.sse.reconnect;
-    const normalized = normalizeReconnectOptions(
-      configured,
-      SSE_RECONNECT_DEFAULTS,
-      "SSE",
-    );
-    reconnect = normalized && {
-      ...normalized,
-      shouldReconnect: configured?.shouldReconnect,
-    };
-  } catch (error) {
-    return [
-      createPreflightFault("REQ_OPTIONS_INVALID", error),
-      undefined,
-      undefined,
-    ];
+  // Resolve the retry policy at preflight so an interceptor cannot change it.
+  const retry = resolveRetryPolicy(options?.retry ?? clientConfig.retry);
+  const pick = () =>
+    pickEndpoint(clientConfig.balancer, {
+      endpoints: clientConfig.endpoints,
+      operation: definition.operation,
+    });
+
+  const picked = pick();
+  if (picked[0] !== null) {
+    release();
+    return [picked[0], undefined, undefined];
   }
+  const resolved = picked[1];
 
-  // `signal` stays in force after open. Listeners stay off the caller's signal.
-  const requestSignal = mergeAbortSignals(controller.signal, [callerAbort]);
-  const stopBeforeTransport = (
-    fault: PreflightFault,
-  ): StreamAwaitResult<EventStreamData<TEvents>, TError> => {
-    releaseAbortSignal(requestSignal);
-    return [fault, undefined, undefined];
-  };
-
-  const inputGuides = new WeakMap<object, Guide>();
-  let parsedInput: ParsedInput<TInput>;
-  try {
-    parsedInput = parseEndpointInput<TInput>(
-      endpoint.input,
-      input,
-      inputGuides,
-    );
-  } catch (error) {
-    return stopBeforeTransport(
-      resolveAbortFault(requestSignal) ??
-        createPreflightFault("REQ_INPUT_INVALID", error),
-    );
-  }
-
-  const parsedCancellation = resolveAbortFault(requestSignal);
-  if (parsedCancellation) {
-    return stopBeforeTransport(parsedCancellation);
-  }
-
-  let request;
-  try {
-    request = createBaseTransportRequest(
-      endpoint.method,
-      endpoint.path,
-      parsedInput,
-      endpoint.builder,
-      {
-        signal: requestSignal,
-        baseEndpoint: clientConfig.endpoint,
-        defaultHeaders: clientConfig.headers,
-        inputDeclared: endpoint.input !== undefined,
-        inputGuides,
-        operation: endpoint.operation,
-        querySerializer: clientConfig.querySerializer,
-        transport: "sse",
-        withCredentials: clientConfig.withCredentials,
-      },
-    );
-  } catch (error) {
-    return stopBeforeTransport(
-      resolveAbortFault(requestSignal) ??
-        createPreflightFault("REQ_BUILD_FAILED", error),
-    );
-  }
-
-  const builtCancellation = resolveAbortFault(requestSignal);
-  if (builtCancellation) {
-    return stopBeforeTransport(builtCancellation);
-  }
-
-  type OwnedStream = {
-    controller: AbortController;
-    initialOpen?: EventStreamOpenInfo;
-    release?: () => void;
-    stream?: EventStreamHandle<unknown>;
-  };
-  let chainSettled = false;
   let streamDelivered = false;
-  const ownedStreams = new Set<OwnedStream>();
-  const transportOrigin = createTransportOrigin();
-  const errorOpenInfo = new Map<unknown, EventStreamOpenInfo | undefined>();
+  // Exits before the first sseHandler entry belong to this call. The handler
+  // takes the one `done` as soon as it is entered.
+  let handedOff = false;
   try {
-    const sseInterceptors = resolveSSEInterceptors(clientConfig.interceptors);
-    const sseHandler: SSEHandler = (req) => {
-      if (chainSettled) {
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(
-          new Error(
-            "SSE interceptor next() cannot be called after the chain has settled",
-          ),
-        );
-        void rejected.catch(() => undefined);
-        return rejected;
-      }
-      try {
-        resolveRequestUrl(req);
-      } catch (error) {
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(error);
-        void rejected.catch(() => undefined);
-        return rejected;
-      }
-      const transportAbort = mergeAbortSignals(requestSignal, [req.signal]);
-      const due = resolveAbortFault(transportAbort);
-      if (due) {
-        // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
-        // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(
-          transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
-        );
-        releaseAbortSignal(transportAbort);
-        void rejected.catch(() => undefined);
-        return rejected;
-      }
-      if (
-        clientConfig.sse.handle === DEFAULT_FETCH &&
-        typeof globalThis.fetch !== "function"
-      ) {
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(
-          transportOrigin.mark(ERR_FETCH_UNSUPPORTED),
-        );
-        releaseAbortSignal(transportAbort);
-        void rejected.catch(() => undefined);
-        return rejected;
-      }
-      const ownerController = new AbortController();
-      const owned: OwnedStream = {
-        controller: ownerController,
-      };
-      ownedStreams.add(owned);
-      const streamAbort = mergeAbortSignals(ownerController.signal, [
-        transportAbort,
-      ]);
-      owned.release = () => {
-        releaseAbortSignal(streamAbort);
-        releaseAbortSignal(transportAbort);
-      };
-      // Type boundary: SSEHandler returns EventStreamHandle<unknown>; the concrete type is narrowed by the interceptor chain.
-      const failure: EventStreamFailureInfo = {};
-      const promise = fetchEventStream(
-        { ...req, signal: streamAbort },
+    let request;
+    try {
+      const built = materializeOutboundRequest(
+        runOutboundBuilder(parsedInput, definition.builder),
+        "sse",
+        inputGuides,
+      );
+      request = createBaseTransportRequest(
+        definition.method,
+        definition.path,
+        built,
         {
-          fetch: clientConfig.sse.handle,
-          failure,
-          handshakeError: endpoint.error,
-          onopen(open) {
-            owned.initialOpen ??= open;
-          },
-          transformMessage(message, signal) {
-            return transformStreamMessage(
-              endpoint.events,
-              message,
-              clientConfig.sse.onInvalidEvent,
-              signal,
-            );
-          },
-          reconnect,
-          maxBufferSize: endpoint.maxBufferSize,
-          maxQueueSize: endpoint.maxQueueSize,
-        },
-      ).then(
-        (stream) => {
-          owned.stream = stream;
-          void stream.closed.then(owned.release, owned.release);
-          return stream;
-        },
-        (cause: unknown) => {
-          owned.release?.();
-          errorOpenInfo.set(cause, failure.open);
-          throw transportOrigin.mark(cause);
+          signal: requestSignal,
+          baseEndpoint: resolved.endpoint,
+          defaultHeaders: clientConfig.headers,
+          operation: definition.operation,
+          querySerializer: clientConfig.querySerializer,
+          withCredentials: clientConfig.withCredentials,
         },
       );
-      void promise.catch(() => undefined);
-      return promise;
-    };
-    const sseChain = makeChain(sseInterceptors);
-    // Type boundary: interceptor chain returns EventStreamHandle<unknown>; runtime message transform narrows it to the endpoint's event types.
-    const stream = (await awaitWithSignal(
-      () => sseChain(request, sseHandler),
-      requestSignal,
-    )) as EventStreamHandle<EventStreamData<TEvents>>;
-    const publicOpen = stream?.open;
-    if (
-      typeof stream?.closed?.then !== "function" ||
-      typeof stream.close !== "function" ||
-      typeof stream[Symbol.asyncIterator] !== "function" ||
-      typeof stream[Symbol.asyncDispose] !== "function" ||
-      typeof publicOpen?.url !== "string"
-    ) {
-      throw new TypeError(
-        "SSE interceptor must resolve an event stream handle",
-      );
-    }
-    chainSettled = true;
-    const release = () => releaseAbortSignal(requestSignal);
-    void stream.closed.then(release, release);
-
-    let open: EventStreamOpenInfo | undefined;
-    for (const owned of ownedStreams) {
-      if (
-        owned.stream &&
-        (owned.stream === stream ||
-          (owned.stream.closed === stream.closed &&
-            publicOpen === owned.stream.open))
-      ) {
-        open = owned.initialOpen;
-        break;
+      // An explicit Content-Type header wins; otherwise the stream request carries the type its body implies.
+      if (!request.headers.has("content-type")) {
+        const contentType =
+          built.defaultContentType ?? resolveHttpBodyContentType(request.body);
+        if (contentType) {
+          request.headers.set("content-type", contentType);
+        }
       }
+    } catch (error) {
+      return [
+        resolveAbortFault(requestSignal) ??
+          createPreflightFault("REQ_BUILD_FAILED", error),
+        undefined,
+        undefined,
+      ];
     }
-    open ??= publicOpen;
 
-    discardOwnedStreams(
-      new Error("SSE interceptor discarded an opened stream"),
-      stream,
-    );
-    // Only transfer listener ownership after every startup operation has succeeded.
-    streamDelivered = true;
-    return [null, stream, open];
-  } catch (error) {
-    chainSettled = true;
-    discardOwnedStreams(error);
+    const builtCancellation = resolveAbortFault(requestSignal);
+    if (builtCancellation) {
+      return [builtCancellation, undefined, undefined];
+    }
 
-    const fromTransport = transportOrigin.has(error);
-    const cause = error;
-    const openInfo = errorOpenInfo.get(cause);
-    const fault = requestSignal.aborted
-      ? resolveAbortedFault(requestSignal)
-      : error instanceof RequestUrlError
-        ? createPreflightFault("REQ_BUILD_FAILED", error)
-        : createEventStreamFault(cause, fromTransport, openInfo?.response);
-    return [fault as Fault<TError>, undefined, openInfo];
+    type OwnedStream = {
+      controller: AbortController;
+      initialOpen?: EventStreamOpenInfo;
+      release: () => void;
+      stream?: EventStreamHandle<unknown>;
+    };
+    let chainSettled = false;
+    const ownedStreams = new Set<OwnedStream>();
+    // The fault behind each value the handler rejected with: interceptors are shown the plain cause. See chain_faults.ts.
+    const failures = new Map<
+      unknown,
+      Pick<EventStreamStartupFailure<HandshakeBody<TError>>, "fault" | "open">
+    >();
+    try {
+      const sseInterceptors = resolveSSEInterceptors(clientConfig.interceptors);
+      const openStream = async (
+        req: HttpRequest,
+      ): Promise<EventStreamHandle<unknown>> => {
+        if (chainSettled) {
+          throw new Error(
+            "SSE interceptor next() cannot be called after the chain has settled",
+          );
+        }
+        const attributed = !handedOff;
+        handedOff = true;
+        // The wrapper `done` reports once, so a repeat is harmless.
+        const settleUnattempted = (): void => {
+          if (attributed) {
+            resolved.done({ attempted: false });
+          }
+        };
+        const ownsEndpointAttempt =
+          attributed && req.baseEndpoint === resolved.endpoint;
+        if (attributed && !ownsEndpointAttempt) {
+          settleUnattempted();
+        }
+        let headers: Headers;
+        try {
+          resolveRequestUrl(req);
+          headers = new Headers(req.headers);
+        } catch (error) {
+          settleUnattempted();
+          throw error;
+        }
+        // The stream ends when its owner discards it, or when the call or an interceptor's own signal stops it. The
+        // caller's signal reaches it through the call, which follows it until the stream has ended.
+        const ownerController = new AbortController();
+        const unfollowCall = followAbort(ownerController, requestSignal);
+        const unfollowRequest = followAbort(
+          ownerController,
+          req.signal === requestSignal ? undefined : req.signal,
+        );
+        const releaseOwner = (): void => {
+          unfollowCall();
+          unfollowRequest();
+        };
+        const streamAbort = ownerController.signal;
+        const due = resolveAbortFault(streamAbort);
+        if (due) {
+          settleUnattempted();
+          releaseOwner();
+          // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
+          const cause = resolveAbortedCause(streamAbort);
+          failures.set(cause, { fault: due });
+          throw cause;
+        }
+        if (
+          clientConfig.sse.handle === DEFAULT_FETCH &&
+          typeof globalThis.fetch !== "function"
+        ) {
+          settleUnattempted();
+          releaseOwner();
+          failures.set(ERR_FETCH_UNSUPPORTED, {
+            fault: createPreflightFault(
+              "ENV_UNSUPPORTED",
+              ERR_FETCH_UNSUPPORTED,
+            ),
+          });
+          throw ERR_FETCH_UNSUPPORTED;
+        }
+        const owned: OwnedStream = {
+          controller: ownerController,
+          release: releaseOwner,
+        };
+        ownedStreams.add(owned);
+        const [failure, stream] = await fetchEventStream(
+          { ...req, headers, signal: streamAbort },
+          {
+            callerSignal,
+            endpointAttempt: ownsEndpointAttempt
+              ? {
+                  start: resolved.start,
+                  end: resolved.end,
+                  done: resolved.done,
+                  pickNext: pick,
+                }
+              : undefined,
+            fetch: clientConfig.sse.handle,
+            handshakeError: definition.error,
+            transformMessage(message, signal) {
+              return transformStreamMessage(
+                definition.events,
+                message,
+                clientConfig.sse.onInvalidEvent,
+                signal,
+              );
+            },
+            retry,
+            maxBufferSize: definition.maxBufferSize,
+          },
+        );
+        if (failure !== null) {
+          owned.release();
+          failures.set(failure.cause, failure);
+          throw failure.cause;
+        }
+        owned.stream = stream;
+        owned.initialOpen = stream.open;
+        void stream.closed.then(owned.release, owned.release);
+        return stream;
+      };
+      const sseHandler: SSEHandler = (req) => {
+        const opening = openStream(req);
+        // An interceptor may drop what next() returned; that must not become an unhandled rejection.
+        void opening.catch(() => undefined);
+        return opening;
+      };
+      const sseChain = makeChain(sseInterceptors);
+      const stream = await awaitWithSignal(
+        () => sseChain(request, sseHandler),
+        requestSignal,
+      );
+      const publicOpen = stream.open;
+      chainSettled = true;
+      void stream.closed.then(release, release);
+
+      let open: EventStreamOpenInfo | undefined;
+      for (const owned of ownedStreams) {
+        if (
+          owned.stream &&
+          (owned.stream === stream ||
+            (owned.stream.closed === stream.closed &&
+              publicOpen === owned.stream.open))
+        ) {
+          open = owned.initialOpen;
+          break;
+        }
+      }
+      open ??= publicOpen;
+
+      discardOwnedStreams(
+        new Error("SSE interceptor discarded an opened stream"),
+        stream,
+      );
+      // Only transfer listener ownership after every startup operation has succeeded.
+      streamDelivered = true;
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the published SSEInterceptor/SSEHandler types carry EventStreamHandle<unknown>, and an interceptor may return its own handle, which is delivered by identity, while the published StreamAwaitResult needs EventStreamData<TEvents>, a type that exists only in the caller's generic. Unasserted: TS2322, `EventStreamHandle<unknown>` is not assignable to `EventStreamHandle<EventStreamData<TEvents>>`. A validating wrapper would replace the delivered handle
+      const delivered = stream as EventStreamHandle<EventStreamData<TEvents>>;
+      return [null, delivered, open];
+    } catch (error) {
+      chainSettled = true;
+      discardOwnedStreams(error);
+
+      const failure = failures.get(error);
+      const fault = requestSignal.aborted
+        ? resolveAbortedFault(requestSignal)
+        : error instanceof RequestUrlError
+          ? createPreflightFault("REQ_BUILD_FAILED", error)
+          : (failure?.fault ??
+            createPreflightFault("EXT_INTERCEPTOR_FAILED", error));
+      return [fault, undefined, failure?.open];
+    }
+
+    function discardOwnedStreams(
+      reason: unknown,
+      delivered?: EventStreamHandle<unknown>,
+    ): void {
+      for (const owned of ownedStreams) {
+        if (
+          owned.stream &&
+          delivered &&
+          (owned.stream === delivered ||
+            owned.stream.closed === delivered.closed)
+        ) {
+          continue;
+        }
+        owned.controller.abort(reason);
+        owned.stream?.close(reason);
+        owned.release();
+      }
+      ownedStreams.clear();
+    }
   } finally {
     if (!streamDelivered) {
-      releaseAbortSignal(requestSignal);
+      release();
     }
-  }
-
-  function discardOwnedStreams(
-    reason: unknown,
-    delivered?: EventStreamHandle<unknown>,
-  ): void {
-    for (const owned of ownedStreams) {
-      if (
-        owned.stream &&
-        delivered &&
-        (owned.stream === delivered || owned.stream.closed === delivered.closed)
-      ) {
-        continue;
-      }
-      owned.controller.abort(reason);
-      owned.stream?.close(reason);
-      owned.release?.();
+    if (!handedOff) {
+      resolved.done({ attempted: false });
     }
-    ownedStreams.clear();
   }
 }
 
+/** An event decoded with the struct its name selects. The operation's own type relates `event` to `data`. */
+type DecodedStreamEvent = {
+  data: unknown;
+  event: string;
+  id: string | undefined;
+};
+
 // Synchronous on the valid path. Only an invalid event awaits the observer.
-function transformStreamMessage<TEvents extends EventStructs>(
-  events: TEvents,
+function transformStreamMessage(
+  events: EventStructs,
   message: EventStreamMessage,
   onInvalidEvent: ClientSSEOptions["onInvalidEvent"],
   signal: AbortSignal,
-): EventStreamData<TEvents> | Promise<undefined> {
+): DecodedStreamEvent | Promise<undefined> {
   const eventName = message.event || "message";
   const eventStruct = resolveEventStruct(events, eventName);
 
@@ -555,7 +599,7 @@ function transformStreamMessage<TEvents extends EventStructs>(
     return notifyInvalidEvent(onInvalidEvent, {
       reason: "missing-struct",
       message: {
-        id: message.id || "",
+        id: message.id,
         event: eventName,
         data: message.data,
       },
@@ -568,13 +612,12 @@ function transformStreamMessage<TEvents extends EventStructs>(
       data: decodeSSEEventData(eventStruct, message.data),
       event: eventName,
       id: message.id || undefined,
-      // Type boundary: decodeSSEEventData validates against the resolved event struct; the shape matches EventStreamData<TEvents>.
-    } as EventStreamData<TEvents>;
+    };
   } catch (error) {
     return notifyInvalidEvent(onInvalidEvent, {
       reason: "validation-failed",
       message: {
-        id: message.id || "",
+        id: message.id,
         event: eventName,
         data: message.data,
       },
@@ -608,17 +651,6 @@ async function notifyInvalidEvent(
   return undefined;
 }
 
-function validateEventStreamLimits(endpoint: {
-  maxBufferSize: number;
-  maxQueueSize: number;
-}): void {
-  for (const name of ["maxBufferSize", "maxQueueSize"] as const) {
-    if (!Number.isSafeInteger(endpoint[name]) || endpoint[name] < 1) {
-      throw new TypeError(`SSE ${name} must be a positive safe integer`);
-    }
-  }
-}
-
 function resolveEventStruct<TEvents extends EventStructs>(
   events: TEvents,
   eventName: string,
@@ -635,70 +667,14 @@ function resolveEventStruct<TEvents extends EventStructs>(
   return undefined;
 }
 
+// Every JSON event reads its wire names. One shared record saves an allocation per event: parsing only reads it.
+const WIRE_NAMES = { aliases: true };
+
 function decodeSSEEventData(struct: AnyStruct, data: string): unknown {
   // Only a string struct keeps the raw data field. Every other kind is JSON text.
   if (resolveInboundRepresentation(struct) === "text") {
     return parseStructValue(struct, data);
   }
 
-  return decodeJson(struct, JSON.parse(data) as unknown);
-}
-
-function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {
-  return {
-    headers: response.headers,
-    ok: response.ok,
-    status: response.status,
-    statusText: response.statusText,
-    url: response.url,
-  };
-}
-
-function createEventStreamFault(
-  cause: unknown,
-  fromTransport: boolean,
-  response?: HttpResponse<unknown>,
-): AnyFault {
-  const fatal = getEventStreamFatalCode(cause);
-  // The JSON media-type precheck is a decode fault on every status.
-  if (response && fatal === "RES_MEDIA_TYPE_INVALID") {
-    return createDecodeFault(
-      fatal,
-      handshakeDecodeCause(cause),
-      toEventStreamMeta(response),
-    );
-  }
-
-  if (response && !response.ok) {
-    const meta = toEventStreamMeta(response);
-    // Decoded null is a real body. Only an unread handshake leaves `body` undefined.
-    if (response.body !== undefined) {
-      return createHttpStatusFault({ ...meta, body: response.body });
-    }
-    if (fatal === "RES_DECODE_FAILED" && !isHandshakeStatusSignal(cause)) {
-      return createDecodeFault(fatal, handshakeDecodeCause(cause), meta);
-    }
-    return createUndecodedHttpStatusFault(meta);
-  }
-
-  // `CAP_*` and `EXT_*` happen after the stream opens, so they settle `closed` rather than startup.
-  if (response && fatal === "RES_DECODE_FAILED") {
-    return createDecodeFault(
-      fatal,
-      handshakeDecodeCause(cause),
-      toEventStreamMeta(response),
-    );
-  }
-
-  if (
-    fromTransport &&
-    (cause === ERR_STREAMING_REQUEST_UNSUPPORTED ||
-      cause === ERR_FETCH_UNSUPPORTED)
-  ) {
-    return createPreflightFault("ENV_UNSUPPORTED", cause);
-  }
-
-  return fromTransport
-    ? createNetworkFault(cause)
-    : createPreflightFault("EXT_INTERCEPTOR_FAILED", cause);
+  return parseStructValue(struct, JSON.parse(data), WIRE_NAMES);
 }

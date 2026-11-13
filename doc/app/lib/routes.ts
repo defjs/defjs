@@ -1,18 +1,18 @@
 import { getSlugs, createGetUrl } from "fumadocs-core/source";
 import { apiEntries } from "../data/api-catalog";
 import { apiVirtualPath } from "./api-virtual";
-import { i18n, locales } from "./i18n";
+import { defaultLocale, i18n, locales, type Locale } from "./i18n";
 
 export interface ContentRoute {
-  locale: string;
+  locale: Locale;
   slugs: string[];
   url: string;
 }
 const getUrl = createGetUrl("/", i18n);
 export function getContentRoute(relativePath: string): ContentRoute {
-  const [locale, ...rest] = relativePath.split("/");
-  if (!locale || !locales.includes(locale))
-    throw new Error(`Unknown locale: ${locale}`);
+  const [first, ...rest] = relativePath.split("/");
+  const locale = locales.find((item) => item === first);
+  if (!locale) throw new Error(`Unknown locale: ${first}`);
   const slugs = getSlugs(rest.join("/"));
   return { locale, slugs, url: getUrl(slugs, locale) };
 }
@@ -27,7 +27,7 @@ export function assertUniqueRoutes(paths: string[]): ContentRoute[] {
 }
 export function apiEntryContentPaths(
   slugs: readonly string[] = apiEntries.map((entry) => entry.slug),
-  localeList: readonly string[] = locales,
+  localeList: readonly Locale[] = locales,
 ): string[] {
   return localeList.flatMap((locale) =>
     slugs.map((slug) => apiVirtualPath(locale, slug)),
@@ -61,7 +61,7 @@ export async function collectPrerenderPaths(): Promise<string[]> {
     "/404",
     "/sitemap.xml",
     ...routes
-      .filter((route) => route.locale === "en-US")
+      .filter((route) => route.locale === defaultLocale)
       .map((route) => `/llms.mdx/${[...route.slugs, "content.md"].join("/")}`),
   ];
 }

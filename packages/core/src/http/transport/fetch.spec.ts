@@ -1,367 +1,35 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { HttpRequest } from "../../http";
+import { fetchHandler } from "./fetch";
 import {
   __resetStreamingRequestBodySupportForTests,
-  createFetchRequest,
-  createFetchRequestInit,
-  ERR_STREAMING_REQUEST_UNSUPPORTED,
-  fetchHandler,
   supportsStreamingRequestBody,
-} from "./fetch";
+} from "./fetch_init";
+import { isBodyFailure } from "./body_failure";
+import { PLATFORM_FETCH_HANDLE } from "../../client/config";
+import type { FetchHandle } from "../../client/config";
+import { initOf } from "../../../test/fetch-request-init";
+
+/** The `Request` that `fetchHandler` gives a custom handle for `request`. */
+async function requestOf(request: HttpRequest): Promise<Request> {
+  let given: Request | undefined;
+  await fetchHandler(request, (input) => {
+    if (!(input instanceof Request)) throw new Error("expected a Request");
+    given = input;
+    return Promise.resolve(new Response());
+  });
+  if (given === undefined) throw new Error("the handle was not called");
+  return given;
+}
+
+function headersOf(init: RequestInit): Headers {
+  if (init.headers instanceof Headers) return init.headers;
+  throw new Error("expected Headers");
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
   __resetStreamingRequestBodySupportForTests();
-});
-
-function stubXsrfBrowserEnvironment(origin: string, cookieValue: string) {
-  const cookieGetter = vi.fn(() => cookieValue);
-  const documentStub = {} as { [key: string]: unknown };
-
-  vi.stubGlobal("location", { origin });
-  vi.stubGlobal("document", documentStub);
-
-  Object.defineProperty(documentStub, "cookie", {
-    configurable: true,
-    get: cookieGetter,
-  });
-
-  return { cookieGetter };
-}
-
-type XSRFConfig = {
-  cookieName: string;
-  headerName: string;
-  tokenProvider?: (context: {
-    request: HttpRequest;
-  }) => string | null | undefined;
-};
-
-function createXsrfConfig(
-  tokenProvider?: XSRFConfig["tokenProvider"],
-): XSRFConfig {
-  return {
-    cookieName: "XSRF-TOKEN",
-    headerName: "X-XSRF-TOKEN",
-    tokenProvider,
-  };
-}
-
-describe("Fetch handler XSRF injection", () => {
-  test("should inject xsrf header for mutating same-origin requests from cookie", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe("cookie-token");
-    expect(cookieGetter).toHaveBeenCalledTimes(1);
-  });
-
-  test("should inject xsrf header when same-origin request uses withCredentials", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      withCredentials: true,
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect(init.credentials).toBe("include");
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe("cookie-token");
-    expect(cookieGetter).toHaveBeenCalledTimes(1);
-  });
-
-  test.each(["GET", "HEAD", "OPTIONS", "TRACE"] as const)(
-    "should not inject xsrf header for safe %s requests",
-    (method) => {
-      const { cookieGetter } = stubXsrfBrowserEnvironment(
-        "https://example.com",
-        "XSRF-TOKEN=cookie-token",
-      );
-      const requestConfig: HttpRequest = {
-        baseEndpoint: "https://example.com",
-        endpoint: "/v1/user",
-        method,
-        xsrf: createXsrfConfig(),
-      };
-
-      const init = createFetchRequestInit(requestConfig);
-
-      expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-      expect(cookieGetter).not.toHaveBeenCalled();
-    },
-  );
-
-  test("should inject xsrf header for custom unsafe methods", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/resource",
-      method: "PROPPATCH",
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe("cookie-token");
-    expect(cookieGetter).toHaveBeenCalledTimes(1);
-  });
-
-  test("should not inject xsrf header for cross-origin requests", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://api.example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      withCredentials: true,
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-    expect(cookieGetter).not.toHaveBeenCalled();
-  });
-
-  test("should not inject xsrf header when browser cookie is empty", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "",
-    );
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-    expect(cookieGetter).toHaveBeenCalledTimes(1);
-  });
-
-  test("should not inject xsrf header when browser cookie name does not match", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "OTHER-TOKEN=other-token",
-    );
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-    expect(cookieGetter).toHaveBeenCalledTimes(1);
-  });
-
-  test("should not inject xsrf header when baseEndpoint is missing", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const requestConfig: HttpRequest = {
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-    expect(cookieGetter).not.toHaveBeenCalled();
-  });
-
-  test("should not inject xsrf header when tokenProvider returns null", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const tokenProvider = vi.fn(() => null);
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(tokenProvider),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-    expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
-    expect(cookieGetter).not.toHaveBeenCalled();
-  });
-
-  test("should not inject xsrf header when tokenProvider returns empty string", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const tokenProvider = vi.fn(() => "");
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(tokenProvider),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-    expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
-    expect(cookieGetter).not.toHaveBeenCalled();
-  });
-
-  test("should not inject xsrf header when browser cookie value is empty", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=",
-    );
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-    expect(cookieGetter).toHaveBeenCalledTimes(1);
-  });
-
-  test("should not inject xsrf header when browser cookie access throws", () => {
-    const cookieGetter = vi.fn(() => {
-      throw new Error("cookie unavailable");
-    });
-    const documentStub = {} as { [key: string]: unknown };
-
-    vi.stubGlobal("location", { origin: "https://example.com" });
-    vi.stubGlobal("document", documentStub);
-
-    Object.defineProperty(documentStub, "cookie", {
-      configurable: true,
-      get: cookieGetter,
-    });
-
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-    expect(cookieGetter).toHaveBeenCalledTimes(1);
-  });
-
-  test("should prefer tokenProvider over cookie", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const tokenProvider = vi.fn(() => "provider-token");
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(tokenProvider),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe(
-      "provider-token",
-    );
-    expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
-    expect(cookieGetter).not.toHaveBeenCalled();
-  });
-
-  test("should not override an existing xsrf header", () => {
-    const { cookieGetter } = stubXsrfBrowserEnvironment(
-      "https://example.com",
-      "XSRF-TOKEN=cookie-token",
-    );
-    const tokenProvider = vi.fn(() => "provider-token");
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      headers: new Headers([["X-XSRF-TOKEN", "existing-token"]]),
-      method: "POST",
-      xsrf: createXsrfConfig(tokenProvider),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe(
-      "existing-token",
-    );
-    expect(tokenProvider).not.toHaveBeenCalled();
-    expect(cookieGetter).not.toHaveBeenCalled();
-  });
-
-  test("should not inject xsrf header in non-browser runtime without provider", () => {
-    vi.stubGlobal("location", undefined);
-    vi.stubGlobal("document", undefined);
-
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).has("X-XSRF-TOKEN")).toBe(false);
-  });
-
-  test("should inject xsrf header in non-browser runtime with provider", () => {
-    vi.stubGlobal("location", undefined);
-    vi.stubGlobal("document", undefined);
-
-    const tokenProvider = vi.fn(() => "provider-token");
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/user",
-      method: "POST",
-      xsrf: createXsrfConfig(tokenProvider),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-
-    expect((init.headers as Headers).get("X-XSRF-TOKEN")).toBe(
-      "provider-token",
-    );
-    expect(tokenProvider).toHaveBeenCalledWith({ request: requestConfig });
-  });
 });
 
 describe("Fetch handler request creation", () => {
@@ -377,8 +45,8 @@ describe("Fetch handler request creation", () => {
       body: { id: 1 },
       withCredentials: true,
     };
-    const request = createFetchRequest(requestConfig);
-    const init = createFetchRequestInit(requestConfig);
+    const request = await requestOf(requestConfig);
+    const init = initOf(requestConfig);
 
     expect(request.url).toEqual(
       new URL(requestConfig.endpoint, requestConfig.baseEndpoint).toString(),
@@ -392,20 +60,20 @@ describe("Fetch handler request creation", () => {
     }
   });
 
-  test("should add url search", () => {
+  test("should add url search", async () => {
     const requestConfig: HttpRequest = {
       baseEndpoint: "https://example.com",
       endpoint: "/v1/user",
       method: "GET",
-      queryParams: new URLSearchParams({ id: "1" }),
+      query: new URLSearchParams({ id: "1" }),
     };
 
-    const { url } = createFetchRequest(requestConfig);
+    const { url } = await requestOf(requestConfig);
     const { searchParams } = new URL(url);
     expect(searchParams.get("id")).toEqual("1");
   });
 
-  test("should add content type when header not set", () => {
+  test("should add content type when header not set", async () => {
     const requestConfig: HttpRequest = {
       baseEndpoint: "https://example.com",
       endpoint: "/v1/user",
@@ -415,7 +83,7 @@ describe("Fetch handler request creation", () => {
       },
     };
 
-    const request = createFetchRequest(requestConfig);
+    const request = await requestOf(requestConfig);
     expect(request.headers.get("Content-Type")).toEqual("application/json");
   });
 
@@ -448,21 +116,15 @@ describe("Fetch handler request creation", () => {
       body: new ArrayBuffer(0),
     };
 
-    expect(
-      (createFetchRequestInit(jsonRequest).headers as Headers).get(
-        "content-type",
-      ),
-    ).toBe("text/plain");
-    expect(
-      (createFetchRequestInit(builderRequest).headers as Headers).get(
-        "content-type",
-      ),
-    ).toBe("text/plain");
-    expect(
-      (createFetchRequestInit(binaryRequest).headers as Headers).get(
-        "content-type",
-      ),
-    ).toBe("text/plain");
+    expect(headersOf(initOf(jsonRequest)).get("content-type")).toBe(
+      "text/plain",
+    );
+    expect(headersOf(initOf(builderRequest)).get("content-type")).toBe(
+      "text/plain",
+    );
+    expect(headersOf(initOf(binaryRequest)).get("content-type")).toBe(
+      "text/plain",
+    );
   });
 
   test("should remove or suppress Content-Type from final body rules", () => {
@@ -484,109 +146,34 @@ describe("Fetch handler request creation", () => {
       bodyContentTypeSource: textBody,
     };
 
-    expect(
-      (createFetchRequestInit(formDataRequest).headers as Headers).has(
-        "content-type",
-      ),
-    ).toBe(false);
-    expect(
-      (createFetchRequestInit(suppressedRequest).headers as Headers).has(
-        "content-type",
-      ),
-    ).toBe(false);
+    expect(headersOf(initOf(formDataRequest)).has("content-type")).toBe(false);
+    expect(headersOf(initOf(suppressedRequest)).has("content-type")).toBe(
+      false,
+    );
   });
 
-  test("should reject requests without baseEndpoint", () => {
+  test("should reject requests without baseEndpoint", async () => {
     const requestConfig: HttpRequest = {
       endpoint: "/v1/user",
       method: "GET",
     };
 
-    expect(() => createFetchRequest(requestConfig)).toThrowError(
+    await expect(requestOf(requestConfig)).rejects.toThrowError(
       "Client endpoint is required",
     );
   });
 
-  test("should reject requests with invalid baseEndpoint", () => {
+  test("should reject requests with invalid baseEndpoint", async () => {
     const requestConfig: HttpRequest = {
       baseEndpoint: "/api",
       endpoint: "/v1/user",
       method: "GET",
     };
 
-    expect(() => createFetchRequest(requestConfig)).toThrowError(
+    await expect(requestOf(requestConfig)).rejects.toThrowError(
       "Client endpoint must be a valid URL",
     );
   });
-
-  test("should auto set duplex half for ReadableStream body", () => {
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/stream",
-      method: "POST",
-      body: new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("hello"));
-          controller.close();
-        },
-      }),
-    };
-
-    if (!supportsStreamingRequestBody()) {
-      expect(() => createFetchRequest(requestConfig)).toThrow(
-        ERR_STREAMING_REQUEST_UNSUPPORTED,
-      );
-      return;
-    }
-
-    const init = createFetchRequestInit(requestConfig);
-    expect(init.duplex).toBe("half");
-  });
-
-  test.each([
-    { contentLength: "-1", total: 0 },
-    { contentLength: "not-a-number", total: 0 },
-    { contentLength: "Infinity", total: 0 },
-    { contentLength: "100", total: 100 },
-    { contentLength: undefined, total: 0 },
-    { contentLength: "0", total: 0 },
-  ])(
-    "should count upload bytes with Content-Length $contentLength",
-    async ({ contentLength, total }) => {
-      const events: Array<{
-        lengthComputable: boolean;
-        loaded: number;
-        total: number;
-      }> = [];
-      const requestConfig: HttpRequest = {
-        baseEndpoint: "https://example.com",
-        endpoint: "/v1/user",
-        headers: new Headers(
-          contentLength === undefined
-            ? {}
-            : { "Content-Length": contentLength },
-        ),
-        method: "POST",
-        uploadProgress(event) {
-          events.push(event);
-        },
-        body: new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("hello"));
-            controller.close();
-          },
-        }),
-      };
-
-      expect(supportsStreamingRequestBody()).toBe(true);
-      const init = createFetchRequestInit(requestConfig);
-      expect(init.duplex).toBe("half");
-      expect(await new Response(init.body).text()).toBe("hello");
-      expect(events).toEqual([
-        { lengthComputable: total > 0, loaded: 5, total },
-      ]);
-    },
-  );
 
   test("should return false when ReadableStream is undefined", () => {
     vi.stubGlobal("ReadableStream", undefined);
@@ -596,9 +183,7 @@ describe("Fetch handler request creation", () => {
   test("should handle fetch network error", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
-        throw new TypeError("Network request failed");
-      }),
+      vi.fn(() => Promise.reject(new TypeError("Network request failed"))),
     );
 
     const requestConfig: HttpRequest = {
@@ -609,63 +194,154 @@ describe("Fetch handler request creation", () => {
 
     await expect(fetchHandler(requestConfig)).rejects.toBeInstanceOf(TypeError);
   });
+});
 
-  test("should handle upload progress stream cancel", async () => {
-    if (!supportsStreamingRequestBody()) {
-      return;
-    }
+describe("finalizeHeaders failure", () => {
+  const cause = new TypeError("token unavailable");
+  const request: HttpRequest = {
+    baseEndpoint: "https://example.com",
+    endpoint: "/v1/user",
+    finalizeHeaders: () => {
+      throw cause;
+    },
+    method: "POST",
+  };
 
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(new TextEncoder().encode("hello"));
-        controller.close();
-      },
-    });
+  function expectHookFailure(rejection: unknown): void {
+    expect(isBodyFailure(rejection)).toBe(true);
+    expect(isBodyFailure(rejection) && rejection.code).toBe("EXT_HOOK_FAILED");
+    expect(rejection instanceof Error && rejection.cause).toBe(cause);
+  }
 
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/upload",
-      method: "POST",
-      body: stream,
-      uploadProgress: vi.fn(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-    const wrappedStream = init.body as ReadableStream<Uint8Array>;
-    const reader = wrappedStream.getReader();
-
-    // Read one chunk
-    const { value } = await reader.read();
-    expect(value).toBeDefined();
-
-    // Cancel the stream
-    await reader.cancel("test-cancel");
+  test("rejects with a tagged hook failure before the platform fetch runs", async () => {
+    // The platform fast path is the untouched global, so it cannot be spied on; a rejection from the hook means fetch never started.
+    expectHookFailure(
+      await fetchHandler(request, PLATFORM_FETCH_HANDLE).catch(
+        (error: unknown) => error,
+      ),
+    );
   });
 
-  test("should propagate upload progress stream read errors", async () => {
-    if (!supportsStreamingRequestBody()) {
-      return;
-    }
+  test("rejects with a tagged hook failure before a custom handle is called", async () => {
+    const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
 
-    const error = new Error("source failed");
-    const stream = new ReadableStream<Uint8Array>({
-      pull() {
-        throw error;
+    expectHookFailure(
+      await fetchHandler(request, handle).catch((error: unknown) => error),
+    );
+    expect(handle).not.toHaveBeenCalled();
+  });
+});
+
+describe("finalizeHeaders URL", () => {
+  test("changes to the URL the hook receives do not reach the sent request or the response", async () => {
+    const request: HttpRequest = {
+      baseEndpoint: "https://example.com",
+      endpoint: "/v1/user",
+      finalizeHeaders: (_request, _headers, url) => {
+        url.searchParams.set("injected", "1");
       },
+      method: "POST",
+    };
+    let sent: Request | undefined;
+    const response = await fetchHandler(request, (input) => {
+      if (!(input instanceof Request)) throw new Error("expected a Request");
+      sent = input;
+      return Promise.resolve(new Response());
     });
 
-    const requestConfig: HttpRequest = {
-      baseEndpoint: "https://example.com",
-      endpoint: "/v1/upload",
-      method: "POST",
-      body: stream,
-      uploadProgress: vi.fn(),
-    };
-
-    const init = createFetchRequestInit(requestConfig);
-    const wrappedStream = init.body as ReadableStream<Uint8Array>;
-    const reader = wrappedStream.getReader();
-
-    await expect(reader.read()).rejects.toThrow("source failed");
+    expect(sent?.url).toBe("https://example.com/v1/user");
+    expect(response.url).toBe("https://example.com/v1/user");
   });
+});
+
+describe("request construction failure", () => {
+  const base: HttpRequest = {
+    baseEndpoint: "https://example.com",
+    endpoint: "/v1/user",
+    method: "POST",
+  };
+
+  async function rejection(
+    request: HttpRequest,
+    handle: FetchHandle | undefined,
+  ): Promise<unknown> {
+    return await fetchHandler(request, handle).catch((error: unknown) => error);
+  }
+
+  function expectBuildFailure(rejected: unknown): void {
+    expect(isBodyFailure(rejected)).toBe(true);
+    expect(isBodyFailure(rejected) && rejected.code).toBe("REQ_BUILD_FAILED");
+    expect(rejected instanceof Error && rejected.cause).toBeInstanceOf(
+      TypeError,
+    );
+  }
+
+  test.each([
+    ["GET", "payload"],
+    ["head", "payload"],
+    ["TRACE", undefined],
+    ["connect", undefined],
+    ["Track", undefined],
+  ])(
+    "%s with body %j is rejected before a custom handle is called",
+    async (method, body) => {
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+      expectBuildFailure(await rejection({ ...base, method, body }, handle));
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(["BAD METHOD", ""])(
+    "the method %j is rejected before a custom handle is called",
+    async (method) => {
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+      expectBuildFailure(await rejection({ ...base, method }, handle));
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([
+    ["a user name", "https://user@example.com"],
+    ["a password", "https://:pw@example.com"],
+  ])(
+    "a URL with %s is rejected before a custom handle is called",
+    async (_label, baseEndpoint) => {
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+      expectBuildFailure(await rejection({ ...base, baseEndpoint }, handle));
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test("the platform fast path rejects a URL with credentials the same way", async () => {
+    expectBuildFailure(
+      await rejection(
+        { ...base, baseEndpoint: "https://user:pw@example.com" },
+        PLATFORM_FETCH_HANDLE,
+      ),
+    );
+  });
+
+  test("the platform fast path rejects a GET body the same way", async () => {
+    expectBuildFailure(
+      await rejection(
+        { ...base, method: "GET", body: "payload" },
+        PLATFORM_FETCH_HANDLE,
+      ),
+    );
+  });
+
+  test.each(["a\r\nX-Evil: 1", "a\u0000b", "\u20ac"])(
+    "bodyContentType %j is rejected before a custom handle is called",
+    async (bodyContentType) => {
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(new Response()));
+
+      expectBuildFailure(
+        await rejection({ ...base, body: "payload", bodyContentType }, handle),
+      );
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
 });

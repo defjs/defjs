@@ -60,93 +60,52 @@ export async function awaitWithSignal<T>(
   }
 }
 
-type ForwardingSignalState = {
-  active: boolean;
-  release: () => void;
-  sources: readonly AbortSignal[];
-};
+function stopFollowingNothing(): void {}
 
-const forwardingSignals = new WeakMap<AbortSignal, ForwardingSignalState>();
-
-/** Release listeners owned by a signal returned from `mergeAbortSignals`. */
-export function releaseAbortSignal(signal: AbortSignal): void {
-  forwardingSignals.get(signal)?.release();
+/**
+ * Makes `controller` abort with `source`'s reason when `source` aborts. Returns the function that stops following.
+ *
+ * - No `source`: nothing to follow, and nothing is allocated.
+ * - A `source` that is already aborted aborts `controller` now.
+ * - Otherwise one listener is added to `source`, and the returned function removes it. It may be called more than once.
+ *
+ * The caller releases on every exit, so that nothing stays attached to a signal the caller keeps. There is no
+ * registry and no unwrapping: to follow two sources, call it twice and release both once. After the release an
+ * abort of `source` is no longer seen through `controller.signal`; read `source.aborted` where that still matters.
+ * Do not pass `controller.signal` as its own source.
+ */
+export function followAbort(
+  controller: AbortController,
+  source: AbortSignal | undefined,
+): () => void {
+  if (source === undefined) {
+    return stopFollowingNothing;
+  }
+  if (source.aborted) {
+    controller.abort(source.reason);
+    return stopFollowingNothing;
+  }
+  const onAbort = () => controller.abort(source.reason);
+  source.addEventListener("abort", onAbort, { once: true });
+  return () => source.removeEventListener("abort", onAbort);
 }
 
-export function mergeAbortSignals(
-  controller: AbortSignal,
-  signals: (AbortSignal | undefined)[],
-): AbortSignal {
-  if (
-    signals.length > 0 &&
-    signals.every((signal) => signal === undefined || signal === controller)
-  ) {
-    return controller;
-  }
+/** Whether the caller's `signal` has aborted. A session reads it after it has released its own listener on it. */
+export function hasAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
 
-  const merged: AbortSignal[] = [];
-  const seen = new Set<AbortSignal>();
-  const append = (signal: AbortSignal) => {
-    const state = forwardingSignals.get(signal);
-    if (state?.active) {
-      for (const source of state.sources) {
-        append(source);
-      }
-      return;
-    }
-    if (!seen.has(signal)) {
-      seen.add(signal);
-      merged.push(signal);
-    }
-  };
-  append(controller);
-  for (const signal of signals) {
-    if (signal) {
-      append(signal);
-    }
-  }
-
-  if (merged.length === 1) {
-    return merged[0] as AbortSignal;
-  }
-
-  const combinedController = new AbortController();
-  const listeners: Array<[AbortSignal, () => void]> = [];
-  let abortWithReason: (reason: unknown) => void;
-  const state: ForwardingSignalState = {
-    active: true,
-    release() {
-      if (!state.active) {
-        return;
-      }
-      state.active = false;
-      for (const [source, listener] of listeners) {
-        source.removeEventListener("abort", listener);
-      }
-    },
-    sources: merged,
-  };
-  forwardingSignals.set(combinedController.signal, state);
-
-  abortWithReason = (reason) => {
-    if (combinedController.signal.aborted) {
-      return;
-    }
-    combinedController.abort(reason);
-    state.release();
-  };
-
-  const alreadyAborted = merged.find((signal) => signal.aborted);
-  if (alreadyAborted) {
-    abortWithReason(alreadyAborted.reason);
-    return combinedController.signal;
-  }
-
-  for (const source of merged) {
-    const listener = () => abortWithReason(source.reason);
-    listeners.push([source, listener]);
-    source.addEventListener("abort", listener, { once: true });
-  }
-
-  return combinedController.signal;
+/**
+ * Whether the caller's signal has stopped a session, so that its unread items are gone. A deadline is a failure, not a
+ * stop: it delivers what was queued, unless the session had already ended when it expired. A session reads the signal
+ * at each read instead of listening to it, so nothing stays attached to the signal once the session has ended.
+ */
+export function stopsUnreadItems(
+  signal: AbortSignal | undefined,
+  endedBeforeAbort: boolean,
+): boolean {
+  return (
+    signal?.aborted === true &&
+    (endedBeforeAbort || !isTimeoutCause(signal.reason))
+  );
 }

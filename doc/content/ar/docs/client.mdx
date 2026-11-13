@@ -1,113 +1,127 @@
 ---
-title: "إعداد العميل / Client"
-description: اضبط كيف يستدعي تطبيقك عمليات SDK المستوردة، باستقلال عن تعريفات API.
+title: "Client"
+description: اضبط كيفية استدعاء تطبيقك لعمليات SDK المستوردة، باستقلالية تامة عن تعريفات واجهات برمجة التطبيقات.
 ---
 
-# العميل
+# العميل (Client)
 
-`Client` هو إعداد تنفيذ التطبيق المستهلك. تُرجع `createClient(...)` [`DerivableClient`](/ar/api/core/derivableclient-type). استدعاء المصنع مع خيارات الطلب يُرجع قيمة `Client`، وقيمة `Client` هي ما تقبله العمليات. وهي غير قابلة للاستدعاء. استورد العمليات من SDK، واختر عنوان الخدمة وبيانات الاعتماد والمعترضات ووسيلة النقل، ثم استدعِ عملية بالعميل. `getUser(client({ signal }), { id: 1 })` يبدأ استدعاءً يعلن مدخلًا. `health(client)` يبدأ استدعاءً لا يعلنه. عندما يكون struct المدخل كاملًا اختياريًا، يكون كل من `search(client)` و`search(client, input)` صالحًا. لا وسيط ثالث للخيارات. استدعاء العملية يبدأها. `await` ينتظر فقط الـ tuple الذي يضع الخطأ أولًا.
+يحمل كائن `Client` إعدادات تنفيذ التطبيق المستهلك: العناوين الأساسية (base URLs)، والترويسات الافتراضية، وبيانات الاعتماد، والمعترضات (Interceptors)، وتسلسل معلمات الاستعلام، ومقابض وسائل النقل.
 
-تعريفات SDK لا تربط هذه النسخة. يمكن لمتصفح وطلب خادم واختبار محلي استخدام العملية المصدَّرة نفسها مع عملاء مختلفين. ويظل الجميع يتبعون عقد Defjs نفسه وإصدارات Core المتوافقة. اضبط عنوان خدمة كل عميل للعمليات التي تستدعيها من خلاله.
+تُرجع الدالة `createClient(...options)` عميلاً مشتقاً من نوع [`DerivableClient`](/ar/api/core/derivableclient-type):
 
-يمكن تمرير قيمة العميل نفسها إلى عمليات كثيرة. تختار التطبيقات سياسات التخزين المؤقت وإعادة المحاولة وتملك العمل الذي تبدأه. لا يُعاد محاولة HTTP تلقائيًا. إعادة اتصال التدفق اختيارية.
+- مرّر `client` مباشرة إلى أي عملية (`getOrder(client, { id: 1 })`) عند عدم الحاجة إلى خيارات طلب خاصة بكل استدعاء.
+- استدعِ `client(requestOptions)` لاشتقاق قيمة `Client` مخصصة لاستدعاء واحد (`getOrder(client({ signal }), { id: 1 })`). لا تُجري عملية الاشتقاق أي إدخال/إخراج، وتكون القيمة المشتقة كائناً عادياً (غير قابل للاستدعاء كدالة).
 
-المصنع دالة وهو أيضًا `Client` بلا خيارات طلب. لا تمرّر المصنع إلى ضابط حالة في React: `setState(factory)` سيستدعيه كمُحدِّث. لا تستخدمه مصدرًا لـ `watch` أو `computed` في Vue: فهما يستدعيان الدالة. قيمة العميل المشتقة كائن عادي.
+## 1. ضبط العميل واستدعاء عملية من SDK
 
-## الإعداد الأساسي
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/basic-setup.ts#example
 </include>
 
-تُرجع `createClient(...)` مصنعًا واحدًا قابلًا للاستدعاء وهو أيضًا [`Client`](/ar/api/core/client-type). وهو ليس مجموعة تحميلات زائدة للنقل.
-
-## ركّب الخيارات
-
-تُطبَّق الخيارات من اليسار إلى اليمين. المستبدِلات تستبدل؛ و`withInterceptors(...items)` يُلحق.
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
 </include>
 
-تُصفَّى المعترضات المختلطة حسب وسيلة النقل عند تشغيل العملية؛ ويبقى الترتيب النسبي بين النوع المختار.
+</Tab>
+</Tabs>
 
-## اشتق عميلًا
+### قواعد تركيب الخيارات
 
-يُرجع `client(options?)` قيمة `Client` لاستدعاء واحد. عند استدعاء `client(options)` تُنسخ الحقول السبعة المعروفة من كائن الوسيط: لقطة للمستوى الأعلى في كائن خيارات جديد. تُتجاهل الحقول غير المعروفة وتُحذف الحقول التي قيمتها `undefined`. لا يوجد تركيب فوق الأصل: `client()` و`client(undefined)` و`client({})` تُرجع عميلًا بلا خيارات طلب. تُحفَظ قيم `heartbeat` و`protocols` و`reconnect` المتداخلة بالمرجع، دون استنساخ. يقرأها WebSocket عند تشغيل العملية (ينسخ حينها حقول heartbeat وقائمة protocols)، لذا قد يؤثر تغيير تلك الكائنات بعد الاشتقاق في استدعاء لاحق. ينبغي للتطبيقات أن تعاملها كغير قابلة للتغيير بعد تمريرها. الاشتقاق لا يؤدي أي إدخال/إخراج. الـ getter الذي يرمي يخرج من `client(options)` ويبقى المصنع صالحًا للاستخدام. قيمة العميل غير قابلة للاستدعاء؛ أنشئ واحدة لكل استدعاء.
+- تُطبّق الخيارات بترتيب ورودها **من اليسار إلى اليمين**.
+- دوال ضبط القيمة المفردة (`withEndpoint`، و`withHeaders`، و`withQuerySerializer`، و`withCredentials`، و`withXSRF` من `@defjs/core/xsrf`) **تستبدل** القيم السابقة.
+- الدالة `withInterceptors(...items)` **تُلحق** المعترضات بالقائمة الحالية وتُرشحها حسب وسيلة النقل (`http` و`sse` و`web-socket`) عند تشغيل العملية.
 
-لا يُجمَع `signal`. إعادة استخدام قيمة عميل تحمل `signal` تشارك تلك الإشارة بين الاستدعاءات، لذا أنشئ قيمة عميل لكل استدعاء. اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق.
+## 2. اشتقاق عميل مخصص لكل استدعاء (`client(options)`)
+
+أنشئ قيمة عميل مشتقة جديدة لكل استدعاء يحتاج إلى إشارة إلغاء `signal` مستقلة، أو دوال تتبع التقدم، أو تجاوزات لجلسة WebSocket:
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-الإعداد الأساسي من `createClient` مشترك بين كل قيمة عميل، وهو غير مُجمَّد وقت التشغيل. هو ثابت بالاصطلاح: لا شيء في المكتبة يغيّره، ولا ينبغي للتطبيقات أن تغيّره. [`RequestOptions`](/ar/api/core/requestoptions-type) على العميل هي لقطة المستوى الأعلى تلك. تمرّر شيفرة التطبيق العميل إلى عملية. وهي لا تقرأ تلك الحالة الداخلية.
+> [!IMPORTANT]
+> نظراً لأن `createClient(...)` تُرجع دالة قابلة للاستدعاء (`DerivableClient`)، **لا** تمررها مباشرة إلى دوال تحديث الحالة مثل `setState(client)` في React أو إلى مصادر المراقبة والحساب مثل `watch(client)` أو `computed(client)` في Vue، حيث تعامل تلك الأطر الدوال كمعاملات تحديث أو دوال جلب (getters).
 
-## خيارات الطلب
+### مرجع خيارات الطلب المخصص `RequestOptions`
 
-لـ [`RequestOptions`](/ar/api/core/requestoptions-type) سبعة حقول مسطحة. يقرأ كل بروتوكول الحقول التي يعرفها فقط ويتجاهل الباقي. تمرير `heartbeat` إلى عملية HTTP يُتجاهل، وليس عطلًا. يقرأ SSE من خيارات الطلب `signal` فقط. إعادة اتصال SSE تأتي من إعداد العميل (`withSSEReconnect`)، لذا `client({ reconnect })` يؤثر في WebSocket فقط. لا يوجد مرشح بروتوكول وقت الترجمة.
+يحتوي كائن `RequestOptions` على سبعة حقول مسطحة. وتقرأ كل وسيلة نقل الحقول الخاصة بها فقط وتتجاهل الباقي:
 
-| الحقل                | يستخدمه              | القاعدة                                                                                                |
-| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
-| `signal`             | HTTP وSSE وWebSocket | يُجهض الاستدعاء. المهلة هي `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). الإجهاض اليدوي هو `NET_ABORTED`. |
-| `onUploadProgress`   | HTTP                 | يتجاهله SSE وWebSocket.                                                                                |
-| `onDownloadProgress` | HTTP                 | يتجاهله SSE وWebSocket.                                                                                |
-| `beforeConnect`      | WebSocket            | يستبدل إعداد العميل لذلك الاستدعاء.                                                                    |
-| `protocols`          | WebSocket            | يستبدل قائمة العميل. وهو لا يُلحَق.                                                                    |
-| `heartbeat`          | WebSocket            | يُستبدل كاملًا. `timeoutMs` هو انتظار إقرار النبض، وليس مهلة للطلب.                                    |
-| `reconnect`          | WebSocket            | يُستبدل كاملًا.                                                                                        |
+| الحقل                | مستخدم بواسطة          | السلوك                                                                                               |
+| -------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP، وSSE، وWebSocket | لإلغاء الاستدعاء (`AbortSignal.timeout(ms)` ← `NET_TIMEOUT`؛ والإلغاء اليدوي ← `NET_ABORTED`).       |
+| `onUploadProgress`   | HTTP                   | يبلّغ عن تقدم رفع جسم الطلب المتدفق.                                                                 |
+| `onDownloadProgress` | HTTP                   | يبلّغ عن تقدم تنزيل جسم الاستجابة المعلن.                                                            |
+| `beforeConnect`      | WebSocket              | يستبدل خطاف `beforeConnect` المضبوط على مستوى العميل لهذه الجلسة.                                    |
+| `protocols`          | WebSocket              | يستبدل قائمة البروتوكولات الفرعية للعميل لهذه الجلسة.                                                |
+| `heartbeat`          | WebSocket              | يستبدل إعدادات نبضات القلب الخاصة بالعميل لهذه الجلسة.                                               |
+| `retry`              | HTTP، وSSE، وWebSocket | يستبدل سياسة إعادة المحاولة على مستوى العميل لهذا الاستدعاء. تبقى `budget` الخاصة بـ HTTP مع العميل. |
 
-لا يوجد حقل `timeout`، ولا حقل `abort`، ولا مهلة افتراضية على مستوى العميل. في SSE وWebSocket، يغطي `signal` الاتصال كاملًا، بما فيه ما بعد فتحه. لا توجد مهلة للبدء فقط. التطبيق الذي يريد واحدة ينشئ `AbortController` خاصًا به، ويجهضه بـ `new DOMException("...", "TimeoutError")` من مؤقت، ويمسح المؤقت بعد أن يُرجع `await`. انظر [SSE](/ar/docs/sse#close-and-dispose).
+## 3. العميل العام في المتصفح مقابل نطاق طلب الخادم
 
-`HttpExecuteOptions` هو شريحة HTTP: `signal` مع ردود نداء التقدّم. `EventStreamExecuteOptions` هو `{ signal? }`. `WebSocketExecuteOptions` هو شريحة WebSocket مع `signal`.
+- **تطبيقات المتصفح**: شارك كائن `DerivableClient` واحداً على نطاق الوحدة عندما تكون نقطة النهاية والمعترضات وبيانات الاعتماد مشتركة عبر التطبيق بأكمله.
+- **تطبيقات الخادم والمعالجة من جهة الخادم (SSR)**: أنشئ عميلاً جديداً **داخل حدود كل طلب وارد** كلما كانت الترويسات أو ملفات تعريف الارتباط أو رموز المصادقة أو سياق المستأجر مخصصة لكل طلب. ولا تخزن أبداً بيانات اعتماد مستخدم محدد على عميل مشترك على مستوى العملية.
 
-## النتائج حسب وسيلة النقل
+## 4. نقاط نهاية متعددة وتوزيع الحمل [#multiple-endpoints]
 
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`. `open` هو لقطة أول مصافحة ناجحة للاتصال المُرجَع لمقابض Defjs الأصلية أو الأغلفة التي تمرّر كائن `open` الحي نفسه؛ وتستخدم المقابض المخصصة أو الأغلفة التي تغلّب `open` قيمة `open` العامة الحالية حتى بعد إعادة الاتصال، بينما يبقى `stream.open` حيًا (انظر [SSE](/ar/docs/sse)).
-- WebSocket → `[error, session, connection]`
+تقبل الدالة `withEndpoint(...urls)` عنواناً أساسياً واحداً أو أكثر كمرشحين. وافتراضياً:
 
-عُد قبل استخدام قيمة النجاح عندما تكون `error` مضبوطة.
+- يستخدم كل عميل [`pickFirstBalancer`](/ar/api/core/pickfirstbalancer)، ويلتزم بالعنوان الأول حتى يتقدّم عند `NET_UNREACHABLE` أو `NET_UNAVAILABLE` (HTTP 502 أو 503 أو 504).
+- **إعادات المحاولة معطّلة افتراضياً.** يجري الاستدعاء محاولة واحدة. `withRetry()` يعادل `withRetry({})`: حتى ثلاث إعادات محاولة مع backoff، لـ HTTP وSSE وWebSocket على السواء. بعد كل إخفاق يختار الموازن من جديد من كل نقاط النهاية، فتصل إعادة المحاولة بعد اتصال مرفوض إلى نقطة النهاية التالية تحت pick-first، وتُجرَّب نقطة نهاية واحدة مرة أخرى بعد التأخير. ميزانية إعادة المحاولة بنمط Finagle الخاصة بـ HTTP تملكها إعدادات العميل، ويشاركها العملاء المشتقون من ذلك الإعداد، بمعزل عن هوية الموازن.
 
-أنت تملك التنظيف: أجهض HTTP، وأغلق SSE + `await stream.closed`، وأغلق WebSocket + `await session.closed`.
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
 
-## احقن نقل اختبار
+يحدّ `attemptTimeoutMs` محاولة واحدة: يعدّ HTTP حتى نهاية جسم الاستجابة، وSSE حتى ترويسات الاستجابة، وWebSocket حتى `open`. لتحديد زمن بلا إعادات محاولة اكتب `withRetry({ maxRetries: 0, attemptTimeoutMs })`. لا تُتحقق خيارات إعادة المحاولة في وقت التشغيل. راجع [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing#retries) لترتيب القرار والانتقال من `withSSEReconnect` و`withWebSocketReconnect`.
+
+### فحص السلامة وخوارزمية p2c [#health-filtering-and-p2c]
+
+بالنسبة للنسخ المتطابقة من الخوادم النظيرة، يمكن لـ [`roundRobinBalancer`](/ar/api/core/roundrobinbalancer) و[`p2cBalancer`](/ar/api/core/p2cbalancer) (خوارزمية ذروة Ewma لزمن الرحلة RTT × الحمل اللحظي) أن يأخذا خيار `outlierDetection`؛ وهو معطّل ما لم تمرّر كائنًا (`{}` للافتراضيات). يعدّ الإخفاقات ويستبعد نقطة نهاية لفترة، ويتخطى نقطة نهاية ترفضها دالة `isHealthy` الخاصة بك؛ ولا يقرر Defjs ما تعنيه السلامة. افتراضيًا تُعدّ كل نتيجة تحمل رمزًا إخفاقًا (بما في ذلك `NET_TIMEOUT` و`NET_BODY_INCOMPLETE`)، ويمكنك استبدال تلك القاعدة بـ `isFailure`؛ و`status` الخام للاستجابة مخصص فقط لموازنات الحمل المخصصة.
+
+راجع دليل [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing) للاطلاع على التفاصيل الكاملة لميزانيات إعادة المحاولة، واستبعاد الإخفاق ودالة السلامة الخاصة بك، وتقدير الحمل بخوارزمية P2C، وموازنات الحمل المخصصة.
+
+## 5. حقن وسيلة نقل مخصصة للاختبار
+
+استبدل دوال البيئة الأصلية `fetch` أو `WebSocket` على العميل باستخدام `withHTTPHandle` أو `withSSEHandle` أو `withWebSocketHandle` لتشغيل اختبارات العقود بالكامل دون اتصال بالشبكة:
 
 <include cwd lang="typescript">
   examples/client/inject-test-transport.ts#example
 </include>
 
-## النطاق على الخادم مقابل المتصفح
+راجع دليل [الاختبارات](/ar/docs/testing) للتعرف على أنماط الاختبار الشاملة.
 
-على الخادم، أنشئ العميل داخل حدود الطلب عندما تلتقط الخيارات أو إغلاقات المعترضات المصادقة أو ملفات تعريف الارتباط أو المستخدمين أو المستأجرين. هوية العميل ليست حد أمان بذاتها.
+## 6. مرجع دوال ضبط خيارات العميل المساعدة
 
-## الترحيل
+| الدالة المساعدة                                                                    | الغرض                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `withEndpoint(...urls)`                                                            | تضبط عنواناً أساسياً واحداً أو أكثر كمرشحين (تستبدل القائمة السابقة).                                                                                                                                                                                                                                              |
+| `withHeaders(HeadersInit)`                                                         | تضبط ترويسات افتراضية ثابتة لـ HTTP وSSE (تتجاوزها ترويسات builder).                                                                                                                                                                                                                                               |
+| `withInterceptors(...items)`                                                       | تُلحق معترضات لـ HTTP وSSE وWebSocket بنمط طبقات البصلة (onion order).                                                                                                                                                                                                                                             |
+| `withQuerySerializer(fn)`                                                          | تُسلسل كائنات معلمات الاستعلام ذات الأسماء البديلة إلى نص استعلام سلكي.                                                                                                                                                                                                                                            |
+| `withCredentials(boolean)`                                                         | تضبط خيار Fetch على `credentials: "include"` لـ HTTP وSSE عند التعيين إلى `true`.                                                                                                                                                                                                                                  |
+| `withXSRF(options?)`                                                               | من `@defjs/core/xsrf`. في المتصفح، تنسخ ملف تعريف ارتباط XSRF إلى ترويسة الطلب لطلبات HTTP المعدِّلة من نفس المصدر. يرمي `withXSRF()` خطأ عند غياب `location` أو `document`، بما في ذلك داخل Worker. الشيفرة المشتركة بين الخادم والمتصفح تضيف هذا الخيار في المتصفح فقط. يُضبط الرمز الآتي من مصدر آخر عبر معترض. |
+| `withBalancer(balancer)`                                                           | تستبدل استراتيجية اختيار نقطة النهاية (`pickFirstBalancer`، و`roundRobinBalancer`، و`p2cBalancer`).                                                                                                                                                                                                                |
+| `withRetry(options?)`                                                              | تضبط إعادات المحاولة الاختيارية لـ HTTP وSSE وWebSocket: عدد الإعادات، وbackoff، والطرق، ومهلة المحاولة، ودالة `shouldRetry`، وميزانية HTTP التي يملكها العميل.                                                                                                                                                    |
+| `withSSEOnInvalidEvent`                                                            | تراقب أحداث SSE التي بلا struct أو التي تفشل في التحقق.                                                                                                                                                                                                                                                            |
+| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | تضبط الخيارات الافتراضية لجلسة WebSocket.                                                                                                                                                                                                                                                                          |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | تحقن تطبيقات وسائل نقل مخصصة أو وهمية للاختبار.                                                                                                                                                                                                                                                                    |
 
-| القديم                                       | الجديد                                          |
-| -------------------------------------------- | ----------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`               |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })` |
-| `execute(cmd, { signal })`                   | `client({ signal })`                            |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`        |
-| `createClient(withTimeout(5000), ...)`       | مرّر `signal` عند الاستدعاء، أو غلّف دالة تطبيق |
+## قراءات ذات صلة
 
-## مرجع
-
-| المساعد                                                                                                       | الأثر                                                         |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | نقطة نهاية أساسية مطلقة لكل وسائل النقل                       |
-| `withHeaders(HeadersInit)`                                                                                    | رؤوس افتراضية ثابتة لـ HTTP/SSE؛ رؤوس الـ builder تغلّبها     |
-| `withHTTPHandle(fetch)`                                                                                       | استبدل Fetch لـ HTTP                                          |
-| `withSSEHandle(fetch)`                                                                                        | استبدل Fetch لـ SSE                                           |
-| `withWebSocketHandle(WebSocket)`                                                                              | استبدل منشئ WebSocket                                         |
-| `withInterceptors(...items)`                                                                                  | ألحق معترضات مختلطة                                           |
-| `withQuerySerializer(fn)`                                                                                     | رمّز كائن استعلام مُسمّى أصلًا إلى سلسلة استعلام              |
-| `withCredentials(boolean)`                                                                                    | `credentials: 'include'` في Fetch لـ HTTP/SSE عندما تكون true |
-| `withXSRF(options?)`                                                                                          | ملف تعريف ارتباط XSRF في HTTP → رأس                           |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | مقابض SSE                                                     |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | مقابض WebSocket                                               |
-
-## وصفات ذات صلة
-
-- [الاختبار بمعالج Fetch محلي](/ar/recipes/test-with-handle)
-- [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)
+- [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing)
+- [المعترضات (Interceptors)](/ar/docs/interceptors)
+- [الاختبارات](/ar/docs/testing)
+- [اختبار الطلبات محلياً عبر مقبض Fetch](/ar/recipes/test-with-handle)

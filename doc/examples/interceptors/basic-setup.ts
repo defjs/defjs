@@ -21,5 +21,4 @@ const client = createClient(
   withEndpoint("https://api.example.com"),
   withInterceptors(audit),
 );
-void client;
 // #endregion

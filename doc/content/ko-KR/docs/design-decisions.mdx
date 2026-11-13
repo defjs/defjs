@@ -1,143 +1,122 @@
 ---
-title: "설계 결정"
-description: SDK 정의와 앱 실행을 분리하고 타입, 런타임 검증, 리소스 소유권을 명시하는 이유를 설명합니다.
+title: "핵심 아키텍처"
+description: API 정의와 클라이언트 실행을 분리하여 SDK를 설계하고 배포하며 재사용하기 쉽게 만드는 방법.
 ---
 
-# 설계 결정
+# 핵심 아키텍처
 
-Defjs는 SDK 설계를 더 편하게 만들려고 있습니다. `def`는 `define`입니다. 팀은 서비스 API를 기술해 재사용 가능한 정의를 배포하고, 사용하는 애플리케이션은 그걸 어떻게 호출할지 정합니다. 나머지 설계는 이 분리에서 따라옵니다.
+Defjs는 하나의 근본적인 경계를 중심으로 구축되었습니다: **SDK는 통신 계약(wire contract)을 정의하고, 사용하는 애플리케이션이 실행 환경을 소유합니다.** `@defjs/core`의 모든 설계 원칙은 바로 이 분리에서 시작됩니다.
 
-## SDK 작성과 애플리케이션 실행
+## 1. 정의 vs. 실행
 
-SDK 작성자는 작업, 입력 계약, 요청 매핑, 응답 디코딩, 선언된 서비스 오류를 소유합니다. 애플리케이션은 클라이언트 설정, 현재 자격 증명, 호출 시점, 결과 처리, 리소스 수명을 소유합니다. export한 엔드포인트는 SDK에 특정 애플리케이션의 환경을 넣지 않고도 서로 다른 클라이언트가 쓸 수 있습니다.
+SDK 패키지는 작업(`defineRequest`, `defineEventStream`, `defineWebSocket`)과 데이터 계약(`struct`)을 export합니다. SDK 모듈 안에서 `createClient`를 호출하거나 싱글톤 클라이언트를 보관하거나 환경 변수를 읽는 일은 절대 없습니다.
 
-클라이언트를 넣어 작업을 호출하면 그 작업이 시작됩니다. 정의는 Struct와 builder가 있는, 실행 가능한 Defjs 모듈이지, 클라이언트에 중립적인 교환 형식이 아닙니다. SDK 작성자는 호환되는 Core 의존성을 선언하고 JavaScript와 TypeScript 선언을 배포합니다. [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)가 패키지에서 이 경계를 보여 줍니다.
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
+<Tab>
 
-선택적 팩토리나 편의 메서드는 기본값이나 도메인별 동작을 제공할 수 있습니다. 엔드포인트를 계속 열어 두면, 그 기본값이 맞지 않을 때 애플리케이션이 제어를 유지합니다. 프레임워크 플러그인과 텔레메트리는 사용하는 클라이언트에 붙으므로, 정의 패키지는 React, Vue, 애플리케이션의 관측 설정과 독립으로 남을 수 있습니다.
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
-이 분리는 테스트도 실용적으로 만듭니다. 클라이언트 로컬 핸들로 실제 SDK 정의를 호출하고, 요청과 디코딩된 결과를 관찰합니다. 런타임 검증, 명시적 오류, 호출자가 소유하는 정리가 믿을 수 있는 SDK 계약을 뒷받침합니다.
+</Tab>
+<Tab>
 
-## 선언은 단언이에요 [#declaration-is-an-assertion]
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
 
-이 여섯 규칙이 응답을 어떻게 읽는지에 대한 모든 질문을 결정해요. 번호를 매긴 것은 나중에 다시 유도하지 않고 하나를 인용할 수 있게 하려는 거예요.
-
-### 1. 선언한 것이 곧 단언한 것이에요
-
-`output`은 "`ok`가 참이면 body는 _이_ 모양이다"라는 뜻이에요. `error`는 "`ok`가 거짓이면 body는 _이_ 모양이다"라는 뜻이에요. 선언은 힌트나 최선을 다한 희망이 아니에요. 무엇이 도착할지에 대한 주장이에요.
-
-### 2. `ok`가 유일한 분기이고, 디코딩하는 쪽은 항상 한쪽뿐이에요
-
-2xx 응답은 `output`으로 읽어요. 그 밖은 `error`로 읽어요. 양쪽을 모두 읽는 일은 없고, 다른 쪽을 fallback으로 쓰지도 않아요.
-
-### 3. 단언과 다른 현실은 실패이고, 크게 보고돼요
-
-형식을 추측하지 않고, 더 약한 것으로 떨어지지 않고, 침묵하지도 않아요. 백엔드가 바뀌었든, 게이트웨이가 끼어들었든, 누군가 응답을 건드렸든 **결론은 바뀌지 않아요**. 라이브러리는 그걸 구분할 수 없고, 구분하는 척해서도 안 돼요.
-
-사람들이 가장 자주 누그러뜨리고 싶어 하는 규칙이라서, 이유를 분명하게 말할 가치가 있어요. 페이지가 `output`으로 막 읽으려던 `200`을 공격자가 바꿔 쓸 수 있고, 대신 `3xx`, `4xx`, `5xx`를 받는다고 해 보세요. 실패는 불편이 아니에요. 유일한 안전한 결과예요. "만약을 위해" raw body를 넘기면, 응답을 주입할 수 있는 누구에게나 요청한 검증을 우회할 길을 주게 돼요.
-
-### 4. 디코딩이 실패하면 body는 없어요
-
-body란 디코딩된 값이에요. 디코딩이 실패하면 값이 없어요. 살펴볼 반쯤 디코딩된 body도 없어요. 문제의 세부는 `cause`에 있고, 응답은 메타데이터만 유지해요.
-
-이건 관례가 아니라 타입 시스템이 강제해요. 디코딩 fault의 `response`는 `HttpMeta`라서 `body` 필드 자체가 없고, 그걸 집으려 하면 컴파일 오류예요.
-
-### 5. 단언을 원하지 않으면 선언하지 마세요
-
-`output`을 빼는 것은 "2xx body는 관심 없다"는 뜻이에요. 읽히지 않아요. `error`를 빼면 그 밖에 대해서도 같은 말이에요. 이건 실수가 아니라 명시적인 opt-out이고, 끝까지 가요. opt-out한 쪽의 읽을 수 없는 body는, 읽을 수 없었다는 사실까지 포함해서, 당신의 일이 아니에요.
-
-### 6. 3xx는 성공 구간이 아니에요
-
-`ok`는 2xx를 뜻하므로, 3xx 응답(대개 `304 Not Modified`)은 `output`이 아니라 `error`로 읽어요. 엔드포인트가 계약의 일부로 3xx status를 돌려준다면 `error`를 선언하지 않고 `HTTP_STATUS` fault를 처리하거나, 텍스트 `error`(`struct.string()`)를 선언해서 빈 body를 받으세요. JSON `error` Struct는 body가 없는 응답을 받을 수 없어요. 그건 실패이고, 빈틈이 아니라 기대된 결과예요.
-
-## 명시적인 클라이언트
-
-`createClient(...)`는 endpoint config를 명시적인 값으로 만들어요. 환경이나 요청 범위가 다르면 endpoint, credentials, interceptor, serializer, 전송 핸들도 달라져요.
-
-대가는 프로세스 전역 기본값이 없다는 거예요. 그 대가는 서버에서 도움이 돼요. 옵션이나 클로저가 인증, 쿠키, 사용자, 테넌트, 요청 메타데이터를 잡을 때는 요청 경계 안에서 클라이언트를 만드세요. 명시적인 클라이언트도 interceptor가 잡은 상태를 격리하지는 않아요. 클라이언트 정체성 자체가 보안 경계는 아니에요.
-
-클라이언트는 설정을 담아요. 활성 작업을 소유하지는 않아요. HTTP 요청, SSE 스트림, WebSocket 세션을 시작한 쪽이 취소하거나 닫고, 종료 프로미스를 await해야 해요.
-
-## 정의와 작업
-
-정의는 안정적인 계약이에요. method, path, input struct, `ok`의 각 쪽을 디코딩하는 struct, 전송 한도예요. `defineRequest`는 작업을 돌려줘요. 클라이언트를 넣어 호출하면 그 호출이 시작돼요. 같은 클라이언트 값을 여러 작업에 넘길 수 있어요.
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
 </include>
 
-백그라운드 작업과 UI 소유자는 서로 다른 클라이언트로 같은 `getUser` 작업을 호출할 수 있어서, 각자 취소와 재시도 정책을 고를 수 있어요. 애플리케이션 코드는 내부 전송 태그나 심볼에 의존하지 않아요.
+</Tab>
+</Tabs>
 
-## 전송별 결과
+`getOrder`는 어떤 클라이언트 상태도 캡처하지 않기 때문에:
 
-세 전송 모두 error-first 튜플을 써요. 하나의 일반적인 “응답”은 lifecycle 사실을 지워 버려요.
+- 브라우저 UI, 백그라운드 작업, SSR 요청 핸들러, 단위 테스트 모두 동일한 `getOrder` 작업을 각기 다른 `Client` 설정으로 호출할 수 있습니다.
+- 프레임워크 플러그인(`@defjs/react`, `@defjs/vue`)과 관측성 미들웨어 플러그인(`@defjs/opentelemetry-server`)은 애플리케이션의 `Client`에 연결되므로, 배포된 SDK 패키지는 의존성이 전혀 없는(100% dependency-free) 상태를 유지합니다.
 
-- HTTP → `[err, data, response]` — 디코딩된 출력과 그걸 만든 응답
-- SSE → `[err, stream, open]` — 논리 스트림 하나와 시작 응답 스냅샷
-- WebSocket → `[err, session, connection]` — 논리 세션과 시작 연결 스냅샷
+## 2. 명시적인 입력 배치와 양방향 별칭(alias)
 
-성공하면 세 번째 값은 항상 있어요. HTTP 실패는 `[error, undefined, undefined]`예요. fault가 이미 응답 메타데이터를 가지고 있고, 핸들러에 넘기거나 로그하거나 다시 throw하는 것도 그 fault예요. SSE와 WebSocket 시작 실패는 스냅샷을 잡았다면 open이나 connection 스냅샷을 여전히 포함할 수 있어요.
+Defjs에서 `input`은 호출자가 전달하는 값을 선언하고, `struct`는 값이 인코딩/디코딩되는 방식을 제어하며, `builder`는 각 값을 요청(`path`, `query`, `headers`, `body`)의 어느 위치에 둘지 배치합니다.
 
-SSE와 WebSocket에서 세 번째 값은 스냅샷이지, 이후 재연결이 같은 물리 연결을 유지한다는 약속이 아니에요. 시작 이후의 lifecycle 제어는 돌려받은 핸들이나 세션에 있어요.
-
-## 런타임 디코딩
-
-TypeScript 추론은 기대를 설명할 뿐, 런타임에 서버 응답을 검사하지는 못해요. Struct 파싱이 계약의 나머지 반쪽이에요. Defjs는 요청을 만들기 전에 작업 입력을 검증하고, 표현을 검사한 뒤, `ok`의 해당 쪽에 struct를 파싱해요.
-
-HTTP에서는 Struct가 **interceptor 체인 뒤에 한 번** 적용돼요. interceptor가 `makeResponse(...)`로 만든 응답도 와이어에서 온 응답과 같은 미디어 타입 검사, 표현 변환, Struct를 거쳐요. 응답이 어디서 왔는지는 읽는 방법을 바꾸지 않으니, 따로 따질 "interceptor를 신뢰하는" 경로는 없어요. 내장 Fetch 전송은 선언된 body를 JSON, 텍스트, `Blob`, 바이트로 읽은 다음 체인에 돌려줘요. JSON 미디어 타입과 `JSON.parse`가 필요한 것은 JSON 표현뿐이고, JSON이 아닌 텍스트, blob, 바이트는 선언된 표현으로서 유효해요. interceptor가 보는 것은 그 표현이지, 아직 Struct로 디코딩된 값이 아니에요. 읽기 실패는 모든 표현에 적용되고, 거기서의 읽기나 파싱 실패는 같은 `RES_*` 또는 `NET_BODY_INCOMPLETE` fault로 드러나요.
-
-순서는 JSON일 때의 미디어 타입, 그다음 표현, 그다음 struct예요.
-
-| 무엇이 성립하지 않았나                            | Fault                                                  |
-| ------------------------------------------------- | ------------------------------------------------------ |
-| 미디어 타입이 선언된 표현이 필요로 하는 것이 아님 | `RES_MEDIA_TYPE_INVALID` — body를 읽기 _전에_ 보고돼요 |
-| 바이트가 그 표현이 아님                           | `RES_DECODE_FAILED`                                    |
-| 값이 그 struct가 아님                             | `RES_STRUCT_MISMATCH` (HTTP 전용)                      |
-| non-2xx이고 `error`가 디코딩됨                    | 타입이 있는 `data`가 있는 `HTTP_STATUS`                |
-| non-2xx이고 `error`를 선언하지 않음               | `data: undefined`인 `HTTP_STATUS`                      |
-
-미디어 타입을 먼저 검사하는 것이 "JSON을 요청했는데 HTML을 받았다"를 파서 오류가 아니라 하나의 정확한 fault로 만들고, 읽기, 파싱, struct를 통째로 건너뛰게 해요.
-
-## builder, encoder, alias
-
-struct는 양방향의 필드 계약이에요. `.alias(name)`이 와이어 이름이에요. struct가 값을 어떻게 인코딩할지 정하고, `builder`가 그 값이 어디로 갈지 정해요.
-
-`builder`는 동기적인 순수 함수예요. 바인딩 뷰가 아니라 파싱된 입력, 즉 실제 값을 받고, `path`, `query`, `headers`, `body`라는 요청을 돌려줘요. 작업이 호출될 때 돌아요. throw하면 튜플의 `REQ_BUILD_FAILED`가 되고, 작업을 호출하는 것은 throw하지 않아요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 builder만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+- **마법 같은 추론은 없다**: 작업에 `input`을 선언했다면 반드시 동기 순수 함수인 `builder`를 명시적으로 제공해야 합니다. 매개변수 이름을 바탕으로 요청 위치를 임의로 추측하지 않습니다.
+- **양방향 `.alias(wireName)` 지원**: struct 필드에 `.alias("customer_name")`을 선언하면 TypeScript 코드에서는 카멜케이스인 `customerName`을 유지하면서, 통신 시에는 `"customer_name"`으로 자동 인코딩되고 응답으로부터 다시 디코딩됩니다.
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-기본 경로는 타입이 있는 값을 넘기는 거예요. `body: { users: input.users }`는 각 사용자의 alias를 유지해서 와이어 필드는 `display_name`이에요. 직접 쓴 키(`account_id`, `x-api-version`)는 리터럴이에요. 타입이 있는 객체를 spread하면 struct가 유지돼요. 논리 필드 옆에 와이어 키를 더하면 `REQ_BUILD_FAILED`예요.
+`builder`가 타입화된 struct 객체를 `body`, `query`, `headers`에 넘길 때 필드 별칭과 `Date` / `bigint` 코덱이 자동으로 적용됩니다. 익명 래퍼 객체에 직접 작성한 키(위 예제의 `account_id`나 `x-api-version` 등)는 문자 그대로 유지됩니다.
 
-query 중첩은 백엔드의 성질이라 클라이언트에 있어요. `withQuerySerializer((query) => string)`은 alias가 포함된 인코딩된 와이어 객체를 봐요. query가 없으면 호출되지 않아요. builder가 돌려준 `URLSearchParams`는 이걸 건너뛰어요. serializer가 없으면 배열은 키를 반복하고 중첩 객체는 실패해요. interceptor가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요.
+## 3. 선언은 곧 단언이다 [#declaration-is-an-assertion]
 
-body 종류는 값에서, 먼저 맞는 규칙으로 결정돼요.
+Defjs가 HTTP 응답을 읽는 방식에는 6가지 엄격한 규칙이 적용됩니다:
 
-- `body`가 없음 → 아무것도 보내지 않아요
-- body 루트의 `urlencoded` 또는 `formData` 코덱 → 그 form 인코딩. 값이 JSON 안에 중첩되면 태그는 적용되지 않아요
-- `FormData`, `URLSearchParams`, `Blob`, `File`, 바이트, `ReadableStream` → 그대로 보내요
-- 문자열 → `text/plain;charset=UTF-8`
-- 평범한 객체, 배열, 숫자, 불리언, `null`, `Date`, `bigint` → JSON. `JSON.stringify`가 누락시키거나 구조를 단순화하는 값(`Map`, `Set`, `toJSON`이 없는 클래스 인스턴스, 함수, `NaN`, Node 스트림) → `REQ_BUILD_FAILED`
+### 규칙 1: 선언한 것이 곧 단언(assertion)이다
 
-`undefined` 필드는 빠져요. nullable 필드의 `null`은 보내져요. 문자열은 stringify하고 `content-type`을 두지 않는 한 JSON이 아니에요. 직접 직렬화하면 (`JSON.stringify`, qs, protobuf) struct encoder를 떠나서 alias가 적용되지 않아요. 공개 `struct.encode`는 없어요.
+`output`은 `2xx` 응답 본문의 형태를 단언합니다. `error`는 `2xx`가 아닌 응답 본문의 형태를 단언합니다. 이러한 선언은 단순한 힌트가 아니라 런타임 보장입니다.
 
-`GET`과 `HEAD`는 body를 실을 수 없어요. WebSocket builder는 헤더나 body를 돌려줄 수 없어요. 정적 WebSocket 서브프로토콜은 builder가 아니라 정의의 `protocols`에 있어요. 잘못된 WebSocket 프레임은 세션 런타임 오류 리스너로 가요. SSE `error` struct는 시작 fault의 타입을 정하고, 핸드셰이크 body는 HTTP body와 같은 kind 규칙을 따라요. `string`은 텍스트, blob과 파일은 blob, `arrayBuffer`는 바이트, 그 밖은 JSON이에요. 표현 선택은 공유되지만 fault 매핑은 달라요. SSE 핸드셰이크의 읽기, 파싱, Struct 실패는 `RES_DECODE_FAILED`이고, Struct 실패의 `cause`는 `StructError`예요. HTTP는 Struct 실패를 `RES_STRUCT_MISMATCH`로 보고해요.
+### 규칙 2: `ok` (`200..299`)만이 유일한 분기 기준이다
 
-## 옵저버와 정책 위치
+`2xx` 응답은 오직 `output`으로만 디코딩됩니다. 그 외의 모든 상태 코드(`3xx`, `4xx`, `5xx`)는 오직 `error`로만 디코딩됩니다. Defjs는 둘 사이에서 대체 동작(fallback)을 절대 시도하지 않습니다.
 
-interceptor는 전송 전역 정책용이에요. 인증, 트레이싱, short-circuit, 검토된 재시도예요. 자기 전송에서만 돌고 onion 순서로 조합돼요. 파생 클라이언트의 요청 옵션은 작업별 수명용이에요. `signal`, WebSocket heartbeat, opt-in 재연결이에요.
+### 규칙 3: 단언에서 벗어난 모든 경우는 명확한 결함으로 처리된다
 
-옵저버는 무슨 일이 있었는지 보고할 뿐 두 번째 소유자가 되지 않아요. SSE `onInvalidEvent`, WebSocket 상태 리스너, 런타임 오류 리스너는 한계가 있는 진단과 메트릭용이에요. 돌려받은 스트림/세션이 여전히 순회, close, unsubscribe, 종료 대기를 소유해요. 캐싱, 낡은 결과 억제, 멱등성, 도메인 오류 매핑은 작업 호출 주변에 두세요. 앱이 자기 정책과 상태를 볼 수 있는 곳이에요.
+Defjs는 `response.ok`로 응답 쪽을 고릅니다. `2xx`는 `output`, `2xx`가 아니면 `error`입니다. 그 쪽에 선언된 JSON struct만 디코딩을 일으키고 `RES_MEDIA_TYPE_INVALID` 또는 `RES_DECODE_FAILED`를 낼 수 있으며, 그 `Content-Type`은 본문을 읽거나 찾기 **전에** 먼저 검증합니다. 내용이 없는 응답(`HEAD`, `204`, `205`, `304`)도 같은 검사를 받습니다. 선언된 JSON 표현에 JSON `Content-Type`이 없으면 `RES_MEDIA_TYPE_INVALID`로 실패하고, 있으면 빈 바이트를 파싱해 `RES_DECODE_FAILED`로 실패합니다. `2xx`가 아닌 HTML 게이트웨이 페이지는 JSON `error` struct가 선언된 경우에만 `RES_MEDIA_TYPE_INVALID`를 냅니다. 활성 쪽에 선언이 없으면 본문을 읽지 않으며, `2xx`가 아닌 응답은 디코딩되지 않은 `HTTP_STATUS`를 반환합니다. SSE 핸드셰이크도 같은 규칙을 따릅니다. 선언된 `error` 본문을 디코딩할 수 없는 비`2xx` 핸드셰이크는 시작 시 그 디코딩 결함을 반환하고 메타데이터에 상태를 담으며, 인터셉터, 재연결 정책, 재연결의 `closed`는 여전히 `HTTP_STATUS`를 봅니다.
 
-## OpenAPI, sourcemap, 텔레메트리
+| 응답을 읽는 도중 실패한 원인                       | 반환되는 결함                                                                            |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 미디어 타입이 선언된 JSON 표현과 일치하지 않음     | `RES_MEDIA_TYPE_INVALID` (먼저 검사함. 본문은 읽지 않으며, 내용이 있든 없든 차이가 없음) |
+| 바이트를 선언된 표현 형식으로 디코딩할 수 없음     | `RES_DECODE_FAILED` (빈 JSON 바이트 포함)                                                |
+| 디코딩된 값이 `struct` 스키마 검증을 통과하지 못함 | `RES_STRUCT_MISMATCH`                                                                    |
+| 디코딩된 `error` struct를 포함한 비`2xx` 상태 코드 | 타입화된 `error.data`를 포함하는 `HTTP_STATUS`                                           |
+| `error`가 선언되지 않은 비`2xx` 상태 코드          | `error.data: undefined`인 `HTTP_STATUS`                                                  |
 
-Defjs는 두 번째 OpenAPI 계약을 생성하거나 동기화하지 않아요. OpenAPI가 이미 권위 있다면 그걸 유지하고 앱 경계에서 런타임 검증을 더하세요. 새 서비스라면 엔드포인트 정의와 Struct가 직접적인 와이어 계약이 될 수 있어요. 두 번째 사실 원천은 없어요.
+### 규칙 4: 디코딩에 실패하면 본문도 존재하지 않는다
 
-`withOpenTelemetryServer(...)`는 클라이언트에 **나가는** Defjs 계측을 더해요. OpenTelemetry SDK를 초기화하지는 않아요. `tracer`, `meter`, `logger`는 각각 선택이고(`tracer`를 생략하면 로컬 span과 span hook이 꺼져요), 세 전송은 기본으로 켜지고, WebSocket query 전파는 기본으로 꺼져요. operation 이름은 정적이고 카디널리티가 낮게 유지하세요. 전파, hook, URL, 헤더, payload, cause, 보존 기간은 민감할 수 있으니 검토하세요.
+본문은 디코딩과 검증을 통과한 후에만 존재합니다. 디코딩이 실패하면 결함 객체의 `response`는 `HttpMeta` 타입(`body` 프로퍼티가 없음)이 되며, 파서/유효성 검증 오류는 `fault.cause`에 첨부됩니다.
 
-sourcemap은 Defjs 동작이 아니라 배포 결정이에요. `sourcesContent`가 있는 공개 map은 소스를 노출하고, 숨긴 map에도 소스와 경로가 있고, map을 끄면 소스 수준 심볼화가 사라져요. 비공개 map은 명시적인 접근과 보존 규칙이 있는, 배포 가능한 디버깅 산출물로 다루세요.
+### 규칙 5: 한쪽을 생략하는 것은 해당 본문을 읽지 않겠다는 선택이다
 
-## 관련 레시피
+`output`을 생략하면 `2xx` 본문을 아예 읽지 않습니다. `error`를 생략하면 서버가 `500`에서 잘못된 JSON을 보내더라도 비`2xx` 본문을 전혀 읽지 않습니다.
 
-- [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)
-- [로컬 Fetch 핸들로 테스트하기](/ko-KR/recipes/test-with-handle)
+### 규칙 6: `3xx`는 성공 상태 코드가 아니다
+
+`ok`는 오직 `200 <= status < 300`만을 의미합니다. `304 Not Modified`는 비`2xx`입니다. `error`를 선언하지 않고 `HTTP_STATUS`를 직접 처리하거나([ETag 조건부 요청](/ko-KR/recipes/etag-revalidate) 참고), 빈 텍스트 본문을 기대한다면 `struct.string()`을 선언하세요.
+
+## 4. 전송 방식별 결과 튜플
+
+세 가지 전송 방식 모두 호출 지점에서 예외(throw)를 던지는 대신 3개 항목의 error-first 튜플을 반환합니다:
+
+- **HTTP** → `[error, data, response]` — 디코딩된 페이로드 + `DecodedResponse<T>` (`output` 생략 시 `HttpMeta`).
+- **SSE** → `[error, stream, open]` — `EventStreamHandle` + 초기 핸드셰이크 스냅샷.
+- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + 초기 연결 스냅샷.
+
+클라이언트는 활성 연결이 아닌 설정 정보를 보관합니다. HTTP 요청, SSE 스트림, WebSocket 세션을 시작한 호출자가 직접 취소하거나 닫는 책임을 갖습니다(HTTP는 `AbortSignal`, SSE와 WebSocket은 `await using` 또는 `.close()` + `await .closed`).
+
+## 5. Defjs가 제공하지 않는 것
+
+다른 HTTP 클라이언트에 있는 몇 가지 패턴은 Defjs가 의도적으로 제공하지 않습니다. 오른쪽 열의 대안을 사용하세요.
+
+| 제공하지 않는 것                                               | 대신 사용할 것                                                       |
+| -------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 전역 클라이언트 싱글턴                                         | 애플리케이션이 소유하고 작업에 전달하는 `createClient(...)`          |
+| 작업을 실행하는 클라이언트 메서드                              | 작업을 직접 호출: `getOrder(client, input)`                          |
+| 클라이언트 수준의 기본 타임아웃, 또는 `timeout` / `abort` 옵션 | `client({ signal: AbortSignal.timeout(ms) })` 또는 `AbortController` |
+| `defineRequest`의 `responseType` 필드                          | `output`의 struct 종류(`string`, `blob`, `arrayBuffer` 또는 JSON)    |
+| struct 인스턴스의 `.parse()` 또는 `struct.encode`              | `struct.parse(schema, value)`와 `builder` 배치                       |
+| 사용자 지정 WebSocket 핸드셰이크 헤더                          | 쿠키, 수명이 짧은 쿼리 티켓 또는 `protocols`                         |
+| WebSocket 메시지 맵 또는 타입 엔벨로프                         | `struct.discriminatedUnion`과 `session.onRuntimeError`               |
+| OpenAPI 코드 생성                                              | OpenAPI를 외부 사양으로 유지하거나 경계에서 `struct`로 검증          |
+
+## 관련 문서
+
+- [Struct 및 스키마](/ko-KR/docs/struct)
+- [HTTP 작업](/ko-KR/docs/http)
+- [오류 처리](/ko-KR/docs/errors)
+- [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)

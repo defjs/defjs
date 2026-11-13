@@ -1,22 +1,32 @@
 ---
 title: "WebSocket-Sitzungen verwalten"
-description: Verbinden, einen typisierten Envelope senden, einmal empfangen, dann schließen und auf closed warten.
+description: Verbinden, einen typisierten Envelope senden, einmalig empfangen, dann schließen und auf closed warten.
 ---
 
-# WebSocket-Session öffnen
+# Eine WebSocket-Sitzung öffnen
 
-Jede Richtung ist ein Struct. Du besitzt das Abmelden, `close` und `await session.closed`. Ungültige Frames gehen an `onRuntimeError`.
+Deklariere `incoming`- und `outgoing`-Structs an `defineWebSocket`. Abonniere in deiner Anwendung `session.onRuntimeError(...)`, konsumiere `session.receive` und melde Listener immer ab, rufe `session.close(...)` auf und warte im `finally`-Block auf `await session.closed`:
 
-Details siehe [WebSocket](/de-DE/docs/web-socket).
-
-<include cwd meta="chat.ts">
-  examples/recipes/websocket-session.ts#example
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
 </include>
 
-`chat.example.com` ist ein Platzhalter. Bei einem Server, der `{ "type": "send", "text": "Hello" }` mit `{ "type": "message", "text": "Hello" }` beantwortet, gibt das Snippet aus:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Antwortet der Server auf `{ "type": "subscribe", "symbol": "ACME" }` mit `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, gibt das Skript folgendes aus:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-Reconnect ist opt-in (`withWebSocketReconnect`). Heartbeat ebenfalls. Browser-WebSockets können keine beliebigen Handshake-Headers nehmen — nutze Cookies, Subprotocols oder ein short-lived Ticket.
+- Sowohl die Wiederverbindung (`withRetry`) als auch der Heartbeat (`withWebSocketHeartbeat`) sind am Client Opt-in.
+- Browser-WebSockets können beim Upgrade-Handshake keine beliebigen HTTP-Header senden; nutze stattdessen Cookies, Subprotokolle oder kurzlebige Tickets. Siehe [WebSocket-Sitzungen](/de-DE/docs/web-socket).

@@ -1,30 +1,36 @@
 import { DEFINITION } from "./symbols";
-import type { AnyStruct, StructDefinition } from "./types";
+import type {
+  ObjectRuntimeStruct,
+  RuntimeStruct,
+  StructDefinition,
+} from "./definition";
 
-const KNOWN_KINDS = new Set<StructDefinition["kind"]>([
-  "any",
-  "array",
-  "arrayBuffer",
-  "bigint",
-  "blob",
-  "boolean",
-  "date",
-  "discriminatedUnion",
-  "enum",
-  "file",
-  "intersection",
-  "literal",
-  "null",
-  "number",
-  "object",
-  "or",
-  "record",
-  "string",
-  "tuple",
-  "unknown",
-]);
+const KNOWN_KINDS: ReadonlySet<unknown> = new Set(
+  Object.keys({
+    any: true,
+    array: true,
+    arrayBuffer: true,
+    bigint: true,
+    blob: true,
+    boolean: true,
+    date: true,
+    discriminatedUnion: true,
+    enum: true,
+    file: true,
+    intersection: true,
+    literal: true,
+    null: true,
+    number: true,
+    object: true,
+    or: true,
+    record: true,
+    string: true,
+    tuple: true,
+    unknown: true,
+  } satisfies Record<StructDefinition["kind"], true>),
+);
 
-export function isStruct(value: unknown): value is AnyStruct {
+export function isStruct(value: unknown): value is RuntimeStruct {
   if (
     typeof value !== "object" ||
     value === null ||
@@ -33,23 +39,28 @@ export function isStruct(value: unknown): value is AnyStruct {
     return false;
   }
 
-  const definition = (value as { [DEFINITION]?: Partial<StructDefinition> })[
-    DEFINITION
-  ];
+  // Reflect.get is one ordinary [[Get]] per field, in the same order as property reads. An `in` check
+  // would also call a proxy's has trap and could reject a value these reads accept.
+  const definition: unknown = Reflect.get(value, DEFINITION);
   if (typeof definition !== "object" || definition === null) {
     return false;
   }
 
-  if (!KNOWN_KINDS.has(definition.kind as StructDefinition["kind"])) {
+  if (!KNOWN_KINDS.has(Reflect.get(definition, "kind"))) {
     return false;
   }
 
-  const flags = definition.flags as
-    { nullable?: unknown; optional?: unknown } | undefined;
+  const flags: unknown = Reflect.get(definition, "flags");
   return (
     typeof flags === "object" &&
     flags !== null &&
-    typeof flags.nullable === "boolean" &&
-    typeof flags.optional === "boolean"
+    typeof Reflect.get(flags, "nullable") === "boolean" &&
+    typeof Reflect.get(flags, "optional") === "boolean"
   );
+}
+
+export function isObjectRuntimeStruct(
+  struct: RuntimeStruct,
+): struct is ObjectRuntimeStruct {
+  return struct[DEFINITION].kind === "object";
 }

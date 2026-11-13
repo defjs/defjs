@@ -1,113 +1,127 @@
 ---
-title: "클라이언트 설정 / Client"
-description: 애플리케이션이 import한 SDK 작업을 어떻게 호출할지, API 정의와 독립적으로 구성합니다.
+title: "Client"
+description: API 정의와 독립적으로 애플리케이션이 import한 SDK 작업을 호출하는 방식을 구성합니다.
 ---
 
-# 클라이언트
+# Client
 
-`Client`는 사용하는 앱의 실행 설정이에요. `createClient(...)`는 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 돌려줘요. 팩토리를 요청 옵션과 함께 호출하면 `Client` 값이 나오고, 작업이 받는 것은 `Client` 값이에요. 호출할 수는 없어요. SDK에서 작업을 import하고, 서비스 주소, 자격 증명, 인터셉터, 전송 수단을 고른 다음, 클라이언트로 작업을 호출해요. `getUser(client({ signal }), { id: 1 })`는 입력을 선언한 호출을 시작해요. `health(client)`는 입력이 없는 호출을 시작해요. 입력 struct 전체가 선택이면 `search(client)`와 `search(client, input)`이 모두 유효해요. 세 번째 옵션 인자는 없어요. 작업을 호출하면 시작되고, `await`는 error-first 튜플만 기다려요.
+`Client`는 SDK를 사용하는 애플리케이션의 런타임 실행 환경 설정을 담고 있습니다: 기본 URL, 기본 헤더, 자격 증명, 인터셉터, 쿼리 직렬화, 전송 계층 핸들 등을 관리합니다.
 
-SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요청, 로컬 테스트가 서로 다른 클라이언트로 같은 export된 작업을 쓸 수 있어요. 모두 같은 Defjs 계약과 호환되는 Core 버전을 따라요. 그 클라이언트로 호출하는 작업에 맞게 각 클라이언트의 서비스 주소를 구성해요.
+`createClient(...options)`는 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 반환합니다:
 
-같은 클라이언트 값을 여러 작업에 넘길 수 있어요. 앱이 캐시와 재시도 정책을 고르고, 시작한 작업을 소유해요. HTTP는 자동으로 재시도하지 않아요. 스트림 재연결은 opt-in이에요.
+- 호출별 요청 옵션이 필요하지 않을 때는 `client`를 작업에 직접 전달합니다 (`getOrder(client, { id: 1 })`).
+- 호출별 옵션이 필요할 때는 `client(requestOptions)`로 단일 호출용 클라이언트 값을 파생합니다 (`getOrder(client({ signal }), { id: 1 })`). 파생은 I/O를 수행하지 않으며, 파생된 값은 호출할 수 없는 순수 객체입니다.
 
-팩토리는 함수이면서 요청 옵션이 없는 `Client`이기도 해요. 팩토리를 React state setter에 넘기지 마세요. `setState(factory)`는 updater로 호출해요. Vue `watch`나 `computed`의 소스로 쓰지 마세요. 그 API는 함수를 호출해요. 파생된 클라이언트 값은 평범한 객체예요.
+## 1. 클라이언트 구성 및 SDK 작업 호출하기
 
-## 기본 사용법
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)`는 [`Client`](/ko-KR/api/core/client-type)이기도 한 호출 가능한 팩토리 하나를 돌려줘요. 전송별 오버로드 묶음이 아니에요.
-
-## 옵션 조합하기
-
-옵션은 왼쪽에서 오른쪽으로 적용돼요. setter는 바꾸고, `withInterceptors(...items)`는 추가해요.
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
 </include>
 
-섞인 interceptor는 작업이 돌 때 전송별로 걸러지고, 선택된 kind 사이의 상대 순서는 유지돼요.
+</Tab>
+</Tabs>
 
-## 클라이언트 파생하기
+### 옵션 합성 규칙
 
-`client(options?)`는 한 번의 호출에 쓸 `Client` 값을 돌려줘요. `client(options)`를 호출할 때 알려진 필드 일곱 개는 인자 객체에서 복사돼요. 새 options 객체로의 최상위 스냅샷이에요. 알 수 없는 필드는 무시하고, 값이 `undefined`인 필드는 빼요. 부모 덮어쓰기는 없어요. `client()`, `client(undefined)`, `client({})`는 요청 옵션이 없는 클라이언트를 돌려줘요. 중첩된 `heartbeat`, `protocols`, `reconnect` 값은 참조로 유지되고 복제되지 않아요. WebSocket은 작업이 실행될 때 그것들을 읽어요 (그때 heartbeat 필드와 protocols 목록을 복사해요). 그래서 파생한 뒤에 그 객체를 바꾸면 이후 호출에 여전히 영향을 줄 수 있어요. 넘긴 뒤에는 불변으로 다루세요. 파생은 I/O를 하지 않아요. getter가 던지면 `client(options)`에서 예외가 나오고, 팩토리는 계속 쓸 수 있어요. 클라이언트 값은 호출할 수 없으니 호출마다 하나씩 만드세요.
+- 옵션은 **왼쪽에서 오른쪽** 순서로 적용됩니다.
+- 단일 값 설정자(`withEndpoint`, `withHeaders`, `withQuerySerializer`, `withCredentials`, `@defjs/core/xsrf`의 `withXSRF`)는 이전 값을 **대체**합니다.
+- `withInterceptors(...items)`는 기존 인터셉터 목록의 뒤에 **추가**되며, 작업이 실행될 때 전송 방식(`http`, `sse`, `web-socket`)에 따라 필터링되어 적용됩니다.
 
-`signal`은 합쳐지지 않아요. `signal`이 담긴 클라이언트 값을 재사용하면 호출 사이에 그 신호를 공유하므로, 호출마다 클라이언트 값을 만드세요. 신호는 앱 코드에서 `AbortSignal.any`로 합치세요.
+## 2. 호출별 클라이언트 파생하기 (`client(options)`)
+
+독립적인 `signal`, 진행률 콜백, 또는 WebSocket 세션 재정의가 필요한 각 호출마다 새로운 파생 클라이언트 값을 생성하세요:
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-`createClient`의 기본 설정은 모든 클라이언트 값이 공유하고, 런타임에 얼려지지 않아요. 관례로 고정돼요. 라이브러리는 그것을 바꾸지 않고, 애플리케이션도 바꾸면 안 돼요. 그 클라이언트의 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)는 그 최상위 스냅샷이에요. 앱 코드는 클라이언트를 작업에 넘길 뿐, 그 내부 상태를 읽지 않아요.
+> [!IMPORTANT]
+> `createClient(...)`가 반환하는 값은 호출 가능한 함수(`DerivableClient`)이므로, 함수를 업데이터나 getter로 취급하는 React의 `setState(client)` 또는 Vue의 `watch(client)` / `computed(client)` 소스로 직접 전달해서는 **안 됩니다**.
 
-## 요청 옵션
+### 호출별 `RequestOptions` 레퍼런스
 
-[`RequestOptions`](/ko-KR/api/core/requestoptions-type)는 평평한 필드 일곱 개예요. 각 프로토콜은 아는 필드만 읽고 나머지는 무시해요. HTTP 작업에 `heartbeat`를 넘겨도 무시될 뿐, 오류가 아니에요. SSE는 요청 옵션에서 `signal`만 읽어요. SSE 재연결은 클라이언트 설정(`withSSEReconnect`)에서 오므로, `client({ reconnect })`는 WebSocket에만 영향을 줘요. 컴파일 타임 프로토콜 필터는 없어요.
+`RequestOptions`는 7개의 평면 필드를 갖습니다. 각 전송 방식은 자신에게 해당하는 필드만 읽고 나머지는 무시합니다:
 
-| 필드                 | 쓰는 쪽              | 규칙                                                                                                     |
-| -------------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
-| `signal`             | HTTP, SSE, WebSocket | 호출을 취소해요. 데드라인은 `AbortSignal.timeout(ms)`(`NET_TIMEOUT`)예요. 수동 취소는 `NET_ABORTED`예요. |
-| `onUploadProgress`   | HTTP                 | SSE와 WebSocket은 무시해요.                                                                              |
-| `onDownloadProgress` | HTTP                 | SSE와 WebSocket은 무시해요.                                                                              |
-| `beforeConnect`      | WebSocket            | 그 호출에 한해 클라이언트 설정을 바꿔요.                                                                 |
-| `protocols`          | WebSocket            | 클라이언트 목록을 바꿔요. 추가되지 않아요.                                                               |
-| `heartbeat`          | WebSocket            | 통째로 바뀌어요. `timeoutMs`는 heartbeat 확인 대기이지, 요청 데드라인이 아니에요.                        |
-| `reconnect`          | WebSocket            | 통째로 바뀌어요.                                                                                         |
+| 필드                 | 대상 전송 방식       | 동작 설명                                                                                         |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE, WebSocket | 호출 취소 (`AbortSignal.timeout(ms)` → `NET_TIMEOUT`, 수동 abort → `NET_ABORTED`).                |
+| `onUploadProgress`   | HTTP                 | 스트리밍 요청 본문 업로드 진행률 보고.                                                            |
+| `onDownloadProgress` | HTTP                 | 선언된 응답 본문 다운로드 진행률 보고.                                                            |
+| `beforeConnect`      | WebSocket            | 이 세션에 한해 클라이언트 수준의 `beforeConnect` 훅을 대체.                                       |
+| `protocols`          | WebSocket            | 이 세션에 한해 클라이언트 수준의 서브프로토콜 목록을 대체.                                        |
+| `heartbeat`          | WebSocket            | 이 세션에 한해 클라이언트 수준의 하트비트 설정을 대체.                                            |
+| `retry`              | HTTP, SSE, WebSocket | 이 호출에 한해 클라이언트 수준의 재시도 정책을 대체합니다. HTTP `budget`은 클라이언트에 남습니다. |
 
-`timeout` 필드도, `abort` 필드도, 클라이언트 기본 데드라인도 없어요. SSE와 WebSocket에서 `signal`은 열린 뒤를 포함해 연결 전체를 덮어요. 시작 전용 데드라인은 없어요. 그게 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요. [SSE](/ko-KR/docs/sse#close-and-dispose)를 보세요.
+## 3. 브라우저 싱글톤 vs. 서버 요청 스코프
 
-`HttpExecuteOptions`는 HTTP 조각이에요. `signal`과 진행률 콜백이에요. `EventStreamExecuteOptions`는 `{ signal? }`예요. `WebSocketExecuteOptions`는 WebSocket 조각에 `signal`을 더한 거예요.
+- **브라우저 애플리케이션**: 엔드포인트, 인터셉터, 자격 증명이 브라우저 전역에서 공유될 때는 모듈 스코프의 단일 `DerivableClient`를 공유하여 사용합니다.
+- **서버 / SSR 애플리케이션**: 헤더, 쿠키, 인증 토큰, 테넌트 컨텍스트가 요청마다 다를 때는 반드시 **각 수신 요청 경계 내부에서** 매번 새로운 클라이언트를 생성해야 합니다. 프로세스 전역 클라이언트에 사용자별 자격 증명을 저장해서는 절대 안 됩니다.
 
-## 전송별 결과
+## 4. 다중 엔드포인트 및 로드 밸런싱 [#multiple-endpoints]
 
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`. `open`은 Defjs 네이티브 handle이나 동일한 live `open` 객체를 그대로 전달하는 래퍼일 때 반환된 연결에서 처음 성공한 핸드셰이크의 스냅샷이며, 커스텀 handle이나 `open`을 재정의하는 래퍼는 재연결 뒤에도 현재 공개한 `open`을 사용하고 `stream.open`은 live로 유지돼요([SSE](/ko-KR/docs/sse) 참고).
-- WebSocket → `[error, session, connection]`
+`withEndpoint(...urls)`는 하나 이상의 후보 기본 URL을 전달받을 수 있습니다. 기본 동작은 다음과 같습니다:
 
-`error`가 있으면 성공 값을 쓰기 전에 return 하세요.
+- 각 클라이언트는 [`pickFirstBalancer`](/ko-KR/api/core/pickfirstbalancer)를 사용하여, `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 또는 504)에서 다음으로 넘어가기 전까지 첫 번째 URL을 계속 유지합니다.
+- **재시도는 기본적으로 꺼져 있습니다.** 호출은 시도 한 번입니다. `withRetry()`는 `withRetry({})`와 같습니다. HTTP, SSE, WebSocket 모두에 대해 백오프와 함께 최대 세 번의 재시도를 켭니다. 실패할 때마다 밸런서는 모든 엔드포인트에서 다시 고르므로, pick-first에서는 연결 거부 뒤의 재시도가 다음 엔드포인트에 닿고, 엔드포인트가 하나면 지연 뒤에 다시 시도합니다. HTTP Finagle 재시도 예산은 클라이언트 설정에 속하며, 밸런서 자체와는 무관하게 그 파생 클라이언트들이 공유합니다.
 
-정리는 호출하는 쪽이 소유해요. HTTP는 abort하고, SSE는 닫고 `await stream.closed` 하고, WebSocket은 닫고 `await session.closed` 해요.
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
 
-## 테스트 전송 주입하기
+`attemptTimeoutMs`는 시도 하나를 제한합니다. HTTP는 응답 본문이 끝날 때까지, SSE는 응답 헤더까지, WebSocket은 `open`까지입니다. 재시도 없이 시간 제한만 하려면 `withRetry({ maxRetries: 0, attemptTimeoutMs })`로 씁니다. 재시도 옵션은 런타임에 검증되지 않습니다. 결정 순서와 `withSSEReconnect`, `withWebSocketReconnect`에서 옮겨 오는 방법은 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing#retries)를 참조하세요.
+
+### 헬스 필터링 및 p2c [#health-filtering-and-p2c]
+
+동일한 역할을 하는 서버 레플리카 집합의 경우, [`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer) 및 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)(PeakEwma RTT × 진행 중인 부하)는 `outlierDetection` 옵션을 받을 수 있으며, 객체를 넘기지 않으면 꺼져 있습니다(`{}`를 넘기면 기본 설정입니다). 실패를 세어 한동안 엔드포인트를 방출하고, 직접 작성한 `isHealthy` 함수가 거부하는 엔드포인트는 건너뜁니다. Defjs는 건강함의 의미를 정하지 않습니다. 기본적으로 코드가 있는 결과는 모두 실패로 세며(`NET_TIMEOUT`과 `NET_BODY_INCOMPLETE` 포함), 그 규칙은 `isFailure`로 바꿀 수 있습니다. 원시 응답 `status`는 커스텀 밸런서만을 위한 것입니다.
+
+재시도 예산, 실패 방출과 직접 작성한 헬스 함수, P2C 부하 추정, 커스텀 밸런서에 대한 자세한 내용은 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing) 가이드를 참조하세요.
+
+## 5. 테스트용 전송 계층 주입
+
+클라이언트의 플랫폼 `fetch`나 `WebSocket`을 `withHTTPHandle`, `withSSEHandle`, 또는 `withWebSocketHandle`로 교체하여 네트워크 연결 없이 전체 계약 테스트를 오프라인으로 실행할 수 있습니다:
 
 <include cwd lang="typescript">
   examples/client/inject-test-transport.ts#example
 </include>
 
-## 서버 vs 브라우저 범위
+완전한 테스트 패턴은 [테스트](/ko-KR/docs/testing) 가이드를 참조하세요.
 
-서버에서는 옵션이나 interceptor 클로저가 인증, 쿠키, 사용자, 테넌트를 잡을 때 요청 경계 안에서 클라이언트를 만들어요. 클라이언트 정체성 자체가 보안 경계는 아니에요.
+## 6. 클라이언트 옵션 헬퍼 레퍼런스
 
-## 마이그레이션
+| 헬퍼                                                                               | 목적                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                            | 하나 이상의 후보 기본 URL 설정 (이전 목록을 완전히 대체).                                                                                                                                                                                                                                                                  |
+| `withHeaders(HeadersInit)`                                                         | HTTP 및 SSE용 정적 기본 헤더 설정 (builder 헤더가 우선).                                                                                                                                                                                                                                                                   |
+| `withInterceptors(...items)`                                                       | 양파 껍질 순서로 HTTP, SSE, WebSocket 인터셉터 추가.                                                                                                                                                                                                                                                                       |
+| `withQuerySerializer(fn)`                                                          | 이미 별칭이 적용된 쿼리 객체를 쿼리 스트링으로 직렬화.                                                                                                                                                                                                                                                                     |
+| `withCredentials(boolean)`                                                         | `true`일 때 HTTP 및 SSE 요청에 대해 Fetch `credentials: "include"` 설정.                                                                                                                                                                                                                                                   |
+| `withXSRF(options?)`                                                               | `@defjs/core/xsrf`에서 가져옵니다. 브라우저에서 동일 출처의 변경 HTTP 요청에 XSRF 쿠키 값을 헤더로 복사합니다. `location`이나 `document`가 없는 런타임(Worker 포함)에서는 `withXSRF()`가 예외를 던집니다. 서버와 브라우저가 공유하는 코드는 이 옵션을 브라우저에서만 추가합니다. 다른 출처의 토큰은 인터셉터로 설정합니다. |
+| `withBalancer(balancer)`                                                           | 엔드포인트 선택 전략 교체 (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).                                                                                                                                                                                                                                      |
+| `withRetry(options?)`                                                              | HTTP, SSE, WebSocket의 선택적 재시도를 구성합니다. 재시도 횟수, 백오프, 메서드, 시도 제한 시간, `shouldRetry` 함수, HTTP 클라이언트가 소유하는 예산입니다.                                                                                                                                                                 |
+| `withSSEOnInvalidEvent`                                                            | struct가 없거나 검증에 실패한 SSE 이벤트를 관측합니다.                                                                                                                                                                                                                                                                     |
+| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 세션 기본 동작 구성.                                                                                                                                                                                                                                                                                             |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | 커스텀 또는 테스트 모의 전송 구현체 주입.                                                                                                                                                                                                                                                                                  |
 
-| 이전                                         | 이후                                                      |
-| -------------------------------------------- | --------------------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                         |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`           |
-| `execute(cmd, { signal })`                   | `client({ signal })`                                      |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                  |
-| `createClient(withTimeout(5000), ...)`       | 호출할 때 `signal`을 넘기거나, 애플리케이션 함수로 감싸요 |
+## 관련 문서
 
-## 참고
-
-| Helper                                                                                                        | 효과                                                       |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | 모든 전송의 절대 base endpoint                             |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE의 정적 기본 헤더. builder 헤더가 덮어써요         |
-| `withHTTPHandle(fetch)`                                                                                       | HTTP의 Fetch를 바꿔요                                      |
-| `withSSEHandle(fetch)`                                                                                        | SSE의 Fetch를 바꿔요                                       |
-| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket 생성자를 바꿔요                                  |
-| `withInterceptors(...items)`                                                                                  | 섞인 interceptor를 추가해요                                |
-| `withQuerySerializer(fn)`                                                                                     | 이미 alias가 적용된 query 객체를 query 문자열로 인코딩해요 |
-| `withCredentials(boolean)`                                                                                    | true이면 HTTP/SSE에서 Fetch `credentials: 'include'`       |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF 쿠키 → 헤더                                      |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 설정                                                   |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 설정                                             |
-
-## 관련 레시피
-
+- [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)
+- [인터셉터](/ko-KR/docs/interceptors)
+- [테스트](/ko-KR/docs/testing)
 - [로컬 Fetch 핸들로 테스트하기](/ko-KR/recipes/test-with-handle)
-- [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)

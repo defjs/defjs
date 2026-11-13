@@ -1,0 +1,28 @@
+#!/bin/sh
+set -e
+
+# oxlint has no --staged option, so it gets the staged paths. A file with unstaged changes is only
+# checked: fixing it and staging it again would put those changes into the commit. (`bun fmt --staged`
+# refuses such a file only when it needs formatting.) Every other staged file is fixed and staged again.
+# The ./ prefix keeps a name that starts with `-` from being read as an option by oxlint and grep.
+list() {
+  git -c core.quotePath=false diff "$@" --line-prefix=./ --name-only --diff-filter=ACMR -- '*.ts' '*.tsx' '*.mts' '*.cts' '*.vue'
+}
+paths() {
+  printf '%s\n' "$1" | tr '\n' '\0'
+}
+
+unstaged=$(list)
+full=$(list --cached | grep -vxF "$unstaged" || true)
+partial=$(list --cached | grep -xF "$unstaged" || true)
+
+bun run --cwd doc typegen
+if [ -n "$full" ]; then
+  paths "$full" | xargs -0 bun run oxlint --fix
+  paths "$full" | xargs -0 git add --
+fi
+if [ -n "$partial" ]; then
+  paths "$partial" | xargs -0 bun run oxlint
+fi
+bun fmt --staged
+bun run typecheck

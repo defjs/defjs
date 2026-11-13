@@ -1,8 +1,9 @@
 import { expect, test } from "vitest";
+import { isRecord, isUnknownArray } from "../narrow";
 import { struct, type AnyStruct } from "../../src/struct";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
-import { encodeOutbound } from "../../src/internal/outbound_request";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeOutbound } from "../../src/struct/encode";
+import { encodeObjectByAlias } from "../encode-by-alias";
 
 type Pair = {
   label: string;
@@ -41,7 +42,7 @@ function pair(
     };
   }
   const child = pair(pick, depth - 1, exotic);
-  // ROUND13_EXOTIC=1 adds any/unknown unions and passthrough containers. The regular suite leaves it unset.
+  // `exotic` adds any/unknown unions and passthrough containers. The suite runs without it.
   switch (pick(exotic ? 19 : 15)) {
     case 0:
       return {
@@ -199,7 +200,8 @@ function plain(value: unknown): unknown {
 function compare(actual: unknown, expected: unknown, path = "$"): void {
   if (Array.isArray(expected)) {
     expect(actual, `${path}: expected array`).toBeInstanceOf(Array);
-    const list = actual as unknown[];
+    if (!isUnknownArray(actual)) throw new Error(`${path}: expected array`);
+    const list = actual;
     expect(list.length, `${path}: length`).toBe(expected.length);
     expected.forEach((item, index) =>
       compare(list[index], item, `${path}[${index}]`),
@@ -209,7 +211,8 @@ function compare(actual: unknown, expected: unknown, path = "$"): void {
   if (expected !== null && typeof expected === "object") {
     expect(actual, `${path}: expected object`).toEqual(expect.any(Object));
     expect(Array.isArray(actual), `${path}: expected object`).toBe(false);
-    const output = actual as { [key: string]: unknown };
+    if (!isRecord(actual)) throw new Error(`${path}: expected object`);
+    const output = actual;
     for (const [key, child] of Object.entries(expected)) {
       expect(
         Object.hasOwn(output, key),
@@ -236,16 +239,16 @@ type AttemptFailure = {
   label: string;
 };
 
-async function runAttempts(
+function runAttempts(
   seed: number,
   attempts: number,
   maxDepth: number,
   exotic = false,
-): Promise<{
+): {
   failed: AttemptFailure[];
   passed: number;
   rejectedInput: number;
-}> {
+} {
   const pick = makeRandom(seed);
   const failed: AttemptFailure[] = [];
   let passed = 0;
@@ -264,8 +267,8 @@ async function runAttempts(
     let expected: unknown;
     let actual: unknown;
     try {
-      const parsed = await parseEndpointInput(schema, input as never);
-      expected = plain(encodeJson(schema, parsed));
+      const parsed = parseEndpointInput(schema, input);
+      expected = plain(encodeObjectByAlias(schema, parsed));
       actual = plain(encodeOutbound(parsed));
       compare(actual, expected);
       passed += 1;
@@ -282,24 +285,12 @@ async function runAttempts(
   return { failed, passed, rejectedInput };
 }
 
-function readCount(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") {
-    return fallback;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`);
-  }
-  return parsed;
-}
+const seed = 0x13c0ffee;
+const attempts = 1_000;
+const maxDepth = 4;
 
-test("parsed outbound encoding matches encodeJson except literal extras", async () => {
-  const seed = readCount("ROUND13_SEED", 0x13c0ffee);
-  const attempts = readCount("ROUND13_ATTEMPTS", 1_000);
-  const maxDepth = readCount("ROUND13_DEPTH", 4);
-  const exotic = process.env["ROUND13_EXOTIC"] === "1";
-  const result = await runAttempts(seed, attempts, maxDepth, exotic);
+test("parsed outbound encoding matches encodeObjectByAlias except literal extras", () => {
+  const result = runAttempts(seed, attempts, maxDepth);
   const summary = {
     attempts,
     examples: result.failed.slice(0, 5).map((failure) => ({

@@ -5,16 +5,27 @@ description: Send a typed JSON body and decode a declared 201.
 
 # POST JSON
 
-Hand the typed body to the builder. Logical field names stay in TypeScript; wire aliases on the struct become JSON keys. An object body is `application/json`.
+Pass a typed input object to `builder` and return `{ body: input }`. `.alias("customer_name")` keeps `customerName` in TypeScript while encoding `"customer_name"` on the wire and decoding it back from the `201` response.
 
-See [HTTP](/docs/http) and [Client](/docs/client) for details.
-
-<include cwd meta="create-user.ts">
-  examples/recipes/post-json.ts#example
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
-`api.example.com` is a placeholder. With a server that answers `201` and `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, the snippet prints:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+With a server that responds with `201` and `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, the script prints:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+See [HTTP operations](/docs/http) and [Struct & schemas](/docs/struct) for details.

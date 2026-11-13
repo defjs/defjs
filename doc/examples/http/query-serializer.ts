@@ -16,7 +16,14 @@ const client = createClient(
         }
         return;
       }
-      if (value !== undefined) params.append(key, String(value));
+      if (
+        value === null ||
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        typeof value === "bigint"
+      )
+        params.append(key, String(value));
     };
     for (const [key, value] of Object.entries(query)) append(key, value);
     return params.toString();

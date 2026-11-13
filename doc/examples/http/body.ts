@@ -28,7 +28,4 @@ const upload = defineRequest({
     return { path: { id: input.id }, body };
   },
 });
-
-void login;
-void upload;
 // #endregion

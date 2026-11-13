@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { decodeJson } from "./codec/json";
+
 import { StructError, struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse, parseStructValue } from "./parse";
 
 describe("parse.ts object and composite values", () => {
   test("requires ordinary object fields and omits optional keys", () => {
@@ -221,7 +221,11 @@ describe("parse.ts object and composite values", () => {
       page: struct.number(),
     });
 
-    const val = decodeJson(queryStruct, { page: 1, page_size: 50 });
+    const val = parseStructValue(
+      queryStruct,
+      { page: 1, page_size: 50 },
+      { aliases: true },
+    );
     expect(val).toEqual({
       page: 1,
       pageSize: 50,
@@ -364,9 +368,9 @@ describe("parse.ts object and composite values", () => {
   });
 
   test("treats null-prototype objects as plain objects", () => {
-    const input = Object.assign(Object.create(null), {
-      "x-request-id": "trace-2",
-    }) as unknown as { [key: string]: string };
+    const input: { [key: string]: string } = {};
+    Object.setPrototypeOf(input, null);
+    input["x-request-id"] = "trace-2";
 
     const [err, val] = parse(struct.record(struct.string()), input);
     if (err) {

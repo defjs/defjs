@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { HttpRequest } from "../../internal/http_request";
+import type { HttpRequest } from "../http_request";
 import {
   applyRequestContentType,
   resolveHttpBodyContentType,
@@ -45,7 +45,7 @@ describe("http utils", () => {
   test("should return null for unsupported serialized bodies", () => {
     expect(serializeHttpBody(undefined)).toBeNull();
     expect(serializeHttpBody(null)).toBe("null");
-    expect(serializeHttpBody((() => "noop") as never)).toBeNull();
+    expect(serializeHttpBody(() => "noop")).toBeNull();
   });
 
   test("should detect content type for supported body types", () => {
@@ -94,7 +94,7 @@ describe("http utils", () => {
 
   test("should return null content type for unsupported bodies", () => {
     expect(resolveHttpBodyContentType(undefined)).toBeNull();
-    expect(resolveHttpBodyContentType((() => "noop") as never)).toBeNull();
+    expect(resolveHttpBodyContentType(() => "noop")).toBeNull();
   });
 
   test("should keep a header when builder source metadata matches the body", () => {
@@ -159,12 +159,28 @@ describe("http utils", () => {
 
   test("should skip content type header when body has no detectable type", () => {
     const headers = new Headers();
-    applyRequestContentType(
-      makeRequest({ body: (() => "noop") as never }),
-      headers,
-    );
+    applyRequestContentType(makeRequest({ body: () => "noop" }), headers);
 
     expect(headers.has("content-type")).toBe(false);
+  });
+
+  test("sends a view over a SharedArrayBuffer as a copy of its bytes", () => {
+    // `new SharedArrayBuffer` is hidden without cross-origin isolation; a shared WebAssembly memory's buffer is one.
+    const shared = new WebAssembly.Memory({
+      initial: 1,
+      maximum: 1,
+      shared: true,
+    }).buffer;
+    new Uint8Array(shared).set([9, 1, 2, 3]);
+    const view = new Uint8Array(shared, 1, 3);
+
+    const body = serializeHttpBody(view);
+
+    expect(body).not.toBe(view);
+    expect(
+      body instanceof Uint8Array && body.buffer instanceof ArrayBuffer,
+    ).toBe(true);
+    expect(body).toEqual(new Uint8Array([1, 2, 3]));
   });
 });
 

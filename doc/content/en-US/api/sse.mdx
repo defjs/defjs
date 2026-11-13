@@ -11,18 +11,18 @@ Declare an event stream, call the operation with a client, iterate events, then 
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`, `events` map, and the required positive-integer limits `maxBufferSize` and `maxQueueSize`; optional `method` (default `'GET'`), `operation`, `input` and `error`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`EventStreamDefinition`](/api/core/eventstreamdefinition-type). `error` is required only when an error struct type is given, and `builder` is required exactly when `input` is declared.
+- **definition** — `path` and `events` map; optional `method` (default `'GET'`), `operation`, `input`, `error`, and `maxBufferSize` (default `64 * 1024`). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`EventStreamDefinition`](/api/core/eventstreamdefinition-type). `error` is required only when an error struct type is given, and `builder` is required exactly when `input` is declared.
 - **Returns** an operation. The first argument is a [`Client`](/api/core/client-type). Further arguments are the input only. Calling it starts the stream.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-The call returns `[null, stream, open]` or `[error, undefined, open?]`. When `error` is declared, the fault is `Fault` of that struct; otherwise it is `Fault<undefined>`. Pass `signal` by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). SSE reads only `signal` and ignores progress and WebSocket fields.
+The call returns `[null, stream, open]` or `[error, undefined, open?]`. When `error` is declared, the fault is `Fault` of that struct; otherwise it is `Fault<undefined>`. Pass `signal` by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). SSE reads only `signal` and `retry` and ignores progress and WebSocket fields.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` is `{ signal? }`. There is no `timeout` or `abort` field and no progress callback. `signal` covers the whole stream, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no startup-only deadline and no client-level default deadline. An application that wants a startup-only deadline creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns.
+`EventStreamExecuteOptions` is `{ signal?, retry? }`. There is no `timeout` or `abort` field and no progress callback. `signal` covers the whole stream, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no client-level default deadline. A deadline on the handshake alone is `withRetry({ maxRetries: 0, attemptTimeoutMs })`, or `retry: { maxRetries: 0, attemptTimeoutMs }` for one call; it ends at the response headers.
 
 ## EventStreamHandle
 
@@ -30,14 +30,11 @@ The call returns `[null, stream, open]` or `[error, undefined, open?]`. When `er
 
 The tuple's third slot is the startup snapshot of `open`; `stream.open` follows the latest connection after a reconnect. That third slot is the returned connection's first successful handshake snapshot only for a native Defjs handle or a wrapper forwarding the same live `open` object; custom handles and wrappers overriding `open` retain their current public `open` even after reconnect, so shared `closed` cannot bypass URL sanitization or header filtering, and Defjs does not reconstruct first-handshake metadata from arbitrary transformations. Prefer `await using stream = handle` for owned scope cleanup. The disposer stops Defjs reading and reconnect work and waits for its reader lock to be released; it does not promise that a provider-controlled, stuck `ReadableStream.cancel()` promise will finish. Manual `close()` / `closed` remains available.
 
-```ts
-async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
-  await using stream = handle;
-  for await (const event of stream) console.log(event);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-event-stream.ts#example
+</include>
 
-Structural implementations of `EventStreamHandle` must now implement `[Symbol.asyncDispose]()` and return the same owned teardown path. This is a compile-time breaking change for custom handles; code that only receives handles returned by Defjs has no new runtime call requirement.
+Structural implementations of `EventStreamHandle` must implement `[Symbol.asyncDispose]()` and return the same owned teardown path.
 
 ### EventStreamOpenInfo
 
@@ -47,7 +44,7 @@ Structural implementations of `EventStreamHandle` must now implement `[Symbol.as
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` is `eof`, `aborted`, or `error`. Every variant may carry `reason` and `cause`. Only `error` has `code`, one of [`EventStreamFaultCode`](/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+`kind` is `eof`, `aborted`, or `error`. Every variant may carry `reason` and `cause`. Only `error` has `code`, one of [`EventStreamFaultCode`](/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` means a reconnect pick failed after the stream opened. `EXT_HOOK_FAILED` means a `shouldRetry` function threw, and `cause` wraps the thrown value. `HTTP_STATUS` means a reconnect handshake ended with a non-2xx status that was not retried, or retries ran out. A full queue is not an error: the library holds at most 1024 unread events and reading the response pauses until the consumer takes one. `close()`, disposal, and a caller `signal` abort discard the events nobody has read yet and end the iterator at once, whether or not the stream had already ended; after an `error` end the iterator still rejects with `cause` once no unread event is left. Without such a stop, the events already queued after an `error` end are still delivered before the iterator rejects.
 
 ## EventStructs
 
@@ -55,9 +52,9 @@ Structural implementations of `EventStreamHandle` must now implement `[Symbol.as
 
 The key is the SSE event name; a message without an `event:` field is named `message`. When no key matches, the `default` struct is used. A `string` event struct keeps the raw `data` text. Every other kind is JSON text: `JSON.parse`, then the struct. A bare `struct.literal` therefore needs JSON text, not an unquoted token. Handshake `error` bodies use the same kind rule as HTTP: `string` is text, `blob` / `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.
 
-Reconnect lives on the client (`withSSEReconnect`). SSE `jitter` is a **0–1 multiplicative factor**, same as WebSocket.
+Retries live on the client (`withRetry`), and a request option `retry` replaces the policy for one call. The same policy serves HTTP and WebSocket.
 
-The retry budget and backoff exponent reset after a successful handshake; they apply per outage. Invalid numeric options return `REQ_OPTIONS_INVALID` before opening a stream, and `maxDelayMs` caps the final delay after jitter. See [`withSSEReconnect`](/api/core/withssereconnect) for validation rules, defaults, and UTF-8 `Last-Event-ID` handling.
+The retry count and backoff exponent reset after every successful handshake; they apply per outage, so `maxRetries: 1` can still create many connections across a long session. Clean server EOF does not reconnect, and an incomplete event at EOF does not commit its id. A handshake answered with 502, 503, or 504 is retried like a refused connection under the same rules (method, `shouldRetry`, `maxRetries`, `ReadableStream` body); any other non-2xx handshake is given to `shouldRetry` with `retryable: false`, so it ends the stream unless your function says otherwise. Exhausted retries and declined non-2xx handshakes end with `HTTP_STATUS`; inspect live `stream.open.response.status` for the status. See [`withRetry`](/api/core/withretry) for the defaults, the decision order, and UTF-8 `Last-Event-ID` handling.
 
 The parser follows WHATWG SSE line and field rules and removes only one leading UTF-8 BOM at the start of each physical stream. U+FEFF in data or ID values is preserved; a later BOM-prefixed field name is ignored as unknown. Multi-line data joins with `\n`, a blank line dispatches a data-bearing event, and an unfinished event at EOF is discarded.
 
@@ -65,7 +62,7 @@ See [SSE guide](/docs/sse) and [Consume an SSE stream](/recipes/consume-sse).
 
 ## EventStreamDefinition
 
-`path`, `events`, required `maxBufferSize` and `maxQueueSize`, optional `method` / `operation` / `input` / `error`. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot return a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+`path`, `events`, optional `method` / `operation` / `input` / `error` / `maxBufferSize`. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot carry a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
 
 ## EventStreamEndpoint
 

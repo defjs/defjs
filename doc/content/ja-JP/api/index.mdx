@@ -1,6 +1,6 @@
 ---
 title: API リファレンス
-description: SDK の定義、データ契約、アプリケーションでの実行に使う関数・options・型の API リファレンスです。
+description: SDK 定義の API、アプリケーションのクライアント設定、型付けされた実行結果を調べられます。
 ---
 
 # API リファレンス
@@ -18,21 +18,21 @@ Defjs SDK を作るとき、または使うときにこのリファレンスを�
 | [`@defjs/core`](/ja-JP/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
 | [`@defjs/vue`](/ja-JP/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
 | [`@defjs/react`](/ja-JP/api/react)                               | `ClientProvider`, `useClient`                                     |
-| [`@defjs/opentelemetry-server`](/ja-JP/api/opentelemetry-server) | `withOpenTelemetryServer`, トランスポートごとの options           |
+| [`@defjs/opentelemetry-server`](/ja-JP/api/opentelemetry-server) | `withOpenTelemetryServer`, トランスポートごとのオプション         |
 
 ## @defjs/core
 
 | ページ                                  | ここで探すもの                                                        |
 | --------------------------------------- | --------------------------------------------------------------------- |
-| [Client](/ja-JP/api/client)             | `createClient`, `with*` options, `Client`                             |
+| [Client](/ja-JP/api/client)             | `createClient`, `with*` オプション, `Client`                          |
 | [HTTP](/ja-JP/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
 | [Struct](/ja-JP/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
 | [Errors](/ja-JP/api/errors)             | `Fault` の種類とファクトリ                                            |
-| [Interceptors](/ja-JP/api/interceptors) | HTTP / SSE / WebSocket の interceptor ヘルパー                        |
-| [SSE](/ja-JP/api/sse)                   | `defineEventStream`, stream handle                                    |
-| [WebSocket](/ja-JP/api/web-socket)      | `defineWebSocket`, session                                            |
+| [Interceptors](/ja-JP/api/interceptors) | HTTP / SSE / WebSocket のインターセプターヘルパー                     |
+| [SSE](/ja-JP/api/sse)                   | `defineEventStream`, ストリームハンドル                               |
+| [WebSocket](/ja-JP/api/web-socket)      | `defineWebSocket`, セッション                                         |
 
 ## 関連
 
-- [はじめよう](/ja-JP/docs/start)
-- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
+- [クイックスタート](/ja-JP/docs/start)
+- [宣言済み 404 の処理](/ja-JP/recipes/get-declared-404)

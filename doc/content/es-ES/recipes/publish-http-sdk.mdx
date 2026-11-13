@@ -1,46 +1,64 @@
 ---
 title: "Crear y publicar un SDK"
-description: Exporta definiciones de API como un paquete npm con tipos y deja que cada aplicación configure su propio cliente.
+description: Estructura un SDK de S3 multimódulo con modelos y definiciones de operaciones basadas en funciones puras, publícalo como un paquete npm y deja que cada aplicación configure su propio cliente.
 ---
 
 # Crear y publicar un SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Un SDK empaqueta la API que ofrece tu equipo. Con Defjs, exporta definiciones de endpoint y sus contratos de datos; las aplicaciones consumidoras aportan la configuración del cliente y deciden cuándo llamarlas. Esta receta usa HTTP, y el mismo límite de paquete vale para definiciones SSE y WebSocket.
+Un SDK de Defjs organiza modelos `struct` compartidos (`src/models/`) y módulos de operaciones de dominio (`src/services/`) en un paquete npm compatible con _tree-shaking_, dejando `createClient(...)`, los endpoints, las credenciales y los interceptores en manos de la aplicación consumidora.
 
-## 1. Define las operaciones del SDK
+A diferencia de los generadores OpenAPI heredados que envuelven los endpoints en clases `Service` con estado (`ObjectsService.putObject(...)`), un SDK de Defjs exporta **funciones de operación puras e independientes** (`putObject`, `getObject`, `listObjectsV2`) que se invocan directamente con el cliente de la aplicación.
 
-Crea `src/users.ts` en tu proyecto de SDK. Deja aquí los paths, el mapeo de la entrada, las respuestas y los errores del servicio. No hace falta una instancia de cliente, una dirección de despliegue ni una credencial actual para definir esta operación.
+---
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+## 1. Estructurar y definir el paquete del SDK
+
+Tomando como ejemplo un SDK de almacenamiento de objetos compatible con Amazon S3 (`@company/s3-sdk`), divide el paquete en dos capas:
+
+- **`src/models/`**: Esquemas `struct` compartidos y tipos de TypeScript `Infer<typeof ...>` (utilizando exportaciones de valor y tipo con el mismo nombre para que los consumidores puedan importar un único identificador tanto para los esquemas en tiempo de ejecución como para los tipos estáticos).
+- **`src/services/`**: Módulos de dominio agrupados por recurso (`buckets.ts`, `objects.ts`). Cada módulo exporta funciones `defineRequest` independientes cuyo `builder` síncrono enruta una entrada plana del llamador hacia `path`, `query`, `headers` y el `body` binario.
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+  <Tab>
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
 </include>
 
-Expónla desde `src/index.ts`:
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
 
-```ts
-export { getUser } from "./users";
-```
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
 
-Añade otros módulos de operación y reexporta sus endpoints a medida que crece el SDK.
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
 
-## 2. Empaqueta JavaScript y declaraciones
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+</include>
 
-El proyecto del SDK tiene su propio límite de paquete:
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
 
-```txt
-users-sdk/
-  package.json
-  tsconfig.json
-  src/
-    index.ts
-    users.ts
-```
-
-Usa este `package.json`, sustituyendo el nombre de ejemplo por un scope de paquete que te pertenezca:
-
+  </Tab>
+  <Tab>
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -55,20 +73,17 @@ Usa este `package.json`, sustituyendo el nombre de ejemplo por un scope de paque
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.6.0"
+    "@defjs/core": "^0.7.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.6.0",
+    "@defjs/core": "^0.7.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
 }
 ```
-
-Core sigue siendo una dependencia de runtime externa, compartida con la aplicación. El rango peer indica qué versiones de Core admite tu SDK; la dependencia de desarrollo te deja construir y probar contra ese rango. Este ejemplo coincide con el contrato actual `0.4.x`. Elige y prueba el rango de tu SDK antes de publicar; las declaraciones y el comportamiento en runtime dependen de él.
-
-Añade `tsconfig.json`:
-
+  </Tab>
+  <Tab>
 ```json
 {
   "compilerOptions": {
@@ -82,12 +97,18 @@ Añade `tsconfig.json`:
   "include": ["src/**/*.ts"]
 }
 ```
+  </Tab>
+</Tabs>
 
-Estas declaraciones de librería aportan tipos, no polyfills de runtime. La aplicación sigue necesitando las Web API que usan los transportes que elija.
+- **Funciones puras, nunca clases `Service`**: Cada operación (`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`) se exporta como un valor `defineRequest` independiente. No las envuelvas en una `class` ni en un objeto de espacio de nombres: las funciones independientes mantienen la convención de llamada idéntica a `@defjs/core` (`await putObject(client, input)`) y permiten a los empaquetadores eliminar endpoints no utilizados (_tree-shaking_) cuando se establece `"sideEffects": false`.
+- **Respuestas vacías, binarias y estructuradas**: `listBuckets` y `listObjectsV2` decodifican structs JSON con mapeos de red `.alias()`; `getObject` decodifica un `Blob` binario (`output: struct.blob()`); `putObject`, `headObject` y `deleteObject` omiten `output` para cuerpos de respuesta vacíos mientras siguen exponiendo `response.headers` (como `etag`) en la tercera posición de la tupla.
+- **Dependencia par externa en tiempo de ejecución**: `@defjs/core` se mantiene como una `peerDependency` compartida con la aplicación consumidora.
 
-`tsdown` empaqueta la entrada en `dist/index.js` y emite `dist/index.d.ts`.
+---
 
-Construye e inspecciona el paquete:
+## 2. Construir y verificar el archivo tarball
+
+Empaqueta `dist/index.js` y `dist/index.d.ts` con `tsdown`, e inspecciona el contenido del paquete antes de publicarlo:
 
 ```sh
 bun install
@@ -96,46 +117,38 @@ bun pm pack --dry-run
 bun pm pack
 ```
 
-Comprueba que el tarball contenga `dist/index.js` y `dist/index.d.ts`. Instala ese tarball en una aplicación aparte y verifica tanto sus tipos como la ejecución antes de publicar. El README del SDK debe documentar la API del servicio, las versiones compatibles de Core, la autenticación esperada y cualquier valor por defecto opcional.
+Comprueba que `dist/index.js` y `dist/index.d.ts` estén incluidos en el tarball.
 
-## 3. Llámalo desde la aplicación consumidora
+---
 
-El ejemplo local deja la definición en `users-sdk.ts` junto a `app.ts` para poder ejecutarse sin red. Su import no crea un cliente; la aplicación configura un handle Fetch local y llama a la operación importada:
+## 3. Consumir el SDK en una aplicación
+
+Instala tu SDK junto a `@defjs/core`:
+
+```sh
+bun add @company/s3-sdk @defjs/core@^0.7.0
+```
+
+Dado que el SDK no vincula ningún cliente, la aplicación consumidora es propietaria del endpoint (AWS S3, Cloudflare R2 o MinIO), del interceptor de firma y de la política de reintentos, e invoca cada operación importada directamente como una función pura:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-Para el SDK empaquetado, instálalo junto con una versión compatible de Core:
+En código de producción, sustituye la importación relativa `./src/index.ts` por `@company/s3-sdk` y elimina `withHTTPHandle(...)` para utilizar el `fetch` nativo de la plataforma.
 
-```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
-```
+---
 
-Sustituye el import relativo del ejemplo por:
+## 4. Probar y publicar
 
-```ts
-import { getUser } from "@company/users-sdk";
-```
-
-Configura la dirección de tu servicio y la autenticación en el cliente de la aplicación. Conserva `withHTTPHandle(...)` para las pruebas locales; quítalo para usar la implementación Fetch de la plataforma. Una segunda aplicación puede importar el mismo endpoint y elegir ajustes de cliente distintos sin cambiar la definición del SDK.
-
-## 4. Verifica y publica
-
-Usa las [pruebas locales del cliente](/es-ES/recipes/test-with-handle) para ejercitar la definición exportada, el mapeo de la solicitud, la validación de la respuesta y los errores declarados. Verifica el mismo endpoint con dos clientes configurados para direcciones de servicio y credenciales distintas. Mantén disponible el manejo tipado de `HTTP_STATUS` en el punto de llamada, y prueba la cancelación y la limpieza de streams de los transportes que exporta tu SDK.
-
-Cuando el paquete haya pasado tus comprobaciones, publícalo desde el directorio del SDK con tu cuenta de npm:
+Ejercita tus definiciones exportadas con [pruebas en memoria con handles](/es-ES/recipes/test-with-handle) que cubran el mapeo de ruta/consulta/cabeceras/cuerpo binario, la decodificación de `output`, las cabeceras de respuesta `ETag`, errores declarados `HTTP_STATUS` (`S3Error`) y la cancelación. Una vez verificadas, publica el paquete:
 
 ```sh
 bun publish --access public
 ```
 
-Este comando publica un paquete público. Usa el registro y la política de acceso de tu organización para un SDK privado. Defjs no genera ni publica el paquete por ti.
-
-Las fábricas de cliente y los métodos de conveniencia son añadidos opcionales. Pueden aportar valores por defecto del servicio o comportamiento de dominio, aceptando la configuración de quien llama y conservando las exportaciones directas de endpoint. Documenta cualquier mapeo de errores o política de ciclo de vida que introduzcan. Ninguno de los dos es necesario para un SDK reutilizable.
-
-Consulta [HTTP](/es-ES/docs/http), [Cliente](/es-ES/docs/client) y [Decisiones de diseño](/es-ES/docs/design-decisions) para los contratos de fondo.
+Consulta [Operaciones HTTP](/es-ES/docs/http), [Cliente](/es-ES/docs/client), [Pruebas](/es-ES/docs/testing) y [Arquitectura central](/es-ES/docs/design-decisions).

@@ -1,32 +1,30 @@
-import { defineConfig } from "vitest/config";
-import { docRoot } from "./vitest.config.unit.ts";
-import { resolve } from "node:path";
+import type { ViteUserConfig as UserConfig } from "vitest/config";
+import { specExclude, specInclude } from "../test/spec-matrix.ts";
+import {
+  coverageSettings,
+  reporters,
+  type RuntimeProject,
+} from "../test/vitest-shared.ts";
 
-/**
- * Documentation test aggregator: `doc-unit` runs in the Bun process and carries the coverage gate;
- * `doc-e2e` drives the built static site in Chromium and needs a fresh `bun run build`.
- */
-export default defineConfig({
-  root: docRoot,
-  test: {
-    coverage: {
-      enabled: false,
-      provider: "istanbul",
-      reporter: ["lcov", "json", "html", "text"],
-      reportsDirectory: resolve(docRoot, "coverage"),
-      include: ["app/lib/**/*.ts", "app/data/**/*.ts", "scripts/**/*.ts"],
-      exclude: [
-        // Evaluated only by the fumadocs-mdx build: `defineDocs` and the content loader need generated sources.
-        "app/lib/source.ts",
-        "**/*.d.ts",
-      ],
-      thresholds: {
-        branches: 100,
-        functions: 100,
-        lines: 100,
-        statements: 100,
+const docRoot = import.meta.dirname;
+
+export function baseConfig({ runtime, test }: RuntimeProject): UserConfig {
+  return {
+    root: docRoot,
+    resolve: { tsconfigPaths: true },
+    test: {
+      ...test,
+      include: specInclude(["{app,scripts,examples}/**"]),
+      exclude: specExclude(runtime),
+      globalSetup: `${docRoot}/../test/runtime-guard-setup.ts`,
+      reporters,
+      coverage: {
+        ...coverageSettings({
+          reportsDirectory: `${docRoot}/coverage/${runtime}`,
+          extraExclude: ["app/lib/source.ts", "**/*.d.ts"],
+        }),
+        include: ["app/lib/**/*.ts", "app/data/**/*.ts", "scripts/**/*.ts"],
       },
     },
-    projects: ["./vitest.config.unit.ts", "./vitest.config.e2e.ts"],
-  },
-});
+  };
+}

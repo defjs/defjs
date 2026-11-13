@@ -11,33 +11,30 @@ Deklariere einen Event-Stream, rufe die Operation mit einem Client auf, iteriere
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`, `events`-Map und die erforderlichen positiven Integer-Limits `maxBufferSize` und `maxQueueSize`; optional `method` (Default `'GET'`), `operation`, `input` und `error`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Member stehen unter [`EventStreamDefinition`](/de-DE/api/core/eventstreamdefinition-type). `error` ist nur erforderlich, wenn ein Error-Struct-Typ angegeben ist, und `builder` genau dann, wenn `input` deklariert ist.
+- **definition** — `path` und `events`-Map; optional `method` (Default `'GET'`), `operation`, `input`, `error` und `maxBufferSize` (Default `64 * 1024`). Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`EventStreamDefinition`](/de-DE/api/core/eventstreamdefinition-type). `error` ist nur erforderlich, wenn ein `error`-Struct-Typ angegeben ist, und `builder` genau dann, wenn `input` deklariert ist.
 - **Returns** eine Operation. Das erste Argument ist ein [`Client`](/de-DE/api/core/client-type). Weitere Argumente sind nur der Input. Der Aufruf startet den Stream.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-Der Aufruf gibt `[null, stream, open]` oder `[error, undefined, open?]` zurück. Ist `error` deklariert, ist der Fault ein `Fault` dieses Structs; sonst `Fault<undefined>`. Übergib `signal`, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. SSE liest nur `signal` und ignoriert Progress- und WebSocket-Felder.
+Der Aufruf gibt `[null, stream, open]` oder `[error, undefined, open?]` zurück. Ist `error` deklariert, ist der Fault ein `Fault` dieses Structs; sonst `Fault<undefined>`. Übergib `signal`, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. SSE liest nur `signal` und `retry` und ignoriert Progress- und WebSocket-Felder.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` ist `{ signal? }`. Es gibt kein `timeout`- oder `abort`-Feld und keinen Progress-Callback. `signal` deckt den ganzen Stream ab, auch nachdem er sich öffnet. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Deadline nur für den Start und keine Default-Deadline auf Client-Ebene. Eine Anwendung, die eine Deadline nur für den Start will, erzeugt ihren eigenen `AbortController`, bricht ihn mit `new DOMException("...", "TimeoutError")` aus einem Timer ab und löscht den Timer, nachdem das await zurückkehrt.
+`EventStreamExecuteOptions` ist `{ signal?, retry? }`. Es gibt kein `timeout`- oder `abort`-Feld und keinen Progress-Callback. `signal` deckt den ganzen Stream ab, auch nachdem er geöffnet wurde. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Default-Deadline auf Client-Ebene. Eine Deadline nur für den Handshake ist `withRetry({ maxRetries: 0, attemptTimeoutMs })` oder `retry: { maxRetries: 0, attemptTimeoutMs }` für einen Aufruf; sie endet bei den Response-Headern.
 
 ## EventStreamHandle
 
 <ApiSignature name="EventStreamHandle" />
 
-Der dritte Slot des Tuples ist der Startup-Snapshot von `open`; `stream.open` folgt nach einem Reconnect der jüngsten Verbindung. Dieser dritte Slot ist nur bei einem nativen Defjs-Handle oder einem Wrapper, der dasselbe Live-`open`-Objekt durchreicht, der Snapshot des ersten erfolgreichen Handshakes der Verbindung des zurückgegebenen Handles; eigene Handles und Wrapper, die `open` überschreiben, behalten auch nach einem Reconnect ihr aktuelles öffentliches `open`, sodass ein gemeinsames `closed` weder URL-Bereinigung noch Header-Filterung umgeht und Defjs die Metadaten des ersten Handshakes nicht aus beliebigen Transformationen rekonstruiert. Nutze lieber `await using stream = handle` für Scope-Cleanup in deiner Verantwortung. Der Disposer stoppt Defjs-Lese- und Reconnect-Arbeit und wartet, bis der Reader-Lock freigegeben ist; er verspricht nicht, dass ein beim Provider hängendes `ReadableStream.cancel()`-Promise fertig wird. Manuelles `close()` / `closed` bleibt verfügbar.
+Der dritte Slot des Tupels ist der Startup-Snapshot von `open`; `stream.open` folgt nach einem Reconnect der jüngsten Verbindung. Dieser dritte Slot ist nur bei einem nativen Defjs-Handle oder einem Wrapper, der dasselbe Live-`open`-Objekt durchreicht, der Snapshot des ersten erfolgreichen Handshakes der Verbindung des zurückgegebenen Handles; eigene Handles und Wrapper, die `open` überschreiben, behalten auch nach einem Reconnect ihr aktuelles öffentliches `open`, sodass ein gemeinsames `closed` weder URL-Bereinigung noch Header-Filterung umgeht und Defjs die Metadaten des ersten Handshakes nicht aus beliebigen Transformationen rekonstruiert. Nutze lieber `await using stream = handle` für die Bereinigung deines Scopes. Der Disposer stoppt Defjs-Lese- und Reconnect-Arbeit und wartet, bis der Reader-Lock freigegeben ist; er verspricht nicht, dass ein beim Provider hängendes `ReadableStream.cancel()`-Promise fertig wird. Manuelles `close()` / `closed` bleibt verfügbar.
 
-```ts
-async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
-  await using stream = handle;
-  for await (const event of stream) console.log(event);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-event-stream.ts#example
+</include>
 
-Strukturelle Implementierungen von `EventStreamHandle` müssen jetzt `[Symbol.asyncDispose]()` implementieren und denselben eigenen Teardown-Pfad zurückgeben. Das ist eine Compile-Time-Breaking-Änderung für eigene Handles; Code, der nur von Defjs zurückgegebene Handles empfängt, hat keine neue Runtime-Aufrufpflicht.
+Strukturelle Implementierungen von `EventStreamHandle` müssen `[Symbol.asyncDispose]()` implementieren und denselben eigenen Teardown-Pfad zurückgeben.
 
 ### EventStreamOpenInfo
 
@@ -47,25 +44,25 @@ Strukturelle Implementierungen von `EventStreamHandle` müssen jetzt `[Symbol.as
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` ist `eof`, `aborted` oder `error`. Jede Variante kann `reason` und `cause` tragen. Nur `error` hat `code`, einen von [`EventStreamFaultCode`](/de-DE/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+`kind` ist `eof`, `aborted` oder `error`. Jede Variante kann `reason` und `cause` tragen. Nur `error` hat `code`, einen von [`EventStreamFaultCode`](/de-DE/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` bedeutet, dass ein Pick beim Reconnect fehlgeschlagen ist, nachdem der Stream geöffnet wurde. `EXT_HOOK_FAILED` bedeutet, dass eine `shouldRetry`-Funktion eine Exception geworfen hat, und `cause` umschließt den geworfenen Wert. `HTTP_STATUS` bedeutet, dass ein Reconnect-Handshake mit einem Nicht-2xx-Status endete, der nicht wiederholt wurde, oder dass die Retries aufgebraucht sind. Eine volle Warteschlange ist kein Fehler: Die Bibliothek hält höchstens 1024 ungelesene Events, und das Lesen der Response pausiert, bis der Konsument eines nimmt. `close()`, Disposal und ein Abbruch des `signal` durch den Aufrufer verwerfen die Events, die noch niemand gelesen hat, und beenden den Iterator sofort, ob der Stream bereits geendet hatte oder nicht; nach einem Ende mit `error` lehnt der Iterator weiterhin mit `cause` ab, sobald kein ungelesenes Event mehr übrig ist. Ohne einen solchen Stopp werden die Events, die nach einem Ende mit `error` bereits in der Warteschlange stehen, weiterhin zugestellt, bevor der Iterator ablehnt.
 
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
 
-Der Key ist der SSE-Event-Name; eine Message ohne `event:`-Feld heißt `message`. Passt kein Key, wird das `default`-Struct genutzt. Ein `string`-Event-Struct behält den rohen `data`-Text. Jedes andere Kind ist JSON-Text: `JSON.parse`, dann der Struct. Ein bloßes `struct.literal` braucht deshalb JSON-Text, kein Token ohne Anführungszeichen. Handshake-`error`-Bodies nutzen dieselbe Kind-Regel wie HTTP: `string` ist Text, `blob` / `file` sind Blobs, `arrayBuffer` sind Bytes, alles andere ist JSON.
+Der Schlüssel ist der SSE-Event-Name; eine Nachricht ohne `event:`-Feld heißt `message`. Passt kein Schlüssel, wird das `default`-Struct genutzt. Ein `string`-Event-Struct behält den rohen `data`-Text. Jede andere Art ist JSON-Text: `JSON.parse`, dann der Struct. Ein bloßes `struct.literal` braucht deshalb JSON-Text, kein Token ohne Anführungszeichen. Handshake-`error`-Bodies nutzen dieselbe Regel für die Struct-Art wie HTTP: `string` ist Text, `blob` / `file` sind Blobs, `arrayBuffer` sind Bytes, alles andere ist JSON.
 
-Reconnect lebt auf dem Client (`withSSEReconnect`). SSE-`jitter` ist ein **multiplikativer Faktor von 0–1**, genau wie bei WebSocket.
+Retries liegen auf dem Client (`withRetry`), und eine Request-Option `retry` ersetzt die Policy für einen Aufruf. Dieselbe Policy gilt für HTTP und WebSocket.
 
-Retry-Budget und Backoff-Exponent werden nach einem erfolgreichen Handshake zurückgesetzt; sie gelten je Ausfall. Ungültige numerische Optionen liefern `REQ_OPTIONS_INVALID`, bevor ein Stream geöffnet wird, und `maxDelayMs` deckelt die endgültige Wartezeit nach Jitter. Validierungsregeln, Defaults und die UTF-8-Behandlung von `Last-Event-ID` stehen bei [`withSSEReconnect`](/de-DE/api/core/withssereconnect).
+Die Anzahl der Retries und der Backoff-Exponent werden nach jedem erfolgreichen Handshake zurückgesetzt; sie gelten je Ausfall, sodass `maxRetries: 1` während einer langen Session dennoch viele Verbindungen ermöglichen kann. Ein reguläres Server-EOF löst keinen Reconnect aus, und ein unvollständiges Event bei EOF speichert seine ID nicht. Ein Handshake mit 502, 503 oder 504 wird wie eine verweigerte Verbindung unter denselben Regeln wiederholt (Methode, `shouldRetry`, `maxRetries`, `ReadableStream`-Body); jeder andere Nicht-2xx-Handshake wird `shouldRetry` mit `retryable: false` übergeben, sodass er den Stream beendet, sofern deine Funktion nichts anderes sagt. Erschöpfte Retries und abgelehnte Nicht-2xx-Handshakes enden mit `HTTP_STATUS`; prüfe das dynamische `stream.open.response.status` auf den Status. Defaults, die Entscheidungsreihenfolge und die UTF-8-Behandlung von `Last-Event-ID` stehen bei [`withRetry`](/de-DE/api/core/withretry).
 
-Der Parser folgt den WHATWG-SSE-Regeln für Zeilen und Felder und entfernt nur ein führendes UTF-8-BOM am Anfang jedes physischen Streams. U+FEFF in Data- oder ID-Werten bleibt erhalten; ein späterer Feldname mit BOM-Präfix wird als unbekannt ignoriert. Mehrzeilige Data wird mit `\n` zusammengefügt, eine Leerzeile dispatcht ein Event mit Data, und ein unfertiges Event bei EOF wird verworfen.
+Der Parser folgt den WHATWG-SSE-Regeln für Zeilen und Felder und entfernt nur ein führendes UTF-8-BOM am Anfang jedes physischen Streams. U+FEFF in Data- oder ID-Werten bleibt erhalten; ein späterer Feldname mit BOM-Präfix wird als unbekannt ignoriert. Mehrzeilige Daten werden mit `\n` zusammengefügt, eine Leerzeile löst ein Event mit Daten aus, und ein unfertiges Event bei EOF wird verworfen.
 
-Siehe [SSE-Guide](/de-DE/docs/sse) und [SSE-Stream konsumieren](/de-DE/recipes/consume-sse).
+Siehe [SSE-Leitfaden](/de-DE/docs/sse) und [SSE-Stream konsumieren](/de-DE/recipes/consume-sse).
 
 ## EventStreamDefinition
 
-`path`, `events`, erforderliche `maxBufferSize` und `maxQueueSize`, optional `method` / `operation` / `input` / `error`. Die Request-Shape entspricht HTTP, inklusive `body`. `GET` und `HEAD` können keinen Body zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+`path`, `events`, optional `method` / `operation` / `input` / `error` / `maxBufferSize`. Die Request-Form entspricht HTTP, inklusive `body`. `GET` und `HEAD` können keinen Body tragen. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ## EventStreamEndpoint
 
@@ -73,7 +70,7 @@ Kommt von `defineEventStream`. Das erste Argument ist ein Client. Weitere Argume
 
 ## EventStreamRequestShape
 
-Dieselben Felder wie `HttpRequestShape` für Method und Path des Streams.
+Dieselben Felder wie `HttpRequestShape` für Methode und Pfad des Streams.
 
 ## StreamAwaitResult
 

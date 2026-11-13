@@ -1,20 +1,25 @@
 ---
 title: "اختبارات HTTP المحلية"
-description: استبدل Fetch لعميل واحد بـ withHTTPHandle وأبقِ العملية دون تغيير.
+description: استبدل دالة Fetch لعميل واحد عبر withHTTPHandle واحتفظ بالعملية دون أي تغيير.
 ---
 
-# الاختبار بمعالج Fetch محلي
+# اختبار الطلبات محلياً عبر مقبض Fetch
 
-`withHTTPHandle(...)` يستبدل Fetch لذلك العميل فقط. ما زلت تحصل على بناء عنوان URL والمعترضات والتوزيع بحسب الحالة وفك Struct — دون DNS أو TLS أو خادم حقيقي.
+تستبدل الدالة `withHTTPHandle(...)` دالة `fetch` الأساسية لنسخة عميل محددة مع تشغيل خط أنابيب Defjs بالكامل — التحقق من المدخلات، وتطبيق دالة `builder`، وحل الروابط، والمعترضات، وتصنيف الحالات، وفك ترميز كائنات Struct — دون فتح أي مقبس شبكي حقيقي:
 
-انظر [العميل](/ar/docs/client) للتفاصيل.
-
-<include cwd meta="get-user.test.ts">
-  examples/recipes/test-with-handle.ts#example
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
 </include>
 
-```txt
-Ada 200
-```
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
 
-استخدم عملية `getUser` نفسها مع عميل `withEndpoint(...)` حقيقي في الإنتاج — المعالج وحده يتغيّر.
+  </Tab>
+</Tabs>
+
+في بيئة الإنتاج، استدعِ نفس العملية `getOrder` تماماً بعميل مضبوط عبر `withEndpoint(...)`. راجع دليلي [الاختبارات](/ar/docs/testing) و[العميل](/ar/docs/client).

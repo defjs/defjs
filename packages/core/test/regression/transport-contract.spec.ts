@@ -16,6 +16,7 @@ import {
   withSSEHandle,
   withWebSocketHandle,
 } from "../../src";
+import { createFakeWebSocket, FakeWebSocket } from "../fake_web_socket";
 
 const jsonHeaders = { "content-type": "application/json" };
 const nullEndpoint = defineRequest({
@@ -32,8 +33,10 @@ test.each([200, 403])(
     for (const mode of ["identity", "spread", "makeResponse"]) {
       const client = createClient(
         withEndpoint("https://example.test"),
-        withHTTPHandle(
-          async () => new Response("null", { status, headers: jsonHeaders }),
+        withHTTPHandle(() =>
+          Promise.resolve(
+            new Response("null", { status, headers: jsonHeaders }),
+          ),
         ),
         withInterceptors(
           createHttpInterceptor(async (request, next) => {
@@ -67,12 +70,14 @@ test.each([200, 403])(
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            status,
-            headers: new Headers(jsonHeaders),
-            body: null,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              status,
+              headers: new Headers(jsonHeaders),
+              body: null,
+            }),
+          ),
         ),
       ),
     );
@@ -89,12 +94,14 @@ test.each([200, 403])(
       const client = createClient(
         withEndpoint("https://example.test"),
         withInterceptors(
-          createHttpInterceptor(async () =>
-            makeResponse({
-              status,
-              headers: new Headers(jsonHeaders),
-              ...(present ? { body: new TextEncoder().encode("null") } : {}),
-            }),
+          createHttpInterceptor(() =>
+            Promise.resolve(
+              makeResponse({
+                status,
+                headers: new Headers(jsonHeaders),
+                ...(present ? { body: new TextEncoder().encode("null") } : {}),
+              }),
+            ),
           ),
         ),
       );
@@ -108,72 +115,86 @@ test.each([200, 403])(
   },
 );
 
-test.each([200, 403])(
-  "zero-byte JSON is a representation failure at status %s",
-  async (status) => {
-    const observations = [];
-    for (const mode of ["native", "synthetic"]) {
-      const client = createClient(
-        withEndpoint("https://example.test"),
-        ...(mode === "native"
-          ? [
-              withHTTPHandle(
-                async () => new Response("", { status, headers: jsonHeaders }),
-              ),
-            ]
-          : [
-              withInterceptors(
-                createHttpInterceptor(async () =>
-                  makeResponse({
-                    status,
-                    headers: new Headers(jsonHeaders),
-                    body: new Uint8Array(),
-                  }),
-                ),
-              ),
-            ]),
-      );
-      const [fault, data] = await nullEndpoint(client);
-      observations.push({
-        mode,
-        code: fault?.code ?? null,
-        data: fault?.code === "HTTP_STATUS" ? fault.data : data,
-      });
-    }
-    expect(observations).toEqual(
-      ["native", "synthetic"].map((mode) => ({
-        mode,
-        code: "RES_DECODE_FAILED",
-        data: undefined,
-      })),
-    );
+test.each(
+  [200, 403].flatMap((status) => [
+    {
+      status,
+      response: "native",
+      option: withHTTPHandle(() =>
+        Promise.resolve(new Response("", { status, headers: jsonHeaders })),
+      ),
+    },
+    {
+      status,
+      response: "synthetic",
+      option: withInterceptors(
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              status,
+              headers: new Headers(jsonHeaders),
+              body: new Uint8Array(),
+            }),
+          ),
+        ),
+      ),
+    },
+  ]),
+)(
+  "zero-byte JSON is a representation failure at status $status of a $response response",
+  async ({ option }) => {
+    const client = createClient(withEndpoint("https://example.test"), option);
+
+    const [fault, data] = await nullEndpoint(client);
+
+    expect(fault?.code).toBe("RES_DECODE_FAILED");
+    expect(data).toBeUndefined();
   },
 );
 
-test("SSE rejects empty JSON but accepts encoded null and empty raw text", async () => {
-  for (const mode of ["empty-json", "null-json", "absent-text", "empty-text"]) {
-    const text =
-      mode === "null-json" ? "null" : mode === "absent-text" ? null : "";
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withSSEHandle(
-        async () => new Response(text, { status: 403, headers: jsonHeaders }),
+test.each([
+  {
+    label: "empty JSON",
+    body: "",
+    error: struct.null(),
+    expected: { code: "RES_DECODE_FAILED" },
+  },
+  {
+    label: "encoded null JSON",
+    body: "null",
+    error: struct.null(),
+    expected: { code: "HTTP_STATUS", data: null },
+  },
+  {
+    label: "absent raw text",
+    body: null,
+    error: struct.string(),
+    expected: { code: "HTTP_STATUS", data: "" },
+  },
+  {
+    label: "empty raw text",
+    body: "",
+    error: struct.string(),
+    expected: { code: "HTTP_STATUS", data: "" },
+  },
+])("SSE reads $label as an error body", async ({ body, error, expected }) => {
+  const client = createClient(
+    withEndpoint("https://example.test"),
+    withSSEHandle(() =>
+      Promise.resolve(
+        new Response(body, { status: 403, headers: jsonHeaders }),
       ),
-    );
-    const endpoint = defineEventStream({
-      path: "/events",
-      events: { message: struct.string() },
-      error: mode.endsWith("json") ? struct.null() : struct.string(),
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
-    });
-    const [fault] = await endpoint(client);
-    expect(fault?.code).toBe(
-      mode === "empty-json" ? "RES_DECODE_FAILED" : "HTTP_STATUS",
-    );
-    if (fault?.code === "HTTP_STATUS")
-      expect(fault.data).toBe(mode === "null-json" ? null : "");
-  }
+    ),
+  );
+  const endpoint = defineEventStream({
+    path: "/events",
+    events: { message: struct.string() },
+    error,
+  });
+
+  const [fault] = await endpoint(client);
+
+  expect(fault).toMatchObject(expected);
 });
 
 test.each(["abort", "timeout"] as const)(
@@ -182,11 +203,13 @@ test.each(["abort", "timeout"] as const)(
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         fetches += 1;
-        return new Response("data: test\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        });
+        return Promise.resolve(
+          new Response("data: test\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
       withInterceptors(
         createSSEInterceptor((request, next) =>
@@ -204,8 +227,6 @@ test.each(["abort", "timeout"] as const)(
     const endpoint = defineEventStream({
       path: "/events",
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
     });
     const [fault, stream] = await endpoint(client);
     try {
@@ -223,37 +244,12 @@ test.each(["abort", "timeout"] as const)(
 test.each(["caller", "replacement"])(
   "WebSocket keeps the %s signal active after delivery",
   async (source) => {
-    const instances: Socket[] = [];
-    class Socket extends EventTarget {
-      static readonly OPEN = 1;
-      readyState = 0;
-      bufferedAmount = 0;
-      protocol = "";
-      extensions = "";
-      binaryType = "blob";
-      readonly url: string;
-      constructor(url: string | URL) {
-        super();
-        this.url = String(url);
-        instances.push(this);
-        queueMicrotask(() => {
-          if (this.readyState !== 0) return;
-          this.readyState = 1;
-          this.dispatchEvent(new Event("open"));
-        });
-      }
-      send(_data: string) {}
-      close() {
-        if (this.readyState === 3) return;
-        this.readyState = 3;
-        this.dispatchEvent(new Event("close"));
-      }
-    }
+    const fake = createFakeWebSocket();
     const caller = new AbortController();
     const replacement = new AbortController();
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket),
+      withWebSocketHandle(fake.Socket),
       withInterceptors(
         createWebSocketInterceptor((request, next) =>
           next({ ...request, signal: replacement.signal }),
@@ -263,7 +259,6 @@ test.each(["caller", "replacement"])(
     const endpoint = defineWebSocket({
       path: "/socket",
       incoming: struct.unknown(),
-      maxIncomingQueueSize: 4,
     });
     const [fault, session] = await endpoint(client({ signal: caller.signal }));
     try {
@@ -271,10 +266,10 @@ test.each(["caller", "replacement"])(
       if (!session) throw new Error("Expected an open session");
       (source === "caller" ? caller : replacement).abort("after delivery");
       expect((await session.closed).kind).toBe("aborted");
-      expect(instances[0]?.readyState).toBe(3);
+      expect(fake.sockets[0]?.readyState).toBe(FakeWebSocket.CLOSED);
     } finally {
       caller.abort("cleanup");
-      for (const socket of instances) socket.close();
+      for (const socket of fake.sockets) socket.close();
     }
   },
 );
@@ -295,8 +290,8 @@ test.each(["abort", "timeout"] as const)(
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({ status: 403, body: new SlowBlob() }),
+        createHttpInterceptor(() =>
+          Promise.resolve(makeResponse({ status: 403, body: new SlowBlob() })),
         ),
       ),
     );
@@ -372,9 +367,9 @@ test("union agreement must preserve numeric differences seen by a custom query s
       serialized.push(wire);
       return `filter=${encodeURIComponent(wire)}`;
     }),
-    withHTTPHandle(async (request) => {
+    withHTTPHandle((request) => {
       requests.push(new Request(request).url);
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const endpoint = defineRequest({
@@ -399,13 +394,15 @@ test("the documented maintenance response supplies a decoded declared error", as
   const client = createClient(
     withEndpoint("https://example.test"),
     withInterceptors(
-      createHttpInterceptor(async () =>
-        makeResponse({
-          status: 503,
-          statusText: "Service Unavailable",
-          headers: new Headers({ "content-type": "application/json" }),
-          body: { message: "Temporarily unavailable" },
-        }),
+      createHttpInterceptor(() =>
+        Promise.resolve(
+          makeResponse({
+            status: 503,
+            statusText: "Service Unavailable",
+            headers: new Headers({ "content-type": "application/json" }),
+            body: { message: "Temporarily unavailable" },
+          }),
+        ),
       ),
     ),
   );
@@ -425,7 +422,6 @@ test("a WebSocket endpoint retains its definition when the configuration object 
   const definition = {
     path: "/first",
     incoming: struct.unknown(),
-    maxIncomingQueueSize: 4,
   };
   const first = defineWebSocket(definition);
   definition.path = "/second";
@@ -434,9 +430,11 @@ test("a WebSocket endpoint retains its definition when the configuration object 
   const client = createClient(
     withEndpoint("https://example.test"),
     withInterceptors(
-      createWebSocketInterceptor(async (request) => {
+      createWebSocketInterceptor((request) => {
         paths.push(request.endpoint);
-        throw new Error("Audit capture before constructing a socket");
+        return Promise.reject(
+          new Error("Audit capture before constructing a socket"),
+        );
       }),
     ),
   );

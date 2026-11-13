@@ -9,6 +9,8 @@ import {
 } from "vitest";
 import type { FetchHandle } from "../src/client/config";
 import type { HttpRequest, HttpResponse } from "../src/http";
+import { isUnknownArray } from "./narrow";
+import { resolveRequestUrl } from "../src/internal/url";
 
 const ORIGIN = "https://example.com";
 const JSON_HEADERS = { "content-type": "application/json" };
@@ -55,12 +57,14 @@ function stalledBody(onCancel?: (reason: unknown) => void) {
   return { fail: (reason: unknown) => fail(reason), reading, stream };
 }
 
-function settleWithin<T>(promise: Promise<T>, ms = 1000): Promise<T> {
+// Liveness guard, not a timing assertion: the budget does not depend on machine speed.
+function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
-      ms,
+      10_000,
     );
+    timeout.unref?.();
     promise.then(
       (value) => {
         clearTimeout(timeout);
@@ -121,15 +125,12 @@ async function importLibrary() {
   ]);
   return {
     client,
-    createFetchRequest: transport.createFetchRequest,
     DEFAULT_FETCH: config.DEFAULT_FETCH,
-    DEFAULT_HTTP_OPTIONS: config.DEFAULT_HTTP_OPTIONS,
-    DEFAULT_SSE_OPTIONS: config.DEFAULT_SSE_OPTIONS,
+    createClientConfig: config.createClientConfig,
     ERR_ABORTED: error.ERR_ABORTED,
     ERR_TIMEOUT: error.ERR_TIMEOUT,
     fetchHandler: transport.fetchHandler,
     http,
-    supportsStreamingRequestBody: transport.supportsStreamingRequestBody,
   };
 }
 
@@ -192,12 +193,31 @@ async function outcomeOf(
       url: response.url,
     };
   } catch (error) {
-    const { cause, code } = error as {
-      cause?: { name?: string };
-      code?: string;
-    };
+    const record =
+      typeof error === "object" && error !== null && !Array.isArray(error)
+        ? error
+        : undefined;
+    const code =
+      record && "code" in record && typeof record.code === "string"
+        ? record.code
+        : undefined;
+    const cause = record && "cause" in record ? record.cause : undefined;
+    const causeName =
+      typeof cause === "object" &&
+      cause !== null &&
+      "name" in cause &&
+      typeof cause.name === "string"
+        ? cause.name
+        : undefined;
+    const name =
+      typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      typeof error.name === "string"
+        ? error.name
+        : undefined;
     // Platform errors word themselves after the API that threw ("fetch" vs "Request"), so only their class is comparable.
-    return { cause: cause?.name, code: code ?? (error as Error).name };
+    return { cause: causeName, code: code ?? name };
   }
 }
 
@@ -211,7 +231,7 @@ async function stallState(
 }
 
 /** Registers the platform fast-path cases; shared by the server (Bun) and browser (Chromium, Firefox) projects. */
-export function defineNativeFetchSuite(): void {
+function useNativeLibrary(): void {
   // Loading and instrumenting the library can outlast a single test's budget, so it is not charged to the first test.
   beforeAll(async () => {
     await ensureLibrary();
@@ -221,6 +241,10 @@ export function defineNativeFetchSuite(): void {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
+}
+
+export function defineNativeFetchSuite(): void {
+  useNativeLibrary();
 
   describe("default handle", () => {
     test("binds both default option handles to globalThis and returns platform responses when detached", async () => {
@@ -230,15 +254,11 @@ export function defineNativeFetchSuite(): void {
         .fn<FetchHandle>()
         .mockResolvedValueOnce(httpResponse)
         .mockResolvedValueOnce(sseResponse);
-      const {
-        calls,
-        receivers,
-        DEFAULT_FETCH,
-        DEFAULT_HTTP_OPTIONS,
-        DEFAULT_SSE_OPTIONS,
-      } = await loadTransport(ORIGIN, platform);
-      const { handle: httpDetached } = DEFAULT_HTTP_OPTIONS;
-      const { handle: sseDetached } = DEFAULT_SSE_OPTIONS;
+      const { calls, receivers, DEFAULT_FETCH, createClientConfig } =
+        await loadTransport(ORIGIN, platform);
+      const { http, sse } = createClientConfig();
+      const { handle: httpDetached } = http;
+      const { handle: sseDetached } = sse;
 
       expect(httpDetached).toBe(DEFAULT_FETCH);
       expect(sseDetached).toBe(DEFAULT_FETCH);
@@ -256,13 +276,14 @@ export function defineNativeFetchSuite(): void {
     test("calls the platform fetch with (url, init) and never builds a Request", async () => {
       const { calls, DEFAULT_FETCH, fetchHandler } = await loadTransport(
         ORIGIN,
-        async () => new Response('{"id":1}', { headers: JSON_HEADERS }),
+        () =>
+          Promise.resolve(new Response('{"id":1}', { headers: JSON_HEADERS })),
       );
 
       const response = await fetchHandler(
         request({
           endpoint: "/users/1",
-          queryParams: new URLSearchParams({ a: "1" }),
+          query: new URLSearchParams({ a: "1" }),
           responseType: "json",
         }),
         DEFAULT_FETCH,
@@ -273,7 +294,8 @@ export function defineNativeFetchSuite(): void {
       const [input, init] = calls[0] ?? [];
       expect(calls[0]).toHaveLength(2);
       expect(input).toBeInstanceOf(URL);
-      expect(String(input)).toBe("https://example.com/users/1?a=1");
+      if (!(input instanceof URL)) throw new Error("Expected a URL");
+      expect(input.href).toBe("https://example.com/users/1?a=1");
       expect(init?.method).toBe("GET");
       expect(new Headers(init?.headers).get("accept")).toBe(
         "application/json, text/plain, */*",
@@ -281,9 +303,8 @@ export function defineNativeFetchSuite(): void {
     });
 
     test("is what the implicit default resolves to while the global fetch is untouched", async () => {
-      const { calls, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => new Response(null),
+      const { calls, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response(null)),
       );
 
       await fetchHandler(request());
@@ -293,9 +314,8 @@ export function defineNativeFetchSuite(): void {
     });
 
     test("is what a client without withHTTPHandle uses", async () => {
-      const { calls, client, http } = await loadTransport(
-        ORIGIN,
-        async () => new Response(null, { status: 204 }),
+      const { calls, client, http } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response(null, { status: 204 })),
       );
       const api = client.createClient(client.withEndpoint(ORIGIN));
       const ping = http.defineRequest({ method: "GET", path: "/ping" });
@@ -309,14 +329,12 @@ export function defineNativeFetchSuite(): void {
     });
 
     test("keeps the fallback response url identical to the url a Request reports", async () => {
-      const { createFetchRequest, DEFAULT_FETCH, fetchHandler } =
-        await loadTransport(
-          ORIGIN,
-          async () => new Response("{}", { headers: JSON_HEADERS }),
-        );
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response("{}", { headers: JSON_HEADERS })),
+      );
 
       const queries = {
-        queryParams: new URLSearchParams({ q: "a b", r: "ü&=" }),
+        query: new URLSearchParams({ q: "a b", r: "ü&=" }),
       };
       for (const overrides of [
         { endpoint: "/plain" },
@@ -326,97 +344,20 @@ export function defineNativeFetchSuite(): void {
         { endpoint: "/deep//up/../path" },
         { endpoint: "/encoded/%E2%9C%93" },
         { endpoint: "/with-query", ...queries },
-        { endpoint: "/with-query-string", queryString: "a=1&b=%20" },
+        {
+          endpoint: "/with-query-string",
+          query: new URLSearchParams("a=1&b=%20"),
+        },
       ]) {
         const input = request({ ...overrides, responseType: "json" });
         const response = await fetchHandler(input, DEFAULT_FETCH);
-        expect(response.url).toBe(createFetchRequest(input).url);
+        expect(response.url).toBe(new Request(resolveRequestUrl(input)).url);
       }
-    });
-
-    test("passes a streaming upload body wrapped for progress, with duplex half", async () => {
-      const {
-        calls,
-        DEFAULT_FETCH,
-        fetchHandler,
-        supportsStreamingRequestBody,
-      } = await loadTransport(ORIGIN, async () => new Response("ok"));
-      if (!supportsStreamingRequestBody()) {
-        return;
-      }
-      const stream = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.close();
-        },
-      });
-
-      await fetchHandler(
-        request({ body: stream, method: "POST", uploadProgress: vi.fn() }),
-        DEFAULT_FETCH,
-      );
-
-      const init = calls[0]?.[1] as
-        (RequestInit & { duplex?: string }) | undefined;
-      expect(init?.duplex).toBe("half");
-      expect(init?.body).toBeInstanceOf(ReadableStream);
-      expect(init?.body).not.toBe(stream);
-    });
-
-    test("cancels the wrapped upload body with the failure when the platform fetch rejects", async () => {
-      const networkError = new Error("network failed");
-      const { DEFAULT_FETCH, fetchHandler, supportsStreamingRequestBody } =
-        await loadTransport(ORIGIN, async () => {
-          throw networkError;
-        });
-      if (!supportsStreamingRequestBody()) {
-        return;
-      }
-      const onCancel = vi.fn();
-      const stream = openSource(onCancel);
-
-      const failure = await settleWithin(
-        fetchHandler(
-          request({ body: stream, method: "POST", uploadProgress: vi.fn() }),
-          DEFAULT_FETCH,
-        ).catch((cause: unknown) => cause),
-      );
-
-      expect(failure).toBe(networkError);
-      expect(onCancel).toHaveBeenCalledExactlyOnceWith(networkError);
-      expect(stream.locked).toBe(false);
-    });
-
-    test("surfaces the platform rejection of a request it cannot send and releases the upload body", async () => {
-      const host = inject("testServerHost");
-      const { DEFAULT_FETCH, fetchHandler, supportsStreamingRequestBody } =
-        await loadTransport(host);
-      if (!supportsStreamingRequestBody()) {
-        return;
-      }
-      const onCancel = vi.fn();
-      const stream = openSource(onCancel);
-
-      const failure = await settleWithin(
-        fetchHandler(
-          request({
-            baseEndpoint: host,
-            body: stream,
-            endpoint: "/json",
-            method: "GET",
-            uploadProgress: vi.fn(),
-          }),
-          DEFAULT_FETCH,
-        ).catch((cause: unknown) => cause),
-      );
-
-      expect(failure).toBeInstanceOf(TypeError);
-      expect(onCancel).toHaveBeenCalledExactlyOnceWith(failure);
-      expect(stream.locked).toBe(false);
     });
 
     test("does not start the platform fetch for an already aborted signal", async () => {
       const { calls, DEFAULT_FETCH, ERR_ABORTED, fetchHandler } =
-        await loadTransport(ORIGIN, async () => new Response("ok"));
+        await loadTransport(ORIGIN, () => Promise.resolve(new Response("ok")));
 
       await expect(
         fetchHandler(request({ signal: AbortSignal.abort() }), DEFAULT_FETCH),
@@ -428,9 +369,8 @@ export function defineNativeFetchSuite(): void {
     test("reads the body in one piece when nothing observes progress", async () => {
       const response = new Response('{"id":1}', { headers: JSON_HEADERS });
       const arrayBuffer = vi.spyOn(response, "arrayBuffer");
-      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => response,
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(response),
       );
 
       const result = await fetchHandler(
@@ -449,9 +389,8 @@ export function defineNativeFetchSuite(): void {
         });
       const response = chunked();
       const arrayBuffer = vi.spyOn(response, "arrayBuffer");
-      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => response,
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(response),
       );
       const viaDefault = vi.fn();
       const viaCustom = vi.fn();
@@ -462,7 +401,7 @@ export function defineNativeFetchSuite(): void {
       );
       const second = await fetchHandler(
         request({ downloadProgress: viaCustom, responseType: "text" }),
-        async () => chunked(),
+        () => Promise.resolve(chunked()),
       );
 
       expect(arrayBuffer).not.toHaveBeenCalled();
@@ -476,15 +415,14 @@ export function defineNativeFetchSuite(): void {
     });
 
     test("fills a missing response url from the resolved request url", async () => {
-      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => new Response("{}", { headers: JSON_HEADERS }),
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response("{}", { headers: JSON_HEADERS })),
       );
 
       const response = await fetchHandler(
         request({
           endpoint: "/filled",
-          queryParams: new URLSearchParams({ q: "a b" }),
+          query: new URLSearchParams({ q: "a b" }),
           responseType: "json",
         }),
         DEFAULT_FETCH,
@@ -495,9 +433,8 @@ export function defineNativeFetchSuite(): void {
 
     test("keeps an absent body absent and an empty present body distinct from JSON null", async () => {
       let next = new Response(null);
-      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => next,
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(next),
       );
       const read = (responseType: "arraybuffer" | "json" | "text") =>
         fetchHandler(request({ responseType }), DEFAULT_FETCH);
@@ -507,9 +444,11 @@ export function defineNativeFetchSuite(): void {
       next = new Response("", { headers: JSON_HEADERS });
       expect((await read("text")).body).toBe("");
       next = new Response("", { headers: JSON_HEADERS });
-      expect(((await read("arraybuffer")).body as ArrayBuffer).byteLength).toBe(
-        0,
-      );
+      const bytes = (await read("arraybuffer")).body;
+      if (!(bytes instanceof ArrayBuffer)) {
+        throw new Error("Expected an array buffer");
+      }
+      expect(bytes.byteLength).toBe(0);
       next = new Response("", { headers: JSON_HEADERS });
       await expect(read("json")).rejects.toMatchObject({
         code: "RES_DECODE_FAILED",
@@ -533,9 +472,8 @@ export function defineNativeFetchSuite(): void {
         headers: { "content-type": "text/html" },
       });
       const arrayBuffer = vi.spyOn(response, "arrayBuffer");
-      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => response,
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(response),
       );
 
       await expect(
@@ -552,9 +490,8 @@ export function defineNativeFetchSuite(): void {
           controller.error(new Error("read failed"));
         },
       });
-      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => new Response(body, { headers: JSON_HEADERS }),
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response(body, { headers: JSON_HEADERS })),
       );
 
       const failure = await fetchHandler(
@@ -563,16 +500,20 @@ export function defineNativeFetchSuite(): void {
       ).catch((cause: unknown) => cause);
 
       // Whether the platform hands back the stream's own error or its own network error is its choice; either is the cause.
-      expect(failure).toMatchObject({
-        cause: expect.any(Error),
-        code: "NET_BODY_INCOMPLETE",
-      });
+      expect(failure).toMatchObject({ code: "NET_BODY_INCOMPLETE" });
+      if (
+        typeof failure !== "object" ||
+        failure === null ||
+        !("cause" in failure)
+      ) {
+        throw new Error("Expected a transport failure");
+      }
+      expect(failure.cause).toBeInstanceOf(Error);
     });
 
     test("classifies an undecodable body as RES_DECODE_FAILED", async () => {
-      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => new Response("{bad", { headers: JSON_HEADERS }),
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response("{bad", { headers: JSON_HEADERS })),
       );
 
       await expect(
@@ -588,7 +529,8 @@ export function defineNativeFetchSuite(): void {
       );
       const { DEFAULT_FETCH, ERR_ABORTED, fetchHandler } = await loadTransport(
         ORIGIN,
-        async () => new Response(body.stream, { headers: JSON_HEADERS }),
+        () =>
+          Promise.resolve(new Response(body.stream, { headers: JSON_HEADERS })),
       );
 
       const pending = fetchHandler(
@@ -606,7 +548,8 @@ export function defineNativeFetchSuite(): void {
       const body = stalledBody();
       const { DEFAULT_FETCH, ERR_ABORTED, fetchHandler } = await loadTransport(
         ORIGIN,
-        async () => new Response(body.stream, { headers: JSON_HEADERS }),
+        () =>
+          Promise.resolve(new Response(body.stream, { headers: JSON_HEADERS })),
       );
 
       const pending = fetchHandler(
@@ -623,7 +566,8 @@ export function defineNativeFetchSuite(): void {
       const body = stalledBody();
       const { DEFAULT_FETCH, ERR_TIMEOUT, fetchHandler } = await loadTransport(
         ORIGIN,
-        async () => new Response(body.stream, { headers: JSON_HEADERS }),
+        () =>
+          Promise.resolve(new Response(body.stream, { headers: JSON_HEADERS })),
       );
 
       const pending = fetchHandler(
@@ -640,16 +584,15 @@ export function defineNativeFetchSuite(): void {
     test("receives a single Request and reads the body in chunks", async () => {
       const response = new Response('{"id":1}', { headers: JSON_HEADERS });
       const arrayBuffer = vi.spyOn(response, "arrayBuffer");
-      const { calls, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => new Response(null),
+      const { calls, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response(null)),
       );
-      const handle = vi.fn<FetchHandle>(async () => response);
+      const handle = vi.fn<FetchHandle>(() => Promise.resolve(response));
 
       const result = await fetchHandler(
         request({
           endpoint: "/custom",
-          queryParams: new URLSearchParams({ a: "1" }),
+          query: new URLSearchParams({ a: "1" }),
           responseType: "json",
         }),
         handle,
@@ -660,17 +603,19 @@ export function defineNativeFetchSuite(): void {
       expect(handle.mock.calls[0]).toHaveLength(1);
       const [input] = handle.mock.calls[0] ?? [];
       expect(input).toBeInstanceOf(Request);
-      expect((input as Request).url).toBe("https://example.com/custom?a=1");
+      if (!(input instanceof Request)) throw new Error("Expected a Request");
+      expect(input.url).toBe("https://example.com/custom?a=1");
       expect(arrayBuffer).not.toHaveBeenCalled();
       expect(calls).toHaveLength(0);
     });
 
     test("a global fetch replaced after load is a custom handle as well", async () => {
-      const { calls, fetchHandler } = await loadTransport(
-        ORIGIN,
-        async () => new Response(null),
+      const { calls, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response(null)),
       );
-      const replacement = vi.fn<FetchHandle>(async () => new Response("ok"));
+      const replacement = vi.fn<FetchHandle>(() =>
+        Promise.resolve(new Response("ok")),
+      );
       vi.stubGlobal("fetch", replacement);
 
       await fetchHandler(request({ responseType: "text" }));
@@ -681,9 +626,8 @@ export function defineNativeFetchSuite(): void {
     });
 
     test("the platform fetch passed explicitly is not the library default", async () => {
-      const { calls, client, http } = await loadTransport(
-        ORIGIN,
-        async () => new Response(null, { status: 204 }),
+      const { calls, client, http } = await loadTransport(ORIGIN, () =>
+        Promise.resolve(new Response(null, { status: 204 })),
       );
       const api = client.createClient(
         client.withEndpoint(ORIGIN),
@@ -707,7 +651,7 @@ export function defineNativeFetchSuite(): void {
 
       const pending = fetchHandler(
         request({ signal: controller.signal, responseType: "json" }),
-        async () => response,
+        () => Promise.resolve(response),
       );
       await body.reading;
       controller.abort();
@@ -726,7 +670,7 @@ export function defineNativeFetchSuite(): void {
       request({
         baseEndpoint: host,
         endpoint: "/body/stall",
-        queryParams: new URLSearchParams({ key }),
+        query: new URLSearchParams({ key }),
         responseType: "json",
         ...overrides,
       });
@@ -741,7 +685,7 @@ export function defineNativeFetchSuite(): void {
           expect(await stallState(fetchImpl, host, key)).toMatchObject(
             expected,
           ),
-        { timeout: 3000 },
+        { timeout: 10_000 },
       );
     const scenarios: {
       expected: object;
@@ -783,17 +727,51 @@ export function defineNativeFetchSuite(): void {
         name: "no content, undeclared",
         overrides: { endpoint: "/body/no-content" },
       },
-      // Whether a 204 or a HEAD response has a body stream is the platform's call (browsers give one, Bun and Node do not);
-      // the two handles only have to agree.
+      // A 204 or a HEAD response has no body in every runtime, even where the platform exposes an empty stream.
       {
-        expected: {},
-        name: "no content, declared",
+        expected: { body: undefined, status: 204 },
+        name: "no content, declared json",
         overrides: { endpoint: "/body/no-content", responseType: "json" },
       },
       {
-        expected: {},
-        name: "head, declared",
-        overrides: { endpoint: "/json", method: "HEAD", responseType: "json" },
+        expected: { body: undefined, status: 204 },
+        name: "no content, declared arraybuffer",
+        overrides: {
+          endpoint: "/body/no-content",
+          responseType: "arraybuffer",
+        },
+      },
+      {
+        expected: { body: undefined, status: 204 },
+        name: "no content, declared text",
+        overrides: { endpoint: "/body/no-content", responseType: "text" },
+      },
+      {
+        expected: { body: undefined, status: 200 },
+        name: "head, declared json",
+        overrides: {
+          endpoint: "/json",
+          method: "HEAD",
+          responseType: "json",
+        },
+      },
+      {
+        expected: { body: undefined, status: 200 },
+        name: "head, declared arraybuffer",
+        overrides: {
+          endpoint: "/json",
+          method: "HEAD",
+          responseType: "arraybuffer",
+        },
+      },
+      {
+        expected: { body: undefined, status: 200 },
+        name: "head, declared text",
+        overrides: {
+          endpoint: "/json",
+          method: "HEAD",
+          responseType: "text",
+        },
       },
       {
         expected: {},
@@ -878,9 +856,11 @@ export function defineNativeFetchSuite(): void {
         DEFAULT_FETCH,
       );
 
-      const items = response.body as { id: number; name: string }[];
-      expect(items).toHaveLength(6000);
-      expect(items.at(-1)).toEqual({ id: 5999, name: "item-5999" });
+      if (!isUnknownArray(response.body)) {
+        throw new Error("Expected a JSON array");
+      }
+      expect(response.body).toHaveLength(6000);
+      expect(response.body.at(-1)).toEqual({ id: 5999, name: "item-5999" });
     });
 
     test.each(["default", "custom"] as const)(
@@ -902,7 +882,7 @@ export function defineNativeFetchSuite(): void {
         await serverSees(realFetch, key, { opened: 1 });
         controller.abort();
 
-        await expect(settleWithin(pending, 3000)).rejects.toBe(ERR_ABORTED);
+        await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
         await serverSees(realFetch, key, { closed: 1 });
       },
     );
@@ -926,9 +906,108 @@ export function defineNativeFetchSuite(): void {
         await serverSees(realFetch, key, { opened: 1 });
         controller.abort(new DOMException("deadline", "TimeoutError"));
 
-        await expect(settleWithin(pending, 3000)).rejects.toBe(ERR_TIMEOUT);
+        await expect(settleWithin(pending)).rejects.toBe(ERR_TIMEOUT);
         await serverSees(realFetch, key, { closed: 1, opened: 1 });
       },
     );
+  });
+}
+
+/**
+ * The upload cases that need a runtime whose Request takes a stream body: Chromium, Node.js and Bun. Firefox answers
+ * `ENV_UNSUPPORTED`, which the upload suite asserts there.
+ */
+export function defineNativeFetchStreamingSuite(): void {
+  useNativeLibrary();
+
+  describe("default handle", () => {
+    test("passes a streaming upload body wrapped for progress, with duplex half", async () => {
+      const { calls, DEFAULT_FETCH, fetchHandler } = await loadTransport(
+        ORIGIN,
+        () => Promise.resolve(new Response("ok")),
+      );
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      });
+
+      await fetchHandler(
+        request({ body: stream, method: "POST", uploadProgress: vi.fn() }),
+        DEFAULT_FETCH,
+      );
+
+      const init = calls[0]?.[1];
+      const duplex =
+        init !== undefined && "duplex" in init ? init.duplex : undefined;
+      expect(duplex).toBe("half");
+      expect(init?.body).toBeInstanceOf(ReadableStream);
+      expect(init?.body).not.toBe(stream);
+    });
+
+    test("passes an unobserved stream body through untouched when called directly", async () => {
+      const { calls, DEFAULT_FETCH, fetchHandler } = await loadTransport(
+        ORIGIN,
+        () => Promise.resolve(new Response("ok")),
+      );
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      });
+
+      await fetchHandler(
+        request({ body: stream, method: "POST" }),
+        DEFAULT_FETCH,
+      );
+
+      expect(calls[0]?.[1]?.body).toBe(stream);
+      expect(stream.locked).toBe(false);
+    });
+
+    test("cancels the wrapped upload body with the failure when the platform fetch rejects", async () => {
+      const networkError = new Error("network failed");
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(ORIGIN, () =>
+        Promise.reject(networkError),
+      );
+      const onCancel = vi.fn();
+      const stream = openSource(onCancel);
+
+      const failure = await settleWithin(
+        fetchHandler(
+          request({ body: stream, method: "POST", uploadProgress: vi.fn() }),
+          DEFAULT_FETCH,
+        ).catch((cause: unknown) => cause),
+      );
+
+      expect(failure).toBe(networkError);
+      expect(onCancel).toHaveBeenCalledExactlyOnceWith(networkError);
+      expect(stream.locked).toBe(false);
+    });
+
+    test("rejects a request Fetch cannot construct as a build failure and leaves the upload body untouched", async () => {
+      const host = inject("testServerHost");
+      const { DEFAULT_FETCH, fetchHandler } = await loadTransport(host);
+      const onCancel = vi.fn();
+      const stream = openSource(onCancel);
+
+      const failure = await settleWithin(
+        fetchHandler(
+          request({
+            baseEndpoint: host,
+            body: stream,
+            endpoint: "/json",
+            method: "GET",
+            uploadProgress: vi.fn(),
+          }),
+          DEFAULT_FETCH,
+        ).catch((cause: unknown) => cause),
+      );
+
+      expect(failure).toHaveProperty("code", "REQ_BUILD_FAILED");
+      expect(failure).toHaveProperty("cause", expect.any(TypeError));
+      expect(onCancel).not.toHaveBeenCalled();
+      expect(stream.locked).toBe(false);
+    });
   });
 }

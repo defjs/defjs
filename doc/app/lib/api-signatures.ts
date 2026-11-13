@@ -1,10 +1,8 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { replaceSource } from "fumadocs-core/mdx-plugins/stringifier";
 
 export interface SignatureEntry {
   name: string;
-  signatures: readonly string[];
+  overloads: readonly { signature: string }[];
 }
 
 export type SignatureCatalog = ReadonlyMap<string, readonly string[]>;
@@ -14,23 +12,26 @@ export interface SignatureFile {
   history?: readonly string[];
 }
 
-interface MdNode {
+/** The file and mdast nodes that remark passes to plugins and that `replaceSource` records an edit against. */
+export type SignatureSourceFile = Parameters<typeof replaceSource>[0];
+type SourceNode = Parameters<typeof replaceSource>[1];
+export type SignatureContent = Exclude<SourceNode, { type: "root" }>;
+export type SignatureRoot = Extract<SourceNode, { type: "root" }>;
+type SignatureElement = Extract<
+  SignatureContent,
+  { type: "mdxJsxFlowElement" | "mdxJsxTextElement" }
+>;
+
+/** Any mdast node; a signature tag among its children is replaced in place, as in an mdast `Parent`. */
+export interface SignatureTree {
   type: string;
-  name?: string | null;
-  lang?: string | null;
-  value?: string;
-  attributes?: {
-    type: string;
-    name?: string;
-    value?: string | null;
-  }[];
-  children?: MdNode[];
+  children?: SignatureContent[];
 }
 
 interface CatalogCache {
   path: string;
   mtimeMs: number;
-  catalog: SignatureCatalog;
+  catalog: Promise<SignatureCatalog>;
 }
 
 let catalogCache: CatalogCache | undefined;
@@ -43,38 +44,51 @@ export function signatureCatalog(
   for (const entry of entries) {
     if (catalog.has(entry.name))
       throw new Error(`Ambiguous API signature "${entry.name}"`);
-    catalog.set(entry.name, entry.signatures);
+    catalog.set(
+      entry.name,
+      entry.overloads.map((overload) => overload.signature),
+    );
   }
   return catalog;
 }
 
-export function apiReferenceFile(cwd = process.cwd()): string {
+export function apiReferenceFile(cwd = `${import.meta.dirname}/../..`): string {
   const candidates = [
-    join(cwd, "app/data/api-reference.json"),
-    join(cwd, "doc/app/data/api-reference.json"),
+    `${cwd}/app/data/api-reference.json`,
+    `${cwd}/doc/app/data/api-reference.json`,
   ];
   for (const candidate of candidates)
-    if (existsSync(candidate)) return candidate;
+    if (Bun.file(candidate).size > 0) return candidate;
   throw new Error(`Cannot find api-reference.json from ${cwd}`);
 }
 
-/** Reads the catalog from disk so a rebuilt page sees a changed reference file. */
-export function readSignatureCatalog(path: string): SignatureCatalog {
-  const mtimeMs = statSync(path).mtimeMs;
-  if (catalogCache?.path === path && catalogCache.mtimeMs === mtimeMs)
-    return catalogCache.catalog;
-  let parsed: unknown;
+async function loadSignatureCatalog(path: string): Promise<SignatureCatalog> {
+  let entries: SignatureEntry[];
   try {
-    parsed = JSON.parse(readFileSync(path, "utf8"));
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: extract-api writes this file from entries of this shape and exports.spec.ts regenerates and compares it, while Bun types `json()` as `Promise<any>`. A static JSON import is typed but is read once at config load, so a re-extracted file would not reach a running dev server.
+    entries = (await Bun.file(path).json()) as SignatureEntry[];
   } catch (error) {
     throw new Error(`Cannot read API signatures from ${path}`, {
       cause: error,
     });
   }
-  if (!Array.isArray(parsed))
-    throw new Error(`API reference is not a list: ${path}`);
-  const catalog = signatureCatalog(parsed as SignatureEntry[]);
+  return signatureCatalog(entries);
+}
+
+/**
+ * Reads the catalog from disk so a rebuilt page sees a changed reference file.
+ * The read is cached by modification time, so pages compiled together share it.
+ * A failed read is dropped from the cache, so the next page reads the file again.
+ */
+export function readSignatureCatalog(path: string): Promise<SignatureCatalog> {
+  const mtimeMs = Bun.file(path).lastModified;
+  if (catalogCache?.path === path && catalogCache.mtimeMs === mtimeMs)
+    return catalogCache.catalog;
+  const catalog = loadSignatureCatalog(path);
   catalogCache = { path, mtimeMs, catalog };
+  catalog.catch(() => {
+    catalogCache = undefined;
+  });
   return catalog;
 }
 
@@ -106,16 +120,21 @@ export function signatureText(
     .join("\n\n");
 }
 
-function signatureAttribute(node: MdNode, file: string): string {
-  const attribute = node.attributes?.find((item) => item.name === "name");
+function signatureAttribute(node: SignatureElement, file: string): string {
+  const attribute = node.attributes.find(
+    (item) => item.type === "mdxJsxAttribute" && item.name === "name",
+  );
   if (!attribute || typeof attribute.value !== "string")
     throw new Error(`API signature name in ${file} must be a string`);
   return attribute.value;
 }
 
 /** `.md` pages parse the tag as raw HTML. `.mdx` pages parse it as JSX. */
-function signatureName(node: MdNode, file: string): string | undefined {
-  if (node.type === "html" && node.value) {
+function signatureName(
+  node: SignatureContent,
+  file: string,
+): string | undefined {
+  if (node.type === "html") {
     const text = node.value.trim();
     if (!text.startsWith("<ApiSignature")) return undefined;
     const name = /\bname="([^"]*)"/.exec(text)?.[1];
@@ -123,27 +142,22 @@ function signatureName(node: MdNode, file: string): string | undefined {
       throw new Error(`API signature name in ${file} must be a string`);
     return name;
   }
-  if (!isApiSignature(node)) return undefined;
+  if (
+    (node.type !== "mdxJsxFlowElement" && node.type !== "mdxJsxTextElement") ||
+    node.name !== "ApiSignature"
+  )
+    return undefined;
   return signatureAttribute(node, file);
 }
 
-function isApiSignature(node: MdNode): boolean {
-  return (
-    (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") &&
-    node.name === "ApiSignature"
-  );
-}
-
 export function replaceApiSignatures(
-  tree: MdNode,
-  file: SignatureFile,
+  tree: SignatureTree,
+  file: SignatureSourceFile,
   catalog: SignatureCatalog,
 ): void {
   const children = tree.children;
   if (!children) return;
-  for (let index = 0; index < children.length; index++) {
-    const child = children[index];
-    if (!child) continue;
+  for (const [index, child] of children.entries()) {
     const attribute = signatureName(child, signatureFile(file));
     if (attribute === undefined) {
       replaceApiSignatures(child, file, catalog);
@@ -151,18 +165,22 @@ export function replaceApiSignatures(
     }
     const value = signatureText(catalog, attribute, signatureFile(file));
     // Processed Markdown is sliced from the authored source, so the fence has to be recorded on the original node.
-    replaceSource(file as never, child as never, "```ts\n" + value + "\n```");
+    replaceSource(file, child, "```ts\n" + value + "\n```");
     children[index] = { type: "code", lang: "ts", value };
   }
 }
 
 /** Attacher: unified calls this once, then the returned function for every page. */
 export function remarkApiSignatures(): (
-  tree: MdNode,
-  file?: SignatureFile,
-) => void {
-  return (tree, file = {}) => {
-    replaceApiSignatures(tree, file, readSignatureCatalog(apiReferenceFile()));
+  tree: SignatureRoot,
+  file: SignatureSourceFile,
+) => Promise<void> {
+  return async (tree, file) => {
+    replaceApiSignatures(
+      tree,
+      file,
+      await readSignatureCatalog(apiReferenceFile()),
+    );
   };
 }
 

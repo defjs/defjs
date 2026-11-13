@@ -1,8 +1,10 @@
-import type { AnyStruct } from "../struct";
+import type { AnyStruct, Infer } from "../struct";
+import type { RuntimeStruct } from "../struct/definition";
+import type { StructLike } from "../struct/types";
 import { decodeBytes, readBytesText } from "../internal/bytes";
 import { rejectNonJson } from "../internal/outbound_request";
-import { decodeJson, encodeJson } from "../struct/codec/json";
-import { parseStructValue } from "../struct/introspection";
+import { encodeValue } from "../struct/encode_by_struct";
+import { parseRuntimeValue, parseStructValue } from "../struct/parse";
 
 export function serializeOutgoingWebSocketMessage(
   outgoing: AnyStruct | undefined,
@@ -14,9 +16,13 @@ export function serializeOutgoingWebSocketMessage(
     );
   }
 
+  // PERF: the shared outbound encoder (a tagging parse, then encodeOutbound) measured 4% to 28% slower on one send: Bun 1.4.4
+  // +7.5% on a number, +16% on a nested object, +4% on a union; Node 26.13 +21%, +28%, +17% (seven interleaved runs each).
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the public StructLike is a compile-time brand with no runtime members, while every struct the constructors build carries the definition RuntimeStruct describes, and making StructLike assignable to it would change the published type. Unasserted: TS2345, `StructLike` is not assignable to `RuntimeStruct`
+  const runtime = outgoing as RuntimeStruct;
   // Same guard as an HTTP JSON body: non-finite numbers, functions, symbols and non-plain objects throw.
   const wire = JSON.stringify(
-    encodeJson(outgoing, parseStructValue(outgoing, message)),
+    encodeValue(runtime, parseRuntimeValue(runtime, message)),
     (key, value: unknown) =>
       rejectNonJson(key, value, "Outgoing WebSocket message"),
   );
@@ -29,18 +35,11 @@ export function serializeOutgoingWebSocketMessage(
   return wire;
 }
 
-export async function transformWebSocketMessage(
-  incoming: AnyStruct,
-  raw: unknown,
-): Promise<unknown> {
-  return await decodeWebSocketMessage(incoming, raw);
-}
-
 /** Synchronous for text and bytes. Only a Blob frame has to be read first. */
-export function decodeWebSocketMessage(
-  incoming: AnyStruct,
+export function decodeWebSocketMessage<S extends StructLike>(
+  incoming: S,
   raw: unknown,
-): unknown {
+): Infer<S> | undefined | Promise<Infer<S> | undefined> {
   if (typeof Blob !== "undefined" && raw instanceof Blob) {
     return raw
       .arrayBuffer()
@@ -49,30 +48,29 @@ export function decodeWebSocketMessage(
   return decodeWebSocketText(incoming, readBytesText(raw));
 }
 
-function decodeWebSocketText(
-  incoming: AnyStruct,
+function decodeWebSocketText<S extends StructLike>(
+  incoming: S,
   text: string | undefined,
-): unknown {
+): Infer<S> | undefined {
   return text === undefined
     ? undefined
-    : decodeJson(incoming, JSON.parse(text));
+    : parseStructValue(incoming, JSON.parse(text), { aliases: true });
 }
 
 export interface WebSocketCloseSnapshot {
-  cause?: unknown;
   code?: number;
   reason?: string;
   wasClean?: boolean;
 }
 
-export function extractCloseInfo(
-  event?: CloseEvent,
-  cause?: unknown,
-): WebSocketCloseSnapshot {
+export function extractCloseInfo(event: {
+  code: number;
+  reason: string;
+  wasClean: boolean;
+}): WebSocketCloseSnapshot {
   return {
-    cause,
-    code: event?.code,
-    reason: event?.reason,
-    wasClean: event?.wasClean,
+    code: event.code,
+    reason: event.reason,
+    wasClean: event.wasClean,
   };
 }

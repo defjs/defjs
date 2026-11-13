@@ -24,13 +24,11 @@ describe("web socket runtime lifecycle", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("should allow closing websocket before startup", async () => {
     const useEchoSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("ready"),
         ok: struct.boolean(),
@@ -57,7 +55,6 @@ describe("web socket runtime lifecycle", () => {
 
   test("should skip unexpected websocket messages after startup", async () => {
     const useInvalidSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
       incoming: struct.object({
         type: struct.literal("message"),
         count: struct.number(),
@@ -91,7 +88,6 @@ describe("web socket runtime lifecycle", () => {
 
     const useBeforeConnectSocket = defineWebSocket({
       builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
       input: struct.object({ token: struct.string() }),
       incoming: struct.object({
         type: struct.literal("connected"),
@@ -104,8 +100,9 @@ describe("web socket runtime lifecycle", () => {
 
     const [error, socket, connection] = await useBeforeConnectSocket(
       clientWithSerializer({
-        beforeConnect: async () => {
+        beforeConnect: () => {
           callCount += 1;
+          return Promise.resolve();
         },
       }),
       { token: "secret-0" },

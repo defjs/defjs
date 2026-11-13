@@ -6,10 +6,9 @@ import {
   withEndpoint,
 } from "@defjs/core";
 
-const client = createClient(withEndpoint("https://chat.example.com"));
-const room = defineWebSocket({
-  maxIncomingQueueSize: 100,
-  path: "/chat",
+const client = createClient(withEndpoint("https://quotes.example.com"));
+const quotes = defineWebSocket({
+  path: "/quotes",
   incoming: struct.discriminatedUnion("type", [
     struct.object({ type: struct.literal("pong"), ok: struct.boolean() }),
   ]),
@@ -17,7 +16,7 @@ const room = defineWebSocket({
 });
 
 async function main() {
-  const [error, session] = await room(
+  const [error, session] = await quotes(
     client({
       heartbeat: {
         intervalMs: 30_000,
@@ -35,8 +34,8 @@ async function main() {
     console.error(error.code);
     return;
   }
-  console.log(session.state);
-  session.close(1000, "done");
+  await using ownedSession = session;
+  console.log(ownedSession.state);
 }
 
 void main();

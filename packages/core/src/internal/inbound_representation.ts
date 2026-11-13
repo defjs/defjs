@@ -1,7 +1,7 @@
-import type { AnyStruct } from "../struct";
+import type { RuntimeStruct } from "../struct/definition";
 import { DEFINITION } from "../struct/symbols";
-import type { RuntimeStruct } from "../struct/types";
-import type { HttpResponseType } from "./http_request";
+import type { StructLike } from "../struct/types";
+import type { HttpResponseType } from "../http/http_request";
 
 /**
  * Representation chosen from the struct kind.
@@ -12,8 +12,9 @@ import type { HttpResponseType } from "./http_request";
  * every other kind. Optional and nullable are flags, so they keep the inner kind.
  */
 export function resolveInboundRepresentation(
-  struct: AnyStruct,
+  struct: StructLike,
 ): HttpResponseType {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the public StructLike is a compile-time brand with no runtime members, while every struct the constructors build carries the definition RuntimeStruct describes, and making StructLike assignable to it would change the published type. Unasserted: TS2345, `StructLike` is not assignable to `RuntimeStruct`
   const kind = (struct as RuntimeStruct)[DEFINITION].kind;
   if (kind === "string") {
     return "text";

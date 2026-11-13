@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { isRecord, isUnknownArray } from "../narrow";
 import {
   createClient,
   defineRequest,
@@ -7,8 +8,8 @@ import {
   withHTTPHandle,
 } from "../../src";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
-import { encodeOutbound } from "../../src/internal/outbound_request";
-import { encodeJson } from "../../src/struct/codec/json";
+import { encodeOutbound } from "../../src/struct/encode";
+import { encodeObjectByAlias } from "../encode-by-alias";
 import { serializeOutgoingWebSocketMessage } from "../../src/web_socket/codec";
 
 const plain = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
@@ -34,7 +35,7 @@ test("nullable shared fields parse and encode null instead of walking aliases", 
     null,
     { name: null },
   ]);
-  expect(plain(encodeJson(Nullable, { name: null }))).toEqual({
+  expect(plain(encodeObjectByAlias(Nullable, { name: null }))).toEqual({
     wire_name: null,
   });
   expect(serializeOutgoingWebSocketMessage(Nullable, { name: null })).toBe(
@@ -42,7 +43,7 @@ test("nullable shared fields parse and encode null instead of walking aliases", 
   );
 });
 
-test("nested nullable and explicit undefined containers stay leaves", async () => {
+test("nested nullable and explicit undefined containers stay leaves", () => {
   const child = struct
     .object({ name: struct.string().alias("wire_name") })
     .nullish();
@@ -54,24 +55,26 @@ test("nested nullable and explicit undefined containers stay leaves", async () =
     null,
     { row: null },
   ]);
-  expect(plain(encodeJson(schema, { row: undefined }))).toEqual({});
-  const tagged = await parseEndpointInput(schema, {});
+  expect(plain(encodeObjectByAlias(schema, { row: undefined }))).toEqual({});
+  const tagged = parseEndpointInput(schema, {});
   expect(plain(encodeOutbound({ ...tagged, row: undefined }))).toEqual({});
 
   const optionalRow = struct.intersection(
     struct.object({ row: Left.optional() }),
     struct.object({ row: Left.optional() }),
   );
-  expect(plain(encodeJson(optionalRow, { row: undefined }))).toEqual({});
+  expect(plain(encodeObjectByAlias(optionalRow, { row: undefined }))).toEqual(
+    {},
+  );
 });
 
 test("nullable intersection input reaches the HTTP handle", async () => {
   let calls = 0;
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls += 1;
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const request = defineRequest({
@@ -87,10 +90,10 @@ test("nullable intersection input reaches the HTTP handle", async () => {
 
 test("a union inside a guide set encodes every match and rejects a difference", async () => {
   const value = { name: "N", lastName: "L" };
-  expect(() => encodeJson(UnionGuide, { row: value })).toThrow(
+  expect(() => encodeObjectByAlias(UnionGuide, { row: value })).toThrow(
     /ambiguous union encode/,
   );
-  const tagged = await parseEndpointInput(UnionGuide, { row: value });
+  const tagged = parseEndpointInput(UnionGuide, { row: value });
   expect(() => encodeOutbound({ ...tagged, row: value })).toThrow(
     /ambiguous union encode/,
   );
@@ -98,9 +101,9 @@ test("a union inside a guide set encodes every match and rejects a difference", 
   let calls = 0;
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls += 1;
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const request = defineRequest({
@@ -128,20 +131,20 @@ test("wire parsing keeps the union branch that actually matched", async () => {
   const request = defineRequest({ method: "GET", path: "/", output: schema });
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => Response.json({ b_name: "N" })),
+    withHTTPHandle(() => Promise.resolve(Response.json({ b_name: "N" }))),
   );
   const [fault, parsed] = await request(client);
   expect(fault).toBeNull();
   expect(plain(parsed)).toEqual({ name: "N" });
 });
 
-test("a child tag replaces parent field guides for the whole subtree", async () => {
+test("a child tag replaces parent field guides for the whole subtree", () => {
   const schema = struct.intersection(
     struct.object({ row: A.optional() }),
     struct.object({ row: B.optional() }),
   );
-  const tagged = await parseEndpointInput(schema, {});
-  const own = await parseEndpointInput(
+  const tagged = parseEndpointInput(schema, {});
+  const own = parseEndpointInput(
     struct.object({ name: struct.string().alias("own_name") }),
     { name: "N" },
   );
@@ -153,35 +156,35 @@ test("a child tag replaces parent field guides for the whole subtree", async () 
     struct.object({ note: struct.string(), row: Left.optional() }),
     struct.object({ note: struct.string() }),
   );
-  const singleRoot = await parseEndpointInput(single, { note: "hi" });
+  const singleRoot = parseEndpointInput(single, { note: "hi" });
   expect(plain(encodeOutbound({ ...singleRoot, row: own }))).toEqual({
     note: "hi",
     row: { own_name: "N" },
   });
 });
 
-test("a record beside an object guides every fresh key at that node", async () => {
+test("a record beside an object guides every fresh key at that node", () => {
   const schema = struct.intersection(
     struct.object({ rows: struct.record(Left) }),
     struct.object({ rows: struct.object({ one: Right }) }),
   );
   const rows = { extra: { firstName: "Grace" }, one: logical };
-  const tagged = await parseEndpointInput(schema, { rows });
+  const tagged = parseEndpointInput(schema, { rows });
   const expected = { rows: { extra: { first_name: "Grace" }, one: wire } };
   expect(plain(encodeOutbound(tagged))).toEqual(expected);
   expect(plain(encodeOutbound({ ...tagged, rows }))).toEqual(expected);
 });
 
-test("guide-set edges encode null, agreeing unions, records, and non-object members", async () => {
+test("guide-set edges encode null, agreeing unions, records, and non-object members", () => {
   const nullWire = struct.intersection(
     struct.object({ name: struct.null() }),
     struct.object({ name: struct.string().nullable().alias("wire_name") }),
   );
-  expect(plain(encodeJson(nullWire, { name: null }))).toEqual({
+  expect(plain(encodeObjectByAlias(nullWire, { name: null }))).toEqual({
     name: null,
     wire_name: null,
   });
-  const nullTagged = await parseEndpointInput(nullWire, { name: null });
+  const nullTagged = parseEndpointInput(nullWire, { name: null });
   expect(plain(encodeOutbound(nullTagged))).toEqual({
     name: null,
     wire_name: null,
@@ -191,7 +194,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ row: Left.optional() }),
     struct.object({ row: Right.optional() }),
   );
-  const empty = await parseEndpointInput(containers, {});
+  const empty = parseEndpointInput(containers, {});
   expect(encodeOutbound({ ...empty, row: null })).toEqual({ row: null });
 
   const First = struct.object({ id: struct.string().alias("wire_id") });
@@ -204,7 +207,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
-  const agreedRoot = await parseEndpointInput(agreed, {});
+  const agreedRoot = parseEndpointInput(agreed, {});
   expect(
     plain(encodeOutbound({ ...agreedRoot, row: { id: "1", title: "T" } })),
   ).toEqual({
@@ -221,7 +224,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
-  const unmatchedRoot = await parseEndpointInput(unmatched, {});
+  const unmatchedRoot = parseEndpointInput(unmatched, {});
   expect(
     plain(encodeOutbound({ ...unmatchedRoot, row: { extra: 1, title: "T" } })),
   ).toEqual({
@@ -240,7 +243,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
-  const missedRoot = await parseEndpointInput(missed, {});
+  const missedRoot = parseEndpointInput(missed, {});
   expect(
     plain(encodeOutbound({ ...missedRoot, pet: { kind: "bird", title: "T" } })),
   ).toEqual({
@@ -253,7 +256,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
       box: struct.object({ name: struct.string().alias("display_name") }),
     }),
   );
-  const boxedRoot = await parseEndpointInput(boxed, {
+  const boxedRoot = parseEndpointInput(boxed, {
     box: { extra: "x", name: "Ada" },
   });
   expect(
@@ -271,7 +274,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
       }),
     }),
   );
-  const partialRoot = await parseEndpointInput(partial, {
+  const partialRoot = parseEndpointInput(partial, {
     box: { note: "hi" },
   });
   expect(
@@ -284,7 +287,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ rows: struct.array(Left).optional() }),
     struct.object({ rows: struct.array(Right).optional() }),
   );
-  const listsRoot = await parseEndpointInput(lists, {});
+  const listsRoot = parseEndpointInput(lists, {});
   expect(
     plain(encodeOutbound({ ...listsRoot, rows: { extra: logical } })),
   ).toEqual({ rows: { extra: logical } });
@@ -293,13 +296,13 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ rows: struct.array(struct.string().optional()) }),
     struct.object({ rows: struct.array(struct.number().optional()) }),
   );
-  const holesRoot = await parseEndpointInput(holes, { rows: [] });
+  const holesRoot = parseEndpointInput(holes, { rows: [] });
   expect(encodeOutbound({ ...holesRoot, rows: [undefined] })).toEqual({
     rows: [undefined],
   });
 });
 
-test("outbound encoding of a parsed value matches encodeJson", async () => {
+test("outbound encoding of a parsed value matches encodeObjectByAlias", () => {
   const shared = struct.intersection(
     struct.object({
       id: struct.string().alias("wire_id"),
@@ -371,8 +374,8 @@ test("outbound encoding of a parsed value matches encodeJson", async () => {
     },
   ];
   for (const { input, schema } of cases) {
-    const tagged = await parseEndpointInput(schema, input as never);
-    const encoded = plain(encodeJson(schema, input));
+    const tagged = parseEndpointInput(schema, input);
+    const encoded = plain(encodeObjectByAlias(schema, input));
     expectOutboundMatchesEncode(plain(encodeOutbound(tagged)), encoded);
   }
 });
@@ -390,14 +393,28 @@ function collectWireKeys(value: unknown, keys: Set<string>): void {
     return;
   }
   if (value !== null && typeof value === "object") {
-    for (const [key, child] of Object.entries(
-      value as { [key: string]: unknown },
-    )) {
+    for (const [key, child] of Object.entries(value)) {
       keys.add(key);
       collectWireKeys(child, keys);
     }
   }
 }
+
+test("a Date put in place of an object that two discriminated unions declare leaves as its ISO string", () => {
+  const event = () =>
+    struct.discriminatedUnion("kind", [
+      struct.object({ kind: struct.literal("created") }),
+    ]);
+  const Schema = struct.intersection(
+    struct.object({ item: event() }),
+    struct.object({ item: event() }),
+  );
+  const input = parseEndpointInput(Schema, { item: { kind: "created" } });
+
+  expect(encodeOutbound({ ...input, item: new Date(0) })).toEqual({
+    item: "1970-01-01T00:00:00.000Z",
+  });
+});
 
 function expectSameWire(
   actual: unknown,
@@ -406,7 +423,8 @@ function expectSameWire(
 ): void {
   if (Array.isArray(encoded)) {
     expect(actual).toEqual(expect.any(Array));
-    const items = actual as unknown[];
+    if (!isUnknownArray(actual)) throw new Error("Expected an array");
+    const items = actual;
     expect(items).toHaveLength(encoded.length);
     for (let index = 0; index < encoded.length; index += 1) {
       expectSameWire(items[index], encoded[index], wireKeys);
@@ -417,8 +435,11 @@ function expectSameWire(
     expect(
       actual !== null && typeof actual === "object" && !Array.isArray(actual),
     ).toBe(true);
-    const actualObject = actual as { [key: string]: unknown };
-    const encodedObject = encoded as { [key: string]: unknown };
+    if (!isRecord(actual) || !isRecord(encoded)) {
+      throw new Error("Expected wire objects");
+    }
+    const actualObject = actual;
+    const encodedObject = encoded;
     for (const key of Object.keys(encodedObject)) {
       expect(actualObject).toHaveProperty(key);
       expectSameWire(actualObject[key], encodedObject[key], wireKeys);

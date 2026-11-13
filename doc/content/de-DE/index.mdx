@@ -5,88 +5,77 @@ description: TypeScript-SDKs mit wiederverwendbaren API-Definitionen und anwendu
 
 # Defjs
 
-**Entwickelt für bessere SDKs.**
+**Den API-Vertrag einmal definieren. Die Ausführung pro Anwendung konfigurieren.**
 
-Defjs hilft Teams, ihre APIs in wiederverwendbare TypeScript-SDKs zu verwandeln. `def` steht für `define`: Beschreibe die Operationen, die dein Service anbietet, exportiere sie aus einem Modul oder npm-Paket, und lass jede Anwendung ihren eigenen Client konfigurieren, um sie aufzurufen.
+Defjs trennt die beiden Seiten eines TypeScript-SDKs sauber voneinander:
 
-## SDK definieren, Anwendung konfigurieren
+- **SDK-Definition (`@defjs/core`)** — Als SDK-Autor deklarierst du typisierte HTTP-, SSE- und WebSocket-Operationen zusammen mit ihren `struct`-Schemas. Eine Definition ist reine Daten: Ihr Import startet weder einen Netzwerkaufruf noch bindet er einen globalen Client.
+- **Anwendungsausführung** — Konsumierende Anwendungen erstellen ihren eigenen `Client` (`createClient(withEndpoint(...))`), hängen Anmeldedaten und Interceptors an, konfigurieren Load-Balancing und übergeben diesen Client beim Aufruf einer Operation.
 
-| SDK-Autor                                                                | SDK-Nutzer                                                        |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| Operationen, Eingabe, Request-Abbildung, Responses und Fehler definieren | Service-Adresse, Zugangsdaten, Interceptors und Transport wählen  |
-| Typisierte HTTP-, SSE- und WebSocket-Endpoints exportieren               | Diese Endpoints importieren und mit einem Defjs-Client aufrufen   |
-| Den API-Vertrag pflegen und veröffentlichen                              | Ergebnisse behandeln und Abbruch, Streams sowie Sessions besitzen |
+## Kurzer Blick: SDK-Definition vs. Anwendungsausführung
 
-Eine SDK-Definition bindet keinen Anwendungsclient. Derselbe exportierte Endpoint kann eine Browser-Anwendung, einen Server oder einen lokalen Test mit unterschiedlichen Client-Konfigurationen bedienen. Beide Seiten nutzen weiterhin den Defjs-Ausführungsvertrag und kompatible Core-Versionen.
-
-Das SDK exportiert eine Operation:
+<Tabs items={["get-health.ts", "app.ts"]}>
+<Tab>
 
 <include cwd meta="get-health.ts">
   examples/home/get-health.ts#example
 </include>
 
-Die Anwendung importiert sie und besitzt die Ausführung:
+</Tab>
+<Tab>
 
 <include cwd meta="app.ts">
   examples/home/app.ts#example
 </include>
 
-Der Aufruf `getHealth(client)` startet den Request. Veröffentlichst du die Definition, importieren Nutzer sie aus deinem SDK-Paket statt aus der lokalen Datei.
+</Tab>
+</Tabs>
 
-## Bewährte Praxis
+Der Aufruf `getHealth(client)` führt I/O aus und liefert ein Error-first-Tupel zurück. Prüfe `if (error)` und beende den Ablauf vorzeitig, bevor du das dekodierte Ergebnis liest.
 
-Eine Definition bleibt vom Client unabhängig. Übergib den Client der Anwendung als erstes Argument, etwa `getHealth(client)`. Die Anwendung besitzt außerdem die Service-Adresse und die Zugangsdaten. Lies zuerst das Error-first-Tupel. Wenn `error` gesetzt ist, melde `error.code` und kehre aus der Funktion zurück, bevor du den Erfolgswert liest.
+## Warum Definitionen von Clients trennen?
 
-## Dein SDK bauen
+| Verantwortung | SDK-Autor (Definition)                                                                                           | Anwendung (Ausführung)                                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Besitzt**   | Methode, Pfadvorlage, `input`- / `output`- / `error`-Schemas, `builder`-Mapping und statischen `operation`-Namen | Basis-URLs, Zugangsdaten, Auth-Interceptors, Load-Balancing, Timeouts und Ressourcen-Bereinigung |
+| **Liefert**   | Wiederverwendbare ESM-Module und `.d.ts`-Deklarationen                                                           | Laufzeitkonfiguration für Browser, Server oder Testumgebung                                      |
+| **Vorteil**   | Keinerlei Bindung an die Laufzeitumgebung; funktioniert im Browser, bei SSR und in Tests                         | Volle Kontrolle über Wiederholungsversuche (Retries), Failover, Telemetrie und Lifecycles        |
 
-1. [Definiere deine erste Operation und führe sie aus](/de-DE/docs/start), in getrennten Dateien für SDK und Anwendung.
-2. Beschreibe die [Datenverträge](/de-DE/docs/struct) und [HTTP-Operationen](/de-DE/docs/http), die dein SDK exportiert.
-3. [Teste und veröffentliche ein SDK-Paket](/de-DE/recipes/publish-http-sdk) mit JavaScript, Deklarationen und einer kompatiblen Core-Abhängigkeit.
-4. Konfiguriere den [Client](/de-DE/docs/client) der konsumierenden Anwendung und ergänze danach Framework- oder Observability-Integration, wo sie gebraucht wird.
+## Wähle deinen Einstieg
 
-Die [Entwurfsentscheidungen](/de-DE/docs/design-decisions) erklären, warum API-Definitionen und Ausführung getrennte Eigentümer haben. Dieselbe Struktur kannst du in einer Anwendung nutzen, bevor du ein Paket veröffentlichst.
+1. **[Schnellstart](/de-DE/docs/start)** — Definiere eine Operation, teste sie offline mit einem lokalen Fetch-Handle und richte sie auf einen echten Dienst aus.
+2. **[Kernarchitektur](/de-DE/docs/design-decisions)** — Verstehe die sechs Regeln zur Response-Dekodierung, Error-first-Tupel und die Verantwortung für Ressourcen.
+3. **[SDKs definieren](/de-DE/docs/struct)** — Deklariere Datenverträge mit [Struct](/de-DE/docs/struct) und exportiere [HTTP](/de-DE/docs/http)-, [SSE](/de-DE/docs/sse)- und [WebSocket](/de-DE/docs/web-socket)-Operationen.
+4. **[Client & Ausführung](/de-DE/docs/client)** — Konfiguriere [Clients](/de-DE/docs/client), behandle typisierte [Fehler](/de-DE/docs/errors), binde [Interceptors](/de-DE/docs/interceptors) ein, richte [Lastverteilung & Failover](/de-DE/docs/load-balancing) ein und führe deterministische [Tests](/de-DE/docs/testing) aus.
 
-## Transport wählen
+## Unterstützte Transporte und Ergebnis-Tupel
 
-| Du brauchst                          | Starte mit                          | Erfolgreiches Ergebnis                                                             |
-| ------------------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------- |
-| Request + statusspezifische Response | [HTTP](/de-DE/docs/http)            | Dekodierte Daten + `DecodedResponse` (`HttpMeta`, wenn kein Output deklariert ist) |
-| Langlebiger Server-Event-Feed        | [SSE](/de-DE/docs/sse)              | Ein Stream + Startup-`open`-Snapshot                                               |
-| Bidirektionale Session               | [WebSocket](/de-DE/docs/web-socket) | Eine Session + Startup-`connection`-Snapshot                                       |
+Jede Operation gibt ein dreiteiliges Error-first-Tupel zurück, das auf den Lebenszyklus des jeweiligen Transports zugeschnitten ist:
 
-Alle drei Transports folgen derselben Folge: eine Operation definieren, dann mit dem Client der Anwendung und der Eingabe des Aufrufers aufrufen.
+| Transport                               | Einstiegspunkt      | Tupel-Form                     | Lifecycle-Verwaltung                                                        |
+| --------------------------------------- | ------------------- | ------------------------------ | --------------------------------------------------------------------------- |
+| **[HTTP](/de-DE/docs/http)**            | `defineRequest`     | `[error, data, response]`      | In-Flight-Aufrufe via `client({ signal })` abbrechen                        |
+| **[SSE](/de-DE/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | Freigeben mit `await using` oder `stream.close()` + `await stream.closed`   |
+| **[WebSocket](/de-DE/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | Freigeben mit `await using` oder `session.close()` + `await session.closed` |
 
-## Paket wählen
+Bei einem HTTP-Fehler ist das Tupel `[error, undefined, undefined]`, da `error` bereits alle `HttpMeta`-Response-Metadaten enthält. Bei SSE und WebSocket enthält der dritte Slot den Startup-Snapshot, sofern vor dem Fehler einer erfasst wurde.
 
-| Paket                         | Wann                                                                                                             |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | SDK-Operationen und Verträge definieren; Clients erzeugen und HTTP-, SSE- und WebSocket-Operationen aufrufen     |
-| `@defjs/react`                | `ClientProvider` / `useClient` — siehe [React](/de-DE/docs/integrations/react)                                   |
-| `@defjs/vue`                  | Plugin + `injectClient` — siehe [Vue](/de-DE/docs/integrations/vue)                                              |
-| `@defjs/opentelemetry-server` | Ausgehende Spans, Metrics und Logs — siehe [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server) |
+## Offizielle Pakete
 
-## Ergebnisformen
+| Paket                         | Rolle                                                                         | Anleitung                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `@defjs/core`                 | Abhängigkeitsfreie SDK-Definitionen, `struct`, Client und Interceptors        | [Schnellstart](/de-DE/docs/start)                                     |
+| `@defjs/react`                | `ClientProvider` und `useClient()`-Kontextinjektion für React 18+             | [React-Integration](/de-DE/docs/integrations/react)                   |
+| `@defjs/vue`                  | `createClientPlugin`, `HTTP_CLIENT` und `injectClient()` für Vue 3 oder neuer | [Vue-Integration](/de-DE/docs/integrations/vue)                       |
+| `@defjs/opentelemetry-server` | Serverseitige Spans für ausgehende Aufrufe, Metriken und Diagnose-Logs        | [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server) |
 
-Alle drei Transports liefern ein Error-first-Tupel mit drei Einträgen. Positionen stimmen; Bedeutungen nicht:
-
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`
-- WebSocket → `[error, session, connection]`
-
-Bei einem Fehler ist der zweite Eintrag `undefined`. Bei HTTP ist auch der dritte Eintrag `undefined`, weil der Fault die Response-Metadaten trägt. Bei SSE und WebSocket ist der dritte Eintrag der Startup-Snapshot, sofern vor dem Fehler einer erfasst wurde. Siehe [Fehler](/de-DE/docs/errors).
-
-## Ownership in einem Atemzug
-
-Brich HTTP ab, wenn sie veraltet ist. Schließe SSE und `await stream.closed`. Schließe WebSocket und `await session.closed`. Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options Cookies, Auth oder Tenant-Daten erfassen. Schwärze URLs, Headers und Bodies, bevor du sie loggst.
-
-Defjs liefert Definitionen, Validierung und Ausführung. Anwendungen wählen Caching- und Retry-Regeln; Stream-Reconnect ist opt-in. Handgeschriebene SDK-Pakete werden heute unterstützt. CLI-Werkzeuge und OpenAPI-/SDK-Generierung bleiben geplant.
-
-## Verwandte Rezepte
+## Beliebte Rezepte aus dem Kochbuch
 
 - [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk)
-- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)
-- [POST JSON](/de-DE/recipes/post-json)
+- [JSON senden und validieren](/de-DE/recipes/post-json)
+- [Deklarierte 404 behandeln](/de-DE/recipes/get-declared-404)
 - [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)
-- [SSE-Stream konsumieren](/de-DE/recipes/consume-sse)
-- [WebSocket-Session öffnen](/de-DE/recipes/websocket-session)
+- [Bearer-Token nach 401 einmalig erneuern](/de-DE/recipes/refresh-bearer-once)
+- [SSE-Stream verarbeiten](/de-DE/recipes/consume-sse)
+- [WebSocket-Sitzung öffnen](/de-DE/recipes/websocket-session)
 - [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)

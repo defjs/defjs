@@ -1,6 +1,10 @@
+import { defined } from "./api-model";
+
+/** Removes doc comments and whole-line lint directives, which are source notes, not signature. */
 export function stripInnerDocs(text: string): string {
   return text
     .replace(/\/\*\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/[ \t]*(?:eslint|oxlint)-disable\b.*\n/gm, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -43,7 +47,7 @@ export function omitInternalMembers(text: string): string {
   const kept: string[] = [];
   let index = 0;
   while (index < lines.length) {
-    const line = lines[index] as string;
+    const line = defined(lines[index], "line");
     if (!/^\s*\/\*\*/.test(line)) {
       kept.push(line);
       index += 1;
@@ -53,7 +57,7 @@ export function omitInternalMembers(text: string): string {
     let comment = "";
     let trailing = "";
     while (index < lines.length) {
-      const current = lines[index] as string;
+      const current = defined(lines[index], "line");
       const close = current.indexOf("*/");
       if (close === -1) {
         comment += `${current}\n`;
@@ -67,7 +71,7 @@ export function omitInternalMembers(text: string): string {
     }
     if (!/@internal\b/i.test(comment)) {
       for (let cursor = start; cursor < index; cursor += 1)
-        kept.push(lines[cursor] as string);
+        kept.push(defined(lines[cursor], "line"));
       continue;
     }
     const pending = trailing.trim()
@@ -83,7 +87,7 @@ function skipMember(lines: readonly string[], start: number): number {
   let depth = 0;
   let seen = false;
   for (let index = start; index < lines.length; index += 1) {
-    const line = lines[index] as string;
+    const line = defined(lines[index], "line");
     for (const char of line) {
       if (char === "{") {
         depth += 1;
@@ -247,17 +251,6 @@ export function facadeSignature(signature: string, member: string): string {
   return signature.replace(/^function\s+[A-Za-z0-9_]+/, `function ${member}`);
 }
 
-/** An unannotated `as const` object has no useful signature; its members do. */
-export function suppressObjectSignature(
-  annotated: boolean,
-  initializer: { kind: number } | undefined,
-  objectLiteralKind: number,
-): boolean {
-  if (annotated) return false;
-  if (!initializer) return false;
-  return initializer.kind === objectLiteralKind;
-}
-
 /** Append a short inferred type only when the declaration has no annotation. */
 export function withInferredType(
   signature: string,
@@ -269,27 +262,6 @@ export function withInferredType(
   const suffix = inferredTypeSuffix(inferred);
   if (!suffix) return cleaned;
   return `${cleaned.slice(0, -1)}${suffix};`;
-}
-
-export function typeParameterClause(
-  fileText: string,
-  params: { pos: number; end: number } | undefined,
-): string {
-  if (!params) return "";
-  const text = fileText.slice(params.pos, params.end);
-  const start = text.indexOf("<");
-  const end = text.lastIndexOf(">");
-  if (start < 0 || end <= start) return "";
-  return text.slice(start + 1, end).trim();
-}
-
-export function cutEnd(
-  mode: "members" | "body" | "node",
-  marker: number | undefined,
-  nodeEnd: number,
-): number {
-  if (mode !== "node" && marker !== undefined) return marker;
-  return nodeEnd;
 }
 
 export function initializerEnd(node: {
@@ -327,29 +299,6 @@ export function readableBinding(signature: string): string {
     .replace(/< /g, "<")
     .replace(/ >/g, ">");
   return `${flatHead}(${parameterName(typeName)}: ${typeName})${rest}`;
-}
-
-/** A missing return annotation can use a short checker type. Longer types stay omitted. */
-export function returnTypeSuffix(typeText: string | undefined): string {
-  const text = typeText?.trim() ?? "";
-  if (
-    !text ||
-    text.length > 200 ||
-    text.includes("...") ||
-    text.includes("\n") ||
-    text === "any"
-  )
-    return "";
-  return `: ${text};`;
-}
-
-export function withReturnType(
-  signature: string,
-  printed: string | undefined,
-): string {
-  const suffix = returnTypeSuffix(printed);
-  if (!suffix || /\)\s*:/.test(signature)) return signature;
-  return `${signature.replace(/;\s*$/, "")}${suffix}`;
 }
 
 /** Keep the public class surface and drop implementation bodies. */

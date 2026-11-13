@@ -1,177 +1,122 @@
 ---
-title: "Décisions de conception"
-description: Comment séparer les définitions d’API de l’exécution du client rend les SDK plus simples à concevoir, publier et réutiliser.
+title: "Architecture du cœur"
+description: Comment la séparation entre définitions d'API et exécution du client simplifie la conception, la publication et la réutilisation des SDK.
 ---
 
-# Décisions de conception
+# Architecture du cœur
 
-Defjs existe pour rendre la conception de SDK plus accueillante. `def` veut dire `define` : une équipe décrit l’API de son service et publie des définitions réutilisables, tandis que chaque application consommatrice décide comment les appeler. Le reste de la conception suit de cette séparation.
+Defjs repose sur une frontière fondamentale : **un SDK définit le contrat réseau ; l'application consommatrice possède l'exécution.** Chaque choix de conception dans `@defjs/core` découle de cette séparation.
 
-## Écriture du SDK et exécution applicative
+## 1. Définition vs exécution
 
-L’auteur du SDK possède les opérations, les contrats d’entrée, le mapping de requête, le décodage des réponses et les erreurs de service déclarées. L’application possède la configuration du client, les identifiants courants, le moment de l’appel, le traitement des résultats et la durée de vie des ressources. Un endpoint exporté peut être utilisé par des clients différents sans embarquer l’environnement d’une application dans le SDK.
+Un package de SDK exporte des opérations (`defineRequest`, `defineEventStream`, `defineWebSocket`) et des contrats de données (`struct`). Il n'appelle jamais `createClient`, ne stocke aucun singleton de client et ne lit aucune variable d'environnement.
 
-Appeler une opération avec un client démarre le travail. Les définitions sont des modules Defjs exécutables avec des Structs et des builders, pas un format d’échange neutre vis-à-vis du client. Les auteurs de SDK déclarent une dépendance Core compatible et livrent le JavaScript plus les déclarations TypeScript. [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk) montre cette frontière dans un paquet.
+<Tabs items={["sdk/orders.ts", "app/consumers.ts", "Single-file quick look"]}>
+<Tab>
 
-Des fabriques ou des méthodes de commodité facultatives peuvent fournir des défauts ou un comportement propre au domaine. Garder les endpoints disponibles permet aux applications de conserver le contrôle quand ces défauts ne conviennent pas. Les plugins de framework et la télémétrie s’attachent au client consommateur, donc le paquet de définition peut rester indépendant de React, de Vue ou de la mise en place d’observabilité d’une application.
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/sdk/orders.ts#example
+</include>
 
-Cette séparation rend aussi les tests pratiques : appelle la définition réelle du SDK à travers un handle local au client et observe la requête et le résultat décodé. La validation au runtime, les erreurs explicites et le nettoyage possédé par l’appelant soutiennent un contrat de SDK fiable.
+</Tab>
+<Tab>
 
-## Une déclaration est une affirmation [#declaration-is-an-assertion]
+<include cwd lang="typescript">
+  examples/design-decisions/definitions/app/consumers.ts#example
+</include>
 
-Ces six règles décident chaque question sur la façon dont une réponse est lue. Elles sont numérotées pour qu’une
-discussion ultérieure puisse en citer une au lieu de la redériver.
-
-### 1. Ce que tu déclares est ce que tu affirmes
-
-`output` veut dire « quand `ok` est vrai, le corps _est_ cette forme ». `error` veut dire « quand `ok` est faux,
-le corps _est_ cette forme ». Une déclaration n’est pas un indice ni un espoir au mieux ; c’est une affirmation sur
-ce qui arrivera.
-
-### 2. `ok` est la seule fourche, et un seul côté décode jamais
-
-Une réponse 2xx est lue avec `output`. Tout le reste est lu avec `error`. Jamais les deux, jamais
-l’autre en repli.
-
-### 3. Une réalité qui diffère de l’affirmation est un échec, signalé haut et fort
-
-Pas de devinette de formats, pas de dégradation vers quelque chose de plus faible, pas de silence. Que le backend
-ait changé, qu’une gateway soit intervenue, ou que quelqu’un ait altéré la réponse **ne change pas la
-conclusion** — la bibliothèque ne peut pas les distinguer et ne devrait pas prétendre le faire.
-
-C’est la règle que les gens veulent le plus souvent adoucir, donc elle mérite d’être dite clairement.
-Suppose qu’un attaquant puisse réécrire un `200` que ta page s’apprêtait à lire avec `output`, et qu’à la place
-tu reçoives un `3xx`, `4xx` ou `5xx`. Échouer n’est pas un inconvénient ; c’est la seule issue
-sûre. Te remettre le corps brut « au cas où » donnerait à quiconque peut injecter une réponse un
-moyen de contourner la validation que tu as demandée.
-
-### 4. Un décodage échoué n’a pas de corps
-
-Un corps _est_ une valeur décodée. Si le décodage a échoué, il n’y a pas de valeur — il n’y a pas de corps
-à moitié décodé à inspecter. Le détail fautif vit sur `cause` ; la réponse garde ses métadonnées et
-rien de plus.
-
-Celui-ci est imposé par le système de types plutôt que par convention : le `response` d’un fault de décodage est
-`HttpMeta`, qui n’a pas de champ `body` du tout, donc en chercher un est une erreur de compilation.
-
-### 5. Si tu ne veux pas l’affirmation, ne déclare pas
-
-Omettre `output` veut dire « je ne me soucie pas du corps 2xx » — il n’est jamais lu. Omettre `error`
-dit la même chose pour tout le reste. C’est un opt-out explicite, pas un oubli, et cela va jusqu’au
-bout : un corps illisible sur le côté dont tu t’es retiré ne te regarde pas, pas même le
-fait qu’il n’ait pas pu être lu.
-
-### 6. 3xx n’est pas une plage de succès
-
-`ok` veut dire 2xx, donc une réponse 3xx (typiquement `304 Not Modified`) est lue avec `error`, jamais avec
-`output`. Si un endpoint répond avec un statut 3xx dans le cadre de son contrat, laisse `error`
-non déclaré et traite le fault `HTTP_STATUS`, ou déclare un `error` texte (`struct.string()`) pour
-accepter le corps vide. Un Struct `error` JSON ne peut pas accepter une réponse sans corps : c’est un
-échec, ce qui est l’issue attendue plutôt qu’un trou.
-
-## Clients explicites
-
-`createClient(...)` fait de la config d’endpoint une valeur explicite. Des environnements ou des portées de requête différents obtiennent des endpoints, identifiants, intercepteurs, serializers et handles de transport différents.
-
-Le coût : pas de défaut à l’échelle du processus. Ce coût aide sur un serveur — crée le client dans la frontière de la requête quand les options ou les closures capturent l’auth, les cookies, les utilisateurs, les tenants ou des métadonnées de requête. Un client explicite n’isole toujours pas l’état capturé par un intercepteur. L’identité du client n’est pas une frontière de sécurité à elle seule.
-
-Un client porte la configuration. Il ne possède pas le travail actif. Qui démarre une requête HTTP, un flux SSE ou une session WebSocket doit l’annuler ou la fermer et attendre la promesse terminale.
-
-## Définitions et opérations
-
-La définition est le contrat stable : méthode, chemin, struct d’entrée, les structs qui décodent chaque côté de `ok`, limites de transport. `defineRequest` renvoie une opération. L’appeler avec un client démarre cet appel. La même valeur de client peut être passée à beaucoup d’opérations.
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
 </include>
 
-Un job d’arrière-plan et un propriétaire UI peuvent appeler la même opération `getUser` avec des clients différents, donc chacun peut choisir sa propre politique d’annulation et de nouvelle tentative. Le code applicatif ne dépend pas des tags ou symboles de transport internes.
+</Tab>
+</Tabs>
 
-## Résultats propres au transport
+Comme `getOrder` ne capture aucun état de client :
 
-Les trois transports utilisent un tuple error-first. Une seule « réponse » générique effacerait des faits de cycle de vie.
+- Une interface navigateur, une tâche de fond, un gestionnaire de requêtes SSR et un test unitaire peuvent appeler la même opération `getOrder` avec des configurations de `Client` différentes.
+- Les plugins de frameworks (`@defjs/react`, `@defjs/vue`) et le plugin middleware d'observabilité (`@defjs/opentelemetry-server`) se greffent sur le `Client` applicatif, préservant ainsi le package SDK publié de toute dépendance tierce.
 
-- HTTP → `[err, data, response]` — sortie décodée + la réponse qui l’a produite
-- SSE → `[err, stream, open]` — un flux logique + instantané de réponse au démarrage
-- WebSocket → `[err, session, connection]` — session logique + instantané de connexion au démarrage
+## 2. Placement explicite des entrées et alias bidirectionnels
 
-En succès, la troisième valeur est toujours présente. Un échec HTTP est `[error, undefined, undefined]` :
-le fault porte déjà les métadonnées de réponse, et ce fault est ce qui est passé à un handler,
-journalisé ou relevé. Les échecs de démarrage SSE et WebSocket peuvent encore inclure l’instantané open ou connection
-quand un a été capturé.
+Dans Defjs, `input` déclare ce que l'appelant transmet, `struct` régit l'encodage et le décodage des valeurs, et `builder` place chaque valeur sur la requête (`path`, `query`, `headers`, `body`).
 
-Pour SSE et WebSocket, la troisième valeur est un instantané, pas une promesse que les reconnexions futures gardent la
-même connexion physique. Après le démarrage, le contrôle du cycle de vie appartient au handle ou à la
-session renvoyé.
-
-## Décodage au runtime
-
-L’inférence TypeScript décrit ce que tu attends ; elle ne peut pas vérifier une réponse serveur au runtime. Le parsing Struct est la seconde moitié du contrat. Defjs valide l’entrée de l’opération avant la construction de la requête, vérifie la représentation, puis parse le struct du côté de `ok` qui s’applique.
-
-Pour HTTP, le Struct est appliqué **une fois, après la chaîne d’intercepteurs**. Une réponse qu’un intercepteur a construite avec
-`makeResponse(...)` passe par la même vérification de media type, la même conversion de représentation et le même Struct
-qu’une réponse venue du fil : d’où vient une réponse ne change pas la façon dont elle est lue, donc il n’y a
-pas de chemin « fais confiance à l’intercepteur » à raisonner. Le transport Fetch intégré lit un corps déclaré
-comme JSON, texte, `Blob` ou octets avant de le rendre à la chaîne. Seules les représentations JSON exigent
-un media type JSON et `JSON.parse` ; le texte, les blobs et les octets non JSON sont valides pour leur représentation
-déclarée. Les intercepteurs voient cette représentation, pas encore la valeur décodée par le Struct. Les échecs de lecture
-s’appliquent à chaque représentation ; les échecs de lecture ou de parse là se présentent comme le même fault `RES_*` ou
-`NET_BODY_INCOMPLETE`.
-
-L’ordre est : media type (pour le JSON), puis représentation, puis struct.
-
-| Ce qui n’a pas tenu                                               | Fault                                                          |
-| ----------------------------------------------------------------- | -------------------------------------------------------------- |
-| Le media type n’est pas celui qu’exige la représentation déclarée | `RES_MEDIA_TYPE_INVALID` — signalé _avant_ la lecture du corps |
-| Les octets ne sont pas cette représentation                       | `RES_DECODE_FAILED`                                            |
-| La valeur n’est pas ce struct                                     | `RES_STRUCT_MISMATCH` (HTTP seulement)                         |
-| Non-2xx, et `error` a décodé                                      | `HTTP_STATUS` avec `data` typé                                 |
-| Non-2xx, et `error` n’était pas déclaré                           | `HTTP_STATUS` avec `data: undefined`                           |
-
-Vérifier le media type d’abord est ce qui transforme « j’ai demandé du JSON et j’ai reçu du HTML » en un fault
-précis au lieu d’une erreur de parser, et cela saute la lecture, le parse et le struct entièrement.
-
-## Builder, encodeur et alias
-
-Un struct est le contrat de champs, dans les deux sens. `.alias(name)` est le nom wire. Le struct décide comment une valeur est encodée. Le `builder` décide où cette valeur va.
-
-`builder` est synchrone et pur. Il reçoit l’entrée parsée — la vraie valeur, pas une vue de binding — et renvoie la requête : `path`, `query`, `headers` et `body`. Il tourne quand l’opération est appelée. Une erreur levée devient `REQ_BUILD_FAILED` sur le tuple ; appeler l’opération ne lève rien. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
+- **Aucune inférence magique** : Si une opération déclare un `input`, elle doit obligatoirement fournir un `builder` synchrone et pur. La destination des champs n'est jamais devinée à partir du nom des paramètres.
+- **`.alias(wireName)` bidirectionnel** : Déclarer `.alias("customer_name")` sur un champ de struct conserve `customerName` dans le typage TypeScript tout en assurant automatiquement la conversion vers et depuis `"customer_name"` sur le réseau.
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-Le chemin par défaut est de remettre la valeur typée. `body: { users: input.users }` garde l’alias de chaque utilisateur, donc le champ wire est `display_name`. Une clé que tu écris toi-même (`account_id`, `x-api-version`) est littérale. Étaler un objet typé garde son struct ; ajouter la clé wire à côté du champ logique est `REQ_BUILD_FAILED`.
+Lorsque le builder transmet un objet struct typé à `body`, `query` ou `headers`, ses alias de champs ainsi que ses codecs `Date` / `bigint` s'appliquent automatiquement. Les clés rédigées dans un objet enveloppe anonyme (comme `account_id` ou `x-api-version` ci-dessus) restent littérales.
 
-L’imbrication de query est une propriété du backend, donc elle vit sur le client : `withQuerySerializer((query) => string)` voit l’objet wire encodé, aliases compris. Il n’est pas appelé quand il n’y a pas de query. Un `URLSearchParams` renvoyé par le builder le saute. Sans serializer, les tableaux répètent les clés et un objet imbriqué échoue. Les intercepteurs observent `queryParams` comme `new URLSearchParams(queryString)`.
+## 3. Une déclaration est une affirmation [#declaration-is-an-assertion]
 
-Le kind du corps est décidé à partir de la valeur, première correspondance :
+Six règles strictes régissent la manière dont Defjs lit les réponses HTTP :
 
-- pas de `body` → rien n’est envoyé
-- un codec `urlencoded` ou `formData` sur la racine du corps → cet encodage de formulaire ; le tag ne s’applique pas quand la valeur est imbriquée dans du JSON
-- `FormData`, `URLSearchParams`, `Blob`, `File`, octets, ou un `ReadableStream` → envoyé tel quel
-- une string → `text/plain;charset=UTF-8`
-- objets simples, tableaux, nombres, booléens, `null`, `Date` et `bigint` → JSON ; tout ce que `JSON.stringify` écarterait ou aplatirait (`Map`, `Set`, une instance de classe sans `toJSON`, une fonction, `NaN`, un flux Node) → `REQ_BUILD_FAILED`
+### Règle 1 : Ce que vous déclarez est ce que vous affirmez
 
-Les champs `undefined` sont omis. `null` sur un champ nullable est envoyé. Une string n’est pas du JSON sauf si tu la stringifies et poses `content-type`. Sérialiser toi-même (`JSON.stringify`, qs, protobuf) quitte l’encodeur de struct, donc les aliases ne s’appliquent pas. Il n’y a pas de `struct.encode` public.
+`output` affirme la structure d'un corps `2xx`. `error` affirme la structure d'un corps non-`2xx`. Une déclaration est une garantie d'exécution, et non un simple indice au mieux.
 
-`GET` et `HEAD` ne peuvent pas porter un corps. Les builders WebSocket ne peuvent pas renvoyer d’en-têtes ni de corps. Les sous-protocoles WebSocket statiques restent sur la définition (`protocols`), pas dans le builder. Les frames WebSocket invalides vont à l’écouteur d’erreur runtime de la session. Un struct `error` SSE type le fault de démarrage, et son corps de handshake suit la même règle de kind qu’un corps HTTP : `string` est du texte, les blobs et les fichiers sont des blobs, `arrayBuffer` est des octets, et tout le reste est du JSON. La sélection de représentation est partagée, mais pas le mapping des faults : les échecs de lecture, de parse ou de Struct du handshake SSE sont `RES_DECODE_FAILED`, avec `StructError` comme `cause` pour un échec de Struct ; HTTP signale les échecs de Struct comme `RES_STRUCT_MISMATCH`.
+### Règle 2 : `ok` (`200..299`) est la seule bifurcation
 
-## Observateurs et placement de la politique
+Une réponse `2xx` est décodée exclusivement avec `output`. Tout autre statut (`3xx`, `4xx`, `5xx`) est décodé exclusivement avec `error`. Defjs ne bascule jamais de l'un vers l'autre en repli.
 
-Les intercepteurs servent à la politique transversale au transport : auth, tracing, court-circuit, retry revu. Ils ne tournent que pour leur transport et se composent en ordre oignon. Les options de requête sur un client dérivé servent à la durée de vie propre au travail : `signal`, heartbeat WebSocket, et reconnexion opt-in.
+### Règle 3 : Tout écart par rapport à l'affirmation est un échec explicite
 
-Les observateurs rapportent ce qui s’est passé sans devenir un second propriétaire. `onInvalidEvent` SSE, les écouteurs d’état WebSocket et les écouteurs d’erreurs runtime servent aux diagnostics et métriques bornés. Le flux ou la session renvoyé possède toujours l’itération, la fermeture, le désabonnement et l’attente terminale. Cache, suppression de résultats périmés, idempotence et mapping d’erreurs de domaine se placent autour de l’appel d’opération, où ton app voit sa propre politique et son état.
+Defjs choisit le côté de la réponse avec `response.ok` : `output` pour `2xx`, `error` pour un non-`2xx`. Seul un struct JSON déclaré de ce côté déclenche le décodage et peut produire `RES_MEDIA_TYPE_INVALID` ou `RES_DECODE_FAILED` ; son `Content-Type` est vérifié **d'abord**, avant que le corps soit lu ou recherché. Une réponse sans contenu (`HEAD`, `204`, `205`, `304`) est soumise au même contrôle : une représentation JSON déclarée sans `Content-Type` JSON échoue avec `RES_MEDIA_TYPE_INVALID`, et avec un `Content-Type` JSON elle analyse les octets vides et échoue avec `RES_DECODE_FAILED`. Une page de passerelle HTML non-`2xx` produit `RES_MEDIA_TYPE_INVALID` seulement lorsqu'un struct JSON `error` est déclaré. Sans déclaration pour le côté actif, le corps n'est pas lu ; une réponse non-`2xx` renvoie un `HTTP_STATUS` non décodé. Un handshake SSE suit les mêmes règles : un handshake non-`2xx` dont le corps `error` déclaré ne peut pas être décodé renvoie ce fault de décodage au démarrage, avec le statut dans ses métadonnées, tandis que les intercepteurs, les politiques de reconnexion et le `closed` d'une reconnexion voient toujours `HTTP_STATUS`.
 
-## OpenAPI, sourcemaps et télémétrie
+| Ce qui a échoué pendant la lecture de la réponse          | Fault retourné                                                                                        |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Le media type ne correspond pas au JSON déclaré           | `RES_MEDIA_TYPE_INVALID` (vérifié d'abord ; le corps n'est jamais lu, contenu ou non n'y change rien) |
+| Les octets ne peuvent être décodés dans la représentation | `RES_DECODE_FAILED` (octets JSON vides compris)                                                       |
+| La valeur décodée échoue à la validation `struct`         | `RES_STRUCT_MISMATCH`                                                                                 |
+| Statut non-`2xx` avec struct `error` décodé               | `HTTP_STATUS` avec `error.data` typé                                                                  |
+| Statut non-`2xx` avec `error` omis                        | `HTTP_STATUS` avec `error.data: undefined`                                                            |
 
-Defjs ne génère ni ne synchronise un second contrat OpenAPI. Si OpenAPI fait déjà autorité, garde-le et ajoute la validation au runtime à la frontière de l’app. Pour un service nouveau, les définitions d’endpoints et les Structs peuvent être le contrat wire direct — pas de seconde source de vérité.
+### Règle 4 : Un décodage échoué n'a pas de corps
 
-`withOpenTelemetryServer(...)` ajoute de l’instrumentation Defjs **sortante** à un client. Il n’initialise pas un SDK OpenTelemetry. `tracer`, `meter` et `logger` sont chacun facultatifs (omettre `tracer` désactive les spans locaux et les hooks de span), les trois transports sont activés par défaut, et la propagation de query WebSocket est désactivée par défaut. Garde les noms d’opération statiques et de faible cardinalité. Revois la propagation, les hooks, les URL, les en-têtes, les payloads, les causes et la rétention comme potentiellement sensibles.
+Un corps n'existe qu'après avoir franchi le décodage et la validation. En cas d'échec de décodage, le `response` du fault est typé comme `HttpMeta` (qui ne possède aucune propriété `body`), et l'erreur d'analyse/validation est rattachée à `fault.cause`.
 
-Les sourcemaps sont une décision de déploiement, pas un comportement Defjs. Une map publique avec `sourcesContent` expose la source ; une map cachée contient encore la source et les chemins ; désactiver les maps retire la symbolication au niveau source. Traite les maps privées comme des artefacts de debug déployables, avec des règles d’accès et de rétention explicites.
+### Règle 5 : Omettre un côté revient à renoncer à le lire
 
-## Recettes liées
+Omettre `output` signifie que les corps `2xx` ne sont jamais lus. Omettre `error` signifie que les corps non-`2xx` ne sont jamais lus — même si le serveur a envoyé un JSON invalide sur un code `500`.
 
-- [GET avec un 404 déclaré](/fr-FR/recipes/get-declared-404)
-- [Tester avec un handle Fetch local](/fr-FR/recipes/test-with-handle)
+### Règle 6 : `3xx` n'est pas un statut de succès
+
+`ok` signifie strictement `200 <= status < 300`. Un code `304 Not Modified` est non-`2xx` : laissez `error` non déclaré et traitez `HTTP_STATUS` (voir [Requêtes conditionnelles ETag](/fr-FR/recipes/etag-revalidate)), ou déclarez `struct.string()` si vous attendez un corps texte vide.
+
+## 4. Tuples de résultat propres au transport
+
+Les trois transports renvoient un tuple error-first de trois éléments plutôt que de lever une exception au point d'appel :
+
+- **HTTP** → `[error, data, response]` — charge utile décodée + `DecodedResponse<T>` (`HttpMeta` quand `output` est omis).
+- **SSE** → `[error, stream, open]` — `EventStreamHandle` + instantané du handshake initial.
+- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + instantané de la connexion initiale.
+
+Les clients portent la configuration, pas les connexions actives. L'appelant qui initie une requête HTTP, un flux SSE ou une session WebSocket en possède l'annulation ou la fermeture (`AbortSignal` pour HTTP ; `await using` ou `.close()` + `await .closed` pour SSE et WebSocket).
+
+## 5. Ce que Defjs ne fournit pas
+
+Plusieurs motifs d'autres clients HTTP n'ont volontairement aucun équivalent dans Defjs. Utilisez le remplacement de la colonne de droite.
+
+| Non fourni                                                                               | À utiliser à la place                                                               |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Un singleton de client global                                                            | Un `createClient(...)` propre à l'application, passé aux opérations                 |
+| Une méthode de client qui exécute une opération                                          | Appeler directement l'opération : `getOrder(client, input)`                         |
+| Un délai d'expiration par défaut au niveau du client, ou les options `timeout` / `abort` | `client({ signal: AbortSignal.timeout(ms) })` ou un `AbortController`               |
+| Un champ `responseType` sur `defineRequest`                                              | Le type de struct de `output` (`string`, `blob`, `arrayBuffer` ou JSON)             |
+| `.parse()` sur une instance de struct, ou `struct.encode`                                | `struct.parse(schema, value)` et le placement par `builder`                         |
+| Des en-têtes de handshake WebSocket personnalisés                                        | Des cookies, des tickets de requête de courte durée ou `protocols`                  |
+| Une table de messages ou une enveloppe de type WebSocket                                 | `struct.discriminatedUnion` et `session.onRuntimeError`                             |
+| La génération de code OpenAPI                                                            | Garder OpenAPI comme spécification externe, ou valider à la frontière avec `struct` |
+
+## Lectures connexes
+
+- [Struct & schémas](/fr-FR/docs/struct)
+- [Opérations HTTP](/fr-FR/docs/http)
+- [Gestion des erreurs](/fr-FR/docs/errors)
+- [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk)

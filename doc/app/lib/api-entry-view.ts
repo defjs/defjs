@@ -1,3 +1,4 @@
+import type { Locale } from "./i18n";
 import type { ApiReferenceEntry, StoredEntry } from "../../scripts/api-model";
 import { apiTargets, requireApiReference } from "../data/api-reference";
 import {
@@ -6,7 +7,6 @@ import {
   firstParagraph,
   parameterSections,
   resolveDocLinks,
-  withoutFirstParagraph,
   type ApiField,
   type ApiParameterSection,
 } from "./api-text";
@@ -24,8 +24,9 @@ export interface ApiEntryView {
   /** Repo-relative declaration file, used by the edit link. */
   source: string;
   group: string;
+  /** The first paragraph as plain text. */
   summary: string;
-  /** Description after the paragraph already shown above the page body. */
+  /** The whole description, first paragraph included, with doc links resolved. */
   description: string;
   signatures: string[];
   parameterTables: ApiParameterSection[];
@@ -37,13 +38,13 @@ export interface ApiEntryView {
   overviewHref: string;
 }
 
-export function apiEntryView(slug: string, locale: string): ApiEntryView {
+export function apiEntryView(slug: string, locale: Locale): ApiEntryView {
   return buildApiEntryView(requireApiReference(slug), locale, apiTargets());
 }
 
 export function buildApiEntryView(
   entry: ApiReferenceEntry,
-  locale: string,
+  locale: Locale,
   targets: ReadonlyMap<string, string>,
 ): ApiEntryView {
   const resolve = (text: string) => resolveDocLinks(text, locale, targets);
@@ -56,8 +57,8 @@ export function buildApiEntryView(
     source: entry.source,
     group: entry.group,
     summary: firstParagraph(entry.description),
-    description: withoutFirstParagraph(resolve(entry.description)),
-    signatures: [...entry.signatures],
+    description: resolve(entry.description),
+    signatures: entry.overloads.map((overload) => overload.signature),
     parameterTables: parameterSections(
       entry.overloads.map((overload) => ({
         signature: overload.signature,

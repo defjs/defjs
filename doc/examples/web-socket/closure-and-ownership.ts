@@ -7,6 +7,4 @@ async function observeSession(
   await using ownedSession = session;
   console.log(ownedSession.state);
 }
-
-void observeSession;
 // #endregion

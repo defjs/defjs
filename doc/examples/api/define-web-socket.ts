@@ -1,17 +1,17 @@
 // #region example
 import { defineWebSocket, struct } from "@defjs/core";
 
-const chat = defineWebSocket({
-  maxIncomingQueueSize: 100,
-  path: "/chat",
-  protocols: ["chat.v1"],
+const quotes = defineWebSocket({
+  path: "/quotes",
+  protocols: ["quotes.v1"],
   incoming: struct.object({
-    text: struct.string(),
-    type: struct.literal("message"),
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
   }),
   outgoing: struct.object({
-    text: struct.string(),
-    type: struct.literal("message"),
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
   }),
 });
 // #endregion

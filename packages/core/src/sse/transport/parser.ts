@@ -17,14 +17,19 @@ export async function readStreamBytes(
   stream: ReadableStream<Uint8Array>,
   onChunk: (chunk: Uint8Array) => void | Promise<void>,
   signal?: AbortSignal,
+  onReadError?: (error: unknown) => void,
 ): Promise<void> {
   const reader = stream.getReader();
+  const read = () => reader.read();
   try {
     for (;;) {
-      const read = () => reader.read();
-      const result = signal
-        ? await awaitWithSignal(read, signal)
-        : await read();
+      let result: Awaited<ReturnType<typeof read>>;
+      try {
+        result = signal ? await awaitWithSignal(read, signal) : await read();
+      } catch (error) {
+        onReadError?.(error);
+        throw error;
+      }
       if (result.done) return;
       await onChunk(result.value);
     }
@@ -45,7 +50,7 @@ export function createLineParser(
   onLine: (line: Uint8Array) => void | Promise<void>,
   options?: LineParserOptions,
 ): (chunk: Uint8Array) => Promise<void> {
-  const limit = validateMaxBufferSize(options?.maxBufferSize);
+  const limit = options?.maxBufferSize;
   let parts: Uint8Array[] = [];
   let byteLength = 0;
   let afterCR = false;
@@ -100,13 +105,14 @@ export interface MessageParserOptions {
 export function createMessageParser(
   onId: (id: string) => void,
   onRetry: (retry: number) => void,
-  onMessage?: (message: EventStreamMessage) => void | Promise<void>,
+  onMessage?: (message: Omit<EventStreamMessage, "id">) => void | Promise<void>,
   options?: MessageParserOptions,
 ): (line: Uint8Array) => void | Promise<void> {
-  const limit = validateMaxBufferSize(options?.maxBufferSize);
+  const limit = options?.maxBufferSize;
   const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
   let firstLine = true;
   let id = "";
+  let idPending = false;
   let event = "";
   let data = "";
   let dataBytes = 0;
@@ -119,8 +125,12 @@ export function createMessageParser(
         content = line.subarray(3);
     }
     if (content.length === 0) {
+      if (idPending) {
+        onId(id);
+        idPending = false;
+      }
       const message =
-        data === "" ? undefined : { id, event, data: data.slice(0, -1) };
+        data === "" ? undefined : { event, data: data.slice(0, -1) };
       event = "";
       data = "";
       dataBytes = 0;
@@ -148,7 +158,7 @@ export function createMessageParser(
       case "id":
         if (!value.includes("\0")) {
           id = value;
-          onId(value);
+          idPending = true;
         }
         break;
       case "retry":
@@ -157,11 +167,4 @@ export function createMessageParser(
         break;
     }
   };
-}
-
-function validateMaxBufferSize(value: number | undefined): number | undefined {
-  if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
-    throw new TypeError("SSE maxBufferSize must be a positive safe integer");
-  }
-  return value;
 }

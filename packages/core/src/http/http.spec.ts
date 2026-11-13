@@ -1,13 +1,8 @@
 import { beforeEach, describe, expect, inject, test } from "vitest";
-import {
-  createClient,
-  withEndpoint,
-  withInterceptors,
-  withXSRF,
-} from "../client";
+import { createClient, withEndpoint, withInterceptors } from "../client";
 import type { Client } from "../client";
 import { createHttpInterceptor } from "../interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "./http_response";
 import { struct } from "../struct";
 import type { HttpRequest } from "./index";
 import { defineRequest } from "./index";
@@ -108,9 +103,9 @@ describe("request http runtime", () => {
     const optionalClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           capturedRequest = request;
-          return makeResponse({ status: 200 });
+          return Promise.resolve(makeResponse({ status: 200 }));
         }),
       ),
     );
@@ -133,7 +128,7 @@ describe("request http runtime", () => {
 
     expect(error).toBeNull();
     expect(capturedRequest?.endpoint).toBe("/search");
-    expect(capturedRequest?.queryString).toBe("");
+    expect(capturedRequest?.query?.toString()).toBe("");
     expect(Array.from(capturedRequest?.headers?.entries() ?? [])).toEqual([]);
   });
 
@@ -144,16 +139,18 @@ describe("request http runtime", () => {
     const client = createClient(
       withEndpoint("https://example.com/api"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           callCount += 1;
-          capturedRequest = request as typeof capturedRequest;
-          return makeResponse({
-            body: {
-              ok: true,
-            },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
+          capturedRequest = request;
+          return Promise.resolve(
+            makeResponse({
+              body: {
+                ok: true,
+              },
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          );
         }),
       ),
     );
@@ -213,8 +210,8 @@ describe("request http runtime", () => {
     expect(callCount).toBe(2);
     expect(capturedRequest?.baseEndpoint).toBe("https://example.com/api");
     expect(capturedRequest?.endpoint).toBe("/inspect/7");
-    expect(capturedRequest?.queryParams?.get("include")).toBe("true");
-    expect(capturedRequest?.queryParams?.getAll("tags")).toEqual(["a", "b"]);
+    expect(capturedRequest?.query?.get("include")).toBe("true");
+    expect(capturedRequest?.query?.getAll("tags")).toEqual(["a", "b"]);
     expect(capturedRequest?.headers?.get("x-token")).toBe("secret");
     expect(capturedRequest?.body).toBe('{"nickname":"Miao"}');
   });
@@ -224,9 +221,9 @@ describe("request http runtime", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           endpoint = request.endpoint;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -241,50 +238,6 @@ describe("request http runtime", () => {
 
     expect(error).toBeNull();
     expect(endpoint).toBe("/users/a%2Fb%20%3F%23%25%E7%8C%AB");
-  });
-
-  test("should expose xsrf client config on the final HttpRequest", async () => {
-    const tokenProvider = () => "xsrf-token";
-    let capturedRequest: HttpRequest | undefined;
-
-    const client = createClient(
-      withEndpoint("https://example.com/api"),
-      withXSRF({
-        cookieName: "CUSTOM-XSRF-TOKEN",
-        headerName: "X-CUSTOM-XSRF-TOKEN",
-        tokenProvider,
-      }),
-      withInterceptors(
-        createHttpInterceptor(async (request) => {
-          capturedRequest = request as typeof capturedRequest;
-          return makeResponse({
-            body: {
-              ok: true,
-            },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
-        }),
-      ),
-    );
-
-    const useInspectXsrf = defineRequest({
-      method: "GET",
-      output: struct.object({
-        ok: struct.boolean(),
-      }),
-      path: "/xsrf",
-    });
-
-    const [error, result] = await useInspectXsrf(client);
-
-    expect(error).toBeNull();
-    expect(result).toEqual({ ok: true });
-    expect(capturedRequest?.xsrf).toEqual({
-      cookieName: "CUSTOM-XSRF-TOKEN",
-      headerName: "X-CUSTOM-XSRF-TOKEN",
-      tokenProvider,
-    });
   });
 
   test("should return definition error when build is provided without input struct", async () => {
@@ -307,13 +260,15 @@ describe("request http runtime", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: {
-              ignored: true,
-            },
-            status: 200,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: {
+                ignored: true,
+              },
+              status: 200,
+            }),
+          ),
         ),
       ),
     );

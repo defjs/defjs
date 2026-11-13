@@ -1,20 +1,29 @@
 ---
 title: "Отмена и таймауты"
-description: Прерви вызов или поставь дедлайн и читай NET_ABORTED / NET_TIMEOUT.
+description: Прерывайте вызов или устанавливайте дедлайн и обрабатывайте NET_ABORTED / NET_TIMEOUT.
 ---
 
 # Отменить HTTP-вызов
 
-Объедини сигнал вызывающего с дедлайном в `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` — один сигнал. Ручной abort классифицируется как `NET_ABORTED`. Дедлайн классифицируется как `NET_TIMEOUT`.
+Объедините `AbortController` вызывающего кода с дедлайном с помощью `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` и передайте полученный сигнал через `client({ signal })`. Defjs классифицирует ручную отмену вызывающим кодом как `NET_ABORTED`, а завершение по таймауту — как `NET_TIMEOUT`.
 
-Подробности — в [HTTP](/ru-RU/docs/http#cancel-the-work).
-
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
 ```
 
-Отмена говорит, что увидел вызывающий. Она не доказывает, что серверная запись откатилась — держи ретраи мутаций за контрактом идемпотентности.
+Отмена лишь фиксирует то, что наблюдал клиент, — она не гарантирует откат мутации на стороне сервера. Защищайте повторы мутирующих запросов ключом идемпотентности. См. раздел [Отмена работы и установка дедлайнов](/ru-RU/docs/http#cancel-the-work).

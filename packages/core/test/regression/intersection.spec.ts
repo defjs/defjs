@@ -8,16 +8,14 @@ import {
   withHTTPHandle,
   withSSEHandle,
 } from "../../src";
-import { encodeJson } from "../../src/struct/codec/json";
-import { encodeValue } from "../../src/struct/encode";
-import { encodeStructValue } from "../../src/struct/introspection";
+import { encodeObjectByAlias } from "../encode-by-alias";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
-import { encodeOutbound } from "../../src/internal/outbound_request";
+import { encodeOutbound } from "../../src/struct/encode";
 import { DEFINITION, STRUCT } from "../../src/struct/symbols";
-import type { RuntimeStruct } from "../../src/struct/types";
+import { assertObject, symbolValue } from "../narrow";
 import {
   serializeOutgoingWebSocketMessage,
-  transformWebSocketMessage,
+  decodeWebSocketMessage,
 } from "../../src/web_socket/codec";
 
 const Person = struct.intersection(
@@ -90,7 +88,7 @@ test("unknown and any are intersection identities and an all-identity intersecti
   expect(struct.parse(identities, input)).toEqual([null, input]);
   expect(struct.parse(identities, input)[1]).toBe(input);
   expect(struct.parse(identities, input, { aliases: true })[1]).toBe(input);
-  expect(encodeStructValue(identities, input)).toBe(input);
+  expect(encodeObjectByAlias(identities, input)).toBe(input);
 
   const nested = struct.intersection(
     struct.intersection(struct.unknown(), struct.any()),
@@ -119,12 +117,12 @@ test("unknown and any are intersection identities and an all-identity intersecti
 });
 
 test("struct encode merges every structured member of a mixed intersection", () => {
-  expect(encodeStructValue(Person, logical)).toEqual(logical);
-  expect(Object.getPrototypeOf(encodeStructValue(Person, logical))).toBeNull();
-  expect(encodeJson(Person, logical)).toEqual(wire);
-  expect(Object.getPrototypeOf(encodeJson(Person, logical))).toBeNull();
+  expect(encodeObjectByAlias(Person, logical)).toEqual(wire);
+  expect(
+    Object.getPrototypeOf(encodeObjectByAlias(Person, logical)),
+  ).toBeNull();
   expect(() =>
-    encodeJson(SharedWire, {
+    encodeObjectByAlias(SharedWire, {
       firstName: "Ada",
       lastName: "Lovelace",
       left: "L",
@@ -132,7 +130,7 @@ test("struct encode merges every structured member of a mixed intersection", () 
     }),
   ).toThrow(new TypeError("invalid intersection encode at shared"));
   expect(
-    encodeJson(SharedWire, {
+    encodeObjectByAlias(SharedWire, {
       firstName: "Ada",
       lastName: "Lovelace",
       left: "same",
@@ -146,20 +144,17 @@ test("struct encode merges every structured member of a mixed intersection", () 
 });
 
 test("struct encode does not merge raw unknown keys into an aliased object", () => {
-  expect(encodeStructValue(Loose, { extra: true, name: "Miao" })).toEqual({
-    name: "Miao",
-  });
-  expect(encodeJson(Loose, { extra: true, name: "Miao" })).toEqual({
+  expect(encodeObjectByAlias(Loose, { extra: true, name: "Miao" })).toEqual({
     full_name: "Miao",
   });
   expect(
-    encodeStructValue(
+    encodeObjectByAlias(
       struct.intersection(struct.unknown(), struct.string()),
       "x",
     ),
   ).toBe("x");
   expect(
-    encodeStructValue(struct.intersection(struct.unknown(), struct.any()), {
+    encodeObjectByAlias(struct.intersection(struct.unknown(), struct.any()), {
       extra: 1,
     }),
   ).toEqual({ extra: 1 });
@@ -176,7 +171,7 @@ test.each([200, 403] as const)(
     });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => Response.json(wire, { status })),
+      withHTTPHandle(() => Promise.resolve(Response.json(wire, { status }))),
     );
     const [fault, person] = await endpoint(client);
 
@@ -190,18 +185,18 @@ test.each([200, 403] as const)(
 test("SSE event data preserves every mixed-intersection member", async () => {
   const endpoint = defineEventStream({
     events: { person: Person },
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
     path: "/person",
   });
   const client = createClient(
     withEndpoint("https://example.test"),
-    withSSEHandle(async () => {
+    withSSEHandle(() => {
       const body = `event: person\ndata: ${JSON.stringify(wire)}\n\n`;
-      return new Response(body, {
-        headers: { "content-type": "text/event-stream" },
-        status: 200,
-      });
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+          status: 200,
+        }),
+      );
     }),
   );
   const [fault, stream] = await endpoint(client);
@@ -217,10 +212,8 @@ test("SSE event data preserves every mixed-intersection member", async () => {
   expect(events).toEqual([{ data: logical, event: "person", id: undefined }]);
 });
 
-test("WebSocket codecs preserve every mixed-intersection member", async () => {
-  await expect(
-    transformWebSocketMessage(Person, JSON.stringify(wire)),
-  ).resolves.toEqual(logical);
+test("WebSocket codecs preserve every mixed-intersection member", () => {
+  expect(decodeWebSocketMessage(Person, JSON.stringify(wire))).toEqual(logical);
   expect(
     JSON.parse(serializeOutgoingWebSocketMessage(Person, logical)),
   ).toEqual(wire);
@@ -338,29 +331,11 @@ test("nested objects and equal-length arrays merge element-wise", () => {
   );
   expect(dateError).toBeNull();
   expect(date).toBeInstanceOf(Date);
-  expect((date as Date).toISOString()).toBe("2020-01-01T00:00:00.000Z");
+  if (!(date instanceof Date)) throw new Error("Expected a date");
+  expect(date.toISOString()).toBe("2020-01-01T00:00:00.000Z");
 });
 
-test("array length mismatch and unequal dates are intersection conflicts", () => {
-  const objects = struct.intersection(
-    struct.object({ value: struct.string() }),
-    struct.object({ value: struct.string() }),
-  );
-  let calls = 0;
-  expect(() =>
-    encodeValue(
-      objects as unknown as RuntimeStruct,
-      { value: "x" },
-      {
-        encodeObject() {
-          calls += 1;
-          return calls === 1 ? ["a"] : ["a", "b"];
-        },
-      },
-    ),
-  ).toThrow(new TypeError("invalid intersection encode at <root>"));
-  expect(calls).toBe(2);
-
+test("unequal dates are an intersection conflict", () => {
   let reads = 0;
   const [error] = struct.parse(
     struct.intersection(
@@ -475,50 +450,50 @@ test("tagged outbound encode deep-merges nested objects and reports wire conflic
   expect(fault.cause.message).toBe("invalid intersection encode at shared");
 });
 
-test("record intersections tag every record container and emit each wire key", async () => {
+test("record intersections tag every record container and emit each wire key", () => {
   const Rows = struct.intersection(
     struct.record(struct.string()),
     struct.record(struct.string()),
   );
-  const rows = await parseEndpointInput(Rows, { name: "Ada" });
-  expect(
-    Object.fromEntries(Object.entries(rows as { [key: string]: unknown })),
-  ).toEqual({ name: "Ada" });
-  const rowsTag = (rows as { [STRUCT]?: object })[STRUCT];
+  const rows = parseEndpointInput(Rows, { name: "Ada" });
+  expect(Object.fromEntries(Object.entries(rows))).toEqual({ name: "Ada" });
+  const rowsTag = structTag(rows);
   expect(rowsTag).toBeDefined();
-  expect(Object.hasOwn(rowsTag as object, DEFINITION)).toBe(false);
+  expect(Object.hasOwn(rowsTag, DEFINITION)).toBe(false);
   expect(JSON.parse(JSON.stringify(encodeOutbound(rows)))).toEqual(
-    encodeJson(Rows, { name: "Ada" }),
+    encodeObjectByAlias(Rows, { name: "Ada" }),
   );
 
   const Mixed = struct.intersection(
     struct.record(struct.string()),
     struct.object({ name: struct.string().alias("display_name") }),
   );
-  const mixed = await parseEndpointInput(Mixed, { extra: "kept", name: "Ada" });
-  expect(
-    Object.fromEntries(Object.entries(mixed as { [key: string]: unknown })),
-  ).toEqual({ extra: "kept", name: "Ada" });
-  const mixedTag = (mixed as { [STRUCT]?: object })[STRUCT];
+  const mixed = parseEndpointInput(Mixed, { extra: "kept", name: "Ada" });
+  expect(Object.fromEntries(Object.entries(mixed))).toEqual({
+    extra: "kept",
+    name: "Ada",
+  });
+  const mixedTag = structTag(mixed);
   expect(mixedTag).toBeDefined();
-  expect(Object.hasOwn(mixedTag as object, DEFINITION)).toBe(false);
+  expect(Object.hasOwn(mixedTag, DEFINITION)).toBe(false);
   expect(JSON.parse(JSON.stringify(encodeOutbound(mixed)))).toEqual(
-    encodeJson(Mixed, { extra: "kept", name: "Ada" }),
+    encodeObjectByAlias(Mixed, { extra: "kept", name: "Ada" }),
   );
 });
 
-test("tagged object intersections keep a guide set for equal shared fields and an absent optional", async () => {
+test("tagged object intersections keep a guide set for equal shared fields and an absent optional", () => {
   const SharedId = struct.intersection(
     struct.object({ id: struct.string() }),
     struct.object({ id: struct.string(), name: struct.string() }),
   );
-  const shared = await parseEndpointInput(SharedId, { id: "1", name: "Ada" });
-  expect(
-    Object.fromEntries(Object.entries(shared as { [key: string]: unknown })),
-  ).toEqual({ id: "1", name: "Ada" });
-  const sharedTag = (shared as { [STRUCT]?: object })[STRUCT];
+  const shared = parseEndpointInput(SharedId, { id: "1", name: "Ada" });
+  expect(Object.fromEntries(Object.entries(shared))).toEqual({
+    id: "1",
+    name: "Ada",
+  });
+  const sharedTag = structTag(shared);
   expect(sharedTag).toBeDefined();
-  expect(Object.hasOwn(sharedTag as object, DEFINITION)).toBe(false);
+  expect(Object.hasOwn(sharedTag, DEFINITION)).toBe(false);
 
   const MixedField = struct.intersection(
     struct.object({
@@ -526,13 +501,11 @@ test("tagged object intersections keep a guide set for equal shared fields and a
     }),
     struct.object({ profile: struct.string().optional() }),
   );
-  const mixed = await parseEndpointInput(MixedField, {});
-  expect(
-    Object.fromEntries(Object.entries(mixed as { [key: string]: unknown })),
-  ).toEqual({});
-  const mixedTag = (mixed as { [STRUCT]?: object })[STRUCT];
+  const mixed = parseEndpointInput(MixedField, {});
+  expect(Object.fromEntries(Object.entries(mixed))).toEqual({});
+  const mixedTag = structTag(mixed);
   expect(mixedTag).toBeDefined();
-  expect(Object.hasOwn(mixedTag as object, DEFINITION)).toBe(false);
+  expect(Object.hasOwn(mixedTag, DEFINITION)).toBe(false);
 });
 
 test("object-side encode skips an explicit undefined alias and an omitted logical key", () => {
@@ -540,7 +513,9 @@ test("object-side encode skips an explicit undefined alias and an omitted logica
     struct.object({ first: struct.string().alias("wire") }),
     struct.object({ second: struct.string().optional().alias("other") }),
   );
-  expect(encodeJson(Aliased, { first: "first", second: undefined })).toEqual({
+  expect(
+    encodeObjectByAlias(Aliased, { first: "first", second: undefined }),
+  ).toEqual({
     wire: "first",
   });
 
@@ -548,15 +523,19 @@ test("object-side encode skips an explicit undefined alias and an omitted logica
     struct.object({ id: struct.string() }),
     struct.object({ note: struct.string().optional() }),
   );
-  const encoded = encodeStructValue(Logical, { id: "1" });
+  const encoded = encodeObjectByAlias(Logical, { id: "1" });
   expect(encoded).toEqual({ id: "1" });
   expect(Object.getPrototypeOf(encoded)).toBeNull();
 });
 
-test("tagged date intersections keep the equal date and do not attach an object tag", async () => {
+test("tagged date intersections keep the equal date and do not attach an object tag", () => {
   const Both = struct.intersection(struct.date(), struct.date());
-  const value = await parseEndpointInput(Both, "2020-01-01T00:00:00.000Z");
+  const value = parseEndpointInput(Both, "2020-01-01T00:00:00.000Z");
   expect(value).toBeInstanceOf(Date);
-  expect((value as Date).toISOString()).toBe("2020-01-01T00:00:00.000Z");
-  expect((value as { [STRUCT]?: unknown })[STRUCT]).toBeUndefined();
+  expect(value.toISOString()).toBe("2020-01-01T00:00:00.000Z");
+  expect(symbolValue(value, STRUCT)).toBeUndefined();
 });
+
+function structTag(value: unknown): object {
+  return assertObject(symbolValue(value, STRUCT), "struct tag");
+}

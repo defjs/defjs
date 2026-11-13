@@ -1,11 +1,8 @@
-import type { HttpRequest } from "@defjs/core";
-import { isAbortCause, isTimeoutCause } from "@defjs/core";
-import type { Context } from "@opentelemetry/api";
+import type { Attributes, Context } from "@opentelemetry/api";
 import { diag } from "@opentelemetry/api";
-import type { Logger, LogAttributes } from "@opentelemetry/api-logs";
+import type { Logger } from "@opentelemetry/api-logs";
 import { SeverityNumber } from "@opentelemetry/api-logs";
-import { createServerMetricAttributes } from "./metrics";
-import { getErrorType } from "./trace";
+import { getExceptionType } from "./trace";
 
 const CLIENT_EXCEPTIONS = {
   http: {
@@ -23,27 +20,17 @@ const CLIENT_EXCEPTIONS = {
 } as const;
 
 interface ClientExceptionLog {
-  request: HttpRequest;
-  context: Context;
   transport: "http" | "sse" | "websocket";
   phase: "request" | "connect" | "connection";
+  context: Context;
   error: unknown;
-  closeInfo?: { code?: unknown };
+  /** The attributes the call shares with its span and metrics. */
+  attributes: Attributes;
+  /** What the transport knows about this failure: the request method, a fault code, a close code. */
+  extra?: Attributes;
 }
 
-/**
- * Caller cancellation produces no log. An abort whose reason is `TimeoutError` or `ERR_TIMEOUT` still logs.
- *
- * `request.signal` alone is not cancellation: WebSocket `finish()` aborts that same signal
- * when a connect fails. Cancellation is an abort sentinel from any `@defjs/core` copy, or an
- * `AbortError`, on the rejection or on `request.signal.reason`. There is no `timeout` option.
- */
-function isCallerCancellation(request: HttpRequest, error: unknown): boolean {
-  const reason = request.signal?.reason;
-  if (isTimeoutCause(error) || isTimeoutCause(reason)) return false;
-  return isAbortCause(error) || isAbortCause(reason);
-}
-
+/** Logs a failure. Caller cancellation is not one: the caller decides that with `isCallerCancellation` and logs nothing. */
 export function emitClientException(
   logger: Logger | undefined,
   details: ClientExceptionLog,
@@ -51,35 +38,26 @@ export function emitClientException(
   if (!logger) return;
 
   try {
-    const { error, transport, request } = details;
-    if (isCallerCancellation(request, error)) return;
-    if (error instanceof Error && "code" in error) {
-      if (
-        error.code === "NET_ABORTED" ||
-        (transport === "http" && error.code === "HTTP_STATUS")
-      )
-        return;
-    }
-
-    const attributes: LogAttributes = {
-      ...createServerMetricAttributes(request),
-      "defjs.phase": details.phase,
-      "exception.type": getErrorType(error),
-    };
-    if (transport === "http")
-      attributes["http.request.method"] = request.method;
-    const closeCode = details.closeInfo?.code;
-    if (transport === "sse" && typeof closeCode === "string")
-      attributes["defjs.sse.fault.code"] = closeCode;
-    if (transport === "websocket" && typeof closeCode === "number")
-      attributes["websocket.close.code"] = closeCode;
+    const { error, transport } = details;
+    if (
+      transport === "http" &&
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "HTTP_STATUS"
+    )
+      return;
 
     logger.emit({
       ...CLIENT_EXCEPTIONS[transport],
       context: details.context,
       severityNumber: SeverityNumber.WARN,
       severityText: "WARN",
-      attributes,
+      attributes: {
+        ...details.attributes,
+        ...details.extra,
+        "defjs.phase": details.phase,
+        "exception.type": getExceptionType(error),
+      },
     });
   } catch {
     try {

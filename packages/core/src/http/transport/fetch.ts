@@ -4,137 +4,42 @@ import {
   PLATFORM_FETCH_HANDLE,
   resolveGlobalFetch,
 } from "../../client/config";
+import { isAbortCause, isTimeoutCause } from "../../error/cause";
 import { awaitWithSignal, resolveAbortCause } from "../../internal/abort";
-import { fetchWithSignal } from "../../internal/fetch";
-import type { HttpProgressFn, HttpRequest } from "../../internal/http_request";
-import type { HttpMeta, HttpResponse } from "../../internal/http_response";
-import { makeResponse } from "../../internal/http_response";
+import { concatChunks, parseBytesBody } from "../../internal/bytes";
+import { fetchWithSignal, NULL_BODY_STATUSES } from "../../internal/fetch";
+import type { HttpProgressFn, HttpRequest } from "../http_request";
+import type { HttpMeta, HttpResponse } from "../http_response";
+import { makeResponse } from "../http_response";
 import { resolveRequestUrl } from "../../internal/url";
 import { applyRequestContentType } from "./body";
 import { BodyFailure, isBodyFailure } from "./body_failure";
+import { createFetchInitBase, isReadableStreamBody } from "./fetch_init";
 import {
-  __resetStreamingRequestBodySupportForTests,
-  createFetchInitBase,
-  ERR_STREAMING_REQUEST_UNSUPPORTED,
-  isReadableStreamBody,
-  supportsStreamingRequestBody,
-} from "./fetch_init";
-import {
-  concatChunks,
   getContentLength,
   getContentType,
   isJsonMediaType,
-  parseBytesBody,
+  jsonMediaTypeError,
 } from "./utils";
 
-export {
-  __resetStreamingRequestBodySupportForTests,
-  ERR_STREAMING_REQUEST_UNSUPPORTED,
-  isReadableStreamBody,
-  supportsStreamingRequestBody,
-};
-
-const XSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
-
-function isSafeMethod(method: string): boolean {
-  return XSRF_SAFE_METHODS.has(method.toUpperCase());
-}
-
-function readBrowserXSRFCookie(name: string): string | undefined {
-  try {
-    const cookie = document.cookie;
-    if (cookie === "") {
-      return undefined;
-    }
-
-    for (const part of cookie.split(";")) {
-      const [rawName, ...rawValue] = part.trim().split("=");
-      if (rawName === name) {
-        return decodeURIComponent(rawValue.join("="));
-      }
-    }
-  } catch {
-    return undefined;
-  }
-
-  return undefined;
-}
-
-function isSameOriginRequest(request: HttpRequest): boolean {
-  if (!request.baseEndpoint) {
-    return false;
-  }
-
-  if (typeof location === "undefined") {
-    return true;
-  }
-
-  return resolveRequestUrl(request).origin === location.origin;
-}
-
-function normalizeXSRFToken(
-  token: string | null | undefined,
-): string | undefined {
-  if (typeof token !== "string" || token === "") {
-    return undefined;
-  }
-
-  return token;
-}
-
-function resolveXSRFToken(
-  request: HttpRequest,
-  xsrf: {
-    cookieName: string;
-    headerName: string;
-    tokenProvider?: (context: {
-      request: HttpRequest;
-    }) => string | null | undefined;
-  },
-): string | undefined {
-  if (xsrf.tokenProvider) {
-    return normalizeXSRFToken(xsrf.tokenProvider({ request }));
-  }
-
-  if (typeof document === "undefined") {
-    return undefined;
-  }
-
-  return normalizeXSRFToken(readBrowserXSRFCookie(xsrf.cookieName));
-}
-
-function applyXSRFHeaderIfNeeded(request: HttpRequest, headers: Headers): void {
-  const xsrf = request.xsrf;
-  if (!xsrf) {
-    return;
-  }
-
-  if (isSafeMethod(request.method)) {
-    return;
-  }
-
-  if (headers.has(xsrf.headerName)) {
-    return;
-  }
-
-  if (!isSameOriginRequest(request)) {
-    return;
-  }
-
-  const token = resolveXSRFToken(request, xsrf);
-  if (token === undefined) {
-    return;
-  }
-
-  headers.set(xsrf.headerName, token);
-}
-
-function wrapUploadProgressStream(
+/**
+ * Relays a caller's stream so its bytes can be counted and its failure seen: a stream `fetch` holds
+ * stays locked whether it errored or not.
+ */
+function wrapUploadStream(
   stream: ReadableStream<Uint8Array>,
-  onProgress: HttpProgressFn,
+  onProgress: HttpProgressFn | undefined,
   total: number,
   signal: AbortSignal | undefined,
+  onFailed: (() => void) | undefined,
 ): ReadableStream<Uint8Array> {
+  // `fetch` only sees the relay, so the platform's rejection of a locked or already read stream has to happen here.
+  // It is a request construction failure, not a network one.
+  try {
+    void new Response(stream);
+  } catch (error) {
+    throw new BodyFailure("REQ_BUILD_FAILED", error, undefined);
+  }
   const reader = stream.getReader();
   let cleanedUp = false;
   let loaded = 0;
@@ -156,39 +61,46 @@ function wrapUploadProgressStream(
     }
   }
 
-  const wrapped = new ReadableStream<Uint8Array>({
-    cancel(reason) {
-      cleanup(true, reason);
+  const wrapped = new ReadableStream<Uint8Array>(
+    {
+      cancel(reason) {
+        cleanup(true, reason);
+      },
+      async pull(controller) {
+        try {
+          const { done, value } = await reader.read();
+
+          if (cleanedUp) {
+            return;
+          }
+
+          if (done) {
+            cleanup(false);
+            controller.close();
+            return;
+          }
+
+          if (onProgress) {
+            loaded += value.byteLength;
+            const event = { lengthComputable: total > 0, loaded, total };
+            await (signal
+              ? awaitWithSignal(() => onProgress(event), signal)
+              : onProgress(event));
+            if (cleanedUp) {
+              return;
+            }
+          }
+          controller.enqueue(value);
+        } catch (error) {
+          onFailed?.();
+          cleanup(true, error);
+          controller.error(error);
+        }
+      },
     },
-    async pull(controller) {
-      try {
-        const { done, value } = await reader.read();
-
-        if (cleanedUp) {
-          return;
-        }
-
-        if (done) {
-          cleanup(false);
-          controller.close();
-          return;
-        }
-
-        loaded += value.byteLength;
-        const event = { lengthComputable: total > 0, loaded, total };
-        await (signal
-          ? awaitWithSignal(() => onProgress(event), signal)
-          : onProgress(event));
-        if (cleanedUp) {
-          return;
-        }
-        controller.enqueue(value);
-      } catch (error) {
-        cleanup(true, error);
-        controller.error(error);
-      }
-    },
-  });
+    // Without an observer there is no reason to read ahead of the consumer.
+    { highWaterMark: onProgress ? 1 : 0 },
+  );
 
   if (signal) {
     signal.addEventListener("abort", onAbort, { once: true });
@@ -202,11 +114,12 @@ function wrapUploadProgressStream(
 
 function cancelWrappedUploadBody(
   request: HttpRequest,
+  onBodyFailed: (() => void) | undefined,
   body: unknown,
   reason: unknown,
 ): void {
   if (
-    request.uploadProgress &&
+    (request.uploadProgress || onBodyFailed) &&
     isReadableStreamBody(request.body) &&
     isReadableStreamBody(body)
   ) {
@@ -221,40 +134,86 @@ function cancelLateResponseBody(
   void body.cancel(signal.reason).catch(() => undefined);
 }
 
+const FORBIDDEN_METHODS: ReadonlySet<string> = new Set([
+  "CONNECT",
+  "TRACE",
+  "TRACK",
+]);
+
+const METHOD_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+/**
+ * The Request constructor throws a TypeError, before any network activity, for a method that is not a token or is forbidden,
+ * a GET/HEAD body, and a URL with credentials (Fetch, "new Request"); `fetch()` rejects with that exception as is. Checking
+ * here keeps these apart from a network failure. Bun's Request accepts all of them, so the answer does not depend on the runtime.
+ */
+function assertRequestShape(request: HttpRequest, url: URL): void {
+  const method = request.method.toUpperCase();
+  let reason: string | undefined;
+  if (!METHOD_TOKEN.test(request.method)) {
+    reason = `${JSON.stringify(request.method)} is not a valid method`;
+  } else if (FORBIDDEN_METHODS.has(method)) {
+    reason = `${request.method} is a forbidden method`;
+  } else if (
+    (method === "GET" || method === "HEAD") &&
+    request.body !== undefined
+  ) {
+    reason = "GET/HEAD requests cannot have a body";
+  } else if (url.username !== "" || url.password !== "") {
+    reason = "The URL must not include credentials";
+  }
+  if (reason !== undefined) {
+    throw new BodyFailure("REQ_BUILD_FAILED", new TypeError(reason), undefined);
+  }
+}
+
+/**
+ * `bodyContentType` is a public field an interceptor can assign, and the platform rejects an invalid header value
+ * (CR, LF, NUL, or a code point above U+00FF) when it is written. That is an invalid request, found before it is sent,
+ * like an interceptor that rewrites `endpoint` to an invalid URL.
+ */
+function applyBodyContentType(request: HttpRequest, headers: Headers): void {
+  try {
+    applyRequestContentType(request, headers);
+  } catch (error) {
+    throw new BodyFailure("REQ_BUILD_FAILED", error, undefined);
+  }
+}
+
 export function createFetchRequestInit(
   request: HttpRequest,
+  url: URL,
+  onBodyFailed?: () => void,
 ): RequestInit & { duplex?: "half" } {
   const headers = new Headers(request.headers);
   const uploadProgress = request.uploadProgress;
-  applyRequestContentType(request, headers);
-  applyXSRFHeaderIfNeeded(request, headers);
+  applyBodyContentType(request, headers);
+  if (request.finalizeHeaders) {
+    try {
+      request.finalizeHeaders(request, headers, new URL(url));
+    } catch (error) {
+      throw isAbortCause(error) || isTimeoutCause(error)
+        ? error
+        : new BodyFailure("EXT_HOOK_FAILED", error, undefined);
+    }
+  }
 
   return createFetchInitBase(request, {
     defaultAccept: "application/json, text/plain, */*",
     headers,
     signal: request.signal,
-    wrapReadableStreamBody: uploadProgress
-      ? (body) =>
-          wrapUploadProgressStream(
-            body,
-            uploadProgress,
-            getContentLength(headers),
-            request.signal,
-          )
-      : undefined,
+    wrapReadableStreamBody:
+      uploadProgress || onBodyFailed
+        ? (body) =>
+            wrapUploadStream(
+              body,
+              uploadProgress,
+              getContentLength(headers),
+              request.signal,
+              onBodyFailed,
+            )
+        : undefined,
   });
-}
-
-export function createFetchRequest(request: HttpRequest): Request {
-  const url = resolveRequestUrl(request);
-  const init = createFetchRequestInit(request);
-
-  try {
-    return new Request(url, init);
-  } catch (error) {
-    cancelWrappedUploadBody(request, init.body, error);
-    throw error;
-  }
 }
 
 /** Release a body we will not read, ignoring a cancellation the provider refuses. */
@@ -270,7 +229,7 @@ async function readWholeBody(
   response: Response,
   signal: AbortSignal | undefined,
   meta: HttpMeta,
-): Promise<Uint8Array> {
+): Promise<Uint8Array<ArrayBuffer>> {
   try {
     return new Uint8Array(
       await (signal
@@ -284,6 +243,75 @@ async function readWholeBody(
     }
     throw new BodyFailure("NET_BODY_INCOMPLETE", error, meta);
   }
+}
+
+/**
+ * Reads a body chunk by chunk, so that `downloadProgress` can watch it, and returns its bytes. One listener covers
+ * every read: cancelling settles a pending read as done, and the loop then reports the abort. Racing each read would
+ * add a listener and three promises per chunk.
+ */
+async function readChunks(
+  stream: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+  declaredLength: number,
+  meta: HttpMeta,
+  downloadProgress: HttpProgressFn | undefined,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const chunks: Uint8Array[] = [];
+  const reader = stream.getReader();
+  const cancelRead = () =>
+    void reader.cancel(signal?.reason).catch(() => undefined);
+  signal?.addEventListener("abort", cancelRead, { once: true });
+  let total = declaredLength;
+  let receivedLength = 0;
+
+  try {
+    while (true) {
+      signal?.throwIfAborted();
+      const result = await reader.read();
+      signal?.throwIfAborted();
+      if (result.done) {
+        break;
+      }
+
+      chunks.push(result.value);
+      receivedLength += result.value.byteLength;
+      if (receivedLength > total) {
+        total = 0;
+      }
+
+      if (downloadProgress) {
+        const event = {
+          lengthComputable: total > 0,
+          loaded: receivedLength,
+          total,
+        };
+        try {
+          await (signal
+            ? awaitWithSignal(() => downloadProgress(event), signal)
+            : downloadProgress(event));
+        } catch (error) {
+          throw new BodyFailure("EXT_OBSERVER_FAILED", error, meta);
+        }
+      }
+    }
+  } catch (error) {
+    // The stream is cancelled with the original reason; the tag is ours, not its concern.
+    void reader
+      .cancel(isBodyFailure(error) ? error.cause : error)
+      .catch(() => undefined);
+    // Cancellation outranks body classification, and `fetchHandler` turns it into an abort result.
+    if (signal?.aborted) {
+      throw error;
+    }
+    throw isBodyFailure(error)
+      ? error
+      : new BodyFailure("NET_BODY_INCOMPLETE", error, meta);
+  } finally {
+    signal?.removeEventListener("abort", cancelRead);
+    reader.releaseLock();
+  }
+  return concatChunks(chunks, receivedLength);
 }
 
 /** @param platform - `response` came straight from the platform fetch called with the request signal. */
@@ -308,8 +336,19 @@ async function parseFetchResponse(
     return makeResponse({ status, statusText, headers, url });
   }
 
+  // The platform defines these responses as having no body, so they are never read, whether the
+  // runtime exposes null or an empty stream. The decoder still checks the declared media type
+  // against the absent body. Names are not normalized on `HttpRequest`, and fetch normalizes `head`.
+  const noContent =
+    httpRequest.method.toUpperCase() === "HEAD" ||
+    NULL_BODY_STATUSES.has(status);
+  const stream = noContent ? null : response.body;
+  if (noContent && response.body) {
+    discardBody(response.body);
+  }
+
   const contentEncoding = headers.get("Content-Encoding")?.trim().toLowerCase();
-  let contentLength =
+  const contentLength =
     contentEncoding !== undefined && contentEncoding !== "identity"
       ? 0
       : getContentLength(headers);
@@ -321,96 +360,36 @@ async function parseFetchResponse(
     statusText,
     url,
   };
-  // No stream is an absent body. A parsed JSON null stays null.
+  // No stream, or a response the platform defines as having no body, is an absent body.
+  // A parsed JSON null stays null.
   let body: unknown = undefined;
 
   // Philosophy 3: the declared representation is part of the assertion. Checking it before the
   // body is read turns "I asked for JSON and got HTML" into one precise fault, and skips the
   // read, the parse, and the struct entirely.
-  if (
-    response.body &&
-    responseType === "json" &&
-    !isJsonMediaType(contentType)
-  ) {
-    discardBody(response.body);
-    const cause = new TypeError(
-      `Expected a JSON media type, received ${contentType || "<none>"}`,
+  if (stream && responseType === "json" && !isJsonMediaType(contentType)) {
+    discardBody(stream);
+    throw new BodyFailure(
+      "RES_MEDIA_TYPE_INVALID",
+      jsonMediaTypeError(contentType),
+      meta,
     );
-    throw new BodyFailure("RES_MEDIA_TYPE_INVALID", cause, meta);
   }
 
   // Progress needs the chunks, so only an unobserved read takes the bulk path.
-  if (response.body && platform && !downloadProgress) {
-    const bytes = await readWholeBody(response, httpRequest.signal, meta);
+  if (stream) {
+    const bytes =
+      platform && !downloadProgress
+        ? await readWholeBody(response, httpRequest.signal, meta)
+        : await readChunks(
+            stream,
+            httpRequest.signal,
+            contentLength,
+            meta,
+            downloadProgress,
+          );
     try {
       body = parseBytesBody(responseType, bytes, contentType);
-    } catch (error) {
-      throw new BodyFailure("RES_DECODE_FAILED", error, meta);
-    }
-  } else if (response.body) {
-    const chunks: Uint8Array[] = [];
-    const reader = response.body.getReader();
-    const signal = httpRequest.signal;
-    // One listener covers every read: cancelling settles a pending read as done, and the loop then
-    // reports the abort. Racing each read would add a listener and three promises per chunk.
-    const cancelRead = () =>
-      void reader.cancel(signal?.reason).catch(() => undefined);
-    signal?.addEventListener("abort", cancelRead, { once: true });
-    let receivedLength = 0;
-
-    try {
-      while (true) {
-        signal?.throwIfAborted();
-        const result = await reader.read();
-        signal?.throwIfAborted();
-        if (result.done) {
-          break;
-        }
-
-        chunks.push(result.value);
-        receivedLength += result.value.byteLength;
-        if (receivedLength > contentLength) {
-          contentLength = 0;
-        }
-
-        if (downloadProgress) {
-          const event = {
-            lengthComputable: contentLength > 0,
-            loaded: receivedLength,
-            total: contentLength,
-          };
-          try {
-            await (signal
-              ? awaitWithSignal(() => downloadProgress(event), signal)
-              : downloadProgress(event));
-          } catch (error) {
-            throw new BodyFailure("EXT_OBSERVER_FAILED", error, meta);
-          }
-        }
-      }
-    } catch (error) {
-      // The stream is cancelled with the original reason; the tag is ours, not its concern.
-      void reader
-        .cancel(isBodyFailure(error) ? error.cause : error)
-        .catch(() => undefined);
-      // Cancellation outranks body classification, and `fetchHandler` turns it into an abort result.
-      if (signal?.aborted) {
-        throw error;
-      }
-      throw isBodyFailure(error)
-        ? error
-        : new BodyFailure("NET_BODY_INCOMPLETE", error, meta);
-    } finally {
-      signal?.removeEventListener("abort", cancelRead);
-      reader.releaseLock();
-    }
-
-    try {
-      body = parseBytesBody(
-        responseType,
-        concatChunks(chunks, receivedLength),
-        contentType,
-      );
     } catch (error) {
       throw new BodyFailure("RES_DECODE_FAILED", error, meta);
     }
@@ -438,19 +417,42 @@ async function parseFetchResponse(
  *   `(url, init)` while the global is untouched, and its body is read in one piece unless download progress is observed. Any other handle receives a
  *   `Request` and its body is read chunk by chunk.
  * @returns Parsed `HttpResponse`. Rejects when no response reached the client, when reading the body
- *   failed, or when an upload observer threw (`EXT_OBSERVER_FAILED`). Cancellation still wins.
+ *   failed, when an upload observer threw (`EXT_OBSERVER_FAILED`), or when `finalizeHeaders` threw (`EXT_HOOK_FAILED`).
+ *   A request that is invalid before it is sent rejects with `REQ_BUILD_FAILED`: a method that is not a token or is
+ *   forbidden, a GET or HEAD body, a URL with credentials, a `bodyContentType` the platform refuses as a header value,
+ *   or, when `uploadProgress` is set, a stream body that is already locked or read. Cancellation still wins.
+ *   The `body` of a `HEAD` response, or of a `204`, `205`, or `304` response, is absent whether or not the engine exposes a body stream.
  * @group http
  */
 export async function fetchHandler(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle = resolveGlobalFetch(),
 ): Promise<HttpResponse<unknown>> {
+  return fetchHandlerWithLifecycle(httpRequest, fetchImpl);
+}
+
+export type FetchLifecycle = {
+  /** The request URL, resolved once by the caller. */
+  url: URL;
+  /** `streamedBody` is true when `fetch` is handed a caller-supplied `ReadableStream`. */
+  start: (streamedBody: boolean) => void;
+  response: (response: Response) => void;
+  /** The request body stopped for good: its source errored or its observer failed. */
+  bodyFailed: () => void;
+};
+
+/** Internal raw Fetch boundary used for per-attempt timing. */
+export async function fetchHandlerWithLifecycle(
+  httpRequest: HttpRequest,
+  fetchImpl: FetchHandle,
+  lifecycle?: FetchLifecycle,
+): Promise<HttpResponse<unknown>> {
   if (fetchImpl === DEFAULT_FETCH) {
     fetchImpl = resolveGlobalFetch();
   }
   const uploadProgress = httpRequest.uploadProgress;
   if (!uploadProgress) {
-    return sendFetchRequest(httpRequest, fetchImpl);
+    return sendFetchRequest(httpRequest, fetchImpl, lifecycle);
   }
 
   let observerFailure: BodyFailure<"EXT_OBSERVER_FAILED"> | undefined;
@@ -472,7 +474,7 @@ export async function fetchHandler(
 
   let response: HttpResponse<unknown>;
   try {
-    response = await sendFetchRequest(observed, fetchImpl);
+    response = await sendFetchRequest(observed, fetchImpl, lifecycle);
   } catch (error) {
     // sendFetchRequest already turned cancellation into the abort cause, and cancellation outranks the observer.
     throw observerFailure !== undefined && !httpRequest.signal?.aborted
@@ -489,158 +491,49 @@ export async function fetchHandler(
 async function sendFetchRequest(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
+  lifecycle: FetchLifecycle | undefined,
 ): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.signal;
   const platform = fetchImpl === PLATFORM_FETCH_HANDLE;
-  let prepared = httpRequest;
+  let url: URL;
+  let init: RequestInit | undefined;
   let request: Request | undefined;
-  let platformBody: RequestInit["body"];
-  let fallbackUrl = "";
   let response: Response;
 
   try {
-    prepared = await prepareUploadProgressRequest(httpRequest);
-    if (platform) {
-      // fetch(url, init) builds the Request itself, so building one here would only do that work twice.
-      const url = resolveRequestUrl(prepared);
-      const init = createFetchRequestInit(prepared);
-      platformBody = init.body;
-      fallbackUrl = url.href;
-      response = await fetchWithSignal(
-        () => fetchImpl(url, init),
-        abortSignal,
-        cancelLateResponseBody,
-      );
-    } else {
-      const built = createFetchRequest(prepared);
-      request = built;
-      fallbackUrl = built.url;
-      response = await fetchWithSignal(
-        () => fetchImpl(built),
-        abortSignal,
-        cancelLateResponseBody,
-      );
+    const streamedBody = isReadableStreamBody(httpRequest.body);
+    url = lifecycle?.url ?? resolveRequestUrl(httpRequest);
+    assertRequestShape(httpRequest, url);
+    init = createFetchRequestInit(httpRequest, url, lifecycle?.bodyFailed);
+    // PERF: fetch(url, init) builds the Request itself, so building one here would only do that work twice.
+    // Any other handle is given the Request.
+    if (!platform) {
+      request = new Request(url, init);
     }
-  } catch (error) {
-    cancelWrappedUploadBody(prepared, request?.body ?? platformBody, error);
-    throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
-  }
-
-  try {
-    return await parseFetchResponse(
-      httpRequest,
-      response,
-      fallbackUrl,
-      platform,
+    response = await fetchWithSignal(
+      () => {
+        lifecycle?.start(streamedBody);
+        return request === undefined
+          ? fetchImpl(url, init)
+          : fetchImpl(request);
+      },
+      abortSignal,
+      cancelLateResponseBody,
     );
   } catch (error) {
+    cancelWrappedUploadBody(
+      httpRequest,
+      lifecycle?.bodyFailed,
+      request?.body ?? init?.body,
+      error,
+    );
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
   }
-}
 
-function isBrowserWindowOrWorker(): boolean {
-  return (
-    typeof location !== "undefined" ||
-    typeof document !== "undefined" ||
-    "importScripts" in globalThis
-  );
-}
-
-/**
- * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where the runtime streams
- * request bodies over any HTTP version (Bun, Node). Browsers are excluded: Chromium rejects a streamed
- * body on HTTP/1.1 and the protocol is unknown beforehand, and Firefox cannot stream request bodies.
- * `location`, `document`, or `importScripts` mark browser windows/workers: there the body is sent unchanged
- * and `onUploadProgress` is not called. Download progress is unaffected.
- * FormData uses the serialized stream and boundary directly; its total length is unknown unless declared in a header.
- */
-async function prepareUploadProgressRequest(
-  request: HttpRequest,
-): Promise<HttpRequest> {
-  const { uploadProgress, body } = request;
-  if (
-    !uploadProgress ||
-    body == null ||
-    isReadableStreamBody(body) ||
-    !supportsStreamingRequestBody() ||
-    isBrowserWindowOrWorker()
-  ) {
-    return request;
-  }
-
-  request.signal?.throwIfAborted();
-  const converted = convertBodyToUploadStream(body);
-  if (!converted) {
-    return request;
-  }
-
-  const headers = new Headers(request.headers);
-  applyRequestContentType(request, headers);
-  if (
-    converted.contentType &&
-    (body instanceof FormData ||
-      (!headers.has("Content-Type") && request.bodyContentType !== null))
-  ) {
-    headers.set("Content-Type", converted.contentType);
-  }
-  if (converted.total > 0) {
-    headers.set("Content-Length", String(converted.total));
-  }
-
-  const total = getContentLength(headers);
-  const startEvent = { lengthComputable: total > 0, loaded: 0, total };
+  lifecycle?.response(response);
   try {
-    if (request.signal) {
-      await awaitWithSignal(() => uploadProgress(startEvent), request.signal);
-    } else {
-      await uploadProgress(startEvent);
-    }
+    return await parseFetchResponse(httpRequest, response, url.href, platform);
   } catch (error) {
-    void converted.stream.cancel(error).catch(() => undefined);
-    throw error;
+    throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
   }
-
-  return {
-    ...request,
-    body: converted.stream,
-    bodyContentType: headers.get("Content-Type"),
-    bodyContentTypeSource: converted.stream,
-    headers,
-  };
-}
-
-function convertBodyToUploadStream(body: HttpRequest["body"]):
-  | {
-      contentType?: string | null;
-      stream: ReadableStream<Uint8Array>;
-      total: number;
-    }
-  | undefined {
-  if (typeof Blob !== "undefined" && body instanceof Blob) {
-    return {
-      contentType: body.type || undefined,
-      stream: body.stream(),
-      total: body.size,
-    };
-  }
-
-  if (body instanceof ArrayBuffer) {
-    return {
-      contentType: "application/octet-stream",
-      stream: new Blob([body]).stream(),
-      total: body.byteLength,
-    };
-  }
-
-  if (typeof FormData !== "undefined" && body instanceof FormData) {
-    const serialized = new Response(body);
-    const contentType = serialized.headers.get("Content-Type");
-    return {
-      contentType,
-      stream: serialized.body as ReadableStream<Uint8Array>,
-      total: 0,
-    };
-  }
-
-  return undefined;
 }

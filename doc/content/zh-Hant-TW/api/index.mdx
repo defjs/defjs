@@ -1,19 +1,19 @@
 ---
 title: API 查閱
-description: 查閱 SDK 定義入口、應用程式執行入口，以及傳輸、Struct 與整合的函式和型別。
+description: 查閱 SDK 定義 API、應用程式 client 設定與具型別的執行結果。
 ---
 
 # API 查閱
 
-建置或使用 Defjs SDK 時查這份參考。SDK 作者從 [`defineRequest`](/zh-Hant-TW/api/core/definerequest)、[`defineEventStream`](/zh-Hant-TW/api/core/defineeventstream)、[`defineWebSocket`](/zh-Hant-TW/api/core/definewebsocket) 與 [Struct](/zh-Hant-TW/api/struct) 開始。應用程式用 [Client 設定](/zh-Hant-TW/api/client) 呼叫這些操作，並用 [Errors](/zh-Hant-TW/api/errors) 處理結果。
+建置或取用 Defjs SDK 時，請查這份參考。SDK 作者從 [`defineRequest`](/zh-Hant-TW/api/core/definerequest)、[`defineEventStream`](/zh-Hant-TW/api/core/defineeventstream)、[`defineWebSocket`](/zh-Hant-TW/api/core/definewebsocket) 與 [Struct](/zh-Hant-TW/api/struct) 開始。應用程式用 [Client 設定](/zh-Hant-TW/api/client) 呼叫這些操作，並以 [Errors](/zh-Hant-TW/api/errors) 處理結果。
 
-以下簽章描述 Defjs 的執行階段契約。完整開發流程見[快速開始](/zh-Hant-TW/docs/start)與[建置並發佈 SDK](/zh-Hant-TW/recipes/publish-http-sdk)。
+簽章就是契約。完整流程請見[快速開始](/zh-Hant-TW/docs/start)與[建置並發布 SDK](/zh-Hant-TW/recipes/publish-http-sdk)。
 
 <ApiIndex />
 
 ## 套件
 
-| 套件                                                                  | 你要查的                                                          |
+| 套件                                                                  | 查閱內容                                                          |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | [`@defjs/core`](/zh-Hant-TW/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
 | [`@defjs/vue`](/zh-Hant-TW/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
@@ -22,17 +22,17 @@ description: 查閱 SDK 定義入口、應用程式執行入口，以及傳輸�
 
 ## @defjs/core
 
-| 頁面                                         | 你要查的                                                              |
+| 頁面                                         | 查閱內容                                                              |
 | -------------------------------------------- | --------------------------------------------------------------------- |
 | [Client](/zh-Hant-TW/api/client)             | `createClient`, `with*` options, `Client`                             |
 | [HTTP](/zh-Hant-TW/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
 | [Struct](/zh-Hant-TW/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
-| [Errors](/zh-Hant-TW/api/errors)             | `Fault` 各個變體與工廠函式                                            |
-| [Interceptors](/zh-Hant-TW/api/interceptors) | HTTP／SSE／WebSocket 的 interceptor helpers                           |
-| [SSE](/zh-Hant-TW/api/sse)                   | `defineEventStream`, stream handle                                    |
-| [WebSocket](/zh-Hant-TW/api/web-socket)      | `defineWebSocket`, session                                            |
+| [Errors](/zh-Hant-TW/api/errors)             | `Fault` 的各個變體與 factory 函式                                     |
+| [Interceptors](/zh-Hant-TW/api/interceptors) | HTTP／SSE／WebSocket 的攔截器輔助函式                                 |
+| [SSE](/zh-Hant-TW/api/sse)                   | `defineEventStream`, 串流 handle                                      |
+| [WebSocket](/zh-Hant-TW/api/web-socket)      | `defineWebSocket`, 工作階段                                           |
 
 ## 相關
 
-- [開始使用](/zh-Hant-TW/docs/start)
-- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
+- [快速開始](/zh-Hant-TW/docs/start)
+- [帶有已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)

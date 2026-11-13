@@ -5,19 +5,38 @@ import {
   identityIndex,
   resolveSee,
   singleGroup,
-  unique,
   validateReference,
 } from "./api-validate";
+import type { ApiReferenceEntry, StoredEntry } from "./api-model";
 
-const client = {
+const client: ApiReferenceEntry = {
   package: "@defjs/core",
   name: "Client",
   kind: "type",
   slug: "core/client-type",
+  source: "packages/core/src/client/client.ts",
   group: "client",
   description: "A client.",
   related: [],
+  exampleFiles: [],
+  returns: [],
+  throws: [],
+  tags: [],
+  typeTable: null,
+  overloads: [],
 };
+
+function row(description: string): StoredEntry {
+  return {
+    name: "value",
+    description,
+    type: "string",
+    simplifiedType: "string",
+    required: true,
+    deprecated: false,
+    tags: [],
+  };
+}
 
 test("a public export without a description lists every offender", () => {
   expect(singleGroup(["client"])).toBe("client");
@@ -56,7 +75,6 @@ test("related targets, groups, and slugs are checked after descriptions", () => 
   expect(() => resolveSee("{@link Absent}", identities)).toThrow(
     "Unknown @see target",
   );
-  expect(unique(["a", "a", "b"])).toEqual(["a", "b"]);
   expect(() =>
     validateReference(
       [
@@ -105,16 +123,13 @@ test("site-link checks walk tags, parameters, tables, and overloads", () => {
   expect(() =>
     assertNoSiteLinks([
       {
-        package: "@defjs/core",
-        name: "Client",
-        description: "A client.",
+        ...client,
         returns: ["ok"],
         throws: ["Error"],
-        tags: [{ text: "n" }],
-        parameters: [{ description: "value" }],
-        typeTable: [{ description: "id" }],
+        tags: [{ name: "example", text: "n" }],
+        typeTable: [row("id")],
         overloads: [
-          { returns: ["ok"], parameters: [{ description: "value" }] },
+          { signature: "function f(): void;", parameters: [row("value")] },
         ],
       },
     ]),
@@ -122,10 +137,14 @@ test("site-link checks walk tags, parameters, tables, and overloads", () => {
   expect(() =>
     assertNoSiteLinks([
       {
-        package: "@defjs/core",
+        ...client,
         name: "Fault",
-        description: "A fault.",
-        parameters: [{ description: "See [HTTP](/docs/http)." }],
+        overloads: [
+          {
+            signature: "function f(): void;",
+            parameters: [row("See [HTTP](/docs/http).")],
+          },
+        ],
       },
     ]),
   ).toThrow("@defjs/core:Fault");

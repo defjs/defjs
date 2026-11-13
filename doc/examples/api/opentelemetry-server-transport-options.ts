@@ -8,8 +8,8 @@ const http = {
     const url = createResolvedRequestUrl(
       request.baseEndpoint,
       request.endpoint,
+      request.query?.toString(),
     );
-    if (request.queryString) url.search = request.queryString;
     url.searchParams.delete("access_token");
     return { "url.full": url.href };
   },

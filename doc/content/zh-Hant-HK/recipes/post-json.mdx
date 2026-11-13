@@ -1,20 +1,31 @@
 ---
 title: "發送 JSON"
-description: 送 typed JSON body，再 decode declared 201。
+description: "發送帶型別嘅 JSON body，並將宣告過嘅 201 回應順利解碼。"
 ---
 
 # POST JSON
 
-將 typed body 交畀 builder。Logical field names 留喺 TypeScript；struct 上面嘅 wire aliases 會變成 JSON keys。Object body 係 `application/json`。
+將帶型別嘅 input 物件交畀 `builder`，並回傳 `{ body: input }`。`.alias("customer_name")` 畀你喺 TypeScript 入面繼續用 `customerName`，同時喺網絡傳輸時自動編碼成 `"customer_name"`，並喺收到 `201` 回應時將佢解碼返出嚟。
 
-詳情睇 [HTTP](/zh-Hant-HK/docs/http) 同 [Client](/zh-Hant-HK/docs/client)。
-
-<include cwd meta="create-user.ts">
-  examples/recipes/post-json.ts#example
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
-`api.example.com` 係 placeholder。如果 server 回應 `201` 同 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`，snippet 會 print：
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+如果伺服器回傳 `201` 同埋 `{ "id": 1, "status": "paid", "customer_name": "Ada" }`，腳本會輸出：
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+詳情請參閱 [HTTP 操作](/zh-Hant-HK/docs/http) 與 [Struct 與 Schema](/zh-Hant-HK/docs/struct)。

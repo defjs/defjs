@@ -1,20 +1,31 @@
 ---
 title: "JSON senden"
-description: Typisierten JSON-Body senden und ein deklariertes 201 dekodieren.
+description: Einen typisierten JSON-Body senden und eine deklarierte 201-Antwort dekodieren.
 ---
 
-# POST JSON
+# JSON senden (POST)
 
-Reich den typisierten Body an den Builder. Logische Feldnamen bleiben in TypeScript; Wire-Aliasse auf dem Struct werden JSON-Keys. Ein Object-Body ist `application/json`.
+Übergib ein typisiertes Eingabeobjekt an den `builder` und gib `{ body: input }` zurück. Mit `.alias("customer_name")` verwendest du in TypeScript weiterhin `customerName`, während auf Wire-Ebene automatisch `"customer_name"` kodiert und aus der `201`-Antwort dekodiert wird.
 
-Details siehe [HTTP](/de-DE/docs/http) und [Client](/de-DE/docs/client).
-
-<include cwd meta="create-user.ts">
-  examples/recipes/post-json.ts#example
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
-`api.example.com` ist ein Platzhalter. Bei einem Server, der mit `201` und `{ "id": 1, "name": "Ada", "email": "ada@example.com" }` antwortet, gibt das Snippet aus:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Antwortet der Server mit Status `201` und `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, gibt das Skript folgendes aus:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+Details findest du unter [HTTP-Operationen](/de-DE/docs/http) und [Struct & Schemas](/de-DE/docs/struct).

@@ -1,22 +1,36 @@
 ---
 title: "طلبات GraphQL"
-description: أبقِ GraphQL كـ HTTP 200 مع فك الغلاف في التطبيق؛ ولا توفّر Core بروتوكول GraphQL.
+description: أبقِ GraphQL كـ HTTP 200 مع فك تغليف في التطبيق؛ لا تشحن حزمة Core بروتوكول GraphQL مدمجاً.
 ---
 
-# فك غلاف GraphQL عبر HTTP
+# فك تغليف غلاف GraphQL عبر HTTP
 
-لا تنفّذ Defjs سياسة `errorPolicy` لـ GraphQL. مثّل النقل بطلب HTTP POST يضع الـ builder فيه مستند الاستعلام والمتغيرات. صرّح بـ `data` في الغلاف باستخدام `.nullish()` حتى تصل حالتا غياب `data` و`data: null` إلى الدالة المساعدة، ثم عالج `errors[]` قبل فحص `data`.
+لا يدمج Defjs عميل GraphQL ولا يوفّر سياسة `errorPolicy`. بل صمّم GraphQL عبر HTTP كعملية `POST` قياسية تُرسل دالة `builder` الخاصة بها الكائن `{ query, operationName, variables }`. عيّن `data` كـ `.nullish()` في بنية الغلاف (Struct envelope) بحيث تجتاز كل من `data` المحذوفة و`data: null` التحقق البنيوي بنجاح، ثم فك تغليف `errors[]` عبر دالة مساعدة في كود التطبيق:
 
-انظر [قرارات التصميم](/ar/docs/design-decisions).
-
-<include cwd meta="graphql-viewer.ts">
-  examples/recipes/graphql-http-envelope.ts#example
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 ada viewer unavailable viewer unavailable
 ```
 
-نجاح HTTP يعني فقط أن الغلاف وصل. تبقى أخطاء التطبيق في `errors[]` حتى ترمي دالة فك الغلاف استثناءً أو تُرجع نتيجة، بما في ذلك الاستجابة التي تحتوي على `data: null`. يتعامل المثال مع غياب `data` ومع `data: null` المصحوبة بـ `errors[]` بوصفهما أخطاء تطبيق، لا حالات عدم مطابقة Struct.
-
-`if (error) throw error` يكيّف خطأ Defjs مع هذه الدالة المساعدة. إخفاقات GraphQL مع HTTP 200 تبقى أخطاء تطبيق في `errors[]` وتُرمى وحدها.
+- تعني استجابة HTTP `200` فقط أن غلاف GraphQL قد وصل سليماً عبر الشبكة. أما أخطاء النطاق داخل مصفوفة `errors[]` (حتى عندما تصاحبها `data: null`) فهي نتائج على مستوى التطبيق وليست أخطاء بنيوية `RES_STRUCT_MISMATCH`.
+- راجع [معمارية النواة](/ar/docs/design-decisions) لمعرفة سبب إبقاء أغلفة البروتوكولات الخاصة داخل دوال مساعدة في التطبيق.

@@ -1,121 +1,106 @@
+import "../testing/deadline.ts";
+import "../testing/test/orders.ts";
+import {
+  createClient,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+} from "@defjs/core";
 import { expect, test } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createReader } from "./etag-revalidate/app/reader.ts";
+import { loadViewer } from "./graphql-http-envelope/app/load-viewer.ts";
+import {
+  refreshingBearer,
+  type Credential,
+} from "./refresh-bearer-once/app/auth-interceptor.ts";
+import { getInvoice } from "./refresh-bearer-once/sdk/billing.ts";
 
-async function executeRecipe(
-  name: string,
-  observations: string,
-): Promise<void> {
-  const code = await Bun.file(new URL(`./${name}.ts`, import.meta.url)).text();
-
-  // Run the example file that the recipe page includes and observe the responses produced by its mock.
-  const source = code
-    .replace(
-      /(["'])@defjs\/core\1/,
-      JSON.stringify(
-        new URL("../../../packages/core/src/index.ts", import.meta.url).href,
-      ),
-    )
-    .replace(/\bwithHTTPHandle\b/, "withHTTPHandle as installHTTPHandle");
-  const observed = `
-const statuses: number[] = []
-function withHTTPHandle(handle: Parameters<typeof installHTTPHandle>[0]) {
-  return installHTTPHandle(async (input, init) => {
-    const response = await handle(input, init)
-    statuses.push(response.status)
-    return response
-  })
+/** A local server that records the status of every response it gives. */
+function recordingServer(respond: (request: Request) => Response) {
+  const statuses: number[] = [];
+  const handle = withHTTPHandle((input, init) => {
+    const response = respond(new Request(input, init));
+    statuses.push(response.status);
+    return Promise.resolve(response);
+  });
+  return { handle, statuses };
 }
-${source}
-export { statuses }
-${observations}
-`;
-  const directory = await mkdtemp(join(tmpdir(), "defjs-recipe-"));
-  const filename = join(directory, "recipe.ts");
-  await Bun.write(filename, observed);
-  const result = await import(filename).finally(() =>
-    rm(directory, { recursive: true, force: true }),
-  );
-  if (name === "etag-revalidate") {
-    expect(result.statuses).toEqual([200, 304]);
-    expect(result.product.name).toBe("Flask");
-  } else if (name === "graphql-http-envelope") {
-    expect(result.viewer.login).toBe("ada");
-    expect(result.statuses).toEqual([200, 200, 200, 200]);
-    expect(result.graphQlErrors).toEqual([
-      "viewer unavailable",
-      "viewer unavailable",
-    ]);
-    expect(result.nullableError.message).toBe("viewer unavailable");
-    expect(result.nullableError.code).toBeUndefined();
-  } else {
-    expect(result.statuses).toEqual([401, 200]);
-    expect(result.credential.accessToken).toBe("v2");
-    expect(result.error).toBeNull();
-    expect(result.invoice.total).toBe(42);
-  }
-}
-
-test.each([
-  { id: 7, exitCode: 0 },
-  { id: 8, exitCode: 1 },
-])("local HTTP test exits $exitCode for user $id", async ({ id, exitCode }) => {
-  const source = (
-    await Bun.file(new URL("./test-with-handle.ts", import.meta.url)).text()
-  )
-    .replace(
-      '"@defjs/core"',
-      JSON.stringify(
-        new URL("../../../packages/core/src/index.ts", import.meta.url).href,
-      ),
-    )
-    .replace("getUser(client, { id: 7 })", `getUser(client, { id: ${id} })`);
-  const directory = await mkdtemp(join(tmpdir(), "defjs-local-test-"));
-  try {
-    const filename = join(directory, "get-user.test.ts");
-    await Bun.write(filename, source);
-    const child = Bun.spawn([process.execPath, filename], {
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
-    });
-    const [status, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect(status).toBe(exitCode);
-    if (exitCode === 0) {
-      expect(stdout).toContain("Ada 200");
-      expect(stderr).toBe("");
-    } else {
-      expect(stdout).not.toContain("Ada 200");
-      expect(stderr).toContain("HTTP_STATUS");
-    }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
 
 test("ETag recipe reuses the cached product after a real 304", async () => {
-  await executeRecipe("etag-revalidate", "export { product }");
+  const etag = '"v7"';
+  const server = recordingServer((request) =>
+    request.headers.get("if-none-match") === etag
+      ? new Response(null, { status: 304, headers: { etag } })
+      : Response.json(
+          { sku: "SKU-1", name: "Flask", priceCents: 3200 },
+          { headers: { etag } },
+        ),
+  );
+  const read = createReader(
+    createClient(withEndpoint("https://catalog.example.test"), server.handle),
+  );
+
+  await read("SKU-1");
+  const product = await read("SKU-1");
+
+  expect(server.statuses).toEqual([200, 304]);
+  expect(product.name).toBe("Flask");
 });
 
 test("Bearer recipe refreshes the credential after a real 401", async () => {
-  await executeRecipe(
-    "refresh-bearer-once",
-    "export { credential, error, invoice }",
+  let credential: Credential = { accessToken: "v1" };
+  const server = recordingServer((request) =>
+    request.headers.get("authorization") === "Bearer v1"
+      ? Response.json({ code: "expired_token" }, { status: 401 })
+      : Response.json({ total: 42 }),
   );
+  const client = createClient(
+    withEndpoint("https://billing.example.test"),
+    server.handle,
+    withInterceptors(
+      refreshingBearer(
+        () => credential,
+        () => {
+          credential = { accessToken: "v2" };
+          return Promise.resolve(credential);
+        },
+      ),
+    ),
+  );
+
+  const [error, invoice] = await getInvoice(client);
+
+  expect(server.statuses).toEqual([401, 200]);
+  expect(credential.accessToken).toBe("v2");
+  expect(error).toBeNull();
+  expect(invoice).toEqual({ total: 42 });
 });
 
 test("GraphQL recipe unwraps data: null with errors as an application error", async () => {
-  await executeRecipe(
-    "graphql-http-envelope",
-    `const nullableError = await loadViewer(createClient(
-      withEndpoint('https://api.example.test'),
-      withHTTPHandle(async () => Response.json({ data: null, errors: [{ message: 'viewer unavailable' }] })),
-    )).catch((error: unknown) => error)
-    export { viewer, graphQlErrors, nullableError }`,
+  const envelopes = [
+    { data: { viewer: { id: "v-1", login: "ada" } } },
+    { errors: [{ message: "viewer unavailable" }] },
+    { data: null, errors: [{ message: "viewer unavailable" }] },
+  ];
+  let calls = 0;
+  const server = recordingServer(() => Response.json(envelopes[calls++]));
+  const client = createClient(
+    withEndpoint("https://api.example.test"),
+    server.handle,
   );
+
+  await expect(loadViewer(client)).resolves.toEqual({
+    id: "v-1",
+    login: "ada",
+  });
+  await expect(loadViewer(client)).rejects.toThrow("viewer unavailable");
+  const nullData: unknown = await loadViewer(client).catch(
+    (error: unknown) => error,
+  );
+
+  expect(server.statuses).toEqual([200, 200, 200]);
+  expect(nullData).toBeInstanceOf(Error);
+  expect(nullData).toHaveProperty("message", "viewer unavailable");
+  // A Defjs fault carries `code`; this is the helper's own application error.
+  expect(nullData).not.toHaveProperty("code");
 });

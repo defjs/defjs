@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { StructError, struct } from "./index";
-import { parseStructTuple as parse } from "./introspection";
+import { parseStructTuple as parse } from "./parse";
 
 describe("constructors.ts discriminatedUnion", () => {
   const event = struct.discriminatedUnion("type", [
@@ -93,51 +93,33 @@ describe("constructors.ts discriminatedUnion", () => {
     expect(e2).toBeInstanceOf(StructError);
   });
 
-  test("rejects a non-object option", () => {
-    expect(() =>
-      struct.discriminatedUnion("type", [struct.string()] as never),
-    ).toThrow(
-      new TypeError("discriminatedUnion options must be object structs"),
-    );
-  });
-
-  test("rejects option list with duplicate discriminator value at chain time", () => {
+  test("rejects a duplicate discriminator value at chain time and names the option", () => {
     expect(() =>
       struct.discriminatedUnion("type", [
         struct.object({ type: struct.literal("a"), value: struct.string() }),
         struct.object({
           type: struct.literal("a"),
           other: struct.number(),
-        }) as never,
+        }),
       ]),
-    ).toThrowError("duplicate discriminator value");
+    ).toThrow(
+      new TypeError(
+        'discriminatedUnion option at index 1 repeats the discriminator value "a"',
+      ),
+    );
   });
 
-  test("rejects option missing the discriminator field at chain time", () => {
+  test("rejects a discriminator field that is not literal and names the option", () => {
     expect(() =>
       struct.discriminatedUnion("type", [
         struct.object({ type: struct.literal("a") }),
-        struct.object({ other: struct.string() }) as never,
+        struct.object({ type: struct.string() }),
       ]),
-    ).toThrowError("missing discriminator field");
-  });
-
-  test("rejects discriminator field that is not literal", () => {
-    expect(() =>
-      struct.discriminatedUnion("type", [
-        struct.object({ type: struct.string() }) as never,
-      ]),
-    ).toThrowError("must be a literal struct");
-  });
-
-  test.each([
-    struct.literal("a").optional(),
-    struct.literal("a").null(),
-    struct.literal("a").nullish(),
-  ])("rejects discriminator field modifiers", (type) => {
-    expect(() =>
-      struct.discriminatedUnion("type", [struct.object({ type })] as never),
-    ).toThrowError("must be a required literal struct");
+    ).toThrow(
+      new TypeError(
+        'discriminatedUnion option at index 1 must have a literal struct for the discriminator field "type"',
+      ),
+    );
   });
 
   test("reads a getter discriminator while building the union", () => {

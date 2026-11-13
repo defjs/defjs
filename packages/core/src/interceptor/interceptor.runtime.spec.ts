@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { fakeEventStream } from "../../test/fake_event_stream";
 import type { HttpRequest } from "../http";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
 import type { SSEInterceptorFn } from "./interceptor";
@@ -29,9 +30,11 @@ describe("SSE interceptor chain", () => {
     ];
 
     let capturedRequest: HttpRequest | undefined;
-    const fakeSSEHandler = async (req: HttpRequest) => {
+    const fakeSSEHandler = (
+      req: HttpRequest,
+    ): Promise<EventStreamHandle<unknown>> => {
       capturedRequest = req;
-      return {} as EventStreamHandle<unknown>;
+      return Promise.resolve(fakeEventStream());
     };
 
     const chain = makeChain(interceptors);
@@ -43,25 +46,19 @@ describe("SSE interceptor chain", () => {
   });
 
   test("SSE interceptor can wrap the returned stream", async () => {
-    const fakeStream = {
-      wrapped: false,
-    } as unknown as EventStreamHandle<unknown>;
-
     const interceptor: SSEInterceptorFn = async (req, next) => {
       const stream = await next(req);
-      return {
-        ...stream,
-        wrapped: true,
-      } as unknown as EventStreamHandle<unknown>;
+      return { ...stream, wrapped: true };
     };
 
     const chain = makeChain([interceptor]);
     const result = await chain(
       { endpoint: "/events", method: "GET" },
-      async () => fakeStream,
+      (): Promise<EventStreamHandle<unknown>> =>
+        Promise.resolve(fakeEventStream()),
     );
 
-    expect((result as unknown as { wrapped: boolean }).wrapped).toBe(true);
+    expect("wrapped" in result && result.wrapped).toBe(true);
   });
 
   test("createSSEInterceptor should return kind sse", () => {

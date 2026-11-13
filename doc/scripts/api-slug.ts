@@ -1,12 +1,14 @@
 /**
  * URLs already published in 11 locales. The regular rule would change them:
- * `ERR_ABORTED` / `ERR_TIMEOUT` are constants, `STRUCT` is a type, and
- * `ClientProvider` is a function.
+ * `ERR_ABORTED` / `ERR_TIMEOUT` are constants, `STRUCT` is a type,
+ * `ClientProvider` is a function, and `withXSRF` keeps its root slug after
+ * moving to `@defjs/core/xsrf`.
  */
 export const slugExceptions: Readonly<Record<string, string>> = {
   "@defjs/core:ERR_ABORTED": "core/err-aborted-type",
   "@defjs/core:ERR_TIMEOUT": "core/err-timeout-type",
   "@defjs/core:STRUCT": "core/struct-symbol-type",
+  "@defjs/core/xsrf:withXSRF": "core/withxsrf",
   "@defjs/react:ClientProvider": "react/clientprovider-type",
 };
 

@@ -5,18 +5,32 @@ description: Keep GraphQL as HTTP 200 + application unwrap; Core does not ship a
 
 # Unwrap a GraphQL HTTP envelope
 
-Defjs does not implement GraphQL `errorPolicy`. Model the wire as an HTTP POST whose builder places the query document and variables. Declare envelope `data` as `.nullish()` so both missing `data` and `data: null` reach your helper, then unwrap `errors[]` before checking `data`.
+Defjs does not embed a GraphQL client or `errorPolicy`. Model GraphQL over HTTP as a standard `POST` operation whose `builder` sends `{ query, operationName, variables }`. Mark `data` as `.nullish()` on the envelope Struct so both omitted `data` and `data: null` pass structural validation, then unwrap `errors[]` in an application helper:
 
-See [Design Decisions](/docs/design-decisions).
-
-<include cwd meta="graphql-viewer.ts">
-  examples/recipes/graphql-http-envelope.ts#example
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 ada viewer unavailable viewer unavailable
 ```
 
-HTTP success only means the envelope arrived. Application errors stay in `errors[]` until your unwrap throws or returns, including a response with `data: null`. The example handles both missing `data` and `data: null` with `errors[]` as application errors, not Struct mismatches.
-
-`if (error) throw error` adapts a Defjs fault to that helper. HTTP 200 GraphQL failures stay application errors in `errors[]` and are thrown on their own.
+- An HTTP `200` only means the GraphQL envelope arrived intact. Domain errors inside `errors[]` (even when accompanied by `data: null`) are application-level results rather than `RES_STRUCT_MISMATCH` faults.
+- See [Core architecture](/docs/design-decisions) for why protocol-specific envelopes stay in application helpers.

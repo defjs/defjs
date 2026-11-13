@@ -5,39 +5,36 @@ description: defineEventStream, опции запроса и stream handle.
 
 # SSE
 
-Объяви поток событий, вызови операцию с клиентом, итерируй события, потом закрой.
+Объявите поток событий, вызовите операцию с клиентом, прочитайте события, затем закройте поток.
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`, карта `events` и обязательные лимиты `maxBufferSize` и `maxQueueSize` (положительные целые); необязательные `method` (по умолчанию `'GET'`), `operation`, `input` и `error`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`EventStreamDefinition`](/ru-RU/api/core/eventstreamdefinition-type). `error` обязателен только когда задан тип error-struct, а `builder` — ровно тогда, когда объявлен `input`.
+- **definition** — `path` и карта `events`; необязательные `method` (по умолчанию `'GET'`), `operation`, `input`, `error` и `maxBufferSize` (по умолчанию `64 * 1024`). При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`EventStreamDefinition`](/ru-RU/api/core/eventstreamdefinition-type). `error` обязателен только когда задан тип error-struct, а `builder` — ровно тогда, когда объявлен `input`.
 - **Возвращает** операцию. Первый аргумент — [`Client`](/ru-RU/api/core/client-type). Дальше идёт только input. Вызов начинает поток.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-Вызов возвращает `[null, stream, open]` или `[error, undefined, open?]`. Если объявлен `error`, fault — это `Fault` этого struct; иначе `Fault<undefined>`. Передавай `signal`, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). SSE читает только `signal` и игнорирует прогресс и поля WebSocket.
+Вызов возвращает `[null, stream, open]` или `[error, undefined, open?]`. Если объявлен `error`, сбой — это `Fault` этого struct; иначе `Fault<undefined>`. Передавайте `signal`, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). SSE читает только `signal` и `retry` и игнорирует прогресс и поля WebSocket.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` — это `{ signal? }`. Полей `timeout` или `abort` нет, и колбэка прогресса нет. `signal` покрывает весь поток, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. Приложение, которому нужен дедлайн только на старт, создаёт свой `AbortController`, прерывает его через `new DOMException("...", "TimeoutError")` из таймера и сбрасывает таймер после того, как `await` вернулся.
+`EventStreamExecuteOptions` — это `{ signal?, retry? }`. Полей `timeout` или `abort` нет, и колбэка прогресса нет. `signal` покрывает весь поток, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручная отмена — `NET_ABORTED`. Дедлайна по умолчанию на уровне клиента нет. Дедлайн только на хэндшейк — это `withRetry({ maxRetries: 0, attemptTimeoutMs })` или `retry: { maxRetries: 0, attemptTimeoutMs }` для одного вызова; он заканчивается на заголовках ответа.
 
 ## EventStreamHandle
 
 <ApiSignature name="EventStreamHandle" />
 
-Третий слот кортежа — снимок `open` на момент старта; `stream.open` после переподключения отражает последнее соединение. Этот третий слот — снимок первого успешного handshake соединения возвращённого handle только для нативного handle Defjs или обёртки, передающей тот же живой объект `open`; пользовательские handle и обёртки, переопределяющие `open`, сохраняют свой текущий публичный `open` даже после переподключения, поэтому общий `closed` не позволяет обойти очистку URL или фильтрацию заголовков, а Defjs не восстанавливает метаданные первого handshake из произвольных преобразований. Для освобождения принадлежащих области видимости ресурсов предпочитай `await using stream = handle`. Асинхронное освобождение останавливает чтение Defjs и переподключения и ждёт освобождения блокировки reader; оно не гарантирует завершение зависшего Promise `ReadableStream.cancel()`, которым управляет провайдер. Ручные `close()` / `closed` остаются доступны.
+Третий слот кортежа — снимок `open` на момент старта; `stream.open` после переподключения отражает последнее соединение. Этот третий слот является снимком первого успешного хэндшейка только для нативного хэндла Defjs или обёртки, передающей тот же живой объект `open`; пользовательские хэндлы и обёртки, переопределяющие `open`, сохраняют свой текущий публичный `open` даже после переподключения, поэтому общий `closed` не позволяет обойти очистку URL или фильтрацию заголовков, а Defjs не восстанавливает метаданные первого хэндшейка из произвольных преобразований. Для освобождения ресурсов, принадлежащих области видимости, предпочитайте `await using stream = handle`. Асинхронное освобождение останавливает чтение Defjs и переподключения и ждёт освобождения блокировки reader; оно не гарантирует завершение зависшего Promise `ReadableStream.cancel()`, которым управляет провайдер. Ручные `close()` / `closed` остаются доступны.
 
-```ts
-async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
-  await using stream = handle;
-  for await (const event of stream) console.log(event);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-event-stream.ts#example
+</include>
 
-Структурные реализации `EventStreamHandle` теперь должны реализовать `[Symbol.asyncDispose]()` с тем же механизмом освобождения принадлежащих им ресурсов. Для пользовательских handle это несовместимое изменение на уровне типов; код, который только получает handle от Defjs, не требует нового вызова во время выполнения.
+Структурные реализации `EventStreamHandle` должны реализовать `[Symbol.asyncDispose]()` и использовать тот же путь освобождения принадлежащих им ресурсов.
 
 ### EventStreamOpenInfo
 
@@ -47,33 +44,33 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` — это `eof`, `aborted` или `error`. Каждый вариант может нести `reason` и `cause`. `code` есть только у `error`, одно из [`EventStreamFaultCode`](/ru-RU/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+`kind` — это `eof`, `aborted` или `error`. Каждый вариант может нести `reason` и `cause`. `code` есть только у `error`, одно из [`EventStreamFaultCode`](/ru-RU/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` значит, что выбор эндпоинта при переподключении не удался после открытия потока. `EXT_HOOK_FAILED` значит, что функция `shouldRetry` бросила исключение, а `cause` оборачивает брошенное значение. `HTTP_STATUS` значит, что хэндшейк переподключения завершился не-2xx статусом, который не повторяли, или повторы исчерпаны. Полная очередь — не ошибка: библиотека держит не больше 1024 непрочитанных событий, и чтение ответа приостанавливается, пока потребитель не заберёт одно. `close()`, освобождение и отмена `signal` вызывающего кода отбрасывают события, которые ещё никто не прочитал, и сразу завершают итератор — независимо от того, закончился ли поток уже; после завершения с `error` итератор всё равно отклоняется с `cause`, когда непрочитанных событий не осталось. Без такой остановки события, уже поставленные в очередь после завершения с `error`, всё равно доставляются до того, как итератор отклонится.
 
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
 
-Ключ — имя SSE-события; сообщение без поля `event:` называется `message`. Если ни один ключ не подошёл, используется struct `default`. Event struct `string` оставляет сырой текст `data`. Любой другой kind — это JSON-текст: `JSON.parse`, потом struct. Голый `struct.literal` поэтому ждёт JSON-текст, а не незакавыченный токен. Тела handshake `error` следуют тому же правилу kind, что HTTP: `string` — текст, `blob` / `file` — blob, `arrayBuffer` — байты, всё остальное — JSON.
+Ключ — имя SSE-события; сообщение без поля `event:` называется `message`. Если ни один ключ не подошёл, используется struct `default`. Event struct `string` оставляет сырой текст `data`. Любой другой вид struct — это JSON-текст: `JSON.parse`, затем struct. Голый `struct.literal` поэтому ждёт JSON-текст, а не незакавыченный токен. Тела ответа хэндшейка `error` следуют тому же правилу вида struct, что HTTP: `string` — текст, `blob` / `file` — blob, `arrayBuffer` — байты, всё остальное — JSON.
 
-Reconnect живёт на клиенте (`withSSEReconnect`). SSE `jitter` — **мультипликативный коэффициент 0–1**, как у WebSocket.
+Повторы живут на клиенте (`withRetry`), а опция запроса `retry` заменяет политику для одного вызова. Та же политика обслуживает HTTP и WebSocket.
 
-Бюджет повторов и показатель степени для задержки сбрасываются после успешного установления соединения и действуют на каждый обрыв отдельно. Недопустимые числовые настройки возвращают `REQ_OPTIONS_INVALID` до открытия потока, а `maxDelayMs` ограничивает итоговую задержку после случайного отклонения. Правила проверки, значения по умолчанию и обработку `Last-Event-ID` в UTF-8 см. в [`withSSEReconnect`](/ru-RU/api/core/withssereconnect).
+Счётчик повторов и показатель степени задержки сбрасываются после каждого успешного хэндшейка и действуют на каждый обрыв отдельно, поэтому `maxRetries: 1` всё равно может создать много соединений за длительную сессию. Штатный EOF от сервера не запускает переподключение, а незавершённое событие при EOF не фиксирует свой id. Хэндшейк с ответом 502, 503 или 504 повторяется как отказ в соединении по тем же правилам (метод, `shouldRetry`, `maxRetries`, тело `ReadableStream`); любой другой не-2xx хэндшейк передаётся в `shouldRetry` с `retryable: false`, поэтому поток завершается, если ваша функция не скажет иначе. Исчерпанные повторы и отклонённые не-2xx хэндшейки завершаются с `HTTP_STATUS`; проверяйте живое значение `stream.open.response.status`, чтобы увидеть статус. Значения по умолчанию, порядок решения и обработку `Last-Event-ID` в UTF-8 см. в [`withRetry`](/ru-RU/api/core/withretry).
 
 Парсер следует правилам строк и полей WHATWG SSE и удаляет только один начальный UTF-8 BOM в начале каждого физического потока. U+FEFF в данных и значениях ID сохраняется; имя поля с BOM в начале, появившееся позже, игнорируется как неизвестное. Несколько строк данных соединяются через `\n`, пустая строка выдаёт событие с данными, а незавершённое событие в конце потока (EOF) отбрасывается.
 
-См. [гайд SSE](/ru-RU/docs/sse) и [Читать SSE-стрим](/ru-RU/recipes/consume-sse).
+См. [руководство по SSE](/ru-RU/docs/sse) и [Чтение SSE-потока](/ru-RU/recipes/consume-sse).
 
 ## EventStreamDefinition
 
-`path`, `events`, обязательные `maxBufferSize` и `maxQueueSize`, необязательные `method` / `operation` / `input` / `error`. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут вернуть тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
+`path`, `events`, необязательные `method` / `operation` / `input` / `error` / `maxBufferSize`. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут нести тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
 
 ## EventStreamEndpoint
 
-То, что возвращает `defineEventStream`. Первый аргумент — клиент. Дальше идёт только input.
+То, что возвращает `defineEventStream`. Первый аргумент — клиент. Дальше идёт только `input`.
 
 ## EventStreamRequestShape
 
-Те же поля, что у `HttpRequestShape`, для method и path стрима.
+Те же поля, что у `HttpRequestShape`, для метода и пути потока.
 
 ## StreamAwaitResult
 
@@ -81,4 +78,4 @@ Reconnect живёт на клиенте (`withSSEReconnect`). SSE `jitter` — 
 
 ## EventStreamData
 
-Распарсенный payload события, выведенный из карты `EventStructs`.
+Разобранная полезная нагрузка события, выведенная из карты `EventStructs`.

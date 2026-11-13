@@ -1,118 +1,108 @@
 ---
 title: "Sessions WebSocket"
-description: Définis le contrat de messages WebSocket de ton SDK pendant que les applications possèdent la configuration de connexion et la durée de vie de la session.
+description: Définissez le contrat de messages WebSocket de votre SDK pendant que les applications possèdent la configuration de connexion et la durée de vie de la session.
 ---
 
-# WebSocket
+# Sessions WebSocket
 
-Le SDK définit le chemin, les entrées, les messages entrants et sortants, et la limite de file d’une opération WebSocket. L’application consommatrice configure son client, appelle l’opération, et choisit les options de connexion propres à l’appel sur un client dérivé. Exporte l’opération à côté des opérations HTTP ou SSE de ton SDK.
+`defineWebSocket` déclare un contrat WebSocket bidirectionnel dans votre SDK : le patron de chemin, `input` et `builder` optionnels (`path` et `query` uniquement), les structs de messages `incoming` et `outgoing`, les limites de file et les sous-protocoles statiques. L'application consommatrice configure le heartbeat, les retries (`withRetry`) et le nettoyage du cycle de vie sur son propre client.
 
-Démarrage → recevoir → envoyer → relâcher avec `await using`. Tu possèdes le désabonnement et la disposition. `close()` / `closed` manuels restent disponibles ; les clients, les providers et les intercepteurs ne ferment pas les sessions tout seuls.
+## 1. Définir le contrat et exécuter une session
 
-## Mise en place
+Modélisez plusieurs types de trames pour `incoming` ou `outgoing` à l'aide de `struct.discriminatedUnion(...)`. Libérez la session `WebSocketSession` obtenue avec `await using` ou par un appel explicite à `session.close()` + `await session.closed` :
+
+<Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup.ts#example
 </include>
 
-## Un struct par direction
+</Tab>
+</Tabs>
 
-`incoming` est un struct pour chaque frame texte. `outgoing` est un struct pour `session.send(...)`. Modélise plusieurs kinds avec `struct.discriminatedUnion`. L’alias sur ces champs est le nom wire dans les deux sens. Il n’y a pas d’enveloppe de type séparée ni de normaliseur.
+## 2. Validation des messages et sens d'échange
 
-```json
-{ "type": "message", "text": "Hello" }
-```
+- **Trames entrantes (`session.receive`)** : Les trames texte, `ArrayBuffer`, vues typées et `Blob` sont décodées en UTF-8, analysées en JSON et validées selon `incoming`. Tout JSON malformé ou non-conformité de schéma est notifié à `session.onRuntimeError` et ignoré sans refermer la session. `session.receive` n'admet qu'un seul consommateur ; demander un second itérateur lève un `TypeError`. Quand le transport échoue, les messages déjà reçus sont livrés d'abord, puis `receive` rejette avec `closed.cause`, et cela comprend un timeout de heartbeat. Une annulation par l'appelant (un abort de `signal`), `session.close()` et la libération écartent les messages non lus, que la session se soit déjà terminée ou non. Sur une session ouverte, `receive` se termine alors aussitôt après `session.close()` ou la libération, et rejette avec la raison de l'abort (un `AbortError` par défaut) après un abort ; une trame qui arrive après `session.close()` est écartée aussi. Un `signal` qui expire, comme le fait `AbortSignal.timeout(ms)`, pendant que la session est ouverte est un timeout : la session se termine en erreur et livre d'abord les messages en file. Un `signal` qui expire après la fin de la session est un arrêt et les écarte.
+- **Trames sortantes (`session.send(payload)`)** : Valide de manière synchrone selon `outgoing`, applique les `.alias()` et codecs, puis sérialise avec `JSON.stringify`. L'envoi est immédiat si l'état est `open`, mis en file pendant `reconnecting` (si `maxOutgoingQueueSize > 0`), et lève de manière synchrone si la charge utile est invalide, la file pleine/désactivée ou la session fermée.
 
-Les frames entrantes texte, `ArrayBuffer`, typed-array et `Blob` sont lues en UTF-8, parsées en JSON, puis vérifiées contre `incoming`. Le JSON malformé et les échecs de struct vont à `session.onRuntimeError` et ne sont pas mis en file. La session reste ouverte. Les frames qui ne sont ni du texte, ni des octets, ni un `Blob` sont ignorées. Il n’y a pas de `withWebSocketOnInvalidEvent`.
+## 3. États de session et observateurs
 
-`session.send(...)` valide et sérialise de façon synchrone : encodage struct, puis `JSON.stringify`. Il envoie immédiatement quand c’est ouvert, met en file pendant `reconnecting` quand une file sortante est activée, et lève `InvalidStateError` quand ce n’est pas inscriptible. Il lève aussi quand il n’y a pas de struct sortant, que le payload échoue le struct, que la file sortante est désactivée ou pleine, ou que l’envoi natif échoue. Une liste `protocols` statique sur la définition est le contrat de l’endpoint (par exemple `graphql-transport-ws`). Les `protocols` d’un client dérivé et `withWebSocketProtocols` peuvent encore la remplacer. Seules ces options choisissent les sous-protocoles : le builder, `beforeConnect` et les intercepteurs ne peuvent pas les changer, donc un jeton dans le sous-protocole est passé comme `protocols` sur le client dérivé pour cet appel. Le builder ne peut renvoyer que `path` et `query`.
+| Membre               | Description                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `state`              | `'idle' \| 'connecting' \| 'open' \| 'reconnecting' \| 'closing' \| 'closed' \| 'aborted' \| 'error'`    |
+| `connection`         | Instantané dynamique du dernier socket physique (`generation`, `url`, `protocol`, `extensions`)          |
+| `bufferedAmount`     | Nombre d'octets natifs non envoyés sur le socket physique actif (`0` en l'absence de connexion)          |
+| `receive`            | Itérable asynchrone à consommateur unique délivrant les messages validés par `incoming`                  |
+| `onStateChange(fn)`  | S'abonne aux transitions d'état ; renvoie une fonction de désabonnement                                  |
+| `onRuntimeError(fn)` | S'abonne aux erreurs d'analyse ou de trames hors phase de démarrage ; renvoie une fonction `unsubscribe` |
+| `closed`             | Promesse résolue avec l'issue terminale (`kind: 'closed' \| 'aborted' \| 'error'`)                       |
 
-Après l’encodage struct, les valeurs que JSON ne peut pas représenter fidèlement lèvent `TypeError` avant l’envoi ou l’entrée dans la file de reconnexion : nombres non finis, fonctions, symboles, `Map`, `Set`, flux, et instances de classe sans représentation JSON. Les valeurs imbriquées suivent la même règle que les corps JSON HTTP. `struct.number()` accepte encore les infinis et rejette `NaN` ; accepter une valeur à la couche struct ne la rend pas un JSON valide. Le heartbeat utilise le même serializer ; son échec de sérialisation termine la session logique.
+<ApiSignature name="SocketAwaitResult" />
 
-`receive` est à un seul consommateur. Demander un second itérateur lève une `TypeError`.
+## 4. Retries, heartbeat et files d'attente
 
-## Instantanés d’état
+La reconnexion et le heartbeat sont activables à la demande via les options du client (`withRetry`, `withWebSocketHeartbeat`) ou sur un client dérivé par appel (`client({ retry, heartbeat })`). La reconnexion utilise la même politique `withRetry` que HTTP et SSE :
 
-| Membre                     | Sens                                                                                                        |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `state`                    | `idle`, `connecting`, `open`, `reconnecting`, `closing`, `closed`, `aborted` ou `error`                     |
-| `connection`               | Dernière connexion physique : `generation`, URL, protocole négocié, extensions quand elles sont disponibles |
-| `bufferedAmount`           | Nombre d’octets natifs non envoyés, ou `0` sans socket physique                                             |
-| `receive`                  | Itérable async à un consommateur des messages entrants validés                                              |
-| `onStateChange(listener)`  | S’abonne aux transitions d’état logique ; renvoie le désabonnement                                          |
-| `onRuntimeError(listener)` | S’abonne aux erreurs runtime hors démarrage ; renvoie le désabonnement                                      |
-| `closed`                   | Promesse du résultat de fermeture terminal logique                                                          |
-
-`open` = socket physique ouvert. `reconnecting` inclut la préparation + le délai avant un remplacement. `connection.generation` s’incrémente à chaque socket physique qui atteint `open`. `session.connection` avance à la reconnexion. Le `startupConnection` du tuple ne préserve le premier instantané réussi que pour une session native Defjs ou un wrapper qui transmet le même objet `connection` live. Les sessions personnalisées et les wrappers qui transforment `connection` utilisent à la place le `connection` public courant de la session renvoyée pour le tuple. Partager `closed` ne peut pas contourner la sanitation d’URL ou le filtrage de métadonnées, et Defjs ne reconstruit pas les métadonnées de la première connexion à partir de transformations arbitraires.
-
-Échec de démarrage → `[error, undefined, connection?]`. Un échec de constructeur avant l’ouverture peut n’avoir aucune connexion ; un abort ou une fermeture pendant le démarrage peut encore fournir un instantané. Après le retour de la session, les erreurs runtime passent par les observateurs, `receive` et `closed` — pas un second tuple de résultat.
-
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
-
-## Reconnexion
-
-La reconnexion est opt-in. Pas d’objet `reconnect` → une fermeture physique termine la session logique. Quand elle est configurée, les défauts sont `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. `attempts` est le budget de nouvelles tentatives pour chaque coupure ; un `open` réussi réinitialise le budget et l’exposant de backoff. Chaque coupure suivante repart donc avec la tentative 1 et la base `delayMs`. `attempts: 0` désactive. Le prédicat par défaut accepte chaque issue de fermeture non manuelle dans le budget de cette coupure. Les ouvertures réussies répétées n’ont pas de limite de nouvelles tentatives à vie. Un socket qui s’ouvre avec succès et est immédiatement refermé par le serveur peut continuer à se reconnecter au délai de base (sous jitter et plafonds), parce que chaque ouverture réinitialise le budget ; utilise `shouldReconnect` pour l’arrêter.
+<Tabs items={["Retry policy", "Application heartbeat"]}>
+<Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
-`shouldReconnect` reçoit la prochaine tentative, la cause de fermeture, le code, la raison et `wasClean`. Un `session.close(...)` manuel n’entre pas dans le prédicat. Une préparation ou une politique qui lève termine la session logique avec une erreur.
-
-Le jitter de backoff WebSocket est **multiplicatif** (`jitter: 0.2` met la base plafonnée à l’échelle `0.8x`–`1.2x` avant arrondi). Le délai final est à nouveau plafonné à `maxDelayMs` et à la limite de timer de la plateforme de `2_147_483_647` ms, donc la partie haute de cette plage peut être tronquée. Une base nulle reste nulle ; un dépassement de nombres valides est clampé au lieu de lever. SSE utilise la même règle de jitter 0–1. Les options de reconnexion sont validées avant le constructeur : `attempts` est un entier sûr non négatif ; `delayMs` doit être fini et non négatif ; `maxDelayMs` doit être un nombre fini non négatif ou `Infinity` positif, ce qui retire le plafond configuré mais pas la limite de plateforme de `2_147_483_647` ms ; `factor` est fini et positif ; `jitter` est fini et dans 0–1. Les valeurs invalides renvoient `REQ_OPTIONS_INVALID`. WebSocket `attempts: 0` désactive les nouvelles tentatives suivantes, mais tous les champs de reconnexion explicitement fournis sont encore validés avant la connexion initiale, comme pour SSE.
-
-`beforeConnect({ attempt, signal })` tourne avant le constructeur initial et chaque reconnexion. Passe son signal au refresh de token pour que l’annulation arrête à la fois la prep et le connect.
-
-## Heartbeat
-
-Opt-in sur le client ou sur un client dérivé. L’intervalle envoie `message()` à travers le struct sortant. Un `isAck(message)` facultatif reconnaît un ack — ce message efface l’attente d’acquittement et n’est **pas** livré à `receive`. `heartbeat` est remplacé comme une valeur entière. `timeoutMs` est le temps d’attente de cet acquittement. Ce n’est pas une échéance de requête.
+</Tab>
+<Tab>
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
-`intervalMs` et `timeoutMs` doivent être des timers finis et strictement positifs ≤ `2_147_483_647`. Le message de heartbeat doit être valide pour le struct sortant. Les échecs de sérialisation, d’envoi natif, de classification d’ack et de timeout sont fatals pour la session logique — ils ne deviennent pas des reconnexions ordinaires.
+</Tab>
+</Tabs>
 
-## Files
+- **Retries** : Quand une politique de retry est définie, les défauts sont `maxRetries: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0.2`. Toute fermeture que `session.close()` n'a pas demandée est retentée par défaut, y compris une connexion qui ne s'est jamais ouverte. Un constructeur qui lève est un échec local qu'un retry ne ferait que répéter, donc il termine l'appel sans interroger `shouldRetry`. Chaque `open` physique réinitialise le compte de la coupure. `shouldRetry` peut passer outre le défaut et peut être async ; il n'est pas appelé pour une fermeture manuelle, un abort de l'appelant, ou une fois que `maxRetries` retries ont été faits. Un retry décliné ou épuisé termine la session comme elle se terminerait sans politique : une erreur de connexion est `closed.kind: "error"`, une trame de fermeture du pair est `"closed"`. Un événement `error` qu'aucun événement `close` ne suit dans la seconde, ou un `close()` natif qui lève sur un socket en erreur, est une tentative échouée comme un heartbeat manqué : la politique de retry décide alors de la suite. Après `session.close()`, la même situation termine la session en `closed.kind: "closed"`. `beforeConnect({ attempt, signal })` s'exécute avant la connexion initiale et chaque retry. Ce que le répartiteur apprend d'un socket ouvert ne dépend que du code de fermeture, quelle que soit la valeur de `wasClean` : `1006` ou `1015` (aucune trame de fermeture reçue) donne `NET_UNREACHABLE`, `1012` ou `1013` donne `NET_UNAVAILABLE`, tout autre code n'est pas un échec.
+- **Délai de tentative (`attemptTimeoutMs`)** : Lorsqu'il est fourni, il borne la construction jusqu'à `open` et est effacé après le handshake. C'est une option de `withRetry` (ou de l'option de requête `retry`), donc `withRetry({ attemptTimeoutMs })` retente aussi, avec le défaut `maxRetries: 3`. Pour une échéance limitée au handshake, écrivez `withRetry({ maxRetries: 0, attemptTimeoutMs })`. L'expiration signale `NET_UNREACHABLE` au répartiteur, et les retries épuisés se terminent par `NET_TIMEOUT`.
+- **Heartbeat** : Defjs ne définit aucun format, intervalle ou timeout de heartbeat : `message` et `isAck` sont vos fonctions, et le type exige `message` et n'admet `timeoutMs` qu'avec `isAck`. L'interface `WebSocket` du navigateur n'a aucun moyen d'envoyer un ping de niveau protocole, donc un message applicatif est le seul heartbeat portable. Tous les `intervalMs`, il envoie `message()` à travers le struct `outgoing` en texte JSON, donc l'endpoint déclare un struct `outgoing` et un ping texte ou binaire nu n'est pas possible. Il attend jusqu'à `timeoutMs` une trame décodée qui satisfait `isAck(msg)` ; une trame qui échoue au struct `incoming` est signalée à `onRuntimeError` et n'atteint jamais `isAck`. Les trames d'acquittement correspondantes sont consommées par le moniteur de heartbeat et ne parviennent pas à `session.receive`. Un acquittement manqué compte comme un échec de connexion : le socket est fermé, l'acquittement manqué est signalé au répartiteur comme `NET_UNREACHABLE` pour l'endpoint, et la tentative entre dans le flux de retry comme n'importe quelle autre fermeture. Sans politique de retry, ou une fois les retries épuisés, `closed.kind` vaut `"error"` et `closed.cause` est l'ordinaire `Error("WebSocket heartbeat timeout")`. Les échecs de sérialisation du heartbeat, ou un `message()` qui lève, sont locaux : ils terminent la session avec leur cause initiale, ne sont pas retentés et ne sont pas attribués à l'endpoint.
+- **Limites de file d'attente** :
+  - Messages entrants : Il n'y a ni option ni limite de nombre. La bibliothèque met en file chaque message que la plateforme livre jusqu'à ce que `session.receive` le lise, donc un consommateur qui ne lit jamais laisse la file croître sans borne ; consommez `session.receive` tant que la session est ouverte, ou fermez la session.
+  - `maxOutgoingQueueSize` (facultatif, défaut `0`) : Met en tampon les appels `session.send()` uniquement lorsque `state === 'reconnecting'` et les expédie avant de publier le prochain `open`.
 
-| Réglage                | Valeur requise                                 | Comportement                                                                                                                   |
-| ---------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `maxIncomingQueueSize` | Entier sûr positif                             | Borne les messages parsés en attente de `receive` et les frames brutes en attente de transform. Dépassement → `state: 'error'` |
-| `maxOutgoingQueueSize` | Entier sûr non négatif facultatif ; défaut `0` | FIFO seulement tant que `state === 'reconnecting'`. Pleine ou désactivée → `send(...)` lève                                    |
+`shouldRetry` reçoit le `code` de fermeture natif, `reason` et `wasClean` dans son contexte WebSocket, et `retryable` y vaut toujours `true`. Un serveur peut achever un handshake de fermeture normal avec le code d’erreur applicative `1011` ; `wasClean === true` ne signifie donc pas que l’application a réussi. L’exemple décide selon `code` ; choisissez les codes applicatifs selon votre protocole au lieu de vous fier uniquement à `!wasClean`.
 
-Les frames sortantes en file sont vidées avant que le socket de remplacement publie `open`. Les frames déjà envoyées sur un socket antérieur ne sont jamais rejouées automatiquement. Les files de reconnexion sont pour les messages que tu envoies pendant la reconnexion — pas pour reconstruire l’état de l’app.
+## 5. Sous-protocoles et authentification [#protocols-and-authentication]
 
-Le dépassement entrant efface la séquence en attente, fait échouer `receive`, arrête la session, résout `session.closed` avec `kind: 'error'`. Garde le consommateur assez rapide ou relève la borne à partir d’une taille et d’une mémoire mesurées.
+Les WebSocket de navigateur ne permettent pas de définir des en-têtes de handshake arbitraires, par conséquent les fonctions `builder` WebSocket renvoient exclusivement `{ path?, query? }`.
 
-## Protocoles et authentification
+- **Priorité des sous-protocoles** : `client({ protocols })` l'emporte sur `withWebSocketProtocols(...)`, qui l'emporte sur `defineWebSocket({ protocols })`.
+- **Conversion d'URL** : Defjs convertit automatiquement `http:` → `ws:` et `https:` → `wss:` sur l'endpoint résolu.
+- **Identifiants** : `withCredentials(true)` s'applique exclusivement à Fetch (HTTP/SSE). Authentifiez les connexions WebSocket à l'aide de cookies/politiques de session, de sous-protocoles ou de jetons temporaires de connexion — évitez de placer des secrets pérennes dans les chaînes de requête.
+- **`beforeConnect` n’est pas un mutateur de requête** : L’analyse d’entrée, le `builder` pur synchrone et la chaîne d’intercepteurs s’exécutent une fois par opération. Pour une requête dont l’endpoint de base n’est pas remplacé par un intercepteur, chaque reconnexion sélectionne à nouveau un endpoint et reconstruit l’URL avec cet endpoint, mais réutilise le chemin/la query construits et la liste de protocoles capturée. L’URL est fixée avant le `beforeConnect` de cette tentative, sur le même endpoint comme après un basculement. Modifier une variable de closure, l’entrée ou le tableau de protocoles dans le hook ne peut pas fournir un nouveau ticket au handshake courant. Le renouvellement d’un identifiant d’URL/sous-protocole au sein d’une session n’est pas pris en charge ; obtenez d’abord le nouvel identifiant, passez-le comme entrée ou configuration client à une nouvelle opération, puis prenez en charge le nettoyage de cette session de remplacement.
 
-Les `protocols` de la définition, `withWebSocketProtocols(...)` du client, et `protocols` sur le client dérivé définissent la liste de sous-protocoles du constructeur. Préséance : client dérivé → client → définition. La liste dérivée remplace la liste du client ; elle n’est pas ajoutée. La première liste définie est copiée pour la session logique et réutilisée à la reconnexion.
+## 6. Fermeture et propriété
 
-Les constructeurs WebSocket du navigateur n’acceptent pas d’en-têtes de handshake arbitraires, et le builder ne peut pas renvoyer `headers` ni `body`. Defjs convertit `http:` → `ws:` et `https:` → `wss:`, encode les placeholders de chemin une fois, et utilise les mêmes règles de query que HTTP : scalaires et clés répétées par défaut, `withQuerySerializer` pour les objets imbriqués, et pas d’appel de serializer quand il n’y a pas de query.
-
-Comme pour HTTP et SSE, un endpoint de base absent, relatif ou invalide, ou un chemin illégal, échoue avec `REQ_BUILD_FAILED` pendant la construction, avant tout intercepteur ou transport, même si un intercepteur court-circuiterait. L’URL résolue doit garder l’origine de base et rester sous son répertoire ; les caractères de contrôle C0 (y compris tab, CR et LF), les antislashs, `?`, `#` et les échappements de répertoire dans le chemin sont rejetés. Les formes scheme-like et protocol-relative sont rejetées même avec des espaces initiaux ; un espace intérieur simple est autorisé et envoyé comme `%20`. Le `req.endpoint` final d’un intercepteur est validé contre son `req.baseEndpoint` final avec la même règle, mais il peut délibérément remplacer la base par une autre URL absolue valide. Les erreurs d’URL déterministes ne sont jamais réessayées.
-
-`withCredentials(true)` est les identifiants Fetch pour HTTP/SSE — pas l’auth WebSocket. Utilise une politique cookie/session revue, un sous-protocole, ou un ticket de connexion de courte durée. Ne mets pas d’identifiants généraux ni de secrets de longue durée dans la query string.
-
-## Fermeture et propriété
-
-`session.close(code?, reason?)` demande la fermeture terminale et arrête le heartbeat. Le code doit être `1000` ou `3000..4999` ; la raison ≤ 123 octets UTF-8. Des arguments de fermeture invalides lèvent avant de changer l’état. Utilise-le avec `await session.closed` quand tu as besoin d’une raison de fermeture manuelle ou du résultat terminal logique.
-
-Le `signal` passé à l’opération reste attaché à la session ouverte et couvre toute la connexion, y compris après son ouverture. Un abort en forme de timeout (`TimeoutError` ou `ERR_TIMEOUT`, y compris `AbortSignal.timeout(...)`) la termine en `'error'` (`NET_TIMEOUT`). Toute autre raison la termine en `'aborted'`, et `receive` rejette avec cette raison elle-même, pas une nouvelle `AbortError`. Il n’y a pas d’échéance limitée au démarrage. Une application qui en veut une crée son propre `AbortController`, l’abandonne avec `new DOMException("...", "TimeoutError")` depuis un timer, et efface le timer après le retour de l’await. Voir [SSE](/fr-FR/docs/sse#close-and-dispose).
+Appelez `session.close(code?, reason?)` (où `code` vaut `1000` ou `3000..4999` et `reason` ne dépasse pas 123 octets UTF-8) et attendez `await session.closed`, ou bien recourez à `await using` :
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-`session.closed` est l’instantané terminal logique : `'closed'`, `'aborted'` ou `'error'`, avec `code` / `reason` / `wasClean` natifs facultatifs et une `cause` pour aborted/error. Les champs de fermeture native observés l’emportent sur le repli demandé par le propriétaire.
+Une connexion qui était ouverte puis coupée sans trame de fermeture (code `1006`, `wasClean: false`) se termine toujours avec `closed.kind: "error"` et `closed.cause` `Error("WebSocket connection error")`, que le runtime émette ou non un événement `error` natif.
 
-Le disposer async standard demande une fermeture native au mieux, puis attend le teardown du cycle de vie, de la pompe de messages, des timers, des listeners, de la file et des références de socket possédés par Defjs. Si un événement de fermeture n’est pas observé dans la seconde, le teardown est forcé et le disposer peut rejeter avec une `DOMException` nommée `TimeoutError` ; cela ne prouve pas que la connexion TCP physique s’est fermée. Les appels répétés du disposer partagent le même teardown. Les implémentations de session structurelles personnalisées doivent maintenant fournir le même contrat `[Symbol.asyncDispose](): PromiseLike<void>`.
+Lorsqu’une coupure de retry épuise son `maxRetries`, la session se termine avec `closed.kind: "error"` et l’erreur de transport ordinaire comme `closed.cause`, aux côtés de l’instantané de fermeture natif (souvent le code `1006` pour un upgrade échoué) ; elle n’expose aucun code stable distinct d’épuisement. Quand une session se termine avec `closed.kind: "error"`, les messages déjà en file sont encore livrés et `session.receive` rejette avec `closed.cause` après le dernier ; une fermeture venue du pair livre aussi les messages en file avant que `session.receive` se termine. Quand l’appelant arrête la session, les messages non lus sont écartés : un abort de l’appelant (`closed.kind: "aborted"`), un `session.close()` manuel et une libération avec `await using` le font tous, y compris après que la session s’est déjà terminée. Sur une session ouverte, `session.receive` se termine alors aussitôt après `session.close()` ou la libération, et rejette avec `closed.cause`, la raison de l’abort, après un abort de l’appelant. Un arrêt après la fin de la session écarte les messages non lus et ne change rien d’autre : `closed` conserve sa valeur, et `session.receive` rejette encore avec `closed.cause` dès qu’il ne reste rien de non lu. Désabonnez systématiquement vos écouteurs `onStateChange` et `onRuntimeError` dès la destruction de votre composant ou worker.
 
-## Frontière GraphQL
-
-Defjs fournit un struct entrant, un struct sortant, et un cycle de vie de session logique. Il n’implémente **pas** un protocole applicatif WebSocket. Les fonctions GraphQL-over-WebSocket — init de connexion, ID d’opération, `next`/`error`/`complete`, disposition, rejeu d’abonnement — sont hors du contrat core.
-
-Utilise un client de protocole comme `graphql-ws` quand le serveur exige ce protocole, ou modélise les frames avec `defineWebSocket(...)`. Pose un sous-protocole statique tel que `graphql-transport-ws` sur `protocols`. Un struct seul ne négocie pas la sémantique GraphQL.
-
-## Recettes liées
+## Lectures connexes
 
 - [Ouvrir une session WebSocket](/fr-FR/recipes/websocket-session)
 - [Consommer un flux SSE](/fr-FR/recipes/consume-sse)
+- [Répartition de charge & basculement](/fr-FR/docs/load-balancing)

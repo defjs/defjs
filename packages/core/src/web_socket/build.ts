@@ -1,6 +1,7 @@
 import type { QuerySerializer } from "../client/config";
-import type { HttpRequest } from "../internal/http_request";
+import type { HttpRequest } from "../http/http_request";
 import {
+  createResolvedRequestUrl,
   fillUrl,
   resolveRequestUrl,
   resolveTransportQuery,
@@ -16,10 +17,7 @@ export function createWebSocketRequest(params: {
   querySerializer?: QuerySerializer;
   withCredentials?: boolean;
 }): HttpRequest {
-  const { queryParams, queryString } = resolveTransportQuery(
-    params.query,
-    params.querySerializer,
-  );
+  const query = resolveTransportQuery(params.query, params.querySerializer);
   const request: HttpRequest = {
     signal: params.signal,
     baseEndpoint: params.baseEndpoint,
@@ -27,11 +25,11 @@ export function createWebSocketRequest(params: {
     headers: new Headers(),
     method: "GET",
     operation: params.operation,
-    queryParams,
-    queryString,
+    query,
     withCredentials: params.withCredentials ?? false,
   };
-  resolveRequestUrl(request);
+  // The query cannot make a URL invalid, so only the endpoint is checked here; every attempt resolves the whole URL.
+  createResolvedRequestUrl(params.baseEndpoint, request.endpoint);
   return request;
 }
 

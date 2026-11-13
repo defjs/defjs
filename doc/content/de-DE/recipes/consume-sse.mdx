@@ -1,22 +1,32 @@
 ---
 title: "SSE-Ereignisse verarbeiten"
-description: Typisierten Event-Stream öffnen, einmal iterieren, dann schließen und auf closed warten.
+description: Einen typisierten Event-Stream öffnen, einmalig iterieren, dann schließen und auf closed warten.
 ---
 
-# SSE-Stream konsumieren
+# Einen SSE-Stream verarbeiten
 
-Ein Async-Iterator pro Stream. Packe `close` + `await stream.closed` in `finally`, damit frühe Exits den Fetch-Versuch nicht leaken.
+Jedes `EventStreamHandle` stellt genau einen asynchronen Iterator bereit. Platziere `stream.close(...)` und `await stream.closed` immer in einem `finally`-Block, damit frühe `break`- oder `return`-Anweisungen den zugrundeliegenden Fetch-Stream niemals offen lassen:
 
-Details siehe [SSE](/de-DE/docs/sse).
-
-<include cwd meta="notifications.ts">
-  examples/recipes/consume-sse.ts#example
+<Tabs items={["sdk/deployments.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/sdk/deployments.ts#example
 </include>
 
-`api.example.com` ist ein Platzhalter. Bei einem Server, dessen erstes Event `message` mit den Daten `{ "text": "hello from the server" }` ist, gibt das Snippet aus:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/consume-sse/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Sendet der Server als erstes Ereignis `line` mit den Daten `{ "text": "build started" }`, gibt das Skript folgendes aus:
 
 ```txt
-hello from the server
+build started
 ```
 
-SSE unternimmt nach Netzwerk- oder Lesefehlern nur dann einen erneuten Versuch, wenn du `withSSEReconnect(...)` aktivierst. Mit einem Reconnect-Objekt ist der Standardwert für `attempts` `3` je Ausfall; ein erfolgreicher Handshake setzt Budget und Backoff-Exponenten zurück. `attempts: 0` deaktiviert Wiederholungsversuche. Ungültige numerische Reconnect-Optionen scheitern vor jedem Request mit `REQ_OPTIONS_INVALID`; siehe [Validierungsregeln](/de-DE/api/core/withssereconnect). Ohne `shouldReconnect` wird die Verbindung nur für `GET`-, `HEAD`-, `OPTIONS`-, `PUT`- und `DELETE`-Requests erneut hergestellt; bei einem Request mit einem `ReadableStream`-Body geschieht das nie.
+- SSE verbindet sich bei Netzwerk- oder Lesefehlern nicht automatisch wieder, es sei denn, du konfigurierst [`withRetry(...)`](/de-DE/api/core/withretry) am Client.
+- Ist `withRetry(...)` gesetzt, beträgt `maxRetries` standardmäßig `3` pro Ausfall und setzt sich bei einem erfolgreichen Handshake zurück (`maxRetries: 0` deaktiviert Retries). Ohne ein eigenes `shouldRetry` werden nur `GET`-, `HEAD`-, `OPTIONS`-, `TRACE`-, `PUT`- und `DELETE`-Anfragen wiederholt. Eine Anfrage mit einem `ReadableStream`-Body wird nie wiederholt. Siehe [SSE-Event-Streams](/de-DE/docs/sse).

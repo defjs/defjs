@@ -1,20 +1,75 @@
 ---
-title: プラグイン
-description: アプリケーションが自分の Defjs クライアントに組み込む任意のパッケージです。
+title: プラグイン統合の概要
+description: SDK 定義を結合させることなく、フレームワーク注入、サーバー可観測性、AI アシスタントスキルで Defjs クライアントを拡張します。
 ---
 
-# プラグイン
+# プラグイン統合の概要
 
-プラグインは、利用側のアプリケーションが自分の Defjs クライアントに組み込む任意のパッケージです。`@defjs/core` はプラグインを import せず、SDK の定義も import しません。クライアント、endpoint、資格情報、どのプラグインを入れるかはアプリケーションが持ちます。
+プラグイン（インテグレーション）は、`@defjs/core` のコアコードを変更したり SDK 定義を特定のフレームワークやテレメトリ基盤と密結合させたりすることなく、定められた拡張ポイントを通じて利用側アプリケーションの `Client` を拡張します。作成した SDK 定義は純粋な `@defjs/core` モジュールのままであり、どのプラグインを導入するかは利用側アプリケーションが自由に選択します。
 
-プラグインには二種類あります。**フレームワークプラグイン**は、既存の `Client` をフレームワークのツリーに渡します。**ミドルウェアプラグイン**はインターセプターチェーンのプラグイン形態で、アプリケーションのクライアントにインターセプターを追記します。[インターセプター](/ja-JP/docs/interceptors) を参照してください。
+すべての Defjs プラグインは、**薄いプラグイン契約（Thin Plugin Contract）** に厳格に従います。
 
-| プラグイン                                                                           | パッケージ                    | 追加するもの                                                                                            | しないこと                                                                                       |
-| ------------------------------------------------------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [React](/ja-JP/docs/integrations/react) · フレームワーク                             | `@defjs/react`                | 既存クライアント向けの `ClientProvider` と `useClient()`                                                | クライアントの作成、キャッシュ、リトライ、破棄をしない。query や state のライブラリではない      |
-| [Vue](/ja-JP/docs/integrations/vue) · フレームワーク                                 | `@defjs/vue`                  | Vue プラグイン、`HTTP_CLIENT`、`injectClient()`                                                         | 作成、キャッシュ、リトライをしない。unmount でトランスポートを閉じない。query ライブラリではない |
-| [OpenTelemetry server](/ja-JP/docs/integrations/opentelemetry-server) · ミドルウェア | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`。HTTP、SSE、WebSocket のインターセプターを追記するクライアントオプション | OpenTelemetry SDK の初期化と、インバウンドのサーバー計装をしない                                 |
+- **隠れたキャッシュや状態を持たない**: プラグインがレスポンスを保存したり、リクエストをリトライしたり、クエリ状態を管理したりすることはありません。
+- **トランスポートを置き換えない**: プラグインが背後の HTTP、SSE、WebSocket トランスポートをラップしたり置き換えたりすることはありません。
+- **呼び出し元が所有するライフサイクル**: UI プロバイダーのアンマウントやテレメトリ SDK の終了処理によって、通信中のリクエストが自動的にキャンセルされたり、アクティブなストリームが閉じられたりすることはありません。
 
-React と Vue は、既存の `Client` をフレームワークのツリーに渡します。アプリケーションはそのクライアントを `@defjs/core` の `createClient` で作ります。React プラグインは Context で提供します。Vue プラグインは `app.use(createClientPlugin(client))` で提供します。どちらのパッケージもリクエストは始めません。
+---
 
-OpenTelemetry server ミドルウェアプラグインは `ClientOption` です。`createClient` に `withOpenTelemetryServer(...)` を渡します。有効なトランスポートごとにインターセプターを 1 つ、HTTP、SSE、WebSocket の順で追記します。[インターセプター](/ja-JP/docs/interceptors) を参照してください。このパッケージは OpenTelemetry SDK を初期化しません。
+## 提供されているプラグインとツール
+
+| 領域                                                                    | パッケージ / リソース              | カテゴリ                 | 提供される機能                                                                                                    | アプリケーション側に残る責務                                                                      |
+| ----------------------------------------------------------------------- | ---------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| [React](/ja-JP/docs/integrations/react)                                 | `@defjs/react`                     | フレームワークプラグイン | React 18+ 向けの `ClientProvider` および `useClient(overrideClient?)`                                             | クライアントの生成、`AbortController` によるクリーンアップ、クエリキャッシュ（TanStack Query 等） |
+| [Vue](/ja-JP/docs/integrations/vue)                                     | `@defjs/vue`                       | フレームワークプラグイン | Vue 3 以降向けの `createClientPlugin`、`HTTP_CLIENT`、`injectClient(key?)`                                        | クライアントの生成、`onCleanup` / `onScopeDispose` でのキャンセル、クエリ状態                     |
+| [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`      | ミドルウェアプラグイン   | アウトバウンド HTTP、SSE、WebSocket のスパン・メトリクス・ログ用 `ClientOption`（`withOpenTelemetryServer(...)`） | OpenTelemetry SDK の初期化、エクスポーター、サンプリング、秘匿化、フラッシュ                      |
+| [AI スキル](/ja-JP/docs/ai) & [llms.txt](/ja-JP/docs/ai-api)            | `defjs/defjs` スキル & `/llms.txt` | AI ツール                | エージェントスキル（`SKILL.md`）および機械可読な Markdown ドキュメント                                            | プロジェクトにインストールされた `@defjs/core` のバージョンおよびテストスイートによる検証         |
+
+---
+
+## 2 つのプラグインアーキテクチャ
+
+### 1. フレームワークプラグイン (`@defjs/react`, `@defjs/vue`)
+
+フレームワークプラグインは、既存の [`DerivableClient`](/ja-JP/api/core/derivableclient-type) をネイティブの依存性注入機能（React Context または Vue の `provide` / `inject`）を通じてコンポーネントツリーの下位へ渡します。
+
+<Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/sdk/orders.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/app/main.tsx#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/react/app/OrderCard.tsx#example
+</include>
+
+  </Tab>
+</Tabs>
+
+### 2. ミドルウェアプラグイン (`@defjs/opentelemetry-server`)
+
+ミドルウェアプラグインは、[`ClientOption`](/ja-JP/api/core/clientoption-type) を返すファクトリ関数です。`createClient(...)` に渡されると、`withInterceptors` を介して HTTP、SSE、WebSocket のインターセプターを追加します。
+
+<Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/request-id/plugins/request-id.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/integrations/request-id/app/client.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+実行順序のルール、リトライ境界、ストリーミングライフサイクルフックの詳細は [インターセプター](/ja-JP/docs/interceptors) を参照してください。

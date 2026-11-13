@@ -5,7 +5,7 @@ description: ClientProvider, useClient avec surcharge facultative du client, et 
 
 # React
 
-Fournis un client `@defjs/core` existant à un arbre React. Ce paquet ne crée pas, ne met pas en cache et ne dispose pas le client. Son entrée est marquée `'use client'`, donc importe-le depuis des composants client. React 18 ou plus récent est requis.
+Fournissez un client `@defjs/core` existant à un arbre React. Ce paquet ne crée pas, ne met pas en cache et ne dispose pas le client. Son entrée est marquée `'use client'`, donc importez-le depuis des composants client. React 18 ou plus récent est requis.
 
 Voir le [guide React](/fr-FR/docs/integrations/react).
 
@@ -13,7 +13,7 @@ Voir le [guide React](/fr-FR/docs/integrations/react).
 
 <ApiSignature name="ClientProvider" />
 
-Provider de Context. Passe le `DerivableClient` renvoyé par `createClient`. Un `ClientProvider` imbriqué remplace le client pour son sous-arbre ; `useClient()` lit le plus proche. Passer un `client` différent change la valeur de contexte pour les descendants.
+Provider de Context. Passez le `DerivableClient` renvoyé par `createClient`. Un `ClientProvider` imbriqué remplace le client pour son sous-arbre ; `useClient()` lit le plus proche. Passer un `client` différent change la valeur de contexte pour les descendants.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,9 +21,9 @@ Provider de Context. Passe le `DerivableClient` renvoyé par `createClient`. Un 
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` préfère le client explicite ; omis ou `undefined`, il lit le `ClientProvider` le plus proche. Une `Error` n’est levée que lorsqu’aucune des deux sources ne fournit de client. Les appels `useClient()` sans argument restent valides. Passe ce client à une opération. Le hook renvoie le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) fourni ; appelle-le avec des options de requête là où l’opération s’exécute pour dériver une valeur `Client`. Ne le passe pas à un setter d’état, car `setState(client)` l’appellerait comme updater. Une valeur `Client` dérivée n’est pas acceptée par `ClientProvider` ni `useClient`.
+`useClient(overrideClient)` préfère le client explicite ; omis ou `undefined`, il lit le `ClientProvider` le plus proche. Une `Error` n’est levée que lorsqu’aucune des deux sources ne fournit de client. Les appels `useClient()` sans argument restent valides. Passez ce client à une opération. Le hook renvoie le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) fourni ; appelez-le avec des options de requête là où l’opération s’exécute pour dériver une valeur `Client`. Ne le passez pas à un setter d'état, car `setState(client)` l’appellerait comme updater. Une valeur `Client` dérivée n’est pas acceptée par `ClientProvider` ni `useClient`.
 
-Appelle toujours `useClient(explicitClient)` au niveau supérieur d’un composant ou d’un Hook personnalisé, même avec un client explicite ; pas dans une fonction ordinaire ni dans un callback d’événement. N’écris pas `explicitClient ?? useClient()`, qui appelle un Hook de façon conditionnelle. La surcharge n’écrit pas le Context et ne crée pas de provider, et le Hook s’abonne quand même au Context.
+Appelez toujours `useClient(explicitClient)` au niveau supérieur d’un composant ou d’un Hook personnalisé, même avec un client explicite ; pas dans une fonction ordinaire ni dans un callback d’événement. N'écrivez pas `explicitClient ?? useClient()`, qui appelle un Hook de façon conditionnelle. La surcharge n’écrit pas le Context et ne crée pas de provider, et le Hook s’abonne quand même au Context.
 
 - **Renvoie** le client explicite exact ou le client fourni le plus proche.
 - **Lève** une `Error` quand ni un client explicite ni le Context ne fournit de client.

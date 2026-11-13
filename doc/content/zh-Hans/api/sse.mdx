@@ -1,43 +1,40 @@
 ---
 title: SSE
-description: defineEventStream、请求选项，以及 stream handle。
+description: defineEventStream、请求选项与流句柄。
 ---
 
 # SSE
 
-声明一条事件流，带着 client 调用该操作，迭代事件，再 close。
+声明事件流，用 Client 调用操作，迭代事件，然后关闭。
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`、`events` map，以及必填的正整数上限 `maxBufferSize` 和 `maxQueueSize`；可选 `method`（默认 `'GET'`）、`operation`、`input` 和 `error`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员写在 [`EventStreamDefinition`](/zh-Hans/api/core/eventstreamdefinition-type)。只有给出了 error struct 类型时 `error` 才必填，`builder` 恰好在声明了 `input` 时才必填。
-- **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即开始这条流。
+- **definition** — `path` 和 `events` 映射；可选 `method`（默认 `'GET'`）、`operation`、`input`、`error` 和 `maxBufferSize`（默认 `64 * 1024`）。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`EventStreamDefinition`](/zh-Hans/api/core/eventstreamdefinition-type)。只有给出 error struct 类型时 `error` 才必填，`builder` 恰好在声明 `input` 时必填。
+- **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即打开流。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-调用返回 `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，fault 是那个 struct 的 `Fault`；否则是 `Fault<undefined>`。通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 来传入 `signal`。SSE 只读取 `signal`，忽略进度和 WebSocket 字段。
+调用返回 `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，`Fault` 是该 struct 的 `Fault`；否则是 `Fault<undefined>`。通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 来传入 `signal`。SSE 只读取 `signal` 和 `retry`，忽略进度和 WebSocket 字段。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` 是 `{ signal? }`。没有 `timeout` 或 `abort` 字段，也没有进度回调。`signal` 覆盖整条流，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。应用若需要仅限启动期的期限，就自己建一个 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。
+`EventStreamExecuteOptions` 是 `{ signal?, retry? }`。没有 `timeout` 或 `abort` 字段，也没有进度回调。`signal` 覆盖整个流，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有 Client 级默认期限。仅限握手的期限是 `withRetry({ maxRetries: 0, attemptTimeoutMs })`，或单次调用的 `retry: { maxRetries: 0, attemptTimeoutMs }`；它在响应头处结束。
 
 ## EventStreamHandle
 
 <ApiSignature name="EventStreamHandle" />
 
-tuple 第三项是 `open` 的启动快照；重连之后，`stream.open` 跟随最新的连接。这一第三项仅对返回的 Defjs 原生 handle 或透传同一 live `open` 对象的 wrapper 保证是所属连接首次成功握手的快照；自定义 handle 或显式覆盖 `open` 的 wrapper 则保留其当前公开 `open`，即使已发生重连也一样，因此共享 `closed` 不能绕过 URL 净化或响应头过滤，Defjs 也不从任意元数据变换反推首次握手。自有作用域优先用 `await using stream = handle` 清理。disposer 会停止 Defjs 的读取和重连任务，并等待 reader lock 释放；它不承诺由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手动 `close()` / `closed` 仍可使用。
+元组第三项是 `open` 的启动快照；重连之后，`stream.open` 跟随最新连接。只有当返回的是 Defjs 原生句柄，或包装器转发同一个实时 `open` 对象时，第三项才保证是所属连接首次成功握手的快照；自定义句柄或覆盖 `open` 的包装器会保留当前公开的 `open`，即使已经重连，因此共享的 `closed` 不能绕过 URL 净化或响应头过滤，Defjs 也不会从任意转换反推首次握手元数据。自有作用域优先用 `await using stream = handle` 清理。disposer 会停止 Defjs 的读取和重连工作，并等待 reader lock 释放；它不承诺由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手动 `close()` / `closed` 仍可用。
 
-```ts
-async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
-  await using stream = handle;
-  for await (const event of stream) console.log(event);
-}
-```
+<include cwd lang="typescript">
+  examples/api/consume-event-stream.ts#example
+</include>
 
-结构化实现 `EventStreamHandle` 的代码现在必须实现 `[Symbol.asyncDispose]()`，并返回同一条自有 teardown 路径。对自定义 handle 实现者而言，这是编译期 breaking change；只接收 Defjs 返回 handle 的代码无需新增运行时调用。
+`EventStreamHandle` 的结构化实现必须实现 `[Symbol.asyncDispose]()`，并返回同一条自有清理路径。
 
 ### EventStreamOpenInfo
 
@@ -47,17 +44,17 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` 是 `eof`、`aborted` 或 `error`。每个变体都可以带 `reason` 和 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hans/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
+`kind` 是 `eof`、`aborted` 或 `error`。每个变体都可以带 `reason` 和 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hans/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'HTTP_STATUS' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 表示流打开之后，重连时选择端点失败。`EXT_HOOK_FAILED` 表示 `shouldRetry` 函数抛出，`cause` 包装抛出的值。`HTTP_STATUS` 表示重连握手以未被重试的非 2xx 状态结束，或重试已用尽。队列满不是错误：库最多保留 1024 个未读事件，读取响应会暂停，直到消费者取走一个。`close()`、销毁，以及调用方 `signal` 的中止会丢弃还没有人读过的事件，并立即结束迭代器，无论流是否已经结束；以 `error` 结束之后，一旦没有未读事件，迭代器仍会以 `cause` reject。没有这种停止时，`error` 结束之后已经入队的事件仍会在迭代器 reject 之前送达。
 
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
 
-key 是 SSE 事件名；没有 `event:` 字段的消息名为 `message`。没有任何 key 匹配时，使用 `default` struct。`string` 事件 struct 保留原始 `data` 文本。其余 kind 都是 JSON 文本：`JSON.parse`，再交给 struct。所以裸的 `struct.literal` 需要 JSON 文本，不是没加引号的 token。握手 `error` body 用和 HTTP 一样的 kind 规则：`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余是 JSON。
+键是 SSE 事件名；没有 `event:` 字段的消息名为 `message`。没有键匹配时，使用 `default` struct。`string` 事件 struct 保留原始 `data` 文本。其他类型都是 JSON 文本：先 `JSON.parse`，再交给 struct。因此裸 `struct.literal` 需要 JSON 文本，而不是未加引号的 token。握手 `error` body 使用与 HTTP 相同的类型规则：`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其他是 JSON。
 
-重连在 client 上（`withSSEReconnect`）。SSE `jitter` 是 **0–1 的乘性因子**，和 WebSocket 一样。
+重试配置在 Client 上（`withRetry`），请求选项 `retry` 会为单次调用替换该策略。同一策略也服务于 HTTP 和 WebSocket。
 
-成功握手后会重置重试预算和退避指数；它们按每次连接中断计算。无效的数字选项会在打开流之前返回 `REQ_OPTIONS_INVALID`，`maxDelayMs` 限制抖动后的最终延迟。校验规则、默认值和 UTF-8 `Last-Event-ID` 的处理方式见 [`withSSEReconnect`](/zh-Hans/api/core/withssereconnect)。
+每次成功握手后都会重置重试次数和退避指数；它们按每次中断计算，因此即使设置 `maxRetries: 1`，长时间会话中仍可建立许多连接。服务器正常 EOF 不会重连，EOF 时未完成的事件也不会提交其 id。返回 502、503 或 504 的握手会像连接被拒绝一样，按相同规则（方法、`shouldRetry`、`maxRetries`、`ReadableStream` body）重试；其他任何非 2xx 握手都会以 `retryable: false` 交给 `shouldRetry`，因此除非你的函数另有表示，否则流会结束。重试耗尽以及被拒绝的非 2xx 握手都以 `HTTP_STATUS` 结束；请查看实时的 `stream.open.response.status` 获取该状态。默认值、决策顺序和 UTF-8 `Last-Event-ID` 的处理方式见 [`withRetry`](/zh-Hans/api/core/withretry)。
 
 解析器遵循 WHATWG SSE 的行和字段规则，只移除每条物理流开头的一个 UTF-8 BOM。data 或 ID 值中的 U+FEFF 会被保留；后续带 BOM 前缀的字段名会按未知字段忽略。多行 data 用 `\n` 连接，空行触发携带 data 的事件分发，EOF 时尚未完成的事件会被丢弃。
 
@@ -65,15 +62,15 @@ key 是 SSE 事件名；没有 `event:` 字段的消息名为 `message`。没有
 
 ## EventStreamDefinition
 
-`path`、`events`，必填的 `maxBufferSize` 和 `maxQueueSize`，可选 `method` / `operation` / `input` / `error`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 的 builder 不能返回请求体。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
+`path`、`events`，可选 `method` / `operation` / `input` / `error` / `maxBufferSize`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 不能携带请求体。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ## EventStreamEndpoint
 
-`defineEventStream` 的返回值。第一个参数是 client。其余参数只是 input。
+`defineEventStream` 的返回值。第一个参数是 Client。其余参数只是 input。
 
 ## EventStreamRequestShape
 
-和这条流的 method、path 对应的 `HttpRequestShape` 字段相同。
+字段与这条流的 `method`、`path` 对应的 `HttpRequestShape` 相同。
 
 ## StreamAwaitResult
 
@@ -81,4 +78,4 @@ key 是 SSE 事件名；没有 `event:` 字段的消息名为 `message`。没有
 
 ## EventStreamData
 
-从 `EventStructs` map 推出来的解析后事件载荷。
+从 `EventStructs` 映射推断出的解析后事件载荷。

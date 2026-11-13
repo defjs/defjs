@@ -1,113 +1,127 @@
 ---
-title: "Client-Konfiguration / Client"
-description: Lege fest, wie deine Anwendung importierte SDK-Operationen aufruft, unabhängig von ihren API-Definitionen.
+title: "Client"
+description: Konfiguriere, wie deine Anwendung importierte SDK-Operationen aufruft – völlig unabhängig von deren API-Definitionen.
 ---
 
 # Client
 
-Ein `Client` ist die Ausführungskonfiguration der konsumierenden Anwendung. `createClient(...)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück. Die Factory mit Request-Options aufzurufen gibt einen `Client`-Wert zurück, und einen `Client`-Wert akzeptieren Operationen. Er ist nicht aufrufbar. Importiere Operationen aus deinem SDK, wähle Service-Adresse, Zugangsdaten, Interceptors und Transport, und rufe eine Operation mit dem Client auf. `getUser(client({ signal }), { id: 1 })` startet einen Aufruf, der Input deklariert. `health(client)` startet einen ohne Input. Ist der ganze Input-Struct optional, sind sowohl `search(client)` als auch `search(client, input)` gültig. Es gibt kein drittes Options-Argument. Der Aufruf der Operation startet sie. `await` wartet nur auf das Error-first-Tupel.
+Ein `Client` enthält die Ausführungskonfiguration der konsumierenden Anwendung: Basis-URLs, Standard-Header, Zugangsdaten, Interceptors, Query-Serialisierung und Transport-Handles.
 
-Die Definitionen des SDKs binden diese Instanz nicht. Ein Browser, ein Server-Request und ein lokaler Test können dieselbe exportierte Operation mit unterschiedlichen Clients nutzen. Alle folgen weiterhin demselben Defjs-Vertrag und kompatiblen Core-Versionen. Konfiguriere die Service-Adresse jedes Clients für die Operationen, die du darüber aufrufst.
+`createClient(...options)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück:
 
-Denselben Client-Wert kannst du an viele Operationen übergeben. Anwendungen wählen Caching- und Retry-Regeln und besitzen die Arbeit, die sie starten. HTTP wird nicht automatisch wiederholt. Stream-Reconnect ist opt-in.
+- Übergib `client` direkt an eine Operation (`getOrder(client, { id: 1 })`), wenn keine aufrufspezifischen Request-Optionen erforderlich sind.
+- Rufe `client(requestOptions)` auf, um einen abgeleiteten `Client`-Wert für einen einzelnen Aufruf zu erzeugen (`getOrder(client({ signal }), { id: 1 })`). Das Ableiten führt keinerlei I/O aus, und der abgeleitete Wert ist ein einfaches Objekt (nicht aufrufbar).
 
-Die Factory ist eine Funktion und zugleich ein `Client` ohne Request-Options. Übergib die Factory nicht an einen React-State-Setter: `setState(factory)` würde sie als Updater aufrufen. Nutze sie nicht als Quelle eines Vue-`watch` oder `computed`: die rufen eine Funktion auf. Ein abgeleiteter Client-Wert ist ein einfaches Objekt.
+## 1. Client konfigurieren und SDK-Operation aufrufen
 
-## Grundeinrichtung
+<Tabs items={["sdk/orders.ts", "app/client.ts", "Composed client options"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/basic-setup/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` gibt eine aufrufbare Factory zurück, die zugleich ein [`Client`](/de-DE/api/core/client-type) ist. Es ist keine Menge von Transport-Overloads.
-
-## Options komponieren
-
-Options gelten von links nach rechts. Setter ersetzen; `withInterceptors(...items)` hängt an.
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
 </include>
 
-Gemischte Interceptors werden nach Transport gefiltert, wenn die Operation läuft; die relative Order unter der gewählten Art bleibt.
+</Tab>
+</Tabs>
 
-## Einen Client ableiten
+### Regeln für die Options-Komposition
 
-`client(options?)` gibt einen `Client`-Wert für einen Aufruf zurück. Beim Aufruf von `client(options)` werden die sieben bekannten Felder aus dem Argumentobjekt kopiert: ein Snapshot der obersten Ebene in ein frisches Options-Objekt. Unbekannte Felder werden ignoriert, und Felder mit dem Wert `undefined` werden weggelassen. Es gibt kein Überlagern über einen übergeordneten Client: `client()`, `client(undefined)` und `client({})` geben einen Client ohne Request-Options zurück. Verschachtelte Werte von `heartbeat`, `protocols` und `reconnect` werden per Referenz gehalten, nicht geklont. WebSocket liest sie, wenn die Operation läuft (es kopiert dann die Heartbeat-Felder und die Protocols-Liste), daher kann eine Änderung dieser Objekte nach dem Ableiten einen späteren Aufruf noch beeinflussen. Anwendungen sollten sie nach dem Übergeben als unveränderlich behandeln. Das Ableiten führt kein I/O aus. Ein Getter, der wirft, entweicht aus `client(options)` und lässt die Factory nutzbar. Der Client-Wert ist nicht aufrufbar; erzeuge pro Aufruf einen.
+- Optionen werden von **links nach rechts** angewendet.
+- Setter für Einzelwerte (`withEndpoint`, `withHeaders`, `withQuerySerializer`, `withCredentials` und `withXSRF` aus `@defjs/core/xsrf`) **ersetzen** frühere Werte.
+- `withInterceptors(...items)` **hängt neue Interceptors an** die bestehende Liste an und filtert sie nach dem Transport (`http`, `sse`, `web-socket`), sobald eine Operation ausgeführt wird.
 
-`signal` wird nicht kombiniert. Ein Client-Wert mit `signal` teilt dieses Signal zwischen Aufrufen, wenn du ihn wiederverwendest; erzeuge also pro Aufruf einen Client-Wert. Kombiniere Signale in Anwendungscode mit `AbortSignal.any`.
+## 2. Pro-Aufruf-Client ableiten (`client(options)`)
+
+Erzeuge für jeden Aufruf, der ein eigenes `signal`, Progress-Callbacks oder WebSocket-Session-Overrides benötigt, einen neuen abgeleiteten Client-Wert:
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-Die Basiskonfiguration aus `createClient` teilt jeder Client-Wert, und sie ist zur Laufzeit nicht eingefroren. Sie ist per Konvention fest: nichts in der Bibliothek ändert sie, und Anwendungen sollten das auch nicht. Die [`RequestOptions`](/de-DE/api/core/requestoptions-type) auf einem Client sind dieser Snapshot der obersten Ebene. Anwendungscode übergibt den Client an eine Operation. Er liest diesen internen State nicht.
+> [!IMPORTANT]
+> Da `createClient(...)` eine aufrufbare Funktion (`DerivableClient`) zurückgibt, übergib sie **nicht** direkt an einen React-`setState(client)`-Updater oder eine Vue-`watch(client)`- / `computed(client)`-Quelle, da diese Frameworks Funktionen als Updater oder Getter interpretieren.
 
-## Request-Optionen
+### Referenz der pro Aufruf verfügbaren `RequestOptions`
 
-[`RequestOptions`](/de-DE/api/core/requestoptions-type) hat sieben flache Felder. Jedes Protokoll liest nur die Felder, die es kennt, und ignoriert den Rest. `heartbeat` an eine HTTP-Operation zu übergeben wird ignoriert, das ist kein Fault. SSE liest aus den Request-Optionen nur `signal`. SSE-Reconnect kommt aus der Client-Konfiguration (`withSSEReconnect`), daher betrifft `client({ reconnect })` nur WebSocket. Es gibt keinen Compile-Time-Filter nach Protokoll.
+`RequestOptions` umfasst sieben flache Felder. Jeder Transport liest ausschließlich die für ihn relevanten Felder aus und ignoriert den Rest:
 
-| Feld                 | Genutzt von          | Regel                                                                                                                       |
-| -------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `signal`             | HTTP, SSE, WebSocket | Bricht den Aufruf ab. Eine Deadline ist `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). Ein manueller Abbruch ist `NET_ABORTED`. |
-| `onUploadProgress`   | HTTP                 | Von SSE und WebSocket ignoriert.                                                                                            |
-| `onDownloadProgress` | HTTP                 | Von SSE und WebSocket ignoriert.                                                                                            |
-| `beforeConnect`      | WebSocket            | Ersetzt die Client-Einstellung für diesen Aufruf.                                                                           |
-| `protocols`          | WebSocket            | Ersetzt die Client-Liste. Sie wird nicht angehängt.                                                                         |
-| `heartbeat`          | WebSocket            | Als Ganzes ersetzt. `timeoutMs` ist die Wartezeit auf die Heartbeat-Bestätigung, keine Request-Deadline.                    |
-| `reconnect`          | WebSocket            | Als Ganzes ersetzt.                                                                                                         |
+| Feld                 | Genutzt von          | Verhalten                                                                                            |
+| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE, WebSocket | Bricht den Aufruf ab (`AbortSignal.timeout(ms)` → `NET_TIMEOUT`; manueller Abbruch → `NET_ABORTED`). |
+| `onUploadProgress`   | HTTP                 | Meldet den Upload-Fortschritt des gestreamten Request-Bodys.                                         |
+| `onDownloadProgress` | HTTP                 | Meldet den Download-Fortschritt des deklarierten Response-Bodys.                                     |
+| `beforeConnect`      | WebSocket            | Ersetzt den clientweiten `beforeConnect`-Hook für diese Sitzung.                                     |
+| `protocols`          | WebSocket            | Ersetzt die clientweite Subprotokoll-Liste für diese Sitzung.                                        |
+| `heartbeat`          | WebSocket            | Ersetzt die clientweite Heartbeat-Konfiguration für diese Sitzung.                                   |
+| `retry`              | HTTP, SSE, WebSocket | Ersetzt die clientweite Retry-Policy für diesen Aufruf. Das HTTP-`budget` bleibt beim Client.        |
 
-Es gibt kein `timeout`-Feld, kein `abort`-Feld und keine Default-Deadline auf Client-Ebene. Bei SSE und WebSocket deckt `signal` die ganze Verbindung ab, auch nachdem sie offen ist. Es gibt keine Deadline nur für den Start. Eine Anwendung, die eine will, erzeugt ihren eigenen `AbortController`, bricht ihn mit `new DOMException("...", "TimeoutError")` aus einem Timer ab und löscht den Timer, nachdem das await zurückkehrt. Siehe [SSE](/de-DE/docs/sse#close-and-dispose).
+## 3. Browser-Singleton vs. Server-Request-Scope
 
-`HttpExecuteOptions` ist der HTTP-Ausschnitt: `signal` plus die Progress-Callbacks. `EventStreamExecuteOptions` ist `{ signal? }`. `WebSocketExecuteOptions` ist der WebSocket-Ausschnitt plus `signal`.
+- **Browser-Anwendungen**: Nutze einen einzigen modulweiten `DerivableClient`, wenn Endpunkt, Interceptors und Zugangsdaten browserweit einheitlich sind.
+- **Server- / SSR-Anwendungen**: Erstelle einen frischen Client **innerhalb jeder eingehenden Request-Grenze**, sobald Header, Cookies, Auth-Tokens oder Mandanten-Kontexte request-spezifisch sind. Speichere niemals benutzerspezifische Zugangsdaten auf einem prozessweiten Client.
 
-## Ergebnisse je Transport
+## 4. Mehrere Endpunkte und Lastverteilung [#multiple-endpoints]
 
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`. `open` ist bei nativen Defjs-Handles oder Wrappern, die dasselbe Live-`open`-Objekt durchreichen, der Snapshot des ersten erfolgreichen Handshakes der zurückgegebenen Verbindung; eigene Handles oder Wrapper, die `open` überschreiben, verwenden auch nach einem Reconnect ihr aktuelles öffentliches `open`, während `stream.open` live bleibt (siehe [SSE](/de-DE/docs/sse)).
-- WebSocket → `[error, session, connection]`
+`withEndpoint(...urls)` akzeptiert eine oder mehrere Basis-URLs. Standardmäßig gilt:
 
-Kehre zurück, bevor du den Erfolgswert nutzt, wenn `error` gesetzt ist.
+- Jeder Client verwendet [`pickFirstBalancer`](/de-DE/api/core/pickfirstbalancer) und bleibt bei der ersten URL, bis er bei `NET_UNREACHABLE` oder `NET_UNAVAILABLE` (HTTP 502, 503 oder 504) weiterschaltet.
+- **Retries sind standardmäßig aus.** Ein Aufruf macht einen Versuch. `withRetry()` entspricht `withRetry({})`: bis zu drei Retries mit Backoff, für HTTP, SSE und WebSocket gleichermaßen. Nach jedem Fehler wählt der Balancer erneut aus allen Endpunkten, sodass ein Retry nach einer verweigerten Verbindung unter Pick-first den nächsten Endpunkt erreicht und ein einzelner Endpunkt nach der Verzögerung erneut versucht wird. Das HTTP-Finagle-Retry-Budget gehört zur Client-Konfiguration und wird von deren abgeleiteten Clients geteilt, unabhängig von der Balancer-Identität.
 
-Du besitzt Cleanup: HTTP abbrechen, SSE schließen + `await stream.closed`, WebSocket schließen + `await session.closed`.
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
 
-## Test-Transport injizieren
+`attemptTimeoutMs` begrenzt einen Versuch: HTTP zählt bis zum Ende des Response-Bodys, SSE bis zu den Response-Headern, WebSocket bis `open`. Für ein Zeitlimit ohne Retries schreibe `withRetry({ maxRetries: 0, attemptTimeoutMs })`. Retry-Optionen werden zur Laufzeit nicht validiert. Die Entscheidungsreihenfolge und die Migration von `withSSEReconnect` und `withWebSocketReconnect` stehen unter [Lastverteilung & Failover](/de-DE/docs/load-balancing#retries).
+
+### Health-Filterung und P2C [#health-filtering-and-p2c]
+
+Für Peer-Server-Replikate können [`roundRobinBalancer`](/de-DE/api/core/roundrobinbalancer) und [`p2cBalancer`](/de-DE/api/core/p2cbalancer) (PeakEwma RTT × In-Flight-Last) eine `outlierDetection`-Option annehmen; sie ist aus, sofern du kein Objekt übergibst (`{}` für die Defaults). Sie zählt Fehler und schließt einen Endpunkt für eine Weile aus, und sie überspringt einen Endpunkt, den deine eigene `isHealthy`-Funktion ablehnt; Defjs entscheidet nicht, was gesund bedeutet. Standardmäßig zählt jedes Ergebnis mit Code als Fehler (auch `NET_TIMEOUT` und `NET_BODY_INCOMPLETE`), und du kannst diese Regel mit `isFailure` ersetzen; der rohe Antwort-`status` ist nur für eigene Balancer bestimmt.
+
+Im dedizierten Leitfaden [Lastverteilung & Failover](/de-DE/docs/load-balancing) findest du alle Details zu Retry-Budgets, dem Ausschluss nach Fehlern und deiner eigenen Health-Funktion, zur P2C-Lastabschätzung und zu eigenen Balancern.
+
+## 5. Test-Transport injizieren
+
+Ersetze plattformnatives `fetch` oder `WebSocket` an einem Client mit `withHTTPHandle`, `withSSEHandle` oder `withWebSocketHandle`, um vollständige Vertragstests komplett offline auszuführen:
 
 <include cwd lang="typescript">
   examples/client/inject-test-transport.ts#example
 </include>
 
-## Scope auf Server vs Browser
+Vollständige Testmuster findest du unter [Tests](/de-DE/docs/testing).
 
-Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options oder Interceptor-Closures Auth, Cookies, User oder Tenants erfassen. Client-Identität ist für sich keine Security-Grenze.
+## 6. Referenz der Client-Option-Helfer
 
-## Migration
+| Helfer                                                                             | Zweck                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                            | Setzt eine oder mehrere Basis-URLs (ersetzt frühere Listen).                                                                                                                                                                                                                                                                          |
+| `withHeaders(HeadersInit)`                                                         | Setzt statische Standard-Header für HTTP und SSE (Builder-Header haben Vorrang).                                                                                                                                                                                                                                                      |
+| `withInterceptors(...items)`                                                       | Hängt HTTP-, SSE- und WebSocket-Interceptors in Onion-Reihenfolge an.                                                                                                                                                                                                                                                                 |
+| `withQuerySerializer(fn)`                                                          | Serialisiert bereits mit Aliasen versehene Query-Objekte in einen Query-String.                                                                                                                                                                                                                                                       |
+| `withCredentials(boolean)`                                                         | Setzt bei `true` Fetch `credentials: "include"` für HTTP und SSE.                                                                                                                                                                                                                                                                     |
+| `withXSRF(options?)`                                                               | Aus `@defjs/core/xsrf`. Kopiert im Browser das XSRF-Cookie in einen Header bei Same-Origin-mutierenden HTTP-Requests. `withXSRF()` wirft, wenn `location` oder `document` fehlt, auch in einem Worker. Isomorpher Code fügt diese Option nur im Browser hinzu. Ein Token aus einer anderen Quelle wird mit einem Interceptor gesetzt. |
+| `withBalancer(balancer)`                                                           | Ersetzt die Endpunkt-Auswahlstrategie (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).                                                                                                                                                                                                                                     |
+| `withRetry(options?)`                                                              | Konfiguriert optionale Retries für HTTP, SSE und WebSocket: Anzahl der Retries, Backoff, Methoden, Versuch-Timeout, eine `shouldRetry`-Funktion und das clienteigene HTTP-Budget.                                                                                                                                                     |
+| `withSSEOnInvalidEvent`                                                            | Beobachtet SSE-Events, die kein Struct haben oder die Validierung nicht bestehen.                                                                                                                                                                                                                                                     |
+| `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Konfiguriert WebSocket-Standardwerte für Sitzungen.                                                                                                                                                                                                                                                                                   |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                         | Injiziert eigene oder Mock-Transport-Implementierungen.                                                                                                                                                                                                                                                                               |
 
-| Alt                                          | Neu                                                                  |
-| -------------------------------------------- | -------------------------------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                                    |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`                      |
-| `execute(cmd, { signal })`                   | `client({ signal })`                                                 |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                             |
-| `createClient(withTimeout(5000), ...)`       | `signal` am Aufruf übergeben oder eine Anwendungsfunktion darumlegen |
+## Weiterführende Links
 
-## Referenz
-
-| Helper                                                                                                        | Wirkung                                                                |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | Absoluter Basis-Endpoint für alle Transports                           |
-| `withHeaders(HeadersInit)`                                                                                    | Statische Default-Header für HTTP/SSE; Builder-Header überschreiben    |
-| `withHTTPHandle(fetch)`                                                                                       | Fetch für HTTP ersetzen                                                |
-| `withSSEHandle(fetch)`                                                                                        | Fetch für SSE ersetzen                                                 |
-| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket-Constructor ersetzen                                         |
-| `withInterceptors(...items)`                                                                                  | Gemischte Interceptors anhängen                                        |
-| `withQuerySerializer(fn)`                                                                                     | Ein schon alias-encodiertes Query-Object in einen Query-String encoden |
-| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` für HTTP/SSE wenn true                  |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF Cookie → Header                                              |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE-Knobs                                                              |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket-Knobs                                                        |
-
-## Verwandte Rezepte
-
+- [Lastverteilung & Failover](/de-DE/docs/load-balancing)
+- [Interceptors](/de-DE/docs/interceptors)
+- [Tests](/de-DE/docs/testing)
 - [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)
-- [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)

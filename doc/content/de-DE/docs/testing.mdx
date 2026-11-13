@@ -1,0 +1,58 @@
+---
+title: "Tests"
+description: Teste SDK-Definitionen und Anwendungsrichtlinien offline mit injizierten Transport-Handles, Tupel-Assertions und deterministischen Timern.
+---
+
+# Tests
+
+Weil Defjs Operationsdefinitionen sauber von der Client-Ausführung trennt, kannst du deine echten SDK-Operationen und Anwendungs-Interceptors vollständig offline testen – ganz ohne einen Netzwerkserver zu starten oder interne Bibliotheksfunktionen zu mocken.
+
+## 1. Lokales Transport-Handle injizieren
+
+Nutze `withHTTPHandle`, `withSSEHandle` oder `withWebSocketHandle` an `createClient(...)`, um den zugrundeliegenden Plattform-Transport zu ersetzen. Defjs führt weiterhin die komplette Operationspipeline aus: Input-`struct`-Validierung, `builder`-Mapping, Prüfung der URL-Verzeichnisgrenzen, Interceptors, Status-Dispatch und Response-`struct`-Dekodierung.
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. Best Practices für Tests
+
+### Das Error-first-Tupel prüfen, nicht interne Details
+
+Rufe stets die exportierte SDK-Operation mit deinem Test-Client auf und prüfe das zurückgegebene `[error, data, response]`-Tupel:
+
+- Für `2xx`-Fälle prüfe `expect(error).toBeNull()` und verifiziere die dekodierten `data`-Felder (einschließlich des `.alias()`-Mappings von Wire- auf logische Namen).
+- Für Fehlerfälle prüfe `error?.code`, `error?.status`, `error?.data` und `error?.cause`, sofern diese Bestandteil des Vertrags sind.
+
+### Wire-Bytes ausgehender Anfragen verifizieren
+
+Erstelle innerhalb deiner `withHTTPHandle(async (input, init) => ...)`-Funktion ein `const request = new Request(input, init)` und prüfe `request.url`, `request.method`, `request.headers` sowie `await request.text()` (oder `await request.json()`), um sicherzustellen, dass dein `builder` und die Struct-Aliase exakt das vom Backend erwartete Wire-Format serialisiert haben.
+
+### Zeit deterministisch mit Fake-Timern steuern
+
+Für Interceptor-Retry-Backoff, SSE-/WebSocket-Reconnect-Verzögerungen oder WebSocket-Heartbeats nutze in Vitest `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`. Diese Fake-Timer verändern die native `AbortSignal.timeout`-Uhr nicht. Für eine deterministische Request-Frist in Vitest brich einen `AbortController` aus einem gesteuerten `setTimeout` mit dem Grund `TimeoutError` ab:
+
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+In Bun Test nutze `jest.useFakeTimers()` und `jest.advanceTimersByTime()`; Buns Fake-Timer steuern auch `AbortSignal.timeout`. Nimm nicht an, dass die Runner dieselben nativen Uhren steuern. Spule die Timer erst vor, nachdem die erwartete Phase begonnen hat, prüfe Zustandsübergänge oder Versuchszähler statt vergangener Wanduhrzeit, und stelle nach jedem Test die echten Timer wieder her.
+
+## Weiterführende Links
+
+- [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)
+- [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk)
+- [Client-Konfiguration](/de-DE/docs/client)

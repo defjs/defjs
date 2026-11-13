@@ -1,22 +1,36 @@
 ---
 title: "Solicitudes condicionales ETag"
-description: Trata el 304 como un fault de estado HTTP; mantén el Map de caché fuera de la llamada a la operación.
+description: Trata el 304 como un fallo de estado HTTP; mantén el Map de caché fuera de la llamada a la operación.
 ---
 
-# Revalida con ETag y un 304
+# Revalidar con ETag y un 304
 
-`ok` significa 2xx, así que un `304` llega como un fault `HTTP_STATUS`. Un estado de redirección tampoco es un cuerpo de error, así que deja `error` sin declarar: el cuerpo nunca se lee, el fault lleva el estado y tú devuelves el producto en caché.
+En Defjs, únicamente las respuestas `2xx` toman la rama de éxito, por lo que `304 Not Modified` llega como un fallo `HTTP_STATUS`. Deja `error` sin declarar en `defineRequest` para que el cuerpo vacío del `304` nunca se lea, y mantén tu caché `Map` en un envoltorio de aplicación alrededor de la llamada a la operación:
 
-Ver [HTTP](/es-ES/docs/http).
-
-<include cwd meta="etag-cache.ts">
-  examples/recipes/etag-revalidate.ts#example
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/reader.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 Flask
 ```
 
-`throw error` después de la rama 304 es el límite de este lector. La función sigue devolviendo `Promise<Product>`; un fault que no sea 304 no se devuelve como tupla de Defjs desde ese límite.
-
-No reescribas `304` como un `200` falso dentro de Core. La propiedad de la caché se queda en el código de la aplicación, alrededor de la llamada a la operación.
+- La instrucción `if (error) throw error` tras la comprobación del `304` es una política explícita: `createReader` devuelve `Promise<Product>`, así que cualquier otro fallo se lanza.
+- Nunca reescribas un `304` en un `200` sintético dentro de un interceptor; mantén el estado de caché en el código de la aplicación alrededor de la llamada a la operación. Consulta [Operaciones HTTP](/es-ES/docs/http).

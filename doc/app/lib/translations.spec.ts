@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { locales, i18n } from "./i18n";
+import { locales } from "./i18n";
 import { apiEntries } from "../data/api-catalog";
 import { messages } from "./messages";
 import { getMessages, getTranslator, getI18nProps } from "./translations";
@@ -8,7 +8,7 @@ test("UI translations use semantic keys and library interpolation", () => {
   const chinese = getTranslator("zh-Hans");
   const english = getTranslator("en-US");
   expect(chinese("nav.guide.ai")).toBe("AI");
-  expect(chinese("nav.guide.sdkDevelopment")).toBe("SDK 开发");
+  expect(chinese("nav.guide.preface")).toBe("前言");
   expect(chinese("ui.results", { variables: { count: "12" } })).toBe(
     "结果：12",
   );
@@ -46,19 +46,11 @@ test("search and language labels retain their distinct meanings", () => {
       expect(t(`api.kind.${kind}`)).not.toBe("");
   }
   expect(getTranslator("ar")("api.signature")).not.toBe(
-    getTranslator()("api.signature"),
+    getTranslator("en-US")("api.signature"),
   );
   expect(getTranslator("ar")("api.kind.function")).not.toBe(
-    getTranslator()("api.kind.function"),
+    getTranslator("en-US")("api.kind.function"),
   );
-});
-
-test("UI fallback does not change the no-fallback content configuration", () => {
-  expect(getMessages()).toEqual(getMessages("en-US"));
-  expect(getMessages("unknown")).toEqual(getMessages("en-US"));
-  expect(getTranslator("unknown")("nav.related")).toBe("Related reading");
-  expect(getTranslator()("ui.language")).toBe("English");
-  expect(i18n.fallbackLanguage).toBeNull();
 });
 
 test("per-call translations and returned messages cannot change another locale", () => {
@@ -78,10 +70,11 @@ test("Fumadocs Provider and standalone translators use the same locale messages"
     expect(props.defaultLanguage).toBe("en-US");
     expect(props.hideLocale).toBe("default-locale");
     expect(props.translations).toEqual(getMessages(locale));
-    expect(props.locales?.map((item) => item.locale)).toEqual(locales);
-    for (const item of props.locales ?? [])
-      expect(item.name).toBe(getTranslator(item.locale)("ui.language"));
+    expect(props.locales).toEqual(
+      locales.map((item) => ({
+        locale: item,
+        name: getTranslator(item)("ui.language"),
+      })),
+    );
   }
-  expect(getI18nProps().locale).toBe("en-US");
-  expect(getI18nProps("unknown").locale).toBe("en-US");
 });

@@ -1,34 +1,197 @@
 import { defineConfig } from "oxlint";
 
+// Every rule is spelled out so an oxlint upgrade cannot add or drop one.
+// `correctness: "off"` keeps oxlint's own default set from running on top.
+// Type-aware rules (the `no-unsafe-*` family among them) run through oxlint-tsgolint.
 export default defineConfig({
-  plugins: ["typescript", "import", "vitest"],
+  plugins: ["typescript", "import", "react", "vitest"],
+  jsPlugins: ["./lint/plugin.ts"],
+  categories: { correctness: "off" },
+  options: {
+    typeAware: true,
+    reportUnusedDisableDirectives: "error",
+  },
   rules: {
-    "import/no-namespace": "error",
-    "typescript/ban-ts-comment": [
+    // Test rules.
+    "vitest/no-focused-tests": "error",
+    "vitest/no-disabled-tests": "error",
+    "vitest/valid-expect-in-promise": "error",
+    // Vitest accepts a failure message as the second argument of `expect`.
+    "vitest/valid-expect": ["error", { maxArgs: 2 }],
+    "vitest/valid-describe-callback": "error",
+    // Project rules.
+    "defjs/prefer-typeof-switch": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-assertions": [
       "error",
-      {
-        minimumDescriptionLength: 10,
-        "ts-expect-error": "allow-with-description",
-        "ts-ignore": true,
-      },
+      { assertionStyle: "never" },
     ],
+    "typescript/no-non-null-assertion": "error",
+    // Forwarding a caught or observed `unknown` value is allowed for reject as it is for throw (only-throw-error's default).
+    "typescript/prefer-promise-reject-errors": [
+      "error",
+      { allowThrowingUnknown: true },
+    ],
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-argument": "error",
+    "import/no-namespace": "error",
     "typescript/consistent-type-imports": [
       "error",
       {
-        disallowTypeAnnotations: true,
-        fixStyle: "separate-type-imports",
         prefer: "type-imports",
+        fixStyle: "separate-type-imports",
+        disallowTypeAnnotations: true,
       },
     ],
-    "typescript/no-explicit-any": "error",
-    "typescript/no-non-null-assertion": "error",
-    // Test-style rules are intentionally disabled: they flag pre-existing Vitest patterns (mock type
-    // parameters, toThrow messages, conditional expects) that are outside the type-safety scope of
-    // this task. They can be re-enabled in a dedicated test-quality pass.
-    "vitest/expect-expect": "off",
-    "vitest/no-conditional-expect": "off",
-    "vitest/require-mock-type-parameters": "off",
-    "vitest/require-to-throw-message": "off",
-    "vitest/valid-title": "off",
+    "typescript/ban-ts-comment": [
+      "error",
+      {
+        "ts-expect-error": "allow-with-description",
+        "ts-ignore": true,
+        minimumDescriptionLength: 10,
+      },
+    ],
+    // ESLint core rules. `no-constant-binary-expression` and `no-loss-of-precision` take no options: oxlint rejects `allowLiteralToggle` and `ignoreDecimals`.
+    "no-constant-binary-expression": "error",
+    "no-empty-pattern": ["error", { allowObjectPatternsAsParameters: true }],
+    "no-fallthrough": [
+      "error",
+      { commentPattern: "(?i:falls?[\\s-]?through|no\\s?break)" },
+    ],
+    "no-irregular-whitespace": [
+      "error",
+      {
+        skipComments: true,
+        skipTemplates: true,
+        skipJSXText: true,
+        skipRegExps: true,
+      },
+    ],
+    "no-loss-of-precision": "error",
+    "no-unused-expressions": [
+      "error",
+      { allowShortCircuit: true, allowTernary: true },
+    ],
+    "no-unused-vars": [
+      "error",
+      {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        destructuredArrayIgnorePattern: "^_",
+        ignoreRestSiblings: true,
+      },
+    ],
+    "for-direction": "error",
+    "no-async-promise-executor": "error",
+    "no-case-declarations": "error",
+    "no-compare-neg-zero": "error",
+    "no-cond-assign": "error",
+    "no-constant-condition": "error",
+    "no-control-regex": "error",
+    "no-debugger": "error",
+    "no-delete-var": "error",
+    "no-dupe-else-if": "error",
+    "no-duplicate-case": "error",
+    "no-empty": "error",
+    "no-empty-character-class": "error",
+    "no-empty-static-block": "error",
+    "no-ex-assign": "error",
+    "no-extra-boolean-cast": "error",
+    "no-global-assign": "error",
+    "no-invalid-regexp": "error",
+    "no-misleading-character-class": "error",
+    "no-nonoctal-decimal-escape": "error",
+    "no-prototype-builtins": "error",
+    "no-regex-spaces": "error",
+    "no-self-assign": "error",
+    "no-shadow-restricted-names": "error",
+    "no-sparse-arrays": "error",
+    "no-unassigned-vars": "error",
+    "no-unexpected-multiline": "error",
+    "no-unsafe-finally": "error",
+    "no-unsafe-optional-chaining": "error",
+    "no-unused-labels": "error",
+    "no-unused-private-class-members": "error",
+    "no-useless-assignment": "error",
+    "no-useless-backreference": "error",
+    "no-useless-catch": "error",
+    "no-useless-escape": "error",
+    "preserve-caught-error": "error",
+    "require-yield": "error",
+    "use-isnan": "error",
+    "valid-typeof": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "prefer-rest-params": "error",
+    "prefer-spread": "error",
+    "no-array-constructor": "error",
+    // typescript-eslint rules.
+    "typescript/no-misused-promises": [
+      "error",
+      {
+        checksVoidReturn: {
+          arguments: true,
+          attributes: false,
+          inheritedMethods: true,
+          properties: true,
+          returns: true,
+          variables: true,
+        },
+      },
+    ],
+    "typescript/no-namespace": ["error", { allowDeclarations: true }],
+    "typescript/await-thenable": "error",
+    "typescript/no-array-delete": "error",
+    "typescript/no-base-to-string": "error",
+    "typescript/no-duplicate-enum-values": "error",
+    "typescript/no-duplicate-type-constituents": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-extra-non-null-assertion": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-for-in-array": "error",
+    "typescript/no-implied-eval": "error",
+    "typescript/no-misused-new": "error",
+    "typescript/no-non-null-asserted-optional-chain": "error",
+    "typescript/no-redundant-type-constituents": "error",
+    "typescript/no-this-alias": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/no-unnecessary-type-constraint": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-unsafe-enum-comparison": "error",
+    "typescript/no-unsafe-function-type": "error",
+    "typescript/no-unsafe-unary-minus": "error",
+    "typescript/no-wrapper-object-types": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/prefer-as-const": "error",
+    "typescript/prefer-namespace-keyword": "error",
+    "typescript/require-await": "error",
+    "typescript/restrict-plus-operands": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/triple-slash-reference": "error",
+    "typescript/unbound-method": "error",
   },
+  overrides: [
+    // React rules apply where React is a dependency; elsewhere `use*` helpers are plain functions.
+    {
+      files: ["packages/react/**", "doc/**"],
+      rules: {
+        "react/jsx-key": "error",
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "error",
+      },
+    },
+    // Examples leave values unused on purpose so readers can see the whole call.
+    { files: ["doc/examples/**"], rules: { "no-unused-vars": "off" } },
+    // Type tests bind values to assert on their inferred types.
+    { files: ["**/*.type.spec.ts"], rules: { "no-unused-vars": "off" } },
+    // Specs declare a binding so an earlier callback can reference it, then assign it once.
+    {
+      files: ["**/*.spec.ts", "**/*.spec.tsx"],
+      rules: { "prefer-const": ["error", { ignoreReadBeforeAssign: true }] },
+    },
+  ],
 });

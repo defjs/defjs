@@ -1,36 +1,24 @@
 ---
-title: "Appeler des API d’IA"
-description: "Appelle un service d’IA depuis l’application sans exposer les identifiants du fournisseur, et lis un flux d’événements fictif hors ligne."
+title: "llms.txt"
+description: "Indique aux assistants l’index Markdown anglais et les sources par page générées pour les grands modèles de langage."
 ---
 
-Appeler un service d’IA depuis l’application est distinct du fait de faire écrire Defjs par un assistant. [Développement assisté par IA](/fr-FR/docs/ai) décrit ce parcours d’assistant. Les formats d’API et d’événements SSE sont propres à chaque fournisseur. Le flux de cette page est un backend fictif, pas un protocole de fournisseur.
+# llms.txt
 
-## Appeler une API d’IA depuis l’application [#call-an-api]
+Ce site publie du Markdown anglais destiné aux assistants. Ces adresses n’ont pas de préfixe de locale et ne sont pas des traductions des guides localisés.
 
-Définis l’appel avec le contrat HTTP ou SSE que tu utilises déjà, puis appelle l’opération sur un client que l’application possède. Commence par les [requêtes HTTP](/fr-FR/docs/http) et les [flux d’événements SSE](/fr-FR/docs/sse). [Envoyer du JSON](/fr-FR/recipes/post-json) est le corps JSON habituel. [Consommer les événements SSE](/fr-FR/recipes/consume-sse) montre comment lire et fermer un flux, mais s’arrête après le premier événement. Cette recette n’est pas une réponse d’IA complète. Pour une réponse d’IA complète, poursuis la lecture jusqu’au signal de fin du fournisseur ou jusqu’à EOF, gère les erreurs de flux et ferme le flux ; adapte les noms d’événements et les schémas de payload au fournisseur. [Annulation et délais](/fr-FR/recipes/cancel-http) montre comment l’appelant arrête un appel HTTP.
+## Index des pages [#llms-txt]
 
-Garde le secret du fournisseur sur un serveur autorisé à le dépenser. Ne le place pas dans un paquet navigateur, une variable de build publique, ni un client livré au navigateur. Les identifiants appartiennent à l’application : règle-les sur le client du serveur, ou attache-les dans un intercepteur qui ne s’exécute que dans cette frontière serveur. La [configuration du client](/fr-FR/docs/client) et les [intercepteurs](/fr-FR/docs/interceptors) sont l’endroit de cette configuration. `withCredentials` choisit seulement le mode cookie de Fetch. Il ne conserve pas un secret de fournisseur.
+[llms.txt](/llms.txt) liste les pages anglaises et renvoie à leurs URL. C’est le point d’entrée lorsqu’un assistant doit d’abord trouver une page.
 
-Après le retour de l’opération, l’application possède le flux. Pour SSE, lis les événements, ferme le handle et attends qu’il soit fermé. Pour HTTP, abandonne l’appel avec `signal` quand la réponse n’est plus utile. Un abort ne prouve pas que le service a défait un travail déjà accepté.
+## Guides compilés [#llms-full]
 
-Ne renvoie pas un POST en flux seulement parce que la tentative a échoué. Defjs ne réessaie pas HTTP de lui-même. La reconnexion SSE reste inactive tant que l’application ne l’active pas, et une méthode telle que POST n’est pas renvoyée sauf si cette politique l’autorise explicitement. Une tentative échouée peut déjà avoir lancé un travail que le service facture. Renvoyer le même POST peut lancer ce travail une seconde fois. Lis les règles de rejeu dans les [requêtes HTTP](/fr-FR/docs/http) et les règles de reconnexion dans les [flux d’événements SSE](/fr-FR/docs/sse) avant d’ajouter une nouvelle tentative.
+[llms-full.txt](/llms-full.txt) réunit les guides anglais dans un seul fichier. Utilisez-le lorsqu'un assistant a besoin d’un contexte large dans un même document et que le budget de tokens le permet.
 
-## Flux hors ligne fictif [#fictional-stream]
+## Une page en Markdown [#page-markdown]
 
-Le format ci-dessous est fictif. Ce n’est pas le format d’événements d’un fournisseur précis. `withSSEHandle` fournit la réponse, donc l’exemple n’a besoin ni de réseau ni d’identifiants réels. Le corps contient deux événements `delta`, puis un événement de fin. La boucle conserve les deux textes. Elle ne s’arrête pas après le premier événement.
+Chaque page anglaise est aussi disponible en Markdown à l’adresse `/llms.mdx/<path>/content.md`. Par exemple, [Quick start en Markdown](/llms.mdx/docs/start/content.md) est le texte anglais de la page Quick start.
 
-<include cwd lang="typescript">
-  examples/ai/fictional-completion.ts#example
-</include>
+## Vérifier la version [#version]
 
-Dans un projet où `@defjs/core` est installé, enregistre l’exemple sous `fictional-completion.ts`, puis exécute :
-
-```sh
-bun fictional-completion.ts
-```
-
-Résultat attendu :
-
-```txt
-Hello there
-```
+Ce site documente la branche par défaut ; le projet peut installer une autre version de `@defjs/core`. Vérifiez les API par rapport au paquet installé avant d'appliquer une suggestion. Supprimez les secrets et vérifiez les politiques du projet avant de partager du code ou du contexte avec un outil d’IA.

@@ -1,4 +1,4 @@
-const value = process.env["SITE_URL"];
+const value = Bun.env["SITE_URL"];
 if (!value)
   throw new Error(
     "SITE_URL must be set to the confirmed production HTTPS origin",

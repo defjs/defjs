@@ -8,10 +8,14 @@ import {
 import { use, useMemo, type ReactNode } from "react";
 import type { TOCItemType } from "fumadocs-core/toc";
 import { docs, source } from "../lib/source";
-import { locales, localePrefix } from "../lib/i18n";
+import {
+  defaultLocale,
+  localePrefix,
+  splitLocale,
+  type Locale,
+} from "../lib/i18n";
 import { getTranslator } from "../lib/translations";
-import { useAppTranslations } from "../lib/use-app-translations";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
+import { useAppTranslations, useLocale } from "../lib/use-app-translations";
 import { apiEntries } from "../data/api-catalog";
 import { getNavigationTree, getNavigationTabs } from "../lib/navigation";
 import { siteUrl, repository } from "../lib/site";
@@ -23,14 +27,12 @@ import {
 } from "../components/navigation";
 import { ApiEntryPage } from "../components/api-entry-page";
 import { getMDXComponents } from "../components/mdx";
-import { apiSlugOf } from "../lib/api-virtual";
-import { readPageTitle, readProcessedText } from "../lib/page-data";
 import type { RenderedApiEntry } from "../lib/api-html";
 import type { Route } from "./+types/page";
 
 async function loadRenderedEntry(
   slug: string,
-  locale: string,
+  locale: Locale,
 ): Promise<{ page: RenderedApiEntry; sourcePath: string }> {
   const [{ apiEntryView }, { renderApiEntry }] = await Promise.all([
     import("../lib/api-entry-view"),
@@ -38,7 +40,7 @@ async function loadRenderedEntry(
   ]);
   const view = apiEntryView(slug, locale);
   const overview = source.getPage(["api", view.group], locale);
-  const overviewTitle = overview ? readPageTitle(overview.data) : view.group;
+  const overviewTitle = overview?.data.title ?? view.group;
   return {
     page: await renderApiEntry(
       view,
@@ -51,23 +53,23 @@ async function loadRenderedEntry(
 }
 
 export async function loader({ params }: Route.LoaderArgs) {
-  const parts = (params["*"] ?? "").split("/").filter(Boolean);
-  const locale = locales.includes(parts[0] ?? "") ? parts.shift() : "en-US";
-  const page = source.getPage(parts, locale);
+  const { locale, rest: slugs } = splitLocale(
+    (params["*"] ?? "").split("/").filter(Boolean),
+  );
+  const page = source.getPage(slugs, locale);
+  // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: React Router routes a thrown Response to the root ErrorBoundary's 404 page; its data() helper is not an Error either, and a thrown Error becomes a 500
   if (!page) throw new Response("Not Found", { status: 404 });
-  const language = locale ?? "en-US";
-  const apiSlug = apiSlugOf(page.data);
   // Reference JSON and the Markdown renderer load only for a virtual entry, from this loader.
-  const rendered = apiSlug ? await loadRenderedEntry(apiSlug, language) : null;
+  const rendered =
+    "apiSlug" in page.data
+      ? await loadRenderedEntry(page.data.apiSlug, locale)
+      : null;
   return {
-    hasContentTitle: rendered
-      ? false
-      : /^# /m.test(await readProcessedText(page.data)),
     path: page.path,
-    home: parts.length === 0,
-    slugs: parts,
+    home: slugs.length === 0,
+    slugs,
     canonical: new URL(page.url, siteUrl).href,
-    locale: language,
+    locale,
     api: rendered?.page ?? null,
     editHref: rendered
       ? `${repository}/edit/main/${rendered.sourcePath}`
@@ -92,7 +94,6 @@ function MdxDocument({
   home,
   slugs,
   canonical,
-  hasContentTitle,
   editHref,
 }: Route.ComponentProps["loaderData"]) {
   const page = docs.getPage(path);
@@ -104,8 +105,6 @@ function MdxDocument({
     <DocumentFrame
       canonical={canonical}
       editHref={editHref}
-      hasContentTitle={hasContentTitle}
-      heading={page.title}
       description={page.description}
       documentTitle={
         home ? page.title : `${apiTitle(page.title, slugs)} | Defjs`
@@ -122,15 +121,14 @@ function ApiDocument({
   editHref,
   view,
 }: Route.ComponentProps["loaderData"] & { view: RenderedApiEntry }) {
-  const { locale = "en-US" } = useI18n();
+  const locale = useLocale();
   return (
     <DocumentFrame
       canonical={canonical}
       editHref={editHref}
-      hasContentTitle={false}
       heading={view.name}
       description={view.summary}
-      markEnglish={locale !== "en-US"}
+      markEnglish={locale !== defaultLocale}
       documentTitle={`${apiTitle(view.name, slugs)} | Defjs`}
       toc={[]}
     >
@@ -141,7 +139,6 @@ function ApiDocument({
 function DocumentFrame({
   canonical,
   editHref,
-  hasContentTitle,
   heading,
   description,
   markEnglish = false,
@@ -151,15 +148,15 @@ function DocumentFrame({
 }: {
   canonical: string;
   editHref: string;
-  hasContentTitle: boolean;
-  heading: string;
+  /** Content pages write their own H1; an API entry page gets its title here. */
+  heading?: string;
   description: string | undefined;
   markEnglish?: boolean;
   documentTitle: string;
   toc: TOCItemType[];
   children: ReactNode;
 }) {
-  const { locale = "en-US" } = useI18n();
+  const locale = useLocale();
   const t = useAppTranslations();
   // The client already bundles every page's metadata, so deriving the tree here avoids serializing it into each page's HTML and .data.
   const pageTree = useMemo(
@@ -197,7 +194,7 @@ function DocumentFrame({
         <link rel="canonical" href={canonical} />
         <title>{documentTitle}</title>
         {description && <meta name="description" content={description} />}
-        {!hasContentTitle && <DocsTitle>{heading}</DocsTitle>}
+        {heading && <DocsTitle>{heading}</DocsTitle>}
         <DocsDescription>
           {description && markEnglish ? (
             <span lang="en" dir="ltr">

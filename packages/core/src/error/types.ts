@@ -1,4 +1,4 @@
-import type { DecodedResponse, HttpMeta } from "../internal/http_response";
+import type { DecodedResponse, HttpMeta } from "../http/http_response";
 import type { AnyStruct, Infer } from "../struct/types";
 
 /**
@@ -14,7 +14,7 @@ import type { AnyStruct, Infer } from "../struct/types";
  * | `NET`  | No usable response: cancel, timeout, connect, truncated body.   |
  * | `RES`  | A response arrived but could not be read as declared.           |
  * | `EXT`  | Code you attached to the pipeline threw.                        |
- * | `CAP`  | A declared buffer or queue limit was exceeded.                  |
+ * | `CAP`  | A declared buffer limit was exceeded.                           |
  * | `ENV`  | The host runtime lacks a required capability.                   |
  *
  * The set is closed on purpose: it keeps `switch (fault.code)` exhaustive. Extensions
@@ -24,7 +24,6 @@ import type { AnyStruct, Infer } from "../struct/types";
  */
 export type FaultCode =
   | "CAP_BUFFER_EXCEEDED"
-  | "CAP_QUEUE_OVERFLOW"
   | "ENV_UNSUPPORTED"
   | "EXT_HOOK_FAILED"
   | "EXT_INTERCEPTOR_FAILED"
@@ -36,7 +35,6 @@ export type FaultCode =
   | "NET_UNREACHABLE"
   | "REQ_BUILD_FAILED"
   | "REQ_INPUT_INVALID"
-  | "REQ_OPTIONS_INVALID"
   | "RES_DECODE_FAILED"
   | "RES_MEDIA_TYPE_INVALID"
   | "RES_STRUCT_MISMATCH";
@@ -69,10 +67,9 @@ export type DecodeFaultCode =
  * Codes whose fault may never have reached a response.
  *
  * Every `FaultCode` except `HTTP_STATUS` and the decode codes:
- * `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `ENV_UNSUPPORTED`,
- * `EXT_HOOK_FAILED`, `EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`,
- * `NET_ABORTED`, `NET_BODY_INCOMPLETE`, `NET_TIMEOUT`, `NET_UNREACHABLE`,
- * `REQ_BUILD_FAILED`, `REQ_INPUT_INVALID`, and `REQ_OPTIONS_INVALID`. These
+ * `CAP_BUFFER_EXCEEDED`, `ENV_UNSUPPORTED`, `EXT_HOOK_FAILED`,
+ * `EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`, `NET_ABORTED`, `NET_BODY_INCOMPLETE`, `NET_TIMEOUT`, `NET_UNREACHABLE`,
+ * `REQ_BUILD_FAILED`, and `REQ_INPUT_INVALID`. These
  * are the `code` values of `PreflightFault`.
  *
  * @group errors
@@ -138,7 +135,7 @@ export type DecodeFault = Error & {
  * A failure that may have happened before any response existed.
  *
  * Covers `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, and `ENV_UNSUPPORTED`. `response`
- * is present only where the transport already had metadata to report, such as a
+ * is `undefined` until the transport has metadata to report, such as a
  * body that truncated mid-download.
  *
  * @group errors

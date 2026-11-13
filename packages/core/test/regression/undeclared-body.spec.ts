@@ -18,7 +18,7 @@ test.each([200, 500])(
     const reads = vi.spyOn(response.body, "getReader");
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => response),
+      withHTTPHandle(() => Promise.resolve(response)),
     );
     const endpoint =
       status === 200

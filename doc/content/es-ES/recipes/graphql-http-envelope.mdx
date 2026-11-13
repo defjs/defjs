@@ -1,22 +1,36 @@
 ---
 title: "Solicitudes GraphQL"
-description: Deja GraphQL como HTTP 200 más un unwrap de aplicación; Core no trae un protocolo GraphQL.
+description: Deja GraphQL como HTTP 200 más un desempaquetado en la aplicación; Core no incluye un protocolo GraphQL.
 ---
 
-# Desenvolver un envelope GraphQL por HTTP
+# Desempaquetar una envoltura GraphQL sobre HTTP
 
-Defjs no implementa `errorPolicy` de GraphQL. Modela el cable como un POST HTTP cuyo builder coloca el documento de query y las variables. Declara el `data` del envelope como `.nullish()` para que tanto un `data` ausente como `data: null` lleguen a tu helper, y luego desenvuelve `errors[]` antes de comprobar `data`.
+Defjs no incluye un cliente de GraphQL ni una opción `errorPolicy`. Modela GraphQL sobre HTTP como una operación `POST` estándar cuyo `builder` envíe `{ query, operationName, variables }`. Marca `data` como `.nullish()` en el Struct de la envoltura para que tanto la omisión de `data` como `data: null` superen la validación estructural, y luego desempaqueta `errors[]` en una función auxiliar de tu aplicación:
 
-Ver [Decisiones de diseño](/es-ES/docs/design-decisions).
-
-<include cwd meta="graphql-viewer.ts">
-  examples/recipes/graphql-http-envelope.ts#example
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/sdk/viewer.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/load-viewer.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/graphql-http-envelope/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 ada viewer unavailable viewer unavailable
 ```
 
-El éxito HTTP solo significa que llegó el envelope. Los errores de aplicación se quedan en `errors[]` hasta que tu unwrap lance o devuelva, incluida una respuesta con `data: null`. El ejemplo trata tanto un `data` ausente como `data: null` junto con `errors[]` como errores de aplicación, no como desajustes de Struct.
-
-`if (error) throw error` adapta un fault de Defjs a este helper. Los fallos GraphQL con HTTP 200 siguen siendo errores de aplicación en `errors[]` y se lanzan aparte.
+- Un código HTTP `200` solo significa que la envoltura GraphQL llegó intacta. Los errores de dominio dentro de `errors[]` (incluso acompañados de `data: null`) son resultados del nivel de aplicación, no fallos `RES_STRUCT_MISMATCH`.
+- Consulta [Arquitectura central](/es-ES/docs/design-decisions) para entender por qué las envolturas específicas de protocolo se gestionan en funciones auxiliares de la aplicación.

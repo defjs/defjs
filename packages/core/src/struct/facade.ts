@@ -23,14 +23,20 @@ import {
   createUnknownStruct,
   createUrlencodedBodyStruct,
 } from "./constructors";
-import { parseStructTuple } from "./introspection";
-import type { Struct, StructLike, UnionStruct } from "./types";
+import { parseStructTuple } from "./parse";
+import type { Struct } from "./types";
 
 type EnumValue<T> = T extends readonly (infer U extends string)[]
   ? U
   : T extends { [key: string]: infer U extends number | string }
     ? U
     : never;
+
+function isStringEnumList(
+  value: { [key: string]: number | string } | readonly [string, ...string[]],
+): value is readonly [string, ...string[]] {
+  return Array.isArray(value);
+}
 
 /**
  * Struct that accepts one value from a list of strings or from the values of an object.
@@ -54,32 +60,11 @@ function structEnum<const T extends { [key: string]: number | string }>(
 function structEnum(
   value: { [key: string]: number | string } | readonly [string, ...string[]],
 ) {
-  if (Array.isArray(value)) {
-    return createEnumStruct(value as readonly [string, ...string[]]);
+  if (isStringEnumList(value)) {
+    return createEnumStruct(value);
   }
 
-  return createObjectEnumStruct(value as { [key: string]: number | string });
-}
-
-/**
- * Struct that accepts a value matching any one of several structs.
- *
- * `struct.or` is variadic: pass each option as its own argument.
- *
- * - Tries the options in order and returns the result of the first one that parses.
- *
- * - If none matches, it fails with one `invalid_union` issue at the union's own path. The issues of the individual options are not reported.
- *
- * - Throws `TypeError` when an option is not a struct.
- *
- * `UnionStruct<T>` is not exported. It is a `Struct` whose input and output are the unions of the option types, without `undefined`. For tagged objects prefer {@link struct.discriminatedUnion}(), which reports the issue of the selected option.
- *
- * @group struct
- */
-function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
-  ...options: T
-): UnionStruct<T> {
-  return createUnionStruct(options);
+  return createObjectEnumStruct(value);
 }
 
 /**
@@ -88,26 +73,6 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
  * Prefer this object over importing the constructor functions one by one. Compose shapes with
  * `struct.object`, then parse with `struct.parse` or let HTTP/SSE/WebSocket
  * endpoints apply the same contracts at the wire boundary. `struct` is a plain object of helpers.
- *
- * ```ts
- * import { struct } from "@defjs/core";
- *
- * const User = struct.object({
- *   id: struct.number(),
- *   displayName: struct.string().alias("display_name"),
- * });
- *
- * function readUser() {
- *   const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
- *   if (error) {
- *     console.error(error.message);
- *     return;
- *   }
- *   console.log(user.displayName);
- * }
- *
- * readUser();
- * ```
  *
  * ### Primitives and containers
  *
@@ -146,29 +111,29 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
  *
  * @example
  * ```ts
- * const User = struct.object({
+ * const Order = struct.object({
  *   id: struct.number(),
- *   displayName: struct.string().alias('display_name'),
+ *   customerName: struct.string().alias('customer_name'),
  * })
  *
- * const getUser = defineRequest({
+ * const getOrder = defineRequest({
  *   method: 'GET',
- *   path: '/users/:id',
+ *   path: '/orders/:id',
  *   input: struct.object({ id: struct.number() }),
  *   builder: (input) => ({ path: input }),
- *   output: User,
+ *   output: Order,
  * })
  *
- * function readUser() {
- *   const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+ * function readOrder() {
+ *   const [error, order] = struct.parse(Order, { id: 1, customerName: 'Ada' })
  *   if (error) {
  *     console.error(error.message)
  *     return
  *   }
- *   console.log(user.displayName)
+ *   console.log(order.customerName)
  * }
  *
- * readUser()
+ * readOrder()
  * ```
  * @group struct
  */
@@ -189,7 +154,7 @@ export const struct = {
   null: createNullStruct,
   number: createNumberStruct,
   object: createObjectStruct,
-  or: structOr,
+  or: createUnionStruct,
   parse: parseStructTuple,
   record: createRecordStruct,
   string: createStringStruct,

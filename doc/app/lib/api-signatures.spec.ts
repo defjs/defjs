@@ -1,9 +1,5 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, test } from "vitest";
+import { structure } from "fumadocs-core/mdx-plugins/remark-structure";
 import { createStringifier } from "fumadocs-core/mdx-plugins/stringifier";
 import {
   apiReferenceFile,
@@ -15,31 +11,73 @@ import {
   signatureFile,
   signatureText,
   type SignatureCatalog,
+  type SignatureContent,
   type SignatureEntry,
+  type SignatureRoot,
+  type SignatureSourceFile,
 } from "./api-signatures";
 
 const entries: SignatureEntry[] = [
   {
     name: "withEndpoint",
-    signatures: ["function withEndpoint(endpoint: string): ClientOption;"],
+    overloads: [
+      { signature: "function withEndpoint(endpoint: string): ClientOption;" },
+    ],
   },
   {
     name: "struct.enum",
-    signatures: [
-      "function enum<T>(value: T): Struct;",
-      "function enum<T>(value: T): Other;",
+    overloads: [
+      { signature: "function enum<T>(value: T): Struct;" },
+      { signature: "function enum<T>(value: T): Other;" },
     ],
   },
-  { name: "ERR_ABORTED", signatures: [" const ERR_ABORTED: Error; "] },
+  {
+    name: "ERR_ABORTED",
+    overloads: [{ signature: " const ERR_ABORTED: Error; " }],
+  },
 ];
 const catalog: SignatureCatalog = signatureCatalog(entries);
 
-function tag(name: string) {
+function tag(
+  name: string,
+): Extract<SignatureContent, { type: "mdxJsxFlowElement" }> {
   return {
     type: "mdxJsxFlowElement",
     name: "ApiSignature",
     attributes: [{ type: "mdxJsxAttribute", name: "name", value: name }],
     children: [],
+  };
+}
+
+function inlineTag(
+  name: string,
+): Extract<SignatureContent, { type: "mdxJsxTextElement" }> {
+  return {
+    type: "mdxJsxTextElement",
+    name: "ApiSignature",
+    attributes: [{ type: "mdxJsxAttribute", name: "name", value: name }],
+    children: [],
+  };
+}
+
+/** The VFile remark hands to a plugin, so fixtures are real files without a direct vfile dependency. */
+function sourceFile(path?: string, value = ""): SignatureSourceFile {
+  const files: SignatureSourceFile[] = [];
+  structure(value, [
+    () => (_root: SignatureRoot, file: SignatureSourceFile) => {
+      files.push(file);
+    },
+  ]);
+  const [file] = files;
+  if (!file) throw new Error("remark passed no file to the plugin");
+  if (path !== undefined) file.path = path;
+  return file;
+}
+
+function span(end: number) {
+  return {
+    start: { line: 1, column: 1, offset: 0 },
+    end: { line: 2, column: 1, offset: end },
   };
 }
 
@@ -60,11 +98,11 @@ test("signature text joins overloads and names, and rejects unknown or empty nam
   );
   expect(() =>
     signatureCatalog([
-      { name: "A", signatures: ["type A = 1;"] },
-      { name: "A", signatures: ["type A = 2;"] },
+      { name: "A", overloads: [{ signature: "type A = 1;" }] },
+      { name: "A", overloads: [{ signature: "type A = 2;" }] },
     ]),
   ).toThrow('Ambiguous API signature "A"');
-  const empty = signatureCatalog([{ name: "A", signatures: [] }]);
+  const empty = signatureCatalog([{ name: "A", overloads: [] }]);
   expect(() => signatureText(empty, "A", "page.mdx")).toThrow(
     'API signature "A" has no text in page.mdx',
   );
@@ -74,24 +112,25 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
   const tree = {
     type: "root",
     children: [
-      undefined,
-      { type: "paragraph", children: [tag("withEndpoint")] },
-      { type: "mdxJsxTextElement", name: "Other", children: [] },
+      {
+        type: "paragraph",
+        children: [inlineTag("withEndpoint")],
+      } satisfies SignatureContent,
       {
         type: "mdxJsxTextElement",
-        name: "ApiSignature",
-        attributes: [
-          { type: "mdxJsxAttribute", name: "name", value: "ERR_ABORTED" },
-        ],
-      },
+        name: "Other",
+        attributes: [],
+        children: [],
+      } satisfies SignatureContent,
+      inlineTag("ERR_ABORTED"),
     ],
   };
   replaceApiSignatures(
-    tree as never,
-    { path: "doc/content/en-US/api/http.mdx" },
+    tree,
+    sourceFile("doc/content/en-US/api/http.mdx"),
     catalog,
   );
-  const paragraph = tree.children[1];
+  const paragraph = tree.children[0];
   expect(
     paragraph && "children" in paragraph && paragraph.children?.[0],
   ).toMatchObject({
@@ -99,47 +138,38 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     lang: "ts",
     value: "function withEndpoint(endpoint: string): ClientOption;",
   });
-  expect(tree.children[3]).toMatchObject({
+  expect(tree.children[2]).toMatchObject({
     type: "code",
     value: "const ERR_ABORTED: Error;",
   });
   const source = '<ApiSignature name="withEndpoint" />\n';
-  const authored = {
-    path: "page.mdx",
-    toString() {
-      return source;
-    },
+  const authored = sourceFile("page.mdx", source);
+  const signature = {
+    ...tag("withEndpoint"),
+    position: span(source.length),
   };
-  const signature = tag("withEndpoint");
-  const root = {
+  const root: SignatureRoot = {
     type: "root",
-    position: { start: { offset: 0 }, end: { offset: source.length } },
+    position: span(source.length),
     children: [signature],
   };
-  Object.assign(signature, {
-    position: { start: { offset: 0 }, end: { offset: source.length } },
-  });
   replaceApiSignatures(root, authored, catalog);
-  const processed = createStringifier(authored as never).stringify(
-    root as never,
-  );
+  const processed = createStringifier(authored).stringify(root);
   expect(processed).toContain(
     "function withEndpoint(endpoint: string): ClientOption;",
   );
   expect(processed).not.toContain("ApiSignature");
-  const markdown = {
-    path: "interceptors.md",
-    toString() {
-      return '<ApiSignature name="withEndpoint" />\n';
-    },
-  };
-  const markdownRoot = {
+  const markdown = sourceFile(
+    "interceptors.md",
+    '<ApiSignature name="withEndpoint" />\n',
+  );
+  const markdownRoot: SignatureRoot = {
     type: "root",
     children: [
       {
         type: "html",
         value: '<ApiSignature name="withEndpoint" />',
-        position: { start: { offset: 0 }, end: { offset: 40 } },
+        position: span(40),
       },
       { type: "html", value: "<div>keep</div>" },
     ],
@@ -156,7 +186,7 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
         type: "root",
         children: [{ type: "html", value: "<ApiSignature />" }],
       },
-      { path: "interceptors.md" },
+      sourceFile("interceptors.md"),
       catalog,
     ),
   ).toThrow("API signature name in interceptors.md must be a string");
@@ -167,9 +197,16 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     replaceApiSignatures(
       {
         type: "root",
-        children: [{ type: "mdxJsxFlowElement", name: "ApiSignature" }],
+        children: [
+          {
+            type: "mdxJsxFlowElement",
+            name: "ApiSignature",
+            attributes: [],
+            children: [],
+          },
+        ],
       },
-      { history: ["only.mdx"] },
+      sourceFile("only.mdx"),
       catalog,
     ),
   ).toThrow("API signature name in only.mdx must be a string");
@@ -182,19 +219,21 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
             type: "mdxJsxFlowElement",
             name: "ApiSignature",
             attributes: [
+              { type: "mdxJsxExpressionAttribute", value: "...props" },
               { type: "mdxJsxAttribute", name: "name", value: null },
             ],
+            children: [],
           },
         ],
       },
-      {},
+      sourceFile(),
       catalog,
     ),
   ).toThrow("API signature name in unknown file must be a string");
 });
 
 test("a code fence keeps an unknown signature tag literal", () => {
-  const root = {
+  const root: SignatureRoot = {
     type: "root",
     children: [
       {
@@ -204,7 +243,7 @@ test("a code fence keeps an unknown signature tag literal", () => {
       },
     ],
   };
-  replaceApiSignatures(root, { path: "http.mdx" }, catalog);
+  replaceApiSignatures(root, sourceFile("http.mdx"), catalog);
   expect(root.children[0]).toEqual({
     type: "code",
     lang: "ts",
@@ -212,63 +251,75 @@ test("a code fence keeps an unknown signature tag literal", () => {
   });
 });
 
-test("the documentation catalog loads from disk and renders a real signature", () => {
+test("the documentation catalog loads from disk and renders a real signature", async () => {
   const transform = remarkApiSignatures();
-  transform({ type: "root" });
-  const tree = { type: "root", children: [tag("createClient")] };
-  transform(tree, { path: "overview.mdx" });
-  expect((tree.children[0] as { value?: string } | undefined)?.value).toContain(
-    "function createClient",
-  );
-  expect(() =>
+  await transform({ type: "root", children: [] }, sourceFile("overview.mdx"));
+  const tree: SignatureRoot = { type: "root", children: [tag("createClient")] };
+  await transform(tree, sourceFile("overview.mdx"));
+  const rendered = tree.children[0];
+  if (!rendered || !("value" in rendered) || typeof rendered.value !== "string")
+    throw new Error("expected a rendered signature");
+  expect(rendered.value).toContain("function createClient");
+  await expect(
     transform(
       { type: "root", children: [tag("NotAnExport")] },
-      { path: "overview.mdx" },
+      sourceFile("overview.mdx"),
     ),
-  ).toThrow('Unknown API signature "NotAnExport" in overview.mdx');
+  ).rejects.toThrow('Unknown API signature "NotAnExport" in overview.mdx');
 });
 
 test("catalog lookup follows the documentation workspace or the repository root", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "defjs-signatures-"));
+  const workspace = `${Bun.env["TMPDIR"] ?? "/tmp"}/defjs-signatures-${crypto.randomUUID()}`;
   try {
     expect(() => apiReferenceFile(workspace)).toThrow(
       `Cannot find api-reference.json from ${workspace}`,
     );
-    const nested = join(workspace, "doc/app/data");
-    mkdirSync(nested, { recursive: true });
-    writeFileSync(
-      join(nested, "api-reference.json"),
+    const nested = `${workspace}/doc/app/data`;
+    await Bun.write(`${nested}/.keep`, "");
+    await Bun.write(
+      `${nested}/api-reference.json`,
       JSON.stringify([
-        { name: "FromRoot", signatures: ["type FromRoot = 1;"] },
+        { name: "FromRoot", overloads: [{ signature: "type FromRoot = 1;" }] },
       ]),
     );
     expect(
-      readSignatureCatalog(apiReferenceFile(workspace)).get("FromRoot"),
+      (await readSignatureCatalog(apiReferenceFile(workspace))).get("FromRoot"),
     ).toEqual(["type FromRoot = 1;"]);
-    const docRoot = join(workspace, "doc");
-    mkdirSync(join(docRoot, "app/data"), { recursive: true });
-    writeFileSync(
-      join(docRoot, "app/data/api-reference.json"),
-      JSON.stringify([{ name: "FromDoc", signatures: ["type FromDoc = 2;"] }]),
+    // A separate file: a version of a file is told apart by its modification time, which two writes in a row can share.
+    const docRoot = `${workspace}/inside-doc`;
+    await Bun.write(`${docRoot}/app/data/.keep`, "");
+    await Bun.write(
+      `${docRoot}/app/data/api-reference.json`,
+      JSON.stringify([
+        { name: "FromDoc", overloads: [{ signature: "type FromDoc = 2;" }] },
+      ]),
     );
     const fromDoc = apiReferenceFile(docRoot);
-    expect(readSignatureCatalog(fromDoc).get("FromDoc")).toEqual([
+    expect((await readSignatureCatalog(fromDoc)).get("FromDoc")).toEqual([
       "type FromDoc = 2;",
     ]);
-    writeFileSync(fromDoc, "{}");
-    expect(() => readSignatureCatalog(fromDoc)).toThrow(
-      "API reference is not a list",
+    // One file per content, for the same reason.
+    const notJson = `${workspace}/not-json.json`;
+    await Bun.write(notJson, "not json");
+    await expect(readSignatureCatalog(notJson)).rejects.toThrow(
+      `Cannot read API signatures from ${notJson}`,
     );
-    writeFileSync(fromDoc, "not json");
-    expect(() => readSignatureCatalog(fromDoc)).toThrow(
-      `Cannot read API signatures from ${fromDoc}`,
+    // A failed read is not cached: the same file is read again once it is fixed.
+    await Bun.write(
+      notJson,
+      JSON.stringify([
+        { name: "Fixed", overloads: [{ signature: "type Fixed = 3;" }] },
+      ]),
     );
+    expect((await readSignatureCatalog(notJson)).get("Fixed")).toEqual([
+      "type Fixed = 3;",
+    ]);
   } finally {
-    await rm(workspace, { recursive: true, force: true });
+    Bun.spawnSync(["rm", "-rf", workspace]);
   }
 });
 
-test("fences keep example code and reject a hand-copied generated entry", () => {
+test("fences keep example code and reject a hand-copied generated entry", async () => {
   const names = new Set(["createClient", "ERR_ABORTED"]);
   expect(
     handCopiedGeneratedNames(
@@ -279,18 +330,18 @@ test("fences keep example code and reject a hand-copied generated entry", () => 
     { name: "ERR_ABORTED", line: 9 },
     { name: "createClient", line: 13 },
   ]);
-  const root = fileURLToPath(new URL("../../content", import.meta.url));
+  const root = `${import.meta.dirname}/../../content`;
   const hits: string[] = [];
   const generatedNames = new Set(
-    readSignatureCatalog(apiReferenceFile()).keys(),
+    (await readSignatureCatalog(apiReferenceFile())).keys(),
   );
-  for (const locale of readdirSync(root)) {
-    const dir = join(root, locale, "api");
-    for (const file of readdirSync(dir)) {
+  for (const locale of new Bun.Glob("*").scanSync(root)) {
+    const dir = `${root}/${locale}/api`;
+    for (const file of new Bun.Glob("*").scanSync(dir)) {
       if (!file.endsWith(".md") && !file.endsWith(".mdx")) continue;
-      const path = join(dir, file);
+      const path = `${dir}/${file}`;
       for (const hit of handCopiedGeneratedNames(
-        readFileSync(path, "utf8"),
+        await Bun.file(path).text(),
         generatedNames,
       ))
         hits.push(

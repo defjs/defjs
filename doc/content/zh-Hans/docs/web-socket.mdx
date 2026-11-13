@@ -1,118 +1,108 @@
 ---
 title: "WebSocket 会话"
-description: SDK 定义收发消息契约，应用打开 WebSocket 会话并负责监听、发送和释放。
+description: 在 SDK 中定义双向 WebSocket 消息契约，由消费方应用掌控连接配置与会话生命周期。
 ---
 
-# WebSocket
+# WebSocket 会话
 
-SDK 定义 WebSocket 操作的 path、输入、收发消息和队列上限。消费方应用配置自己的 client，调用该操作，并在派生 client 上选择这次调用的连接选项。把该操作和 SDK 的 HTTP 或 SSE 操作一起导出。
+在 SDK 中，`defineWebSocket` 声明双向 WebSocket 契约：路径模板、可选的 `input` 与 `builder`（仅限 `path` 和 `query`）、`incoming` 与 `outgoing` 消息 struct、队列上限，以及静态子协议。消费方应用在自己的 Client 上配置心跳、重试（`withRetry`）和生命周期清理。
 
-启动、接收、发送后，用 `await using` 释放 session，或手动 `close()` 并等待 `closed`。监听退订和资源释放属于调用方；Client、provider、interceptor 不会自动关闭成功返回的 session。
+## 1. 定义契约并运行会话
 
-## 基本用法
+当 `incoming` 或 `outgoing` 有多种帧类型时，用 `struct.discriminatedUnion(...)` 建模。用 `await using` 或 `session.close()` + `await session.closed` 释放返回的 `WebSocketSession`：
+
+<Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/sdk/ticks-socket.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/web-socket/basic-setup/app/session.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup.ts#example
 </include>
 
-## 每个方向一个 struct
+</Tab>
+</Tabs>
 
-`incoming` 是每个文本 frame 的一个 struct。`outgoing` 是 `session.send(...)` 的一个 struct。好几种消息用 `struct.discriminatedUnion`。这些字段上的 alias 就是两个方向的传输字段名。没有单独的 type 信封，也没有 normalizer。
+## 2. 消息校验与双向通信规则
 
-```json
-{ "type": "message", "text": "Hello" }
-```
+- **入站帧（`session.receive`）**：文本、`ArrayBuffer`、类型化数组和 `Blob` 帧都按 UTF-8 解码，解析为 JSON，再用 `incoming` 校验。畸形 JSON 或 schema 不匹配会上报给 `session.onRuntimeError` 并被丢弃，不会关闭会话。`session.receive` 是单消费者；请求第二个迭代器会抛出 `TypeError`。传输失败时，已经收到的消息会先送达，然后 `receive` 以 `closed.cause` reject，心跳超时也算在内。调用方的取消（中止 `signal`）、`session.close()` 和销毁会丢弃未读消息，无论会话是否已经结束。对于打开的会话，`session.close()` 或销毁之后 `receive` 随即结束，中止之后则以中止原因（默认是 `AbortError`）reject；`session.close()` 之后到达的帧也会被丢弃。会话打开期间到期的 `signal`（如 `AbortSignal.timeout(ms)`）是超时：会话以错误结束，并先送达已入队的消息。会话已经结束之后才到期的，是一次停止，并丢弃它们。
+- **出站帧（`session.send(payload)`）**：同步用 `outgoing` 校验，应用 `.alias()` 和编解码器，再用 `JSON.stringify` 序列化。`open` 状态下立即发送；`reconnecting` 期间若队列可用（`maxOutgoingQueueSize > 0`）则排队；载荷无效、队列已满/被禁用或会话已关闭时同步抛出异常。
 
-入站的文本、`ArrayBuffer`、typed-array、`Blob` frame 按 UTF-8 读，JSON parse，再拿 `incoming` 校验。坏 JSON 和 struct 失败进 `session.onRuntimeError`，不进队列。session 继续活着。不是文本、字节或 `Blob` 的 frame 会被忽略。没有 `withWebSocketOnInvalidEvent`。
+## 3. 会话状态与观察者机制
 
-`session.send(...)` 同步校验并序列化：struct 编码，再 `JSON.stringify`。open 时立刻发；开了 outgoing 队列且处于 `reconnecting` 时入队；不可写时抛 `InvalidStateError`。没有 outgoing struct、payload 过不了 struct、outgoing 队列关掉或满了、原生 send 失败，也会抛。definition 上的静态 `protocols` 列表是 endpoint 契约（例如 `graphql-transport-ws`）。派生 client 的 `protocols` 和 `withWebSocketProtocols` 仍可覆盖。只有这些选项能选子协议：builder、`beforeConnect` 和 interceptor 都改不了，所以把 token 放在子协议里时，要作为这次调用的派生 client 上的 `protocols` 传入。builder 只能返回 `path` 和 `query`。
+| 成员                 | 说明                                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `state`              | 当前连接状态：`'idle' \| 'connecting' \| 'open' \| 'reconnecting' \| 'closing' \| 'closed' \| 'aborted' \| 'error'` |
+| `connection`         | 底层最新物理 Socket 的实时快照（包含 `generation`、`url`、协商的 `protocol` 以及 `extensions`）                     |
+| `bufferedAmount`     | 当前活跃物理 Socket 上未发送完成的缓冲字节数（未连接时为 `0`）                                                      |
+| `receive`            | 单消费者的异步可迭代对象，提供经过强类型校验的 `incoming` 入站消息流                                                |
+| `onStateChange(fn)`  | 订阅连接状态流转事件；返回一个用于取消订阅的 `unsubscribe` 函数                                                     |
+| `onRuntimeError(fn)` | 订阅连接建立后的非启动期数据帧/解析异常；返回一个 `unsubscribe` 函数                                                |
+| `closed`             | 一个返回最终终态结果（`kind: 'closed' \| 'aborted' \| 'error'`）的 Promise                                          |
 
-Struct 编码之后，JSON 无法忠实表示的值会在发送或进入重连队列之前抛出 `TypeError`：非有限数值、函数、symbol、`Map`、`Set`、流，以及没有 JSON 表示的类实例。嵌套值遵循与 HTTP JSON body 相同的规则。`struct.number()` 仍接受无穷值并拒绝 `NaN`；值通过 Struct 校验，并不代表它是有效的 JSON。心跳使用同一序列化器；序列化失败会结束逻辑会话。
+<ApiSignature name="SocketAwaitResult" />
 
-`receive` 只有一个消费者。再要第二个 iterator 会抛 `TypeError`。
+## 4. 重试、心跳与队列
 
-## 状态快照
+重连与心跳都需显式开启（opt-in），可通过 Client 选项（`withRetry`、`withWebSocketHeartbeat`）或单次调用的派生 Client 选项（`client({ retry, heartbeat })`）配置。重连使用与 HTTP 和 SSE 相同的 `withRetry` 策略：
 
-| 成员                       | 含义                                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| `state`                    | `idle`、`connecting`、`open`、`reconnecting`、`closing`、`closed`、`aborted` 或 `error` |
-| `connection`               | 最新物理连接：`generation`、URL、协商出的 protocol、有的话还有 extensions               |
-| `bufferedAmount`           | 原生未发送字节数；没有物理 socket 时是 `0`                                              |
-| `receive`                  | 校验过的入站消息，单消费者 async iterable                                               |
-| `onStateChange(listener)`  | 订阅逻辑状态迁移；返回退订                                                              |
-| `onRuntimeError(listener)` | 订阅非启动期的运行时错误；返回退订                                                      |
-| `closed`                   | 逻辑终止关闭结果的 promise                                                              |
-
-`open` = 物理 socket 打开。`reconnecting` 包括换上一条之前的准备和延迟。`connection.generation` 在每条到达 `open` 的物理 socket 上加一。`session.connection` 在重连后继续更新。仅当返回的是 Defjs 原生 session，或透传同一 live `connection` 对象的 wrapper 时，tuple 的 `startupConnection` 才保留首次成功连接快照。自定义 session 或转换 `connection` 的 wrapper 则以返回 session 当前公开的 `connection` 为准。共享 `closed` 不能绕过 URL 清理或元数据过滤，Defjs 也不会从任意转换重建首次连接的元数据。
-
-启动失败 → `[error, undefined, connection?]`。open 前构造失败可能没有 connection；启动期间的中止或关闭仍可能给出快照。session 返回之后，运行时错误走 observer、`receive`、`closed`——不会再来第二个结果 tuple。
-
-<include cwd lang="typescript">
-  examples/web-socket/state-snapshots.ts#example
-</include>
-
-## 重连
-
-重连需显式开启。没有 `reconnect` 对象 → 物理关闭就结束逻辑会话。配置后，默认是 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 是每次中断的重试预算；成功 `open` 会重置预算和退避指数，因此后续每次中断都重新从重试 1 和 `delayMs` 基数开始。`attempts: 0` 禁用重试。默认谓词接受本次中断预算内的每一种非手动关闭结果。多次成功打开后，不存在整个生命周期的重试次数上限。成功打开后立刻被服务端再次关闭的 socket，会按基础延迟持续重连（受 jitter 和上限约束），因为每次打开都会重置预算；用 `shouldReconnect` 停止它。
+<Tabs items={["Retry policy", "Application heartbeat"]}>
+<Tab>
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
-`shouldReconnect` 拿到下一次重试的 attempt、关闭 cause、code、reason、`wasClean`。手动 `session.close(...)` 不进这个谓词。准备或策略抛错会以 error 结束逻辑 session。
-
-WebSocket 退避 jitter 是**乘性**的（`jitter: 0.2` 会在取整前，把已限制上限的基数乘以 `0.8x`–`1.2x`）。最终延迟还会再次限制在 `maxDelayMs` 和平台定时器上限 `2_147_483_647` ms 内，因此该范围的上半部分可能被截断。基数为零时仍保持零；有效数值计算时发生溢出，结果会被限制在上限，而不是抛错。SSE 使用同样的 0–1 jitter 规则。重连 options 会在构造函数之前校验：`attempts` 是非负安全整数；`delayMs` 必须是非负有限数；`maxDelayMs` 可以是非负有限数或正 `Infinity`，后者移除配置上限，但最终等待仍不超过 `2_147_483_647` ms；`factor` 是有限的正数；`jitter` 是 0–1 范围内的有限数。无效值返回 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 禁用后续重试，但所有显式提供的重连字段仍会在首次连接前校验，与 SSE 一样。
-
-`beforeConnect({ attempt, signal })` 在初次构造和每次重连之前跑。把这个 signal 传进 token 刷新，取消才能同时停住准备和连接。
-
-## 心跳
-
-在 client 或派生 client 上 opt-in。间隔里用 outgoing struct 发送 `message()`。可选 `isAck(message)` 认出 ack——这条消息清掉确认等待，**不会**投递给 `receive`。`heartbeat` 作为整体替换。`timeoutMs` 是等待这次确认的时间。它不是请求期限。
+</Tab>
+<Tab>
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
-`intervalMs` 和 `timeoutMs` 必须是有限的正数（毫秒），且不超过 `2_147_483_647`。Heartbeat 消息必须对 outgoing struct 合法。序列化、原生 send、ack 分类、超时失败对逻辑 session 是致命的——它们不会变成普通重连。
+</Tab>
+</Tabs>
 
-## 队列
+- **重试**：设置了重试策略时，默认值为 `maxRetries: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0.2`。`session.close()` 没有请求的每一次关闭默认都会重试，包括从未打开的连接。构造函数抛出是重试只会重复的本地失败，因此它结束调用，且不会询问 `shouldRetry`。每次物理 `open` 都会重置中断计数。`shouldRetry` 可以推翻默认，也可以是异步的；手动关闭、调用方中止，或已经做了 `maxRetries` 次重试之后，不会调用它。被拒绝或用尽的重试会像没有策略时那样结束会话：连接错误是 `closed.kind: "error"`，对端的关闭帧是 `"closed"`。`error` 事件之后一秒内没有 `close` 事件，或原生 `close()` 在出错的 socket 上抛出，都算一次失败的尝试，与心跳超时一样，由重试策略决定后续。`session.close()` 之后出现同样的情形，会话以 `closed.kind: "closed"` 结束。`beforeConnect({ attempt, signal })` 在首次连接和每次重试之前运行。已打开的 socket 向均衡器报告的结果只取决于关闭码，与 `wasClean` 无关：`1006` 或 `1015`（没有收到关闭帧）为 `NET_UNREACHABLE`，`1012` 或 `1013` 为 `NET_UNAVAILABLE`，其他关闭码都不算失败。
+- **尝试超时（`attemptTimeoutMs`）**：提供时，它限制从构造到 `open` 的时间，握手后清除。它是 `withRetry`（或请求选项 `retry`）的选项，因此 `withRetry({ attemptTimeoutMs })` 也会重试，默认 `maxRetries: 3`。只要握手期限，写成 `withRetry({ maxRetries: 0, attemptTimeoutMs })`。到期向均衡器报告 `NET_UNREACHABLE`，重试耗尽则以 `NET_TIMEOUT` 结束。
+- **心跳**：Defjs 不定义心跳格式、间隔或超时：`message` 和 `isAck` 是你的函数，类型要求有 `message`，并且只允许 `timeoutMs` 与 `isAck` 一起出现。浏览器 `WebSocket` 接口无法发送协议级 ping，因此应用级消息是唯一可移植的心跳。每过 `intervalMs`，它通过 `outgoing` struct 以 JSON 文本发送 `message()`，因此端点要声明 `outgoing` struct，裸的文本或二进制 ping 不可行。它至多等待 `timeoutMs`，寻找匹配 `isAck(msg)` 的已解码帧；未通过 `incoming` struct 的帧会报告给 `onRuntimeError`，永远到不了 `isAck`。匹配的 ack 帧由心跳监视器消费，不转发给 `session.receive`。漏掉 ack 算连接失败：socket 被关闭，漏掉的 ack 作为 `NET_UNREACHABLE` 报告给均衡器并归属于该端点，这次尝试像其他关闭一样进入重试流程。没有重试策略，或重试已经用尽时，`closed.kind` 为 `"error"`，`closed.cause` 是普通的 `Error("WebSocket heartbeat timeout")`。心跳序列化失败或 `message()` 抛出属于本地问题：它们以原始 cause 结束会话，不会重试，也不归属于端点。
+- **队列上限**：
+  - 入站消息：没有选项，也没有数量上限。库会把平台送达的每条消息排队，直到 `session.receive` 读走它，因此从不读取的消费者会让队列无界增长；会话打开期间请消费 `session.receive`，或者关闭会话。
+  - `maxOutgoingQueueSize`（可选，默认 `0`）：仅在 `state === 'reconnecting'` 时缓冲 `session.send()` 调用，并在下一次 `open` 发布前全部刷出。
 
-| 设置                   | 要求的值                     | 行为                                                                                         |
-| ---------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
-| `maxIncomingQueueSize` | 正安全整数                   | 限制等着 `receive` 的已 parse 消息，以及等着 transform 的原始 frame。溢出 → `state: 'error'` |
-| `maxOutgoingQueueSize` | 可选的非负安全整数；默认 `0` | 只在 `state === 'reconnecting'` 时 FIFO。满了或关掉 → `send(...)` 抛                         |
+`shouldRetry` 在其 WebSocket context 中接收原生关闭 `code`、`reason` 和 `wasClean`，并且那里的 `retryable` 始终为 `true`。服务端可能以应用错误码 `1011` 完成正常的关闭握手，因此 `wasClean === true` 不代表应用处理成功。示例根据 `code` 决定；请根据自己的协议选择应用关闭码，而不要只依赖 `!wasClean`。
 
-排队的 outgoing frame 在替换 socket 公布 `open` 之前刷出去。已经在更早的 socket 上发出去的 frame 永不自动重放。重连队列是给重连期间你发出的消息用的——不是用来重建应用状态。
+## 5. 子协议与身份认证 [#protocols-and-authentication]
 
-入站溢出会清掉待处理序列、让 `receive` 失败、停掉 session，并以 `kind: 'error'` resolve `session.closed`。消费者要够快，或者按测过的大小/内存把上限抬高。
+浏览器 WebSocket 不支持任意握手请求头，因此 WebSocket 的 `builder` 只返回 `{ path?, query? }`。
 
-## 协议与鉴权
+- **子协议优先级**：`client({ protocols })` 覆盖 `withWebSocketProtocols(...)`，后者覆盖 `defineWebSocket({ protocols })`。
+- **URL 转换**：Defjs 会在解析出的端点上自动把 `http:` 转为 `ws:`，把 `https:` 转为 `wss:`。
+- **凭据**：`withCredentials(true)` 只适用于 Fetch（HTTP/SSE）。WebSocket 请通过 cookie/会话策略、子协议或短期连接 ticket 认证——避免在 query 字符串中放长期密钥。
+- **`beforeConnect` 不是请求修改器**：输入解析、同步纯 `builder` 和拦截器链每次操作只运行一次。如果请求的基础端点未被拦截器替换，每次重连都会重新选择端点并用它重建 URL，但会复用已构建的 path/query 和捕获的协议列表。不论仍使用原端点还是发生故障转移，URL 都会在该次尝试的 `beforeConnect` 运行之前确定。在 hook 中修改闭包变量、input 或协议数组，不能为当前握手提供新的 ticket。同一个会话内不支持轮换 URL/子协议凭据；请先获取新凭据，再通过 input 或 client 配置发起新操作，并负责替代会话的清理。
 
-Definition 的 `protocols`、client 的 `withWebSocketProtocols(...)`，以及派生 client 上的 `protocols`，设定构造函数的子协议列表。优先级：派生 client → client → definition。派生列表替换 client 列表，不是追加。逻辑 session 复制按上述优先级找到的第一份已定义列表，重连时复用。
+## 6. 连接关闭与资源回收
 
-浏览器 WebSocket 构造函数不接受任意握手 headers，builder 也不能返回 `headers` 或 `body`。Defjs 把 `http:` 转成 `ws:`、`https:` 转成 `wss:`，path 占位符编码一次，query 规则和 HTTP 一样：默认标量和重复 key，嵌套对象用 `withQuerySerializer`，没有 query 时不调用 serializer。
-
-与 HTTP 和 SSE 一样，基础端点缺失、相对或无效，或者路径非法时，会在构建时、任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，即使 interceptor 本来会短路请求也一样。解析后的 URL 必须与基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 的最终 `req.endpoint` 会相对于最终 `req.baseEndpoint` 按相同规则校验，但可以有意把基础端点换成另一个有效的绝对 URL。确定性的 URL 错误不会重试。
-
-`withCredentials(true)` 是 HTTP/SSE 的 Fetch credentials——不是 WebSocket 鉴权。用审过的 cookie/session 策略、子协议，或短命连接 ticket。别把通用凭证或长命密钥放进 query string。
-
-## 关闭与所有权
-
-`session.close(code?, reason?)` 请求终止关闭，并停掉 heartbeat。code 必须是 `1000` 或 `3000..4999`；reason ≤ 123 个 UTF-8 字节。非法 close 参数在改状态之前就抛。要手动关闭原因或逻辑终止结果时，配上 `await session.closed`。
-
-传给操作的 `signal` 会一直挂在已打开的 session 上，并覆盖整条连接，包括已经打开之后。超时形状的中止（`TimeoutError` 或 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）以 kind `error`（`NET_TIMEOUT`）结束。其他 abort reason 以 kind `aborted` 结束，`receive` 以该 reason 本身 reject，而不是新的 `AbortError`。没有仅限启动期的期限。应用若需要一个，就自己建 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。见 [SSE](/zh-Hans/docs/sse#close-and-dispose)。
+调用 `session.close(code?, reason?)`（其中 `code` 必须为 `1000` 或 `3000..4999`，`reason` 长度不超过 123 个 UTF-8 字节）并等待 `await session.closed`，或者直接使用 `await using`：
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-`session.closed` 是逻辑终止快照：`'closed'`、`'aborted'` 或 `'error'`，可带原生 `code` / `reason` / `wasClean`，aborted/error 还可带 `cause`。观察到的原生关闭字段优先于所有者请求的回退值。
+曾经打开、随后在没有关闭帧的情况下断开的连接（代码 `1006`，`wasClean: false`）始终以 `closed.kind: "error"` 结束，`closed.cause` 为 `Error("WebSocket connection error")`，无论运行时是否触发原生 `error` 事件。
 
-标准 async disposer 会尽力请求原生 close，然后等待 Defjs 自有的生命周期、消息泵、定时器、监听、队列、socket 引用拆掉。一秒内没观察到 close event，就强制 teardown，disposer 可能用名为 `TimeoutError` 的 `DOMException` reject；这不能证明物理 TCP 连接已经关闭。重复调用 disposer 共享同一次 teardown。自定义结构化 session 实现现在必须提供同一个 `[Symbol.asyncDispose](): PromiseLike<void>` 契约。
+重试中断耗尽其 `maxRetries` 后，会话以 `closed.kind: "error"` 结束，`closed.cause` 是普通传输错误，并带有原生关闭快照（升级失败时通常为代码 `1006`）；没有单独的稳定耗尽代码。会话以 `closed.kind: "error"` 结束时，已经入队的消息仍会送达，`session.receive` 在最后一条之后以 `closed.cause` reject；来自对端的关闭也会在 `session.receive` 结束之前送达已入队的消息。调用方停止会话时，未读消息被丢弃：调用方中止（`closed.kind: "aborted"`）、手动 `session.close()`，以及用 `await using` 销毁，都会这样做，会话已经结束之后也一样。对于打开的会话，`session.close()` 或销毁之后 `session.receive` 随即结束，调用方中止之后则以 `closed.cause`（即中止原因）reject。会话结束之后的停止会丢弃未读消息，且不改变其他东西：`closed` 保持原值，一旦没有未读内容，`session.receive` 仍会以 `closed.cause` reject。组件或 worker 结束工作时，始终注销 `onStateChange` 和 `onRuntimeError` 监听器。
 
-## GraphQL 边界
-
-Defjs 提供一个 incoming struct、一个 outgoing struct，以及逻辑 session 生命周期。它**不**实现 WebSocket 应用协议。GraphQL-over-WebSocket 的能力——connection init、operation ID、`next`/`error`/`complete`、释放、订阅重放——都在 core 契约之外。
-
-服务端要求那套协议时，用 `graphql-ws` 这类协议 client，或用 `defineWebSocket(...)` 给 frame 建模。把 `graphql-transport-ws` 这类静态子协议放在 `protocols` 上。单靠 struct 谈不拢 GraphQL 语义。
-
-## 相关操作示例
+## 相关阅读
 
 - [打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)
 - [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [负载均衡与故障转移](/zh-Hans/docs/load-balancing)

@@ -4,7 +4,9 @@ import {
   type DerivableClient,
   withEndpoint,
   withHTTPHandle,
+  withInterceptors,
 } from "../client";
+import { createHttpInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineRequest } from "./http";
 
@@ -30,8 +32,7 @@ function clientFor(
   status: number,
   headers: Record<string, string>,
 ): DerivableClient {
-  const handle = (async () =>
-    new Response(body, { headers, status })) as unknown as typeof fetch;
+  const handle = () => Promise.resolve(new Response(body, { headers, status }));
 
   return createClient(
     withEndpoint("https://api.example.test"),
@@ -154,21 +155,23 @@ describe("declaration routing", () => {
       "cancels the HTTP %s body when only %s is declared",
       async (status, declared) => {
         let cancelled = false;
-        const handle = (async () =>
-          new Response(
-            new ReadableStream<Uint8Array>({
-              cancel() {
-                cancelled = true;
-              },
-              start(controller) {
-                controller.enqueue(
-                  new TextEncoder().encode('{"id":1,"message":"nope"}'),
-                );
-                controller.close();
-              },
-            }),
-            { headers: JSON_HEADERS, status },
-          )) as unknown as typeof fetch;
+        const handle = () =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream<Uint8Array>({
+                cancel() {
+                  cancelled = true;
+                },
+                start(controller) {
+                  controller.enqueue(
+                    new TextEncoder().encode('{"id":1,"message":"nope"}'),
+                  );
+                  controller.close();
+                },
+              }),
+              { headers: JSON_HEADERS, status },
+            ),
+          );
         const endpoint =
           declared === "error"
             ? defineRequest({ error: ApiError, method: "GET", path: "/x" })
@@ -220,15 +223,17 @@ describe("declaration routing", () => {
     const observerError = new Error("observer exploded");
 
     function clientStreaming(): DerivableClient {
-      const handle = (async () => {
+      const handle = () => {
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             controller.enqueue(new TextEncoder().encode('{"id":1}'));
             controller.close();
           },
         });
-        return new Response(stream, { headers: JSON_HEADERS, status: 200 });
-      }) as unknown as typeof fetch;
+        return Promise.resolve(
+          new Response(stream, { headers: JSON_HEADERS, status: 200 }),
+        );
+      };
 
       return createClient(
         withEndpoint("https://api.example.test"),
@@ -278,9 +283,7 @@ describe("declaration routing", () => {
       // Both a dead server and a throwing interceptor arrive at the chain's catch as one bare
       // cause. Only the transport boundary knows which happened, so it tags its own rejections.
       const networkError = new TypeError("fetch failed");
-      const handle = (async () => {
-        throw networkError;
-      }) as unknown as typeof fetch;
+      const handle = () => Promise.reject(networkError);
 
       const useRequest = defineRequest({
         method: "GET",
@@ -298,40 +301,98 @@ describe("declaration routing", () => {
       expect(fault?.cause).toBe(networkError);
     });
 
-    test("should attribute a transport that throws a primitive to the extension", async () => {
-      // The transport-origin mark is kept beside the value, which a primitive cannot carry. A
-      // transport that rejects with a string is broken in a way we cannot distinguish, and the
-      // documented consequence is that it is attributed to the extension.
-      const handle = (async () => {
-        throw "offline";
-      }) as unknown as typeof fetch;
+    test.each(["offline", null, undefined, 0])(
+      "should attribute a transport that rejects with %s to the transport",
+      async (rejection) => {
+        // A rejection that is not an object cannot carry a mark, so the origin is recorded by value.
+        const handle = () => {
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a non-Error value, which must still count as a transport failure
+          return Promise.reject(rejection);
+        };
 
-      const useRequest = defineRequest({
-        method: "GET",
-        output: User,
-        path: "/x",
+        const useRequest = defineRequest({
+          method: "GET",
+          output: User,
+          path: "/x",
+        });
+        const [fault] = await useRequest(
+          createClient(
+            withEndpoint("https://api.example.test"),
+            withHTTPHandle(handle),
+          ),
+        );
+
+        expect(fault?.code).toBe("NET_UNREACHABLE");
+        expect(Object.is(fault?.cause, rejection)).toBe(true);
+      },
+    );
+
+    test("should keep transport attribution and the original value when an interceptor rethrows a primitive rejection", async () => {
+      const handle = () => {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a string primitive
+        return Promise.reject("offline");
+      };
+      const seen: unknown[] = [];
+      const rethrow = createHttpInterceptor(async (request, next) => {
+        try {
+          return await next(request);
+        } catch (error) {
+          seen.push(error);
+          throw error;
+        }
       });
-      const [fault] = await useRequest(
+
+      const [fault] = await defineRequest({ method: "GET", path: "/x" })(
         createClient(
           withEndpoint("https://api.example.test"),
           withHTTPHandle(handle),
+          withInterceptors(rethrow),
+        ),
+      );
+
+      expect(seen).toEqual(["offline"]);
+      expect(fault?.code).toBe("NET_UNREACHABLE");
+      expect(fault?.cause).toBe("offline");
+    });
+
+    test("should attribute an interceptor that swallows a primitive rejection and throws another to the extension", async () => {
+      const handle = () => {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the transport under test rejects with a string primitive
+        return Promise.reject("offline");
+      };
+      const replace = createHttpInterceptor(async (request, next) => {
+        try {
+          return await next(request);
+        } catch {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the interceptor under test throws a different primitive
+          throw "interceptor says no";
+        }
+      });
+
+      const [fault] = await defineRequest({ method: "GET", path: "/x" })(
+        createClient(
+          withEndpoint("https://api.example.test"),
+          withHTTPHandle(handle),
+          withInterceptors(replace),
         ),
       );
 
       expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
-      expect(fault?.cause).toBe("offline");
+      expect(fault?.cause).toBe("interceptor says no");
     });
 
     test("should still report a truncated body with nothing declared", async () => {
       const readError = new Error("read failed");
-      const handle = (async () => {
+      const handle = () => {
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             controller.error(readError);
           },
         });
-        return new Response(stream, { headers: JSON_HEADERS, status: 200 });
-      }) as unknown as typeof fetch;
+        return Promise.resolve(
+          new Response(stream, { headers: JSON_HEADERS, status: 200 }),
+        );
+      };
 
       const useRequest = defineRequest({
         method: "GET",

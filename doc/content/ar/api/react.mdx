@@ -21,12 +21,12 @@ description: ClientProvider، وuseClient مع تجاوز عميل اختيار�
 
 <ApiSignature name="useClient" />
 
-يفضّل `useClient(overrideClient)` العميل الصريح؛ والقيمة المحذوفة أو `undefined` تقرأ أقرب `ClientProvider`. يُرمى `Error` فقط عندما لا يوفّر أي المصدرين عميلًا. تبقى استدعاءات `useClient()` بلا وسائط صالحة. مرّر ذلك العميل إلى عملية. يُرجع الـ Hook [`DerivableClient`](/ar/api/core/derivableclient-type) الذي جرى توفيره؛ استدعِه بخيارات الطلب حيث تعمل العملية لاشتقاق قيمة `Client`. لا تمرّره إلى ضابط حالة، لأن `setState(client)` سيستدعيه كمُحدِّث. قيمة `Client` المشتقة لا يقبلها `ClientProvider` ولا `useClient`.
+يفضّل `useClient(overrideClient)` العميل الصريح؛ والقيمة المحذوفة أو `undefined` تقرأ أقرب `ClientProvider`. يُلقى `Error` فقط عندما لا يوفّر أي المصدرين عميلًا. تبقى استدعاءات `useClient()` بلا وسائط صالحة. مرّر ذلك العميل إلى عملية. يُرجع الخطاف [`DerivableClient`](/ar/api/core/derivableclient-type) الذي جرى توفيره؛ استدعِه بخيارات الطلب حيث تعمل العملية لاشتقاق قيمة `Client`. لا تمرّره إلى ضابط حالة، لأن `setState(client)` سيستدعيه كمُحدِّث. قيمة `Client` المشتقة لا يقبلها `ClientProvider` ولا `useClient`.
 
 استدعِ `useClient(explicitClient)` دائمًا في المستوى الأعلى لمكوّن أو Hook مخصص، حتى مع عميل صريح؛ لا في دالة عادية أو ردّ نداء حدث. لا تكتب `explicitClient ?? useClient()`، فهذا يستدعي Hook شرطيًا. التجاوز لا يكتب السياق ولا ينشئ موفّرًا، ويظل Hook مشتركًا في السياق.
 
 - **يُرجع** العميل الصريح نفسه أو أقرب عميل موفَّر.
-- **يرمي** `Error` عندما لا يوفّر عميل صريح ولا السياق عميلًا.
+- **يُلقي** `Error` عندما لا يوفّر عميل صريح ولا السياق عميلًا.
 
 ## ClientProviderProps
 

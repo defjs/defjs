@@ -1,20 +1,31 @@
 ---
 title: "Отправка JSON"
-description: Отправь типизированное JSON-тело и декодируй объявленный 201.
+description: Отправьте типизированное тело JSON и декодируйте объявленный ответ со статусом 201.
 ---
 
 # POST JSON
 
-Отдай типизированное тело builder’у. Логические имена полей остаются в TypeScript; wire-алиасы на struct становятся JSON-ключами. Тело-объект — это `application/json`.
+Передайте типизированный объект параметров в `builder` и верните `{ body: input }`. Вызов `.alias("customer_name")` сохраняет свойство `customerName` в TypeScript, отправляя `"customer_name"` по сети и декодируя его обратно из ответа `201`.
 
-Подробности — в [HTTP](/ru-RU/docs/http) и [Клиент](/ru-RU/docs/client).
-
-<include cwd meta="create-user.ts">
-  examples/recipes/post-json.ts#example
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
-`api.example.com` — placeholder. Если сервер отвечает `201` и `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, сниппет выведет:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Если сервер отвечает статусом `201` и телом `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, скрипт выведет:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+Подробности см. в разделах [HTTP-операции](/ru-RU/docs/http) и [Struct и схемы](/ru-RU/docs/struct).

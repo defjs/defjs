@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, inject, test } from "vitest";
 import {
   StructError,
@@ -11,6 +10,7 @@ import {
   withQuerySerializer,
 } from "../src";
 import type { Client, Infer } from "../src";
+import { toBase64 } from "./base64";
 
 test("should settle public HTTP cancellation when an interceptor hangs after a real response", async () => {
   const controller = new AbortController();
@@ -38,7 +38,7 @@ test("should settle public HTTP cancellation when an interceptor hangs after a r
   expect(error).toMatchObject({ code: "NET_ABORTED" });
   expect(result).toBeUndefined();
   expect(response).toBeUndefined();
-}, 2_000);
+});
 
 const EchoField = struct.object({
   filename: struct.string().optional(),
@@ -69,35 +69,30 @@ const readMissLog = defineRequest({
 
 type Echo = Infer<typeof EchoReport>;
 
-// Same probe the transport uses. A runtime that rejects duplex request bodies cannot carry a ReadableStream.
-function runtimeSupportsStreamingRequestBody(): boolean {
-  if (typeof Request !== "function" || typeof ReadableStream === "undefined") {
-    return false;
-  }
-
-  try {
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.close();
-      },
-    });
-    const request = new Request("https://example.com/", {
-      body: stream,
-      duplex: "half",
-      method: "POST",
-    } as RequestInit & { duplex?: "half" });
-    return request.body !== null;
-  } catch {
-    return false;
-  }
-}
-
 function bytesToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64");
+  return toBase64(bytes);
 }
 
 function isRecord(value: unknown): value is { [key: string]: unknown } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function queryScalar(value: unknown): string | undefined {
+  switch (typeof value) {
+    case "string":
+    case "number":
+    case "boolean":
+    case "bigint":
+      return String(value);
+    case "function":
+      return value.toString();
+    case "symbol":
+      throw new TypeError("Cannot convert a Symbol value to a string");
+    case "object":
+      return value === null ? "null" : undefined;
+    default:
+      return undefined;
+  }
 }
 
 function stringifyQuery(
@@ -120,9 +115,8 @@ function stringifyQuery(
       }
       continue;
     }
-    if (typeof value !== "undefined") {
-      parts.push(`${name}=${String(value)}`);
-    }
+    const scalar = queryScalar(value);
+    if (scalar !== undefined) parts.push(`${name}=${scalar}`);
   }
   return parts.join("&");
 }
@@ -216,7 +210,7 @@ describe("request builder through the real server", () => {
     );
   });
 
-  test("sends a builder URLSearchParams query verbatim and skips the query serializer", async () => {
+  test("sends a builder URLSearchParams query and skips the query serializer", async () => {
     const query = new URLSearchParams();
     query.append("tag", "a");
     query.append("tag", "b");
@@ -236,7 +230,7 @@ describe("request builder through the real server", () => {
     expect(report.rawQuery).toBe("tag=a&tag=b");
   });
 
-  test("passes alias-encoded nested query objects to withQuerySerializer and the server receives that string", async () => {
+  test("passes alias-encoded nested query objects to withQuerySerializer and the server receives that query form-urlencoded", async () => {
     let seen: unknown;
     const serialized = createClient(
       withEndpoint(host),
@@ -273,7 +267,7 @@ describe("request builder through the real server", () => {
       tags: ["a", "b"],
     });
     expect(report.rawQuery).toBe(
-      "filter[state_code]=open&page_size=10&tags=a&tags=b",
+      "filter%5Bstate_code%5D=open&page_size=10&tags=a&tags=b",
     );
   });
 
@@ -597,31 +591,6 @@ describe("request builder through the real server", () => {
     expect(protobuf.bodyBase64).toBe(bytesToBase64(Uint8Array.from([9, 8, 7])));
   });
 
-  test.skipIf(!runtimeSupportsStreamingRequestBody())(
-    "sends a ReadableStream body when the runtime supports duplex request bodies",
-    async () => {
-      const payload = new TextEncoder().encode("stream-bytes");
-      const sendStream = defineRequest({
-        builder: () => ({
-          body: new ReadableStream<Uint8Array>({
-            start(controller) {
-              controller.enqueue(payload);
-              controller.close();
-            },
-          }),
-        }),
-        method: "POST",
-        output: EchoReport,
-        path: "/e2e/echo",
-      });
-
-      const report = await echo(sendStream);
-
-      expect(report.headers["content-type"]).toBe("application/octet-stream");
-      expect(report.bodyText).toBe("stream-bytes");
-    },
-  );
-
   test("branches a discriminated-union builder into JSON, file, and urlencoded bodies", async () => {
     const Row = struct.object({
       name: struct.string().alias("n"),
@@ -723,7 +692,7 @@ describe("request builder through the real server", () => {
 
   test("returns REQ_BUILD_FAILED when the builder throws and does not reach the server", async () => {
     // The miss log lives in the globalSetup process, so every execution needs paths no earlier run has used.
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     const missPath = `/e2e/miss/build-failed-${runId}`;
     const controlPath = `/e2e/miss/build-failed-control-${runId}`;
     const explode = defineRequest({
@@ -756,22 +725,20 @@ describe("request builder through the real server", () => {
   });
 
   test("returns REQ_INPUT_INVALID for invalid input and does not reach the server", async () => {
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     const missPath = `/e2e/miss/input-invalid-${runId}`;
     const controlPath = `/e2e/miss/input-invalid-control-${runId}`;
     const create = defineRequest({
       builder: (input) => ({ body: { name: input.name } }),
       input: struct.object({
-        name: struct.string(),
+        name: struct.number(),
       }),
       method: "POST",
       output: EchoReport,
       path: missPath,
     });
 
-    const [error, result, response] = await create(client, {
-      name: 1,
-    } as never);
+    const [error, result, response] = await create(client, { name: NaN });
     await pingMiss(controlPath);
 
     expect(error).toMatchObject({ code: "REQ_INPUT_INVALID" });
@@ -915,4 +882,41 @@ describe("inbound representation through the real server", () => {
     expect(error.status).toBe(422);
     expect(error.data).toEqual({ code: "BAD", message: "nope" });
   });
+
+  // The media type is checked first: the 204 has none, the HEAD answer declares JSON and then has no bytes to parse.
+  test.each([
+    {
+      method: "GET",
+      path: "/body/no-content",
+      code: "RES_MEDIA_TYPE_INVALID",
+    },
+    { method: "HEAD", path: "/json", code: "RES_DECODE_FAILED" },
+  ] as const)(
+    "reads $method $path as empty content, and fails only a declared JSON object with $code",
+    async ({ method, path, code }) => {
+      const readBytes = defineRequest({
+        method,
+        output: struct.arrayBuffer(),
+        path,
+      });
+      const readBlob = defineRequest({ method, output: struct.blob(), path });
+      const readText = defineRequest({ method, output: struct.string(), path });
+      const readObject = defineRequest({
+        method,
+        output: struct.object({ id: struct.number() }),
+        path,
+      });
+
+      const bytes = await ok(client, readBytes);
+      const blob = await ok(client, readBlob);
+      const text = await ok(client, readText);
+      const [error] = await readObject(client);
+
+      expect(bytes).toBeInstanceOf(ArrayBuffer);
+      expect(bytes.byteLength).toBe(0);
+      expect(blob.size).toBe(0);
+      expect(text).toBe("");
+      expect(error?.code).toBe(code);
+    },
+  );
 });

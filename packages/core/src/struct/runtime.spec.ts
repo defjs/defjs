@@ -1,10 +1,19 @@
 import { describe, expect, test } from "vitest";
 import { isStruct } from "./guards";
 import { StructError, struct } from "./index";
-import { getStructFields, parseStructTuple as parse } from "./introspection";
-import { resolveObjectShape } from "./shape";
+import { parseStructTuple as parse } from "./parse";
+import { assertStruct } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { RuntimeStruct } from "./types";
+import type { RuntimeStruct } from "./definition";
+
+function runtimeOf(value: unknown): RuntimeStruct {
+  assertStruct(value, "struct");
+  return value;
+}
+
+function withPrototype(prototype: object): unknown {
+  return Object.create(prototype);
+}
 
 describe("runtime.ts chain methods", () => {
   test("nullable stays required while optional and nullish may be omitted", () => {
@@ -39,42 +48,8 @@ describe("runtime.ts chain methods", () => {
     expect(val).toEqual({ name: "Miao" });
   });
 
-  test("alias requires a string name", () => {
-    expect(() => struct.string().alias(null as never)).toThrow(
-      "alias() requires a string name",
-    );
-  });
-
   test("removed tag method is absent from struct runtime surface", () => {
     expect("tag" in struct.string()).toBe(false);
-  });
-
-  test("introspection exposes aliases instead of tags", () => {
-    const user = struct.object({
-      name: struct.string().alias("user_name"),
-      nickname: struct.string(),
-    });
-
-    expect(
-      getStructFields(user).map((field) => ({
-        alias: field.alias,
-        key: field.key,
-      })),
-    ).toEqual([
-      { alias: "user_name", key: "name" },
-      { alias: undefined, key: "nickname" },
-    ]);
-  });
-
-  test("getStructFields exposes a readonly public field view", () => {
-    const fields = getStructFields(
-      struct.object({
-        name: struct.string().alias("user_name"),
-      }),
-    );
-
-    expect(Object.isFrozen(fields)).toBe(true);
-    expect(Object.isFrozen(fields[0])).toBe(true);
   });
 
   test("shares lazy object shape and fields cache across pre-created struct derivations", () => {
@@ -88,10 +63,10 @@ describe("runtime.ts chain methods", () => {
     const Alias = User.alias("user");
     const Optional = User.optional();
     const Nullish = User.nullish();
-    const baseRuntime = User as unknown as RuntimeStruct;
-    const aliasRuntime = Alias as unknown as RuntimeStruct;
-    const optionalRuntime = Optional as unknown as RuntimeStruct;
-    const nullishRuntime = Nullish as unknown as RuntimeStruct;
+    const baseRuntime = runtimeOf(User);
+    const aliasRuntime = runtimeOf(Alias);
+    const optionalRuntime = runtimeOf(Optional);
+    const nullishRuntime = runtimeOf(Nullish);
     const baseDefinition = baseRuntime[DEFINITION];
     const aliasDefinition = aliasRuntime[DEFINITION];
     const optionalDefinition = optionalRuntime[DEFINITION];
@@ -110,12 +85,12 @@ describe("runtime.ts chain methods", () => {
     expect(optionalDefinition.cache).toBe(baseDefinition.cache);
     expect(nullishDefinition.cache).toBe(baseDefinition.cache);
 
-    getStructFields(Alias);
+    parse(Alias, { name: "x" });
     const cachedFields = baseDefinition.cache.fields;
 
-    getStructFields(Optional);
-    getStructFields(User);
-    getStructFields(Nullish);
+    parse(Optional, { name: "x" });
+    parse(User, { name: "x" });
+    parse(Nullish, { name: "x" });
 
     expect(reads).toBe(1);
     expect(cachedFields).toBeDefined();
@@ -130,7 +105,7 @@ describe("runtime.ts chain methods", () => {
       displayName: struct.string().alias("name"),
     });
 
-    expect(() => getStructFields(User)).toThrow('duplicate wire key "name"');
+    expect(() => parse(User, {})).toThrow('duplicate wire key "name"');
   });
 
   test("rejects duplicate aliases in the same object shape", () => {
@@ -139,7 +114,7 @@ describe("runtime.ts chain methods", () => {
       displayName: struct.string().alias("name"),
     });
 
-    expect(() => getStructFields(User)).toThrow('duplicate wire key "name"');
+    expect(() => parse(User, {})).toThrow('duplicate wire key "name"');
   });
 
   test("rejects duplicate empty wire keys", () => {
@@ -148,7 +123,7 @@ describe("runtime.ts chain methods", () => {
       secondName: struct.string().alias(""),
     });
 
-    expect(() => getStructFields(User)).toThrow('duplicate wire key ""');
+    expect(() => parse(User, {})).toThrow('duplicate wire key ""');
   });
 
   test("keeps duplicate wire key failures stable across repeated field resolution", () => {
@@ -156,23 +131,12 @@ describe("runtime.ts chain methods", () => {
       firstName: struct.string().alias("name"),
       displayName: struct.string().alias("name"),
     });
-    const runtime = User as unknown as RuntimeStruct;
-    const definition = runtime[DEFINITION];
-
-    if (definition.kind !== "object") {
-      throw new Error("expected object definition");
-    }
-
-    const shape = resolveObjectShape(runtime, definition);
-    expect(resolveObjectShape(runtime, definition)).toBe(shape);
-    expect(() => getStructFields(User)).toThrow('duplicate wire key "name"');
-    expect(() => getStructFields(User)).toThrow('duplicate wire key "name"');
+    expect(() => parse(User, {})).toThrow('duplicate wire key "name"');
+    expect(() => parse(User, {})).toThrow('duplicate wire key "name"');
   });
 
   test("does not accept inherited struct definition brand", () => {
-    const base = struct.string() as object;
-    const fake = Object.create(base);
-
+    const fake = withPrototype(struct.string());
     expect(isStruct(fake)).toBe(false);
   });
 
@@ -182,11 +146,53 @@ describe("runtime.ts chain methods", () => {
     expect(isStruct(fake)).toBe(false);
   });
 
+  test("does not accept a definition that is null or of an unknown kind", () => {
+    expect(isStruct({ [DEFINITION]: null })).toBe(false);
+    expect(
+      isStruct({
+        [DEFINITION]: {
+          flags: { nullable: false, optional: false },
+          kind: "not-real",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  test.each([
+    undefined,
+    null,
+    1,
+    {},
+    { nullable: false },
+    { optional: false },
+    { nullable: 0, optional: false },
+    { nullable: false, optional: 0 },
+  ])("rejects malformed struct flags: %j", (flags) => {
+    expect(isStruct({ [DEFINITION]: { kind: "string", flags } })).toBe(false);
+  });
+
   test("invalid primitive parse returns StructError and undefined", () => {
     const [err, val] = parse(struct.string(), 42);
 
     expect(err).toBeInstanceOf(StructError);
     expect(val).toBeUndefined();
+  });
+
+  test("modifiers retain their captured definition when the writable metadata property is replaced", () => {
+    const value = struct.string();
+    const original = runtimeOf(value)[DEFINITION];
+    Reflect.set(value, DEFINITION, {
+      ...original,
+      flags: { nullable: true, optional: false },
+    });
+    expect(runtimeOf(value.optional())[DEFINITION].flags).toEqual({
+      nullable: false,
+      optional: true,
+    });
+    expect(runtimeOf(value.alias("wire"))[DEFINITION].flags).toEqual({
+      nullable: false,
+      optional: false,
+    });
   });
 
   test("runtime structs do not carry an own _struct property", () => {

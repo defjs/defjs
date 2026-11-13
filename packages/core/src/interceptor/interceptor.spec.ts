@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { HttpRequest } from "../http";
-import { createFetchRequestInit } from "../http/transport/fetch";
 import { makeFakeHandler } from "../../test/make_fake_handler";
 import type { InterceptorFn } from "../interceptor/interceptor";
 import { createHttpInterceptor, makeChain } from "../interceptor/interceptor";
-import { makeResponse } from "../internal/http_response";
+import { makeResponse } from "../http/http_response";
+import { initOf } from "../../test/fetch-request-init";
+
+function headersOf(req: HttpRequest): Headers {
+  const headers = initOf(req).headers;
+  if (headers instanceof Headers) return headers;
+  throw new Error("expected Headers");
+}
 
 describe("interceptor", () => {
   it("should work with InterceptorFn chain", async () => {
@@ -55,11 +61,13 @@ describe("interceptor", () => {
 
   it("should allow interceptor to skip next and return makeResponse", async () => {
     let handlerCalled = false;
-    const interceptor: InterceptorFn = async () =>
-      makeResponse({
-        body: null,
-        status: 200,
-      });
+    const interceptor: InterceptorFn = () =>
+      Promise.resolve(
+        makeResponse({
+          body: null,
+          status: 200,
+        }),
+      );
     const chain = makeChain([interceptor]);
     const response = await chain(
       {
@@ -114,7 +122,7 @@ describe("interceptor", () => {
       },
       makeFakeHandler({
         onRequestBefore(req) {
-          finalHeaders = createFetchRequestInit(req).headers as Headers;
+          finalHeaders = headersOf(req);
         },
       }),
     );
@@ -146,7 +154,7 @@ describe("interceptor", () => {
       },
       makeFakeHandler({
         onRequestBefore(req) {
-          finalHeaders = createFetchRequestInit(req).headers as Headers;
+          finalHeaders = headersOf(req);
         },
       }),
     );
@@ -178,7 +186,7 @@ describe("interceptor", () => {
       },
       makeFakeHandler({
         onRequestBefore(req) {
-          finalHeaders = createFetchRequestInit(req).headers as Headers;
+          finalHeaders = headersOf(req);
         },
       }),
     );

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { HttpRequest } from "../http";
+import { fakeEventStream } from "../../test/fake_event_stream";
 import { makeFakeHandler } from "../../test/make_fake_handler";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
-import type { BasicCredential } from "./basic_auth";
 import {
   basicAuthHttpInterceptor,
   basicAuthSSEInterceptor,
@@ -14,7 +14,7 @@ describe("Basic Auth Interceptor", () => {
     vi.unstubAllGlobals();
   });
 
-  const credential: BasicCredential = {
+  const credential: { username: string; password: string } = {
     username: "user",
     password: "123",
   };
@@ -123,9 +123,11 @@ describe("Basic Auth Interceptor", () => {
     const chain = makeChain([interceptor.fn]);
 
     let capturedRequest: HttpRequest | undefined;
-    const fakeSSEHandler = async (req: HttpRequest) => {
+    const fakeSSEHandler = (
+      req: HttpRequest,
+    ): Promise<EventStreamHandle<unknown>> => {
       capturedRequest = req;
-      return {} as EventStreamHandle<unknown>;
+      return Promise.resolve(fakeEventStream());
     };
 
     await chain(hq, fakeSSEHandler);

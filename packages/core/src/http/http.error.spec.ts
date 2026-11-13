@@ -2,17 +2,17 @@ import { beforeEach, describe, expect, inject, test, vi } from "vitest";
 import {
   createClient,
   type DerivableClient,
+  type FetchHandle,
   withEndpoint,
   withHTTPHandle,
   withInterceptors,
 } from "../client";
 import { ERR_ABORTED } from "../error";
 import { createHttpInterceptor } from "../interceptor";
-import type { HttpResponse } from "../internal/http_response";
-import { makeResponse } from "../internal/http_response";
+import type { HttpResponse } from "./http_response";
+import { makeResponse } from "./http_response";
 import { StructError, struct } from "../struct";
 import { createPrimitiveStruct } from "../struct/runtime";
-import { MALFORMED_INTERCEPTOR_RESULTS } from "../../test/malformed_interceptor_results";
 import { defineRequest } from "./index";
 
 describe("request http runtime errors", () => {
@@ -20,6 +20,191 @@ describe("request http runtime errors", () => {
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));
+  });
+
+  test.each(["", "text/plain"])(
+    "should reject a synthetic JSON response with content type %j before decoding",
+    async (contentType) => {
+      const body = new Blob(['{"id":1}']);
+      const read = vi.spyOn(body, "text");
+      const useRequest = defineRequest({
+        method: "GET",
+        output: struct.object({ id: struct.number() }),
+        path: "/synthetic-json",
+      });
+      const syntheticClient = createClient(
+        withEndpoint("https://example.test"),
+        withInterceptors(
+          createHttpInterceptor(() =>
+            Promise.resolve(
+              makeResponse({
+                body,
+                headers: new Headers({ "content-type": contentType }),
+                status: 200,
+              }),
+            ),
+          ),
+        ),
+      );
+
+      const [fault, data, response] = await useRequest(syntheticClient);
+
+      expect(fault?.code).toBe("RES_MEDIA_TYPE_INVALID");
+      expect(fault?.cause).toBeInstanceOf(TypeError);
+      expect(fault?.message).toBe(
+        `Expected a JSON media type, received ${contentType || "<none>"}`,
+      );
+      expect(fault?.response).not.toHaveProperty("body");
+      expect(data).toBeUndefined();
+      expect(response).toBeUndefined();
+      expect(read).not.toHaveBeenCalled();
+    },
+  );
+
+  test("should decode an absent synthetic body as empty content but reject a declared JSON media type that is missing", async () => {
+    const syntheticClient = createClient(
+      withEndpoint("https://example.test"),
+      withInterceptors(
+        createHttpInterceptor(() =>
+          Promise.resolve(makeResponse({ status: 204 })),
+        ),
+      ),
+    );
+    const text = defineRequest({
+      method: "GET",
+      output: struct.string(),
+      path: "/empty-text",
+    });
+    const json = defineRequest({
+      method: "GET",
+      output: struct.object({ id: struct.number() }),
+      path: "/empty-json",
+    });
+    const bytes = defineRequest({
+      method: "GET",
+      output: struct.arrayBuffer(),
+      path: "/empty-bytes",
+    });
+    const blob = defineRequest({
+      method: "GET",
+      output: struct.blob(),
+      path: "/empty-blob",
+    });
+
+    const [textFault, textData, textResponse] = await text(syntheticClient);
+    const [jsonFault, jsonData, jsonResponse] = await json(syntheticClient);
+    const [bytesFault, bytesData] = await bytes(syntheticClient);
+    const [blobFault, blobData] = await blob(syntheticClient);
+
+    expect(bytesFault).toBeNull();
+    expect(bytesData).toBeInstanceOf(ArrayBuffer);
+    expect(bytesData?.byteLength).toBe(0);
+    expect(blobFault).toBeNull();
+    expect(blobData).toBeInstanceOf(Blob);
+    expect(blobData?.size).toBe(0);
+
+    expect(textFault).toBeNull();
+    expect(textData).toBe("");
+    expect(textResponse?.body).toBe("");
+    // The synthetic response has no JSON media type, which is checked before the absent body.
+    expect(jsonFault?.code).toBe("RES_MEDIA_TYPE_INVALID");
+    expect(jsonFault?.cause).toBeInstanceOf(TypeError);
+    expect(jsonFault?.response).not.toHaveProperty("body");
+    expect(jsonData).toBeUndefined();
+    expect(jsonResponse).toBeUndefined();
+  });
+
+  test("should stop before the builder when an input decoder aborts the call", async () => {
+    const controller = new AbortController();
+    const builder = vi.fn(() => ({}));
+    const input = createPrimitiveStruct<number>({
+      decode(value) {
+        controller.abort();
+        return value;
+      },
+      expected: "number",
+      is: (value): value is number => typeof value === "number",
+      kind: "number",
+    });
+    const useRequest = defineRequest({
+      builder,
+      input,
+      method: "GET",
+      path: "/cancelled-input",
+    });
+
+    const [fault] = await useRequest(client({ signal: controller.signal }), 1);
+
+    expect(fault?.code).toBe("NET_ABORTED");
+    expect(builder).not.toHaveBeenCalled();
+  });
+
+  test("should let cancellation outrank an output decoder failure", async () => {
+    const controller = new AbortController();
+    const cause = new Error("decoder failed after abort");
+    const decode = vi.fn(() => {
+      controller.abort();
+      throw cause;
+    });
+    const output = createPrimitiveStruct<string>({
+      decode,
+      expected: "string",
+      is: (value): value is string => typeof value === "string",
+      kind: "string",
+    });
+    const syntheticClient = createClient(
+      withEndpoint("https://example.test"),
+      withInterceptors(
+        createHttpInterceptor(() =>
+          Promise.resolve(makeResponse({ body: "text", status: 200 })),
+        ),
+      ),
+    );
+    const useRequest = defineRequest({
+      method: "GET",
+      output,
+      path: "/cancelled-output",
+    });
+
+    const [fault, data, response] = await useRequest(
+      syntheticClient({ signal: controller.signal }),
+    );
+
+    expect(decode).toHaveBeenCalledOnce();
+    expect(fault?.code).toBe("NET_ABORTED");
+    expect(data).toBeUndefined();
+    expect(response).toBeUndefined();
+  });
+
+  test("should stop transport when interceptor resolution aborts the call", async () => {
+    const controller = new AbortController();
+    const handle = vi.fn<FetchHandle>();
+    const fn = createHttpInterceptor((_request, next) => next(_request)).fn;
+    const interceptor = {
+      kind: "http" as const,
+      get fn() {
+        controller.abort();
+        return fn;
+      },
+    };
+    const guardedClient = createClient(
+      withEndpoint("https://example.test"),
+      withHTTPHandle(handle),
+      (config) => {
+        config.interceptors.push(interceptor);
+      },
+    );
+    const useRequest = defineRequest({
+      method: "GET",
+      path: "/cancelled-chain",
+    });
+
+    const [fault] = await useRequest(
+      guardedClient({ signal: controller.signal }),
+    );
+
+    expect(fault?.code).toBe("NET_ABORTED");
+    expect(handle).not.toHaveBeenCalled();
   });
 
   test("should report a SyntaxError from a text decode hook without claiming invalid JSON", async () => {
@@ -35,12 +220,14 @@ describe("request http runtime errors", () => {
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: "plain text",
-            headers: new Headers({ "content-type": "text/plain" }),
-            status: 200,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: "plain text",
+              headers: new Headers({ "content-type": "text/plain" }),
+              status: 200,
+            }),
+          ),
         ),
       ),
     );
@@ -100,8 +287,8 @@ describe("request http runtime errors", () => {
     });
 
     const [error, result, response] = await useValidatedRequest(client, {
-      id: "oops",
-    } as never);
+      id: NaN,
+    });
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -119,16 +306,16 @@ describe("request http runtime errors", () => {
     }
     expect(error.cause.format()._errors).toEqual([]);
     expect(error.cause.flatten().fieldErrors["id"]).toEqual([
-      "Expected number at id, received string",
+      "Expected number at id, received number",
     ]);
     expect(error.cause.prettify()).toBe(
-      "× id: Expected number at id, received string",
+      "× id: Expected number at id, received number",
     );
-    expect(error.cause.issues[0]?.received).toBe("oops");
+    expect(error.cause.issues[0]?.received).toBe(NaN);
     expect(String(error)).toBe(
-      "DefjsFault: Expected number at id, received string",
+      "DefjsFault: Expected number at id, received number",
     );
-    expect(String(error)).not.toContain("oops");
+    expect(String(error)).not.toContain("NaN");
   });
 
   test("should stop before build and transport when a required input field is missing", async () => {
@@ -137,9 +324,9 @@ describe("request http runtime errors", () => {
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () => {
+        createHttpInterceptor(() => {
           transportCalls += 1;
-          return makeResponse({ status: 200 });
+          return Promise.resolve(makeResponse({ status: 200 }));
         }),
       ),
     );
@@ -153,10 +340,9 @@ describe("request http runtime errors", () => {
       path: "/search",
     });
 
-    const [error, result, response] = await useRequest(
-      guardedClient,
-      {} as never,
-    );
+    const [error, result, response] = await useRequest(guardedClient, {
+      page: NaN,
+    });
 
     expect(error?.code).toBe("REQ_INPUT_INVALID");
     expect(result).toBeUndefined();
@@ -291,32 +477,10 @@ describe("request http runtime errors", () => {
     }
   });
 
-  test("should return REQ_BUILD_FAILED when the JSON body is a Map", async () => {
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
-    const guardedClient = createClient(
-      withEndpoint("https://example.com"),
-      withHTTPHandle(handle),
-    );
-    const useRequest = defineRequest({
-      builder: () => ({ body: new Map() as never }),
-      method: "POST",
-      path: "/users",
-    });
-
-    const [fault, result, response] = await useRequest(guardedClient);
-
-    expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(result).toBeUndefined();
-    expect(response).toBeUndefined();
-    expect(fault?.cause).toBeInstanceOf(TypeError);
-    expect(
-      fault?.cause instanceof TypeError ? fault.cause.message : "",
-    ).toMatch(/Map/);
-    expect(handle).toHaveBeenCalledTimes(0);
-  });
-
   test("should return REQ_BUILD_FAILED when the JSON body is an async iterable object", async () => {
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
+    const handle = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
       withHTTPHandle(handle),
@@ -325,7 +489,7 @@ describe("request http runtime errors", () => {
       builder: () => ({
         body: {
           async *[Symbol.asyncIterator]() {
-            yield new TextEncoder().encode("chunk");
+            yield await Promise.resolve(new TextEncoder().encode("chunk"));
           },
         },
       }),
@@ -346,9 +510,9 @@ describe("request http runtime errors", () => {
   });
 
   test("should return a definition error when interceptor chain throws", async () => {
-    const throwingInterceptor = createHttpInterceptor(async () => {
-      throw new Error("interceptor boom");
-    });
+    const throwingInterceptor = createHttpInterceptor(() =>
+      Promise.reject(new Error("interceptor boom")),
+    );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -372,7 +536,10 @@ describe("request http runtime errors", () => {
     }
     expect(error).toBeInstanceOf(Error);
     expect(error.cause).toBeInstanceOf(Error);
-    expect((error.cause as Error).message).toBe("interceptor boom");
+    if (!(error.cause instanceof Error)) {
+      throw new Error("expected Error cause");
+    }
+    expect(error.cause.message).toBe("interceptor boom");
   });
 
   test.each([
@@ -418,9 +585,9 @@ describe("request http runtime errors", () => {
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () => {
+        createHttpInterceptor(() => {
           controller.abort("caller stopped");
-          return makeResponse({ status: 200 });
+          return Promise.resolve(makeResponse({ status: 200 }));
         }),
       ),
     );
@@ -445,11 +612,13 @@ describe("request http runtime errors", () => {
       const started = new Promise<void>((resolve) => {
         markStarted = resolve;
       });
-      const fetchMock = vi.fn(async (request: Request) => {
+      const fetchMock = vi.fn<FetchHandle>(async (input) => {
+        if (!(input instanceof Request)) throw new Error("expected Request");
+        const request = input;
         transportSignal = request.signal;
         markStarted();
         return await new Promise<Response>(() => undefined);
-      }) as unknown as typeof fetch;
+      });
       const guardedClient = createClient(
         withEndpoint("https://example.com"),
         withHTTPHandle(fetchMock),
@@ -487,17 +656,19 @@ describe("request http runtime errors", () => {
 
   test("should reject interceptor next calls after the HTTP chain settles", async () => {
     let lateResponse: Promise<HttpResponse<unknown>> | undefined;
-    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
-      withHTTPHandle(fetchMock as unknown as typeof fetch),
+      withHTTPHandle(fetchMock),
       withInterceptors(
-        createHttpInterceptor(async (request, next) => {
+        createHttpInterceptor((request, next) => {
           setTimeout(() => {
             lateResponse = next(request);
             void lateResponse.catch(() => undefined);
           }, 0);
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -518,10 +689,12 @@ describe("request http runtime errors", () => {
     async (reason) => {
       const controller = new AbortController();
       controller.abort(reason);
-      const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+      const fetchMock = vi.fn(() =>
+        Promise.resolve(new Response(null, { status: 200 })),
+      );
       const guardedClient = createClient(
         withEndpoint("https://example.com"),
-        withHTTPHandle(fetchMock as unknown as typeof fetch),
+        withHTTPHandle(fetchMock),
       );
 
       const useRequest = defineRequest({
@@ -549,10 +722,12 @@ describe("request http runtime errors", () => {
         return undefined;
       },
     };
-    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
-      withHTTPHandle(fetchMock as unknown as typeof fetch),
+      withHTTPHandle(fetchMock),
     );
     const useRequest = defineRequest({ method: "GET", path: "/snapshot" });
 
@@ -565,29 +740,11 @@ describe("request http runtime errors", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
-  test("should return ABORTED when signal is aborted with explicit undefined reason", async () => {
-    const signal = { aborted: true, reason: undefined } as AbortSignal;
-
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.null(),
-      path: "/null",
-    });
-
-    const [error, result, response] = await useRequest(client({ signal }));
-
-    expect(result).toBeUndefined();
-    expect(response).toBeUndefined();
-    expect(error?.code).toBe("NET_ABORTED");
-  });
-
   test("should classify an interceptor that throws the abort sentinel as cancellation", async () => {
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () => {
-          throw ERR_ABORTED;
-        }),
+        createHttpInterceptor(() => Promise.reject(ERR_ABORTED)),
       ),
     );
     const useRequest = defineRequest({
@@ -606,9 +763,10 @@ describe("request http runtime errors", () => {
     const observerError = new Error("download observer failed");
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
-      withHTTPHandle(
-        async () =>
+      withHTTPHandle(() =>
+        Promise.resolve(
           new Response("ok", { headers: { "content-type": "text/plain" } }),
+        ),
       ),
     );
     const useRequest = defineRequest({
@@ -619,8 +777,8 @@ describe("request http runtime errors", () => {
 
     const [error, result, response] = await useRequest(
       guardedClient({
-        async onDownloadProgress() {
-          throw observerError;
+        onDownloadProgress() {
+          return Promise.reject(observerError);
         },
       }),
     );
@@ -637,13 +795,15 @@ describe("request http runtime errors", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: null,
-            status: 500,
-            statusText: "Server Error",
-            url: "https://example.com/test",
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: null,
+              status: 500,
+              statusText: "Server Error",
+              url: "https://example.com/test",
+            }),
+          ),
         ),
       ),
     );
@@ -666,14 +826,16 @@ describe("request http runtime errors", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: { code: "ERR" },
-            headers: new Headers([["content-type", "application/json"]]),
-            status: 500,
-            statusText: "Server Error",
-            url: "https://example.com/test",
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: { code: "ERR" },
+              headers: new Headers([["content-type", "application/json"]]),
+              status: 500,
+              statusText: "Server Error",
+              url: "https://example.com/test",
+            }),
+          ),
         ),
       ),
     );
@@ -707,7 +869,7 @@ describe("request http runtime errors", () => {
       path: "/null",
     });
 
-    const [error] = await useBadRequest(client, { id: "invalid" } as never);
+    const [error] = await useBadRequest(client, { id: NaN });
 
     expect(error?.code).toBe("REQ_INPUT_INVALID");
   });
@@ -744,11 +906,13 @@ describe("request http runtime errors", () => {
       withEndpoint("https://example.com"),
       withInterceptors(
         abortingInterceptor,
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: null,
-            status: 200,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: null,
+              status: 200,
+            }),
+          ),
         ),
       ),
     );
@@ -770,14 +934,16 @@ describe("request http runtime errors", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: null,
-            headers: new Headers(),
-            status: 500,
-            statusText: "Server Error",
-            url: "https://example.com/test",
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: null,
+              headers: new Headers(),
+              status: 500,
+              statusText: "Server Error",
+              url: "https://example.com/test",
+            }),
+          ),
         ),
       ),
     );
@@ -800,14 +966,16 @@ describe("request http runtime errors", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: { code: "ERR" },
-            headers: new Headers([["content-type", "application/json"]]),
-            status: 500,
-            statusText: "Server Error",
-            url: "https://example.com/test",
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: { code: "ERR" },
+              headers: new Headers([["content-type", "application/json"]]),
+              status: 500,
+              statusText: "Server Error",
+              url: "https://example.com/test",
+            }),
+          ),
         ),
       ),
     );
@@ -838,12 +1006,14 @@ describe("request http runtime errors", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: null,
-            status: 204,
-            url: "https://example.com/test",
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: null,
+              status: 204,
+              url: "https://example.com/test",
+            }),
+          ),
         ),
       ),
     );
@@ -864,13 +1034,15 @@ describe("request http runtime errors", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: null,
-            status: 500,
-            statusText: "Internal Server Error",
-            url: "https://example.com/test",
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: null,
+              status: 500,
+              statusText: "Internal Server Error",
+              url: "https://example.com/test",
+            }),
+          ),
         ),
       ),
     );
@@ -894,14 +1066,16 @@ describe("request http runtime errors", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: { code: "ERR" },
-            headers: new Headers([["content-type", "application/json"]]),
-            status: 500,
-            statusText: "Server Error",
-            url: "https://example.com/test",
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: { code: "ERR" },
+              headers: new Headers([["content-type", "application/json"]]),
+              status: 500,
+              statusText: "Server Error",
+              url: "https://example.com/test",
+            }),
+          ),
         ),
       ),
     );
@@ -931,9 +1105,9 @@ describe("request http runtime errors", () => {
       let fetches = 0;
       const guardedClient = createClient(
         withEndpoint("https://example.com"),
-        withHTTPHandle(async () => {
+        withHTTPHandle(() => {
           fetches += 1;
-          return new Response(null, { status: 204 });
+          return Promise.resolve(new Response(null, { status: 204 }));
         }),
         withInterceptors(
           createHttpInterceptor((_request, next) =>
@@ -963,9 +1137,8 @@ describe("request http runtime errors", () => {
     const guardedClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () => {
-          throw "interceptor boom";
-        }),
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the interceptor under test rejects with a string, which must be classified as INTERCEPTOR_FAILED
+        createHttpInterceptor(() => Promise.reject("interceptor boom")),
       ),
     );
     const useRequest = defineRequest({ method: "GET", path: "/intercepted" });
@@ -979,57 +1152,22 @@ describe("request http runtime errors", () => {
     expect(error).toBeInstanceOf(Error);
   });
 
-  describe("when the interceptor chain does not resolve an HttpResponse", () => {
-    const notAnHttpResponse = [
-      ...MALFORMED_INTERCEPTOR_RESULTS,
-      [
-        "an unbranded lookalike",
-        () => ({
-          body: null,
-          headers: new Headers(),
-          ok: true,
-          status: 200,
-          statusText: "",
-          url: "",
-        }),
-      ],
-    ] as const;
-    const useUndeclared = defineRequest({ method: "GET", path: "/malformed" });
+  describe("when the interceptor chain resolves a derived response", () => {
     const useDeclared = defineRequest({
       method: "GET",
       output: struct.null(),
-      path: "/malformed",
+      path: "/derived",
     });
-
-    test.each(notAnHttpResponse)(
-      "should settle with EXT_INTERCEPTOR_FAILED for %s",
-      async (_name, resolved) => {
-        const guardedClient = createClient(
-          withEndpoint("https://example.com"),
-          withInterceptors(
-            createHttpInterceptor(async () => resolved() as never),
-          ),
-        );
-
-        for (const useRequest of [useUndeclared, useDeclared]) {
-          const [error, result, response] = await useRequest(guardedClient);
-
-          expect(error).toMatchObject({ code: "EXT_INTERCEPTOR_FAILED" });
-          expect(error?.cause).toBeInstanceOf(TypeError);
-          expect(result).toBeUndefined();
-          expect(response).toBeUndefined();
-        }
-      },
-    );
 
     test("should accept a response derived from next() by spreading", async () => {
       const guardedClient = createClient(
         withEndpoint("https://example.com"),
-        withHTTPHandle(
-          async () =>
+        withHTTPHandle(() =>
+          Promise.resolve(
             new Response("null", {
               headers: { "content-type": "application/json" },
             }),
+          ),
         ),
         withInterceptors(
           createHttpInterceptor(async (request, next) => ({
@@ -1051,9 +1189,9 @@ describe("request http runtime errors", () => {
     let fetched = 0;
     const guardedClient = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
+      withHTTPHandle(() => {
         fetched += 1;
-        return new Response(null, { status: 204 });
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
     );
     const useItem = defineRequest({
@@ -1080,9 +1218,9 @@ describe("request http runtime errors", () => {
     const guardedClient = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () => {
+        createHttpInterceptor(() => {
           controller.abort();
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -1098,5 +1236,35 @@ describe("request http runtime errors", () => {
     expect(error?.code).toBe("NET_ABORTED");
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
+  });
+});
+
+describe("request http caller signal", () => {
+  const jsonResponse = (status: number) =>
+    new Response("{}", {
+      headers: { "content-type": "application/json" },
+      status,
+    });
+  const clientWith = (handle: FetchHandle) =>
+    createClient(withEndpoint("https://example.test"), withHTTPHandle(handle));
+
+  test("should balance listeners on the caller signal for a valid definition", async () => {
+    const controller = new AbortController();
+    const add = vi.spyOn(controller.signal, "addEventListener");
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const handle = vi.fn<FetchHandle>(() => Promise.resolve(jsonResponse(200)));
+    const useRequest = defineRequest({
+      method: "GET",
+      output: struct.object({}),
+      path: "/misuse",
+    });
+
+    const [fault] = await useRequest(
+      clientWith(handle)({ signal: controller.signal }),
+    );
+
+    expect(fault).toBeNull();
+    expect(add.mock.calls.length).toBeGreaterThan(0);
+    expect(remove).toHaveBeenCalledTimes(add.mock.calls.length);
   });
 });

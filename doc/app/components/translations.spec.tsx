@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { expect, test } from "vitest";
 import { locales, localePrefix } from "../lib/i18n";
 import { getTranslator } from "../lib/translations";
+import { useLocale } from "../lib/use-app-translations";
 import { TestI18nProvider as Translated } from "./test-i18n";
 import { apiEntries } from "../data/api-catalog";
 import { ApiIndex } from "./api-index";
@@ -38,7 +39,7 @@ test("the real Fumadocs Provider shares its translations with React and server c
 });
 
 test("localized API forms and 404 pages render with no client-side translation step", () => {
-  for (const locale of ["en-US", "zh-Hans", "ar"]) {
+  for (const locale of ["en-US", "zh-Hans", "ar"] as const) {
     const t = getTranslator(locale);
     const html = renderToStaticMarkup(
       <MemoryRouter>
@@ -59,6 +60,13 @@ test("localized API forms and 404 pages render with no client-side translation s
     expect(html).toContain(`href="${localePrefix(locale) || "/"}"`);
     expect(html).not.toContain("{count}");
   }
+});
+
+test("a component outside the Provider reads the default locale", () => {
+  function LocaleProbe() {
+    return <p lang={useLocale()} />;
+  }
+  expect(renderToStaticMarkup(<LocaleProbe />)).toBe('<p lang="en-US"></p>');
 });
 
 test("custom React UI reads overrides from the same Provider as built-in UI", () => {

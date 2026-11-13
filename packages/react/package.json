@@ -1,6 +1,6 @@
 {
   "name": "@defjs/react",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Provide an existing Defjs client to a React tree.",
   "bugs": {
     "url": "https://github.com/defjs/defjs/issues"
@@ -13,13 +13,10 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "publishConfig": {
-    "directory": "dist",
-    "linkDirectory": false
-  },
   "scripts": {
-    "build": "bun --bun tsdown --config-loader native --config tsdown.config.ts",
-    "test:unit": "vitest run --config vitest.config.ts --coverage"
+    "build": "bun check --project tsconfig.build.json && bun --bun tsdown --config-loader native --config tsdown.config.ts",
+    "unit:chrome": "vitest run --config vitest.config.chrome.ts",
+    "unit:firefox": "vitest run --config vitest.config.firefox.ts"
   },
   "devDependencies": {
     "@defjs/core": "workspace:^",
@@ -30,15 +27,15 @@
     "@vitest/browser-playwright": "catalog:",
     "@vitest/coverage-istanbul": "catalog:",
     "playwright": "catalog:",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.6.0",
+    "@defjs/core": "^0.7.0",
     "react": ">=18.0.0"
   }
 }

@@ -6,7 +6,6 @@ import {
   decodeWebSocketMessage,
   extractCloseInfo,
   serializeOutgoingWebSocketMessage,
-  transformWebSocketMessage,
 } from "./codec";
 
 describe("codec helpers", () => {
@@ -15,22 +14,12 @@ describe("codec helpers", () => {
       code: 1000,
       reason: "normal",
       wasClean: true,
-    } as CloseEvent;
-    const info = extractCloseInfo(event, new Error("cause"));
+    };
+    const info = extractCloseInfo(event);
     expect(info).toEqual({
-      cause: new Error("cause"),
       code: 1000,
       reason: "normal",
       wasClean: true,
-    });
-  });
-
-  test("extractCloseInfo handles undefined event", () => {
-    const info = extractCloseInfo(undefined);
-    expect(info).toEqual({
-      code: undefined,
-      reason: undefined,
-      wasClean: undefined,
     });
   });
 
@@ -86,10 +75,14 @@ describe("codec helpers", () => {
   });
 
   test("resolveAbortCause falls back to ERR_ABORTED when reason is undefined", () => {
-    const signal = Object.create(AbortSignal.prototype);
+    const signal = {};
+    Object.setPrototypeOf(signal, AbortSignal.prototype);
     Object.defineProperty(signal, "aborted", { value: true });
     Object.defineProperty(signal, "reason", { value: undefined });
-    const cause = resolveAbortCause(signal as AbortSignal);
+    if (!isAbortedSignal(signal)) {
+      throw new Error("expected an aborted signal");
+    }
+    const cause = resolveAbortCause(signal);
     expect(cause).toBe(ERR_ABORTED);
   });
 
@@ -213,101 +206,6 @@ describe("serializeOutgoingWebSocketMessage", () => {
   });
 });
 
-describe("transformWebSocketMessage", () => {
-  const incoming = struct.object({
-    text: struct.string().alias("message_text"),
-    type: struct.literal("message"),
-  });
-
-  test("returns undefined for frames that are not text", async () => {
-    await expect(
-      transformWebSocketMessage(incoming, 123),
-    ).resolves.toBeUndefined();
-    await expect(
-      transformWebSocketMessage(incoming, null),
-    ).resolves.toBeUndefined();
-    await expect(
-      transformWebSocketMessage(incoming, undefined),
-    ).resolves.toBeUndefined();
-    await expect(
-      transformWebSocketMessage(incoming, { type: "message" }),
-    ).resolves.toBeUndefined();
-  });
-
-  test("rejects invalid JSON", async () => {
-    await expect(
-      transformWebSocketMessage(incoming, "not json"),
-    ).rejects.toBeInstanceOf(SyntaxError);
-  });
-
-  test("decodes a text frame with aliases", async () => {
-    await expect(
-      transformWebSocketMessage(
-        incoming,
-        '{"message_text":"hello","type":"message"}',
-      ),
-    ).resolves.toEqual({
-      text: "hello",
-      type: "message",
-    });
-  });
-
-  test("decodes an ArrayBuffer frame", async () => {
-    const buffer = new TextEncoder().encode(
-      '{"message_text":"hello","type":"message"}',
-    ).buffer;
-    await expect(transformWebSocketMessage(incoming, buffer)).resolves.toEqual({
-      text: "hello",
-      type: "message",
-    });
-  });
-
-  test("decodes a Uint8Array frame", async () => {
-    const bytes = new TextEncoder().encode(
-      '{"message_text":"hello","type":"message"}',
-    );
-    await expect(transformWebSocketMessage(incoming, bytes)).resolves.toEqual({
-      text: "hello",
-      type: "message",
-    });
-  });
-
-  test("decodes a DataView frame", async () => {
-    const bytes = new TextEncoder().encode(
-      '{"message_text":"hello","type":"message"}',
-    );
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    await expect(transformWebSocketMessage(incoming, view)).resolves.toEqual({
-      text: "hello",
-      type: "message",
-    });
-  });
-
-  test("decodes a Blob frame", async () => {
-    const blob = new Blob(['{"message_text":"hello","type":"message"}']);
-    await expect(transformWebSocketMessage(incoming, blob)).resolves.toEqual({
-      text: "hello",
-      type: "message",
-    });
-  });
-
-  test("rejects a text frame that fails the incoming struct", async () => {
-    await expect(
-      transformWebSocketMessage(
-        incoming,
-        '{"message_text":1,"type":"message"}',
-      ),
-    ).rejects.toBeInstanceOf(StructError);
-  });
-
-  test("rejects a Blob frame that fails the incoming struct", async () => {
-    const blob = new Blob(['{"type":"other"}']);
-    await expect(
-      transformWebSocketMessage(incoming, blob),
-    ).rejects.toBeInstanceOf(StructError);
-  });
-});
-
 describe("decodeWebSocketMessage", () => {
   const incoming = struct.object({
     text: struct.string().alias("message_text"),
@@ -404,3 +302,7 @@ describe("decodeWebSocketMessage", () => {
     },
   );
 });
+
+function isAbortedSignal(value: object): value is AbortSignal {
+  return "aborted" in value && value.aborted === true && "reason" in value;
+}

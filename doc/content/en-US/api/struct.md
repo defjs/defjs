@@ -5,29 +5,15 @@ description: struct facade, Infer, and StructError.
 
 # Struct
 
-Build wire-boundary shapes, parse values, infer TypeScript types.
+Build wire-boundary shapes, parse values, and infer TypeScript types.
 
 ## struct
 
 Facade. Prefer this over internal constructors.
 
-```ts
-const User = struct.object({
-  id: struct.number(),
-  displayName: struct.string().alias("display_name"),
-});
-
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(user.displayName);
-}
-
-readUser();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### Primitives and containers
 
@@ -57,7 +43,7 @@ readUser();
 - **Returns** `[null, value]` or `[StructError, undefined]`. The error carries one issue. Object fields stop at the first bad field. `struct.or` tries every branch and then reports `invalid_union`; it does not keep the first branch failure.
 - Object fields are required unless marked `.optional()` or `.nullish()`. Keys the shape does not declare are dropped from the result.
 - Optional `options.errorMap` rewrites issue messages for this parse only.
-- Default reads **logical** keys (`displayName`). Pass `{ aliases: true }` to read wire keys (`display_name`) the same way HTTP/JSON codecs do.
+- By default, parsing reads **logical** keys (`customerName`). Pass `{ aliases: true }` to read wire keys (`customer_name`) the same way HTTP/JSON codecs do.
 
 ## ErrorMap
 
@@ -85,7 +71,7 @@ See [Struct guide](/docs/struct).
 
 ## STRUCT
 
-A `unique symbol` that tags the objects parsed from endpoint input. It is internal to the outbound encoder and is exported as a type only. Do not read or set it.
+A `unique symbol` that tags the objects parsed from operation input. It is internal to the outbound encoder and is exported as a type only. Do not read or set it.
 
 ## Struct
 
@@ -99,9 +85,49 @@ Anything with a `_struct` type payload. See [`StructLike`](/api/core/structlike-
 
 `.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
+## StringStruct
+
+String struct from `struct.string`.
+
+## NumberStruct
+
+Number struct from `struct.number`.
+
+## UnknownStruct
+
+Unknown struct from `struct.unknown`.
+
 ## ObjectStruct
 
 Object-shaped struct from `struct.object`.
+
+## ArrayStruct
+
+Array struct from `struct.array`.
+
+## RecordStruct
+
+Record struct from `struct.record`.
+
+## TupleStruct
+
+Tuple struct from `struct.tuple`.
+
+## UnionStruct
+
+Union struct from `struct.or`.
+
+## DiscriminatedUnionStruct
+
+Discriminated-union struct from `struct.discriminatedUnion`.
+
+## IntersectionStruct
+
+Intersection struct from `struct.intersection`.
+
+## PreservedStruct
+
+The struct that a modifier such as `.optional()` or `.nullable()` returns for a composite struct; it keeps the composite's type.
 
 ## StructIssue
 

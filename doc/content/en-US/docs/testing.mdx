@@ -1,0 +1,58 @@
+---
+title: "Testing"
+description: Test SDK definitions and application policies offline with injected transport handles, tuple assertions, and deterministic timers.
+---
+
+# Testing
+
+Because Defjs separates operation definitions from client execution, you can test your real SDK operations and application interceptors offline without starting a network server or mocking internal library functions.
+
+## 1. Inject a local transport handle
+
+Use `withHTTPHandle`, `withSSEHandle`, or `withWebSocketHandle` on `createClient(...)` to replace the underlying platform transport. Defjs still runs the full operation pipeline: input `struct` validation, `builder` mapping, URL confinement checks, interceptors, status dispatch, and response `struct` decoding.
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. Testing best practices
+
+### Assert the error-first tuple, not internals
+
+Always call the exported SDK operation with your test client and assert the returned `[error, data, response]` tuple:
+
+- For `2xx` cases, assert `expect(error).toBeNull()` and check the decoded `data` fields (including `.alias()` wire-to-logical mapping).
+- For failure cases, assert `error?.code`, `error?.status`, `error?.data`, and `error?.cause` when part of the contract.
+
+### Verify wire bytes on outbound requests
+
+Inside your `withHTTPHandle(async (input, init) => ...)` function, construct `const request = new Request(input, init)` and inspect `request.url`, `request.method`, `request.headers`, and `await request.text()` (or `await request.json()`) to verify that your `builder` and struct aliases serialized the exact wire format your backend expects.
+
+### Control time deterministically with fake timers
+
+For interceptor retry backoff, SSE/WebSocket reconnect delays, or WebSocket heartbeats, use `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` in Vitest. These fake timers do not advance the native `AbortSignal.timeout` clock. For a deterministic request deadline in Vitest, abort an `AbortController` from a controlled `setTimeout` with a `TimeoutError` reason:
+
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+In Bun test, use `jest.useFakeTimers()` and `jest.advanceTimersByTime()`; Bun's fake timers also control `AbortSignal.timeout`. Do not assume the runners control the same native clocks. Advance timers only after the awaited phase has started, assert state transitions or attempt counts rather than elapsed wall-clock time, and restore real timers after each test.
+
+## Related reading
+
+- [Test with a local Fetch handle](/recipes/test-with-handle)
+- [Build and publish an SDK](/recipes/publish-http-sdk)
+- [Client configuration](/docs/client)

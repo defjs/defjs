@@ -31,8 +31,6 @@ test("sends builder path, query, headers, and body, and decodes string and JSON 
         traceId: struct.string().alias("x-trace-id"),
       }),
     }),
-    maxBufferSize: 64 * 1024,
-    maxQueueSize: 8,
     method: "POST",
     path: "/e2e/sse/:room",
   });

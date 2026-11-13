@@ -11,11 +11,6 @@ export function computeReconnectDelay(
   config: BackoffConfig,
   attempt: number,
 ): number {
-  // SSE can replace the normalized base with onerror's delay or retryInterval.
-  if (!Number.isFinite(config.delayMs)) {
-    throw new RangeError("Reconnect delay must be finite");
-  }
-
   const exponential =
     config.delayMs === 0
       ? 0
@@ -37,9 +32,6 @@ export function computeReconnectDelay(
 }
 
 export async function wait(ms: number, signal: AbortSignal): Promise<void> {
-  if (!Number.isFinite(ms)) {
-    throw new RangeError("Reconnect delay must be finite");
-  }
   if (ms <= 0) {
     return;
   }
@@ -55,7 +47,9 @@ export async function wait(ms: number, signal: AbortSignal): Promise<void> {
     const onAbort = () => {
       clearTimeout(timeout);
       signal.removeEventListener("abort", onAbort);
-      reject(signal.reason);
+      // Like fetch and throwIfAborted, the delay rejects with the caller's reason, whatever value it is.
+      const reason: unknown = signal.reason;
+      reject(reason);
     };
 
     if (signal.aborted) {

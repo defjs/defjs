@@ -1,0 +1,58 @@
+---
+title: "Тестирование"
+description: Тестируйте определения SDK и политики приложений офлайн с подменяемыми хэндлами транспорта, проверками кортежей и детерминированными таймерами.
+---
+
+# Тестирование
+
+Поскольку Defjs разделяет определения операций и выполнение в клиенте, вы можете тестировать настоящие определения SDK и перехватчики приложения офлайн — без запуска сетевого сервера и без мокирования внутренних функций библиотеки.
+
+## 1. Внедрение локального хэндла транспорта
+
+Используйте `withHTTPHandle`, `withSSEHandle` или `withWebSocketHandle` в `createClient(...)`, чтобы заменить базовый платформенный транспорт. Defjs по-прежнему выполняет полный конвейер операции: валидацию входной структуры `struct`, маппинг в `builder`, проверки ограничения URL, перехватчики, маршрутизацию статусов и декодирование структуры ответа `struct`.
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. Лучшие практики тестирования
+
+### Проверяйте error-first кортеж, а не внутренности библиотеки
+
+Всегда вызывайте экспортированную операцию SDK с вашим тестовым клиентом и проверяйте возвращаемый кортеж `[error, data, response]`:
+
+- Для успешных сценариев `2xx` проверяйте `expect(error).toBeNull()` и поля декодированного объекта `data` (включая работу маппинга `.alias()` из сетевых имён в логические).
+- Для сценариев сбоя проверяйте `error?.code`, `error?.status`, `error?.data` и `error?.cause`, если они входят в контракт.
+
+### Проверяйте сырые байты исходящих запросов
+
+Внутри функции `withHTTPHandle(async (input, init) => ...)` создайте `const request = new Request(input, init)` и проверяйте `request.url`, `request.method`, `request.headers`, а также `await request.text()` (или `await request.json()`), чтобы убедиться, что `builder` и алиасы структуры сформировали ровно тот сетевой формат, который ожидает ваш бэкенд.
+
+### Детерминированное управление временем через фейковые таймеры
+
+Для задержек повтора в перехватчиках, пауз переподключения SSE/WebSocket или heartbeat WebSocket используйте `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` в Vitest. Эти фейковые таймеры не двигают нативные часы `AbortSignal.timeout`. Для детерминированного дедлайна запроса в Vitest прервите `AbortController` из управляемого `setTimeout` с причиной `TimeoutError`:
+
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+В Bun test используйте `jest.useFakeTimers()` и `jest.advanceTimersByTime()`; фейковые таймеры Bun также управляют `AbortSignal.timeout`. Не считайте, что раннеры управляют одними и теми же нативными часами. Сдвигайте таймеры только после старта ожидаемой фазы, проверяйте переходы состояний или счётчики попыток, а не реальное прошедшее время, и восстанавливайте настоящие таймеры после каждого теста.
+
+## Связанные материалы
+
+- [Тестирование с локальным Fetch-хэндлом](/ru-RU/recipes/test-with-handle)
+- [Сборка и публикация SDK](/ru-RU/recipes/publish-http-sdk)
+- [Настройка клиента](/ru-RU/docs/client)

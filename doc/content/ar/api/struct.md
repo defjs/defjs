@@ -9,25 +9,11 @@ description: واجهة struct، وInfer، وStructError.
 
 ## struct
 
-واجهة. فضّل هذه على المنشئات الداخلية.
+واجهة. فضّل هذه على دوال البناء الداخلية.
 
-```ts
-const User = struct.object({
-  id: struct.number(),
-  displayName: struct.string().alias("display_name"),
-});
-
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
-  if (error) {
-    console.error(error.message);
-    return;
-  }
-  console.log(user.displayName);
-}
-
-readUser();
-```
+<include cwd lang="typescript">
+  examples/api/struct.ts#example
+</include>
 
 ### البدائيات والحاويات
 
@@ -57,7 +43,7 @@ readUser();
 - **يُرجع** `[null, value]` أو `[StructError, undefined]`، ومشكلة واحدة. تتوقف حقول الكائن عند أول حقل فاسد. يجرّب `struct.or` كل فرع، ثم يبلّغ `invalid_union`، ولا يُبقي فشل الفرع الأول.
 - حقول الكائن مطلوبة ما لم تُوسَم بـ `.optional()` أو `.nullish()`. المفاتيح التي لا يصرّح بها الشكل تُحذف من النتيجة.
 - `options.errorMap` الاختياري يعيد كتابة رسائل المشاكل لهذا التحليل فقط.
-- الافتراضي يقرأ المفاتيح **المنطقية** (`displayName`). مرّر `{ aliases: true }` لتقرأ المفاتيح بصيغة النقل (`display_name`) بالطريقة نفسها التي تفعلها ترميزات HTTP/JSON.
+- الافتراضي يقرأ المفاتيح **المنطقية** (`customerName`). مرّر `{ aliases: true }` لتقرأ المفاتيح بصيغة النقل (`customer_name`) بالطريقة نفسها التي تفعلها ترميزات HTTP/JSON.
 
 ## ErrorMap
 
@@ -85,7 +71,7 @@ readUser();
 
 ## STRUCT
 
-`unique symbol` يسِم الكائنات المحلَّلة من مدخل نقطة النهاية. وهو داخلي لمرمِّز الطلبات الصادرة ويُصدَّر كنوع فقط. لا تقرأه ولا تعيّنه.
+`unique symbol` يسِم الكائنات المحلَّلة من مدخل العملية. وهو داخلي لمرمِّز الطلبات الصادرة ويُصدَّر كنوع فقط. لا تقرأه ولا تعيّنه.
 
 ## Struct
 
@@ -99,9 +85,49 @@ readUser();
 
 `.alias()` و`.null()` / `.nullable()` و`.nullish()` و`.optional()`.
 
+## StringStruct
+
+struct بشكل سلسلة نصية من `struct.string`.
+
+## NumberStruct
+
+struct بشكل رقم من `struct.number`.
+
+## UnknownStruct
+
+struct بشكل unknown من `struct.unknown`.
+
 ## ObjectStruct
 
 struct بشكل كائن من `struct.object`.
+
+## ArrayStruct
+
+struct بشكل مصفوفة من `struct.array`.
+
+## RecordStruct
+
+struct بشكل سجل من `struct.record`.
+
+## TupleStruct
+
+struct بشكل صف ثابت (tuple) من `struct.tuple`.
+
+## UnionStruct
+
+struct بشكل اتحاد من `struct.or`.
+
+## DiscriminatedUnionStruct
+
+struct بشكل اتحاد مميَّز من `struct.discriminatedUnion`.
+
+## IntersectionStruct
+
+struct بشكل تقاطع من `struct.intersection`.
+
+## PreservedStruct
+
+الـ struct الذي يعيده مُعدِّل مثل `.optional()` أو `.nullable()` على struct مركّب؛ ويحتفظ بنوع المركّب.
 
 ## StructIssue
 

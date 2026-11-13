@@ -31,7 +31,7 @@ async function sendBody(body: BodyValue) {
 }
 
 test("anonymous parents recurse through arrays of tagged objects beyond depth two", async () => {
-  const item = await parseEndpointInput(Item, { id: "42" });
+  const item = parseEndpointInput(Item, { id: "42" });
   const result = await sendBody({
     outer: { inner: { rows: [{ ...item, extra: "kept" }] } },
   });
@@ -40,7 +40,7 @@ test("anonymous parents recurse through arrays of tagged objects beyond depth tw
 });
 
 test("records preserve nested extras and aliases", async () => {
-  const value = await parseEndpointInput(
+  const value = parseEndpointInput(
     struct.object({ rows: struct.record(Item) }),
     { rows: { selected: { id: "42" } } },
   );
@@ -53,7 +53,7 @@ test("records preserve nested extras and aliases", async () => {
 });
 
 test("tuples preserve nested extras and aliases", async () => {
-  const value = await parseEndpointInput(
+  const value = parseEndpointInput(
     struct.object({ row: struct.tuple([Item]) }),
     { row: [{ id: "42" }] },
   );
@@ -66,7 +66,7 @@ test("tuples preserve nested extras and aliases", async () => {
 });
 
 test("untagged concrete object children retain their field struct and extras", async () => {
-  const value = await parseEndpointInput(struct.object({ row: Item }), {
+  const value = parseEndpointInput(struct.object({ row: Item }), {
     row: { id: "42" },
   });
   const result = await sendBody({ ...value, row: { id: "42", extra: "kept" } });
@@ -75,10 +75,10 @@ test("untagged concrete object children retain their field struct and extras", a
 });
 
 test("a child own tag takes precedence over the declared field struct", async () => {
-  const value = await parseEndpointInput(struct.object({ row: Item }), {
+  const value = parseEndpointInput(struct.object({ row: Item }), {
     row: { id: "42" },
   });
-  const replacement = await parseEndpointInput(
+  const replacement = parseEndpointInput(
     struct.object({ id: struct.string().alias("replacement_id") }),
     { id: "43" },
   );
@@ -100,7 +100,7 @@ test.each(["anonymous", "record", "tuple", "deep"] as const)(
       tuple: struct.tuple([Item]),
       deep: struct.object({ child: struct.object({ row: Item }) }),
     });
-    const value = await parseEndpointInput(Schema, {
+    const value = parseEndpointInput(Schema, {
       record: { selected: { id: "42" } },
       tuple: [{ id: "42" }],
       deep: { child: { row: { id: "42" } } },
@@ -123,7 +123,7 @@ test.each(["anonymous", "record", "tuple", "deep"] as const)(
 
 test("untagged union object children preserve extras", async () => {
   const Schema = struct.object({ row: struct.or(Item, struct.string()) });
-  const value = await parseEndpointInput(Schema, { row: { id: "42" } });
+  const value = parseEndpointInput(Schema, { row: { id: "42" } });
   const result = await sendBody({ ...value, row: { id: "42", extra: "kept" } });
   expect(result.fault).toBeNull();
   expect(result.sent).toEqual([{ row: wireItem }]);
@@ -141,8 +141,8 @@ test.each(["array", "record", "tuple"] as const)(
       rows: struct.or(containers[kind], struct.string()),
     });
     const raw = kind === "record" ? { selected: { id: "42" } } : [{ id: "42" }];
-    const value = await parseEndpointInput(Schema, { rows: raw });
-    const item = await parseEndpointInput(Item, { id: "42" });
+    const value = parseEndpointInput(Schema, { rows: raw });
+    const item = parseEndpointInput(Item, { id: "42" });
     const row = { ...item, extra: "kept" };
     const result = await sendBody({
       ...value,
@@ -159,9 +159,9 @@ test("union arrays reject nested collisions before the public HTTP transport", a
   let sends = 0;
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       sends += 1;
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const endpoint = defineRequest({
@@ -185,11 +185,11 @@ test("union arrays reject nested collisions before the public HTTP transport", a
 });
 
 test("unknown fields recurse into anonymous containers with tagged children", async () => {
-  const parent = await parseEndpointInput(
+  const parent = parseEndpointInput(
     struct.object({ payload: struct.unknown() }),
     { payload: {} },
   );
-  const item = await parseEndpointInput(Item, { id: "42" });
+  const item = parseEndpointInput(Item, { id: "42" });
   const result = await sendBody({
     ...parent,
     payload: { rows: [{ ...item, extra: "kept" }] },
@@ -206,7 +206,7 @@ test("intersection with a union object side retains aliases from both sides", as
       struct.number(),
     ),
   );
-  const value = await parseEndpointInput(Schema, {
+  const value = parseEndpointInput(Schema, {
     firstName: "Ada",
     lastName: "Lovelace",
   });

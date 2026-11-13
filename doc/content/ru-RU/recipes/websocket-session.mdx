@@ -1,22 +1,32 @@
 ---
 title: "Управление сессиями WebSocket"
-description: Подключись, отправь один типизированный envelope, получи один раз, потом close и await closed.
+description: Подключитесь, отправьте типизированное сообщение, прочитайте ответ, затем закройте сессию и дождитесь closed.
 ---
 
-# Открыть WebSocket-сессию
+# Открытие WebSocket-сессии
 
-Каждое направление — один struct. Отмена подписок, `close` и `await session.closed` — на тебе. Невалидные кадры идут в `onRuntimeError`.
+Объявите структуры `incoming` и `outgoing` в `defineWebSocket`. В приложении подпишитесь на `session.onRuntimeError(...)`, читайте `session.receive` и всегда отписывайтесь, вызывайте `session.close(...)` и дожидайтесь `await session.closed` в блоке `finally`:
 
-Подробности — в [WebSocket](/ru-RU/docs/web-socket).
-
-<include cwd meta="chat.ts">
-  examples/recipes/websocket-session.ts#example
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
 </include>
 
-`chat.example.com` — placeholder. Если сервер на `{ "type": "send", "text": "Hello" }` отвечает `{ "type": "message", "text": "Hello" }`, сниппет выведет:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Если сервер отвечает на `{ "type": "subscribe", "symbol": "ACME" }` сообщением `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, скрипт выведет:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-Переподключение включается явно (`withWebSocketReconnect`), как и heartbeat. Браузерные WebSocket’ы не принимают произвольные заголовки при установлении соединения — используй cookies, подпротоколы или билет с коротким сроком действия.
+- И переподключение (`withRetry`), и heartbeat (`withWebSocketHeartbeat`) подключаются на клиенте опционально.
+- Браузерные WebSocket не могут отправлять произвольные HTTP-заголовки во время хэндшейка обновления протокола; используйте cookies, субпротоколы или короткоживущие тикеты подключения. См. раздел [Сессии WebSocket](/ru-RU/docs/web-socket).

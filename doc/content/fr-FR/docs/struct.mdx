@@ -1,140 +1,141 @@
 ---
-title: "Contrats de données / Struct"
-description: Définis les contrats d’entrée et de réponse que ton SDK partage avec ses consommateurs, avec les types et la validation au runtime.
+title: "Struct & schémas"
+description: Définissez les contrats de données partagés entre votre SDK et ses consommateurs, avec inférence de types et validation à l'exécution.
 ---
 
-# Struct
+# Struct & schémas
 
-Les Structs expriment le contrat de données que ton SDK promet : entrée de l’appelant, réponses du service, erreurs déclarées et messages temps réel. Réutilise-les à travers les opérations exportées pour que les consommateurs obtiennent des types TypeScript et une validation au runtime cohérents, indépendamment du client qu’ils configurent.
+`struct` déclare le contrat de données réseau partagé entre un SDK et ses consommateurs : entrées de l'appelant, sorties `2xx`, erreurs de service déclarées, événements SSE et trames WebSocket.
 
-Tu obtiens les types TypeScript via `Infer`, et les contrôles au runtime via `struct.parse(...)` — pas de throw, tuple error-first.
+- **Inférence statique** : Dérivez les types TypeScript grâce à `Infer<typeof Schema>`.
+- **Validation error-first** : Validez les valeurs à l'exécution via `struct.parse(Schema, value)` — renvoie `[null, data]` ou `[StructError, undefined]` sans jamais lever d'exception.
 
-## Mise en place
+## 1. Définir un schéma dans le SDK, valider dans l'application
+
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
 </include>
 
-La sortie parsée ne garde que les champs déclarés. Champs requis manquants, primitives fausses, mauvaises valeurs imbriquées, mauvaise longueur de tuple, ou `null` interdit → `StructError`, pas de valeur partielle. Les Structs sont immuables ; `.optional()` et ses voisins renvoient un nouveau Struct.
+</Tab>
+</Tabs>
 
-## Requis, facultatif, null
+Les objets analysés ne conservent que les champs déclarés (les propriétés inconnues sont retirées) et adoptent un prototype `null`. Tout champ requis manquant, tout type primitif incorrect ou toute branche invalide génère un `StructError` sans aucune sortie partielle.
 
-Présence et nullabilité sont séparées :
+## 2. Champs requis, facultatifs et nullables
 
-| Déclaration                  | Manquant / `undefined`                 | `null`  | Valeur valide              |
-| ---------------------------- | -------------------------------------- | ------- | -------------------------- |
-| `struct.string()`            | Rejette                                | Rejette | Accepte string             |
-| `struct.string().optional()` | Accepte ; omet le champ d’objet absent | Rejette | Accepte string             |
-| `struct.string().null()`     | Rejette                                | Accepte | Accepte string             |
-| `struct.string().nullish()`  | Accepte ; omet le champ d’objet absent | Accepte | Accepte string             |
-| `struct.null()`              | Rejette                                | Accepte | Rejette les autres valeurs |
+Defjs sépare strictement la **présence du champ** (`undefined`) de sa **nullabilité** (`null`). Chaque constructeur de struct est obligatoire et non-null par défaut :
+
+| Déclaration                  | Manquant / `undefined`                  | `null`  | Valeur valide      |
+| ---------------------------- | --------------------------------------- | ------- | ------------------ |
+| `struct.string()`            | Rejet                                   | Rejet   | Accepte `string`   |
+| `struct.string().optional()` | Accepte (omis lors de la sérialisation) | Rejet   | Accepte `string`   |
+| `struct.string().null()`     | Rejet                                   | Accepte | Accepte `string`   |
+| `struct.string().nullish()`  | Accepte (omis lors de la sérialisation) | Accepte | Accepte `string`   |
+| `struct.null()`              | Rejet                                   | Accepte | Rejette non-`null` |
 
 <include cwd lang="typescript">
   examples/struct/required-optional-null.ts#example
 </include>
 
-`struct.any()` et `struct.unknown()` rejettent aussi `null` et `undefined`. Enchaîne `.null()`, `.optional()` ou `.nullish()` pour les accepter.
+`struct.any()` et `struct.unknown()` rejettent également `null` et `undefined`, sauf s'ils sont combinés avec `.null()`, `.optional()` ou `.nullish()`.
 
-À la racine, optional peut être `undefined`. Dans un objet, les champs optional/nullish omis restent absents. Un champ objet imbriqué suit la même règle : marque-le `.optional()` quand l’appelant peut l’omettre. Un champ objet requis reste requis même quand chaque champ à l’intérieur est facultatif.
+## 3. Alias réseau bidirectionnels (`.alias()`)
 
-## Placement dans la requête
+Utilisez `.alias("wire_name")` lorsque le backend emploie du `snake_case` ou des noms d'en-têtes spécifiques alors que votre SDK TypeScript utilise le `camelCase`. Vous déclarez l'alias une fois sur le champ, et il fonctionne dans les deux sens :
 
-Chemin, query, en-têtes et corps sont des champs que le builder renvoie, pas un struct de requête. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. `struct.urlencoded(shape)` et `struct.formData(shape)` sont des structs objet avec un tag de codec. Le tag ne tourne que quand cette valeur est la racine du corps : les clés utilisent les aliases, et les tableaux répètent le nom du champ.
-
-<include cwd lang="typescript">
-  examples/struct/request-placement.ts#example
-</include>
-
-| Racine du corps                                   | Envoyé comme      | Content type par défaut                           |
-| ------------------------------------------------- | ----------------- | ------------------------------------------------- |
-| objet typé, tableau, nombre fini, booléen, `null` | texte JSON        | `application/json`                                |
-| struct `string` ou une string brute               | texte             | `text/plain;charset=UTF-8`                        |
-| `struct.urlencoded(shape)` à la racine            | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)` à la racine              | `FormData`        | boundary multipart de la plateforme               |
-| `Blob` / `File`                                   | le blob           | type du blob ou `application/octet-stream`        |
-| `ArrayBuffer` / vue / flux                        | octets            | `application/octet-stream`                        |
-
-`NaN` et `±Infinity`, y compris à l’intérieur d’un tableau ou d’un objet, échouent avec `REQ_BUILD_FAILED`.
-
-`struct.file()` est un struct de valeur pour un champ de formulaire et pour un corps fichier brut. Les builders WebSocket ne peuvent pas renvoyer `headers` ni `body`. HTTP et SSE le peuvent. `GET` et `HEAD` ne le peuvent pas.
-
-## Aliases
-
-`.alias(...)` sépare les noms logiques des noms wire. `struct.parse(...)` utilise les clés logiques sauf si tu passes `{ aliases: true }`. Les codecs JSON et de requête plate encodent les aliases ; le décodage de réponse JSON ramène les clés wire vers les champs logiques.
+| Frontière                                                               | Clé utilisée                                              |
+| ----------------------------------------------------------------------- | --------------------------------------------------------- |
+| `input` d'opération et `struct.parse(Schema, value)`                    | Nom logique (`customerName`)                              |
+| Valeur struct typée renvoyée par `builder` (`body`, `query`, `headers`) | Alias réseau (`customer_name`)                            |
+| Décodage de réponse JSON / événement SSE / trame WebSocket              | Alias réseau `customer_name` → nom logique `customerName` |
+| Clé d'objet anonyme écrite directement dans `builder`                   | Clé littérale telle qu'écrite                             |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-| Frontière                                       | Champ                        |
-| ----------------------------------------------- | ---------------------------- |
-| `struct.parse(User, ...)` et entrée d’opération | `displayName` logique        |
-| Objet typé renvoyé par le builder               | `display_name` wire          |
-| Décodage JSON / SSE / WebSocket                 | Wire → `displayName` logique |
-| Objet anonyme écrit dans le builder             | La clé que tu as écrite      |
+Copier un objet typé avec la syntaxe de déploiement (spread) au sein du `builder` (`{ ...input.order, extra: 1 }`) préserve l'encodage du struct et ses alias. Déclarer à la fois la clé logique et son alias réseau sur le même objet échoue avec `REQ_BUILD_FAILED`.
 
-Le builder lui-même lit les noms logiques (`input.user.displayName`) ; le nom wire n’apparaît que quand le serializer encode l’objet typé que le builder renvoie.
+## 4. Placement dans la requête et codecs de formulaire
 
-Les aliases fonctionnent sur les champs imbriqués, les tableaux, les objets, les unions et les discriminateurs. Garde les noms logiques dans le code app ; pose le nom externe sur le struct une fois. Étaler un objet typé garde cet encodage. Poser à la fois le champ logique et sa clé wire dans le même objet est `REQ_BUILD_FAILED`. `JSON.stringify` d’une valeur que tu fais toi-même quitte ce chemin : le serializer voit les noms logiques.
+`input` définit les paramètres ; `builder` les place dans `{ path, query, headers, body }`. Pour les corps encodés en formulaire, `struct.urlencoded(shape)` et `struct.formData(shape)` marquent l'objet racine afin que le transport le sérialise automatiquement en `URLSearchParams` ou `FormData` :
 
-Le guide est choisi à chaque nœud, pas seulement à la racine. Un nouvel objet sous un parent anonyme garde les clés que tu as écrites. Le même objet sous un parent typé utilise le struct de ce champ.
+<include cwd lang="typescript">
+  examples/struct/request-placement.ts#example
+</include>
 
-```ts
-body: { row: { id: '42' } }              // Anonymous root: emits id
-body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
-```
+| Racine du corps renvoyée par le `builder`         | Format réseau     | `Content-Type` par défaut                         |
+| ------------------------------------------------- | ----------------- | ------------------------------------------------- |
+| Objet typé, tableau, nombre fini, booléen, `null` | Texte JSON        | `application/json`                                |
+| Struct `string` ou `string` brute                 | Texte UTF-8       | `text/plain;charset=UTF-8`                        |
+| `struct.urlencoded(shape)` à la racine du corps   | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `struct.formData(shape)` à la racine du corps     | `FormData`        | `multipart/form-data; boundary=...`               |
+| `Blob` / `File` (`struct.file()`)                 | Binaire blob      | `blob.type` ou `application/octet-stream`         |
+| `ArrayBuffer` / vue / `ReadableStream`            | Octets bruts      | `application/octet-stream`                        |
 
-Quand un guide d’union correspond à plus d’une branche, chaque branche est encodée et comparée. Une sortie wire identique est gardée ; une différence est `REQ_BUILD_FAILED`.
+## 5. Traitement de `StructError` et des issues
 
-Une intersection mixte qui contient une partie non objet est marquée, quand elle est parsée, avec la conjonction des tags des parties qui ont correspondu ; une valeur d’intersection mixte nouvellement écrite qui n’a pas été parsée est un objet anonyme.
-
-## Échecs de parse
-
-`struct.parse(...)` renvoie `[null, value]` ou `[StructError, undefined]`. `StructError` étend `Error` et expose `issues`, plus `format()`, `flatten()` et `prettify()`.
+`struct.parse(Schema, data, { aliases?, errorMap? })` renvoie `[StructError, undefined]` en cas d'échec. `StructError` hérite de la classe native `Error` et fournit `issues`, `format()`, `flatten()` et `prettify()` :
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-Un `StructIssue` a `code`, `expected`, `message`, `path` et `received`. `code` est `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` ou `missing_key`. Les messages par défaut nomment le kind reçu, jamais la valeur : `Expected number at id, received string`. Les chemins d’issue sont structurels et conservent les clés de record : `struct.record(...)` peut produire `Expected number at alice@example.com, received string`, donc les clés peuvent rester sensibles dans les messages par défaut, `prettify()` et `String(fault)`. `message` et `prettify()` omettent donc les payloads reçus ; `received` garde la valeur d’origine et a besoin d’être masqué avant journalisation ou renvoi. `struct.parse(..., { errorMap })` réécrit les messages pour cet appel seulement, y compris les échecs de conversion bigint/date dans un struct d’une autre copie de Core. Toute string renvoyée, y compris `''`, remplace le défaut ; seul `undefined` le garde. Le texte personnalisé est utilisé tel quel et peut exposer des valeurs si la map les inclut.
+Chaque `StructIssue` contient `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` ou `custom`), `path`, `expected`, `received` et `message`. Les messages par défaut omettent la valeur reçue et n'indiquent que son _type_, mais les chemins conservent les clés dynamiques de record, qui peuvent contenir des valeurs sensibles. `String(error)` et `error.prettify()` ne constituent pas une frontière d'occultation ; utilisez une liste d'autorisation de champs sûrs pour les journaux, et traitez les valeurs brutes `received` ainsi que les messages personnalisés comme sensibles.
 
-La validation Struct est seulement structurelle. Pas de règles publiques de range, de format, de refinement, d’auth ou de transition d’état. Fais ces contrôles avant d’appeler une opération.
-
-## Référence
-
-Constructeurs publics sur `@defjs/core` (les internes ne sont pas des API de façade) :
+## 6. Référence des constructeurs
 
 <include cwd lang="typescript">
   examples/struct/any.ts#example
 </include>
 
-| Constructeur                     | Entrée                                                           | Sortie inférée                  |
-| -------------------------------- | ---------------------------------------------------------------- | ------------------------------- |
-| `struct.number()`                | Nombre autre que `NaN`                                           | `number`, y compris ±`Infinity` |
-| `struct.date()`                  | `Date`, nombre, ou string de date                                | `Date` valide                   |
-| `struct.bigint()`                | `bigint` ou string acceptée par `BigInt(...)`                    | `bigint`                        |
-| `struct.enum(...)`               | Membre string ou nombre déclaré                                  | Cette union de littéraux        |
-| `struct.discriminatedUnion(...)` | Objet avec discriminant littéral requis                          | Branche objet sélectionnée      |
-| `struct.or(...)`                 | Première branche qui correspond ; l’encodage vérifie l’ambiguïté | Union des sorties de branches   |
-| `struct.intersection(...)`       | Valeurs acceptées par chaque membre                              | Intersection des sorties        |
-| `struct.record(value)`           | Objet simple dont les valeurs correspondent à `value`            | Record des valeurs parsées      |
-| `struct.tuple(items)`            | Tableau de la longueur déclarée exactement                       | Tuple de longueur fixe          |
+| Constructeur                                               | Entrée acceptée                        | Sortie inférée                                                   |
+| ---------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------- |
+| `struct.string()` / `struct.boolean()`                     | Primitive correspondante               | `string` / `boolean`                                             |
+| `struct.number()`                                          | Tout `number` sauf `NaN`               | `number` (`NaN` rejeté ; `±Infinity` rejeté dans les corps JSON) |
+| `struct.bigint()`                                          | `bigint` ou chaîne numérique           | `bigint`                                                         |
+| `struct.date()`                                            | `Date` valide, timestamp ou chaîne ISO | `Date`                                                           |
+| `struct.literal(value)`                                    | Littéral primitif exact                | Type littéral                                                    |
+| `struct.enum(values)`                                      | Membre chaîne ou nombre déclaré        | Union de littéraux                                               |
+| `struct.array(item)` / `struct.tuple(items)`               | Tableau / tuple de longueur fixe       | `T[]` / `[...]`                                                  |
+| `struct.object(shape)` / `struct.record(val)`              | Objet simple                           | Objet typé / `Record<string, V>`                                 |
+| `struct.discriminatedUnion(key, options)`                  | Objet avec discriminant littéral `key` | Union des branches d'objets                                      |
+| `struct.or(branches)`                                      | Première branche correspondante        | Union des types des branches                                     |
+| `struct.intersection(members)`                             | Valeur satisfaisant tous les membres   | Intersection fusionnée en profondeur                             |
+| `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`        | Représentation binaire                                           |
 
-Chaque Struct prend en charge `.alias(name)`, `.optional()`, `.null()` et `.nullish()`. `struct.discriminatedUnion` a besoin d’options objet avec un discriminant littéral requis et rejette les doublons.
+### Structs récursifs
 
-Importe `struct`, `Infer`, `Struct`, `StructError` et les types publics liés depuis `@defjs/core`. Utilise `struct.parse(...)` comme parser. N’importe pas `createObjectStruct`, les symboles de définition, les internes de codec, ni `packages/core/src`.
+Un type auto-référent se lit lui-même par une propriété getter de la shape. Les getters s'exécutent une seule fois, à la première utilisation du struct objet, et non à la définition de la constante, si bien que la constante peut se nommer elle-même. Annotez la constante avec `Struct<T>` : TypeScript ne peut pas inférer un type qui se référence lui-même.
 
-Non-promesses de la façade :
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
 
-- Les sorties objet/record utilisent un prototype null — ne suppose pas les méthodes de `Object.prototype`.
-- Les clés d’objet inconnues sont écartées.
-- `struct.number()` rejette `NaN`, accepte les infinis.
-- `struct.or(...)` essaie les branches dans l’ordre ; rejette les encodages ambigus quand les branches ne s’accordent pas.
-- `struct.intersection(...)` parse les membres dans l’ordre de déclaration.
-- Une intersection fusionne en profondeur les sorties des membres (les valeurs égales selon `Object.is` et les dates de même instant restent, les objets simples et les tableaux de même longueur fusionnent récursivement, tout autre conflit est `invalid_intersection` à ce chemin), `unknown`/`any` ne contribuent rien, et une clé logique peut correspondre à plusieurs clés wire. Seules des valeurs inégales écrites sur la même clé wire entrent en conflit.
-- Un Struct valide une frontière ; il ne met pas en cache, n’autorise pas et ne possède pas une ressource de transport.
+### Ce que `struct` ne fait pas
 
-## Recettes liées
+- `struct` ne déclare que la structure. La longueur des chaînes, les motifs, les plages numériques et les règles métier relèvent du code applicatif, après l'analyse.
+- L'analyse s'arrête au premier champ invalide. Elle ne remplit jamais un champ manquant par une valeur zéro et ne renvoie jamais de sortie partielle.
 
-- [POST JSON](/fr-FR/recipes/post-json)
-- [GET avec un 404 déclaré](/fr-FR/recipes/get-declared-404)
+## Lectures connexes
+
+- [Opérations HTTP](/fr-FR/docs/http)
+- [Gestion des erreurs](/fr-FR/docs/errors)
+- [Envoyer et valider du JSON](/fr-FR/recipes/post-json)

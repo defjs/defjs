@@ -27,6 +27,4 @@ const outcome = await tracer.startActiveSpan("orders.read", async (span) => {
     span.end();
   }
 });
-
-void outcome;
 // #endregion

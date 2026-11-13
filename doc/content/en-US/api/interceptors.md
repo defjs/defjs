@@ -27,7 +27,7 @@ Call `next(req)` (optionally a mutated request) or short-circuit with `makeRespo
 
 <ApiSignature name="WebSocketSessionLike" />
 
-A wrapper or short-circuit session must forward the same `[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle; returning an unrelated resolved promise is not sufficient. Requiring this member is a compile-time breaking change for structural implementations. Code that only accepts sessions returned by Defjs has no additional runtime call requirement.
+A wrapper or short-circuit session must forward the same `[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle; returning an unrelated resolved promise is not sufficient.
 
 ## Tagged types
 

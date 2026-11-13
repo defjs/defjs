@@ -1,9 +1,10 @@
 import { expect, test } from "vitest";
 import type { ApiReferenceEntry } from "../../scripts/api-model";
 import { apiReference } from "../data/api-reference";
+import { buildApiEntryView } from "./api-entry-view";
+import type { Locale } from "./i18n";
 import { readableMarkdown } from "./markdown";
 import {
-  entrySummary,
   renderApiEntryMarkdown,
   renderApiEntryMarkdownBySlug,
 } from "./api-entry-markdown";
@@ -22,7 +23,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
     source: "packages/core/src/client/client.ts",
     group: "client",
     description: "Creates a {@link Client}.\n\nMore.",
-    signatures: ["function createClient(): Client;"],
     related: ["@defjs/core:Client"],
     exampleFiles: [
       {
@@ -39,7 +39,6 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
       { name: "typeParam", text: "ignored" },
     ],
     typeTable: null,
-    parameters: [],
     overloads: [
       {
         signature: "function createClient(): Client;",
@@ -54,15 +53,18 @@ function entry(overrides: Partial<ApiReferenceEntry> = {}): ApiReferenceEntry {
             tags: [],
           },
         ],
-        returns: ["A {@link Client}."],
       },
     ],
     ...overrides,
   };
 }
 
+function markdown(item: ApiReferenceEntry, locale: Locale): string {
+  return renderApiEntryMarkdown(buildApiEntryView(item, locale, targets));
+}
+
 test("markdown includes the signature, fields, prose, examples, related pages and overview", () => {
-  const text = renderApiEntryMarkdown(entry(), "en-US", targets);
+  const text = markdown(entry(), "en-US");
   expect(text).toContain("@defjs/core · function");
   expect(text).toContain("```ts\nfunction createClient(): Client;\n```");
   expect(text).toContain("## Parameters");
@@ -78,13 +80,11 @@ test("markdown includes the signature, fields, prose, examples, related pages an
   expect(text).toContain("const n = 1;");
   expect(text).toContain("## See also");
   expect(text).toContain("[Overview](/api/client)");
-  expect(entrySummary(entry())).toBe("Creates a Client.");
 });
 
 test("members, a broken code fence and a deprecated field stay readable", () => {
-  const text = renderApiEntryMarkdown(
+  const text = markdown(
     entry({
-      signatures: ["const raw = ```;"],
       typeTable: [
         {
           name: "old",
@@ -96,7 +96,7 @@ test("members, a broken code fence and a deprecated field stay readable", () => 
           tags: [],
         },
       ],
-      overloads: [],
+      overloads: [{ signature: "const raw = ```;", parameters: [] }],
       related: [],
       exampleFiles: [
         {
@@ -111,7 +111,6 @@ test("members, a broken code fence and a deprecated field stay readable", () => 
       description: "",
     }),
     "zh-Hans",
-    targets,
   );
   expect(text).toContain("## Members");
   expect(text).toContain("deprecated. Gone \\| away.");
@@ -123,8 +122,8 @@ test("members, a broken code fence and a deprecated field stay readable", () => 
   expect(text).toContain("[Overview](/zh-Hans/api/client)");
 });
 
-test("different overloads each keep a parameter table and a missing related target fails", () => {
-  const text = renderApiEntryMarkdown(
+test("different overloads each keep a parameter table", () => {
+  const text = markdown(
     entry({
       related: [],
       typeTable: [],
@@ -142,7 +141,6 @@ test("different overloads each keep a parameter table and a missing related targ
               tags: [],
             },
           ],
-          returns: [],
         },
         {
           signature: "function enum(value: number): void;",
@@ -157,27 +155,14 @@ test("different overloads each keep a parameter table and a missing related targ
               tags: [],
             },
           ],
-          returns: [],
         },
       ],
     }),
     "en-US",
-    targets,
   );
   expect(text.match(/## Parameters/g)?.length).toBe(2);
   expect(text).toContain("function enum(value: string): void;");
   expect(text).toContain("A number.");
-  expect(() =>
-    renderApiEntryMarkdown(
-      entry({
-        related: ["@defjs/core:Missing"],
-        exampleFiles: [],
-        tags: [],
-      }),
-      "en-US",
-      targets,
-    ),
-  ).toThrow("Unknown related API: @defjs/core:Missing");
 });
 
 test("every published entry renders Markdown that search can index", () => {

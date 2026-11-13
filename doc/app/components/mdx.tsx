@@ -1,6 +1,5 @@
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { Tabs, Tab } from "fumadocs-ui/components/tabs";
-import { TypeTable } from "fumadocs-ui/components/type-table";
 import { ApiIndex } from "./api-index";
 import type { MDXComponents } from "mdx/types";
 import type { ComponentProps } from "react";
@@ -23,7 +22,6 @@ export function getMDXComponents() {
     a: ContentLink,
     Tabs,
     Tab,
-    TypeTable,
     ApiIndex,
   } satisfies MDXComponents;
 }

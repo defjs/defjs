@@ -3,14 +3,14 @@ import { defineRequest, struct, type Client } from "@defjs/core";
 
 const createBatch = defineRequest({
   method: "POST",
-  path: "/accounts/:account_id/users",
+  path: "/accounts/:account_id/orders",
   input: struct.object({
     accountId: struct.number(),
     draft: struct.boolean().optional(),
-    users: struct.array(
+    orders: struct.array(
       struct.object({
-        displayName: struct.string().alias("display_name"),
-        email: struct.string(),
+        customerName: struct.string().alias("customer_name"),
+        totalCents: struct.number().alias("total_cents"),
       }),
     ),
   }),
@@ -18,7 +18,7 @@ const createBatch = defineRequest({
     path: { account_id: input.accountId },
     query: { draft: input.draft ? 1 : undefined },
     headers: { "x-api-version": "2" },
-    body: { users: input.users },
+    body: { orders: input.orders },
   }),
   output: struct.object({ accepted: struct.number() }),
 });
@@ -26,11 +26,12 @@ const createBatch = defineRequest({
 async function submit(client: Client) {
   const [error, result] = await createBatch(client, {
     accountId: 42,
-    users: [{ displayName: "Ada", email: "ada@example.com" }],
+    orders: [{ customerName: "Ada", totalCents: 4200 }],
   });
-  if (error) return;
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   console.log(result.accepted);
 }
-
-void submit;
 // #endregion

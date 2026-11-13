@@ -1,11 +1,11 @@
-import { FAILED } from "./symbols";
+import type { StructDefinition } from "./definition";
+import { DEFINITION } from "./symbols";
 import type {
   FlattenedStructError,
   FormattedStructError,
   Path,
   StructIssue,
 } from "./types";
-import { describeKind, formatPath } from "./utils";
 
 /**
  * Optional callback that rewrites a {@link StructIssue} message before it is stored.
@@ -91,7 +91,8 @@ export class StructError extends Error {
    */
   flatten(): FlattenedStructError {
     const formErrors: string[] = [];
-    const fieldErrors: { [key: string]: string[] } = Object.create(null);
+    const fieldErrors: { [key: string]: string[] } = {};
+    Object.setPrototypeOf(fieldErrors, null);
     for (const item of this.issues) {
       if (item.path.length === 0) {
         formErrors.push(item.message);
@@ -124,57 +125,14 @@ export class StructError extends Error {
 }
 
 function createFormattedError(): FormattedStructError {
-  const node: FormattedStructError = Object.create(null);
-  node._errors = [];
+  const node: FormattedStructError = { _errors: [] };
+  Object.setPrototypeOf(node, null);
   return node;
 }
 
 function formatErrorTreeKey(segment: number | string): string {
   const key = String(segment);
   return key === "_errors" ? "\\_errors" : key;
-}
-
-let activeErrorMap: ErrorMap | undefined;
-
-// Holds the issue of the failure a parse is handing back. `failure()` applies the active error map, then writes the
-// issue right before `FAILED` travels up to the parse entry point, which reads it. No user code runs after that write
-// (a union that goes on to its next candidate just drops the issue). The entry point puts back what it found, so a
-// parse started from an error map, a decode hook or a getter cannot disturb a pending failure, and the slot is empty
-// between top-level parses. The map runs here, on the parser's copy, so a hook built by another copy still uses it.
-let parkedIssue: StructIssue | undefined;
-
-export function hasErrorMap(): boolean {
-  return activeErrorMap !== undefined;
-}
-
-export function runWithErrorMap<T>(map: ErrorMap | undefined, run: () => T): T {
-  const previous = activeErrorMap;
-  activeErrorMap = map;
-  try {
-    return run();
-  } finally {
-    activeErrorMap = previous;
-  }
-}
-
-/** Parks the issue for the parse entry point and returns FAILED. A decode hook receives it as `fail`. */
-export function failure(candidate: StructIssue): typeof FAILED {
-  if (activeErrorMap) {
-    const override = activeErrorMap(candidate);
-    if (override !== undefined) {
-      candidate.message = override;
-    }
-  }
-  parkedIssue = candidate;
-  return FAILED;
-}
-
-export function parkedFailure(): StructIssue | undefined {
-  return parkedIssue;
-}
-
-export function restoreFailure(issue: StructIssue | undefined): void {
-  parkedIssue = issue;
 }
 
 export function issue(
@@ -193,4 +151,104 @@ export function issue(
     path,
     received,
   };
+}
+
+export function formatPath(path: Path): string {
+  if (path.length === 0) {
+    return "<root>";
+  }
+
+  let output = "";
+  for (const item of path) {
+    if (typeof item === "number") {
+      output += `[${item}]`;
+      continue;
+    }
+
+    output += output ? `.${item}` : item;
+  }
+  return output;
+}
+
+/**
+ * Kind of a received value, safe to put in a log line.
+ *
+ * Names the kind and never the value. `File` is checked before `Blob` because a file is a blob.
+ */
+export function describeKind(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+
+  if (Array.isArray(value)) {
+    return "array";
+  }
+
+  if (typeof value !== "object") {
+    return typeof value;
+  }
+
+  if (value instanceof File) {
+    return "File";
+  }
+
+  if (value instanceof Blob) {
+    return "Blob";
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return "ArrayBuffer";
+  }
+
+  if (value instanceof Date) {
+    return "Date";
+  }
+
+  return "object";
+}
+
+export function describeValue(value: unknown): string {
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
+
+export function expectedType(definition: StructDefinition): string {
+  switch (definition.kind) {
+    case "any":
+      return "any";
+
+    case "array":
+      return `array<${expectedType(definition.item[DEFINITION])}>`;
+
+    case "arrayBuffer":
+      return "ArrayBuffer";
+
+    case "blob":
+      return "Blob";
+
+    case "object":
+      return "object";
+
+    case "record":
+      return `record<${expectedType(definition.value[DEFINITION])}>`;
+
+    case "tuple":
+      return "tuple";
+
+    case "unknown":
+      return "unknown";
+
+    case "bigint":
+    case "boolean":
+    case "date":
+    case "discriminatedUnion":
+    case "enum":
+    case "file":
+    case "intersection":
+    case "literal":
+    case "null":
+    case "number":
+    case "or":
+    case "string":
+      return definition.expected;
+  }
 }

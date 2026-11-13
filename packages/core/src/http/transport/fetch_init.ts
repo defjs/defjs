@@ -1,4 +1,4 @@
-import type { HttpRequest } from "../../internal/http_request";
+import type { HttpRequest } from "../http_request";
 import { isReadableStream } from "../../internal/type_guards";
 import { serializeHttpBody } from "./body";
 
@@ -8,7 +8,7 @@ export const ERR_STREAMING_REQUEST_UNSUPPORTED = new Error(
 );
 
 export function isReadableStreamBody(
-  body: HttpRequest["body"] | unknown,
+  body: unknown,
 ): body is ReadableStream<Uint8Array> {
   return isReadableStream(body);
 }
@@ -19,9 +19,8 @@ let streamingRequestBodySupport: boolean | undefined;
  * Whether a ReadableStream can be a Request body: a non-null body and no Content-Type.
  * A runtime without stream bodies stringifies the stream and adds a text/plain Content-Type (Firefox).
  * The `duplex` getter is not used: Bun streams request bodies without reading it.
- * This does not predict whether the connection takes the stream (Chromium streams only over HTTP/2+).
- * Upload-progress conversion is also skipped in browsers (`prepareUploadProgressRequest`): the body is sent
- * unchanged and the callback is not called. Download progress is unaffected.
+ * This does not predict whether the connection takes the stream (Chromium and WebKit stream only over HTTP/2+).
+ * A caller-supplied ReadableStream is the only request body that reports upload progress; every other body is sent as built.
  */
 export function supportsStreamingRequestBody(): boolean {
   if (streamingRequestBodySupport !== undefined) {
@@ -39,11 +38,12 @@ export function supportsStreamingRequestBody(): boolean {
         controller.close();
       },
     });
-    const request = new Request("https://example.com", {
+    const init: RequestInit & { duplex?: "half" } = {
       body: stream,
       duplex: "half",
       method: "POST",
-    } as RequestInit & { duplex?: "half" });
+    };
+    const request = new Request("https://example.com", init);
 
     streamingRequestBodySupport =
       request.body !== null && !request.headers.has("Content-Type");

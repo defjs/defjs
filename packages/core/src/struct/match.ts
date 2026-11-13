@@ -1,46 +1,37 @@
-import { resolveObjectShape } from "./shape";
+import {
+  MAX_DEPTH,
+  type EnumDefinition,
+  type ObjectDefinition,
+  type RuntimeStruct,
+} from "./definition";
+import { isPlainObject } from "./plain_object";
+import { resolveObjectShapeEntries } from "./shape";
 import { DEFINITION } from "./symbols";
-import type { RuntimeStruct, StructDefinition, StructLike } from "./types";
-import { hasOwnKey, isPlainObject, matchesEnum, MAX_DEPTH } from "./utils";
+
+export function selectUnionOptions(
+  options: readonly RuntimeStruct[],
+  value: unknown,
+): RuntimeStruct[] {
+  const matches: RuntimeStruct[] = [];
+  for (const option of options) {
+    if (matchesRuntimeValue(option, value)) {
+      matches.push(option);
+    }
+  }
+  return matches;
+}
 
 export function matchesRuntimeValue(
   struct: RuntimeStruct,
   value: unknown,
   depth = 0,
 ): boolean {
-  return matchesDefinition(struct[DEFINITION], value, struct, depth);
-}
-
-export function selectUnionOptions(
-  options: readonly StructLike<unknown, unknown, boolean>[],
-  value: unknown,
-  depth = 0,
-): RuntimeStruct[] {
-  const matches: RuntimeStruct[] = [];
-  for (const option of options) {
-    const runtime = option as unknown as RuntimeStruct;
-    if (matchesRuntimeValue(runtime, value, depth)) {
-      matches.push(runtime);
-    }
-  }
-  return matches;
-}
-
-export function matchesDefinition(
-  definition: StructDefinition,
-  value: unknown,
-  struct: RuntimeStruct,
-  depth = 0,
-): boolean {
+  const definition = struct[DEFINITION];
   if (value === null) {
-    if (definition.kind === "null" || definition.flags.nullable) {
+    if (definition.flags.nullable) {
       return true;
     }
-    if (
-      (definition.kind !== "literal" || definition.value !== null) &&
-      definition.kind !== "intersection" &&
-      definition.kind !== "or"
-    ) {
+    if (definition.kind !== "intersection" && definition.kind !== "or") {
       return false;
     }
   }
@@ -71,11 +62,7 @@ export function matchesDefinition(
         depth < MAX_DEPTH &&
         Array.isArray(value) &&
         value.every((item) =>
-          matchesRuntimeValue(
-            definition.item as unknown as RuntimeStruct,
-            item,
-            depth + 1,
-          ),
+          matchesRuntimeValue(definition.item, item, depth + 1),
         )
       );
     case "tuple":
@@ -84,70 +71,52 @@ export function matchesDefinition(
         Array.isArray(value) &&
         value.length === definition.items.length &&
         definition.items.every((item, index) =>
-          matchesRuntimeValue(
-            item as unknown as RuntimeStruct,
-            value[index],
-            depth + 1,
-          ),
+          matchesRuntimeValue(item, value[index], depth + 1),
         )
       );
     case "object":
       return (
         depth < MAX_DEPTH &&
         isPlainObject(value) &&
-        matchesObjectValue(struct, value, depth)
+        matchesObjectValue(definition, value, depth)
       );
     case "record":
       return (
         depth < MAX_DEPTH &&
         isPlainObject(value) &&
         Object.keys(value).every((key) =>
-          matchesRuntimeValue(
-            definition.value as unknown as RuntimeStruct,
-            value[key],
-            depth + 1,
-          ),
+          matchesRuntimeValue(definition.value, value[key], depth + 1),
         )
       );
     case "or":
       return definition.options.some((option) =>
-        matchesRuntimeValue(option as unknown as RuntimeStruct, value, depth),
+        matchesRuntimeValue(option, value, depth),
       );
     case "discriminatedUnion": {
       if (
         !isPlainObject(value) ||
-        !hasOwnKey(value, definition.discriminator)
+        !Object.hasOwn(value, definition.discriminator)
       ) {
         return false;
       }
-      const target = definition.map.get(value[definition.discriminator]) as
-        RuntimeStruct | undefined;
+      const target = definition.map.get(value[definition.discriminator]);
       return target ? matchesRuntimeValue(target, value, depth) : false;
     }
     case "intersection":
       return definition.options.every((option) =>
-        matchesRuntimeValue(option as unknown as RuntimeStruct, value, depth),
+        matchesRuntimeValue(option, value, depth),
       );
   }
 }
 
 function matchesObjectValue(
-  struct: RuntimeStruct,
+  definition: ObjectDefinition,
   value: { [key: string]: unknown },
   depth: number,
 ): boolean {
-  const definition = struct[DEFINITION];
-  if (definition.kind !== "object") {
-    return true;
-  }
-
-  const shape = resolveObjectShape(struct, definition);
-  for (const key in shape) {
-    const fieldStruct = shape[key];
-    const field = fieldStruct as unknown as RuntimeStruct;
-    const fieldDefinition = field[DEFINITION];
-    if (!hasOwnKey(value, key)) {
-      if (isRequiredField(fieldDefinition)) {
+  for (const [key, field] of resolveObjectShapeEntries(definition)) {
+    if (!Object.hasOwn(value, key)) {
+      if (!field[DEFINITION].flags.optional) {
         return false;
       }
       continue;
@@ -161,6 +130,18 @@ function matchesObjectValue(
   return true;
 }
 
-function isRequiredField(definition: StructDefinition): boolean {
-  return !definition.flags.optional;
+export function matchesEnum(
+  definition: EnumDefinition<string | number>,
+  value: unknown,
+): boolean {
+  // One-shot schemas avoid allocating a Set. A second lookup pays for the reusable index.
+  if (definition.valueSet === undefined) {
+    definition.valueSet = null;
+    const values: readonly unknown[] = definition.values;
+    return values.includes(value);
+  }
+  const valueSet: ReadonlySet<unknown> = (definition.valueSet ??= new Set(
+    definition.values,
+  ));
+  return valueSet.has(value);
 }

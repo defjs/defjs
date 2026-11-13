@@ -5,13 +5,13 @@ description: Constructeurs d’intercepteurs HTTP, SSE et WebSocket.
 
 # Intercepteurs
 
-Enveloppe `next` pour un transport. Enregistre avec `withInterceptors`. Les listes mixtes sont filtrées par kind quand l’opération s’exécute.
+Enveloppez `next` pour un transport. Enregistrez avec `withInterceptors`. Les listes mixtes sont filtrées par type quand l’opération s’exécute.
 
 ## createHttpInterceptor()
 
 <ApiSignature name="createHttpInterceptor, InterceptorFn, HttpInterceptorNext" />
 
-Appelle `next(req)` (éventuellement une requête mutée) ou court-circuite avec `makeResponse`. `next` ne va que vers l’intérieur : vers les intercepteurs enregistrés après celui-ci, puis le transport. L’appeler à nouveau rejoue cette partie intérieure depuis cet intercepteur ; les intercepteurs extérieurs ne tournent pas deux fois.
+Appelez `next(req)` (éventuellement une requête mutée) ou court-circuite avec `makeResponse`. `next` ne va que vers l’intérieur : vers les intercepteurs enregistrés après celui-ci, puis le transport. L’appeler à nouveau rejoue cette partie intérieure depuis cet intercepteur ; les intercepteurs extérieurs ne tournent pas deux fois.
 
 ## createSSEInterceptor()
 
@@ -27,7 +27,7 @@ Appelle `next(req)` (éventuellement une requête mutée) ou court-circuite avec
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Un wrapper ou une session de court-circuit doit transmettre le même teardown `[Symbol.asyncDispose]()` que son cycle de vie `close` / `closed` ; renvoyer une promesse résolue sans rapport ne suffit pas. Exiger ce membre est un breaking change à la compilation pour les implémentations structurelles. Le code qui n’accepte que des sessions renvoyées par Defjs n’a pas d’appel runtime supplémentaire à faire.
+Un wrapper ou une session de court-circuit doit transmettre la même libération `[Symbol.asyncDispose]()` que son cycle de vie `close` / `closed` ; renvoyer une promesse résolue sans rapport ne suffit pas.
 
 ## Types marqués
 
@@ -51,6 +51,6 @@ Un wrapper ou une session de court-circuit doit transmettre le même teardown `[
 
 <ApiSignature name="basicAuthHttpInterceptor, basicAuthSSEInterceptor, BasicAuthInterceptorOptions" />
 
-Pose `Authorization: Basic <encoded>` sur chaque requête. `fn` renvoie `{ username, password }` et est appelée par requête. Le second argument facultatif `{ encode }` reçoit ces identifiants et renvoie la partie après `Basic ` ; l’encodage par défaut est ``btoa(`${username}:${password}`)``. Sans `encode`, créer l’intercepteur lève une erreur quand `btoa` n’est pas disponible.
+Définit `Authorization: Basic <encoded>` sur chaque requête. `fn` renvoie `{ username, password }` et est appelée par requête. Le second argument facultatif `{ encode }` reçoit ces identifiants et renvoie la partie après `Basic ` ; l’encodage par défaut est ``btoa(`${username}:${password}`)``. Sans `encode`, créer l’intercepteur lève une erreur quand `btoa` n’est pas disponible.
 
 Voir le [guide Intercepteurs](/fr-FR/docs/interceptors).

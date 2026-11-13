@@ -3,30 +3,20 @@ import {
   catalogKind,
   defined,
   expandParameterList,
-  implementationNode,
   isBindingPattern,
   lookupDescription,
   memberDescription,
   namedParameterType,
-  nestedExpression,
-  objectPropertyName,
-  overloadNodes,
   parameterRequired,
-  parameterTypeText,
-  projectChecker,
-  requireKind,
-  referenceRecord,
+  requireNode,
   formatJsonDocument,
   preferredParameterType,
   serializeCatalog,
   serializeReference,
-  serializeSummaries,
   stableMemberName,
   storedEntry,
   typeOnlyExport,
   visibleMembers,
-  zipOverloads,
-  zipParameters,
 } from "./api-model";
 import type { ApiReferenceEntry, StoredEntry } from "./api-model";
 
@@ -38,14 +28,12 @@ const row = (name: string, typeHref?: string): StoredEntry => ({
   required: true,
   deprecated: false,
   tags: [{ name: "example", text: "n" }],
-  ...(typeHref ? { typeHref } : {}),
+  typeHref,
 });
 
 test("model helpers keep stable names, kinds, and parameter rows", () => {
   expect(defined("ok", "value")).toBe("ok");
   expect(() => defined(undefined, "value")).toThrow("missing value");
-  expect(projectChecker({ project: { checker: 1 } })).toBe(1);
-  expect(() => projectChecker({})).toThrow("TypeScript program has no checker");
   expect(
     catalogKind({ typeOnlyExport: true, declarationKind: "function" }),
   ).toBe("type");
@@ -76,26 +64,11 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
   expect(typeOnlyExport([])).toBe(false);
   expect(typeOnlyExport([true, true])).toBe(true);
   expect(typeOnlyExport([true, false])).toBe(false);
-  expect(
-    overloadNodes(
-      [{ kind: 1, body: {} }, { kind: 2 }, { kind: 2, body: {} }],
-      2,
-    ),
-  ).toEqual([{ kind: 2 }]);
-  expect(overloadNodes([{ kind: 2, body: {} }], 2)).toEqual([
-    { kind: 2, body: {} },
-  ]);
-  expect(overloadNodes([], 2)).toEqual([]);
-  expect(
-    implementationNode([{ kind: 1 }, { kind: 3 }, { kind: 2 }], 1, 3).kind,
-  ).toBe(2);
-  expect(() => implementationNode([{ kind: 1 }], 1, 3)).toThrow(
-    "implementation declaration",
-  );
-  expect(() => requireKind(1, 2, "bad kind")).toThrow("bad kind");
-  requireKind(2, 2, "bad kind");
-  expect(parameterTypeText("  ")).toBe("unknown");
-  expect(parameterTypeText(" ClientOption[] ")).toBe("ClientOption[]");
+  const isNamed = (node: { name?: string }): node is { name: string } =>
+    node.name !== undefined;
+  const named = { name: "x" };
+  expect(requireNode(named, isNamed, "not named")).toBe(named);
+  expect(() => requireNode({}, isNamed, "not named")).toThrow("not named");
   expect(() => stableMemberName("__@CLIENT@1")).toThrow("unstable member name");
   expect(() => stableMemberName("__#CLIENT")).toThrow("unstable member name");
   expect(stableMemberName("[CLIENT]")).toBe("[CLIENT]");
@@ -156,101 +129,10 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
       new Map([["Empty", []]]),
     ),
   ).toThrow("binding parameter type has no member table: Empty");
-  expect(nestedExpression(undefined, [1])).toBeUndefined();
-  expect(nestedExpression({ kind: 2 }, [1])).toEqual({ kind: 2 });
-  expect(
-    nestedExpression(
-      { kind: 1, expression: { kind: 2 } } as { kind: number },
-      [1],
-    ),
-  ).toEqual({
-    kind: 2,
-  });
-  expect(
-    nestedExpression({ kind: 1 } as { kind: number }, [1]),
-  ).toBeUndefined();
-  expect(objectPropertyName("any", "identifier")).toBe("any");
-  expect(() => objectPropertyName("['any']", "other")).toThrow(
-    "unsupported struct property name",
-  );
-  expect(objectPropertyName("any", 80, 80)).toBe("any");
-  expect(() => objectPropertyName("['any']", 81, 80)).toThrow(
-    "unsupported struct property name",
-  );
   expect(
     storedEntry({ ...row("id"), typeHref: undefined }).typeHref,
   ).toBeUndefined();
   expect(storedEntry({ ...row("id"), typeHref: "#id" }).typeHref).toBe("#id");
-  expect(
-    zipParameters(
-      [
-        {
-          name: "...options",
-          required: false,
-          typeText: "T[]",
-          description: "opts",
-        },
-      ],
-      [],
-    ),
-  ).toEqual([
-    {
-      name: "...options",
-      description: "opts",
-      type: "T[]",
-      simplifiedType: "T[]",
-      required: false,
-      deprecated: false,
-      tags: [],
-    },
-  ]);
-  const generated = {
-    name: "p0",
-    description: "from fumadocs",
-    type: "T[]",
-    simplifiedType: "T[]",
-    required: true,
-    deprecated: false,
-    tags: [],
-  };
-  expect(
-    defined(
-      zipParameters(
-        [
-          {
-            name: "...options",
-            required: false,
-            typeText: "T[]",
-            description: "opts",
-          },
-        ],
-        [generated],
-      )[0],
-      "generated parameter",
-    ).description,
-  ).toBe("from fumadocs");
-  expect(
-    defined(
-      zipParameters(
-        [
-          {
-            name: "value",
-            required: true,
-            typeText: "unknown",
-            description: "raw",
-          },
-        ],
-        [{ ...generated, description: " " }],
-      )[0],
-      "raw parameter",
-    ).description,
-  ).toBe("raw");
-  expect(() => zipOverloads(["a"], [], [])).toThrow(
-    "signature/parameter mismatch",
-  );
-  expect(zipOverloads(["function f(): void;"], [[]], ["A value."])).toEqual([
-    { signature: "function f(): void;", parameters: [], returns: ["A value."] },
-  ]);
 });
 
 test("serialized reference JSON uses a fixed field order", () => {
@@ -262,7 +144,6 @@ test("serialized reference JSON uses a fixed field order", () => {
     source: "packages/core/src/client/client.ts",
     group: "client",
     description: "A client.",
-    signatures: ["interface Client {}"],
     related: ["@defjs/core:HttpAwaitResult"],
     exampleFiles: [
       {
@@ -275,45 +156,26 @@ test("serialized reference JSON uses a fixed field order", () => {
     throws: ["Error"],
     tags: [{ name: "example", text: "n" }],
     typeTable: null,
-    parameters: [],
     overloads: [],
   };
-  const withTable = referenceRecord({
-    ...entry,
-    typeTable: [row("id", "#id"), row("name")],
-    parameters: [row("options")],
-    overloads: [
-      {
-        signature: "function f(): void;",
-        parameters: [row("options")],
-        returns: [],
-      },
-    ],
-  });
-  const table = withTable.typeTable as StoredEntry[];
-  expect(defined(table[0], "id").typeHref).toBe("#id");
-  expect(defined(table[1], "name").typeHref).toBeUndefined();
-  expect(serializeReference([entry]).endsWith("\n")).toBe(true);
-  expect(serializeCatalog([entry])).toContain('"slug": "core/client-type"');
-  expect(serializeCatalog([entry])).toContain(
-    '"related": ["@defjs/core:HttpAwaitResult"]',
-  );
-  expect(serializeCatalog([{ ...entry, related: [] }])).toContain(
-    '"related": []',
-  );
-  expect(serializeCatalog([entry])).not.toContain("description");
-  const wide = serializeCatalog([
+  const withTable = serializeReference([
     {
       ...entry,
-      related: [
-        "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",
-        "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions",
+      typeTable: [row("id", "#id"), row("name")],
+      overloads: [
+        {
+          signature: "function f(): void;",
+          parameters: [row("options")],
+        },
       ],
     },
   ]);
-  expect(wide).toContain(
-    '"related": [\n      "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",\n      "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions"\n    ]',
-  );
+  expect(withTable.match(/"typeHref"/g)?.length).toBe(1);
+  expect(withTable).toContain('"typeHref": "#id"');
+  expect(serializeReference([entry]).endsWith("\n")).toBe(true);
+  expect(serializeCatalog([entry])).toContain('"slug": "core/client-type"');
+  expect(serializeCatalog([entry])).toContain('"description": "A client."');
+  expect(serializeCatalog([entry])).not.toContain("related");
 });
 
 test("bun fmt failures name the document", () => {
@@ -340,31 +202,6 @@ test("parameter types prefer the declaration when the generated form is a helper
   expect(preferredParameterType("unknown", "string")).toBe("string");
   expect(preferredParameterType("", "string")).toBe("string");
   expect(preferredParameterType("string", "string")).toBe("string");
-  const generated = {
-    name: "p0",
-    description: "from fumadocs",
-    type: "{ output?: never }",
-    simplifiedType: "expanded",
-    required: true,
-    deprecated: false,
-    tags: [],
-  };
-  const expanded = defined(
-    zipParameters(
-      [
-        {
-          name: "definition",
-          required: true,
-          typeText: "Declared",
-          description: "",
-        },
-      ],
-      [generated],
-    )[0],
-    "expanded parameter",
-  );
-  expect(expanded.type).toBe("Declared");
-  expect(expanded.simplifiedType).toBe("Declared");
 });
 
 test("member tables drop tuple indexes, undocumented symbols and internal rows", () => {
@@ -399,7 +236,7 @@ test("member tables drop tuple indexes, undocumented symbols and internal rows",
   ).toEqual(["length", "[CLIENT]"]);
 });
 
-test("summaries keep the first paragraph and the reference records its source file", () => {
+test("the catalog keeps the first paragraph and the reference records its source file", () => {
   const entry: ApiReferenceEntry = {
     package: "@defjs/core",
     name: "Client",
@@ -408,18 +245,16 @@ test("summaries keep the first paragraph and the reference records its source fi
     source: "packages/core/src/client/client.ts",
     group: "client",
     description: "A client.\n\nMore.",
-    signatures: [],
     related: [],
     exampleFiles: [],
     returns: [],
     throws: [],
     tags: [],
     typeTable: null,
-    parameters: [],
     overloads: [],
   };
-  expect(serializeSummaries([entry])).toContain('"description": "A client."');
-  expect(serializeSummaries([entry])).not.toContain("More");
+  expect(serializeCatalog([entry])).toContain('"description": "A client."');
+  expect(serializeCatalog([entry])).not.toContain("More");
   expect(serializeReference([entry])).toContain(
     '"source": "packages/core/src/client/client.ts"',
   );

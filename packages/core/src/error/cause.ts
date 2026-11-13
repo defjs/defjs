@@ -66,7 +66,7 @@ export const ERR_TIMEOUT = brandSentinel(
  *
  * Pass the underlying `fault.cause`; this function does not unwrap faults.
  * `createNetworkFault` uses this check to select `NET_ABORTED`. OpenTelemetry
- * uses it to suppress caller-cancellation logs while preserving timeout logs.
+ * uses it to treat caller cancellation as no failure while preserving timeouts as failures.
  *
  * @group errors
  * @see {@link ERR_ABORTED}
@@ -89,7 +89,7 @@ export function isAbortCause(cause: unknown): boolean {
  *
  * Pass the underlying `fault.cause`; this function does not unwrap faults.
  * `createNetworkFault` uses this check to select `NET_TIMEOUT`. OpenTelemetry
- * keeps logging timeouts even when the abort signal is also set.
+ * keeps timeouts as failures even when the abort signal is also set.
  *
  * @group errors
  * @see {@link ERR_TIMEOUT}
@@ -103,7 +103,24 @@ export function isTimeoutCause(cause: unknown): boolean {
   );
 }
 
+/**
+ * Which `NET_*` code a cause stands for: cancellation first, then a timeout, otherwise an unreachable peer.
+ * `createNetworkFault` builds the fault for it; use this when only the code is needed.
+ */
+export function networkCauseCode(
+  cause: unknown,
+): "NET_ABORTED" | "NET_TIMEOUT" | "NET_UNREACHABLE" {
+  if (isAbortCause(cause)) {
+    return "NET_ABORTED";
+  }
+  return isTimeoutCause(cause) ? "NET_TIMEOUT" : "NET_UNREACHABLE";
+}
+
 /** Message carried by `cause`, or its string form when it is not an error. */
 export function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+  try {
+    return cause instanceof Error ? cause.message : String(cause);
+  } catch {
+    return "Unknown error";
+  }
 }

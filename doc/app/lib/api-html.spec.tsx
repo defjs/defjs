@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { ApiEntryPage } from "../components/api-entry-page";
 import { apiReference, apiTargets } from "../data/api-reference";
-import summaries from "../data/api-summaries.json";
+import { apiEntries } from "../data/api-catalog";
 import { apiVirtualFiles } from "./api-virtual";
 import { buildApiEntryView, type ApiEntryView } from "./api-entry-view";
 import { renderApiEntryMarkdownBySlug } from "./api-entry-markdown";
@@ -33,7 +33,7 @@ function entry(overrides: Partial<ApiEntryView> = {}): ApiEntryView {
     source: "packages/core/src/client/client.ts",
     group: "client",
     summary: "Creates a client.",
-    description: "Second paragraph.",
+    description: "Creates a client.\n\nSecond paragraph.",
     signatures: ["function createClient(): Client;"],
     parameterTables: [
       {
@@ -87,7 +87,7 @@ function entry(overrides: Partial<ApiEntryView> = {}): ApiEntryView {
 }
 
 test("server rendering highlights like the MDX code blocks and keeps prose", async () => {
-  const rendered = await renderApiEntry(entry(), t, "Client");
+  const rendered = await renderApiEntry(entry(), t, "Client", "en-US");
   expect(rendered.summary).toBe("Creates a client.");
   expect(rendered.name).toBe("createClient");
   expect(rendered.signaturesHtml[0]).toContain("data-api-copy");
@@ -103,6 +103,7 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
   expect(rendered.membersHtml).toContain("Identifier");
   expect(rendered.membersHtml).not.toContain('lang="en"');
   expect(rendered.descriptionHtml).toContain("Second paragraph");
+  expect(rendered.descriptionHtml).not.toContain("Creates a client");
   expect(rendered.examplesHtml[2]).toContain('href="/api/core/client-type"');
   expect(rendered.examplesHtml[2]).toContain("<li>one</li>");
   expect(rendered.examplesHtml[2]).toContain("github-light");
@@ -119,12 +120,13 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
     }),
     t,
     "Client",
+    "en-US",
   );
   expect(empty.descriptionHtml).toBe("");
   expect(empty.signaturesHtml).toEqual([]);
   expect(empty.membersHtml).toBe("");
   expect(await renderMarkdown("  ", copyLabels(t))).toBe("");
-  expect(await renderFieldTable([], t)).toBe("");
+  expect(await renderFieldTable([], t, "en-US")).toBe("");
   const arabic = await renderFieldTable(
     [
       {
@@ -167,11 +169,11 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
 }, 30_000);
 
 test("every entry page and its processed text hide raw doc links", async () => {
-  expect(apiReference).toHaveLength(165);
+  expect(apiReference).toHaveLength(197);
   expect(apiReference.map((entry) => entry.name)).not.toContain("ClientState");
   for (const item of apiReference) {
     const view = buildApiEntryView(item, "en-US", apiTargets());
-    const rendered = await renderApiEntry(view, t, "Overview title");
+    const rendered = await renderApiEntry(view, t, "Overview title", "en-US");
     const page = renderToStaticMarkup(
       <MemoryRouter>
         <TestI18nProvider>
@@ -187,13 +189,13 @@ test("every entry page and its processed text hide raw doc links", async () => {
     assertClean(item.slug, readableMarkdown(processed, "en-US"));
   }
   const files = apiVirtualFiles(
-    summaries,
+    apiEntries,
     ["en-US"],
     new Set(),
     (slug, locale) =>
       Promise.resolve(renderApiEntryMarkdownBySlug(slug, locale)),
   );
-  expect(files).toHaveLength(165);
+  expect(files).toHaveLength(197);
   for (const file of files) {
     expect(file.type).toBe("page");
     if (file.type !== "page") continue;

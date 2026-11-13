@@ -3,18 +3,23 @@ title: "Pruebas HTTP locales"
 description: Sustituye Fetch en un cliente con withHTTPHandle y deja la operación igual.
 ---
 
-# Prueba con un handle Fetch local
+# Probar con un handle Fetch local
 
-`withHTTPHandle(...)` sustituye Fetch solo para ese cliente. Sigues teniendo construcción de URL, interceptores, despacho por estado y decodificación Struct — sin DNS, TLS ni un servidor real.
+`withHTTPHandle(...)` sustituye la función subyacente `fetch` para una instancia concreta de cliente mientras ejercita toda la canalización de Defjs —validación de entrada, mapeo en `builder`, resolución de URLs, interceptores, clasificación por código de estado y decodificación con Struct— sin necesidad de abrir ningún socket de red:
 
-Ver detalles en [Cliente](/es-ES/docs/client).
-
-<include cwd meta="get-user.test.ts">
-  examples/recipes/test-with-handle.ts#example
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
 </include>
 
-```txt
-Ada 200
-```
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
 
-Usa la misma operación `getUser` contra un cliente real con `withEndpoint(...)` en producción — solo cambia el handle.
+  </Tab>
+</Tabs>
+
+En producción, llama a la misma operación `getOrder` con un cliente configurado con `withEndpoint(...)`. Consulta [Pruebas](/es-ES/docs/testing) y [Cliente](/es-ES/docs/client).

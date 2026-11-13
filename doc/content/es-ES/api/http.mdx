@@ -12,15 +12,15 @@ Declara una solicitud tipada y llama a la operación con un cliente y su entrada
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, struct `input` opcional, structs `output` y `error` opcionales, `operation` opcional. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`. Estos miembros de `definition` están documentados en [`RequestDefinition`](/es-ES/api/core/requestdefinition-type). `builder` es obligatorio exactamente cuando se declara `input`.
-- **Devuelve** una operación. Llámalo como `getUser(client, input)`, o `health(client)` cuando no se declara entrada. Cuando todo el struct de entrada es opcional, el argumento de entrada puede omitirse. Llamarla arranca la solicitud. No hay un tercer argumento de opciones.
+- **Devuelve** una operación. Llámala como `getOrder(client, input)`, o `health(client)` cuando no se declara entrada. Cuando todo el struct de entrada es opcional, el argumento de entrada puede omitirse. Llamarla arranca la solicitud. No hay un tercer argumento de opciones.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
-`output` es un struct para el cuerpo 2xx; `error` es un struct para cada cuerpo no-2xx. Ninguno va
-claveado por estado. Omitir uno significa que ese cuerpo nunca se lee — consulta
-[La declaración es una afirmación](/es-ES/docs/design-decisions#declaration-is-an-assertion).
+`output` es un struct para el cuerpo 2xx; `error` es un struct para cada cuerpo no-2xx. Ninguno se
+indexa por estado. Omitir uno significa que ese cuerpo nunca se lee — consulta
+[Declarar es afirmar](/es-ES/docs/design-decisions#declaration-is-an-assertion).
 
-Llamar a la operación devuelve una promesa de la tupla descrita en [`HttpAwaitResult`](/es-ES/api/core/httpawaitresult-type). Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). HTTP lee `signal` y los callbacks de progreso e ignora los demás campos.
+Llamar a la operación devuelve una promesa de la tupla descrita en [`HttpAwaitResult`](/es-ES/api/core/httpawaitresult-type). Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). HTTP lee `signal`, `retry` y los callbacks de progreso e ignora los demás campos.
 
 Un estado no-2xx es `HTTP_STATUS` cuando no se declara un struct `error` o el cuerpo `error` declarado decodifica. El `data` del fault es el cuerpo
 `error` decodificado cuando se declaró uno, y `undefined` en caso contrario. Cuando un cuerpo `error` declarado no se puede leer (media type incorrecto, JSON inválido) o
@@ -46,13 +46,13 @@ que uno del cable; no hay un cortocircuito de confianza.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` es el recorte HTTP de [`RequestOptions`](/es-ES/api/core/requestoptions-type): [`UseRequestConfig`](/es-ES/api/core/userequestconfig-type), que es `signal` más `onDownloadProgress` y `onUploadProgress`. No hay campo `timeout` ni `abort`. Un plazo es `signal: AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. No hay un plazo por defecto a nivel de cliente. Los demás campos de la solicitud, como `heartbeat`, se ignoran.
+`HttpExecuteOptions` es el recorte HTTP de [`RequestOptions`](/es-ES/api/core/requestoptions-type): [`UseRequestConfig`](/es-ES/api/core/userequestconfig-type), que es `signal` más `onDownloadProgress`, `onUploadProgress` y `retry`. No hay campo `timeout` ni `abort`. Un plazo es `signal: AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. No hay un plazo por defecto a nivel de cliente. Los demás campos de la solicitud, como `heartbeat`, se ignoran.
 
 ## Tipos
 
 ### RequestDefinition
 
-`method`, `path`, `input`, `output`, `error`, `operation` y `builder` opcionales. No hay `responseType`: el kind del struct elige cómo se lee un cuerpo declarado. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
+`method`, `path`, `input`, `output`, `error`, `operation` y `builder` opcionales. El tipo del struct elige cómo se lee un cuerpo declarado. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
 
 ### HttpAwaitResult
 
@@ -63,7 +63,7 @@ En éxito, el tercer hueco lleva `body` solo cuando se declaró `output`. En fal
 
 ### HttpRequest
 
-Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` y `queryParams`. Cuando los interceptores la ven, `body` ya es el valor de cable — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa instancia tal cual. `responseType` y `errorResponseType` son de solo lectura: se derivan de los kinds de struct `output` y `error` del endpoint y no deben cambiarse.
+Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` y `query`. Cuando los interceptores la ven, `body` ya es el valor de red — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. `query` es la única query que envía la solicitud, un `URLSearchParams`: un interceptor la cambia in situ o pasa un reemplazo a `next()`. Un builder que devuelve `URLSearchParams` hace que se copie esa instancia, y el string de una función `withQuerySerializer` se analiza dentro de ella. La forma de red es `query.toString()`, la serialización application/x-www-form-urlencoded del URL Standard, así que un espacio es `+`, y una `query` vacía no añade `?`. `responseType` y `errorResponseType` son de solo lectura: se derivan de los tipos de struct `output` y `error` declarados y no deben cambiarse.
 
 ### HttpMeta
 
@@ -83,9 +83,9 @@ la decodificación ocurrió, y por eso un fallo de decodificación informa solo 
 
 <ApiSignature name="HttpResponse" />
 
-`body` es `undefined` cuando la respuesta no tenía ninguno; un JSON `null` sigue siendo `null`. El tipo está marcado, así que construye uno con `makeResponse` y no con un objeto literal. La forma de cable que producen los transportes y ven los interceptores: `body` es texto o JSON ya parseado, no un
-valor decodificado. En una representación JSON, un string es una raíz string JSON y no se vuelve a parsear; los bytes
-y los blobs son crudos y se parsean una vez. `DecodedResponse` es lo que llega a quien llama.
+`body` es `undefined` cuando la respuesta no tenía ninguno; un JSON `null` sigue siendo `null`. El tipo lleva una marca, así que construye uno con `makeResponse` y no con un objeto literal. La forma de red que producen los transportes y ven los interceptores: `body` es texto o JSON ya analizado, no un
+valor decodificado. En una representación JSON, un string es una raíz string JSON y no se vuelve a analizar; los bytes
+y los blobs son crudos y se analizan una vez. `DecodedResponse` es lo que llega a quien llama.
 
 ### HttpProgressEvent
 
@@ -93,10 +93,9 @@ y los blobs son crudos y se parsean una vez. `DecodedResponse` es lo que llega a
 
 `loaded`, `total`, `lengthComputable`. Los callbacks pueden ser async. Un `onDownloadProgress` o `onUploadProgress` que lanza falla la llamada con
 `EXT_OBSERVER_FAILED`, con el valor lanzado como `cause`; la cancelación sigue informando `NET_ABORTED`, o `NET_TIMEOUT` cuando el motivo del abort es un timeout.
-El progreso de subida solo se informa donde el runtime puede hacer stream de cuerpos de solicitud (Bun, Node); en los navegadores, los cuerpos `Blob` / `File`,
-`ArrayBuffer` y `FormData` se envían sin cambios y no se llama a `onUploadProgress`.
+El progreso de subida se informa solo cuando el cuerpo de la petición es un `ReadableStream` que tú pasas. Cualquier otro cuerpo (`Blob`, `File`, `ArrayBuffer`, `FormData`, un string, `URLSearchParams`) se envía tal como se construyó y `onUploadProgress` no se llama, en todos los runtimes; la biblioteca nunca convierte un cuerpo en un stream. Un cuerpo `ReadableStream` sigue las reglas de Fetch para cuerpos de petición en streaming, con o sin `onUploadProgress`: Chromium y WebKit lo aceptan solo sobre HTTP/2 o posterior (`NET_UNREACHABLE` en HTTP/1.1; WebKit se comprobó a mano solo en 27.2; Node.js y Bun aceptan HTTP/1.1); Firefox no puede hacer streaming de cuerpos de petición (`ENV_UNSUPPORTED`); en los navegadores, una petición cross-origin necesita un preflight CORS salvo que el navegador conserve un resultado de preflight en caché, así que el servidor debe responder a `OPTIONS`; un redirect 301, 302, 307 o 308 falla después de que el cuerpo se envió una vez, mientras que 303 pasa a ser un GET y tiene éxito. Los navegadores no envían `Content-Length`. `fetch` informa de estos fallos, y de un `ReadableStream` de origen que lanza mientras `fetch` lo lee, como el mismo error de red que un endpoint inalcanzable, así que el balanceador de carga recibe `{ attempted: false }` para ellos, igual que para un callback de progreso que lanza (`EXT_OBSERVER_FAILED`). Una subida en streaming por sí sola no puede detectar un endpoint caído, y una subida en streaming rechazada nunca se reintenta: un cuerpo `ReadableStream` termina el flujo de reintento antes de que se consulte a `shouldRetry`.
 
-En los runtimes de servidor, FormData usa su stream serializado sin almacenar todo el cuerpo en un Blob y conserva el boundary multipart real. Su total es desconocido salvo que lo aporte un `Content-Length` explícito válido. Los content types explícitos sobreviven a la conversión de subida, salvo que FormData debe usar el boundary de su serialización. `loaded` cuenta bytes del stream, no acuses del servidor. Las descargas con un `Content-Encoding` distinto de identity informan `total: 0` y `lengthComputable: false`; sus bytes de stream pueden estar ya descomprimidos.
+Un cuerpo en streaming no tiene longitud conocida: el total informado es desconocido salvo que lo fije una cabecera `Content-Length` explícita y válida (los navegadores no envían esa cabecera). `loaded` cuenta bytes del stream, no acuses del servidor. Las descargas con un `Content-Encoding` distinto de identity informan `total: 0` y `lengthComputable: false`; sus bytes de stream pueden estar ya descomprimidos.
 
 Consulta la [guía de HTTP](/es-ES/docs/http) y [Cliente](/es-ES/docs/client).
 
@@ -106,7 +105,7 @@ Lo devuelve `defineRequest`. El primer argumento es un [`Client`](/es-ES/api/cor
 
 ## BuilderInput
 
-Entrada parseada del endpoint que ve `builder`. Los nodos objeto llevan el struct que los produjo, así que el alias y la codificación de `Date` y `bigint` siguen al valor.
+Entrada analizada de la operación que ve `builder`. Los nodos objeto llevan el struct que los produjo, así que el alias y la codificación de `Date` y `bigint` siguen al valor.
 
 ## HttpRequestShape
 
@@ -118,7 +117,7 @@ Los cuatro campos son opcionales. `query` es `URLSearchParams` o un record; un o
 
 ## UseRequestConfig
 
-`signal`, más `onDownloadProgress` y `onUploadProgress` opcionales. `HttpExecuteOptions` es este recorte. No hay campo `timeout` ni `abort`.
+`signal`, más `onDownloadProgress`, `onUploadProgress` y `retry` opcionales. `HttpExecuteOptions` es este recorte. No hay campo `timeout` ni `abort`.
 
 ## RequestSuccessData
 
@@ -132,7 +131,7 @@ Cuerpo de error inferido del struct `error` declarado, o `undefined` cuando no s
 
 `'arraybuffer' | 'blob' | 'json' | 'text'`
 
-Elegido a partir del kind del struct declarado (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, todo lo demás → `json`). No es un campo de `defineRequest`.
+Elegido a partir del tipo del struct declarado (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, todo lo demás → `json`). No es un campo de `defineRequest`.
 
 ## MakeResponseOptions
 

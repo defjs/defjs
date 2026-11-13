@@ -1,60 +1,52 @@
 <!-- #region example -->
 <script setup lang="ts">
-import { defineEventStream, struct, type EventStreamHandle } from "@defjs/core";
+import { defineEventStream, struct } from "@defjs/core";
 import { injectClient } from "@defjs/vue";
 import { onScopeDispose, ref } from "vue";
 
 const client = injectClient();
-const messages = ref<{ id: number; text: string }[]>([]);
+const errorMessage = ref<string>();
+const lines = ref<{ id: number; text: string }[]>([]);
 let nextId = 0;
-const notifications = defineEventStream({
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 100,
-  path: "/notifications",
-  events: { message: struct.string() },
+const deployEvents = defineEventStream({
+  path: "/deployments/events",
+  events: { line: struct.string() },
 });
 
 const controller = new AbortController();
-let disposed = false;
-let stream: EventStreamHandle<unknown> | undefined;
-
-const stop = () => {
-  disposed = true;
-  controller.abort();
-  stream?.close("scope-disposed");
-};
-onScopeDispose(stop);
+onScopeDispose(() => controller.abort());
 
 void (async () => {
-  const [error, nextStream] = await notifications(
+  const [error, stream] = await deployEvents(
     client({ signal: controller.signal }),
   );
-  if (error) return;
-
-  stream = nextStream;
-  if (disposed) {
-    nextStream.close("scope-disposed");
-    await nextStream.closed;
+  if (error) {
+    if (error.code !== "NET_ABORTED")
+      errorMessage.value = `Unable to open deploy log (${error.code}).`;
     return;
   }
 
   try {
-    for await (const event of nextStream) {
-      messages.value.push({ id: nextId++, text: event.data });
-      if (messages.value.length > 100) messages.value.shift();
+    for await (const event of stream) {
+      lines.value.push({ id: nextId++, text: event.data });
+      if (lines.value.length > 100) lines.value.shift();
     }
   } catch (cause) {
-    if (!disposed) console.error("notifications failed", cause);
+    if (!controller.signal.aborted) {
+      errorMessage.value = "Deploy log interrupted.";
+      console.error("deployEvents failed", cause);
+    }
   } finally {
-    nextStream.close("scope-finished");
-    await nextStream.closed;
+    stream.close("scope-finished");
+    await stream.closed;
   }
 })();
 </script>
 
 <template>
+  <p v-if="errorMessage" role="alert">{{ errorMessage }}</p>
   <ul>
-    <li v-for="message in messages" :key="message.id">{{ message.text }}</li>
+    <li v-for="line in lines" :key="line.id">{{ line.text }}</li>
   </ul>
 </template>
 <!-- #endregion -->

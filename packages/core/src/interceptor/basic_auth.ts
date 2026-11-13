@@ -1,11 +1,8 @@
-import type { HttpRequest } from "../internal/http_request";
+import type { HttpRequest } from "../http/http_request";
 import type { HttpInterceptor, SSEInterceptor } from "./interceptor";
 import { createHttpInterceptor, createSSEInterceptor } from "./interceptor";
 
-export type BasicCredential = {
-  username: string;
-  password: string;
-};
+type BasicCredential = { username: string; password: string };
 
 /**
  * Options for basic-auth interceptors, including a custom credential encoder.

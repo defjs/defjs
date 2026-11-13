@@ -1,0 +1,244 @@
+import { expect, inject, test } from "vitest";
+import { createClient, withEndpoint, withWebSocketHandle } from "../client";
+import { struct } from "../struct";
+import { defineWebSocket } from "./index";
+
+test("immediate clean close settles according to observed native events", async () => {
+  const endpoint = inject("testServerHost");
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const events: string[] = [];
+    const cancellation = new AbortController();
+    let closeNative: () => void = () => undefined;
+    let finishNative: () => void = () => undefined;
+    const nativeClosed = new Promise<void>((resolve) => {
+      finishNative = resolve;
+    });
+    class RecordingSocket extends WebSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols);
+        closeNative = () => {
+          try {
+            if (this.readyState < WebSocket.CLOSING) this.close();
+          } catch (error) {
+            events.push(
+              `cleanup-error:${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        };
+        this.addEventListener("open", () => events.push("open"));
+        this.addEventListener("error", () => events.push("error"));
+        this.addEventListener("close", (event) => {
+          events.push(`close:${event.code}:${event.wasClean}`);
+          finishNative();
+        });
+      }
+    }
+    const work = async () => {
+      const client = createClient(
+        withEndpoint(endpoint),
+        withWebSocketHandle(RecordingSocket),
+      );
+      const connect = defineWebSocket({
+        incoming: struct.unknown(),
+        path: "/ws/close-immediately",
+      });
+      const [fault, session] = await connect(
+        client({ signal: cancellation.signal }),
+      );
+      const closed = session ? (await session.closed).kind : undefined;
+      await nativeClosed;
+      return { fault: fault?.code ?? null, closed };
+    };
+    const result = await work().finally(() => {
+      cancellation.abort();
+      closeNative();
+    });
+    expect(events.some((event) => event.startsWith("close:"))).toBe(true);
+    if (events.includes("open")) {
+      expect(result.fault).toBeNull();
+      expect(result.closed).toBe("closed");
+    } else {
+      expect(result.fault).toBe("NET_UNREACHABLE");
+    }
+  }
+}, 30_000);
+
+test("original 10ms closes agree with native-only controls", async () => {
+  const endpoint = inject("testServerHost");
+  for (const blockMs of [0, 25]) {
+    for (const route of ["error-before-close", "binary"]) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        for (const mode of ["native", "library"]) {
+          const events: string[] = [];
+          const frames: string[] = [];
+          const messages: unknown[] = [];
+          const runtimeErrors: string[] = [];
+          let fault: string | null = null;
+          let closed: string | undefined;
+          const cancellation = new AbortController();
+          let closeNative: () => void = () => undefined;
+          let finishNative: () => void = () => undefined;
+          const nativeClosed = new Promise<void>((resolve) => {
+            finishNative = resolve;
+          });
+          const trace = () =>
+            JSON.stringify({
+              attempt,
+              blockMs,
+              route,
+              mode,
+              events,
+              frames,
+              messages,
+              runtimeErrors,
+              fault,
+              closed,
+            });
+          class RecordingSocket extends WebSocket {
+            constructor(url: string | URL, protocols?: string | string[]) {
+              super(url, protocols);
+              closeNative = () => {
+                try {
+                  if (this.readyState < WebSocket.CLOSING) this.close();
+                } catch (error) {
+                  events.push(
+                    `cleanup-error:${error instanceof Error ? error.message : String(error)}`,
+                  );
+                }
+              };
+              this.binaryType = "arraybuffer";
+              this.addEventListener("open", () => events.push("open"));
+              this.addEventListener("error", () => events.push("error"));
+              this.addEventListener("message", (event) => {
+                events.push("message");
+                frames.push(frameText(event.data));
+                function frameText(data: unknown): string {
+                  if (typeof data === "string") {
+                    return data;
+                  }
+                  if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+                    return new TextDecoder().decode(data);
+                  }
+                  throw new Error("expected a websocket frame");
+                }
+              });
+              this.addEventListener("close", (event) => {
+                events.push(`close:${event.code}:${event.wasClean}`);
+                finishNative();
+              });
+              // Hold only the browser event loop; the real server still closes at 10ms.
+              const end = performance.now() + blockMs;
+              while (performance.now() < end) {
+                /* deliberate scheduling stress */
+              }
+            }
+          }
+          const work = async () => {
+            const protocols = route === "binary" ? ["json"] : undefined;
+            const path = `/ws/regression/${route}`;
+            if (mode === "native") {
+              new RecordingSocket(
+                `${endpoint.replace(/^http/, "ws")}${path}`,
+                protocols,
+              );
+            } else {
+              const client = createClient(
+                withEndpoint(endpoint),
+                withWebSocketHandle(RecordingSocket),
+              );
+              const connect = defineWebSocket({
+                incoming: struct.object({
+                  type: struct.literal("message"),
+                  text: struct.string(),
+                }),
+                path,
+                protocols,
+              });
+              const [error, session] = await connect(
+                client({ signal: cancellation.signal }),
+              );
+              fault = error?.code ?? null;
+              if (session) {
+                session.onRuntimeError((error) =>
+                  runtimeErrors.push(
+                    error instanceof Error ? error.name : String(error),
+                  ),
+                );
+                closed = (await session.closed).kind;
+                for await (const message of session.receive)
+                  messages.push(message);
+              }
+            }
+            await nativeClosed;
+          };
+          try {
+            await work();
+          } finally {
+            cancellation.abort();
+            closeNative();
+          }
+          try {
+            // Firefox may close before open; the native trace defines the expected library result.
+            const opened = events.includes("open");
+            expect(
+              events.map((event) =>
+                event.startsWith("close:") ? "close" : event,
+              ),
+            ).toEqual(opened ? ["open", "message", "close"] : ["close"]);
+            expect(events.at(-1)).toMatch(/^close:1000:(true|false)$/);
+            expect(frames).toEqual(
+              opened
+                ? [
+                    JSON.stringify({
+                      type: "message",
+                      text: route === "binary" ? "hello-binary" : 123,
+                    }),
+                  ]
+                : [],
+            );
+            if (mode === "library") {
+              expect(fault).toBe(opened ? null : "NET_UNREACHABLE");
+              expect(closed).toBe(opened ? "closed" : undefined);
+              expect(messages).toEqual(
+                opened && route === "binary"
+                  ? [{ type: "message", text: "hello-binary" }]
+                  : [],
+              );
+              expect(runtimeErrors).toEqual(
+                opened && route === "error-before-close" ? ["StructError"] : [],
+              );
+            }
+          } catch (error) {
+            console.error("WebSocket close observation:", trace());
+            throw error;
+          }
+        }
+      }
+    }
+  }
+}, 60_000);
+
+test("rejects an optional outgoing root that has no JSON representation", async () => {
+  const client = createClient(withEndpoint(inject("testServerHost")));
+  const connect = defineWebSocket({
+    incoming: struct.object({ received: struct.string() }),
+    outgoing: struct.string().optional(),
+    path: "/ws/regression/capture",
+  });
+  const [error, session] = await connect(client);
+  expect(error).toBeNull();
+  if (!session) throw new Error("Expected an open session");
+  try {
+    expect(() => session.send(undefined)).toThrow();
+    session.send("after-rejected-send");
+    await expect(
+      session.receive[Symbol.asyncIterator]().next(),
+    ).resolves.toEqual({
+      done: false,
+      value: { received: '"after-rejected-send"' },
+    });
+  } finally {
+    session.close();
+    await session.closed;
+  }
+}, 15_000);

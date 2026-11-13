@@ -1,15 +1,9 @@
 import type { QuerySerializer } from "../client/config";
-import { isPlainObject } from "../struct/utils";
-import type { HttpRequest } from "./http_request";
-import type { RequestBuildValue, RequestScalarValue } from "./request_values";
-import {
-  isRequestScalarValue,
-  serializeRequestScalarValue,
-} from "./request_values";
+import { isPlainObject } from "../struct/plain_object";
+import type { HttpRequest } from "../http/http_request";
+import { isURLSearchParams } from "./type_guards";
 
 export class RequestUrlError extends TypeError {}
-
-type UrlScalarValue = Exclude<RequestScalarValue, bigint>;
 
 export function fillUrl(
   path: string,
@@ -24,7 +18,7 @@ export function fillUrl(
 
   return path.replace(/:([^/]+)/g, (_, part: string) => {
     const value = paramMap.get(part);
-    if (typeof value === "undefined") {
+    if (value === undefined) {
       throw new TypeError(`Missing path param: ${part}`);
     }
     return value;
@@ -43,13 +37,10 @@ function encodePathSegment(key: string, value: string): string {
   return encodeURIComponent(value);
 }
 
-export function createSearchParams(query?: {
+export function createSearchParams(query: {
   [key: string]: unknown;
 }): URLSearchParams {
   const searchParams = new URLSearchParams();
-  if (!query) {
-    return searchParams;
-  }
 
   for (const [key, value] of Object.entries(query)) {
     appendToSearchParams(searchParams, key, value);
@@ -58,90 +49,42 @@ export function createSearchParams(query?: {
   return searchParams;
 }
 
+/**
+ * The query a request carries. A `URLSearchParams` from the builder is copied, so that an interceptor that changes
+ * the request's query does not change the builder's own instance. A serializer's string is parsed, so that the wire
+ * form is always `query.toString()`.
+ */
 export function resolveTransportQuery(
   query: URLSearchParams | { [key: string]: unknown } | undefined,
   serializer?: QuerySerializer,
-): { queryParams: URLSearchParams; queryString: string } {
-  if (
-    typeof URLSearchParams !== "undefined" &&
-    query instanceof URLSearchParams
-  ) {
-    return { queryParams: query, queryString: query.toString() };
+): URLSearchParams {
+  if (isURLSearchParams(query)) {
+    return new URLSearchParams(query);
   }
 
   if (!isPlainObject(query)) {
-    const queryParams = createSearchParams();
-    return { queryParams, queryString: queryParams.toString() };
+    return new URLSearchParams();
   }
 
-  if (!serializer) {
-    const queryParams = createSearchParams(query);
-    return { queryParams, queryString: queryParams.toString() };
-  }
-
-  const queryString = serializer(query);
-  return {
-    queryParams: new URLSearchParams(queryString),
-    queryString,
-  };
+  return serializer
+    ? new URLSearchParams(serializer(query))
+    : createSearchParams(query);
 }
 
-export function appendRecordToHeaders(
-  headers: Headers,
-  value?: HeadersInit | { [key: string]: RequestBuildValue },
-): void {
-  if (!value) {
-    return;
-  }
-
-  if (value instanceof Headers) {
-    value.forEach((headerValue, key) => {
-      headers.set(key, headerValue);
-    });
-    return;
-  }
-
-  const applied = new Set<string>();
-  const appendValue = (key: string, headerValue: string) => {
-    const name = key.toLowerCase();
-    if (applied.has(name)) {
-      headers.append(key, headerValue);
+/**
+ * Copies `source` into `target`. The first value of a name replaces the target's value of that name, so a builder
+ * header overrides a default; later values of the same name, such as each Set-Cookie, are appended.
+ */
+export function mergeHeaders(target: Headers, source: Headers): void {
+  const replaced = new Set<string>();
+  source.forEach((value, name) => {
+    if (replaced.has(name)) {
+      target.append(name, value);
     } else {
-      headers.set(key, headerValue);
-      applied.add(name);
+      target.set(name, value);
+      replaced.add(name);
     }
-  };
-
-  if (Array.isArray(value)) {
-    for (const [key, headerValue] of value) {
-      appendValue(key, headerValue);
-    }
-    return;
-  }
-
-  for (const [key, headerValue] of Object.entries(value)) {
-    if (typeof headerValue === "undefined") {
-      continue;
-    }
-
-    if (Array.isArray(headerValue)) {
-      for (const item of headerValue) {
-        if (!isUrlScalarValue(item)) {
-          throw new TypeError(
-            `header value for "${key}" requires a scalar value`,
-          );
-        }
-        appendValue(key, serializeRequestScalarValue(item));
-      }
-      continue;
-    }
-
-    if (!isUrlScalarValue(headerValue)) {
-      throw new TypeError(`header value for "${key}" requires a scalar value`);
-    }
-
-    appendValue(key, serializeRequestScalarValue(headerValue));
-  }
+  });
 }
 
 /**
@@ -157,14 +100,14 @@ export function appendRecordToHeaders(
  * @throws TypeError when the endpoint or path is invalid.
  * @param baseEndpoint - A valid absolute client endpoint. Its query and hash are dropped, and a trailing slash is added to its pathname so that the base path is kept: `https://api.example.com/v1` with `/users` gives `https://api.example.com/v1/users`.
  * @param path - A relative endpoint path. A single leading slash is removed. After resolution, the URL must keep the base origin and stay under its directory. Absolute or protocol-relative paths, C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`.
- * @param queryString - Query without a leading `?`. When non-empty it is set as the URL's search verbatim.
+ * @param search - The URL's search without a leading `?`, as `URLSearchParams.toString()` gives it. When non-empty it is set as the URL's `search`.
  * @returns the resolved `URL`.
  * @group http
  */
 export function createResolvedRequestUrl(
   baseEndpoint: string,
   path: string,
-  queryString = "",
+  search = "",
 ): URL {
   const base = createEndpointDirectoryBase(baseEndpoint);
   let url: URL;
@@ -180,28 +123,21 @@ export function createResolvedRequestUrl(
   }
   validateEndpointPath(path);
   // The validated path carries no query, so an empty string would only reassign an empty search.
-  if (queryString) {
-    url.search = queryString;
+  if (search) {
+    url.search = search;
   }
   return url;
 }
 
-// HttpRequest-flavored convenience: resolve endpoint + base + query string in one go.
-// Replaces the near-identical `createRequestUrl` helpers previously duplicated in fetch/sse/test_handler.
+/** The URL of `request`: its endpoint under its base endpoint, with its query. */
 export function resolveRequestUrl(request: HttpRequest): URL {
   if (!request.baseEndpoint) {
     throw new RequestUrlError("Client endpoint is required");
   }
-  const queryString =
-    typeof request.queryString === "string"
-      ? request.queryString
-      : request.queryParams
-        ? request.queryParams.toString()
-        : "";
   return createResolvedRequestUrl(
     request.baseEndpoint,
     request.endpoint,
-    queryString,
+    request.query?.toString(),
   );
 }
 
@@ -210,16 +146,15 @@ function appendToSearchParams(
   key: string,
   value: unknown,
 ): void {
-  if (typeof value === "undefined") {
+  if (value === undefined) {
     return;
   }
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      if (typeof item === "undefined") {
-        continue;
+      if (item !== undefined) {
+        appendQueryLeaf(searchParams, key, item);
       }
-      appendQueryLeaf(searchParams, key, item);
     }
     return;
   }
@@ -232,20 +167,18 @@ function appendQueryLeaf(
   key: string,
   value: unknown,
 ): void {
-  if (value === null) {
-    throw new TypeError(`query value for "${key}" must not be null`);
+  switch (typeof value) {
+    case "string":
+    case "number":
+    case "boolean":
+    case "bigint":
+      searchParams.append(key, String(value));
+      return;
+    default:
+      throw new TypeError(
+        `a query serializer is required for nested query value "${key}"`,
+      );
   }
-  if (isRequestScalarValue(value)) {
-    searchParams.append(key, serializeRequestScalarValue(value));
-    return;
-  }
-  throw new TypeError(
-    `a query serializer is required for nested query value "${key}"`,
-  );
-}
-
-function isUrlScalarValue(value: unknown): value is UrlScalarValue {
-  return isRequestScalarValue(value) && typeof value !== "bigint";
 }
 
 // One client usually talks to one endpoint. `new URL(path, base)` only reads the base, so it is shared.
@@ -253,8 +186,8 @@ let lastEndpoint: string | undefined;
 let lastBase: URL | undefined;
 
 function createEndpointDirectoryBase(baseEndpoint: string): URL {
-  if (baseEndpoint === lastEndpoint) {
-    return lastBase as URL;
+  if (baseEndpoint === lastEndpoint && lastBase !== undefined) {
+    return lastBase;
   }
   let base: URL;
   try {
@@ -275,6 +208,16 @@ function createEndpointDirectoryBase(baseEndpoint: string): URL {
   return base;
 }
 
+function hasC0ControlOrBackslash(path: string): boolean {
+  for (let index = 0; index < path.length; index += 1) {
+    const code = path.charCodeAt(index);
+    if (code <= 0x1f || code === 0x5c) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function validateEndpointPath(path: string): void {
   if (URL.canParse(path) || /^ *\/\//.test(path)) {
     throw new RequestUrlError("Endpoint path must not be an absolute URL");
@@ -284,8 +227,8 @@ function validateEndpointPath(path: string): void {
     throw new RequestUrlError("Endpoint path must not include query or hash");
   }
 
-  // eslint-disable-next-line no-control-regex -- C0 controls are an intentional request URL security boundary.
-  if (/[\u0000-\u001f\\]/.test(path)) {
+  // C0 controls are an intentional request URL security boundary.
+  if (hasC0ControlOrBackslash(path)) {
     throw new RequestUrlError(
       "Endpoint path must not include C0 controls or backslashes",
     );

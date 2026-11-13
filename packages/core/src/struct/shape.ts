@@ -1,53 +1,82 @@
-import { isStruct } from "./guards";
 import type {
   ObjectDefinition,
-  ObjectShape,
+  ResolvedStructField,
   RuntimeStruct,
-  StructLike,
-} from "./types";
+} from "./definition";
+import { isStruct } from "./guards";
+import { DEFINITION } from "./symbols";
 
-export function resolveObjectShape(
-  _struct: RuntimeStruct,
+/** The fields as `[key, struct]` pairs in key order. Getters run once, on the first call for this object struct. */
+export function resolveObjectShapeEntries(
   definition: ObjectDefinition,
-): ObjectShape {
-  const cached = definition.cache.resolvedShape;
+): readonly (readonly [key: string, struct: RuntimeStruct])[] {
+  const cached = definition.cache.entries;
   if (cached) {
     return cached;
   }
 
-  const shape = readObjectShape(
-    definition.shape,
+  // Every getter runs before any value is checked, so a getter that throws wins over an invalid field before it.
+  const read: [key: string, value: unknown][] = [];
+  for (const [key, descriptor] of Object.entries(
     definition.cache.declaredDescriptors,
-  );
-  for (const [key, value] of Object.entries(shape)) {
-    assertStruct(value, `object field "${key}"`);
+  )) {
+    read.push([
+      key,
+      typeof descriptor.get === "function"
+        ? descriptor.get.call(definition.shape)
+        : descriptor.value,
+    ]);
   }
 
-  definition.cache.resolvedShape = shape;
-  return shape;
+  const entries: (readonly [key: string, struct: RuntimeStruct])[] = [];
+  for (const [key, value] of read) {
+    assertStruct(value, `object field "${key}"`);
+    entries.push([key, value]);
+  }
+  definition.cache.entries = entries;
+  return entries;
 }
 
-export function readObjectShape(
-  shape: ObjectShape,
-  descriptors: PropertyDescriptorMap,
-): ObjectShape {
-  const output: { [key: string]: unknown } = Object.create(null);
-
-  for (const [key, descriptor] of Object.entries(descriptors)) {
-    const value =
-      typeof descriptor.get === "function"
-        ? descriptor.get.call(shape)
-        : descriptor.value;
-    output[key] = value;
+export function resolveStructFields(
+  definition: ObjectDefinition,
+): readonly ResolvedStructField[] {
+  const cached = definition.cache.fields;
+  if (cached) {
+    return cached;
   }
 
-  return output as unknown as ObjectShape;
+  const fields = Object.freeze(
+    resolveObjectShapeEntries(definition).map(([key, struct]) =>
+      Object.freeze({
+        key,
+        struct,
+        wireKey: struct[DEFINITION].alias ?? key,
+      }),
+    ),
+  );
+
+  assertUniqueWireKeys(fields);
+  definition.cache.fields = fields;
+  return fields;
+}
+
+function assertUniqueWireKeys(fields: readonly ResolvedStructField[]): void {
+  const seen = new Map<string, string>();
+  for (const field of fields) {
+    if (seen.has(field.wireKey)) {
+      const previous = seen.get(field.wireKey);
+      throw new TypeError(
+        `duplicate wire key "${field.wireKey}" for object fields "${previous}" and "${field.key}"`,
+      );
+    }
+    seen.set(field.wireKey, field.key);
+  }
 }
 
 export function assertStruct(
   value: unknown,
   label: string,
-): asserts value is StructLike<unknown, unknown, boolean> {
+): asserts value is RuntimeStruct {
   if (!isStruct(value)) {
     throw new TypeError(`${label} must be a struct`);
   }

@@ -1,20 +1,31 @@
 ---
 title: "إرسال JSON"
-description: أرسل جسم JSON محدَّد النوع وفكّ 201 معلَنًا.
+description: أرسل جسم طلب JSON محدد الأنواع وفك ترميز استجابة 201 معلنة بدقة.
 ---
 
-# POST JSON
+# إرسال بيانات JSON (POST JSON)
 
-سلّم الجسم محدَّد النوع إلى الـ builder. تبقى أسماء الحقول المنطقية في TypeScript؛ وتصبح الأسماء المستعارة على الـ struct مفاتيح JSON. جسم الكائن هو `application/json`.
+مرّر كائن مدخلات ذا نوع محدد إلى دالة `builder` وأرجع `{ body: input }`. تُبقي `.alias("customer_name")` اسم `customerName` داخل TypeScript، مع ترميز `"customer_name"` سلكياً وفك ترميزه مجدداً من استجابة `201`.
 
-انظر [HTTP](/ar/docs/http) و[العميل](/ar/docs/client) للتفاصيل.
-
-<include cwd meta="create-user.ts">
-  examples/recipes/post-json.ts#example
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
-`api.example.com` عنوان توضيحي. مع خادم يجيب بـ `201` و`{ "id": 1, "name": "Ada", "email": "ada@example.com" }`، تطبع الشيفرة:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+عندما يستجيب الخادم بحالة `201` مع `{ "id": 1, "status": "paid", "customer_name": "Ada" }`، يطبع البرنامج:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+راجع دليلي [عمليات HTTP](/ar/docs/http) و[Struct والمخططات](/ar/docs/struct) للمزيد من التفاصيل.

@@ -1,46 +1,64 @@
 ---
 title: "SDK 작성과 배포"
-description: API 정의와 타입 선언을 npm 패키지로 배포하고, 사용하는 앱이 자신의 Client를 구성하게 합니다.
+description: 모델과 순수 함수 기반 작업 정의로 다중 모듈 S3 SDK를 구성해 npm 패키지로 배포하고, 각 애플리케이션이 자체 클라이언트를 직접 구성하도록 합니다.
 ---
 
 # SDK 작성과 배포 [#publish-an-http-sdk-without-hiding-execute]
 
-SDK는 팀이 제공하는 API를 패키지로 묶습니다. Defjs에서는 엔드포인트 정의와 데이터 계약을 export하고, 사용하는 애플리케이션이 클라이언트 설정을 제공하고 언제 호출할지 정합니다. 이 예제는 HTTP를 쓰고, 같은 패키지 경계가 SSE와 WebSocket 정의에도 통합니다.
+Defjs SDK는 공유 `struct` 모델(`src/models/`)과 도메인별 작업 모듈(`src/services/`)을 트리쉐이킹 가능한 npm 패키지로 구성하며, `createClient(...)`, 엔드포인트, 자격 증명, 인터셉터 설정은 사용하는 애플리케이션에 온전히 맡깁니다.
 
-## 1. SDK 작업 정의하기
+엔드포인트를 상태를 가진 `Service` 클래스(`ObjectsService.putObject(...)`)로 감싸는 레거시 OpenAPI 생성기와 달리, Defjs SDK는 애플리케이션의 클라이언트로 직접 호출할 수 있는 **독립적인 순수 작업 함수**(`putObject`, `getObject`, `listObjectsV2`)를 export합니다.
 
-SDK 프로젝트에 `src/users.ts`를 만듭니다. path, 입력 배치, 응답, 서비스 오류 계약을 이곳에 둡니다. 작업을 정의하는 데 Client 인스턴스나 배포 주소, 현재 인증 정보를 넣을 필요는 없습니다.
+---
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+## 1. SDK 패키지 구조화 및 정의하기
+
+Amazon S3 호환 오브젝트 스토리지 SDK(`@company/s3-sdk`)를 예로 들어 패키지를 두 계층으로 나눕니다:
+
+- **`src/models/`**: 공유 `struct` 스키마 및 `Infer<typeof ...>` TypeScript 타입(런타임 스키마와 정적 타입 모두에 동일한 이름의 값 + 타입 export를 사용하여 사용하는 쪽에서 단일 식별자로 import할 수 있도록 구성).
+- **`src/services/`**: 리소스별로 그룹화된 도메인 모듈(`buckets.ts`, `objects.ts`). 각 모듈은 동기 `builder`를 통해 호출자의 평탄한 입력을 `path`, `query`, `headers`, 바이너리 `body`로 분배하는 독립형 `defineRequest` 함수를 export합니다.
+
+<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+  <Tab>
+<include cwd meta='title="src/models/common.ts"'>
+  examples/recipes/publish-http-sdk/src/models/common.ts#example
 </include>
 
-`src/index.ts`에서 공개합니다.
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+</include>
 
-```ts
-export { getUser } from "./users";
-```
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/models/object.ts"'>
+  examples/recipes/publish-http-sdk/src/models/object.ts#example
+</include>
 
-작업이 늘어나면 모듈을 추가하고 해당 엔드포인트를 같은 진입점에서 다시 export합니다.
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+</include>
 
-## 2. JavaScript와 타입 선언 패키지화하기
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/services/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+</include>
 
-SDK 프로젝트는 자기 패키지 경계를 가집니다.
+  </Tab>
+  <Tab>
+<include cwd meta='title="src/index.ts"'>
+  examples/recipes/publish-http-sdk/src/index.ts#example
+</include>
 
-```txt
-users-sdk/
-  package.json
-  tsconfig.json
-  src/
-    index.ts
-    users.ts
-```
-
-다음 `package.json`을 사용하되, 예제 패키지 이름은 자신이 소유한 scope로 바꿉니다.
-
+  </Tab>
+  <Tab>
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/s3-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -55,20 +73,17 @@ users-sdk/
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.6.0"
+    "@defjs/core": "^0.7.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.6.0",
+    "@defjs/core": "^0.7.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
 }
 ```
-
-Core는 앱과 공유하는 외부 런타임 의존성으로 남습니다. peer 범위는 SDK가 지원하는 Core 릴리스를 나타내고, 개발 의존성은 해당 범위의 빌드와 테스트에 사용합니다. 이 예제는 현재 `0.4.x` 계약에 맞춥니다. 타입 선언과 런타임 동작 모두 Core에 의존하므로, 배포 전에 지원 범위를 정하고 검증하세요.
-
-`tsconfig.json`을 추가합니다.
-
+  </Tab>
+  <Tab>
 ```json
 {
   "compilerOptions": {
@@ -82,12 +97,18 @@ Core는 앱과 공유하는 외부 런타임 의존성으로 남습니다. peer 
   "include": ["src/**/*.ts"]
 }
 ```
+  </Tab>
+</Tabs>
 
-이 `lib` 설정은 타입 선언을 제공하며 런타임 polyfill을 제공하지는 않습니다. 앱에는 선택한 전송 수단이 사용하는 Web API가 필요합니다.
+- **`Service` 클래스가 아닌 순수 함수**: 모든 작업(`listBuckets`, `listObjectsV2`, `getObject`, `putObject`, `deleteObject`)은 독립적인 `defineRequest` 값으로 export됩니다. 이를 `class`나 네임스페이스 객체로 감싸지 마세요. 독립형 함수를 사용하면 호출 규약이 `@defjs/core`(`await putObject(client, input)`)와 동일하게 유지되며, `"sideEffects": false`가 설정된 경우 번들러가 사용하지 않는 엔드포인트를 트리쉐이킹할 수 있습니다.
+- **빈 응답, 바이너리 응답, 구조화된 응답**: `listBuckets`와 `listObjectsV2`는 `.alias()` 와이어 매핑이 적용된 JSON struct를 디코딩하고, `getObject`는 바이너리 `Blob`(`output: struct.blob()`)을 디코딩합니다. `putObject`, `headObject`, `deleteObject`는 빈 응답 본문에 대해 `output`을 생략하면서도 세 번째 튜플 슬롯을 통해 `response.headers`(예: `etag`)를 그대로 노출합니다.
+- **외부 런타임 peer 의존성**: `@defjs/core`는 사용하는 애플리케이션과 공유되는 `peerDependency`로 유지됩니다.
 
-`tsdown`은 진입점을 `dist/index.js`로 번들하고 `dist/index.d.ts`를 생성합니다.
+---
 
-빌드한 뒤 패키지를 확인합니다.
+## 2. 빌드 및 Tarball 검증
+
+`tsdown`을 사용해 `dist/index.js`와 `dist/index.d.ts`를 번들링한 뒤 배포 전에 패키지 내용을 점검하세요:
 
 ```sh
 bun install
@@ -96,46 +117,38 @@ bun pm pack --dry-run
 bun pm pack
 ```
 
-tarball에 `dist/index.js`와 `dist/index.d.ts`가 들어 있는지 확인합니다. 별도 앱에 tarball을 설치해 타입과 실행을 모두 검증한 뒤 배포하세요. SDK README에는 서비스 API, 호환되는 Core 버전, 필요한 인증, 선택적인 기본 설정을 문서화합니다.
+Tarball 내에 `dist/index.js`와 `dist/index.d.ts`가 정상적으로 포함되어 있는지 확인합니다.
 
-## 3. 사용하는 애플리케이션에서 호출하기
+---
 
-오프라인으로 돌릴 수 있는 로컬 예제는 정의를 `app.ts` 옆의 `users-sdk.ts`에 둡니다. 이 import는 클라이언트를 만들지 않습니다. 애플리케이션이 로컬 Fetch 핸들을 구성하고 import한 작업을 호출합니다.
+## 3. 애플리케이션에서 SDK 사용하기
+
+애플리케이션에 작성한 SDK와 `@defjs/core`를 함께 설치합니다:
+
+```sh
+bun add @company/s3-sdk @defjs/core@^0.7.0
+```
+
+SDK는 클라이언트를 바인딩하지 않으므로 사용하는 애플리케이션이 엔드포인트(AWS S3, Cloudflare R2 또는 MinIO), 서명 인터셉터, 재시도 정책의 소유권을 가지며, import한 각 작업을 순수 함수로 직접 호출합니다:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+"etag-report-v1" 1 hello-s3-pdf
 ```
 
-패키지로 배포한 SDK는 호환되는 Core와 함께 설치합니다.
+실제 프로덕션 코드에서는 상대 경로 import인 `./src/index.ts`를 `@company/s3-sdk`로 변경하고, `withHTTPHandle(...)`을 제거하여 플랫폼의 실제 `fetch`를 사용하도록 설정합니다.
 
-```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
-```
+---
 
-예제의 상대 import를 다음과 같이 바꿉니다.
+## 4. 테스트 및 배포
 
-```ts
-import { getUser } from "@company/users-sdk";
-```
-
-서비스 주소와 인증은 앱의 Client에 설정합니다. 로컬 테스트에서는 `withHTTPHandle(...)`을 유지하고, 플랫폼 Fetch를 사용하려면 제거합니다. 다른 앱도 같은 엔드포인트를 import하고 SDK 정의를 바꾸지 않은 채 다른 Client 설정으로 실행할 수 있습니다.
-
-## 4. 검증하고 배포하기
-
-[클라이언트 로컬 테스트](/ko-KR/recipes/test-with-handle)로 export한 정의, 입력 배치, 응답 검증, 선언된 오류를 확인합니다. 서비스 주소와 인증 정보가 다른 두 Client로 같은 엔드포인트를 검증하세요. 호출 지점에서 타입이 있는 `HTTP_STATUS` 처리를 유지하고, SDK가 제공하는 전송 수단에 대해 취소와 스트림 정리도 테스트합니다.
-
-검증을 마쳤으면 SDK 디렉터리에서 자신의 npm 계정으로 배포합니다.
+경로/쿼리/헤더/바이너리 본문 매핑, `output` 디코딩, `ETag` 응답 헤더, 선언된 `HTTP_STATUS`(`S3Error`) 결함, 취소 동작을 포괄하는 [인메모리 핸들 테스트](/ko-KR/recipes/test-with-handle)로 export된 정의들을 철저히 검증하세요. 검증이 완료되면 패키지를 배포합니다:
 
 ```sh
 bun publish --access public
 ```
 
-이 명령은 공개 패키지를 배포합니다. 비공개 SDK에는 조직의 레지스트리와 접근 정책을 적용하세요. Defjs가 패키지를 생성하거나 배포해 주지는 않습니다.
-
-Client 팩토리와 편의 메서드는 필요할 때 추가할 수 있습니다. 호출자의 설정을 받고 엔드포인트 직접 export를 유지하면서 서비스 기본값이나 도메인 동작을 제공할 수 있습니다. 추가하는 오류 매핑이나 수명 정책은 문서화하세요. 재사용 가능한 SDK를 만들기 위한 필수 요소는 아닙니다.
-
-기반 계약은 [HTTP](/ko-KR/docs/http), [클라이언트](/ko-KR/docs/client), [설계 결정](/ko-KR/docs/design-decisions)을 참고하세요.
+자세한 내용은 [HTTP 작업](/ko-KR/docs/http), [Client](/ko-KR/docs/client), [테스트](/ko-KR/docs/testing), [핵심 아키텍처](/ko-KR/docs/design-decisions) 문서를 참조하세요.

@@ -1,10 +1,7 @@
-import type { HttpRequest } from "../internal/http_request";
-import type { HttpResponse } from "../internal/http_response";
+import type { HttpRequest } from "../http/http_request";
+import type { HttpResponse } from "../http/http_response";
 import type { EventStreamHandle } from "../sse/transport/event_stream";
-import type {
-  WebSocketCloseInfo,
-  WebSocketState,
-} from "../web_socket/web_socket";
+import type { WebSocketSession } from "../web_socket/web_socket";
 
 // ---------------------------------------------------------------------------
 // HTTP Interceptor
@@ -154,38 +151,20 @@ export function createSSEInterceptor(fn: SSEInterceptorFn): SSEInterceptor {
 // ---------------------------------------------------------------------------
 
 /**
- * Minimal WebSocket session surface that interceptors see.
- *
- * Structurally compatible with {@link WebSocketSession} without importing that
- * type, which avoids a circular dependency between interceptors and WebSocket.
- * Messages are typed `unknown`.
+ * WebSocket session surface that interceptors see: a {@link WebSocketSession} whose messages are typed `unknown`.
  *
  * A wrapper or short-circuit session must forward the same
  * `[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle;
- * returning an unrelated resolved promise is not sufficient. Requiring this
- * member is a compile-time breaking change for structural implementations. Code
- * that only accepts sessions returned by Defjs has no additional runtime call
- * requirement.
+ * returning an unrelated resolved promise is not sufficient.
  *
  * @group interceptors
  */
-export interface WebSocketSessionLike extends AsyncDisposable {
-  readonly bufferedAmount: number;
-  readonly connection: {
-    extensions?: string;
-    generation: number;
-    protocol?: string;
-    url?: string;
-  };
-  readonly closed: Promise<WebSocketCloseInfo>;
-  readonly receive: AsyncIterable<unknown>;
-  readonly state: WebSocketState;
-  close(code?: number, reason?: string): void;
-  [Symbol.asyncDispose](): PromiseLike<void>;
-  onRuntimeError(listener: (error: unknown) => void): () => void;
-  onStateChange(listener: (state: WebSocketState) => void): () => void;
-  send(message: unknown): void;
-}
+/* eslint-disable @typescript-eslint/no-empty-object-type -- an interface, not a type alias, keeps the name WebSocketSessionLike in declarations, hovers and the generated API pages */
+export interface WebSocketSessionLike extends WebSocketSession<
+  unknown,
+  unknown
+> {}
+/* eslint-enable @typescript-eslint/no-empty-object-type */
 
 /**
  * Terminal `next` function a WebSocket interceptor receives; it opens a session for the request.

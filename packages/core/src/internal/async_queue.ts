@@ -6,21 +6,22 @@ type PendingNext<T> = {
 const NO_ERROR = Symbol("NO_ERROR");
 
 export interface AsyncQueueOptions {
-  maxSize: number;
+  /** Maximum number of queued values. Omit it to leave the queue unbounded. */
+  maxSize?: number;
 }
 
 export class AsyncQueue<T> implements AsyncIterable<T> {
-  private readonly values: T[] = [];
+  // Queued values are stored as the results `next()` hands out, so an `undefined` value is still a queued result.
+  private readonly values: IteratorYieldResult<T>[] = [];
   private readonly waiting: PendingNext<T>[] = [];
-  private readonly maxSize: number;
+  // Producers parked by `waitForRoom`. The only caller has a single producer, so this is never long.
+  private readonly roomWaiters: (() => void)[] = [];
+  private readonly maxSize: number | undefined;
   private done = false;
   private error: unknown = NO_ERROR;
   private iteratorClaimed = false;
 
-  constructor(options: AsyncQueueOptions) {
-    if (!Number.isSafeInteger(options.maxSize) || options.maxSize < 1) {
-      throw new TypeError("AsyncQueue maxSize must be a positive safe integer");
-    }
+  constructor(options: AsyncQueueOptions = {}) {
     this.maxSize = options.maxSize;
   }
 
@@ -35,11 +36,33 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
       return;
     }
 
-    if (this.values.length >= this.maxSize) {
+    if (this.maxSize !== undefined && this.values.length >= this.maxSize) {
       throw new Error("AsyncQueue overflow");
     }
 
-    this.values.push(value);
+    this.values.push({ done: false, value });
+  }
+
+  /**
+   * Resolves once `push` has room again or the queue has ended. `undefined` means there is room now,
+   * so a producer can keep pushing synchronously and only awaits when the queue is full.
+   */
+  waitForRoom(): Promise<void> | undefined {
+    if (
+      this.done ||
+      this.maxSize === undefined ||
+      this.values.length < this.maxSize
+    ) {
+      return undefined;
+    }
+    return new Promise<void>((resolve) => {
+      this.roomWaiters.push(resolve);
+    });
+  }
+
+  /** Drops the values nobody has taken yet. */
+  discard(): void {
+    this.values.length = 0;
   }
 
   close(): void {
@@ -48,11 +71,13 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
     }
 
     this.done = true;
+    this.releaseRoom();
     while (this.waiting.length > 0) {
       this.waiting.shift()?.resolve({ done: true, value: undefined });
     }
   }
 
+  /** Values already queued are still delivered; every pull after them rejects with `error`. */
   fail(error: unknown): void {
     if (this.done) {
       return;
@@ -60,7 +85,7 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
 
     this.done = true;
     this.error = error;
-    this.values.length = 0;
+    this.releaseRoom();
     while (this.waiting.length > 0) {
       this.waiting.shift()?.reject(error);
     }
@@ -74,11 +99,10 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
 
     return {
       next: () => {
-        if (this.values.length > 0) {
-          return Promise.resolve({
-            done: false,
-            value: this.values.shift() as T,
-          });
+        const queued = this.values.shift();
+        if (queued) {
+          this.releaseRoom();
+          return Promise.resolve(queued);
         }
 
         if (this.error !== NO_ERROR) {
@@ -94,5 +118,11 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
         });
       },
     };
+  }
+
+  private releaseRoom(): void {
+    for (const resolve of this.roomWaiters.splice(0)) {
+      resolve();
+    }
   }
 }

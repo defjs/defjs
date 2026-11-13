@@ -12,7 +12,7 @@ Declare a typed request, then call the operation with a client and its input.
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, optional `input` struct, optional `output` and `error` structs, optional `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`RequestDefinition`](/api/core/requestdefinition-type). `builder` is required exactly when `input` is declared.
-- **Returns** an operation. Call it as `getUser(client, input)`, or `health(client)` when no input is declared. When the whole input struct is optional, the input argument may be omitted. Calling it starts the request. There is no third options argument.
+- **Returns** an operation. Call it as `getOrder(client, input)`, or `health(client)` when no input is declared. When the whole input struct is optional, the input argument may be omitted. Calling it starts the request. There is no third options argument.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
@@ -20,7 +20,7 @@ Declare a typed request, then call the operation with a client and its input.
 keyed by status. Omitting one means that body is never read — see
 [Declaration is an assertion](/docs/design-decisions#declaration-is-an-assertion).
 
-Calling the operation returns a promise of the tuple described under [`HttpAwaitResult`](/api/core/httpawaitresult-type). Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). HTTP reads `signal` and the progress callbacks and ignores the other fields.
+Calling the operation returns a promise of the tuple described under [`HttpAwaitResult`](/api/core/httpawaitresult-type). Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). HTTP reads `signal`, `retry`, and the progress callbacks and ignores the other fields.
 
 A non-2xx status is `HTTP_STATUS` when no `error` struct is declared or the declared `error` body decodes. The fault's `data` is the decoded
 `error` body when one was declared, and `undefined` otherwise. When a declared `error` body cannot be read (wrong media type, invalid JSON) or
@@ -46,13 +46,13 @@ struct as one off the wire; there is no trusted short-circuit.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` is the HTTP slice of [`RequestOptions`](/api/core/requestoptions-type): [`UseRequestConfig`](/api/core/userequestconfig-type), which is `signal` plus `onDownloadProgress` and `onUploadProgress`. There is no `timeout` or `abort` field. A deadline is `signal: AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. `signal` is the call's signal; combine signals with `AbortSignal.any` in application code. There is no client-level default deadline. Other request fields, such as `heartbeat`, are ignored.
+`HttpExecuteOptions` is the HTTP slice of [`RequestOptions`](/api/core/requestoptions-type): [`UseRequestConfig`](/api/core/userequestconfig-type), which is `signal` plus `onDownloadProgress`, `onUploadProgress`, and `retry`. There is no `timeout` or `abort` field. A deadline is `signal: AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. `signal` is the call's signal; combine signals with `AbortSignal.any` in application code. There is no client-level default deadline. Other request fields, such as `heartbeat`, are ignored.
 
 ## Types
 
 ### RequestDefinition
 
-`method`, `path`, optional `input`, `output`, `error`, `operation`, and `builder`. There is no `responseType`: the struct kind selects how a declared body is read. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+`method`, `path`, optional `input`, `output`, `error`, `operation`, and `builder`. The struct kind selects how a declared body is read. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
 
 ### HttpAwaitResult
 
@@ -63,7 +63,7 @@ On success the third slot carries `body` only when `output` was declared. On fai
 
 ### HttpRequest
 
-Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, and `queryParams`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through. `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed.
+Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, and `query`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. `query` is the one query the request sends, a `URLSearchParams`: an interceptor changes it in place or passes a replacement to `next()`. A builder that returns `URLSearchParams` has it copied, and the string of a `withQuerySerializer` function is parsed into it. The wire form is `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization, so a space is `+`, and an empty `query` adds no `?`. `responseType` and `errorResponseType` are readonly: they are derived from the declared `output` and `error` struct kinds and must not be changed.
 
 ### HttpMeta
 
@@ -93,10 +93,9 @@ and blobs are raw and are parsed once. `DecodedResponse` is what reaches the cal
 
 `loaded`, `total`, `lengthComputable`. Callbacks may be async. A throwing `onDownloadProgress` or `onUploadProgress` fails the call with
 `EXT_OBSERVER_FAILED`, with the thrown value as `cause`; cancellation still reports `NET_ABORTED`, or `NET_TIMEOUT` when the abort reason is a timeout.
-Upload progress is reported only where the runtime can stream request bodies (Bun, Node); in browsers, `Blob` / `File`,
-`ArrayBuffer`, and `FormData` bodies are sent unchanged and `onUploadProgress` is not called.
+Upload progress is reported only when the request body is a `ReadableStream` that you pass. Any other body (`Blob`, `File`, `ArrayBuffer`, `FormData`, a string, `URLSearchParams`) is sent as built and `onUploadProgress` is not called, on every runtime; the library never converts a body into a stream. A `ReadableStream` body follows the Fetch rules for streaming request bodies, with or without `onUploadProgress`: Chromium and WebKit accept it only over HTTP/2 or later (`NET_UNREACHABLE` on HTTP/1.1; WebKit was checked manually at 27.2 only; Node.js and Bun accept HTTP/1.1); Firefox cannot stream request bodies (`ENV_UNSUPPORTED`); in browsers a cross-origin request needs a CORS preflight unless the browser holds a cached preflight result, so the server must answer `OPTIONS`; a 301, 302, 307, or 308 redirect fails after the body was sent once, while 303 becomes a GET and succeeds. Browsers send no `Content-Length`. `fetch` reports these failures, and a source `ReadableStream` that throws while `fetch` reads it, as the same network error as an unreachable endpoint, so the load balancer receives `{ attempted: false }` for them, as it does for a throwing progress callback (`EXT_OBSERVER_FAILED`). A streamed upload alone therefore cannot detect a down endpoint, and a rejected streamed upload is never retried: a `ReadableStream` body ends the retry flow before `shouldRetry` is asked.
 
-In server runtimes, FormData uses its serialized stream without whole-body Blob buffering and preserves the actual multipart boundary. Its total is unknown unless a valid explicit `Content-Length` supplies it. Explicit content types survive upload conversion, except that FormData must use its serialization's boundary. `loaded` counts stream bytes, not server acknowledgements. Downloads with a non-identity `Content-Encoding` report `total: 0` and `lengthComputable: false`; their stream bytes may already be decompressed.
+A streamed body has no known length: the reported total is unknown unless a valid explicit `Content-Length` header sets it (browsers do not send that header). `loaded` counts stream bytes, not server acknowledgements. Downloads with a non-identity `Content-Encoding` report `total: 0` and `lengthComputable: false`; their stream bytes may already be decompressed.
 
 See [HTTP guide](/docs/http) and [Client](/docs/client).
 
@@ -106,7 +105,7 @@ Returned by `defineRequest`. The first argument is a [`Client`](/api/core/client
 
 ## BuilderInput
 
-Parsed endpoint input seen by `builder`. Object nodes carry the struct that produced them, so alias, `Date`, and `bigint` encoding follow the value.
+Parsed operation input seen by `builder`. Object nodes carry the struct that produced them, so alias, `Date`, and `bigint` encoding follow the value.
 
 ## HttpRequestShape
 
@@ -118,7 +117,7 @@ All four fields are optional. `query` is `URLSearchParams` or a record; a nested
 
 ## UseRequestConfig
 
-`signal`, plus optional `onDownloadProgress` and `onUploadProgress`. `HttpExecuteOptions` is this slice. There is no `timeout` or `abort` field.
+`signal`, plus optional `onDownloadProgress`, `onUploadProgress`, and `retry`. `HttpExecuteOptions` is this slice. There is no `timeout` or `abort` field.
 
 ## RequestSuccessData
 

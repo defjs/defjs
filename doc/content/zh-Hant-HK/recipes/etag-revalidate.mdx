@@ -1,22 +1,36 @@
 ---
 title: "ETag 條件請求"
-description: 將 304 當 HTTP status fault；cache Map 留喺操作呼叫外面。
+description: 將 304 視為 HTTP 狀態錯誤；快取 Map 留喺操作呼叫外面。
 ---
 
-# 用 ETag 同 304 revalidate
+# 用 ETag 與 304 重新驗證快取
 
-`ok` 只代表 2xx，所以 `304` 會以 `HTTP_STATUS` fault 到。Redirect status 亦唔係 error body，所以唔好聲明 `error`：body 根本唔會被讀，fault 帶住 status，你自己 return cached product。
+喺 Defjs 入面，只有 `2xx` 狀態碼會進入成功分支，所以 `304 Not Modified` 會作為 `HTTP_STATUS` fault 回傳。喺 `defineRequest` 上面保持唔宣告 `error`，咁空嘅 `304` body 就根本唔會被讀取；然後將你嘅 `Map` 快取放喺操作呼叫外層嘅應用程式包裝函式入面：
 
-睇 [HTTP](/zh-Hant-HK/docs/http)。
-
-<include cwd meta="etag-cache.ts">
-  examples/recipes/etag-revalidate.ts#example
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/reader.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 Flask
 ```
 
-304 分支之後嘅 `throw error` 係呢個讀取 function 嘅邊界。Function 仍然 return `Promise<Product>`；非 304 嘅 fault 唔會喺呢個邊界以 Defjs tuple 返回。
-
-唔好喺 Core 入面將 `304` 改寫成假 `200`。Cache ownership 留喺 application code，圍住操作呼叫。
+- 喺檢查完 `304` 之後使用 `if (error) throw error` 係一項明確策略：`createReader` 回傳 `Promise<Product>`，所以其他所有 fault 都會 throw。
+- 千祈唔好喺攔截器入面將 `304` 改寫成虛構嘅 `200` 回應；請將快取狀態保留喺操作呼叫外層嘅應用程式代碼中。詳情請參閱 [HTTP 操作](/zh-Hant-HK/docs/http)。

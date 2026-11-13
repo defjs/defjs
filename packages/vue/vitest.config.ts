@@ -1,19 +1,36 @@
-import { defineConfig } from "vitest/config";
-import { coverageConfig } from "./test/shared.ts";
+import type { ViteUserConfig as UserConfig } from "vitest/config";
+import "../../test/loopback-proxy-bypass.ts";
+import { specExclude, specInclude } from "../../test/spec-matrix.ts";
+import {
+  coverageSettings,
+  reporters,
+  type RuntimeProject,
+} from "../../test/vitest-shared.ts";
 
-/**
- * Package-level workspace aggregator.
- *
- * Runs the browser Vitest project for @defjs/vue (Chromium + Firefox).
- *
- * Coverage configuration is centralized here so it applies across all projects
- * when running via the package test script.
- */
-export default defineConfig({
-  test: {
-    coverage: {
-      ...coverageConfig,
+const packageRoot = import.meta.dirname;
+
+export function baseConfig({ runtime, test }: RuntimeProject): UserConfig {
+  return {
+    root: packageRoot,
+    define: {
+      __VUE_OPTIONS_API__: "true",
+      __VUE_PROD_DEVTOOLS__: "false",
+      __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "false",
     },
-    projects: ["./vitest.config.browser.ts"],
-  },
-});
+    resolve: {
+      alias: {
+        "@defjs/core": `${packageRoot}/../core/src`,
+      },
+    },
+    test: {
+      ...test,
+      include: specInclude(),
+      exclude: specExclude(runtime),
+      globalSetup: `${packageRoot}/../../test/browser-api-server-setup.ts`,
+      reporters,
+      coverage: coverageSettings({
+        reportsDirectory: `${packageRoot}/coverage/${runtime}`,
+      }),
+    },
+  };
+}

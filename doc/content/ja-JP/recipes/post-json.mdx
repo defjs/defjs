@@ -1,20 +1,31 @@
 ---
 title: "JSON の送信"
-description: 型付きの JSON ボディを送り、宣言済みの 201 をデコードします。
+description: 型付けされた JSON リクエストボディを送信し、宣言された 201 レスポンスをデコードします。
 ---
 
-# POST JSON
+# JSON を POST する
 
-型付きのボディをビルダーに渡します。論理フィールド名は TypeScript 側に残り、struct 上のワイヤエイリアスが JSON のキーになります。オブジェクトのボディは `application/json` です。
+型付けされた入力オブジェクトを `builder` に渡し、`{ body: input }` を返します。`.alias("customer_name")` を指定することで、TypeScript 上では `customerName` というプロパティ名を維持したまま、ワイヤ上では `"customer_name"` としてエンコードし、`201` レスポンスからは元の論理名へデコードします。
 
-詳細は [HTTP](/ja-JP/docs/http) と [Client](/ja-JP/docs/client) を見てください。
-
-<include cwd meta="create-user.ts">
-  examples/recipes/post-json.ts#example
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
-`api.example.com` はプレースホルダーです。`201` と `{ "id": 1, "name": "Ada", "email": "ada@example.com" }` を返すサーバーに対して、このスニペットは次のように出力します。
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+サーバーが `201` と `{ "id": 1, "status": "paid", "customer_name": "Ada" }` を返した場合、スクリプトの出力は以下のようになります。
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+詳細は [HTTP 操作](/ja-JP/docs/http) および [Struct とスキーマ](/ja-JP/docs/struct) を参照してください。

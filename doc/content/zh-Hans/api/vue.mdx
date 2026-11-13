@@ -14,7 +14,7 @@ description: Vue 插件、默认或自定义 injection key，以及 injectClient
 <ApiSignature name="createClientPlugin" />
 
 - **client** — `createClient` 给的实例。
-- **返回** 给 `app.use(...)` 用的 Vue plugin。安装时会调用 `app.provide(HTTP_CLIENT, client)`。
+- **返回** 供 `app.use(...)` 使用的 Vue 插件。安装时会调用 `app.provide(HTTP_CLIENT, client)`。
 
 <include cwd>examples/api/create-client-plugin.ts#example</include>
 
@@ -22,15 +22,15 @@ description: Vue 插件、默认或自定义 injection key，以及 injectClient
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` 读取所选 key 最近的 provider；省略参数或传入 `undefined` 时使用 `HTTP_CLIENT`。必须处于有效的 Vue 注入上下文，例如同步 `setup()` 或 `app.runWithContext()`（Vue 3.3+）。后者只提供同步 app 级上下文，不携带组件子树覆盖，也不跨普通 `await` 保持；`<script setup>` 顶层 `await` 后由编译器恢复的上下文仍然有效。把这个 client 传进操作。注入的值就是提供的那个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)；在操作运行的地方带上请求选项调用它，即可派生出一个 `Client` 值。不要把它当作 `watch` 或 `computed` 的源，因为那些 API 会调用函数。派生出的 `Client` 值不被插件或 `injectClient` 接受。
+`injectClient(key)` 读取该 key 最近的 Provider；省略或传入 `undefined` 时使用 `HTTP_CLIENT`。必须在有效的 Vue 注入上下文中调用：同步 `setup()` 或 `app.runWithContext()`（Vue 3.3+）。后者只提供同步的应用级上下文，不提供子树覆盖，也不跨普通 `await` 保持；`<script setup>` 顶层 `await` 后由编译器恢复的上下文仍然有效。把该 Client 传进操作。注入值是提供的 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)；在操作运行处用请求选项调用它可派生一个 `Client` 值。不要把它当作 `watch` 或 `computed` 的来源，因为那些 API 会调用函数。派生出的 `Client` 值不被插件或 `injectClient` 接受。
 
-自定义 `InjectionKey<Client>` 用 `app.provide(key, client)` 或祖先的 `provide(key, client)` 设置。提供与获取方必须共享同一个 `Symbol` 对象，相同描述不代表相同 key。`createClientPlugin(client)` 仍只接受 Client，并只提供 `HTTP_CLIENT`。
+自定义 `InjectionKey<DerivableClient>` 通过 `app.provide(key, client)` 或祖先的 `provide(key, client)` 提供。提供方与获取方必须共享同一个 `Symbol` 对象，描述相同并不代表 key 相同。`createClientPlugin(client)` 仍然只接收 Client，并只提供 `HTTP_CLIENT`。
 
 - **返回** 所选 key 对应的同一个 Client。
-- **抛出** 没有有效注入上下文或所选 key 未提供 Client 时抛出 `Error`。自定义 key 缺失不会回退到 `HTTP_CLIENT`；仅安装插件不能建立注入上下文。
+- **抛出** 没有有效注入上下文，或所选 key 未提供 Client 时抛出 `Error`。自定义 key 缺失不会回退到 `HTTP_CLIENT`；仅安装插件不会建立注入上下文。
 
 ## HTTP_CLIENT
 
 <ApiSignature name="HTTP_CLIENT" />
 
-Vue 注入键。优先用 `injectClient()`，别直接 `inject(HTTP_CLIENT)`。子树覆盖：`provide(HTTP_CLIENT, childClient)`。
+Vue 注入键。优先使用 `injectClient()`，而不是直接 `inject(HTTP_CLIENT)`。可用 `provide(HTTP_CLIENT, childClient)` 覆盖子树。

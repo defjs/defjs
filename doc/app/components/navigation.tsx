@@ -13,7 +13,6 @@ import {
   type Root,
   type Separator,
 } from "fumadocs-core/page-tree";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
 import { Container } from "fumadocs-ui/layouts/docs/slots/container";
 import {
   Sidebar,
@@ -33,7 +32,7 @@ import {
   PopoverTrigger,
 } from "fumadocs-ui/components/ui/popover";
 import type { LayoutTab } from "fumadocs-ui/layouts/shared";
-import { useAppTranslations } from "../lib/use-app-translations";
+import { useAppTranslations, useLocale } from "../lib/use-app-translations";
 import { getNavigationTabs, getRelatedNavigation } from "../lib/navigation";
 
 function NavigationState({ children }: { children: ReactNode }) {
@@ -64,7 +63,8 @@ function NavigationSidebar(props: SidebarProps) {
   const content = (
     <nav
       aria-label={t("nav.navigation")}
-      className="navigation-sidebar contents"
+      // The layout sets the sidebar width through a utility on its direct child; this nav is that child.
+      className="navigation-sidebar contents md:layout:[--fd-sidebar-width:268px]"
     >
       <Sidebar {...props} />
     </nav>
@@ -124,10 +124,11 @@ function NavigationContainer({ children, ...props }: ComponentProps<"div">) {
 function NavigationItem({ item }: { item: Item }) {
   const { pathname } = useLocation();
   const depth = useFolderDepth();
-  if (/\/(docs|recipes)$/.test(item.url)) return null;
   const active = pathname.replace(/\/$/, "") === item.url.replace(/\/$/, "");
-  const standalone = item.url.endsWith("/docs/design-decisions");
   const parts = typeof item.name === "string" ? item.name.split(" / ") : [];
+  const style: CSSProperties & Record<`--${string}`, number> = {
+    "--navigation-depth": depth,
+  };
   return (
     <SidebarItem
       href={item.url}
@@ -135,9 +136,8 @@ function NavigationItem({ item }: { item: Item }) {
       active={active}
       aria-current={active ? "page" : undefined}
       icon={item.icon}
-      data-navigation-standalone={standalone || undefined}
-      style={{ "--navigation-depth": depth } as CSSProperties}
-      className={`navigation-item relative flex flex-wrap items-center gap-x-1 rounded-lg p-2 text-start text-fd-muted-foreground hover:bg-fd-accent/50 hover:text-fd-accent-foreground data-[active=true]:bg-fd-primary/10 data-[active=true]:text-fd-primary ${standalone ? "mt-4" : ""}`}
+      style={style}
+      className="navigation-item relative flex flex-wrap items-center gap-x-1 rounded-lg p-2 text-start text-fd-muted-foreground hover:bg-fd-accent/50 hover:text-fd-accent-foreground data-[active=true]:bg-fd-primary/10 data-[active=true]:text-fd-primary"
     >
       {parts.length === 2 ? (
         <>
@@ -154,7 +154,6 @@ function NavigationItem({ item }: { item: Item }) {
   );
 }
 function NavigationHeading({ item }: { item: Separator }) {
-  if (item.$id?.endsWith(":navigation:standalone")) return null;
   return <h2 className="navigation-group-heading">{item.name}</h2>;
 }
 export const navigationSlots = {
@@ -179,48 +178,31 @@ export function StaticNavigation({ tree }: { tree: Root }) {
   const current = tree.children.find(
     (node) =>
       node.type === "folder" &&
-      flattenTree(node.children).some((page) => page.url === pathname),
+      flattenTree([node]).some((page) => page.url === pathname),
   );
   function list(nodes: Node[]): ReactNode {
     return (
       <ul className="navigation-static-list space-y-2">
-        {nodes
-          .filter(
-            (node) =>
-              !node.$id?.endsWith(":navigation:standalone") &&
-              (node.type !== "page" || !/\/(docs|recipes)$/.test(node.url)),
-          )
-          .map((node, i) => (
-            <li
-              key={i}
-              className={
-                node.type === "page" &&
-                node.url.endsWith("/docs/design-decisions")
-                  ? "mt-4"
-                  : undefined
-              }
-            >
-              {node.type === "page" ? (
-                <a
-                  href={node.url}
-                  aria-current={node.url === pathname ? "page" : undefined}
-                  data-navigation-standalone={
-                    node.url.endsWith("/docs/design-decisions") || undefined
-                  }
-                  className="navigation-item relative block p-2"
-                >
-                  {node.name}
-                </a>
-              ) : node.type === "separator" ? (
-                <h2 className="navigation-group-heading">{node.name}</h2>
-              ) : (
-                <details>
-                  <summary>{node.name}</summary>
-                  {list(node.children)}
-                </details>
-              )}
-            </li>
-          ))}
+        {nodes.map((node, i) => (
+          <li key={i}>
+            {node.type === "page" ? (
+              <a
+                href={node.url}
+                aria-current={node.url === pathname ? "page" : undefined}
+                className="navigation-item relative block p-2"
+              >
+                {node.name}
+              </a>
+            ) : node.type === "separator" ? (
+              <h2 className="navigation-group-heading">{node.name}</h2>
+            ) : (
+              <details>
+                <summary>{node.name}</summary>
+                {list(node.children)}
+              </details>
+            )}
+          </li>
+        ))}
       </ul>
     );
   }
@@ -249,7 +231,7 @@ export function StaticNavigation({ tree }: { tree: Root }) {
 }
 
 export function RelatedNavigation({ tree }: { tree: Root }) {
-  const { locale = "en-US" } = useI18n();
+  const locale = useLocale();
   const t = useAppTranslations();
   const { pathname } = useLocation();
   const groups = getRelatedNavigation(tree, locale, pathname);

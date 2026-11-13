@@ -3,18 +3,35 @@ title: "Renovar un token tras 401"
 description: Adjunta Authorization y reintenta una vez dentro de un interceptor; next() solo va hacia dentro.
 ---
 
-# Renueva un Bearer token una vez ante un 401
+# Renovar un token Bearer tras un 401
 
-`next()` es el resto de **esta** cebolla — no un reenvío `axios(config)` desde fuera. Pon el attach, el refresh single-flight y un único replay en **un** interceptor HTTP para que las capas exteriores no corran dos veces.
+En Defjs, `next(request)` invoca el resto de la cadena de interceptores hacia adentro; no vuelve a despachar desde el interceptor más externo. Ubica la asignación del token, la desduplicación de renovaciones simultáneas (_single-flight_) y el reintento único tras `401` dentro de **un único** interceptor HTTP, de modo que los interceptores externos de registro o de medición de tiempos no se ejecuten dos veces:
 
-Ver [Interceptores](/es-ES/docs/interceptors).
-
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 42
 ```
 
-Llamar a `next` otra vez solo vuelve a entrar en los interceptores **dentro** de esta capa (y en el handler de Fetch). No vuelve a ejecutar los wrappers exteriores de tiempo o auth — por eso el 401 va en un interceptor, no en una segunda llamada a la operación.
+Un cuerpo que puede reenviarse no equivale a una operación de negocio repetible. Este interceptor también reenvía un `POST` JSON tras un 401 coincidente: dos entregas HTTP, primero rechazada y después aceptada. Úsalo para escrituras solo cuando la autenticación rechace la primera entrega antes de ejecutar el gestor de negocio; conserva una clave de idempotencia estable entre ambas entregas y usa desduplicación en el servidor. Si ese contrato no está disponible, devuelve el 401 en lugar de repetir automáticamente la escritura. El ejemplo completo no repite un cuerpo de petición `ReadableStream`.
+
+Consulta [Interceptores](/es-ES/docs/interceptors) para conocer el orden de capas y los límites de reintentos.

@@ -1,0 +1,58 @@
+---
+title: "テスト"
+description: 注入したトランスポートハンドル、タプルアサーション、決定論的なフェイクタイマーを用いて、SDK 定義とアプリケーションポリシーをオフラインでテストします。
+---
+
+# テスト
+
+Defjs は操作の定義とクライアントの実行を明確に分離しているため、実際のネットワークサーバーを起動したり内部ライブラリ関数をモックしたりすることなく、実際の SDK 操作やアプリケーションのインターセプターをオフラインでテストできます。
+
+## 1. ローカルトランスポートハンドルの注入
+
+`createClient(...)` で `withHTTPHandle`、`withSSEHandle`、`withWebSocketHandle` を使用すると、内部のプラットフォーム標準トランスポートを差し替えることができます。Defjs は通常通り、入力の `struct` バリデーション、`builder` による配置、URL の制限チェック、インターセプター、ステータス分岐、レスポンスの `struct` デコードといったパイプライン全体を実行します。
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/sdk/orders.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/testing/test/orders.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. テストのベストプラクティス
+
+### 内部状態ではなくエラーファーストタプルを検証する
+
+テスト用クライアントを用いて export された SDK 操作を呼び出し、返された `[error, data, response]` タプルに対してアサーションを行います。
+
+- **`2xx` 正常系**: `expect(error).toBeNull()` を確認し、デコードされた `data` の各フィールド（`.alias()` による通信キーから論理プロパティへのマッピングを含む）を検証します。
+- **異常系**: 契約に含まれる `error?.code`、`error?.status`、`error?.data`、`error?.cause` を検証します。
+
+### 送信されるリクエストのバイト列を検証する
+
+`withHTTPHandle(async (input, init) => ...)` 関数内で `const request = new Request(input, init)` を構築し、`request.url`、`request.method`、`request.headers`、および `await request.text()`（または `await request.json()`）を調べることで、`builder` や struct エイリアスがバックエンドの期待する正確な形式でシリアライズされているかを確認できます。
+
+### フェイクタイマーによる決定論的な時間制御
+
+インターセプターのリトライバックオフ、SSE/WebSocket の再接続遅延、WebSocket のハートビートには、Vitest で `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` を使います。これらのフェイクタイマーは、ネイティブの `AbortSignal.timeout` の時計を進めません。Vitest で決定論的なリクエスト期限が必要なら、制御した `setTimeout` から `AbortController` を `TimeoutError` を理由に中止します。
+
+<include cwd lang="typescript">
+  examples/testing/deadline.ts#example
+</include>
+
+Bun test では `jest.useFakeTimers()` と `jest.advanceTimersByTime()` を使います。Bun のフェイクタイマーは `AbortSignal.timeout` も制御します。ランナーが同じネイティブ時計を制御すると仮定しないでください。待機中の段階が始まってからタイマーを進め、経過した実時間ではなく状態遷移か試行回数を検証し、各テストのあとで本物のタイマーに戻してください。
+
+## 関連ドキュメント
+
+- [ローカル Fetch ハンドルによるテスト](/ja-JP/recipes/test-with-handle)
+- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
+- [Client の構成](/ja-JP/docs/client)

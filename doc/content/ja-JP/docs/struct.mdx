@@ -1,140 +1,141 @@
 ---
-title: "データ契約 / Struct"
-description: SDK の入力・出力・エラーを Struct で定義し、利用アプリケーションで同じ契約による型推論と実行時検証を使います。
+title: "Struct とスキーマ"
+description: SDK と利用側アプリケーション間で共有される入力およびレスポンスのデータ契約を、型推論と実行時バリデーション付きで定義します。
 ---
 
-# Struct
+# Struct とスキーマ
 
-SDK の作成者は Struct で API の入力・出力・エラー、SSE イベント、WebSocket メッセージの契約を定義します。型推論と実行時検証を同じ宣言に結び付けることで、利用アプリケーションは配布された定義をそのまま実行できます。Struct は値の表現を決め、リクエストの配置先は `builder` が決めます。
+`struct` は、SDK と利用側アプリケーションの間で共有される通信データ契約（呼び出し元の入力、`2xx` の出力、宣言されたサービスエラー、SSE イベント、WebSocket フレーム）を宣言します。
 
-リクエスト（とそのレスポンス）を Struct としてモデルします。TypeScript の型は `Infer` から、実行時チェックは `struct.parse(...)` から得られます — throw せず、エラーファーストのタプルです。
+- **静的な型推論**: `Infer<typeof Schema>` を使って TypeScript の型を自動導出します。
+- **エラーファーストのバリデーション**: `struct.parse(Schema, value)` により、例外を throw することなく `[null, data]` または `[StructError, undefined]` を返します。
 
-## 基本セットアップ
+## 1. SDK でスキーマを定義し、アプリケーションで検証する
+
+<Tabs items={["sdk/schema.ts", "app/validate.ts", "Single-file quick look"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/sdk/schema.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup/app/validate.ts#example
+</include>
+
+</Tab>
+<Tab>
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
 </include>
 
-パース結果に残るのは宣言したフィールドだけです。必須フィールドの欠落、プリミティブの不一致、壊れた入れ子、タプル長の不一致、許されない `null` → `StructError` で、部分的な値はありません。Struct は不変です。`.optional()` などは新しい Struct を返します。
+</Tab>
+</Tabs>
 
-## 必須、任意、null
+パースされたオブジェクトには宣言されたフィールドのみが残り（未知のプロパティは自動的に削除されます）、プロトタイプは `null` に設定されます。必須キーの欠落、基本型の不一致、無効な分岐が発生した場合、不完全なデータを出力することなく `StructError` を返します。
 
-存在と null 許容は別です。
+## 2. 必須フィールド、オプショナル、nullable
 
-| 宣言                         | 欠落 / `undefined`                           | `null`     | 妥当な値           |
-| ---------------------------- | -------------------------------------------- | ---------- | ------------------ |
-| `struct.string()`            | 拒否                                         | 拒否       | 文字列を受け付ける |
-| `struct.string().optional()` | 受け付ける。無いオブジェクトフィールドは省略 | 拒否       | 文字列を受け付ける |
-| `struct.string().null()`     | 拒否                                         | 受け付ける | 文字列を受け付ける |
-| `struct.string().nullish()`  | 受け付ける。無いオブジェクトフィールドは省略 | 受け付ける | 文字列を受け付ける |
-| `struct.null()`              | 拒否                                         | 受け付ける | 他の値は拒否       |
+Defjs では、**フィールドの存在有無**（`undefined`）と **値の null 許容性**（`null`）を明確に区別します。すべての struct コンストラクターは、デフォルトで厳格に「必須かつ非 null」です。
+
+| 宣言                         | 未指定 / `undefined`                     | `null` | 有効な値               |
+| ---------------------------- | ---------------------------------------- | ------ | ---------------------- |
+| `struct.string()`            | 拒否                                     | 拒否   | `string` のみ許可      |
+| `struct.string().optional()` | 許可（オブジェクトシリアライズ時は除外） | 拒否   | `string` のみ許可      |
+| `struct.string().null()`     | 拒否                                     | 許可   | `string` または `null` |
+| `struct.string().nullish()`  | 許可（オブジェクトシリアライズ時は除外） | 許可   | `string` または `null` |
+| `struct.null()`              | 拒否                                     | 許可   | `null` 以外は拒否      |
 
 <include cwd lang="typescript">
   examples/struct/required-optional-null.ts#example
 </include>
 
-`struct.any()` と `struct.unknown()` は `null` と `undefined` も拒否します。受け付けるには `.null()`、`.optional()`、`.nullish()` を連ねてください。
+`struct.any()` や `struct.unknown()` も、`.null()`、`.optional()`、`.nullish()` を明示的にチェーンしない限り、`null` や `undefined` を拒否します。
 
-ルートでは optional は `undefined` になれます。オブジェクト内では、省略された optional/nullish フィールドは欠落のままです。入れ子のオブジェクトフィールドも同じです。呼び出し側が省いてよいなら `.optional()` を付けます。中のフィールドがすべて optional でも、必須のオブジェクトフィールドは必須のままです。
+## 3. 双方向の通信用エイリアス (`.alias()`)
 
-## リクエストへの配置
+バックエンドが `snake_case` や特定のヘッダー名を使用し、TypeScript SDK 側では `camelCase` を使いたい場合は、`.alias("wire_name")` を使用します。フィールドに一度エイリアスを宣言するだけで、双方向で機能します。
 
-path、query、headers、body はビルダーが返すフィールドであり、リクエスト struct ではありません。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。`struct.urlencoded(shape)` と `struct.formData(shape)` は、コーデックタグ付きのオブジェクト struct です。タグが走るのは、その値がボディのルートであるときだけです。キーはエイリアスを使い、配列はフィールド名を繰り返します。
-
-<include cwd lang="typescript">
-  examples/struct/request-placement.ts#example
-</include>
-
-| ボディのルート                                         | 送られるもの      | デフォルトの content type                         |
-| ------------------------------------------------------ | ----------------- | ------------------------------------------------- |
-| 型付きの object、array、有限の number、boolean、`null` | JSON テキスト     | `application/json`                                |
-| `string` struct、または生の文字列                      | テキスト          | `text/plain;charset=UTF-8`                        |
-| ルートの `struct.urlencoded(shape)`                    | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| ルートの `struct.formData(shape)`                      | `FormData`        | プラットフォームの multipart boundary             |
-| `Blob` / `File`                                        | その blob         | blob の type、または `application/octet-stream`   |
-| `ArrayBuffer` / view / stream                          | バイト列          | `application/octet-stream`                        |
-
-`NaN` と `±Infinity` は、配列やオブジェクトの中も含めて、`REQ_BUILD_FAILED` で失敗します。
-
-`struct.file()` は、フォームフィールド用と生のファイルボディ用の値 struct です。WebSocket のビルダーは `headers` も `body` も返せません。HTTP と SSE は返せます。`GET` と `HEAD` は返せません。
-
-## エイリアス
-
-`.alias(...)` は論理名とワイヤ名を分けます。`struct.parse(...)` は、`{ aliases: true }` を渡さない限り論理キーを使います。JSON とフラットなリクエストコーデックはエイリアスをエンコードし、JSON レスポンスのデコードはワイヤキーを論理フィールドへ戻します。
+| 境界                                                                 | 使用されるキー名                               |
+| -------------------------------------------------------------------- | ---------------------------------------------- |
+| 操作の `input` および `struct.parse(Schema, value)`                  | 論理名（`customerName`）                       |
+| `builder` が返す型付けされた struct 値（`body`, `query`, `headers`） | 通信用エイリアス（`customer_name`）            |
+| JSON レスポンス / SSE イベント / WebSocket フレームのデコード時      | 通信用 `customer_name` → 論理名 `customerName` |
+| `builder` 内で直接記述された匿名オブジェクトのキー                   | 記述されたままのリテラルキー                   |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-| 境界                                   | フィールド                    |
-| -------------------------------------- | ----------------------------- |
-| `struct.parse(User, ...)` と操作の入力 | 論理名 `displayName`          |
-| ビルダーが返した型付きオブジェクト     | ワイヤ名 `display_name`       |
-| JSON / SSE / WebSocket のデコード      | ワイヤ → 論理名 `displayName` |
-| ビルダー内で書いた匿名オブジェクト     | 自分で書いたキー              |
+`builder` 内で型付けされたオブジェクトを展開（スプレッド: `{ ...input.order, extra: 1 }`）しても、struct のエンコード設定とエイリアスはそのまま保持されます。同じオブジェクト上で論理キーと通信用エイリアスの両方を同時に指定すると、`REQ_BUILD_FAILED` で失敗します。
 
-ビルダー自体が読むのは論理名（`input.user.displayName`）です。ワイヤ名が現れるのは、シリアライザがビルダーの返した型付きオブジェクトをエンコードするときだけです。
+## 4. リクエストへの配置とフォームコーデック
 
-エイリアスは入れ子フィールド、配列、オブジェクト、ユニオン、判別子で効きます。アプリコードでは論理名を保ち、外部名は struct に一度だけ置いてください。型付きオブジェクトをスプレッドすると、そのエンコードが保たれます。同じオブジェクトに論理フィールドとそのワイヤキーの両方を置くと `REQ_BUILD_FAILED` です。値を自分で `JSON.stringify` するとこの経路から外れます。シリアライザが見るのは論理名です。
+`input` はパラメータを定義し、`builder` はそれらを `{ path, query, headers, body }` へと配置します。フォームエンコードされたボディの場合、`struct.urlencoded(shape)` や `struct.formData(shape)` をルートオブジェクトに指定することで、トランスポートが自動的に `URLSearchParams` や `FormData` としてシリアライズします。
 
-ガイドはルートだけでなく、各ノードで決まります。匿名の親の下に新しく書いたオブジェクトは、書いたキーのままです。型付きの親の下では、同じオブジェクトがそのフィールドの struct を使います。
+<include cwd lang="typescript">
+  examples/struct/request-placement.ts#example
+</include>
 
-```ts
-body: { row: { id: '42' } }              // Anonymous root: emits id
-body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
-```
+| `builder` が返すボディのルート値                           | 送信時の形式      | デフォルトの `Content-Type`                       |
+| ---------------------------------------------------------- | ----------------- | ------------------------------------------------- |
+| 型付けされたオブジェクト、配列、有限の数値、真偽値、`null` | JSON テキスト     | `application/json`                                |
+| `string` struct または生の `string`                        | UTF-8 テキスト    | `text/plain;charset=UTF-8`                        |
+| ボディルートの `struct.urlencoded(shape)`                  | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| ボディルートの `struct.formData(shape)`                    | `FormData`        | `multipart/form-data; boundary=...`               |
+| `Blob` / `File` (`struct.file()`)                          | バイナリ Blob     | `blob.type` または `application/octet-stream`     |
+| `ArrayBuffer` / ビュー / `ReadableStream`                  | 生のバイト列      | `application/octet-stream`                        |
 
-union のガイドが複数の分岐に一致したら、分岐ごとにエンコードして比較します。ワイヤ結果が同じならそれを採用し、違えば `REQ_BUILD_FAILED` です。
+## 5. `StructError` とバリデーション問題（issues）の処理
 
-非 object 部分を含む混合 intersection は、解析時に一致した各部分のタグの連言をタグとして付け、解析せず新しく書いた値は匿名オブジェクトとして扱います。
-
-## パースの失敗
-
-`struct.parse(...)` は `[null, value]` か `[StructError, undefined]` を返します。`StructError` は `Error` を拡張し、`issues` に加えて `format()`、`flatten()`、`prettify()` を持ちます。
+`struct.parse(Schema, data, { aliases?, errorMap? })` は、検証失敗時に `[StructError, undefined]` を返します。`StructError` はネイティブの `Error` を継承しており、`issues`、`format()`、`flatten()`、`prettify()` を提供します。
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-`StructIssue` は `code`、`expected`、`message`、`path`、`received` を持ちます。`code` は `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union`、`missing_key` のいずれかです。デフォルトのメッセージは受け取った値の種類を示し、値自体は示しません。たとえば `Expected number at id, received string` です。issue の path は構造的で、record のキーを保持します。`struct.record(...)` は `Expected number at alice@example.com, received string` を生成し得るため、キーはデフォルトメッセージ、`prettify()`、`String(fault)` の中でも機微情報になり得ます。したがって `message` と `prettify()` は受信ペイロードを含みません。`received` は元の値を保持するので、ログや返却の前に redact してください。`struct.parse(..., { errorMap })` は、その呼び出しだけのメッセージを書き換えます。別の Core のコピーで作った struct の bigint/date 変換失敗も対象です。`''` を含む、返された文字列はすべてデフォルトを置き換え、`undefined` だけがデフォルトを保ちます。カスタム文面はそのまま使われ、map が値を含めればその値が露出することがあります。
+各 `StructIssue` には、`code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection`、`custom`）、`path`、`expected`、`received`、`message` が含まれます。デフォルトのメッセージは受信した値を省き、その _型_ だけを報告しますが、path は動的な record のキーを保持し、そこに機密性の高い値が含まれることがあります。`String(error)` と `error.prettify()` は秘匿化の境界ではありません。ログに出すときは安全なフィールドの許可リストを使い、生の `received` 値とカスタムメッセージは機密情報として扱ってください。
 
-Struct の検証は構造だけです。公開された範囲、形式、refinement、認証、状態遷移の規則はありません。そうした検査は操作を呼ぶ前に行ってください。
-
-## リファレンス
-
-`@defjs/core` の公開コンストラクタです（内部はファサード API ではありません）。
+## 6. コンストラクターリファレンス
 
 <include cwd lang="typescript">
   examples/struct/any.ts#example
 </include>
 
-| コンストラクタ                   | 入力                                              | 推論される出力              |
-| -------------------------------- | ------------------------------------------------- | --------------------------- |
-| `struct.number()`                | `NaN` 以外の数値                                  | ±`Infinity` を含む `number` |
-| `struct.date()`                  | `Date`、数値、または日付文字列                    | 妥当な `Date`               |
-| `struct.bigint()`                | `bigint`、または `BigInt(...)` が受け付ける文字列 | `bigint`                    |
-| `struct.enum(...)`               | 宣言した文字列または数値のメンバー                | そのリテラルユニオン        |
-| `struct.discriminatedUnion(...)` | 必須のリテラル判別子を持つオブジェクト            | 選ばれたオブジェクトの枝    |
-| `struct.or(...)`                 | 最初に一致した枝。エンコードは曖昧さを検査する    | 枝の出力のユニオン          |
-| `struct.intersection(...)`       | すべてのメンバーが受け付ける値                    | 出力の交差                  |
-| `struct.record(value)`           | 値が `value` に合うプレーンオブジェクト           | パース済み値のレコード      |
-| `struct.tuple(items)`            | 宣言した長さちょうどの配列                        | 固定長タプル                |
+| コンストラクター                                           | 受け付ける入力値                                 | 推論される出力型                                             |
+| ---------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------ |
+| `struct.string()` / `struct.boolean()`                     | 一致するプリミティブ値                           | `string` / `boolean`                                         |
+| `struct.number()`                                          | `NaN` を除く任意の数値                           | `number`（`NaN` は拒否、JSON ボディでは `±Infinity` も拒否） |
+| `struct.bigint()`                                          | `bigint` または数値形式の文字列                  | `bigint`                                                     |
+| `struct.date()`                                            | 有効な `Date`、タイムスタンプ、または ISO 文字列 | `Date`                                                       |
+| `struct.literal(value)`                                    | 正確に一致するプリミティブリテラル               | リテラル型                                                   |
+| `struct.enum(values)`                                      | 宣言された文字列または数値の要素                 | リテラルの union 型                                          |
+| `struct.array(item)` / `struct.tuple(items)`               | 配列 / 固定長タプル                              | `T[]` / `[...]`                                              |
+| `struct.object(shape)` / `struct.record(val)`              | プレーンオブジェクト                             | 型付けされたオブジェクト / `Record<string, V>`               |
+| `struct.discriminatedUnion(key, options)`                  | リテラルの `key` 識別子を持つオブジェクト        | オブジェクトブランチの union 型                              |
+| `struct.or(branches)`                                      | 最初にマッチしたブランチ                         | 各ブランチ型の union 型                                      |
+| `struct.intersection(members)`                             | すべての構成要素を満たす値                       | ディープマージされた交差型（intersection）                   |
+| `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`                  | バイナリ表現                                                 |
 
-すべての Struct は `.alias(name)`、`.optional()`、`.null()`、`.nullish()` をサポートします。`struct.discriminatedUnion` は、必須のリテラル判別子を持つオブジェクトの選択肢が必要で、重複は拒否します。
+### 再帰的な struct
 
-`struct`、`Infer`、`Struct`、`StructError`、関連する公開型は `@defjs/core` から import してください。パーサーは `struct.parse(...)` です。`createObjectStruct`、定義の symbol、コーデック内部、`packages/core/src` は import しないでください。
+自己参照する型は、shape 上の getter プロパティで自分自身を読み取ります。getter は定数の定義時ではなく、オブジェクト struct が初めて使われたときに一度だけ実行されるため、定数が自分自身を参照できます。この定数には `Struct<T>` を注釈してください。TypeScript は自分自身を参照する型を推論できません。
 
-ファサードが約束しないこと:
+<include cwd lang="typescript">
+  examples/struct/recursive.ts#example
+</include>
 
-- オブジェクト/レコードの出力は null プロトタイプです — `Object.prototype` のメソッドを前提にしないでください。
-- 未知のオブジェクトキーは落とされます。
-- `struct.number()` は `NaN` を拒否し、無限大は受け付けます。
-- `struct.or(...)` は枝を順に試します。枝のエンコードが食い違うときは曖昧なエンコードを拒否します。
-- `struct.intersection(...)` は宣言順にメンバーをパースします。
-- intersection はメンバー出力を深くマージします（`Object.is` で等しい値と同時刻の Date はそのまま、plain object と長さが同じ配列は再帰的にマージ、それ以外の衝突はその path の `invalid_intersection`）。`unknown` / `any` は出力に寄与しません。一つの論理キーは複数の wire key に対応できます。同じ wire key に等しくない値が書かれたときだけ衝突です。
-- Struct は境界を検証します。キャッシュも認可も、トランスポート資源の所有もしません。
+### `struct` が行わないこと
 
-## 関連レシピ
+- `struct` は構造の宣言のみを行います。文字列の長さ、パターン、数値の範囲、ビジネスルールは、解析後にアプリケーションコードで扱います。
+- 解析は最初の無効なフィールドで停止します。欠けたフィールドをゼロ値で埋めることはなく、部分的な出力を返すこともありません。
 
-- [POST JSON](/ja-JP/recipes/post-json)
-- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
+## 関連ドキュメント
+
+- [HTTP 操作](/ja-JP/docs/http)
+- [エラーハンドリング](/ja-JP/docs/errors)
+- [JSON の送信とバリデーション](/ja-JP/recipes/post-json)

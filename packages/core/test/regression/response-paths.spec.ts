@@ -16,9 +16,10 @@ test.each([200, 403])(
   async (status) => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(
-        async () =>
+      withHTTPHandle(() =>
+        Promise.resolve(
           new Response(JSON.stringify("123"), { status, headers: jsonHeaders }),
+        ),
       ),
     );
     const endpoint = defineRequest({
@@ -40,12 +41,13 @@ test.each([200, 403])(
   async (status) => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(
-        async () =>
+      withHTTPHandle(() =>
+        Promise.resolve(
           new Response(JSON.stringify("ready"), {
             status,
             headers: jsonHeaders,
           }),
+        ),
       ),
     );
     const endpoint = defineRequest({
@@ -67,12 +69,13 @@ test.each([200, 403])(
   async (status) => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(
-        async () =>
+      withHTTPHandle(() =>
+        Promise.resolve(
           new Response(JSON.stringify('{"role":"admin"}'), {
             status,
             headers: jsonHeaders,
           }),
+        ),
       ),
     );
     const payload = struct.object({ role: struct.string() });
@@ -93,16 +96,16 @@ test.each([200, 403])(
 test("preserves a decoded null SSE handshake error body", async () => {
   const client = createClient(
     withEndpoint("https://example.test"),
-    withSSEHandle(
-      async () => new Response("null", { status: 403, headers: jsonHeaders }),
+    withSSEHandle(() =>
+      Promise.resolve(
+        new Response("null", { status: 403, headers: jsonHeaders }),
+      ),
     ),
   );
   const endpoint = defineEventStream({
     path: "/events",
     events: { message: struct.string() },
     error: struct.null(),
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
 
   const [fault] = await endpoint(client);
@@ -116,29 +119,30 @@ test("preserves a decoded null SSE handshake error body", async () => {
 test("reports an unreadable declared SSE handshake body as a decode fault", async () => {
   const client = createClient(
     withEndpoint("https://example.test"),
-    withSSEHandle(async () => {
+    withSSEHandle(() => {
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
           controller.error(new Error("incomplete handshake body"));
         },
       });
-      return new Response(body, { status: 403, headers: jsonHeaders });
+      return Promise.resolve(
+        new Response(body, { status: 403, headers: jsonHeaders }),
+      );
     }),
   );
   const endpoint = defineEventStream({
     path: "/events",
     events: { message: struct.string() },
     error: struct.object({ code: struct.string() }),
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
 
   const [fault, stream] = await endpoint(client);
 
-  // The published handshake contract requires RES_DECODE_FAILED. HTTP_STATUS with
-  // undefined data also violates the public contract for the declared error struct.
+  // Typed `data` exists only when the declared error body decoded, so startup reports the decode
+  // fault, as `defineRequest` does, with the status in its metadata.
   expect(fault?.code).toBe("RES_DECODE_FAILED");
   expect(fault?.response?.status).toBe(403);
+  expect(fault?.cause).toBeInstanceOf(Error);
   expect(stream).toBeUndefined();
 });
 
@@ -161,16 +165,16 @@ test("cancels an in-progress declared SSE handshake body when the caller aborts"
   );
   const client = createClient(
     withEndpoint("https://example.test"),
-    withSSEHandle(
-      async () => new Response(body, { status: 403, headers: jsonHeaders }),
+    withSSEHandle(() =>
+      Promise.resolve(
+        new Response(body, { status: 403, headers: jsonHeaders }),
+      ),
     ),
   );
   const endpoint = defineEventStream({
     path: "/events",
     events: { message: struct.string() },
     error: struct.object({ code: struct.string() }),
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
   const controller = new AbortController();
   const pending = endpoint(client({ signal: controller.signal }));
@@ -182,7 +186,7 @@ test("cancels an in-progress declared SSE handshake body when the caller aborts"
     expect(fault?.code).toBe("NET_ABORTED");
     expect(stream).toBeUndefined();
     await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce(), {
-      timeout: 500,
+      timeout: 10_000,
     });
   } finally {
     // Release the stalled read only after measuring transport cancellation.

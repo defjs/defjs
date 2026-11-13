@@ -1,3 +1,4 @@
+import type { Locale } from "./i18n";
 import { createElement, type ComponentProps, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { highlight } from "fumadocs-core/highlight";
@@ -7,7 +8,7 @@ import { rehypeCode } from "fumadocs-core/mdx-plugins/rehype-code";
 import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
 import { wrapEnglishHtml } from "./api-entry-actions";
 import type { ApiEntryView } from "./api-entry-view";
-import type { ApiField } from "./api-text";
+import { withoutFirstParagraph, type ApiField } from "./api-text";
 import type { Translator } from "./translations";
 
 const themes = { light: "github-light", dark: "github-dark" } as const;
@@ -82,19 +83,13 @@ export async function highlightCode(
   lang: string,
   labels: CopyLabels,
 ): Promise<string> {
-  const node = (await highlight(code, {
+  const node = await highlight(code, {
     lang,
     themes,
     defaultColor: false,
-  })) as ReactElement<ComponentProps<"pre">>;
+  });
   return tagCopyButton(
-    renderToStaticMarkup(
-      preBlock({
-        className: node.props.className,
-        style: node.props.style,
-        children: node.props.children,
-      }),
-    ),
+    renderToStaticMarkup(preBlock({ children: node })),
     labels,
   );
 }
@@ -118,7 +113,7 @@ export async function renderMarkdown(
 export async function renderFieldTable(
   rows: readonly ApiField[],
   t: Translator,
-  locale = "en-US",
+  locale: Locale,
 ): Promise<string> {
   if (rows.length === 0) return "";
   const labels = copyLabels(t);
@@ -141,7 +136,7 @@ export async function renderApiEntry(
   view: ApiEntryView,
   t: Translator,
   overviewTitle: string,
-  locale = "en-US",
+  locale: Locale,
 ): Promise<RenderedApiEntry> {
   const labels = copyLabels(t);
   const parameterSections: RenderedParameterSection[] = [];
@@ -169,7 +164,11 @@ export async function renderApiEntry(
     signaturesHtml: await Promise.all(
       view.signatures.map((code) => highlightCode(code, "ts", labels)),
     ),
-    descriptionHtml: await renderMarkdown(view.description, labels),
+    // The first paragraph is the summary shown above the page body.
+    descriptionHtml: await renderMarkdown(
+      withoutFirstParagraph(view.description),
+      labels,
+    ),
     parameterSections,
     membersHtml: await renderFieldTable(view.members, t, locale),
     returnsHtml: await Promise.all(

@@ -1,34 +1,32 @@
 // #region example
 import { defineRequest, struct, type Client } from "@defjs/core";
 
-const createUser = defineRequest({
+const createOrder = defineRequest({
   method: "POST",
-  path: "/organizations/:organizationId/users",
+  path: "/organizations/:organizationId/orders",
   input: struct.object({
     organizationId: struct.string(),
     notify: struct.boolean().optional(),
     requestId: struct.string(),
-    user: struct.object({
-      displayName: struct.string().alias("display_name"),
+    order: struct.object({
+      customerName: struct.string().alias("customer_name"),
     }),
   }),
   builder: (input) => ({
     path: { organizationId: input.organizationId },
     query: { notify: input.notify },
     headers: { "x-request-id": input.requestId },
-    body: input.user,
+    body: input.order,
   }),
 });
 
 async function submit(client: Client) {
-  const [error] = await createUser(client, {
+  const [error] = await createOrder(client, {
     organizationId: "acme",
     notify: true,
     requestId: "request-42",
-    user: { displayName: "Ada" },
+    order: { customerName: "Ada" },
   });
-  if (error) return;
+  if (error) console.error(error.code);
 }
-
-void submit;
 // #endregion

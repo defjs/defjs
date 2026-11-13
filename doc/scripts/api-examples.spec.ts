@@ -1,19 +1,16 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { loadExample, readExampleRegion, readText } from "./api-examples";
+import { joinPath } from "./paths";
+import { removeDirectory, tempDirectory } from "./tmp";
 
 const roots: string[] = [];
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
+afterEach(() => {
+  for (const root of roots.splice(0)) removeDirectory(root);
 });
 
 test("example regions keep their body and reject a missing marker", async () => {
-  const docRoot = join(import.meta.dirname, "..");
+  const docRoot = joinPath(import.meta.dirname, "..");
   const loaded = await loadExample(
     docRoot,
     "examples/api/create-client.ts#example",
@@ -29,9 +26,9 @@ test("example regions keep their body and reject a missing marker", async () => 
   expect(() =>
     readExampleRegion("// #region example\nconst n = 1;\n", "example"),
   ).toThrow("missing #endregion");
-  const root = await mkdtemp(join(tmpdir(), "defjs-example-"));
+  const root = tempDirectory("defjs-example");
   roots.push(root);
-  await expect(readText(join(root, "missing.ts"))).rejects.toThrow(
+  await expect(readText(joinPath(root, "missing.ts"))).rejects.toThrow(
     "missing example file",
   );
   await expect(
@@ -43,14 +40,15 @@ test("example regions keep their body and reject a missing marker", async () => 
   );
   await expect(
     loadExample(docRoot, "examples/api/create-client.ts#example", () =>
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: rejects with a string to cover loadExample's non-Error message branch
       Promise.reject("disk"),
     ),
   ).rejects.toThrow("disk");
-  await writeFile(
-    join(root, "sample.ts"),
+  await Bun.write(
+    joinPath(root, "sample.ts"),
     "// #region example\nconst n = 1;\n// #endregion\n",
   );
-  await expect(readText(join(root, "sample.ts"))).resolves.toContain(
+  await expect(readText(joinPath(root, "sample.ts"))).resolves.toContain(
     "const n = 1;",
   );
 });

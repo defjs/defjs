@@ -1,22 +1,32 @@
 ---
 title: "Gestionar sesiones WebSocket"
-description: Conecta, envía un envelope tipado, recibe una vez, luego cierra y await closed.
+description: Conecta, envía una envoltura tipada, recibe una vez y luego cierra y espera a closed.
 ---
 
 # Abrir una sesión WebSocket
 
-Cada dirección es un struct. Tú gestionas el unsubscribe, `close` y `await session.closed`. Los frames inválidos van a `onRuntimeError`.
+Declara structs de `incoming` y `outgoing` en `defineWebSocket`. En tu aplicación, suscríbete a `session.onRuntimeError(...)`, consume `session.receive` y asegúrate siempre de cancelar la suscripción, llamar a `session.close(...)` y esperar con `await session.closed` en un bloque `finally`:
 
-Ver detalles en [WebSocket](/es-ES/docs/web-socket).
-
-<include cwd meta="chat.ts">
-  examples/recipes/websocket-session.ts#example
+<Tabs items={["sdk/quotes.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/sdk/quotes.ts#example
 </include>
 
-`chat.example.com` es un placeholder. Con un servidor que responde a `{ "type": "send", "text": "Hello" }` con `{ "type": "message", "text": "Hello" }`, el snippet imprime:
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/websocket-session/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Con un servidor que responda a `{ "type": "subscribe", "symbol": "ACME" }` con `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, el script imprime:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
-La reconexión es opt-in (`withWebSocketReconnect`). El heartbeat también. Los WebSockets del navegador no admiten cabeceras arbitrarias de handshake — usa cookies, subprotocolos o un ticket de corta duración.
+- Tanto la reconexión (`withRetry`) como los latidos (`withWebSocketHeartbeat`) son opcionales (opt-in) en el cliente.
+- Las conexiones WebSocket en el navegador no pueden enviar cabeceras HTTP arbitrarias durante el handshake de actualización; usa cookies, subprotocolos o tokens de corta duración en su lugar. Consulta [Sesiones WebSocket](/es-ES/docs/web-socket).

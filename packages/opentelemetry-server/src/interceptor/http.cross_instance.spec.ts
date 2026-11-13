@@ -4,7 +4,7 @@ import {
 } from "@defjs/core";
 import { describe, expect, test, vi } from "vitest";
 import { withOpenTelemetryServer } from "../option";
-import { createMockLogger } from "../test-utils";
+import { createMockLogger } from "../../test/mocks";
 
 vi.resetModules();
 const appCore = await import("@defjs/core");

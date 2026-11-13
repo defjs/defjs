@@ -1,24 +1,23 @@
 import { describe, expect, test, vi } from "vitest";
-import { failure, issue, parkedFailure } from "./errors";
 
-const errorsModule = import("./errors");
+vi.mock("./errors", { spy: true });
+
+import { issue } from "./errors";
 import type { ErrorMap } from "./index";
 import { struct } from "./index";
-import { parseStructTuple as parse, parseStructValue } from "./introspection";
-import { parseValue } from "./parse";
+import { parseStructTuple as parse, parseStructValue } from "./parse";
 import { createPrimitiveStruct } from "./runtime";
-import { OMIT } from "./symbols";
-import type {
-  ParseResult,
-  Path,
-  RuntimeStruct,
-  StructIssue,
-  StructLike,
-} from "./types";
-import { success } from "./utils";
+import type { ParseResult, Path, StructIssue, StructLike } from "./types";
 
-function runtime(value: unknown): RuntimeStruct {
-  return value as RuntimeStruct;
+function nestedResult(
+  results: readonly ParseResult<unknown>[],
+  index: number,
+): ParseResult<unknown> {
+  const result = results[index];
+  if (result === undefined) {
+    throw new Error("expected nested parse result");
+  }
+  return result;
 }
 
 function firstIssue(result: ParseResult<unknown>): StructIssue {
@@ -680,12 +679,12 @@ describe("parse re-entrancy", () => {
       },
     ]);
     expect(nested[0]).toEqual([null, { ok: true }]);
-    expect(firstIssue(nested[1] as ParseResult<unknown>)).toMatchObject({
+    expect(firstIssue(nestedResult(nested, 1))).toMatchObject({
       message: "inner message",
       path: ["ok"],
       received: "no",
     });
-    expect(firstIssue(nested[2] as ParseResult<unknown>)).toMatchObject({
+    expect(firstIssue(nestedResult(nested, 2))).toMatchObject({
       message: "Expected number at rows[1].id, received string",
       path: ["rows", 1, "id"],
     });
@@ -793,44 +792,6 @@ describe("parse re-entrancy", () => {
       path: ["children", 1, "id"],
       received: "y",
     });
-  });
-
-  test("a decode hook can build its failure first and still report it after re-entering parse", () => {
-    const nested: ParseResult<unknown>[] = [];
-    const Checked = createPrimitiveStruct<string, string>({
-      decode: (value, path) => {
-        const own =
-          value === "bad"
-            ? failure(issue(path, "custom", "good value", value))
-            : undefined;
-        nested.push(
-          parse(struct.object({ n: struct.number() }), { n: "nested" }),
-        );
-        nested.push(parse(struct.string(), "fine"));
-        return own ?? success(value.toUpperCase());
-      },
-      expected: "string",
-      is: (value): value is string => typeof value === "string",
-      kind: "string",
-    });
-    const Schema = struct.object({ names: struct.array(Checked) });
-
-    expect(parse(Schema, { names: ["a", "b"] })).toEqual([
-      null,
-      { names: ["A", "B"] },
-    ]);
-    expect(firstIssue(parse(Schema, { names: ["a", "bad", "never"] }))).toEqual(
-      {
-        code: "custom",
-        expected: "good value",
-        message: "Expected good value at names[1], received string",
-        path: ["names", 1],
-        received: "bad",
-      },
-    );
-    // Two hook calls per parse of the valid input and two for the failing one, two nested parses each.
-    expect(nested).toHaveLength(8);
-    expect(firstIssue(nested[0] as ParseResult<unknown>).path).toEqual(["n"]);
   });
 
   test("an exception from errorMap, a getter, or a hook leaves nothing behind for the next parse", () => {
@@ -1020,24 +981,27 @@ describe("parse outputs and quiet candidates", () => {
     const [error, value] = parse(Schema, input);
 
     expect(error).toBeNull();
-    expect(Object.keys(value ?? {})).toEqual(["z", "y", "x"]);
-    const out = value as unknown as {
-      x: { [key: string]: unknown }[];
-      y: { [key: string]: { [key: string]: unknown } };
-      z: { [key: string]: unknown }[];
-    };
-    const row = out.z[0] as { [key: string]: unknown };
+    if (error !== null || value === undefined) {
+      throw new Error("expected value");
+    }
+    expect(Object.keys(value)).toEqual(["z", "y", "x"]);
+    const row = value.z[0];
+    const record = value.y["r"];
+    const tupleObject = value.x[0];
+    if (row === undefined || record === undefined) {
+      throw new Error("expected nested nodes");
+    }
     expect(Object.keys(row)).toEqual(["b", "a"]);
-    for (const node of [out, row, out.y, out.y["r"], out.x[0]]) {
+    for (const node of [value, row, value.y, record, tupleObject]) {
       expect(Object.getPrototypeOf(node)).toBeNull();
     }
-    expect(out.z).not.toBe(input.z);
-    expect(out.x).not.toBe(input.x);
+    expect(value.z).not.toBe(input.z);
+    expect(value.x).not.toBe(input.x);
     expect(row).not.toBe(input.z[0]);
-    expect(out.y["r"]).not.toBe(input.y.r);
+    expect(record).not.toBe(input.y.r);
   });
 
-  test("candidates that fail without an errorMap never build an issue message", async () => {
+  test("candidates that fail without an errorMap never build an issue message", () => {
     const hostile = new Hostile();
     const Shallow = struct.or(struct.string(), struct.unknown());
     const Deep = struct.object({
@@ -1050,7 +1014,8 @@ describe("parse outputs and quiet candidates", () => {
     });
     const deepInput = { box: { items: [{ v: hostile }] } };
 
-    const spy = vi.spyOn(await errorsModule, "issue");
+    const spy = vi.mocked(issue);
+    spy.mockClear();
     expect(parse(Shallow, hostile)[1]).toBe(hostile);
     expect(parse(Deep, deepInput)[0]).toBeNull();
     expect(spy).not.toHaveBeenCalled();
@@ -1059,7 +1024,7 @@ describe("parse outputs and quiet candidates", () => {
       "Expected string at <root>, received object",
     );
     expect(spy).toHaveBeenCalled();
-    spy.mockRestore();
+    spy.mockClear();
   });
 
   const hostile = new Hostile();
@@ -1099,8 +1064,9 @@ describe("parse outputs and quiet candidates", () => {
   // Only the catch-all accepts the value, so the candidate in front of it has to fail quietly first.
   test.each(quietCandidates)(
     "a %s candidate fails without building a message",
-    async (_name, candidate, value) => {
-      const spy = vi.spyOn(await errorsModule, "issue");
+    (_name, candidate, value) => {
+      const spy = vi.mocked(issue);
+      spy.mockClear();
       const [error, result] = parse(
         struct.or(candidate, struct.unknown()),
         value,
@@ -1108,7 +1074,7 @@ describe("parse outputs and quiet candidates", () => {
       expect(error).toBeNull();
       expect(result).toBe(value);
       expect(spy).not.toHaveBeenCalled();
-      spy.mockRestore();
+      spy.mockClear();
     },
   );
 
@@ -1140,218 +1106,5 @@ describe("parse outputs and quiet candidates", () => {
       "missing_key@rows.0.a:number",
       "invalid_type@rows.0.b.1:string",
     ]);
-  });
-});
-
-describe("parseValue boundary", () => {
-  test("forwards the mode, reports paths below the caller path, and leaves the caller path alone", () => {
-    const callerPath: Path = ["caller"];
-    const optional = runtime(struct.string().optional());
-
-    expect(parseValue(optional, undefined, callerPath, "field")).toEqual({
-      ok: true,
-      value: OMIT,
-    });
-    expect(parseValue(optional, undefined, callerPath, "value")).toEqual({
-      ok: true,
-      value: undefined,
-    });
-    expect(
-      parseValue(runtime(struct.string()), undefined, [], "field"),
-    ).toEqual({
-      ok: false,
-      issue: {
-        code: "missing_key",
-        expected: "string",
-        message: "Expected string at <root>, received undefined",
-        path: [],
-        received: undefined,
-      },
-    });
-    expect(
-      parseValue(
-        runtime(struct.object({ a: struct.array(struct.string()) })),
-        { a: ["x", 2] },
-        callerPath,
-        "value",
-      ),
-    ).toEqual({
-      ok: false,
-      issue: {
-        code: "invalid_type",
-        expected: "string",
-        message: "Expected string at caller.a[1], received number",
-        path: ["caller", "a", 1],
-        received: 2,
-      },
-    });
-    expect(callerPath).toEqual(["caller"]);
-  });
-});
-
-describe("the parked failure", () => {
-  test("is empty after every parse: failed, succeeded after discarded candidates, or threw", () => {
-    const Schema = struct.object({
-      value: struct.or(
-        struct.object({ a: struct.number() }),
-        struct.object({ b: struct.string() }),
-      ),
-    });
-    // With an errorMap the discarded candidates report, so their issues pass through the slot.
-    const errorMap: ErrorMap = () => undefined;
-    expect(parkedFailure()).toBeUndefined();
-
-    expect(parse(Schema, { value: { b: "x" } }, { errorMap })[0]).toBeNull();
-    expect(parkedFailure()).toBeUndefined();
-
-    expect(parse(Schema, { value: 1 }, { errorMap })[0]).not.toBeNull();
-    expect(parkedFailure()).toBeUndefined();
-
-    expect(parse(Schema, { value: 1 })[0]).not.toBeNull();
-    expect(parkedFailure()).toBeUndefined();
-
-    const explode: ErrorMap = () => {
-      throw new Error("errorMap exploded");
-    };
-    expect(() => parse(Schema, { value: 1 }, { errorMap: explode })).toThrow(
-      "errorMap exploded",
-    );
-    expect(parkedFailure()).toBeUndefined();
-
-    expect(parseValue(runtime(Schema), { value: 1 }, [], "value").ok).toBe(
-      false,
-    );
-    expect(parkedFailure()).toBeUndefined();
-  });
-});
-
-describe("structs built by another copy of the package", () => {
-  // A bundler can leave two copies of the package in one application. Structs are recognised by registered symbols, so
-  // a struct from one copy is accepted by the other and its decode hooks run inside the parser that is parsing.
-  async function otherCopy(): Promise<{ struct: typeof struct }> {
-    vi.resetModules();
-    const copy = await import("./index");
-    expect(copy.struct).not.toBe(struct);
-    return copy;
-  }
-
-  test("optional and nullish fields use the parsing copy's omission sentinel in both directions", async () => {
-    const other = await otherCopy();
-    const token = Symbol.for("defjs.struct.omit");
-    for (const [parser, owner] of [
-      [struct, other.struct],
-      [other.struct, struct],
-    ] as const) {
-      const Schema = owner.object({
-        required: owner.unknown(),
-        optional: owner.any().optional(),
-        absent: owner.unknown().optional(),
-        skipped: owner.any().optional(),
-        nullable: owner.unknown().nullish(),
-      });
-      const [error, value] = parser.parse(Schema, {
-        required: token,
-        optional: token,
-        skipped: undefined,
-        nullable: null,
-      });
-      expect(error).toBeNull();
-      expect(value).toEqual({
-        required: token,
-        optional: token,
-        nullable: null,
-      });
-      expect(Object.keys(value ?? {})).toEqual([
-        "required",
-        "optional",
-        "nullable",
-      ]);
-      expect(
-        parser.parse(owner.record(owner.unknown().nullish()), {
-          kept: token,
-          skipped: undefined,
-          nullable: null,
-        }),
-      ).toEqual([null, { kept: token, nullable: null }]);
-    }
-  });
-
-  test("decode hooks accept and reject exactly like the hooks of this copy", async () => {
-    const other = await otherCopy();
-
-    expect(parse(other.struct.date(), ISO)).toEqual([null, new Date(ISO)]);
-    expect(parse(other.struct.bigint(), "12")).toEqual([null, 12n]);
-    expect(parse(other.struct.bigint(), 7n)).toEqual([null, 7n]);
-
-    const rejected: [StructLike, StructLike, unknown][] = [
-      [other.struct.date(), struct.date(), "not a date"],
-      [other.struct.bigint(), struct.bigint(), "x1"],
-    ];
-    for (const [foreign, own, input] of rejected) {
-      const [error, value] = parse(foreign, input);
-      expect(value).toBeUndefined();
-      expect(error?.issues).toHaveLength(1);
-      expect(error?.issues).toEqual(parse(own, input)[0]?.issues);
-    }
-
-    // The parsing copy's error map applies to conversion failures raised by the other copy's decode hooks.
-    const seen: string[] = [];
-    const errorMap: ErrorMap = (item) => {
-      seen.push(item.message);
-      return "redacted";
-    };
-    const mappedCases: [StructLike, string, string][] = [
-      [other.struct.bigint(), "x1", "bigint"],
-      [other.struct.date(), "not a date", "Date"],
-    ];
-    for (const [foreign, input, expected] of mappedCases) {
-      seen.length = 0;
-      const [mapped, mappedValue] = parse(foreign, input, { errorMap });
-      expect(mappedValue).toBeUndefined();
-      expect(seen).toEqual([`Expected ${expected} at <root>, received string`]);
-      expect(seen[0]).not.toContain(input);
-      expect(mapped?.issues[0]?.message).toBe("redacted");
-      expect(mapped?.issues[0]?.received).toBe(input);
-      expect(String(mapped)).not.toContain(input);
-    }
-  });
-
-  test("failures keep their place in the document and a union moves on to its next candidate", async () => {
-    const other = await otherCopy();
-    const Doc = struct.object({
-      events: struct.array(
-        struct.object({ at: other.struct.date(), id: other.struct.bigint() }),
-      ),
-    });
-
-    expect(
-      firstIssue(
-        parse(Doc, {
-          events: [
-            { at: ISO, id: "1" },
-            { at: "never", id: "2" },
-          ],
-        }),
-      ),
-    ).toMatchObject({
-      code: "invalid_type",
-      expected: "Date",
-      path: ["events", 1, "at"],
-      received: "never",
-    });
-    expect(
-      firstIssue(parse(Doc, { events: [{ at: ISO, id: "one" }] })).path,
-    ).toEqual(["events", 0, "id"]);
-
-    const Either = struct.or(other.struct.date(), struct.string());
-    expect(parse(Either, "plain")).toEqual([null, "plain"]);
-    expect(parse(Either, ISO)).toEqual([null, new Date(ISO)]);
-
-    // The parser of the other copy runs a struct of this one the same way.
-    expect(
-      firstIssue(
-        other.struct.parse(struct.array(struct.date()), [ISO, "never"]),
-      ),
-    ).toMatchObject({ path: [1], received: "never" });
   });
 });

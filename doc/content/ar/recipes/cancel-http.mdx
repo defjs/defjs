@@ -1,20 +1,29 @@
 ---
 title: "الإلغاء والمهلة"
-description: أجهض استدعاءً أو ضع له مهلة، واقرأ NET_ABORTED / NET_TIMEOUT.
+description: ألغِ طلباً أو عيّن مهلة زمنية وميّز بين خطأي NET_ABORTED وNET_TIMEOUT بدقة.
 ---
 
-# إلغاء استدعاء HTTP
+# إلغاء طلب HTTP وإدارته بالمهلة الزمنية
 
-اجمع إشارة المستدعي مع مهلة على `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` إشارة واحدة. يُصنَّف الإجهاض اليدوي `NET_ABORTED`. وتُصنَّف المهلة `NET_TIMEOUT`.
+اجمع بين `AbortController` الخاص بالمستدعي ومهلة زمنية محددة عبر `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` ومرّر الإشارة المدمجة عبر `client({ signal })`. يصنف Defjs الإلغاء اليدوي من المستدعي كـ `NET_ABORTED` والإلغاء الناتج عن انتهاء المهلة كـ `NET_TIMEOUT`.
 
-انظر [HTTP](/ar/docs/http#cancel-the-work) للتفاصيل.
-
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
 ```
 
-يخبرك الإلغاء بما رآه المستدعي. وهو لا يثبت أن كتابة على الخادم قد تراجعت — أبقِ إعادة محاولة التغييرات خلف عقد تماثل.
+يُبلّغ الإلغاء عما لاحظه العميل فحسب، ولا يضمن أن الخادم قد تراجع عن عملية الكتابة. احرص على حماية عمليات التعديل بمفتاح تكرار (idempotency key). راجع [إلغاء طلبات HTTP وتعيين المهل الزمنية](/ar/docs/http#cancel-the-work).

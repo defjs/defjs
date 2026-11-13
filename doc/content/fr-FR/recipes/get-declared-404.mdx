@@ -1,22 +1,34 @@
 ---
 title: "Gérer une 404 déclarée"
-description: Appelle un GET et branche sur un 200 typé contre un 404 déclaré.
+description: Appelez une requête GET et aiguillez entre un 200 typé et une erreur 404 déclarée.
 ---
 
 # GET avec un 404 déclaré
 
-Déclare les corps de succès et de 404. Branche sur `error.code` et `error.status` — tu obtiens un `error.data` typé pour l’absence déclarée.
+Déclarez à la fois `output` (pour les réponses 2xx) et `error` (pour les réponses hors 2xx) sur `defineRequest`. Au point d'appel, aiguillez sur `error?.code === "HTTP_STATUS" && error.status === 404` pour lire la charge utile typée `error.data`.
 
-Voir [HTTP](/fr-FR/docs/http) et [Gestion des erreurs](/fr-FR/docs/errors) pour les détails.
-
-<include cwd meta="get-user.ts">
-  examples/recipes/get-declared-404.ts#example
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/sdk/orders.ts#example
 </include>
 
-`api.example.com` est un placeholder. Avec un serveur qui répond à `GET /users/7` par `200` et `{ "id": 7, "name": "Ada" }`, le snippet affiche :
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/get-declared-404/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+Avec un serveur répondant à `GET /orders/7` par `200` et `{ "id": 7, "status": "paid" }`, le script affiche :
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
-Un statut non-2xx est `HTTP_STATUS`. Déclarer `error` donne un type à son corps ; omettre `error` laisse `error.data` à `undefined` et le corps non lu. Si un corps `error` déclaré ne peut pas être lu (mauvais media type, JSON invalide, mauvaise forme), le résultat est un fault `RES_*` à la place. Un seul Struct `error` couvre chaque statut non-2xx, donc utilise `struct.or(...)` ou une union discriminée quand les formes diffèrent.
+- Un statut hors 2xx produit un fault `HTTP_STATUS` quand `error` est omis ou que le corps `error` déclaré décode. Déclarer `error` décode et valide le corps d'erreur dans `error.data` ; omettre `error` laisse `error.data` à `undefined` sans lire le corps.
+- Si le corps d'un `error` déclaré a un mauvais media type, du JSON invalide ou échoue à la validation Struct, l'opération renvoie un fault `RES_*` à la place. Comme un unique Struct `error` couvre tous les statuts hors 2xx, utilisez `struct.or(...)` lorsque des statuts d'erreur différents retournent des structures distinctes.
+
+Consultez [Opérations HTTP](/fr-FR/docs/http) et [Gestion des erreurs](/fr-FR/docs/errors).

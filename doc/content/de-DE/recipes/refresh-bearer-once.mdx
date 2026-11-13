@@ -1,20 +1,37 @@
 ---
 title: "Token nach 401 erneuern"
-description: Authorization anhängen und einmal innerhalb eines Interceptors erneut senden; next() geht nur nach innen.
+description: Authorization anhängen und innerhalb eines einzelnen Interceptors genau einmal wiederholen; next() läuft nur nach innen.
 ---
 
-# Einen Bearer-Token bei 401 einmal erneuern
+# Bearer-Token nach 401 einmalig erneuern
 
-`next()` ist der Rest **dieser** Onion — nicht `axios(config)`-Redispatch von außen. Packe Attach + Single-Flight-Refresh + einen Replay in **einen** HTTP-Interceptor, damit äußere Layer nicht zweimal laufen.
+In Defjs ruft `next(request)` den verbleibenden Teil der Interceptor-Kette nach innen auf – es startet nicht erneut beim äußersten Interceptor. Platziere das Anhängen von Tokens, die Single-Flight-Deduplizierung von Refresh-Aufrufen und die einmalige Wiederholung nach `401` in **einem** HTTP-Interceptor, damit äußere Logging- oder Timing-Interceptors nicht doppelt laufen:
 
-Siehe [Interceptors](/de-DE/docs/interceptors).
-
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 42
 ```
 
-`next` nochmal aufzurufen betritt nur Interceptors **innerhalb** dieses Layers (und den Fetch-Handler) erneut. Es lässt äußere Timing-/Auth-Wrapper nicht nochmal laufen — deshalb gehört das 401-Layout in einen Interceptor, nicht in einen zweiten Aufruf der Operation.
+Ein erneut abspielbarer Body ist nicht dasselbe wie eine wiederholbare Geschäftsoperation. Dieser Interceptor sendet auch einen JSON-`POST` nach einer passenden 401 erneut: zwei HTTP-Zustellungen, zuerst abgelehnt und dann akzeptiert. Nutze ihn für Schreibzugriffe nur, wenn die Authentifizierung die erste Zustellung vor Ausführung des Geschäftshandlers ablehnt; behalte bei beiden Zustellungen einen stabilen Idempotenzschlüssel bei und verwende serverseitige Deduplizierung. Ist dieser Vertrag nicht gegeben, gib die 401 zurück, statt den Schreibzugriff automatisch erneut abzuspielen. Das vollständige Beispiel spielt einen `ReadableStream`-Request-Body nicht erneut ab.
+
+Siehe [Interceptors](/de-DE/docs/interceptors) für Details zur Onion-Reihenfolge und zu Retry-Grenzen.

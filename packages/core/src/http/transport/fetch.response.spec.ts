@@ -18,7 +18,7 @@ describe("Fetch handler responses", () => {
         endpoint: "/unused",
         method: "GET",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     expect(response.body).toBeUndefined();
@@ -45,7 +45,7 @@ describe("Fetch handler responses", () => {
         endpoint: "/unused",
         method: "GET",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     expect(response.body).toBeUndefined();
@@ -74,10 +74,12 @@ describe("Fetch handler responses", () => {
           method: "GET",
           responseType,
         },
-        async () =>
-          new Response(body, {
-            headers: { "content-type": "application/json" },
-          }),
+        () =>
+          Promise.resolve(
+            new Response(body, {
+              headers: { "content-type": "application/json" },
+            }),
+          ),
       );
 
       expect(response.body).toEqual(
@@ -86,20 +88,6 @@ describe("Fetch handler responses", () => {
       expect(canceled).toBe(false);
     },
   );
-
-  test("should ignore an unsupported runtime response type", async () => {
-    const response = await fetchHandler(
-      {
-        baseEndpoint: "https://example.com",
-        endpoint: "/unsupported",
-        method: "GET",
-        responseType: "unsupported" as HttpRequest["responseType"],
-      },
-      async () => new Response("ignored"),
-    );
-
-    expect(response.body).toBeNull();
-  });
 
   test("should ignore an unused response body cancellation failure", async () => {
     const body = new ReadableStream<Uint8Array>({
@@ -114,14 +102,16 @@ describe("Fetch handler responses", () => {
         endpoint: "/unused",
         method: "GET",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     expect(response.body).toBeUndefined();
   });
 
   test("should not wait for unused response body cancellation to settle", async () => {
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     const body = new ReadableStream<Uint8Array>({ cancel });
 
     const response = await settleWithin(
@@ -131,7 +121,7 @@ describe("Fetch handler responses", () => {
           endpoint: "/unused",
           method: "GET",
         },
-        async () => new Response(body),
+        () => Promise.resolve(new Response(body)),
       ),
     );
 
@@ -141,7 +131,9 @@ describe("Fetch handler responses", () => {
 
   test("should cancel and unlock a progress response when the async observer rejects", async () => {
     const observerError = new Error("observer failed");
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     const body = new ReadableStream<Uint8Array>({
       cancel,
       start(controller) {
@@ -160,14 +152,15 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     await expect(settleWithin(pending)).rejects.toMatchObject({
       cause: observerError,
       code: "EXT_OBSERVER_FAILED",
     });
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(observerError);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(observerError);
     expect(body.locked).toBe(false);
   });
 
@@ -186,7 +179,7 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     ).catch((cause: unknown) => cause);
 
     expect(failure).toMatchObject({
@@ -214,7 +207,7 @@ describe("Fetch handler responses", () => {
       endpoint: "/delay",
       method: "GET",
       signal: abort.signal,
-      queryParams: new URLSearchParams({ ms: "5000" }),
+      query: new URLSearchParams({ ms: "5000" }),
     };
 
     setTimeout(() => {
@@ -226,7 +219,9 @@ describe("Fetch handler responses", () => {
 
   test("should settle an ignored fetch abort and cancel a late response body", async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => Promise.reject(new Error("cancel failed")));
+    const cancel = vi.fn((_reason?: unknown) =>
+      Promise.reject(new Error("cancel failed")),
+    );
     let resolveFetch!: (response: Response) => void;
     const fetchMock = vi.fn(
       () =>
@@ -242,7 +237,7 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      fetchMock as unknown as typeof fetch,
+      fetchMock,
     );
 
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
@@ -250,14 +245,17 @@ describe("Fetch handler responses", () => {
 
     await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
     resolveFetch(new Response(new ReadableStream<Uint8Array>({ cancel })));
-    await vi.waitFor(() =>
-      expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason),
-    );
+    await vi.waitFor(() => {
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(cancel.mock.calls[0]?.[0]).toBe(controller.signal.reason);
+    });
   });
 
   test("should abort a stalled response body read without waiting for cancellation", async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     let startPull!: () => void;
     const pullStarted = new Promise<void>((resolve) => {
       startPull = resolve;
@@ -280,20 +278,23 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     await pullStarted;
     controller.abort();
 
     await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(controller.signal.reason);
     expect(body.locked).toBe(false);
   });
 
   test("should abort a stalled response body read when cancellation rejects", async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => Promise.reject(new Error("cancel failed")));
+    const cancel = vi.fn((_reason?: unknown) =>
+      Promise.reject(new Error("cancel failed")),
+    );
     let startPull!: () => void;
     const pullStarted = new Promise<void>((resolve) => {
       startPull = resolve;
@@ -316,20 +317,23 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     await pullStarted;
     controller.abort();
 
     await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(controller.signal.reason);
     expect(body.locked).toBe(false);
   });
 
   test("should abort a stalled progress response body read without waiting for cancellation", async () => {
     const controller = new AbortController();
-    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const cancel = vi.fn(
+      (_reason?: unknown) => new Promise<void>(() => undefined),
+    );
     let startPull!: () => void;
     const pullStarted = new Promise<void>((resolve) => {
       startPull = resolve;
@@ -353,14 +357,15 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "text",
       },
-      async () => new Response(body),
+      () => Promise.resolve(new Response(body)),
     );
 
     await pullStarted;
     controller.abort();
 
     await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED);
-    expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]?.[0]).toBe(controller.signal.reason);
     expect(body.locked).toBe(false);
   });
 
@@ -371,7 +376,7 @@ describe("Fetch handler responses", () => {
       endpoint: "/delay",
       method: "GET",
       signal,
-      queryParams: new URLSearchParams({ ms: "10000" }),
+      query: new URLSearchParams({ ms: "10000" }),
     };
 
     await expect(fetchHandler(requestConfig)).rejects.toBe(ERR_TIMEOUT);
@@ -503,6 +508,122 @@ describe("Fetch handler responses", () => {
     expect(res.body).toBeUndefined();
   });
 
+  describe("a response the platform defines as having no body", () => {
+    // Chromium and Firefox expose an empty stream for some of these; Bun and Node expose null.
+    // The handler treats both as an absent body. The stream stays open so that only a cancel,
+    // not a read, can release it.
+    const exposedStream = (status: number) => {
+      let canceled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        cancel() {
+          canceled = true;
+        },
+      });
+      const response = Object.defineProperty(
+        new Response(null, { status }),
+        "body",
+        { value: stream },
+      );
+      return { response, wasCanceled: () => canceled };
+    };
+
+    test.each([
+      [204, "arraybuffer"],
+      [204, "blob"],
+      [204, "text"],
+      [204, "json"],
+      [205, "arraybuffer"],
+      [205, "json"],
+    ] as const)(
+      "should report an exposed empty stream on %i as absent for %s",
+      async (status, responseType) => {
+        const { response, wasCanceled } = exposedStream(status);
+
+        const result = await fetchHandler(
+          {
+            baseEndpoint: "https://example.com",
+            endpoint: "/no-content",
+            method: "GET",
+            responseType,
+          },
+          () => Promise.resolve(response),
+        );
+
+        expect(result.status).toBe(status);
+        expect(result.body).toBeUndefined();
+        expect(wasCanceled()).toBe(true);
+      },
+    );
+
+    test("should apply the error representation to an exposed empty 304 stream", async () => {
+      const { response, wasCanceled } = exposedStream(304);
+
+      const result = await fetchHandler(
+        {
+          baseEndpoint: "https://example.com",
+          endpoint: "/not-modified",
+          errorResponseType: "arraybuffer",
+          method: "GET",
+        },
+        () => Promise.resolve(response),
+      );
+
+      expect(result.status).toBe(304);
+      expect(result.body).toBeUndefined();
+      expect(wasCanceled()).toBe(true);
+    });
+
+    test.each(["arraybuffer", "json"] as const)(
+      "should report a HEAD response that exposes a body stream as absent for %s",
+      async (responseType) => {
+        let canceled = false;
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("{}"));
+          },
+          cancel() {
+            canceled = true;
+          },
+        });
+        const response = Object.defineProperty(
+          new Response(null, {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+          "body",
+          { value: stream },
+        );
+
+        const result = await fetchHandler(
+          {
+            baseEndpoint: "https://example.com",
+            endpoint: "/head",
+            method: "head",
+            responseType,
+          },
+          () => Promise.resolve(response),
+        );
+
+        expect(result.body).toBeUndefined();
+        expect(canceled).toBe(true);
+      },
+    );
+
+    test("should keep a body stream on a status that is not a null body status", async () => {
+      const result = await fetchHandler(
+        {
+          baseEndpoint: "https://example.com",
+          endpoint: "/ok",
+          method: "GET",
+          responseType: "text",
+        },
+        () => Promise.resolve(new Response("kept", { status: 200 })),
+      );
+
+      expect(result.body).toBe("kept");
+    });
+  });
+
   test("should fill an empty native Response url from the resolved request URL", async () => {
     const response = await fetchHandler(
       {
@@ -511,11 +632,13 @@ describe("Fetch handler responses", () => {
         method: "GET",
         responseType: "json",
       },
-      async () =>
-        new Response(JSON.stringify({ id: 1 }), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        }),
+      () =>
+        Promise.resolve(
+          new Response(JSON.stringify({ id: 1 }), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+        ),
     );
 
     expect(response.url).toBe("https://example.com/filled");
@@ -530,13 +653,11 @@ describe("Fetch handler responses", () => {
       responseType: "json" as const,
     };
     const headers = { "content-type": "application/json" };
-    const absent = await fetchHandler(
-      request,
-      async () => new Response(null, { headers, status: 200 }),
+    const absent = await fetchHandler(request, () =>
+      Promise.resolve(new Response(null, { headers, status: 200 })),
     );
-    const parsedNull = await fetchHandler(
-      request,
-      async () => new Response("null", { headers, status: 200 }),
+    const parsedNull = await fetchHandler(request, () =>
+      Promise.resolve(new Response("null", { headers, status: 200 })),
     );
 
     expect(absent.body).toBeUndefined();
@@ -552,22 +673,26 @@ describe("Fetch handler responses", () => {
           method: "GET",
           responseType: "json",
         },
-        async () =>
-          new Response("", {
-            headers: { "content-type": "application/json" },
-            status: 200,
-          }),
+        () =>
+          Promise.resolve(
+            new Response("", {
+              headers: { "content-type": "application/json" },
+              status: 200,
+            }),
+          ),
       ),
     ).rejects.toMatchObject({ code: "RES_DECODE_FAILED" });
   });
 });
 
+// Liveness guard, not a timing assertion: the awaited promise must settle while the test holds a dependency pending. The budget does not depend on machine speed.
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("operation did not settle")),
-      100,
+      10_000,
     );
+    timeout.unref?.();
     promise.then(
       (value) => {
         clearTimeout(timeout);

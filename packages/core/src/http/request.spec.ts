@@ -1,16 +1,15 @@
 import { describe, expect, test } from "vitest";
 import { parseEndpointInput } from "../internal/endpoint_input";
-import type { OutboundBuilder } from "../internal/outbound_request";
 import { struct } from "../struct";
 import { createHttpRequest } from "./request";
-import { createFetchRequestInit } from "./transport/fetch";
+import { initOf } from "../../test/fetch-request-init";
 
 async function formBlob(
   value: unknown,
 ): Promise<{ text: string; type: string }> {
   expect(value).toBeInstanceOf(Blob);
-  const blob = value as Blob;
-  return { text: await blob.text(), type: blob.type };
+  if (!(value instanceof Blob)) throw new Error("expected Blob");
+  return { text: await value.text(), type: value.type };
 }
 
 const options = {
@@ -31,7 +30,7 @@ describe("http request helpers", () => {
         tags: ["a", "b"],
         token: "secret",
       },
-      ((input: {
+      (input: {
         id: number;
         include: boolean;
         nickname: string;
@@ -42,7 +41,7 @@ describe("http request helpers", () => {
         headers: { "x-token": input.token },
         path: { id: input.id },
         query: { include: input.include, tags: input.tags },
-      })) as OutboundBuilder,
+      }),
       {
         signal: abort.signal,
         baseEndpoint: "https://api.example.com/v1",
@@ -68,9 +67,11 @@ describe("http request helpers", () => {
     expect(request.baseEndpoint).toBe("https://api.example.com/v1");
     expect(request.endpoint).toBe("/user/7");
     expect(request.operation).toBe("users.update");
-    expect(request.queryParams?.get("custom")).toBe("include=true");
-    expect(request.queryParams?.getAll("tags")).toEqual(["a", "b"]);
-    expect(request.queryString).toBe("custom=include=true&tags=a&tags=b");
+    expect(request.query?.get("custom")).toBe("include=true");
+    expect(request.query?.getAll("tags")).toEqual(["a", "b"]);
+    expect(request.query?.toString()).toBe(
+      "custom=include%3Dtrue&tags=a&tags=b",
+    );
     expect(request.headers?.get("x-token")).toBe("secret");
     expect(request.headers?.has("content-type")).toBe(false);
     expect(request.bodyContentType).toBe("application/json");
@@ -93,9 +94,9 @@ describe("http request helpers", () => {
       "GET",
       "/search",
       { filter: ["active"], include: true },
-      ((input: { filter: string[]; include: boolean }) => ({
+      (input: { filter: string[]; include: boolean }) => ({
         query: input,
-      })) as OutboundBuilder,
+      }),
       {
         signal: new AbortController().signal,
         baseEndpoint: "https://api.example.com",
@@ -106,12 +107,12 @@ describe("http request helpers", () => {
       },
     );
 
-    expect(request.queryString).toBe(
+    expect(request.query?.toString()).toBe(
       `include=true&filter=${encodeURIComponent(JSON.stringify(["active"]))}`,
     );
   });
 
-  test("should encode aliases from parsed endpoint input", async () => {
+  test("should encode aliases from parsed endpoint input", () => {
     const profile = struct.object({
       displayName: struct.string().alias("display_name"),
       internalNote: struct.string(),
@@ -124,7 +125,7 @@ describe("http request helpers", () => {
         orgId: struct.string().alias("org_id"),
       }),
     });
-    const parsed = await parseEndpointInput(input, {
+    const parsed = parseEndpointInput(input, {
       member: {
         profile: {
           displayName: "Miao",
@@ -139,15 +140,15 @@ describe("http request helpers", () => {
       "POST",
       "/orgs/:org_id/users",
       parsed,
-      ((input: { member: object; org: object }) => ({
+      (input: { member: object; org: object }) => ({
         body: input.member,
         path: input.org,
-      })) as OutboundBuilder,
+      }),
       options,
     );
 
     expect(request.endpoint).toBe("/orgs/org_1/users");
-    expect(request.queryString).toBe("");
+    expect(request.query?.toString()).toBe("");
     expect(request.body).toBe(
       '{"profile":{"display_name":"Miao","internalNote":"local"}}',
     );
@@ -155,7 +156,7 @@ describe("http request helpers", () => {
     expect(request.bodyContentType).toBe("application/json");
   });
 
-  test("should encode path query and json body aliases independently", async () => {
+  test("should encode path query and json body aliases independently", () => {
     const input = struct.object({
       filter: struct.object({
         queryName: struct.string().alias("name"),
@@ -168,7 +169,7 @@ describe("http request helpers", () => {
         bodyUid: struct.number().alias("uid"),
       }),
     });
-    const parsed = await parseEndpointInput(input, {
+    const parsed = parseEndpointInput(input, {
       filter: {
         queryName: "Jack",
       },
@@ -184,28 +185,30 @@ describe("http request helpers", () => {
       "POST",
       "/users/:uid",
       parsed,
-      ((input: { filter: object; target: object; user: object }) => ({
+      (input: { filter: object; target: object; user: object }) => ({
         body: input.user,
         path: input.target,
         query: input.filter,
-      })) as OutboundBuilder,
+      }),
       options,
     );
 
     expect(request.endpoint).toBe("/users/7");
-    expect(request.queryString).toBe("name=Jack");
-    expect(JSON.parse(request.body as string)).toEqual({
+    expect(request.query?.toString()).toBe("name=Jack");
+    if (typeof request.body !== "string")
+      throw new Error("expected string body");
+    expect(JSON.parse(request.body)).toEqual({
       name: "baby",
       uid: 1,
     });
   });
 
-  test("should support text xml form-url-encoded and raw bodies", async () => {
+  test("should support text xml form-url-encoded and raw bodies", () => {
     const textRequest = createHttpRequest(
       "POST",
       "/text",
       undefined,
-      (() => ({ body: "hello" })) as OutboundBuilder,
+      () => ({ body: "hello" }),
       options,
     );
 
@@ -217,10 +220,10 @@ describe("http request helpers", () => {
       "POST",
       "/xml",
       undefined,
-      (() => ({
+      () => ({
         body: "<root />",
         headers: { "content-type": "text/xml;charset=UTF-8" },
-      })) as OutboundBuilder,
+      }),
       options,
     );
 
@@ -232,19 +235,20 @@ describe("http request helpers", () => {
     const Form = struct.urlencoded({
       ids: struct.array(struct.number()),
     });
-    const parsed = await parseEndpointInput(Form, { ids: [1, 2] });
+    const parsed = parseEndpointInput(Form, { ids: [1, 2] });
     const encodedRequest = createHttpRequest(
       "POST",
       "/form",
       undefined,
-      (() => ({ body: parsed })) as OutboundBuilder,
+      () => ({ body: parsed }),
       options,
     );
 
     expect(encodedRequest.body).toBeInstanceOf(URLSearchParams);
-    expect((encodedRequest.body as URLSearchParams).toString()).toBe(
-      "ids=1&ids=2",
-    );
+    if (!(encodedRequest.body instanceof URLSearchParams)) {
+      throw new Error("expected URLSearchParams");
+    }
+    expect(encodedRequest.body.toString()).toBe("ids=1&ids=2");
     expect(encodedRequest.headers?.has("content-type")).toBe(false);
     expect(encodedRequest.bodyContentType).toBe(
       "application/x-www-form-urlencoded;charset=UTF-8",
@@ -254,7 +258,7 @@ describe("http request helpers", () => {
       "POST",
       "/raw",
       undefined,
-      (() => ({ body: new Uint8Array([1, 2, 3]).buffer })) as OutboundBuilder,
+      () => ({ body: new Uint8Array([1, 2, 3]).buffer }),
       options,
     );
 
@@ -263,45 +267,45 @@ describe("http request helpers", () => {
     expect(rawRequest.bodyContentType).toBe("application/octet-stream");
   });
 
-  test("should let a declared content-type win and classify each body once", async () => {
+  test("should let a declared content-type win and classify each body once", () => {
     const jsonRequest = createHttpRequest(
       "POST",
       "/json",
       undefined,
-      (() => ({
+      () => ({
         body: { ok: true },
         headers: { "content-type": "text/plain" },
-      })) as OutboundBuilder,
+      }),
       options,
     );
     const textRequest = createHttpRequest(
       "POST",
       "/text",
       undefined,
-      (() => ({ body: "hello" })) as OutboundBuilder,
+      () => ({ body: "hello" }),
       options,
     );
     const Form = struct.urlencoded({ id: struct.string() });
-    const parsed = await parseEndpointInput(Form, { id: "1" });
+    const parsed = parseEndpointInput(Form, { id: "1" });
     const urlencodedRequest = createHttpRequest(
       "POST",
       "/urlencoded",
       undefined,
-      (() => ({ body: parsed })) as OutboundBuilder,
+      () => ({ body: parsed }),
       options,
     );
     const nullBodyRequest = createHttpRequest(
       "POST",
       "/raw-null",
       undefined,
-      (() => ({ body: null })) as OutboundBuilder,
+      () => ({ body: null }),
       options,
     );
     const noBodyRequest = createHttpRequest(
       "POST",
       "/json-undefined",
       undefined,
-      (() => ({})) as OutboundBuilder,
+      () => ({}),
       options,
     );
 
@@ -325,28 +329,28 @@ describe("http request helpers", () => {
       "POST",
       "/json-string",
       undefined,
-      (() => ({ body: "hello" })) as OutboundBuilder,
+      () => ({ body: "hello" }),
       options,
     );
     const numberRequest = createHttpRequest(
       "POST",
       "/json-number",
       undefined,
-      (() => ({ body: 1 })) as OutboundBuilder,
+      () => ({ body: 1 }),
       options,
     );
     const booleanRequest = createHttpRequest(
       "POST",
       "/json-boolean",
       undefined,
-      (() => ({ body: true })) as OutboundBuilder,
+      () => ({ body: true }),
       options,
     );
     const nullRequest = createHttpRequest(
       "POST",
       "/json-null",
       undefined,
-      (() => ({ body: null })) as OutboundBuilder,
+      () => ({ body: null }),
       options,
     );
 
@@ -370,9 +374,9 @@ describe("http request helpers", () => {
     );
     const copied = { ...request, headers: new Headers(request.headers) };
     expect(copied.bodyContentType).toBe("application/json");
-    expect(
-      new Headers(createFetchRequestInit(copied).headers).get("content-type"),
-    ).toBe("application/json");
+    expect(new Headers(initOf(copied).headers).get("content-type")).toBe(
+      "application/json",
+    );
   });
 
   test.each([
@@ -399,11 +403,9 @@ describe("http request helpers", () => {
         bodyContentType: type,
         headers: new Headers(header ? { "content-type": header } : undefined),
       };
-      expect(
-        new Headers(createFetchRequestInit(replaced).headers).get(
-          "content-type",
-        ),
-      ).toBe(sent);
+      expect(new Headers(initOf(replaced).headers).get("content-type")).toBe(
+        sent,
+      );
     },
   );
 
@@ -417,9 +419,9 @@ describe("http request helpers", () => {
     );
     request.headers = undefined;
     expect(request.bodyContentType).toBe("application/json");
-    expect(
-      new Headers(createFetchRequestInit(request).headers).get("content-type"),
-    ).toBe("application/json");
+    expect(new Headers(initOf(request).headers).get("content-type")).toBe(
+      "application/json",
+    );
   });
 
   test("should build form data bodies and reject unsupported nested values", async () => {
@@ -431,7 +433,7 @@ describe("http request helpers", () => {
       files: struct.array(struct.blob()),
       name: struct.string(),
     });
-    const parsed = await parseEndpointInput(Form, {
+    const parsed = parseEndpointInput(Form, {
       age: 18,
       avatar,
       files,
@@ -441,38 +443,35 @@ describe("http request helpers", () => {
       "POST",
       "/upload",
       undefined,
-      (() => ({
+      () => ({
         body: parsed,
         headers: { "content-type": "multipart/form-data" },
-      })) as OutboundBuilder,
+      }),
       options,
     );
 
     expect(request.body).toBeInstanceOf(FormData);
     expect(request.headers?.has("content-type")).toBe(false);
-    expect((request.body as FormData).get("age")).toBe("18");
-    expect((request.body as FormData).get("name")).toBe("Miao");
-    expect(await formBlob((request.body as FormData).get("avatar"))).toEqual(
-      await formBlob(avatar),
-    );
+    if (!(request.body instanceof FormData))
+      throw new Error("expected FormData");
+    const body = request.body;
+    expect(body.get("age")).toBe("18");
+    expect(body.get("name")).toBe("Miao");
+    expect(await formBlob(body.get("avatar"))).toEqual(await formBlob(avatar));
     expect(
-      await Promise.all(
-        (request.body as FormData)
-          .getAll("files")
-          .map((entry) => formBlob(entry)),
-      ),
+      await Promise.all(body.getAll("files").map((entry) => formBlob(entry))),
     ).toEqual(await Promise.all(files.map((entry) => formBlob(entry))));
 
     const Nested = struct.formData({
       profile: struct.object({ nested: struct.boolean() }),
     });
-    const bad = await parseEndpointInput(Nested, { profile: { nested: true } });
+    const bad = parseEndpointInput(Nested, { profile: { nested: true } });
     expect(() =>
       createHttpRequest(
         "POST",
         "/upload",
         undefined,
-        (() => ({ body: bad })) as OutboundBuilder,
+        () => ({ body: bad }),
         options,
       ),
     ).toThrow(/profile/);

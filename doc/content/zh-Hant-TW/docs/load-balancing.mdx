@@ -1,0 +1,182 @@
+---
+title: "負載平衡與容錯移轉"
+description: 在多端點間分發流量、剔除持續失敗的副本、略過你自己的健康檢查拒絕的副本，並以退避重試 HTTP、SSE 與 WebSocket 呼叫。
+---
+
+# 負載平衡與容錯移轉
+
+當應用程式使用 `withEndpoint(...urls)` 設定多個基礎網址時，Defjs 能將請求分發至各個副本、把持續失敗的主機剔除一段時間、略過你自己的健康函式拒絕的主機，並可選擇性地在另一個端點上重試失敗的呼叫。Defjs 不決定什麼叫做健康：只有你提供的函式才能把端點標成不健康。
+
+## 1. 選擇負載平衡器策略
+
+| 策略                                                                             | 最佳使用情境                                         | 預設健康狀態過濾                             |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/zh-Hant-TW/api/core/pickfirstbalancer) _(預設)_ | 具有優先順序的主備區域清單的瀏覽器前端應用           | 關閉（透過 `outlierDetection: {}` 主動啟用） |
+| [`roundRobinBalancer(options?)`](/zh-Hant-TW/api/core/roundrobinbalancer)        | 跨同等副本的伺服器對伺服器呼叫（支援選用 `weights`） | 關閉（透過 `outlierDetection: {}` 主動啟用） |
+| [`p2cBalancer(options?)`](/zh-Hant-TW/api/core/p2cbalancer)                      | 副本節點延遲或進行中請求負載差異較大的伺服器呼叫     | 關閉（透過 `outlierDetection: {}` 主動啟用） |
+
+<Tabs items={["主備（Pick-first）", "對等伺服器（Round-robin 與 P2C）", "自訂負載平衡器"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### `pickFirstBalancer` 與 `p2cBalancer` 的運作機制
+
+- **`pickFirstBalancer`**：停在第一個 URL 上，遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）時才前進。順序與黏性端點遵循 client 的完整端點清單（`members`）。重試會從每一個端點重新選取，因此遵循同一條規則：連線被拒絕，或遇到 502、503、504 之後，會到達下一個端點；逾時不會推進 pick-first，於是會再試同一個端點。設定 `failbackMs: 30_000` 可單靠時間回到第一個端點：黏性端點離開第一個端點達到這段時間後，下一次候選包含第一個端點的 pick 會選中它，並再次把它變成黏性端點。沒有任何機制判斷第一個端點是否已復原。若它再次失敗，上面的前進規則會離開它，時間重新起算。`failbackMs` 應長於兩次 pick 之間的間隔，例如 SSE 或 WebSocket 的重連延遲；否則每一次 pick 都會回到第一個端點。
+- **`roundRobinBalancer` 未加權重**：計數器從隨機的 `uint32` 開始，每一次 `pick` 都會推進它，包括為重試或串流重連所做的 pick。沒有 `outlierDetection`、且呼叫一個接一個執行時，持續失敗的端點因此會收到超過 1/n 的首次嘗試。恰好兩個端點且啟用重試時，它會收到全部的首次嘗試，於是每一次呼叫都需要一次重試。並行呼叫會交錯各自的 pick，打破這個模式。設定 `outlierDetection: {}` 後，失敗的端點會被剔除一段時間。
+- **`roundRobinBalancer` 權重**：未指定的權重為 `1`；設定的權重是正的有限數。平滑加權輪詢會維持比例（例如 `3:1` 時，權重較高的節點每四次選取會被選中三次）。極端的量級會被縮放以避免溢位；低於浮點精確度的比例可能四捨五入成零。每次選取與清理過時 current 值都要花 O(成員數量 + 候選數量) 的工作。
+- **`p2cBalancer`（兩者隨機取優，Power of Two Choices）**：不重複地隨機抽取兩個候選端點，並選擇評分較低者：`PeakEwma RTT × (pending + 1)`（若設定 `load: "pending"` 則只計算進行中的 `pending` 請求數）。預設值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd/tower 慣例。pending 在 `pick` 選取端點的那一刻就被預留，因此同一個 tick 內的一批呼叫會分散到不同端點；它在對端回應開始時（HTTP 回應標頭、SSE 交握、WebSocket 開啟）釋放，若沒有回應開始，則在嘗試完成時釋放。對 SSE 與 WebSocket 而言，這表示 p2c 平衡的是交握，而不是已開啟連線的數量。
+
+平衡器狀態（黏性端點、剔除狀態與 p2c 負載）以及重試預算都歸 Client 所有：整個應用程式只建立一次 Client，並以 `client(options)` 衍生每次呼叫的 Client：衍生的 Client 同時保留平衡器狀態與重試預算。用 `withBalancer` 把同一個平衡器值傳給多個 Client 時，只共用平衡器狀態；每個 Client 仍有各自的重試預算。每個請求都新建一個 `createClient`，則兩者都會從頭開始。
+
+## 2. 重試 [#retries]
+
+重試由三個各自獨立的決定支配：**要不要再試一次**（`withRetry`）、**要送到哪裡**（執行時要求平衡器從每一個端點重新選取），以及**要等多久**（退避）。一個 `withRetry(options)` 涵蓋 HTTP、SSE 與 WebSocket，並存在 `config.retry` 裡；請求選項 `retry` 會為單次呼叫替換它。三種傳輸共用選項、決策順序與退避計算，差別只在預設會重試哪些失敗。平衡器完全不知道重試策略；自訂平衡器也不需要特別配合。
+
+重試**預設關閉**。省略 `withRetry` 時，每次呼叫只嘗試一次，沒有退避，對 HTTP 而言既不會建立重試預算，也不會向它存入額度。之後各次呼叫的選擇方式不變：`pickFirstBalancer` 仍可以在一次失敗的呼叫之後前進。`withRetry()` 與 `withRetry({})` 等價：第一次嘗試之後最多 `maxRetries: 3` 次重試，`1000` 毫秒的延遲每次重試加倍，直到 `30000` 毫秒，並有 ±20% 的抖動。
+
+這與 Go 生態系一致：[gRPC 把 `retryPolicy` 放在 service configuration 裡](https://grpc.io/docs/guides/retry/)，與負載平衡設定並列；[go-kit 的 `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) 則明確包住一個平衡器。兩者預設都不套用應用程式自己的重試策略。gRPC 的重試策略要求設定退避，並使用 ±0.2 的抖動。不含第一次嘗試的重試次數（`maxRetries`）與 ky、got、undici，以及 Go 的 `go-retryablehttp` 一致；gRPC 的 `maxAttempts` 則把最初那一次算進去。gRPC 可以針對底層競態做透明重試；Defjs 不模擬這些行為。
+
+<include cwd lang="typescript">
+  examples/client/http-retry.ts#example
+</include>
+
+每次失敗的嘗試之後，每種傳輸的流程都相同，順序如下：
+
+1. 呼叫端中止、手動 `close()`、致命錯誤，以及 `ReadableStream` 請求本文都會結束呼叫。不會呼叫 `shouldRetry`。
+2. 已經做完 `maxRetries` 次重試時，呼叫結束。不會呼叫 `shouldRetry`。
+3. 由 `shouldRetry(context)` 決定；沒有它時，由 `context.retryable` 決定。這個函式可以是非同步的，並收到依 `transport` 收窄的 [`RetryContext`](/zh-Hant-TW/api/core/retrycontext-type)。回傳 `context.retryable` 可保留預設，再在上面加上你自己的規則。
+4. 僅 HTTP：預算支付這次重試，否則呼叫結束。
+5. 呼叫等待退避延遲，然後平衡器重新選取。
+
+- **重試次數（`maxRetries`）**：第一次嘗試之後的重試次數，預設 `3`；`0` 絕不重試。同時有 `maxRetries: 0` 與 `attemptTimeoutMs` 的呼叫只限制每次嘗試的時間。對 SSE 與 WebSocket，連線再次建立時（成功的交握或 `open`）次數會重新開始，因此它限制的是每次中斷，不是整個工作階段。會接受連線然後立刻丟掉的伺服器因此會一直被重試；請用 `shouldRetry` 停掉它。沒有設定上的上限。這裡計算的是外層嘗試，而非應用程式攔截器內部的實際傳送次數：循環呼叫 `next()` 的攔截器可以多次傳送至同一端點。例如，使用 `maxRetries: 1` 時，攔截器向故障主要端點傳送三次，再由外層向健康備用端點重試一次，就會產生四次網路請求；builder 與攔截器鏈外層的身分驗證只會執行兩次，不是四次。
+- **預設會重試哪些失敗**：HTTP 會在方法屬於 `methods`，且該次嘗試沒有得到回應（`NET_UNREACHABLE`）、得到 `502`、`503` 或 `504`（`NET_UNAVAILABLE`），或用完 `attemptTimeoutMs` 時重試。SSE 會在方法屬於 `methods`，且交握發生網路失敗、交握回了 `502`／`503`／`504`、嘗試逾時，或已開啟的串流發生網路錯誤時重試；串流正常結束會結束呼叫。WebSocket 會重試 `session.close()` 沒有要求的每一次關閉，包括從未開啟的連線與沒有得到回應的心跳，但不包括建構子拋出。`429` 或 `500` 這類狀態預設不會重試；`shouldRetry` 會帶著 `retryable: false` 與 `status` 收到它，並可以回傳 `true`。`methods` 預設為 `GET`、`HEAD`、`OPTIONS`、`TRACE`、`PUT` 與 `DELETE`，比較時不區分大小寫；HTTP 要求一次嘗試送出的每一個方法，在攔截器改寫之後，都要在裡面。POST 只有在你把它加進 `methods`，或從 `shouldRetry` 回傳 `true` 時才會重試，而且這需要應用程式層級保證跨副本的冪等性。一次符合條件的 HTTP 重試會重建請求，並從最外層重新執行整條攔截器鏈。SSE 會重用已建構的請求，只更換 URL，WebSocket 則會再跑一次 `beforeConnect`。
+- **退避（`delayMs`、`factor`、`jitter`、`maxDelayMs`）**：第 n 次重試之前，等待 `delayMs × factor^(n−1)`，並加上乘性抖動，在抖動與取整之後封頂。預設值是 `1000`、`2`、`0.2` 與 `30000`。`delayMs: 0` 略過等待；`maxDelayMs: Infinity` 移除上限。平台計時器上限仍然生效。對 SSE 而言，伺服器送出的純數字 `retry:` 欄位會取代之後嘗試的 `delayMs`。Core 不會讀取 `Retry-After`。這個標頭的處理方式（包含任何延遲上限）屬於[應用程式攔截器策略](/zh-Hant-TW/docs/interceptors)，不是此處退避機制的一部分。
+- **單一端點**：重試會從每一個端點選取，包括剛剛失敗的那個，因此單一端點會在退避延遲之後再試一次。重試預算與 `maxRetries` 會把這場重試風暴限制住。
+- **單次嘗試 vs. 整次呼叫逾時**：`attemptTimeoutMs` 限制單次嘗試。HTTP 為送往所選端點的每次 Fetch 計時，從呼叫一直到其回應本文讀取完成；SSE 停在回應標頭，WebSocket 停在 `open`。HTTP 傳送前後的攔截器工作（例如 `401` 之後更新權杖）以及 struct 解碼都不計時，也絕不會算到端點頭上；傳送完成之後，呼叫端期限在攔截器工作期間到期，不會以 `NET_TIMEOUT` 回報給平衡器，回報的是端點自身的結果。呼叫端的 `client({ signal: AbortSignal.timeout(ms) })` 涵蓋每一次嘗試**以及退避等待**。等待期間取消會回傳呼叫端的取消錯誤，也不會再重新選取。選項不會在執行時期驗證。
+- **重試時沒有可用端點**：當某一輪重試無法使用任何端點（平衡器 pick 失敗，或下一個端點的 URL 無法解析）時，HTTP 呼叫會回傳上一次嘗試的錯誤（例如 `NET_UNREACHABLE`），而不是 `REQ_BUILD_FAILED`。
+- **Finagle / Linkerd 重試預算（`budget`）**：僅 HTTP。每一份 client 設定各自擁有一份預算，只有使用同一份設定衍生的 client 會共享，共用平衡器的 client 之間則不共享。預設值是 `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`：原始流量的 20% 再加上儲備。存入與取出都在十個 TTL/10 的時間切片上惰性到期。一次重試會在等待之前先取出額度；預算耗盡時既不等待，也不重試。設定 `budget: false` 可移除這項限制。SSE 與 WebSocket 沒有預算：共用 HTTP 的預算會讓一陣 HTTP 重試擋住重連。
+- **瀏覽器離線提示**：當 `navigator.onLine === false` 時，連線失敗會回報 `{ attempted: false }`，此時不會推進平衡器，也不會觸發 HTTP 重試。
+
+後一次 `withRetry` 會替換該策略。`withRetry()` 與 `withRetry(undefined)` 的行為與 `withRetry({})` 相同。啟用之後若要關閉重試，傳入 `withRetry({ maxRetries: 0 })`。
+
+### 從 `withSSEReconnect` 與 `withWebSocketReconnect` 遷移
+
+`withSSEReconnect` 與 `withWebSocketReconnect` 已經移除，沒有別名。`withRetry` 涵蓋 SSE 與 WebSocket，請求選項 `reconnect` 現在是 `retry`。
+
+- `attempts: N` 變成 `maxRetries: N`。
+- `shouldReconnect` 變成 `shouldRetry`。它的 context 多了 `transport` 與 `retryable`，而且只在還有重試次數時才會被呼叫。與 `shouldReconnect` 一樣，它會取代預設規則，包括方法規則，因此回傳 `true` 的函式仍會重試 `POST` 串流。
+- 預設值變了：SSE 的 `factor` 從 `1` 變成 `2`，SSE 的 `maxDelayMs` 從無上限變成 `30000`；兩種傳輸的 `jitter` 都從 `0` 變成 `0.2`。
+- SSE 交握：在 0.6，每一個非 2xx 交握都會結束串流，不會詢問 `shouldReconnect`。現在 `502`、`503` 或 `504` 交握會像連線被拒絕一樣重試，其他任何非 2xx 交握會帶著 `retryable: false` 到達 `shouldRetry`。
+- Fault code：以非 2xx 狀態結束 SSE 串流的重連交握，現在會在 `closed.code` 回報 `HTTP_STATUS`；0.6 回報的是 `RES_DECODE_FAILED`，`EventStreamFaultCode` 已經不再有它。`shouldRetry` 拋出例外時，每種傳輸的呼叫都會以 `EXT_HOOK_FAILED` 結束，拋出的值成為 `cause`；拋出的 `shouldReconnect` 則會讓 SSE 串流以 `NET_UNREACHABLE` 結束。
+- WebSocket 心跳：在 0.6，沒有得到回應的心跳會以錯誤結束工作階段，絕不會到達 `shouldReconnect`。現在它和其他中斷一樣：`shouldRetry` 會帶著 `retryable: true`、一個 `cause`，而且沒有關閉 `code` 收到它，並可以回傳 `false`，像以前一樣以該錯誤結束工作階段。
+- `withRetry` 也會重試 HTTP。若要讓 HTTP 呼叫只嘗試一次，對 `context.transport === "http"` 回傳 `false`。
+
+```ts
+// Before
+createClient(
+  withEndpoint(url),
+  withSSEReconnect({ attempts: 3, delayMs: 1000 }),
+  withWebSocketReconnect({
+    attempts: 3,
+    shouldReconnect: ({ code }) => code !== 1008,
+  }),
+);
+// After
+createClient(
+  withEndpoint(url),
+  withRetry({
+    maxRetries: 3,
+    shouldRetry: (context) => {
+      if (context.transport === "http") return false;
+      if (context.transport === "websocket" && context.code === 1008)
+        return false;
+      return context.retryable;
+    },
+  }),
+);
+```
+
+### 瀏覽器部署邊界
+
+- 瀏覽器 CORS 失敗會以連線失敗的形式傳給 Fetch，並回報為 `NET_UNREACHABLE`，無法與主機停機區分。它可能推進端點選取，並觸發明確啟用的安全方法重試；成功的重試因此可能掩蓋主要區域的 CORS 設定錯誤。
+- 即使回應缺少必要的 CORS 標頭，伺服器仍可能已處理 POST。應用程式隨後收到 `NET_UNREACHABLE`，卻不知道寫入是否成功。預設不會重播 POST；明確啟用寫入重試，需要應用程式層級保證跨副本的冪等性。
+- 在瀏覽器中，伺服器拒絕的 WebSocket 升級（例如 `401`）與端點無法連線無從區分，都會回報為 `NET_UNREACHABLE`，因此過期的憑證可能導致端點被剔除。
+- Cookie 的範圍依主機而非連接埠劃分：`localhost` 上不同連接埠的兩個端點可以共用 Cookie，但 `localhost` 與 `127.0.0.1` 不會。多來源端點集合需要審慎規劃 Cookie/Token 與 CORS 憑證策略；`withCredentials(true)` 不會改變 Cookie 範圍。
+- 明確的離線提示（`navigator.onLine === false`）會抑制端點歸屬與連線失敗重試。這只是瀏覽器提示，不是可靠的可達性檢查。
+
+## 3. 失敗剔除與你自己的健康函式（`outlierDetection`）
+
+Defjs 沒有內建的「健康端點」概念。[`outlierDetection`](/zh-Hant-TW/api/core/outlierdetection) 做兩件可選的事，每個內建平衡器都透過自己的 `outlierDetection` 選項接受它（`pickFirstBalancer`、`roundRobinBalancer` 與 `p2cBalancer` 除非你傳入物件，否則維持關閉，`{}` 表示預設值）。它會計入已分類的失敗並把端點剔除一段時間，也會略過你的 `isHealthy` 函式拒絕的端點：
+
+<Tabs items={["依時間剔除", "你自己的健康函式"]}>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#ejection
+</include>
+
+</Tab>
+<Tab>
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **計入失敗**：預設的 `isFailure` 規則把每個帶 code 的結果都計為失敗：`NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR`、`NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。它只決定哪些結果計入剔除；它不是對健康的判斷，你也可以傳入 `isFailure` 換掉它。已嘗試但沒有 code 的結果會重設連續計數；未歸屬的嘗試則維持計數不變。連續出現 `consecutiveFailures` 次（預設 `5`）計入的結果後，該端點會被剔除。設定 `consecutiveFailures: 0` 可關閉計數。
+2. **依時間剔除**：端點會被剔除 `min(minPenaltyMs × level, maxPenaltyMs)`（`1000ms` 至 `60000ms`），再加上最多 `50%` 的均勻正向抖動；基礎時長加抖動的總和不會超過 `maxPenaltyMs`。`level` 是 gRPC outlier detection（gRFC A50）的剔除倍數：每一次剔除加一，成功絕不會把它清掉，每 `10` 秒沒有剔除就減一，從剔除結束的那一刻起算。時間一到，端點就可以再被選取。沒有任何東西去探測它，或判定它已經復原；若它仍然失敗，再累積 `consecutiveFailures` 次計入的結果就會以更長的時間再次剔除它，因此會接受連線然後把它丟掉的端點會被剔除 1 秒、2 秒、3 秒，依此類推直到 `maxPenaltyMs`，只要它的失敗回來得比一個 level 衰減還快。在剔除之前就開始的嘗試，或端點被剔除期間開始的嘗試，其結果即使在端點又能被選取之後才到達，也會被忽略，因此遲到的結果不會重新剔除它。剔除結束是在下一次 pick 對照時鐘判定的；沒有計時器在跑。
+3. **`isHealthy`**：唯一的健康判斷。它是同步的，每一次 pick 都會對每個目前沒有被剔除的端點執行（被剔除的端點不會被問到），所以請讓它便宜地讀取應用程式自己維護的狀態，如第二個分頁。它回傳 `false` 的端點不會被選取。回傳 `true` 不會結束剔除：端點只有在沒有被剔除，而且 `isHealthy` 沒有拒絕它時，才能被選取。拋出不會被 Defjs 接住：這次 pick 會以 `REQ_BUILD_FAILED` 失敗，拋出的值就是 `cause`。
+4. **有界歷史**：在衍生 Client 之間，健康歷史總共至少保留 256 個端點，且至少涵蓋目前成員數量。優先淘汰最近最少使用的乾淨或已過期項目，接著才是尚未達到門檻的部分連續失敗紀錄。只有所有保留項目都已被剔除時，才會淘汰尚未到期的剔除，此時移除最舊的一項。僅在某次呼叫省略端點，不會重設其懲罰。P2C 的負載歷史紀錄同樣至少保留 256 項且至少涵蓋目前成員數量，因此超過 256 個端點的清單也會保留每一份估計，先淘汰閒置項目，再淘汰忙碌項目；被遺忘的端點會從 `defaultRttMs` 重新開始。Pick-first 的 shuffle key 在 LRU 快取中至少保留 256 項且至少涵蓋目前成員，因此被遺忘的端點再次出現時會取得新 key。加權輪詢為 client 的成員保留 current 值：在某次選擇中被排除的端點（健康過濾）仍保留其值，如同 nginx 跳過已下線的節點，只有離開成員清單的端點才會丟棄其值；複製後的權重設定在建構時固定。可用時，時長使用平台的單調 Performance 時鐘，只有在無法使用時才以 `Date.now()` 作為後備。
+5. **應急放行（panic-mode fail-open）**：若 `isHealthy` 否決了所有未被剔除的端點，平衡器會忽略 `isHealthy`，改在未被剔除的端點中挑選；只有所有設定的端點都被剔除時，才會放行至 Client 的完整候選清單，而不是在本機直接丟棄所有流量。
+
+## 4. 傳輸統計生命週期 (`pick` → `start` → `end` → `done`)
+
+自訂平衡器必須選取 `info.endpoints` 中某個完全相同的字串；這能維持健康過濾。
+
+自訂平衡器要實作同步的 `pick(info)`，以及可選的 `start()`、`end(info)` 與 `done(info)` 回呼。執行時呼叫這些回呼時沒有接收者，因此 `this` 是 `undefined`；請把狀態放在閉包、箭頭函式或已綁定的函式裡。同步拋出不會改變這次嘗試；在執行環境有定義 `reportError` 的地方會以它回報，未被處理的回報可以結束沒有錯誤處理常式的 Bun 或 Deno 行程。Node.js 沒有定義 `reportError`，因此那裡的拋出會被限制在內部。`PickInfo` 包含一次 pick 的候選 `endpoints`（包裝器過濾時該清單會縮小）、`members`（client 的完整端點清單，每次嘗試都相同；有狀態的平衡器以它為依據維護順序與狀態）與可選的定義 `operation`，沒有傳輸類型的判別欄位。傳輸層會把自己的事實轉譯成中立的 `DoneInfo.code` 結果。內建平衡器從不讀取 `status`；這份原始回應資訊只保留給自訂平衡器。`start` 在嘗試之前執行，`end` 在對端回應開始或發生回應前失敗時執行，`done` 則在完成時執行。因此，之後的本文失敗可以改變最終的 code，卻不會改變更早的 `end` 取樣：
+
+| 實體傳輸層結果                                                    | 最終 `done(info)` 取樣資料                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE 回應狀態 502、503 或 504                                 | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| HTTP/SSE 其他至少為 500 的回應狀態                                | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE 回應狀態 2xx、3xx 或 4xx（包括 429）                     | `{ attempted: true, status }`                              |
+| HTTP 回應本文中途截斷                                             | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE 交握成功，之後串流 `reader.read()` 拒絕                       | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE 正常 EOF、不是事件串流的 2xx 交握，或緩衝區上限               | `{ attempted: true, status }`                              |
+| 已連線的 WebSocket 以代碼 `1006` 或 `1015` 關閉（未收到關閉訊框） | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已開啟的 WebSocket 以代碼 `1012` 或 `1013` 關閉                   | `{ attempted: true, code: "NET_UNAVAILABLE" }`             |
+| WebSocket 心跳確認逾時                                            | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已開啟的 WebSocket 以其他任何代碼關閉，無論 `wasClean` 為何       | `{ attempted: true }`                                      |
+| 呼叫端取消，或手動關閉串流／Socket                                | `{ attempted: false }`                                     |
+| `fetch` 以網路錯誤拒絕串流的 HTTP 請求本文                        | `{ attempted: false }`                                     |
+| 嘗試開始後呼叫端期限到期                                          | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+串流的 HTTP 請求本文是呼叫端提供的 `ReadableStream`。不論連線被拒絕或是 HTTP/1.1、重新導向無法重播串流、CORS 預檢失敗，或來源串流拋出，`fetch` 都用同一個網路錯誤拒絕它，因此那個錯誤不能可靠地表示端點已停機。呼叫仍會以 `NET_UNREACHABLE` 失敗，但平衡器收到的是 `{ attempted: false }`，與會拋出例外的進度回呼（`EXT_OBSERVER_FAILED`）相同。代價是單靠串流上傳無法偵測已停機的端點：它們不會讓 `pickFirst` 離開它，也不會計入 `outlierDetection`，而且被拒絕的串流上傳絕不會重試：`ReadableStream` 本文會在詢問 `shouldRetry` 之前就結束重試流程。交握解碼失敗會保留由交握狀態推導出的中立結果（例如狀態 `503` 對應 `NET_UNAVAILABLE`）。不完整的 HTTP 本文則保留 `NET_BODY_INCOMPLETE` 及其原始 status，即使是閘道回應也一樣；如同任何帶 code 的結果，它會被預設的 outlier detection 計為失敗。無法送出的心跳（`message()` 拋出或序列化失敗）屬於本機問題，維持中立。
+
+## 相關閱讀
+
+- [Client 設定](/zh-Hant-TW/docs/client)
+- [SSE 重試](/zh-Hant-TW/docs/sse#reconnect)
+- [WebSocket 重試](/zh-Hant-TW/docs/web-socket)

@@ -1,20 +1,31 @@
 ---
 title: "发送 JSON"
-description: 把带类型的 JSON body 交给 builder，并解码声明过的 201。
+description: 发送带类型的 JSON body，并解码声明的 201。
 ---
 
 # POST JSON
 
-把带类型的 body 交给 builder。逻辑字段名留在 TypeScript；struct 上的传输字段别名会变成 JSON key。对象 body 是 `application/json`。
+把带类型的输入对象传给 `builder`，返回 `{ body: input }`。`.alias("customer_name")` 让你在 TypeScript 中保持 `customerName`，在网络上编码为 `"customer_name"`，并从 `201` 响应中解码回来。
 
-细节见 [HTTP](/zh-Hans/docs/http) 和 [Client](/zh-Hans/docs/client)。
-
-<include cwd meta="create-user.ts">
-  examples/recipes/post-json.ts#example
+<Tabs items={["sdk/orders.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/sdk/orders.ts#example
 </include>
 
-`api.example.com` 是占位地址。假设服务器返回 `201` 和 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`，这段代码会输出：
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/post-json/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
+
+当服务端以 `201` 返回 `{ "id": 1, "status": "paid", "customer_name": "Ada" }` 时，脚本会打印：
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```
+
+见 [HTTP 请求](/zh-Hans/docs/http) 与 [数据结构 / Struct](/zh-Hans/docs/struct)。

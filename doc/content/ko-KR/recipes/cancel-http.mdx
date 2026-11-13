@@ -1,20 +1,29 @@
 ---
 title: "취소와 시간 제한"
-description: 호출을 abort하거나 타임아웃하고 NET_ABORTED / NET_TIMEOUT을 읽어요.
+description: 호출을 취소하거나 시간 초과를 설정하고 NET_ABORTED 및 NET_TIMEOUT을 확인합니다.
 ---
 
 # HTTP 호출 취소하기
 
-호출자의 신호와 데드라인을 `signal`에 합쳐요. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])`은 신호 하나예요. 수동 취소는 `NET_ABORTED`로 분류돼요. 데드라인은 `NET_TIMEOUT`으로 분류돼요.
+`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])`를 사용하여 호출자의 `AbortController`와 마감 시간(deadline)을 결합한 뒤, `client({ signal })`을 통해 전달하세요. Defjs는 호출자가 수동으로 abort한 경우 `NET_ABORTED`로, 타임아웃에 의해 abort된 경우 `NET_TIMEOUT`으로 정확히 분류합니다.
 
-자세한 내용은 [HTTP](/ko-KR/docs/http#cancel-the-work)를 보세요.
-
-<include cwd meta="cancel-report.ts">
-  examples/recipes/cancel-http.ts#example
+<Tabs items={["sdk/reports.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/sdk/reports.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/cancel-http/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
 ```
 
-취소는 호출자가 관찰한 결과를 알려 줘요. 서버 쪽 쓰기가 롤백됐다는 증명은 아니에요 — 변경 재시도는 멱등성 계약 뒤에 두세요.
+호출 취소는 클라이언트가 관측한 상태를 보고할 뿐이며, 서버 측 쓰기가 롤백되었음을 보장하지는 않습니다. 변경 요청의 재시도는 반드시 멱등성 키(idempotency key)를 활용하세요. 자세한 내용은 [작업 취소 및 마감 시간 설정](/ko-KR/docs/http#cancel-the-work) 문서를 참조하세요.

@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no Vue dependen
 bun add @defjs/core @defjs/vue vue
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.7.0` range.
 
 ## Quick start
 
@@ -34,7 +34,7 @@ Read the client with `injectClient()` and own cleanup in the watcher:
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { injectClient } from "@defjs/vue";
-import { getUser } from "./api";
+import { getOrder } from "./api";
 
 const props = defineProps<{ id: number }>();
 const client = injectClient();
@@ -46,14 +46,14 @@ watch(
     const abort = new AbortController();
     onCleanup(() => abort.abort());
 
-    void getUser(client({ signal: abort.signal }), { id }).then(
-      ([error, user]) => {
+    void getOrder(client({ signal: abort.signal }), { id }).then(
+      ([error, order]) => {
         if (abort.signal.aborted) return;
         if (error) {
           name.value = error.message;
           return;
         }
-        name.value = user.name;
+        name.value = order.status;
       },
     );
   },
@@ -99,7 +99,7 @@ app.use(createClientPlugin(client));
 ## Notes
 
 - `injectClient()` returns the `DerivableClient` that was provided, a function. Call it with request options where the operation runs to derive a `Client` value. Pass it straight to `createClientPlugin` or `provide`. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`; the plugin stores it as-is. A derived `Client` value is not accepted.
-- Create request-specific clients (SSR data with credentials, cookies, or tenant state) at the application boundary.
+- Create request-specific clients (SSR with per-request credentials, cookies, or tenant state) at the application boundary.
 - The owner that creates a client also owns its requests, SSE streams, and WebSocket sessions. App unmount does not clean them up.
 - Import `createClient`, `withEndpoint`, `withInterceptors`, and other client options from `@defjs/core`.
 

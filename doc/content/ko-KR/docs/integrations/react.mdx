@@ -1,81 +1,90 @@
 ---
 title: "React"
-description: React에서 SDK의 API 정의를 사용하고, 앱의 Client를 제공해 결과와 취소를 관리합니다.
+description: React가 제공하는 클라이언트와 컴포넌트가 소유하는 요청 수명 주기로 프레임워크 독립적인 SDK를 사용합니다.
 ---
 
 # React
 
-SDK나 공유 정의 모듈에서 작업을 import합니다. React 애플리케이션이 클라이언트를 소유하고 이 프레임워크 플러그인으로 제공합니다. SDK 패키지는 React와 독립으로 남을 수 있고, 다른 애플리케이션이 재사용할 수 있습니다.
+`@defjs/react`는 React Context와 `useClient()`를 통해 애플리케이션이 소유하는 `@defjs/core` 클라이언트를 React 18+ 컴포넌트 트리에 연결합니다. 작성된 SDK 정의는 React에 대한 의존성이 전혀 없는 순수한 `@defjs/core` 모듈로 유지됩니다.
 
-이 플러그인은 기존 `Client`를 제공하고 읽기 위한 선택적 도구예요. 앱이 소유한 고정 클라이언트를 직접 import하거나, 재사용 로직에 Client를 명시적으로 넘기거나, 트리 기본값과 하위 트리 덮어쓰기에 프레임워크 주입을 쓰거나, 앱만의 구성을 선택해도 돼요. SDK 정의에 이 플러그인이 필수는 아니에요.
+```sh
+bun add @defjs/core @defjs/react react
+```
 
-기존 `@defjs/core` 클라이언트를 React 트리에 연결해요. Context와 `useClient()`를 받아요. 패키지는 클라이언트를 **만들지 않고**, 캐시를 더하지 않으며, 작업을 재시도하지 않고, 전송 리소스를 dispose하지도 않아요. 작업을 시작한 컴포넌트, effect, 또는 데이터 라이브러리가 소유해요. `useClient()`가 준 클라이언트는 작업에 넘깁니다. 훅은 제공된 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 그대로 돌려줘요. `signal` 같은 호출별 옵션이 필요하면 작업이 실행되는 곳에서 호출하세요: `getUser(client({ signal }), input)`. state setter에 넘기지 마세요. `setState(client)`는 updater로 호출해요. 파생된 `Client` 값은 `ClientProvider`와 `useClient`가 받지 않아요.
+## `@defjs/react`의 역할 vs. 애플리케이션의 역할
 
-## 기본 사용법
+- **`@defjs/react`가 제공하는 것**: `ClientProvider` 및 `useClient(overrideClient?)`.
+- **애플리케이션이 소유하는 것**: [`DerivableClient`](/ko-KR/api/core/derivableclient-type) 생성, 언마운트나 의존성 변경 시 진행 중인 요청 취소(`AbortController`), SSE/WebSocket 핸들 닫기, TanStack Query와 같은 쿼리 캐시 라이브러리와의 통합.
+- **중요**: `useClient()`는 함수 객체인 `DerivableClient`를 반환합니다. 작업이 실행되는 위치에서 `client({ signal })`을 호출하세요(`getOrder(client({ signal }), input)`). React 상태 설정자 함수에 함수 인자를 넘기면 업데이터 함수로 처리되므로, `client`를 `setState(client)`에 직접 전달해서는 절대 안 됩니다.
 
-`@defjs/core`, `@defjs/react`, React 18+를 설치하세요. ESM이에요.
+---
 
-`bun add @defjs/core @defjs/react react`
+## 1. 클라이언트 제공 및 effect 내부에서 호출하기
 
-클라이언트를 제공한 뒤, 사용자를 fetch하고 변경 시 abort 해요.
+애플리케이션 경계에서 클라이언트를 생성하고 컴포넌트 트리를 `<ClientProvider client={client}>`로 감싼 뒤, effect 정리(cleanup) 시점에 진행 중인 작업을 abort하세요:
 
-<include cwd>examples/react/client-provider.tsx#example</include>
+<Tabs items={["sdk/orders.ts", "app/App.tsx", "app/OrderCard.tsx"]}>
+  <Tab>
+    <include cwd>examples/integrations/react/sdk/orders.ts#example</include>
 
-<include cwd>examples/react/basic-setup.tsx#example</include>
+  </Tab>
+  <Tab>
+    <include cwd>examples/react/client-provider.tsx#example</include>
 
-`ClientProvider`는 일반 Context provider예요. 다른 `client` prop은 자손이 보는 값을 바꿔요 — 복제, 교체, dispose는 없어요. 중첩 provider는 명시적 경계를 만들어요.
+  </Tab>
+  <Tab>
+    <include cwd>examples/integrations/react/app/OrderCard.tsx#example</include>
 
-개발 모드에서 React는 effect를 두 번 이상 설정·정리할 수 있어요. signal 검사는 낡은 프로미스가 현재 렌더에 쓰지 못하게 해요. 튜플 오류는 여전히 data예요.
+  </Tab>
+</Tabs>
 
-## `useClient`로 읽기
+- `ClientProvider`는 가벼운 React Context 프로바이더입니다. 다른 `client` prop을 전달하면 이전 클라이언트를 복제하거나 폐기하지 않고 하위 컴포넌트가 읽는 참조만 즉시 업데이트합니다.
+- 개발 환경(`StrictMode`)에서는 React가 effect를 두 번 이상 마운트하고 정리할 수 있습니다. `controller.signal.aborted`를 확인하면 오래된 응답이 현재 상태를 덮어쓰는 레이스 컨디션을 방지할 수 있습니다.
 
-`useClient(overrideClient)`는 명시적 클라이언트를 우선해 돌려줘요. 생략하거나 `undefined`를 넘기면 가장 가까운 `ClientProvider`를 읽고, 두 곳 모두 클라이언트가 없을 때만 `Error`를 던져요. 인자 없는 `useClient()`도 계속 유효해요.
+---
 
-명시적 클라이언트가 있어도 `useClient(explicitClient)`는 항상 컴포넌트나 커스텀 훅의 최상위에서 호출하세요. 일반 함수나 이벤트 콜백에서 호출하면 안 돼요. `explicitClient ?? useClient()`는 훅을 조건부로 호출하므로 유효하지 않아요. 명시적 값은 Context에 쓰거나 provider를 만들지 않으며, 훅은 여전히 Context를 구독해요.
+## 2. `useClient`로 읽기 및 재정의
+
+`useClient(overrideClient)`는 `overrideClient`가 제공되면 이를 반환하고, 생략되거나 `undefined`이면 가장 가까운 `ClientProvider`에서 클라이언트를 읽어옵니다. 둘 다 클라이언트를 제공하지 못할 때만 `Error`를 던집니다.
 
 <include cwd>examples/react/read-with-use-client.tsx#example</include>
 
-훅은 클라이언트만 공급해요. 작업을 시작하거나, 전송을 구독하거나, error-first 튜플을 예외로 바꾸지 않아요.
+- 항상 컴포넌트나 커스텀 Hook의 최상위 레벨에서 조건문 없이 `useClient(explicitClient)`를 호출하세요. Hooks의 규칙을 위반하는 `explicitClient ?? useClient()` 형태의 코드는 작성하지 마세요.
 
-## 쿼리 작업 소유하기
+---
 
-쿼리 라이브러리가 캐싱, 재시도, 낡은 결과 억제, 취소를 소유할 수 있어요. 라이브러리가 주는 signal은 파생 클라이언트의 `signal`로 넘기세요. 목록 페이지에서는 TanStack Query(또는 비슷한 것)에서 작업을 호출하세요. `@defjs/react`는 DI만 하고 `useRequest`를 제공하지 **않아요**.
+## 3. TanStack Query와의 통합
+
+`@defjs/react`는 순수한 의존성 주입 도구이며 `useRequest` 같은 훅을 제공하지 **않습니다**. TanStack Query 같은 데이터 페칭 라이브러리를 사용할 때는 쿼리 함수의 `signal`을 `client({ signal })`로 전달하고 쿼리 어댑터 내부에서 error-first 튜플을 변환하세요:
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
-여기의 `throw error`는 쿼리 함수의 reject 경로이며, Defjs의 기본 호출 방식이 아니에요. 튜플을 먼저 확인하고, 이 어댑터만 reject해서 쿼리 라이브러리가 실패를 기록하게 해요.
+여기서 `throw error`는 TanStack Query의 거부(rejection) 계약을 충족하기 위한 명시적 어댑터 경계이며, Defjs의 기본 호출 방식이 아닙니다.
 
-같은 작업을 두 번째 effect에서 시작하지 마세요 — 소유자가 둘이면 취소와 낡은 결과 처리가 모호해져요.
+---
 
-## 실시간 작업 소유하기
+## 4. effect 내부에서 SSE 및 WebSocket 수명 주기 관리
 
-SSE와 WebSocket 핸들은 작업 호출보다 오래 살아요. 시작을 await하기 전에 정리를 등록하고, dispose 뒤에 도착한 핸들을 닫고, 단일 iterator를 소비하고, 종료 프로미스를 await 하세요.
+SSE 및 WebSocket 핸들은 최초 `openStream(...)`이나 `connectChat(...)` 호출 이후에도 계속 유지됩니다. `AbortController`의 signal을 작업에 전달하고 정리 로직에서 abort하세요. 이 signal은 연결 시작과 열린 세션을 모두 포괄합니다. 세션을 `await using`으로 소유하고 단일 비동기 이터레이터를 소비하세요:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-작업에 넘긴 `signal`은 열린 세션에도 계속 적용돼요. cleanup에서 abort하면 세션이 `aborted`로 끝나고 `receive`가 `AbortError`로 reject되므로, 위의 `catch`는 effect가 dispose된 뒤의 오류를 무시하고 진짜 실패(큐 오버플로, heartbeat 확인 타임아웃)만 보고해요. abort된 SSE 스트림은 대신 이터레이터가 정상적으로 끝나요. `catch`가 없으면 루프의 reject가 처리되지 않은 프로미스 rejection이 돼요.
+- WebSocket 작업에 전달된 `signal`을 abort하면 세션이 `aborted` 상태로 종료되고 `session.receive`가 `AbortError`로 reject됩니다. `catch` 블록을 `controller.signal.aborted`로 보호하여 하트비트 타임아웃 등 실제 런타임 오류만 표출되도록 하세요.
+- SSE 스트림을 abort하면 예외를 던지지 않고 `for await (const msg of stream)` 루프가 깔끔하게 종료됩니다.
 
-`EventStreamHandle`도 같은 규칙이에요. `finally`에서 닫고 `stream.closed`를 await 하세요. WebSocket 소비자는 상태/런타임 오류 리스너도 구독 해제하고 `session.receive`를 계속 읽어야 해요 — 읽지 않은 한정 큐는 오버플로할 수 있어요.
+---
 
-## SSR과 클라이언트 범위
+## 5. SSR 및 프로바이더 스코프
 
-패키지 진입점은 Client Component 경계예요. 브라우저 앱은 엔드포인트, 인터셉터, 담은 상태가 브라우저에 안전하고 요청에 독립적일 때 모듈 범위 클라이언트를 공유할 수 있어요. SSR에서는 헤더, 쿠키, 사용자, 테넌트, 자격 증명이 다르면 요청 경계마다 별도 클라이언트를 만들어요.
+- **브라우저**: 엔드포인트와 인터셉터가 요청과 무관한 경우 모듈 스코프의 단일 클라이언트를 공유합니다.
+- **SSR**: 헤더, 쿠키, 테넌트, 자격 증명이 요청마다 다를 때는 각 서버 요청 경계 내부에서 매번 새로운 클라이언트를 생성하세요.
+- `<ClientProvider>`를 언마운트해도 활성 HTTP 호출이 자동으로 취소되거나 SSE/WebSocket 연결이 닫히거나 클라이언트가 폐기되지 않습니다.
 
-provider unmount는 HTTP를 abort하거나, SSE/WebSocket을 닫거나, 리스너를 구독 해제하거나, `dispose`를 호출하지 **않아요**. `@defjs/react`에는 그런 수명 API가 없어요. 각 작업을 시작한 코드가 끝내거나 취소해야 해요.
+---
 
-## 참고
+## 공개 Export 및 관련 가이드
 
-`@defjs/react`의 공개 export:
-
-- `ClientProvider` — `ClientProviderProps`를 받고 넘긴 클라이언트를 제공
-- `useClient` — 명시적 클라이언트 우선, 없으면 가장 가까운 provider의 클라이언트, 둘 다 없으면 throw
-- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
-
-클라이언트와 옵션은 `@defjs/core`에서 만들어요. [클라이언트](/ko-KR/docs/client), [오류](/ko-KR/docs/errors), [SSE](/ko-KR/docs/sse), [WebSocket](/ko-KR/docs/web-socket)을 보세요.
-
-## 관련 레시피
-
-- [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)
-- [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)
-- [SSE 스트림 소비하기](/ko-KR/recipes/consume-sse)
-- [WebSocket 세션 열기](/ko-KR/recipes/websocket-session)
+- `ClientProvider` — `DerivableClient` 제공 (`ClientProviderProps: { client: DerivableClient; children?: ReactNode }`).
+- `useClient(overrideClient?)` — 명시적 재정의 클라이언트 또는 가장 가까운 프로바이더의 클라이언트 반환.
+- 관련 가이드: [Client](/ko-KR/docs/client), [오류 처리](/ko-KR/docs/errors), [SSE 이벤트 스트림](/ko-KR/docs/sse), [WebSocket 세션](/ko-KR/docs/web-socket).
+- 관련 레시피: [선언된 404 처리](/ko-KR/recipes/get-declared-404), [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http), [SSE 이벤트 소비](/ko-KR/recipes/consume-sse), [WebSocket 세션 관리](/ko-KR/recipes/websocket-session).

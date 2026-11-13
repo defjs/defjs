@@ -1,5 +1,5 @@
-import { join } from "node:path";
 import { parseExampleFile } from "./api-tags";
+import { joinPath } from "./paths";
 
 export interface ExampleFile {
   path: string;
@@ -31,10 +31,12 @@ export async function loadExample(
 ): Promise<ExampleFile> {
   const parsed = parseExampleFile(spec);
   try {
-    const source = await read(join(docRoot, parsed.path));
+    const source = await read(joinPath(docRoot, parsed.path));
     return { ...parsed, code: readExampleRegion(source, parsed.region) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`failed to read @exampleFile ${spec}: ${message}`);
+    throw new Error(`failed to read @exampleFile ${spec}: ${message}`, {
+      cause: error,
+    });
   }
 }

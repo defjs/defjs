@@ -4,7 +4,6 @@ import {
   codeLanguage,
   firstParagraph,
   linkTargets,
-  localeHref,
   parameterSections,
   resolveDocLinks,
   withoutFirstParagraph,
@@ -43,11 +42,10 @@ test("the first paragraph is plain text and later paragraphs stay out of the sum
 });
 
 test("locale links keep the default locale at the root", () => {
-  expect(localeHref("en-US", "/api/client")).toBe("/api/client");
+  expect(apiPageHref("en-US", "client")).toBe("/api/client");
   expect(apiPageHref("zh-Hans", "core/client-type")).toBe(
     "/zh-Hans/api/core/client-type",
   );
-  expect(() => localeHref("en-US", "api/client")).toThrow("absolute");
 });
 
 test("doc links resolve outside code and keep unknown names as text", () => {

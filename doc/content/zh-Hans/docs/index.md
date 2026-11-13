@@ -1,47 +1,38 @@
 ---
 title: "指南"
-description: 设计 SDK 契约与操作、发布它们，并在消费方应用里配置执行。
+description: 设计并发布 SDK 契约与操作，并在消费方应用中配置执行方式。
 ---
 
-Defjs 把团队发布的 API 和应用使用的 client 分开。这组指南围绕两条路径：沿 SDK 编写路径定义并打包操作；沿应用路径配置执行并处理结果。
+# 指南
 
-## SDK 开发 [#getting-started]
+Defjs 将 SDK 团队发布的 API 契约与消费方应用在运行时使用的 Client 配置分离开来。阅读以下各章节，了解整体架构、定义操作，并通过 Client 选项和拦截器管控执行。
+
+## 快速起步 [#getting-started]
 
 - [项目概览](/zh-Hans)
 - [快速开始](/zh-Hans/docs/start)
-- [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)
-- [为何定义与执行彼此独立](/zh-Hans/docs/design-decisions)
+- [核心架构设计](/zh-Hans/docs/design-decisions)
 
-## 契约与执行 [#calls-and-contracts]
+## 定义 SDK [#defining-sdks]
 
-SDK 作者拥有 Struct 和端点定义。应用提供 Client，并用它调用操作。
-
-- [数据契约 / Struct](/zh-Hans/docs/struct)
-- [客户端配置 / Client](/zh-Hans/docs/client)
-
-## 请求与实时通信
-
+- [数据结构 / Struct](/zh-Hans/docs/struct)
 - [HTTP 请求](/zh-Hans/docs/http)
 - [SSE 事件流](/zh-Hans/docs/sse)
 - [WebSocket 会话](/zh-Hans/docs/web-socket)
 
-## 错误与拦截
+## Client 与执行 [#client-execution]
 
+- [Client](/zh-Hans/docs/client)
 - [错误处理](/zh-Hans/docs/errors)
 - [拦截器](/zh-Hans/docs/interceptors)
+- [负载均衡与故障转移](/zh-Hans/docs/load-balancing)
+- [测试](/zh-Hans/docs/testing)
 
-## 插件
+## 框架集成与 AI [#integrations-and-ai]
 
-给消费方应用的 client 用的可选包。SDK 定义与它们保持独立。
-
-- [插件](/zh-Hans/docs/integrations)
+- [集成概览](/zh-Hans/docs/integrations)
 - [React](/zh-Hans/docs/integrations/react)
 - [Vue](/zh-Hans/docs/integrations/vue)
 - [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server)
-
-## AI
-
-- [AI 辅助开发](/zh-Hans/docs/ai)
-- [调用 AI API](/zh-Hans/docs/ai-api)
-
-[设计决策](/zh-Hans/docs/design-decisions)
+- [Skill](/zh-Hans/docs/ai)
+- [llms.txt](/zh-Hans/docs/ai-api)

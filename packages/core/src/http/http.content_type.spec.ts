@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   createClient,
   type DerivableClient,
+  type FetchHandle,
   withEndpoint,
   withHTTPHandle,
 } from "../client";
@@ -16,7 +17,7 @@ function clientReturning(
   init: ResponseInit,
 ): { cancelled: () => boolean; client: DerivableClient } {
   let cancelled = false;
-  const handle = vi.fn(async () => {
+  const handle = vi.fn<FetchHandle>(() => {
     const stream = new ReadableStream<Uint8Array>({
       cancel() {
         cancelled = true;
@@ -26,8 +27,8 @@ function clientReturning(
         controller.close();
       },
     });
-    return new Response(stream, init);
-  }) as unknown as typeof fetch;
+    return Promise.resolve(new Response(stream, init));
+  });
 
   return {
     cancelled: () => cancelled,

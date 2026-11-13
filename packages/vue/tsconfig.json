@@ -5,6 +5,6 @@
       "@defjs/core": ["../core/src"]
     }
   },
-  "include": ["*.ts", "src/**/*.ts", "test/**/*.ts"],
+  "include": ["*.ts", "src/**/*.ts"],
   "exclude": ["node_modules", "dist", "coverage"]
 }

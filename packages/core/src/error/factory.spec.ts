@@ -1,6 +1,5 @@
-import { runInNewContext } from "node:vm";
 import { describe, expect, test } from "vitest";
-import type { DecodedResponse, HttpMeta } from "../internal/http_response";
+import type { DecodedResponse, HttpMeta } from "../http/http_response";
 import { ERR_ABORTED, ERR_TIMEOUT } from "./cause";
 import {
   createDecodeFault,
@@ -28,6 +27,13 @@ function decoded<TBody>(
   return { ...meta(overrides), body };
 }
 
+function faultRecordKeys(value: unknown): string[] {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("expected a fault record");
+  }
+  return Object.keys(value);
+}
+
 function expectNativeFault(
   fault: Error,
   expectedKeys: string[],
@@ -48,7 +54,8 @@ function expectNativeFault(
     value: cause,
     writable: true,
   });
-  expect(Object.keys(JSON.parse(JSON.stringify(fault)))).toEqual(expectedKeys);
+  const parsed: unknown = JSON.parse(JSON.stringify(fault));
+  expect(faultRecordKeys(parsed)).toEqual(expectedKeys);
   expect(JSON.parse(JSON.stringify(fault))).not.toHaveProperty("cause");
   expect(JSON.parse(JSON.stringify(fault))).not.toHaveProperty("name");
 }
@@ -176,11 +183,11 @@ describe("fault factories", () => {
 
     test("should stringify a non-error cause", () => {
       const fault = createPreflightFault(
-        "REQ_OPTIONS_INVALID",
-        "abort and timeout are exclusive",
+        "REQ_BUILD_FAILED",
+        "the builder returned a bad value",
       );
 
-      expect(fault.message).toBe("abort and timeout are exclusive");
+      expect(fault.message).toBe("the builder returned a bad value");
     });
   });
 
@@ -189,10 +196,12 @@ describe("fault factories", () => {
       ["aborted", "NET_ABORTED"],
       ["timeout", "NET_TIMEOUT"],
     ] as const)(
-      "should recognize the %s brand on an error from another realm",
+      "should recognize the %s brand on a value from another realm",
       (brand, code) => {
-        const cause = runInNewContext(
-          `Object.defineProperty(new Error('foreign cause'), Symbol.for('defjs.cause.${brand}'), { value: true })`,
+        const cause: unknown = Object.defineProperty(
+          {},
+          Symbol.for(`defjs.cause.${brand}`),
+          { value: true },
         );
 
         expect(cause).not.toBeInstanceOf(Error);

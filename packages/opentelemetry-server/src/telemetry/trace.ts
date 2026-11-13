@@ -1,97 +1,37 @@
-import type { HttpRequest } from "@defjs/core";
-import type { Attributes, Context } from "@opentelemetry/api";
-import type { Span, Tracer } from "@opentelemetry/api";
-import { diag, SpanKind, SpanStatusCode } from "@opentelemetry/api";
+import { isAbortCause, isTimeoutCause } from "@defjs/core";
+import type { Span } from "@opentelemetry/api";
+import { diag, SpanStatusCode } from "@opentelemetry/api";
 
-const spanStatusSet = new WeakMap<Span, boolean>();
+// Fetch writes only these six methods in upper case; every other method goes on the wire as given.
+const FETCH_NORMALIZED_METHODS: ReadonlySet<string> = new Set([
+  "DELETE",
+  "GET",
+  "HEAD",
+  "OPTIONS",
+  "POST",
+  "PUT",
+]);
 
-function markSpanStatusSet(span: Span): void {
-  spanStatusSet.set(span, true);
+// The known methods of the HTTP semantic conventions: RFC 9110, PATCH and QUERY.
+const KNOWN_HTTP_METHODS: ReadonlySet<string> = new Set([
+  ...FETCH_NORMALIZED_METHODS,
+  "CONNECT",
+  "PATCH",
+  "QUERY",
+  "TRACE",
+]);
+
+/**
+ * `http.request.method` of a request sent through Fetch: the method as it goes on the wire, or
+ * `_OTHER` when that is not a known method.
+ */
+export function normalizeHttpMethod(method: string): string {
+  if (KNOWN_HTTP_METHODS.has(method)) return method;
+  const upper = method.toUpperCase();
+  return FETCH_NORMALIZED_METHODS.has(upper) ? upper : "_OTHER";
 }
 
-type StartSpanHookResult =
-  { ok: true; attributes?: Attributes } | { ok: false; error: unknown };
-
-export function resolveStartSpanHook(
-  hook: ((request: HttpRequest) => Attributes) | undefined,
-  request: HttpRequest,
-): StartSpanHookResult {
-  if (!hook) {
-    return { ok: true };
-  }
-  try {
-    return { ok: true, attributes: hook(request) };
-  } catch (error) {
-    return { ok: false, error };
-  }
-}
-
-export function createHttpSpan(
-  tracer: Tracer,
-  method: string,
-  url: string,
-  parentCtx: Context,
-  operation?: string,
-  startAttributes?: Attributes,
-): Span {
-  return tracer.startSpan(
-    operation ? `${method} ${operation}` : method,
-    {
-      kind: SpanKind.CLIENT,
-      attributes: {
-        ...(operation ? { "defjs.operation": operation } : {}),
-        "http.request.method": method,
-        "url.full": url,
-        ...startAttributes,
-      },
-    },
-    parentCtx,
-  );
-}
-
-export function createSSESpan(
-  tracer: Tracer,
-  url: string,
-  parentCtx: Context,
-  operation?: string,
-  startAttributes?: Attributes,
-): Span {
-  return tracer.startSpan(
-    operation ? `SSE ${operation}` : "SSE",
-    {
-      kind: SpanKind.CLIENT,
-      attributes: {
-        ...(operation ? { "defjs.operation": operation } : {}),
-        "url.full": url,
-        ...startAttributes,
-      },
-    },
-    parentCtx,
-  );
-}
-
-export function createWebSocketSpan(
-  tracer: Tracer,
-  url: string,
-  parentCtx: Context,
-  operation?: string,
-  startAttributes?: Attributes,
-): Span {
-  return tracer.startSpan(
-    operation ? `WebSocket ${operation}` : "WebSocket",
-    {
-      kind: SpanKind.CLIENT,
-      attributes: {
-        ...(operation ? { "defjs.operation": operation } : {}),
-        "url.full": url,
-        ...startAttributes,
-      },
-    },
-    parentCtx,
-  );
-}
-
-export function setSpanHttpResponse(span: Span, status: number): void {
+export function endSpanWithResponse(span: Span, status: number): void {
   if (status !== 0) {
     span.setAttribute("http.response.status_code", status);
   }
@@ -102,33 +42,57 @@ export function setSpanHttpResponse(span: Span, status: number): void {
     span.setStatus({ code: SpanStatusCode.ERROR });
   }
 
-  markSpanStatusSet(span);
   span.end();
 }
 
-export function setSpanError(span: Span, error: unknown): void {
-  span.recordException(toError(error));
+// The runtime's error text (Node's fetch message with the full URL, a JSON parse error with a body
+// fragment) and its stack can carry credentials, query values or body content, so the exception
+// event keeps only `exception.type`, the same field the diagnostic logs emit.
+function recordSpanException(span: Span, error: unknown): void {
+  span.recordException({ name: getExceptionType(error) });
+}
+
+export function endSpanWithError(span: Span, error: unknown): void {
+  recordSpanException(span, error);
   span.setAttribute("error.type", getErrorType(error));
   span.setStatus({ code: SpanStatusCode.ERROR });
-  markSpanStatusSet(span);
   span.end();
 }
 
-export function endSpan(span: Span): void {
-  if (!spanStatusSet.has(span)) {
-    span.setStatus({ code: SpanStatusCode.OK });
-  }
+/** Caller cancellation is not a failure: the span records `<transport>.aborted` and keeps its status unset. */
+export function endSpanAborted(
+  span: Span,
+  transport: "http" | "sse" | "websocket",
+): void {
+  span.addEvent(`${transport}.aborted`);
   span.end();
+}
+
+/**
+ * Whether `error` is the caller cancelling the call, which is not a failure. An abort whose reason is
+ * `TimeoutError` or `ERR_TIMEOUT` is a timeout and stays one.
+ *
+ * An aborted `signal` alone is not cancellation: WebSocket `finish()` aborts that same signal
+ * when a connect fails. Cancellation is a `NET_ABORTED` fault, an abort sentinel from any
+ * `@defjs/core` copy, or an `AbortError`, on the rejection or on `signal.reason`. There is no
+ * `timeout` option.
+ */
+export function isCallerCancellation(
+  signal: AbortSignal | undefined,
+  error: unknown,
+): boolean {
+  if (faultCode(error) === "NET_ABORTED") return true;
+  const reason: unknown = signal?.reason;
+  // A failure that is no abort at all is the common case; it never reaches the timeout checks.
+  if (!isAbortCause(error) && !isAbortCause(reason)) return false;
+  return !isTimeoutCause(error) && !isTimeoutCause(reason);
 }
 
 export function runSpanHook(
   span: Span,
   hookName: string,
-  hook: (() => Promise<void> | void) | undefined,
+  hook: () => Promise<void> | void,
 ): void {
-  if (!hook) {
-    return;
-  }
   try {
     const result = hook();
     void Promise.resolve(result).catch((error) =>
@@ -139,7 +103,7 @@ export function runSpanHook(
   }
 }
 
-function recordSpanHookError(
+export function recordSpanHookError(
   span: Span,
   hookName: string,
   error: unknown,
@@ -170,26 +134,10 @@ function recordSpanHookError(
     // Telemetry hooks must not affect transport execution.
   }
   try {
-    span.recordException(toError(error));
+    recordSpanException(span, error);
   } catch {
     // Telemetry hooks must not affect transport execution.
   }
-}
-
-export function addSpanEvent(
-  span: Span,
-  eventName: string,
-  attributes?: Attributes,
-): void {
-  if (attributes) {
-    span.addEvent(eventName, attributes);
-    return;
-  }
-  span.addEvent(eventName);
-}
-
-function toError(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error));
 }
 
 export function getHttpResponseErrorType(status: number): string | undefined {
@@ -201,7 +149,30 @@ export function getHttpResponseErrorType(status: number): string | undefined {
   return undefined;
 }
 
+/**
+ * The `code` of a fault, or `undefined` for any other value. A failure the call rethrows may carry
+ * a throwing getter, and reading telemetry facts must not replace that failure.
+ */
+function faultCode(error: unknown): unknown {
+  try {
+    return error instanceof Error && "code" in error ? error.code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * `error.type` of a failed call: `timeout` for a timeout, which a `NET_TIMEOUT` fault is as well,
+ * otherwise the class name of the error.
+ */
 export function getErrorType(error: unknown): string {
+  return isTimeoutCause(error) || faultCode(error) === "NET_TIMEOUT"
+    ? "timeout"
+    : getExceptionType(error);
+}
+
+/** `exception.type` of a failure: the class name of the error, not a Defjs fault code. */
+export function getExceptionType(error: unknown): string {
   if (error instanceof Error) {
     return error.name || "Error";
   }

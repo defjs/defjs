@@ -1,22 +1,36 @@
 ---
 title: "Условные запросы ETag"
-description: Считай 304 fault’ом HTTP_STATUS; Map кэша держи снаружи вызова операции.
+description: Считайте статус 304 сбоем `HTTP_STATUS` и храните кэш Map снаружи вызова операции.
 ---
 
 # Ревалидация через ETag и 304
 
-`ok` значит 2xx, поэтому `304` приходит как fault `HTTP_STATUS`. Статус редиректа тоже не тело ошибки, так что `error` не объявляй: тело не читают, fault несёт status, а закэшированный продукт возвращаешь сам.
+В Defjs только ответы диапазона `2xx` попадают в успешную ветку, поэтому статус `304 Not Modified` возвращается как сбой `HTTP_STATUS`. Оставьте `error` необъявленным в `defineRequest`, чтобы пустое тело `304` даже не читалось, и храните кэш `Map` в прикладной обёртке вокруг вызова операции:
 
-См. [HTTP](/ru-RU/docs/http).
-
-<include cwd meta="etag-cache.ts">
-  examples/recipes/etag-revalidate.ts#example
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/sdk/catalog.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/reader.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/etag-revalidate/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 Flask
 ```
 
-`throw error` после ветки 304 — граница этой функции чтения. Она по-прежнему возвращает `Promise<Product>`; fault, отличный от 304, не выходит с этой границы кортежем Defjs.
-
-Не переписывай `304` в фальшивый `200` внутри Core. Владение кэшем остаётся в коде приложения вокруг вызова операции.
+- Вызов `if (error) throw error` после проверки `304` — это явная граница для функции `createReader`, возвращающей `Promise<Product>`.
+- Никогда не переписывайте `304` в синтетический ответ `200` внутри перехватчика; сохраняйте состояние кэша в коде приложения вокруг вызова операции. См. раздел [HTTP-операции](/ru-RU/docs/http).

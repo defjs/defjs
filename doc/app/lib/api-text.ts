@@ -1,5 +1,5 @@
 import { mapOutsideFences } from "./markdown";
-import { localePrefix } from "./i18n";
+import { localePrefix, type Locale } from "./i18n";
 
 export interface ApiField {
   name: string;
@@ -28,14 +28,8 @@ export function firstParagraph(description: string): string {
     .trim();
 }
 
-export function localeHref(locale: string, path: string): string {
-  if (!path.startsWith("/"))
-    throw new Error(`API path must be absolute: ${path}`);
-  return `${localePrefix(locale)}${path}`;
-}
-
-export function apiPageHref(locale: string, slug: string): string {
-  return localeHref(locale, `/api/${slug}`);
+export function apiPageHref(locale: Locale, slug: string): string {
+  return `${localePrefix(locale)}/api/${slug}`;
 }
 
 export function linkTargets(
@@ -53,7 +47,7 @@ export function linkTargets(
 /** `{@link Name}` and `{@link Name | label}` become locale-prefixed Markdown links. */
 export function resolveDocLinks(
   text: string,
-  locale: string,
+  locale: Locale,
   targets: ReadonlyMap<string, string>,
 ): string {
   return mapOutsideFences(text, (line) =>
@@ -111,16 +105,21 @@ function fieldFingerprint(rows: readonly ApiField[]): string {
     .join("\n");
 }
 
+/** The index after the inline code span that opens at `index`. An unclosed span runs to the end of the line. */
+function inlineCodeEnd(line: string, index: number): number {
+  let end = index + 1;
+  while (end < line.length && line[end] === "`") end += 1;
+  const marker = line.slice(index, end);
+  const close = line.indexOf(marker, end);
+  return close === -1 ? line.length : close + marker.length;
+}
+
 /** `<Type>` in prose is a type argument. Inline code keeps search from seeing an MDX component. */
 function escapeTypeAngles(line: string): string {
   let out = "";
   for (let index = 0; index < line.length;) {
     if (line[index] === "`") {
-      let end = index + 1;
-      while (end < line.length && line[end] === "`") end += 1;
-      const marker = line.slice(index, end);
-      const close = line.indexOf(marker, end);
-      const stop = close === -1 ? line.length : close + marker.length;
+      const stop = inlineCodeEnd(line, index);
       out += line.slice(index, stop);
       index = stop;
       continue;
@@ -164,11 +163,7 @@ function replaceDocLinks(
   let out = "";
   for (let index = 0; index < line.length;) {
     if (line[index] === "`") {
-      let end = index + 1;
-      while (end < line.length && line[end] === "`") end += 1;
-      const marker = line.slice(index, end);
-      const close = line.indexOf(marker, end);
-      const stop = close === -1 ? line.length : close + marker.length;
+      const stop = inlineCodeEnd(line, index);
       out += line.slice(index, stop);
       index = stop;
       continue;

@@ -1,7 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "include": ["./**/*.ts", "./**/*.tsx"],
-  "exclude": ["./opentelemetry-logging", "./**/*.spec.ts"],
+  "exclude": ["./**/*.spec.ts"],
   "compilerOptions": {
     "types": ["react"],
     "noUnusedLocals": false,

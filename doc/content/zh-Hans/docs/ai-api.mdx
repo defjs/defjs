@@ -1,36 +1,24 @@
 ---
-title: "调用 AI API"
-description: "从应用调用 AI 服务且不把提供商凭证暴露给浏览器，并阅读一段虚构的离线事件流。"
+title: "llms.txt"
+description: "把助手指向为大型语言模型生成的英文 Markdown 索引与单页源文件。"
 ---
 
-从应用调用 AI 服务，与让助手编写 Defjs，是两件不同的事。[AI 辅助开发](/zh-Hans/docs/ai) 是助手工作流。API 与 SSE 的事件格式由提供商各自规定。本页的流是虚构后端，不是某个提供商的协议。
+# llms.txt
 
-## 在应用里调用 AI 接口 [#call-an-api]
+本站发布为助手生成的英文 Markdown。这些地址没有语言前缀，也不是本地化指南的译文。
 
-用你已经在用的 HTTP 或 SSE 契约定义这次调用，再在应用自己的 client 上调用该操作。从 [HTTP 请求](/zh-Hans/docs/http) 和 [SSE 事件流](/zh-Hans/docs/sse) 读起。[发送 JSON](/zh-Hans/recipes/post-json) 是常见的 JSON 正文。[消费 SSE 事件流](/zh-Hans/recipes/consume-sse) 展示如何读取和关闭流，但示例只消费第一条事件。那个示例不是一份完整的 AI 回答。要获得完整 AI 回答，应按服务协议继续读取，直到完成信号或 EOF，处理读取错误并关闭流；事件名和数据契约也要按服务提供商的格式调整。[取消与超时](/zh-Hans/recipes/cancel-http) 说明调用方如何停掉一次 HTTP 调用。
+## 页面索引 [#llms-txt]
 
-把服务密钥留在有权消耗它的服务端。不要把它写进浏览器包、公开的构建变量，或会发到浏览器的 client。凭证归应用所有：配在服务端 client 上，或只在该服务端边界内运行的拦截器里附上。配置位置是[客户端配置](/zh-Hans/docs/client)和[拦截器](/zh-Hans/docs/interceptors)。`withCredentials` 只选择 Fetch 的 cookie 模式，并不保存服务密钥。
+[llms.txt](/llms.txt) 列出英文页面，并链接到对应网页。助手需要先找到页面时，从这里开始。
 
-操作返回之后，流归应用所有。SSE 要按需读取事件、关闭句柄，并等到它关闭。HTTP 在不再需要答案时中止调用。中止并不能证明服务已经撤销它接受过的工作。
+## 汇编指南 [#llms-full]
 
-不要因为一次流式 POST 失败就立刻重试。Defjs 不会替你重试 HTTP。SSE 重连默认关闭，要由应用显式打开；即便打开，POST 这类方法也不会再次发送，除非该策略明确允许。失败的那一次可能已经让服务开始了会计费的工作。把同一个 POST 再发一次，可能把这份工作再做一遍。添加重试之前，先读 [HTTP 请求](/zh-Hans/docs/http) 里的重放规则和 [SSE 事件流](/zh-Hans/docs/sse) 里的重连规则。
+[llms-full.txt](/llms-full.txt) 把英文指南合并成一个文件。助手需要在一份文档中获得较广的上下文，且 token 预算允许时使用。
 
-## 虚构的离线流 [#fictional-stream]
+## 单页 Markdown [#page-markdown]
 
-下面的事件格式是虚构的，不是某个具体提供商的事件格式。`withSSEHandle` 提供响应，因此示例不需要网络，也不需要真实凭证。正文是两个 `delta` 事件，然后是一个完成事件。循环会保留两段文本，不会在第一个事件后停止。
+每个英文页面也提供 Markdown 版本：`/llms.mdx/<path>/content.md`。例如，[快速开始的 Markdown](/llms.mdx/docs/start/content.md) 就是快速开始页的英文正文。
 
-<include cwd lang="typescript">
-  examples/ai/fictional-completion.ts#example
-</include>
+## 核对版本 [#version]
 
-在已安装 `@defjs/core` 的项目中，将示例保存为 `fictional-completion.ts`，然后运行：
-
-```sh
-bun fictional-completion.ts
-```
-
-预期输出：
-
-```txt
-Hello there
-```
+本站记录的是默认分支；项目安装的 `@defjs/core` 版本可能不同。采用建议之前，先按已安装的包核对 API。向 AI 工具提供代码或上下文之前，先移除密钥并确认项目的数据使用政策。

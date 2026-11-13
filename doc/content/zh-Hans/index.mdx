@@ -1,92 +1,81 @@
 ---
 title: Defjs
-description: 为更友好的 SDK 设计而生：定义可复用的接口契约，由应用配置 Client 并执行。
+description: 定义一次可复用的 TypeScript API 契约，由各个应用程序自主配置 Client 及其执行流程。
 ---
 
 # Defjs
 
-**为更友好的 SDK 设计而生。**
+**定义一次 API 契约，由各应用自主配置执行。**
 
-Defjs 帮助团队把 API 做成可复用的 TypeScript SDK。`def` 代表 `define`：描述服务提供的操作，从模块或 npm 包导出它们，再让每个应用配置自己的 client 来调用它们。
+Defjs 将 TypeScript SDK 的两端职责清晰分离：
 
-## 定义 SDK，配置应用
+- **SDK 定义 (`@defjs/core`)** —— SDK 作者使用 `defineRequest`、`defineEventStream` 和 `defineWebSocket` 声明带类型的 HTTP、SSE 与 WebSocket 操作，并用 `struct` 声明数据结构。定义是纯数据：导入它不会发起网络调用，也不会绑定全局 Client。
+- **应用执行** —— 消费方应用创建自己的 `Client`（`createClient(withEndpoint(...))`），挂载认证凭据与拦截器，配置负载均衡，并在调用操作时传入该 Client。
 
-| SDK 作者                                 | SDK 消费方                               |
-| ---------------------------------------- | ---------------------------------------- |
-| 定义操作、输入、请求映射、响应和错误     | 选择服务地址、凭证、拦截器和传输         |
-| 导出带类型的 HTTP、SSE 和 WebSocket 端点 | 导入这些端点，并用 Defjs client 调用它们 |
-| 维护并发布 API 契约                      | 处理结果，并拥有取消、流和会话           |
+## 快速浏览：SDK 定义与应用执行
 
-SDK 定义不会捕获应用的 client。同一个导出的端点可以用不同的 client 配置服务浏览器应用、服务端或本地测试。两边仍使用 Defjs 的执行契约和兼容的 Core 版本。
-
-SDK 导出一个操作：
+<Tabs items={["get-health.ts", "app.ts"]}>
+<Tab>
 
 <include cwd meta="get-health.ts">
   examples/home/get-health.ts#example
 </include>
 
-应用导入它，并拥有执行：
+</Tab>
+<Tab>
 
 <include cwd meta="app.ts">
   examples/home/app.ts#example
 </include>
 
-调用 `getHealth(client)` 即开始请求。发布定义之后，消费方从你的 SDK 包导入它，而不是从本地文件导入。
+</Tab>
+</Tabs>
 
-## 最佳实践
+调用 `getHealth(client)` 会执行 I/O，并解析为错误优先元组。读取解码结果之前，先判断 `if (error)` 并返回。
 
-定义与 client 彼此独立。把应用的 client 作为第一个参数传入，例如 `getHealth(client)`。服务地址和凭证也归应用所有。先检查 error-first tuple。`error` 有值时，报告 `error.code`，从函数返回，然后再读取成功值。
+## 为什么将定义与 Client 解耦？
 
-## 构建你的 SDK
+| 职责划分     | SDK 作者（契约定义）                                                                               | 应用程序（运行时执行）                                 |
+| ------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **归属内容** | 请求方法、路径模板、`input` / `output` / `error` schema、`builder` 映射，以及静态 `operation` 名称 | 基地址、认证凭据、认证拦截器、负载均衡、超时与资源清理 |
+| **产物交付** | 可独立发布的 ESM 模块与 `.d.ts` 类型声明文件                                                       | 面向浏览器、SSR 或测试环境的具体运行时配置             |
+| **核心收益** | 与环境零耦合；同一套定义适用于浏览器、服务端渲染和测试                                             | 完全掌控重试、故障转移、遥测与生命周期                 |
 
-1. 在分开的 SDK 文件和应用文件里[定义并运行你的第一个操作](/zh-Hans/docs/start)。
-2. 描述 SDK 导出的[数据契约](/zh-Hans/docs/struct)和 [HTTP 操作](/zh-Hans/docs/http)。
-3. 用 JavaScript、声明文件和兼容的 Core 依赖[测试并发布一个 SDK 包](/zh-Hans/recipes/publish-http-sdk)。
-4. 配置消费方应用的 [Client](/zh-Hans/docs/client)，再按需要加上框架或可观测性集成。
+## 推荐阅读路径
 
-[设计决策](/zh-Hans/docs/design-decisions)解释为什么 API 定义和执行有各自的所有者。发布成包之前，也可以在同一个应用里使用这套结构。
+1. **[快速开始](/zh-Hans/docs/start)** —— 定义一个操作，用本地 Fetch 句柄离线测试，再让 Client 指向真实服务。
+2. **[核心架构设计](/zh-Hans/docs/design-decisions)** —— 深入理解六大响应解码规则、错误优先元组设计，以及明确的资源所有权模型。
+3. **[定义 SDK](/zh-Hans/docs/struct)** —— 使用 [Struct](/zh-Hans/docs/struct) 声明数据契约，并导出 [HTTP](/zh-Hans/docs/http)、[SSE](/zh-Hans/docs/sse) 和 [WebSocket](/zh-Hans/docs/web-socket) 操作。
+4. **[Client 与执行](/zh-Hans/docs/client)** —— 配置 [Client](/zh-Hans/docs/client)，处理带类型的 [错误](/zh-Hans/docs/errors)，接入 [拦截器](/zh-Hans/docs/interceptors)，配置 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)，并编写确定性的 [测试](/zh-Hans/docs/testing)。
 
-## 选传输
+## 支持的传输协议与返回元组
 
-| 你要做的事              | 从这里看                              | 成功时拿到什么                                                      |
-| ----------------------- | ------------------------------------- | ------------------------------------------------------------------- |
-| 请求 + 按状态区分的响应 | [HTTP](/zh-Hans/docs/http)            | 解码后的数据 + `DecodedResponse`（没有声明 output 时是 `HttpMeta`） |
-| 长连接的服务端事件流    | [SSE](/zh-Hans/docs/sse)              | 一条 stream + 启动时的 `open` 快照                                  |
-| 双向会话                | [WebSocket](/zh-Hans/docs/web-socket) | 一个 session + 启动时的 `connection` 快照                           |
+每个操作都会返回针对对应传输协议生命周期设计的错误优先三元组：
 
-三种传输走同一条顺序：定义一个操作，再带着应用的 client 和调用方的 input 调用它。
+| 传输协议                                  | 入口函数            | 元组结构                       | 生命周期所有权                                                                |
+| ----------------------------------------- | ------------------- | ------------------------------ | ----------------------------------------------------------------------------- |
+| **[HTTP](/zh-Hans/docs/http)**            | `defineRequest`     | `[error, data, response]`      | 通过 `client({ signal })` 取消进行中的请求                                    |
+| **[SSE](/zh-Hans/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | 通过 `await using` 或 `stream.close()` + `await stream.closed` 安全释放连接   |
+| **[WebSocket](/zh-Hans/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | 通过 `await using` 或 `session.close()` + `await session.closed` 优雅关闭会话 |
 
-## 选包
+在 HTTP 请求失败时，元组为 `[error, undefined, undefined]`，因为 `error` 已经携带了所有 `HttpMeta` 响应元数据。对于 SSE 和 WebSocket，只要失败前捕获到了启动快照，第三项就会保留它。
 
-| 包                            | 什么时候用                                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | 定义 SDK 操作和契约；创建 client，并调用 HTTP、SSE 和 WebSocket 操作                                    |
-| `@defjs/react`                | `ClientProvider` / `useClient` — 见 [React](/zh-Hans/docs/integrations/react)                           |
-| `@defjs/vue`                  | Plugin + `injectClient` — 见 [Vue](/zh-Hans/docs/integrations/vue)                                      |
-| `@defjs/opentelemetry-server` | 出站 span、metrics 和 logs — 见 [OpenTelemetry Server](/zh-Hans/docs/integrations/opentelemetry-server) |
+## 官方软件包
 
-## 结果长什么样
+| 软件包                        | 定位与能力                                                                               | 相关文档                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `@defjs/core`                 | 零依赖的 SDK 定义、`struct`、Client 与拦截器                                             | [快速开始](/zh-Hans/docs/start)                                         |
+| `@defjs/react`                | 面向 React 18+ 的 `ClientProvider` 上下文与 `useClient()` Hook                           | [React 集成](/zh-Hans/docs/integrations/react)                          |
+| `@defjs/vue`                  | 面向 Vue 3 或更高版本的 `createClientPlugin` 插件、`HTTP_CLIENT` 标识与 `injectClient()` | [Vue 集成](/zh-Hans/docs/integrations/vue)                              |
+| `@defjs/opentelemetry-server` | 服务端出站 OpenTelemetry Trace Spans、指标与结构化诊断日志                               | [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server) |
 
-三种传输都返回错误优先的三项 tuple。位置对齐，含义不一样：
-
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`
-- WebSocket → `[error, session, connection]`
-
-失败时第二项是 `undefined`。HTTP 的第三项同样是 `undefined`，因为 fault 已经带着响应元数据。SSE 和 WebSocket 的第三项，是失败前已捕获到的启动快照（如果有）。细节见[错误](/zh-Hans/docs/errors)。
-
-## 所有权一句话
-
-HTTP 过期了就 abort。SSE 要 `close` 再 `await stream.closed`。WebSocket 要 `close` 再 `await session.closed`。服务端如果 options 会捕获 cookie、鉴权或租户，把 Client 建在请求边界里。打日志前先把 URL、headers、body 脱敏。
-
-Defjs 提供定义、校验和执行。应用选择缓存和重试策略；流的重连需要显式启用。今天支持手写的 SDK 包。CLI 工具和 OpenAPI/SDK 生成仍在计划中。
-
-## 相关操作示例
+## 常用配方
 
 - [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)
-- [声明了 404 的 GET](/zh-Hans/recipes/get-declared-404)
-- [POST JSON](/zh-Hans/recipes/post-json)
-- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)
-- [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [发送并校验 JSON 数据](/zh-Hans/recipes/post-json)
+- [优雅处理已声明的 404 响应](/zh-Hans/recipes/get-declared-404)
+- [取消进行中的 HTTP 请求](/zh-Hans/recipes/cancel-http)
+- [401 自动单次刷新 Bearer Token](/zh-Hans/recipes/refresh-bearer-once)
+- [消费 SSE 服务端推送流](/zh-Hans/recipes/consume-sse)
 - [打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)
-- [用本地 Fetch handle 做测试](/zh-Hans/recipes/test-with-handle)
+- [用本地 Fetch 句柄测试](/zh-Hans/recipes/test-with-handle)

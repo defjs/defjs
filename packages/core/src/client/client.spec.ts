@@ -11,17 +11,17 @@ import {
   withHTTPHandle,
   withInterceptors,
   withQuerySerializer,
+  withRetry,
   withSSEHandle,
   withSSEOnInvalidEvent,
-  withSSEReconnect,
   withWebSocketBeforeConnect,
   withWebSocketHandle,
   withWebSocketHeartbeat,
   withWebSocketProtocols,
-  withWebSocketReconnect,
-  withXSRF,
 } from "./index";
 import type { Client } from "./client";
+import type { ClientConfig, FetchHandle } from "./config";
+import { createFakeWebSocket } from "../../test/fake_web_socket";
 
 describe("Client", () => {
   let baseClient: Client;
@@ -35,10 +35,10 @@ describe("Client", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withHeaders({ "X-Tenant": "acme", "X-Override": "default" }),
-      withHTTPHandle(async (input, init) => {
+      withHTTPHandle((input, init) => {
         const request = new Request(input, init);
         seen.push({ headers: new Headers(request.headers) });
-        return Response.json({ ok: true });
+        return Promise.resolve(Response.json({ ok: true }));
       }),
     );
 
@@ -56,55 +56,140 @@ describe("Client", () => {
     expect(seen[0]?.headers.get("X-Override")).toBe("command");
   });
 
-  test.each(["HTTP", "SSE"] as const)(
-    "%s array command headers override defaults at the fetch boundary",
-    async (transport) => {
+  test.each<{
+    transport: string;
+    withHandle: (handle: FetchHandle) => (config: ClientConfig) => void;
+    answer: () => Response;
+    open: (client: Client) => Promise<{
+      fault: { code: string } | null;
+      stream: { close(): void; closed: Promise<unknown> } | undefined;
+    }>;
+    scope: string;
+  }>([
+    {
+      transport: "HTTP",
+      withHandle: withHTTPHandle,
+      answer: () => new Response(null, { status: 204 }),
+      open: async (client) => {
+        const [fault] = await defineRequest({
+          builder: () => ({
+            headers: [
+              ["X-Scope", "first"],
+              ["x-scope", "second"],
+            ],
+          }),
+          method: "GET",
+          path: "/headers",
+        })(client);
+        return { fault, stream: undefined };
+      },
+      // Two pair entries are combined by Headers.
+      scope: "first, second",
+    },
+    {
+      transport: "SSE",
+      withHandle: withSSEHandle,
+      answer: () =>
+        new Response(": done\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      open: async (client) => {
+        const [fault, stream] = await defineEventStream({
+          builder: () => ({ headers: { "x-scope": ["first", "second"] } }),
+          events: { message: struct.unknown() },
+          path: "/headers",
+        })(client);
+        return { fault, stream };
+      },
+      // A record array is one value that JavaScript joins with a comma.
+      scope: "first,second",
+    },
+  ])(
+    "$transport array command headers override defaults at the fetch boundary",
+    async ({ withHandle, answer, open, scope }) => {
       let sent: Headers | undefined;
       const defaults = { "X-Scope": "default", "X-Keep": "keep" };
       const client = createClient(
         withEndpoint("https://example.test"),
         withHeaders(defaults),
-        (transport === "HTTP" ? withHTTPHandle : withSSEHandle)(
-          async (input, init) => {
-            sent = new Request(input, init).headers;
-            return transport === "HTTP"
-              ? new Response(null, { status: 204 })
-              : new Response(": done\n\n", {
-                  headers: { "content-type": "text/event-stream" },
-                });
-          },
-        ),
+        withHandle((input, init) => {
+          sent = new Request(input, init).headers;
+          return Promise.resolve(answer());
+        }),
       );
-      const pending =
-        transport === "HTTP"
-          ? defineRequest({
-              builder: () => ({
-                headers: [
-                  ["X-Scope", "first"],
-                  ["x-scope", "second"],
-                ],
-              }),
-              method: "GET",
-              path: "/headers",
-            })(client)
-          : defineEventStream({
-              builder: () => ({
-                headers: { "x-scope": ["first", "second"] },
-              }),
-              events: { message: struct.unknown() },
-              maxBufferSize: 1024,
-              maxQueueSize: 1,
-              path: "/headers",
-            })(client);
 
-      const [fault, stream] = await pending;
+      const { fault, stream } = await open(client);
       stream?.close();
       await stream?.closed;
 
       expect(fault).toBeNull();
-      expect(sent?.get("x-scope")).toBe("first, second");
+      expect(sent?.get("x-scope")).toBe(scope);
       expect(sent?.get("x-keep")).toBe("keep");
       expect(defaults["X-Scope"]).toBe("default");
+    },
+  );
+
+  test.each(["HTTP", "SSE"] as const)(
+    "%s reports REQ_BUILD_FAILED when Headers rejects an array header entry",
+    async (transport) => {
+      const handle = vi.fn<FetchHandle>(() =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      );
+      const client = createClient(
+        withEndpoint("https://example.test"),
+        withHTTPHandle(handle),
+        withSSEHandle(handle),
+      );
+
+      const [fault] =
+        transport === "HTTP"
+          ? await defineRequest({
+              // @ts-expect-error A one-item entry is not a [name, value] pair.
+              builder: () => ({ headers: [["x-missing"]] }),
+              method: "GET",
+              path: "/headers",
+            })(client)
+          : await defineEventStream({
+              // @ts-expect-error A one-item entry is not a [name, value] pair.
+              builder: () => ({ headers: [["x-missing"]] }),
+              events: { message: struct.unknown() },
+              path: "/headers",
+            })(client);
+
+      expect(fault?.code).toBe("REQ_BUILD_FAILED");
+      expect(fault?.cause).toBeInstanceOf(TypeError);
+      expect(handle).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(["HTTP", "SSE"] as const)(
+    "%s reports REQ_BUILD_FAILED when Headers rejects a record header value",
+    async (transport) => {
+      const handle = vi.fn<FetchHandle>(() =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      );
+      const client = createClient(
+        withEndpoint("https://example.test"),
+        withHTTPHandle(handle),
+        withSSEHandle(handle),
+      );
+
+      const [fault] =
+        transport === "HTTP"
+          ? await defineRequest({
+              builder: () => ({ headers: { "x-line": "line\nbreak" } }),
+              method: "GET",
+              path: "/headers",
+            })(client)
+          : await defineEventStream({
+              builder: () => ({ headers: { "x-line": "line\nbreak" } }),
+              events: { message: struct.unknown() },
+              path: "/headers",
+            })(client);
+
+      expect(fault?.code).toBe("REQ_BUILD_FAILED");
+      expect(fault?.cause).toBeInstanceOf(TypeError);
+      expect(handle).not.toHaveBeenCalled();
     },
   );
 
@@ -112,12 +197,14 @@ describe("Client", () => {
     const seen: string[] = [];
     const client = createClient(
       withEndpoint("https://original.example"),
-      withHTTPHandle(async (input) => {
+      withHTTPHandle((input) => {
         seen.push(input instanceof Request ? input.url : String(input));
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            headers: { "content-type": "application/json" },
+            status: 200,
+          }),
+        );
       }),
     );
 
@@ -132,25 +219,23 @@ describe("Client", () => {
     expect(seen).toEqual(["https://original.example/ping"]);
   });
 
-  test("HTTP handle, credentials, interceptors, serializer, and xsrf apply when an operation runs", async () => {
-    const customFetch = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = new Request(input, init);
-        expect(request.headers.get("x-custom-xsrf-token")).toBe("xsrf-token");
-        expect(request.credentials).toBe("include");
-        expect(new URL(request.url).search).toBe("?serialized=zen");
-        return new Response(JSON.stringify({ ok: true }), {
+  test("HTTP handle, credentials, interceptors, and serializer apply when an operation runs", async () => {
+    const customFetch = vi.fn<FetchHandle>((input, init) => {
+      const request = new Request(input, init);
+      expect(request.credentials).toBe("include");
+      expect(new URL(request.url).search).toBe("?serialized=zen");
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true }), {
           headers: { "content-type": "application/json" },
           status: 200,
-        });
-      },
-    ) as unknown as typeof fetch;
+        }),
+      );
+    });
     const interceptor = createHttpInterceptor(async (request, next) =>
       next(request),
     );
     const serializer = (query: { [key: string]: unknown }) =>
       `serialized=${String(query["q"])}`;
-    const tokenProvider = vi.fn(() => "xsrf-token");
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
@@ -159,11 +244,6 @@ describe("Client", () => {
       withSSEHandle(customFetch),
       withInterceptors(interceptor),
       withQuerySerializer(serializer),
-      withXSRF({
-        cookieName: "CUSTOM-XSRF-TOKEN",
-        headerName: "X-CUSTOM-XSRF-TOKEN",
-        tokenProvider,
-      }),
     );
 
     const request = defineRequest({
@@ -177,28 +257,24 @@ describe("Client", () => {
     expect(error).toBeNull();
     expect(data).toEqual({ ok: true });
     expect(customFetch).toHaveBeenCalledOnce();
-    expect(tokenProvider).toHaveBeenCalled();
   });
 
   test("per-field SSE and WebSocket helpers are accepted by createClient", () => {
     const onInvalidEvent = vi.fn();
     const beforeConnect = vi.fn();
-    class MockWebSocket extends EventTarget {
-      static CONNECTING = 0;
-      static OPEN = 1;
-      static CLOSING = 2;
-      static CLOSED = 3;
-    }
-
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEOnInvalidEvent(onInvalidEvent),
-      withSSEReconnect({ attempts: 5, delayMs: 500 }),
-      withWebSocketHandle(MockWebSocket as unknown as typeof WebSocket),
+      withRetry({ maxRetries: 3, delayMs: 1_000 }),
+      withWebSocketHandle(createFakeWebSocket().Socket),
       withWebSocketBeforeConnect(beforeConnect),
       withWebSocketProtocols(["json"]),
-      withWebSocketHeartbeat({ intervalMs: 1_000, timeoutMs: 5_000 }),
-      withWebSocketReconnect({ attempts: 3, delayMs: 1_000 }),
+      withWebSocketHeartbeat({
+        intervalMs: 1_000,
+        message: () => "ping",
+        isAck: () => true,
+        timeoutMs: 5_000,
+      }),
     );
 
     expect(typeof client).toBe("function");

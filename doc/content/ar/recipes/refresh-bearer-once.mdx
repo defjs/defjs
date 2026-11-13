@@ -1,20 +1,37 @@
 ---
 title: "تحديث الرمز بعد 401"
-description: أرفق Authorization وأعد التشغيل مرة واحدة داخل معترض واحد؛ next() يتجه إلى الداخل فقط.
+description: أرفق ترويسة Authorization وأعد المحاولة مرة واحدة داخل معترض واحد؛ دالة next() تتجه نحو الداخل فقط.
 ---
 
-# حدّث رمز Bearer مرة واحدة عند 401
+# تحديث رمز Bearer مرة واحدة عند استلام 401
 
-`next()` هو بقية بصلة **هذا** المعترض — وليس إعادة إرسال من الخارج مثل `axios(config)`. ضع الإرفاق وتحديث الرحلة الواحدة وإعادة التشغيل الواحدة في معترض HTTP **واحد** حتى لا تعمل الطبقات الخارجية مرتين.
+في Defjs، يستدعي `next(request)` بقية سلسلة المعترضات باتجاه الداخل فقط — ولا يعيد توزيع الطلب من المعترض الخارجي الأول مجدداً. ضع إرفاق الرمز، وإلغاء تكرار التحديث المتزامن لرحلة مفردة (single-flight)، وإعادة المحاولة لمرة واحدة عند استلام `401` داخل معترض HTTP **واحد** حتى لا تعمل معترضات السجلات أو التوقيت الخارجية مرتين:
 
-انظر [المعترضات](/ar/docs/interceptors).
-
-<include cwd meta="refresh-bearer.ts">
-  examples/recipes/refresh-bearer-once.ts#example
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "app/main.ts"]}>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/sdk/billing.ts#example
 </include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/auth-interceptor.ts#example
+</include>
+
+  </Tab>
+  <Tab>
+<include cwd lang="typescript">
+  examples/recipes/refresh-bearer-once/app/main.ts#example
+</include>
+
+  </Tab>
+</Tabs>
 
 ```txt
 42
 ```
 
-استدعاء `next` مرة أخرى يعيد الدخول فقط إلى المعترضات **داخل** هذه الطبقة (ومعالِج Fetch). وهو لا يعيد تشغيل أغلفة التوقيت أو المصادقة الخارجية — ولهذا ينتمي تخطيط 401 إلى معترض واحد، لا إلى استدعاء ثانٍ للعملية.
+قابلية إعادة إرسال الجسم لا تعني قابلية تكرار العملية التجارية. يعيد هذا المعترض أيضًا إرسال `POST` بصيغة JSON بعد استجابة 401 مطابقة: عمليتا تسليم عبر HTTP، تُرفض الأولى ثم تُقبل الثانية. لا تستخدمه للكتابة إلا عندما ترفض المصادقة التسليم الأول قبل تشغيل معالج الأعمال؛ واحتفظ بمفتاح ثابت لتساوي الأثر عبر التسليمين، مع إزالة التكرار على الخادم. إذا لم يتوفر هذا العقد، فأرجع استجابة 401 بدلاً من إعادة إرسال عملية الكتابة تلقائيًا. لا يعيد المثال الكامل إرسال جسم طلب من نوع `ReadableStream`.
+
+راجع دليل [المعترضات (Interceptors)](/ar/docs/interceptors) للتعرف على ترتيب طبقات البصلة وحدود إعادة المحاولة.
