@@ -480,7 +480,7 @@ const s3Client = createClient(
 );
 
 export async function syncReport(bucket: string, key: string, pdf: Blob) {
-  const [putErr, , putRes] = await putObject(s3Client, {
+  const [putErr] = await putObject(s3Client, {
     bucket,
     key,
     body: pdf,
@@ -503,7 +503,7 @@ export async function syncReport(bucket: string, key: string, pdf: Blob) {
 
   const [getErr, blob] = await getObject(
     s3Client({ signal: AbortSignal.timeout(10_000) }),
-    { bucket, key, ifNoneMatch: putRes.headers.get("etag") ?? undefined },
+    { bucket, key },
   );
   if (getErr) return undefined;
 

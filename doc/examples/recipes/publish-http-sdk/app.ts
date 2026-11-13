@@ -91,11 +91,7 @@ async function main() {
 
   const [getErr, blob] = await getObject(
     s3Client({ signal: AbortSignal.timeout(10_000) }),
-    {
-      bucket: "assets",
-      key: "reports/q1.pdf",
-      ifNoneMatch: putRes.headers.get("etag") ?? undefined,
-    },
+    { bucket: "assets", key: "reports/q1.pdf" },
   );
   if (getErr) {
     console.error(getErr.code);
