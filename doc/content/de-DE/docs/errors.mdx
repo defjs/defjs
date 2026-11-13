@@ -103,7 +103,7 @@ Bei langlebigen Verbindungen meldet das Tupel der Operation **Startup**-Fehler (
 
 ## 5. Sicheres strukturiertes Logging und Ursachen-Prüfung
 
-Jeder `Fault` ist ein nativer `Error` (`instanceof Error === true`) mit aufzählbaren Eigenschaften für `code`, `status`, `response` und `data`.
+Jeder `Fault` ist ein nativer `Error` (`instanceof Error === true`) mit einer aufzählbaren Eigenschaft `code`. `status`, `response` und `data` hängen vom Code ab, wie die Tabelle oben zeigt: `HTTP_STATUS` hat alle drei, `RES_*` hat `status` und `response`, und jeder andere Code hat nur `response`, das `undefined` ist, solange keine Header eingetroffen sind.
 
 <Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
 <Tab>

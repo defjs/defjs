@@ -82,13 +82,13 @@ WebSocket-перехватчик может вызвать `next(req)` **не б
 
 ## 5. Встроенные фабрики и хелперы
 
-| Экспорт                                        | Транспорт | Описание                                                                                      |
-| ---------------------------------------------- | --------- | --------------------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | Оборачивает `(req, next) => Promise<HttpResponse<unknown>>`                                   |
-| `createSSEInterceptor(fn)`                     | SSE       | Оборачивает `(req, next) => Promise<EventStreamHandle<unknown>>`                              |
-| `createWebSocketInterceptor(fn)`               | WebSocket | Оборачивает `(req, next) => Promise<WebSocketSessionLike>`                                    |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Внедряет `Authorization: Basic ...` из синхронного или асинхронного провайдера учётных данных |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Внедряет `Authorization: Basic ...` в хэндшейк SSE                                            |
+| Экспорт                                        | Транспорт | Описание                                                                                                   |
+| ---------------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | Оборачивает `(req, next) => Promise<HttpResponse<unknown>>`                                                |
+| `createSSEInterceptor(fn)`                     | SSE       | Оборачивает `(req, next) => Promise<EventStreamHandle<unknown>>`                                           |
+| `createWebSocketInterceptor(fn)`               | WebSocket | Оборачивает `(req, next) => Promise<WebSocketSessionLike>`                                                 |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Внедряет `Authorization: Basic ...` из синхронного провайдера учётных данных, вызываемого на каждый запрос |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Внедряет `Authorization: Basic ...` в хэндшейк SSE                                                         |
 
 ## Связанные материалы
 

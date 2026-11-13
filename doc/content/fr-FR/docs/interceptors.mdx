@@ -82,13 +82,13 @@ Un intercepteur WebSocket ne peut appeler `next(req)` **qu'une seule fois au max
 
 ## 5. Fabriques et helpers intégrés
 
-| Export                                         | Transport | Description                                                                                     |
-| ---------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | Enveloppe `(req, next) => Promise<HttpResponse<unknown>>`                                       |
-| `createSSEInterceptor(fn)`                     | SSE       | Enveloppe `(req, next) => Promise<EventStreamHandle<unknown>>`                                  |
-| `createWebSocketInterceptor(fn)`               | WebSocket | Enveloppe `(req, next) => Promise<WebSocketSessionLike>`                                        |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injecte `Authorization: Basic ...` depuis un fournisseur d'identifiants synchrone ou asynchrone |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injecte `Authorization: Basic ...` sur les handshakes SSE                                       |
+| Export                                         | Transport | Description                                                                                               |
+| ---------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | Enveloppe `(req, next) => Promise<HttpResponse<unknown>>`                                                 |
+| `createSSEInterceptor(fn)`                     | SSE       | Enveloppe `(req, next) => Promise<EventStreamHandle<unknown>>`                                            |
+| `createWebSocketInterceptor(fn)`               | WebSocket | Enveloppe `(req, next) => Promise<WebSocketSessionLike>`                                                  |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | Injecte `Authorization: Basic ...` depuis un fournisseur d'identifiants synchrone appelé à chaque requête |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | Injecte `Authorization: Basic ...` sur les handshakes SSE                                                 |
 
 ## Lectures connexes
 

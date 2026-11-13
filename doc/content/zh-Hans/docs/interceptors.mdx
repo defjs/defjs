@@ -82,13 +82,13 @@ WebSocket 拦截器**最多只能调用一次** `next(req)`。包装返回的 `W
 
 ## 5. 内置工厂与常用辅助工具
 
-| 导出                                           | 传输      | 说明                                                                   |
-| ---------------------------------------------- | --------- | ---------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>`                   |
-| `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>`              |
-| `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>`                    |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 接收同步/异步凭证 Provider，自动注入 `Authorization: Basic ...` 请求头 |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 握手请求阶段自动注入 `Authorization: Basic ...` 请求头          |
+| 导出                                           | 传输      | 说明                                                                                  |
+| ---------------------------------------------- | --------- | ------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | 包装 `(req, next) => Promise<HttpResponse<unknown>>`                                  |
+| `createSSEInterceptor(fn)`                     | SSE       | 包装 `(req, next) => Promise<EventStreamHandle<unknown>>`                             |
+| `createWebSocketInterceptor(fn)`               | WebSocket | 包装 `(req, next) => Promise<WebSocketSessionLike>`                                   |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 接收同步凭证 Provider（每个请求调用一次），自动注入 `Authorization: Basic ...` 请求头 |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 握手请求阶段自动注入 `Authorization: Basic ...` 请求头                         |
 
 ## 相关阅读
 

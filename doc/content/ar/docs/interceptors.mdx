@@ -82,13 +82,13 @@ description: طبّق سياسات المصادقة والنقل على عميل
 
 ## 5. دوال المصنع والدوال المساعدة المدمجة
 
-| التصدير                                        | وسيلة النقل | الوصف                                                                               |
-| ---------------------------------------------- | ----------- | ----------------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP        | تغلف `(req, next) => Promise<HttpResponse<unknown>>`                                |
-| `createSSEInterceptor(fn)`                     | SSE         | تغلف `(req, next) => Promise<EventStreamHandle<unknown>>`                           |
-| `createWebSocketInterceptor(fn)`               | WebSocket   | تغلف `(req, next) => Promise<WebSocketSessionLike>`                                 |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP        | تحقن الترويسة `Authorization: Basic ...` من موفر بيانات اعتماد تزامني أو غير تزامني |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE         | تحقن الترويسة `Authorization: Basic ...` في مصافحات تدفق SSE                        |
+| التصدير                                        | وسيلة النقل | الوصف                                                                                 |
+| ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP        | تغلف `(req, next) => Promise<HttpResponse<unknown>>`                                  |
+| `createSSEInterceptor(fn)`                     | SSE         | تغلف `(req, next) => Promise<EventStreamHandle<unknown>>`                             |
+| `createWebSocketInterceptor(fn)`               | WebSocket   | تغلف `(req, next) => Promise<WebSocketSessionLike>`                                   |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP        | تحقن الترويسة `Authorization: Basic ...` من موفر بيانات اعتماد تزامني يُستدعى لكل طلب |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE         | تحقن الترويسة `Authorization: Basic ...` في مصافحات تدفق SSE                          |
 
 ## قراءات ذات صلة
 

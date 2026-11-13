@@ -103,7 +103,7 @@ En conexiones de larga duración, la tupla de la operación notifica los fallos 
 
 ## 5. Registro estructurado seguro e inspección de causas
 
-Cada `Fault` es un `Error` nativo (`instanceof Error === true`) con propiedades enumerables `code`, `status`, `response` y `data`.
+Cada `Fault` es un `Error` nativo (`instanceof Error === true`) con una propiedad enumerable `code`. `status`, `response` y `data` dependen del código, como muestra la tabla anterior: `HTTP_STATUS` tiene las tres, `RES_*` tiene `status` y `response`, y cualquier otro código solo tiene `response`, que es `undefined` salvo que hayan llegado las cabeceras.
 
 <Tabs items={["Inspeccionar la causa de StructError", "Resumen de diagnóstico redactado"]}>
 <Tab>

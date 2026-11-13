@@ -82,13 +82,13 @@ Un interceptor WebSocket puede llamar a `next(req)` **como máximo una vez**. Al
 
 ## 5. Factorías integradas y utilidades
 
-| Export                                         | Transporte | Descripción                                                                  |
-| ---------------------------------------------- | ---------- | ---------------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP       | Envuelve `(req, next) => Promise<HttpResponse<unknown>>`                     |
-| `createSSEInterceptor(fn)`                     | SSE        | Envuelve `(req, next) => Promise<EventStreamHandle<unknown>>`                |
-| `createWebSocketInterceptor(fn)`               | WebSocket  | Envuelve `(req, next) => Promise<WebSocketSessionLike>`                      |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP       | Inyecta `Authorization: Basic ...` desde un proveedor sincrónico o asíncrono |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE        | Inyecta `Authorization: Basic ...` en los handshakes de SSE                  |
+| Export                                         | Transporte | Descripción                                                                                        |
+| ---------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP       | Envuelve `(req, next) => Promise<HttpResponse<unknown>>`                                           |
+| `createSSEInterceptor(fn)`                     | SSE        | Envuelve `(req, next) => Promise<EventStreamHandle<unknown>>`                                      |
+| `createWebSocketInterceptor(fn)`               | WebSocket  | Envuelve `(req, next) => Promise<WebSocketSessionLike>`                                            |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP       | Inyecta `Authorization: Basic ...` desde un proveedor sincrónico al que se llama en cada solicitud |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE        | Inyecta `Authorization: Basic ...` en los handshakes de SSE                                        |
 
 ## Lecturas relacionadas
 

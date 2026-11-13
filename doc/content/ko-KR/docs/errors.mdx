@@ -103,7 +103,7 @@ API 응답에 리터럴 태그(`kind`, `type`, 또는 본문 내부의 `status` 
 
 ## 5. 안전한 구조화된 로깅 및 원인 분석
 
-모든 `Fault`는 `code`, `status`, `response`, `data` 열거 가능(enumerable) 프로퍼티를 가진 네이티브 `Error`(`instanceof Error === true`)입니다.
+모든 `Fault`는 열거 가능(enumerable)한 `code` 프로퍼티를 가진 네이티브 `Error`(`instanceof Error === true`)입니다. `status`, `response`, `data`는 위 표와 같이 코드에 따라 달라집니다. `HTTP_STATUS`는 셋 모두 가지고, `RES_*`는 `status`와 `response`를 가지며, 그 외의 코드는 `response`만 가집니다. 이 `response`는 헤더가 도착하지 않았다면 `undefined`입니다.
 
 <Tabs items={["StructError 원인 확인", "민감 정보를 제거한 진단 요약"]}>
 <Tab>

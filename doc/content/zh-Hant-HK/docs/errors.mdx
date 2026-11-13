@@ -103,7 +103,7 @@ TypeScript 拒絕嘅呼叫係例外：佢冇規定嘅結果，亦都唔係 `Faul
 
 ## 5. 安全嘅結構化日誌與 Cause 檢查
 
-每個 `Fault` 都係原生 `Error`（`instanceof Error === true`），並且帶有可列舉嘅 `code`、`status`、`response` 同 `data` 屬性。
+每個 `Fault` 都係原生 `Error`（`instanceof Error === true`），並且帶有可列舉嘅 `code`。`status`、`response` 同 `data` 取決於 code，正如上表所示：`HTTP_STATUS` 三者都有，`RES_*` 有 `status` 同 `response`，其他 code 淨係有 `response`，而且未收到 header 之前係 `undefined`。
 
 <Tabs items={["檢查 StructError 原因", "隱去敏感資料嘅診斷摘要"]}>
 <Tab>

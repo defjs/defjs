@@ -82,13 +82,13 @@ WebSocket インターセプターが `next(req)` を呼び出せるのは **最
 
 ## 5. 組み込みファクトリとヘルパー
 
-| エクスポート                                   | トランスポート | 説明                                                                    |
-| ---------------------------------------------- | -------------- | ----------------------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP           | `(req, next) => Promise<HttpResponse<unknown>>` をラップ                |
-| `createSSEInterceptor(fn)`                     | SSE            | `(req, next) => Promise<EventStreamHandle<unknown>>` をラップ           |
-| `createWebSocketInterceptor(fn)`               | WebSocket      | `(req, next) => Promise<WebSocketSessionLike>` をラップ                 |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP           | 同期/非同期の認証情報プロバイダーから `Authorization: Basic ...` を注入 |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE            | SSE ハンドシェイク時に `Authorization: Basic ...` を注入                |
+| エクスポート                                   | トランスポート | 説明                                                                                     |
+| ---------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP           | `(req, next) => Promise<HttpResponse<unknown>>` をラップ                                 |
+| `createSSEInterceptor(fn)`                     | SSE            | `(req, next) => Promise<EventStreamHandle<unknown>>` をラップ                            |
+| `createWebSocketInterceptor(fn)`               | WebSocket      | `(req, next) => Promise<WebSocketSessionLike>` をラップ                                  |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP           | リクエストごとに呼ばれる同期の認証情報プロバイダーから `Authorization: Basic ...` を注入 |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE            | SSE ハンドシェイク時に `Authorization: Basic ...` を注入                                 |
 
 ## 関連ドキュメント
 

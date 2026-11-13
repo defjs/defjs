@@ -103,7 +103,7 @@ HTTP 失敗時，tuple 是 `[error, undefined, undefined]`。收到的回應中�
 
 ## 5. 安全的結構化日誌記錄與 cause 檢查
 
-每個 `Fault` 都是原生 `Error`（`instanceof Error === true`），並帶有可列舉的 `code`、`status`、`response` 與 `data` 屬性。
+每個 `Fault` 都是原生 `Error`（`instanceof Error === true`），並帶有可列舉的 `code`。`status`、`response` 與 `data` 取決於 code，如上表所示：`HTTP_STATUS` 三者都有，`RES_*` 有 `status` 與 `response`，其他 code 只有 `response`，且在收到標頭之前為 `undefined`。
 
 <Tabs items={["檢查 StructError 原因", "去識別化診斷摘要"]}>
 <Tab>

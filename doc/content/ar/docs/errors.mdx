@@ -103,7 +103,7 @@ description: صرّح عن عقود أخطاء الخدمة في حزمة SDK و
 
 ## 5. تسجيل السجلات الهيكلية بأمان وفحص الأسباب
 
-كل كائن `Fault` هو كائن `Error` أصلي (`instanceof Error === true`) يحتوي على خصائص قابلة للتعداد: `code` و`status` و`response` و`data`.
+كل كائن `Fault` هو كائن `Error` أصلي (`instanceof Error === true`) يحتوي على الخاصية القابلة للتعداد `code`. أما `status` و`response` و`data` فتعتمد على الرمز، كما يوضح الجدول أعلاه: يحتوي `HTTP_STATUS` على الثلاث جميعها، ويحتوي `RES_*` على `status` و`response`، وكل رمز آخر لا يحتوي إلا على `response`، وتكون قيمتها `undefined` ما لم تصل الترويسات.
 
 <Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
 <Tab>

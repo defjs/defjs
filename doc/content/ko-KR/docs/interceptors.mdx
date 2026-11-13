@@ -82,13 +82,13 @@ WebSocket 인터셉터는 `next(req)`를 **최대 1회만** 호출할 수 있습
 
 ## 5. 내장 팩토리 및 헬퍼
 
-| Export                                         | 전송 방식 | 설명                                                               |
-| ---------------------------------------------- | --------- | ------------------------------------------------------------------ |
-| `createHttpInterceptor(fn)`                    | HTTP      | `(req, next) => Promise<HttpResponse<unknown>>` 래핑               |
-| `createSSEInterceptor(fn)`                     | SSE       | `(req, next) => Promise<EventStreamHandle<unknown>>` 래핑          |
-| `createWebSocketInterceptor(fn)`               | WebSocket | `(req, next) => Promise<WebSocketSessionLike>` 래핑                |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 동기/비동기 자격 증명 제공자로부터 `Authorization: Basic ...` 주입 |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | SSE 핸드셰이크 시 `Authorization: Basic ...` 주입                  |
+| Export                                         | 전송 방식 | 설명                                                                          |
+| ---------------------------------------------- | --------- | ----------------------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | `(req, next) => Promise<HttpResponse<unknown>>` 래핑                          |
+| `createSSEInterceptor(fn)`                     | SSE       | `(req, next) => Promise<EventStreamHandle<unknown>>` 래핑                     |
+| `createWebSocketInterceptor(fn)`               | WebSocket | `(req, next) => Promise<WebSocketSessionLike>` 래핑                           |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 요청마다 호출되는 동기 자격 증명 제공자로부터 `Authorization: Basic ...` 주입 |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | SSE 핸드셰이크 시 `Authorization: Basic ...` 주입                             |
 
 ## 관련 문서
 

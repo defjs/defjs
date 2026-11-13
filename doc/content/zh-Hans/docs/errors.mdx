@@ -103,7 +103,7 @@ HTTP 失败时，元组是 `[error, undefined, undefined]`。到达的响应元�
 
 ## 5. 安全的结构化日志与 Cause 排查
 
-每个 `Fault` 均为原生 `Error` 实例（`instanceof Error === true`），并且拥有可枚举的 `code`、`status`、`response` 和 `data` 属性。
+每个 `Fault` 均为原生 `Error` 实例（`instanceof Error === true`），并且拥有可枚举的 `code`。`status`、`response` 和 `data` 取决于 code，如上表所示：`HTTP_STATUS` 三者都有，`RES_*` 有 `status` 和 `response`，其他 code 只有 `response`，且在收到响应头之前为 `undefined`。
 
 <Tabs items={["检查 StructError 原因", "脱敏诊断摘要"]}>
 <Tab>

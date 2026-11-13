@@ -103,7 +103,7 @@ API レスポンスにリテラルのタグ（`kind`、`type`、または埋め�
 
 ## 5. 安全な構造化ログと原因の調査
 
-すべての `Fault` はネイティブの `Error`（`instanceof Error === true`）であり、`code`、`status`、`response`、`data` の各プロパティを列挙可能です。
+すべての `Fault` はネイティブの `Error`（`instanceof Error === true`）であり、列挙可能な `code` プロパティを持ちます。`status`、`response`、`data` は上の表のとおりコードによって異なります。`HTTP_STATUS` は 3 つすべてを持ち、`RES_*` は `status` と `response` を持ち、それ以外のコードは `response` のみを持ちます。この `response` は、ヘッダーが届いていなければ `undefined` です。
 
 <Tabs items={["StructError の原因の確認", "機密情報を除いた診断概要"]}>
 <Tab>

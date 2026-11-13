@@ -82,13 +82,13 @@ WebSocket 攔截器**最多只能呼叫一次** `next(req)`。包裝回傳的 `W
 
 ## 5. 內建 factory 與輔助函式
 
-| 匯出名稱                                       | 傳輸協定  | 說明                                                      |
-| ---------------------------------------------- | --------- | --------------------------------------------------------- |
-| `createHttpInterceptor(fn)`                    | HTTP      | 包裝 `(req, next) => Promise<HttpResponse<unknown>>`      |
-| `createSSEInterceptor(fn)`                     | SSE       | 包裝 `(req, next) => Promise<EventStreamHandle<unknown>>` |
-| `createWebSocketInterceptor(fn)`               | WebSocket | 包裝 `(req, next) => Promise<WebSocketSessionLike>`       |
-| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 從同步或非同步的憑證提供者注入 `Authorization: Basic ...` |
-| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 交握注入 `Authorization: Basic ...`                |
+| 匯出名稱                                       | 傳輸協定  | 說明                                                              |
+| ---------------------------------------------- | --------- | ----------------------------------------------------------------- |
+| `createHttpInterceptor(fn)`                    | HTTP      | 包裝 `(req, next) => Promise<HttpResponse<unknown>>`              |
+| `createSSEInterceptor(fn)`                     | SSE       | 包裝 `(req, next) => Promise<EventStreamHandle<unknown>>`         |
+| `createWebSocketInterceptor(fn)`               | WebSocket | 包裝 `(req, next) => Promise<WebSocketSessionLike>`               |
+| `basicAuthHttpInterceptor(provider, options?)` | HTTP      | 從每個請求都會呼叫的同步憑證提供者注入 `Authorization: Basic ...` |
+| `basicAuthSSEInterceptor(provider, options?)`  | SSE       | 在 SSE 交握注入 `Authorization: Basic ...`                        |
 
 ## 相關閱讀
 

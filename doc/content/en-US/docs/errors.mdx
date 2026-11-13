@@ -103,7 +103,7 @@ For long-lived connections, the operation tuple reports **startup** failures (be
 
 ## 5. Safe structured logging and cause inspection
 
-Every `Fault` is a native `Error` (`instanceof Error === true`) with enumerable `code`, `status`, `response`, and `data` properties.
+Every `Fault` is a native `Error` (`instanceof Error === true`) with an enumerable `code`. `status`, `response`, and `data` depend on the code, as the table above shows: `HTTP_STATUS` has all three, `RES_*` has `status` and `response`, and every other code has only `response`, which is `undefined` unless headers arrived.
 
 <Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
 <Tab>

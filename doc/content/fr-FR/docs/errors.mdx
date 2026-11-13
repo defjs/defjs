@@ -103,7 +103,7 @@ Pour les connexions persistantes, le tuple de l'opération signale les échecs s
 
 ## 5. Journalisation structurée sécurisée et inspection de cause
 
-Tout `Fault` est une instance d'`Error` native (`instanceof Error === true`) dotée de propriétés énumérables `code`, `status`, `response` et `data`.
+Tout `Fault` est une instance d'`Error` native (`instanceof Error === true`) dotée d'une propriété énumérable `code`. `status`, `response` et `data` dépendent du code, comme le montre le tableau ci-dessus : `HTTP_STATUS` a les trois, `RES_*` a `status` et `response`, et tout autre code n'a que `response`, qui vaut `undefined` tant que les en-têtes ne sont pas arrivés.
 
 <Tabs items={["Inspect StructError cause", "Redacted diagnostic summary"]}>
 <Tab>
