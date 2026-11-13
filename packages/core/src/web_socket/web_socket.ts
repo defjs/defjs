@@ -101,7 +101,7 @@ interface WebSocketDefinitionBase<
 > {
   incoming: TIncoming;
   maxOutgoingQueueSize?: number;
-  operation?: string;
+  meta?: { [key: string]: unknown };
   outgoing?: TOutgoing;
   path: string;
   protocols?: readonly string[];
@@ -118,7 +118,7 @@ interface WebSocketDefinitionBase<
  *
  * - `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.
  *
- * - `operation` is a static, low-cardinality name for telemetry.
+ * - `meta` is application-defined metadata (`{ [key: string]: unknown }`) that flows through interceptors and balancers, read-only there and shared by every connection of this definition. Defjs core never reads it, and it is never sent with the request.
  *
  * - `input` is the struct for the operation input. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see {@link WebSocketRequestShape}.
  *
@@ -242,7 +242,7 @@ export interface WebSocketSession<
  *
  * - On success: `[null, session, connection]`. `session.connection` moves forward on reconnect. The tuple's `connection` preserves the first successful snapshot only for a native Defjs session or a wrapper forwarding the same live `connection` object. Custom sessions and wrappers that transform `connection` instead return their current public `connection`. Sharing `closed` cannot bypass URL sanitization or metadata filtering, and Defjs does not reconstruct first-connection metadata from arbitrary transformations.
  *
- * - On failure: `[fault, undefined, connection]`. `connection` may be `undefined`, for example when the constructor failed before the socket opened.
+ * - On failure: `[err, undefined, connection]`. `connection` may be `undefined`, for example when the constructor failed before the socket opened.
  *
  * - Only startup failures arrive here. Once the session is returned, later errors surface through `onRuntimeError`, `receive`, and `closed`.
  *
@@ -250,13 +250,13 @@ export interface WebSocketSession<
  */
 export type SocketAwaitResult<TIncoming, TOutgoing = never> =
   | [
-      error: null,
-      socket: WebSocketSession<TIncoming, TOutgoing>,
+      err: null,
+      session: WebSocketSession<TIncoming, TOutgoing>,
       connection: WebSocketConnectionInfo,
     ]
   | [
-      error: Fault<undefined>,
-      socket: undefined,
+      err: Fault<undefined>,
+      session: undefined,
       connection: WebSocketConnectionInfo | undefined,
     ];
 
@@ -363,11 +363,11 @@ export type WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> =
  * Pass path and incoming (and optional outgoing) message structs.
  * Call the returned operation with a client and, when declared, the input.
  *
- * - **definition** — `path`, one `incoming` struct, and optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize`, and `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path`, one `incoming` struct, and optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize`, and `meta`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * A WebSocket `builder` may return `path` and `query` only; `headers` and `body` are rejected. `WebSocketDefinitionBase` and `BuilderField` are internal helper types.
  *
- * Known fields are copied when the definition is created. Structs and `builder` keep their identity. A `protocols` array is copied, so a later edit of the original array does not retarget the endpoint. A getter on a fixed field runs during `defineWebSocket`.
+ * Known fields are copied when the definition is created. Structs, `builder`, and `meta` keep their identity. A `protocols` array is copied, so a later edit of the original array does not retarget the endpoint. A getter on a fixed field runs during `defineWebSocket`.
  *
  * @param definition - WebSocket contract (path, structs, queue limits, optional input).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
@@ -395,7 +395,7 @@ export function defineWebSocket<
   const incoming = definition.incoming;
   const input = definition.input;
   const maxOutgoingQueueSize = definition.maxOutgoingQueueSize;
-  const operation = definition.operation;
+  const meta = definition.meta;
   const outgoing = definition.outgoing;
   const path = definition.path;
   const protocols = snapshotProtocols(definition.protocols);
@@ -404,7 +404,7 @@ export function defineWebSocket<
     incoming,
     input,
     maxOutgoingQueueSize,
-    operation,
+    meta,
     outgoing,
     path,
     protocols,
@@ -474,7 +474,7 @@ function buildSocketRequest(
     return createWebSocketRequest({
       signal,
       baseEndpoint,
-      operation: endpoint.operation,
+      meta: endpoint.meta,
       params: built.params,
       path: endpoint.path,
       query: built.query,
@@ -544,7 +544,7 @@ async function runWebSocketCommand<
   }
   const [pickFault, pick] = pickEndpoint(clientConfig.balancer, {
     endpoints: clientConfig.endpoints,
-    operation: endpoint.operation,
+    meta: endpoint.meta,
   });
   if (pickFault) {
     scope.release();
@@ -651,7 +651,7 @@ function openSession(
       outgoing: endpoint.outgoing,
       maxOutgoingQueueSize: endpoint.maxOutgoingQueueSize ?? 0,
       clientConfig,
-      operation: endpoint.operation,
+      meta: endpoint.meta,
       Socket: call.Socket,
       openState: call.openState,
       retry: options.retry,

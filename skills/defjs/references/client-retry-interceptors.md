@@ -338,14 +338,20 @@ export const honorRetryAfter = createHttpInterceptor(async (request, next) => {
 
 ### Best practice 4: ETag revalidation (`304 Not Modified`) and `makeResponse`
 
-Do **not** rewrite a `304 Not Modified` into a synthetic `200` inside an interceptor. A `304` has no body and reaches the call site as an `HTTP_STATUS` fault (`error.status === 304`), where the application's cache reader returns its cached value. Use `makeResponse` only when intentionally short-circuiting a request before transport:
+Do **not** rewrite a `304 Not Modified` into a synthetic `200` inside an interceptor. A `304` has no body and reaches the call site as an `HTTP_STATUS` fault (`err.status === 304`), where the application's cache reader returns its cached value. Use `makeResponse` only when intentionally short-circuiting a request before transport:
 
 ```ts
-import { defineRequest, makeResponse, struct, type Client } from "@defjs/core";
+import {
+  defineRequest,
+  makeResponse,
+  struct,
+  type AnyFault,
+  type Client,
+} from "@defjs/core";
 
 const getOrderWithEtag = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({
     id: struct.number(),
@@ -358,22 +364,25 @@ const getOrderWithEtag = defineRequest({
   output: struct.object({ id: struct.number(), status: struct.string() }),
 });
 
-export function makeOrderReader(client: Client) {
-  let cached:
-    { etag: string; value: { id: number; status: string } } | undefined;
+type Order = { id: number; status: string };
 
-  return async (id: number) => {
-    const [error, order, response] = await getOrderWithEtag(client, {
+export function makeOrderReader(client: Client) {
+  let cached: { etag: string; value: Order } | undefined;
+
+  return async (id: number): Promise<[AnyFault, undefined] | [null, Order]> => {
+    const [err, order, response] = await getOrderWithEtag(client, {
       id,
       ifNoneMatch: cached?.etag,
     });
-    if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
-      return [null, cached.value] as const;
+    if (err) {
+      if (err.code === "HTTP_STATUS" && err.status === 304 && cached) {
+        return [null, cached.value];
+      }
+      return [err, undefined];
     }
-    if (error) return [error, undefined] as const;
     const etag = response.headers.get("etag");
     if (etag) cached = { etag, value: order };
-    return [null, order] as const;
+    return [null, order];
   };
 }
 

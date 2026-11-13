@@ -15,7 +15,7 @@ const client = createClient(
     http: {
       startSpanHook(request) {
         const attributes = {
-          "app.operation": request.operation ?? "unclassified",
+          "app.request.method": request.method,
         };
         if (!request.baseEndpoint) return attributes;
         const url = createResolvedRequestUrl(

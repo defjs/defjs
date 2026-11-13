@@ -32,11 +32,11 @@ async function main() {
     const readOrders = defineRequest({
       method: "GET",
       path: "/orders",
-      operation: "orders.read",
+      meta: { operation: "orders.read" },
     });
-    const [error] = await readOrders(client);
-    if (error) {
-      console.error(error.code);
+    const [err] = await readOrders(client);
+    if (err) {
+      console.error(err.code);
       return;
     }
   } finally {

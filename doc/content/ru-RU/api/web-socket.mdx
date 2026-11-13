@@ -11,12 +11,12 @@ description: defineWebSocket, session и опции запроса.
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path` и один struct `incoming`; необязательные structs `outgoing` и `input`, `operation`, статические `protocols` и `maxOutgoingQueueSize`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`WebSocketDefinition`](/ru-RU/api/core/websocketdefinition-type). `builder` обязателен ровно тогда, когда объявлен `input`.
+- **definition** — `path` и один struct `incoming`; необязательные structs `outgoing` и `input`, `meta`, статические `protocols` и `maxOutgoingQueueSize`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`WebSocketDefinition`](/ru-RU/api/core/websocketdefinition-type). `builder` обязателен ровно тогда, когда объявлен `input`.
 - **Возвращает** операцию. Первый аргумент — [`Client`](/ru-RU/api/core/client-type). Дальше идёт только input. Вызов открывает сессию.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `retry` и игнорирует поля прогресса HTTP.
+Вызов возвращает `[null, session, connection]` или `[err, undefined, connection?]`. Опции одного вызова передавайте, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `retry` и игнорирует поля прогресса HTTP.
 
 Каждый из параметров `beforeConnect`, `heartbeat`, `protocols` и `retry` целиком заменяет значение клиента для этого вызова. Приоритет protocols: выведенный клиент, затем `withWebSocketProtocols`, затем `protocols` определения. `heartbeat.timeoutMs` — ожидание подтверждения, а не дедлайн запроса.
 
@@ -72,7 +72,7 @@ Builder и цепочка перехватчиков выполняются од
 
 ## WebSocketDefinition
 
-`path`, `incoming`, необязательные `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. Builder может вернуть только `path` и `query`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
+`path`, `incoming`, необязательные `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize`. Builder может вернуть только `path` и `query`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
 
 ## WebSocketEndpoint
 
@@ -88,7 +88,7 @@ Builder и цепочка перехватчиков выполняются од
 
 ## SocketAwaitResult
 
-`[null, session, connection]` или `[error, undefined, connection?]`.
+`[null, session, connection]` или `[err, undefined, connection?]`.
 
 ## ManualSocketCloseReason
 

@@ -11,12 +11,12 @@ description: defineWebSocket، والجلسة، وخيارات الطلب.
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path` وstruct `incoming` واحد؛ وstructا `outgoing` و`input` اختياريان و`operation` و`protocols` ثابتة و`maxOutgoingQueueSize`. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`WebSocketDefinition`](/ar/api/core/websocketdefinition-type). `builder` مطلوب تمامًا عندما يُعلَن `input`.
+- **definition** — `path` وstruct `incoming` واحد؛ وstructا `outgoing` و`input` اختياريان و`meta` و`protocols` ثابتة و`maxOutgoingQueueSize`. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`WebSocketDefinition`](/ar/api/core/websocketdefinition-type). `builder` مطلوب تمامًا عندما يُعلَن `input`.
 - **يُرجع** عملية. الوسيط الأول هو [`Client`](/ar/api/core/client-type). الوسائط التالية هي المدخل فقط. استدعاؤها يفتح الجلسة.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-يُرجع الاستدعاء `[null, session, connection]` أو `[error, undefined, connection?]`. مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ WebSocket الحقول `signal` و`beforeConnect` و`heartbeat` و`protocols` و`retry`، ويتجاهل حقول تقدّم HTTP.
+يُرجع الاستدعاء `[null, session, connection]` أو `[err, undefined, connection?]`. مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ WebSocket الحقول `signal` و`beforeConnect` و`heartbeat` و`protocols` و`retry`، ويتجاهل حقول تقدّم HTTP.
 
 يستبدل كل من `beforeConnect` و`heartbeat` و`protocols` و`retry` قيمة العميل لذلك الاستدعاء كاملة. أسبقية البروتوكول هي العميل المشتق، ثم `withWebSocketProtocols`، ثم `protocols` في التعريف. `heartbeat.timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.
 
@@ -72,7 +72,7 @@ description: defineWebSocket، والجلسة، وخيارات الطلب.
 
 ## WebSocketDefinition
 
-`path` و`incoming`، و`outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` الاختيارية. يجوز لدالة `builder` إرجاع `path` و`query` فقط. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
+`path` و`incoming`، و`outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize` الاختيارية. يجوز لدالة `builder` إرجاع `path` و`query` فقط. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ ودالة `builder` وحدها تقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
 
 ## WebSocketEndpoint
 
@@ -88,7 +88,7 @@ description: defineWebSocket، والجلسة، وخيارات الطلب.
 
 ## SocketAwaitResult
 
-`[null, session, connection]` أو `[error, undefined, connection?]`.
+`[null, session, connection]` أو `[err, undefined, connection?]`.
 
 ## ManualSocketCloseReason
 

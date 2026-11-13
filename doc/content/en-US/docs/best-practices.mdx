@@ -5,18 +5,18 @@ description: Architectural conventions for structuring in-app API request layers
 
 # Engineering conventions [#engineering-conventions]
 
-Whether you are hand-writing an HTTP request layer inside a frontend/backend application or publishing an official TypeScript SDK for your company's public API, Defjs projects follow the same modular architecture: **shared `struct` data models (`models/`) paired with pure operation definitions (`services/`)**.
+Whether you are hand-writing an HTTP request layer inside a frontend/backend application or publishing an official TypeScript SDK for your company's public API, Defjs projects follow the same modular architecture: **shared `struct` schemas (`schema/`) paired with pure operation definitions (`request/`)**.
 
 ---
 
 ## 1. Two ways to use Defjs
 
-Most teams adopt Defjs in one of two scenarios. Both organize contracts into `models/` and `services/`, differing only in where `createClient(...)` lives:
+Most teams adopt Defjs in one of two scenarios. Both organize contracts into `schema/` and `request/`, differing only in where `createClient(...)` lives:
 
-| Scenario                                                                               | Directory layout                                                  | Who owns `createClient(...)`?                                                                    | Guide                                          |
-| :------------------------------------------------------------------------------------- | :---------------------------------------------------------------- | :----------------------------------------------------------------------------------------------- | :--------------------------------------------- |
-| **[Application API layer](/docs/application-api)** (in-project HTTP/realtime requests) | `src/api/models/` + `src/api/services/` + `src/api/client.ts`     | Your application (`src/api/client.ts` exports a browser singleton or an SSR per-request factory) | [Application API layer](/docs/application-api) |
-| **[Public SDK design](/docs/public-sdk)** (external npm package for public APIs)       | `src/models/` + `src/services/` + `src/index.ts` (`package.json`) | The external consumer's application (the published SDK never creates or captures a `Client`)     | [Public SDK design](/docs/public-sdk)          |
+| Scenario                                                                               | Directory layout                                                 | Who owns `createClient(...)`?                                                                    | Guide                                          |
+| :------------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :----------------------------------------------------------------------------------------------- | :--------------------------------------------- |
+| **[Application API layer](/docs/application-api)** (in-project HTTP/realtime requests) | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`     | Your application (`src/api/client.ts` exports a browser singleton or an SSR per-request factory) | [Application API layer](/docs/application-api) |
+| **[Public SDK design](/docs/public-sdk)** (external npm package for public APIs)       | `src/schema/` + `src/request/` + `src/index.ts` (`package.json`) | The external consumer's application (the published SDK never creates or captures a `Client`)     | [Public SDK design](/docs/public-sdk)          |
 
 ---
 
@@ -32,9 +32,9 @@ export class OrdersService {
   // Hides per-call client(options) derivation and blocks bundler tree-shaking
 }
 
-// Recommended: export standalone operation definitions from services/*.ts
+// Recommended: export standalone operation definitions from request/*.ts
 export const getOrder = defineRequest({
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   method: "GET",
   path: "/orders/:id",
   input: GetOrderInput,
@@ -46,9 +46,9 @@ export const getOrder = defineRequest({
 
 Calling the exported operation directly (`await getOrder(client, { id: 42 })` or `await getOrder(client({ signal }), { id: 42 })`) keeps the calling convention uniform across your entire codebase and allows bundlers to tree-shake unused operations when `"sideEffects": false` is set.
 
-### Convention 2: Same-name `struct` + `Infer` exports in `models/`
+### Convention 2: Same-name `struct` + `Infer` exports in `schema/`
 
-In `models/*.ts`, export both the runtime `struct` schema and its inferred TypeScript type under the **same identifier**. TypeScript merges value and type declarations in the same scope, so callers import a single symbol for both runtime validation and static type annotations:
+In `schema/*.ts`, export both the runtime `struct` schema and its inferred TypeScript type under the **same identifier**. TypeScript merges value and type declarations in the same scope, so callers import a single symbol for both runtime validation and static type annotations:
 
 ```ts
 import { struct, type Infer } from "@defjs/core";
@@ -61,24 +61,24 @@ export const Order = struct.object({
 export type Order = Infer<typeof Order>;
 ```
 
-### Convention 3: Keep `services/*.ts` free of client instances
+### Convention 3: Keep `request/*.ts` free of client instances
 
-Even when writing an [application API layer](/docs/application-api) inside a single repository (`src/api/`), do **not** import `apiClient` inside `src/api/services/*.ts` to wrap your definitions. Keeping `services/*.ts` as pure definitions gives you three immediate benefits:
+Even when writing an [application API layer](/docs/application-api) inside a single repository (`src/api/`), do **not** import `apiClient` inside `src/api/request/*.ts` to wrap your definitions. Keeping `request/*.ts` as pure definitions gives you three immediate benefits:
 
 1. **Deterministic offline tests**: Unit tests can pass a local `createClient(withEndpoint(...), withHTTPHandle(...))` directly into any operation without module mocking.
 2. **SSR and multi-tenant safety**: Server loaders can pass a request-scoped `Client` carrying the current user's cookies or tenant token into the exact same operation definition used by browser components.
-3. **Zero-cost graduation to a shared package**: If your team later moves `src/api/models/` and `src/api/services/` into a monorepo workspace package or public npm SDK, no operation file needs to change.
+3. **Zero-cost graduation to a shared package**: If your team later moves `src/api/schema/` and `src/api/request/` into a monorepo workspace package or public npm SDK, no operation file needs to change.
 
 ### Convention 4: Separate `builder` placement from interceptor policy
 
 Keep each concern in its designated layer:
 
-| Concern                                                                              | Where it belongs                                                 | Why                                                              |
-| :----------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :--------------------------------------------------------------- |
-| Routing caller parameters into `path`, `query`, `headers`, and `body`                | Operation `builder` in `services/*.ts`                           | Synchronous pure function of the current `input`                 |
-| Static low-cardinality operation identity (`"orders.create"`, `"s3.objects.put"`)    | Operation `operation` field in `services/*.ts`                   | Used by OpenTelemetry spans, metrics, and logging interceptors   |
-| Base URLs, auth headers (`Authorization`, signatures, XSRF), retries, load balancing | `createClient(...)` in `client.ts`                               | Environment- and session-specific execution policy               |
-| Per-call deadlines, cancellation (`signal`), and transfer progress callbacks         | Inline `client({ signal, onDownloadProgress })` at the call site | Scoped to a single invocation without mutating the shared client |
+| Concern                                                                              | Where it belongs                                                 | Why                                                                                                                        |
+| :----------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------- |
+| Routing caller parameters into `path`, `query`, `headers`, and `body`                | Operation `builder` in `request/*.ts`                            | Synchronous pure function of the current `input`                                                                           |
+| Application-defined context for interceptors (`{ operation: "orders.create" }`)      | Operation `meta` field in `request/*.ts`                         | `{ [key: string]: unknown }`; read-only and shared per definition; never sent with the request; reported as `defjs.meta.*` |
+| Base URLs, auth headers (`Authorization`, signatures, XSRF), retries, load balancing | `createClient(...)` in `client.ts`                               | Environment- and session-specific execution policy                                                                         |
+| Per-call deadlines, cancellation (`signal`), and transfer progress callbacks         | Inline `client({ signal, onDownloadProgress })` at the call site | Scoped to a single invocation without mutating the shared client                                                           |
 
 ---
 

@@ -98,7 +98,7 @@ Defjs строго разделяет **наличие поля** (`undefined`) 
   examples/struct/parse-failures.ts#example
 </include>
 
-Каждая запись `StructIssue` содержит `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` или `custom`), `path`, `expected`, `received` и `message`. Сообщения по умолчанию опускают полученное значение и сообщают только его _тип_, но пути сохраняют динамические ключи record, которые могут содержать конфиденциальные значения. `String(error)` и `error.prettify()` не являются границей маскирования; при логировании используйте allowlist безопасных полей и считайте сырые значения `received` и пользовательские сообщения конфиденциальными.
+Каждая запись `StructIssue` содержит `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` или `custom`), `path`, `expected`, `received` и `message`. Сообщения по умолчанию опускают полученное значение и сообщают только его _тип_, но пути сохраняют динамические ключи record, которые могут содержать конфиденциальные значения. `String(err)` и `err.prettify()` не являются границей маскирования; при логировании используйте allowlist безопасных полей и считайте сырые значения `received` и пользовательские сообщения конфиденциальными.
 
 ## 6. Справочник конструкторов
 

@@ -10,12 +10,13 @@ const getOrder = defineRequest({
   error: struct.object({ message: struct.string() }),
 });
 
-async function loadOrder(client: Client) {
-  const [error, order] = await getOrder(client, { id: 7 });
-  if (error) {
-    console.error(error.code);
-    return;
+async function loadOrderStatus(
+  client: Client,
+): Promise<[Error, undefined] | [null, string]> {
+  const [err, order] = await getOrder(client, { id: 7 });
+  if (err) {
+    return [err, undefined];
   }
-  console.log(order.status);
+  return [null, order.status];
 }
 // #endregion

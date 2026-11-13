@@ -5,7 +5,7 @@ description: モデルと純粋関数の操作定義でマルチ構成の S3 SDK
 
 # SDK の作成と公開 [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs の SDK は、共有の `struct` モデル（`src/models/`）とドメインごとの操作定義モジュール（`src/services/`）をツリーシェイク可能な npm パッケージとして構成し、`createClient(...)`、エンドポイント、認証情報、インターセプターの設定は利用側アプリケーションに委ねます。
+Defjs の SDK は、共有の `struct` モデル（`src/schema/`）とドメインごとの操作定義モジュール（`src/request/`）をツリーシェイク可能な npm パッケージとして構成し、`createClient(...)`、エンドポイント、認証情報、インターセプターの設定は利用側アプリケーションに委ねます。
 
 エンドポイントを状態を持つ `Service` クラス（`ObjectsService.putObject(...)` など）でラップする従来の OpenAPI ジェネレーターとは異なり、Defjs の SDK は**独立した純粋関数の操作定義**（`putObject`、`getObject`、`listObjectsV2`）を直接 export し、アプリケーション側のクライアントを渡して呼び出します。
 
@@ -15,37 +15,37 @@ Defjs の SDK は、共有の `struct` モデル（`src/models/`）とドメイ�
 
 Amazon S3 互換のオブジェクトストレージ SDK（`@company/s3-sdk`）を例に、パッケージを 2 つのレイヤーに分割します。
 
-- **`src/models/`**：複数の操作で共有する `struct` スキーマと `Infer<typeof ...>` による TypeScript 型（値と型を同じ識別子で export することで、利用側は 1 つの import でランタイムスキーマと静的型の両方として利用できます）。
-- **`src/services/`**：リソース領域ごとに分割した操作モジュール（`buckets.ts`、`objects.ts`）。各モジュールは独立した `defineRequest` 純粋関数を export し、同期純粋関数 `builder` によってフラットな入力を `path`、`query`、`headers`、およびバイナリ `body` に振り分けます。
+- **`src/schema/`**：複数の操作で共有する `struct` スキーマと `Infer<typeof ...>` による TypeScript 型（値と型を同じ識別子で export することで、利用側は 1 つの import でランタイムスキーマと静的型の両方として利用できます）。
+- **`src/request/`**：リソース領域ごとに分割した操作モジュール（`buckets.ts`、`objects.ts`）。各モジュールは独立した `defineRequest` 純粋関数を export し、同期純粋関数 `builder` によってフラットな入力を `path`、`query`、`headers`、およびバイナリ `body` に振り分けます。
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -73,10 +73,10 @@ Amazon S3 互換のオブジェクトストレージ SDK（`@company/s3-sdk`）�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,10 +126,10 @@ tarball に `dist/index.js` と `dist/index.d.ts` が正しく含まれている
 作成した SDK を `@defjs/core` と共にインストールします。
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-SDK はクライアントを束縛しないため、エンドポイント（AWS S3、Cloudflare R2、MinIO など）、署名インターセプター、リトライポリシーは利用側アプリケーションが所有し、import した各操作を純粋関数として直接呼び出します。
+SDK はクライアントを束縛しないため、エンドポイント（AWS S3、Cloudflare R2、MinIO など）、署名インターセプター、リトライポリシーは利用側アプリケーションが所有し、import した各操作を純粋関数として直接呼び出します。`syncReport` は 3 回の呼び出しを行うため、各エラーにステップ名を付け（`putErr`、`listErr`、`getErr`）、失敗したステップを包んだエラーをエラーファーストのタプルとして返します。これは Go の `fmt.Errorf("put object: %w", err)` に相当します。ログに出すのは `main` だけです。
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no React depend
 bun add @defjs/core @defjs/react react
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.7.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.8.0` range.
 
 ## Quick start
 
@@ -59,10 +59,10 @@ export function OrderProfile({ id }: { id: number }) {
     const abort = new AbortController();
 
     void getOrder(client({ signal: abort.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (abort.signal.aborted) return;
-        if (error) {
-          setName(error.message);
+        if (err) {
+          setName(err.message);
           return;
         }
         setName(order.status);

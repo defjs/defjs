@@ -66,7 +66,7 @@ Par défaut, `url.full` ne résout que `request.endpoint` contre un `request.bas
 
 ## Diagnostics du logger
 
-L’option de premier niveau `logger?: Logger` utilise `@opentelemetry/api-logs`, pas un Logger applicatif. Elle est facultative et peut être utilisée seule. Defjs n’obtient jamais un logger global et ne possède pas son provider. Il émet au plus un LogRecord `WARN` (numéro de sévérité 13) par requête ou connexion logique, avec un message fixe et les attributs `server.address` et `server.port` (quand ils sont connus), `defjs.phase`, `exception.type`, plus `http.request.method` pour HTTP, `defjs.sse.fault.code` quand un flux SSE se termine en erreur, et `websocket.close.code` quand l’information de fermeture WebSocket a un code numérique :
+L’option de premier niveau `logger?: Logger` utilise `@opentelemetry/api-logs`, pas un Logger applicatif. Elle est facultative et peut être utilisée seule. Defjs n’obtient jamais un logger global et ne possède pas son provider. Il émet au plus un LogRecord `WARN` (numéro de sévérité 13) par requête ou connexion logique, avec un message fixe et les attributs `server.address` et `server.port` (quand ils sont connus), `defjs.phase`, `exception.type`, les attributs `defjs.meta.*` issus du `meta` de la définition, plus `http.request.method` pour HTTP, `defjs.sse.fault.code` quand un flux SSE se termine en erreur, et `websocket.close.code` quand l’information de fermeture WebSocket a un code numérique :
 
 | Issue                                                               | Événement                                                         | `defjs.phase` |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |

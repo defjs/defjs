@@ -2,15 +2,18 @@
 import { struct } from "@defjs/core";
 import { Order } from "../sdk/schema.ts";
 
-const [error, order] = struct.parse(Order, {
-  id: 1,
-  status: "paid",
-  customerName: "Ada",
-});
-
-if (error) {
-  console.error(error.message);
-} else {
+function main() {
+  const [err, order] = struct.parse(Order, {
+    id: 1,
+    status: "paid",
+    customerName: "Ada",
+  });
+  if (err) {
+    console.error(err.message);
+    return;
+  }
   console.log(order.customerName);
 }
+
+main();
 // #endregion

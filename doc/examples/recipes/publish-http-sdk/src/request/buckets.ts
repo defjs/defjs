@@ -1,7 +1,7 @@
 // #region example
 import { defineRequest, struct, type Infer } from "@defjs/core";
-import { ListBucketsOutput } from "../models/bucket.ts";
-import { S3Error } from "../models/common.ts";
+import { ListBucketsOutput } from "../schema/bucket.ts";
+import { S3Error } from "../schema/common.ts";
 
 export const BucketInput = struct.object({
   bucket: struct.string(),
@@ -9,7 +9,7 @@ export const BucketInput = struct.object({
 export type BucketInput = Infer<typeof BucketInput>;
 
 export const listBuckets = defineRequest({
-  operation: "s3.buckets.list",
+  meta: { operation: "s3.buckets.list" },
   method: "GET",
   path: "/",
   output: ListBucketsOutput,
@@ -17,7 +17,7 @@ export const listBuckets = defineRequest({
 });
 
 export const headBucket = defineRequest({
-  operation: "s3.buckets.head",
+  meta: { operation: "s3.buckets.head" },
   method: "HEAD",
   path: "/:bucket",
   input: BucketInput,
@@ -27,7 +27,7 @@ export const headBucket = defineRequest({
 });
 
 export const deleteBucket = defineRequest({
-  operation: "s3.buckets.delete",
+  meta: { operation: "s3.buckets.delete" },
   method: "DELETE",
   path: "/:bucket",
   input: BucketInput,

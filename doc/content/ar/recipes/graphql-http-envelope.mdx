@@ -5,7 +5,7 @@ description: أبقِ GraphQL كـ HTTP 200 مع فك تغليف في التطب
 
 # فك تغليف غلاف GraphQL عبر HTTP
 
-لا يدمج Defjs عميل GraphQL ولا يوفّر سياسة `errorPolicy`. بل صمّم GraphQL عبر HTTP كعملية `POST` قياسية تُرسل دالة `builder` الخاصة بها الكائن `{ query, operationName, variables }`. عيّن `data` كـ `.nullish()` في بنية الغلاف (Struct envelope) بحيث تجتاز كل من `data` المحذوفة و`data: null` التحقق البنيوي بنجاح، ثم فك تغليف `errors[]` عبر دالة مساعدة في كود التطبيق:
+لا يدمج Defjs عميل GraphQL ولا يوفّر سياسة `errorPolicy`. بل صمّم GraphQL عبر HTTP كعملية `POST` قياسية تُرسل دالة `builder` الخاصة بها الكائن `{ query, operationName, variables }`. عيّن `data` كـ `.nullish()` في بنية الغلاف (Struct envelope) بحيث تجتاز كل من `data` المحذوفة و`data: null` التحقق البنيوي بنجاح، ثم فك تغليف `errors[]` عبر دالة مساعدة في كود التطبيق تُرجع مصفوفة يكون الخطأ في أولها، `Promise<[Error, undefined] | [null, Viewer | null]>`، فيعالج المستدعي `err` واحداً سواء كان خطأ Defjs أو خطأ GraphQL:
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -32,5 +32,5 @@ description: أبقِ GraphQL كـ HTTP 200 مع فك تغليف في التطب
 ada viewer unavailable viewer unavailable
 ```
 
-- تعني استجابة HTTP `200` فقط أن غلاف GraphQL قد وصل سليماً عبر الشبكة. أما أخطاء النطاق داخل مصفوفة `errors[]` (حتى عندما تصاحبها `data: null`) فهي نتائج على مستوى التطبيق وليست أخطاء بنيوية `RES_STRUCT_MISMATCH`.
+- تعني استجابة HTTP `200` فقط أن غلاف GraphQL قد وصل سليماً عبر الشبكة. أما أخطاء النطاق داخل مصفوفة `errors[]` (حتى عندما تصاحبها `data: null`) فهي نتائج على مستوى التطبيق وليست أخطاء بنيوية `RES_STRUCT_MISMATCH`. تُرجعها الدالة المساعدة كـ `Error` خاص بها (مع دمج رسائلها)، وتُرجع أي خطأ Defjs ناتج عن الاستدعاء الوحيد كما هو. ولا تُلقي استثناءً أبداً، ولا تُرجع `undefined` للإشارة إلى الفشل.
 - راجع [معمارية النواة](/ar/docs/design-decisions) لمعرفة سبب إبقاء أغلفة البروتوكولات الخاصة داخل دوال مساعدة في التطبيق.

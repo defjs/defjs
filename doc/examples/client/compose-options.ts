@@ -11,7 +11,7 @@ const audit = createHttpInterceptor(async (request, next) => {
   const started = performance.now();
   const response = await next(request);
   console.info(
-    request.operation ?? request.method,
+    request.method,
     response.status,
     Math.round(performance.now() - started),
   );

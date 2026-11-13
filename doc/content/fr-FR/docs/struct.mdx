@@ -98,7 +98,7 @@ Copier un objet typé avec la syntaxe de déploiement (spread) au sein du `build
   examples/struct/parse-failures.ts#example
 </include>
 
-Chaque `StructIssue` contient `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` ou `custom`), `path`, `expected`, `received` et `message`. Les messages par défaut omettent la valeur reçue et n'indiquent que son _type_, mais les chemins conservent les clés dynamiques de record, qui peuvent contenir des valeurs sensibles. `String(error)` et `error.prettify()` ne constituent pas une frontière d'occultation ; utilisez une liste d'autorisation de champs sûrs pour les journaux, et traitez les valeurs brutes `received` ainsi que les messages personnalisés comme sensibles.
+Chaque `StructIssue` contient `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` ou `custom`), `path`, `expected`, `received` et `message`. Les messages par défaut omettent la valeur reçue et n'indiquent que son _type_, mais les chemins conservent les clés dynamiques de record, qui peuvent contenir des valeurs sensibles. `String(err)` et `err.prettify()` ne constituent pas une frontière d'occultation ; utilisez une liste d'autorisation de champs sûrs pour les journaux, et traitez les valeurs brutes `received` ainsi que les messages personnalisés comme sensibles.
 
 ## 6. Référence des constructeurs
 

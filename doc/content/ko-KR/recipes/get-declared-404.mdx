@@ -5,7 +5,7 @@ description: 단일 GET을 호출하고 타입화된 200과 선언된 404 응답
 
 # 선언된 404가 있는 GET
 
-`defineRequest`에 `output`(`2xx` 응답용)과 `error`(비`2xx` 응답용)를 모두 선언합니다. 호출 지점에서는 `error?.code === "HTTP_STATUS" && error.status === 404` 조건으로 분기하여 타입화된 `error.data` 페이로드를 읽습니다.
+`defineRequest`에 `output`(`2xx` 응답용)과 `error`(비`2xx` 응답용)를 모두 선언합니다. 호출 지점에서는 먼저 `if (err)`를 확인하고, 그 블록 안에서 `err.code === "HTTP_STATUS" && err.status === 404` 조건으로 분기하여 타입화된 `err.data` 페이로드를 읽습니다.
 
 <Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
@@ -28,7 +28,7 @@ description: 단일 GET을 호출하고 타입화된 200과 선언된 404 응답
 Loaded paid from 200
 ```
 
-- 비`2xx` 상태 코드는 `error`를 생략했거나 선언한 `error` 본문이 디코딩되면 `HTTP_STATUS` 결함을 생성합니다. `error`를 선언해 두면 오류 본문이 디코딩 및 검증되어 `error.data`에 채워집니다. `error` 선언을 생략하면 응답 본문을 읽지 않고 `error.data`는 `undefined`로 남습니다.
+- 비`2xx` 상태 코드는 `error`를 생략했거나 선언한 `error` 본문이 디코딩되면 `HTTP_STATUS` 결함을 생성합니다. `error`를 선언해 두면 오류 본문이 디코딩 및 검증되어 `err.data`에 채워집니다. `error` 선언을 생략하면 응답 본문을 읽지 않고 `err.data`는 `undefined`로 남습니다.
 - 선언된 `error` 본문의 미디어 타입이 잘못되었거나 JSON 형식이 올바르지 않거나 Struct 스키마 검증에 실패하면 `RES_*` 결함이 반환됩니다. 단일 `error` Struct가 모든 비`2xx` 상태 코드를 처리하므로, 상태 코드별로 오류 응답 형태가 다르다면 `struct.or(...)`을 사용하세요.
 
 자세한 내용은 [HTTP 작업](/ko-KR/docs/http) 및 [오류 처리](/ko-KR/docs/errors) 문서를 참조하세요.

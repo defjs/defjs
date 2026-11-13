@@ -32,10 +32,10 @@ Use `withHTTPHandle`, `withSSEHandle`, or `withWebSocketHandle` on `createClient
 
 ### Assert the error-first tuple, not internals
 
-Always call the exported SDK operation with your test client and assert the returned `[error, data, response]` tuple:
+Always call the exported SDK operation with your test client and assert the returned `[err, data, response]` tuple:
 
-- For `2xx` cases, assert `expect(error).toBeNull()` and check the decoded `data` fields (including `.alias()` wire-to-logical mapping).
-- For failure cases, assert `error?.code`, `error?.status`, `error?.data`, and `error?.cause` when part of the contract.
+- For `2xx` cases, assert `expect(err).toBeNull()` and check the decoded `data` fields (including `.alias()` wire-to-logical mapping).
+- For failure cases, assert `err?.code`, `err?.status`, `err?.data`, and `err?.cause` when part of the contract.
 
 ### Verify wire bytes on outbound requests
 

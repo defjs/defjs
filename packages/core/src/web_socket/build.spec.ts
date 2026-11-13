@@ -133,14 +133,14 @@ describe("web socket build helpers", () => {
       baseEndpoint: "https://api.example.com/v1",
       params: { roomId: "9" },
       query: { token: "abc" },
-      operation: "chat.connect",
+      meta: { operation: "chat.connect" },
       path: "/chat/:roomId",
       withCredentials: false,
     });
     expect(createWebSocketUrlFromRequest(request)).toBe(
       "wss://api.example.com/v1/chat/9?token=abc",
     );
-    expect(request.operation).toBe("chat.connect");
+    expect(request.meta).toEqual({ operation: "chat.connect" });
   });
 
   test("createWebSocketUrlFromRequest converts http to ws", () => {

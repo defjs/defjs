@@ -94,7 +94,7 @@ export type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void;
  * - HTTP never writes inferred Content-Type into `headers`; interceptors see only declared headers. An explicit `content-type` header always wins over `bodyContentType` and detection, whether set by the builder, client defaults, an interceptor, or a raw `fetchHandler` request. `body: undefined` has no library-inferred Content-Type. Signers should read `headers.get('content-type') ?? request.bodyContentType`; do not configure internal fields.
  * - `endpoint` is the path with path parameters filled in; `baseEndpoint` is the endpoint selected for this call.
  * - `query` is the one query the request sends. Interceptors change it in place or pass a replacement to `next()`. A builder that returns `URLSearchParams` has it copied, and a `QuerySerializer` string is parsed into it.
- * - `operation` is a static, low-cardinality endpoint identity for telemetry and diagnostics.
+ * - `meta` is the definition's application-defined metadata (`{ readonly [key: string]: unknown }`): one object, forwarded by reference to every call, attempt, balancer pick, and client. Interceptors read it here and balancers read it as `PickInfo.meta`; both see it read-only. The read-only type is shallow, so nested objects stay shared. Keep per-call state in the interceptor's closure. A replacement passed as `next({ ...request, meta })` reaches only the interceptors after this one, not the balancer or later attempts. Defjs core never reads or copies `meta`, and it is never sent with the request.
  * - `downloadProgress` and `uploadProgress` are the `onDownloadProgress` and `onUploadProgress` hooks of `HttpExecuteOptions`.
  * - `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed. Each is set only when its struct is declared. An interceptor that short-circuits with `makeResponse` reads them to match the transport.
  *
@@ -128,8 +128,8 @@ export interface HttpRequest {
   /** HTTP interceptors see declared headers; detected Content-Type is applied at the Fetch boundary. */
   headers?: Headers;
   method: string;
-  /** Static, low-cardinality endpoint identity for telemetry and diagnostics. */
-  operation?: string;
+  /** Application-defined metadata from the definition, shared by every call. Read-only; never sent with the request. */
+  readonly meta?: { readonly [key: string]: unknown };
   /** The query the request sends. Its wire form is `query.toString()`, the URL Standard's application/x-www-form-urlencoded serialization, so a space is `+`. An empty query adds no `?`. */
   query?: URLSearchParams;
   /**

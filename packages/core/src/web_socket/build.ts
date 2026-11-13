@@ -10,7 +10,7 @@ import {
 export function createWebSocketRequest(params: {
   signal: AbortSignal;
   baseEndpoint: string;
-  operation?: string;
+  meta?: { [key: string]: unknown };
   params?: { [key: string]: string };
   path: string;
   query?: URLSearchParams | { [key: string]: unknown };
@@ -24,7 +24,7 @@ export function createWebSocketRequest(params: {
     endpoint: fillUrl(params.path, params.params),
     headers: new Headers(),
     method: "GET",
-    operation: params.operation,
+    meta: params.meta,
     query,
     withCredentials: params.withCredentials ?? false,
   };

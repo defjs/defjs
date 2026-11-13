@@ -11,12 +11,12 @@ description: defineEventStream、请求选项与流句柄。
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` 和 `events` 映射；可选 `method`（默认 `'GET'`）、`operation`、`input`、`error` 和 `maxBufferSize`（默认 `64 * 1024`）。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`EventStreamDefinition`](/zh-Hans/api/core/eventstreamdefinition-type)。只有给出 error struct 类型时 `error` 才必填，`builder` 恰好在声明 `input` 时必填。
+- **definition** — `path` 和 `events` 映射；可选 `method`（默认 `'GET'`）、`meta`、`input`、`error` 和 `maxBufferSize`（默认 `64 * 1024`）。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`EventStreamDefinition`](/zh-Hans/api/core/eventstreamdefinition-type)。只有给出 error struct 类型时 `error` 才必填，`builder` 恰好在声明 `input` 时必填。
 - **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即打开流。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-调用返回 `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，`Fault` 是该 struct 的 `Fault`；否则是 `Fault<undefined>`。通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 来传入 `signal`。SSE 只读取 `signal` 和 `retry`，忽略进度和 WebSocket 字段。
+调用返回 `[null, stream, open]` 或 `[err, undefined, open?]`。声明了 `error` 时，`Fault` 是该 struct 的 `Fault`；否则是 `Fault<undefined>`。通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 来传入 `signal`。SSE 只读取 `signal` 和 `retry`，忽略进度和 WebSocket 字段。
 
 ## EventStreamExecuteOptions
 
@@ -62,7 +62,7 @@ description: defineEventStream、请求选项与流句柄。
 
 ## EventStreamDefinition
 
-`path`、`events`，可选 `method` / `operation` / `input` / `error` / `maxBufferSize`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 不能携带请求体。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
+`path`、`events`，可选 `method` / `meta` / `input` / `error` / `maxBufferSize`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 不能携带请求体。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ## EventStreamEndpoint
 
@@ -74,7 +74,7 @@ description: defineEventStream、请求选项与流句柄。
 
 ## StreamAwaitResult
 
-`[null, stream, open]` 或 `[error, undefined, open?]`。
+`[null, stream, open]` 或 `[err, undefined, open?]`。
 
 ## EventStreamData
 

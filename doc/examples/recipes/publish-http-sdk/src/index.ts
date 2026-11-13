@@ -1,13 +1,13 @@
 // #region example
-export { Bucket, ListBucketsOutput } from "./models/bucket.ts";
-export { S3Error, StorageClass } from "./models/common.ts";
-export { ListObjectsOutput, ObjectSummary } from "./models/object.ts";
+export { Bucket, ListBucketsOutput } from "./schema/bucket.ts";
+export { S3Error, StorageClass } from "./schema/common.ts";
+export { ListObjectsOutput, ObjectSummary } from "./schema/object.ts";
 export {
   BucketInput,
   deleteBucket,
   headBucket,
   listBuckets,
-} from "./services/buckets.ts";
+} from "./request/buckets.ts";
 export {
   deleteObject,
   GetObjectInput,
@@ -18,5 +18,5 @@ export {
   ObjectKeyInput,
   PutObjectInput,
   putObject,
-} from "./services/objects.ts";
+} from "./request/objects.ts";
 // #endregion

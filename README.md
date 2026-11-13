@@ -24,7 +24,7 @@ For complete guides, examples, and the API reference, visit **[defjs.lyz.cloud](
 bun add @defjs/core
 ```
 
-Best practice: keep the definition independent of the client. Calling an operation runs it. Return from the function when the error side is set, before using the success value.
+Best practice: keep the definition independent of the client. Calling an operation runs it. Check `err` right after the call and return from inside that block, before using the success value.
 
 ```ts
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
@@ -40,9 +40,9 @@ const getOrder = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, order] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
+  const [err, order] = await getOrder(client, { id: 1 });
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(order.status);

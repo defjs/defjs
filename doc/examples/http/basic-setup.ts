@@ -12,9 +12,9 @@ const getOrder = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, order] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
+  const [err, order] = await getOrder(client, { id: 1 });
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(order.status);

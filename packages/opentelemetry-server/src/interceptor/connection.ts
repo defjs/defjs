@@ -71,6 +71,7 @@ function finishConnection(
       context: call.context,
       error: outcome.error,
       attributes: call.attributes,
+      meta: call.meta,
       extra: outcome.extra,
     });
     attributes = { ...attributes, "error.type": getErrorType(outcome.error) };
@@ -153,6 +154,7 @@ export function observeConnection<
           context: call.context,
           error,
           attributes: call.attributes,
+          meta: call.meta,
         });
         attributes["defjs.result"] = "error";
         attributes["error.type"] = getErrorType(error);

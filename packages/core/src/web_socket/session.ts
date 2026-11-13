@@ -46,7 +46,7 @@ export interface SessionConfig {
   readonly outgoing: AnyStruct | undefined;
   readonly maxOutgoingQueueSize: number;
   readonly clientConfig: ClientConfig;
-  readonly operation: string | undefined;
+  readonly meta: { [key: string]: unknown } | undefined;
   readonly Socket: SocketConstructor;
   readonly openState: number;
   readonly retry: RetryPolicy | undefined;

@@ -17,9 +17,9 @@ async function main(signal: AbortSignal) {
       console.log(event.loaded);
     },
   });
-  const [error, order] = await getOrder(requestClient, { id: 1 });
-  if (error) {
-    console.error(error.code);
+  const [err, order] = await getOrder(requestClient, { id: 1 });
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(order.status);

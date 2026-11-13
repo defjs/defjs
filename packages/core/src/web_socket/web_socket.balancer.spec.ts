@@ -29,15 +29,17 @@ const PRIMARY = "http://127.0.0.1:1";
 const SECONDARY = "http://127.0.0.1:2";
 const REPLACED = "http://127.0.0.1:9";
 
+const ROOM_META = { operation: "room.join" };
+
 const room = defineWebSocket({
   incoming: struct.unknown(),
-  operation: "room.join",
+  meta: ROOM_META,
   path: "/ws",
 });
 
 const pinged = defineWebSocket({
   incoming: struct.unknown(),
-  operation: "room.join",
+  meta: ROOM_META,
   outgoing: struct.unknown(),
   path: "/ws",
 });
@@ -201,9 +203,7 @@ describe("web socket endpoint balancer", () => {
     expect(record.picks).toHaveLength(2);
     for (const info of record.picks)
       expect(info).not.toHaveProperty("transport");
-    expect(record.picks.every((info) => info.operation === "room.join")).toBe(
-      true,
-    );
+    expect(record.picks.every((info) => info.meta === ROOM_META)).toBe(true);
     expect(record.picks[0]?.endpoints).toEqual([PRIMARY, SECONDARY]);
     expect(socketAt(0).url).toBe("ws://127.0.0.1:1/ws");
     expect(socketAt(1).url).toBe("ws://127.0.0.1:2/ws");
@@ -323,14 +323,14 @@ describe("web socket endpoint balancer", () => {
         throw new Error("bad builder");
       },
       incoming: struct.unknown(),
-      operation: "room.join",
+      meta: ROOM_META,
       path: "/ws",
     });
     const [fault] = await failing(clientFor(built.balancer));
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(built.picks).toHaveLength(1);
     expect(built.picks[0]).not.toHaveProperty("transport");
-    expect(built.picks[0]?.operation).toBe("room.join");
+    expect(built.picks[0]?.meta).toBe(ROOM_META);
     expect(built.dones).toEqual([{ attempted: false }]);
     expect(built.pending()).toBe(0);
     expect(fake.sockets).toHaveLength(0);

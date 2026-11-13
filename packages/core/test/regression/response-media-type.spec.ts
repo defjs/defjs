@@ -96,7 +96,7 @@ test.each([200, 403])(
     const definition = {
       method: "POST",
       path: "/first",
-      operation: "first",
+      meta: { operation: "first" },
       input: shape,
       output: struct.string(),
       error: struct.string(),
@@ -105,7 +105,7 @@ test.each([200, 403])(
     const endpoint = defineRequest(definition);
     definition.method = "PUT";
     definition.path = "/second";
-    definition.operation = "second";
+    definition.meta = { operation: "second" };
     definition.input = struct.object({
       value: struct.string().alias("changed"),
     });
@@ -120,7 +120,7 @@ test.each([200, 403])(
           observed.push([
             request.method,
             request.endpoint,
-            request.operation,
+            request.meta,
             request.body,
           ]);
           return Promise.resolve(makeResponse({ status, body: "result" }));
@@ -128,7 +128,9 @@ test.each([200, 403])(
       ),
     );
     const [fault, data] = await endpoint(client, { value: "original" });
-    expect(observed).toEqual([["POST", "/first", "first", "original"]]);
+    expect(observed).toEqual([
+      ["POST", "/first", { operation: "first" }, "original"],
+    ]);
     expect(fault?.code ?? null).toBe(status === 200 ? null : "HTTP_STATUS");
     expect(fault?.code === "HTTP_STATUS" ? fault.data : data).toBe("result");
   },

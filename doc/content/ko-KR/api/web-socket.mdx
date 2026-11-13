@@ -11,12 +11,12 @@ description: defineWebSocket, 세션, 요청 옵션이에요.
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`와 `incoming` struct 하나, 선택 `outgoing`과 `input` struct, `operation`, 정적 `protocols`, `maxOutgoingQueueSize`예요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 `builder`만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. 이 `definition` 멤버는 [`WebSocketDefinition`](/ko-KR/api/core/websocketdefinition-type)에 적혀 있어요. `builder`는 `input`을 선언했을 때만 필요해요.
+- **definition** — `path`와 `incoming` struct 하나, 선택 `outgoing`과 `input` struct, `meta`, 정적 `protocols`, `maxOutgoingQueueSize`예요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 `builder`만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. 이 `definition` 멤버는 [`WebSocketDefinition`](/ko-KR/api/core/websocketdefinition-type)에 적혀 있어요. `builder`는 `input`을 선언했을 때만 필요해요.
 - **반환** 작업이에요. 첫 인자는 [`Client`](/ko-KR/api/core/client-type)예요. 그 뒤 인자는 입력뿐이에요. 호출하면 세션이 열려요.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-호출은 `[null, session, connection]` 또는 `[error, undefined, connection?]`을 돌려줘요. 호출별 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. WebSocket은 `signal`, `beforeConnect`, `heartbeat`, `protocols`, `retry`를 읽고, HTTP 진행률 필드는 무시해요.
+호출은 `[null, session, connection]` 또는 `[err, undefined, connection?]`을 돌려줘요. 호출별 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. WebSocket은 `signal`, `beforeConnect`, `heartbeat`, `protocols`, `retry`를 읽고, HTTP 진행률 필드는 무시해요.
 
 `beforeConnect`, `heartbeat`, `protocols`, `retry`는 각각 그 호출에 한해 대응하는 클라이언트 수준 옵션을 통째로 바꿔요. 프로토콜 우선순위는 파생 클라이언트, `withWebSocketProtocols`, 정의의 `protocols` 순서예요. `heartbeat.timeoutMs`는 확인 대기이지, 요청 데드라인이 아니에요.
 
@@ -72,7 +72,7 @@ description: defineWebSocket, 세션, 요청 옵션이에요.
 
 ## WebSocketDefinition
 
-`path`, `incoming`, 선택 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`예요. `builder`는 `path`와 `query`만 돌려줄 수 있어요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 `builder`만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+`path`, `incoming`, 선택 `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize`예요. `builder`는 `path`와 `query`만 돌려줄 수 있어요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 `builder`만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 ## WebSocketEndpoint
 
@@ -88,7 +88,7 @@ description: defineWebSocket, 세션, 요청 옵션이에요.
 
 ## SocketAwaitResult
 
-`[null, session, connection]` 또는 `[error, undefined, connection?]`예요.
+`[null, session, connection]` 또는 `[err, undefined, connection?]`예요.
 
 ## ManualSocketCloseReason
 

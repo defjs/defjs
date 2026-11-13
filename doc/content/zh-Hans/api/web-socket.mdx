@@ -11,12 +11,12 @@ description: defineWebSocket、会话与请求选项。
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`，以及一个 `incoming` struct；可选 `outgoing` 和 `input` struct、`operation`、静态 `protocols` 和 `maxOutgoingQueueSize`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明 `input` 时必填。
+- **definition** — `path`，以及一个 `incoming` struct；可选 `outgoing` 和 `input` struct、`meta`、静态 `protocols` 和 `maxOutgoingQueueSize`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员记录在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明 `input` 时必填。
 - **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即打开会话。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-调用返回 `[null, session, connection]` 或 `[error, undefined, connection?]`。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `retry`，忽略 HTTP 进度字段。
+调用返回 `[null, session, connection]` 或 `[err, undefined, connection?]`。单次调用选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 Client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `retry`，忽略 HTTP 进度字段。
 
 `beforeConnect`、`heartbeat`、`protocols` 和 `retry` 各自整体覆盖该次调用的 Client 级选项。协议优先级依次为：派生的 Client、`withWebSocketProtocols`、定义的 `protocols`。`heartbeat.timeoutMs` 是等待确认的时间，不是请求期限。
 
@@ -72,7 +72,7 @@ description: defineWebSocket、会话与请求选项。
 
 ## WebSocketDefinition
 
-`path`、`incoming`，可选 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。`builder` 只能返回 `path` 和 `query`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
+`path`、`incoming`，可选 `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize`。`builder` 只能返回 `path` 和 `query`。声明了 `input` 就始终需要显式 `builder`。`input` 只定义参数；位置完全由 `builder` 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ## WebSocketEndpoint
 
@@ -88,7 +88,7 @@ description: defineWebSocket、会话与请求选项。
 
 ## SocketAwaitResult
 
-`[null, session, connection]` 或 `[error, undefined, connection?]`。
+`[null, session, connection]` 或 `[err, undefined, connection?]`。
 
 ## ManualSocketCloseReason
 

@@ -5,7 +5,7 @@ description: 在 SDK 中声明服务错误契约，并在消费方应用中处�
 
 # 错误处理
 
-在 Defjs 中，请求、传输和解码失败不会在调用处抛出异常。每个操作都返回错误优先元组（`[error, ...]`），其中 `error` 要么是 `null`，要么是带类型的 `Fault`（原生 `Error` 实例，由 `error.code` 判别）。
+在 Defjs 中，请求、传输和解码失败不会在调用处抛出异常。每个操作都返回错误优先元组（`[err, ...]`），其中 `err` 要么是 `null`，要么是带类型的 `Fault`（原生 `Error` 实例，由 `err.code` 判别）。把这个变量命名为 `err`，并像 Go 一样立刻检查。
 
 TypeScript 拒绝的调用是例外：它没有规定的结果，也不是 `Fault`。实际上它通常以平台的 `TypeError` reject。
 
@@ -33,9 +33,17 @@ TypeScript 拒绝的调用是例外：它没有规定的结果，也不是 `Faul
 </Tab>
 </Tabs>
 
-### 为什么 HTTP 失败时 `error` 会携带响应元数据？
+### 为什么 HTTP 失败时 `err` 会携带响应元数据？
 
-HTTP 失败时，元组是 `[error, undefined, undefined]`。到达的响应元数据（`status`、`statusText`、`headers`、`url`）直接挂在 `error.response` 上，因此只把 `error` 交给日志记录器或错误处理程序也不会丢失上下文。
+HTTP 失败时，元组是 `[err, undefined, undefined]`。到达的响应元数据（`status`、`statusText`、`headers`、`url`）直接挂在 `err.response` 上，因此只把 `err` 交给日志记录器或错误处理程序也不会丢失上下文。
+
+### 每个错误只处理一次
+
+把元组当作 Go 的 `(T, error)`。调用后立即检查 `if (err)`，并在该代码块内部离开，这样成功路径不会多出缩进；与具体 code 相关的分支（`err.code === "HTTP_STATUS" && err.status === 404`，或 `switch (err.code)`）放在块内，就像 Go 把 `errors.Is` 和 `errors.As` 放在 `if err != nil` 里。错误要么处理（记录日志、展示、回退），要么返回，不能两者都做。只有程序顶层（`main`、UI 事件处理函数、测试）负责处理；其他可能失败的函数都返回自己的错误优先元组 `Promise<[Error, undefined] | [null, T]>`，绝不用 `undefined`、`null` 或 `false` 表示失败。只有一次 Defjs 调用时，原样返回 Fault（Go 的 `return nil, err`）。有多次调用时，按步骤给每个错误命名（`putErr`、`listErr`），并用 `new Error("put object", { cause: putErr })` 包装，对应 `fmt.Errorf("put object: %w", err)`。只有库的契约要求时才抛出，例如 TanStack Query 的 `queryFn`。
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. Fault 类别与封闭的代码集合
 
@@ -61,7 +69,7 @@ HTTP 失败时，元组是 `[error, undefined, undefined]`。到达的响应元�
 | `RES_*`       | `number` | `HttpMeta`（**绝无 `body` 属性**）                | 不存在                                  | `StructError` 或解析器原始报错 |
 | 其他代码      | 不存在   | 若已收到响应头则为 `HttpMeta`，否则为 `undefined` | 不存在                                  | 底层 `Error` / 中止原因        |
 
-## 3. 窄化联合错误体（`error.data`）
+## 3. 窄化联合错误体（`err.data`）
 
 由于同一个 `error` struct 需要承载所有非 `2xx` 状态码的错误结构，当不同 HTTP 状态码返回不同的 JSON 格式时，请声明一个联合类型：
 
@@ -123,7 +131,7 @@ HTTP 失败时，元组是 `[error, undefined, undefined]`。到达的响应元�
 </Tabs>
 
 > [!CAUTION]
-> 把 `fault.cause`、`fault.data`、响应头、完整 URL 和 `StructIssue.received` 都视为可能敏感。默认只记录低基数白名单字段（`operation`、`code`、`status`、耗时）。
+> 把 `fault.cause`、`fault.data`、响应头、完整 URL 和 `StructIssue.received` 都视为可能敏感。默认只记录低基数白名单字段（你自己的 `meta` 标签、`code`、`status`、耗时）。
 
 ## 相关阅读
 

@@ -1,11 +1,11 @@
 ---
 title: "Application API layer"
-description: Organize hand-written HTTP requests, models, and client policies inside an application repository without publishing a separate SDK package.
+description: Organize hand-written HTTP requests, schemas, and client policies inside an application repository without publishing a separate SDK package.
 ---
 
 # Application API layer [#application-api-layer]
 
-Most projects use Defjs directly inside an application repository (`src/api/`) to replace scattered `fetch` or `axios` wrappers. Even when you have no plans to publish an external npm package, separating `src/api/models/`, `src/api/services/`, and `src/api/client.ts` keeps your request layer strongly typed, testable in memory, and safe across browser and SSR runtimes.
+Most projects use Defjs directly inside an application repository (`src/api/`) to replace scattered `fetch` or `axios` wrappers. Even when you have no plans to publish an external npm package, separating `src/api/schema/`, `src/api/request/`, and `src/api/client.ts` keeps your request layer strongly typed, testable in memory, and safe across browser and SSR runtimes.
 
 ---
 
@@ -16,9 +16,9 @@ Organize your project's request layer into three focused parts under `src/api/`:
 ```text
 src/
 ├── api/
-│   ├── models/           # 1. Shared struct schemas + Infer<typeof ...> types
+│   ├── schema/           # 1. Shared struct schemas + Infer<typeof ...> types
 │   │   └── order.ts      #    ApiError, OrderStatus, Order, OrderPage
-│   ├── services/         # 2. Pure operation definitions grouped by domain
+│   ├── request/         # 2. Pure operation definitions grouped by domain
 │   │   └── orders.ts     #    getOrder, listOrders, createOrder
 │   └── client.ts         # 3. App-owned Client (endpoint, auth interceptor, retry)
 └── checkout.ts           # 4. Business logic / UI components calling operations
@@ -28,16 +28,16 @@ src/
 
 ## 2. Complete in-app example
 
-<Tabs items={["src/api/models/order.ts", "src/api/services/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
+<Tabs items={["src/api/schema/order.ts", "src/api/request/orders.ts", "src/api/client.ts", "src/checkout.ts"]}>
   <Tab>
-<include cwd meta='title="src/api/models/order.ts"'>
-  examples/best-practices/application-api/src/api/models/order.ts#example
+<include cwd meta='title="src/api/schema/order.ts"'>
+  examples/best-practices/application-api/src/api/schema/order.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/api/services/orders.ts"'>
-  examples/best-practices/application-api/src/api/services/orders.ts#example
+<include cwd meta='title="src/api/request/orders.ts"'>
+  examples/best-practices/application-api/src/api/request/orders.ts#example
 </include>
 
   </Tab>
@@ -55,6 +55,8 @@ src/
   </Tab>
 </Tabs>
 
+`src/checkout.ts` is business logic, not the top of the program, so `placeAndLoadOrder` does not log. It returns an error-first tuple, `Promise<[Error, undefined] | [null, Checkout]>`, and wraps each step's fault with the step that failed (`new Error("create order", { cause: createErr })`), like Go's `fmt.Errorf("create order: %w", err)`. The caller, such as a UI event handler, checks `if (err)` and decides how to show it.
+
 ---
 
 ## 3. Key patterns for application projects
@@ -62,14 +64,14 @@ src/
 ### Browser singleton vs. SSR per-request client
 
 - **Browser / SPA (`apiClient`)**: Export a single module-scoped `createClient(...)` instance per backend origin. Sharing that instance preserves load-balancer health state and the client-level HTTP retry budget across page interactions. In React or Vue apps, provide `apiClient` at the root via [`@defjs/react`](/docs/integrations/react) (`ClientProvider` / `useClient`) or [`@defjs/vue`](/docs/integrations/vue) (`createClientPlugin` / `injectClient`).
-- **SSR / BFF (`createServerApiClient(accessToken)`)**: Whenever credentials, cookies, or tenant headers vary per incoming HTTP request, call a factory function inside your server request handler to create an isolated `Client`. Because `getOrder`, `listOrders`, and `createOrder` are pure functions, the exact same `services/orders.ts` definitions work with both `apiClient` and `createServerApiClient(token)`.
+- **SSR / BFF (`createServerApiClient(accessToken)`)**: Whenever credentials, cookies, or tenant headers vary per incoming HTTP request, call a factory function inside your server request handler to create an isolated `Client`. Because `getOrder`, `listOrders`, and `createOrder` are pure functions, the exact same `request/orders.ts` definitions work with both `apiClient` and `createServerApiClient(token)`.
 
 ### Per-call timeouts and cancellation
 
 Never create a new `Client` via `createClient(...)` just to pass a timeout or `AbortSignal`. Instead, derive a single-call client inline from your shared client:
 
 ```ts
-const [error, created] = await createOrder(
+const [err, created] = await createOrder(
   apiClient({ signal: AbortSignal.timeout(5_000) }),
   {
     customerName: "Ada Lovelace",
@@ -81,6 +83,6 @@ const [error, created] = await createOrder(
 
 ### Shared error envelope (`ApiError`)
 
-Declare your backend's standard error envelope once (`export const ApiError = struct.object(...)`) in `src/api/models/` and pass `error: ApiError` on every `defineRequest` in `src/api/services/`. When a request returns a non-`2xx` status, narrowing `if (error.code === "HTTP_STATUS")` gives you strongly typed access to `error.data.code`, `error.data.message`, and `error.data.requestId`.
+Declare your backend's standard error envelope once (`export const ApiError = struct.object(...)`) in `src/api/schema/` and pass `error: ApiError` on every `defineRequest` in `src/api/request/`. When a request returns a non-`2xx` status, narrowing `if (err.code === "HTTP_STATUS")` inside `if (err)` gives you strongly typed access to `err.data.code`, `err.data.message`, and `err.data.requestId`.
 
 See [Engineering conventions](/docs/best-practices), [Public SDK design](/docs/public-sdk), [Client](/docs/client), and [Interceptors](/docs/interceptors).

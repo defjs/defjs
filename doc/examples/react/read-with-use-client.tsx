@@ -12,9 +12,9 @@ export function HealthCheck() {
   const client = useClient();
 
   const check = async () => {
-    const [error, result] = await health(client);
-    if (error) {
-      console.error(error.code);
+    const [err, result] = await health(client);
+    if (err) {
+      console.error(err.code);
       return;
     }
     console.log(result.ok);

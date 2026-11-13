@@ -361,7 +361,7 @@
     "name": "HttpAwaitResult",
     "kind": "type",
     "slug": "core/httpawaitresult-type",
-    "description": "Await-result tuple for an HTTP call: success is [null, data, response], and failure is [fault, undefined, undefined]."
+    "description": "Await-result tuple for an HTTP call: success is [null, data, response], and failure is [err, undefined, undefined]."
   },
   {
     "package": "@defjs/core",

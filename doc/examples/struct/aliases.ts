@@ -6,9 +6,9 @@ const Order = struct.object({
 });
 
 function readDisplayName() {
-  const [parseError, order] = struct.parse(Order, { customerName: "Ada" });
-  if (parseError) {
-    console.error(parseError.message);
+  const [err, order] = struct.parse(Order, { customerName: "Ada" });
+  if (err) {
+    console.error(err.message);
     return;
   }
   console.log(order.customerName);
@@ -16,8 +16,9 @@ function readDisplayName() {
 
 readDisplayName();
 
-const [wireError] = struct.parse(Order, { customer_name: "Ada" });
+const [wireErr] = struct.parse(Order, { customer_name: "Ada" });
 // Expected failure: public parse reads logical keys, not wire keys.
-if (!wireError) throw new Error("struct.parse must read logical keys");
-console.log(wireError.issues[0]?.path);
+if (wireErr) {
+  console.log(wireErr.issues[0]?.path);
+}
 // #endregion

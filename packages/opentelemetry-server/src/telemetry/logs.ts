@@ -26,6 +26,8 @@ interface ClientExceptionLog {
   error: unknown;
   /** The attributes the call shares with its span and metrics. */
   attributes: Attributes;
+  /** The request's `meta` as `defjs.meta.<key>` attributes. */
+  meta: Attributes;
   /** What the transport knows about this failure: the request method, a fault code, a close code. */
   extra?: Attributes;
 }
@@ -53,6 +55,7 @@ export function emitClientException(
       severityNumber: SeverityNumber.WARN,
       severityText: "WARN",
       attributes: {
+        ...details.meta,
         ...details.attributes,
         ...details.extra,
         "defjs.phase": details.phase,

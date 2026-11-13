@@ -16,7 +16,7 @@ const quotes = defineWebSocket({
 });
 
 async function main() {
-  const [error, session] = await quotes(
+  const [err, session] = await quotes(
     client({
       heartbeat: {
         intervalMs: 30_000,
@@ -30,8 +30,8 @@ async function main() {
       },
     }),
   );
-  if (error) {
-    console.error(error.code);
+  if (err) {
+    console.error(err.code);
     return;
   }
   await using ownedSession = session;

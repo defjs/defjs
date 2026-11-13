@@ -16,9 +16,9 @@ export function useOrderQueryFn(id: number) {
 
   return useCallback(
     async ({ signal }: { signal: AbortSignal }) => {
-      const [error, order] = await getOrder(client({ signal }), { id });
+      const [err, order] = await getOrder(client({ signal }), { id });
       // Query libraries record a failure when the query function rejects.
-      if (error) throw error;
+      if (err) throw err;
       return order;
     },
     [client, id],

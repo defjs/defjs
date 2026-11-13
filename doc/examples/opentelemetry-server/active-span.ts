@@ -10,21 +10,32 @@ const client = createClient(
 );
 const readOrders = defineRequest({
   method: "GET",
-  operation: "orders.read",
+  meta: { operation: "orders.read" },
   path: "/orders",
 });
 
-const outcome = await tracer.startActiveSpan("orders.read", async (span) => {
-  try {
-    const outcome = await readOrders(client);
-    const [error] = outcome;
-    if (error) {
-      span.setAttribute("error.type", error.code);
-      span.setStatus({ code: SpanStatusCode.ERROR });
-    }
-    return outcome;
-  } finally {
-    span.end();
+async function main() {
+  const [readErr] = await tracer.startActiveSpan(
+    "orders.read",
+    async (span) => {
+      try {
+        const outcome = await readOrders(client);
+        const [err] = outcome;
+        if (err) {
+          span.setAttribute("error.type", err.code);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+        }
+        return outcome;
+      } finally {
+        span.end();
+      }
+    },
+  );
+  if (readErr) {
+    console.error(readErr.code);
+    return;
   }
-});
+}
+
+void main();
 // #endregion

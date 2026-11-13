@@ -11,12 +11,12 @@ Deklariere einen Socket, rufe die Operation mit einem Client auf, sende und empf
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path` und ein `incoming`-Struct; optional `outgoing`- und `input`-Structs, `operation`, statische `protocols` und `maxOutgoingQueueSize`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`WebSocketDefinition`](/de-DE/api/core/websocketdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
+- **definition** — `path` und ein `incoming`-Struct; optional `outgoing`- und `input`-Structs, `meta`, statische `protocols` und `maxOutgoingQueueSize`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Felder stehen unter [`WebSocketDefinition`](/de-DE/api/core/websocketdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
 - **Returns** eine Operation. Das erste Argument ist ein [`Client`](/de-DE/api/core/client-type). Weitere Argumente sind nur der Input. Der Aufruf öffnet die Session.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-Der Aufruf gibt `[null, session, connection]` oder `[error, undefined, connection?]` zurück. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. WebSocket liest `signal`, `beforeConnect`, `heartbeat`, `protocols` und `retry` und ignoriert HTTP-Progress-Felder.
+Der Aufruf gibt `[null, session, connection]` oder `[err, undefined, connection?]` zurück. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. WebSocket liest `signal`, `beforeConnect`, `heartbeat`, `protocols` und `retry` und ignoriert HTTP-Progress-Felder.
 
 `beforeConnect`, `heartbeat`, `protocols` und `retry` ersetzen jeweils die Option auf Client-Ebene für diesen Aufruf als Ganzes. Der Vorrang der Protokolle ist der abgeleitete Client, dann `withWebSocketProtocols`, dann die `protocols` der Definition. `heartbeat.timeoutMs` ist die Wartezeit auf die Bestätigung, keine Request-Deadline.
 
@@ -72,7 +72,7 @@ Siehe [WebSocket-Leitfaden](/de-DE/docs/web-socket) und [WebSocket-Session öffn
 
 ## WebSocketDefinition
 
-`path`, `incoming`, optional `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. Der Builder darf nur `path` und `query` zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+`path`, `incoming`, optional `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize`. Der Builder darf nur `path` und `query` zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ## WebSocketEndpoint
 
@@ -88,7 +88,7 @@ Nur `path` und `query`. `headers` und `body` sind `never`.
 
 ## SocketAwaitResult
 
-`[null, session, connection]` oder `[error, undefined, connection?]`.
+`[null, session, connection]` oder `[err, undefined, connection?]`.
 
 ## ManualSocketCloseReason
 

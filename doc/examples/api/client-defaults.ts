@@ -22,12 +22,12 @@ const search = defineRequest({
 });
 
 async function main() {
-  const [error, text] = await search(
+  const [err, text] = await search(
     client({ signal: AbortSignal.timeout(30_000) }),
     { q: "defjs" },
   );
-  if (error) {
-    console.error(error.code);
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(text);

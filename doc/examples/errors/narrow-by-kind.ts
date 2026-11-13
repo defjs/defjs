@@ -12,15 +12,15 @@ const ApiError = struct.discriminatedUnion("kind", [
   }),
 ]);
 
-declare const fault: Fault<typeof ApiError>;
+declare const err: Fault<typeof ApiError>;
 
-if (fault.code === "HTTP_STATUS") {
-  switch (fault.data.kind) {
+if (err.code === "HTTP_STATUS") {
+  switch (err.data.kind) {
     case "validation":
-      console.log(fault.data.fields.length);
+      console.log(err.data.fields.length);
       break;
     case "rateLimit":
-      console.log(fault.data.retryAfter);
+      console.log(err.data.retryAfter);
       break;
   }
 }

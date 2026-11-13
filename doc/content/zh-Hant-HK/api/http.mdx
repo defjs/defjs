@@ -11,7 +11,7 @@ description: defineRequest、request options，同 HTTP request/response 型別�
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`、`path`，可選 `input` struct、可選 `output` 同 `error` struct，以及可選 `operation`。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` 成員記錄喺 [`RequestDefinition`](/zh-Hant-HK/api/core/requestdefinition-type)。`builder` 只有喺宣告咗 `input` 嗰陣先必填。
+- **definition** — `method`、`path`，可選 `input` struct、可選 `output` 同 `error` struct，以及可選 `meta`。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` 成員記錄喺 [`RequestDefinition`](/zh-Hant-HK/api/core/requestdefinition-type)。`builder` 只有喺宣告咗 `input` 嗰陣先必填。
 - **Returns** 一個操作。呼叫方式係 `getOrder(client, input)`；冇宣告 input 就係 `health(client)`。成個 input struct 可選嗰陣，可以省略 input 參數。呼叫就會開始請求。冇第三個選項參數。
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -44,7 +44,7 @@ description: defineRequest、request options，同 HTTP request/response 型別�
 
 ### RequestDefinition
 
-`method`、`path`，可選 `input`、`output`、`error`、`operation` 同 `builder`。struct 種類決定已宣告 body 點樣讀取。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
+`method`、`path`，可選 `input`、`output`、`error`、`meta` 同 `builder`。struct 種類決定已宣告 body 點樣讀取。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ### HttpAwaitResult
 
@@ -54,7 +54,7 @@ description: defineRequest、request options，同 HTTP request/response 型別�
 
 ### HttpRequest
 
-已正規化嘅傳出 request：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`finalizeHeaders`、`downloadProgress` / `uploadProgress`、`baseEndpoint` 同 `query`。攔截器見到佢嗰陣，`body` 已經係 wire value——JSON 嘅話就係 JSON 文字字串——所以簽 HMAC 同 digest 要對住嗰個，唔好對住 struct input。`query` 係請求會送出嘅唯一 query，型別係 `URLSearchParams`：攔截器可以就地修改佢，亦可以將替換值傳俾 `next()`。builder 回傳 `URLSearchParams` 就會複製嗰個實例；`withQuerySerializer` 函式回傳嘅字串就會被解析入去。傳輸形式係 `query.toString()`，即係 URL Standard 嘅 application/x-www-form-urlencoded 序列化，所以空格係 `+`，空嘅 `query` 唔會加 `?`。`responseType` 同 `errorResponseType` 係唯讀：佢哋由已宣告嘅 `output` 同 `error` struct 種類推導出嚟，唔可以改。
+已正規化嘅傳出 request：`method`、`endpoint`、`headers`、`body`、`signal`、`meta`、`withCredentials`、`finalizeHeaders`、`downloadProgress` / `uploadProgress`、`baseEndpoint` 同 `query`。攔截器見到佢嗰陣，`body` 已經係 wire value——JSON 嘅話就係 JSON 文字字串——所以簽 HMAC 同 digest 要對住嗰個，唔好對住 struct input。`query` 係請求會送出嘅唯一 query，型別係 `URLSearchParams`：攔截器可以就地修改佢，亦可以將替換值傳俾 `next()`。builder 回傳 `URLSearchParams` 就會複製嗰個實例；`withQuerySerializer` 函式回傳嘅字串就會被解析入去。傳輸形式係 `query.toString()`，即係 URL Standard 嘅 application/x-www-form-urlencoded 序列化，所以空格係 `+`，空嘅 `query` 唔會加 `?`。`responseType` 同 `errorResponseType` 係唯讀：佢哋由已宣告嘅 `output` 同 `error` struct 種類推導出嚟，唔可以改。
 
 ### HttpMeta
 

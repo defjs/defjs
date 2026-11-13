@@ -1,6 +1,6 @@
 {
   "name": "@defjs/vue",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Provide an existing Defjs client to a Vue application.",
   "bugs": {
     "url": "https://github.com/defjs/defjs/issues"
@@ -30,7 +30,7 @@
     "vue": "3.5.45"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "vue": ">=3.0.0"
   }
 }

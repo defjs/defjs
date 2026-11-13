@@ -53,7 +53,7 @@
     },
     "packages/core": {
       "name": "@defjs/core",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "devDependencies": {
         "@hono/bun": "^1.0.1",
         "@hono/node-server": "^2.1.6",
@@ -71,7 +71,7 @@
     },
     "packages/opentelemetry-server": {
       "name": "@defjs/opentelemetry-server",
-      "version": "0.0.4",
+      "version": "0.0.5",
       "dependencies": {
         "@opentelemetry/api-logs": "^0.223.0",
       },
@@ -86,14 +86,14 @@
         "vitest": "^5.1.0",
       },
       "peerDependencies": {
-        "@defjs/core": "^0.7.0",
+        "@defjs/core": "^0.8.0",
         "@opentelemetry/api": "^1.0.0",
         "@opentelemetry/core": "^2.0.0 || ^3.0.0",
       },
     },
     "packages/react": {
       "name": "@defjs/react",
-      "version": "0.0.4",
+      "version": "0.0.5",
       "devDependencies": {
         "@defjs/core": "workspace:^",
         "@testing-library/dom": "^10.4.2",
@@ -111,13 +111,13 @@
         "vitest": "catalog:",
       },
       "peerDependencies": {
-        "@defjs/core": "^0.7.0",
+        "@defjs/core": "^0.8.0",
         "react": ">=18.0.0",
       },
     },
     "packages/vue": {
       "name": "@defjs/vue",
-      "version": "0.0.4",
+      "version": "0.0.5",
       "devDependencies": {
         "@defjs/core": "workspace:^",
         "@vitest/browser-playwright": "catalog:",
@@ -130,7 +130,7 @@
         "vue": "3.5.45",
       },
       "peerDependencies": {
-        "@defjs/core": "^0.7.0",
+        "@defjs/core": "^0.8.0",
         "vue": ">=3.0.0",
       },
     },

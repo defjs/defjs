@@ -1,11 +1,11 @@
 ---
 title: "构建并发布 SDK"
-description: 用 models 与纯函数操作定义构建多模块 S3 SDK，发布为 npm 包，并让每个应用自行配置 Client。
+description: 用 schema 与纯函数操作定义构建多模块 S3 SDK，发布为 npm 包，并让每个应用自行配置 Client。
 ---
 
 # 构建并发布 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs SDK 将共享的 `struct` 数据模型（`src/models/`）与按业务域划分的操作定义模块（`src/services/`）组织为可按需 tree-shake 的 npm 包，同时把 `createClient(...)`、端点地址、认证凭据和拦截器留在消费方应用中。
+Defjs SDK 将共享的 `struct` schema（`src/schema/`）与按业务域划分的操作定义模块（`src/request/`）组织为可按需 tree-shake 的 npm 包，同时把 `createClient(...)`、端点地址、认证凭据和拦截器留在消费方应用中。
 
 不同于传统 OpenAPI 生成器将接口封装在带状态的 `Service` 类（如 `ObjectsService.putObject(...)`）中，Defjs SDK **只导出独立的纯函数操作定义**（`putObject`、`getObject`、`listObjectsV2`），在应用侧直接传入 `client` 调用。
 
@@ -15,37 +15,37 @@ Defjs SDK 将共享的 `struct` 数据模型（`src/models/`）与按业务域�
 
 以兼容 Amazon S3 协议的对象存储 SDK（`@company/s3-sdk`）为例，将包拆分为两层：
 
-- **`src/models/`**：跨接口复用的 `struct` schema 与 `Infer<typeof ...>` 类型（利用 TypeScript 值与类型同名合并导出，让消费方导入同一个标识符即可同时用作运行时 schema 和静态类型）。
-- **`src/services/`**：按资源域划分的操作模块（`buckets.ts`、`objects.ts`）。每个模块只导出独立的 `defineRequest` 纯函数，通过同步纯函数 `builder` 将调用方扁平入参分发到 `path`、`query`、`headers` 和二进制 `body`。
+- **`src/schema/`**：跨接口复用的 `struct` schema 与 `Infer<typeof ...>` 类型（利用 TypeScript 值与类型同名合并导出，让消费方导入同一个标识符即可同时用作运行时 schema 和静态类型）。
+- **`src/request/`**：按资源域划分的操作模块（`buckets.ts`、`objects.ts`）。每个模块只导出独立的 `defineRequest` 纯函数，通过同步纯函数 `builder` 将调用方扁平入参分发到 `path`、`query`、`headers` 和二进制 `body`。
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -73,10 +73,10 @@ Defjs SDK 将共享的 `struct` 数据模型（`src/models/`）与按业务域�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,10 +126,10 @@ bun pm pack
 把 SDK 与 `@defjs/core` 一起安装：
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-由于 SDK 不绑定任何客户端，消费方应用自行掌控服务端点（AWS S3、Cloudflare R2 或 MinIO）、签名拦截器与重试策略，并以纯函数方式直接调用导入的操作定义：
+由于 SDK 不绑定任何客户端，消费方应用自行掌控服务端点（AWS S3、Cloudflare R2 或 MinIO）、签名拦截器与重试策略，并以纯函数方式直接调用导入的操作定义。因为 `syncReport` 发起三次调用，所以它按步骤给每个错误命名（`putErr`、`listErr`、`getErr`），并返回错误优先元组，其中的错误包装了失败的那一步，就像 Go 的 `fmt.Errorf("put object: %w", err)`。只有 `main` 会记录它：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

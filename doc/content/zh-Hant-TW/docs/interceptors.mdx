@@ -68,7 +68,7 @@ HTTP 重試預設關閉。若要在連線失敗、逾時，或 `502`、`503`、`
 - **401 寫入**：[Bearer 更新範例](/zh-Hant-TW/recipes/refresh-bearer-once) 可能傳遞同一個 JSON POST 兩次。必須確保身分驗證在業務處理前拒絕請求，並使用穩定的冪等鍵與伺服器端去重，否則不要自動重播寫入。串流請求本文不會重播。
 - **處理傳輸層拒絕**：發生網路錯誤時，`next(request)` 會拒絕（不會有狀態碼 0 的回應）。接住並重新拋出該拒絕，就能保留原本的 `NET_*` 錯誤碼。
 - **無法送出的請求**：在 HTTP 攔截器中，當平台拒絕該請求（無效或被禁止的方法、GET 或 HEAD 的本文、帶有憑證的 URL、無效的 `Content-Type`），或 `finalizeHeaders` hook 拋出例外時，`next(request)` 會以平台自己的錯誤（`TypeError`）或 hook 拋出的值拒絕，而不是函式庫的 `BodyFailure` 包裝。重新拋出它會保留 fault code（`REQ_BUILD_FAILED` 或 `EXT_HOOK_FAILED`）；拋出不同的錯誤則讓這次失敗歸你（`EXT_INTERCEPTOR_FAILED`）。傳輸層附近的其他失敗仍會以 `BodyFailure` 到達 `next(request)`：無法讀取、解碼或對上媒體型別的回應本文、被截斷的本文，以及會拋出例外的上傳進度觀察者（`EXT_OBSERVER_FAILED`），後者可能在請求送出前就發生。
-- **在攔截器內拋出例外**：攔截器自己未處理的拋出（或傳給 `next()` 的 `signal` 不是 `AbortSignal`）會讓操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 解析，並設定 `fault.cause`。拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT` 則解析為 `NET_ABORTED` 或 `NET_TIMEOUT`。
+- **在攔截器內拋出例外**：攔截器自己未處理的拋出（或傳給 `next()` 的 `signal` 不是 `AbortSignal`）會讓操作 tuple 以 `EXT_INTERCEPTOR_FAILED` 解析，並設定 `err.cause`。拋出 `ERR_ABORTED` 或 `ERR_TIMEOUT` 則解析為 `NET_ABORTED` 或 `NET_TIMEOUT`。
 
 對 SSE 而言，請優先使用 `withRetry`，而不是反覆呼叫 `next()` 的攔截器。多次呼叫攔截器的 `next()` 會讓這些替代串流失去端點歸屬與重新選取；這和以迭代器的 `next()` 消費事件無關。
 

@@ -1,6 +1,6 @@
 // #region example
 import { defineRequest, struct, type Infer } from "@defjs/core";
-import { ApiError, Order, OrderPage, OrderStatus } from "../models/order.ts";
+import { ApiError, Order, OrderPage, OrderStatus } from "../schema/order.ts";
 
 export const GetOrderInput = struct.object({
   id: struct.number(),
@@ -8,7 +8,7 @@ export const GetOrderInput = struct.object({
 export type GetOrderInput = Infer<typeof GetOrderInput>;
 
 export const getOrder = defineRequest({
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   method: "GET",
   path: "/orders/:id",
   input: GetOrderInput,
@@ -26,7 +26,7 @@ export const ListOrdersInput = struct.object({
 export type ListOrdersInput = Infer<typeof ListOrdersInput>;
 
 export const listOrders = defineRequest({
-  operation: "orders.list",
+  meta: { operation: "orders.list" },
   method: "GET",
   path: "/orders",
   input: ListOrdersInput,
@@ -48,7 +48,7 @@ export const CreateOrderInput = struct.object({
 export type CreateOrderInput = Infer<typeof CreateOrderInput>;
 
 export const createOrder = defineRequest({
-  operation: "orders.create",
+  meta: { operation: "orders.create" },
   method: "POST",
   path: "/orders",
   input: CreateOrderInput,

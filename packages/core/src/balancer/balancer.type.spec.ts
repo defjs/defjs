@@ -2,7 +2,7 @@ import type { Balancer, PickInfo } from "./public_api";
 
 const info: PickInfo = {
   endpoints: ["https://example.test"],
-  operation: "read",
+  meta: { operation: "read" },
 };
 void info;
 

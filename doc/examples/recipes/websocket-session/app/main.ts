@@ -5,9 +5,9 @@ import { quotes } from "../sdk/quotes.ts";
 const client = createClient(withEndpoint("https://quotes.example.com"));
 
 async function main() {
-  const [error, session] = await quotes(client);
-  if (error) {
-    console.error(error.code);
+  const [err, session] = await quotes(client);
+  if (err) {
+    console.error(err.code);
     return;
   }
   const unsubscribe = session.onRuntimeError((cause) =>

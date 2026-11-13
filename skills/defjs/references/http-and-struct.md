@@ -77,12 +77,7 @@ const NewOrder = struct.object({
 });
 
 export function parseWireOrder(raw: unknown) {
-  const [error, order] = struct.parse(NewOrder, raw, { aliases: true });
-  if (error) {
-    console.error(error.prettify());
-    return undefined;
-  }
-  return order;
+  return struct.parse(NewOrder, raw, { aliases: true });
 }
 
 // Wrong: rebuilding a plain object with wire keys bypasses struct alias metadata
@@ -101,7 +96,7 @@ export const badPostOrder = defineRequest({
 // Right: pass the typed struct value directly so Defjs encodes aliases across the tree
 export const postOrder = defineRequest({
   method: "POST",
-  operation: "orders.create",
+  meta: { operation: "orders.create" },
   path: "/orders",
   input: struct.object({ order: NewOrder }),
   builder: (input) => ({ body: input.order }),
@@ -138,7 +133,7 @@ export const CategoryStruct: Struct<Category> = struct.object({
 
 `defineRequest` declares a single HTTP operation. Keep one operation per definition so consumers can tree-shake unused endpoints.
 
-- **`operation`**: Set a static, low-cardinality identifier such as `"orders.update"`. Interceptors and `@defjs/opentelemetry-server` use it for span and metric identity without leaking dynamic URLs or user IDs.
+- **`meta`**: Optional `{ [key: string]: unknown }`, application-defined context such as `{ operation: "orders.update" }`. It reaches interceptors (`request.meta`) and balancers (`PickInfo.meta`) as one read-only object shared by every call, so keep per-call state in the interceptor's closure. Defjs core never sends it with the request, and `@defjs/opentelemetry-server` reports each key as a `defjs.meta.<key>` span and log attribute, so keep secrets out of it.
 - **`output` and `error`**: `output` decodes `2xx` responses; `error` decodes non-`2xx` responses. Only one side is ever read. If `output` or `error` is omitted, that side's response body is not read at all.
 - **Empty responses (`HEAD`, `204`, `205`, `304`)**: Read as zero bytes. `struct.string()` yields `""`, `struct.arrayBuffer()` yields an empty `ArrayBuffer`, and `struct.blob()` yields an empty `Blob`. A JSON struct still checks for a JSON `Content-Type` first (`RES_MEDIA_TYPE_INVALID` if missing) and then fails on empty bytes with `RES_DECODE_FAILED`—omit `output` on a `204 No Content` endpoint instead of declaring a JSON object.
 
@@ -155,7 +150,7 @@ const Order = struct.object({
 
 export const updateOrder = defineRequest({
   method: "PATCH",
-  operation: "orders.update",
+  meta: { operation: "orders.update" },
   path: "/orders/:id",
   input: struct.object({
     id: struct.number(),
@@ -175,12 +170,12 @@ export const updateOrder = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com/v1"));
 
 async function main() {
-  const [error, order, response] = await updateOrder(client, {
+  const [err, order, response] = await updateOrder(client, {
     id: 7,
     patch: { status: "paid", customerName: "Ada" },
   });
-  if (error) {
-    console.error(error.code);
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(order.customerName, response.status);
@@ -195,7 +190,7 @@ void main();
 
 Whenever `input` is declared, `builder` is **required**. Only a definition without `input` may omit `builder`.
 
-- **Synchronous and pure**: `builder` has signature `(input) => ({ path?, query?, headers?, body? })`. If `builder` throws or returns an illegal placement, the operation resolves to `[Fault, undefined, undefined]` with `error.code === "REQ_BUILD_FAILED"`.
+- **Synchronous and pure**: `builder` has signature `(input) => ({ path?, query?, headers?, body? })`. If `builder` throws or returns an illegal placement, the operation resolves to `[Fault, undefined, undefined]` with `err.code === "REQ_BUILD_FAILED"`.
 - **`path`**: Values must be scalars (`string | number | bigint | boolean`). Each `:param` segment is percent-encoded once. Empty strings `""`, `"."`, `".."`, `null`, and `undefined` fail with `REQ_BUILD_FAILED`.
 - **`query`**: Default encoder accepts scalars and arrays of scalars (arrays repeat the key; `undefined` values are omitted; `null` or nested objects without `withQuerySerializer` fail with `REQ_BUILD_FAILED`).
 - **`headers`**: Accepts `Headers`, `[name, value][]`, or a record of scalars and scalar arrays (`["a", "b"]` joins as `"a,b"`; `undefined` values are omitted; invalid header bytes fail with `REQ_BUILD_FAILED`).
@@ -216,7 +211,7 @@ defineRequest({
 // Right: pure synchronous placement; put auth in createHttpInterceptor
 defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -277,7 +272,7 @@ import { defineRequest, struct } from "@defjs/core";
 
 export const uploadInvoice = defineRequest({
   method: "POST",
-  operation: "invoices.upload",
+  meta: { operation: "invoices.upload" },
   path: "/invoices",
   input: struct.formData({
     orderId: struct.string().alias("order_id"),
@@ -294,17 +289,23 @@ export const uploadInvoice = defineRequest({
 
 Pass per-call `RequestOptions` by deriving a single-call client value inline: `operation(client({ signal, onDownloadProgress, onUploadProgress }), input)`.
 
-- **Timeouts vs caller aborts**: `AbortSignal.timeout(ms)` (or aborting with a `TimeoutError` `DOMException`) resolves to `error.code === "NET_TIMEOUT"`. Aborting your own `AbortController` resolves to `error.code === "NET_ABORTED"`. Combine both with `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])`.
+- **Timeouts vs caller aborts**: `AbortSignal.timeout(ms)` (or aborting with a `TimeoutError` `DOMException`) resolves to `err.code === "NET_TIMEOUT"`. Aborting your own `AbortController` resolves to `err.code === "NET_ABORTED"`. Combine both with `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])`.
 - **Upload progress**: `onUploadProgress` is called **only** when the request body is a `ReadableStream` you pass. Built bodies (`Blob`, `File`, `FormData`, `string`, JSON) are sent at once without calling `onUploadProgress`. Note that `ReadableStream` request bodies are never retried, fail on HTTP/1.1 in Chromium/WebKit (`NET_UNREACHABLE`), and are unsupported in Firefox (`ENV_UNSUPPORTED`).
 
 ### Best practice: combined manual abort and deadline timeout
 
 ```ts
-import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
+import {
+  createClient,
+  defineRequest,
+  struct,
+  withEndpoint,
+  type AnyFault,
+} from "@defjs/core";
 
 const getReport = defineRequest({
   method: "GET",
-  operation: "reports.get",
+  meta: { operation: "reports.get" },
   path: "/reports/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -313,21 +314,40 @@ const getReport = defineRequest({
 
 const client = createClient(withEndpoint("https://api.example.com"));
 
-export async function fetchReport(id: number, userCancel: AbortSignal) {
+export async function fetchReport(
+  id: number,
+  userCancel: AbortSignal,
+): Promise<[AnyFault, undefined] | [null, string]> {
   const signal = AbortSignal.any([userCancel, AbortSignal.timeout(5_000)]);
-  const [error, report] = await getReport(client({ signal }), { id });
-  if (error) {
-    if (error.code === "NET_ABORTED") return undefined;
-    if (error.code === "NET_TIMEOUT") {
-      console.warn("Report request timed out");
-      return undefined;
-    }
-    console.error(error.code, error.message);
-    return undefined;
+  const [err, report] = await getReport(client({ signal }), { id });
+  if (err) {
+    return [err, undefined];
   }
-  return report.url;
+  return [null, report.url];
 }
+
+async function main() {
+  const userCancel = new AbortController();
+  const [err, url] = await fetchReport(7, userCancel.signal);
+  if (err) {
+    if (err.code === "NET_TIMEOUT") {
+      console.warn("report request timed out");
+      return;
+    }
+    if (err.code === "NET_ABORTED") {
+      console.warn("report request cancelled");
+      return;
+    }
+    console.error(err.code, err.message);
+    return;
+  }
+  console.log(url);
+}
+
+void main();
 ```
+
+`fetchReport` makes one Defjs call, so it returns the fault as-is (Go's `return nil, err`); the caller branches on `err.code` inside `if (err)`.
 
 ---
 
@@ -339,9 +359,9 @@ export async function fetchReport(id: number, userCancel: AbortSignal) {
 | SSE (`defineEventStream`)     | `[null, stream, startupOpen]`        | `[Fault<TError>, undefined, startupOpen \| undefined]`          |
 | WebSocket (`defineWebSocket`) | `[null, session, startupConnection]` | `[Fault<undefined>, undefined, startupConnection \| undefined]` |
 
-`Fault<TError>` (and `AnyFault`) is a discriminated union keyed by `error.code`:
+`Fault<TError>` (and `AnyFault`) is a discriminated union keyed by `err.code`:
 
-| `error.code`             | Variant                   | Extra fields                                  | Meaning                                                                                                                       |
+| `err.code`               | Variant                   | Extra fields                                  | Meaning                                                                                                                       |
 | ------------------------ | ------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `REQ_INPUT_INVALID`      | `PreflightFault`          | `cause` (`StructError`)                       | Caller input failed the `input` struct                                                                                        |
 | `REQ_BUILD_FAILED`       | `PreflightFault`          | `cause`                                       | `builder` threw, returned invalid path/query/headers/body, or platform refused to construct the request                       |
@@ -361,7 +381,7 @@ export async function fetchReport(id: number, userCancel: AbortSignal) {
 
 ### Best practice: narrowing declared `HTTP_STATUS` errors and triaging `StructError`
 
-When `defineRequest` declares an `error` struct, narrowing `error.code === "HTTP_STATUS"` guarantees `error.data` matches `Infer<typeof errorStruct>` (because a malformed error body produces `RES_STRUCT_MISMATCH` instead):
+When `defineRequest` declares an `error` struct, narrowing `err.code === "HTTP_STATUS"` guarantees `err.data` matches `Infer<typeof errorStruct>` (because a malformed error body produces `RES_STRUCT_MISMATCH` instead):
 
 ```ts
 import {
@@ -386,7 +406,7 @@ const OrderError = struct.discriminatedUnion("kind", [
 
 const getOrder = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -396,26 +416,31 @@ const getOrder = defineRequest({
 
 export function formatFault(fault: AnyFault): string {
   if (fault.cause instanceof StructError) {
-    console.error(fault.cause.prettify());
+    return `[${fault.code}] ${fault.message}\n${fault.cause.prettify()}`;
   }
   return `[${fault.code}] ${fault.message}`;
 }
 
 const client = createClient(withEndpoint("https://api.example.com"));
 
-export async function loadOrder(id: number) {
-  const [error, order] = await getOrder(client, { id });
-  if (error) {
-    if (error.code === "HTTP_STATUS") {
-      switch (error.data.kind) {
+async function main() {
+  const [err, order] = await getOrder(client, { id: 1 });
+  if (err) {
+    if (err.code === "HTTP_STATUS") {
+      switch (err.data.kind) {
         case "not_found":
-          return `Missing order #${error.data.orderId}`;
+          console.error(`missing order #${err.data.orderId}`);
+          return;
         case "rate_limit":
-          return `Retry in ${error.data.retryAfterSeconds}s`;
+          console.error(`retry in ${err.data.retryAfterSeconds}s`);
+          return;
       }
     }
-    return formatFault(error);
+    console.error(formatFault(err));
+    return;
   }
-  return order.status;
+  console.log(order.status);
 }
+
+void main();
 ```

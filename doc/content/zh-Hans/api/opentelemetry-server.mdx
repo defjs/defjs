@@ -66,7 +66,7 @@ HTTP、SSE、WebSocket 默认开。某个传输传 `{ enabled: false }` 就跳�
 
 ## Logger 诊断
 
-顶层 `logger?: Logger` 使用 `@opentelemetry/api-logs` 接口，而不是应用日志记录器。它可选，也可单独使用。Defjs 从不获取全局 logger，也不管理其 provider。每个请求或逻辑连接最多发出一条 `WARN` `LogRecord`（严重级别 13），消息固定，属性包括 `server.address` 和 `server.port`（已知时）、`defjs.phase`、`exception.type`，HTTP 另有 `http.request.method`，SSE 流以错误结束时另有 `defjs.sse.fault.code`，WebSocket 关闭信息带数值代码时另有 `websocket.close.code`：
+顶层 `logger?: Logger` 使用 `@opentelemetry/api-logs` 接口，而不是应用日志记录器。它可选，也可单独使用。Defjs 从不获取全局 logger，也不管理其 provider。每个请求或逻辑连接最多发出一条 `WARN` `LogRecord`（严重级别 13），消息固定，属性包括 `server.address` 和 `server.port`（已知时）、`defjs.phase`、`exception.type`、来自定义 `meta` 的 `defjs.meta.*` 属性，HTTP 另有 `http.request.method`，SSE 流以错误结束时另有 `defjs.sse.fault.code`，WebSocket 关闭信息带数值代码时另有 `websocket.close.code`：
 
 | 结果                                                 | 事件                                                              | `defjs.phase` |
 | ---------------------------------------------------- | ----------------------------------------------------------------- | ------------- |

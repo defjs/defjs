@@ -32,10 +32,10 @@ description: 以注入的傳輸層 Handle、tuple 斷言與確定性計時器，
 
 ### 斷言 error-first tuple，而不是內部實作
 
-一律用測試 Client 呼叫匯出的 SDK 操作，並斷言回傳的 `[error, data, response]` tuple：
+一律用測試 Client 呼叫匯出的 SDK 操作，並斷言回傳的 `[err, data, response]` tuple：
 
-- `2xx` 的情況，斷言 `expect(error).toBeNull()`，並檢查解碼後的 `data` 欄位（包含 `.alias()` 從傳輸名稱到邏輯名稱的對應）。
-- 失敗的情況，若屬於契約的一部分，斷言 `error?.code`、`error?.status`、`error?.data` 與 `error?.cause`。
+- `2xx` 的情況，斷言 `expect(err).toBeNull()`，並檢查解碼後的 `data` 欄位（包含 `.alias()` 從傳輸名稱到邏輯名稱的對應）。
+- 失敗的情況，若屬於契約的一部分，斷言 `err?.code`、`err?.status`、`err?.data` 與 `err?.cause`。
 
 ### 驗證出站請求的網路位元組
 

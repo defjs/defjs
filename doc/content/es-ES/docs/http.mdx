@@ -5,7 +5,7 @@ description: Diseña operaciones HTTP para tu SDK y llámalas con la configuraci
 
 # Operaciones HTTP
 
-Un SDK define cada operación HTTP con `defineRequest`: su método, plantilla de ruta, esquema de `input`, `builder` síncrono y los esquemas de respuesta `output` / `error`. Las aplicaciones consumidoras importan la operación, pasan su `Client` configurado y tratan la tupla devuelta `[error, data, response]`.
+Un SDK define cada operación HTTP con `defineRequest`: su método, plantilla de ruta, esquema de `input`, `builder` síncrono y los esquemas de respuesta `output` / `error`. Las aplicaciones consumidoras importan la operación, pasan su `Client` configurado y tratan la tupla devuelta `[err, data, response]`.
 
 ## 1. Definir la operación y llamarla
 
@@ -38,7 +38,7 @@ Asigna a cada operación su propio export mediante `defineRequest` en el módulo
 ### Buenas prácticas en el diseño de SDKs
 
 - **Una operación por definición**: mantén cada método, ruta y contrato en su propia definición para que las aplicaciones puedan aplicar _tree-shaking_ a las operaciones que no usen.
-- **Asigna un nombre estático a `operation`**: utiliza un identificador de baja cardinalidad como `"orders.read"`. Los plugins de telemetría (`@defjs/opentelemetry-server`) y los interceptores de registro lo usarán sin filtrar URLs ni identificadores de usuario.
+- **Adjunta `meta` cuando los interceptores necesiten contexto**: `meta` es `{ [key: string]: unknown }` y lo define la aplicación, por ejemplo `{ operation: "orders.read" }`. Llega a los interceptores y a los balanceadores (`request.meta`, `PickInfo.meta`) como un único objeto de solo lectura por definición, compartido por cada llamada, intento y cliente. El tipo de solo lectura es superficial, así que guarda el estado por llamada en el closure del interceptor, no en `meta` ni en sus objetos anidados. Un tipo con nombre para `meta` debe ser un alias de `type`: TypeScript no asigna una `interface` a su firma de índice. El núcleo de Defjs nunca lee ni copia `meta`, y nunca se envía con la petición; los valores para la URL, las cabeceras o el cuerpo pasan por `builder`. `@defjs/opentelemetry-server` reporta cada clave como un atributo `defjs.meta.<key>` en spans y logs de fallo, así que mantén los secretos y los datos personales fuera de `meta`.
 - **Nunca incrustes un cliente en el SDK**: exporta únicamente definiciones, esquemas `struct` y tipos.
 
 ## 2. Resolución de URLs y parámetros de ruta

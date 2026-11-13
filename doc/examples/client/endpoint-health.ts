@@ -43,19 +43,22 @@ const timedEjection = roundRobinBalancer({
 // #endregion
 
 // #region active
-async function probe(endpoint: string, signal: AbortSignal): Promise<boolean> {
+async function probe(
+  endpoint: string,
+  signal: AbortSignal,
+): Promise<[Error, undefined] | [null, boolean]> {
   try {
     const response = await fetch(new URL("/healthz", endpoint), {
       signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
     });
     await response.body?.cancel();
-    return response.ok;
-  } catch {
-    return false;
+    return [null, response.ok];
+  } catch (cause) {
+    return [new Error("probe endpoint", { cause }), undefined];
   }
 }
 
-async function callWithHealthChecks() {
+async function callWithHealthChecks(): Promise<Error | null> {
   const healthy = new Map<string, boolean>();
   const controller = new AbortController();
   let checking = false;
@@ -63,7 +66,12 @@ async function callWithHealthChecks() {
     if (checking) return;
     checking = true;
     for (const endpoint of endpoints) {
-      healthy.set(endpoint, await probe(endpoint, controller.signal));
+      const [err, ok] = await probe(endpoint, controller.signal);
+      if (err) {
+        healthy.set(endpoint, false);
+        continue;
+      }
+      healthy.set(endpoint, ok);
     }
     checking = false;
   }
@@ -82,12 +90,12 @@ async function callWithHealthChecks() {
   const timer = setInterval(() => void check(), 5000);
   try {
     await check();
-    const [error] = await getStatus(activeClient);
-    if (error) {
-      console.error(error.code);
-      return;
+    const [err] = await getStatus(activeClient);
+    if (err) {
+      return err;
     }
     console.log("Service responded");
+    return null;
   } finally {
     clearInterval(timer);
     controller.abort();
@@ -96,12 +104,18 @@ async function callWithHealthChecks() {
 // #endregion
 
 async function main() {
-  const [error] = await getStatus(client);
-  if (error) {
-    console.error(error.code);
+  const [statusErr] = await getStatus(client);
+  if (statusErr) {
+    console.error(statusErr.code);
     return;
   }
   console.log("Service responded");
+
+  const checkErr = await callWithHealthChecks();
+  if (checkErr) {
+    console.error(checkErr);
+    return;
+  }
 }
 
 void main();

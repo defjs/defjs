@@ -32,10 +32,10 @@ description: "用注入式傳輸層 handle 離線測試 SDK 定義同應用程�
 
 ### 斷言 error-first tuple，而唔係內部私有狀態
 
-一定要用你嘅測試 client 呼叫匯出嘅 SDK 操作，並針對回傳嘅 `[error, data, response]` tuple 進行斷言：
+一定要用你嘅測試 client 呼叫匯出嘅 SDK 操作，並針對回傳嘅 `[err, data, response]` tuple 進行斷言：
 
-- 對於 `2xx` 成功情況，斷言 `expect(error).toBeNull()` 並驗證解碼後嘅 `data` 欄位（包括 `.alias()` 網絡欄位到邏輯命名嘅自動轉換）。
-- 對於失敗情況，如果屬於契約一部分，請斷言 `error?.code`、`error?.status`、`error?.data` 同埋 `error?.cause`。
+- 對於 `2xx` 成功情況，斷言 `expect(err).toBeNull()` 並驗證解碼後嘅 `data` 欄位（包括 `.alias()` 網絡欄位到邏輯命名嘅自動轉換）。
+- 對於失敗情況，如果屬於契約一部分，請斷言 `err?.code`、`err?.status`、`err?.data` 同埋 `err?.cause`。
 
 ### 驗證傳出請求嘅網絡原始 bytes
 

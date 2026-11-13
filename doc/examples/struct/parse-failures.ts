@@ -2,12 +2,12 @@
 import { struct, StructError } from "@defjs/core";
 
 const Order = struct.object({ id: struct.number(), status: struct.string() });
-const [error] = struct.parse(Order, { id: "not-a-number" });
+const [err] = struct.parse(Order, { id: "not-a-number" });
 
-if (error) {
-  console.log(error instanceof StructError);
-  console.log(error.issues[0]?.code, error.issues[0]?.path);
-  console.log(error.flatten().fieldErrors);
-  console.log(error.format(), error.prettify());
+if (err) {
+  console.log(err instanceof StructError);
+  console.log(err.issues[0]?.code, err.issues[0]?.path);
+  console.log(err.flatten().fieldErrors);
+  console.log(err.format(), err.prettify());
 }
 // #endregion

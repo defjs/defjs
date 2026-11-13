@@ -30,6 +30,6 @@ and verify the result with the project’s existing tests.
 
 ## Das Ergebnis prüfen [#verify]
 
-Lies Definition und Anwendung getrennt. Die Definition exportiert die Operation und erzeugt den Client nicht. Die Anwendung erzeugt den Client und ruft die Operation auf, zum Beispiel `getOrder(client, { id: 1 })`. Ist `input` deklariert, ist `builder` eine explizite synchrone reine Funktion. Der Erfolgswert wird nur gelesen, wenn der Fehlerplatz leer ist.
+Lies Definition und Anwendung getrennt. Die Definition exportiert die Operation und erzeugt den Client nicht. Die Anwendung erzeugt den Client und ruft die Operation auf, zum Beispiel `getOrder(client, { id: 1 })`. Ist `input` deklariert, ist `builder` eine explizite synchrone reine Funktion. Der Erfolgswert wird nur gelesen, wenn der Fehlerplatz leer ist: Die Aufrufstelle prüft `if (err)` direkt nach dem Aufruf und kehrt innerhalb dieses Blocks zurück, und ein Helfer, der fehlschlagen kann, gibt sein eigenes `[err, value]`-Tupel zurück, statt zu protokollieren oder `undefined` zurückzugeben.
 
 Führe danach die Typprüfung dieses Projekts und die Tests aus, die den Vertrag abdecken. Installation von Abhängigkeiten und CI-Regeln bleiben bei diesem Projekt.

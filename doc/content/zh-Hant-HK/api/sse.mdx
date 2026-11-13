@@ -11,12 +11,12 @@ description: defineEventStream、request options，同事件流 handle。
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path` 同 `events` map；可選 `method`（預設 `'GET'`）、`operation`、`input`、`error` 同 `maxBufferSize`（預設 `64 * 1024`）。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` 成員記錄喺 [`EventStreamDefinition`](/zh-Hant-HK/api/core/eventstreamdefinition-type)。只有提供咗 error struct 型別嗰陣，`error` 先必填；`builder` 只有喺宣告咗 `input` 嗰陣先必填。
+- **definition** — `path` 同 `events` map；可選 `method`（預設 `'GET'`）、`meta`、`input`、`error` 同 `maxBufferSize`（預設 `64 * 1024`）。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` 成員記錄喺 [`EventStreamDefinition`](/zh-Hant-HK/api/core/eventstreamdefinition-type)。只有提供咗 error struct 型別嗰陣，`error` 先必填；`builder` 只有喺宣告咗 `input` 嗰陣先必填。
 - **Returns** 一個操作。第一個參數係 [`Client`](/zh-Hant-HK/api/core/client-type)。之後嘅參數只係 input。呼叫就會開始事件流。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼叫回傳 `[null, stream, open]` 或者 `[error, undefined, open?]`。宣告過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`signal` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `signal` 同 `retry`，progress 同 WebSocket 欄位會忽略。
+呼叫回傳 `[null, stream, open]` 或者 `[err, undefined, open?]`。宣告過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`signal` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `signal` 同 `retry`，progress 同 WebSocket 欄位會忽略。
 
 ## EventStreamExecuteOptions
 
@@ -62,7 +62,7 @@ key 係 SSE event 名稱；冇 `event:` 欄位嘅訊息名為 `message`。冇 ke
 
 ## EventStreamDefinition
 
-`path`、`events`，可選 `method` / `operation` / `input` / `error` / `maxBufferSize`。request 形狀同 HTTP 一樣，包括 `body`。`GET` 同 `HEAD` 唔可以帶 body。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
+`path`、`events`，可選 `method` / `meta` / `input` / `error` / `maxBufferSize`。request 形狀同 HTTP 一樣，包括 `body`。`GET` 同 `HEAD` 唔可以帶 body。只要宣告咗 `input`，就必須明確提供 `builder`。`input` 只定義參數，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ## EventStreamEndpoint
 
@@ -74,7 +74,7 @@ key 係 SSE event 名稱；冇 `event:` 欄位嘅訊息名為 `message`。冇 ke
 
 ## StreamAwaitResult
 
-`[null, stream, open]` 或者 `[error, undefined, open?]`。
+`[null, stream, open]` 或者 `[err, undefined, open?]`。
 
 ## EventStreamData
 

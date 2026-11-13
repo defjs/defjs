@@ -37,12 +37,12 @@ const client = createClient(
   }),
 );
 async function main() {
-  const [error, order] = await getOrder(
+  const [err, order] = await getOrder(
     client({ signal: AbortSignal.timeout(5_000) }),
     { id: 1 },
   );
-  if (error) {
-    console.error(error.code);
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(order.status);

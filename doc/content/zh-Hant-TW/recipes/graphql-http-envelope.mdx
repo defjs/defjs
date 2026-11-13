@@ -5,7 +5,7 @@ description: 把 GraphQL 當成 HTTP 200 加應用程式層解包；Core 不提�
 
 # 拆解 GraphQL HTTP 封套
 
-Defjs 不內嵌 GraphQL client，也沒有 `errorPolicy`。請把 HTTP 上的 GraphQL 建模成標準 `POST` 操作，由 `builder` 送出 `{ query, operationName, variables }`。在封套 struct 上把 `data` 標記為 `.nullish()`，讓省略 `data` 與 `data: null` 都能通過 struct 驗證，再於應用程式輔助函式中拆解 `errors[]`：
+Defjs 不內嵌 GraphQL client，也沒有 `errorPolicy`。請把 HTTP 上的 GraphQL 建模成標準 `POST` 操作，由 `builder` 送出 `{ query, operationName, variables }`。在封套 struct 上把 `data` 標記為 `.nullish()`，讓省略 `data` 與 `data: null` 都能通過 struct 驗證，再於應用程式輔助函式中拆解 `errors[]`。該輔助函式回傳 error-first tuple，即 `Promise<[Error, undefined] | [null, Viewer | null]>`，因此呼叫端只需處理一個 `err`，無論它是 Defjs fault 還是 GraphQL 錯誤：
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -32,5 +32,5 @@ Defjs 不內嵌 GraphQL client，也沒有 `errorPolicy`。請把 HTTP 上的 Gr
 ada viewer unavailable viewer unavailable
 ```
 
-- HTTP `200` 只代表 GraphQL 封套完整送達。`errors[]` 裡的領域錯誤（即使同時帶著 `data: null`）屬於應用程式層級的結果，不是 `RES_STRUCT_MISMATCH` fault。
+- HTTP `200` 只代表 GraphQL 封套完整送達。`errors[]` 裡的領域錯誤（即使同時帶著 `data: null`）屬於應用程式層級的結果，不是 `RES_STRUCT_MISMATCH` fault。輔助函式會把它們當成自己的 `Error` 回傳（訊息串接在一起），單一呼叫的 Defjs fault 則原樣回傳。它絕不拋出，也不會回傳 `undefined` 來表示失敗。
 - 至於協定專屬的封套為何要留在應用程式輔助函式裡，請參閱[核心架構](/zh-Hant-TW/docs/design-decisions)。

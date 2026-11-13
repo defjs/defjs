@@ -11,7 +11,7 @@ Déclarez une requête typée, puis appelez l'opération avec un client et son e
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`, `path`, struct `input` facultatif, structs `output` et `error` facultatifs, `operation` facultative. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`RequestDefinition`](/fr-FR/api/core/requestdefinition-type). `builder` est obligatoire exactement quand `input` est déclaré.
+- **definition** — `method`, `path`, struct `input` facultatif, structs `output` et `error` facultatifs, `meta` facultatif. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`RequestDefinition`](/fr-FR/api/core/requestdefinition-type). `builder` est obligatoire exactement quand `input` est déclaré.
 - **Renvoie** une opération. Appelez-la comme `getOrder(client, input)`, ou `health(client)` quand aucune entrée n’est déclarée. Quand tout le struct d’entrée est facultatif, l’argument d’entrée peut être omis. L’appeler démarre la requête. Il n’y a pas de troisième argument d’options.
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -52,7 +52,7 @@ qu’une valeur venue du fil ; il n’y a pas de court-circuit de confiance.
 
 ### RequestDefinition
 
-`method`, `path`, `input`, `output`, `error`, `operation` et `builder` ; `input`, `output`, `error` et `operation` sont facultatifs. Le type du struct choisit comment un corps déclaré est lu. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
+`method`, `path`, `input`, `output`, `error`, `meta` et `builder` ; `input`, `output`, `error` et `meta` sont facultatifs. Le type du struct choisit comment un corps déclaré est lu. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
 
 ### HttpAwaitResult
 
@@ -63,7 +63,7 @@ En succès, le troisième emplacement porte `body` seulement quand `output` a é
 
 ### HttpRequest
 
-Requête sortante normalisée : `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` et `query`. Quand les intercepteurs la voient, `body` est déjà la valeur réseau — pour du JSON, une chaîne de texte JSON — signez donc les HMAC et les digests sur celle-ci, pas sur l’entrée du struct. `query` est l’unique query que la requête envoie, un `URLSearchParams` : un intercepteur la modifie sur place ou passe un remplaçant à `next()`. Un builder qui renvoie `URLSearchParams` en fait copier l’instance, et la chaîne d’une fonction `withQuerySerializer` y est analysée. La forme réseau est `query.toString()`, la sérialisation application/x-www-form-urlencoded de l’URL Standard : l’espace devient `+`, et une `query` vide n’ajoute pas de `?`. `responseType` et `errorResponseType` sont readonly : ils sont dérivés des types de struct `output` et `error` de la définition et ne doivent pas être modifiés.
+Requête sortante normalisée : `method`, `endpoint`, `headers`, `body`, `signal`, `meta`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` et `query`. Quand les intercepteurs la voient, `body` est déjà la valeur réseau — pour du JSON, une chaîne de texte JSON — signez donc les HMAC et les digests sur celle-ci, pas sur l’entrée du struct. `query` est l’unique query que la requête envoie, un `URLSearchParams` : un intercepteur la modifie sur place ou passe un remplaçant à `next()`. Un builder qui renvoie `URLSearchParams` en fait copier l’instance, et la chaîne d’une fonction `withQuerySerializer` y est analysée. La forme réseau est `query.toString()`, la sérialisation application/x-www-form-urlencoded de l’URL Standard : l’espace devient `+`, et une `query` vide n’ajoute pas de `?`. `responseType` et `errorResponseType` sont readonly : ils sont dérivés des types de struct `output` et `error` de la définition et ne doivent pas être modifiés.
 
 ### HttpMeta
 

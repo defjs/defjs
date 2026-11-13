@@ -21,13 +21,13 @@ const createOrder = defineRequest({
 });
 
 function readOrder() {
-  const [parseError, order] = struct.parse(Order, {
+  const [err, order] = struct.parse(Order, {
     id: 7,
     status: "paid",
     totalCents: 4200,
   });
-  if (parseError) {
-    console.error(parseError.message);
+  if (err) {
+    console.error(err.message);
     return;
   }
   console.log(order.status);

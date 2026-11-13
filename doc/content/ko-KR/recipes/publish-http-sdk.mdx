@@ -5,7 +5,7 @@ description: 모델과 순수 함수 기반 작업 정의로 다중 모듈 S3 SD
 
 # SDK 작성과 배포 [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs SDK는 공유 `struct` 모델(`src/models/`)과 도메인별 작업 모듈(`src/services/`)을 트리쉐이킹 가능한 npm 패키지로 구성하며, `createClient(...)`, 엔드포인트, 자격 증명, 인터셉터 설정은 사용하는 애플리케이션에 온전히 맡깁니다.
+Defjs SDK는 공유 `struct` 모델(`src/schema/`)과 도메인별 작업 모듈(`src/request/`)을 트리쉐이킹 가능한 npm 패키지로 구성하며, `createClient(...)`, 엔드포인트, 자격 증명, 인터셉터 설정은 사용하는 애플리케이션에 온전히 맡깁니다.
 
 엔드포인트를 상태를 가진 `Service` 클래스(`ObjectsService.putObject(...)`)로 감싸는 레거시 OpenAPI 생성기와 달리, Defjs SDK는 애플리케이션의 클라이언트로 직접 호출할 수 있는 **독립적인 순수 작업 함수**(`putObject`, `getObject`, `listObjectsV2`)를 export합니다.
 
@@ -15,37 +15,37 @@ Defjs SDK는 공유 `struct` 모델(`src/models/`)과 도메인별 작업 모듈
 
 Amazon S3 호환 오브젝트 스토리지 SDK(`@company/s3-sdk`)를 예로 들어 패키지를 두 계층으로 나눕니다:
 
-- **`src/models/`**: 공유 `struct` 스키마 및 `Infer<typeof ...>` TypeScript 타입(런타임 스키마와 정적 타입 모두에 동일한 이름의 값 + 타입 export를 사용하여 사용하는 쪽에서 단일 식별자로 import할 수 있도록 구성).
-- **`src/services/`**: 리소스별로 그룹화된 도메인 모듈(`buckets.ts`, `objects.ts`). 각 모듈은 동기 `builder`를 통해 호출자의 평탄한 입력을 `path`, `query`, `headers`, 바이너리 `body`로 분배하는 독립형 `defineRequest` 함수를 export합니다.
+- **`src/schema/`**: 공유 `struct` 스키마 및 `Infer<typeof ...>` TypeScript 타입(런타임 스키마와 정적 타입 모두에 동일한 이름의 값 + 타입 export를 사용하여 사용하는 쪽에서 단일 식별자로 import할 수 있도록 구성).
+- **`src/request/`**: 리소스별로 그룹화된 도메인 모듈(`buckets.ts`, `objects.ts`). 각 모듈은 동기 `builder`를 통해 호출자의 평탄한 입력을 `path`, `query`, `headers`, 바이너리 `body`로 분배하는 독립형 `defineRequest` 함수를 export합니다.
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -73,10 +73,10 @@ Amazon S3 호환 오브젝트 스토리지 SDK(`@company/s3-sdk`)를 예로 들�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,10 +126,10 @@ Tarball 내에 `dist/index.js`와 `dist/index.d.ts`가 정상적으로 포함되
 애플리케이션에 작성한 SDK와 `@defjs/core`를 함께 설치합니다:
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-SDK는 클라이언트를 바인딩하지 않으므로 사용하는 애플리케이션이 엔드포인트(AWS S3, Cloudflare R2 또는 MinIO), 서명 인터셉터, 재시도 정책의 소유권을 가지며, import한 각 작업을 순수 함수로 직접 호출합니다:
+SDK는 클라이언트를 바인딩하지 않으므로 사용하는 애플리케이션이 엔드포인트(AWS S3, Cloudflare R2 또는 MinIO), 서명 인터셉터, 재시도 정책의 소유권을 가지며, import한 각 작업을 순수 함수로 직접 호출합니다. `syncReport`는 호출이 세 번이므로 각 오류에 단계 이름을 붙이고(`putErr`, `listErr`, `getErr`), 실패한 단계를 감싼 오류를 error-first 튜플로 반환합니다. Go의 `fmt.Errorf("put object: %w", err)`에 해당합니다. 로그로 남기는 것은 `main`뿐입니다:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

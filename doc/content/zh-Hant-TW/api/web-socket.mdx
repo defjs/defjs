@@ -11,12 +11,12 @@ description: defineWebSocket、工作階段與請求選項。
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`，以及一個 `incoming` struct；選用的 `outgoing` 與 `input` struct、`operation`、靜態 `protocols` 與 `maxOutgoingQueueSize`。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。這些 `definition` 成員的文件位於 [`WebSocketDefinition`](/zh-Hant-TW/api/core/websocketdefinition-type)。`builder` 恰好在宣告 `input` 時必填。
+- **definition** — `path`，以及一個 `incoming` struct；選用的 `outgoing` 與 `input` struct、`meta`、靜態 `protocols` 與 `maxOutgoingQueueSize`。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。這些 `definition` 成員的文件位於 [`WebSocketDefinition`](/zh-Hant-TW/api/core/websocketdefinition-type)。`builder` 恰好在宣告 `input` 時必填。
 - **回傳** 一個操作。第一個引數是 [`Client`](/zh-Hant-TW/api/core/client-type)。其餘引數只有 input。呼叫它就會開啟工作階段。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-呼叫會回傳 `[null, session, connection]` 或 `[error, undefined, connection?]`。單次呼叫的選項，請從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。WebSocket 會讀 `signal`、`beforeConnect`、`heartbeat`、`protocols` 與 `retry`，並忽略 HTTP 進度欄位。
+呼叫會回傳 `[null, session, connection]` 或 `[err, undefined, connection?]`。單次呼叫的選項，請從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。WebSocket 會讀 `signal`、`beforeConnect`、`heartbeat`、`protocols` 與 `retry`，並忽略 HTTP 進度欄位。
 
 `beforeConnect`、`heartbeat`、`protocols` 與 `retry` 每一項都會在該次呼叫整份取代 client 的設定。子協定的優先順序是：衍生的 client、`withWebSocketProtocols`，最後才是定義上的 `protocols`。`heartbeat.timeoutMs` 是等待確認的時間，不是請求期限。
 
@@ -72,7 +72,7 @@ builder 與攔截器鏈每次操作只執行一次。重連會重用已建構的
 
 ## WebSocketDefinition
 
-`path`、`incoming`，以及選用的 `outgoing`／`input`／`operation`／`protocols`／`maxOutgoingQueueSize`。builder 只能回傳 `path` 與 `query`。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。
+`path`、`incoming`，以及選用的 `outgoing`／`input`／`meta`／`protocols`／`maxOutgoingQueueSize`。builder 只能回傳 `path` 與 `query`。只要宣告了 `input`，就必須提供明確的 `builder`。`input` 只宣告參數，每個值放在哪裡全由 builder 決定。只有未宣告 `input` 的定義可以省略 `builder`。
 
 ## WebSocketEndpoint
 
@@ -88,7 +88,7 @@ builder 與攔截器鏈每次操作只執行一次。重連會重用已建構的
 
 ## SocketAwaitResult
 
-`[null, session, connection]` 或 `[error, undefined, connection?]`。
+`[null, session, connection]` 或 `[err, undefined, connection?]`。
 
 ## ManualSocketCloseReason
 

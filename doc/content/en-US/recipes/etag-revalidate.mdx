@@ -32,5 +32,5 @@ In Defjs, only `2xx` responses take the success branch, so `304 Not Modified` ar
 Flask
 ```
 
-- The `if (error) throw error` after the `304` check is an explicit policy: `createReader` returns `Promise<Product>`, so every other fault is thrown.
+- Inside `if (err)`, only the `304` with a cached entry is handled (it returns the cached product). Every other fault is returned unchanged, like Go's `return nil, err`, so `createReader` returns `Promise<[Error, undefined] | [null, Product]>` and never throws. A missing `ETag` header is the helper's own failure and is returned as a new `Error` too. `main` is the top of the program, so it logs the error and returns.
 - Never rewrite `304` into a synthetic `200` inside an interceptor; keep cache state in application code around the operation call. See [HTTP operations](/docs/http).

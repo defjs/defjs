@@ -66,7 +66,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-Если изменить входные данные с `{ id: 7 }` на `{ id: 8 }`, мок вернёт статус `404`, и Defjs декодирует объявленную структуру `error` в поле `error.data`:
+Если изменить входные данные с `{ id: 7 }` на `{ id: 8 }`, мок вернёт статус `404`, и Defjs декодирует объявленную структуру `error` в поле `err.data`:
 
 ```txt
 Order not found
@@ -74,11 +74,11 @@ Order not found
 
 ## 4. Разберитесь с error-first кортежем
 
-Каждый HTTP-вызов возвращает кортеж `[error, data, response]`:
+Каждый HTTP-вызов возвращает кортеж `[err, data, response]`. Проверяйте `if (err)` сразу после вызова и выходите из этого блока, как в Go с `if err != nil`:
 
-- **При успехе (`2xx`)**: `error` равен `null`, `data` содержит валидированное значение `output` (`Order`), а `response` — это `DecodedResponse<Order>`.
-- **При объявленном статусе вне `2xx`**: `error.code` равен `'HTTP_STATUS'`, `error.status` содержит код ответа (`404`), а `error.data` — валидированную структуру `error` (`NotFound`).
-- **При ошибках входа, декодирования или сети**: `error.code` точно указывает на этап сбоя:
+- **При успехе (`2xx`)**: `err` равен `null`, `data` содержит валидированное значение `output` (`Order`), а `response` — это `DecodedResponse<Order>`.
+- **При объявленном статусе вне `2xx`**: `err.code` равен `'HTTP_STATUS'`, `err.status` содержит код ответа (`404`), а `err.data` — валидированную структуру `error` (`NotFound`).
+- **При ошибках входа, декодирования или сети**: `err.code` точно указывает на этап сбоя:
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — невалидные входные данные или выброс исключения в `builder`
   - `RES_MEDIA_TYPE_INVALID` — ожидалось тело JSON, но пришёл неподдерживаемый `Content-Type` (отклоняется до чтения тела)
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — невозможно прочитать тело или структура ответа не совпадает со схемой

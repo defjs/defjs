@@ -31,7 +31,7 @@ export function ApiProvider({ children }: { children: ReactNode }) {
 
 const getOrder = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -46,10 +46,10 @@ export function OrderStatus({ id }: { id: number }) {
     const controller = new AbortController();
 
     void getOrder(client({ signal: controller.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (controller.signal.aborted) return;
-        if (error) {
-          setStatus(undefined);
+        if (err) {
+          setStatus(err.message);
           return;
         }
         setStatus(order.status);
@@ -73,7 +73,7 @@ import { useClient } from "@defjs/react";
 import { useEffect } from "react";
 
 const quotes = defineWebSocket({
-  operation: "quotes.stream",
+  meta: { operation: "quotes.stream" },
   path: "/quotes",
   incoming: struct.object({ symbol: struct.string(), price: struct.number() }),
 });
@@ -85,11 +85,11 @@ export function QuoteTicker() {
     const controller = new AbortController();
 
     void (async () => {
-      const [error, session] = await quotes(
+      const [err, session] = await quotes(
         client({ signal: controller.signal }),
       );
-      if (error) {
-        if (error.code !== "NET_ABORTED") console.error(error.code);
+      if (err) {
+        if (err.code !== "NET_ABORTED") console.error(err.code);
         return;
       }
       await using owned = session;
@@ -144,7 +144,7 @@ const status = ref("Loading...");
 
 const getOrder = defineRequest({
   method: "GET",
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
@@ -158,9 +158,13 @@ watch(
     onCleanup(() => controller.abort());
 
     void getOrder(client({ signal: controller.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (controller.signal.aborted) return;
-        status.value = error ? "Error" : order.status;
+        if (err) {
+          status.value = err.message;
+          return;
+        }
+        status.value = order.status;
       },
     );
   },
@@ -169,7 +173,7 @@ watch(
 
 // For SSE or WebSocket in Vue setup, tie abort + close to onScopeDispose:
 const deployEvents = defineEventStream({
-  operation: "deployments.events",
+  meta: { operation: "deployments.events" },
   path: "/deployments/events",
   events: { line: struct.string() },
 });
@@ -178,10 +182,13 @@ const streamController = new AbortController();
 onScopeDispose(() => streamController.abort());
 
 void (async () => {
-  const [error, stream] = await deployEvents(
+  const [err, stream] = await deployEvents(
     client({ signal: streamController.signal }),
   );
-  if (error) return;
+  if (err) {
+    console.error(err.code);
+    return;
+  }
   try {
     for await (const event of stream) {
       console.info(event.data);
@@ -203,7 +210,7 @@ void (async () => {
 `@defjs/opentelemetry-server` instruments outbound HTTP, SSE, and WebSocket operations on a `@defjs/core` client via `withOpenTelemetryServer({ tracer?, meter?, logger?, ... })`.
 
 - **Boundary**: The plugin does **not** initialize the OpenTelemetry SDK—configure your `TracerProvider`, `MeterProvider`, and `LoggerProvider` in application bootstrap code.
-- **Low-cardinality `operation`**: Always set a static `operation` name (`"orders.read"`, `"orders.watch"`, `"orders.connect"`) on every definition. Spans are named `<METHOD> <operation>`, `SSE <operation>`, and `WebSocket <operation>`, and `defjs.operation` is recorded on spans and metrics. Never put dynamic IDs or URLs in `operation`.
+- **Application-defined `meta`**: Attach `meta` (`{ [key: string]: unknown }`, for example `{ operation: "orders.read" }`) when interceptors need context. `@defjs/opentelemetry-server` reports each key as a `defjs.meta.<key>` attribute on spans and failure logs (not metrics); an empty `meta` adds nothing. It is one read-only object shared by every call of the definition, and Defjs core never sends it with the request.
 - **WebSocket trace propagation**: Browser/standard WebSockets cannot set handshake headers. Enable `webSocket: { queryPropagation: true }` only when the server explicitly reads W3C `traceparent` / `tracestate` from query parameters (it replaces any existing same-name query pairs).
 - **Attempts vs logical sessions**: HTTP retries emit one span per attempt as siblings under the active parent. SSE and WebSocket reconnects retain one logical-session span across reconnects. Caller aborts (`NET_ABORTED`) leave span status unset and emit no error log; timeouts (`NET_TIMEOUT`) mark the span `ERROR` with `error.type: "timeout"`.
 - **Privacy defaults**: Request/response bodies, full headers, and `request.query` on `url.full` are never captured by default.
@@ -218,7 +225,7 @@ import { logs } from "@opentelemetry/api-logs";
 
 export const listOrders = defineRequest({
   method: "GET",
-  operation: "orders.list",
+  meta: { operation: "orders.list" },
   path: "/orders",
 });
 
@@ -253,7 +260,7 @@ import { expect, test } from "vitest";
 
 const postOrder = defineRequest({
   method: "POST",
-  operation: "orders.create",
+  meta: { operation: "orders.create" },
   path: "/orders/:region",
   input: struct.object({
     region: struct.string(),
@@ -285,11 +292,11 @@ test("postOrder encodes wire aliases and decodes 201 and 400 responses", async (
     }),
   );
 
-  const [error, order, response] = await postOrder(client, {
+  const [err, order, response] = await postOrder(client, {
     region: "eu",
     order: { customerName: "Ada" },
   });
-  expect(error).toBeNull();
+  expect(err).toBeNull();
   expect(order).toEqual({ id: 9, customerName: "Ada" });
   expect(response?.status).toBe(201);
 });
@@ -299,38 +306,38 @@ test("postOrder encodes wire aliases and decodes 201 and 400 responses", async (
 
 ## 5. In-app API layer & public SDK architecture
 
-Defjs supports two primary project layouts that share the same `models/` + `services/` (pure operation functions) structure:
+Defjs supports two primary project layouts that share the same `schema/` + `request/` (pure operation functions) structure:
 
-| Scenario                                                                                                                                   | Layout                                                            | Who owns `createClient(...)`?                                                                        |
-| :----------------------------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------- |
-| **Application API layer (`src/api/`)** — Hand-writing HTTP/realtime requests inside an app repository (replacing `axios`/`fetch` wrappers) | `src/api/models/` + `src/api/services/` + `src/api/client.ts`     | Your app (`src/api/client.ts` exports a browser singleton `apiClient` or an SSR per-request factory) |
-| **Public SDK package (`@company/s3-sdk`)** — Publishing an external npm SDK for a company's public API                                     | `src/models/` + `src/services/` + `src/index.ts` (`package.json`) | External consumer applications (the SDK package never creates or captures a `Client`)                |
+| Scenario                                                                                                                                   | Layout                                                           | Who owns `createClient(...)`?                                                                        |
+| :----------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------- |
+| **Application API layer (`src/api/`)** — Hand-writing HTTP/realtime requests inside an app repository (replacing `axios`/`fetch` wrappers) | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`     | Your app (`src/api/client.ts` exports a browser singleton `apiClient` or an SSR per-request factory) |
+| **Public SDK package (`@company/s3-sdk`)** — Publishing an external npm SDK for a company's public API                                     | `src/schema/` + `src/request/` + `src/index.ts` (`package.json`) | External consumer applications (the SDK package never creates or captures a `Client`)                |
 
 ```text
 @company/s3-sdk/ (or src/api/ inside an app repo)
 ├── src/
-│   ├── models/           # Shared struct schemas + Infer<typeof ...> same-name types
+│   ├── schema/           # Shared struct schemas + Infer<typeof ...> same-name types
 │   │   ├── common.ts     # S3Error, StorageClass
 │   │   ├── bucket.ts     # Bucket, ListBucketsOutput
 │   │   └── object.ts     # ObjectSummary, ListObjectsOutput
-│   ├── services/         # Domain modules grouped by resource tag
+│   ├── request/         # Domain modules grouped by resource tag
 │   │   ├── buckets.ts    # listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts    # listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts          # Flat barrel re-exports (or client.ts in an in-app src/api/ layer)
-├── package.json          # "type": "module", "sideEffects": false, peerDependencies: { "@defjs/core": "^0.7.0" }
+├── package.json          # "type": "module", "sideEffects": false, peerDependencies: { "@defjs/core": "^0.8.0" }
 └── tsconfig.json
 ```
 
 - **Architecture rules**:
-  1. **Pure functions, never `Service` classes**: Unlike legacy OpenAPI generators that wrap endpoints in stateful classes (`ObjectsService.putObject(...)` or `new S3Client()`), every operation in `src/services/*.ts` is exported directly as a standalone `defineRequest` / `defineEventStream` / `defineWebSocket` value and called as `await putObject(client, input)` or `await getObject(client({ signal }), input)`. Never wrap operations in a `class` or a namespace object—standalone exports preserve per-call `client(options)` derivation and allow bundlers to tree-shake unused operations when `"sideEffects": false` is set.
-  2. **Same-name `struct` + `Infer` exports in `models/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
-  3. **Keep `services/*.ts` client-free in both scenarios**: Even inside an application's `src/api/`, never import `apiClient` inside `src/api/services/*.ts`. Keep `createClient(...)` in `src/api/client.ts` so operations remain directly testable with `withHTTPHandle` and reusable across browser singletons and SSR per-request clients.
-  4. **Public SDK package metadata**: When publishing an external SDK package, declare `"@defjs/core": "^0.7.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
+  1. **Pure functions, never `Service` classes**: Unlike legacy OpenAPI generators that wrap endpoints in stateful classes (`ObjectsService.putObject(...)` or `new S3Client()`), every operation in `src/request/*.ts` is exported directly as a standalone `defineRequest` / `defineEventStream` / `defineWebSocket` value and called as `await putObject(client, input)` or `await getObject(client({ signal }), input)`. Never wrap operations in a `class` or a namespace object—standalone exports preserve per-call `client(options)` derivation and allow bundlers to tree-shake unused operations when `"sideEffects": false` is set.
+  2. **Same-name `struct` + `Infer` exports in `schema/`**: Export both `export const S3Error = struct.object(...)` and `export type S3Error = Infer<typeof S3Error>` so consumers import one identifier for both runtime schemas and TypeScript types.
+  3. **Keep `request/*.ts` client-free in both scenarios**: Even inside an application's `src/api/`, never import `apiClient` inside `src/api/request/*.ts`. Keep `createClient(...)` in `src/api/client.ts` so operations remain directly testable with `withHTTPHandle` and reusable across browser singletons and SSR per-request clients.
+  4. **Public SDK package metadata**: When publishing an external SDK package, declare `"@defjs/core": "^0.8.0"` under `peerDependencies` (and `devDependencies` for local tests) with `"type": "module"` and `"sideEffects": false`.
 
-### Best practice: hand-written S3 SDK (`models/` + `services/` + application consumer)
+### Best practice: hand-written S3 SDK (`schema/` + `request/` + application consumer)
 
 ```ts
-// src/models/common.ts
+// src/schema/common.ts
 import { struct, type Infer } from "@defjs/core";
 
 export const StorageClass = struct.enum([
@@ -350,7 +357,7 @@ export type S3Error = Infer<typeof S3Error>;
 ```
 
 ```ts
-// src/models/object.ts
+// src/schema/object.ts
 import { struct, type Infer } from "@defjs/core";
 import { StorageClass } from "./common.ts";
 
@@ -377,10 +384,10 @@ export type ListObjectsOutput = Infer<typeof ListObjectsOutput>;
 ```
 
 ```ts
-// src/services/objects.ts
+// src/request/objects.ts
 import { defineRequest, struct, type Infer } from "@defjs/core";
-import { S3Error, StorageClass } from "../models/common.ts";
-import { ListObjectsOutput } from "../models/object.ts";
+import { S3Error, StorageClass } from "../schema/common.ts";
+import { ListObjectsOutput } from "../schema/object.ts";
 
 // Wrong: wrapping operations in a Service class or capturing a client
 // export class ObjectsService {
@@ -398,7 +405,7 @@ export const ListObjectsInput = struct.object({
 export type ListObjectsInput = Infer<typeof ListObjectsInput>;
 
 export const listObjectsV2 = defineRequest({
-  operation: "s3.objects.listV2",
+  meta: { operation: "s3.objects.listV2" },
   method: "GET",
   path: "/:bucket",
   input: ListObjectsInput,
@@ -423,7 +430,7 @@ export const GetObjectInput = struct.object({
 export type GetObjectInput = Infer<typeof GetObjectInput>;
 
 export const getObject = defineRequest({
-  operation: "s3.objects.get",
+  meta: { operation: "s3.objects.get" },
   method: "GET",
   path: "/:bucket/:key",
   input: GetObjectInput,
@@ -445,7 +452,7 @@ export const PutObjectInput = struct.object({
 export type PutObjectInput = Infer<typeof PutObjectInput>;
 
 export const putObject = defineRequest({
-  operation: "s3.objects.put",
+  meta: { operation: "s3.objects.put" },
   method: "PUT",
   path: "/:bucket/:key",
   input: PutObjectInput,
@@ -484,7 +491,11 @@ const s3Client = createClient(
   withRetry({ maxRetries: 3 }),
 );
 
-export async function syncReport(bucket: string, key: string, pdf: Blob) {
+export async function syncReport(
+  bucket: string,
+  key: string,
+  pdf: Blob,
+): Promise<[Error, undefined] | [null, { count: number; size: number }]> {
   const [putErr] = await putObject(s3Client, {
     bucket,
     key,
@@ -493,10 +504,7 @@ export async function syncReport(bucket: string, key: string, pdf: Blob) {
     storageClass: "STANDARD",
   });
   if (putErr) {
-    if (putErr.code === "HTTP_STATUS") {
-      console.error(putErr.data.code, putErr.data.requestId);
-    }
-    return undefined;
+    return [new Error("put object", { cause: putErr }), undefined];
   }
 
   const [listErr, page] = await listObjectsV2(s3Client, {
@@ -504,16 +512,32 @@ export async function syncReport(bucket: string, key: string, pdf: Blob) {
     prefix: "reports/",
     maxKeys: 50,
   });
-  if (listErr) return undefined;
+  if (listErr) {
+    return [new Error("list objects", { cause: listErr }), undefined];
+  }
 
   const [getErr, blob] = await getObject(
     s3Client({ signal: AbortSignal.timeout(10_000) }),
     { bucket, key },
   );
-  if (getErr) return undefined;
+  if (getErr) {
+    return [new Error("get object", { cause: getErr }), undefined];
+  }
 
-  return { count: page.contents.length, size: blob.size };
+  return [null, { count: page.contents.length, size: blob.size }];
 }
+
+async function main() {
+  const pdf = new Blob(["%PDF-1.7"], { type: "application/pdf" });
+  const [err, report] = await syncReport("reports", "q3.pdf", pdf);
+  if (err) {
+    console.error(err);
+    return;
+  }
+  console.log(report.count, report.size);
+}
+
+void main();
 ```
 
 ---

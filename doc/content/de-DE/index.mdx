@@ -31,15 +31,15 @@ Defjs trennt die beiden Seiten eines TypeScript-SDKs sauber voneinander:
 </Tab>
 </Tabs>
 
-Der Aufruf `getHealth(client)` führt I/O aus und liefert ein Error-first-Tupel zurück. Prüfe `if (error)` und beende den Ablauf vorzeitig, bevor du das dekodierte Ergebnis liest.
+Der Aufruf `getHealth(client)` führt I/O aus und liefert ein Error-first-Tupel zurück. Prüfe `if (err)` und beende den Ablauf vorzeitig, bevor du das dekodierte Ergebnis liest.
 
 ## Warum Definitionen von Clients trennen?
 
-| Verantwortung | SDK-Autor (Definition)                                                                                           | Anwendung (Ausführung)                                                                           |
-| ------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **Besitzt**   | Methode, Pfadvorlage, `input`- / `output`- / `error`-Schemas, `builder`-Mapping und statischen `operation`-Namen | Basis-URLs, Zugangsdaten, Auth-Interceptors, Load-Balancing, Timeouts und Ressourcen-Bereinigung |
-| **Liefert**   | Wiederverwendbare ESM-Module und `.d.ts`-Deklarationen                                                           | Laufzeitkonfiguration für Browser, Server oder Testumgebung                                      |
-| **Vorteil**   | Keinerlei Bindung an die Laufzeitumgebung; funktioniert im Browser, bei SSR und in Tests                         | Volle Kontrolle über Wiederholungsversuche (Retries), Failover, Telemetrie und Lifecycles        |
+| Verantwortung | SDK-Autor (Definition)                                                                                                      | Anwendung (Ausführung)                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Besitzt**   | Methode, Pfadvorlage, `input`- / `output`- / `error`-Schemas, `builder`-Mapping und optionalen anwendungsdefinierten `meta` | Basis-URLs, Zugangsdaten, Auth-Interceptors, Load-Balancing, Timeouts und Ressourcen-Bereinigung |
+| **Liefert**   | Wiederverwendbare ESM-Module und `.d.ts`-Deklarationen                                                                      | Laufzeitkonfiguration für Browser, Server oder Testumgebung                                      |
+| **Vorteil**   | Keinerlei Bindung an die Laufzeitumgebung; funktioniert im Browser, bei SSR und in Tests                                    | Volle Kontrolle über Wiederholungsversuche (Retries), Failover, Telemetrie und Lifecycles        |
 
 ## Wähle deinen Einstieg
 
@@ -52,13 +52,13 @@ Der Aufruf `getHealth(client)` führt I/O aus und liefert ein Error-first-Tupel 
 
 Jede Operation gibt ein dreiteiliges Error-first-Tupel zurück, das auf den Lebenszyklus des jeweiligen Transports zugeschnitten ist:
 
-| Transport                               | Einstiegspunkt      | Tupel-Form                     | Lifecycle-Verwaltung                                                        |
-| --------------------------------------- | ------------------- | ------------------------------ | --------------------------------------------------------------------------- |
-| **[HTTP](/de-DE/docs/http)**            | `defineRequest`     | `[error, data, response]`      | In-Flight-Aufrufe via `client({ signal })` abbrechen                        |
-| **[SSE](/de-DE/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | Freigeben mit `await using` oder `stream.close()` + `await stream.closed`   |
-| **[WebSocket](/de-DE/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | Freigeben mit `await using` oder `session.close()` + `await session.closed` |
+| Transport                               | Einstiegspunkt      | Tupel-Form                   | Lifecycle-Verwaltung                                                        |
+| --------------------------------------- | ------------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| **[HTTP](/de-DE/docs/http)**            | `defineRequest`     | `[err, data, response]`      | In-Flight-Aufrufe via `client({ signal })` abbrechen                        |
+| **[SSE](/de-DE/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | Freigeben mit `await using` oder `stream.close()` + `await stream.closed`   |
+| **[WebSocket](/de-DE/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | Freigeben mit `await using` oder `session.close()` + `await session.closed` |
 
-Bei einem HTTP-Fehler ist das Tupel `[error, undefined, undefined]`, da `error` bereits alle `HttpMeta`-Response-Metadaten enthält. Bei SSE und WebSocket enthält der dritte Slot den Startup-Snapshot, sofern vor dem Fehler einer erfasst wurde.
+Bei einem HTTP-Fehler ist das Tupel `[err, undefined, undefined]`, da `err` bereits alle `HttpMeta`-Response-Metadaten enthält. Bei SSE und WebSocket enthält der dritte Slot den Startup-Snapshot, sofern vor dem Fehler einer erfasst wurde.
 
 ## Offizielle Pakete
 

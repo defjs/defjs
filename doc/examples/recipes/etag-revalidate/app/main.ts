@@ -22,7 +22,20 @@ const client = createClient(
 );
 
 const read = createReader(client);
-await read("SKU-1");
-const product = await read("SKU-1");
-console.log(product.name);
+
+async function main() {
+  const [warmErr] = await read("SKU-1");
+  if (warmErr) {
+    console.error(warmErr);
+    return;
+  }
+  const [revalidateErr, product] = await read("SKU-1");
+  if (revalidateErr) {
+    console.error(revalidateErr);
+    return;
+  }
+  console.log(product.name);
+}
+
+void main();
 // #endregion

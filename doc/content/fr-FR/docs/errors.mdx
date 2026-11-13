@@ -5,7 +5,7 @@ description: Déclarez les contrats d'erreur du service dans votre SDK et traite
 
 # Gestion des erreurs
 
-Dans Defjs, les échecs de requête, de transport et de décodage ne lèvent aucune exception au point d'appel. Chaque opération renvoie un tuple error-first (`[error, ...]`) dans lequel `error` vaut soit `null`, soit un `Fault` typé (une instance native d'`Error` discriminée par `error.code`).
+Dans Defjs, les échecs de requête, de transport et de décodage ne lèvent aucune exception au point d'appel. Chaque opération renvoie un tuple error-first (`[err, ...]`) dans lequel `err` vaut soit `null`, soit un `Fault` typé (une instance native d'`Error` discriminée par `err.code`). Nommez cette variable `err` et vérifiez-la tout de suite, comme en Go.
 
 Un appel que TypeScript rejette fait exception : son résultat n'est pas spécifié et ce n'est pas un `Fault`. En pratique, il rejette en général avec le `TypeError` de la plateforme.
 
@@ -33,9 +33,17 @@ Un appel que TypeScript rejette fait exception : son résultat n'est pas spécif
 </Tab>
 </Tabs>
 
-### Pourquoi `error` transporte les métadonnées de réponse en cas d'échec HTTP
+### Pourquoi `err` transporte les métadonnées de réponse en cas d'échec HTTP
 
-Lors d'un échec HTTP, le tuple est `[error, undefined, undefined]`. Toutes les métadonnées de réponse parvenues (`status`, `statusText`, `headers`, `url`) sont rattachées directement à `error.response`, ce qui vous permet de transmettre `error` à un gestionnaire ou un journal sans perdre de contexte.
+Lors d'un échec HTTP, le tuple est `[err, undefined, undefined]`. Toutes les métadonnées de réponse parvenues (`status`, `statusText`, `headers`, `url`) sont rattachées directement à `err.response`, ce qui vous permet de transmettre `err` à un gestionnaire ou un journal sans perdre de contexte.
+
+### Traitez chaque erreur une seule fois
+
+Traitez le tuple comme le `(T, error)` de Go. Vérifiez `if (err)` juste après l'appel et sortez depuis ce bloc, afin que le chemin de succès ne soit pas indenté ; placez-y les branches propres à un code (`err.code === "HTTP_STATUS" && err.status === 404`, ou un `switch (err.code)`), comme Go place `errors.Is` et `errors.As` dans `if err != nil`. Soit vous traitez une erreur (la journaliser, l'afficher, basculer sur une valeur de repli), soit vous la renvoyez, jamais les deux. Seul le sommet du programme (`main`, un gestionnaire d'événements d'interface, un test) traite ; toute autre fonction susceptible d'échouer renvoie son propre tuple error-first, `Promise<[Error, undefined] | [null, T]>`, et ne signale jamais l'échec par `undefined`, `null` ou `false`. Avec un seul appel Defjs, renvoyez le fault tel quel (le `return nil, err` de Go). Avec plusieurs appels, nommez chaque erreur d'après son étape (`putErr`, `listErr`) et enveloppez-la avec `new Error("put object", { cause: putErr })`, l'équivalent de `fmt.Errorf("put object: %w", err)`. Ne levez d'exception que là où le contrat d'une bibliothèque l'exige, comme le `queryFn` de TanStack Query.
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. Classes de faults et ensemble fermé de codes
 
@@ -61,7 +69,7 @@ Le code nomme ce qui a échoué, pas qui a fourni la valeur. Pour HTTP, une requ
 | `RES_*`       | `number` | `HttpMeta` (**aucun champ `body`**)                        | Absent                                | `StructError` ou erreur d'analyse          |
 | Autres codes  | Absent   | `HttpMeta` si les en-têtes sont arrivés, sinon `undefined` | Absent                                | `Error` sous-jacent / motif d'interruption |
 
-## 3. Restreindre les unions de corps d'erreur (`error.data`)
+## 3. Restreindre les unions de corps d'erreur (`err.data`)
 
 Comme un unique struct `error` couvre tous les statuts hors `2xx`, déclarez une union lorsque des statuts d'erreur distincts renvoient des structures JSON différentes :
 
@@ -123,7 +131,7 @@ Tout `Fault` est une instance d'`Error` native (`instanceof Error === true`) dot
 </Tabs>
 
 > [!CAUTION]
-> Considérez `fault.cause`, `fault.data`, les en-têtes de réponse, les URL complètes et `StructIssue.received` comme potentiellement sensibles. Ne journalisez par défaut qu'une liste blanche de champs de faible cardinalité (`operation`, `code`, `status`, durée).
+> Considérez `fault.cause`, `fault.data`, les en-têtes de réponse, les URL complètes et `StructIssue.received` comme potentiellement sensibles. Ne journalisez par défaut qu'une liste blanche de champs de faible cardinalité (votre propre libellé `meta`, `code`, `status`, durée).
 
 ## Lectures connexes
 

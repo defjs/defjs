@@ -98,7 +98,7 @@ Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得�
   examples/struct/parse-failures.ts#example
 </include>
 
-每個 `StructIssue` 都包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 同埋 `message`。預設訊息會省略收到嘅值，只報告佢嘅*型別*，但 path 會保留動態 record 嘅 key，入面可能有敏感值。`String(error)` 同 `error.prettify()` 唔係脫敏邊界；寫 log 時請用安全欄位嘅 allowlist，並將原始 `received` 值同自訂訊息當作敏感資料。
+每個 `StructIssue` 都包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 同埋 `message`。預設訊息會省略收到嘅值，只報告佢嘅*型別*，但 path 會保留動態 record 嘅 key，入面可能有敏感值。`String(err)` 同 `err.prettify()` 唔係脫敏邊界；寫 log 時請用安全欄位嘅 allowlist，並將原始 `received` 值同自訂訊息當作敏感資料。
 
 ## 6. 建構函式參考
 

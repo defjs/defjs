@@ -45,7 +45,7 @@ describe("http request helpers", () => {
       {
         signal: abort.signal,
         baseEndpoint: "https://api.example.com/v1",
-        operation: "users.update",
+        meta: { operation: "users.update" },
         querySerializer: (query) => {
           const params = new URLSearchParams();
           for (const [key, value] of Object.entries(query)) {
@@ -66,7 +66,7 @@ describe("http request helpers", () => {
 
     expect(request.baseEndpoint).toBe("https://api.example.com/v1");
     expect(request.endpoint).toBe("/user/7");
-    expect(request.operation).toBe("users.update");
+    expect(request.meta).toEqual({ operation: "users.update" });
     expect(request.query?.get("custom")).toBe("include=true");
     expect(request.query?.getAll("tags")).toEqual(["a", "b"]);
     expect(request.query?.toString()).toBe(

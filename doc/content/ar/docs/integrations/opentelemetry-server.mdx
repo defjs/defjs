@@ -11,26 +11,16 @@ description: قِس وتتبّع استدعاءات SDK على عميل تطبي
 
 ---
 
-## 1. الإعداد الأساسي وهوية العملية
+## 1. الإعداد الأساسي
 
-حدّد نص `operation` ثابتاً ومنخفض التباين في تعريفات SDK لديك (`defineRequest` و`defineEventStream` و`defineWebSocket`)، ثم مرّر كائنات `tracer` أو `meter` أو `logger` أو `propagator` الخاصة بـ OpenTelemetry إلى `withOpenTelemetryServer(...)` عند بناء العميل:
+مرّر كائنات `tracer` أو `meter` أو `logger` أو `propagator` الخاصة بـ OpenTelemetry إلى `withOpenTelemetryServer(...)` عند بناء العميل:
 
-<Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/operation-names.ts#example
-    </include>
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
 
-  </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/basic-setup.ts#example
-    </include>
-
-  </Tab>
-</Tabs>
-
-- **تسمية فترات التتبع (Spans)**: عند تحديد `operation`، تصبح أسماء الفترات `GET orders.read` و`SSE orders.watch` و`WebSocket orders.connect`، وتحمل الخاصية `defjs.operation`. وبدون `operation`، تتراجع أسماء الفترات إلى طريقة HTTP أو `SSE` أو `WebSocket`. طريقة HTTP في اسم الفترة هي `http.request.method` بعد التطبيع، أو `HTTP` عندما تكون تلك القيمة `_OTHER`.
+- **`meta` الخاص بالتعريف**: يصبح كل مفتاح خاص قابل للعدّ في `request.meta` سمة `defjs.meta.<key>` على الفترة وعلى سجلات الإخفاق، بقيمته كما هي. ويقرر OpenTelemetry SDK الاحتفاظ بكل قيمة أو إسقاطها وفق قواعد السمات لديه، ولا يُبلّغ عن أي قيمة مُسقطة إلا عبر `diag`. لا يضيف `meta` المغفل أو الفارغ شيئًا. لا تحمل المقاييس `meta` أبدًا، فتبقى مجموعات سماتها محدودة. تُطبَّق السمات التي يعيدها `startSpanHook(request)` أخيرًا ويمكنها استبدال قيمة `defjs.meta.*` على الفترة فقط؛ أما سجلات الإخفاق فتحتفظ بالقيمة من `meta`. وتغادر قيم `meta` العملية مع القياس عن بُعد الخاص بك، لذا أبقِ الأسرار والبيانات الشخصية خارج `meta`.
+- **تسمية فترات التتبع (Spans)**: أسماء الفترات هي طريقة HTTP أو `SSE` أو `WebSocket`. طريقة HTTP في اسم الفترة هي `http.request.method` بعد التطبيع، أو `HTTP` عندما تكون تلك القيمة `_OTHER`.
 - **إشارات قياس مستقلة**: تعمل كائنات `tracer` و`meter` و`logger` كخيارات مستقلة كلياً:
   - إغفال `tracer` يعطل إنشاء الفترات المحلية وخطافاتها مع الاستمرار في تسجيل المقاييس والسجلات ونشر سياق التتبع الصادر.
   - إغفال `meter` يعطل مقاييس الحزمة.
@@ -135,7 +125,7 @@ description: قِس وتتبّع استدعاءات SDK على عميل تطبي
 | خطأ نهائي في SSE أو WebSocket أو رفض تسوية `closed` (بما في ذلك انقطاع `1006` بلا إطار إغلاق، ومهلة نبضات القلب)                              | سجل `WARN` واحد مع اسم حدث وسيلة النقل، والمرحلة `connection`                                                 |
 | الاكتمال الطبيعي، والرسائل، ونهاية الملف EOF، وإطارات إغلاق WebSocket من الخادم (بما في ذلك `1011`)، أو الإلغاء النشط غير المرتبط بالمهلة     | لا شيء                                                                                                        |
 
-تُسجل سجلات التشخيص رسالة ثابتة، ونوع الاستثناء `exception.type` (اسم فئة وسيلة النقل أو المنصة مثل `BodyFailure` أو `EventStreamFatalError` (مصافحة SSE دون `text/event-stream`) أو `DefjsFault` (بما في ذلك مصافحة SSE ذات حالة غير 2xx) أو `TypeError` أو `Error`)، والمرحلة، واسم العملية الثابت `operation`، وعنوان الخادم ومنفذه، وحقول البروتوكول — دون تسجيل عناوين URL الخام، أو نصوص الاستعلام، أو الترويسات، أو الأجسام، أو تتبعات المكدس (stack traces) أبداً. يتبع حدث `exception` في الفترة القاعدة نفسها ولا يحمل إلا `exception.type`؛ ويستبدل `url.full` أي userinfo في نقطة النهاية بـ `REDACTED:REDACTED` وقيم مفاتيح الاستعلام الحساسة الافتراضية في الاصطلاح الدلالي (مثل `sig` و`X-Amz-Signature`) بـ `REDACTED`.
+تُسجل سجلات التشخيص رسالة ثابتة، ونوع الاستثناء `exception.type` (اسم فئة وسيلة النقل أو المنصة مثل `BodyFailure` أو `EventStreamFatalError` (مصافحة SSE دون `text/event-stream`) أو `DefjsFault` (بما في ذلك مصافحة SSE ذات حالة غير 2xx) أو `TypeError` أو `Error`)، والمرحلة، وعنوان الخادم ومنفذه، وحقول البروتوكول، وسمات `defjs.meta.*` التي تطابق قيمها تمامًا ما يضعه التطبيق في `meta`. ولا يُضيف Defjs عناوين URL الخام، أو نصوص الاستعلام، أو الترويسات، أو الأجسام، أو تتبعات المكدس (stack traces). يتبع حدث `exception` في الفترة القاعدة نفسها ولا يحمل إلا `exception.type`؛ ويستبدل `url.full` أي userinfo في نقطة النهاية بـ `REDACTED:REDACTED` وقيم مفاتيح الاستعلام الحساسة الافتراضية في الاصطلاح الدلالي (مثل `sig` و`X-Amz-Signature`) بـ `REDACTED`.
 
 ---
 

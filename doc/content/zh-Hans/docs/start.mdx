@@ -68,7 +68,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-如果把 `input` 从 `{ id: 7 }` 改为 `{ id: 8 }`，mock 会返回 `404`，Defjs 会把声明的 `error` struct 解码到 `error.data`：
+如果把 `input` 从 `{ id: 7 }` 改为 `{ id: 8 }`，mock 会返回 `404`，Defjs 会把声明的 `error` struct 解码到 `err.data`：
 
 ```txt
 Order not found
@@ -76,11 +76,11 @@ Order not found
 
 ## 4. 理解错误优先元组
 
-每次 HTTP 调用都解析为 `[error, data, response]`：
+每次 HTTP 调用都解析为 `[err, data, response]`。调用后立即检查 `if (err)` 并在该块内部离开，就像 Go 的 `if err != nil`：
 
-- **`2xx` 成功时**：`error` 为 `null`，`data` 是通过校验的 `output` 值（`Order`），`response` 是 `DecodedResponse<Order>`。
-- **返回已声明的非 `2xx` 状态码时**：`error.code` 为 `'HTTP_STATUS'`，`error.status` 是状态码数字（例如 `404`），`error.data` 是通过校验的 `error` struct（`NotFound`）。
-- **输入、解码或网络 fault 时**：`error.code` 指明失败发生在哪个阶段：
+- **`2xx` 成功时**：`err` 为 `null`，`data` 是通过校验的 `output` 值（`Order`），`response` 是 `DecodedResponse<Order>`。
+- **返回已声明的非 `2xx` 状态码时**：`err.code` 为 `'HTTP_STATUS'`，`err.status` 是状态码数字（例如 `404`），`err.data` 是通过校验的 `error` struct（`NotFound`）。
+- **输入、解码或网络 fault 时**：`err.code` 指明失败发生在哪个阶段：
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` —— 调用方输入无效，或 `builder` 抛出了异常
   - `RES_MEDIA_TYPE_INVALID` —— 声明了 JSON body，但响应的 `Content-Type` 不是 JSON（在读取 body 之前就被拒绝）
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` —— body 无法读取，或与 schema 不匹配

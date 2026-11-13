@@ -7,7 +7,7 @@ description: 以 Amazon S3 SDK 架构为蓝本，为企业开放平台设计并�
 
 当企业或平台团队需要为对外开放的公共 API 发布官方 TypeScript SDK（例如云存储 SDK、支付网关 SDK 或开放平台 SDK）时，SDK 包的核心职责是**完整声明接口契约，同时不预设消费方的运行环境与客户端策略**。
 
-本指南以**兼容 Amazon S3 协议的对象存储 SDK（`@company/s3-sdk`）**为完整手写蓝本，展示如何通过 `models/` 与纯函数 `services/` 构建企业级公共 SDK。
+本指南以**兼容 Amazon S3 协议的对象存储 SDK（`@company/s3-sdk`）**为完整手写蓝本，展示如何通过 `schema/` 与纯函数 `request/` 构建企业级公共 SDK。
 
 ---
 
@@ -16,7 +16,7 @@ description: 以 Amazon S3 SDK 架构为蓝本，为企业开放平台设计并�
 传统公共 SDK 往往在包内封装厚重的客户端类（如 `new S3Client({ region, credentials })`）或静态 `Service` 类。使用 `@defjs/core` 编写对外 SDK 能为你的外部客户解决四个核心痛点：
 
 1. **多环境与多云/沙箱无缝切换**：由于 `@company/s3-sdk` 不绑定任何 Endpoint 或 Client，外部开发者可以用同一套操作定义自由连接生产环境（`https://s3.us-east-1.amazonaws.com`）、沙箱测试环境、Cloudflare R2，或本地 CI 中的 MinIO 容器。
-2. **100% 按需 Tree-shaking**：每个接口（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）都作为独立纯函数导出，配合 `"sideEffects": false`，只用到上传和下载的前端应用在打包时会自动剔除所有未引用的接口与模型。
+2. **100% 按需 Tree-shaking**：每个接口（`listBuckets`、`listObjectsV2`、`getObject`、`putObject`、`deleteObject`）都作为独立纯函数导出，配合 `"sideEffects": false`，只用到上传和下载的前端应用在打包时会自动剔除所有未引用的接口与 schema。
 3. **运行时结构校验与静态类型合一**：消费方导入一个符号即可同时获得 TypeScript 静态类型（`Infer<typeof ...>`）与运行时数据校验（`struct`），自动完成下划线字段映射（`.alias()`）与日期解析（`struct.date()`）。
 4. **消费方完全掌控鉴权、重试与可观测性**：外部客户可以在自己的 `Client` 上自由挂载请求签名拦截器、`withRetry(...)` 重试策略、多区域 `withBalancer(...)` 容灾，或服务端 OpenTelemetry 追踪（`@defjs/opentelemetry-server`）。
 
@@ -24,20 +24,20 @@ description: 以 Amazon S3 SDK 架构为蓝本，为企业开放平台设计并�
 
 ## 2. 公共 SDK 目录结构
 
-将 SDK 包划分为 `src/models/`（共享数据模型）与 `src/services/`（按资源域划分的纯函数操作定义），并通过顶层 `src/index.ts` 统一重导出：
+将 SDK 包划分为 `src/schema/`（共享schema）与 `src/request/`（按资源域划分的纯函数操作定义），并通过顶层 `src/index.ts` 统一重导出：
 
 ```text
 @company/s3-sdk/
 ├── src/
-│   ├── models/                 # 1. 共享数据模型（struct + Infer 同名导出）
+│   ├── schema/                 # 1. 共享schema（struct + Infer 同名导出）
 │   │   ├── common.ts           #    StorageClass, S3Error
 │   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
 │   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
-│   ├── services/               # 2. 按资源域划分的 defineRequest 纯函数
+│   ├── request/               # 2. 按资源域划分的 defineRequest 纯函数
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. 顶层按需重导出入口
-├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.8.0" }
 └── tsconfig.json
 ```
 
@@ -45,34 +45,34 @@ description: 以 Amazon S3 SDK 架构为蓝本，为企业开放平台设计并�
 
 ## 3. 完整 S3 SDK 代码实现
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -100,10 +100,10 @@ description: 以 Amazon S3 SDK 架构为蓝本，为企业开放平台设计并�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -139,7 +139,7 @@ description: 以 Amazon S3 SDK 架构为蓝本，为企业开放平台设计并�
 
 ## 4. 外部开发者如何接入你的公共 SDK
 
-外部应用只需安装 `@company/s3-sdk` 与 `@defjs/core`，使用自己的服务端点和签名拦截器创建 `Client`，即可直接以纯函数方式调用 SDK 导出的操作：
+外部应用只需安装 `@company/s3-sdk` 与 `@defjs/core`，使用自己的服务端点和签名拦截器创建 `Client`，即可直接以纯函数方式调用 SDK 导出的操作。该示例采用 Go 风格的错误处理：`syncReport` 发起三次调用，因此按步骤给每个错误命名（`putErr`、`listErr`、`getErr`），返回错误优先元组，并用 `new Error("put object", { cause: putErr })` 包装失败的那一步，就像 Go 的 `fmt.Errorf("put object: %w", err)`。只有程序顶层的 `main` 通过记录日志来处理错误：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

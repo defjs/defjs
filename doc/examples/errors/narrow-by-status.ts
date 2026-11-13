@@ -6,9 +6,9 @@ const ApiError = struct.discriminatedUnion("status", [
   struct.object({ status: struct.literal(429), retryAfter: struct.number() }),
 ]);
 
-declare const fault: Fault<typeof ApiError>;
+declare const err: Fault<typeof ApiError>;
 
-if (fault.code === "HTTP_STATUS" && fault.data.status === 429) {
-  console.log(fault.data.retryAfter);
+if (err.code === "HTTP_STATUS" && err.data.status === 429) {
+  console.log(err.data.retryAfter);
 }
 // #endregion

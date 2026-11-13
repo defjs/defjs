@@ -32,5 +32,5 @@ Dans Defjs, seules les réponses `2xx` empruntent la branche de succès, par con
 Flask
 ```
 
-- `if (error) throw error` après la vérification du code `304` est une politique explicite : `createReader` renvoie `Promise<Product>`, donc tout autre fault est levé.
+- Dans `if (err)`, seul le `304` avec une entrée en cache est traité (il renvoie le produit en cache). Tout autre fault est renvoyé tel quel, comme le `return nil, err` de Go : `createReader` renvoie donc `Promise<[Error, undefined] | [null, Product]>` et ne lève jamais d'exception. Un en-tête `ETag` manquant est un échec propre à la fonction utilitaire, renvoyé lui aussi sous la forme d'une nouvelle `Error`. `main` est le sommet du programme : il journalise l'erreur puis retourne.
 - Ne réécrivez jamais un `304` en un faux `200` dans un intercepteur ; maintenez l'état du cache dans le code applicatif autour de l'appel d'opération. Consultez [Opérations HTTP](/fr-FR/docs/http).

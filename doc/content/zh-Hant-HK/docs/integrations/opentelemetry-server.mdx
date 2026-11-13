@@ -11,26 +11,16 @@ description: 喺伺服器應用程式嘅 client 上觀測 SDK 呼叫，tracer、
 
 ---
 
-## 1. 基本設定與操作識別碼
+## 1. 基本設定
 
-喺 SDK 定義中（`defineRequest`、`defineEventStream`、`defineWebSocket`）設定靜態、低基數嘅 `operation` 字串，然後喺建構 client 時將你嘅 OpenTelemetry `tracer`、`meter`、`logger` 或 `propagator` 傳入 `withOpenTelemetryServer(...)`：
+喺建構 client 時將你嘅 OpenTelemetry `tracer`、`meter`、`logger` 或 `propagator` 傳入 `withOpenTelemetryServer(...)`：
 
-<Tabs items={["sdk/operations.ts", "app/telemetry-client.ts"]}>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/operation-names.ts#example
-    </include>
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
 
-  </Tab>
-  <Tab>
-    <include cwd lang="typescript">
-      examples/opentelemetry-server/basic-setup.ts#example
-    </include>
-
-  </Tab>
-</Tabs>
-
-- **span 命名規則**：設定咗 `operation` 之後，span 名稱會變成 `GET orders.read`、`SSE orders.watch` 同 `WebSocket orders.connect`，並且帶有 `defjs.operation` 屬性。如果冇設定 `operation`，span 名稱會 fallback 返去單純嘅 HTTP 方法、`SSE` 或 `WebSocket`。span 名稱入面嘅 HTTP 方法係正規化之後嘅 `http.request.method`；個值係 `_OTHER` 嗰陣就用 `HTTP`。
+- **定義 `meta`**：`request.meta` 每個自有可枚舉 key 都會成為 span 同失敗日誌上嘅 `defjs.meta.<key>` 屬性，值保持原樣。OpenTelemetry SDK 會按屬性規則保留或丟棄每個值，並且只會透過 `diag` 報告被丟棄嘅值。`meta` 缺失或為空時唔會新增任何屬性。Metrics 從來唔會帶 `meta`，所以佢哋嘅屬性集合保持有界。`startSpanHook(request)` 返回嘅屬性最後套用，只可以取代 span 上嘅 `defjs.meta.*` 值；失敗日誌會保留來自 `meta` 嘅值。呢啲值會隨你嘅遙測資料一齊離開程序，所以唔好將機密資料同個人資料放入 `meta`。
+- **span 命名規則**：span 名稱就係 HTTP 方法、`SSE` 或 `WebSocket`。span 名稱入面嘅 HTTP 方法係正規化後嘅 `http.request.method`；該值係 `_OTHER` 時用 `HTTP`。
 - **獨立運作嘅 Signals**：`tracer`、`meter` 同 `logger` 都係可選嘅，並且彼此獨立運作：
   - 省略 `tracer`：停用本地 span 建立同 span hooks，但依然會記錄 metrics、日誌同向外傳遞 trace context。
   - 省略 `meter`：停用套件嘅各項 metrics 指標。
@@ -135,7 +125,7 @@ SSE 同 WebSocket 嘅連線建立耗時同連線持續時間樣本帶有 `defjs.
 | SSE 或 WebSocket 出現終止錯誤或 `closed` reject（包括冇 close frame 嘅 `1006` 斷線、心跳逾時）                       | 發出一條 `WARN`，帶有傳輸事件名稱，階段為 `connection`                                                         |
 | 正常完成、普通訊息、EOF、伺服器 WebSocket 關閉 frame（包括 `1011`），或主動非逾時中斷                                | 唔發送任何日誌                                                                                                 |
 
-診斷記錄包含固定訊息、`exception.type`（平台／傳輸層 class 名稱，例如 `BodyFailure`、`EventStreamFatalError`（回應唔係 `text/event-stream` 嘅 SSE handshake）、`DefjsFault`（包括返回非 2xx 嘅 SSE handshake）、`TypeError` 或 `Error`）、phase 階段、靜態 `operation`、伺服器位址／埠號同協議欄位——絕唔會記錄原始 URL、query string、headers、body 或錯誤堆疊 trace。span 嘅 `exception` 事件跟同一條規則，只帶 `exception.type`；`url.full` 會將端點入面任何 userinfo 換成 `REDACTED:REDACTED`，並將語義慣例預設敏感 query key（例如 `sig` 同 `X-Amz-Signature`）嘅值換成 `REDACTED`。
+診斷記錄包含固定訊息、`exception.type`（平台／傳輸層 class 名稱，例如 `BodyFailure`、`EventStreamFatalError`（回應唔係 `text/event-stream` 嘅 SSE handshake）、`DefjsFault`（包括返回非 2xx 嘅 SSE handshake）、`TypeError` 或 `Error`）、phase 階段、伺服器位址／埠號、協議欄位同 `defjs.meta.*` 屬性，其值正正係應用程式放入 `meta` 嘅內容。Defjs 唔會加入原始 URL、query string、headers、body 或錯誤堆疊 trace。span 嘅 `exception` 事件跟同一條規則，只帶 `exception.type`；`url.full` 會將端點入面任何 userinfo 換成 `REDACTED:REDACTED`，並將語義慣例預設敏感 query key（例如 `sig` 同 `X-Amz-Signature`）嘅值換成 `REDACTED`。
 
 ---
 

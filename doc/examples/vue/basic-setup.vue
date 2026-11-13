@@ -23,9 +23,9 @@ watch(
     onCleanup(() => controller.abort());
 
     void getOrder(client({ signal: controller.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (controller.signal.aborted) return;
-        if (error) {
+        if (err) {
           name.value = "Unable to load order.";
           return;
         }

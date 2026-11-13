@@ -1,14 +1,11 @@
 import { expect, test } from "vitest";
 import { createServerApiClient } from "./src/api/client.ts";
-import {
-  createOrder,
-  getOrder,
-  listOrders,
-} from "./src/api/services/orders.ts";
+import { createOrder, getOrder, listOrders } from "./src/api/request/orders.ts";
 import { placeAndLoadOrder } from "./src/checkout.ts";
 
 test("in-app API layer keeps operation definitions pure while isolating per-request SSR clients", async () => {
-  const checkoutResult = await placeAndLoadOrder();
+  const [checkoutErr, checkoutResult] = await placeAndLoadOrder();
+  expect(checkoutErr).toBeNull();
   expect(checkoutResult).toEqual({
     id: 101,
     status: "paid",

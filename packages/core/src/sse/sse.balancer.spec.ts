@@ -152,17 +152,19 @@ function track(
   };
 }
 
-function expectPicks(recorded: Recorded, operation = "orders"): void {
+const META = { operation: "orders" };
+
+function expectPicks(recorded: Recorded, meta = META): void {
   expect(recorded.picks.length).toBeGreaterThan(0);
   for (const pick of recorded.picks) {
     expect(pick).not.toHaveProperty("transport");
-    expect(pick.operation).toBe(operation);
+    expect(pick.meta).toBe(meta);
   }
 }
 
 const orders = defineEventStream({
   events: { message: struct.string() },
-  operation: "orders",
+  meta: META,
   path: "/events",
 });
 
@@ -245,7 +247,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
       refused,
       defineEventStream({
         events: { message: struct.string() },
-        operation: "orders",
+        meta: META,
         path: "/events",
       }),
     ],
@@ -253,7 +255,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
       plain,
       defineEventStream({
         events: { message: struct.string() },
-        operation: "orders",
+        meta: META,
         path: "/events",
       }),
     ],
@@ -281,7 +283,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const hugeStream = defineEventStream({
     events: { message: struct.string() },
     maxBufferSize: 16,
-    operation: "orders",
+    meta: META,
     path: "/events",
   });
   const [hugeError, hugeHandle] = await hugeStream(
@@ -316,7 +318,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const post = defineEventStream({
     events: { message: struct.string() },
     method: "POST",
-    operation: "orders",
+    meta: META,
     path: "/events",
   });
   const postRecord = track(() => postServer.url);
@@ -1224,7 +1226,7 @@ test("does not call done when the initial pick fails, and calls it once when bui
     },
     events: { message: struct.string() },
     input: struct.object({}),
-    operation: "orders",
+    meta: META,
     path: "/events",
   });
   const recorded = track(() => "https://example.com");
@@ -1536,7 +1538,7 @@ test("applies the reconnect gates to a 503 handshake", async () => {
   const post = defineEventStream({
     events: { message: struct.string() },
     method: "POST",
-    operation: "orders",
+    meta: META,
     path: "/events",
   });
   for (const [definition, reconnect] of [

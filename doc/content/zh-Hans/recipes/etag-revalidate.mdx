@@ -34,5 +34,5 @@ description: 将 304 视为 HTTP 状态 Fault，并把缓存 Map 留在操作调
 Flask
 ```
 
-- `304` 检查之后的 `if (error) throw error` 是显式策略：`createReader` 返回 `Promise<Product>`，所以其他 Fault 都会抛出。
+- 在 `if (err)` 内部，只有带缓存条目的 `304` 会被处理（返回缓存的 product）。其他 Fault 都原样返回，就像 Go 的 `return nil, err`，所以 `createReader` 返回 `Promise<[Error, undefined] | [null, Product]>`，从不抛出。缺少 `ETag` 头是辅助函数自身的失败，同样作为新的 `Error` 返回。`main` 是程序顶层，所以由它记录错误并返回。
 - 绝不要在拦截器内把 `304` 改写成合成的 `200`；缓存状态应留在操作调用周围的应用代码中。见 [HTTP 请求](/zh-Hans/docs/http)。

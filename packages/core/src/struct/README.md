@@ -44,9 +44,9 @@ const getOrder = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, order] = await getOrder(client, { id: 1 });
-  if (error) {
-    console.error(error.code);
+  const [err, order] = await getOrder(client, { id: 1 });
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(order.id, order.customerName);
@@ -99,7 +99,7 @@ const Combined = struct.intersection(
 
 ```typescript
 type ParseResult<T> =
-  [error: null, value: T] | [error: StructError, value: undefined];
+  [err: null, value: T] | [err: StructError, value: undefined];
 ```
 
 When parsing fails, the second item is always `undefined`. A failed parse does not construct a zero value for the whole Struct, and it does not expose sibling fields that were already parsed successfully.
@@ -112,16 +112,16 @@ const DailySummary = struct.object({
   operatorMessage: struct.string(),
 });
 
-const [missingError, missingSummary] = struct.parse(DailySummary, {});
-// missingError.issues[0] points at orders; missingSummary is undefined.
+const [missingErr, missingSummary] = struct.parse(DailySummary, {});
+// missingErr.issues[0] points at orders; missingSummary is undefined.
 
-const [error, summary] = struct.parse(DailySummary, {
+const [summaryErr, summary] = struct.parse(DailySummary, {
   orders: 0,
   acceptingOrders: false,
   adjustmentIds: [],
   operatorMessage: "",
 });
-// error is null; 0, false, [], and '' are legal values explicitly provided by the caller.
+// summaryErr is null; 0, false, [], and '' are legal values explicitly provided by the caller.
 ```
 
 `date` and `bigint` still perform boundary conversion: for example, `date` accepts a `Date`, a string, or a number and outputs a `Date`; `bigint` accepts a `bigint` or a string and outputs a `bigint`. An invalid date, or a value that does not match the `bigint` input rules, produces a structural error.
@@ -133,11 +133,10 @@ const [error, summary] = struct.parse(DailySummary, {
 A strict deep-equality matcher compares prototypes, so a Struct parse result is not deep-equal to an object literal with the same fields. Tests should assert this boundary explicitly, or shallow-copy only at the assertion:
 
 ```typescript
-const [profileError, profile] = struct.parse(
-  struct.object({ name: struct.string() }),
-  { name: "Ada" },
-);
-if (profileError) throw profileError;
+const [err, profile] = struct.parse(struct.object({ name: struct.string() }), {
+  name: "Ada",
+});
+if (err) throw err;
 if (Object.getPrototypeOf(profile) !== null)
   throw new Error("expected a null prototype");
 if (JSON.stringify({ ...profile }) !== JSON.stringify({ name: "Ada" }))
@@ -227,20 +226,22 @@ const echoOrder = defineRequest({
 });
 
 async function main() {
-  const [logicalError, logicalOrder] = struct.parse(OrderBody, {
+  const [logicalErr, logicalOrder] = struct.parse(OrderBody, {
     id: 1,
     customerName: "Ada",
   });
-  if (logicalError) {
-    console.error(logicalError.message);
+  if (logicalErr) {
+    console.error(logicalErr.message);
     return;
   }
 
-  const [wireKeyError] = struct.parse(OrderBody, {
+  const [wireKeyErr] = struct.parse(OrderBody, {
     order_id: 1,
     customer_name: "Ada",
   });
-  if (!wireKeyError) throw new Error("struct.parse must read logical keys");
+  if (wireKeyErr) {
+    console.log("wire keys are not logical keys:", wireKeyErr.message);
+  }
 
   let requestWireBody: unknown;
   const client = createClient(
@@ -250,11 +251,11 @@ async function main() {
       return Response.json({ order_id: 1, customer_name: "Ada" });
     }),
   );
-  const [requestError, responseOrder] = await echoOrder(client, {
+  const [requestErr, responseOrder] = await echoOrder(client, {
     order: { id: 1, customerName: "Ada" },
   });
-  if (requestError) {
-    console.error(requestError.code);
+  if (requestErr) {
+    console.error(requestErr.code);
     return;
   }
   console.log(
@@ -267,7 +268,7 @@ async function main() {
 void main();
 ```
 
-`logicalOrder` and `responseOrder` use `{ id, customerName }`; `wireKeyError` points at the missing logical `id`; `requestWireBody` is `{ order_id, customer_name }`. The public `struct.parse` reads logical values unless `{ aliases: true }` is passed. Transport JSON encoding and decoding apply wire aliases.
+`logicalOrder` and `responseOrder` use `{ id, customerName }`; `wireKeyErr` points at the missing logical `id`; `requestWireBody` is `{ order_id, customer_name }`. The public `struct.parse` reads logical values unless `{ aliases: true }` is passed. Transport JSON encoding and decoding apply wire aliases.
 
 | Concept                  | Example                    | Result                                                     |
 | ------------------------ | -------------------------- | ---------------------------------------------------------- |
@@ -361,7 +362,7 @@ const updateOrder = defineRequest({
 });
 
 // `client` is the application-owned client.
-const [error] = await updateOrder(client, {
+const [err] = await updateOrder(client, {
   orderId: 1,
   includeProfile: true,
   traceId: "trace-1",
@@ -391,12 +392,12 @@ When an operation executes, the corresponding transport wraps Struct errors agai
 ```typescript
 import { StructError } from "@defjs/core";
 
-const [error] = await getOrder(client, { id: 1 });
+const [err] = await getOrder(client, { id: 1 });
 
-if (error?.code === "RES_STRUCT_MISMATCH") {
-  if (error.cause instanceof StructError) {
-    console.error(error.cause.flatten());
-    console.error(error.cause.prettify());
+if (err) {
+  if (err.code === "RES_STRUCT_MISMATCH" && err.cause instanceof StructError) {
+    console.error(err.cause.flatten());
+    console.error(err.cause.prettify());
   }
 }
 ```

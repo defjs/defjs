@@ -98,7 +98,7 @@ Hacer spread de un objeto tipado dentro de `builder` (`{ ...input.order, extra: 
   examples/struct/parse-failures.ts#example
 </include>
 
-Cada `StructIssue` contiene `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` o `custom`), `path`, `expected`, `received` y `message`. Los mensajes predeterminados omiten el valor recibido y reportan solo su _tipo_, pero las rutas conservan las claves dinámicas de record, que pueden contener datos confidenciales. `String(error)` y `error.prettify()` no son una frontera de ocultación; usa una lista blanca de campos seguros al registrar, y trata los valores crudos de `received` y los mensajes personalizados como confidenciales.
+Cada `StructIssue` contiene `code` (`invalid_type`, `missing_key`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` o `custom`), `path`, `expected`, `received` y `message`. Los mensajes predeterminados omiten el valor recibido y reportan solo su _tipo_, pero las rutas conservan las claves dinámicas de record, que pueden contener datos confidenciales. `String(err)` y `err.prettify()` no son una frontera de ocultación; usa una lista blanca de campos seguros al registrar, y trata los valores crudos de `received` y los mensajes personalizados como confidenciales.
 
 ## 6. Referencia de constructores
 

@@ -5,7 +5,7 @@ description: 単一の GET を呼び出し、型付けされた 200 と宣言さ
 
 # 宣言済み 404 を返す GET
 
-`defineRequest` で `output`（`2xx` レスポンス用）と `error`（`2xx` 以外のレスポンス用）の両方を宣言します。呼び出し側では、`error?.code === "HTTP_STATUS" && error.status === 404` で分岐し、型付けされた `error.data` ペイロードを読み取ります。
+`defineRequest` で `output`（`2xx` レスポンス用）と `error`（`2xx` 以外のレスポンス用）の両方を宣言します。呼び出し側では、まず `if (err)` を確認し、そのブロックの中で `err.code === "HTTP_STATUS" && err.status === 404` により分岐して、型付けされた `err.data` ペイロードを読み取ります。
 
 <Tabs items={["sdk/orders.ts", "app/main.ts"]}>
   <Tab>
@@ -28,7 +28,7 @@ description: 単一の GET を呼び出し、型付けされた 200 と宣言さ
 Loaded paid from 200
 ```
 
-- 非 `2xx` ステータスは、`error` を省略した場合、または宣言した `error` ボディがデコードできる場合に `HTTP_STATUS` を生成します。`error` を宣言すると、エラーボディがデコード・検証されて `error.data` に格納されます。`error` の宣言を省略した場合は、ボディを一切読み取ることなく `error.data` は `undefined` となります。
+- 非 `2xx` ステータスは、`error` を省略した場合、または宣言した `error` ボディがデコードできる場合に `HTTP_STATUS` を生成します。`error` を宣言すると、エラーボディがデコード・検証されて `err.data` に格納されます。`error` の宣言を省略した場合は、ボディを一切読み取ることなく `err.data` は `undefined` となります。
 - 宣言された `error` ボディが不正なメディアタイプである場合、壊れた JSON である場合、または Struct バリデーションに失敗した場合は、代わりに `RES_*` Fault が返されます。単一の `error` Struct がすべての非 `2xx` ステータスをカバーするため、ステータスごとにエラーボディの形式が異なる場合は `struct.or(...)` を使用してください。
 
 詳細は [HTTP 操作](/ja-JP/docs/http) および [エラーハンドリング](/ja-JP/docs/errors) を参照してください。

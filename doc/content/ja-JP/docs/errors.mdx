@@ -5,7 +5,7 @@ description: SDK でサービスエラーの契約を宣言し、利用側アプ
 
 # エラーハンドリング
 
-Defjs では、リクエスト、トランスポート、デコードの各処理において、呼び出し元で例外を throw することはありません。すべての操作はエラーファーストのタプル（`[error, ...]`）を返し、`error` は `null` または型付けされた `Fault`（`error.code` で判別可能なネイティブの `Error` インスタンス）になります。
+Defjs では、リクエスト、トランスポート、デコードの各処理において、呼び出し元で例外を throw することはありません。すべての操作はエラーファーストのタプル（`[err, ...]`）を返し、`err` は `null` または型付けされた `Fault`（`err.code` で判別可能なネイティブの `Error` インスタンス）になります。この変数は Go と同様に `err` と名付け、すぐに確認します。
 
 TypeScript が拒否する呼び出しは例外です。結果は規定されておらず、`Fault` でもありません。実際には、通常はプラットフォームの `TypeError` で reject します。
 
@@ -33,9 +33,17 @@ TypeScript が拒否する呼び出しは例外です。結果は規定されて
 </Tab>
 </Tabs>
 
-### HTTP 失敗時に `error` がレスポンスメタデータを保持する理由
+### HTTP 失敗時に `err` がレスポンスメタデータを保持する理由
 
-HTTP 通信の失敗時、返されるタプルは `[error, undefined, undefined]` になります。受信できたレスポンスメタデータ（`status`、`statusText`、`headers`、`url`）はすべて `error.response` に直接格納されるため、コンテキストを損なうことなく `error` 単体をロガーやエラーハンドラーへ渡すことができます。
+HTTP 通信の失敗時、返されるタプルは `[err, undefined, undefined]` になります。受信できたレスポンスメタデータ（`status`、`statusText`、`headers`、`url`）はすべて `err.response` に直接格納されるため、コンテキストを損なうことなく `err` 単体をロガーやエラーハンドラーへ渡すことができます。
+
+### エラーは一度だけ処理する
+
+タプルは Go の `(T, error)` と同じように扱います。呼び出しの直後に `if (err)` を確認し、そのブロックの中で処理を抜けます。こうすると成功パスはインデントされないままになります。コード別の分岐（`err.code === "HTTP_STATUS" && err.status === 404` や `switch (err.code)`）はそのブロックの中に置きます。Go で `errors.Is` や `errors.As` を `if err != nil` の中で使うのと同じです。エラーは処理する（ログに出す、表示する、フォールバックする）か返すかのどちらかで、両方は行いません。処理するのはプログラムの最上位（`main`、UI のイベントハンドラー、テスト）だけです。失敗しうるそれ以外の関数は、自身のエラーファーストのタプル `Promise<[Error, undefined] | [null, T]>` を返し、失敗を `undefined`、`null`、`false` で表すことはありません。Defjs の呼び出しが 1 回だけなら、Fault をそのまま返します（Go の `return nil, err`）。複数回呼ぶ場合は、各エラーにステップ名を付け（`putErr`、`listErr`）、`new Error("put object", { cause: putErr })` で包みます。これは `fmt.Errorf("put object: %w", err)` に相当します。throw してよいのは、TanStack Query の `queryFn` のように、ライブラリの契約が要求する場所だけです。
+
+<include cwd lang="typescript">
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
 
 ## 2. Fault クラスと網羅的な Fault コード体系
 
@@ -61,7 +69,7 @@ HTTP 通信の失敗時、返されるタプルは `[error, undefined, undefined
 | `RES_*`        | `number` | `HttpMeta`（**`body` フィールドなし**）                 | なし                                              | `StructError` またはパーサーエラー |
 | その他のコード | なし     | ヘッダー受信済みなら `HttpMeta`、それ以外は `undefined` | なし                                              | 根本の `Error` / 中止理由          |
 
-## 3. union 型エラーボディの絞り込み (`error.data`)
+## 3. union 型エラーボディの絞り込み (`err.data`)
 
 単一の `error` struct がすべての非 `2xx` ステータスをカバーするため、異なるエラーステータスが異なる形状の JSON を返す場合は union 型を宣言します。
 
@@ -123,7 +131,7 @@ API レスポンスにリテラルのタグ（`kind`、`type`、または埋め�
 </Tabs>
 
 > [!CAUTION]
-> `fault.cause`、`fault.data`、レスポンスヘッダー、完全な URL、および `StructIssue.received` には機密情報が含まれる可能性があります。デフォルトでは、低カーディナリティのフィールド（`operation`、`code`、`status`、所要時間）だけを許可リストとして記録してください。
+> `fault.cause`、`fault.data`、レスポンスヘッダー、完全な URL、および `StructIssue.received` には機密情報が含まれる可能性があります。デフォルトでは、低カーディナリティのフィールド（独自の `meta` ラベル、`code`、`status`、所要時間）だけを許可リストとして記録してください。
 
 ## 関連ドキュメント
 

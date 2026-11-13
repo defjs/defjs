@@ -6,9 +6,9 @@ const ApiError = struct.or(
   struct.object({ retryAfter: struct.number() }),
 );
 
-declare const fault: Fault<typeof ApiError>;
+declare const err: Fault<typeof ApiError>;
 
-if (fault.code === "HTTP_STATUS" && "retryAfter" in fault.data) {
-  console.log(fault.data.retryAfter);
+if (err.code === "HTTP_STATUS" && "retryAfter" in err.data) {
+  console.log(err.data.retryAfter);
 }
 // #endregion

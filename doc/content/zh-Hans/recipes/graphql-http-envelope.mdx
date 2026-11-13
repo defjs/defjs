@@ -5,7 +5,7 @@ description: 把 GraphQL 保持为 HTTP 200 + 应用层解包；Core 不提供 G
 
 # 解包 GraphQL HTTP 信封
 
-Defjs 不内嵌 GraphQL 客户端或 `errorPolicy`。把基于 HTTP 的 GraphQL 建模为普通 `POST` 操作，其 `builder` 发送 `{ query, operationName, variables }`。在信封 struct 上把 `data` 标为 `.nullish()`，让省略的 `data` 和 `data: null` 都能通过结构校验，然后在应用辅助函数中解包 `errors[]`：
+Defjs 不内嵌 GraphQL 客户端或 `errorPolicy`。把基于 HTTP 的 GraphQL 建模为普通 `POST` 操作，其 `builder` 发送 `{ query, operationName, variables }`。在信封 struct 上把 `data` 标为 `.nullish()`，让省略的 `data` 和 `data: null` 都能通过结构校验，然后在返回错误优先元组 `Promise<[Error, undefined] | [null, Viewer | null]>` 的应用辅助函数中解包 `errors[]`，这样调用方只需处理一个 `err`，无论它是 Defjs Fault 还是 GraphQL 错误：
 
 <Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "app/main.ts"]}>
   <Tab>
@@ -34,5 +34,5 @@ Defjs 不内嵌 GraphQL 客户端或 `errorPolicy`。把基于 HTTP 的 GraphQL 
 ada viewer unavailable viewer unavailable
 ```
 
-- HTTP `200` 只表示 GraphQL 信封完整到达。`errors[]` 中的领域错误（即使伴随 `data: null`）是应用层结果，而不是 `RES_STRUCT_MISMATCH` Fault。
+- HTTP `200` 只表示 GraphQL 信封完整到达。`errors[]` 中的领域错误（即使伴随 `data: null`）是应用层结果，而不是 `RES_STRUCT_MISMATCH` Fault。辅助函数把它们作为自己的 `Error` 返回（消息拼接在一起），并原样返回这一次调用的任何 Defjs Fault。它从不抛出，也从不用 `undefined` 表示失败。
 - 协议专用信封为何留在应用辅助函数中，见[核心架构设计](/zh-Hans/docs/design-decisions)。

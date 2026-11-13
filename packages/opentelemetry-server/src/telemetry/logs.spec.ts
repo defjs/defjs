@@ -40,10 +40,10 @@ describe("client exception logs", () => {
         context: ROOT_CONTEXT,
         error: new TypeError("password=secret"),
         attributes: {
-          "defjs.operation": "orders.create",
           "server.address": "api.example.com",
           "server.port": 8443,
         },
+        meta: { "defjs.meta.operation": "orders.create" },
         extra: extras,
       });
       expect(records).toEqual([
@@ -54,7 +54,7 @@ describe("client exception logs", () => {
           severityNumber: 13,
           severityText: "WARN",
           attributes: {
-            "defjs.operation": "orders.create",
+            "defjs.meta.operation": "orders.create",
             "server.address": "api.example.com",
             "server.port": 8443,
             "defjs.phase": "connect",
@@ -85,6 +85,7 @@ describe("client exception logs", () => {
         error,
         phase: "request",
         attributes: {},
+        meta: {},
         transport: "http",
       });
       expect(records).toHaveLength(1);
@@ -106,6 +107,7 @@ describe("client exception logs", () => {
       error,
       phase: "request",
       attributes: {},
+      meta: {},
       transport: "http",
     });
     expect(records).toEqual([]);
@@ -114,6 +116,7 @@ describe("client exception logs", () => {
       error,
       phase: "connect",
       attributes: {},
+      meta: {},
       transport: "sse",
     });
     expect(records).toHaveLength(1);
@@ -133,6 +136,7 @@ describe("client exception logs", () => {
         error,
         phase: "request",
         attributes: {},
+        meta: {},
         transport: "http",
       }),
     ).not.toThrow();
@@ -164,6 +168,7 @@ describe("client exception logs", () => {
           error,
           phase: "connection",
           attributes: {},
+          meta: {},
           transport: "http",
         }),
       ).not.toThrow();

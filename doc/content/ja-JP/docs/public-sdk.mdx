@@ -7,7 +7,7 @@ description: Amazon S3 SDK のアーキテクチャをモデルに、クライ�
 
 企業やプラットフォームチームが外部の開発者向けに公式 TypeScript SDK（オブジェクトストレージ SDK、決済ゲートウェイ SDK、SaaS プラットフォーム SDK など）を公開する場合、SDK パッケージは**実行環境を縛ることなく通信契約（wire contract）を定義する**必要があります。
 
-このガイドでは、**Amazon S3 互換の SDK（`@company/s3-sdk`）**を具体例として、`models/` と純粋関数の `services/` を用いたマルチモジュール公開 SDK の設計方法を解説します。
+このガイドでは、**Amazon S3 互換の SDK（`@company/s3-sdk`）**を具体例として、`schema/` と純粋関数の `request/` を用いたマルチモジュール公開 SDK の設計方法を解説します。
 
 ---
 
@@ -24,20 +24,20 @@ description: Amazon S3 SDK のアーキテクチャをモデルに、クライ�
 
 ## 2. パッケージのディレクトリ構成
 
-SDK パッケージを `src/models/`（データ構造）と `src/services/`（リソース領域ごとに整理された純粋な操作定義）に分割し、フラットなバレルファイル `src/index.ts` から再 export します。
+SDK パッケージを `src/schema/`（データ構造）と `src/request/`（リソース領域ごとに整理された純粋な操作定義）に分割し、フラットなバレルファイル `src/index.ts` から再 export します。
 
 ```text
 @company/s3-sdk/
 ├── src/
-│   ├── models/                 # 1. 共有される struct スキーマと Infer<typeof ...> 型
+│   ├── schema/                 # 1. 共有される struct スキーマと Infer<typeof ...> 型
 │   │   ├── common.ts           #    StorageClass, S3Error
 │   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
 │   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
-│   ├── services/               # 2. リソース領域ごとの純粋な defineRequest 関数
+│   ├── request/               # 2. リソース領域ごとの純粋な defineRequest 関数
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. ルート import と tree-shaking のためのバレル export
-├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.8.0" }
 └── tsconfig.json
 ```
 
@@ -45,34 +45,34 @@ SDK パッケージを `src/models/`（データ構造）と `src/services/`（�
 
 ## 3. S3 SDK の完全な実装
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -100,10 +100,10 @@ SDK パッケージを `src/models/`（データ構造）と `src/services/`（�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -139,7 +139,7 @@ SDK パッケージを `src/models/`（データ構造）と `src/services/`（�
 
 ## 4. 外部の開発者が SDK を利用する方法
 
-外部のアプリケーションは、`@company/s3-sdk` と `@defjs/core` をインストールし、自身のエンドポイントと署名インターセプターで `Client` を構成するだけで、export された操作を純粋関数として直接呼び出せます。
+外部のアプリケーションは、`@company/s3-sdk` と `@defjs/core` をインストールし、自身のエンドポイントと署名インターセプターで `Client` を構成するだけで、export された操作を純粋関数として直接呼び出せます。この例は Go 流のエラーハンドリングに従っています。`syncReport` は 3 回の呼び出しを行うため、各エラーにステップ名を付け（`putErr`、`listErr`、`getErr`）、エラーファーストのタプルを返し、失敗したステップを `new Error("put object", { cause: putErr })` で包みます。これは Go の `fmt.Errorf("put object: %w", err)` に相当します。エラーをログに出して処理するのは、プログラムの最上位である `main` だけです。
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

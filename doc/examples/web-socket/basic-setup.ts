@@ -21,9 +21,9 @@ const quotes = defineWebSocket({
 });
 
 async function main() {
-  const [error, session, startupConnection] = await quotes(client);
-  if (error) {
-    console.error(error.code, startupConnection?.generation);
+  const [err, session, startupConnection] = await quotes(client);
+  if (err) {
+    console.error(err.code, startupConnection?.generation);
     return;
   }
   await using ownedSession = session;

@@ -2,16 +2,24 @@
 import type { Client } from "@defjs/core";
 import { runViewer } from "../sdk/viewer.ts";
 
-export async function loadViewer(client: Client) {
-  const [error, result] = await runViewer(client);
-  // A Defjs fault is outside the HTTP 200 envelope this helper returns.
-  if (error) throw error;
+type Viewer = { id: string; login: string };
+
+export async function loadViewer(
+  client: Client,
+): Promise<[Error, undefined] | [null, Viewer | null]> {
+  const [err, result] = await runViewer(client);
+  if (err) return [err, undefined];
+  // GraphQL errors ride in the HTTP 200 envelope, so they are not Defjs faults.
   if (result.errors?.length) {
-    throw new Error(result.errors.map((item) => item.message).join("; "));
+    const message = result.errors.map((item) => item.message).join("; ");
+    return [new Error(message), undefined];
   }
   if (!result.data) {
-    throw new Error("GraphQL response contained neither data nor errors");
+    return [
+      new Error("graphql response contained neither data nor errors"),
+      undefined,
+    ];
   }
-  return result.data.viewer;
+  return [null, result.data.viewer];
 }
 // #endregion

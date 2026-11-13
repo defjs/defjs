@@ -12,24 +12,24 @@ const getOrder = defineRequest({
 });
 
 async function main() {
-  const [error, order, response] = await getOrder(client, { id: 7 });
-  if (error?.code === "HTTP_STATUS" && error.status === 404) {
-    console.log(error.data.message);
-    return;
-  }
-  if (error?.code === "NET_TIMEOUT") {
-    console.log("timed out");
-    return;
-  }
-  if (error?.code === "RES_STRUCT_MISMATCH") {
-    console.log(
-      "the response did not match what we declared",
-      error.response.status,
-    );
-    return;
-  }
-  if (error) {
-    console.error(error.code);
+  const [err, order, response] = await getOrder(client, { id: 7 });
+  if (err) {
+    if (err.code === "HTTP_STATUS" && err.status === 404) {
+      console.log(err.data.message);
+      return;
+    }
+    if (err.code === "NET_TIMEOUT") {
+      console.log("timed out");
+      return;
+    }
+    if (err.code === "RES_STRUCT_MISMATCH") {
+      console.log(
+        "the response did not match what we declared",
+        err.response.status,
+      );
+      return;
+    }
+    console.error(err.code);
     return;
   }
   console.log(order.status, response.status);

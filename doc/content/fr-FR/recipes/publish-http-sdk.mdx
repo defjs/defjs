@@ -5,7 +5,7 @@ description: Structurez un SDK S3 multi-modules avec des modèles et des défini
 
 # Créer et publier un SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Un SDK Defjs organise des modèles `struct` partagés (`src/models/`) et des modules d'opérations métier (`src/services/`) au sein d'un paquet npm optimisé pour le _tree-shaking_, tout en déléguant `createClient(...)`, les endpoints, les identifiants et les intercepteurs à l'application consommatrice.
+Un SDK Defjs organise des modèles `struct` partagés (`src/schema/`) et des modules d'opérations métier (`src/request/`) au sein d'un paquet npm optimisé pour le _tree-shaking_, tout en déléguant `createClient(...)`, les endpoints, les identifiants et les intercepteurs à l'application consommatrice.
 
 Contrairement aux générateurs OpenAPI historiques qui encapsulent les endpoints dans des classes `Service` à état (`ObjectsService.putObject(...)`), un SDK Defjs exporte **des fonctions d'opération pures et autonomes** (`putObject`, `getObject`, `listObjectsV2`) appelées directement avec le client de l'application.
 
@@ -15,37 +15,37 @@ Contrairement aux générateurs OpenAPI historiques qui encapsulent les endpoint
 
 En prenant pour exemple un SDK de stockage d'objets compatible Amazon S3 (`@company/s3-sdk`), découpez le paquet en deux couches :
 
-- **`src/models/`** : Schémas `struct` partagés et types TypeScript `Infer<typeof ...>` (en utilisant des exports de valeur et de type portant le même nom afin que les consommateurs puissent importer un seul identifiant à la fois pour les schémas à l'exécution et pour les types statiques).
-- **`src/services/`** : Modules métier regroupés par ressource (`buckets.ts`, `objects.ts`). Chaque module exporte des fonctions `defineRequest` autonomes dont le `builder` synchrone répartit une entrée d'appel à plat entre `path`, `query`, `headers` et le `body` binaire.
+- **`src/schema/`** : Schémas `struct` partagés et types TypeScript `Infer<typeof ...>` (en utilisant des exports de valeur et de type portant le même nom afin que les consommateurs puissent importer un seul identifiant à la fois pour les schémas à l'exécution et pour les types statiques).
+- **`src/request/`** : Modules métier regroupés par ressource (`buckets.ts`, `objects.ts`). Chaque module exporte des fonctions `defineRequest` autonomes dont le `builder` synchrone répartit une entrée d'appel à plat entre `path`, `query`, `headers` et le `body` binaire.
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -73,10 +73,10 @@ En prenant pour exemple un SDK de stockage d'objets compatible Amazon S3 (`@comp
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,10 +126,10 @@ Vérifiez que `dist/index.js` et `dist/index.d.ts` figurent bien dans la tarball
 Installez votre SDK aux côtés de `@defjs/core` :
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-Comme le SDK ne lie aucun client, l'application consommatrice est propriétaire de l'endpoint (AWS S3, Cloudflare R2 ou MinIO), de l'intercepteur de signature et de la politique de réessai, et appelle directement chaque opération importée comme une fonction pure :
+Comme le SDK ne lie aucun client, l'application consommatrice est propriétaire de l'endpoint (AWS S3, Cloudflare R2 ou MinIO), de l'intercepteur de signature et de la politique de réessai, et appelle directement chaque opération importée comme une fonction pure. Comme `syncReport` effectue trois appels, elle nomme chaque erreur d'après son étape (`putErr`, `listErr`, `getErr`) et renvoie un tuple error-first dont l'erreur enveloppe l'étape en échec, comme le `fmt.Errorf("put object: %w", err)` de Go. Seul `main` la journalise :
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

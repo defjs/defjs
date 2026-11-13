@@ -7,7 +7,7 @@ description: صمّم وانشر حزمة TypeScript SDK خالية من الع�
 
 عندما تنشر شركتك أو فريق المنصة حزمة TypeScript SDK رسمية للمطورين الخارجيين (على سبيل المثال: حزمة SDK لتخزين الكائنات، أو لبوابة دفع، أو لمنصة SaaS)، يجب أن **تعرّف حزمة SDK عقد الشبكة دون فرض بيئة التشغيل**.
 
-باستخدام **حزمة SDK متوافقة مع Amazon S3 (`@company/s3-sdk`)** كمخطط عملي، يوضّح هذا الدليل كيفية تصميم حزمة SDK عامة متعددة الوحدات تضم `models/` وعمليات كدوال نقية في `services/`.
+باستخدام **حزمة SDK متوافقة مع Amazon S3 (`@company/s3-sdk`)** كمخطط عملي، يوضّح هذا الدليل كيفية تصميم حزمة SDK عامة متعددة الوحدات تضم `schema/` وعمليات كدوال نقية في `request/`.
 
 ---
 
@@ -24,20 +24,20 @@ description: صمّم وانشر حزمة TypeScript SDK خالية من الع�
 
 ## 2. هيكل مجلدات الحزمة
 
-قسّم حزمة SDK إلى `src/models/` (هياكل البيانات) و`src/services/` (تعريفات عمليات نقية مجمّعة حسب المورد)، مع ملف تصدير مسطح `src/index.ts`:
+قسّم حزمة SDK إلى `src/schema/` (هياكل البيانات) و`src/request/` (تعريفات عمليات نقية مجمّعة حسب المورد)، مع ملف تصدير مسطح `src/index.ts`:
 
 ```text
 @company/s3-sdk/
 ├── src/
-│   ├── models/                 # 1. مخططات struct المشتركة + أنواع Infer<typeof ...>
+│   ├── schema/                 # 1. مخططات struct المشتركة + أنواع Infer<typeof ...>
 │   │   ├── common.ts           #    StorageClass, S3Error
 │   │   ├── bucket.ts           #    Bucket, ListBucketsOutput
 │   │   └── object.ts           #    ObjectSummary, ListObjectsOutput
-│   ├── services/               # 2. دوال defineRequest نقية حسب نطاق المورد
+│   ├── request/               # 2. دوال defineRequest نقية حسب نطاق المورد
 │   │   ├── buckets.ts          #    BucketInput, listBuckets, headBucket, deleteBucket
 │   │   └── objects.ts          #    listObjectsV2, headObject, getObject, putObject, deleteObject
 │   └── index.ts                # 3. تصديرات مجمّعة للاستيراد الجذري والقابل للتقليم الشجري
-├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.7.0" }
+├── package.json                # sideEffects: false, peerDependencies: { "@defjs/core": "^0.8.0" }
 └── tsconfig.json
 ```
 
@@ -45,34 +45,34 @@ description: صمّم وانشر حزمة TypeScript SDK خالية من الع�
 
 ## 3. التنفيذ الكامل لحزمة S3 SDK
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -100,10 +100,10 @@ description: صمّم وانشر حزمة TypeScript SDK خالية من الع�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -139,7 +139,7 @@ description: صمّم وانشر حزمة TypeScript SDK خالية من الع�
 
 ## 4. كيف يستهلك المطورون الخارجيون حزمة SDK الخاصة بك
 
-تثبّت التطبيقات الخارجية `@company/s3-sdk` إلى جانب `@defjs/core`، وتضبط `Client` الخاص بها مع نقطة النهاية ومعترض التوقيع، وتستدعي العمليات المصدَّرة مباشرةً كدوال نقية:
+تثبّت التطبيقات الخارجية `@company/s3-sdk` إلى جانب `@defjs/core`، وتضبط `Client` الخاص بها مع نقطة النهاية ومعترض التوقيع، وتستدعي العمليات المصدَّرة مباشرةً كدوال نقية. يتبع المثال معالجة الأخطاء بأسلوب Go: تجري `syncReport` ثلاثة استدعاءات، لذلك تسمي كل خطأ باسم خطوته (`putErr` و`listErr` و`getErr`)، وتُرجع مصفوفة يكون الخطأ في أولها، وتغلّف الخطوة الفاشلة بـ `new Error("put object", { cause: putErr })`، على غرار `fmt.Errorf("put object: %w", err)` في Go. أما `main`، وهي أعلى البرنامج، فهي وحدها من تعالج الخطأ بتسجيله:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

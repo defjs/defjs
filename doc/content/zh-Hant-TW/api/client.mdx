@@ -257,6 +257,6 @@ HTTP 預算歸 client 所有，採 Finagle 風格。預設為 20%，再加上 10
 
 `pick` 回傳 error-first tuple。選用的 `start` 會在所選傳輸開始之前同步執行至多一次；選用的 `end` 會在 `start` 之後、對端回應開始（或回應前發生失敗）時執行一次；選用的 `done` 則在完成時執行一次。Fetch 無法揭露 Linkerd 的首個本文訊框，也無法揭露 Envoy 的串流邊界。所有鉤子拋出的例外都會被接住，並在執行環境有定義 `reportError` 的地方以它回報（未被處理的回報可以結束沒有錯誤處理常式的 Bun 或 Deno 行程）；回傳的 Promise 不會被等待。`ERR_NO_CANDIDATE` 只會作為 `REQ_BUILD_FAILED` 的 `cause`，不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-TW/api/core/isnocandidatecause) 也能辨識來自另一份 Core 副本的它。
 
-平衡器只看得到中立的結果；每種傳輸會把自己的事實轉譯成 `DoneInfo.code`。預設的 outlier detection 把每個帶 code 的結果都計為失敗，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。原始的 `DoneInfo.status` 只保留給自訂平衡器，內建策略從不讀取它。`PickInfo` 包含一次 pick 的候選 `endpoints`、`members`（client 的完整端點清單，每次嘗試都相同）與選用的 `operation`，沒有傳輸類型的判別欄位。
+平衡器只看得到中立的結果；每種傳輸會把自己的事實轉譯成 `DoneInfo.code`。預設的 outlier detection 把每個帶 code 的結果都計為失敗，包括 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE`。原始的 `DoneInfo.status` 只保留給自訂平衡器，內建策略從不讀取它。`PickInfo` 包含一次 pick 的候選 `endpoints`、`members`（client 的完整端點清單，每次嘗試都相同）與選用的 `meta`，沒有傳輸類型的判別欄位。
 
 見 [Client 指南](/zh-Hant-TW/docs/client)。

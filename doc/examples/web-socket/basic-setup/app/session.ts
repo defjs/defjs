@@ -5,9 +5,9 @@ import { openTicker } from "../sdk/ticks-socket.ts";
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, session] = await openTicker(client);
-  if (error) {
-    console.error(error.code);
+  const [err, session] = await openTicker(client);
+  if (err) {
+    console.error(err.code);
     return;
   }
 

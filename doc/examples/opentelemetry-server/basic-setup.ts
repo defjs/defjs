@@ -9,7 +9,7 @@ const meter = metrics.getMeter("orders-service");
 const logger = logs.getLogger("@defjs/opentelemetry-server");
 const readOrders = defineRequest({
   method: "GET",
-  operation: "orders.read",
+  meta: { operation: "orders.read" },
   path: "/orders",
 });
 
@@ -27,9 +27,9 @@ const logsOnlyClient = createClient(
 );
 
 async function main() {
-  const [error] = await readOrders(client);
-  if (error) {
-    console.error(error.code);
+  const [err] = await readOrders(client);
+  if (err) {
+    console.error(err.code);
     return;
   }
 }

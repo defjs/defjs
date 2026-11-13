@@ -5,18 +5,18 @@ description: Conventions architecturales pour structurer les couches de requête
 
 # Conventions d'ingénierie [#engineering-conventions]
 
-Que vous écriviez manuellement une couche de requêtes HTTP au sein d'une application frontend/backend ou que vous publiiez un SDK TypeScript officiel pour l'API publique de votre entreprise, les projets Defjs suivent la même architecture modulaire : **des modèles de données `struct` partagés (`models/`) associés à des définitions d'opérations pures (`services/`)**.
+Que vous écriviez manuellement une couche de requêtes HTTP au sein d'une application frontend/backend ou que vous publiiez un SDK TypeScript officiel pour l'API publique de votre entreprise, les projets Defjs suivent la même architecture modulaire : **des modèles de données `struct` partagés (`schema/`) associés à des définitions d'opérations pures (`request/`)**.
 
 ---
 
 ## 1. Deux façons d'utiliser Defjs
 
-La plupart des équipes adoptent Defjs dans l'un de ces deux scénarios. Tous deux organisent les contrats dans `models/` et `services/`, et ne diffèrent que par l'emplacement de `createClient(...)` :
+La plupart des équipes adoptent Defjs dans l'un de ces deux scénarios. Tous deux organisent les contrats dans `schema/` et `request/`, et ne diffèrent que par l'emplacement de `createClient(...)` :
 
-| Scénario                                                                                                  | Structure de répertoires                                          | Qui est propriétaire de `createClient(...)` ?                                                              | Guide                                                   |
-| :-------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- | :------------------------------------------------------ |
-| **[Couche API d'application](/fr-FR/docs/application-api)** (requêtes HTTP/temps réel internes au projet) | `src/api/models/` + `src/api/services/` + `src/api/client.ts`     | Votre application (`src/api/client.ts` exporte un singleton navigateur ou une fabrique par requête en SSR) | [Couche API d'application](/fr-FR/docs/application-api) |
-| **[Conception de SDK public](/fr-FR/docs/public-sdk)** (paquet npm externe pour API publiques)            | `src/models/` + `src/services/` + `src/index.ts` (`package.json`) | L'application du consommateur externe (le SDK publié ne crée ni ne capture jamais de `Client`)             | [Conception de SDK public](/fr-FR/docs/public-sdk)      |
+| Scénario                                                                                                  | Structure de répertoires                                         | Qui est propriétaire de `createClient(...)` ?                                                              | Guide                                                   |
+| :-------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- | :------------------------------------------------------ |
+| **[Couche API d'application](/fr-FR/docs/application-api)** (requêtes HTTP/temps réel internes au projet) | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`     | Votre application (`src/api/client.ts` exporte un singleton navigateur ou une fabrique par requête en SSR) | [Couche API d'application](/fr-FR/docs/application-api) |
+| **[Conception de SDK public](/fr-FR/docs/public-sdk)** (paquet npm externe pour API publiques)            | `src/schema/` + `src/request/` + `src/index.ts` (`package.json`) | L'application du consommateur externe (le SDK publié ne crée ni ne capture jamais de `Client`)             | [Conception de SDK public](/fr-FR/docs/public-sdk)      |
 
 ---
 
@@ -32,9 +32,9 @@ export class OrdersService {
   // Masque la dérivation client(options) par appel et bloque le tree-shaking du bundler
 }
 
-// Recommandé : exporter des définitions d'opérations autonomes depuis services/*.ts
+// Recommandé : exporter des définitions d'opérations autonomes depuis request/*.ts
 export const getOrder = defineRequest({
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   method: "GET",
   path: "/orders/:id",
   input: GetOrderInput,
@@ -46,9 +46,9 @@ export const getOrder = defineRequest({
 
 Appeler directement l'opération exportée (`await getOrder(client, { id: 42 })` ou `await getOrder(client({ signal }), { id: 42 })`) maintient une convention d'appel uniforme dans toute votre base de code et permet aux bundlers d'éliminer les opérations inutilisées (_tree-shaking_) lorsque `"sideEffects": false` est défini.
 
-### Convention 2 : Exports `struct` + `Infer` de même nom dans `models/`
+### Convention 2 : Exports `struct` + `Infer` de même nom dans `schema/`
 
-Dans `models/*.ts`, exportez à la fois le schéma `struct` d'exécution et son type TypeScript inféré sous le **même identifiant**. TypeScript fusionne les déclarations de valeur et de type dans la même portée, de sorte que les appelants importent un seul symbole à la fois pour la validation à l'exécution et pour les annotations de types statiques :
+Dans `schema/*.ts`, exportez à la fois le schéma `struct` d'exécution et son type TypeScript inféré sous le **même identifiant**. TypeScript fusionne les déclarations de valeur et de type dans la même portée, de sorte que les appelants importent un seul symbole à la fois pour la validation à l'exécution et pour les annotations de types statiques :
 
 ```ts
 import { struct, type Infer } from "@defjs/core";
@@ -61,24 +61,24 @@ export const Order = struct.object({
 export type Order = Infer<typeof Order>;
 ```
 
-### Convention 3 : Gardez `services/*.ts` exempt d'instances de client
+### Convention 3 : Gardez `request/*.ts` exempt d'instances de client
 
-Même lorsque vous écrivez une [couche API d'application](/fr-FR/docs/application-api) au sein d'un dépôt unique (`src/api/`), n'importez **pas** `apiClient` dans `src/api/services/*.ts` pour encapsuler vos définitions. Conserver `services/*.ts` sous forme de définitions pures vous procure trois avantages immédiats :
+Même lorsque vous écrivez une [couche API d'application](/fr-FR/docs/application-api) au sein d'un dépôt unique (`src/api/`), n'importez **pas** `apiClient` dans `src/api/request/*.ts` pour encapsuler vos définitions. Conserver `request/*.ts` sous forme de définitions pures vous procure trois avantages immédiats :
 
 1. **Tests hors ligne déterministes** : Les tests unitaires peuvent passer un `createClient(withEndpoint(...), withHTTPHandle(...))` local directement à n'importe quelle opération sans avoir à mocker de modules.
 2. **Sécurité SSR et multi-locataire (multi-tenant)** : Les chargeurs serveur peuvent passer un `Client` limité à la requête, portant les cookies de l'utilisateur courant ou le jeton du locataire, à exactement la même définition d'opération que celle utilisée par les composants navigateur.
-3. **Évolution sans coût vers un paquet partagé** : Si votre équipe déplace ultérieurement `src/api/models/` et `src/api/services/` vers un paquet d'espace de travail monorepo ou un SDK npm public, aucun fichier d'opération n'a besoin d'être modifié.
+3. **Évolution sans coût vers un paquet partagé** : Si votre équipe déplace ultérieurement `src/api/schema/` et `src/api/request/` vers un paquet d'espace de travail monorepo ou un SDK npm public, aucun fichier d'opération n'a besoin d'être modifié.
 
 ### Convention 4 : Séparez le placement dans `builder` de la politique d'intercepteurs
 
 Gardez chaque préoccupation dans la couche qui lui est dédiée :
 
-| Préoccupation                                                                                                 | Où elle doit se trouver                                               | Pourquoi                                                                                   |
-| :------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------- | :----------------------------------------------------------------------------------------- |
-| Répartir les paramètres de l'appelant dans `path`, `query`, `headers` et `body`                               | `builder` de l'opération dans `services/*.ts`                         | Fonction pure et synchrone de l'`input` courant                                            |
-| Identité d'opération statique à faible cardinalité (`"orders.create"`, `"s3.objects.put"`)                    | Champ `operation` de l'opération dans `services/*.ts`                 | Utilisée par les spans OpenTelemetry, les métriques et les intercepteurs de journalisation |
-| URL de base, en-têtes d'authentification (`Authorization`, signatures, XSRF), réessais, répartition de charge | `createClient(...)` dans `client.ts`                                  | Politique d'exécution propre à l'environnement et à la session                             |
-| Délais d'expiration par appel, annulation (`signal`) et callbacks de progression de transfert                 | `client({ signal, onDownloadProgress })` en ligne sur le site d'appel | Limité à une seule invocation sans muter le client partagé                                 |
+| Préoccupation                                                                                                 | Où elle doit se trouver                                               | Pourquoi                                                                                                                                 |
+| :------------------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------- |
+| Répartir les paramètres de l'appelant dans `path`, `query`, `headers` et `body`                               | `builder` de l'opération dans `request/*.ts`                          | Fonction pure et synchrone de l'`input` courant                                                                                          |
+| Contexte défini par l'application pour les intercepteurs (`{ operation: "orders.create" }`)                   | Champ `meta` de l'opération dans `request/*.ts`                       | `{ [key: string]: unknown }` ; en lecture seule et partagé par définition ; jamais envoyé avec la requête ; rapporté sous `defjs.meta.*` |
+| URL de base, en-têtes d'authentification (`Authorization`, signatures, XSRF), réessais, répartition de charge | `createClient(...)` dans `client.ts`                                  | Politique d'exécution propre à l'environnement et à la session                                                                           |
+| Délais d'expiration par appel, annulation (`signal`) et callbacks de progression de transfert                 | `client({ signal, onDownloadProgress })` en ligne sur le site d'appel | Limité à une seule invocation sans muter le client partagé                                                                               |
 
 ---
 

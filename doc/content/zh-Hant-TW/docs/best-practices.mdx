@@ -5,18 +5,18 @@ description: 使用 Defjs 建構應用程式內部 API 請求層與對外公開 
 
 # 工程規範 [#engineering-conventions]
 
-無論是在應用程式專案內部手寫 HTTP 請求層，還是代表公司對外發布公開 API 的官方 TypeScript SDK，基於 Defjs 的專案都遵循同一套模組化架構：**共用資料模型層（`models/`）搭配純函式操作定義層（`services/`）**。
+無論是在應用程式專案內部手寫 HTTP 請求層，還是代表公司對外發布公開 API 的官方 TypeScript SDK，基於 Defjs 的專案都遵循同一套模組化架構：**共用schema層（`schema/`）搭配純函式操作定義層（`request/`）**。
 
 ---
 
 ## 1. 兩大核心使用情境
 
-在實務開發中，團隊通常會在以下兩種情境下採用 Defjs。兩者的 `models/` 與 `services/` 組織方式完全一致，唯一的差異在於 `createClient(...)` 放在哪裡：
+在實務開發中，團隊通常會在以下兩種情境下採用 Defjs。兩者的 `schema/` 與 `request/` 組織方式完全一致，唯一的差異在於 `createClient(...)` 放在哪裡：
 
-| 使用情境                                                                               | 建議目錄結構                                                          | 誰持有 `createClient(...)`？                                                     | 專題指南                                            |
-| :------------------------------------------------------------------------------------- | :-------------------------------------------------------------------- | :------------------------------------------------------------------------------- | :-------------------------------------------------- |
-| **[應用程式 API 層](/zh-Hant-TW/docs/application-api)**（專案內部手寫 HTTP／即時請求） | `src/api/models/` + `src/api/services/` + `src/api/client.ts`         | 你的應用程式本身（由 `src/api/client.ts` 匯出瀏覽器單例或 SSR 單一請求工廠函式） | [應用程式 API 層](/zh-Hant-TW/docs/application-api) |
-| **[公開 SDK 設計](/zh-Hant-TW/docs/public-sdk)**（對外發布的公開 API npm 套件）        | `src/models/` + `src/services/` + `src/index.ts`（含 `package.json`） | 外部取用端應用程式（發布的 SDK 套件內絕不建立或捕捉任何 `Client`）               | [公開 SDK 設計](/zh-Hant-TW/docs/public-sdk)        |
+| 使用情境                                                                               | 建議目錄結構                                                         | 誰持有 `createClient(...)`？                                                     | 專題指南                                            |
+| :------------------------------------------------------------------------------------- | :------------------------------------------------------------------- | :------------------------------------------------------------------------------- | :-------------------------------------------------- |
+| **[應用程式 API 層](/zh-Hant-TW/docs/application-api)**（專案內部手寫 HTTP／即時請求） | `src/api/schema/` + `src/api/request/` + `src/api/client.ts`         | 你的應用程式本身（由 `src/api/client.ts` 匯出瀏覽器單例或 SSR 單一請求工廠函式） | [應用程式 API 層](/zh-Hant-TW/docs/application-api) |
+| **[公開 SDK 設計](/zh-Hant-TW/docs/public-sdk)**（對外發布的公開 API npm 套件）        | `src/schema/` + `src/request/` + `src/index.ts`（含 `package.json`） | 外部取用端應用程式（發布的 SDK 套件內絕不建立或捕捉任何 `Client`）               | [公開 SDK 設計](/zh-Hant-TW/docs/public-sdk)        |
 
 ---
 
@@ -32,9 +32,9 @@ export class OrdersService {
   // 掩蓋了單次呼叫 client(options) 衍生能力，且阻礙打包工具按端點粒度進行 tree-shaking
 }
 
-// 建議做法：在 services/*.ts 中直接匯出獨立的操作定義純函式
+// 建議做法：在 request/*.ts 中直接匯出獨立的操作定義純函式
 export const getOrder = defineRequest({
-  operation: "orders.get",
+  meta: { operation: "orders.get" },
   method: "GET",
   path: "/orders/:id",
   input: GetOrderInput,
@@ -46,9 +46,9 @@ export const getOrder = defineRequest({
 
 直接呼叫匯出的操作函式（`await getOrder(client, { id: 42 })` 或 `await getOrder(client({ signal }), { id: 42 })`），能讓整個程式碼庫的呼叫慣例保持一致，並在設定 `"sideEffects": false` 時讓打包工具完整剔除未使用的操作。
 
-### 規範二：在 `models/` 中以相同名稱合併匯出 `struct` 與 `Infer`
+### 規範二：在 `schema/` 中以相同名稱合併匯出 `struct` 與 `Infer`
 
-在 `models/*.ts` 中，使用**相同的識別字**同時匯出執行時期的 `struct` schema 與其推導出的 `Infer<typeof ...>` TypeScript 型別。TypeScript 會自動合併同一作用域內的值宣告與型別宣告，呼叫端只需匯入一個名稱即可同時用於執行時期驗證與靜態型別標註：
+在 `schema/*.ts` 中，使用**相同的識別字**同時匯出執行時期的 `struct` schema 與其推導出的 `Infer<typeof ...>` TypeScript 型別。TypeScript 會自動合併同一作用域內的值宣告與型別宣告，呼叫端只需匯入一個名稱即可同時用於執行時期驗證與靜態型別標註：
 
 ```ts
 import { struct, type Infer } from "@defjs/core";
@@ -61,24 +61,24 @@ export const Order = struct.object({
 export type Order = Infer<typeof Order>;
 ```
 
-### 規範三：保持 `services/*.ts` 與 Client 執行個體解耦
+### 規範三：保持 `request/*.ts` 與 Client 執行個體解耦
 
-即使是在單一專案儲存庫內撰寫[應用程式 API 層](/zh-Hant-TW/docs/application-api)（`src/api/`），也**不要**在 `src/api/services/*.ts` 裡匯入 `apiClient` 來二次包裝定義。讓 `services/*.ts` 保持為純粹的操作定義能帶來三大工程效益：
+即使是在單一專案儲存庫內撰寫[應用程式 API 層](/zh-Hant-TW/docs/application-api)（`src/api/`），也**不要**在 `src/api/request/*.ts` 裡匯入 `apiClient` 來二次包裝定義。讓 `request/*.ts` 保持為純粹的操作定義能帶來三大工程效益：
 
 1. **決定性的離線單元測試**：單元測試可直接將本機的 `createClient(withEndpoint(...), withHTTPHandle(...))` 傳入任何操作函式，無須模擬（mock）模組。
 2. **SSR 與多租戶安全**：伺服器端載入器（loader）可以為每個進入的請求建立帶有當前使用者 Cookie 或租戶 Token 的專屬 `Client`，並與瀏覽器元件共用同一份操作定義。
-3. **零成本升級為共用套件**：若團隊日後決定將 `src/api/models/` 與 `src/api/services/` 抽離為 Monorepo 子套件或公開 npm SDK，操作定義檔案無須修改任何一行程式碼。
+3. **零成本升級為共用套件**：若團隊日後決定將 `src/api/schema/` 與 `src/api/request/` 抽離為 Monorepo 子套件或公開 npm SDK，操作定義檔案無須修改任何一行程式碼。
 
 ### 規範四：將 `builder` 參數放置與攔截器策略分離
 
 將不同層面的職責放在各自歸屬的層級中：
 
-| 職責層面                                                          | 歸屬位置                                                  | 原因                                                 |
-| :---------------------------------------------------------------- | :-------------------------------------------------------- | :--------------------------------------------------- |
-| 將呼叫端參數路由至 `path`、`query`、`headers` 與 `body`           | `services/*.ts` 中的操作 `builder`                        | 僅依賴當前 `input` 的同步純函式                      |
-| 靜態低基數操作識別（如 `"orders.create"`、`"s3.objects.put"`）    | `services/*.ts` 中的操作 `operation` 欄位                 | 供 OpenTelemetry 追蹤 span、指標與日誌攔截器識別操作 |
-| 基底 URL、驗證標頭（`Authorization`、簽章、XSRF）、重試、負載平衡 | `client.ts` 中的 `createClient(...)`                      | 與執行環境及工作階段相關的執行策略                   |
-| 單次呼叫逾時、取消（`signal`）與傳輸進度回呼                      | 呼叫處的內聯衍生 `client({ signal, onDownloadProgress })` | 僅作用於單次呼叫，不會變更共用 Client                |
+| 職責層面                                                          | 歸屬位置                                                  | 原因                                                                                     |
+| :---------------------------------------------------------------- | :-------------------------------------------------------- | :--------------------------------------------------------------------------------------- |
+| 將呼叫端參數路由至 `path`、`query`、`headers` 與 `body`           | `request/*.ts` 中的操作 `builder`                         | 僅依賴當前 `input` 的同步純函式                                                          |
+| 應用程式為攔截器定義的脈絡（`{ operation: "orders.create" }`）    | `request/*.ts` 中的 `meta` 欄位                           | `{ [key: string]: unknown }`；唯讀且每個定義共用；絕不隨請求送出；以 `defjs.meta.*` 回報 |
+| 基底 URL、驗證標頭（`Authorization`、簽章、XSRF）、重試、負載平衡 | `client.ts` 中的 `createClient(...)`                      | 與執行環境及工作階段相關的執行策略                                                       |
+| 單次呼叫逾時、取消（`signal`）與傳輸進度回呼                      | 呼叫處的內聯衍生 `client({ signal, onDownloadProgress })` | 僅作用於單次呼叫，不會變更共用 Client                                                    |
 
 ---
 

@@ -74,12 +74,12 @@ Defjs choisit le côté de la réponse avec `response.ok` : `output` pour `2xx`,
 | Le media type ne correspond pas au JSON déclaré           | `RES_MEDIA_TYPE_INVALID` (vérifié d'abord ; le corps n'est jamais lu, contenu ou non n'y change rien) |
 | Les octets ne peuvent être décodés dans la représentation | `RES_DECODE_FAILED` (octets JSON vides compris)                                                       |
 | La valeur décodée échoue à la validation `struct`         | `RES_STRUCT_MISMATCH`                                                                                 |
-| Statut non-`2xx` avec struct `error` décodé               | `HTTP_STATUS` avec `error.data` typé                                                                  |
-| Statut non-`2xx` avec `error` omis                        | `HTTP_STATUS` avec `error.data: undefined`                                                            |
+| Statut non-`2xx` avec struct `error` décodé               | `HTTP_STATUS` avec `err.data` typé                                                                    |
+| Statut non-`2xx` avec `error` omis                        | `HTTP_STATUS` avec `err.data: undefined`                                                              |
 
 ### Règle 4 : Un décodage échoué n'a pas de corps
 
-Un corps n'existe qu'après avoir franchi le décodage et la validation. En cas d'échec de décodage, le `response` du fault est typé comme `HttpMeta` (qui ne possède aucune propriété `body`), et l'erreur d'analyse/validation est rattachée à `fault.cause`.
+Un corps n'existe qu'après avoir franchi le décodage et la validation. En cas d'échec de décodage, le `response` du fault est typé comme `HttpMeta` (qui ne possède aucune propriété `body`), et l'erreur d'analyse/validation est rattachée à `err.cause`.
 
 ### Règle 5 : Omettre un côté revient à renoncer à le lire
 
@@ -93,9 +93,9 @@ Omettre `output` signifie que les corps `2xx` ne sont jamais lus. Omettre `error
 
 Les trois transports renvoient un tuple error-first de trois éléments plutôt que de lever une exception au point d'appel :
 
-- **HTTP** → `[error, data, response]` — charge utile décodée + `DecodedResponse<T>` (`HttpMeta` quand `output` est omis).
-- **SSE** → `[error, stream, open]` — `EventStreamHandle` + instantané du handshake initial.
-- **WebSocket** → `[error, session, connection]` — `WebSocketSession` + instantané de la connexion initiale.
+- **HTTP** → `[err, data, response]` — charge utile décodée + `DecodedResponse<T>` (`HttpMeta` quand `output` est omis).
+- **SSE** → `[err, stream, open]` — `EventStreamHandle` + instantané du handshake initial.
+- **WebSocket** → `[err, session, connection]` — `WebSocketSession` + instantané de la connexion initiale.
 
 Les clients portent la configuration, pas les connexions actives. L'appelant qui initie une requête HTTP, un flux SSE ou une session WebSocket en possède l'annulation ou la fermeture (`AbortSignal` pour HTTP ; `await using` ou `.close()` + `await .closed` pour SSE et WebSocket).
 

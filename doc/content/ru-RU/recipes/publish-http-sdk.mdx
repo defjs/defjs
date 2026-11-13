@@ -5,7 +5,7 @@ description: Организуйте многомодульный S3 SDK с мо�
 
 # Создание и публикация SDK [#publish-an-http-sdk-without-hiding-execute]
 
-SDK на базе Defjs объединяет общие модели `struct` (`src/models/`) и предметные модули операций (`src/services/`) в поддерживающий tree-shaking npm-пакет, оставляя `createClient(...)`, эндпоинты, учётные данные и перехватчики на стороне использующего приложения.
+SDK на базе Defjs объединяет общие модели `struct` (`src/schema/`) и предметные модули операций (`src/request/`) в поддерживающий tree-shaking npm-пакет, оставляя `createClient(...)`, эндпоинты, учётные данные и перехватчики на стороне использующего приложения.
 
 В отличие от устаревших генераторов OpenAPI, которые оборачивают эндпоинты в хранящие состояние классы `Service` (`ObjectsService.putObject(...)`), Defjs SDK экспортирует **отдельные чистые функции операций** (`putObject`, `getObject`, `listObjectsV2`), вызываемые напрямую с клиентом приложения.
 
@@ -15,37 +15,37 @@ SDK на базе Defjs объединяет общие модели `struct` (`
 
 На примере совместимого с Amazon S3 SDK объектного хранилища (`@company/s3-sdk`) разделим пакет на два уровня:
 
-- **`src/models/`**: Общие схемы `struct` и типы TypeScript `Infer<typeof ...>` (с одноимёнными экспортами значений и типов, чтобы потребители могли импортировать один идентификатор как для runtime-схем, так и для статических типов).
-- **`src/services/`**: Предметные модули, сгруппированные по ресурсам (`buckets.ts`, `objects.ts`). Каждый модуль экспортирует самостоятельные функции `defineRequest`, чей синхронный `builder` распределяет плоский входной объект вызова по `path`, `query`, `headers` и бинарному `body`.
+- **`src/schema/`**: Общие схемы `struct` и типы TypeScript `Infer<typeof ...>` (с одноимёнными экспортами значений и типов, чтобы потребители могли импортировать один идентификатор как для runtime-схем, так и для статических типов).
+- **`src/request/`**: Предметные модули, сгруппированные по ресурсам (`buckets.ts`, `objects.ts`). Каждый модуль экспортирует самостоятельные функции `defineRequest`, чей синхронный `builder` распределяет плоский входной объект вызова по `path`, `query`, `headers` и бинарному `body`.
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -73,10 +73,10 @@ SDK на базе Defjs объединяет общие модели `struct` (`
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,10 +126,10 @@ bun pm pack
 Установите ваш SDK вместе с `@defjs/core`:
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-Поскольку SDK не привязывает клиент, использующее приложение само управляет эндпоинтом (AWS S3, Cloudflare R2 или MinIO), перехватчиком подписи запросов и политикой повторов, вызывая каждую импортированную операцию напрямую как чистую функцию:
+Поскольку SDK не привязывает клиент, использующее приложение само управляет эндпоинтом (AWS S3, Cloudflare R2 или MinIO), перехватчиком подписи запросов и политикой повторов, вызывая каждую импортированную операцию напрямую как чистую функцию. Поскольку `syncReport` делает три вызова, она называет каждую ошибку по шагу (`putErr`, `listErr`, `getErr`) и возвращает error-first кортеж, чья ошибка оборачивает сбойный шаг, как `fmt.Errorf("put object: %w", err)` в Go. В лог её пишет только `main`:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

@@ -20,13 +20,16 @@ const createOrder = defineRequest({
   }),
 });
 
-async function submit(client: Client) {
-  const [error] = await createOrder(client, {
+async function submit(client: Client): Promise<Error | null> {
+  const [err] = await createOrder(client, {
     organizationId: "acme",
     notify: true,
     requestId: "request-42",
     order: { customerName: "Ada" },
   });
-  if (error) console.error(error.code);
+  if (err) {
+    return err;
+  }
+  return null;
 }
 // #endregion

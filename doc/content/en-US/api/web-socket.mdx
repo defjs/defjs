@@ -11,12 +11,12 @@ Declare a socket, call the operation with a client, send and receive typed messa
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path`, and one `incoming` struct; optional `outgoing` and `input` structs, `operation`, static `protocols`, and `maxOutgoingQueueSize`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`WebSocketDefinition`](/api/core/websocketdefinition-type). `builder` is required exactly when `input` is declared.
+- **definition** — `path`, and one `incoming` struct; optional `outgoing` and `input` structs, `meta`, static `protocols`, and `maxOutgoingQueueSize`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`WebSocketDefinition`](/api/core/websocketdefinition-type). `builder` is required exactly when `input` is declared.
 - **Returns** an operation. The first argument is a [`Client`](/api/core/client-type). Further arguments are the input only. Calling it opens the session.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-The call returns `[null, session, connection]` or `[error, undefined, connection?]`. Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). WebSocket reads `signal`, `beforeConnect`, `heartbeat`, `protocols`, and `retry`, and ignores HTTP progress fields.
+The call returns `[null, session, connection]` or `[err, undefined, connection?]`. Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). WebSocket reads `signal`, `beforeConnect`, `heartbeat`, `protocols`, and `retry`, and ignores HTTP progress fields.
 
 `beforeConnect`, `heartbeat`, `protocols`, and `retry` each override the client-level option for that call as a whole. Protocol precedence is the derived client, then `withWebSocketProtocols`, then the definition's `protocols`. `heartbeat.timeoutMs` is the acknowledgement wait, not a request deadline.
 
@@ -72,7 +72,7 @@ See [WebSocket guide](/docs/web-socket) and [Open a WebSocket session](/recipes/
 
 ## WebSocketDefinition
 
-`path`, `incoming`, optional `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. The builder may return `path` and `query` only. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+`path`, `incoming`, optional `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize`. The builder may return `path` and `query` only. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
 
 ## WebSocketEndpoint
 
@@ -88,7 +88,7 @@ The operation returned by `defineWebSocket`. The first argument is a client. Fur
 
 ## SocketAwaitResult
 
-`[null, session, connection]` or `[error, undefined, connection?]`.
+`[null, session, connection]` or `[err, undefined, connection?]`.
 
 ## ManualSocketCloseReason
 

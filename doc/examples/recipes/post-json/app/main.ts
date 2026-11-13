@@ -5,16 +5,16 @@ import { createOrder } from "../sdk/orders.ts";
 const client = createClient(withEndpoint("https://api.example.com/v1"));
 
 async function main() {
-  const [error, order, response] = await createOrder(client, {
+  const [err, order, response] = await createOrder(client, {
     status: "paid",
     customerName: "Ada",
   });
-  if (error?.code === "HTTP_STATUS") {
-    console.error(error.status, error.data.message);
-    return;
-  }
-  if (error) {
-    console.error(error.code);
+  if (err) {
+    if (err.code === "HTTP_STATUS") {
+      console.error(err.status, err.data.message);
+      return;
+    }
+    console.error(err.code);
     return;
   }
   console.log(`Created ${order.status} → ${response.status}`);

@@ -32,10 +32,10 @@ Utilisez `withHTTPHandle`, `withSSEHandle` ou `withWebSocketHandle` sur `createC
 
 ### Vérifier le tuple error-first plutôt que les mécanismes internes
 
-Appelez toujours l'opération exportée du SDK avec votre client de test et effectuez vos assertions sur le tuple `[error, data, response]` renvoyé :
+Appelez toujours l'opération exportée du SDK avec votre client de test et effectuez vos assertions sur le tuple `[err, data, response]` renvoyé :
 
-- Pour les cas `2xx`, vérifiez `expect(error).toBeNull()` et contrôlez les champs décodés de `data` (y compris les correspondances d'alias `.alias()` entre réseau et logique).
-- Pour les cas d'échec, vérifiez `error?.code`, `error?.status`, `error?.data` et `error?.cause` dès lors qu'ils font partie du contrat.
+- Pour les cas `2xx`, vérifiez `expect(err).toBeNull()` et contrôlez les champs décodés de `data` (y compris les correspondances d'alias `.alias()` entre réseau et logique).
+- Pour les cas d'échec, vérifiez `err?.code`, `err?.status`, `err?.data` et `err?.cause` dès lors qu'ils font partie du contrat.
 
 ### Vérifier les octets émis lors des requêtes sortantes
 

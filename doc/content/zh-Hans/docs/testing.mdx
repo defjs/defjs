@@ -32,10 +32,10 @@ description: 用注入的传输句柄离线测试 SDK 定义与应用策略，�
 
 ### 断言错误优先元组，而非内部实现细节
 
-始终用测试 Client 调用导出的 SDK 操作，并断言返回的 `[error, data, response]` 元组：
+始终用测试 Client 调用导出的 SDK 操作，并断言返回的 `[err, data, response]` 元组：
 
-- 对于 `2xx` 场景，断言 `expect(error).toBeNull()`，并检查解码后的 `data` 字段（包括 `.alias()` 的网络字段到逻辑字段映射）。
-- 对于失败场景，按契约断言 `error?.code`、`error?.status`、`error?.data` 和 `error?.cause`。
+- 对于 `2xx` 场景，断言 `expect(err).toBeNull()`，并检查解码后的 `data` 字段（包括 `.alias()` 的网络字段到逻辑字段映射）。
+- 对于失败场景，按契约断言 `err?.code`、`err?.status`、`err?.data` 和 `err?.cause`。
 
 ### 校验出站请求的网络字节
 

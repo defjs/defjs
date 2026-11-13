@@ -30,6 +30,6 @@ and verify the result with the project’s existing tests.
 
 ## 核對結果 [#verify]
 
-將定義同應用程式分開讀。定義匯出操作，唔建立 client。應用程式建立 client，再呼叫操作，例如 `getOrder(client, { id: 1 })`。宣告咗 `input` 時，`builder` 必須係明確嘅同步純函式。只有 error 槽係空嘅時候先使用成功值。
+將定義同應用程式分開讀。定義匯出操作，唔建立 client。應用程式建立 client，再呼叫操作，例如 `getOrder(client, { id: 1 })`。宣告咗 `input` 時，`builder` 必須係明確嘅同步純函式。只有 error 槽係空嘅時候先使用成功值：呼叫處一呼叫完就檢查 `if (err)`，並喺個區塊入面 return，而可能失敗嘅 helper 就回傳自己嘅 `[err, value]` tuple，唔好寫 log，亦唔好回傳 `undefined`。
 
 然後執行該項目嘅型別檢查，同埋覆蓋呢份契約嘅測試。相依套件安裝同 CI 規則留喺嗰個項目入面。

@@ -286,7 +286,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     );
   });
 
-  test("uses only the explicit operation as the metric identity", async () => {
+  test("does not add application meta to metric attributes", async () => {
     const metrics = createMockMetrics();
     const interceptor = createOpenTelemetryHttpInterceptor({
       propagator: mockPropagator,
@@ -294,14 +294,17 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     await interceptor.fn(
-      { ...makeHttpRequest(), endpoint: "/users/42", operation: "users.read" },
+      {
+        ...makeHttpRequest(),
+        endpoint: "/users/42",
+        meta: { operation: "users.read" },
+      },
       () => Promise.resolve(makeHttpResponse()),
     );
 
     expect(metrics.requestDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       {
-        "defjs.operation": "users.read",
         "http.request.method": "GET",
         "http.response.status_code": 200,
         "server.address": "api.example.com",

@@ -66,7 +66,7 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-入力を `{ id: 7 }` から `{ id: 8 }` に変更すると、モックは `404` を返し、Defjs は宣言された `error` struct をデコードして `error.data` に格納します。
+入力を `{ id: 7 }` から `{ id: 8 }` に変更すると、モックは `404` を返し、Defjs は宣言された `error` struct をデコードして `err.data` に格納します。
 
 ```txt
 Order not found
@@ -74,11 +74,11 @@ Order not found
 
 ## 4. エラーファーストタプルの理解
 
-すべての HTTP 呼び出しは `[error, data, response]` を返します。
+すべての HTTP 呼び出しは `[err, data, response]` を返します。呼び出しの直後に `if (err)` を確認し、Go の `if err != nil` と同じようにそのブロックの中で処理を抜けます。
 
-- **`2xx` の成功時**: `error` は `null`、`data` は検証済みの `output` 値（`Order`）、`response` は `DecodedResponse<Order>` になります。
-- **宣言された非 `2xx` ステータス時**: `error.code` は `'HTTP_STATUS'`、`error.status` はステータスコード数値（`404`）、`error.data` は検証済みの `error` struct（`NotFound`）になります。
-- **入力値エラー、デコード失敗、ネットワーク障害時**: `error.code` が失敗した正確なステージを特定します。
+- **`2xx` の成功時**: `err` は `null`、`data` は検証済みの `output` 値（`Order`）、`response` は `DecodedResponse<Order>` になります。
+- **宣言された非 `2xx` ステータス時**: `err.code` は `'HTTP_STATUS'`、`err.status` はステータスコード数値（`404`）、`err.data` は検証済みの `error` struct（`NotFound`）になります。
+- **入力値エラー、デコード失敗、ネットワーク障害時**: `err.code` が失敗した正確なステージを特定します。
   - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — 呼び出し元入力値の不正、または `builder` 内での例外発生
   - `RES_MEDIA_TYPE_INVALID` — 宣言された JSON ボディに対して非 JSON の `Content-Type` が返された場合（ボディの読み取り前に即座に拒否）
   - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — ボディの読み取り不可またはスキーマの不一致

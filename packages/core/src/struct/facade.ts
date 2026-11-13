@@ -105,7 +105,7 @@ function structEnum(
  *
  * ### Parsing and modifiers
  *
- * {@link struct.parse}(struct, value, options?) parses an unknown value and returns `[null, value]` or `[StructError, undefined]`.
+ * {@link struct.parse}(struct, value, options?) parses an unknown value and returns `[null, value]` or `[err, undefined]` where `err` is a `StructError`.
  *
  * Every struct has the chainable modifiers `.optional()`, `.null()` / `.nullable()`, `.nullish()`, and `.alias(name)`. See {@link StructMethods}.
  *
@@ -124,16 +124,16 @@ function structEnum(
  *   output: Order,
  * })
  *
- * function readOrder() {
- *   const [error, order] = struct.parse(Order, { id: 1, customerName: 'Ada' })
- *   if (error) {
- *     console.error(error.message)
+ * function main() {
+ *   const [err, order] = struct.parse(Order, { id: 1, customerName: 'Ada' })
+ *   if (err) {
+ *     console.error(err.message)
  *     return
  *   }
  *   console.log(order.customerName)
  * }
  *
- * readOrder()
+ * main()
  * ```
  * @group struct
  */

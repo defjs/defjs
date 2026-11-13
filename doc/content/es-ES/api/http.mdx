@@ -11,7 +11,7 @@ Declara una solicitud tipada y llama a la operación con un cliente y su entrada
 
 <ApiSignature name="defineRequest" />
 
-- **definition** — `method`, `path`, struct `input` opcional, structs `output` y `error` opcionales, `operation` opcional. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`. Estos miembros de `definition` están documentados en [`RequestDefinition`](/es-ES/api/core/requestdefinition-type). `builder` es obligatorio exactamente cuando se declara `input`.
+- **definition** — `method`, `path`, struct `input` opcional, structs `output` y `error` opcionales, `meta` opcional. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`. Estos miembros de `definition` están documentados en [`RequestDefinition`](/es-ES/api/core/requestdefinition-type). `builder` es obligatorio exactamente cuando se declara `input`.
 - **Devuelve** una operación. Llámala como `getOrder(client, input)`, o `health(client)` cuando no se declara entrada. Cuando todo el struct de entrada es opcional, el argumento de entrada puede omitirse. Llamarla arranca la solicitud. No hay un tercer argumento de opciones.
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -52,7 +52,7 @@ que uno del cable; no hay un cortocircuito de confianza.
 
 ### RequestDefinition
 
-`method`, `path`, `input`, `output`, `error`, `operation` y `builder` opcionales. El tipo del struct elige cómo se lee un cuerpo declarado. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
+`method`, `path`, `input`, `output`, `error`, `meta` y `builder` opcionales. El tipo del struct elige cómo se lee un cuerpo declarado. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
 
 ### HttpAwaitResult
 
@@ -63,7 +63,7 @@ En éxito, el tercer hueco lleva `body` solo cuando se declaró `output`. En fal
 
 ### HttpRequest
 
-Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` y `query`. Cuando los interceptores la ven, `body` ya es el valor de red — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. `query` es la única query que envía la solicitud, un `URLSearchParams`: un interceptor la cambia in situ o pasa un reemplazo a `next()`. Un builder que devuelve `URLSearchParams` hace que se copie esa instancia, y el string de una función `withQuerySerializer` se analiza dentro de ella. La forma de red es `query.toString()`, la serialización application/x-www-form-urlencoded del URL Standard, así que un espacio es `+`, y una `query` vacía no añade `?`. `responseType` y `errorResponseType` son de solo lectura: se derivan de los tipos de struct `output` y `error` declarados y no deben cambiarse.
+Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `meta`, `withCredentials`, `finalizeHeaders`, `downloadProgress` / `uploadProgress`, `baseEndpoint` y `query`. Cuando los interceptores la ven, `body` ya es el valor de red — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. `query` es la única query que envía la solicitud, un `URLSearchParams`: un interceptor la cambia in situ o pasa un reemplazo a `next()`. Un builder que devuelve `URLSearchParams` hace que se copie esa instancia, y el string de una función `withQuerySerializer` se analiza dentro de ella. La forma de red es `query.toString()`, la serialización application/x-www-form-urlencoded del URL Standard, así que un espacio es `+`, y una `query` vacía no añade `?`. `responseType` y `errorResponseType` son de solo lectura: se derivan de los tipos de struct `output` y `error` declarados y no deben cambiarse.
 
 ### HttpMeta
 

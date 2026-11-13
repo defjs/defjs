@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no Vue dependen
 bun add @defjs/core @defjs/vue vue
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.7.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.8.0` range.
 
 ## Quick start
 
@@ -47,10 +47,10 @@ watch(
     onCleanup(() => abort.abort());
 
     void getOrder(client({ signal: abort.signal }), { id }).then(
-      ([error, order]) => {
+      ([err, order]) => {
         if (abort.signal.aborted) return;
-        if (error) {
-          name.value = error.message;
+        if (err) {
+          name.value = err.message;
           return;
         }
         name.value = order.status;

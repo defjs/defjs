@@ -37,7 +37,7 @@ SDK 作者用 `defineEventStream` 嚟宣告 Server-Sent Events（SSE）操作，
 
 ## 2. 開啟時嘅握手與 tuple 形狀
 
-呼叫操作只會喺初始 HTTP 回應係 `2xx` 而且 media type 為 `text/event-stream` 時，先會 resolve 出 `[error, stream, startupOpen]`：
+呼叫操作只會喺初始 HTTP 回應係 `2xx` 而且 media type 為 `text/event-stream` 時，先會 resolve 出 `[err, stream, startupOpen]`：
 
 <Tabs items={["Handshake inspection", "Result tuple"]}>
 <Tab>
@@ -54,7 +54,7 @@ SDK 作者用 `defineEventStream` 嚟宣告 Server-Sent Events（SSE）操作，
 </Tab>
 </Tabs>
 
-- **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`。定義中有宣告 `error` struct 時，`error.data` 就係解碼後嘅 body。當個 body 解碼唔到，結果會改為 decode fault，同 HTTP 一樣：JSON 宣告撞上另一種 media type（例如 gateway 回嚟嘅 HTML `503`）係 `RES_MEDIA_TYPE_INVALID`，讀唔到或者解析唔到嘅 body 係 `RES_DECODE_FAILED`，同 struct 唔匹配嘅 body 係 `RES_STRUCT_MISMATCH`。佢嘅 `status` 同 `response` 以 metadata 帶住握手狀態，`cause` 就係原因。攔截器、`shouldRetry`，以及重連失敗嗰條串流嘅 `closed`，對嗰個回應仍然收到 `HTTP_STATUS`，而且佢嘅 `cause` 係同一個原因，所以 gateway 嘅 `503` 無論 body 點樣都會重試。宣告咗 `error` 會令 client 喺報告 fault 之前將握手 body 讀到結尾，所以伺服器應該結束每一個非 `2xx` 回應。狀態冇內容（`304`），或者 JSON 宣告撞上唔係 JSON 嘅 media type 時，body 唔會被讀。讀緊、但永遠唔結束嘅 body 會令呼叫一直掛住，直至呼叫端嘅 `signal` abort，或者平台切斷連線。被切斷嘅連線就係讀唔到嘅 body，所以呼叫會回傳 `RES_DECODE_FAILED`，並以平台失敗作為 `cause`。`attemptTimeoutMs` 唔會限制呢次讀取。冇宣告 `error` 時，body 會被取消而且唔讀。冇 `withRetry` 就會結束目前操作。有嘅話，`502`、`503` 或 `504` 握手會當作連線被拒絕咁，跟第 4 節嘅規則重試，其他任何狀態會交俾 `shouldRetry`，並帶 `retryable: false` 同佢嘅 `status`，所以除非你嘅函式另有決定，否則串流會結束。重試用盡或者被拒絕就以 `HTTP_STATUS` 結束。下一次操作會重新揀選端點，所以 balancer 可能會揀另一個端點。
+- **握手狀態碼非 `2xx`**：回傳 `HTTP_STATUS`。定義中有宣告 `error` struct 時，`err.data` 就係解碼後嘅 body。當個 body 解碼唔到，結果會改為 decode fault，同 HTTP 一樣：JSON 宣告撞上另一種 media type（例如 gateway 回嚟嘅 HTML `503`）係 `RES_MEDIA_TYPE_INVALID`，讀唔到或者解析唔到嘅 body 係 `RES_DECODE_FAILED`，同 struct 唔匹配嘅 body 係 `RES_STRUCT_MISMATCH`。佢嘅 `status` 同 `response` 以 metadata 帶住握手狀態，`cause` 就係原因。攔截器、`shouldRetry`，以及重連失敗嗰條串流嘅 `closed`，對嗰個回應仍然收到 `HTTP_STATUS`，而且佢嘅 `cause` 係同一個原因，所以 gateway 嘅 `503` 無論 body 點樣都會重試。宣告咗 `error` 會令 client 喺報告 fault 之前將握手 body 讀到結尾，所以伺服器應該結束每一個非 `2xx` 回應。狀態冇內容（`304`），或者 JSON 宣告撞上唔係 JSON 嘅 media type 時，body 唔會被讀。讀緊、但永遠唔結束嘅 body 會令呼叫一直掛住，直至呼叫端嘅 `signal` abort，或者平台切斷連線。被切斷嘅連線就係讀唔到嘅 body，所以呼叫會回傳 `RES_DECODE_FAILED`，並以平台失敗作為 `cause`。`attemptTimeoutMs` 唔會限制呢次讀取。冇宣告 `error` 時，body 會被取消而且唔讀。冇 `withRetry` 就會結束目前操作。有嘅話，`502`、`503` 或 `504` 握手會當作連線被拒絕咁，跟第 4 節嘅規則重試，其他任何狀態會交俾 `shouldRetry`，並帶 `retryable: false` 同佢嘅 `status`，所以除非你嘅函式另有決定，否則串流會結束。重試用盡或者被拒絕就以 `HTTP_STATUS` 結束。下一次操作會重新揀選端點，所以 balancer 可能會揀另一個端點。
 - **Content-Type 唔啱**：media type 唔係 `text/event-stream` 嘅 `2xx` 握手會回傳 `RES_MEDIA_TYPE_INVALID`，`204` 或 `205` 都包括在內。
 - **冇 body**：`text/event-stream` 而且冇 body 嘅 `2xx` 握手（Node.js 同 Bun 會將 `204` 或 `205` 呈現為 null body）係一條空事件流：呼叫成功，串流即時以 `kind: "eof"` 結束，而且永遠唔會重試。
 - **`startupOpen` vs. `stream.open`**：tuple 嘅第三個欄位（`startupOpen`）記錄首次握手回應嘅 snapshot；後續重連時，`stream.open` 會即時更新。如果重連握手以非 2xx 狀態結束串流，iterator 會 reject，`stream.closed` 會回報 `HTTP_STATUS`，而 `stream.open.response.status` 會保留嗰個狀態；請檢查 `stream.open` 取得嗰個即時回應狀態。

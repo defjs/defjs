@@ -30,6 +30,6 @@ and verify the result with the project’s existing tests.
 
 ## Vérifier le résultat [#verify]
 
-Lisez la définition et l'application séparément. La définition exporte l’opération et ne crée pas le client. L’application crée le client et appelle l’opération, par exemple `getOrder(client, { id: 1 })`. Là où `input` est déclaré, `builder` est une fonction synchrone et pure, écrite explicitement. La valeur de succès n’est utilisée que lorsque l’emplacement d’erreur est vide.
+Lisez la définition et l'application séparément. La définition exporte l’opération et ne crée pas le client. L’application crée le client et appelle l’opération, par exemple `getOrder(client, { id: 1 })`. Là où `input` est déclaré, `builder` est une fonction synchrone et pure, écrite explicitement. La valeur de succès n’est utilisée que lorsque l’emplacement d’erreur est vide : le point d’appel vérifie `if (err)` juste après l’appel et retourne depuis ce bloc, et une fonction utilitaire susceptible d’échouer renvoie son propre tuple `[err, value]` au lieu de journaliser ou de renvoyer `undefined`.
 
 Exécutez ensuite la vérification de types de ce projet et les tests qui couvrent le contrat. L'installation des dépendances et les règles de CI restent dans ce projet.

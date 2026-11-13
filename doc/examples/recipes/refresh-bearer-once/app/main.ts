@@ -32,9 +32,9 @@ const client = createClient(
 );
 
 async function main() {
-  const [error, invoice] = await getInvoice(client);
-  if (error) {
-    console.error(error.code);
+  const [err, invoice] = await getInvoice(client);
+  if (err) {
+    console.error(err.code);
     return;
   }
   console.log(invoice.total);

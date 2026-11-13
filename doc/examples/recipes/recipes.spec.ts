@@ -40,11 +40,13 @@ test("ETag recipe reuses the cached product after a real 304", async () => {
     createClient(withEndpoint("https://catalog.example.test"), server.handle),
   );
 
-  await read("SKU-1");
-  const product = await read("SKU-1");
+  const [warmErr] = await read("SKU-1");
+  const [revalidateErr, product] = await read("SKU-1");
 
   expect(server.statuses).toEqual([200, 304]);
-  expect(product.name).toBe("Flask");
+  expect(warmErr).toBeNull();
+  expect(revalidateErr).toBeNull();
+  expect(product?.name).toBe("Flask");
 });
 
 test("Bearer recipe refreshes the credential after a real 401", async () => {
@@ -68,11 +70,11 @@ test("Bearer recipe refreshes the credential after a real 401", async () => {
     ),
   );
 
-  const [error, invoice] = await getInvoice(client);
+  const [err, invoice] = await getInvoice(client);
 
   expect(server.statuses).toEqual([401, 200]);
   expect(credential.accessToken).toBe("v2");
-  expect(error).toBeNull();
+  expect(err).toBeNull();
   expect(invoice).toEqual({ total: 42 });
 });
 
@@ -89,18 +91,18 @@ test("GraphQL recipe unwraps data: null with errors as an application error", as
     server.handle,
   );
 
-  await expect(loadViewer(client)).resolves.toEqual({
-    id: "v-1",
-    login: "ada",
-  });
-  await expect(loadViewer(client)).rejects.toThrow("viewer unavailable");
-  const nullData: unknown = await loadViewer(client).catch(
-    (error: unknown) => error,
-  );
+  const [viewerErr, viewer] = await loadViewer(client);
+  const [missingErr, missing] = await loadViewer(client);
+  const [nullDataErr, nullData] = await loadViewer(client);
 
   expect(server.statuses).toEqual([200, 200, 200]);
-  expect(nullData).toBeInstanceOf(Error);
-  expect(nullData).toHaveProperty("message", "viewer unavailable");
+  expect(viewerErr).toBeNull();
+  expect(viewer).toEqual({ id: "v-1", login: "ada" });
+  expect(missing).toBeUndefined();
+  expect(missingErr).toHaveProperty("message", "viewer unavailable");
+  expect(nullData).toBeUndefined();
+  expect(nullDataErr).toBeInstanceOf(Error);
+  expect(nullDataErr).toHaveProperty("message", "viewer unavailable");
   // A Defjs fault carries `code`; this is the helper's own application error.
-  expect(nullData).not.toHaveProperty("code");
+  expect(nullDataErr).not.toHaveProperty("code");
 });

@@ -112,7 +112,7 @@ export function registerSseBalancerUploadSuite(cap: UploadCapability): void {
       builder: () => ({ body }),
       events: { message: struct.string() },
       method: "POST",
-      operation: "orders",
+      meta: { operation: "orders" },
       path: "/events",
     });
     const handle = vi.fn(() => Promise.reject(new TypeError("down")));
@@ -150,7 +150,7 @@ export function registerSseBalancerUploadSuite(cap: UploadCapability): void {
       builder: () => ({ body }),
       events: { message: struct.string() },
       method: "POST",
-      operation: "orders",
+      meta: { operation: "orders" },
       path: "/events",
     });
     const [error] = await streamBody(

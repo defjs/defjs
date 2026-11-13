@@ -5,7 +5,7 @@ description: هيكل حزمة S3 SDK متعددة الوحدات مع النم�
 
 # بناء حزمة SDK ونشرها [#publish-an-http-sdk-without-hiding-execute]
 
-تُنظّم حزمة Defjs SDK نماذج `struct` المشتركة (`src/models/`) ووحدات عمليات النطاق (`src/services/`) في حزمة npm قابلة للتقليم الشجري (tree-shakable) مع ترك استدعاء `createClient(...)` وعناوين نقاط النهاية وبيانات الاعتماد والمعترضات بالكامل للتطبيق المستهلك.
+تُنظّم حزمة Defjs SDK نماذج `struct` المشتركة (`src/schema/`) ووحدات عمليات النطاق (`src/request/`) في حزمة npm قابلة للتقليم الشجري (tree-shakable) مع ترك استدعاء `createClient(...)` وعناوين نقاط النهاية وبيانات الاعتماد والمعترضات بالكامل للتطبيق المستهلك.
 
 وعلى خلاف مولّدات OpenAPI التقليدية التي تغلّف نقاط النهاية داخل أصناف `Service` ذات حالة (`ObjectsService.putObject(...)`)، تُصدّر حزمة Defjs SDK **دوال عمليات نقية مستقلة** (`putObject` و`getObject` و`listObjectsV2`) تُستدعى مباشرةً مع عميل التطبيق.
 
@@ -15,37 +15,37 @@ description: هيكل حزمة S3 SDK متعددة الوحدات مع النم�
 
 باستخدام حزمة SDK لتخزين الكائنات المتوافق مع Amazon S3 (`@company/s3-sdk`) كمثال، قسّم الحزمة إلى طبقتين:
 
-- **`src/models/`**: مخططات `struct` المشتركة وأنواع TypeScript المستنتجة عبر `Infer<typeof ...>` (باستخدام تصدير القيمة والنوع بالاسم نفسه حتى يتمكن المستهلكون من استيراد معرّف واحد لكلٍّ من مخططات وقت التشغيل والأنواع الثابتة).
-- **`src/services/`**: وحدات نطاق مجمّعة حسب المورد (`buckets.ts` و`objects.ts`). تُصدّر كل وحدة دوال `defineRequest` مستقلة يوزّع بانيها المتزامن `builder` مدخلات الاستدعاء المسطحة على `path` و`query` و`headers` و`body` الثنائي.
+- **`src/schema/`**: مخططات `struct` المشتركة وأنواع TypeScript المستنتجة عبر `Infer<typeof ...>` (باستخدام تصدير القيمة والنوع بالاسم نفسه حتى يتمكن المستهلكون من استيراد معرّف واحد لكلٍّ من مخططات وقت التشغيل والأنواع الثابتة).
+- **`src/request/`**: وحدات نطاق مجمّعة حسب المورد (`buckets.ts` و`objects.ts`). تُصدّر كل وحدة دوال `defineRequest` مستقلة يوزّع بانيها المتزامن `builder` مدخلات الاستدعاء المسطحة على `path` و`query` و`headers` و`body` الثنائي.
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -73,10 +73,10 @@ description: هيكل حزمة S3 SDK متعددة الوحدات مع النم�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,10 +126,10 @@ bun pm pack
 ثبّت حزمة SDK الخاصة بك إلى جانب `@defjs/core`:
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-نظرًا لأن حزمة SDK لا تربط أي عميل، يمتلك التطبيق المستهلك نقطة النهاية (AWS S3 أو Cloudflare R2 أو MinIO)، ومعترض التوقيع، وسياسة إعادة المحاولة، ويستدعي كل عملية مستوردة مباشرةً كدالة نقية:
+نظرًا لأن حزمة SDK لا تربط أي عميل، يمتلك التطبيق المستهلك نقطة النهاية (AWS S3 أو Cloudflare R2 أو MinIO)، ومعترض التوقيع، وسياسة إعادة المحاولة، ويستدعي كل عملية مستوردة مباشرةً كدالة نقية. ولأن `syncReport` تجري ثلاثة استدعاءات، فإنها تسمي كل خطأ باسم خطوته (`putErr` و`listErr` و`getErr`) وتُرجع مصفوفة يكون الخطأ في أولها يغلّف الخطوة التي فشلت، على غرار `fmt.Errorf("put object: %w", err)` في Go. و`main` وحدها تسجّله:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

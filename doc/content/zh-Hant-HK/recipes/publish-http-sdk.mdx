@@ -1,11 +1,11 @@
 ---
 title: "建置並發佈 SDK"
-description: 用 models 同純函數操作定義構建多模組 S3 SDK，發佈成 npm 套件，並由每個應用程式設定自己嘅 Client。
+description: 用 schema 同純函數操作定義構建多模組 S3 SDK，發佈成 npm 套件，並由每個應用程式設定自己嘅 Client。
 ---
 
 # 建置並發佈 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Defjs SDK 將共用嘅 `struct` 數據模型（`src/models/`）同按業務域劃分嘅操作定義模組（`src/services/`）組織成可以按需 tree-shake 嘅 npm 套件，同時將 `createClient(...)`、端點、身分憑證同攔截器完全留畀使用方應用程式掌控。
+Defjs SDK 將共用嘅 `struct` schema（`src/schema/`）同按業務域劃分嘅操作定義模組（`src/request/`）組織成可以按需 tree-shake 嘅 npm 套件，同時將 `createClient(...)`、端點、身分憑證同攔截器完全留畀使用方應用程式掌控。
 
 有別於傳統 OpenAPI 生成器將接口封裝喺帶狀態嘅 `Service` 類別（例如 `ObjectsService.putObject(...)`）入面，Defjs SDK **淨係匯出獨立嘅純函數操作定義**（`putObject`、`getObject`、`listObjectsV2`），喺應用程式嗰邊直接傳入 `client` 調用。
 
@@ -15,37 +15,37 @@ Defjs SDK 將共用嘅 `struct` 數據模型（`src/models/`）同按業務域�
 
 以兼容 Amazon S3 協議嘅物件儲存 SDK（`@company/s3-sdk`）為例，將套件拆分成兩層：
 
-- **`src/models/`**：跨接口重用嘅 `struct` schema 同 `Infer<typeof ...>` TypeScript 型別（利用同名匯出值同型別，令使用方淨係匯入一個識別符就可以同時當作執行時 schema 同靜態型別用）。
-- **`src/services/`**：按資源域劃分嘅操作模組（`buckets.ts`、`objects.ts`）。每個模組淨係匯出獨立嘅 `defineRequest` 純函數，透過同步純函數 `builder` 將調用方嘅扁平入參分發去 `path`、`query`、`headers` 同二進制 `body`。
+- **`src/schema/`**：跨接口重用嘅 `struct` schema 同 `Infer<typeof ...>` TypeScript 型別（利用同名匯出值同型別，令使用方淨係匯入一個識別符就可以同時當作執行時 schema 同靜態型別用）。
+- **`src/request/`**：按資源域劃分嘅操作模組（`buckets.ts`、`objects.ts`）。每個模組淨係匯出獨立嘅 `defineRequest` 純函數，透過同步純函數 `builder` 將調用方嘅扁平入參分發去 `path`、`query`、`headers` 同二進制 `body`。
 
-<Tabs items={["src/models/common.ts", "src/models/bucket.ts", "src/models/object.ts", "src/services/buckets.ts", "src/services/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+<Tabs items={["src/schema/common.ts", "src/schema/bucket.ts", "src/schema/object.ts", "src/request/buckets.ts", "src/request/objects.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
   <Tab>
-<include cwd meta='title="src/models/common.ts"'>
-  examples/recipes/publish-http-sdk/src/models/common.ts#example
+<include cwd meta='title="src/schema/common.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/common.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/bucket.ts"'>
-  examples/recipes/publish-http-sdk/src/models/bucket.ts#example
+<include cwd meta='title="src/schema/bucket.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/bucket.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/models/object.ts"'>
-  examples/recipes/publish-http-sdk/src/models/object.ts#example
+<include cwd meta='title="src/schema/object.ts"'>
+  examples/recipes/publish-http-sdk/src/schema/object.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/buckets.ts"'>
-  examples/recipes/publish-http-sdk/src/services/buckets.ts#example
+<include cwd meta='title="src/request/buckets.ts"'>
+  examples/recipes/publish-http-sdk/src/request/buckets.ts#example
 </include>
 
   </Tab>
   <Tab>
-<include cwd meta='title="src/services/objects.ts"'>
-  examples/recipes/publish-http-sdk/src/services/objects.ts#example
+<include cwd meta='title="src/request/objects.ts"'>
+  examples/recipes/publish-http-sdk/src/request/objects.ts#example
 </include>
 
   </Tab>
@@ -73,10 +73,10 @@ Defjs SDK 將共用嘅 `struct` 數據模型（`src/models/`）同按業務域�
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.7.0"
+    "@defjs/core": "^0.8.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.7.0",
+    "@defjs/core": "^0.8.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -126,10 +126,10 @@ bun pm pack
 將你發佈嘅 SDK 同 `@defjs/core` 一齊安裝到應用程式：
 
 ```sh
-bun add @company/s3-sdk @defjs/core@^0.7.0
+bun add @company/s3-sdk @defjs/core@^0.8.0
 ```
 
-因為 SDK 唔綁定任何 Client，使用方應用程式自己掌控服務端點（AWS S3、Cloudflare R2 或 MinIO）、簽名攔截器同重試策略，並以純函數方式直接調用匯入嘅操作定義：
+因為 SDK 唔綁定任何 Client，使用方應用程式自己掌控服務端點（AWS S3、Cloudflare R2 或 MinIO）、簽名攔截器同重試策略，並以純函數方式直接調用匯入嘅操作定義。因為 `syncReport` 有三個呼叫，所以按步驟命名每個錯誤（`putErr`、`listErr`、`getErr`），並回傳 error-first tuple，其中嘅錯誤會包裝失敗嘅步驟，就好似 Go 嘅 `fmt.Errorf("put object: %w", err)`。只有 `main` 會記錄佢：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example

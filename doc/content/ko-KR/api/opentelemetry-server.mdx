@@ -66,7 +66,7 @@ span 훅은 `tracer`를 전달했을 때만 실행돼요. `startSpanHook`은 해
 
 ## 로거 진단
 
-최상위 `logger?: Logger` 옵션은 애플리케이션 로거가 아니라 `@opentelemetry/api-logs`를 써요. 선택 사항이고 단독으로 쓸 수 있어요. Defjs는 전역 로거를 얻지도, 프로바이더를 소유하지도 않아요. 요청 또는 논리적 연결마다 최대 한 번 `WARN` LogRecord(심각도 13)를 내보내요. 메시지는 고정이고, 속성은 `server.address`와 `server.port`(알려진 경우), `defjs.phase`, `exception.type`이며 HTTP는 `http.request.method`가, SSE 스트림이 오류로 끝나면 `defjs.sse.fault.code`가, WebSocket 종료 정보에 숫자 코드가 있으면 `websocket.close.code`가 더해져요.
+최상위 `logger?: Logger` 옵션은 애플리케이션 로거가 아니라 `@opentelemetry/api-logs`를 써요. 선택 사항이고 단독으로 쓸 수 있어요. Defjs는 전역 로거를 얻지도, 프로바이더를 소유하지도 않아요. 요청 또는 논리적 연결마다 최대 한 번 `WARN` LogRecord(심각도 13)를 내보내요. 메시지는 고정이고, 속성은 `server.address`와 `server.port`(알려진 경우), `defjs.phase`, `exception.type`, 정의의 `meta`에서 온 `defjs.meta.*` 속성이며 HTTP는 `http.request.method`가, SSE 스트림이 오류로 끝나면 `defjs.sse.fault.code`가, WebSocket 종료 정보에 숫자 코드가 있으면 `websocket.close.code`가 더해져요.
 
 | 결과                                                      | 이벤트                                                            | `defjs.phase` |
 | --------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |

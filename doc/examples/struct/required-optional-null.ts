@@ -9,13 +9,13 @@ const Profile = struct.object({
 });
 
 function showProfile() {
-  const [error, profile] = struct.parse(Profile, {
+  const [err, profile] = struct.parse(Profile, {
     name: "Ada",
     biography: null,
     note: undefined,
   });
-  if (error) {
-    console.error(error.message);
+  if (err) {
+    console.error(err.message);
     return;
   }
   console.log(profile.name, profile.nickname, profile.biography, profile.note);

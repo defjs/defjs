@@ -11,12 +11,12 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 <ApiSignature name="defineWebSocket" />
 
-- **definition** — `path` と `incoming` struct 1 つ、任意の `outgoing` と `input` struct、`operation`、静的な `protocols`、`maxOutgoingQueueSize` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`WebSocketDefinition`](/ja-JP/api/core/websocketdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
+- **definition** — `path` と `incoming` struct 1 つ、任意の `outgoing` と `input` struct、`meta`、静的な `protocols`、`maxOutgoingQueueSize` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`WebSocketDefinition`](/ja-JP/api/core/websocketdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
 - **戻り値** 操作です。第 1 引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとセッションが開きます。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`retry` で、HTTP の進捗フィールドは無視します。
+呼び出しは `[null, session, connection]` または `[err, undefined, connection?]` を返します。呼び出しごとのオプションは、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`retry` で、HTTP の進捗フィールドは無視します。
 
 `beforeConnect`、`heartbeat`、`protocols`、`retry` は、それぞれがその呼び出しに限り、クライアントレベルのオプションを全体として置き換えます。protocols の優先順位は、派生したクライアント、`withWebSocketProtocols`、定義の `protocols` の順です。`heartbeat.timeoutMs` は確認待ちであり、リクエストの期限ではありません。
 
@@ -72,7 +72,7 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 ## WebSocketDefinition
 
-`path`、`incoming`、任意の `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` です。`builder` が返せるのは `path` と `query` だけです。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+`path`、`incoming`、任意の `outgoing` / `input` / `meta` / `protocols` / `maxOutgoingQueueSize` です。`builder` が返せるのは `path` と `query` だけです。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは `builder` だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
 
 ## WebSocketEndpoint
 
@@ -88,7 +88,7 @@ description: defineWebSocket、セッション、リクエストオプション�
 
 ## SocketAwaitResult
 
-`[null, session, connection]` または `[error, undefined, connection?]` です。
+`[null, session, connection]` または `[err, undefined, connection?]` です。
 
 ## ManualSocketCloseReason
 

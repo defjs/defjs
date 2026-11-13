@@ -31,15 +31,15 @@ Defjs 将 TypeScript SDK 的两端职责清晰分离：
 </Tab>
 </Tabs>
 
-调用 `getHealth(client)` 会执行 I/O，并解析为错误优先元组。读取解码结果之前，先判断 `if (error)` 并返回。
+调用 `getHealth(client)` 会执行 I/O，并解析为错误优先元组。读取解码结果之前，先判断 `if (err)` 并返回。
 
 ## 为什么将定义与 Client 解耦？
 
-| 职责划分     | SDK 作者（契约定义）                                                                               | 应用程序（运行时执行）                                 |
-| ------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **归属内容** | 请求方法、路径模板、`input` / `output` / `error` schema、`builder` 映射，以及静态 `operation` 名称 | 基地址、认证凭据、认证拦截器、负载均衡、超时与资源清理 |
-| **产物交付** | 可独立发布的 ESM 模块与 `.d.ts` 类型声明文件                                                       | 面向浏览器、SSR 或测试环境的具体运行时配置             |
-| **核心收益** | 与环境零耦合；同一套定义适用于浏览器、服务端渲染和测试                                             | 完全掌控重试、故障转移、遥测与生命周期                 |
+| 职责划分     | SDK 作者（契约定义）                                                                                 | 应用程序（运行时执行）                                 |
+| ------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **归属内容** | 请求方法、路径模板、`input` / `output` / `error` schema、`builder` 映射，以及可选的应用自定义 `meta` | 基地址、认证凭据、认证拦截器、负载均衡、超时与资源清理 |
+| **产物交付** | 可独立发布的 ESM 模块与 `.d.ts` 类型声明文件                                                         | 面向浏览器、SSR 或测试环境的具体运行时配置             |
+| **核心收益** | 与环境零耦合；同一套定义适用于浏览器、服务端渲染和测试                                               | 完全掌控重试、故障转移、遥测与生命周期                 |
 
 ## 推荐阅读路径
 
@@ -52,13 +52,13 @@ Defjs 将 TypeScript SDK 的两端职责清晰分离：
 
 每个操作都会返回针对对应传输协议生命周期设计的错误优先三元组：
 
-| 传输协议                                  | 入口函数            | 元组结构                       | 生命周期所有权                                                                |
-| ----------------------------------------- | ------------------- | ------------------------------ | ----------------------------------------------------------------------------- |
-| **[HTTP](/zh-Hans/docs/http)**            | `defineRequest`     | `[error, data, response]`      | 通过 `client({ signal })` 取消进行中的请求                                    |
-| **[SSE](/zh-Hans/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | 通过 `await using` 或 `stream.close()` + `await stream.closed` 安全释放连接   |
-| **[WebSocket](/zh-Hans/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | 通过 `await using` 或 `session.close()` + `await session.closed` 优雅关闭会话 |
+| 传输协议                                  | 入口函数            | 元组结构                     | 生命周期所有权                                                                |
+| ----------------------------------------- | ------------------- | ---------------------------- | ----------------------------------------------------------------------------- |
+| **[HTTP](/zh-Hans/docs/http)**            | `defineRequest`     | `[err, data, response]`      | 通过 `client({ signal })` 取消进行中的请求                                    |
+| **[SSE](/zh-Hans/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | 通过 `await using` 或 `stream.close()` + `await stream.closed` 安全释放连接   |
+| **[WebSocket](/zh-Hans/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | 通过 `await using` 或 `session.close()` + `await session.closed` 优雅关闭会话 |
 
-在 HTTP 请求失败时，元组为 `[error, undefined, undefined]`，因为 `error` 已经携带了所有 `HttpMeta` 响应元数据。对于 SSE 和 WebSocket，只要失败前捕获到了启动快照，第三项就会保留它。
+在 HTTP 请求失败时，元组为 `[err, undefined, undefined]`，因为 `err` 已经携带了所有 `HttpMeta` 响应元数据。对于 SSE 和 WebSocket，只要失败前捕获到了启动快照，第三项就会保留它。
 
 ## 官方软件包
 

@@ -17,12 +17,12 @@ const controller = new AbortController();
 onScopeDispose(() => controller.abort());
 
 void (async () => {
-  const [error, stream] = await deployEvents(
+  const [err, stream] = await deployEvents(
     client({ signal: controller.signal }),
   );
-  if (error) {
-    if (error.code !== "NET_ABORTED")
-      errorMessage.value = `Unable to open deploy log (${error.code}).`;
+  if (err) {
+    if (err.code !== "NET_ABORTED")
+      errorMessage.value = `Unable to open deploy log (${err.code}).`;
     return;
   }
 

@@ -31,15 +31,15 @@ Defjs sépare les deux facettes d'un SDK TypeScript :
 </Tab>
 </Tabs>
 
-L'appel `getHealth(client)` effectue les E/S et résout un tuple error-first. Vérifiez `if (error)` et retournez avant de lire le résultat décodé.
+L'appel `getHealth(client)` effectue les E/S et résout un tuple error-first. Vérifiez `if (err)` et retournez avant de lire le résultat décodé.
 
 ## Pourquoi séparer les définitions des clients ?
 
-| Responsabilité | Auteur du SDK (Définition)                                                                               | Application (Exécution)                                                                                                          |
-| -------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Possède**    | Méthode, patron de chemin, schémas `input` / `output` / `error`, projection `builder` et nom d'opération | URL de base, identifiants, intercepteurs d'authentification, répartition de charge, délais d'attente et nettoyage des ressources |
-| **Livre**      | Modules ESM réutilisables et déclarations `.d.ts`                                                        | Configuration du runtime navigateur, serveur ou environnement de test                                                            |
-| **Bénéfice**   | Aucun couplage avec l'environnement ; fonctionne dans le navigateur, en SSR et dans les tests            | Maîtrise totale des retries, du basculement, de la télémétrie et des cycles de vie                                               |
+| Responsabilité | Auteur du SDK (Définition)                                                                                                          | Application (Exécution)                                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Possède**    | Méthode, patron de chemin, schémas `input` / `output` / `error`, projection `builder` et `meta` facultatif défini par l'application | URL de base, identifiants, intercepteurs d'authentification, répartition de charge, délais d'attente et nettoyage des ressources |
+| **Livre**      | Modules ESM réutilisables et déclarations `.d.ts`                                                                                   | Configuration du runtime navigateur, serveur ou environnement de test                                                            |
+| **Bénéfice**   | Aucun couplage avec l'environnement ; fonctionne dans le navigateur, en SSR et dans les tests                                       | Maîtrise totale des retries, du basculement, de la télémétrie et des cycles de vie                                               |
 
 ## Choisissez votre parcours
 
@@ -52,13 +52,13 @@ L'appel `getHealth(client)` effectue les E/S et résout un tuple error-first. V�
 
 Chaque opération renvoie un tuple error-first de trois éléments adapté au cycle de vie de son transport :
 
-| Transport                               | Point d'entrée      | Forme du tuple                 | Cycle de vie                                                             |
-| --------------------------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------ |
-| **[HTTP](/fr-FR/docs/http)**            | `defineRequest`     | `[error, data, response]`      | Annulez le travail en cours via `client({ signal })`                     |
-| **[SSE](/fr-FR/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | Libérez avec `await using` ou `stream.close()` + `await stream.closed`   |
-| **[WebSocket](/fr-FR/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | Libérez avec `await using` ou `session.close()` + `await session.closed` |
+| Transport                               | Point d'entrée      | Forme du tuple               | Cycle de vie                                                             |
+| --------------------------------------- | ------------------- | ---------------------------- | ------------------------------------------------------------------------ |
+| **[HTTP](/fr-FR/docs/http)**            | `defineRequest`     | `[err, data, response]`      | Annulez le travail en cours via `client({ signal })`                     |
+| **[SSE](/fr-FR/docs/sse)**              | `defineEventStream` | `[err, stream, open]`        | Libérez avec `await using` ou `stream.close()` + `await stream.closed`   |
+| **[WebSocket](/fr-FR/docs/web-socket)** | `defineWebSocket`   | `[err, session, connection]` | Libérez avec `await using` ou `session.close()` + `await session.closed` |
 
-En cas d'échec HTTP, le tuple est `[error, undefined, undefined]`, car l'objet `error` transporte déjà les métadonnées de réponse `HttpMeta`. Pour SSE et WebSocket, le troisième élément contient l'instantané de démarrage dès lors qu'il a pu être capturé avant l'échec.
+En cas d'échec HTTP, le tuple est `[err, undefined, undefined]`, car l'objet `err` transporte déjà les métadonnées de réponse `HttpMeta`. Pour SSE et WebSocket, le troisième élément contient l'instantané de démarrage dès lors qu'il a pu être capturé avant l'échec.
 
 ## Packages officiels
 

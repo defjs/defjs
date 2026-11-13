@@ -47,7 +47,7 @@ export interface ResolvedEndpoint {
  *   wrapper, not the function on the raw pick result.
  *
  * @param balancer - Client balancer, built-in or custom.
- * @param info - Candidates and the definition's `operation`.
+ * @param info - Candidates and the definition's `meta`.
  * @returns An error-first tuple. The fault is a `PreflightFault`.
  */
 export function pickEndpoint(
